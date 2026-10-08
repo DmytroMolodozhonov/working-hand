@@ -112,7 +112,9 @@ export class HandStabilizer {
         this.lastGoodTime = -Infinity;
         this.pendingJump = null;
         this.pendingCount = 0;
-        this.filters = Array.from({ length: 21 * 3 }, () => new OneEuroFilter(2.5, 4.0, 1.0));
+        // 1.3 Hz at rest: a still hand stays still (2.5 let the network's jitter through);
+        // beta 7: the cut-off rises fast with speed, so quick moves are not delayed
+        this.filters = Array.from({ length: 21 * 3 }, () => new OneEuroFilter(1.3, 7.0, 1.0));
         this.out = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
         this.rejected = 0;
         this.accepted = 0;

@@ -6,12 +6,17 @@
  * authority for zombies, chests, free weapons and world destruction.
  * No game server is needed — PeerJS's public broker only introduces the
  * browsers to each other (a custom PeerServer can be set in the menu).
+ *
+ * «Общий сервер»: one fixed room everybody can see in the menu (on / off and
+ * who is in). The first player to switch it on hosts it; the others just
+ * press «Войти» — no codes. Room codes stay for private games.
  */
 
 import { Emitter } from '../core/events.js';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
 const PREFIX = 'zns-room-';
+export const WORLD_CODE = 'ZNS-DMYTRO-WORLD'; // the shared server's room
 const ICE = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -65,8 +70,11 @@ export class Network extends Emitter {
         return P;
     }
 
-    /** Create a room. Resolves with the room code. */
-    host(name, server) {
+    /**
+     * Create a room. Resolves with the room code.
+     * @param {string} [fixedCode]  a fixed room (the shared server) instead of a random code
+     */
+    host(name, server, fixedCode = null) {
         this.leave();
         this.name = name || 'Игрок';
         const Peer = this._PeerCtor();
@@ -74,12 +82,12 @@ export class Network extends Emitter {
             let attempts = 0;
             const tryCode = () => {
                 attempts++;
-                const code = randomCode();
+                const code = fixedCode || randomCode();
                 const peer = new Peer(PREFIX + code, parseServer(server));
                 const fail = (err) => {
                     peer.destroy();
-                    if (err?.type === 'unavailable-id' && attempts < 5) tryCode();
-                    else reject(new Error(humanError(err)));
+                    if (err?.type === 'unavailable-id' && attempts < 5 && !fixedCode) tryCode();
+                    else reject(Object.assign(new Error(humanError(err)), { type: err?.type }));
                 };
                 peer.once('error', fail);
                 peer.once('open', () => {
@@ -101,6 +109,14 @@ export class Network extends Emitter {
     }
 
     _acceptClient(conn) {
+        // A menu asking "is the shared server on, who is in?" — answer and hang up
+        if (conn.metadata?.probe) {
+            conn.on('open', () => {
+                this._sendConn(conn, { t: 'info', players: this.playerList().map((p) => p.name), playing: !!this.info?.playing });
+                setTimeout(() => { try { conn.close(); } catch (e) { /* ignore */ } }, 1500);
+            });
+            return;
+        }
         conn.on('open', () => {
             const id = conn.peer;
             const name = String(conn.metadata?.name || 'Игрок').slice(0, 16);
@@ -162,7 +178,7 @@ export class Network extends Emitter {
                 reject(new Error(humanError(err)));
             };
             const timer = setTimeout(() => fail({ type: 'timeout' }), 20000);
-            peer.on('error', fail);
+            peer.on('error', (err) => fail(Object.assign(err || {}, { type: err?.type })));
             peer.on('open', (myId) => {
                 const conn = peer.connect(PREFIX + clean, { reliable: true, serialization: 'json', metadata: { name: this.name } });
                 const lost = () => {
@@ -199,6 +215,48 @@ export class Network extends Emitter {
                 this._watchIce(conn, lost);
             });
         });
+    }
+
+    /**
+     * Is a room on? Resolves {online, players[], playing} (never rejects).
+     * Uses one small helper connection to the broker, reused between checks.
+     */
+    probe(code, server) {
+        const Peer = this._PeerCtor();
+        const key = server || '';
+        return new Promise((resolve) => {
+            const done = (r) => { clearTimeout(timer); resolve(r); };
+            const timer = setTimeout(() => done({ online: false, unknown: true, players: [] }), 9000);
+            const go = (peer) => {
+                const onErr = (err) => {
+                    peer.off('error', onErr);
+                    if (err?.type === 'peer-unavailable') done({ online: false, players: [] });
+                    else { this._probePeer = null; try { peer.destroy(); } catch (e) { /* ignore */ } done({ online: false, unknown: true, players: [] }); }
+                };
+                peer.on('error', onErr);
+                const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json', metadata: { probe: true } });
+                conn.on('data', (msg) => {
+                    if (msg?.t !== 'info') return;
+                    peer.off('error', onErr);
+                    done({ online: true, players: msg.players || [], playing: !!msg.playing });
+                    try { conn.close(); } catch (e) { /* ignore */ }
+                });
+            };
+            const p = this._probePeer;
+            if (p && !p.destroyed && p.open && this._probeKey === key) { go(p); return; }
+            try { p?.destroy(); } catch (e) { /* ignore */ }
+            const peer = new Peer(parseServer(server));
+            this._probePeer = peer;
+            this._probeKey = key;
+            peer.once('open', () => go(peer));
+            peer.once('error', () => { this._probePeer = null; done({ online: false, unknown: true, players: [] }); });
+        });
+    }
+
+    /** Stop checking the shared server (when playing). */
+    stopProbe() {
+        try { this._probePeer?.destroy(); } catch (e) { /* ignore */ }
+        this._probePeer = null;
     }
 
     playerList() {

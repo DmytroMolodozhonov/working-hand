@@ -186,7 +186,7 @@ test('joining a wrong code shows a clear message', async () => {
     await p.context.close();
 });
 
-test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players, shields, freezing + shatter, death', async () => {
+test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players, shields, freezing + shatter, death', async () => {
     const host = await openPlayer('Маг1');
     await host.page.click('#mp-host-btn');
     await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
@@ -216,7 +216,7 @@ test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players,
     for (const s of st) {
         assert.equal(s.mode, 'freeworld');
         assert.ok(s.pvp);
-        assert.equal(s.hp, 10);
+        assert.equal(s.hp, 20);
         assert.equal(s.weapons, 0, 'no tables with weapons');
         assert.equal(s.tables, 0);
         assert.equal(s.zombies, 0);
@@ -256,8 +256,8 @@ test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players,
     // Sapira hits the other player: 4 damage, the host sees it too
     await aim();
     await castAt('Sapira');
-    await wf(guest.page, () => window.__zns.game.combat.hp === 6, null, 20000);
-    await wf(host.page, () => [...window.__zns.game.remotes.values()][0].hp === 6, null, 20000);
+    await wf(guest.page, () => window.__zns.game.combat.hp === 16, null, 20000);
+    await wf(host.page, () => [...window.__zns.game.remotes.values()][0].hp === 16, null, 20000);
 
     // Fatigue: Sapira costs 20 of 30 — a second one right away is too tiring
     const fat = await ev(host.page, () => {
@@ -278,8 +278,8 @@ test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players,
     assert.equal(fat.a, 'Sapira');
     assert.ok(fat.f1 <= 10.5, `fatigue spent (${fat.f1})`);
     assert.equal(fat.b, null, 'not enough strength');
-    await wf(guest.page, () => window.__zns.game.combat.hp === 2, null, 20000).catch(() => {}); // the real cast may also hit
-    await ev(guest.page, () => { window.__zns.game.combat.hp = 10; });
+    await wf(guest.page, () => window.__zns.game.combat.hp === 12, null, 20000).catch(() => {}); // the real cast may also hit
+    await ev(guest.page, () => { window.__zns.game.combat.hp = 20; });
 
     // Protection Maxima on the guest: the host sees the dome, spells bounce off
     await aim();
@@ -299,7 +299,7 @@ test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players,
         const r = [...g.remotes.values()][0];
         g.explode(r.position.clone(), 3.6, g.localId, 1);
     });
-    await wf(guest.page, () => window.__zns.game.combat.hp < 10, null, 20000);
+    await wf(guest.page, () => window.__zns.game.combat.hp < 20, null, 20000);
     assert.equal(await ev(host.page, () => window.__zns.game.combat.hp), hostHp0);
 
     // Frozen guest: everyone sees the ice; any punch shatters them → death screen, back to menu
@@ -390,7 +390,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
 
     // 3) Calm exit: hand off the opponent, then a flick → the duel just ends
     await ev(host.page, () => { window.__zns.game.combat.fatigue = 30; });
-    await ev(guest.page, () => { window.__zns.game.combat.fatigue = 30; window.__zns.game.combat.hp = 10; });
+    await ev(guest.page, () => { window.__zns.game.combat.fatigue = 30; window.__zns.game.combat.hp = 20; });
     await aim();
     await hostCast('Stupefy');
     await ev(guest.page, (hostId) => window.__zns.game.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 25 } }), ids[0]);

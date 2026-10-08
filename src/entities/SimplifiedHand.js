@@ -8,6 +8,8 @@
  *   - grip override: fingers wrap a held handle instead of passing through it
  *   - serializeState()/applyState() for multiplayer avatars
  *   - allocation-free history averaging
+ *   - the wrist turn is only trusted when the knuckles are seen well (an
+ *     edge-on hand doesn't flip the model over)
  */
 
 import * as THREE from 'three';
@@ -27,7 +29,9 @@ export class SimplifiedHand {
         this.PALM_H = 0.45;
         this.PALM_D = 0.14;
 
-        this.HISTORY_LENGTH = 3; // (was 7 render frames: up to ~0.2 s behind at 30 FPS)
+        // The landmarks come 1€-filtered (TrackingGuard) and blended (PoseSmoother):
+        // a long average on top only made the hand lag
+        this.HISTORY_LENGTH = 2;
         this.landmarkHistory = [];
         this._historyPool = [];
         this._avg = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
@@ -233,20 +237,27 @@ export class SimplifiedHand {
 
         const dx = pinkyB.x - indexB.x;
         const dy = pinkyB.y - indexB.y;
-        if (dx * dx + dy * dy > 0.0008) {
+        // How well the knuckle line is seen compared to the hand's length: an
+        // edge-on hand shows almost a dot and its angle is noise — then hold the turn
+        const handLen = Math.hypot(middleB.x - wrist.x, middleB.y - wrist.y) + 1e-6;
+        const conf = Math.max(0, Math.min(1, (Math.hypot(dx, dy) / handLen - 0.22) / 0.3));
+        if (conf > 0 && dx * dx + dy * dy > 0.0008) {
             const twist = Math.atan2(dy, dx);
             const targetTwist = this.side === 'right' ? -twist + 0.25 : twist - Math.PI - 0.25;
             // SAFEGUARD: a sudden ~180° jump is almost always a tracking glitch
             // (edge-on hand, atan2 wrap). Accept it only if it persists.
             const jump = Math.abs(lerpAngle(0, targetTwist - ts.wristTwist, 1));
-            if (jump > 2.4 && this.landmarkHistory.length > 2) {
+            if (jump > 2.0) {
+                // A turn-over: real only if it stays (several frames AND 0.15 s) and is seen clearly
+                const t = performance.now();
                 if (this._pendingTwist !== null && Math.abs(lerpAngle(0, targetTwist - this._pendingTwist, 1)) < 0.6) {
                     this._pendingTwistFrames++;
                 } else {
                     this._pendingTwist = targetTwist;
                     this._pendingTwistFrames = 1;
+                    this._pendingTwistAt = t;
                 }
-                if (this._pendingTwistFrames >= 4) {
+                if (this._pendingTwistFrames >= 5 && t - this._pendingTwistAt > 150 && conf > 0.5) {
                     ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.6);
                     this._pendingTwist = null;
                     this._pendingTwistFrames = 0;
@@ -254,7 +265,7 @@ export class SimplifiedHand {
             } else {
                 this._pendingTwist = null;
                 this._pendingTwistFrames = 0;
-                ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.6);
+                ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.6 * conf);
             }
         }
 

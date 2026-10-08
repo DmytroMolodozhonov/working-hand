@@ -17,7 +17,7 @@ import { WeaponSystem } from './Weapons.js';
 import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
-import { Combat, PVP } from './Combat.js';
+import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
@@ -342,6 +342,23 @@ export class Game {
         if (dPlayer < radius + 3) {
             _v1.set(pp.x - pos.x, 0, pp.z - pos.z).normalize().multiplyScalar((radius + 3 - dPlayer) * 4 * push);
             this.knockback.add(_v1);
+            // Close to the centre: also thrown up into the air
+            const k = 1 - dPlayer / (radius + 3);
+            if (k > 0.35 && !this.flight.active) {
+                const ch = this.character;
+                ch.group.position.y += 0.7;
+                ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, 10 * k * push);
+                ch.onGround = false;
+            }
+        }
+        // My own Bombardo too close to me hurts me too — the closer, the worse
+        // (point-blank can kill). Not in creative. Other players' blasts: Combat.explosion.
+        if (casterId === 'local' || casterId === this.localId) {
+            const self = Math.round(bombardoDamage(this.combat.center(_v2).distanceTo(pos), radius, power));
+            if (self > 0 && this.config.mode !== 'creative') {
+                if (this.combat.enabled) this.combat.damage(self, null, 'Bombardo');
+                else this.damageLocalPlayer(self);
+            }
         }
 
         if (authoritative) {
@@ -1004,6 +1021,11 @@ export class Game {
     /** Start the flight spell (arms must be up). Returns true when it started. */
     startFlight(force = false) {
         if (this.flight.active) return false;
+        // Maps (labyrinths etc.) are meant to be walked: no flying over the walls
+        if (this.world.isMap) {
+            this.hud.setVoice('🚫 На картах «Флайн» не работает — только в Творчестве, Выживании и Свободном мире', true);
+            return false;
+        }
         const armsUp = this.character.areBothHandsUp() || Date.now() - (this._armsUpAt || 0) < 1500;
         if (!force && !armsUp) {
             this.hud.setVoice('🦸 Для полёта поднимите <b>обе руки вверх</b> и скажите «Флайн»', true);

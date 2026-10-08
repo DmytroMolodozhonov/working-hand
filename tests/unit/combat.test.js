@@ -43,10 +43,11 @@ test('«Protection» / «Protection Maxima» are recognised (and not taken for o
     assert.equal(matchSpell('бомбардо максима'), 'BombardoMaxima');
 });
 
-test('free world: 10 HP, every spell hurts players, death at 0 HP', () => {
+test('free world: 20 HP, every spell hurts players, death at 0 HP', () => {
     const { combat, events } = fakeGame();
     assert.equal(combat.hp, PVP.MAX_HP);
-    assert.equal(PVP.MAX_HP, 10);
+    assert.equal(PVP.MAX_HP, 20);
+    combat.hp = 10; // (the arithmetic below starts from 10)
     combat.hitBySpell('Thunderwave', FRONT, 'enemy');
     assert.equal(combat.hp, 7);
     assert.equal(events.flashes, 1, 'red flash around the screen');
@@ -94,16 +95,16 @@ test('Protection: arm out → shield for 3 s; spells from the front bounce off, 
     assert.equal(c2.castProtection(false), null);
     assert.equal(c2.fatigue, 25);
     assert.equal(c2.hitBySpell('Sapira', FRONT, 'enemy'), false, 'blocked');
-    assert.equal(c2.hp, 10);
+    assert.equal(c2.hp, 20);
     assert.equal(c2.hitBySpell('Sapira', BEHIND, 'enemy'), true, 'hits from behind');
-    assert.equal(c2.hp, 6);
+    assert.equal(c2.hp, 16);
     // Bombardo blast in front: half damage through the shield
-    c2.hp = 10;
+    c2.hp = 20;
     c2.explosion(new THREE.Vector3(0, 1.1, -2), 3.6, 1, 'enemy');
-    const halved = 10 - c2.hp;
+    const halved = 20 - c2.hp;
     const { combat: c3 } = fakeGame();
     c3.explosion(new THREE.Vector3(0, 1.1, -2), 3.6, 1, 'enemy');
-    assert.ok(halved > 0 && halved < 10 - c3.hp, `shielded ${halved} < unshielded ${10 - c3.hp}`);
+    assert.ok(halved > 0 && halved < 20 - c3.hp, `shielded ${halved} < unshielded ${20 - c3.hp}`);
     // After 3 s the shield is gone
     for (let i = 0; i < 200; i++) c2.update(1 / 60);
     assert.equal(c2.shield, null);
@@ -120,9 +121,9 @@ test('Protection Maxima: needs a T-pose, dome for 5 s blocks every direction, co
     assert.equal(c.shield.left, 5, 'the dome lasts 5 seconds');
     assert.equal(c.hitBySpell('Thunderwave', FRONT, 'enemy'), false);
     assert.equal(c.hitBySpell('Thunderwave', BEHIND, 'enemy'), false);
-    assert.equal(c.hp, 10);
-    c.explosion(new THREE.Vector3(1, 1, 1), 6.2, 3, 'enemy'); // Bombardo Maxima right next to me
-    assert.ok(c.hp >= 7, `dome takes 75% (hp ${c.hp})`);
+    assert.equal(c.hp, 20);
+    c.explosion(new THREE.Vector3(1, 1, 1), 6.2, 3, 'enemy'); // Bombardo Maxima right next to me (would kill)
+    assert.ok(c.hp >= 13, `dome takes 75% (hp ${c.hp})`);
 });
 
 test('ice beam freezes a player in 5 s, 20 s frozen, any hit shatters them whatever their HP', () => {
@@ -138,8 +139,8 @@ test('ice beam freezes a player in 5 s, 20 s frozen, any hit shatters them whate
     assert.match(combat.check('Inferno'), /заморожены.*через 20 с/);
     for (let i = 0; i < 5 * 60; i++) combat.update(1 / 60);
     assert.equal(Math.round(combat.frozenLeft), 15);
-    // a punch on a frozen player (10 HP) kills
-    assert.equal(combat.hp, 10);
+    // a punch on a frozen player (full 20 HP) kills
+    assert.equal(combat.hp, 20);
     combat.meleeHit(1, 'enemy');
     assert.equal(events.deaths.length, 1);
     assert.match(events.deaths[0].text, /заморожены/);
@@ -151,7 +152,7 @@ test('frozen player thaws after 20 s; a shield stops the ice beam', () => {
     for (let i = 0; i < 21 * 60; i++) combat.update(1 / 60);
     assert.equal(combat.frozen, false);
     combat.meleeHit(1, 'enemy');
-    assert.equal(combat.hp, 9, 'normal hit again');
+    assert.equal(combat.hp, 19, 'normal hit again');
     const { combat: c } = fakeGame();
     c.castProtection(false);
     assert.equal(c.chillBy(0.5, FRONT, 'enemy'), false, 'beam blocked');
@@ -160,15 +161,25 @@ test('frozen player thaws after 20 s; a shield stops the ice beam', () => {
 
 test('own Bombardo does not hurt me; creative mode has no PvP', () => {
     const { combat } = fakeGame();
-    combat.explosion(new THREE.Vector3(0, 1, 0), 3.6, 1, 'me');
-    assert.equal(combat.hp, 10);
+    combat.explosion(new THREE.Vector3(0, 1, 0), 3.6, 1, 'me'); // (my own blast: Game.applyExplosion decides)
+    assert.equal(combat.hp, 20);
     const { g } = fakeGame();
     g.config.mode = 'creative';
     const c = new Combat(g);
     assert.equal(c.enabled, false);
     assert.equal(c.check('BombardoMaxima'), null, 'no fatigue in creative');
     c.hitBySpell('Sapira', FRONT, 'enemy');
-    assert.equal(c.hp, 10);
+    assert.equal(c.hp, 20);
+});
+
+test('Bombardo damage depends on the distance: point-blank kills, the edge barely hurts', async () => {
+    const { bombardoDamage } = await import('../../src/game/Combat.js');
+    assert.ok(bombardoDamage(0, 3.6, 1) >= PVP.MAX_HP, 'point-blank Bombardo kills');
+    assert.ok(bombardoDamage(0, 6.2, 3) > bombardoDamage(0, 3.6, 1), 'Maxima is stronger');
+    const mid = bombardoDamage(2, 3.6, 1), far = bombardoDamage(5.5, 3.6, 1);
+    assert.ok(mid > 5 && mid < 15, `2 m away: ${mid}`);
+    assert.ok(far < 1, `at the edge: ${far}`);
+    assert.equal(bombardoDamage(7, 3.6, 1), 0, 'out of reach');
 });
 
 test('shields work and show in every mode (creative too), without fatigue', () => {

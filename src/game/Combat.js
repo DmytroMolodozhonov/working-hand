@@ -1,7 +1,7 @@
 /**
  * Combat.js — the «Свободный мир» rules: players fight each other with spells.
  *
- *   Health      10 HP (red bar at the top). Every spell hurts players too.
+ *   Health      20 HP (red bar at the top), like on the maps. Every spell hurts players too.
  *               At 0 HP you are out: back to the menu.
  *   Fatigue     30 points (white bar at the bottom), +1 per second. Every
  *               spell costs fatigue; without enough the spell fails.
@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 
 export const PVP = {
-    MAX_HP: 10,
+    MAX_HP: 20,
     MAX_FATIGUE: 30,
     FATIGUE_REGEN: 1, // per second
     SHIELD_TIME: 3,
@@ -65,6 +65,18 @@ export const PLAYER_DAMAGE = {
     Punch: 1,
     BombardoMax: 3, // at the centre of a Bombardo; × power for Bombardo Maxima
 };
+
+/**
+ * Bombardo damage by distance from the centre of the blast: point-blank kills
+ * (20 HP; Bombardo Maxima 30), it falls off steeply and is ~0 at the edge of
+ * the reach (radius + 3 m).
+ */
+export function bombardoDamage(dist, radius, power = 1) {
+    const reach = radius + 3;
+    if (!(dist < reach)) return 0;
+    const k = 1 - dist / reach;
+    return PVP.MAX_HP * (power > 1 ? 1.5 : 1) * k * k;
+}
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -319,10 +331,9 @@ export class Combat {
     explosion(pos, radius, power, byId) {
         if (!this.enabled || this.dead) return;
         if (byId && byId === this.game.localId) return; // your own blast doesn't hurt you
-        const reach = radius + 3;
         const d = this.center(_v1).distanceTo(pos);
-        if (d > reach) return;
-        let dmg = PLAYER_DAMAGE.BombardoMax * power * (1 - d / reach);
+        let dmg = bombardoDamage(d, radius, power);
+        if (dmg <= 0) return;
         const s = this.shield;
         if (s && s.left > 0) {
             if (s.type === 2) dmg *= 0.25;

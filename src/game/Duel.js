@@ -28,6 +28,7 @@
 
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
+import { PVP } from './Combat.js';
 
 export const DUEL_SPELLS = {
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
@@ -54,6 +55,7 @@ export const DUEL = {
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _c2 = new THREE.Color();
 const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vector3(), _ds = new THREE.Vector3(), _du = new THREE.Vector3();
 
 let nextId = 1;
@@ -64,16 +66,49 @@ export class Duel {
         this.bolts = new Map(); // id -> bolt
         this.clashes = []; // {a, b, p, ...}
         this._t = 0;
-        // Crackling charges: a thin bright core + a soft glow, one pair per colour
+        // Crackling charges: a thin bright core + a soft glow, one pair per spell AND
+        // wizard: the same spell looks a bit different for each player (own shade and
+        // core colour), so two charges pushing against each other stay apart
         this.pools = {};
-        for (const [key, s] of Object.entries(DUEL_SPELLS)) {
-            this.pools[key] = {
-                core: new SegmentPool(game.scene, { capacity: 200, radius: s.core || 0.055, color: s.coreColor || 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }),
-                glow: new SegmentPool(game.scene, { capacity: 200, radius: s.glow || 0.24, color: s.color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
-            };
-        }
+        for (const key of Object.keys(DUEL_SPELLS)) this._pool(key, 0);
+        // Glowing "centre of force" where two charges meet
+        this._orbs = [];
+        this._orbsUsed = 0;
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
         this.log = []; // last duel events (for testing / debugging)
+    }
+
+    /** 0..3: this wizard's colour signature (same on every computer). */
+    _slot(by) {
+        const p = this.game.net?.players?.get?.(by);
+        if (p && Number.isFinite(p.color)) return p.color % 4;
+        let h = 0;
+        for (const ch of String(by)) h = (h * 31 + ch.charCodeAt(0)) | 0;
+        return Math.abs(h) % 4;
+    }
+
+    /** Colours of `spell` cast by wizard `by`: {glow, core}. */
+    colors(spell, by) {
+        const slot = typeof by === 'number' ? by : this._slot(by);
+        const s = DUEL_SPELLS[spell];
+        const shift = [0, 0.085, -0.085, 0.17][slot];
+        const glow = new THREE.Color(s.color).offsetHSL(shift, 0, slot ? 0.04 : 0).getHex();
+        const core = slot === 0 ? (s.coreColor || 0xffffff) : [0xffffff, 0xfff08a, 0x9ff3ff, 0xffb3ec][slot];
+        return { glow, core };
+    }
+
+    _pool(spell, by) {
+        const slot = typeof by === 'number' ? by : this._slot(by);
+        const key = spell + '|' + slot;
+        if (!this.pools[key]) {
+            const s = DUEL_SPELLS[spell];
+            const c = this.colors(spell, slot);
+            this.pools[key] = {
+                core: new SegmentPool(this.game.scene, { capacity: 200, radius: s.core || 0.055, color: c.core, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }),
+                glow: new SegmentPool(this.game.scene, { capacity: 200, radius: s.glow || 0.24, color: c.glow, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
+            };
+        }
+        return this.pools[key];
     }
 
     get me() {
@@ -161,8 +196,9 @@ export class Duel {
         if (g.sync) g.sync.duelCast(b);
         if (g.sound) g.sound.playSapira?.();
         // the spell leaves the hand with a flash
-        this._burst(origin, DUEL_SPELLS[spell].color, 18);
-        g.fx.lightFlash(origin, DUEL_SPELLS[spell].color, 2.5, 0.25, 12);
+        const col = this.colors(spell, this.me).glow;
+        this._burst(origin, col, 18);
+        g.fx.lightFlash(origin, col, 2.5, 0.25, 12);
         return b;
     }
 
@@ -216,7 +252,7 @@ export class Duel {
         const step = (DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED) * dt;
         b.front.addScaledVector(b.dir, step);
         b.traveled += step;
-        this._drawBolt(b.spell, origin, b.front);
+        this._drawBolt(b.spell, origin, b.front, b.by);
         if (!tp) {
             const t = this.game.terrain;
             if (b.traveled > DUEL.RANGE || (t && t.data.isSolidAt(b.front.x, b.front.y, b.front.z))) this._end(b, 'fizzle');
@@ -279,9 +315,13 @@ export class Duel {
             if (c.enabled) c.freeze(byId);
             else c.stun(5, byId);
         } else if (spell === 'LevitateDuel') {
+            // Thrown ~3 m up, falls back down. (Lifted past the ground-snap margin so the
+            // ground-following doesn't pull the player straight back down; flying ends.)
             const ch = g.character;
-            ch.group.position.y += 0.3;
-            ch.verticalVelocity = 11; // thrown up, falls back down
+            if (g.flight?.active) g.flight.land?.('levitate');
+            ch.group.position.y += 0.8;
+            ch.verticalVelocity = 11;
+            ch.onGround = false;
             if (c.enabled) setTimeout(() => c.damage(1, byId, 'Levitation'), 1600);
         } else if (spell === 'SapiraDuel') {
             g.fx.lightFlash(p, 0x8e2de2, 4, 0.4, 20);
@@ -379,13 +419,13 @@ export class Duel {
     /** Strength in a duel: fatigue first, HP second, a little luck. */
     _strength(id, luck) {
         const g = this.game;
-        let fatigue = 30, hp = 10;
+        let fatigue = 30, hp = PVP.MAX_HP;
         if (id === this.me) { fatigue = g.combat.fatigue; hp = g.combat.hp; }
         else {
             const r = g.remotes.get(id);
-            if (r) { fatigue = r.fatigue ?? 30; hp = r.hp ?? 10; }
+            if (r) { fatigue = r.fatigue ?? 30; hp = r.hp ?? PVP.MAX_HP; }
         }
-        return (fatigue / 30) * 1.0 + (hp / 10) * 0.35 + luck;
+        return (fatigue / 30) * 1.0 + (hp / PVP.MAX_HP) * 0.35 + luck;
     }
 
     /** Is this wizard still holding the duel (hand on the opponent)? jerk = gave up sharply. */
@@ -411,9 +451,12 @@ export class Duel {
         const okA = this._handOf(a.by, a.side, ha, d), okB = this._handOf(b.by, b.side, hb, d);
         if (okA && okB) {
             const m = ha.clone().lerp(hb, c.p);
-            this._drawBolt(a.spell, ha, m);
-            this._drawBolt(b.spell, hb, m);
-            if (Math.random() < 0.7) this._burst(m, Math.random() < 0.5 ? DUEL_SPELLS[a.spell].color : DUEL_SPELLS[b.spell].color, 3);
+            this._drawBolt(a.spell, ha, m, a.by);
+            this._drawBolt(b.spell, hb, m, b.by);
+            const colA = this.colors(a.spell, a.by).glow, colB = this.colors(b.spell, b.by).glow;
+            if (Math.random() < 0.7) this._burst(m, Math.random() < 0.5 ? colA : colB, 3);
+            // The centre of force: pulses, and takes the colour of whoever is pushing harder
+            this._showOrb(m, colA, colB, c.p, c.t);
             a.front.copy(m);
             b.front.copy(m);
         }
@@ -517,9 +560,10 @@ export class Duel {
 
     // =========================================================== visuals
     /** A jagged, flickering electric charge from a to b. */
-    _drawBolt(spell, from, to) {
-        const pool = this.pools[spell];
-        if (!pool) return;
+    _drawBolt(spell, from, to, by) {
+        if (!DUEL_SPELLS[spell]) return;
+        const pool = this._pool(spell, by);
+        const col = this.colors(spell, by).glow;
         // own copies: the caller may pass the shared temp vectors
         const a = _da.copy(from), b = _db.copy(to);
         const len = a.distanceTo(b);
@@ -544,8 +588,8 @@ export class Duel {
             prev = p;
         }
         // bright head, and a glow at the hand it comes from
-        if (Math.random() < 0.8) this.game.fx.spark(b, DUEL_SPELLS[spell].color, 0.22, _v1.set((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2), 0.25);
-        if (Math.random() < 0.5) this.game.fx.spark(a, DUEL_SPELLS[spell].color, 0.12, _v1.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5), 0.2);
+        if (Math.random() < 0.8) this.game.fx.spark(b, col, 0.22, _v1.set((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2), 0.25);
+        if (Math.random() < 0.5) this.game.fx.spark(a, col, 0.12, _v1.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5), 0.2);
     }
 
     _burst(p, color, n) {
@@ -553,8 +597,35 @@ export class Duel {
         for (let i = 0; i < n; i++) fx.spark(p, i % 3 ? color : 0xffffff, 0.12 + Math.random() * 0.1, _v1.set((Math.random() - 0.5) * 7, (Math.random() - 0.3) * 6, (Math.random() - 0.5) * 7), 0.5);
     }
 
+    /**
+     * A pulsing ball where two charges meet. p = meeting point between the two
+     * hands (0 = at A's hand): the ball leans to the colour of the one winning.
+     */
+    _showOrb(pos, colA, colB, p, t) {
+        let orb = this._orbs[this._orbsUsed];
+        if (!orb) {
+            const mk = (r, o) => new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false }));
+            orb = { inner: mk(0.22, 0.95), outer: mk(0.55, 0.45) };
+            orb.inner.renderOrder = orb.outer.renderOrder = 5;
+            this.game.scene.add(orb.inner, orb.outer);
+            this._orbs.push(orb);
+        }
+        this._orbsUsed++;
+        const pulse = 1 + Math.sin(t * 18) * 0.18 + Math.sin(t * 7.3) * 0.08;
+        orb.inner.position.copy(pos);
+        orb.outer.position.copy(pos);
+        orb.inner.scale.setScalar(pulse);
+        orb.outer.scale.setScalar(pulse * (1.1 + Math.abs(p - 0.5)));
+        // p < 0.5: the point is near A's hand → B is pushing harder (B's colour)
+        orb.outer.material.color.setHex(colA).lerp(_c2.setHex(colB), 1 - p);
+        orb.inner.visible = orb.outer.visible = true;
+    }
+
     /** Called by the effects' update (segment pools fade the flicker). */
     updateVisuals(dt) {
         for (const p of Object.values(this.pools)) { p.core.update(dt); p.glow.update(dt); }
+        // orbs of duels that ended this frame disappear
+        for (let i = this._orbsUsed; i < this._orbs.length; i++) this._orbs[i].inner.visible = this._orbs[i].outer.visible = false;
+        this._orbsUsed = 0;
     }
 }
