@@ -601,3 +601,64 @@ test('«Левиоса» + «Атак»: the floating sword flies into a zombie 
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('animals: herds graze, fight back or flee, sheep together; carcass, meat, Inferno cooks it; horses: apples, mount, ride; golden apple trees', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const A = g.animals;
+        const me = g.character.group.position;
+        const at = (dx, dz) => new T.Vector3(me.x + dx, g.collision.groundY(me.x + dx, me.z + dz) + 0.5, me.z + dz);
+        // a cow, a flock of sheep, a horse
+        const cow = A._spawn('cow', at(6, 0));
+        const flock = [0, 1, 2, 3, 4].map((i) => A._spawn('sheep', at(-8 + i, 6)));
+        const horse = A._spawn('horse', at(0, -5), { bonus: 20 });
+        await frames(10);
+        // hit a sheep: the flock reacts
+        A.hit(flock[0], 1, new T.Vector3(1, 0, 0), g.localId);
+        const flockAngry = flock.filter((s) => s.state === 'attack').length;
+        // kill the cow with fire: a cooked carcass with meat
+        for (let i = 0; i < 20 && !cow.dead; i++) { cow.damageCooldown = 0; A.burnAlong(me.clone().setY(cow.group.position.y), new T.Vector3(1, 0, 0), 12); }
+        const cowDead = cow.dead, cooked = cow.cooked, meat0 = cow.meat;
+        A._takeMeat(cow, g.localId, 'right');
+        const inHand = g.items.held.right?.item.kind;
+        // «Gather» the rest
+        const got = A.gatherAt(me.clone().setY(cow.group.position.y + 0.5), new T.Vector3().subVectors(cow.group.position, me).setY(0).normalize());
+        const steaks = g.inventory.slots.filter((s) => s && s.kind === 'steak').reduce((n, s) => n + (s.count || 1), 0);
+        const bones = !!cow.bones;
+        // a horse: 3 golden apples, then a jump next to it
+        horse.apples = 3;
+        g.character.group.position.copy(horse.group.position).add(new T.Vector3(1, 1.5, 0));
+        const rnd = Math.random; Math.random = () => 0.5; A.tryMount(); Math.random = rnd;
+        const riding = A.riding === horse;
+        const hx0 = horse.group.position.clone();
+        g.character.isRunning = true; g.character.runIntensity = 1;
+        for (let i = 0; i < 10; i++) A._ride(0.1);
+        const rode = horse.group.position.distanceTo(hx0);
+        g.character.isRunning = false;
+        A.dismount();
+        // a golden tree somewhere: pick an apple
+        let tree = null;
+        for (let k = 0; k < 40 && !tree; k++) { A._treesAround(new T.Vector3((k % 7 - 3) * 110, 0, (Math.floor(k / 7) - 3) * 110)); tree = [...A.trees.values()].find((t) => t); }
+        let apple = false;
+        if (tree) { g.items.releaseHand('left'); A._pickApple(tree, 0, g.localId, 'left'); apple = g.items.held.left?.item.kind === 'apple'; }
+        return { flockAngry, cowDead, cooked, meat0, inHand, got, steaks, bones, riding, rode, tamed: horse.tamed, tree: !!tree, apple };
+    });
+    assert.ok(r.flockAngry >= 1, `the flock stands up for the sheep (${r.flockAngry})`);
+    assert.ok(r.cowDead && r.cooked, 'the cow burnt — cooked');
+    assert.equal(r.meat0, 4, 'a cow gives 4 pieces');
+    assert.equal(r.inHand, 'steak', 'a steak taken by hand');
+    assert.ok(r.got && r.got.includes('3'), 'Gather took the rest: ' + r.got);
+    assert.ok(r.steaks >= 3, `steaks in the slots (${r.steaks})`);
+    assert.ok(r.bones, 'only bones are left');
+    assert.ok(r.riding, 'on the horse after 3 apples');
+    assert.ok(r.rode > 5, `the horse carried me (${r.rode.toFixed(1)} m in 1 s)`);
+    assert.ok(r.tamed, 'the horse is tamed');
+    assert.ok(r.tree && r.apple, 'a golden apple picked from a golden tree');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

@@ -135,7 +135,8 @@ export class Bleeding {
             this._zT = 0;
             if (g.authority) for (const w of g.weapons.stuckWeapons()) {
                 const z = w.stuckIn?.z;
-                if (z && !z.playerId && !z.isDead && z.takeDamage) g.damageZombie(z, 1, true, _v.set(0, -1, 0), null);
+                if (z && z.isAnimal && !z.isDead) g.animals.hit(z, 1, null, null);
+                else if (z && !z.playerId && !z.isDead && z.takeDamage) g.damageZombie(z, 1, true, _v.set(0, -1, 0), null);
             }
         }
         for (const w of g.weapons.stuckWeapons()) if (Math.random() < dt * 6) this._drip(w.position);

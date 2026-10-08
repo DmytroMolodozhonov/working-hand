@@ -35,7 +35,7 @@ test('menu: maps, modes and the new spell are listed; no errors on load', async 
     const spells = await page.$$eval('#spells-grid .item-name', (els) => els.map((e) => e.textContent));
     assert.ok(spells.some((n) => n.startsWith('Бомбардо') && n.includes('Максима')), 'one card with a Maxima badge: ' + spells.join(','));
     assert.ok(!spells.includes('Бомбардо Максима'), 'no separate Maxima card');
-    await page.click('#spell-cats .sub-tab:last-child');
+    await page.click('#spell-cats .sub-tab:has-text("Строительство")');
     assert.ok((await page.$$eval('#spells-grid .item-name', (els) => els.map((e) => e.textContent))).includes('Create a Wall'));
     await page.click('[data-tab="tab-settings"]');
     await page.click('.sub-tab[data-sub="set-graphics"]');
@@ -52,6 +52,8 @@ test('creative: world with mountains, weapons floating over pedestals, hands fol
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
+    // the game picture is really on screen (not inside a hidden menu)
+    assert.equal(await page.evaluate(() => document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.id), 'game-canvas', 'the game canvas is visible');
     const s = await state(page);
     assert.equal(s.mode, 'creative');
     assert.deepEqual(s.weapons.map((w) => w.type).sort(), ['axe', 'sword']);

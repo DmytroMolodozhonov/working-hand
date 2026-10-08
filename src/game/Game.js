@@ -30,6 +30,7 @@ import { ItemSystem } from './Items.js';
 import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
+import { Animals } from './Animals.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -150,9 +151,9 @@ export class Game {
             blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
             quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
             storm: (origin) => this.storm?.start(origin, 13),
-            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); },
-            birdRay: (o, d, len, width) => this.books?.hitRay(o, d, len, width),
-            ignite: (o, d, len) => this.fire.igniteAlong(o, d, len),
+            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); },
+            birdRay: (o, d, len, width) => { this.books?.hitRay(o, d, len, width); this.animals?.hitRay(o, d, len, width, 3, this.localId); },
+            ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); },
             collision: this.collision,
             terrain: () => this.terrain,
         });
@@ -184,6 +185,7 @@ export class Game {
         this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
         this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
+        this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -347,6 +349,7 @@ export class Game {
     /** The local player's weapon/fist hit something. */
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic); return; }
+        if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         this.punchCount++;
         if (this.authority) {
             this.damageZombie(z, dmg, isWeapon, dir, this.localId, hit);
@@ -386,6 +389,7 @@ export class Game {
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
+        if (authoritative) this.animals?.hitAt(pos, radius, 6 * power, casterId);
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -1038,6 +1042,13 @@ export class Game {
         }
         if (this.combat.enabled && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает сил'); return null; }
         let hint;
+        // «Gather» at a carcass (meat) or a golden tree (apples)
+        if (name === 'Gather') {
+            const side = ['right', 'left'].find((sd) => this.character.isArmRaised(sd)) || 'right';
+            const got = this.animals.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
+            if (got && !got.startsWith('🍏')) { this.hud.setVoice(got, true); this._lastBuild = now; return 'Gather'; }
+            if (got) { if (isFinal) this.hud.setVoice(got, true); return null; }
+        }
         if (name === 'Gather') hint = this.builder.gather();
         else if (name === 'CreateDoor') hint = this.doors ? this.doors.create() : '🚪 Двери скоро будут';
         else hint = this.builder.start(name);
@@ -1398,6 +1409,7 @@ export class Game {
         this.wandMagic.update(dt);
         this.gear.update(dt);
         this.bleeding.update(dt);
+        this.animals.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
@@ -1413,7 +1425,7 @@ export class Game {
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
-        this.weapons.checkHits(this.combat.enabled ? this.zombies.concat(this.combat.meleeTargets()) : this.zombies, dt);
+        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets()), dt);
         mark('зомби');
 
         this.spells.update(dt);
@@ -1500,7 +1512,7 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
-        ch.update(dt, this.collision, !flight.active);
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding);
 
         // Explosion knockback (decays)
         if (this.knockback.lengthSq() > 0.0001) {
@@ -1866,6 +1878,7 @@ export class Game {
         this.wandMagic?.dispose();
         this.gear?.dispose();
         this.bleeding?.dispose();
+        this.animals?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

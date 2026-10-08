@@ -355,6 +355,7 @@ window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (k >= '1' && k <= '9' && game.inventory) game.inventory.select(Math.min(parseInt(k, 10), game.inventory.slots.length) - 1);
     if ((k === '0' || k === '`' || k === 'ё') && game.inventory) game.inventory.select(-1);
+    if ((k === 'j' || k === 'о') && game.animals) game.animals.tryMount();
     if (k === 'm' || k === 'ь') game.castDebug('Inferno');
     if (k === 'b' || k === 'и') game.castDebug('Bombardo');
     if (k === 'n' || k === 'т') game.castDebug('BombardoMaxima');

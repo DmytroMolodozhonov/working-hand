@@ -184,6 +184,10 @@ export class Gear {
                         }
                     }
                 }
+                for (const an of g.animals?.targets() || []) {
+                    if (a.hit.has(an)) continue;
+                    if (_v.copy(an.group.position).add(_v2.set(0, 0.9, 0)).distanceTo(p) < 1.0) { a.hit.add(an); if (a.by === g.localId) g.animals.hit(an, a.dmg, a.vel.clone(), a.by); this._stick(a, an.group); }
+                }
                 if (a.by !== g.localId && !g.combat.dead && g.combat.center(_v).distanceTo(p) < 1.0 && !a.hit.has('me')) {
                     a.hit.add('me');
                     const from = _v2.copy(p).addScaledVector(a.vel, -0.1);

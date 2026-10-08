@@ -335,6 +335,19 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
     }
 
+    // ---- animals (the host owns them)
+    animals(list) { if (this.net.isHost) this.net.send({ t: 'an', l: list }); }
+    animalHit(id, dmg, dir, fire) { this.net.send({ t: 'ahit', id, dmg, d: dir ? [r3(dir.x), r3(dir.y), r3(dir.z)] : null, f: fire ? 1 : 0, by: this.me }); }
+    animalMeat(id, side) { this.net.send({ t: 'ameat', id, side }); }
+    animalMeatTo(to, item, side) { this.net.send({ t: 'agive', to, item, side }, true); }
+    animalGather(id) { this.net.send({ t: 'agath', id }); }
+    applePick(key, i, side) { this.net.send({ t: 'apick', key, i, side }); }
+    appleGone(key, i, until) { if (this.net.isHost) this.net.send({ t: 'agone', key, i, until }, true); }
+    animalFeed(id) { this.net.send({ t: 'afeed', id }); }
+    animalRide(id, on) { this.net.send({ t: 'aride', id, on: on ? 1 : 0, by: this.me }, true); }
+    animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
+    animalButt(to, dmg, p) { this.net.send({ t: 'abutt', to, dmg, p: [r3(p.x), r3(p.y), r3(p.z)] }, true); }
+
     impale(to, wid) {
         this.game.bleeding?.noteImpale(wid, to);
         this.net.send({ t: 'impale', w: wid, to }, true);
@@ -488,6 +501,17 @@ export class NetSync {
                 if (c && !this.net.isHost) g.openChest(c);
                 break;
             }
+            case 'an': if (!this.net.isHost) g.animals?.applyNet(m.l); break;
+            case 'ahit': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals.hit(a, Math.min(30, m.dmg || 1), m.d ? vec(m.d) : null, m.from || m.by, !!m.f); } break;
+            case 'ameat': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals._takeMeat(a, m.from, m.side); } break;
+            case 'agath': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) { const n = a.meat; for (let i = 0; i < n; i++) g.animals._takeMeat(a, m.from, null); } } break;
+            case 'agive': if (m.to === this.me && m.item) g.animals?._give(m.item, m.side); break;
+            case 'apick': if (this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr) g.animals._pickApple(tr, m.i, m.from, m.side); } break;
+            case 'agone': if (!this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr && tr.apples[m.i]) tr.apples[m.i].until = Date.now() + Math.max(0, (m.until || 0) - Date.now()); } break;
+            case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(3, a.apples + 1); } break;
+            case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
+            case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; } } break;
+            case 'abutt': if (m.to === this.me) { if (g.combat.enabled) g.combat.damage(m.dmg || 1, null, 'animal'); else g.damageLocalPlayer(m.dmg || 1); } break;
             case 'impale': g.bleeding?.noteImpale(m.w, m.to); break;
             case 'unimpale': g.bleeding?.noteUnimpale(m.w); break;
             case 'pullout': { const w = g.weapons.byId.get(m.w); if (w && w.stuckIn) g.weapons._unstick(w, true); break; }
