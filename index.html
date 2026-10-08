@@ -1,37 +1,478 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Gemini K-Hand 3D</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; }
-      #root { height: 100%; }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/": "https://esm.sh/react@18.3.1/",
-    "react-dom": "https://esm.sh/react-dom@18.3.1",
-    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
-    "three": "https://esm.sh/three@0.160.0",
-    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.16.8?deps=three@0.160.0,react@18.3.1,react-dom@18.3.1",
-    "@react-three/drei": "https://esm.sh/@react-three/drei@9.105.0?deps=three@0.160.0,react@18.3.1,react-dom@18.3.1,@react-three/fiber@8.16.8",
-    "@react-three/rapier": "https://esm.sh/@react-three/rapier@1.3.0?deps=three@0.160.0,react@18.3.1,react-dom@18.3.1,@react-three/fiber@8.16.8",
-    "@mediapipe/camera_utils": "https://esm.sh/@mediapipe/camera_utils@^0.3.1675466862",
-    "@mediapipe/hands": "https://esm.sh/@mediapipe/hands@^0.4.1675469240",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.363.0",
-    "kalidokit": "https://esm.sh/kalidokit@^1.1.5"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Voxel Game - Pose Control</title>
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
-  <body>
-    <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
+
+<body>
+    <!-- HUD (In-Game) -->
+    <div id="hud" class="hidden">
+        <div id="hp-container">
+            <div id="hp-bar-fill"></div>
+            <span id="hp-text">HP: 10/10</span>
+        </div>
+        <div id="stats-container">
+            <p>Убито: <span id="kill-count">0</span></p>
+            <p>Ударов: <span id="punch-count">0</span></p>
+            <p id="fps-counter" style="color: #00ff00; font-family: monospace;">FPS: 60</p>
+        </div>
+    </div>
+    <div id="damage-flash" class="hidden"></div>
+
+
+    <!-- Voice Debug Log (Bottom Center) -->
+    <!-- Voice Debug Log (Top Center, Small, Hidden by default) -->
+    <div id="voice-debug"
+        style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); color: #ffeaa7; font-size: 12px; font-weight: normal; font-family: sans-serif; z-index: 9999; text-shadow: 1px 1px 2px #000; pointer-events: none; text-align: center; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 5px; display: none;">
+        🎤 ОЖИДАНИЕ КОМАНДЫ...
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over" class="hidden">
+        <h1>ВЫ ПРОИГРАЛИ</h1>
+        <p>Зомби съели ваш мозг.</p>
+        <div class="stats-summary">
+            <p>Убито зомби: <span id="go-kills">0</span></p>
+            <p>Всего ударов: <span id="go-punches">0</span></p>
+        </div>
+        <button id="restart-btn">В МЕНЮ</button>
+
+
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading" class="overlay">
+        <div class="menu-container">
+            <h1>ЗАГРУЗКА...</h1>
+            <div id="loading-bar-container"
+                style="width: 100%; height: 20px; background: #2c3e50; border-radius: 10px; overflow: hidden; margin: 20px 0; border: 1px solid #34495e;">
+                <div id="loading-bar-fill"
+                    style="width: 0%; height: 100%; background: #3498db; transition: width 0.3s; box-shadow: 0 0 10px #3498db;">
+                </div>
+            </div>
+            <p id="loading-status" style="color: #bdc3c7; font-size: 0.9em;">Инициализация ресурсов...</p>
+        </div>
+    </div>
+
+    <div id="main-menu">
+        <div class="menu-container">
+            <h1>ЗОМБИ НЕ СПЯТ</h1>
+
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="tab-game">ИГРА</button>
+                <button class="tab-btn" data-tab="tab-editor">РЕДАКТОР</button>
+
+                <button class="tab-btn" data-tab="tab-items">ПРЕДМЕТЫ</button>
+                <button class="tab-btn" data-tab="tab-settings">НАСТРОЙКИ</button>
+                <button class="tab-btn" data-tab="tab-audio">АУДИО</button>
+                <button class="tab-btn" data-tab="tab-voice">ГОЛОС</button>
+            </div>
+
+            <div class="tab-content">
+                <!-- TAB 1: GAME -->
+                <div id="tab-game" class="tab-pane active">
+
+
+
+                    <div id="game-map-container"
+                        style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                        <h4
+                            style="color: #ff4757; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;">
+                            Выбор Режима и Карты:</h4>
+
+
+
+                        <div id="game-map-list">
+                            <!-- Maps will be populated here by main.js -->
+                        </div>
+
+                        <!-- Zombie Slider for Creative Mode -->
+                        <div id="creative-settings"
+                            style="display: none; margin-top: 15px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px;">
+                            <label style="color: #fff; display: block; margin-bottom: 10px;">Количество зомби
+                                (Творческий): <span id="zombie-count-val">0</span></label>
+                            <input type="range" id="creative-zombie-count" min="0" max="50" value="0"
+                                style="width: 100%;">
+                        </div>
+                    </div>
+
+                    <button id="start-btn" style="margin-top: 20px;">ИГРАТЬ</button>
+                </div>
+
+
+
+                <!-- TAB: ITEMS -->
+                <div id="tab-items" class="tab-pane">
+                    <div id="items-grid" class="items-grid">
+                        <!-- Items populated by JS -->
+                    </div>
+                </div>
+
+
+
+                <!-- TAB 2: SETTINGS -->
+                <div id="tab-settings" class="tab-pane">
+                    <div class="settings-group">
+                        <label>
+                            <input type="checkbox" id="camera-mode-toggle" checked>
+                            Режим "От первого лица" (FPV)
+                        </label>
+                    </div>
+                    <div class="settings-group">
+                        <label>
+                            <input type="checkbox" id="show-hands-toggle" checked>
+                            Показывать Кисти Рук
+                        </label>
+                    </div>
+                    <div class="settings-group">
+                        <label>Версия Кистей Рук:</label>
+                        <div style="margin-top: 5px;">
+                            <label style="margin-right: 15px;">
+                                <input type="radio" name="hand-version" value="v3" id="hand-version-v3" checked>
+                                V3 (Стабильная)
+                            </label>
+                            <label>
+                                <input type="radio" name="hand-version" value="v2" id="hand-version-v2">
+                                V2 (Точная)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <label>Лимит FPS:</label>
+                        <select id="fps-limit">
+                            <option value="30">30 FPS</option>
+                            <option value="60">60 FPS</option>
+                            <option value="0" selected>Максимум</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>Качество ИИ (MediaPipe):</label>
+                        <select id="model-quality">
+                            <option value="0">Lite</option>
+                            <option value="1" selected>Full</option>
+                            <option value="2">Heavy</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>Качество Кистей (Hands):</label>
+                        <select id="hand-quality">
+                            <option value="low">Низкое (Быстро)</option>
+                            <option value="high" selected>Высокое (Voxel)</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>Разрешение:</label>
+                        <select id="camera-res">
+                            <option value="640x480" selected>640x480</option>
+                            <option value="1280x720">1280x720</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>Плавность камеры: <span id="smooth-val">30%</span></label>
+                        <!-- 0 = Raw, 100 = Max Smooth -->
+                        <input type="range" id="cam-smooth" min="0" max="95" value="70">
+                    </div>
+                    <div class="settings-group">
+                        <label>Чувствительность: <span id="sens-val">100%</span></label>
+                        <!-- 10 = 0.1x, 100 = 1.0x -->
+                        <input type="range" id="cam-sens" min="10" max="100" value="100">
+                    </div>
+                    <div class="settings-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="drift-camera" checked>
+                            Плавный поворот (рекомендуется)
+                        </label>
+                    </div>
+
+                    <button id="test-mode-btn" class="menu-btn"
+                        style="background: #7f8c8d; margin-top: 15px; font-size: 0.9em;">🛠️ Настроить Камеру
+                        (Тест)</button>
+                </div>
+
+                <!-- TAB 3: AUDIO -->
+                <div id="tab-audio" class="tab-pane">
+                    <div class="settings-group">
+                        <label>Громкость Зомби: <span id="vol-val">100%</span></label>
+                        <input type="range" id="zombie-vol" min="0" max="100" value="100">
+                    </div>
+                    <div class="settings-group">
+                        <label>Громкость Музыки: <span id="music-vol-val">50%</span></label>
+                        <input type="range" id="music-vol" min="0" max="100" value="50">
+                    </div>
+                    <div class="settings-group">
+                        <label>Звуки рычания:</label>
+                        <select id="audio-ambient-toggle">
+                            <option value="1">Включены</option>
+                            <option value="0">Выключены</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- TAB 5: VOICE TEST -->
+                <div id="tab-voice" class="tab-pane">
+                    <div class="settings-group">
+                        <h3 style="color: #ff4757; margin-bottom: 15px;">🎤 Проверка Голоса</h3>
+                        <p style="color: #a4b0be; margin-bottom: 20px;">Произнесите команду (например: "Инферно", "Лед",
+                            "Гром"), и система отобразит распознанный текст ниже.</p>
+
+                        <div id="voice-test-output"
+                            style="background: rgba(0,0,0,0.4); padding: 30px; border-radius: 12px; border: 2px dashed #ff4757; text-align: center; margin-bottom: 20px;">
+                            <span id="voice-test-text"
+                                style="font-size: 1.8rem; color: #a4b0be; font-weight: bold; text-shadow: 0 0 10px rgba(85, 239, 196, 0.3);">
+                                НАЖМИТЕ "СТАРТ" ДЛЯ ПРОВЕРКИ
+                            </span>
+                        </div>
+
+                        <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+                            <button id="voice-toggle-btn" class="menu-btn"
+                                style="background: #27ae60; width: 200px; padding: 12px; font-size: 1.1rem;">
+                                🎙️ СТАРТ
+                            </button>
+                        </div>
+
+                        <div class="info-text"
+                            style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <p>Теперь система будет слушать только после нажатия кнопки. Это позволяет проверить
+                                микрофон точно тогда, когда вам это нужно.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: EDITOR -->
+                <div id="tab-editor" class="tab-pane">
+                    <div class="editor-layout">
+                        <div class="editor-sidebar">
+                            <div class="sidebar-section">
+                                <h4>Объекты</h4>
+                                <button class="tool-btn active" data-tool="wall">🧱 Стена</button>
+                                <button class="tool-btn" data-tool="spawn">🧍 Спавн</button>
+                                <button class="tool-btn" data-tool="win">🏁 Финиш</button>
+                                <button class="tool-btn" data-tool="zombie">🧟 Зомби</button>
+                                <button class="tool-btn" data-tool="chest">📦 Сундук</button>
+                                <button class="tool-btn" data-tool="erase">❌ Удалить</button>
+                            </div>
+                            <div class="sidebar-section">
+                                <h4>Файл</h4>
+                                <input type="text" id="map-name" placeholder="Название">
+                                <button id="save-map-btn">💾 Сохранить</button>
+                                <button id="clear-map-btn">🗑️ Очистить</button>
+
+                            </div>
+                        </div>
+                        <div class="editor-canvas-area">
+                            <canvas id="editor-canvas" width="500" height="500"></canvas>
+                            <div id="chest-item-selector" class="hidden">
+                                <label>Предмет:</label>
+                                <select id="chest-item">
+                                    <option value="sword">Меч</option>
+                                    <option value="axe">Топор</option>
+                                </select>
+                                <button id="confirm-chest">OK</button>
+                            </div>
+                        </div>
+
+                    </div>
+                    <!-- Bottom Map Selector -->
+                    <div id="editor-map-selector"
+                        style="margin-top: 20px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                        <div id="editor-map-list" class="horizontal-map-list">
+                            <!-- Maps populated by MapEditor.js -->
+                        </div>
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+    </div>
+
+
+    <!-- TEST MODE UI -->
+    <div id="test-mode-ui" class="overlay hidden" style="pointer-events: none;">
+        <!-- Left Panel: Controls -->
+        <div class="menu-container"
+            style="pointer-events: auto; position: absolute; left: 20px; top: 20px; width: 300px; padding: 20px;">
+            <h3 onclick="document.getElementById('grp-cam').classList.toggle('hidden')"
+                style="cursor: pointer; user-select: none;">▶ 🎥 Настройка Камеры</h3>
+            <div id="grp-cam" class="hidden">
+                <p style="font-size: 0.9em; color: #aaa;">Двигайте ползунки, красная точка показывает положение
+                    камеры.
+                </p>
+                <div class="settings-group">
+                    <label>X (Влево/Вправо): <span id="tm-val-x">0</span></label>
+                    <input type="range" id="tm-x" min="-2" max="2" step="0.05" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Y (Высота): <span id="tm-val-y">1.5</span></label>
+                    <input type="range" id="tm-y" min="-1" max="3" step="0.05" value="1.5">
+                </div>
+                <div class="settings-group">
+                    <label>Z (Вперед/Назад): <span id="tm-val-z">0</span></label>
+                    <input type="range" id="tm-z" min="-2" max="2" step="0.05" value="0">
+                </div>
+            </div>
+
+            <hr style="border-color: #444; margin: 15px 0;">
+
+            <h3 onclick="document.getElementById('grp-weap').classList.toggle('hidden')"
+                style="cursor: pointer; user-select: none;">▶ ⚔️ Настройка Меча</h3>
+            <div id="grp-weap" class="hidden">
+                <div class="settings-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="hide-weapon" checked>
+                        Скрыть модель меча
+                    </label>
+                </div>
+                <div class="settings-group">
+                    <label>Pos X: <span id="wp-val-x">0</span></label>
+                    <input type="range" id="wp-x" min="-1" max="1" step="0.01" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Pos Y: <span id="wp-val-y">0</span></label>
+                    <input type="range" id="wp-y" min="-1" max="1" step="0.01" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Pos Z: <span id="wp-val-z">0</span></label>
+                    <input type="range" id="wp-z" min="-1" max="1" step="0.01" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Rot X: <span id="wr-val-x">0</span></label>
+                    <input type="range" id="wr-x" min="-3.14" max="3.14" step="0.1" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Rot Y: <span id="wr-val-y">0</span></label>
+                    <input type="range" id="wr-y" min="-3.14" max="3.14" step="0.1" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Rot Z: <span id="wr-val-z">0</span></label>
+                    <input type="range" id="wr-z" min="-3.14" max="3.14" step="0.1" value="0">
+                </div>
+            </div>
+
+            <hr style="border-color: #444; margin: 15px 0;">
+
+            <h3 onclick="document.getElementById('grp-hand').classList.toggle('hidden')"
+                style="cursor: pointer; user-select: none;">▼ 🤚 Настройка Рук</h3>
+            <div id="grp-hand">
+                <div class="settings-group">
+                    <label>Hand Scale: <span id="hp-val-s">1.0</span></label>
+                    <input type="range" id="hp-s" min="0.1" max="3.0" step="0.1" value="1.0">
+                </div>
+                <div class="settings-group">
+                    <label>Hand X: <span id="hp-val-x">0</span></label>
+                    <input type="range" id="hp-x" min="-1.0" max="1.0" step="0.01" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Hand Y: <span id="hp-val-y">0</span></label>
+                    <input type="range" id="hp-y" min="-1.0" max="1.0" step="0.01" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Hand Z: <span id="hp-val-z">0</span></label>
+                    <input type="range" id="hp-z" min="-2.0" max="2.0" step="0.01" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Hand Rot X: <span id="hr-val-x">0</span></label>
+                    <input type="range" id="hr-x" min="-3.14" max="3.14" step="0.1" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Hand Rot Y: <span id="hr-val-y">0</span></label>
+                    <input type="range" id="hr-y" min="-3.14" max="3.14" step="0.1" value="0">
+                </div>
+                <div class="settings-group">
+                    <label>Hand Rot Z: <span id="hr-val-z">0</span></label>
+                    <input type="range" id="hr-z" min="-3.14" max="3.14" step="0.1" value="0">
+                </div>
+            </div>
+
+            <div style="margin-top: 15px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label for="tm-preview-tracking" style="cursor: pointer; user-select: none;">🔴 Live
+                        Tracking</label>
+                    <input type="checkbox" id="tm-preview-tracking" style="width: 20px; height: 20px;">
+                </div>
+                <p style="font-size: 10px; color: #aaa; margin-top: 5px; margin-bottom: 0;">Включите, чтобы увидеть
+                    руки
+                    в движении (как в игре) и настроить риг.</p>
+            </div>
+
+            <hr style="border-color: #444; margin: 15px 0;">
+
+            <button id="save-rig-btn" class="hidden" style="background: #8e44ad; width: 100%; margin-top: 10px;">💾
+                Сохранить Риг</button>
+            <button id="tm-spawn-btn" style="background: #27ae60; width: 100%; margin-top: 10px;">👀 Проверить
+                (FPV)</button>
+            <button id="tm-exit-btn" style="background: #c0392b; width: 100%; margin-top: 10px;">Выйти в
+                Меню</button>
+        </div>
+
+        <!-- Back Button (Visible when in FPV test) -->
+        <div id="tm-back-overlay" class="hidden"
+            style="position: absolute; top: 20px; right: 20px; pointer-events: auto;">
+            <button id="tm-back-btn" style="background: #f39c12; font-weight: bold;">⚙️ Вернуться к
+                настройке</button>
+        </div>
+    </div>
+
+    <!-- VICTORY SCREEN -->
+    <div id="victory-screen" class="overlay hidden">
+        <div class="menu-container">
+            <h1>🏆 ПОБЕДА! 🏆</h1>
+            <p id="victory-score">Счет: 0</p>
+            <button id="victory-menu-btn" class="menu-btn">В Меню</button>
+        </div>
+    </div>
+
+    <!-- Mini-map -->
+    <div id="minimap-container">
+        <canvas id="minimap" width="150" height="150"></canvas>
+    </div>
+
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="game-canvas"></canvas>
+
+    <div id="webcam-preview">
+        <video id="preview-video" autoplay playsinline muted style="display:none;"></video>
+        <canvas id="skeleton-canvas" width="320" height="240"
+            style="width: 100%; height: 100%; background: #000;"></canvas>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+
+    <!-- MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js"
+        crossorigin="anonymous"></script>
+
+    <!-- Kalidokit - proper pose solver -->
+    <script src="https://cdn.jsdelivr.net/npm/kalidokit@1.1/dist/kalidokit.umd.js"></script>
+
+    <!-- Game Scripts -->
+    <script src="poseService.js?v=26"></script>
+    <script src="test_api.py?v=26" type="text/python"></script>
+    <script src="SoundManager.js?v=27"></script>
+    <script src="VoiceService.js?v=27"></script>
+    <script src="SpellManager.js?v=27"></script>
+    <script src="Item.js?v=27"></script>
+    <script src="Chest.js?v=27"></script>
+    <script src="Zombie.js?v=27"></script>
+    <script src="Zombie.js?v=27"></script>
+    <script src="DetailedHand.js"></script>
+    <script src="SimplifiedHand.js"></script>
+    <script src="Character.js?v=27"></script>
+    <script src="World.js?v=27"></script>
+    <script src="MapEditor.js?v=27"></script>
+    <script src="WeaponEditor.js?v=27"></script>
+    <script src="RiggingManager.js?v=1"></script>
+    <script src="main.js?v=43"></script>
 </body>
+
 </html>
