@@ -418,7 +418,10 @@ export class Game {
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
         // the player may be saying «Бомбардо Максима».
         if (name === 'Bombardo' && !isFinal) {
-            if (!this._pendingBombardo && now - this.lastSpellCastTime >= SPELL_COOLDOWN) this._pendingBombardo = { at: now };
+            if (!this._pendingBombardo && now - this.lastSpellCastTime >= SPELL_COOLDOWN) {
+                this._pendingBombardo = { at: now };
+                setTimeout(() => this._updatePendingSpell(), BOMBARDO_WAIT + 5);
+            }
             return null;
         }
         // The microphone's final version of a phrase that was already cast
@@ -444,7 +447,7 @@ export class Game {
     /** A «Бомбардо» that was not followed by «Максима» goes off now. */
     _updatePendingSpell() {
         const p = this._pendingBombardo;
-        if (!p || Date.now() - p.at < BOMBARDO_WAIT) return;
+        if (!p || !this.active || Date.now() - p.at < BOMBARDO_WAIT) return;
         this._pendingBombardo = null;
         this.lastMagicTime = Date.now(); // the hand was raised when the word started
         if (this.castLocalSpell('бомбардо', true)) {
@@ -564,7 +567,10 @@ export class Game {
         if (this.sync) this.sync.update(dt);
 
         this.fx.update(dt);
-        this.world.update();
+        // See further while flying (smoothly), terrain streams in around the player
+        this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
+        this.world.update(this.character.group.position, this._viewBoost);
+        this.world.followShadow(this.character.group.position);
         this._updateCamera(dt);
 
         if (this.frameCount % 5 === 0) {
@@ -632,9 +638,11 @@ export class Game {
             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
         }
-        // Stay inside the world
-        ch.group.position.x = Math.max(-119, Math.min(119, ch.group.position.x));
-        ch.group.position.z = Math.max(-119, Math.min(119, ch.group.position.z));
+        // Maps have an edge; the open world is endless
+        if (this.world.isMap) {
+            ch.group.position.x = Math.max(-119, Math.min(119, ch.group.position.x));
+            ch.group.position.z = Math.max(-119, Math.min(119, ch.group.position.z));
+        }
     }
 
     /** «Флайн»: Superman flight steered by the torso. */

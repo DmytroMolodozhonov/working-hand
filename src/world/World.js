@@ -8,7 +8,10 @@
 
 import * as THREE from 'three';
 import { createRng } from '../core/math.js';
-import { Terrain } from './Terrain.js';
+import { Terrain, BLOCK } from './Terrain.js';
+
+const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
+const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
 import { CollisionWorld } from './Collision.js';
 
 const GRASS_COLORS = [0x4CAF50, 0x66BB6A, 0x43A047, 0x81C784, 0x388E3C];
@@ -57,11 +60,15 @@ export class VoxelWorld {
         this.dirLight.shadow.camera.far = 500;
         // Layer 1 = player's own head/body in first person: invisible, but casts a shadow.
         this.dirLight.shadow.camera.layers.enable(1);
-        this.dirLight.shadow.camera.left = -100;
-        this.dirLight.shadow.camera.right = 100;
-        this.dirLight.shadow.camera.top = 100;
-        this.dirLight.shadow.camera.bottom = -100;
+        // The shadow covers the area around the player (see followShadow), not
+        // the whole 240 m map: far mountains are not re-drawn into the shadow
+        // map every frame, and nearby shadows get sharper.
+        this.dirLight.shadow.camera.left = -SHADOW_EXTENT;
+        this.dirLight.shadow.camera.right = SHADOW_EXTENT;
+        this.dirLight.shadow.camera.top = SHADOW_EXTENT;
+        this.dirLight.shadow.camera.bottom = -SHADOW_EXTENT;
         this.scene.add(this.dirLight);
+        this.scene.add(this.dirLight.target);
 
         this.hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x4CAF50, 0.3);
         this.scene.add(this.hemiLight);
@@ -71,12 +78,16 @@ export class VoxelWorld {
         if (isNight) {
             this.scene.background = new THREE.Color(0x050505);
             this.scene.fog = new THREE.Fog(0x000000, 10, 50);
+            this.fogFar = 50;
+            this.fogNear = 10;
             this.ambientLight.intensity = 0.15;
             this.dirLight.intensity = 0.15;
             this.hemiLight.intensity = 0.08;
         } else {
             this.scene.background = new THREE.Color(0x87CEEB);
             this.scene.fog = new THREE.Fog(0x87CEEB, 20, 80);
+            this.fogFar = 80;
+            this.fogNear = 20;
             this.ambientLight.intensity = 0.6;
             this.dirLight.intensity = 0.8;
             this.hemiLight.intensity = 0.3;
@@ -85,8 +96,9 @@ export class VoxelWorld {
 
     createSkybox() {
         const sky = new THREE.Mesh(
-            new THREE.SphereGeometry(100, 32, 32),
-            new THREE.MeshBasicMaterial({ color: 0x87CEEB, side: THREE.BackSide }),
+            // Big enough for the long view in flight; it travels with the player
+            new THREE.SphereGeometry(450, 32, 32),
+            new THREE.MeshBasicMaterial({ color: 0x87CEEB, side: THREE.BackSide, depthWrite: false }),
         );
         this.scene.add(sky);
         this.sky = sky;
@@ -95,7 +107,7 @@ export class VoxelWorld {
     // ----------------------------------------------------------------- terrain
     createTerrain(mountains) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { size: 240, seed: this.seed, mountains });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains });
         this.collision.setTerrain(this.terrain);
 
         // Decorative grass cubes (1000, instanced) — same look as before.
@@ -112,7 +124,9 @@ export class VoxelWorld {
             const x = Math.floor((rng() - 0.5) * this.terrainWidth);
             const z = Math.floor((rng() - 0.5) * this.terrainDepth);
             const ci = Math.floor(rng() * GRASS_COLORS.length);
-            const y = this.terrain.surfaceY(x, z) + 1.0; // original: 0.5 above ground at -0.5
+            // (cubes that would land in a lake sit hidden under the ground instead)
+            const wet = this.terrain.data.get(x, 0, z) === BLOCK.WATER;
+            const y = wet ? -3 : this.terrain.surfaceY(x, z) + 1.0; // original: 0.5 above ground at -0.5
             dummy.position.set(x, y, z);
             dummy.updateMatrix();
             this.grass.setMatrixAt(i, dummy.matrix);
@@ -370,8 +384,32 @@ export class VoxelWorld {
         return out;
     }
 
-    update() {
-        if (this.terrain) this.terrain.update();
+    /**
+     * @param {{x,y,z}} [focus]  player position: the endless terrain loads around it
+     * @param {number} [viewBoost]  0..1 — see further (in flight)
+     */
+    update(focus, viewBoost = 0) {
+        if (this.scene.fog && this.fogFar) {
+            // In flight the view opens up so the land below is visible
+            const far = this.fogFar * (1 + viewBoost * 1.2);
+            this.scene.fog.far = far;
+            this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5);
+            if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
+        }
+        if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);
+        if (this.terrain) this.terrain.update(focus);
+    }
+
+    /** Keep the sun's shadow box centred on the player. */
+    followShadow(pos) {
+        // Move in whole shadow-map texels so the shadow edges don't shimmer
+        const texel = (SHADOW_EXTENT * 2) / this.dirLight.shadow.mapSize.width;
+        const x = Math.round(pos.x / texel) * texel, z = Math.round(pos.z / texel) * texel;
+        if (x === this._shadowX && z === this._shadowZ) return;
+        this._shadowX = x; this._shadowZ = z;
+        this.dirLight.position.set(x + 50, 100, z + 50);
+        this.dirLight.target.position.set(x, 0, z);
+        this.dirLight.target.updateMatrixWorld();
     }
 
     groundY(x, z) {

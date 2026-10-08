@@ -251,7 +251,12 @@ test('Бомбардо on a mountain: part of the mountain is blown away, zombie
         const flew = { maxY: z.group.position.y };
         g.explode(top, 3.6, 'local');
         for (let i = 0; i < 20; i++) { await new Promise((r) => setTimeout(r, 50)); flew.maxY = Math.max(flew.maxY, z.group.position.y); }
-        await new Promise((r) => setTimeout(r, 3000));
+        // Wait until it has landed (game time runs slower on a busy test machine)
+        for (let i = 0; i < 150; i++) {
+            await new Promise((res) => setTimeout(res, 100));
+            const gy = g.collision.groundY(z.group.position.x, z.group.position.z);
+            if (i > 20 && Math.abs(z.group.position.y - (gy + 1.0)) < 0.2 && !z.vy) break;
+        }
         let removed = 0;
         for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) removed += Math.max(0, h0 - t.topLayer(best.x + dx, best.z + dz));
         return { h0, after: t.topLayer(best.x, best.z), removed, flewY: flew.maxY, landedY: z.group.position.y, ground: g.collision.groundY(z.group.position.x, z.group.position.z) };
@@ -328,7 +333,7 @@ test('«Бомбардо Максима»: 3× stronger — bigger crater, burst
         await new Promise((res) => setTimeout(res, 1100));
         casts.length = 0;
         say('бомбардо', false);
-        await new Promise((res) => setTimeout(res, 1000));
+        for (let i = 0; i < 30 && !casts.length; i++) await new Promise((res) => setTimeout(res, 100));
         const plain = [...casts];
         say('бомбардо', true); // the final transcript of the same word
         await new Promise((res) => setTimeout(res, 300));
@@ -338,6 +343,48 @@ test('«Бомбардо Максима»: 3× stronger — bigger crater, burst
     assert.deepEqual(voice.afterMaxima, ['BombardoMaxima']);
     assert.deepEqual(voice.plain, ['Bombardo'], 'plain Bombardo fires after a short wait');
     assert.equal(voice.total, 1, 'the final transcript does not cast it twice');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('endless world: flying far away streams terrain in and out, no edge, no stalls', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const t = g.terrain;
+        const ch = g.character;
+        const shown = () => [...t.meshes.values()].filter((e) => e.ground.visible || e.raised.visible).length;
+        const atSpawn = shown();
+        g.startFlight(true);
+        // Fly far east at top speed (fast-forward the position along the way)
+        g.stats.worstLogicMs = 0;
+        for (let i = 0; i < 60; i++) {
+            ch.group.position.x += 35;
+            ch.group.position.y = Math.max(ch.group.position.y, g.collision.groundY(ch.group.position.x, ch.group.position.z) + 12);
+            await new Promise((res) => setTimeout(res, 120));
+        }
+        // Let the last chunks load
+        for (let i = 0; i < 100 && t._queue.length; i++) await new Promise((res) => setTimeout(res, 100));
+        const p = ch.group.position;
+        let near = 0;
+        for (const e of t.meshes.values()) if (Math.hypot(e.cx * 32 + 16 - p.x, e.cz * 32 + 16 - p.z) < 100) near++;
+        return {
+            x: p.x, atSpawn, shownFar: shown(), near, meshes: t.meshes.size, pooled: t.pool.length,
+            data: t.data.chunks.size, ground: g.collision.groundY(p.x, p.z), queue: t._queue.length,
+            maxBuild: t.stats.maxBuildMs, worstLogic: g.stats.worstLogicMs, skyX: g.world.sky.position.x,
+        };
+    });
+    assert.ok(r.x > 2000, `flew ${r.x.toFixed(0)} m`);
+    assert.ok(r.atSpawn > 20, `chunks around spawn (${r.atSpawn})`);
+    assert.ok(r.near >= 25, `terrain loaded around the player far away (${r.near} chunks)`);
+    assert.equal(r.queue, 0, 'everything around is loaded');
+    assert.ok(r.meshes < 260, `far chunks are unloaded (${r.meshes} meshes, ${r.pooled} pooled)`);
+    assert.ok(r.data < 900, `chunk data is evicted (${r.data})`);
+    assert.ok(Number.isFinite(r.ground) && r.ground >= -0.6, 'ground under the player');
+    assert.ok(Math.abs(r.skyX - r.x) < 1, 'sky travels with the player');
+    assert.ok(r.worstLogic < 150, `no frame stalls while streaming (worst logic ${r.worstLogic.toFixed(0)} ms, chunk ${r.maxBuild.toFixed(1)} ms)`);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

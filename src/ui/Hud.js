@@ -3,6 +3,9 @@
  * DOM elements are looked up once (the original queried them every frame).
  */
 
+const MINIMAP_WINDOW = 128; // m of terrain drawn around the player
+const BLOCK_LEAVES = 7; // Terrain BLOCK.LEAVES
+
 export class Hud {
     constructor() {
         this.el = {
@@ -81,33 +84,49 @@ export class Hud {
         if (this.el.mp.innerHTML !== html) this.el.mp.innerHTML = html;
     }
 
-    /** Pre-render the terrain height map once (mountains drawn grey). */
+    /** Terrain for the minimap (the world is endless: a window around the player is drawn). */
     setTerrain(terrain) {
         this.terrainImage = null;
-        if (!terrain) return;
-        const d = terrain.data;
-        const size = d.size;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const img = ctx.createImageData(size, size);
+        this.terrain = terrain || null;
+    }
+
+    /** Pre-render the height map around (cx, cz) — mountains grey, trees green, craters brown. */
+    _renderTerrainWindow(cx, cz) {
+        const d = this.terrain.data;
+        const size = MINIMAP_WINDOW;
+        const half = size / 2;
+        let ti = this.terrainImage;
+        if (!ti) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ti = this.terrainImage = { canvas, ctx, img: ctx.createImageData(size, size) };
+        }
+        const px = ti.img.data;
         for (let z = 0; z < size; z++) {
             for (let x = 0; x < size; x++) {
-                const top = d.topLayer(x - d.half, z - d.half);
+                const wx = cx - half + x, wz = cz - half + z;
+                const top = d.topLayer(wx, wz);
                 const i = (z * size + x) * 4;
                 if (top >= 1) {
-                    const v = Math.min(255, 90 + top * 7);
-                    img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v; img.data[i + 3] = 150;
+                    if (d.get(wx, top, wz) === BLOCK_LEAVES) {
+                        px[i] = 34; px[i + 1] = 139; px[i + 2] = 34; px[i + 3] = 170;
+                    } else {
+                        const v = Math.min(255, 90 + top * 6);
+                        px[i] = v; px[i + 1] = v; px[i + 2] = v; px[i + 3] = 150;
+                    }
                 } else if (top < 0) {
-                    img.data[i] = 60; img.data[i + 1] = 40; img.data[i + 2] = 20; img.data[i + 3] = 150;
+                    px[i] = 60; px[i + 1] = 40; px[i + 2] = 20; px[i + 3] = 150;
                 } else {
-                    img.data[i + 3] = 0;
+                    px[i + 3] = 0;
                 }
             }
         }
-        ctx.putImageData(img, 0, 0);
-        this.terrainImage = { canvas, half: d.half, version: d.version, terrain };
+        ti.ctx.putImageData(ti.img, 0, 0);
+        ti.cx = cx;
+        ti.cz = cz;
+        ti.version = d.version;
     }
 
     drawMinimap(charPos, rotY, world, zombies, others = []) {
@@ -123,12 +142,15 @@ export class Hud {
         ctx.save();
         ctx.translate(radius, radius);
 
-        if (this.terrainImage) {
-            // Refresh after explosions (cheap: only when terrain changed)
-            if (this.terrainImage.version !== this.terrainImage.terrain.data.version) this.setTerrain(this.terrainImage.terrain);
+        if (this.terrain) {
+            // Redrawn only after explosions or when the player moved to another 16 m cell
+            const cx = Math.round(charPos.x / 16) * 16, cz = Math.round(charPos.z / 16) * 16;
             const ti = this.terrainImage;
+            if (!ti || ti.cx !== cx || ti.cz !== cz || ti.version !== this.terrain.data.version) this._renderTerrainWindow(cx, cz);
+            const t = this.terrainImage;
+            const half = MINIMAP_WINDOW / 2;
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(ti.canvas, (-ti.half - charPos.x - 0.5) * scale, (-ti.half - charPos.z - 0.5) * scale, ti.canvas.width * scale, ti.canvas.height * scale);
+            ctx.drawImage(t.canvas, (t.cx - half - charPos.x - 0.5) * scale, (t.cz - half - charPos.z - 0.5) * scale, MINIMAP_WINDOW * scale, MINIMAP_WINDOW * scale);
         }
 
         ctx.fillStyle = '#2ecc71';

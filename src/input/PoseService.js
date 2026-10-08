@@ -17,6 +17,9 @@ import { PoseInterpreter } from './PoseInterpreter.js';
 const POSE_LINKS = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28]];
 const HAND_LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [0, 9], [9, 10], [10, 11], [11, 12], [0, 13], [13, 14], [14, 15], [15, 16], [0, 17], [17, 18], [18, 19], [19, 20], [5, 9], [9, 13], [13, 17]];
 
+// Auto mode: above this many ms per camera frame on the CPU (< ~12 recognitions/s), use the graphics card
+const AUTO_GPU_ABOVE_MS = 85;
+
 export class PoseService {
     constructor({ faceSolver = null, baseUrl = null } = {}) {
         this.baseUrl = baseUrl || new URL('../../', import.meta.url).href;
@@ -93,7 +96,39 @@ export class PoseService {
         this.stats.mode = 'main';
     }
 
-    _startWorker(quality) {
+    /**
+     * Which processor runs the networks. Auto = the CPU in the worker thread:
+     * then the graphics card only draws the game (three networks on the
+     * graphics card compete with the game for it and cost FPS). If this
+     * computer's CPU turns out too slow, auto switches to the graphics card.
+     */
+    _workerDelegate() {
+        return globalThis.__ZNS_DELEGATE__ || this._delegate || this._autoDelegate || 'CPU';
+    }
+
+    /** Auto mode: CPU too slow for smooth tracking → move to the graphics card once. */
+    _checkAutoDelegate() {
+        if (this._delegate || globalThis.__ZNS_DELEGATE__ || this._autoDelegate || !this.worker) return;
+        if (this.stats.delegate !== 'CPU' || this.stats.results < 90) return;
+        if (this.stats.avgCost < AUTO_GPU_ABOVE_MS) return;
+        this._autoDelegate = 'GPU';
+        console.info(`[PoseService] CPU inference ${this.stats.avgCost.toFixed(0)} ms — switching to the graphics card`);
+        const old = this.worker;
+        // Keep tracking with the old worker until the new one is ready
+        this._spawnWorker(this._quality, 'GPU').then((w) => {
+            if (this.worker !== old) { w.terminate(); return; }
+            old.postMessage({ type: 'close' });
+            old.terminate();
+            this.worker = w;
+            this.inFlight = false;
+        }).catch((e) => console.warn('[PoseService] GPU switch failed:', e?.message || e));
+    }
+
+    async _startWorker(quality) {
+        this.worker = await this._spawnWorker(quality, this._workerDelegate());
+    }
+
+    _spawnWorker(quality, delegate) {
         return new Promise((resolve, reject) => {
             const worker = new Worker(new URL('./vision.worker.js', import.meta.url), { type: 'module' });
             const timeout = setTimeout(() => { worker.terminate(); reject(new Error('worker init timeout')); }, 60000);
@@ -101,10 +136,11 @@ export class PoseService {
                 const msg = ev.data;
                 if (msg.type === 'ready') {
                     clearTimeout(timeout);
-                    this.worker = worker;
                     this.stats.delegate = msg.delegate;
-                    worker.onmessage = (e) => this._onWorkerMessage(e.data);
-                    resolve();
+                    this.stats.avgCost = 0;
+                    this.stats.results = 0;
+                    worker.onmessage = (e) => { if (e.target === this.worker || this.worker === null) this._onWorkerMessage(e.data); };
+                    resolve(worker);
                 } else if (msg.type === 'error') {
                     clearTimeout(timeout);
                     worker.terminate();
@@ -112,7 +148,7 @@ export class PoseService {
                 }
             };
             worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || 'worker error')); };
-            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || this._delegate || null });
+            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate });
         });
     }
 
@@ -120,6 +156,7 @@ export class PoseService {
         if (msg.type === 'result') {
             this.inFlight = false;
             this._handleResult(msg.result);
+            this._checkAutoDelegate();
         } else if (msg.type === 'error') {
             this.inFlight = false;
             if (msg.during === 'frame') this._frameErrors = (this._frameErrors || 0) + 1;
