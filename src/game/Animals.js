@@ -58,7 +58,7 @@ function bx(g, w, h, d, c, x, y, z) {
 }
 
 /** A voxel animal; body along −Z (the head looks forward), feet at y=0. */
-function animalModel(type, color) {
+export function animalModel(type, color) {
     const g = new THREE.Group();
     const legs = [];
     const leg = (x, z, h, w, c) => {
@@ -111,7 +111,7 @@ function animalModel(type, color) {
     return g;
 }
 
-function bonesModel() {
+export function bonesModel() {
     const g = new THREE.Group();
     const m = lam(0xefe9da);
     for (let i = 0; i < 5; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.7), m); b.position.set((i - 2) * 0.14, 0.05, 0); b.rotation.y = (i - 2) * 0.2; g.add(b); }
@@ -121,7 +121,7 @@ function bonesModel() {
     return g;
 }
 
-function goldenTreeModel() {
+export function goldenTreeModel() {
     const g = new THREE.Group();
     bx(g, 0.8, 4, 0.8, 0xb8860b, 0, 2, 0);
     const leaf = new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x4a3a00 });

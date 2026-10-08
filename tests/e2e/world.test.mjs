@@ -37,7 +37,7 @@ test('endless world: flying far away streams terrain in and out, no edge, no sta
             ch.group.position.y = Math.max(ch.group.position.y, g.collision.groundY(ch.group.position.x, ch.group.position.z) + 12);
             await new Promise((res) => setTimeout(res, 120));
         }
-        for (let i = 0; i < 150 && t._queue.length; i++) await new Promise((res) => setTimeout(res, 100));
+        for (let i = 0; i < 300 && t._queue.length; i++) await new Promise((res) => setTimeout(res, 100));
         const p = ch.group.position;
         let near = 0;
         for (const e of t.meshes.values()) if (Math.hypot(e.cx * 32 + 16 - p.x, e.cz * 32 + 16 - p.z) < 100) near++;

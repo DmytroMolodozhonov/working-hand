@@ -251,7 +251,10 @@ export class TerrainData {
                 if (h > maxTop) maxTop = h;
             }
         }
-        const c = { cx, cz, blocks, top, maxTop, modified: false };
+        // the lowest layer that is not solid rock (meshing skips the solid rock below it)
+        let minOpen = MAX_LAYER;
+        for (let i = 0; i < top.length; i++) if (top[i] + 1 < minOpen) minOpen = top[i] + 1;
+        const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen };
         if (this.mountains) { this._carveCaves(c); this._plantTrees(c); }
         return c;
     }
@@ -335,7 +338,7 @@ export class TerrainData {
                     if (!hgt) continue;
                     for (let L = cv.F + 1; L <= cv.F + hgt && L <= c.top[col]; L++) {
                         const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
-                        if (c.blocks[i] !== BLOCK.WATER) { c.blocks[i] = BLOCK.AIR; carved = true; }
+                        if (c.blocks[i] !== BLOCK.WATER) { c.blocks[i] = BLOCK.AIR; carved = true; if (L < c.minOpen) c.minOpen = L; }
                     }
                 }
                 if (carved) {
@@ -451,6 +454,7 @@ export class TerrainData {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = type;
         c.modified = true;
+        if (!drawn(type) && L < c.minOpen) c.minOpen = L;
         if (type !== BLOCK.AIR && L > c.maxTop) c.maxTop = L;
         if (type === BLOCK.ICE) this.version++;
         this._refreshTop(c, ix & MASK, iz & MASK);
@@ -581,6 +585,7 @@ export class TerrainData {
                     const type = c.blocks[idx];
                     if (type === BLOCK.AIR || type === BLOCK.BEDROCK || type === BLOCK.WATER) continue;
                     c.blocks[idx] = BLOCK.AIR;
+                    if (L < c.minOpen) c.minOpen = L;
                     removed.push({ x: ix, y: by, z: iz, type });
                     touched = true;
                 }
@@ -680,16 +685,23 @@ export class TerrainData {
         const c = this.chunk(cx, cz);
         const out = { ground: newBuffers(), raised: newBuffers(), water: newBuffers() };
         const x0 = cx * CHUNK, z0 = cz * CHUNK;
-        // Only the layers that can hold faces of this chunk's blocks
-        const layers = Math.min(MAX_LAYER, c.maxTop + 1) - MIN_LAYER + 1;
+        // Only the layers that can hold faces of this chunk's blocks: from just
+        // below the lowest open (non-rock) layer here or next door, to the top
+        let open = c.minOpen ?? MIN_LAYER;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) open = Math.min(open, this.chunk(cx + dx, cz + dz).minOpen ?? MIN_LAYER);
+        const lowest = Math.max(MIN_LAYER, open - 1);
+        const G0 = lowest - MIN_LAYER;
+        const layers = Math.max(1, Math.min(MAX_LAYER, c.maxTop + 1) - lowest + 1);
         const sizes = [CHUNK, layers, CHUNK];
-        const origin = [x0, MIN_LAYER, z0];
+        const origin = [x0, lowest, z0];
         const blocks = c.blocks;
+        const below = lowest > MIN_LAYER ? BLOCK.STONE : BLOCK.AIR; // (all rock under `lowest`)
         // Fast access inside this chunk; neighbours only for border occlusion
         const at = (gx, gy, gz) => {
-            if (gy < 0 || gy >= HEIGHT) return BLOCK.AIR;
-            if (gx >= 0 && gx < CHUNK && gz >= 0 && gz < CHUNK) return blocks[(gy * CHUNK + gz) * CHUNK + gx];
-            return this.get(x0 + gx, MIN_LAYER + gy, z0 + gz);
+            if (gy < 0) return below;
+            if (gy + G0 >= HEIGHT) return BLOCK.AIR;
+            if (gx >= 0 && gx < CHUNK && gz >= 0 && gz < CHUNK) return blocks[((gy + G0) * CHUNK + gz) * CHUNK + gx];
+            return this.get(x0 + gx, lowest + gy, z0 + gz);
         };
 
         const x = [0, 0, 0];
@@ -717,11 +729,11 @@ export class TerrainData {
                         // water shows its surface only towards air.
                         let key = 0, kind = 0;
                         if (drawn(a) && !drawn(bRaw)) {
-                            const L = ay + MIN_LAYER;
+                            const L = ay + lowest;
                             key = this.faceColor(a, x0 + ax, L, z0 + az, d === 1) + 1;
                             kind = L >= 1 ? 1 : 0;
                         } else if (drawn(b) && !drawn(aRaw)) {
-                            const L = ay + qy + MIN_LAYER;
+                            const L = ay + qy + lowest;
                             // skip the bottom of the bedrock layer
                             if (!(d === 1 && L === MIN_LAYER)) {
                                 key = -(this.faceColor(b, x0 + ax + qx, L, z0 + az + qz, false) + 1);

@@ -30,9 +30,9 @@ import { ItemSystem } from './Items.js';
 import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
-import { Animals } from './Animals.js';
-import { Doors } from './Doors.js';
-import { Spiders } from './Spider.js';
+import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
+import { Doors, doorModel } from './Doors.js';
+import { Spiders, spiderModel } from './Spider.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -1427,10 +1427,14 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
+        for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
+        zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b));
+        zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
         this.scene.add(zoo);
         this.renderer.compile(this.scene, this.camera);
         this.scene.remove(zoo);
-        zoo.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
+        // (geometries only: many of these materials are shared caches used later — disposing them would recompile)
+        zoo.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.prewarmedPrograms = this.renderer.info.programs.length;

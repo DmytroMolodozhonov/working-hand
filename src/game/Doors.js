@@ -29,7 +29,7 @@ function woodColor(block) {
     return [0x8b5a2b, 0xd9cfb5, 0x5a3a1e, 0x8a3f38, 0x3e2716][Math.max(0, k)];
 }
 
-function doorModel(color) {
+export function doorModel(color) {
     const g = new THREE.Group();
     const wood = new THREE.MeshLambertMaterial({ color });
     const dark = new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(0.65) });

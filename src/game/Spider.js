@@ -23,7 +23,7 @@ const SPEED = 4.2;
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
-function spiderModel() {
+export function spiderModel() {
     const g = new THREE.Group();
     const black = new THREE.MeshLambertMaterial({ color: 0x1b1418 });
     const dark = new THREE.MeshLambertMaterial({ color: 0x2c2228 });
