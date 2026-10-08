@@ -95,6 +95,24 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
     await wf(guest.page, (id) => window.__zns.game.zombieById.get(id)?.isDead, zid, 20000);
     await wf(guest.page, () => window.__zns.game.killCount === 1, null, 10000);
 
+    // Guest punches a second zombie with a bare fist (fast wrist movement)
+    const zid2 = await ev(host.page, () => {
+        const g = window.__zns.game;
+        const z = g._createZombie(new window.__zns.THREE.Vector3(14, 0.5, 8));
+        z.health = 5;
+        z.speed = z.baseSpeed = 0;
+        return z.id;
+    });
+    await wf(guest.page, (id) => window.__zns.game.zombieById.has(id), zid2, 20000);
+    await ev(guest.page, () => {
+        const g = window.__zns.game;
+        g.character.group.position.set(12, 1.5, 8);
+        g.playerAttackCooldown = 0;
+        g.currentPose = { ...(g.currentPose || {}), isPunching: true, headRotation: { yaw: 0, pitch: 0 } };
+    });
+    await wf(host.page, (id) => window.__zns.game.zombieById.get(id).health < 5, zid2, 20000);
+    await ev(guest.page, () => { window.__zns.game.currentPose.isPunching = false; });
+
     // Guest casts Бомбардо → host explodes it → craters identical on both machines
     await ev(guest.page, () => {
         const g = window.__zns.game;
@@ -137,7 +155,13 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
     await late.page.fill('#mp-code', code);
     await late.page.click('#mp-join-btn');
     await wf(late.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
-    await wf(late.page, () => window.__zns.game.explosions.length === 1, null, 30000);
+    try {
+        await wf(late.page, () => window.__zns.game.explosions.length === 1, null, 30000);
+    } catch (e) {
+        console.log('late joiner state', JSON.stringify(await ev(late.page, () => ({ ex: window.__zns.game.explosions.length, welcome: !!window.__zns.pendingWelcome, wex: window.__zns.pendingWelcome?.explosions?.length, role: window.__zns.net.role }))));
+        console.log('host state', JSON.stringify(await ev(host.page, () => ({ ex: window.__zns.game.explosions.length }))), late.errors.slice(0, 5));
+        throw e;
+    }
     assert.equal(await craterOf(late.page), ch, 'late joiner has the same crater');
     await wf(late.page, () => window.__zns.game.remotes.size === 2, null, 30000);
     await wf(host.page, () => window.__zns.game.remotes.size === 2, null, 30000);

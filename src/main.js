@@ -366,7 +366,18 @@ async function ensureSound() {
     await sound.loadSounds((p) => updateProgress(5 + p * 55, `Загрузка звуков: ${Math.round(p * 100)}%`));
 }
 
+let starting = false;
 async function startGame(config, welcome = null) {
+    if (starting) return; // a second click / duplicate invitation while loading
+    starting = true;
+    try {
+        await startGameInner(config, welcome);
+    } finally {
+        starting = false;
+    }
+}
+
+async function startGameInner(config, welcome) {
     mainMenu.classList.add('hidden');
     loadingScreen.classList.remove('hidden');
     loadingScreen.style.display = 'flex';
@@ -523,7 +534,7 @@ net.on('disconnected', ({ reason }) => {
 });
 net.on('message', (msg) => {
     if (msg.t !== 'welcome' || !net.isClient) return;
-    if (game && game.active) return;
+    if ((game && game.active) || starting) return;
     pendingWelcome = msg;
     const local = readConfig();
     startGame({ ...local, mode: msg.config.mode, map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed }, msg);

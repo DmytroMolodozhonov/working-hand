@@ -329,9 +329,10 @@ test('settings: third-person camera, V2 hands, hidden hands — all run without 
     }
 });
 
-test('map editor: draw a map, save it, it appears in the game list, delete it', async () => {
+test('map editor: draw a map, save it, it appears in the game list, delete it', async (t) => {
     const name = 'ZZ Редактор';
     await fetch(srv.url + 'api/maps?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    t.after(() => fetch(srv.url + 'api/maps?name=' + encodeURIComponent(name), { method: 'DELETE' }));
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await page.click('[data-tab="tab-editor"]');
     await page.waitForSelector('#editor-canvas');
@@ -350,8 +351,11 @@ test('map editor: draw a map, save it, it appears in the game list, delete it', 
     await page.click('#confirm-chest');
     await page.fill('#map-name', name);
     await page.click('#save-map-btn');
-    await sleep(1000);
-    const maps = await (await fetch(srv.url + 'api/maps')).json();
+    let maps = {};
+    for (let i = 0; i < 40 && !maps[name]; i++) {
+        await sleep(250);
+        maps = await (await fetch(srv.url + 'api/maps')).json();
+    }
     assert.ok(maps[name], 'saved on the server');
     assert.ok(maps[name].walls.length >= 6, `walls ${maps[name].walls.length}`);
     assert.deepEqual(maps[name].playerSpawn, { x: 5, z: 6 });

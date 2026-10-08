@@ -607,8 +607,17 @@ export class Game {
         for (let i = this.zombies.length - 1; i >= 0; i--) {
             const z = this.zombies[i];
             if (!this.authority) {
+                // Multiplayer guest: the host moves zombies; we only animate them
+                // and report our own punches.
                 z.updateRemote(dt, this.camera);
-                if (z.isDead && z.removable) this.removeZombie(z);
+                if (z.isDead && z.removable) { this.removeZombie(z); continue; }
+                if (z.isDead) continue;
+                const gdx = charPos.x - z.group.position.x, gdz = charPos.z - z.group.position.z;
+                const gdist = Math.sqrt(gdx * gdx + gdz * gdz);
+                if (isPunching && !hasWeapon && this.playerAttackCooldown <= 0 && gdist < 3.0) {
+                    this.playerAttackCooldown = 0.5;
+                    this.onLocalHit(z, 1, _v1.set(-gdx, 0, -gdz).normalize().clone(), false);
+                }
                 continue;
             }
             const target = this.nearestPlayer(z.group.position);
