@@ -70,6 +70,14 @@ export class SimplifiedHand {
         this.palm.position.y = this.PALM_H / 2;
         this.palm.name = 'palm';
         this.handPivot.add(this.palm);
+        // a softer shape: the knuckle ridge and the heel of the hand
+        this.knuckleMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(this.skinColor).multiplyScalar(0.9) });
+        const ridge = new THREE.Mesh(new THREE.BoxGeometry(this.PALM_W * 0.96, 0.06, this.PALM_D * 1.12), this.knuckleMat);
+        ridge.position.y = this.PALM_H / 2 - 0.03;
+        this.palm.add(ridge);
+        const heel = new THREE.Mesh(new THREE.BoxGeometry(this.PALM_W * 0.8, 0.1, this.PALM_D * 1.08), this.material);
+        heel.position.y = -this.PALM_H / 2 + 0.06;
+        this.palm.add(heel);
 
         this.handPivot.rotation.x = Math.PI / 2;
         this.handPivot.rotation.y = 0;
@@ -89,16 +97,29 @@ export class SimplifiedHand {
         if (this.side === 'left') this.group.scale.set(-1, 1, 1);
     }
 
+    /** The skin colour of the hand (from the hero's look). */
+    setSkin(color) {
+        this.material.color.setHex(color);
+        this.knuckleMat?.color.setHex(color).multiplyScalar(0.9);
+    }
+
     createFinger(cfg) {
         const segments = [];
         const segLen = cfg.len / 3;
         let lastParent = null;
-        const geo = new THREE.BoxGeometry(cfg.w, segLen, cfg.w * 0.95);
+        if (!this.nailMat) this.nailMat = new THREE.MeshLambertMaterial({ color: 0xf6d9d0 });
         for (let i = 0; i < 3; i++) {
             const pivot = new THREE.Group();
-            const mesh = new THREE.Mesh(geo, this.material);
+            // fingers get a little thinner towards the tip; a nail on the last bone
+            const w = cfg.w * (1 - 0.1 * i);
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, segLen * 0.96, w * 0.95), this.material);
             mesh.position.y = segLen / 2;
             pivot.add(mesh);
+            if (i === 2) {
+                const nail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, segLen * 0.45, 0.012), this.nailMat);
+                nail.position.set(0, segLen * 0.7, -w * 0.48);
+                pivot.add(nail);
+            }
             if (i === 0) {
                 pivot.position.set(cfg.x, cfg.y - this.PALM_H / 2, cfg.z);
                 if (cfg.isThumb) {

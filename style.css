@@ -1397,3 +1397,25 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #air-bar .air-txt { color: #bff3ff; font-size: 12px; margin-right: 6px; text-shadow: 0 0 3px #000; }
 #underwater-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.3s; background: radial-gradient(ellipse at center, rgba(30, 110, 170, 0.35), rgba(5, 40, 80, 0.85)); }
 #bleed-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0; transition: opacity 0.2s; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(160, 0, 20, 0.75)); }
+/* ---------------- Character editor ---------------- */
+.ce-layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; text-align: left; }
+@media (max-width: 700px) { .ce-layout { grid-template-columns: 1fr; } }
+.ce-preview-col { display: flex; flex-direction: column; align-items: center; }
+#ce-canvas { width: 300px; height: 420px; border-radius: 12px; background: radial-gradient(circle at 50% 35%, #34495e, #1a1a2e 75%); cursor: grab; }
+.ce-hint { color: #8395a7; font-size: 0.8rem; margin-top: 6px; }
+.ce-heroes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ce-hero { background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 6px 10px; cursor: pointer; color: #ecf0f1; display: flex; gap: 6px; align-items: center; }
+.ce-hero.sel { border-color: #3498db; background: rgba(52, 152, 219, 0.3); }
+.ce-star { color: #ffe066; font-size: 1.1rem; }
+.ce-options { max-height: 520px; overflow-y: auto; padding-right: 4px; }
+.ce-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.ce-label { color: #bdc3c7; width: 120px; }
+.ce-val { color: #fff; min-width: 150px; text-align: center; font-weight: bold; }
+.ce-arrow { background: #34495e; color: #fff; border: none; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.ce-arrow:hover { background: #3498db; }
+.ce-skin { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.3); cursor: pointer; }
+.ce-skin.sel { border-color: #ffe066; box-shadow: 0 0 6px #ffe066; }
+.ce-colors { display: flex; flex-wrap: wrap; gap: 14px; margin: 6px 0 10px; }
+.ce-color { color: #bdc3c7; display: flex; align-items: center; gap: 6px; }
+.ce-color input { width: 34px; height: 26px; border: none; background: none; cursor: pointer; }
+#tab-character input[type="text"] { background: rgba(0, 0, 0, 0.4); border: 1px solid #34495e; color: #fff; padding: 8px 10px; border-radius: 6px; }

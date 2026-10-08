@@ -469,6 +469,8 @@ test('server list: «Создать сервер» starts a game that the other 
     await wf(b.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     assert.equal(await ev(b.page, () => window.__zns.game.config.mode), 'freeworld');
     await wf(a.page, () => window.__zns.game.remotes.size === 1, null, 60000);
+    // the friend's own hero (made in «Персонаж») is what the host sees
+    await wf(a.page, () => !!([...window.__zns.game.remotes.values()][0].character.look), null, 30000);
     assert.deepEqual(realErrors(a.errors), []);
     assert.deepEqual(realErrors(b.errors), []);
     await a.context.close();

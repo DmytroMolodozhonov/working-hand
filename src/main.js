@@ -15,6 +15,7 @@ import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS } from './net/Network.js';
 import { renderSpellsTab, renderItemsTab } from './ui/Codex.js';
 import { listWorlds, loadWorld, deleteWorld } from './game/WorldSave.js';
+import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
 
@@ -99,7 +100,8 @@ tabBtns.forEach((btn) => {
         if (btn.dataset.tab === 'tab-items') renderItemsTab();
         if (btn.dataset.tab === 'tab-spells') renderSpellsTab();
         if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
-        if (btn.dataset.tab === 'tab-character') window.__charEditor?.show();
+        if (btn.dataset.tab === 'tab-character') { window.__charEditor = window.__charEditor || new CharacterEditor($('tab-character')); window.__charEditor.show(); }
+        else window.__charEditor?.hide();
     });
 });
 // Settings sub-tabs
@@ -182,6 +184,7 @@ function readConfig() {
         handVersion: document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
+        look: activeLook(), // the hero from the «Персонаж» tab
     };
 }
 

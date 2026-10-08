@@ -169,6 +169,7 @@ export class Game {
         this.character.setFirstPerson(this.cameraMode === 'fpv' && !isTest);
         this.character.setShowHands(!!config.showHands);
         if (isTest) this.character.group.position.set(10, 1.5, 10);
+        else if (config.look) this.character.setLook(config.look); // the hero made in «Персонаж»
 
         this.weapons = new WeaponSystem(this);
         this.water = new WaterMagic(this);

@@ -72,8 +72,11 @@ export class NetSync {
         const ids = new Set(list.map((p) => p.id));
         for (const p of list) {
             if (p.id === this.me || this.game.remotes.has(p.id)) continue;
-            this.game.remotes.set(p.id, new RemoteAvatar(this.game.scene, p.id, p.name, p.color));
+            const av = new RemoteAvatar(this.game.scene, p.id, p.name, p.color);
+            this.game.remotes.set(p.id, av);
+            if (this.looks?.has(p.id)) av.setLook(this.looks.get(p.id));
             if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${p.name}`);
+            this._lookSoon = true; // a newcomer: tell them how I look
         }
         for (const id of [...this.game.remotes.keys()]) if (!ids.has(id)) this._onLeave(id);
     }
@@ -81,10 +84,13 @@ export class NetSync {
     _onJoin({ id, name }) {
         if (!this.game.remotes.has(id)) {
             const info = this.net.players.get(id);
-            this.game.remotes.set(id, new RemoteAvatar(this.game.scene, id, name, info?.color || 1));
+            const av = new RemoteAvatar(this.game.scene, id, name, info?.color || 1);
+            this.game.remotes.set(id, av);
+            if (this.looks?.has(id)) av.setLook(this.looks.get(id));
             if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${name}`);
         }
         // Late joiner: send the whole world state
+        this.sendLook();
         if (this.net.isHost) {
             const msg = this.welcomeMessage();
             msg.you = this.game.keeper?.players[name] || null; // a player coming back gets their things
@@ -173,6 +179,7 @@ export class NetSync {
     // ================================================================ update
     update(dt) {
         const g = this.game;
+        if (this._lookSoon || !this._lookSent) { this._lookSoon = false; this._lookSent = true; this.sendLook(); }
         this._mineT = (this._mineT || 0) + dt;
         if (this._mineT > 8) { this._mineT = 0; this._sendMine(); }
         this.pTimer += dt;
@@ -348,6 +355,12 @@ export class NetSync {
     animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
     animalButt(to, dmg, p) { this.net.send({ t: 'abutt', to, dmg, p: [r3(p.x), r3(p.y), r3(p.z)] }, true); }
 
+    /** My hero's look, for everybody (on start and whenever somebody joins). */
+    sendLook() {
+        const look = this.game.character.look;
+        if (look) this.net.send({ t: 'look', by: this.me, look }, true);
+    }
+
     impale(to, wid) {
         this.game.bleeding?.noteImpale(wid, to);
         this.net.send({ t: 'impale', w: wid, to }, true);
@@ -499,6 +512,13 @@ export class NetSync {
                 (g._openedChests = g._openedChests || new Set()).add(m.id);
                 const c = g.chests.find((x) => x.id === m.id);
                 if (c && !this.net.isHost) g.openChest(c);
+                break;
+            }
+            case 'look': {
+                if (m.by === this.me || !m.look) break;
+                this.looks = this.looks || new Map();
+                this.looks.set(m.by, m.look);
+                g.remotes.get(m.by)?.setLook(m.look);
                 break;
             }
             case 'an': if (!this.net.isHost) g.animals?.applyNet(m.l); break;

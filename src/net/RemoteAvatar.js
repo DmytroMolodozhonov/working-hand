@@ -35,6 +35,14 @@ export class RemoteAvatar {
         this.dead = false;
     }
 
+    /** The other player's own hero (face, clothes…). */
+    setLook(look) {
+        if (!look || JSON.stringify(look) === this._lookKey) return;
+        this._lookKey = JSON.stringify(look);
+        this.character.setLook(look);
+        this.color = look.topColor ?? this.color;
+    }
+
     setDead(dead) {
         this.dead = dead;
         this.character.group.visible = !dead;

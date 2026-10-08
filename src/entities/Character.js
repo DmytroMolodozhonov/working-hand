@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three';
+import { applyLook } from './Appearance.js';
 import { SimplifiedHand } from './SimplifiedHand.js';
 import { DetailedHand } from './DetailedHand.js';
 
@@ -473,9 +474,18 @@ export class VoxelCharacter {
 
     /** First person: hide own head/body from the camera (layer 1) but keep the shadow. */
     setFirstPerson(isFPV) {
+        this._fpv = isFPV;
         const layer = isFPV ? 1 : 0;
         this.head.traverse((c) => c.layers.set(layer));
         this.body.traverse((c) => c.layers.set(layer));
+        // clothes on the body (robe, cape, hood…) are not in the way of the eyes either
+        for (const p of this._lookParts || []) if (p.parent === this.torso || p.parent === this.head) p.traverse((c) => c.layers.set(layer));
+    }
+
+    /** Dress the hero (face, hair, clothes — see Appearance.js). */
+    setLook(look) {
+        applyLook(this, look);
+        this.setFirstPerson(!!this._fpv);
     }
 
     getHeadPosition(out = new THREE.Vector3()) {
