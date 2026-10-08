@@ -1,0 +1,7 @@
+{
+  "name": "Gemini K-Hand Tracker 3D",
+  "description": "Real-time 3D Hand Tracking using MediaPipe & Kalidokit, with deep gesture analysis powered by Gemini 2.5.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
