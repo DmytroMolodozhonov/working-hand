@@ -306,6 +306,67 @@ test('map with chest: opens without crash, lid animates, faces away from walls, 
     }
 });
 
+test('settings: third-person camera, V2 hands, hidden hands — all run without errors', async () => {
+    for (const variant of ['tpv', 'v2', 'nohands']) {
+        const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+        await page.click('[data-tab="tab-settings"]');
+        if (variant === 'tpv') await page.uncheck('#camera-mode-toggle');
+        if (variant === 'v2') await page.check('#hand-version-v2');
+        if (variant === 'nohands') await page.uncheck('#show-hands-toggle');
+        await page.click('[data-tab="tab-game"]');
+        await startFromMenu(page, 'creative');
+        await waitHudVisible(page);
+        await feed(page, { arms: 'forward', leftCurl: 0.5, rightCurl: 0.5 }, 15, 60);
+        const st = await page.evaluate(() => {
+            const g = window.__zns.game;
+            return { mode: g.cameraMode, version: g.character.handVersion, v2count: g.character.rightDetailedHand.mesh.count, shown: g.character.handsVisible };
+        });
+        if (variant === 'tpv') assert.equal(st.mode, 'tpv');
+        if (variant === 'v2') { assert.equal(st.version, 'v2'); assert.ok(st.v2count > 100, `voxel hand drawn (${st.v2count})`); }
+        if (variant === 'nohands') assert.equal(st.shown, false);
+        assert.deepEqual(realErrors(errors), [], variant);
+        await page.close();
+    }
+});
+
+test('map editor: draw a map, save it, it appears in the game list, delete it', async () => {
+    const name = 'ZZ Редактор';
+    await fetch(srv.url + 'api/maps?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await page.click('[data-tab="tab-editor"]');
+    await page.waitForSelector('#editor-canvas');
+    const box = await page.locator('#editor-canvas').boundingBox();
+    const cell = (x, z) => ({ x: box.x + (x + 0.5) * box.width / 20, y: box.y + (z + 0.5) * box.height / 20 });
+    // Walls (drag), spawn, chest
+    await page.click('[data-tool="wall"]');
+    await page.mouse.move(cell(3, 3).x, cell(3, 3).y);
+    await page.mouse.down();
+    for (let x = 3; x <= 8; x++) await page.mouse.move(cell(x, 3).x, cell(x, 3).y);
+    await page.mouse.up();
+    await page.click('[data-tool="spawn"]');
+    await page.mouse.click(cell(5, 6).x, cell(5, 6).y);
+    await page.click('[data-tool="chest"]');
+    await page.mouse.click(cell(5, 4).x, cell(5, 4).y);
+    await page.click('#confirm-chest');
+    await page.fill('#map-name', name);
+    await page.click('#save-map-btn');
+    await sleep(1000);
+    const maps = await (await fetch(srv.url + 'api/maps')).json();
+    assert.ok(maps[name], 'saved on the server');
+    assert.ok(maps[name].walls.length >= 6, `walls ${maps[name].walls.length}`);
+    assert.deepEqual(maps[name].playerSpawn, { x: 5, z: 6 });
+    assert.equal(maps[name].chests.length, 1);
+    await page.click('[data-tab="tab-game"]');
+    await page.evaluate(() => window.updateGameMapList(true));
+    await page.waitForSelector(`.map-card[data-name="${name}"]`);
+    // Delete through the API used by the editor's ✕ button
+    const del = await fetch(srv.url + 'api/maps?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    assert.equal(del.status, 200);
+    // the editor shows an alert() on save — that's expected UI, not an error
+    assert.deepEqual(realErrors(errors).filter((e) => !e.startsWith('dialog: Карта')), []);
+    await page.close();
+});
+
 test('camera setup (test mode) opens and closes without errors', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await page.click('[data-tab="tab-settings"]');
