@@ -122,6 +122,7 @@ export class NetSync {
             ice: g.iceCells,
             players: this.net.playerList(),
             dayStart: g.dayStart,
+            weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
         };
@@ -133,6 +134,7 @@ export class NetSync {
         if (Array.isArray(msg.edits) && msg.edits.length) g.builder?.applyEdits(msg.edits.slice(-30000));
         for (const i of msg.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
+        if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);
@@ -333,6 +335,15 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
     }
 
+    arrow(from, dir, dmg) {
+        const v = dir.clone();
+        this.net.send({ t: 'arrow', by: this.me, o: [r3(from.x), r3(from.y), r3(from.z)], v: [r3(v.x), r3(v.y), r3(v.z)], d: Math.round(dmg * 10) / 10 }, true);
+    }
+
+    weather(seconds) {
+        if (this.net.isHost) this.net.send({ t: 'weather', s: Math.round(seconds) }, true);
+    }
+
     chestOpenedLoot(chest) {
         if (this.net.isHost) this.net.send({ t: 'chest', id: chest.id });
     }
@@ -456,6 +467,8 @@ export class NetSync {
                 if (c && !this.net.isHost) g.openChest(c);
                 break;
             }
+            case 'arrow': if (m.by !== this.me) g.gear?.fire(vec(m.o), vec(m.v), m.d || 3, m.by); break;
+            case 'weather': g.gear?.startWeather(Math.min(400, m.s || 120)); break;
             // ---- things (wands, scrolls, shields…)
             case 'inew': if (!this.net.isHost && m.item) g.items?.spawnLoose(m.item, vec(m.p), { vel: m.v ? vec(m.v) : null, hover: !!m.h, broadcast: false }); break;
             case 'ipos': if (!this.net.isHost) g.items?.applyPositions(m.l); break;

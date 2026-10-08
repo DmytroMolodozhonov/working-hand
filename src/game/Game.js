@@ -28,6 +28,7 @@ import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { Swimming } from './Swimming.js';
 import { ItemSystem } from './Items.js';
 import { WandMagic } from './WandMagic.js';
+import { Gear } from './Gear.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -180,6 +181,7 @@ export class Game {
         this.swim = new Swimming(this); // deep water: swimming, air, «Air Bubble»
         this.items = new ItemSystem(this); // wands, scrolls, shields, backpacks, bows, food… in the world and the hands
         this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
+        this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -267,6 +269,22 @@ export class Game {
             this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 1.3, pz), 'tA');
             const s2 = this.world.createPedestal(7, pz);
             this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 1.3, pz), 'tS');
+            // Creative: bows and shields of every kind on pedestals too
+            if (config.mode === 'creative') {
+                const gear = [
+                    { kind: 'bow', uid: 'cb0', type: 0, magic: false, bonus: 0, arrows: 25 },
+                    { kind: 'bow', uid: 'cb1', type: 1, magic: false, bonus: 0, arrows: 25 },
+                    { kind: 'bow', uid: 'cb2', type: 2, magic: true, bonus: 35, arrows: 25 },
+                    { kind: 'shield', uid: 'cs0', type: 0, magic: false, max: 0 },
+                    { kind: 'shield', uid: 'cs1', type: 1, magic: false, max: 0 },
+                    { kind: 'shield', uid: 'cs2', type: 2, magic: true, max: 40 },
+                ];
+                gear.forEach((it, i) => {
+                    const x = -12.5 + i * 5, z = -12;
+                    const top = this.world.createPedestal(x, z);
+                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 1.3, z), { hover: true, broadcast: false });
+                });
+            }
         }
     }
 
@@ -975,10 +993,17 @@ export class Game {
         this.hud.setTimer?.(1 - L.t / 5, best ? '🎯' : '⚡', Math.ceil(5 - L.t), best ? Math.min(1, L.aimT / 0.5) : 0);
         if (best && L.aimT >= 0.5) {
             this.lightning = null;
+            if (L.hammer) this.gear.hammerResult(true);
             const point = best.pos.clone();
             this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
             if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
             this.hud.setVoice('⚡ <span style="color:#9fd8ff">LIGHTNING STRIKE!</span>', true);
+            return;
+        }
+        if (L.t >= 5 && L.hammer) {
+            // the hammer's lightning is lost (it never hurts its holder)
+            this.lightning = null;
+            this.gear.hammerResult(false);
             return;
         }
         if (L.t >= 5) {
@@ -1363,6 +1388,7 @@ export class Game {
         this.items.update(dt);
         this.items.updateRemote();
         this.wandMagic.update(dt);
+        this.gear.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
@@ -1829,6 +1855,7 @@ export class Game {
         this.swim?.dispose();
         this.items?.dispose();
         this.wandMagic?.dispose();
+        this.gear?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

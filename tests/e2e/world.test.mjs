@@ -491,3 +491,65 @@ test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('gear: bows and shields on creative pedestals, an arrow hits a zombie, shields stop spells and break, Thor\'s hammer in a storm', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const ch = g.character;
+        const onPedestals = [...g.items.loose.values()].filter((L) => L.hover).map((L) => L.item.kind);
+        // an arrow: from the hero to a zombie 10 m ahead
+        const p = ch.group.position;
+        const z = g._createZombie(new T.Vector3(p.x, g.collision.groundY(p.x, p.z - 10), p.z - 10));
+        z.setSleeping?.(true);
+        const hp0 = z.hp;
+        const from = new T.Vector3(p.x, z.group.position.y + 0.6, p.z - 1.5);
+        g.gear.fire(from, new T.Vector3(0, 0.4, -40), 5, g.localId);
+        for (let i = 0; i < 40; i++) await frames(1);
+        const zHit = z.hp < hp0 || z.isDead;
+        const stuck = g.gear.arrows.some((a) => a.stuck);
+        // shields: a magic one takes spells (strength goes down), a wooden one breaks under a strong spell
+        g.combat.enabled = true;
+        g.items.takeIntoHand({ kind: 'shield', uid: 'tsm', type: 2, magic: true, max: 40 }, 'left');
+        await frames(2);
+        const front = ch.group.position.clone().add(new T.Vector3(-Math.sin(ch.group.rotation.y) * 8, 1, -Math.cos(ch.group.rotation.y) * 8));
+        const hpBefore = g.combat.hp;
+        const hit1 = g.combat.hitBySpell('Sapira', front, 'enemy');
+        const magicLeft = g.gear.shieldPower.get('tsm');
+        g.items.releaseHand('left');
+        g.items.takeIntoHand({ kind: 'shield', uid: 'tsw', type: 0, magic: false, max: 0 }, 'left');
+        await frames(2);
+        g.combat.hitBySpell('Thunderwave', front, 'enemy');
+        const woodenBroke = !g.items.held.left;
+        const hpAfter = g.combat.hp;
+        g.combat.enabled = false;
+        // Thor's hammer: only in a storm, raised above the head
+        g.items.takeIntoHand({ kind: 'hammer', uid: 'th', charges: 0 }, 'right');
+        g.storm.start(null, 60);
+        for (let i = 0; i < 80 && g.storm.k < 0.6; i++) await frames(1);
+        const hm = g.items.held.right;
+        hm.model.position.copy(ch.head.getWorldPosition(new T.Vector3())).add(new T.Vector3(0, 0.8, 0));
+        g.gear._updateHammer(0.016);
+        const charged = !!(g.lightning && g.lightning.hammer);
+        g.lightning.t = 5.1;
+        const hpH = g.playerHP;
+        g._updateLightning(0.016);
+        return { onPedestals, zHit, stuck, hit1, magicLeft, woodenBroke, hpBefore, hpAfter, charged, failed: g.gear.hammer.failed, hpH, hpH2: g.playerHP };
+    });
+    assert.ok(r.onPedestals.filter((k) => k === 'bow').length === 3 && r.onPedestals.filter((k) => k === 'shield').length === 3, 'three bows and three shields on pedestals: ' + r.onPedestals);
+    assert.ok(r.zHit, 'the arrow hurt the zombie');
+    assert.ok(r.stuck, 'the arrow got stuck');
+    assert.equal(r.hit1, false, 'the magic shield stopped the spell');
+    assert.ok(r.magicLeft < 40, `its strength went down (${r.magicLeft})`);
+    assert.ok(r.woodenBroke, 'a wooden shield breaks under a strong spell');
+    assert.equal(r.hpAfter, r.hpBefore, 'no damage through the shields');
+    assert.ok(r.charged, 'lightning struck the raised hammer');
+    assert.ok(r.failed, 'a missed hammer lightning is lost till the next storm');
+    assert.equal(r.hpH2, r.hpH, 'the hammer never hurts its holder');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

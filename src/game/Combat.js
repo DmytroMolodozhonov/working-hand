@@ -64,6 +64,7 @@ export const SPELL_COST = {
     WaveAttackMaxima: 18,
     AirBubble: 4,
     AirBubbleMaxima: 10,
+    Hammer: 7,
     Lumos: 2,
     LumosMaxima: 4,
 };
@@ -310,7 +311,8 @@ export class Combat {
     /** Does my shield stop something coming from `from`? 1 = fully, 0 = no. */
     shieldFactor(from) {
         const s = this.shield;
-        if (!s || s.left <= 0) return 0;
+        if (!s || s.left <= 0) return this.game.gear?.shieldFaces(from) ? 1 : 0; // a shield in the hand
+        if (s.type === 1 && this.game.gear?.shieldFaces(from)) return 1;
         if (s.type === 2) return 1;
         const ch = this.game.character;
         const hand = ch.getHandWorldPosition(s.side, _v1);
@@ -319,7 +321,8 @@ export class Combat {
         return dir.dot(toAttacker) > 0.25 ? 1 : 0;
     }
 
-    _blocked(from) {
+    _blocked(from, kind = null) {
+        if ((!this.shield || this.shield.left <= 0) && this.game.gear?.shieldFaces(from)) { this.game.gear.shieldTook(kind || 'Sapira'); return; }
         const c = this.center(_v1);
         const fx = this.game.fx;
         const at = this.shield.type === 2 ? c.addScaledVector(_v2.subVectors(from, c).normalize(), 2.4) : this.game.character.getHandWorldPosition(this.shield.side, _v1);
@@ -341,7 +344,7 @@ export class Combat {
      */
     hitBySpell(kind, from, byId, push = null) {
         if (!this.enabled || this.dead) return false;
-        if (this.shieldFactor(from) >= 1) { this._blocked(from); return false; }
+        if (this.shieldFactor(from) >= 1) { this._blocked(from, kind); return false; }
         if (kind === 'Inferno') {
             if (this.infernoCooldown > 0) return true;
             this.infernoCooldown = PVP.INFERNO_TICK;
@@ -357,7 +360,7 @@ export class Combat {
      */
     chillBy(amount, from, byId) {
         if (!this.enabled || this.dead) return false;
-        if (this.shieldFactor(from) >= 1) { this._blocked(from); return false; }
+        if (this.shieldFactor(from) >= 1) { this._blocked(from, 'Ice'); return false; }
         if (this.frozen) return true;
         this.chill = Math.min(1, this.chill + amount);
         this.chillTimer = 0.4;
@@ -394,6 +397,9 @@ export class Combat {
     /** Someone hit me with a fist or a weapon. A frozen player shatters. */
     meleeHit(dmg, byId, magic = false) {
         if (!this.enabled || this.dead) return;
+        // a shield in the hand turned to the attacker takes the blow
+        const att = this.game.remotes?.get(byId)?.position;
+        if (att && this.game.gear?.shieldFaces(att)) { this.game.gear.shieldTook('melee'); return; }
         // a magic weapon breaks an ordinary «Protection» it touches
         if (magic && this.shield && this.shield.type === 1) {
             this.shield.left = 0;
