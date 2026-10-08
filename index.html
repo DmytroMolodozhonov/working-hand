@@ -13,7 +13,7 @@
     <div id="hud" class="hidden">
         <div id="hp-container">
             <div id="hp-bar-fill"></div>
-            <span id="hp-text">HP: 10/10</span>
+            <span id="hp-text">HP: 20/20</span>
         </div>
         <div id="stats-container">
             <p>Убито: <span id="kill-count">0</span></p>
@@ -117,11 +117,16 @@
 
                     <!-- MULTIPLAYER -->
                     <details id="mp-panel">
-                        <summary><h4>🌐 Мультиплеер (по интернету)</h4></summary>
+                        <summary><h4>🌐 Мультиплеер (по интернету) <span id="mp-world-badge"></span></h4></summary>
                         <div class="mp-row">
                             <label for="mp-name">Ваше имя:</label>
                             <input type="text" id="mp-name" maxlength="16" placeholder="Игрок">
                         </div>
+                        <div class="mp-row mp-world">
+                            <span id="mp-world-status">🌍 Общий сервер: проверяем...</span>
+                            <button id="mp-world-btn" class="mp-btn">🌍 Войти</button>
+                        </div>
+                        <div class="mp-row mp-or-row"><span class="mp-or">или своя комната по коду:</span></div>
                         <div class="mp-row">
                             <button id="mp-host-btn" class="mp-btn">🌐 Создать игру</button>
                             <span class="mp-or">или</span>

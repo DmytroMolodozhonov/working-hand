@@ -77,7 +77,7 @@ test('fatigue: 30 points, +1 per second, spells cost fatigue, not enough → the
     assert.equal(combat.check('BombardoMaxima'), null);
     combat.pay('BombardoMaxima');
     assert.equal(combat.fatigue, 5);
-    assert.match(combat.check('Bombardo'), /Нет сил/);
+    assert.match(combat.check("Bombardo"), /Не хватает сил/);
     assert.equal(combat.check('Protection'), null);
     for (let i = 0; i < 10 * 60; i++) combat.update(1 / 60); // 10 s
     assert.ok(Math.abs(combat.fatigue - 15) < 0.01, `${combat.fatigue}`);
@@ -194,4 +194,33 @@ test('shields work and show in every mode (creative too), without fatigue', () =
     for (let i = 0; i < 40; i++) c.update(0.1);
     assert.equal(c.shield, null, 'gone after 3 s');
     assert.equal(c.visuals.hand.visible, false);
+});
+
+test('punch: only a fast fist that reaches the other player hurts — walking past does not', () => {
+    const { g, combat } = fakeGame();
+    const hits = [];
+    g.sync = { playerHit: (id, dmg) => hits.push({ id, dmg }) };
+    g.sound = null;
+    g.character.handVelocity = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+    g.character.isRunning = false;
+    // The other player right in front of my right fist (fist at x 0.6, z -1.5)
+    g.remotes.set('enemy', { dead: false, character: { group: { position: new THREE.Vector3(0.6, 0.5, -2.2) } } });
+    combat.updatePunches();
+    assert.equal(hits.length, 0, 'standing next to someone (or walking past) is no hit');
+    g.character.handVelocity.right.set(0, 0, -2); // a slow push
+    combat.updatePunches();
+    assert.equal(hits.length, 0, 'a slow move is no punch');
+    g.character.handVelocity.right.set(0, 0, -7); // a real punch towards them
+    combat.updatePunches();
+    assert.equal(hits.length, 1);
+    // Running (arms swinging) never punches
+    for (const t of combat.targets.values()) t.damageCooldown = 0;
+    g.character.isRunning = true;
+    combat.updatePunches();
+    assert.equal(hits.length, 1);
+    // Too far for the fist
+    g.character.isRunning = false;
+    g.remotes.get('enemy').character.group.position.set(0.6, 0.5, -4);
+    combat.updatePunches();
+    assert.equal(hits.length, 1);
 });

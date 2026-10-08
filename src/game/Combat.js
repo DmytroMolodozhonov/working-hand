@@ -217,7 +217,11 @@ export class Combat {
         if (this.stunned) return `💫 Вы оглушены — ещё ${Math.ceil(this.stunLeft)} с`;
         if (!this.enabled) return null;
         const cost = SPELL_COST[name] ?? 5;
-        if (this.fatigue < cost) return `😮‍💨 Нет сил: нужно ${cost} усталости, есть ${Math.floor(this.fatigue)}`;
+        if (this.fatigue < cost) {
+            const msg = `😮‍💨 Не хватает сил: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
+            this.game.hud?.toast?.(msg); // a short note that fades by itself
+            return msg;
+        }
         return null;
     }
 
@@ -474,13 +478,29 @@ export class Combat {
         if (this.game.sound) this.game.sound.playHit();
     }
 
-    /** Fists against other players (no weapon in hand). */
-    updatePunches(isPunching) {
-        if (!this.enabled || !isPunching || this.game.weapons.hasWeapon() || this.frozen || this.dead) return;
-        const me = this.game.character.group.position;
-        for (const t of this.meleeTargets()) {
-            const p = t.group.position;
-            if (Math.hypot(p.x - me.x, p.z - me.z) < 2.6 && Math.abs(p.y - me.y) < 2) this.hitRemote(t, PLAYER_DAMAGE.Punch);
+    /**
+     * Fists against other players (no weapon in hand). Only a real punch counts:
+     * the fist itself reaches the other player's body AND flies towards it fast.
+     * Walking past, or swinging the arms while running, hurts nobody.
+     */
+    updatePunches() {
+        if (!this.enabled || this.game.weapons.hasWeapon() || this.frozen || this.dead) return;
+        const ch = this.game.character;
+        if (ch.isRunning) return;
+        const targets = this.meleeTargets();
+        if (!targets.length) return;
+        for (const side of ['left', 'right']) {
+            const fist = ch.getHandWorldPosition(side, _v1);
+            const vel = ch.handVelocity[side];
+            for (const t of targets) {
+                const p = t.group.position;
+                // body: a column from the feet to the head
+                const dx = fist.x - p.x, dz = fist.z - p.z;
+                const flat = Math.hypot(dx, dz);
+                if (flat > 1.15 || fist.y < p.y - 2 || fist.y > p.y + 2.3) continue;
+                const towards = -(vel.x * dx + vel.z * dz) / (flat || 1);
+                if (towards > 4) this.hitRemote(t, PLAYER_DAMAGE.Punch);
+            }
         }
     }
 

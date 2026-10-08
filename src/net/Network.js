@@ -245,7 +245,7 @@ export class Network extends Emitter {
             const p = this._probePeer;
             if (p && !p.destroyed && p.open && this._probeKey === key) { go(p); return; }
             try { p?.destroy(); } catch (e) { /* ignore */ }
-            const peer = new Peer(parseServer(server));
+            const peer = new Peer({ ...parseServer(server), debug: 0 }); // (a switched-off server is normal: no error logs)
             this._probePeer = peer;
             this._probeKey = key;
             peer.once('open', () => go(peer));

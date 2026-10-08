@@ -434,3 +434,27 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await host.context.close();
     await guest.context.close();
 });
+
+test('«Общий сервер»: one button switches it on, the other player sees «включён» and joins without a code', async () => {
+    const a = await openPlayer('Дима');
+    const b = await openPlayer('Друг');
+    // Off at first
+    await wf(b.page, () => /выключен|нет связи/.test(document.getElementById('mp-world-status').textContent), null, 40000);
+    await a.page.click('#mp-world-btn');
+    await wf(a.page, () => document.getElementById('mp-status').textContent.includes('Общий сервер включён'), null, 30000);
+    // The other menu notices by itself (checks every 10 s)
+    await wf(b.page, () => document.getElementById('mp-world-status').textContent.includes('включён'), null, 40000);
+    assert.match(await b.page.textContent('#mp-world-status'), /Дима/);
+    await b.page.click('#mp-world-btn');
+    await wf(b.page, () => document.getElementById('mp-status').textContent.includes('Вы на общем сервере'), null, 30000);
+    await wf(a.page, () => document.getElementById('mp-players').textContent.includes('Друг'), null, 15000);
+    // The host starts: the friend enters the same game
+    await a.page.click('#start-btn');
+    await wf(a.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(b.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(a.page, () => window.__zns.game.remotes.size === 1, null, 60000);
+    assert.deepEqual(realErrors(a.errors), []);
+    assert.deepEqual(realErrors(b.errors), []);
+    await a.context.close();
+    await b.context.close();
+});

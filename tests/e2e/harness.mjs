@@ -66,6 +66,8 @@ export async function openPage(browser, url, { noCamera = false, viewport = { wi
     });
     page.on('dialog', (d) => { errors.push('dialog: ' + d.message()); d.dismiss().catch(() => {}); });
     if (noCamera) await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; });
+    // (the menu's «Общий сервер» check would try the public broker — no internet here)
+    await page.addInitScript(() => { window.__ZNS_NO_WORLD_PROBE__ = true; });
     await page.goto(url);
     await page.waitForFunction(() => !!window.__zns, null, { timeout: 30000 });
     return { page, errors, logs };
@@ -92,5 +94,5 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Errors that are expected in a headless sandbox (no audio device, no speech API etc.). */
 export function realErrors(errors) {
-    return errors.filter((e) => !/Created TensorFlow Lite XNNPACK delegate|Web Speech API|AudioContext|Failed to load resource: the server responded with a status of 404 \(File not found\).*favicon|favicon\.ico|WebGL: INVALID|GPU stall|GL Driver Message/i.test(e));
+    return errors.filter((e) => !/ERR_TUNNEL_CONNECTION_FAILED|ERR_NAME_NOT_RESOLVED|Created TensorFlow Lite XNNPACK delegate|Web Speech API|AudioContext|Failed to load resource: the server responded with a status of 404 \(File not found\).*favicon|favicon\.ico|WebGL: INVALID|GPU stall|GL Driver Message/i.test(e));
 }

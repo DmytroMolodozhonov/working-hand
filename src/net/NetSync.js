@@ -54,6 +54,7 @@ export class NetSync {
         ws.onGrab = (w, side) => this._localGrab(w, side);
         ws.onRelease = (w, side) => this._localRelease(w, side);
         this._syncPlayerList(net.playerList());
+        this._announce = true; // from now on, joins/leaves are shown on screen
     }
 
     dispose() {
@@ -70,6 +71,7 @@ export class NetSync {
         for (const p of list) {
             if (p.id === this.me || this.game.remotes.has(p.id)) continue;
             this.game.remotes.set(p.id, new RemoteAvatar(this.game.scene, p.id, p.name, p.color));
+            if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${p.name}`);
         }
         for (const id of [...this.game.remotes.keys()]) if (!ids.has(id)) this._onLeave(id);
     }
@@ -78,6 +80,7 @@ export class NetSync {
         if (!this.game.remotes.has(id)) {
             const info = this.net.players.get(id);
             this.game.remotes.set(id, new RemoteAvatar(this.game.scene, id, name, info?.color || 1));
+            if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${name}`);
         }
         // Late joiner: send the whole world state
         if (this.net.isHost) this.net.sendTo(id, this.welcomeMessage());
@@ -85,7 +88,11 @@ export class NetSync {
 
     _onLeave(id) {
         const r = this.game.remotes.get(id);
-        if (r) { r.dispose(); this.game.remotes.delete(id); }
+        if (r) {
+            if (this._announce) this.game.hud.notify?.(`🔴 Вышел: ${r.name}`);
+            r.dispose();
+            this.game.remotes.delete(id);
+        }
         this.game.water?.applyRemote(id, null);
         // Drop weapons they were holding
         for (const [wid, owner] of this.weaponOwners) {
@@ -190,10 +197,17 @@ export class NetSync {
         this.hudTimer += dt;
         if (this.hudTimer > 0.5) {
             this.hudTimer = 0;
-            const rows = [`🌐 Комната <b>${this.net.code}</b>${this.net.isHost ? ' (вы хост)' : ''}`];
-            rows.push(`• ${escapeHtml(this.net.name)} (вы)`);
-            for (const r of g.remotes.values()) rows.push(`• ${escapeHtml(r.name)}${r.hp != null && g.config.mode !== 'creative' ? ` — ${r.hp} HP` : ''}`);
-            g.hud.setMultiplayer(rows.join('<br>'));
+            const showHp = g.config.mode !== 'creative';
+            const world = this.net.code && /WORLD/.test(this.net.code);
+            const title = world ? '🌍 Общий сервер' : `🌐 Комната <b>${this.net.code}</b>`;
+            const rows = [`<div class="mp-hud-title">${title} · игроков: <b>${g.remotes.size + 1}</b></div>`];
+            const myHp = g.combat?.enabled ? g.combat.hp : null;
+            rows.push(`<div class="mp-hud-row me"><span>${escapeHtml(this.net.name)} (вы)</span>${showHp && myHp != null ? `<span>${myHp} HP</span>` : ''}</div>`);
+            for (const r of g.remotes.values()) {
+                const col = '#' + (r.color ?? 0x3498db).toString(16).padStart(6, '0');
+                rows.push(`<div class="mp-hud-row"><span><i style="background:${col}"></i>${escapeHtml(r.name)}</span>${showHp && r.hp != null ? `<span>${r.dead ? '💀' : r.hp + ' HP'}</span>` : ''}</div>`);
+            }
+            g.hud.setMultiplayer(rows.join(''));
         }
     }
 

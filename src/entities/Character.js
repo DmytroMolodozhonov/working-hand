@@ -118,17 +118,23 @@ export class VoxelCharacter {
         buildArm(this.leftArmAnchor, this.leftElbowAnchor, -0.7);
         buildArm(this.rightArmAnchor, this.rightElbowAnchor, 0.7);
 
-        const legGeo = new THREE.BoxGeometry(0.5, 1.2, 0.5);
+        // Legs hang from the bottom of the body (the original left a 0.75 gap there,
+        // invisible in first person but seen on other players) down to the feet
+        // (group y -1.95 = ground + 0.05)
+        const LEG = 1.95;
+        const legGeo = new THREE.BoxGeometry(0.5, LEG, 0.5);
         const legMat = new THREE.MeshLambertMaterial({ color: this.pantsColor });
-        this.leftLegPivot.position.set(-0.3, -0.75, 0);
+        this.leftLegPivot.position.set(-0.3, 0, 0);
         this.group.add(this.leftLegPivot);
         const leftLeg = new THREE.Mesh(legGeo, legMat);
-        leftLeg.position.y = -0.6;
+        leftLeg.position.y = -LEG / 2;
+        leftLeg.castShadow = true;
         this.leftLegPivot.add(leftLeg);
-        this.rightLegPivot.position.set(0.3, -0.75, 0);
+        this.rightLegPivot.position.set(0.3, 0, 0);
         this.group.add(this.rightLegPivot);
         const rightLeg = new THREE.Mesh(legGeo, legMat);
-        rightLeg.position.y = -0.6;
+        rightLeg.position.y = -LEG / 2;
+        rightLeg.castShadow = true;
         this.rightLegPivot.add(rightLeg);
 
         this.leftHandAnchor = new THREE.Group();
@@ -384,7 +390,7 @@ export class VoxelCharacter {
         }
 
         // Crouching lowers the body by 1 m: the legs fold back (kneeling) so they stay above the ground
-        const crouchAngle = this.isCrouching ? -1.35 : 0;
+        const crouchAngle = this.isCrouching ? -1.1 : 0;
 
         if (move) {
             // Movement (original speeds)

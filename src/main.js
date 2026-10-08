@@ -12,7 +12,7 @@ import { Hud } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
-import { Network } from './net/Network.js';
+import { Network, WORLD_CODE } from './net/Network.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
 
@@ -509,6 +509,7 @@ async function startGameInner(config, welcome) {
         await new Promise((r) => requestAnimationFrame(r));
         game.start();
         if (net.isHost && game.sync) net.broadcast(game.sync.welcomeMessage());
+        net.info = { playing: true }; // (the shared server's status in other players' menus)
         updateProgress(100, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...');
 
         const reveal = () => {
@@ -607,9 +608,76 @@ $('mp-join-btn').addEventListener('click', async () => {
     }
 });
 
-net.on('peer-join', ({ name }) => { renderPlayers(); if (!game || !game.active) setMpStatus(`К вам подключился: ${escapeHtml(name)}. Код: <span class="mp-code-big">${net.code}</span>`); });
-net.on('peer-leave', () => renderPlayers());
-net.on('players', () => renderPlayers());
+net.on('peer-join', ({ name }) => {
+    renderPlayers();
+    renderWorld();
+    if (game && game.active) return;
+    setMpStatus(net.code === WORLD_CODE
+        ? `К вам на общий сервер зашёл: ${escapeHtml(name)}. Выберите режим и нажмите «ИГРАТЬ».`
+        : `К вам подключился: ${escapeHtml(name)}. Код: <span class="mp-code-big">${net.code}</span>`);
+});
+
+// ---- «Общий сервер»: one fixed room, on/off and who is in — no codes
+const worldStatus = $('mp-world-status');
+const worldBtn = $('mp-world-btn');
+const worldBadge = $('mp-world-badge');
+let worldState = null;
+function renderWorld() {
+    if (net.active && net.code === WORLD_CODE) {
+        const who = net.playerList().map((p) => escapeHtml(p.name)).join(', ');
+        worldStatus.innerHTML = net.isHost ? `🟢 Общий сервер включён — его держите вы. Сейчас: ${who}` : `🟢 Вы на общем сервере. Сейчас: ${who}`;
+        worldBtn.style.display = 'none';
+        worldBadge.textContent = '— 🟢 вы на общем сервере';
+        return;
+    }
+    worldBtn.style.display = net.active ? 'none' : '';
+    if (!worldState) { worldStatus.textContent = '🌍 Общий сервер: проверяем...'; worldBadge.textContent = ''; return; }
+    if (worldState.online) {
+        const who = worldState.players.map(escapeHtml).join(', ');
+        worldStatus.innerHTML = `🟢 Общий сервер <b>включён</b>: ${who || '...'}${worldState.playing ? ' (идёт игра)' : ''}`;
+        worldBtn.textContent = '🌍 Войти';
+        worldBadge.textContent = `— 🟢 общий сервер включён (${worldState.players.length})`;
+    } else {
+        worldStatus.innerHTML = worldState.unknown ? '⚪ Общий сервер: нет связи, попробуйте включить' : '⚪ Общий сервер <b>выключен</b> — включите его, и друзья смогут войти';
+        worldBtn.textContent = '🌍 Включить сервер';
+        worldBadge.textContent = '— ⚪ общий сервер выключен';
+    }
+}
+async function checkWorld() {
+    if (net.active || (game && game.active) || window.__ZNS_NO_WORLD_PROBE__) { renderWorld(); return; }
+    try { worldState = await net.probe(WORLD_CODE, mpServer.value); } catch (e) { worldState = { online: false, unknown: true, players: [] }; }
+    renderWorld();
+}
+setTimeout(checkWorld, 800);
+setInterval(checkWorld, 10000);
+worldBtn.addEventListener('click', async () => {
+    net.stopProbe();
+    const name = playerName();
+    const join = async () => {
+        setMpStatus('Входим на общий сервер...');
+        await net.join(WORLD_CODE, name, mpServer.value);
+        setMpStatus('✅ Вы на общем сервере! Ждём, когда начнётся игра (если она уже идёт — вы войдёте сразу).');
+    };
+    try {
+        if (worldState?.online) await join();
+        else {
+            setMpStatus('Включаем общий сервер...');
+            try {
+                await net.host(name, mpServer.value, WORLD_CODE);
+                setMpStatus('🟢 Общий сервер включён — вы его держите. Друзья увидят «включён» и войдут одной кнопкой. Выберите режим и нажмите «ИГРАТЬ».');
+            } catch (e) {
+                if (e.type === 'unavailable-id') await join(); // someone switched it on a moment earlier
+                else throw e;
+            }
+        }
+    } catch (e) {
+        setMpStatus('❌ ' + escapeHtml(e.message));
+    }
+    renderPlayers();
+    renderWorld();
+});
+net.on('peer-leave', () => { renderPlayers(); renderWorld(); });
+net.on('players', () => { renderPlayers(); renderWorld(); });
 net.on('status', (text) => setMpStatus('⚠️ ' + escapeHtml(text)));
 net.on('disconnected', ({ reason }) => {
     if (game && game.active) {

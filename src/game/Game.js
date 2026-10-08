@@ -181,6 +181,7 @@ export class Game {
         this.net && this.net.active ? (this.sync = new NetSync(this, this.net)) : (this.sync = null);
 
         if (this.combat.enabled) { this.maxHP = PVP.MAX_HP; this.playerHP = PVP.MAX_HP; } else this.hud.hidePvp();
+        this.hud.setMinimal?.(this.combat.enabled); // Свободный мир: only HP, fatigue and FPS on screen
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.hud.setHpVisible(config.mode !== 'creative');
         this.hud.setMultiplayer(null);
@@ -833,7 +834,7 @@ export class Game {
         this.weapons.update(dt);
         this.water.update(dt);
         this.combat.update(dt);
-        this.combat.updatePunches(!!(this.currentPose && this.currentPose.isPunching));
+        this.combat.updatePunches();
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
@@ -859,7 +860,7 @@ export class Game {
 
         if (this.frameCount % 5 === 0) {
             const cp = this.character.group.position;
-            const others = [...this.remotes.values()].map((r) => r.position);
+            const others = [...this.remotes.values()].filter((r) => !r.dead).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
             this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
         }
@@ -931,6 +932,9 @@ export class Game {
             this.knockback.multiplyScalar(Math.max(0, 1 - 4 * dt));
         }
 
+        // Other players are solid: you can't walk through them
+        if (!flight.active) this._pushOutOfPlayers(ch.group.position);
+
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
         if (!flight.active) {
             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
@@ -940,6 +944,21 @@ export class Game {
         if (this.world.isMap) {
             ch.group.position.x = Math.max(-119, Math.min(119, ch.group.position.x));
             ch.group.position.z = Math.max(-119, Math.min(119, ch.group.position.z));
+        }
+    }
+
+    _pushOutOfPlayers(me) {
+        const MIN = 1.2; // two bodies (1.2 m wide) side by side
+        for (const r of this.remotes.values()) {
+            if (r.dead) continue;
+            const p = r.position;
+            if (Math.abs(p.y - me.y) > 2.5) continue; // one above the other (jumping, flying)
+            let dx = me.x - p.x, dz = me.z - p.z;
+            const d = Math.hypot(dx, dz);
+            if (d >= MIN) continue;
+            if (d < 1e-4) { dx = 1; dz = 0; } else { dx /= d; dz /= d; }
+            me.x = p.x + dx * MIN;
+            me.z = p.z + dz * MIN;
         }
     }
 

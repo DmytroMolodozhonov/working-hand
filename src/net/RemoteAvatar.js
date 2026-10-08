@@ -20,13 +20,14 @@ export class RemoteAvatar {
         this.character.setShowHands(true);
         // Different shirt colour per player so friends are easy to tell apart.
         const shirt = COLORS[colorIndex % COLORS.length];
+        this.color = shirt; // (also the player's dot on the minimap)
         this.character.body.material.color.setHex(shirt);
         this.character.leftArmAnchor.children[0].material.color.setHex(shirt);
         this.target = null;
         this.hp = null;
         this.lastUpdate = performance.now();
         this.tag = makeNameTag(this.name);
-        this.tag.position.set(0, 3.2, 0);
+        this.tag.position.set(0, 3.4, 0);
         this.character.group.add(this.tag);
         this.scene = scene;
         this.combat = { shield: 0, side: 'right', shieldLeft: 0, frozen: false }; // Свободный мир
@@ -129,8 +130,9 @@ function makeNameTag(name) {
     canvas.width = 256;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
+    ctx.font = 'bold 30px sans-serif';
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    const w = Math.min(250, 30 + ctx.measureText(name).width * 2.2);
+    const w = Math.min(250, 30 + ctx.measureText(name).width);
     roundRect(ctx, (256 - w) / 2, 8, w, 48, 12);
     ctx.fill();
     ctx.font = 'bold 30px sans-serif';
@@ -139,8 +141,9 @@ function makeNameTag(name) {
     ctx.textBaseline = 'middle';
     ctx.fillText(name, 128, 33);
     const tex = new THREE.CanvasTexture(canvas);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-    sprite.scale.set(2.4, 0.6, 1);
+    // Same readable size on screen at any distance (sizeAttenuation off)
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false }));
+    sprite.scale.set(0.3, 0.075, 1);
     sprite.renderOrder = 10;
     return sprite;
 }

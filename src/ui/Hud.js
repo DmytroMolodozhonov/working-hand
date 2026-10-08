@@ -47,7 +47,21 @@ export class Hud {
         this.el.punches.textContent = punches;
     }
 
+    /**
+     * Свободный мир: a clean screen — no kill / punch counters, and the corner
+     * shows only «FPS: N».
+     */
+    setMinimal(on) {
+        this.minimal = !!on;
+        for (const id of ['kill-count', 'punch-count']) {
+            const p = document.getElementById(id)?.parentElement;
+            if (p) p.style.display = on ? 'none' : '';
+        }
+        this._lastFps = null;
+    }
+
     setFps(fps, aiFps = 0, quality = '', spike = '') {
+        if (this.minimal) { aiFps = 0; quality = ''; spike = ''; }
         const key = `${fps}|${aiFps}|${quality}|${spike}`;
         if (key === this._lastFps) return;
         this._lastFps = key;
@@ -63,7 +77,7 @@ export class Hud {
         el.fatigue.classList.remove('hidden');
         el.fatigueFill.style.width = `${Math.max(0, (value / max) * 100)}%`;
         el.fatigueFill.classList.toggle('low', value < max * 0.3);
-        el.fatigueText.textContent = `Усталость: ${Math.floor(value)}/${max}`;
+        el.fatigueText.textContent = `⚡ Усталость: ${Math.floor(value)}/${max}`;
     }
 
     hidePvp() {
@@ -101,6 +115,26 @@ export class Hud {
         f.classList.add('active');
     }
 
+    /**
+     * A short message under the health bar that fades by itself (e.g. «нет сил»):
+     * small, see-through and never in the way of the game.
+     */
+    toast(text, ms = 1600) {
+        let el = this._toastEl;
+        if (!el) {
+            el = this._toastEl = document.createElement('div');
+            el.id = 'hud-toast';
+            el.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:60;pointer-events:none;'
+                + 'padding:5px 14px;border-radius:14px;background:rgba(0,0,0,.45);color:#fff;font-size:15px;'
+                + 'transition:opacity .35s;opacity:0;white-space:nowrap';
+            document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.style.opacity = '1';
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
+    }
+
     setVoice(html, show = true) {
         const v = this.el.voice;
         if (!v) return;
@@ -116,6 +150,23 @@ export class Hud {
 
     voiceText() {
         return this.el.voice ? this.el.voice.innerHTML : '';
+    }
+
+    /** «Подключился: Имя» at the bottom left (above the minimap); fades after a few seconds. */
+    notify(text, ms = 5000) {
+        let box = this._notifyBox;
+        if (!box) {
+            box = this._notifyBox = document.createElement('div');
+            box.id = 'hud-notify';
+            document.body.appendChild(box);
+        }
+        const item = document.createElement('div');
+        item.className = 'hud-notify-item';
+        item.textContent = text;
+        box.appendChild(item);
+        while (box.children.length > 5) box.firstChild.remove();
+        setTimeout(() => { item.style.opacity = '0'; }, ms);
+        setTimeout(() => item.remove(), ms + 600);
     }
 
     setMultiplayer(html) {
@@ -208,10 +259,37 @@ export class Hud {
             const zx = (z.group.position.x - charPos.x) * scale, zz = (z.group.position.z - charPos.z) * scale;
             if (zx * zx + zz * zz < radius * radius) { ctx.beginPath(); ctx.arc(zx, zz, 3, 0, Math.PI * 2); ctx.fill(); }
         }
-        ctx.fillStyle = '#3498db';
+        // Other players: a dot in their colour with the name; beyond the edge of the
+        // map an arrow on the rim shows which way to look (with the distance)
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
         for (const o of others) {
             const ox = (o.x - charPos.x) * scale, oz = (o.z - charPos.z) * scale;
-            if (ox * ox + oz * oz < radius * radius) { ctx.beginPath(); ctx.arc(ox, oz, 4, 0, Math.PI * 2); ctx.fill(); }
+            const col = o.color != null ? '#' + o.color.toString(16).padStart(6, '0') : '#3498db';
+            const name = (o.name || '').slice(0, 8);
+            const d2 = ox * ox + oz * oz;
+            if (d2 < (radius - 6) * (radius - 6)) {
+                ctx.fillStyle = col;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(ox, oz, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                if (name) { ctx.fillStyle = '#fff'; ctx.fillText(name, ox, oz - 7); }
+            } else {
+                const a = Math.atan2(oz, ox);
+                const r = radius - 9;
+                ctx.save();
+                ctx.translate(Math.cos(a) * r, Math.sin(a) * r);
+                ctx.rotate(a);
+                ctx.fillStyle = col;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+                const tx = Math.cos(a) * (r - 18), ty = Math.sin(a) * (r - 18) + 3;
+                const dist = Math.round(Math.sqrt(d2) / scale);
+                ctx.fillStyle = '#fff';
+                ctx.fillText(`${name} ${dist} м`, tx, ty);
+            }
         }
         ctx.fillStyle = '#fff';
         ctx.beginPath();

@@ -1105,12 +1105,42 @@ body {
 
 #mp-hud {
     margin-top: 8px;
-    background: rgba(0, 0, 0, 0.45);
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    color: #ecf0f1;
-    line-height: 1.4;
+    background: rgba(10, 12, 20, 0.82);
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #fff;
+    line-height: 1.45;
+    min-width: 170px;
+    text-align: left;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+#mp-hud .mp-hud-title { font-weight: bold; color: #ffe066; margin-bottom: 3px; }
+#mp-hud .mp-hud-row { display: flex; justify-content: space-between; gap: 12px; }
+#mp-hud .mp-hud-row.me { color: #9ff3ff; }
+#mp-hud .mp-hud-row i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; border: 1px solid #fff; }
+
+/* «Подключился: Имя» — bottom left, above the minimap */
+#hud-notify {
+    position: fixed;
+    left: 16px;
+    bottom: 200px;
+    z-index: 60;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.hud-notify-item {
+    background: rgba(10, 12, 20, 0.8);
+    color: #fff;
+    font-weight: bold;
+    font-size: 15px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    border-left: 4px solid #2ecc71;
+    transition: opacity 0.5s;
 }
 
 /* ------------------------------------------------ Свободный мир (PvP) */
@@ -1120,29 +1150,64 @@ body {
     bottom: 18px;
     transform: translateX(-50%);
     width: min(420px, 70vw);
-    height: 18px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 2px solid #fff;
-    border-radius: 10px;
+    height: 20px;
+    background: linear-gradient(180deg, rgba(20, 16, 40, 0.85), rgba(8, 6, 20, 0.9));
+    border: 2px solid #d4af37;
+    border-radius: 12px;
+    box-shadow: 0 0 10px rgba(120, 90, 255, 0.45), inset 0 0 6px rgba(0, 0, 0, 0.8);
     overflow: hidden;
     z-index: 1200;
     pointer-events: none;
 }
+/* magic energy: blue → violet, with a slow shimmer running along it */
 #fatigue-fill {
-    background: linear-gradient(90deg, #dfe6e9, #ffffff);
+    position: relative;
+    background: linear-gradient(90deg, #2bd2ff 0%, #5b8cff 45%, #9b5bff 100%);
     height: 100%;
     width: 100%;
     transition: width 0.2s;
+    box-shadow: 0 0 8px rgba(110, 160, 255, 0.9);
 }
-#fatigue-fill.low { background: linear-gradient(90deg, #b2bec3, #dfe6e9); }
+#fatigue-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%);
+    background-size: 40% 100%;
+    background-repeat: no-repeat;
+    animation: fatigue-shimmer 2.4s linear infinite;
+}
+@keyframes fatigue-shimmer {
+    from { background-position: -40% 0; }
+    to { background-position: 140% 0; }
+}
+#fatigue-fill.low {
+    background: linear-gradient(90deg, #ff4d4d, #ff9f43);
+    box-shadow: 0 0 10px rgba(255, 90, 60, 0.9);
+    animation: fatigue-low 0.9s ease-in-out infinite;
+}
+@keyframes fatigue-low {
+    50% { filter: brightness(1.35); }
+}
+/* marks every 5 points (most spells cost 5–25) */
+#fatigue-container::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / 6 - 1px), rgba(0, 0, 0, 0.45) calc(100% / 6 - 1px), rgba(0, 0, 0, 0.45) calc(100% / 6));
+    pointer-events: none;
+}
 #fatigue-text {
     position: absolute;
     inset: 0;
+    z-index: 1;
     text-align: center;
     font-size: 12px;
-    line-height: 18px;
-    color: #2d3436;
+    line-height: 20px;
+    color: #fff;
     font-weight: bold;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 3px #000, 0 1px 2px #000;
 }
 #pvp-status {
     position: fixed;
