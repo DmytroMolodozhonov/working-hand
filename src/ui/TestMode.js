@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from '../../vendor/three/OrbitControls.js';
+import { startCamera } from './CameraPanel.js';
 
 export function setupTestMode(game, { renderer, camera, poseService, onExit }) {
     const $ = (id) => document.getElementById(id);
@@ -84,7 +85,7 @@ export function setupTestMode(game, { renderer, camera, poseService, onExit }) {
         orbit.enabled = false;
         try {
             await poseService.initialize('webcam', 'preview-video', { modelComplexity: 1 });
-            await poseService.start();
+            await startCamera(poseService);
         } catch (e) {
             console.error('Camera start failed', e);
         }

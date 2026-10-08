@@ -118,8 +118,15 @@ export class WeaponSystem {
             for (const side of ['left', 'right']) this._updateHand(side, dt, now, ch, allowGrab);
         }
 
+        // The player's visible hands are solid for free weapons nearby
+        const handMeshes = ch ? this._handMeshes(ch) : null;
         for (const w of this.weapons) {
             if (w.hover && !w.holder) continue;
+            // (only just after letting go, or while it lies on a hand — reaching for a weapon
+            // on the ground must not push it away)
+            const fresh = w.onHand || now - (w.releasedAt || -1e9) < 3000;
+            w.handMeshes = fresh && handMeshes && !w.holder && !w.remoteTarget && this._nearHands(w, ch) ? handMeshes : null;
+            if (!w.handMeshes) w.onHand = false;
             w.step(dt, collision);
         }
 
@@ -290,6 +297,32 @@ export class WeaponSystem {
         hand.group.position.addScaledVector(_a, 0.8);
     }
 
+    /** Palm and finger meshes of the player's visible hands (cached per hand model). */
+    _handMeshes(ch) {
+        const out = this._handMeshList || (this._handMeshList = []);
+        out.length = 0;
+        const hands = ch.getActiveHands();
+        for (const side of ['left', 'right']) {
+            const hand = hands[side];
+            if (!hand || !hand.group.visible) continue;
+            if (!hand._solidMeshes) {
+                hand._solidMeshes = [];
+                hand.group.traverse((o) => { if (o.isMesh) hand._solidMeshes.push(o); });
+            }
+            hand.group.updateMatrixWorld(true);
+            for (const m of hand._solidMeshes) out.push(m);
+        }
+        return out;
+    }
+
+    /** Is a free weapon close enough to a hand to touch it? */
+    _nearHands(w, ch) {
+        for (const side of ['left', 'right']) {
+            if (ch.getGripObject(side).getWorldPosition(_b).distanceToSquared(w.position) < 9) return true;
+        }
+        return false;
+    }
+
     release(side) {
         const hs = this.hands[side];
         const w = hs.held;
@@ -297,6 +330,7 @@ export class WeaponSystem {
         const hand = this.game.character?.getActiveHands()[side];
         this._forget(side, hand);
         w.release();
+        w.releasedAt = this.game.now();
         if (this.onRelease) this.onRelease(w, side);
     }
 

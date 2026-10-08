@@ -394,8 +394,10 @@ export class PoseService {
             }
             // One frame at a time, like the original camera loop
             this.inFlight = true;
+            this.lastSendStart = performance.now();
             try {
                 await this.holistic.send({ image: v });
+                this.lastSendEnd = performance.now();
                 const cost = performance.now() - ts;
                 this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + cost * 0.1 : cost;
             } catch (e) {

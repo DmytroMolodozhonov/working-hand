@@ -48,8 +48,9 @@ export class PoseSmoother {
         const to = this.to;
         if (!to) return null;
         const from = this.from;
-        // Blend over slightly more than one interval: never stalls waiting for the next pose
-        const duration = Math.max(16, Math.min(150, this.interval * 1.1));
+        // Blend over half an interval (at most 40 ms): no visible jumps, but the hero
+        // reaches the newest pose quickly instead of trailing a whole result behind
+        const duration = Math.max(16, Math.min(40, this.interval * 0.5));
         const k = from === to ? 1 : Math.min(1, Math.max(0, (now - this.startedAt) / duration));
         const out = Object.assign({}, to);
         if (k < 1) {

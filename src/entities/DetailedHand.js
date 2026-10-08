@@ -104,7 +104,7 @@ export class DetailedHand {
 
         for (let i = 0; i < 21; i++) this._toLocal(landmarks[i], wrist, scaleFactor, this._targets[i]);
         if (!this.currentVectors) this.currentVectors = this._targets.map((v) => v.clone());
-        for (let i = 0; i < 21; i++) this.currentVectors[i].lerp(this._targets[i], 0.3);
+        for (let i = 0; i < 21; i++) this.currentVectors[i].lerp(this._targets[i], 0.5); // (0.3 trailed the real hand)
 
         let idx = 0;
         const cv = this.currentVectors;

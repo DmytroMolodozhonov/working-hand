@@ -64,6 +64,7 @@ export class Game {
         this.lastSpellCastTime = 0;
         this.cameraBaseRotation = 0;
         this.smoothHead = { yaw: 0, pitch: 0 };
+        this.yawNeutral = 0; // head yaw that counts as "straight ahead" (drifting camera)
         this.smoothBody = 0;
         this.knockback = new THREE.Vector3();
         this.flight = new FlightController();
@@ -746,12 +747,36 @@ export class Game {
         if (this.voice) this.voice.stop();
     }
 
+    /**
+     * Freeze detector: a frame that came late gets a reason (shown next to the
+     * FPS), so a stutter can be traced on the player's own computer.
+     */
+    _noteSpike(gapMs, now) {
+        if (gapMs < 70 || !this._frameEnd || !this._parts) return;
+        let reason = null, worst = 0;
+        for (const [name, ms] of Object.entries(this._parts)) if (ms > worst) { worst = ms; reason = name; }
+        if (worst < 35) {
+            // The previous frame itself was quick: something ran between frames
+            const ps = this.poseService;
+            const ai = ps && ps.lastSendEnd > this._frameEnd - 5 && ps.lastSendEnd - ps.lastSendStart > 30;
+            reason = ai ? 'нейросеть камеры' : 'браузер (память/вкладка)';
+        }
+        this.stats.spike = { ms: gapMs, reason, at: now };
+        const log = this.stats.spikes || (this.stats.spikes = []);
+        log.push({ ms: Math.round(gapMs), reason, t: Math.round(now) });
+        if (log.length > 30) log.shift();
+    }
+
     frame() {
         const t0 = performance.now();
         const deltaTime = (t0 - this.lastTime) / 1000;
         this.lastTime = t0;
         const dt = Math.min(deltaTime, 0.1);
         this.frameCount++;
+        this._noteSpike(deltaTime * 1000, t0);
+        const parts = this._parts || (this._parts = {});
+        let tm = t0;
+        const mark = (name) => { const n = performance.now(); parts[name] = n - tm; tm = n; };
 
         // FPS counter (rolling)
         this.fpsAccum += deltaTime;
@@ -759,7 +784,9 @@ export class Game {
         if (this.fpsFrames >= 20) {
             const ps = this.poseSmoother;
             const aiFps = ps.lastPushAt && t0 - ps.lastPushAt < 1000 ? Math.round(1000 / ps.interval) : 0;
-            this.hud.setFps(Math.round(this.fpsFrames / this.fpsAccum), aiFps, this.quality.current.name);
+            const sp = this.stats.spike;
+            this.hud.setFps(Math.round(this.fpsFrames / this.fpsAccum), aiFps, this.quality.current.name,
+                sp && t0 - sp.at < 6000 ? `рывок ${Math.round(sp.ms)} мс: ${sp.reason}` : '');
             this.fpsAccum = 0;
             this.fpsFrames = 0;
         }
@@ -768,6 +795,7 @@ export class Game {
         this._updatePlayer(dt);
         this._updateChests(dt);
         if (!isTest) this._checkVictory();
+        mark('игрок');
 
         this.levitation.update(dt);
         this.duel.update(dt);
@@ -777,9 +805,11 @@ export class Game {
         this.water.update(dt);
         this.combat.update(dt);
         this.combat.updatePunches(!!(this.currentPose && this.currentPose.isPunching));
+        mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
         this.weapons.checkHits(this.combat.enabled ? this.zombies.concat(this.combat.meleeTargets()) : this.zombies, dt);
+        mark('зомби');
 
         this.spells.update(dt);
         this._updateMagicGesture();
@@ -788,12 +818,14 @@ export class Game {
 
         for (const r of this.remotes.values()) r.update(dt);
         if (this.sync) this.sync.update(dt);
+        mark('мультиплеер');
 
         this.fx.update(dt);
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
         this.world.update(this.character.group.position, this._viewBoost);
         this.world.followShadow(this.character.group.position);
+        mark('мир');
         this._updateCamera(dt);
 
         if (this.frameCount % 5 === 0) {
@@ -808,7 +840,10 @@ export class Game {
         this.stats.logicMs = (this.stats.logicMs || logic) * 0.95 + logic * 0.05;
         if (logic > (this.stats.worstLogicMs || 0)) this.stats.worstLogicMs = logic;
 
+        mark('прочее');
         this.renderer.render(this.scene, this.camera);
+        mark('графика');
+        this._frameEnd = performance.now();
 
         const ms = performance.now() - t0;
         this.stats.frames++;
@@ -836,13 +871,20 @@ export class Game {
                 this.smoothHead.yaw += (targetYaw - this.smoothHead.yaw) * alpha;
                 this.smoothHead.pitch += (targetPitch - this.smoothHead.pitch) * alpha;
                 if (s.drifting) {
-                    if (Math.abs(this.smoothHead.yaw) > 0.1) this.cameraBaseRotation += this.smoothHead.yaw * 6 * dt; // 0.1 per frame at 60 FPS
+                    // "Straight ahead" adapts slowly to where the player really looks (camera beside
+                    // the screen), so a small constant head turn doesn't spin the view.
+                    const off = this.smoothHead.yaw - this.yawNeutral;
+                    if (Math.abs(off) < 0.3) this.yawNeutral += off * Math.min(1, dt * 0.12);
+                    // Turning speed grows smoothly past the dead zone, with a cap
+                    const DEAD = 0.15;
+                    const over = Math.abs(off) - DEAD;
+                    if (over > 0) this.cameraBaseRotation += Math.sign(off) * Math.min(2.2, over * 4) * dt;
                     ch.setBodyRotation(this.cameraBaseRotation);
                 } else if (pose.bodyRotation !== undefined && !flying) {
                     this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
                     ch.setBodyRotation(this.smoothBody);
                 }
-                ch.updateHeadRotation(this.smoothHead.yaw, this.smoothHead.pitch);
+                ch.updateHeadRotation(this.smoothHead.yaw - (s.drifting ? this.yawNeutral : 0), this.smoothHead.pitch);
             }
             ch.updateArmsLookAt(pose, dt);
             ch.setCrouching(flying ? false : pose.isCrouching);

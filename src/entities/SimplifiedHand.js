@@ -27,7 +27,7 @@ export class SimplifiedHand {
         this.PALM_H = 0.45;
         this.PALM_D = 0.14;
 
-        this.HISTORY_LENGTH = 7;
+        this.HISTORY_LENGTH = 3; // (was 7 render frames: up to ~0.2 s behind at 30 FPS)
         this.landmarkHistory = [];
         this._historyPool = [];
         this._avg = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
@@ -47,8 +47,8 @@ export class SimplifiedHand {
         };
         this.targetState = JSON.parse(JSON.stringify(this.currentState));
 
-        this.LERP_SPEED = 0.35;
-        this.ROT_LERP_SPEED = 0.25;
+        this.LERP_SPEED = 0.5;
+        this.ROT_LERP_SPEED = 0.45;
 
         // Safeguards
         this._pendingTwist = null;
@@ -247,23 +247,23 @@ export class SimplifiedHand {
                     this._pendingTwistFrames = 1;
                 }
                 if (this._pendingTwistFrames >= 4) {
-                    ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.35);
+                    ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.6);
                     this._pendingTwist = null;
                     this._pendingTwistFrames = 0;
                 }
             } else {
                 this._pendingTwist = null;
                 this._pendingTwistFrames = 0;
-                ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.35);
+                ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.6);
             }
         }
 
         const targetTilt = Math.max(-1.2, Math.min(1.2, (middleB.y - wrist.y) * 3.0));
-        ts.wristTilt += (targetTilt - ts.wristTilt) * 0.4;
+        ts.wristTilt += (targetTilt - ts.wristTilt) * 0.6;
 
         const rawRoll = ((pinkyB.z || 0) - (indexB.z || 0)) * 6;
         const targetRoll = Math.max(-0.8, Math.min(0.8, rawRoll));
-        ts.wristRoll += (targetRoll - ts.wristRoll) * 0.25;
+        ts.wristRoll += (targetRoll - ts.wristRoll) * 0.45;
     }
 
     animateModel() {

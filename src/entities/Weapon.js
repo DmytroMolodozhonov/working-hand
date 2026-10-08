@@ -71,6 +71,19 @@ export class Weapon {
             local: new THREE.Vector3((x - spec.com[0]) * this.S, (y - spec.com[1]) * this.S, (z - spec.com[2]) * this.S),
             radius: r * this.S,
         }));
+        // Denser points along the blade/shaft for touching hands (a palm is narrower
+        // than the gaps between the samples above)
+        const spine = this.samples.filter((p) => Math.abs(p.local.x) < 0.05 * this.S && Math.abs(p.local.z) < 0.05 * this.S)
+            .sort((a, b) => a.local.y - b.local.y);
+        this.handSamples = this.samples.slice();
+        for (let i = 0; i + 1 < spine.length; i++) {
+            const a = spine[i], b = spine[i + 1];
+            const n = Math.floor(a.local.distanceTo(b.local) / (0.06 * this.S));
+            for (let k = 1; k < n; k++) {
+                const t = k / n;
+                this.handSamples.push({ local: a.local.clone().lerp(b.local, t), radius: Math.max(0.03 * this.S, a.radius + (b.radius - a.radius) * t) });
+            }
+        }
 
         this.sleeping = true;
         this.sleepTimer = 0;
@@ -158,7 +171,8 @@ export class Weapon {
             if (!this._restRef) this._restRef = this.position.clone();
             const still = this.position.distanceToSquared(this._restRef) < 0.0004;
             if (!still) this._restRef.copy(this.position);
-            const calm = (this.velocity.lengthSq() < 0.09 && this.angularVelocity.lengthSq() < 0.25) || (still && this.velocity.lengthSq() < 1.0);
+            // (lying on a hand: stays awake so it follows the hand / slides off when it tilts)
+            const calm = !this.onHand && (this.velocity.lengthSq() < 0.09 && this.angularVelocity.lengthSq() < 0.25) || (still && this.velocity.lengthSq() < 1.0);
             this.sleepTimer = calm ? this.sleepTimer + dt : 0;
             if (this.sleepTimer > 0.4) {
                 this.sleeping = true;
@@ -195,6 +209,12 @@ export class Weapon {
         if (collision) this._contacts(h, collision);
     }
 
+    /** World samples + dense hand samples (each marked) for one contact pass. */
+    _contactList() {
+        if (!this._both) this._both = this.samples.concat(this.handSamples.map((p) => ({ ...p, hand: true })));
+        return this._both;
+    }
+
     _worldInvInertia() {
         _m.makeRotationFromQuaternion(this.quaternion);
         _m3.setFromMatrix4(_m);
@@ -207,10 +227,23 @@ export class Weapon {
         const invMass = 1 / this.mass;
         const friction = 0.55;
         let touching = 0;
+        const hands = !this.drive && this.handMeshes && this.handMeshes.length ? this.handMeshes : null;
+        if (hands) this.onHand = false;
+        const list = hands ? this._contactList() : this.samples;
         for (let iter = 0; iter < 2; iter++) {
-        for (const s of this.samples) {
+        for (const s of list) {
             const p = _v1.copy(s.local).applyQuaternion(this.quaternion).add(this.position);
-            const depth = contactAgainstWorld(p, s.radius, collision, _n);
+            let depth;
+            if (s.hand) {
+                // Free weapon against the player's palms and fingers: it lies on an open
+                // hand instead of falling through it
+                depth = 0;
+                for (const mesh of hands) {
+                    const d = contactAgainstBox(p, s.radius, mesh, _hn);
+                    if (d > depth) { depth = d; _n.copy(_hn); }
+                }
+                if (depth > 0) { this.onHand = true; depth = Math.min(depth, 0.03); } // pushed out gently (no jumps)
+            } else depth = contactAgainstWorld(p, s.radius, collision, _n);
             if (depth <= 0) continue;
             touching++;
             // Positional correction (split between holder spring and body)
@@ -324,6 +357,49 @@ export function integrateQuaternion(q, w, h) {
  * Sphere (p, r) vs static world. Returns penetration depth (>0) and writes the
  * push-out normal into `n`. Handles ground/terrain, tables/chests/trunks, map walls.
  */
+const _hn = new THREE.Vector3();
+const _lp = new THREE.Vector3();
+const _hm = new THREE.Matrix4();
+
+/**
+ * Penetration of a sphere (p, r) into a mesh's box (its geometry bounds, in its
+ * own orientation). Returns the depth (> 0 when touching) and the push-out
+ * direction in `n`.
+ */
+export function contactAgainstBox(p, r, mesh, n) {
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    const b = geo.boundingBox;
+    _hm.copy(mesh.matrixWorld).invert();
+    _lp.copy(p).applyMatrix4(_hm);
+    // Quick reject (scale of hand meshes is ~1)
+    const cx = Math.max(b.min.x, Math.min(b.max.x, _lp.x));
+    const cy = Math.max(b.min.y, Math.min(b.max.y, _lp.y));
+    const cz = Math.max(b.min.z, Math.min(b.max.z, _lp.z));
+    const dx = _lp.x - cx, dy = _lp.y - cy, dz = _lp.z - cz;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > r * r) return 0;
+    let depth;
+    if (d2 > 1e-10) {
+        const d = Math.sqrt(d2);
+        n.set(dx / d, dy / d, dz / d);
+        depth = r - d;
+    } else {
+        // Centre inside the box: out through the nearest face
+        const faces = [
+            [b.max.x - _lp.x, 1, 0, 0], [_lp.x - b.min.x, -1, 0, 0],
+            [b.max.y - _lp.y, 0, 1, 0], [_lp.y - b.min.y, 0, -1, 0],
+            [b.max.z - _lp.z, 0, 0, 1], [_lp.z - b.min.z, 0, 0, -1],
+        ];
+        let best = faces[0];
+        for (const f of faces) if (f[0] < best[0]) best = f;
+        n.set(best[1], best[2], best[3]);
+        depth = r + best[0];
+    }
+    n.transformDirection(mesh.matrixWorld);
+    return depth;
+}
+
 export function contactAgainstWorld(p, r, collision, n) {
     let best = 0;
     // Ground / terrain under the point

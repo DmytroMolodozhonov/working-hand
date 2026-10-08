@@ -24,12 +24,12 @@ test('pose smoother: motion between camera results is continuous', () => {
     const a = s.sample(551);
     assert.ok(a.leftWrist.x < 0.505, `jumped: ${a.leftWrist.x}`);
     // Half-way it is half-way, and it keeps moving every rendered frame
-    const b = s.sample(577);
+    const b = s.sample(562);
     assert.ok(b.leftWrist.x > 0.53 && b.leftWrist.x < 0.57, `${b.leftWrist.x}`);
     assert.ok(b.headRotation.yaw > 0.15 && b.headRotation.yaw < 0.25);
     assert.ok(b.leftHandLandmarks[0].x > 0.53);
-    // ...and arrives by the time the next result is due
-    const c = s.sample(610);
+    // ...and arrives quickly (half an interval), well before the next result
+    const c = s.sample(580);
     assert.equal(c.leftWrist.x, 0.6);
     assert.equal(c.headRotation.yaw, 0.4);
 });
@@ -38,9 +38,9 @@ test('pose smoother: a new result starts from what is on screen (no jumps back)'
     const s = new PoseSmoother();
     for (let i = 0; i <= 10; i++) s.push(pose(0.5, 0), i * 50);
     s.push(pose(0.7, 0), 550);
-    const mid = s.sample(575).leftWrist.x;
-    s.push(pose(0.7, 0), 580); // next result arrives early
-    const after = s.sample(581).leftWrist.x;
+    const mid = s.sample(562).leftWrist.x;
+    s.push(pose(0.7, 0), 566); // next result arrives early
+    const after = s.sample(567).leftWrist.x;
     assert.ok(Math.abs(after - mid) < 0.01, `${mid} → ${after}`);
 });
 

@@ -14,6 +14,7 @@ import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network } from './net/Network.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
+import { startCamera } from './ui/CameraPanel.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -357,8 +358,15 @@ voice.onResult = (command, isFinal = true) => {
     }
     if (game && game.active) {
         if (game.isMagicActive || Date.now() - game.lastMagicTime < 1500) hud.setVoice(`🎤 СЛЫШУ: "${escapeHtml(command)}"`);
+        // Multiplayer: a friend's voice heard by this microphone must not cast here
+        const margin = parseInt($('voice-filter')?.value ?? '9', 10);
+        if (margin > 0 && game.remotes?.size > 0 && matchSpell(command) && !voice.isOwnVoice(margin)) {
+            hud.setVoice(`🔇 Тихо — похоже, это голос другого игрока: "${escapeHtml(command)}"`);
+            return;
+        }
         const name = game.castLocalSpell(command, isFinal);
         if (name) {
+            voice.learnOwnVoice();
             hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span> (было: "${escapeHtml(command)}")`);
             if (voiceTestText && isMenuVoiceActive) voiceTestText.innerHTML = `✨ ${name.toUpperCase()} ✨`;
         }
@@ -476,7 +484,8 @@ async function startGameInner(config, welcome) {
             try {
                 poseService.onStatus = (t) => updateProgress(75, t);
                 await poseService.initialize('webcam', 'preview-video', config);
-                await poseService.start();
+                // No camera: a panel explains why, lists the cameras and keeps retrying
+                cameraOk = await startCamera(poseService);
             } catch (e) {
                 cameraOk = false;
                 console.error('Camera/AI init failed:', e);
@@ -616,7 +625,7 @@ function escapeHtml(s) {
 // Volumes, graphics, camera… are kept in this browser between launches.
 (function rememberSettings() {
     const KEY = 'zns-settings';
-    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'audio-ambient-toggle', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'voice-filter', 'audio-ambient-toggle', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count'];
     let saved = {};
