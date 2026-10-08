@@ -41,6 +41,7 @@ export function matchSpell(text) {
     if (has('авада', 'кедавр', 'кидавр', 'avada', 'kedavr', 'kadavr', 'водокидавр', 'адакедавр')) return 'AvadaKedavra';
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
     if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return 'Levitation';
+    if (has('брейнрот', 'брейн рот', 'брейнрод', 'брэйнрот', 'brainrot', 'brain rot', 'брейн', 'брэйн', 'brain')) return 'Brainrot';
     if (has('вайнд', 'винд', 'вайн', 'уинд', 'wind', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
     // Water bending (before Ice/Sands: their short tokens would catch these words)
@@ -153,6 +154,7 @@ export class SpellManager {
             case 'Sapira': this.castSapira(o, d, casterId); break;
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
             case 'Wind': this.castWind(o, d, casterId, 1); break;
+            case 'Brainrot': this.castBrainrot(o, d); break;
             case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
             case 'Inferno': this.castInferno(o, d, casterId); break;
             case 'Sands': this.castSands(o, d, casterId); break;
@@ -282,6 +284,54 @@ export class SpellManager {
                 p.hit('Thunderwave', origin, dirTo.clone().setY(0.2).multiplyScalar(26));
             }
         }
+    }
+
+    // ------------------------------------------------------------ Brainrot
+    /**
+     * «Брейнрот»: hypnotic rings roll out from a glowing spot above the
+     * wizard's head towards the zombie (the length of `direction` = distance).
+     */
+    castBrainrot(origin, direction) {
+        this._sound('playSapira');
+        const dist = Math.max(2, direction.length());
+        const dir = direction.clone().normalize();
+        if (!this._ringGeo) this._ringGeo = new THREE.TorusGeometry(1, 0.09, 8, 40);
+        const cols = [0xd65bff, 0xff5bd6, 0x8f5bff, 0x5bffd0];
+        const rings = [];
+        for (let i = 0; i < 9; i++) {
+            const m = new THREE.Mesh(this._ringGeo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length], transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+            m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+            m.visible = false;
+            this.scene.add(m);
+            rings.push({ m, delay: i * 0.16 });
+        }
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff7bff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+        orb.position.copy(origin);
+        this.scene.add(orb);
+        const SPEED = 11;
+        let t = 0;
+        this.spells.push({
+            life: 0.16 * 9 + dist / SPEED + 0.3,
+            onUpdate: (spell, dt) => {
+                t += dt;
+                orb.scale.setScalar(1 + Math.sin(t * 14) * 0.25);
+                for (const r of rings) {
+                    const lt = t - r.delay;
+                    if (lt < 0) continue;
+                    const d = lt * SPEED;
+                    if (d > dist) { r.m.visible = false; continue; }
+                    r.m.visible = true;
+                    r.m.position.copy(origin).addScaledVector(dir, d);
+                    r.m.scale.setScalar(0.35 + d * 0.09);
+                    r.m.rotateZ(dt * 5);
+                    r.m.material.opacity = 0.85 * (1 - d / dist * 0.6);
+                }
+            },
+            onEnd: () => {
+                for (const r of rings) { this.scene.remove(r.m); r.m.material.dispose(); }
+                this.scene.remove(orb); orb.geometry.dispose(); orb.material.dispose();
+            },
+        });
     }
 
     // ---------------------------------------------------------------- Wind

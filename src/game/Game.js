@@ -488,6 +488,7 @@ export class Game {
         }
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
+        if (name === 'Brainrot') return this._castBrainrot(isFinal);
         // Levitation: point the hand at an object (or a creature: a duel spell)
         if (name === 'Levitation') {
             const aim = this.levitation.active ? null : this.duel.pickSide(false);
@@ -629,6 +630,87 @@ export class Game {
         this._lastWind = now;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
+    }
+
+    /**
+     * «Брейнрот»: no hand needed — the zombie you look at (or the nearest one)
+     * becomes your servant for a while: it fights the other zombies, and they fight it.
+     */
+    _castBrainrot(isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === 'Brainrot' && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastBrainrot || 0) < 1200) return null;
+        const head = this.character.head.getWorldPosition(new THREE.Vector3());
+        const look = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        let best = null;
+        for (const z of this.zombies) {
+            if (z.isDead || z.isDying || z.isThrall) continue;
+            const to = _v1.copy(z.group.position).add(_v2.set(0, 1.4, 0)).sub(head);
+            const d = to.length();
+            if (d > 30) continue;
+            const ang = look.angleTo(to.normalize());
+            const score = (ang < 0.5 ? ang * 4 : 10 + d * 0.2 + ang) + d * 0.04;
+            if (ang > 0.5 && d > 10) continue;
+            if (!best || score < best.score) best = { z, score, d };
+        }
+        if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на зомби (не дальше 30 м) и скажите «Брейнрот»', true); return null; }
+        const tired = this.combat.check('Brainrot');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('Brainrot');
+        this._lastBrainrot = now;
+        this._interimCast = isFinal ? null : { name: 'Brainrot', at: now };
+        // Rings from above the head to the zombie (the vector's length = the distance)
+        const origin = head.add(_v1.set(0, 1.3, 0));
+        const vec = _v2.copy(best.z.group.position).add(_v1.set(0, 1.4, 0)).sub(origin);
+        this.spells.cast('Brainrot', origin, vec.clone(), null, this.localId);
+        if (this.sync) this.sync.spell('Brainrot', origin, vec, null);
+        const zid = best.z.id;
+        const arrive = Math.round(Math.min(2500, (vec.length() / 11) * 1000 + 300));
+        setTimeout(() => {
+            if (this.authority) this.applyBrainrot(zid, this.localId);
+            else if (this.sync) this.sync.brainrot(zid);
+        }, arrive);
+        return 'Brainrot';
+    }
+
+    /** The zombie becomes `by`'s servant for 45 s (authority: host / single player). */
+    applyBrainrot(zid, by) {
+        const z = this.zombieById.get(zid);
+        if (!z || z.isDead) return;
+        z.setThrall(true);
+        z.thrallOwner = by;
+        z.thrallUntil = performance.now() + 45000;
+        z.isSleeping && z.setSleeping?.(false);
+        for (let i = 0; i < 24; i++) this.fx.spark(_v1.copy(z.group.position).add(_v2.set(0, 2.2, 0)), i % 2 ? 0xd65bff : 0xff7bff, 0.15, _v2.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.7);
+    }
+
+    /** Where a zombie goes: a servant hunts the other zombies, the others go for a servant close by. */
+    _zombieTarget(z) {
+        const zp = z.group.position;
+        if (z.isThrall) {
+            if (performance.now() > z.thrallUntil) { z.setThrall(false); return this._zombieTarget(z); }
+            let best = null, bd = 40 * 40;
+            for (const o of this.zombies) {
+                if (o === z || o.isDead || o.isDying || o.isThrall) continue;
+                const d = zp.distanceToSquared(o.group.position);
+                if (d < bd) { bd = d; best = o; }
+            }
+            if (best) return { pos: best.group.position, zombie: best, distSq: bd };
+            // nobody to fight: stays near its master (not too close)
+            const owner = z.thrallOwner === this.localId ? this.character.group.position : this.remotes.get(z.thrallOwner)?.position;
+            if (owner && zp.distanceToSquared(owner) > 16) return { pos: owner, follow: true, distSq: zp.distanceToSquared(owner) };
+            return null;
+        }
+        const player = this.nearestPlayer(zp);
+        let best = null, bd = 10 * 10;
+        for (const o of this.zombies) {
+            if (!o.isThrall || o.isDead || o.isDying) continue;
+            const d = zp.distanceToSquared(o.group.position);
+            if (d < bd) { bd = d; best = o; }
+        }
+        if (best && (!player || bd < player.distSq)) return { pos: best.group.position, zombie: best, distSq: bd };
+        return player;
     }
 
     /** Another wizard's «Вайнд» reached me: blown away (no harm; a shield stops it). */
@@ -1172,7 +1254,7 @@ export class Game {
                 }
                 continue;
             }
-            const target = this.nearestPlayer(z.group.position);
+            const target = this._zombieTarget(z);
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
             if (z.removable) { this.removeZombie(z); continue; }
             if (z.isDead || z.isSleeping) continue;
@@ -1197,6 +1279,20 @@ export class Game {
                 this.onLocalHit(z, 1, dir, false);
                 if (!z.isDead) z.group.position.addScaledVector(dir, 0.3);
             }
+
+            // Zombie against zombie («Брейнрот»: the servant and the others fight)
+            if (target && target.zombie && target.distSq < 5.3) {
+                const now = Date.now();
+                if (now - (z.lastAttackTime || 0) > 900) {
+                    z.lastAttackTime = now;
+                    z.triggerAttack();
+                    const dir = _v1.subVectors(target.zombie.group.position, z.group.position).setY(0).normalize().clone();
+                    target.zombie.damageCooldown = 0;
+                    this.damageZombie(target.zombie, z.isThrall ? 2 : 1, false, dir, z.isThrall ? z.thrallOwner : null);
+                }
+                continue;
+            }
+            if (target && (target.zombie || target.follow)) continue;
 
             // Zombie bites (survival / maps)
             if (survival && target && target.distSq < 4.0) {

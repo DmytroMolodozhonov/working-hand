@@ -86,3 +86,7 @@ test('«Вайнд» / «Вайнд Максима» are recognised', () => {
     for (const w of ['вайнд максима', 'wind maxima', 'винд максимум']) assert.equal(matchSpell(w), 'WindMaxima', w);
     assert.equal(matchSpell('вингардиум левиоса'), 'Levitation');
 });
+
+test('«Брейнрот» is recognised', () => {
+    for (const w of ['брейнрот', 'brainrot', 'брейн рот', 'Брэйнрот']) assert.equal(matchSpell(w), 'Brainrot', w);
+});

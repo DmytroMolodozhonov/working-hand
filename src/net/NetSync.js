@@ -217,6 +217,11 @@ export class NetSync {
         this.net.send({ t: 'zhit', id: z.id, res, by });
     }
 
+    /** «Брейнрот» from a guest: the host makes the zombie a servant. */
+    brainrot(zid) {
+        this.net.send({ t: 'brainrot', id: zid, by: this.me });
+    }
+
     zombieSand(z) {
         if (this.net.isHost) this.net.send({ t: 'zsand', id: z.id });
     }
@@ -324,6 +329,7 @@ export class NetSync {
                 if (z && !z.isDead) g.damageZombie(z, Math.min(10, m.dmg | 0 || 1), !!m.w, vec(m.dir || [0, 0, 1]), m.from);
                 break;
             }
+            case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;
             case 'spell': {
                 if (m.by === this.me) break;
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);

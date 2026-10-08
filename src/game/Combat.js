@@ -53,6 +53,7 @@ export const SPELL_COST = {
     Levitation: 6,
     Accio: 5,
     Wind: 8,
+    Brainrot: 15,
     WindMaxima: 20,
     Stupefy: 12,
     AvadaKedavra: 25,

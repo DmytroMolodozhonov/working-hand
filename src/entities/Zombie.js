@@ -110,6 +110,7 @@ export class Zombie {
         const rightEye = new THREE.Mesh(g.eye, g.eyeMat);
         rightEye.position.set(0.25, 0.1, 0.6);
         this.head.add(rightEye);
+        this.eyes = [leftEye, rightEye];
 
         const shirt = this._mat(SHIRT);
         this.leftArm = new THREE.Mesh(g.arm, shirt);
@@ -165,6 +166,7 @@ export class Zombie {
         const ground = collision ? collision.groundY(pos.x, pos.z) : -0.5;
 
         if (this.damageCooldown > 0) this.damageCooldown -= dt;
+        this._spinHalo(dt);
         // Blown by «Вайнд»: slides away, slowing down (also when stunned or frozen)
         if (this.windVel && !this.isDead && !this.isDying) {
             pos.addScaledVector(this.windVel, dt);
@@ -500,6 +502,31 @@ export class Zombie {
         if (this.ctx.sound) this.ctx.sound.playFrozenHit();
     }
 
+    // ------------------------------------------------------------- «Брейнрот»
+    /** Under a wizard's spell: violet eyes and a hypnotic ring turning over the head. */
+    setThrall(on) {
+        if (!!on === !!this.isThrall) return;
+        this.isThrall = !!on;
+        const g = shared();
+        if (!g.thrallEye) g.thrallEye = new THREE.MeshBasicMaterial({ color: 0xd65bff });
+        for (const e of this.eyes || []) e.material = on ? g.thrallEye : g.eyeMat;
+        if (on && !this.halo) {
+            if (!g.haloGeo) g.haloGeo = new THREE.TorusGeometry(0.55, 0.07, 6, 28);
+            if (!g.haloMat) g.haloMat = new THREE.MeshBasicMaterial({ color: 0xc040ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+            this.halo = new THREE.Mesh(g.haloGeo, g.haloMat);
+            this.halo.position.y = 3.0;
+            this.halo.rotation.x = Math.PI / 2;
+            this.group.add(this.halo);
+        }
+        if (this.halo) this.halo.visible = !!on;
+    }
+
+    _spinHalo(dt) {
+        if (!this.halo || !this.halo.visible) return;
+        this.halo.rotation.z += dt * 3;
+        this.halo.scale.setScalar(1 + Math.sin(performance.now() / 180) * 0.12);
+    }
+
     // ------------------------------------------------------------- networking
     serialize() {
         const p = this.group.position;
@@ -511,6 +538,7 @@ export class Zombie {
         if (this.isSleeping) flags |= 8;
         if (this.isAttacking) flags |= 16;
         if (!this.group.visible) flags |= 32;
+        if (this.isThrall) flags |= 64;
         return [this.id, r(p.x), r(p.y), r(p.z), r(this.group.rotation.y), flags, this.limbMask, r(this.freezeProgress), r(this.group.rotation.x)];
     }
 
@@ -523,6 +551,7 @@ export class Zombie {
         this.isSleeping = !!(flags & 8);
         if ((flags & 16) && !this.isAttacking) this.triggerAttack();
         if ((flags & 32) && this.group.visible) this.group.visible = false;
+        this.setThrall(!!(flags & 64));
         const frozen = !!(flags & 2);
         if (frozen && !this.isFrozen) { this.freezeProgress = 1; this.freeze(); this._restoreColor(); }
         else if (!frozen && this.isFrozen) this.unfreeze();
@@ -536,6 +565,7 @@ export class Zombie {
 
     /** Client-side visual update: interpolate towards host state and animate. */
     updateRemote(dt, camera) {
+        this._spinHalo(dt);
         if (this.hitFlashTimer > 0) {
             this.hitFlashTimer -= dt;
             if (this.hitFlashTimer <= 0) this._restoreColor();
