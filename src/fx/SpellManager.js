@@ -62,6 +62,7 @@ export function matchSpell(text) {
     const maxW = () => has('макс', 'max', 'мах');
     if (has('bubble', 'бабл', 'баббл', 'бабол', 'пузыр', 'эйр баб', 'air bub')) return maxW() ? 'AirBubbleMaxima' : 'AirBubble';
     if ((has('wave', 'вейв', 'вэйв', 'уэйв', 'волн') && has('attack', 'атак', 'аттак', 'атт', 'атэк', 'эттак', 'атак')) || has('waveattack', 'вейватак')) return maxW() ? 'WaveAttackMaxima' : 'WaveAttack';
+    if (has('breakthrough', 'брейкфру', 'брейкср', 'брэйкфру', 'брейк сру', 'брейк фру', 'брейксру', 'break through', 'прорыв')) return has('макс', 'max', 'мах') ? 'BreakthroughMaxima' : 'Breakthrough';
     if (has('рескью', 'рескю', 'рэскью', 'rescue', 'рескьу', 'спасен', 'спаси')) return 'Rescue';
     if (has('атак', 'attack', 'аттак', 'атэк', 'этак', 'атака', 'в атаку')) return 'Attack';
     if (has('earthquake', 'earth quake', 'earthcake', 'эрсквейк', 'эртквейк', 'ерсквейк', 'эрскейк', 'эрткейк', 'эрс квейк', 'квейк', 'quake', 'землетряс', 'эрскейп', 'escape', 'эскейп', 'искейп', 'ескейп', 'скейп', 'эскейт', 'skype', 'скайп')) return has('макс', 'max', 'мах') ? 'EarthquakeMaxima' : 'Earthquake';

@@ -704,3 +704,30 @@ test('doors: «Create a Door» from wood in the hand, «Stand», a closed door b
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('«Breakthrough»: arms low, then up — a wall of earth and stone rises in front', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const hint = g.castLocalSpell('breakthrough', true); // arms not low → a hint, nothing happens
+        g._bt.lowAt = performance.now() - 500;
+        g._bt.riseAt = performance.now();
+        const said = g.castLocalSpell('breakthrough maxima', true);
+        for (let i = 0; i < 40 && g._bt.rising; i++) await frames(1);
+        const ch = g.character;
+        const yaw = ch.group.rotation.y;
+        const x = Math.round(ch.group.position.x - Math.sin(yaw) * 4), z = Math.round(ch.group.position.z - Math.cos(yaw) * 4);
+        const base = g.terrain.data.floorBelow(x, z, 40);
+        let tall = 0;
+        for (let L = 0; L < 8; L++) if (g.terrain.data.get(x, L + 1, z) === 3 || g.terrain.data.get(x, L + 1, z) === 2) tall++;
+        return { hint, said, tall, top: base };
+    });
+    assert.equal(r.hint, null, 'no wall without the gesture');
+    assert.equal(r.said, 'BreakthroughMaxima');
+    assert.ok(r.tall >= 5, `a wall 5 blocks high (${r.tall})`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

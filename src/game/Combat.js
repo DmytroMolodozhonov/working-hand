@@ -65,6 +65,8 @@ export const SPELL_COST = {
     AirBubble: 4,
     AirBubbleMaxima: 10,
     Hammer: 7,
+    Breakthrough: 10,
+    BreakthroughMaxima: 20,
     Lumos: 2,
     LumosMaxima: 4,
 };

@@ -609,6 +609,7 @@ export class Game {
         if (name === 'WaveAttack' || name === 'WaveAttackMaxima') return this._castWave(name, isFinal);
         if (name === 'Lumos' || name === 'LumosMaxima' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
         if (name === 'Rescue') return this.bleeding.rescue(isFinal);
+        if (name === 'Breakthrough' || name === 'BreakthroughMaxima') return this._castBreakthrough(name, isFinal);
         if (name === 'Attack') {
             const hint = this.levitation.attack();
             if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
@@ -767,6 +768,106 @@ export class Game {
     }
 
     /** «Вайнд» / «Вайнд Максима»: from the raised hand, where it points. */
+    /**
+     * «Breakthrough»: both arms a little below the horizon in front of you,
+     * then raise them together (within 3 s) while saying the word — a wall of
+     * earth and stone rises out of the ground in front of you.
+     * «Breakthrough Максима»: a wall twice as wide and higher.
+     */
+    _castBreakthrough(name, isFinal) {
+        if (!isFinal && name === 'Breakthrough') return null; // (wait for «Максима»)
+        if (this._bt?.pending) return null;
+        const now = performance.now();
+        const B = this._bt || (this._bt = {});
+        const tired = this.combat.check(name);
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        if (now - (B.riseAt || 0) < 2000) { this.combat.pay(name); this._raiseWall(name === 'BreakthroughMaxima'); B.riseAt = 0; return name; }
+        if (now - (B.lowAt || 0) < 3000) {
+            B.pending = { name, until: now + 3000 };
+            this.hud.setVoice('🪨 Теперь поднимите обе руки вместе!', true);
+            return name;
+        }
+        if (isFinal) this.hud.setVoice('🪨 «Breakthrough»: опустите обе руки чуть ниже горизонта перед собой, потом поднимите их вместе и скажите слово', true);
+        return null;
+    }
+
+    _updateBreakthrough(dt) {
+        const B = this._bt || (this._bt = {});
+        const ch = this.character;
+        const now = performance.now();
+        if (this.currentPose) {
+            ch.group.updateMatrixWorld(true);
+            const inv = new THREE.Matrix4().copy(ch.group.matrixWorld).invert();
+            const l = ch.getHandWorldPosition('left', new THREE.Vector3()).applyMatrix4(inv);
+            const r = ch.getHandWorldPosition('right', new THREE.Vector3()).applyMatrix4(inv);
+            const shoulder = 1.25; // shoulder height in body space
+            const low = (h) => h.y < shoulder - 0.15 && h.y > shoulder - 1.1 && h.z < -0.5;
+            const up = (h) => h.y > shoulder - 0.05;
+            if (low(l) && low(r)) B.lowAt = now;
+            else if (up(l) && up(r) && now - (B.lowAt || 0) < 3000 && !B.upNow) { B.riseAt = now; B.upNow = true; }
+            if (!(up(l) && up(r))) B.upNow = false;
+        }
+        if (B.pending) {
+            if (now - (B.riseAt || 0) < 800) {
+                const p = B.pending;
+                B.pending = null;
+                this.combat.pay(p.name);
+                this._raiseWall(p.name === 'BreakthroughMaxima');
+            } else if (now > B.pending.until) { B.pending = null; this.hud.setVoice('🪨 Не успели поднять руки', true); }
+        }
+        // the wall rises row by row
+        const W = B.rising;
+        if (W) {
+            W.t += dt;
+            const rows = Math.min(W.height, Math.floor(W.t / (0.9 / W.height)) + 1);
+            while (W.done < rows) {
+                const L = W.done;
+                const edits = [];
+                for (const c of W.cols) {
+                    const type = L === W.height - 1 ? BLOCK.DIRT : BLOCK.STONE;
+                    edits.push([c.x, c.base + L, c.z, type]);
+                    this.builder.data?.set(c.x, c.base + L, c.z, type);
+                    if (Math.random() < 0.5) this.fx.spark(new THREE.Vector3(c.x, c.base + L - 1, c.z), 0x8a7a5a, 0.2, new THREE.Vector3((Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3), 0.9);
+                }
+                this.builder._sendEdits(edits);
+                W.done++;
+            }
+            if (W.done >= W.height) B.rising = null;
+        }
+    }
+
+    _raiseWall(max) {
+        const ch = this.character;
+        const yaw = ch.group.rotation.y;
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        const sx = -fz, sz = fx; // sideways
+        const width = max ? 9 : 5, height = max ? 5 : 3;
+        const dist = max ? 4 : 3.5;
+        const cx = ch.group.position.x + fx * dist, cz = ch.group.position.z + fz * dist;
+        const cols = [];
+        const seen = new Set();
+        for (let i = 0; i < width; i++) {
+            const o = i - (width - 1) / 2;
+            for (const t of [0, 0.5]) { // two cells thick where it runs diagonally
+                const x = Math.round(cx + sx * o + fx * t), z = Math.round(cz + sz * o + fz * t);
+                const k = x + ',' + z;
+                if (seen.has(k)) continue;
+                seen.add(k);
+                cols.push({ x, z, base: this.terrain.data.topLayer(x, z) + 1 });
+            }
+        }
+        this._bt.rising = { cols, height, done: 0, t: 0 };
+        this.fx.explosion?.(new THREE.Vector3(cx, ch.group.position.y - 1.5, cz), 1.5, 0.4);
+        if (this.sound) this.sound.playExplosion?.(new THREE.Vector3(cx, ch.group.position.y, cz), ch.group.position, 0.3);
+        // creatures standing there are thrown back
+        for (const z of this.zombies) {
+            if (z.isDead) continue;
+            const d = Math.hypot(z.group.position.x - cx, z.group.position.z - cz);
+            if (d < width / 2 + 1) { z.windVel = (z.windVel || new THREE.Vector3()).add(new THREE.Vector3(fx * 8, 0, fz * 8)); z.vy = Math.max(z.vy || 0, 6); }
+        }
+        this.hud.setVoice(max ? '🪨 BREAKTHROUGH МАКСИМА!' : '🪨 Breakthrough!', true);
+    }
+
     /** Is my charge in a duel right now? */
     _inDuel() {
         const me = this.localId;
@@ -1426,6 +1527,7 @@ export class Game {
         this.storm.update(dt);
         this._updateLightning(dt);
         this._updateWave(dt);
+        this._updateBreakthrough(dt);
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);

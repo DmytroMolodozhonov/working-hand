@@ -248,3 +248,8 @@ test('voice: «Атак» and «Rescue»; wand words', () => {
     assert.equal(matchSpell('раскрой свои секреты'), 'Reveal');
     assert.equal(matchSpell('латин вратин'), 'Draw');
 });
+
+test('voice: «Breakthrough» (+ Максима)', () => {
+    for (const w of ['breakthrough', 'Брейкфру', 'брейк сру']) assert.equal(matchSpell(w), 'Breakthrough', w);
+    assert.equal(matchSpell('breakthrough maxima'), 'BreakthroughMaxima');
+});
