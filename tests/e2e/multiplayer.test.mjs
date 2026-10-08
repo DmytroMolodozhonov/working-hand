@@ -384,9 +384,12 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await hostCast('Stupefy');
     await ev(guest.page, (hostId) => window.__zns.game.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 8 } }), ids[0]);
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 40000);
-    await setContact(guest.page, false, false); // hand moved calmly away
-    await new Promise((r) => setTimeout(r, 1200));
-    await setContact(guest.page, false, true); // …then shaken off
+    // (the guest's hand off the opponent stops pushing — a quick, calm move away then a flick)
+    await ev(guest.page, () => {
+        const d = window.__zns.game.duel;
+        const t0 = performance.now();
+        d._contact = () => ({ ok: false, jerk: performance.now() - t0 > 450 }); // hand moved calmly away, then shaken off
+    });
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 0, null, 20000);
     await new Promise((r) => setTimeout(r, 800));
     assert.equal(await ev(guest.page, () => window.__zns.game.combat.stunned), false, 'nobody hit after a calm exit');
