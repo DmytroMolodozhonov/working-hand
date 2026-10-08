@@ -20,22 +20,23 @@ const $ = (id) => document.getElementById(id);
 
 // ------------------------------------------------------------------ renderer
 const canvas = $('game-canvas');
-// Antialiasing is costly on weak graphics: off when the game had to drop to a low
-// quality level last time (or a low level is chosen in the settings).
-const lowGraphics = (() => {
+// Antialiasing (MSAA) costs a lot of graphics memory bandwidth: on only when this
+// computer is known to manage the highest quality (chosen, or reached by «Авто»).
+const graphicsLevel = (() => {
     try {
         const g = (JSON.parse(localStorage.getItem('zns-settings') || '{}') || {})['graphics-quality'];
-        if (g !== undefined && g !== 'auto') return parseInt(g, 10) <= 1;
+        if (g !== undefined && g !== 'auto') return parseInt(g, 10);
         const last = parseInt(localStorage.getItem('zns-quality-level'), 10);
-        return Number.isFinite(last) && last <= 1;
-    } catch (e) { return false; }
+        return Number.isFinite(last) ? last : 2;
+    } catch (e) { return 2; }
 })();
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGraphics, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: graphicsLevel >= 3, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;
-// soft shadows sample the shadow map many times per pixel; weak computers get plain ones
-renderer.shadowMap.type = lowGraphics ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+// soft shadows sample the shadow map many times per pixel: only at the highest level
+// (the QualityManager switches the type with the level; starting right avoids a rebuild)
+renderer.shadowMap.type = graphicsLevel >= 3 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -292,7 +293,7 @@ function renderItemsTab() {
         { name: 'Топор', desc: 'Тяжёлый топор.', dmg: '3 (сильный замах — больше)', pvp: '3–4', icon: 'assets/icons/axe.png' },
         { name: 'Инферно', say: 'рука к лицу + «Инферно»', desc: 'Поток огня из руки.', dmg: '1/тик', pvp: '1 каждые 0,6 с', cost: 10, icon: 'assets/icons/inferno.png' },
         { name: 'Тандервейв', say: 'рука к лицу + «Тандервейв» / «Гром»', desc: 'Веер молний, отбрасывает.', dmg: '5', pvp: '3 + отброс', cost: 15, icon: 'assets/icons/thunder.png' },
-        { name: 'Сапира', say: 'рука к лицу + «Сапира»', desc: 'Луч смерти.', dmg: '10', pvp: '4', cost: 20, icon: 'assets/icons/sapira.png' },
+        { name: 'Сапира', say: 'направить руку на цель + «Сапира»', desc: 'Дуэльное: медленный тяжёлый фиолетовый заряд летит к цели; его можно отбить щитом или встречным заклинанием.', dmg: '10', pvp: '4', cost: 20, icon: 'assets/icons/sapira.png' },
         { name: 'Айс', say: 'рука к лицу + «Айс» / «Лёд»', desc: 'Ледяной луч: держите на цели 5 секунд — замораживает. Игрок заморожен на 20 секунд и не может двигаться; любой удар по замороженному смертелен. Убежать из луча — заклинание спадёт.', dmg: '1/сек', pvp: 'заморозка', cost: 10, icon: 'assets/icons/ice.png' },
         { name: 'Даст', say: 'рука к лицу + «Даст» / «Санд»', desc: 'Шар песка: зомби рассыпается в песок.', dmg: 'Мгновенно', pvp: '3', cost: 8, icon: 'assets/icons/sand.png' },
         { name: 'Бомбардо', say: 'рука к лицу + «Бомбардо»', desc: 'Взрывной шар: вырывает куски гор и земли, ломает деревья, раскидывает зомби и предметы.', dmg: 'до 8 (взрыв)', pvp: 'до 3 (щит −50%)', cost: 15, icon: 'assets/icons/bombardo.svg' },

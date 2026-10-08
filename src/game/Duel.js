@@ -5,6 +5,7 @@
  *   Авада Кедавра             instant death (green)
  *   Айс on a wizard           freezes them (20 s, any hit shatters)
  *   Вингардиум Левиоса        on a creature: throws it up into the air
+ *   Сапира                    a slow, heavy violet charge: 4 HP to a wizard, 10 to a zombie
  *
  * A duel spell is not an instant beam: a crackling, jagged charge flies from
  * the hand to the target (fast, ~0.7 s over 10 m) and acts only when
@@ -33,6 +34,8 @@ export const DUEL_SPELLS = {
     AvadaKedavra: { color: 0x2dff5a, name: 'Авада Кедавра' },
     IceDuel: { color: 0x8fdcff, name: 'Айс' },
     LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса' },
+    // Slower and thicker: a dark-violet ball of force rolling through the air
+    SapiraDuel: { color: 0x8e2de2, name: 'Сапира', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
 };
 
 export const DUEL = {
@@ -65,8 +68,8 @@ export class Duel {
         this.pools = {};
         for (const [key, s] of Object.entries(DUEL_SPELLS)) {
             this.pools[key] = {
-                core: new SegmentPool(game.scene, { capacity: 200, radius: 0.055, color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }),
-                glow: new SegmentPool(game.scene, { capacity: 200, radius: 0.24, color: s.color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
+                core: new SegmentPool(game.scene, { capacity: 200, radius: s.core || 0.055, color: s.coreColor || 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }),
+                glow: new SegmentPool(game.scene, { capacity: 200, radius: s.glow || 0.24, color: s.color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
             };
         }
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
@@ -210,7 +213,7 @@ export class Duel {
         if (b.tk !== 'n' && !tp) { this._end(b, 'fizzle'); return; }
         // The charge homes in on its target (or flies straight)
         if (tp) b.dir.copy(tp).sub(b.front).normalize();
-        const step = DUEL.SPEED * dt;
+        const step = (DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED) * dt;
         b.front.addScaledVector(b.dir, step);
         b.traveled += step;
         this._drawBolt(b.spell, origin, b.front);
@@ -280,6 +283,11 @@ export class Duel {
             ch.group.position.y += 0.3;
             ch.verticalVelocity = 11; // thrown up, falls back down
             if (c.enabled) setTimeout(() => c.damage(1, byId, 'Levitation'), 1600);
+        } else if (spell === 'SapiraDuel') {
+            g.fx.lightFlash(p, 0x8e2de2, 4, 0.4, 20);
+            g.hud.flashColor?.('rgba(142, 45, 226, 0.6)');
+            if (c.enabled) c.damage(4, byId, 'Sapira');
+            else g.hud.setVoice('💜 Сапира попала в вас', true);
         }
     }
 
@@ -297,6 +305,9 @@ export class Duel {
             z.freeze();
         } else if (spell === 'LevitateDuel') {
             z.vy = Math.max(z.vy || 0, 13);
+        } else if (spell === 'SapiraDuel') {
+            g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
+            g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
         }
     }
 

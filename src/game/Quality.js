@@ -6,13 +6,19 @@
  * shadow, and how far the world is drawn. «Авто» moves between the levels by
  * itself (down quickly when it stutters, up slowly when there is headroom);
  * the settings can also pin a level.
+ *
+ * On a real graphics card the cost is mostly per pixel (not per object): the
+ * sky's clouds, soft shadows and the number of pixels. The low levels switch
+ * those off first.
  */
 
+import * as THREE from 'three';
+
 export const QUALITY_LEVELS = [
-    { name: 'очень низкая', pixelRatio: 0.6, shadowSize: 512, shadowEvery: 3, view: 0.65 },
-    { name: 'низкая', pixelRatio: 0.8, shadowSize: 1024, shadowEvery: 2, view: 0.8 },
-    { name: 'средняя', pixelRatio: 1.0, shadowSize: 1024, shadowEvery: 1, view: 1.0 },
-    { name: 'высокая', pixelRatio: 1.5, shadowSize: 2048, shadowEvery: 1, view: 1.0 },
+    { name: 'очень низкая', pixelRatio: 0.6, shadowSize: 512, shadowEvery: 3, view: 0.65, shadows: false, soft: false, clouds: false },
+    { name: 'низкая', pixelRatio: 0.8, shadowSize: 1024, shadowEvery: 2, view: 0.8, shadows: true, soft: false, clouds: false },
+    { name: 'средняя', pixelRatio: 1.0, shadowSize: 1024, shadowEvery: 1, view: 1.0, shadows: true, soft: false, clouds: true },
+    { name: 'высокая', pixelRatio: 1.5, shadowSize: 2048, shadowEvery: 1, view: 1.0, shadows: true, soft: true, clouds: true },
 ];
 
 export class QualityManager {
@@ -61,6 +67,16 @@ export class QualityManager {
         // The sun shadow is redrawn every frame only when there is time for it
         this.renderer.shadowMap.autoUpdate = q.shadowEvery === 1;
         this.renderer.shadowMap.needsUpdate = true;
+        if (sun) sun.castShadow = q.shadows; // (three.js rebuilds the shaders for the new light setup)
+        const type = q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+        if (this.renderer.shadowMap.type !== type) {
+            this.renderer.shadowMap.type = type;
+            world?.scene?.traverse((o) => {
+                if (!o.material) return;
+                for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
+            });
+        }
+        world?.sky?.setClouds(q.clouds);
         if (world) world.viewScale = q.view;
         if (this.auto) { try { localStorage.setItem('zns-quality-level', String(this.level)); } catch (e) { /* not remembered */ } }
     }

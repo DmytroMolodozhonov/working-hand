@@ -19,19 +19,28 @@ test('pose smoother: motion between camera results is continuous', () => {
     assert.equal(s.sample(0), null);
     // 20 results per second
     for (let i = 0; i <= 10; i++) s.push(pose(0.5, 0), i * 50);
-    s.push(pose(0.6, 0.4), 550);
+    s.push(pose(0.55, 0.4), 550);
     // Right after the new result the hero has not jumped there
     const a = s.sample(551);
     assert.ok(a.leftWrist.x < 0.505, `jumped: ${a.leftWrist.x}`);
     // Half-way it is half-way, and it keeps moving every rendered frame
     const b = s.sample(562);
-    assert.ok(b.leftWrist.x > 0.53 && b.leftWrist.x < 0.57, `${b.leftWrist.x}`);
+    assert.ok(b.leftWrist.x > 0.515 && b.leftWrist.x < 0.535, `${b.leftWrist.x}`);
     assert.ok(b.headRotation.yaw > 0.15 && b.headRotation.yaw < 0.25);
-    assert.ok(b.leftHandLandmarks[0].x > 0.53);
+    assert.ok(b.leftHandLandmarks[0].x > 0.515);
     // ...and arrives quickly (half an interval), well before the next result
     const c = s.sample(580);
-    assert.equal(c.leftWrist.x, 0.6);
+    assert.equal(c.leftWrist.x, 0.55);
     assert.equal(c.headRotation.yaw, 0.4);
+});
+
+test('pose smoother: a big jump (tracking glitch) glides instead of teleporting', () => {
+    const s = new PoseSmoother();
+    for (let i = 0; i <= 10; i++) s.push(pose(0.5, 0), i * 50);
+    s.push(pose(0.8, 0), 550); // the arm "teleports" by 30% of the image
+    const early = s.sample(580).leftWrist.x;
+    assert.ok(early > 0.5 && early < 0.62, `still gliding: ${early}`);
+    assert.equal(s.sample(550 + 200).leftWrist.x, 0.8); // but gets there within 0.2 s
 });
 
 test('pose smoother: a new result starts from what is on screen (no jumps back)', () => {

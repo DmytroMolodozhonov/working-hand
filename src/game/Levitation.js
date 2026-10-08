@@ -16,6 +16,7 @@ export const LEVITATE = {
     CONE: 0.5, // rad around the pointing direction
     MIN_HOLD: 2, // m in front of the hand
     MAX_HOLD: 6,
+    TWIST: 1.6, // the object turns this much more than the wrist (a small turn of the hand swings it)
     FOLLOW: 3.5, // how fast the float point follows the hand (1/s)
     DROP_DISTANCE: 0.75, // m of hand movement within DROP_WINDOW = a jerk
     DROP_WINDOW: 0.25,
@@ -25,6 +26,9 @@ export const LEVITATE = {
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _q1 = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
 
 export class Levitation {
     constructor(game) {
@@ -79,6 +83,9 @@ export class Levitation {
             age: 0,
             history: [],
         };
+        // The wrist steers the object's rotation from now on
+        s.handQ0 = this._handQuat(s.side, new THREE.Quaternion());
+        s.objQ0 = (best.kind === 'weapon' ? best.obj.quaternion : best.obj.mesh.quaternion).clone();
         if (s.kind === 'weapon') {
             const w = s.obj;
             w.hover = null;
@@ -113,24 +120,45 @@ export class Levitation {
 
         if (this._jerked(s, ch)) { this.release(false); return; }
 
+        // Rotation follows the wrist: turn / tilt / twist the hand and the object does
+        // the same (amplified) — a floating sword can be swung like this
+        const turn = this._wristTurn(s, _q1);
         if (s.kind === 'weapon') {
             const w = s.obj;
             w.drive.position.copy(s.target);
-            // a slow magical spin
-            w.drive.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(_v1.set(0, 1, 0), dt * 0.8));
+            w.drive.quaternion.copy(turn).multiply(s.objQ0);
         } else {
             const b = s.obj;
             _v1.subVectors(s.target, b.pos);
             b.vel.lerp(_v1.multiplyScalar(4), Math.min(1, dt * 6));
             b.pos.addScaledVector(b.vel, dt);
             b.mesh.position.copy(b.pos);
-            b.mesh.rotation.y += dt * 0.6;
+            b.mesh.quaternion.slerp(_q2.copy(turn).multiply(s.objQ0), Math.min(1, dt * 10));
         }
         // Magic sparkles around the floating object
         if (Math.random() < 0.6) {
             const p = s.kind === 'weapon' ? s.obj.position : s.obj.pos;
             this.game.fx.spark(_v1.set(p.x + (Math.random() - 0.5) * 0.8, p.y + (Math.random() - 0.5) * 0.8, p.z + (Math.random() - 0.5) * 0.8), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _v2.set(0, 0.6, 0), 0.6);
         }
+    }
+
+    /** World orientation of the hand (the palm when hands are shown). */
+    _handQuat(side, out) {
+        const grip = this.game.character.getGripObject(side);
+        grip.updateWorldMatrix(true, false);
+        return grip.getWorldQuaternion(out);
+    }
+
+    /** How the wrist turned since the object was picked up (amplified), as a world rotation. */
+    _wristTurn(s, out) {
+        const now = this._handQuat(s.side, _q2);
+        out.copy(now).multiply(_q3.copy(s.handQ0).invert()); // rotation from then to now
+        if (out.w < 0) { out.x = -out.x; out.y = -out.y; out.z = -out.z; out.w = -out.w; }
+        const angle = 2 * Math.acos(Math.min(1, out.w));
+        if (angle < 1e-4) return out.identity();
+        const k = Math.sin(angle / 2);
+        _v3.set(out.x / k, out.y / k, out.z / k);
+        return out.setFromAxisAngle(_v3, Math.min(Math.PI, angle * LEVITATE.TWIST));
     }
 
     /** A fast, far movement of the hand relative to the body. */

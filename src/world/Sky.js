@@ -41,6 +41,7 @@ uniform vec3 uGround;
 uniform vec3 uSunDir;
 uniform float uTime;
 uniform float uNight;
+uniform float uClouds;
 varying vec3 vDir;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -68,7 +69,7 @@ void main() {
     col += sunCol * pow(sunAmt, 64.0) * mix(0.6, 0.15, uNight);
     col = mix(col, sunCol * mix(1.6, 0.9, uNight), smoothstep(0.9985, 0.9992, sunAmt));
     // Clouds: projected on a high flat layer, drifting
-    if (h > 0.01) {
+    if (uClouds > 0.5 && h > 0.01) {
         vec2 uv = d.xz / (h + 0.08) * 1.6 + vec2(uTime * 0.012, uTime * 0.004);
         float c = fbm(uv);
         c = smoothstep(0.48, 0.78, c) * smoothstep(0.01, 0.22, h);
@@ -99,6 +100,7 @@ export class Sky {
             uSunDir: { value: new THREE.Vector3(0.45, 0.6, 0.35) },
             uTime: { value: 0 },
             uNight: { value: 0 },
+            uClouds: { value: 1 }, // off at the lowest graphics levels (the clouds cost the most per pixel)
         };
         const mat = new THREE.ShaderMaterial({
             uniforms: this.uniforms,
@@ -116,6 +118,10 @@ export class Sky {
 
     get position() {
         return this.mesh.position;
+    }
+
+    setClouds(on) {
+        this.uniforms.uClouds.value = on ? 1 : 0;
     }
 
     setNight(night) {

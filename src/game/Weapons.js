@@ -359,12 +359,15 @@ export class WeaponSystem {
 
     // ----------------------------------------------------------------- combat
     /**
-     * Blade vs zombie hits for the local player's held weapons.
+     * Blade vs zombie hits for the local player's held weapons — and the one
+     * floating by «Вингардиум Левиоса» (it is swung with the wrist).
      * @param {Zombie[]} zombies
      */
     checkHits(zombies, dt) {
-        for (const side of ['left', 'right']) {
-            const hs = this.hands[side];
+        const lev = this._levSlot || (this._levSlot = { held: null, hasPrev: false, basePrev: new THREE.Vector3(), tipPrev: new THREE.Vector3() });
+        const floating = this.game.levitation?.heldWeapon() || null;
+        if (floating !== lev.held) { lev.held = floating; lev.hasPrev = false; }
+        for (const hs of [this.hands.left, this.hands.right, lev]) {
             const w = hs.held;
             if (!w) continue;
             const [base, tip] = w.getBladeSegment(_a, _b);

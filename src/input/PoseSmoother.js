@@ -41,6 +41,14 @@ export class PoseSmoother {
         this.from = this.display || this.to || pose;
         this.to = pose;
         this.startedAt = now;
+        // How far the arms jump with this result (image fractions): small moves are shown
+        // at once, a big jump (often a tracking glitch) is glided over instead of teleporting
+        let jump = 0;
+        for (const key of POINT_KEYS) {
+            const a = this.from[key], b = pose[key];
+            if (a && b) jump = Math.max(jump, Math.hypot(b.x - a.x, b.y - a.y));
+        }
+        this.jump = jump;
     }
 
     /** The pose to show at time `now` (null before the first result). */
@@ -50,7 +58,8 @@ export class PoseSmoother {
         const from = this.from;
         // Blend over half an interval (at most 40 ms): no visible jumps, but the hero
         // reaches the newest pose quickly instead of trailing a whole result behind
-        const duration = Math.max(16, Math.min(40, this.interval * 0.5));
+        const big = Math.max(0, (this.jump || 0) - 0.06) * 900; // +90 ms per 0.1 of the image beyond 6%
+        const duration = Math.max(16, Math.min(40, this.interval * 0.5)) + Math.min(140, big);
         const k = from === to ? 1 : Math.min(1, Math.max(0, (now - this.startedAt) / duration));
         const out = Object.assign({}, to);
         if (k < 1) {

@@ -448,6 +448,7 @@ export class Game {
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
         // Duel magic: a charge flies at the creature the hand points at
         if (name === 'Stupefy' || name === 'AvadaKedavra') return this._castDuel(name, name, isFinal);
+        if (name === 'Sapira') return this._castDuel('Sapira', 'SapiraDuel', isFinal);
         // Ice / levitation aimed at a wizard become duel spells
         if ((name === 'Ice' || name === 'Frozen') && performance.now() - (this.water.frozenAt || -1e9) > 4000) {
             const aim = this.water.active ? null : this.duel.pickSide(true);
@@ -673,6 +674,7 @@ export class Game {
         if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
         if (name === 'Stupefy' || name === 'AvadaKedavra') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
+        if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);
