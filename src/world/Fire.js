@@ -12,7 +12,7 @@
  */
 
 import * as THREE from 'three';
-import { BLOCK } from './Terrain.js';
+import { BLOCK, isFlammable } from './Terrain.js';
 
 export const FIRE = {
     BURN_TIME: 9, // s a tree burns
@@ -59,7 +59,7 @@ export class FireSystem {
         for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) for (let dy = -r; dy <= r; dy++) {
             const x = Math.round(p.x) + dx, z = Math.round(p.z) + dz, L = Math.floor(p.y + 1.5) + dy;
             const b = terrain.get(x, L, z);
-            if (b === BLOCK.LEAVES || b === BLOCK.WOOD) this._igniteBlock(x, L, z);
+            if (isFlammable(b)) this._igniteBlock(x, L, z);
         }
     }
 
@@ -78,7 +78,7 @@ export class FireSystem {
             if (terrain) {
                 const x = Math.round(_v.x), z = Math.round(_v.z), L = Math.floor(_v.y + 1.5);
                 const b = terrain.get(x, L, z);
-                if (b === BLOCK.LEAVES || b === BLOCK.WOOD) { this._igniteBlock(x, L, z); hit = true; }
+                if (isFlammable(b)) { this._igniteBlock(x, L, z); hit = true; }
                 if (b !== BLOCK.AIR && b !== BLOCK.WATER) break; // the stream stops at solid things
             }
         }
@@ -148,7 +148,7 @@ export class FireSystem {
                 b.spread = true;
                 for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
                     const nb = terrain.get(b.x + dx, b.L + dy, b.z + dz);
-                    if ((nb === BLOCK.LEAVES || nb === BLOCK.WOOD) && hash01(b.x + dx, b.L + dy, b.z + dz) < 0.8) this._igniteBlock(b.x + dx, b.L + dy, b.z + dz);
+                    if (isFlammable(nb) && hash01(b.x + dx, b.L + dy, b.z + dz) < 0.8) this._igniteBlock(b.x + dx, b.L + dy, b.z + dz);
                 }
             }
             if (b.t > FIRE.BLOCK_BURN) {

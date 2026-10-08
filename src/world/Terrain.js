@@ -24,7 +24,23 @@ import * as THREE from 'three';
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
 import { applyVoxelDetail } from './VoxelShading.js';
 
-export const BLOCK = { AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11 };
+export const BLOCK = {
+    AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
+    // five kinds of trees (oak = WOOD / LEAVES)
+    BIRCH: 12, BIRCH_LEAVES: 13, SPRUCE: 14, SPRUCE_LEAVES: 15, CHERRY: 16, CHERRY_LEAVES: 17, DARK: 18, DARK_LEAVES: 19,
+};
+/** Tree kinds: trunk and leaf blocks. */
+export const TREE_KINDS = [
+    { name: 'Дуб', wood: BLOCK.WOOD, leaves: BLOCK.LEAVES },
+    { name: 'Берёза', wood: BLOCK.BIRCH, leaves: BLOCK.BIRCH_LEAVES },
+    { name: 'Ель', wood: BLOCK.SPRUCE, leaves: BLOCK.SPRUCE_LEAVES },
+    { name: 'Вишня', wood: BLOCK.CHERRY, leaves: BLOCK.CHERRY_LEAVES },
+    { name: 'Тёмный дуб', wood: BLOCK.DARK, leaves: BLOCK.DARK_LEAVES },
+];
+export const isWood = (t) => t === BLOCK.WOOD || t === BLOCK.BIRCH || t === BLOCK.SPRUCE || t === BLOCK.CHERRY || t === BLOCK.DARK;
+export const isLeaves = (t) => t === BLOCK.LEAVES || t === BLOCK.BIRCH_LEAVES || t === BLOCK.SPRUCE_LEAVES || t === BLOCK.CHERRY_LEAVES || t === BLOCK.DARK_LEAVES;
+/** Burns (wood and leaves of every tree). */
+export const isFlammable = (t) => isWood(t) || isLeaves(t);
 // ICE_SHAPE: solid space inside frozen water shapes (drawn by WaterMagic, not as cubes)
 
 /** Water is not solid: you can see, walk and shoot through it. */
@@ -45,6 +61,27 @@ const BASE_COLORS = {
     [BLOCK.WATER]: 0x2f7fd0,
     [BLOCK.SAND]: 0xd6c48a,
     [BLOCK.ICE]: 0xc9ecff,
+    [BLOCK.BIRCH]: 0xe6e0cf,
+    [BLOCK.BIRCH_LEAVES]: 0x8fcf4a,
+    [BLOCK.SPRUCE]: 0x5a3a1e,
+    [BLOCK.SPRUCE_LEAVES]: 0x1f5a35,
+    [BLOCK.CHERRY]: 0x6b2f2a,
+    [BLOCK.CHERRY_LEAVES]: 0xf2a7c3,
+    [BLOCK.DARK]: 0x3e2716,
+    [BLOCK.DARK_LEAVES]: 0x2d4f1e,
+};
+// a few shades per kind so crowns and trunks don't look like plastic boxes
+const SHADES = {
+    [BLOCK.WOOD]: [0x8B4513, 0x7a3d12, 0x8f5020, 0x80461a, 0x8B4513],
+    [BLOCK.LEAVES]: [0x2e8b2e, 0x267a26, 0x3a9a35, 0x2f7f3a, 0x449e3c],
+    [BLOCK.BIRCH]: [0xe6e0cf, 0xdcd6c4, 0x2b2b2b, 0xe9e4d6, 0xd8d2bf],
+    [BLOCK.BIRCH_LEAVES]: [0x8fcf4a, 0x9ad655, 0x84c241, 0xa5dc62, 0x8bc94a],
+    [BLOCK.SPRUCE]: [0x5a3a1e, 0x4f3219, 0x613f21, 0x55371c, 0x5a3a1e],
+    [BLOCK.SPRUCE_LEAVES]: [0x1f5a35, 0x1a4f2e, 0x24653b, 0x1d5532, 0x2a6e40],
+    [BLOCK.CHERRY]: [0x6b2f2a, 0x5f2925, 0x73352f, 0x662c28, 0x6b2f2a],
+    [BLOCK.CHERRY_LEAVES]: [0xf2a7c3, 0xf7b9cf, 0xe993b3, 0xfcc6d9, 0xee9fbd],
+    [BLOCK.DARK]: [0x3e2716, 0x352113, 0x452c19, 0x3a2414, 0x3e2716],
+    [BLOCK.DARK_LEAVES]: [0x2d4f1e, 0x26441a, 0x335822, 0x2a4a1c, 0x385e26],
 };
 const GRASS_SIDE = 0x6b4a2a; // dirt-coloured sides under a grass top
 
@@ -242,10 +279,48 @@ export class TerrainData {
                 let flat = true;
                 for (let dz = -1; dz <= 2 && flat; dz++) for (let dx = -1; dx <= 2; dx++) if (this.heightAt(tx + dx, tz + dz) !== h || this.heightAt.water) { flat = false; break; }
                 if (!flat) continue;
-                for (let L = h + 1; L <= h + 6; L++) for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) put(tx + dx, L, tz + dz, BLOCK.WOOD, false);
-                for (let L = h + 6; L <= h + 11; L++) {
-                    for (let dz = -2; dz < 4; dz++) for (let dx = -2; dx < 4; dx++) put(tx + dx, L, tz + dz, BLOCK.LEAVES, true);
-                }
+                this._tree(put, tx, tz, h, Math.floor(hash01(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * TREE_KINDS.length));
+            }
+        }
+    }
+
+    /** One tree of a kind (0 oak, 1 birch, 2 spruce, 3 cherry, 4 dark oak) on ground level h. */
+    _tree(put, tx, tz, h, kind) {
+        const { wood, leaves } = TREE_KINDS[kind];
+        if (kind === 1) {
+            // Birch: a slim white trunk, a light, small crown up high
+            for (let L = h + 1; L <= h + 8; L++) put(tx, L, tz, wood, false);
+            for (let L = h + 6; L <= h + 10; L++) {
+                const r = L === h + 10 ? 0 : 1;
+                for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) put(tx + dx, L, tz + dz, leaves, true);
+                if (L >= h + 7 && L <= h + 8) for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) put(tx + dx, L, tz + dz, leaves, true);
+            }
+        } else if (kind === 2) {
+            // Spruce: tall, a cone of dark needles
+            for (let L = h + 1; L <= h + 10; L++) put(tx, L, tz, wood, false);
+            for (let L = h + 3; L <= h + 12; L++) {
+                const r = Math.max(0, Math.round((h + 12 - L) / 3));
+                for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (Math.abs(dx) + Math.abs(dz) <= r + 1) put(tx + dx, L, tz + dz, leaves, true);
+            }
+        } else if (kind === 3) {
+            // Cherry: a low crooked trunk, a wide round pink crown
+            for (let L = h + 1; L <= h + 5; L++) put(tx + (L > h + 3 ? 1 : 0), L, tz, wood, false);
+            for (let L = h + 5; L <= h + 9; L++) {
+                const r = L === h + 5 || L === h + 9 ? 2 : 3;
+                for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dz * dz <= r * r + 1) put(tx + 1 + dx, L, tz + dz, leaves, true);
+            }
+        } else if (kind === 4) {
+            // Dark oak: a thick 2×2 trunk, a big dark flat crown
+            for (let L = h + 1; L <= h + 7; L++) for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) put(tx + dx, L, tz + dz, wood, false);
+            for (let L = h + 7; L <= h + 10; L++) {
+                const r = L === h + 10 ? 2 : 3;
+                for (let dz = -r; dz < r + 2; dz++) for (let dx = -r; dx < r + 2; dx++) put(tx + dx, L, tz + dz, leaves, true);
+            }
+        } else {
+            // Oak (the original voxel tree)
+            for (let L = h + 1; L <= h + 6; L++) for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) put(tx + dx, L, tz + dz, wood, false);
+            for (let L = h + 6; L <= h + 11; L++) {
+                for (let dz = -2; dz < 4; dz++) for (let dx = -2; dx < 4; dx++) put(tx + dx, L, tz + dz, leaves, true);
             }
         }
     }
@@ -447,12 +522,12 @@ export class TerrainData {
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;
         if (L <= 0 && type === BLOCK.GRASS) return base; // flat ground: exact original colour
         if (type === BLOCK.WATER || type === BLOCK.ICE) return base;
-        if (type === BLOCK.LEAVES || type === BLOCK.WOOD) {
+        if (SHADES[type]) {
             // a few shades per tree so crowns don't look like one plastic box
             let k = ((ix >> 1) * 73856093) ^ (((L) >> 1) * 19349663) ^ ((iz >> 1) * 83492791);
+            if (type === BLOCK.BIRCH) k = (ix * 73856093) ^ (L * 19349663) ^ (iz * 83492791); // birch: small dark marks
             k = ((k ^ (k >>> 13)) >>> 0) % 5;
-            const shades = type === BLOCK.LEAVES ? [0x2e8b2e, 0x267a26, 0x3a9a35, 0x2f7f3a, 0x449e3c] : [0x8B4513, 0x7a3d12, 0x8f5020, 0x80461a, 0x8B4513];
-            return shades[k];
+            return SHADES[type][k];
         }
         // Small brightness jitter so mountains don't look like plastic. Sides vary
         // per layer (rock strata) so greedy meshing can still merge long runs;

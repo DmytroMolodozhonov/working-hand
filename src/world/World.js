@@ -14,6 +14,15 @@ const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
 const _moon = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
+// Spawn-area trees (instanced, vertex-coloured green / brown): tint multipliers per kind
+// (oak, birch, spruce, cherry, dark oak) — the same kinds as the voxel trees further out
+const SPAWN_TREE_TINTS = [
+    { leaf: [1, 1, 1], trunk: [1, 1, 1] },
+    { leaf: [1.45, 1.2, 0.75], trunk: [2.6, 3.2, 3.9] },
+    { leaf: [0.55, 0.62, 0.8], trunk: [0.68, 0.75, 0.8] },
+    { leaf: [3.2, 1.25, 2.6], trunk: [0.82, 0.62, 0.72] },
+    { leaf: [0.75, 0.62, 0.55], trunk: [0.48, 0.45, 0.42] },
+];
 const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
 import { CollisionWorld } from './Collision.js';
@@ -255,14 +264,16 @@ export class VoxelWorld {
             dummy.scale.set(scale, scale, scale);
             dummy.updateMatrix();
             this.leafMesh.setMatrixAt(placed, dummy.matrix);
-            // each crown a slightly different green
+            // five kinds of trees: crown (and trunk, below) tinted per kind, each a little different
+            const kind = Math.floor(rng() * 5);
             const v = 0.88 + rng() * 0.24;
-            this.leafMesh.setColorAt(placed, tint.setRGB(v * (0.9 + rng() * 0.2), v, v * (0.85 + rng() * 0.2)));
+            const lt = SPAWN_TREE_TINTS[kind];
+            this.leafMesh.setColorAt(placed, tint.setRGB(v * lt.leaf[0] * (0.95 + rng() * 0.1), v * lt.leaf[1], v * lt.leaf[2] * (0.95 + rng() * 0.1)));
             const boxId = this.collision.addBox({ minX: x - 1, maxX: x + 1, minY: -0.5, maxY: 5.5, minZ: z - 1, maxZ: z + 1, kind: 'tree', noSupport: true });
-            this.trees.push({ x, z, alive: true, index: placed, boxId });
+            this.trees.push({ x, z, alive: true, index: placed, boxId, kind });
             placed++;
         }
-        for (let i = 0; i < placed; i++) this.trunkMesh.setColorAt(i, tint.setRGB(1, 1, 1));
+        for (let i = 0; i < placed; i++) { const tk = SPAWN_TREE_TINTS[this.trees[i].kind].trunk; this.trunkMesh.setColorAt(i, tint.setRGB(tk[0], tk[1], tk[2])); }
         this.trunkMesh.count = placed;
         this.leafMesh.count = placed;
         if (this.leafMesh.instanceColor) this.leafMesh.instanceColor.needsUpdate = true;

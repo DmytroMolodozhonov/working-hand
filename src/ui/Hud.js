@@ -4,7 +4,7 @@
  */
 
 const MINIMAP_WINDOW = 128; // m of terrain drawn around the player
-const BLOCK_LEAVES = 7; // Terrain BLOCK.LEAVES
+import { isLeaves } from '../world/Terrain.js';
 
 export class Hud {
     constructor() {
@@ -225,7 +225,7 @@ export class Hud {
                 const top = d.topLayer(wx, wz);
                 const i = (z * size + x) * 4;
                 if (top >= 1) {
-                    if (d.get(wx, top, wz) === BLOCK_LEAVES) {
+                    if (isLeaves(d.get(wx, top, wz))) {
                         px[i] = 34; px[i + 1] = 139; px[i + 2] = 34; px[i + 3] = 170;
                     } else {
                         const v = Math.min(255, 90 + top * 6);
