@@ -8,9 +8,10 @@ set ZIP=https://github.com/DmytroMolodozhonov/working-hand/archive/refs/heads/ma
 set DIR=ZombieNeSpyat
 
 rem ---- Python is needed to run the game
+rem (really run it: the Microsoft Store "python" stub only opens the Store)
 set PY=
-where python 1>nul 2>&1 && set PY=python
-if not defined PY where py 1>nul 2>&1 && set PY=py
+python -c "import sys" 1>nul 2>&1 && set PY=python
+if not defined PY py -3 -c "import sys" 1>nul 2>&1 && set PY=py -3
 if not defined PY (
     echo Python ne najden. Ustanovite Python 3: https://www.python.org/downloads/windows/
     echo Pri ustanovke postavte galochku "Add python.exe to PATH", potom zapustite etot fajl snova.
@@ -21,6 +22,8 @@ if not defined PY (
 rem ---- With Git: download / update; without Git: download the zip archive
 where git 1>nul 2>&1
 if errorlevel 1 goto nogit
+rem Downloaded as an archive earlier: keep updating it that way
+if exist "%DIR%\server.py" if not exist "%DIR%\.git" goto nogit
 if exist "%DIR%\.git" (
     echo Obnovlyayu igru...
     cd "%DIR%"
