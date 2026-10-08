@@ -94,6 +94,8 @@ const volInput = $('zombie-vol');
 const volVal = $('vol-val');
 const musicVolInput = $('music-vol');
 const musicVolVal = $('music-vol-val');
+const spellVolInput = $('spell-vol');
+const spellVolVal = $('spell-vol-val');
 const ambientToggle = $('audio-ambient-toggle');
 volInput.addEventListener('input', (e) => {
     volVal.textContent = e.target.value + '%';
@@ -102,6 +104,10 @@ volInput.addEventListener('input', (e) => {
 musicVolInput?.addEventListener('input', (e) => {
     musicVolVal.textContent = e.target.value + '%';
     if (sound) sound.setMusicVolume(parseInt(e.target.value, 10));
+});
+spellVolInput?.addEventListener('input', (e) => {
+    spellVolVal.textContent = e.target.value + '%';
+    if (sound) sound.setSpellVolume(parseInt(e.target.value, 10));
 });
 ambientToggle?.addEventListener('change', () => {
     if (sound) sound.ambientEnabled = ambientToggle.value === '1';
@@ -437,6 +443,7 @@ async function startGameInner(config, welcome) {
         sound.enabled = true;
         sound.setVolume(parseInt(volInput.value, 10));
         if (musicVolInput) sound.setMusicVolume(parseInt(musicVolInput.value, 10));
+        if (spellVolInput) sound.setSpellVolume(parseInt(spellVolInput.value, 10));
         sound.ambientEnabled = ambientToggle ? ambientToggle.value === '1' : true;
 
         if (game) game.dispose();
@@ -598,7 +605,7 @@ function escapeHtml(s) {
 // Volumes, graphics, camera… are kept in this browser between launches.
 (function rememberSettings() {
     const KEY = 'zns-settings';
-    const IDS = ['zombie-vol', 'music-vol', 'audio-ambient-toggle', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'audio-ambient-toggle', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count'];
     let saved = {};

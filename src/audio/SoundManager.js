@@ -124,6 +124,15 @@ export class SoundManager {
         if (this.music.current) this.music.current.setVolume(gain);
     }
 
+    /** Volume of the spell sounds (0..100), separate from zombies and music. */
+    setSpellVolume(val) {
+        this.spellVolume = val / 100;
+    }
+
+    _spell(buffer, volume = 1, rate = 1) {
+        this._play(buffer, volume * (this.spellVolume ?? 1), rate);
+    }
+
     async resume() {
         if (this.context.state === 'suspended') {
             try { await this.context.resume(); } catch (e) { /* user gesture needed */ }
@@ -277,18 +286,18 @@ export class SoundManager {
         this._playAt(this.sounds.death, position, 1.5, 5);
     }
 
-    playThunder() { this._play(this.sounds.thunder, 1.0); }
-    playInferno() { this._play(this.sounds.inferno, 0.8); }
-    playSapira() { this._play(this.sounds.sapira, 1.0); }
+    playThunder() { this._spell(this.sounds.thunder, 1.0); }
+    playInferno() { this._spell(this.sounds.inferno, 0.8); }
+    playSapira() { this._spell(this.sounds.sapira, 1.0); }
     playWhoosh() { this.playSand(); }
 
     playSand() {
-        if (this.sounds.sand) this._play(this.sounds.sand, 1.0);
-        else if (this.sounds.inferno) this._play(this.sounds.inferno, 0.5, 2.0);
+        if (this.sounds.sand) this._spell(this.sounds.sand, 1.0);
+        else if (this.sounds.inferno) this._spell(this.sounds.inferno, 0.5, 2.0);
     }
 
-    playIce() { this._play(this.sounds.ice, 1.4); }
-    playBombardoCast() { this._play(this.sounds.cast, 0.9); }
+    playIce() { this._spell(this.sounds.ice, 1.4); }
+    playBombardoCast() { this._spell(this.sounds.cast, 0.9); }
 
     playExplosion(position, listenerPos, power = 1) {
         if (!this.sounds.explosion) return;
@@ -296,20 +305,20 @@ export class SoundManager {
         const d = listenerPos ? position.distanceTo(listenerPos) : 0;
         const vol = Math.max(0.15, (big ? 2.2 : 1.6) - d / (big ? 60 : 40));
         // A bigger blast sounds deeper
-        this._play(this.sounds.explosion, vol, (big ? 0.7 : 0.95) + Math.random() * 0.1);
+        this._spell(this.sounds.explosion, vol, (big ? 0.7 : 0.95) + Math.random() * 0.1);
     }
 
     /** Water rising out of a river into the ball. */
     playWaterRise() {
         if (!this.context) return;
         if (!this.sounds.waterRise) this.sounds.waterRise = this._synthWater(1.1, false);
-        this._play(this.sounds.waterRise, 0.9, 0.9 + Math.random() * 0.2);
+        this._spell(this.sounds.waterRise, 0.9, 0.9 + Math.random() * 0.2);
     }
 
     playSplash() {
         if (!this.context) return;
         if (!this.sounds.splash) this.sounds.splash = this._synthWater(0.7, true);
-        this._play(this.sounds.splash, 1.2, 0.85 + Math.random() * 0.3);
+        this._spell(this.sounds.splash, 1.2, 0.85 + Math.random() * 0.3);
     }
 
     playChestOpen(position) {
