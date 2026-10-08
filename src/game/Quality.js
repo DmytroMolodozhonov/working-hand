@@ -24,7 +24,7 @@ export class QualityManager {
         this.renderer = renderer;
         this.auto = setting === 'auto' || setting === undefined || setting === null;
         const fixed = parseInt(setting, 10);
-        this.level = this.auto ? 2 : Math.max(0, Math.min(3, Number.isFinite(fixed) ? fixed : 2));
+        this.level = this.auto ? QualityManager.lastLevel() : Math.max(0, Math.min(3, Number.isFinite(fixed) ? fixed : 2));
         this.maxLevel = 3;
         this.world = null;
         this._acc = 0;
@@ -33,6 +33,14 @@ export class QualityManager {
         this._sinceChange = 0;
         this._frame = 0;
         this.fps = 60;
+    }
+
+    /** The level auto mode settled on last time (so a weak computer doesn't start with stutters). */
+    static lastLevel() {
+        try {
+            const v = parseInt(localStorage.getItem('zns-quality-level'), 10);
+            return Number.isFinite(v) ? Math.max(0, Math.min(2, v)) : 2;
+        } catch (e) { return 2; }
     }
 
     get current() {
@@ -54,6 +62,7 @@ export class QualityManager {
         this.renderer.shadowMap.autoUpdate = q.shadowEvery === 1;
         this.renderer.shadowMap.needsUpdate = true;
         if (world) world.viewScale = q.view;
+        if (this.auto) { try { localStorage.setItem('zns-quality-level', String(this.level)); } catch (e) { /* not remembered */ } }
     }
 
     /** Call once per frame with the real frame time (seconds). */

@@ -51,7 +51,7 @@ float noise(vec2 p) {
 }
 float fbm(vec2 p) {
     float v = 0.0, a = 0.5;
-    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
+    for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
     return v;
 }
 
@@ -74,8 +74,10 @@ void main() {
         c = smoothstep(0.48, 0.78, c) * smoothstep(0.01, 0.22, h);
         vec3 cloudLit = mix(vec3(1.0), vec3(1.0, 0.95, 0.88), pow(sunAmt, 4.0));
         vec3 cloudCol = mix(cloudLit, vec3(0.25, 0.28, 0.35), uNight * 0.85);
-        float shade = 0.82 + 0.18 * fbm(uv * 1.7 + 3.0);
-        col = mix(col, cloudCol * shade, c * mix(0.85, 0.35, uNight));
+        if (c > 0.002) {
+            float shade = 0.82 + 0.18 * fbm(uv * 1.7 + 3.0);
+            col = mix(col, cloudCol * shade, c * mix(0.85, 0.35, uNight));
+        }
     }
     // Stars at night
     if (uNight > 0.01 && h > 0.0) {

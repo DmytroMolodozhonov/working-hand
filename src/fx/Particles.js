@@ -168,6 +168,7 @@ export class ParticlePool {
             if (this.alpha) this.alpha.setX(i, this.fade[i] ? this.life[i] / this.maxLife[i] : 1);
         }
         this.mesh.count = n;
+        this.mesh.visible = n > 0; // empty pools cost no draw call
         if (n > 0 || this._hadParticles) {
             this.mesh.instanceMatrix.needsUpdate = true;
             this.mesh.instanceColor.needsUpdate = true;
@@ -223,6 +224,7 @@ export class SegmentPool {
             this.mesh.setMatrixAt(n++, _m);
         }
         this.mesh.count = n;
+        this.mesh.visible = n > 0; // empty pools cost no draw call
         this.mesh.instanceMatrix.needsUpdate = true;
     }
 

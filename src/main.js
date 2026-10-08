@@ -19,7 +19,17 @@ const $ = (id) => document.getElementById(id);
 
 // ------------------------------------------------------------------ renderer
 const canvas = $('game-canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// Antialiasing is costly on weak graphics: off when the game had to drop to a low
+// quality level last time (or a low level is chosen in the settings).
+const lowGraphics = (() => {
+    try {
+        const g = (JSON.parse(localStorage.getItem('zns-settings') || '{}') || {})['graphics-quality'];
+        if (g !== undefined && g !== 'auto') return parseInt(g, 10) <= 1;
+        const last = parseInt(localStorage.getItem('zns-quality-level'), 10);
+        return Number.isFinite(last) && last <= 1;
+    } catch (e) { return false; }
+})();
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGraphics, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;

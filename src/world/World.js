@@ -118,7 +118,7 @@ export class VoxelWorld {
         const mat = new THREE.MeshPhongMaterial({ color: 0x4CAF50 });
         this.grass = new THREE.InstancedMesh(geo, mat, grassCount);
         this.grass.receiveShadow = true;
-        this.grass.castShadow = true;
+        this.grass.castShadow = false; // tiny cubes: their shadows cost more than they show
         this.grassData = [];
         const dummy = new THREE.Object3D();
         const color = new THREE.Color();
