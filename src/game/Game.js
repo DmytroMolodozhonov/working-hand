@@ -130,6 +130,8 @@ export class Game {
             explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
             handPose: (casterId, side) => this.handPose(casterId, side),
             players: (casterId) => this._spellPlayers(casterId),
+            weapons: () => this.weapons.weapons,
+            blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
             ignite: (o, d, len) => this.fire.igniteAlong(o, d, len),
             collision: this.collision,
             terrain: () => this.terrain,
@@ -485,6 +487,7 @@ export class Game {
             if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
         }
         if (name === 'Accio') return this._castAccio(isFinal);
+        if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         // Levitation: point the hand at an object (or a creature: a duel spell)
         if (name === 'Levitation') {
             const aim = this.levitation.active ? null : this.duel.pickSide(false);
@@ -604,6 +607,42 @@ export class Game {
         return costName;
     }
 
+    /** «Вайнд» / «Вайнд Максима»: from the raised hand, where it points. */
+    _castWind(name, isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
+        // «Вайнд…» heard while the phrase goes on: wait for a possible «Максима»
+        if (name === 'Wind' && !isFinal) return null;
+        if (now - (this._lastWind || 0) < 900) return null;
+        const ch = this.character;
+        const pref = this.magicHand || this.lastMagicHand || 'right';
+        const side = ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s));
+        if (!side) { if (isFinal) this.hud.setVoice('🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
+        const tired = this.combat.check(name);
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        const origin = ch.getHandWorldPosition(side);
+        const dir = ch.getHandDirection(side);
+        this.spells.cast(name, origin, dir, side, this.localId);
+        if (this.sync) this.sync.spell(name, origin, dir, side);
+        this.combat.pay(name);
+        this._lastWind = now;
+        this._interimCast = isFinal ? null : { name, at: now };
+        return name;
+    }
+
+    /** Another wizard's «Вайнд» reached me: blown away (no harm; a shield stops it). */
+    _blowMe(casterId, origin, pushAt) {
+        if (casterId === 'local' || casterId === this.localId || this.combat.dead) return;
+        const v = pushAt(this.combat.center(new THREE.Vector3()));
+        if (!v) return;
+        if (this.combat.shieldFactor(origin) >= 1) { this.combat._blocked(origin); return; }
+        if (this.flight.active) { this.knockback.add(v); return; }
+        this.knockback.add(_v1.copy(v).setY(0));
+        const ch = this.character;
+        if (v.y > 2) { ch.group.position.y += 0.7; ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, v.y); ch.onGround = false; }
+    }
+
     _castAccio(isFinal) {
         const now = Date.now();
         const early = this._interimCast;
@@ -720,6 +759,14 @@ export class Game {
         if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
         if (name === 'Accio') { this._lastAccio = 0; return this._castAccio(true); }
+        if (name === 'Wind' || name === 'WindMaxima') {
+            this._lastWind = 0;
+            const origin = this.character.getHandWorldPosition('right');
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+            this.spells.cast(name, origin, dir, 'right', this.localId);
+            if (this.sync) this.sync.spell(name, origin, dir, 'right');
+            return name;
+        }
         if (name === 'Stupefy' || name === 'AvadaKedavra') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
         const origin = this.character.getHandWorldPosition('right');

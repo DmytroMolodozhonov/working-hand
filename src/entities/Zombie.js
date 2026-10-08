@@ -165,6 +165,14 @@ export class Zombie {
         const ground = collision ? collision.groundY(pos.x, pos.z) : -0.5;
 
         if (this.damageCooldown > 0) this.damageCooldown -= dt;
+        // Blown by «Вайнд»: slides away, slowing down (also when stunned or frozen)
+        if (this.windVel && !this.isDead && !this.isDying) {
+            pos.addScaledVector(this.windVel, dt);
+            this.windVel.multiplyScalar(Math.max(0, 1 - 1.8 * dt));
+            if (this.windVel.lengthSq() < 0.05) this.windVel = null;
+            // carried by the wind: can't walk until it calms down
+            else if (this.windVel.lengthSq() > 2.25) { this._settleY(dt, ground); return; }
+        }
         if (this.hitFlashTimer > 0) {
             this.hitFlashTimer -= dt;
             if (this.hitFlashTimer <= 0) this._restoreColor();

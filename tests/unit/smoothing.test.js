@@ -80,3 +80,9 @@ test('«Акцио» is recognised (and not taken for another spell)', () => {
     for (const w of ['акцио', 'Акцио!', 'accio', 'аксио', 'акция']) assert.equal(matchSpell(w), 'Accio', w);
     assert.equal(matchSpell('вингардиум левиоса'), 'Levitation');
 });
+
+test('«Вайнд» / «Вайнд Максима» are recognised', () => {
+    for (const w of ['вайнд', 'винд', 'wind', 'Вайнд!']) assert.equal(matchSpell(w), 'Wind', w);
+    for (const w of ['вайнд максима', 'wind maxima', 'винд максимум']) assert.equal(matchSpell(w), 'WindMaxima', w);
+    assert.equal(matchSpell('вингардиум левиоса'), 'Levitation');
+});

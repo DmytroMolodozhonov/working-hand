@@ -52,6 +52,8 @@ export const SPELL_COST = {
     Frozen: 5,
     Levitation: 6,
     Accio: 5,
+    Wind: 8,
+    WindMaxima: 20,
     Stupefy: 12,
     AvadaKedavra: 25,
 };

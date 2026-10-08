@@ -41,6 +41,7 @@ export function matchSpell(text) {
     if (has('авада', 'кедавр', 'кидавр', 'avada', 'kedavr', 'kadavr', 'водокидавр', 'адакедавр')) return 'AvadaKedavra';
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
     if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return 'Levitation';
+    if (has('вайнд', 'винд', 'вайн', 'уинд', 'wind', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
     // Water bending (before Ice/Sands: their short tokens would catch these words)
     const water = has('вотер', 'ватер', 'уотер', 'water', 'вотр', 'водян', 'вода', 'воду', 'уатер', 'watter', 'woter');
@@ -151,6 +152,8 @@ export class SpellManager {
         switch (name) {
             case 'Sapira': this.castSapira(o, d, casterId); break;
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
+            case 'Wind': this.castWind(o, d, casterId, 1); break;
+            case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
             case 'Inferno': this.castInferno(o, d, casterId); break;
             case 'Sands': this.castSands(o, d, casterId); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
@@ -279,6 +282,58 @@ export class SpellManager {
                 p.hit('Thunderwave', origin, dirTo.clone().setY(0.2).multiplyScalar(26));
             }
         }
+    }
+
+    // ---------------------------------------------------------------- Wind
+    /**
+     * «Вайнд»: a gust from the hand blows away whatever is in front — zombies,
+     * players, loose things. Harmless. «Вайнд Максима» is 3× stronger and reaches further.
+     */
+    castWind(origin, direction, casterId, power = 1) {
+        this._sound('playWhoosh');
+        const range = power > 1 ? 24 : 14;
+        const cone = 0.65;
+        const strength = 13 * power; // m/s at the hand
+        // Visible gust: pale swirling streaks flying out in a cone
+        const n = power > 1 ? 70 : 35;
+        for (let i = 0; i < n; i++) {
+            const spread = _b.set((Math.random() - 0.5) * cone * 1.6, (Math.random() - 0.5) * cone * 1.2, (Math.random() - 0.5) * cone * 1.6);
+            const v = _a.copy(direction).add(spread).normalize().multiplyScalar(range * (0.9 + Math.random() * 0.8));
+            const start = _c.copy(origin).addScaledVector(direction, Math.random() * 1.5);
+            this.fx.spark(start, Math.random() < 0.5 ? 0xe8f6ff : 0xbfe3ff, 0.18 + Math.random() * 0.25 * power, v, 0.7 + Math.random() * 0.3);
+        }
+        const push = (pos) => {
+            const to = _a.subVectors(pos, origin);
+            const dist = to.length();
+            if (dist > range) return null;
+            const dirTo = to.normalize();
+            if (dist > 2.5 && direction.angleTo(dirTo) > cone) return null;
+            if (dist <= 2.5 && direction.dot(dirTo) < 0) return null;
+            const k = strength * (1 - 0.6 * dist / range);
+            return _b.copy(direction).lerp(dirTo, 0.5).setY(0).normalize().multiplyScalar(k).setY(k * 0.35);
+        };
+        // Zombies (moved where they are simulated)
+        if (this.auth) {
+            for (const z of this.zombies) {
+                if (z.isDead) continue;
+                const v = push(_c.copy(z.group.position).add(UP));
+                if (!v) continue;
+                z.windVel = (z.windVel || new THREE.Vector3()).add(v.clone().setY(0));
+                z.vy = Math.max(z.vy || 0, v.y);
+            }
+        }
+        // Loose things (where their physics runs)
+        for (const w of this.hooks.weapons ? this.hooks.weapons() : []) {
+            if (w.holder || w.remoteTarget) continue;
+            const v = push(w.position);
+            if (!v) continue;
+            w.hover = null;
+            w.wake();
+            w.velocity.add(v);
+            w.angularVelocity.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+        }
+        // Me, if another wizard blew at me (every machine moves its own player)
+        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos));
     }
 
     // --------------------------------------------------------------- Sands
