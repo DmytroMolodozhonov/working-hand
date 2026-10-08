@@ -464,6 +464,8 @@ export class Game {
         if (this.sound) this.sound.playHit();
         if (this.playerHP <= 0) {
             this.isDeadLocal = true;
+            // Multiplayer: the game (and the host's room) goes on — wait to respawn
+            if (this.net && this.net.active) { this.onLocalDeath('💀 Вас убили', null); return; }
             this.ui.gameOver(this.killCount, this.punchCount);
             this.stop();
         }
@@ -946,11 +948,37 @@ export class Game {
         return this.remotes.get(id)?.name || null;
     }
 
-    /** My player was killed in the free world: show it, then back to the menu. */
+    /**
+     * My player was killed: a dark screen «Вас убили» with «Возродиться». The
+     * game goes on (a host's death never closes the room for the others).
+     */
     onLocalDeath(text, byId) {
         if (this.sync) this.sync.died(byId);
         this.hud.setStatus('');
-        this.ui.died?.(text);
+        if (this.flight.busy) this.flight.land('dead');
+        this.weapons.releaseAll?.();
+        this.ui.died?.(text, () => this.respawn());
+    }
+
+    /** Back into the game: full health, a new place near the start. */
+    respawn() {
+        const ch = this.character;
+        this.combat.revive();
+        this.playerHP = this.maxHP;
+        this.isDeadLocal = false;
+        const p = ch.group.position;
+        if (this.config.map && this.world.mapResult?.playerSpawn) p.copy(this.world.mapResult.playerSpawn);
+        else {
+            const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 14;
+            p.x = Math.cos(a) * d;
+            p.z = Math.sin(a) * d;
+        }
+        p.y = this.collision.groundY(p.x, p.z) + 2.5;
+        ch.verticalVelocity = 0;
+        this.knockback.set(0, 0, 0);
+        this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
+        if (this.sync) this.sync.respawned();
+        for (let i = 0; i < 30; i++) this.fx.spark(_v1.copy(p).add(_v2.set(0, -1, 0)), i % 2 ? 0xffffff : 0x9fd8ff, 0.15, _v2.set((Math.random() - 0.5) * 4, Math.random() * 5, (Math.random() - 0.5) * 4), 0.7);
     }
 
     /** Frozen water shapes become part of the world (and are synced). */

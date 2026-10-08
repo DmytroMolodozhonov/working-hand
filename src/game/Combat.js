@@ -195,6 +195,22 @@ export class Combat {
         this._hudKey = '';
     }
 
+    /** Back to life (respawn): full health and strength, no ice / stun / shield. */
+    revive() {
+        this.hp = PVP.MAX_HP;
+        this.fatigue = PVP.MAX_FATIGUE;
+        this.shield = null;
+        this.frozenLeft = 0;
+        this.frozenBy = null;
+        this.chill = 0;
+        this.stunLeft = 0;
+        this.dead = false;
+        this.game.character.knockedDown = false;
+        this.game.hud.setStatus?.('');
+        this.game.hud.setFrozenOverlay?.(0);
+        this._hudKey = '';
+    }
+
     get frozen() {
         return this.frozenLeft > 0;
     }

@@ -427,21 +427,25 @@ const ui = {
         $('victory-screen').classList.remove('hidden');
         if (document.pointerLockElement) document.exitPointerLock();
     },
-    /** Свободный мир: killed → message, then back to the menu. */
-    died(text) {
+    /** Killed: a dark screen with «Возродиться» — the game (and a host's room) goes on. */
+    died(text, onRespawn) {
         $('death-text').innerHTML = text;
         const screen = $('death-screen');
         screen.classList.remove('hidden');
         if (document.pointerLockElement) document.exitPointerLock();
-        let left = 5;
-        $('death-count').textContent = left;
-        const back = () => location.reload();
-        $('death-menu-btn').onclick = back;
+        const btn = $('death-respawn-btn');
+        btn.disabled = true;
+        let left = 3;
+        btn.textContent = `Возродиться (${left})`;
         const timer = setInterval(() => {
             left--;
-            $('death-count').textContent = Math.max(0, left);
-            if (left <= 0) { clearInterval(timer); back(); }
+            if (left > 0) { btn.textContent = `Возродиться (${left})`; return; }
+            clearInterval(timer);
+            btn.disabled = false;
+            btn.textContent = '✨ Возродиться';
         }, 1000);
+        btn.onclick = () => { if (btn.disabled) return; screen.classList.add('hidden'); onRespawn?.(); };
+        $('death-menu-btn').onclick = () => { net.sayGoodbye(); net.leave(); location.reload(); };
     },
     isLoading: () => !loadingScreen.classList.contains('hidden'),
     isMenuVoiceActive: () => isMenuVoiceActive,

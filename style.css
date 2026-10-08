@@ -1238,7 +1238,7 @@ body {
 #death-screen {
     position: fixed;
     inset: 0;
-    background: rgba(40, 0, 0, 0.75);
+    background: radial-gradient(circle, rgba(30, 0, 0, 0.7), rgba(0, 0, 0, 0.92));
     z-index: 3000;
     display: flex;
     align-items: center;
@@ -1255,13 +1255,27 @@ body {
 }
 #death-text { font-size: 30px; margin-bottom: 12px; }
 .death-sub { font-size: 16px; opacity: 0.85; margin-bottom: 18px; }
-#death-menu-btn {
-    font-size: 18px;
-    padding: 10px 26px;
+#death-respawn-btn {
+    display: block;
+    margin: 18px auto 10px;
+    font-size: 22px;
+    padding: 12px 34px;
     border: none;
-    border-radius: 8px;
-    background: #e74c3c;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
     color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 0 14px rgba(46, 204, 113, 0.6);
+}
+#death-respawn-btn:disabled { background: #4b5560; box-shadow: none; cursor: default; }
+#death-menu-btn {
+    font-size: 14px;
+    padding: 7px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 8px;
+    background: transparent;
+    color: #ddd;
     cursor: pointer;
 }
 

@@ -221,7 +221,7 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
         assert.equal(s.tables, 0);
         assert.equal(s.zombies, 0);
         assert.ok(s.bar, 'fatigue bar shown');
-        assert.match(s.hpBar, /10\/10/);
+        assert.match(s.hpBar, /20\/20/);
     }
 
     // Put the guest 12 m in front of the host's right hand
@@ -287,7 +287,7 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
     await wf(host.page, () => [...window.__zns.game.remotes.values()][0].combat.shield === 2, null, 20000);
     await castAt('Thunderwave');
     await new Promise((r) => setTimeout(r, 1500));
-    assert.equal(await guestHp(), 10, 'shield stopped Thunderwave');
+    assert.equal(await guestHp(), 20, 'shield stopped Thunderwave');
     const domeSeen = await ev(host.page, () => [...window.__zns.game.remotes.values()][0].visuals.dome.visible);
     assert.ok(domeSeen, 'the dome is visible to the other player');
     await wf(guest.page, () => !window.__zns.game.combat.shield, null, 30000);
@@ -313,6 +313,17 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
     assert.match(death, /Маг1/);
     assert.match(death, /заморож/);
     await wf(host.page, () => [...window.__zns.game.remotes.values()][0]?.dead || window.__zns.game.remotes.size === 0, null, 20000);
+    // No kick to the menu: «Возродиться» brings the player back, the others see it
+    await wf(guest.page, () => !document.getElementById('death-respawn-btn').disabled, null, 20000);
+    await guest.page.click('#death-respawn-btn');
+    await wf(guest.page, () => { const c = window.__zns.game.combat; return !c.dead && c.hp === 20; }, null, 20000);
+    await wf(host.page, () => [...window.__zns.game.remotes.values()][0]?.dead === false, null, 20000);
+    // The HOST dies: its room stays open, the guest stays in the game
+    await ev(host.page, () => window.__zns.game.combat.die(null, 'test'));
+    await wf(host.page, () => !document.getElementById('death-screen').classList.contains('hidden'), null, 20000);
+    await new Promise((r) => setTimeout(r, 4000));
+    assert.ok(await ev(guest.page, () => window.__zns.net.active && window.__zns.game.active), 'the guest is still in the game');
+    assert.ok(await ev(host.page, () => window.__zns.net.active && window.__zns.game.active), 'the host is still hosting');
 
     for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
     await host.context.close();

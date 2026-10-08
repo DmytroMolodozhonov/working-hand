@@ -280,6 +280,11 @@ export class NetSync {
         this.net.send({ t: 'pdead', by: this.me, killer: killer || null }, true);
     }
 
+    /** I'm back in the game. */
+    respawned() {
+        this.net.send({ t: 'prespawn', by: this.me }, true);
+    }
+
     explosion(pos, radius, power = 1, casterId = null) {
         if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
     }
@@ -446,6 +451,11 @@ export class NetSync {
                 const killer = m.killer === this.me ? 'вы' : (g.remotes.get(m.killer)?.name || null);
                 if (m.killer === this.me) g.killCount++;
                 g.hud.setVoice(killer ? `💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})` : `💀 ${escapeHtml(who)} погиб`, true);
+                break;
+            }
+            case 'prespawn': {
+                const r = g.remotes.get(m.by);
+                if (r) { r.setDead(false); r.hp = null; g.hud.notify?.(`✨ ${r.name} возродился`); }
                 break;
             }
             case 'bite': g.damageLocalPlayer(m.dmg || 1); break;

@@ -214,7 +214,9 @@ export class VoxelWorld {
             this.grass.setColorAt(i, color.setHex(GRASS_COLORS[ci]));
             this.grassData.push({ x, y, z, color: GRASS_COLORS[ci], alive: true });
         }
-        this.scene.add(this.grass);
+        // (no longer shown: the scattered green cubes cluttered the meadows; they are still
+        // generated so the random sequence — and with it every tree's place — stays the same)
+        this.grass.visible = false;
 
         this.createTrees(rng);
     }
