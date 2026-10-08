@@ -476,6 +476,9 @@ export class WeaponSystem {
 
     _unstick(w, fall) {
         if (!w.stuckIn) return;
+        // out of a player: they bleed slower now (everybody is told)
+        const pid = w.stuckIn.z?.playerId;
+        if (pid) { this.game.sync?.unimpale?.(w.id); this.game.bleeding?.noteUnimpale(w.id); }
         w.stuckIn = null;
         this.stuck?.delete(w);
         w.holder = null;

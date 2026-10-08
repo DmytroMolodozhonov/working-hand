@@ -110,6 +110,7 @@ export class Levitation {
         const ch = this.game.character;
         s.age += dt;
         if (s.kind === 'weapon' && (s.obj.holder?.levitate !== true || !this.game.weapons.byId.has(s.obj.id))) { this.state = null; return; }
+        if (s.attack) { this._updateAttack(s, dt); return; }
 
         // Where the object should float: in front of the hand, following it slowly
         const hand = ch.getHandWorldPosition(s.side, _v1);
@@ -140,6 +141,74 @@ export class Levitation {
             const p = s.kind === 'weapon' ? s.obj.position : s.obj.pos;
             this.game.fx.spark(_v1.set(p.x + (Math.random() - 0.5) * 0.8, p.y + (Math.random() - 0.5) * 0.8, p.z + (Math.random() - 0.5) * 0.8), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _v2.set(0, 0.6, 0), 0.6);
         }
+    }
+
+    /**
+     * «Атак» while a sword / axe floats: it flies at the nearest living
+     * creature (or on, along the hand, if there is none) and sticks into it.
+     */
+    attack() {
+        const s = this.state;
+        if (!s || s.kind !== 'weapon') return '🪶 Сначала поднимите меч или топор «Вингардиум Левиоса», потом — «Атак»';
+        const g = this.game;
+        const w = s.obj;
+        let best = null;
+        const consider = (pos, target) => {
+            const d = pos.distanceTo(w.position);
+            if (d < 30 && (!best || d < best.d)) best = { d, pos, target };
+        };
+        for (const z of g.zombies) if (!z.isDead && !z.isThrall) consider(z.group.position, { kind: 'z', z });
+        for (const [id, r] of g.remotes) if (!r.dead) consider(r.position, { kind: 'p', id, r });
+        for (const a of g.animals?.list || []) if (!a.dead) consider(a.group.position, { kind: 'a', a });
+        const dir = g.character.getHandDirection(s.side, new THREE.Vector3());
+        s.attack = { target: best ? best.target : null, dir, t: 0 };
+        this._sparkle(w.position, 25);
+        return null;
+    }
+
+    _updateAttack(s, dt) {
+        const g = this.game;
+        const w = s.obj;
+        const A = s.attack;
+        A.t += dt;
+        const tp = A.target ? (A.target.kind === 'z' ? A.target.z.group.position : A.target.kind === 'p' ? A.target.r.position : A.target.a.group.position) : null;
+        const goal = tp ? _v1.copy(tp).add(_v2.set(0, 0.9, 0)) : _v1.copy(w.position).addScaledVector(A.dir, 30);
+        const to = _v2.subVectors(goal, w.position);
+        const d = to.length();
+        const step = Math.min(d, 22 * dt);
+        to.normalize();
+        // flies fast (kinematic), the tip first
+        w.position.addScaledVector(to, step);
+        w.drive.position.copy(w.position);
+        w.drive.quaternion.setFromUnitVectors(_v3.set(0, 1, 0), to);
+        w.quaternion.copy(w.drive.quaternion);
+        w.velocity.copy(to).multiplyScalar(22);
+        if (Math.random() < 0.8) this.game.fx.spark(w.position, 0xc9a8ff, 0.08, _v3.copy(to).multiplyScalar(-3), 0.4);
+        const dead = A.target && (A.target.kind === 'z' ? A.target.z.isDead : A.target.kind === 'p' ? A.target.r.dead : A.target.a.dead);
+        if (A.target && !dead && d < 1.0) {
+            // hit: it sticks in
+            this.state = null;
+            w.drive = null;
+            w.holder = null;
+            if (g.sync) g.sync._localRelease(w);
+            const dmg = (w.type === 'axe' ? 5 : 4) * (w.damageScale || 1);
+            if (A.target.kind === 'z') {
+                if (g.authority) g.damageZombie(A.target.z, dmg, true, to.clone(), g.localId);
+                else g.sync?.sendHit(A.target.z, dmg, to.clone(), true);
+                if (!A.target.z.isDead) g.weapons._stick(w, A.target.z, null);
+            } else if (A.target.kind === 'p') {
+                const r = A.target.r;
+                const victim = { group: r.character.group, get isDead() { return r.dead; }, removable: false, playerId: A.target.id };
+                g.weapons._stick(w, victim, null);
+                g.combat.hitRemote({ id: A.target.id, damageCooldown: 0, group: r.character.group }, Math.round(dmg), !!w.magic);
+                g.sync?.impale?.(A.target.id, w.id);
+            } else {
+                g.animals?.hit(A.target.a, dmg, to.clone(), g.localId);
+            }
+            g.hud.setVoice('🗡️ Оружие вонзилось!', true);
+            return;
+        }
+        if (A.t > 3 || (!A.target && A.t > 1.6)) this.release(false);
     }
 
     /** World orientation of the hand (the palm when hands are shown). */

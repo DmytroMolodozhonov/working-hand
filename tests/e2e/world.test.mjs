@@ -553,3 +553,51 @@ test('gear: bows and shields on creative pedestals, an arrow hits a zombie, shie
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('«Левиоса» + «Атак»: the floating sword flies into a zombie and sticks; blood; «Rescue» stops my bleeding', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const w = g.weapons.byId.get('tS');
+        const p = w.position.clone();
+        const z = g._createZombie(new T.Vector3(p.x + 6, g.collision.groundY(p.x + 6, p.z), p.z));
+        z.setSleeping?.(true);
+        z.health = 60;
+        const hp0 = z.health;
+        w.hover = null;
+        w.attach({ levitate: true, side: null });
+        g.levitation.state = { kind: 'weapon', obj: w, side: 'right', hold: 3, target: w.position.clone(), age: 0, history: [], handQ0: new T.Quaternion(), objQ0: w.quaternion.clone() };
+        const said = g.castLocalSpell('Атак', true);
+        for (let i = 0; i < 60 && !w.stuckIn; i++) await frames(1);
+        const stuck = !!w.stuckIn;
+        const hp1 = z.health;
+        await new Promise((res) => setTimeout(res, 2500));
+        const hp2 = z.isDead ? -1 : z.health;
+        // my own bleeding (in creative nobody bleeds): switch to a survival-like check
+        g.config.mode = 'survival';
+        g.playerHP = 20;
+        g.bleeding.start(1);
+        await new Promise((res) => setTimeout(res, 5000));
+        const bled = g.playerHP;
+        const c0 = g.combat.center.bind(g.combat);
+        g.combat.center = (out) => g.character.getHandWorldPosition('right', out || new T.Vector3());
+        const res = g.bleeding.rescue(true);
+        g.combat.center = c0;
+        await new Promise((res2) => setTimeout(res2, 1500));
+        return { said, stuck, hp0, hp1, hp2, bled, res, after: g.playerHP, rate: g.bleeding.rate };
+    });
+    assert.equal(r.said, 'Attack');
+    assert.ok(r.stuck, 'the sword stuck in the zombie');
+    assert.ok(r.hp1 < r.hp0, `it hurt the zombie (${r.hp0} → ${r.hp1})`);
+    assert.ok(r.hp2 === -1 || r.hp2 < r.hp1, `the zombie bleeds (${r.hp1} → ${r.hp2})`);
+    assert.ok(r.bled <= 18, `I bleed about 1 HP a second (20 → ${r.bled} in ~5 s of slow test frames)`);
+    assert.equal(r.res, 'Rescue');
+    assert.equal(r.rate, 0, 'Rescue stopped it');
+    assert.equal(r.after, r.bled, 'no more blood lost after Rescue');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

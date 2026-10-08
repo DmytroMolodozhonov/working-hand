@@ -239,3 +239,12 @@ test('voice: water spells «Wave Attack» / «Air Bubble» (+ Максима)', 
     assert.equal(matchSpell('эйр бабл максима'), 'AirBubbleMaxima');
     assert.equal(matchSpell('thunder wave'), 'Thunderwave');
 });
+
+test('voice: «Атак» and «Rescue»; wand words', () => {
+    for (const w of ['атак', 'attack', 'Аттак']) assert.equal(matchSpell(w), 'Attack', w);
+    for (const w of ['rescue', 'Рескью']) assert.equal(matchSpell(w), 'Rescue', w);
+    assert.equal(matchSpell('wave attack'), 'WaveAttack');
+    assert.equal(matchSpell('люмос максима'), 'LumosMaxima');
+    assert.equal(matchSpell('раскрой свои секреты'), 'Reveal');
+    assert.equal(matchSpell('латин вратин'), 'Draw');
+});

@@ -335,6 +335,27 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
     }
 
+    impale(to, wid) {
+        this.game.bleeding?.noteImpale(wid, to);
+        this.net.send({ t: 'impale', w: wid, to }, true);
+    }
+
+    unimpale(wid) {
+        this.net.send({ t: 'unimpale', w: wid }, true);
+    }
+
+    pullOut(wid) {
+        this.net.send({ t: 'pullout', w: wid }, true);
+    }
+
+    bleed(rate) {
+        this.net.send({ t: 'bleed', by: this.me, r: rate }, true);
+    }
+
+    rescue(to) {
+        this.net.send({ t: 'rescue', to }, true);
+    }
+
     arrow(from, dir, dmg) {
         const v = dir.clone();
         this.net.send({ t: 'arrow', by: this.me, o: [r3(from.x), r3(from.y), r3(from.z)], v: [r3(v.x), r3(v.y), r3(v.z)], d: Math.round(dmg * 10) / 10 }, true);
@@ -467,6 +488,11 @@ export class NetSync {
                 if (c && !this.net.isHost) g.openChest(c);
                 break;
             }
+            case 'impale': g.bleeding?.noteImpale(m.w, m.to); break;
+            case 'unimpale': g.bleeding?.noteUnimpale(m.w); break;
+            case 'pullout': { const w = g.weapons.byId.get(m.w); if (w && w.stuckIn) g.weapons._unstick(w, true); break; }
+            case 'bleed': if (m.by !== this.me) g.bleeding?.remote.set(m.by, m.r || 0); break;
+            case 'rescue': if (m.to === this.me && g.bleeding) { for (const wid of g.bleeding._bladesInMe()) g.bleeding.pullOut(wid); g.bleeding.stop(); } break;
             case 'arrow': if (m.by !== this.me) g.gear?.fire(vec(m.o), vec(m.v), m.d || 3, m.by); break;
             case 'weather': g.gear?.startWeather(Math.min(400, m.s || 120)); break;
             // ---- things (wands, scrolls, shields…)

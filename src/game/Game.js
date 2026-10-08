@@ -29,6 +29,7 @@ import { Swimming } from './Swimming.js';
 import { ItemSystem } from './Items.js';
 import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
+import { Bleeding } from './Bleeding.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -182,6 +183,7 @@ export class Game {
         this.items = new ItemSystem(this); // wands, scrolls, shields, backpacks, bows, food… in the world and the hands
         this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
         this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
+        this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -599,6 +601,12 @@ export class Game {
         }
         if (name === 'WaveAttack' || name === 'WaveAttackMaxima') return this._castWave(name, isFinal);
         if (name === 'Lumos' || name === 'LumosMaxima' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
+        if (name === 'Rescue') return this.bleeding.rescue(isFinal);
+        if (name === 'Attack') {
+            const hint = this.levitation.attack();
+            if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
+            return 'Attack';
+        }
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
         // Inferno with a scroll in the hand burns it: its power is yours
@@ -1389,6 +1397,7 @@ export class Game {
         this.items.updateRemote();
         this.wandMagic.update(dt);
         this.gear.update(dt);
+        this.bleeding.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
@@ -1856,6 +1865,7 @@ export class Game {
         this.items?.dispose();
         this.wandMagic?.dispose();
         this.gear?.dispose();
+        this.bleeding?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

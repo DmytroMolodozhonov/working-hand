@@ -1396,3 +1396,4 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #air-bar i.on { background: radial-gradient(circle at 35% 35%, #ffffff, #8fdcff 55%, #2f8fd0); }
 #air-bar .air-txt { color: #bff3ff; font-size: 12px; margin-right: 6px; text-shadow: 0 0 3px #000; }
 #underwater-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.3s; background: radial-gradient(ellipse at center, rgba(30, 110, 170, 0.35), rgba(5, 40, 80, 0.85)); }
+#bleed-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0; transition: opacity 0.2s; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(160, 0, 20, 0.75)); }
