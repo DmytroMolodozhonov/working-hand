@@ -347,7 +347,12 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
         return g._castDuel(spell, spell, true);
     }, spell);
     // In the test browser there is no camera: the guest "keeps the hand on the opponent" by decree
-    const setContact = (page, ok, jerk) => ev(page, ([ok, jerk]) => { window.__zns.game.duel._contact = () => ({ ok, jerk }); }, [ok, jerk]);
+    // (only for this player's own hand — what it hears about the other player stays real)
+    const setContact = (page, ok, jerk) => ev(page, ([ok, jerk]) => {
+        const d = window.__zns.game.duel;
+        const real = d._realContact || (d._realContact = d._contact.bind(d));
+        d._contact = (id, ...rest) => (id === d.me ? { ok, jerk } : real(id, ...rest));
+    }, [ok, jerk]);
 
     // 1) Остолбеней: a charge flies (not instant) and stuns on arrival
     await aim();
@@ -387,8 +392,10 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     // (the guest's hand off the opponent stops pushing — a quick, calm move away then a flick)
     await ev(guest.page, () => {
         const d = window.__zns.game.duel;
+        const real = d._realContact || (d._realContact = d._contact.bind(d));
         const t0 = performance.now();
-        d._contact = () => ({ ok: false, jerk: performance.now() - t0 > 450 }); // hand moved calmly away, then shaken off
+        // hand moved calmly away, then shaken off
+        d._contact = (id, ...rest) => (id === d.me ? { ok: false, jerk: performance.now() - t0 > 450 } : real(id, ...rest));
     });
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 0, null, 20000);
     await new Promise((r) => setTimeout(r, 800));
