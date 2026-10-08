@@ -17,6 +17,8 @@
  *   grab/rel client→host  weapon picked up / thrown;  wown: owner changed
  *   w        host→all     free weapon poses 10×/s
  *   bite     host→player  zombie bit you;  win: someone reached the finish
+ *   wb       player→all   water ball in hand (10×/s);  wdrop: ball dropped
+ *   ice      player→all   ice blocks built with water forming
  */
 
 import * as THREE from 'three';
@@ -33,6 +35,8 @@ export class NetSync {
         this.pTimer = 0;
         this.zTimer = 0;
         this.wTimer = 0;
+        this.wbTimer = 0;
+        this._wbSent = null;
         this.hudTimer = 0;
         this.weaponOwners = new Map(); // weaponId -> playerId
         this.knownZombies = new Set();
@@ -78,6 +82,7 @@ export class NetSync {
     _onLeave(id) {
         const r = this.game.remotes.get(id);
         if (r) { r.dispose(); this.game.remotes.delete(id); }
+        this.game.water?.applyRemote(id, null);
         // Drop weapons they were holding
         for (const [wid, owner] of this.weaponOwners) {
             if (owner !== id) continue;
@@ -96,6 +101,7 @@ export class NetSync {
             chests: g.chests.filter((c) => c.isOpen).map((c) => c.id),
             weapons: g.weapons.weapons.map((w) => ({ s: w.serialize(), owner: this.weaponOwners.get(w.id) || (w.holder ? this.me : null), hover: !!w.hover })),
             zombies: g.zombies.map((z) => z.serialize()),
+            ice: g.iceCells,
             players: this.net.playerList(),
         };
     }
@@ -107,6 +113,7 @@ export class NetSync {
             g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);
         }
+        if (msg.ice && msg.ice.length) g.applyIce(msg.ice);
         for (const id of msg.chests || []) {
             const c = g.chests.find((x) => x.id === id);
             if (c) c.setOpenInstant();
@@ -137,6 +144,14 @@ export class NetSync {
             const held = [];
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());
             this.net.send({ t: 'p', id: this.me, s: g.character.serializePose(), hp: g.playerHP, w: held }, true);
+        }
+        // Water ball in my hand
+        this.wbTimer += dt;
+        if (this.wbTimer >= 0.1) {
+            this.wbTimer = 0;
+            const st = g.water.serialize();
+            if (st || this._wbSent) this.net.send({ t: 'wb', by: this.me, s: st }, true);
+            this._wbSent = st;
         }
         if (this.net.isHost) {
             this.zTimer += dt;
@@ -189,6 +204,14 @@ export class NetSync {
 
     spell(name, origin, dir, side) {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
+    }
+
+    waterDrop(b) {
+        this.net.send({ t: 'wdrop', by: this.me, p: [r3(b.pos.x), r3(b.pos.y), r3(b.pos.z)], v: [r3(b.vel.x), r3(b.vel.y), r3(b.vel.z)], r: r3(b.r), f: b.frozen ? 1 : 0 }, true);
+    }
+
+    ice(cells) {
+        this.net.send({ t: 'ice', by: this.me, c: cells }, true);
     }
 
     explosion(pos, radius, power = 1) {
@@ -323,6 +346,9 @@ export class NetSync {
                 if (m.owner && m.owner !== this.me) w.hover = null;
                 break;
             }
+            case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
+            case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
+            case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 4000)); break;
             case 'bite': g.damageLocalPlayer(m.dmg || 1); break;
             case 'win': g.victory(g.killCount * 100 + g.playerHP * 50); break;
             default: break;

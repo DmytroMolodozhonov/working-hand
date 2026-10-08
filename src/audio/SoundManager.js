@@ -299,6 +299,19 @@ export class SoundManager {
         this._play(this.sounds.explosion, vol, (big ? 0.7 : 0.95) + Math.random() * 0.1);
     }
 
+    /** Water rising out of a river into the ball. */
+    playWaterRise() {
+        if (!this.context) return;
+        if (!this.sounds.waterRise) this.sounds.waterRise = this._synthWater(1.1, false);
+        this._play(this.sounds.waterRise, 0.9, 0.9 + Math.random() * 0.2);
+    }
+
+    playSplash() {
+        if (!this.context) return;
+        if (!this.sounds.splash) this.sounds.splash = this._synthWater(0.7, true);
+        this._play(this.sounds.splash, 1.2, 0.85 + Math.random() * 0.3);
+    }
+
     playChestOpen(position) {
         if (!this.sounds.chest) this.sounds.chest = this._synthCreak();
         this._playAt(this.sounds.chest, position, 1.2, 6);
@@ -319,6 +332,27 @@ export class SoundManager {
             lp2 += (lp - lp2) * 0.08;
             const boom = Math.sin(2 * Math.PI * (55 - 25 * t) * t) * Math.exp(-t * 4);
             d[i] = Math.max(-1, Math.min(1, (lp * 2.2 + lp2 * 1.5 + boom * 0.9) * env));
+        }
+        return buf;
+    }
+
+    /** Bubbly water noise: a rising gurgle, or a short splash. */
+    _synthWater(seconds, splash) {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        let lp = 0, bubble = 0, bf = 300, bt = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const env = splash ? Math.min(1, t * 300) * Math.exp(-t * 7) : Math.sin(Math.PI * t / seconds) ** 2;
+            lp += ((Math.random() * 2 - 1) - lp) * (splash ? 0.5 : 0.12);
+            // random bubbles: short chirps rising in pitch
+            if (t >= bt) { bt = t + 0.02 + Math.random() * 0.06; bf = 250 + Math.random() * 700; bubble = 1; }
+            bubble *= 0.9993;
+            bf *= 1.00012;
+            const b = Math.sin(2 * Math.PI * bf * t) * bubble * 0.35;
+            d[i] = Math.max(-1, Math.min(1, (lp * (splash ? 1.4 : 0.6) + b) * env));
         }
         return buf;
     }

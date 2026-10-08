@@ -16,11 +16,13 @@ import { SpellManager, matchSpell } from '../fx/SpellManager.js';
 import { WeaponSystem } from './Weapons.js';
 import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
+import { WaterMagic } from './WaterMagic.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK } from '../world/Terrain.js';
 
 const SPELL_COOLDOWN = 1000;
+const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 const PLAYER_RADIUS = 0.48;
 const ZOMBIE_RADIUS = 0.88;
@@ -137,6 +139,8 @@ export class Game {
         if (isTest) this.character.group.position.set(10, 1.5, 10);
 
         this.weapons = new WeaponSystem(this);
+        this.water = new WaterMagic(this);
+        this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon) => this.onLocalHit(z, dmg, dir, isWeapon);
 
         // Flashlight: always present (intensity 0 when off) so toggling never recompiles shaders.
@@ -288,6 +292,7 @@ export class Game {
         for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? 0x7a5230 });
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
+        this.water.explode(pos, radius);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
 
@@ -410,10 +415,15 @@ export class Game {
      */
     castLocalSpell(text, isFinal = true) {
         if (!this.active) return null;
+        let name = matchSpell(text);
+        if (!name) return null;
+        // Water bending: the hand is at the water / holding the ball, not raised to the face
+        const waterName = this._waterSpell(name);
+        if (waterName) return this._castWater(waterName, text, isFinal);
+        if (name === 'Frozen') name = 'Ice';
+        if (name === 'Maxima') return null;
         const recent = this.isMagicActive || Date.now() - this.lastMagicTime < 1500;
         if (!recent) return null;
-        const name = matchSpell(text);
-        if (!name) return null;
         const now = Date.now();
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
         // the player may be saying «Бомбардо Максима».
@@ -444,6 +454,51 @@ export class Game {
         return name;
     }
 
+    /** Which voice commands go to the water ball. */
+    _waterSpell(name) {
+        if (name === 'Waterball' || name === 'WaterForming') return name;
+        if (!this.water.active) return null;
+        if (name === 'Maxima') return 'Maxima';
+        if (name === 'Frozen' || name === 'Ice') return 'Frozen';
+        return null;
+    }
+
+    _castWater(name, text, isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastWaterCast || 0) < WATER_COOLDOWN) return null;
+        let hint;
+        if (name === 'Waterball') {
+            hint = this.water.start();
+            // «Waterbollow Максима» in one breath
+            if (!hint && /макс|max/i.test(text)) this.water.maxima();
+        } else if (name === 'Maxima') hint = this.water.maxima();
+        else if (name === 'WaterForming') hint = this.water.form();
+        else if (name === 'Frozen') hint = this.water.freeze();
+        if (hint) {
+            this.hud.setVoice(hint.startsWith('💧') || hint.startsWith('🧊') ? hint : '💧 ' + hint, true);
+            this._flightMsgUntil = performance.now() + 2500;
+            return null;
+        }
+        this._lastWaterCast = now;
+        this._interimCast = isFinal ? null : { name, at: now };
+        return name;
+    }
+
+    /** Ice blocks built with water forming become part of the world (and are synced). */
+    placeIce(cells) {
+        this.applyIce(cells);
+        if (this.sync) this.sync.ice(cells);
+    }
+
+    applyIce(cells) {
+        const t = this.terrain?.data;
+        if (!t) return;
+        for (const [x, L, z] of cells) t.set(x, L, z, BLOCK.ICE);
+        for (const c of cells) this.iceCells.push(c);
+    }
+
     /** A «Бомбардо» that was not followed by «Максима» goes off now. */
     _updatePendingSpell() {
         const p = this._pendingBombardo;
@@ -460,6 +515,7 @@ export class Game {
     /** Debug keys: cast in the camera direction. */
     castDebug(name) {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
+        if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);
@@ -554,6 +610,7 @@ export class Game {
         if (!isTest) this._checkVictory();
 
         this.weapons.update(dt);
+        this.water.update(dt);
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
         this.weapons.checkHits(this.zombies, dt);

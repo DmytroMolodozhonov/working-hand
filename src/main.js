@@ -274,6 +274,8 @@ function renderItemsTab() {
         { name: 'Даст', desc: 'Пыль (Даст/Sand).', dmg: 'Мгновенно', icon: 'assets/icons/sand.png' },
         { name: 'Бомбардо', desc: 'Взрывной шар: разрушает блоки, горы, деревья и раскидывает зомби.', dmg: 'до 8 (взрыв)', icon: 'assets/icons/bombardo.svg' },
         { name: 'Бомбардо Максима', desc: 'В 3 раза мощнее «Бомбардо»: из руки вырывается огромная волна магии, шар больше, воронка намного шире, всё разлетается дальше.', dmg: 'до 24 (взрыв)', icon: 'assets/icons/bombardo_maxima.svg' },
+        { name: 'Waterbollow', desc: 'Поднесите руку к реке или озеру и скажите «Waterbollow»: вода поднимается шаром и следует за рукой. «Максима» — больше воды (можно много раз), открытая вторая рука у шара тоже подливает воду. Резкое движение — шар падает.', dmg: 'ледяной шар: 3–10', icon: 'assets/icons/water.svg' },
+        { name: 'Water forming', desc: 'Пока вода жидкая: ведите шар, и за ним остаются водяные блоки — стены, башни, дома. Вода тратится, подпитывайте шар. «Frozen» превращает всё в лёд: сквозь него не пройти, на нём можно стоять.', dmg: '—', icon: 'assets/icons/water_forming.svg' },
         { name: 'Флайн', desc: 'Полёт как у Супермена: обе руки вверх + «Флайн». Рулите корпусом, приземление — направьте себя в землю.', dmg: '—', icon: 'assets/icons/flight.svg' },
     ];
     for (const item of items) {
@@ -336,6 +338,10 @@ window.addEventListener('keydown', (e) => {
     if (k === 'b' || k === 'и') game.castDebug('Bombardo');
     if (k === 'n' || k === 'т') game.castDebug('BombardoMaxima');
     if (k === 'g' || k === 'п') game.castDebug('Flight');
+    if (k === 'v' || k === 'м') game.castDebug('Waterball');
+    if (k === 'x' || k === 'ч') game.castDebug('Maxima');
+    if (k === 'c' || k === 'с') game.castDebug('WaterForming');
+    if (k === 'z' || k === 'я') game.castDebug('Frozen');
     if (k === 'f' || k === 'а') game.toggleFlashlight();
 });
 
