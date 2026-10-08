@@ -19,6 +19,7 @@ import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
+import { Accio } from './Accio.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -150,6 +151,7 @@ export class Game {
         this.water = new WaterMagic(this);
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
+        this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
@@ -482,6 +484,7 @@ export class Game {
             const aim = this.water.active ? null : this.duel.pickSide(true);
             if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
         }
+        if (name === 'Accio') return this._castAccio(isFinal);
         // Levitation: point the hand at an object (or a creature: a duel spell)
         if (name === 'Levitation') {
             const aim = this.levitation.active ? null : this.duel.pickSide(false);
@@ -601,6 +604,21 @@ export class Game {
         return costName;
     }
 
+    _castAccio(isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === 'Accio' && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastAccio || 0) < 900 || this.accio.active) return null;
+        const tired = this.combat.check('Accio');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        const hint = this.accio.cast();
+        if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
+        this.combat.pay('Accio');
+        this._lastAccio = now;
+        this._interimCast = isFinal ? null : { name: 'Accio', at: now };
+        return 'Accio';
+    }
+
     _castLevitation(isFinal) {
         const now = Date.now();
         const early = this._interimCast;
@@ -701,6 +719,7 @@ export class Game {
         if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
         if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
+        if (name === 'Accio') { this._lastAccio = 0; return this._castAccio(true); }
         if (name === 'Stupefy' || name === 'AvadaKedavra') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
         const origin = this.character.getHandWorldPosition('right');
@@ -828,6 +847,7 @@ export class Game {
         mark('игрок');
 
         this.levitation.update(dt);
+        this.accio.update(dt);
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);

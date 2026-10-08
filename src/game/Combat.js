@@ -51,6 +51,7 @@ export const SPELL_COST = {
     WaterForming: 5,
     Frozen: 5,
     Levitation: 6,
+    Accio: 5,
     Stupefy: 12,
     AvadaKedavra: 25,
 };

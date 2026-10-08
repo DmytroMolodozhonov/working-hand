@@ -155,7 +155,9 @@ export class WeaponSystem {
             const w = hs.held;
             // Weapon got taken by the network (another player / host reset)
             if (w.holder == null || w.holder.side !== side) { this._forget(side, hand); return; }
-            if (hs.openSince && now - hs.openSince > RELEASE_HOLD_MS) {
+            // Summoned into an open hand («Акцио»): kept until the hand has closed on it once
+            if (hs.waitClose && curl > 0.5) hs.waitClose = false;
+            if (hs.openSince && now - hs.openSince > RELEASE_HOLD_MS && !hs.waitClose) {
                 this.release(side);
                 return;
             }
@@ -337,6 +339,7 @@ export class WeaponSystem {
     _forget(side, hand) {
         const hs = this.hands[side];
         hs.held = null;
+        hs.waitClose = false;
         hs.rel0 = hs.relC = null;
         if (hand && hand.setGrip) hand.setGrip(null);
     }

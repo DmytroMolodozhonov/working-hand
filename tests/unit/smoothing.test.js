@@ -75,3 +75,8 @@ test('«Бомбардо Максима» is recognised and is 3× stronger', ()
     assert.ok(vol(bombardoRadius(MAXIMA_POWER)) / vol(bombardoRadius(1)) > 4.5);
     assert.equal(bombardoRadius(1), 3.6);
 });
+
+test('«Акцио» is recognised (and not taken for another spell)', () => {
+    for (const w of ['акцио', 'Акцио!', 'accio', 'аксио', 'акция']) assert.equal(matchSpell(w), 'Accio', w);
+    assert.equal(matchSpell('вингардиум левиоса'), 'Levitation');
+});
