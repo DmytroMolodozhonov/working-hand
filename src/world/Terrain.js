@@ -50,7 +50,7 @@ const drawn = (type) => type !== BLOCK.AIR && type !== BLOCK.WATER && type !== B
 /** Top of the water surface (water fills layers up to 0, drawn a little lower than the ground). */
 export const WATER_LEVEL_Y = -0.62;
 
-const BASE_COLORS = {
+export const BASE_COLORS = {
     [BLOCK.GRASS]: 0x4CAF50, // identical to the old ground plane
     [BLOCK.DIRT]: 0x7a5230,
     [BLOCK.STONE]: 0x8a8a8a,

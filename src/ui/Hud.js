@@ -4,7 +4,7 @@
  */
 
 const MINIMAP_WINDOW = 128; // m of terrain drawn around the player
-import { isLeaves } from '../world/Terrain.js';
+import { BLOCK, BASE_COLORS } from '../world/Terrain.js';
 
 export class Hud {
     constructor() {
@@ -206,6 +206,11 @@ export class Hud {
     }
 
     /** Pre-render the height map around (cx, cz) — mountains grey, trees green, craters brown. */
+    /**
+     * The world from above, in its real colours: grass, sand, rock, snow,
+     * water (darker where deep), the crowns of trees — with soft shading so
+     * hills and mountains stand out.
+     */
     _renderTerrainWindow(cx, cz) {
         const d = this.terrain.data;
         const size = MINIMAP_WINDOW;
@@ -216,26 +221,33 @@ export class Hud {
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
-            ti = this.terrainImage = { canvas, ctx, img: ctx.createImageData(size, size) };
+            ti = this.terrainImage = { canvas, ctx, img: ctx.createImageData(size, size), heights: new Int16Array((size + 1) * (size + 1)) };
         }
         const px = ti.img.data;
+        const H = ti.heights;
+        for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) H[(z + 1) * (size + 1) + (x + 1)] = d.topLayer(cx - half + x, cz - half + z);
         for (let z = 0; z < size; z++) {
             for (let x = 0; x < size; x++) {
                 const wx = cx - half + x, wz = cz - half + z;
-                const top = d.topLayer(wx, wz);
+                const top = H[(z + 1) * (size + 1) + (x + 1)];
                 const i = (z * size + x) * 4;
-                if (top >= 1) {
-                    if (isLeaves(d.get(wx, top, wz))) {
-                        px[i] = 34; px[i + 1] = 139; px[i + 2] = 34; px[i + 3] = 170;
-                    } else {
-                        const v = Math.min(255, 90 + top * 6);
-                        px[i] = v; px[i + 1] = v; px[i + 2] = v; px[i + 3] = 150;
-                    }
-                } else if (top < 0) {
-                    px[i] = 60; px[i + 1] = 40; px[i + 2] = 20; px[i + 3] = 150;
+                let col, shade = 1;
+                // water above the ground?
+                let depth = 0;
+                while (depth < 8 && d.get(wx, top + 1 + depth, wz) === BLOCK.WATER) depth++;
+                if (depth) {
+                    col = 0x3a8fd8;
+                    shade = 1.1 - depth * 0.08;
                 } else {
-                    px[i + 3] = 0;
+                    col = BASE_COLORS[d.get(wx, top, wz)] ?? 0x4CAF50;
+                    // hill shading: light from the north-west
+                    const hw = H[(z + 1) * (size + 1) + x], hn = H[z * (size + 1) + (x + 1)];
+                    shade = 1 + Math.max(-0.25, Math.min(0.25, ((top - hw) + (top - hn)) * 0.07)) + Math.min(0.15, Math.max(0, top) * 0.004);
                 }
+                px[i] = Math.min(255, ((col >> 16) & 255) * shade);
+                px[i + 1] = Math.min(255, ((col >> 8) & 255) * shade);
+                px[i + 2] = Math.min(255, (col & 255) * shade);
+                px[i + 3] = 255;
             }
         }
         ti.ctx.putImageData(ti.img, 0, 0);
@@ -248,17 +260,17 @@ export class Hud {
         const ctx = this.mmCtx;
         if (!ctx) return;
         const cvs = this.el.minimap;
-        const W = cvs.width;
-        const radius = W / 2;
+        const W = cvs.width, Hh = cvs.height;
+        const hw = W / 2, hh = Hh / 2;
         const scale = 2.0;
-        ctx.clearRect(0, 0, W, W);
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(0, 0, W, W);
+        ctx.clearRect(0, 0, W, Hh);
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(0, 0, W, Hh);
         ctx.save();
-        ctx.translate(radius, radius);
+        ctx.translate(hw, hh);
 
         if (this.terrain) {
-            // Redrawn only after explosions or when the player moved to another 16 m cell
+            // Redrawn only after changes to the world or when the player moved to another 16 m cell
             const cx = Math.round(charPos.x / 16) * 16, cz = Math.round(charPos.z / 16) * 16;
             const ti = this.terrainImage;
             if (!ti || ti.cx !== cx || ti.cz !== cz || ti.version !== this.terrain.data.version) this._renderTerrainWindow(cx, cz);
@@ -267,57 +279,69 @@ export class Hud {
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(t.canvas, (t.cx - half - charPos.x - 0.5) * scale, (t.cz - half - charPos.z - 0.5) * scale, MINIMAP_WINDOW * scale, MINIMAP_WINDOW * scale);
         }
+        const inside = (x, y, m = 0) => Math.abs(x) < hw - m && Math.abs(y) < hh - m;
 
-        ctx.fillStyle = '#2ecc71';
+        // the round trees near the start (the voxel ones are already in the picture)
         if (world && world.trees) {
             for (const t of world.trees) {
                 if (t.alive === false) continue;
                 const dx = (t.x - charPos.x) * scale, dy = (t.z - charPos.z) * scale;
-                if (dx * dx + dy * dy < radius * radius) { ctx.beginPath(); ctx.arc(dx, dy, 2, 0, Math.PI * 2); ctx.fill(); }
+                if (!inside(dx, dy)) continue;
+                ctx.fillStyle = '#1f6b24';
+                ctx.beginPath(); ctx.arc(dx, dy, 4.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#2e8b2e';
+                ctx.beginPath(); ctx.arc(dx - 1, dy - 1, 3, 0, Math.PI * 2); ctx.fill();
             }
         }
         ctx.fillStyle = '#e74c3c';
+        ctx.strokeStyle = '#4a0000';
+        ctx.lineWidth = 1;
         for (const z of zombies) {
             if (z.isDead) continue;
             const zx = (z.group.position.x - charPos.x) * scale, zz = (z.group.position.z - charPos.z) * scale;
-            if (zx * zx + zz * zz < radius * radius) { ctx.beginPath(); ctx.arc(zx, zz, 3, 0, Math.PI * 2); ctx.fill(); }
+            if (inside(zx, zz)) { ctx.beginPath(); ctx.arc(zx, zz, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
         }
         // Other players: a dot in their colour with the name; beyond the edge of the
-        // map an arrow on the rim shows which way to look (with the distance)
+        // map an arrow on the edge shows which way to look (with the distance)
         ctx.font = 'bold 10px sans-serif';
         ctx.textAlign = 'center';
         for (const o of others) {
             const ox = (o.x - charPos.x) * scale, oz = (o.z - charPos.z) * scale;
             const col = o.color != null ? '#' + o.color.toString(16).padStart(6, '0') : '#3498db';
             const name = (o.name || '').slice(0, 8);
-            const d2 = ox * ox + oz * oz;
-            if (d2 < (radius - 6) * (radius - 6)) {
+            if (inside(ox, oz, 6)) {
                 ctx.fillStyle = col;
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
                 ctx.beginPath(); ctx.arc(ox, oz, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                if (name) { ctx.fillStyle = '#fff'; ctx.fillText(name, ox, oz - 7); }
+                if (name) { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(name, ox, oz - 7); ctx.fillText(name, ox, oz - 7); }
             } else {
                 const a = Math.atan2(oz, ox);
-                const r = radius - 9;
+                // where the direction leaves the rectangle
+                const k = Math.min((hw - 9) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - 9) / Math.max(1e-6, Math.abs(Math.sin(a))));
                 ctx.save();
-                ctx.translate(Math.cos(a) * r, Math.sin(a) * r);
+                ctx.translate(Math.cos(a) * k, Math.sin(a) * k);
                 ctx.rotate(a);
                 ctx.fillStyle = col;
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
                 ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
                 ctx.restore();
-                const tx = Math.cos(a) * (r - 18), ty = Math.sin(a) * (r - 18) + 3;
-                const dist = Math.round(Math.sqrt(d2) / scale);
-                ctx.fillStyle = '#fff';
+                const tx = Math.max(-hw + 30, Math.min(hw - 30, Math.cos(a) * (k - 16))), ty = Math.max(-hh + 10, Math.min(hh - 4, Math.sin(a) * (k - 16) + 3));
+                const dist = Math.round(Math.hypot(ox, oz) / scale);
+                ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+                ctx.strokeText(`${name} ${dist} м`, tx, ty);
                 ctx.fillText(`${name} ${dist} м`, tx, ty);
             }
         }
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
+        // me: a white arrow with a dark outline
         ctx.rotate(-rotY);
-        ctx.moveTo(0, -6); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2.5); ctx.lineTo(-5, 5); ctx.closePath();
+        ctx.fill(); ctx.stroke();
         ctx.restore();
     }
 }
