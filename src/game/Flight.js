@@ -17,8 +17,8 @@
 import { clamp, lerp } from '../core/math.js';
 
 export const FLIGHT = {
-    CONFIRM_TIME: 1.0, // s: arms must stay up this long after the word
-    ARMS_GRACE: 0.3, // s: short tracking glitches while confirming are forgiven
+    CONFIRM_TIME: 0.9, // s: arms must stay up this long after the word
+    ARMS_GRACE: 0.45, // s: tracking glitches / arms a bit low while confirming are forgiven
     TAKEOFF_TIME: 1.6, // s of vertical climb before turning horizontal
     TAKEOFF_ACCEL: 7, // m/s² upwards
     TAKEOFF_MAX: 9, // m/s

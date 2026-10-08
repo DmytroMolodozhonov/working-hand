@@ -236,7 +236,9 @@ export class VoxelCharacter {
         _up.set(0, 1, 0).applyQuaternion(_qBody);
         this.head.getWorldPosition(_v3);
         const headH = _v3.sub(this.group.position).dot(_up);
-        const threshold = 1.3;
+        // How far below the top of the head the hand may be (a bit lower than
+        // the original 1.3 so a hand a little below the middle of the screen counts)
+        const threshold = 1.55;
         const stats = (elbowAnchor) => {
             _v1.set(0, 0, this.BONE_LENGTH_LOWER).applyMatrix4(elbowAnchor.matrixWorld).sub(this.group.position);
             const height = _v1.dot(_up) - (headH - threshold);
@@ -258,7 +260,8 @@ export class VoxelCharacter {
         this.group.getWorldQuaternion(_qBody);
         _up.set(0, 1, 0).applyQuaternion(_qBody);
         this.head.getWorldPosition(_v3);
-        const headTop = _v3.sub(this.group.position).dot(_up) + 0.2;
+        // hands at about forehead height or higher count as "up"
+        const headTop = _v3.sub(this.group.position).dot(_up) - 0.15;
         const h = (elbowAnchor) => _v1.set(0, 0, this.BONE_LENGTH_LOWER).applyMatrix4(elbowAnchor.matrixWorld).sub(this.group.position).dot(_up);
         return h(this.leftElbowAnchor) > headTop && h(this.rightElbowAnchor) > headTop;
     }

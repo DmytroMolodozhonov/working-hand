@@ -18,6 +18,7 @@ import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { Combat, PVP } from './Combat.js';
+import { Levitation } from './Levitation.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -143,6 +144,7 @@ export class Game {
         this.weapons = new WeaponSystem(this);
         this.water = new WaterMagic(this);
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
+        this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon) => this.onLocalHit(z, dmg, dir, isWeapon);
 
@@ -432,13 +434,16 @@ export class Game {
         if (this.combat.frozen) { this.hud.setVoice(this.combat.check(name), true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
+        // Levitation: point the hand at the object
+        if (name === 'Levitation') return this._castLevitation(isFinal);
         // Water bending: the hand is at the water / holding the ball, not raised to the face
         const waterName = this._waterSpell(name);
         if (waterName) return this._castWater(waterName, text, isFinal);
         if (name === 'Frozen') name = 'Ice';
         if (name === 'Maxima') return null;
         const recent = this.isMagicActive || Date.now() - this.lastMagicTime < 1500;
-        if (!recent) return null;
+        // Flight has its own gesture (both arms up) — checked in startFlight
+        if (!recent && name !== 'Flight') return null;
         const now = Date.now();
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
         // the player may be saying «Бомбардо Максима».
@@ -511,11 +516,27 @@ export class Game {
         const early = this._interimCast;
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
         if (now - (this._lastShieldCast || 0) < 800) return null;
-        const hint = this.combat.enabled ? this.combat.castProtection(name === 'ProtectionMaxima') : '🛡️ Щит работает в режиме «Свободный мир»';
+        const hint = this.combat.castProtection(name === 'ProtectionMaxima');
         if (hint) { this.hud.setVoice(hint, true); return null; }
         this._lastShieldCast = now;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
+    }
+
+    _castLevitation(isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === 'Levitation' && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastLevitate || 0) < 900) return null;
+        const tired = this.levitation.active ? null : this.combat.check('Levitation');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        const wasActive = this.levitation.active;
+        const hint = this.levitation.cast();
+        if (hint) { this.hud.setVoice(hint, true); return null; }
+        if (!wasActive) this.combat.pay('Levitation');
+        this._lastLevitate = now;
+        this._interimCast = isFinal ? null : { name: 'Levitation', at: now };
+        return 'Levitation';
     }
 
     /** Targets for spells cast by `casterId` (players hit each other only in the free world). */
@@ -560,17 +581,27 @@ export class Game {
         this.ui.died?.(text);
     }
 
-    /** Ice blocks built with water forming become part of the world (and are synced). */
-    placeIce(cells) {
-        this.applyIce(cells);
-        if (this.sync) this.sync.ice(cells);
+    /** Frozen water shapes become part of the world (and are synced). */
+    placeIce(blobs) {
+        const r3 = (v) => Math.round(v * 100) / 100;
+        const list = blobs.map((b) => ({ x: r3(b.x), y: r3(b.y), z: r3(b.z), r: r3(b.r) }));
+        this.applyIce(list);
+        if (this.sync) this.sync.ice(list);
     }
 
-    applyIce(cells) {
+    applyIce(blobs) {
         const t = this.terrain?.data;
         if (!t) return;
-        for (const [x, L, z] of cells) t.set(x, L, z, BLOCK.ICE);
-        for (const c of cells) this.iceCells.push(c);
+        const shapes = blobs.filter((b) => b && Number.isFinite(b.x) && Number.isFinite(b.r) && b.r > 0 && b.r < 3);
+        for (const b of shapes) {
+            // solid inside (can't walk through, can stand on it); drawn as the smooth frozen shape
+            for (const [x, L, z] of WaterMagic.cellsOf(b)) {
+                const cur = t.get(x, L, z);
+                if (cur === BLOCK.AIR || cur === BLOCK.WATER) t.set(x, L, z, BLOCK.ICE_SHAPE);
+            }
+        }
+        this.water.addIceShapes(shapes);
+        for (const b of shapes) this.iceCells.push(b);
     }
 
     /** A «Бомбардо» that was not followed by «Максима» goes off now. */
@@ -591,6 +622,7 @@ export class Game {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
         if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
         if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
+        if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);
@@ -634,6 +666,10 @@ export class Game {
         this.active = true;
         this.lastTime = performance.now();
         this.prewarm();
+        // The microphone listens all game long: shield (arm forward), water
+        // (hand towards a river) and flight (arms up) don't raise a hand to
+        // the face. Each spell checks its own gesture.
+        if (this.voice && this.config.mode !== 'test') this.voice.start();
         const loop = (t) => {
             if (!this.active) return;
             this._raf = requestAnimationFrame(loop);
@@ -684,6 +720,7 @@ export class Game {
         this._updateChests(dt);
         if (!isTest) this._checkVictory();
 
+        this.levitation.update(dt);
         this.weapons.update(dt);
         this.water.update(dt);
         this.combat.update(dt);
@@ -860,7 +897,8 @@ export class Game {
     /** Start the flight spell (arms must be up). Returns true when it started. */
     startFlight(force = false) {
         if (this.flight.active) return false;
-        if (!force && !this.character.areBothHandsUp()) {
+        const armsUp = this.character.areBothHandsUp() || Date.now() - (this._armsUpAt || 0) < 1500;
+        if (!force && !armsUp) {
             this.hud.setVoice('🦸 Для полёта поднимите <b>обе руки вверх</b> и скажите «Флайн»', true);
             return false;
         }
@@ -1017,9 +1055,10 @@ export class Game {
         } else if (this.isMagicActive && Date.now() - this.lastMagicTime > 1200) {
             this.isMagicActive = false;
             this.hud.setVoice('', false);
-            if (this.voice && !this.ui.isMenuVoiceActive?.()) this.voice.stop();
             this.magicHand = null;
         }
+        // Remember when both arms were up (the flight word may come a moment later)
+        if (tracked && this.character.areBothHandsUp()) this._armsUpAt = Date.now();
     }
 
     _updateCamera(dt) {

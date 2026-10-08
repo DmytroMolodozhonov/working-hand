@@ -86,8 +86,10 @@ test('fatigue: 30 points, +1 per second, spells cost fatigue, not enough → the
 
 test('Protection: arm out → shield for 3 s; spells from the front bounce off, from behind they hit', () => {
     const { combat, events } = fakeGame({ armOut: 'none' });
-    assert.match(combat.castProtection(false), /вытяните руку/);
-    assert.equal(combat.fatigue, 30, 'no fatigue spent on a failed cast');
+    // No arm fully stretched: the shield still forms at the hand reaching furthest
+    assert.equal(combat.castProtection(false), null);
+    assert.equal(combat.shield.type, 1);
+    assert.equal(combat.fatigue, 25);
     const { combat: c2 } = fakeGame({ armOut: 'right' });
     assert.equal(c2.castProtection(false), null);
     assert.equal(c2.fatigue, 25);
@@ -109,12 +111,13 @@ test('Protection: arm out → shield for 3 s; spells from the front bounce off, 
     assert.equal(events.deaths.length, 0);
 });
 
-test('Protection Maxima: needs a T-pose, dome blocks every direction, costs 20', () => {
+test('Protection Maxima: needs a T-pose, dome for 5 s blocks every direction, costs 20', () => {
     const { combat } = fakeGame({ armOut: 'both', tPose: false });
     assert.match(combat.castProtection(true), /буква T|T/);
     const { combat: c } = fakeGame({ armOut: 'both', tPose: true });
     assert.equal(c.castProtection(true), null);
     assert.equal(c.fatigue, 10);
+    assert.equal(c.shield.left, 5, 'the dome lasts 5 seconds');
     assert.equal(c.hitBySpell('Thunderwave', FRONT, 'enemy'), false);
     assert.equal(c.hitBySpell('Thunderwave', BEHIND, 'enemy'), false);
     assert.equal(c.hp, 10);
@@ -166,4 +169,18 @@ test('own Bombardo does not hurt me; creative mode has no PvP', () => {
     assert.equal(c.check('BombardoMaxima'), null, 'no fatigue in creative');
     c.hitBySpell('Sapira', FRONT, 'enemy');
     assert.equal(c.hp, 10);
+});
+
+test('shields work and show in every mode (creative too), without fatigue', () => {
+    const { g } = fakeGame({ armOut: 'right' });
+    g.config.mode = 'creative';
+    const c = new Combat(g);
+    assert.equal(c.castProtection(false), null);
+    assert.ok(c.shield && c.visuals, 'shield + its visuals');
+    c.update(0.1);
+    assert.ok(c.visuals.hand.visible, 'the blue shield is visible');
+    assert.equal(c.fatigue, 30);
+    for (let i = 0; i < 40; i++) c.update(0.1);
+    assert.equal(c.shield, null, 'gone after 3 s');
+    assert.equal(c.visuals.hand.visible, false);
 });

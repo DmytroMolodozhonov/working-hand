@@ -10,9 +10,11 @@ import * as THREE from 'three';
 import { createRng } from '../core/math.js';
 import { Terrain, BLOCK } from './Terrain.js';
 
+const _sun = new THREE.Vector3();
 const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
 import { CollisionWorld } from './Collision.js';
+import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
 
 const GRASS_COLORS = [0x4CAF50, 0x66BB6A, 0x43A047, 0x81C784, 0x388E3C];
 export const MAP_CELL = 5; // metres per editor cell (original: 2.5x bigger than 2m)
@@ -48,10 +50,11 @@ export class VoxelWorld {
 
     // ------------------------------------------------------------------ lights
     createLights() {
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
         this.scene.add(this.ambientLight);
 
-        this.dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        // Warm sunlight + cool sky light: simple, but reads as daylight
+        this.dirLight = new THREE.DirectionalLight(0xfff0d8, 0.85);
         this.dirLight.position.set(50, 100, 50);
         this.dirLight.castShadow = true;
         this.dirLight.shadow.mapSize.width = 2048;
@@ -70,38 +73,37 @@ export class VoxelWorld {
         this.scene.add(this.dirLight);
         this.scene.add(this.dirLight.target);
 
-        this.hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x4CAF50, 0.3);
+        this.hemiLight = new THREE.HemisphereLight(0xbfe3ff, 0x6a8f4e, 0.35);
         this.scene.add(this.hemiLight);
     }
 
     setNightMode(isNight) {
         if (isNight) {
             this.scene.background = new THREE.Color(0x050505);
-            this.scene.fog = new THREE.Fog(0x000000, 10, 50);
+            this.scene.fog = new THREE.Fog(this.sky ? SKY_NIGHT.fog : 0x000000, 10, 50);
+            this.sky?.setNight(true);
             this.fogFar = 50;
             this.fogNear = 10;
             this.ambientLight.intensity = 0.15;
             this.dirLight.intensity = 0.15;
             this.hemiLight.intensity = 0.08;
         } else {
-            this.scene.background = new THREE.Color(0x87CEEB);
-            this.scene.fog = new THREE.Fog(0x87CEEB, 20, 80);
-            this.fogFar = 80;
-            this.fogNear = 20;
-            this.ambientLight.intensity = 0.6;
-            this.dirLight.intensity = 0.8;
-            this.hemiLight.intensity = 0.3;
+            this.scene.background = new THREE.Color(this.sky ? SKY_DAY.fog : 0x87CEEB);
+            // the fog is the colour of the horizon: far land melts into the sky
+            this.scene.fog = new THREE.Fog(this.sky ? SKY_DAY.fog : 0x87CEEB, this.sky ? 25 : 20, this.sky ? 90 : 80);
+            this.fogFar = this.sky ? 90 : 80;
+            this.fogNear = this.sky ? 25 : 20;
+            this.sky?.setNight(false);
+            this.ambientLight.intensity = 0.3;
+            this.dirLight.intensity = 0.85;
+            this.hemiLight.intensity = 0.35;
         }
     }
 
     createSkybox() {
-        const sky = new THREE.Mesh(
-            // Big enough for the long view in flight; it travels with the player
-            new THREE.SphereGeometry(450, 32, 32),
-            new THREE.MeshBasicMaterial({ color: 0x87CEEB, side: THREE.BackSide, depthWrite: false }),
-        );
-        this.scene.add(sky);
-        this.sky = sky;
+        // Painted sky (gradient, sun, drifting clouds, stars at night); travels with the player
+        this.sky = new Sky(this.scene);
+        this.sky.setSunDirection(_sun.copy(this.dirLight.position).sub(this.dirLight.target.position));
     }
 
     // ----------------------------------------------------------------- terrain
@@ -140,15 +142,30 @@ export class VoxelWorld {
 
     createTrees(rng) {
         const count = 50;
-        const trunkGeo = new THREE.BoxGeometry(2, 6, 2);
-        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-        const leafGeo = new THREE.BoxGeometry(6, 6, 6);
-        const leafMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+        // Voxel trees: a darker trunk and a crown built from several boxes in
+        // different greens (instead of one green cube on a stick).
+        const trunkGeo = mergeBoxes([
+            { size: [1.6, 6, 1.6], pos: [0, 0, 0], color: 0x7a4a24 },
+            { size: [1.0, 0.8, 1.0], pos: [1.1, 1.8, 0.2], color: 0x6b3f1e }, // branch stubs
+            { size: [0.9, 0.7, 0.9], pos: [-0.9, 2.6, -0.4], color: 0x6b3f1e },
+        ]);
+        const crownGeo = mergeBoxes([
+            { size: [6.2, 2.6, 6.2], pos: [0, 6.6, 0], color: 0x2f8a2f },
+            { size: [5.0, 2.2, 5.0], pos: [0.3, 8.8, -0.2], color: 0x3a9a35 },
+            { size: [3.2, 1.6, 3.2], pos: [-0.2, 10.5, 0.3], color: 0x46a83c },
+            { size: [2.4, 2.0, 2.4], pos: [2.6, 7.6, 1.8], color: 0x2a7d2a },
+            { size: [2.2, 1.8, 2.2], pos: [-2.7, 8.0, -1.6], color: 0x338f30 },
+            { size: [1.8, 1.4, 1.8], pos: [1.2, 9.9, 2.0], color: 0x3f9f38 },
+        ]);
+        const trunkMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+        const leafMat = new THREE.MeshLambertMaterial({ vertexColors: true });
         this.trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
-        this.leafMesh = new THREE.InstancedMesh(leafGeo, leafMat, count);
+        this.leafMesh = new THREE.InstancedMesh(crownGeo, leafMat, count);
         this.trunkMesh.castShadow = true;
         this.leafMesh.castShadow = true;
+        this.leafMesh.receiveShadow = true;
         const dummy = new THREE.Object3D();
+        const tint = new THREE.Color();
         let placed = 0, attempts = 0;
         while (placed < count && attempts < 2000) {
             attempts++;
@@ -157,18 +174,27 @@ export class VoxelWorld {
             // Keep trees on flat ground (not inside mountains) and off the spawn tables.
             if (this.terrain && !this._flatAround(x, z, 1)) continue;
             if (Math.abs(x) < 11 && z > -9 && z < 1) continue;
+            const turn = Math.floor(rng() * 4) * (Math.PI / 2);
+            const scale = 0.9 + rng() * 0.25;
             dummy.position.set(x, 2.5, z);
+            dummy.rotation.set(0, turn, 0);
+            dummy.scale.set(1, 1, 1);
             dummy.updateMatrix();
             this.trunkMesh.setMatrixAt(placed, dummy.matrix);
-            dummy.position.set(x, 8, z);
+            dummy.position.set(x, 0, z);
+            dummy.scale.set(scale, scale, scale);
             dummy.updateMatrix();
             this.leafMesh.setMatrixAt(placed, dummy.matrix);
+            // each crown a slightly different green
+            const v = 0.88 + rng() * 0.24;
+            this.leafMesh.setColorAt(placed, tint.setRGB(v * (0.9 + rng() * 0.2), v, v * (0.85 + rng() * 0.2)));
             const boxId = this.collision.addBox({ minX: x - 1, maxX: x + 1, minY: -0.5, maxY: 5.5, minZ: z - 1, maxZ: z + 1, kind: 'tree', noSupport: true });
             this.trees.push({ x, z, alive: true, index: placed, boxId });
             placed++;
         }
         this.trunkMesh.count = placed;
         this.leafMesh.count = placed;
+        if (this.leafMesh.instanceColor) this.leafMesh.instanceColor.needsUpdate = true;
         this.scene.add(this.trunkMesh);
         this.scene.add(this.leafMesh);
     }
@@ -397,6 +423,7 @@ export class VoxelWorld {
             if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
         }
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);
+        if (this.sky) this.sky.update(1 / 60);
         if (this.terrain) this.terrain.update(focus);
     }
 
@@ -444,4 +471,33 @@ export function chestFacing(cx, cz, wallSet, mapData) {
         if (score > bestScore) { bestScore = score; best = d; }
     }
     return best ? best.rot : 0;
+}
+
+/** One geometry from several coloured boxes (for instanced voxel props). */
+function mergeBoxes(boxes) {
+    const positions = [], normals = [], colors = [], indices = [];
+    const c = new THREE.Color();
+    for (const b of boxes) {
+        const g = new THREE.BoxGeometry(b.size[0], b.size[1], b.size[2]);
+        g.translate(b.pos[0], b.pos[1], b.pos[2]);
+        const base = positions.length / 3;
+        const p = g.attributes.position.array, n = g.attributes.normal.array;
+        c.setHex(b.color);
+        for (let i = 0; i < p.length; i += 3) {
+            positions.push(p[i], p[i + 1], p[i + 2]);
+            normals.push(n[i], n[i + 1], n[i + 2]);
+            // slightly darker underside, lighter top
+            const k = n[i + 1] > 0.5 ? 1.12 : n[i + 1] < -0.5 ? 0.7 : 1.0;
+            colors.push(c.r * k, c.g * k, c.b * k);
+        }
+        for (const i of g.index.array) indices.push(base + i);
+        g.dispose();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setIndex(indices);
+    geo.computeBoundingSphere();
+    return geo;
 }

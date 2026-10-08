@@ -37,6 +37,7 @@ export function matchSpell(text) {
         // «Бомбардо Максима»: the same word plus «максима»
         return has('макс', 'max', 'мэкс', 'мекс', 'maks', 'мах') ? 'BombardoMaxima' : 'Bombardo';
     }
+    if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return 'Levitation';
     // Water bending (before Ice/Sands: their short tokens would catch these words)
     const water = has('вотер', 'ватер', 'уотер', 'water', 'вотр', 'водян', 'вода', 'воду', 'уатер', 'watter', 'woter');
     if (has('форминг', 'forming', 'формин') || (water && has('форм', 'form'))) return 'WaterForming';

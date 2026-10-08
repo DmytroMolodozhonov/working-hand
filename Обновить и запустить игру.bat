@@ -16,7 +16,10 @@ if exist "%DIR%\.git" (
     cd "%DIR%"
     git fetch origin %BRANCH%
     git checkout -q %BRANCH%
+    rem Saved maps / settings must never block the update
+    git stash -q -u >nul 2>&1
     git pull --ff-only origin %BRANCH%
+    git stash pop -q >nul 2>&1
 ) else (
     echo Skachivayu igru pervyj raz, eto zajmet minutu...
     git clone -b %BRANCH% %REPO% "%DIR%"
@@ -27,6 +30,10 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+echo.
+echo Versiya igry:
+git log -1 --format="  %%cd  %%s" --date=format:"%%d.%%m.%%Y %%H:%%M"
+echo.
 echo Gotovo! Zapuskayu igru...
 where python 1>nul 2>&1
 if errorlevel 1 (

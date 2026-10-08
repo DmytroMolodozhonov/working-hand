@@ -62,10 +62,23 @@ export class PoseService {
         const quality = config.modelComplexity !== undefined ? parseInt(config.modelComplexity, 10) : 1;
 
         const delegate = config.delegate === 'GPU' || config.delegate === 'CPU' ? config.delegate : null;
-        if (this.ready && quality === this._quality && (config.delegate === undefined || delegate === this._delegate)) return;
+        // 'classic' = MediaPipe Holistic exactly as in the original game (default), 'tasks' = 3 separate networks
+        const engine = config.engine || this._engine || globalThis.__ZNS_ENGINE__ || 'classic';
+        if (this.ready && quality === this._quality && engine === this._engine && (config.delegate === undefined || delegate === this._delegate)) return;
         this._quality = quality;
+        this._engine = engine;
         if (config.delegate !== undefined) this._delegate = delegate;
-        await this._startModels(quality);
+        if (engine === 'classic') {
+            try {
+                await this._startHolistic(quality);
+            } catch (e) {
+                console.warn('[PoseService] Holistic failed, using the new networks:', e?.message || e);
+                this._engine = 'tasks';
+                await this._startModels(quality);
+            }
+        } else {
+            await this._startModels(quality);
+        }
 
         let width = 640, height = 480;
         if (config.resolution) {
@@ -74,6 +87,64 @@ export class PoseService {
         }
         this._resolution = { width, height };
         this.ready = true;
+    }
+
+    /**
+     * The original game's recognition: one MediaPipe Holistic network (pose,
+     * hands, face together) with its built-in landmark smoothing — the
+     * smooth, steady feel the game was tuned with. Runs on the main thread.
+     */
+    async _startHolistic(quality) {
+        this._closeModels();
+        this._status('Загрузка нейросети...');
+        const dir = this.baseUrl + 'vendor/mediapipe-holistic/';
+        if (!globalThis.Holistic) await loadScript(dir + 'holistic.js');
+        const holistic = new globalThis.Holistic({ locateFile: (file) => dir + file });
+        holistic.setOptions({
+            // The original always used the heavy model; «Lite» in the settings still lightens it
+            modelComplexity: quality === 0 ? 0 : 2,
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            smoothSegmentation: false,
+            refineFaceLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+        });
+        holistic.onResults((r) => this._onHolistic(r));
+        await holistic.initialize();
+        this.holistic = holistic;
+        this.stats.mode = 'holistic';
+        this.stats.delegate = 'GPU';
+        // Hand helper: the newer Hand Landmarker in a worker finds hands that
+        // Holistic loses (hand over the arm / body). Optional — Holistic alone works too.
+        if (typeof Worker !== 'undefined' && !globalThis.__ZNS_NO_HAND_HELPER__) {
+            this._spawnWorker(quality, 'CPU', true).then((w) => {
+                if (this.holistic !== holistic) { w.terminate(); return; }
+                this.handWorker = w;
+                this.stats.handHelper = true;
+            }).catch((e) => console.warn('[PoseService] hand helper unavailable:', e?.message || e));
+        }
+    }
+
+    _onHolistic(results) {
+        this.stats.results++;
+        this.stats.lastResultAt = performance.now();
+        const r = {
+            poseLandmarks: results.poseLandmarks || null,
+            faceLandmarks: results.faceLandmarks || null,
+            leftHandLandmarks: results.leftHandLandmarks || null,
+            rightHandLandmarks: results.rightHandLandmarks || null,
+        };
+        // A hand Holistic lost: take it from the hand helper (fresh results only)
+        const helper = this._helperHands;
+        if (helper && (!r.leftHandLandmarks || !r.rightHandLandmarks) && performance.now() - helper.at < 250) {
+            const assigned = assignHands(helper.hands, r.poseLandmarks);
+            if (!r.leftHandLandmarks && assigned.left) { r.leftHandLandmarks = assigned.left; this.stats.helperHands = (this.stats.helperHands || 0) + 1; }
+            if (!r.rightHandLandmarks && assigned.right) { r.rightHandLandmarks = assigned.right; this.stats.helperHands = (this.stats.helperHands || 0) + 1; }
+        }
+        this.lastResults = r;
+        this._drawSkeleton(r);
+        if (this.onPoseUpdate) this.onPoseUpdate(this.interpreter.process(r, this.videoElement));
     }
 
     async _startModels(quality) {
@@ -128,7 +199,7 @@ export class PoseService {
         this.worker = await this._spawnWorker(quality, this._workerDelegate());
     }
 
-    _spawnWorker(quality, delegate) {
+    _spawnWorker(quality, delegate, handsOnly = false) {
         return new Promise((resolve, reject) => {
             const worker = new Worker(new URL('./vision.worker.js', import.meta.url), { type: 'module' });
             const timeout = setTimeout(() => { worker.terminate(); reject(new Error('worker init timeout')); }, 60000);
@@ -139,7 +210,9 @@ export class PoseService {
                     this.stats.delegate = msg.delegate;
                     this.stats.avgCost = 0;
                     this.stats.results = 0;
-                    worker.onmessage = (e) => { if (e.target === this.worker || this.worker === null) this._onWorkerMessage(e.data); };
+                    worker.onmessage = handsOnly
+                        ? (e) => this._onHandHelper(e.data)
+                        : (e) => { if (e.target === this.worker || this.worker === null) this._onWorkerMessage(e.data); };
                     resolve(worker);
                 } else if (msg.type === 'error') {
                     clearTimeout(timeout);
@@ -148,8 +221,13 @@ export class PoseService {
                 }
             };
             worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || 'worker error')); };
-            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate });
+            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate, handsOnly });
         });
+    }
+
+    _onHandHelper(msg) {
+        this.handInFlight = false;
+        if (msg.type === 'result') this._helperHands = { hands: msg.result.hands || [], at: performance.now() };
     }
 
     _onWorkerMessage(msg) {
@@ -165,6 +243,9 @@ export class PoseService {
     }
 
     _closeModels() {
+        if (this.holistic) { try { this.holistic.close(); } catch (e) { /* ignore */ } this.holistic = null; }
+        if (this.handWorker) { this.handWorker.terminate(); this.handWorker = null; }
+        this._helperHands = null;
         if (this.worker) { this.worker.postMessage({ type: 'close' }); this.worker.terminate(); this.worker = null; }
         if (this.runner) { this.runner.close(); this.runner = null; }
         this.inFlight = false;
@@ -221,7 +302,27 @@ export class PoseService {
         this._lastVideoTime = v.currentTime;
         this.stats.frames++;
         const ts = performance.now();
-        if (this.worker) {
+        if (this.holistic) {
+            // The hand helper gets the same frame (in parallel, its own thread)
+            if (this.handWorker && !this.handInFlight) {
+                this.handInFlight = true;
+                createImageBitmap(v).then((bitmap) => {
+                    if (this.handWorker) this.handWorker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
+                    else { bitmap.close?.(); this.handInFlight = false; }
+                }).catch(() => { this.handInFlight = false; });
+            }
+            // One frame at a time, like the original camera loop
+            this.inFlight = true;
+            try {
+                await this.holistic.send({ image: v });
+                const cost = performance.now() - ts;
+                this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + cost * 0.1 : cost;
+            } catch (e) {
+                this._frameErrors = (this._frameErrors || 0) + 1;
+                if (this._frameErrors < 5) console.warn('[PoseService] Holistic frame failed', e);
+            }
+            this.inFlight = false;
+        } else if (this.worker) {
             this.inFlight = true;
             try {
                 const bitmap = await createImageBitmap(v);
@@ -318,4 +419,15 @@ export class PoseService {
         }
         ctx.restore();
     }
+}
+
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = src;
+        el.crossOrigin = 'anonymous';
+        el.onload = () => resolve();
+        el.onerror = () => reject(new Error('cannot load ' + src));
+        document.head.appendChild(el);
+    });
 }

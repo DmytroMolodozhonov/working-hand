@@ -163,13 +163,27 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # On Windows SO_REUSEADDR lets a second server share a port that is still
+    # busy — the browser would then keep talking to an OLD game window.
+    allow_reuse_address = os.name != "nt"
+
+
+def open_server():
+    """Start on PORT; if an old game window still holds it, take the next free port."""
+    last_error = None
+    for port in range(PORT, PORT + 20):
+        try:
+            return ThreadingServer(("", port), GameRequestHandler), port
+        except OSError as e:
+            last_error = e
+            print(f"  Порт {port} занят (возможно, открыто старое окно игры), пробую следующий...")
+    raise last_error
 
 
 def main():
     no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
-    httpd = ThreadingServer(("", PORT), GameRequestHandler)
-    url = f"http://localhost:{PORT}"
+    httpd, port = open_server()
+    url = f"http://localhost:{port}"
     print("=" * 50)
     print("  ЗОМБИ НЕ СПЯТ — сервер запущен")
     print(f"  Откройте в браузере: {url}")

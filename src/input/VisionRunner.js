@@ -26,7 +26,13 @@ export class VisionRunner {
         this.faceEvery = 2;
     }
 
-    async init({ quality = 1, useModule = true } = {}) {
+    /**
+     * @param {object} o
+     *   handsOnly: only the Hand Landmarker (helper next to Holistic, which
+     *   loses hands that overlap the arm/body; this network has its own palm detector)
+     */
+    async init({ quality = 1, useModule = true, handsOnly = false } = {}) {
+        this.handsOnly = handsOnly;
         const fileset = await FilesetResolver.forVisionTasks(this.baseUrl + 'vendor/mediapipe/wasm', useModule);
         // With the ES-module loader the library clears self.ModuleFactory after
         // creating a task, and a second import() of the same module does not
@@ -40,6 +46,17 @@ export class VisionRunner {
             // GPU processing needs a canvas per task; in a worker that is an OffscreenCanvas.
             const canvasFor = () => (delegate === 'GPU' && typeof OffscreenCanvas !== 'undefined' ? { canvas: new OffscreenCanvas(1, 1) } : {});
             const common = (path) => ({ baseOptions: { modelAssetPath: model(path), delegate }, runningMode: 'VIDEO', ...canvasFor() });
+            if (handsOnly) {
+                restoreFactory();
+                const hands = await HandLandmarker.createFromOptions(fileset, {
+                    ...common('hand_landmarker.task'),
+                    numHands: 2,
+                    minHandDetectionConfidence: 0.5,
+                    minHandPresenceConfidence: 0.5,
+                    minTrackingConfidence: 0.5,
+                });
+                return { pose: null, hands, face: null };
+            }
             restoreFactory();
             const pose = await PoseLandmarker.createFromOptions(fileset, {
                 ...common(poseModel),
@@ -91,10 +108,10 @@ export class VisionRunner {
         this.lastTs = ts;
         this.frame++;
         const t0 = performance.now();
-        const pose = this.pose.detectForVideo(image, ts);
+        const pose = this.pose ? this.pose.detectForVideo(image, ts) : { landmarks: [] };
         const hands = this.hands.detectForVideo(image, ts);
         let face = null;
-        if (this.frame % this.faceEvery === 0) face = this.face.detectForVideo(image, ts);
+        if (this.face && this.frame % this.faceEvery === 0) face = this.face.detectForVideo(image, ts);
         const cost = performance.now() - t0;
         // The face only steers the camera (head turn), which is smoothed anyway:
         // every 2nd frame is enough and leaves more time for body and hands.
@@ -110,6 +127,7 @@ export class VisionRunner {
                 score: hands.handedness?.[i]?.[0]?.score ?? 1,
             })),
             faceLandmarks: face && face.faceLandmarks?.[0] ? plain(face.faceLandmarks[0], false) : (face ? null : undefined),
+            handsOnly: this.handsOnly,
         };
     }
 

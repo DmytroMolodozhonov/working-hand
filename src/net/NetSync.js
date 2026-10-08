@@ -145,6 +145,8 @@ export class NetSync {
             this.pTimer = 0;
             const held = [];
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());
+            const floating = g.levitation?.heldWeapon();
+            if (floating) held.push(floating.serialize());
             this.net.send({ t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP, c: g.combat.serialize(), w: held }, true);
         }
         // Water ball in my hand
@@ -346,7 +348,11 @@ export class NetSync {
                 const w = g.weapons.byId.get(m.w);
                 if (!w) break;
                 if (m.owner) this.weaponOwners.set(m.w, m.owner); else this.weaponOwners.delete(m.w);
-                if (m.owner && m.owner !== this.me && w.holder) {
+                if (m.owner && m.owner !== this.me && w.holder?.levitate) {
+                    g.levitation.state = null;
+                    w.holder = null;
+                    w.drive = null;
+                } else if (m.owner && m.owner !== this.me && w.holder) {
                     // Someone else got it first: let go.
                     const side = w.holder.side;
                     g.weapons._forget(side, g.character.getActiveHands()[side]);
@@ -358,7 +364,7 @@ export class NetSync {
             }
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
-            case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 4000)); break;
+            case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
             case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(5, m.dmg | 0 || 1), m.by); break;
             case 'pdead': {
                 if (m.by === this.me) break;

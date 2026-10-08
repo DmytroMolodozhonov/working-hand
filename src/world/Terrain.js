@@ -22,11 +22,15 @@
 
 import * as THREE from 'three';
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
+import { applyVoxelDetail } from './VoxelShading.js';
 
-export const BLOCK = { AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10 };
+export const BLOCK = { AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11 };
+// ICE_SHAPE: solid space inside frozen water shapes (drawn by WaterMagic, not as cubes)
 
 /** Water is not solid: you can see, walk and shoot through it. */
 export const isSolid = (type) => type !== BLOCK.AIR && type !== BLOCK.WATER;
+/** Blocks drawn as cubes (frozen water shapes are drawn as their own smooth shapes). */
+const drawn = (type) => type !== BLOCK.AIR && type !== BLOCK.WATER && type !== BLOCK.ICE_SHAPE;
 /** Top of the water surface (water fills layers up to 0, drawn a little lower than the ground). */
 export const WATER_LEVEL_Y = -0.62;
 
@@ -442,7 +446,14 @@ export class TerrainData {
         let base = BASE_COLORS[type] ?? 0xff00ff;
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;
         if (L <= 0 && type === BLOCK.GRASS) return base; // flat ground: exact original colour
-        if (type === BLOCK.WOOD || type === BLOCK.LEAVES || type === BLOCK.WATER || type === BLOCK.ICE) return base;
+        if (type === BLOCK.WATER || type === BLOCK.ICE) return base;
+        if (type === BLOCK.LEAVES || type === BLOCK.WOOD) {
+            // a few shades per tree so crowns don't look like one plastic box
+            let k = ((ix >> 1) * 73856093) ^ (((L) >> 1) * 19349663) ^ ((iz >> 1) * 83492791);
+            k = ((k ^ (k >>> 13)) >>> 0) % 5;
+            const shades = type === BLOCK.LEAVES ? [0x2e8b2e, 0x267a26, 0x3a9a35, 0x2f7f3a, 0x449e3c] : [0x8B4513, 0x7a3d12, 0x8f5020, 0x80461a, 0x8B4513];
+            return shades[k];
+        }
         // Small brightness jitter so mountains don't look like plastic. Sides vary
         // per layer (rock strata) so greedy meshing can still merge long runs;
         // tops vary per 2×2 patch.
@@ -502,20 +513,20 @@ export class TerrainData {
                         // Solid faces show wherever the neighbour is air or (see-through) water;
                         // water shows its surface only towards air.
                         let key = 0, kind = 0;
-                        if (isSolid(a) && !isSolid(bRaw)) {
+                        if (drawn(a) && !drawn(bRaw)) {
                             const L = ay + MIN_LAYER;
                             key = this.faceColor(a, x0 + ax, L, z0 + az, d === 1) + 1;
                             kind = L >= 1 ? 1 : 0;
-                        } else if (isSolid(b) && !isSolid(aRaw)) {
+                        } else if (drawn(b) && !drawn(aRaw)) {
                             const L = ay + qy + MIN_LAYER;
                             // skip the bottom of the bedrock layer
                             if (!(d === 1 && L === MIN_LAYER)) {
                                 key = -(this.faceColor(b, x0 + ax + qx, L, z0 + az + qz, false) + 1);
                                 kind = L >= 1 ? 1 : 0;
                             }
-                        } else if (a === BLOCK.WATER && bRaw === BLOCK.AIR) {
+                        } else if (a === BLOCK.WATER && (bRaw === BLOCK.AIR || bRaw === BLOCK.ICE_SHAPE)) {
                             key = BASE_COLORS[BLOCK.WATER] + 1; kind = 2;
-                        } else if (b === BLOCK.WATER && aRaw === BLOCK.AIR) {
+                        } else if (b === BLOCK.WATER && (aRaw === BLOCK.AIR || aRaw === BLOCK.ICE_SHAPE)) {
                             key = -(BASE_COLORS[BLOCK.WATER] + 1); kind = 2;
                         }
                         mask[n] = key;
@@ -598,7 +609,7 @@ export class Terrain {
         this.scene = scene;
         this.data = new TerrainData();
         this.data.generate({ seed, mountains });
-        this.material = new THREE.MeshPhongMaterial({ vertexColors: true });
+        this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
         this.waterMaterial = new THREE.MeshPhongMaterial({
             vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false,
             shininess: 90, specular: 0x88bbff,

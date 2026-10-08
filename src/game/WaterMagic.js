@@ -8,13 +8,14 @@
  *                  in more water and grows, up to a maximum.
  *   second hand    an open second hand next to the ball feeds it with water
  *                  from the nearest river/lake, no words needed.
- *   «Water forming» liquid water only: the ball becomes a brush — where you
- *                  lead it, water blocks are left hanging in the air (walls,
- *                  towers, whole buildings). Every block costs water, the
- *                  ball shrinks and can run dry; feed it to keep building.
- *   «Frozen»       freezes the ball and everything formed: formed blocks
- *                  become solid ice in the world (you can't walk through, you
- *                  can stand on them). Ice can't be formed any more.
+ *   «Water forming» liquid water only: the ball itself is the clay — where you
+ *                  lead it, water flows out of it and stays hanging in the
+ *                  air as one living, merging mass (walls, towers, whole
+ *                  buildings). It costs the ball's water: the ball shrinks and
+ *                  can run dry; feed it to keep building.
+ *   «Frozen»       freezes the ball and everything formed exactly in its
+ *                  shape: solid ice (you can't walk through it, you can stand
+ *                  on it). Ice can't be formed any more.
  *   sharp move     a fast, far jerk of the hand drops the spell: liquid water
  *                  falls and splashes (into a river it just becomes river
  *                  again, unfrozen formed blocks collapse); an ice ball falls,
@@ -26,8 +27,9 @@ import { BLOCK, WATER_LEVEL_Y } from '../world/Terrain.js';
 import { createWaterMaterial } from '../fx/WaterMaterial.js';
 
 export const WATER = {
-    REACH: 3.2, // m from the hand to the water to start the spell
-    HAND_ABOVE_MAX: 2.6, // m: the hand must be this close above the surface
+    REACH: 6, // m from the spot in front of the hand to the water
+    ABOVE_MAX: 4.5, // m: that spot must be this close above the surface
+    HOLD: 0.85, // m between the palm and the ball's surface (magic, not in the hand)
     START_VOLUME: 2, // m³ (one formed block = 1 m³)
     MAXIMA_ADD: 4,
     MAX_VOLUME: 60,
@@ -111,13 +113,28 @@ export class WaterMagic {
         this.column.renderOrder = 2;
         this.scene.add(this.column);
 
-        // Formed (still liquid) blocks held by magic
-        this.formedMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1, 3, 3, 3), this.blockMat, 1024);
+        // Formed water: overlapping living blobs that read as one flowing mass
+        this.blobGeo = new THREE.SphereGeometry(1, 28, 18);
+        this.blobMat = createWaterMaterial(); // liquid (still moving)
+        this.blobMat.userData.uniforms.uWobble.value = 0.12;
+        this._mats.push(this.blobMat);
+        this.formedMesh = new THREE.InstancedMesh(this.blobGeo, this.blobMat, 800);
         this.formedMesh.count = 0;
         this.formedMesh.visible = false;
         this.formedMesh.frustumCulled = false;
         this.formedMesh.renderOrder = 2;
         this.scene.add(this.formedMesh);
+        // Frozen shapes left in the world (everyone's), one instanced mesh
+        this.iceShapeMat = createWaterMaterial({ ice: true });
+        this.iceShapeMat.userData.uniforms.uWobble.value = 0.16;
+        this.iceShapeMat.userData.uniforms.uTime.value = 5.0;
+        this.iceShapes = []; // {x, y, z, r}
+        this.iceMesh = new THREE.InstancedMesh(this.blobGeo, this.iceShapeMat, 4000);
+        this.iceMesh.count = 0;
+        this.iceMesh.visible = false;
+        this.iceMesh.frustumCulled = false;
+        this.iceMesh.castShadow = true;
+        this.scene.add(this.iceMesh);
     }
 
     get active() {
@@ -138,17 +155,26 @@ export class WaterMagic {
         const t = this.terrain;
         if (!t) return 'Здесь нет воды';
         const ch = this.game.character;
+        // The casting hand is the one stretched out (roughly horizontally)
+        // towards the water — like every other spell, not just the lower one.
         let best = null;
         for (const side of ['right', 'left']) {
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
-            const src = t.findWaterSurface(hand.x, hand.z, WATER.REACH);
+            const dir = ch.getHandDirection(side, new THREE.Vector3());
+            const spot = hand.clone().addScaledVector(dir, WATER.HOLD + 0.8);
+            const src = t.findWaterSurface(spot.x, spot.z, WATER.REACH);
             if (!src) continue;
-            const above = hand.y - src.y;
-            if (above > WATER.HAND_ABOVE_MAX || above < -1.5) continue;
-            const d = src.dist + Math.max(0, above) * 0.5;
-            if (!best || d < best.d) best = { side, src, d };
+            const above = spot.y - src.y;
+            if (above > WATER.ABOVE_MAX || above < -2) continue;
+            const toWater = _v1.set(src.x - hand.x, 0, src.z - hand.z);
+            const flat = _v2.set(dir.x, 0, dir.z);
+            const pointing = toWater.lengthSq() > 0.01 && flat.lengthSq() > 0.01 ? flat.normalize().dot(toWater.normalize()) : 0;
+            let score = src.dist * 0.25 + Math.abs(dir.y) * 1.5 + (1 - pointing) * 0.8;
+            if (!ch.isArmExtended?.(side)) score += 1.5;
+            if (this.game.magicHand === side || this.game.lastMagicHand === side) score -= 0.4;
+            if (!best || score < best.score) best = { side, src, score };
         }
-        if (!best) return '💧 Поднесите руку <b>к самой воде</b> (река или озеро) и скажите «Waterbollow»';
+        if (!best) return '💧 Вытяните руку <b>в сторону реки или озера</b> (вода не дальше ~6 м) и скажите «Waterbollow»';
         const src = new THREE.Vector3(best.src.x, best.src.y, best.src.z);
         this.state = {
             side: best.side,
@@ -161,8 +187,8 @@ export class WaterMagic {
             shown: 0.15, // displayed volume (grows smoothly)
             pos: src.clone(),
             source: src,
-            formed: new Map(), // "x,L,z" -> [x, L, z]
-            lastCell: null,
+            formed: [], // blobs {x, y, z, r} still liquid
+            lastBlob: null,
             lastPos: null,
             history: [], // [{t, x, y, z}] hand positions relative to the body
             feeding: 0,
@@ -192,7 +218,7 @@ export class WaterMagic {
         if (!s) return 'Сначала поднимите воду: «Waterbollow»';
         if (s.frozen) return '🧊 Изо льда формировать нельзя, только из жидкой воды';
         s.forming = true;
-        s.lastCell = null;
+        s.lastBlob = null;
         s.lastPos = s.pos.clone();
         return null;
     }
@@ -201,13 +227,13 @@ export class WaterMagic {
     freeze() {
         const s = this.state;
         if (!s) return 'Нечего замораживать';
-        if (s.frozen && !s.formed.size) return 'Уже лёд';
-        const cells = [...s.formed.values()];
-        if (cells.length) {
-            this.game.placeIce(cells);
-            for (const [x, L, z] of cells) if (Math.random() < 0.3) this._sparkle(_v1.set(x, L - 1, z), 3);
+        if (s.frozen && !s.formed.length) return 'Уже лёд';
+        const blobs = s.formed;
+        if (blobs.length) {
+            this.game.placeIce(blobs);
+            for (const b of blobs) if (Math.random() < 0.3) this._sparkle(_v1.set(b.x, b.y, b.z), 3);
         }
-        s.formed.clear();
+        s.formed = [];
         this._syncFormed();
         s.forming = false;
         if (s.volume >= 0.3) {
@@ -248,7 +274,8 @@ export class WaterMagic {
         const hand = ch.getHandWorldPosition(side, _v2);
         const dir = ch.getHandDirection(side, _v3);
         const r = radiusOf(s ? s.shown : 1);
-        return out.copy(hand).addScaledVector(dir, 0.3 + r).addScaledVector(UP, r * 0.25);
+        // about a metre in front of the palm: held by magic, not in the hand
+        return out.copy(hand).addScaledVector(dir, WATER.HOLD + r).addScaledVector(UP, r * 0.15);
     }
 
     _updateHeld(dt) {
@@ -343,7 +370,7 @@ export class WaterMagic {
             this.droplets.visible = false;
         }
         this._prevBall.copy(s.pos);
-        if (!vis && !s.formed.size && s.phase === 'held') this._end();
+        if (!vis && !s.formed.length && s.phase === 'held') this._end();
     }
 
     /** A fast, far movement of the holding hand (relative to the body). */
@@ -360,33 +387,73 @@ export class WaterMagic {
         return moved > WATER.DROP_DISTANCE;
     }
 
-    /** Water forming: leave water blocks where the ball passes. */
+    /**
+     * Water forming: the ball pours itself out along its path. Each piece is a
+     * living blob overlapping the last one, so the result is one flowing mass.
+     */
     _form() {
         const s = this.state;
         const t = this.terrain;
         if (!t) return;
+        const r = radiusOf(s.shown);
+        const br = Math.min(1.1, Math.max(0.45, 0.3 + r * 0.38)); // thickness of the "wall"
+        const cost = (4 / 3) * Math.PI * br * br * br * 0.5; // overlapping blobs share water
         const from = s.lastPos || s.pos;
         const len = from.distanceTo(s.pos);
-        const steps = Math.max(1, Math.ceil(len / 0.4));
+        const steps = Math.max(1, Math.ceil(len / 0.2));
         const pp = this.game.character.group.position;
-        for (let i = 1; i <= steps && s.volume >= 1; i++) {
+        for (let i = 1; i <= steps && s.volume >= cost; i++) {
             _v2.copy(from).lerp(s.pos, i / steps);
-            const x = Math.round(_v2.x), L = Math.floor(_v2.y + 1.5), z = Math.round(_v2.z);
-            const key = x + ',' + L + ',' + z;
-            if (key === s.lastCell || s.formed.has(key)) continue;
-            s.lastCell = key;
-            const b = t.get(x, L, z);
-            if (b !== BLOCK.AIR && b !== BLOCK.WATER) continue;
-            // never inside the player
-            const by = L - 1;
-            if (Math.abs(x - pp.x) < 1.0 && Math.abs(z - pp.z) < 1.0 && by > pp.y - 2.6 && by < pp.y + 1.2) continue;
-            s.formed.set(key, [x, L, z]);
-            s.volume -= 1;
-            s.shown = Math.min(s.shown, s.volume + 0.5);
-            this._drop(_v3.set(x, by, z), 0.4, _v1.set(0, -1, 0));
+            if (s.lastBlob && _v2.distanceTo(s.lastBlob) < br * 0.7) continue;
+            // never inside the player, never inside rock
+            if (Math.hypot(_v2.x - pp.x, _v2.z - pp.z) < 0.7 + br && _v2.y > pp.y - 2.6 && _v2.y < pp.y + 1.4) continue;
+            if (t.isSolidAt(_v2.x, _v2.y, _v2.z)) continue;
+            const b = { x: _v2.x, y: _v2.y, z: _v2.z, r: br * (0.9 + Math.random() * 0.2) };
+            s.formed.push(b);
+            s.lastBlob = _v2.clone();
+            s.volume -= cost;
+            s.shown = Math.min(s.shown, s.volume + 0.3);
+            // the water visibly flows out of the ball into the shape
+            for (let k = 0; k < 3; k++) this._flowParticle(s.pos, _v3.set(b.x, b.y, b.z));
         }
         s.lastPos = s.pos.clone();
         this._syncFormed();
+    }
+
+    /** Solid cells inside a frozen blob (for walking into / standing on it). */
+    static cellsOf(b) {
+        const out = [];
+        const R = b.r * 0.85;
+        for (let x = Math.floor(b.x - b.r); x <= Math.ceil(b.x + b.r); x++) {
+            for (let z = Math.floor(b.z - b.r); z <= Math.ceil(b.z + b.r); z++) {
+                for (let L = Math.floor(b.y - b.r + 1.5); L <= Math.ceil(b.y + b.r + 1.5); L++) {
+                    const cy = L - 1;
+                    if ((x - b.x) ** 2 + (cy - b.y) ** 2 + (z - b.z) ** 2 <= R * R) out.push([x, L, z]);
+                }
+            }
+        }
+        if (!out.length) out.push([Math.round(b.x), Math.floor(b.y + 1.5), Math.round(b.z)]);
+        return out;
+    }
+
+    /** Frozen water shapes join the world (mine or another player's). */
+    addIceShapes(blobs) {
+        for (const b of blobs) this.iceShapes.push({ x: b.x, y: b.y, z: b.z, r: b.r });
+        this._syncIce();
+    }
+
+    _syncIce() {
+        const m = this.iceMesh;
+        const n = Math.min(this.iceShapes.length, m.instanceMatrix.count);
+        for (let i = 0; i < n; i++) {
+            const b = this.iceShapes[this.iceShapes.length - n + i];
+            _m.makeScale(b.r, b.r, b.r).setPosition(b.x, b.y, b.z);
+            m.setMatrixAt(i, _m);
+        }
+        m.count = n;
+        m.visible = n > 0;
+        m.instanceMatrix.needsUpdate = true;
+        m.computeBoundingSphere?.();
     }
 
     /** Droplets circling the ball; now and then one flies off and is pulled back. */
@@ -416,9 +483,9 @@ export class WaterMagic {
         const m = this.formedMesh;
         let i = 0;
         if (s) {
-            for (const [x, L, z] of s.formed.values()) {
+            for (const b of s.formed) {
                 if (i >= m.instanceMatrix.count) break;
-                _m.makeTranslation(x, L - 1, z);
+                _m.makeScale(b.r, b.r, b.r).setPosition(b.x, b.y, b.z);
                 m.setMatrixAt(i++, _m);
             }
         }
@@ -431,11 +498,13 @@ export class WaterMagic {
     drop() {
         const s = this.state;
         if (!s) return;
-        if (s.formed.size) {
+        if (s.formed.length) {
+            // unfrozen water collapses
             let n = 0;
-            for (const [x, L, z] of s.formed.values()) if (n++ < 80) this._splash(_v1.set(x, L - 1, z), 0.5, 3);
-            s.formed.clear();
+            for (const b of s.formed) if (n++ < 80) this._splash(_v1.set(b.x, b.y - b.r, b.z), 0.6, 4);
+            s.formed = [];
             this._syncFormed();
+            if (this.game.sound) this.game.sound.playSplash?.();
         }
         if (s.volume >= 0.3 && s.phase === 'held') {
             const ch = this.game.character;
@@ -544,8 +613,15 @@ export class WaterMagic {
         this._remove(b.mesh);
     }
 
-    /** Bombardo shatters ice balls in range. */
+    /** Bombardo shatters ice balls and frozen shapes in range. */
     explode(pos, radius) {
+        const before = this.iceShapes.length;
+        this.iceShapes = this.iceShapes.filter((b) => {
+            const hit = Math.hypot(b.x - pos.x, b.y - pos.y, b.z - pos.z) < radius + b.r * 0.5;
+            if (hit && Math.random() < 0.4) this._sparkle(_v1.set(b.x, b.y, b.z), 6);
+            return !hit;
+        });
+        if (this.iceShapes.length !== before) this._syncIce();
         for (let i = this.resting.length - 1; i >= 0; i--) {
             const b = this.resting[i];
             if (b.pos.distanceTo(pos) < radius + b.r + 1) {
@@ -648,10 +724,11 @@ export class WaterMagic {
         this.falling = [];
         this.resting = [];
         this.remotes.clear();
-        for (const o of [this.ball, this.core, this.droplets, this.iceTemplate, this.column, this.formedMesh]) this.scene.remove(o);
+        for (const o of [this.ball, this.core, this.droplets, this.iceTemplate, this.column, this.formedMesh, this.iceMesh]) this.scene.remove(o);
         this.ballGeo.dispose();
         this.column.geometry.dispose();
-        this.formedMesh.geometry.dispose();
+        this.blobGeo.dispose();
+        this.iceShapeMat.dispose();
         this.droplets.geometry.dispose();
         for (const m of [...this._mats, this.iceMat]) m.dispose();
     }

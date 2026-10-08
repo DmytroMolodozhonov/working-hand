@@ -17,7 +17,7 @@ self.onmessage = async (event) => {
         if (msg.type === 'init') {
             if (msg.delegate) self.__ZNS_DELEGATE__ = msg.delegate;
             runner = new VisionRunner(msg.baseUrl);
-            const info = await runner.init({ quality: msg.quality, useModule: true });
+            const info = await runner.init({ quality: msg.quality, useModule: true, handsOnly: !!msg.handsOnly });
             self.postMessage({ type: 'ready', ...info });
         } else if (msg.type === 'frame') {
             if (!runner) { msg.bitmap?.close?.(); return; }

@@ -194,7 +194,14 @@
                         </select>
                     </div>
                     <div class="settings-group">
-                        <label>Нейросеть считает на:</label>
+                        <label>Распознавание тела:</label>
+                        <select id="vision-engine">
+                            <option value="classic" selected>Как раньше (Holistic, плавно)</option>
+                            <option value="tasks">Новое (3 нейросети, быстрее на слабых ПК)</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>Нейросеть считает на (для «Нового»):</label>
                         <select id="vision-delegate">
                             <option value="auto" selected>Авто</option>
                             <option value="GPU">Видеокарте</option>

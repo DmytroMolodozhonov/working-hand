@@ -98,12 +98,16 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
             ch.group.position.x = start.x + i * 0.15;
             await sleep(60);
         }
-        out.formed = W.state ? W.state.formed.size : -1;
+        out.formed = W.state ? W.state.formed.length : -1;
         out.v2 = W.state ? W.state.volume : -1;
-        const cells = W.state ? [...W.state.formed.values()] : [];
+        out.formedVisible = W.formedMesh.visible && W.formedMesh.count === out.formed;
+        const blobs = W.state ? W.state.formed.slice() : [];
         out.frozen = await say('frozen');
-        out.ice = cells.filter(([x, L, z]) => t.get(x, L, z) === 10).length;
-        out.iceSolid = cells.length ? t.isSolidAt(cells[0][0], cells[0][1] - 1, cells[0][2]) : false;
+        // Every frozen blob is solid inside (ICE_SHAPE) and drawn as a smooth ice shape, not cubes
+        out.ice = blobs.filter((b) => t.get(Math.round(b.x), Math.floor(b.y + 1.5), Math.round(b.z)) === 11).length;
+        out.iceSolid = blobs.length ? t.isSolidAt(blobs[0].x, blobs[0].y, blobs[0].z) : false;
+        out.iceShapes = W.iceShapes.length;
+        out.iceMeshVisible = W.iceMesh.visible;
         out.ballFrozen = W.state ? W.state.frozen : null;
         out.formIce = await say('water forming'); // not possible from ice
         // Drop the ice ball: it falls and stays in the world (solid)
@@ -142,11 +146,14 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
     assert.ok(r.v1 >= r.v0 + 7, `«Максима» twice: ${r.v0} → ${r.v1} m³`);
     assert.ok(r.ballVisible);
     assert.equal(r.form, 'WaterForming');
-    assert.ok(r.formed >= 3, `water blocks formed (${r.formed})`);
+    assert.ok(r.formed >= 3, `water shape formed (${r.formed} blobs)`);
+    assert.ok(r.formedVisible, 'the formed water is drawn');
     assert.ok(r.v2 < r.v1, 'forming spends the ball\'s water');
     assert.equal(r.frozen, 'Frozen');
-    assert.equal(r.ice, r.formed, 'every formed block became ice');
+    assert.equal(r.ice, r.formed, 'every formed blob became solid ice');
     assert.ok(r.iceSolid, 'ice is solid');
+    assert.equal(r.iceShapes, r.formed);
+    assert.ok(r.iceMeshVisible, 'the frozen shape is drawn');
     assert.ok(r.ballFrozen === true || r.ballFrozen === null);
     assert.equal(r.formIce, null, 'ice cannot be formed');
     assert.equal(r.resting, 1, 'the dropped ice ball stays in the world');
@@ -157,6 +164,87 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
     assert.equal(r.restingAfterLiquid, 1, 'liquid water just splashes');
     assert.equal(r.iceBeam, 'Ice');
     assert.ok(r.iceCells >= r.formed);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('Вингардиум Левиоса, Protection in creative, Флайн by voice with arms up', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 480, height: 300 } });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const ch = g.character;
+        const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+        const out = {};
+        // Nothing pointed at → a hint
+        ch.group.position.set(0, ch.group.position.y, 30);
+        await sleep(300);
+        out.none = g.castLocalSpell('вингардиум левиоса', true);
+        // Put the sword 4 m in front of the right hand
+        const w = g.weapons.weapons.find((x) => x.type === 'sword');
+        const hand = ch.getHandWorldPosition('right');
+        const dir = ch.getHandDirection('right');
+        w.position.copy(hand).addScaledVector(dir, 4);
+        w.position.y = Math.max(w.position.y, g.collision.surfaceY(w.position.x, w.position.z) + 0.2);
+        w.wake();
+        await sleep(400);
+        g._lastLevitate = 0;
+        out.cast = g.castLocalSpell('вингардиум левиоса', true);
+        out.held = !!(w.holder && w.holder.levitate);
+        await sleep(1500);
+        const y0 = w.position.y;
+        // The player walks sideways: the sword follows the hand
+        const start = w.position.clone();
+        for (let i = 0; i < 20; i++) { ch.group.position.x += 0.25; await sleep(80); }
+        for (let i = 0; i < 40 && Math.abs(w.position.x - (start.x + 5)) > 1.2; i++) await sleep(100);
+        out.followed = w.position.x - start.x;
+        out.floats = w.position.y > g.collision.surfaceY(w.position.x, w.position.z) + 0.3;
+        // A sharp jerk of the hand lets go
+        const s = g.levitation.state;
+        s.history.unshift({ t: g.levitation._t, x: 50, y: 0, z: 0 });
+        s.history.length = 1;
+        await sleep(400);
+        out.released = !g.levitation.active && !w.holder;
+        // Shields: visible in creative, dome needs a T-pose
+        g._lastShieldCast = 0;
+        out.shield = g.castLocalSpell('protection', true);
+        await sleep(300);
+        out.shieldVisible = g.combat.visuals.hand.visible;
+        await sleep(3500);
+        out.shieldGone = !g.combat.visuals.hand.visible;
+        g._lastShieldCast = 0;
+        out.domeNoT = g.castLocalSpell('protection maxima', true);
+        ch.isTPose = () => true;
+        g._lastShieldCast = 0;
+        out.dome = g.castLocalSpell('protection maxima', true);
+        await sleep(300);
+        out.domeVisible = g.combat.visuals.dome.visible;
+        out.domeLeft = g.combat.shield && g.combat.shield.left;
+        // Flight: arms up (no hand to the face needed) — the word a moment after
+        g.lastMagicTime = 0;
+        g.isMagicActive = false;
+        g._armsUpAt = Date.now() - 800;
+        g.lastSpellCastTime = 0;
+        out.fly = g.castLocalSpell('флайн', true);
+        out.flying = g.flight.busy;
+        return out;
+    });
+    assert.equal(r.none, null);
+    assert.equal(r.cast, 'Levitation');
+    assert.ok(r.held, 'the sword is lifted');
+    assert.ok(r.floats, 'it floats');
+    assert.ok(r.followed > 2, `it follows the hand (${r.followed.toFixed(2)} m)`);
+    assert.ok(r.released, 'a jerk lets it go');
+    assert.equal(r.shield, 'Protection');
+    assert.ok(r.shieldVisible, 'blue shield visible in creative');
+    assert.ok(r.shieldGone, 'gone after 3 s');
+    assert.equal(r.domeNoT, null, 'Protection Maxima needs the T-pose');
+    assert.equal(r.dome, 'ProtectionMaxima');
+    assert.ok(r.domeVisible);
+    assert.ok(r.domeLeft > 4.5, 'dome lasts 5 s');
+    assert.equal(r.fly, 'Flight');
+    assert.ok(r.flying);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

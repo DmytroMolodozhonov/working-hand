@@ -584,8 +584,25 @@ test('camera setup (test mode) opens and closes without errors', async () => {
     await page.close();
 });
 
-test('real camera pipeline: webcam → worker → hand detected', async () => {
-    const { page, errors } = await openPage(browser, srv.url);
+test('real camera pipeline (classic Holistic, as in the original): webcam → body detected', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { viewport: { width: 640, height: 400 } });
+    await startFromMenu(page, 'creative');
+    await waitFor(page, () => window.__zns.poseService.stats.results >= 3, null, 180000);
+    const st = await page.evaluate(() => {
+        const r = window.__zns.poseService.lastResults || {};
+        return { ...window.__zns.poseService.stats, found: ['poseLandmarks', 'faceLandmarks', 'leftHandLandmarks', 'rightHandLandmarks'].filter((k) => r[k]) };
+    });
+    assert.equal(st.mode, 'holistic');
+    assert.ok(st.results >= 3, 'Holistic answers every camera frame');
+    // (with a real person in the picture it finds body, face and hands — checked by hand
+    // with tests/fixtures-like portrait video; this fixture photo is not a full person)
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('real camera pipeline (new networks): webcam → worker → hand detected', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { viewport: { width: 640, height: 400 } });
+    await page.evaluate(() => { document.getElementById('vision-engine').value = 'tasks'; });
     await startFromMenu(page, 'creative');
     await waitFor(page, () => window.__zns.poseService.stats.results >= 3, null, 120000);
     const st = await page.evaluate(() => ({ ...window.__zns.poseService.stats, hands: window.__zns.poseService.lastResults && (window.__zns.poseService.lastResults.leftHandLandmarks || window.__zns.poseService.lastResults.rightHandLandmarks) ? 1 : 0 }));

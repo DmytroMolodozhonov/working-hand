@@ -143,6 +143,7 @@ function readConfig() {
         fpsLimit: parseInt($('fps-limit').value, 10),
         modelComplexity: parseInt($('model-quality').value, 10),
         delegate: $('vision-delegate')?.value || 'auto',
+        engine: $('vision-engine')?.value || 'classic',
         resolution: $('camera-res').value,
         cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
         showHands: showHandsToggle ? showHandsToggle.checked : false,
@@ -282,8 +283,9 @@ function renderItemsTab() {
         { name: 'Максима (вода)', say: '«Максима», пока держите водный шар', desc: 'Шар втягивает больше воды и растёт — говорите сколько угодно раз, до максимума. Открытая вторая рука рядом с шаром тоже подливает воду без слов.', dmg: '—', cost: 4, icon: 'assets/icons/water.svg' },
         { name: 'Water forming', say: '«Water forming», пока вода жидкая', desc: 'Ведите шар — за ним остаются водяные блоки: стены, башни, дома. Вода тратится, подпитывайте шар. Изо льда формировать нельзя.', dmg: '—', cost: 5, icon: 'assets/icons/water_forming.svg' },
         { name: 'Frozen', say: '«Frozen» с водным шаром', desc: 'Замораживает шар и всё сформированное: блоки становятся льдом — сквозь него не пройти, на нём можно стоять. Без водного шара работает как «Айс».', dmg: '—', cost: 5, icon: 'assets/icons/ice.png' },
-        { name: 'Protection', say: 'вытянуть руку + «Protection»', desc: 'Свободный мир. У руки на 3 секунды появляется синий щит: заклинания, пущенные прямо в вас, отскакивают. Взрыв Бомбардо рядом ранит вполовину.', dmg: '—', cost: 5, icon: 'assets/icons/shield.svg' },
-        { name: 'Protection Maxima', say: 'руки в стороны буквой «T» + «Protection Maxima»', desc: 'Купол вокруг всего тела на 3 секунды: отражает заклинания со всех сторон, взрывы ранят на 75% слабее.', dmg: '—', cost: 20, icon: 'assets/icons/shield_max.svg' },
+        { name: 'Вингардиум Левиоса', say: 'направить руку на предмет + «Вингардиум Левиоса»', desc: 'Меч, топор или ледяной шар до 10 м поднимается и плавно следует за рукой. Резкое движение — заклинание спадает и предмет летит дальше (так можно бросать). Сказать ещё раз — мягко опустить.', dmg: '—', cost: 6, icon: 'assets/icons/levitation.svg' },
+        { name: 'Protection', say: 'вытянуть руку + «Protection»', desc: 'Работает в любом режиме. У вытянутой руки на 3 секунды появляется голубой щит. В «Свободном мире» заклинания, пущенные прямо в вас, отскакивают, а взрыв Бомбардо рядом ранит вполовину.', dmg: '—', cost: 5, icon: 'assets/icons/shield.svg' },
+        { name: 'Protection Maxima', say: 'руки в стороны буквой «T» + «Protection Maxima»', desc: 'Голубой шар вокруг всего тела на 5 секунд: отражает заклинания со всех сторон, взрывы ранят на 75% слабее.', dmg: '—', cost: 20, icon: 'assets/icons/shield_max.svg' },
     ];
     for (const item of items) {
         const card = document.createElement('div');
@@ -355,6 +357,7 @@ window.addEventListener('keydown', (e) => {
     if (k === 'c' || k === 'с') game.castDebug('WaterForming');
     if (k === 'z' || k === 'я') game.castDebug('Frozen');
     if (k === 'p' || k === 'з') game.castDebug('Protection');
+    if (k === 'l' || k === 'д') game.castDebug('Levitation');
     if (k === 'o' || k === 'щ') game.castDebug('ProtectionMaxima');
     if (k === 'f' || k === 'а') game.toggleFlashlight();
 });

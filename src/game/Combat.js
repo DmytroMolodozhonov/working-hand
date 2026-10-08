@@ -9,7 +9,8 @@
  *               the hand for 3 s. Spells cast straight at you bounce off it;
  *               a Bombardo blast next to you still hurts, but half as much.
  *   Protection Maxima  arms out in a T + «Protection Maxima»: a dome around
- *               the whole body for 3 s (blast damage −75 %).
+ *               the whole body for 5 s (blast damage −75 %). Shields work and are
+ *               visible in every mode; HP/fatigue rules only in the free world.
  *   Freezing    the ice beam freezes players too (5 s in the beam, keep
  *               running and it breaks). A frozen player can't move or cast
  *               for 20 s — and ANY hit shatters them, whatever their HP.
@@ -27,7 +28,7 @@ export const PVP = {
     MAX_FATIGUE: 30,
     FATIGUE_REGEN: 1, // per second
     SHIELD_TIME: 3,
-    DOME_TIME: 3,
+    DOME_TIME: 5,
     FREEZE_TIME: 20,
     CHILL_TIME: 5, // s in the ice beam to freeze
     INFERNO_TICK: 0.6, // s between Inferno damage ticks
@@ -49,6 +50,7 @@ export const SPELL_COST = {
     Maxima: 4,
     WaterForming: 5,
     Frozen: 5,
+    Levitation: 6,
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */
@@ -165,7 +167,8 @@ export class Combat {
         this.chillTimer = 0;
         this.dead = false;
         this.infernoCooldown = 0;
-        this.visuals = this.enabled ? new CombatVisuals(game.scene) : null;
+        // Shields work (and are visible) in every mode; damage rules only in the free world
+        this.visuals = game.scene ? new CombatVisuals(game.scene) : null;
         this.targets = new Map(); // remote id -> melee target (for weapons/fists)
         this._hudKey = '';
     }
@@ -209,8 +212,12 @@ export class Combat {
             if (hint) return hint;
             this.shield = { type: 2, side: 'right', left: PVP.DOME_TIME };
         } else {
-            const side = ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
-            if (!side) return '🛡️ Для щита <b>вытяните руку</b> вперёд и скажите «Protection»';
+            // The stretched-out hand; if none is fully stretched, the one reaching furthest
+            let side = ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
+            if (!side) {
+                const reach = (sd) => ch.getHandWorldPosition(sd, _v1).distanceTo(ch.group.position);
+                side = reach('right') >= reach('left') ? 'right' : 'left';
+            }
             const hint = this.spend('Protection');
             if (hint) return hint;
             this.shield = { type: 1, side, left: PVP.SHIELD_TIME };
@@ -338,7 +345,12 @@ export class Combat {
 
     // ================================================================ update
     update(dt) {
-        if (!this.enabled) return;
+        if (!this.enabled) {
+            // Other modes: only the shield (no HP / fatigue rules)
+            if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
+            this._updateVisuals(dt);
+            return;
+        }
         if (!this.dead) this.fatigue = Math.min(PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
         if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
         if (this.frozenLeft > 0) {
@@ -350,7 +362,13 @@ export class Combat {
         this.infernoCooldown -= dt;
         for (const t of this.targets.values()) t.damageCooldown -= dt;
 
-        // Visuals of my own shield / ice
+        this._updateVisuals(dt);
+        this._hud();
+    }
+
+    /** My own shield / ice shell. */
+    _updateVisuals(dt) {
+        if (!this.visuals) return;
         const ch = this.game.character;
         const side = this.shield?.side || 'right';
         this.visuals.update(dt, this.state(), {
@@ -358,7 +376,6 @@ export class Combat {
             hand: ch.getHandWorldPosition(side, new THREE.Vector3()),
             dir: ch.getHandDirection(side, new THREE.Vector3()),
         });
-        this._hud();
     }
 
     _hud() {
@@ -385,7 +402,7 @@ export class Combat {
     }
 
     serialize() {
-        if (!this.enabled) return null;
+        if (!this.enabled && !this.shield) return null;
         const s = this.shield;
         return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft)];
     }
