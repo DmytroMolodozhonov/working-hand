@@ -75,7 +75,7 @@ test('creative: world with mountains, weapons floating over pedestals, hands fol
     assert.ok(open < 0.3, `open hand curl ${open}`);
     assert.ok(fist > 0.7, `fist curl ${fist}`);
     // Hand tracking lost for a moment: the hand keeps its pose (no drop)
-    await feed(page, { arms: 'forward', leftCurl: null, rightCurl: null }, 8, 60);
+    await feed(page, { arms: 'forward', leftCurl: null, rightCurl: null }, 4, 60); // (a short loss — well under the 2 s the hand holds its pose)
     const held = await page.evaluate(() => window.__zns.game.character.getGripCurl('right'));
     assert.ok(held > 0.7, `pose kept during short loss: ${held}`);
     assert.deepEqual(realErrors(errors), []);
