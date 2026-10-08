@@ -23,6 +23,7 @@ import { Accio } from './Accio.js';
 import { Storm } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
+import { BookBirds } from './BookBirds.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -143,7 +144,8 @@ export class Game {
             blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
             quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
             storm: (origin) => this.storm?.start(origin, 13),
-            lightningAt: (point, casterId) => this.storm?.endIn(3),
+            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); },
+            birdRay: (o, d, len, width) => this.books?.hitRay(o, d, len, width),
             ignite: (o, d, len) => this.fire.igniteAlong(o, d, len),
             collision: this.collision,
             terrain: () => this.terrain,
@@ -170,6 +172,7 @@ export class Game {
         this.inventory = new Inventory(this); // five slots under the fatigue bar
         this.inventory.show(config.mode !== 'test');
         this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
+        this.books = isTest ? null : new BookBirds(this); // book-birds: building spells are learned from their books
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -339,6 +342,7 @@ export class Game {
         this.water.explode(pos, radius);
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
+        this.books?.hitAt(pos, radius + 1);
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -1192,6 +1196,7 @@ export class Game {
         this.accio.update(dt);
         this.inventory.update(dt);
         this.builder.update(dt);
+        this.books?.update(dt);
         this.storm.update(dt);
         this._updateLightning(dt);
         this.duel.update(dt);
@@ -1643,6 +1648,7 @@ export class Game {
     dispose() {
         this.stop();
         this.inventory?.dispose();
+        this.books?.dispose();
         if (this.sync) this.sync.dispose();
         this.sync = null;
         for (const r of this.remotes.values()) r.dispose();

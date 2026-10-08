@@ -251,6 +251,7 @@ export class Duel {
         if (tp) b.dir.copy(tp).sub(b.front).normalize();
         const step = (DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED) * dt;
         b.front.addScaledVector(b.dir, step);
+        this.game.books?.hitAt(b.front, 0.4);
         b.traveled += step;
         this._drawBolt(b.spell, origin, b.front, b.by);
         if (!tp) {

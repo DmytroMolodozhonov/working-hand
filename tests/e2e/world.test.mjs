@@ -289,3 +289,43 @@ test('fire: Inferno sets a tree on fire, it spreads and burns down; adaptive gra
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('book-birds: a spell knocks one down, the book is taken by hand, read, and goes into a slot', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const B = g.books;
+        B._spawnT = 0;
+        for (let i = 0; i < 400 && B.birds.size === 0; i++) await frames(1);
+        const birds = B.birds.size;
+        const b = [...B.birds.values()][0];
+        // a Sapira-like ray straight at it
+        const me = g.character.group.position;
+        const o = me.clone().setY(me.y + 1.5);
+        const d = b.model.position.clone().sub(o);
+        const len = d.length();
+        B.hitRay(o, d.normalize(), len + 1, 1);
+        for (let i = 0; i < 600 && B.books.size === 0; i++) await frames(1);
+        const books = B.books.size;
+        const bk = [...B.books.values()][0];
+        // bring the book to the hand
+        const hand = g.character.getHandWorldPosition('right');
+        bk.model.position.copy(hand);
+        for (let i = 0; i < 100 && !B.inHand; i++) await frames(1);
+        const inHand = !!B.inHand;
+        // the right pocket puts it into a slot
+        g.inventory.pocketRight();
+        const slot = g.inventory.slots.find((s) => s && s.kind === 'book');
+        return { birds, books, inHand, slot: !!slot, spells: slot?.spells?.length || 0, left: !!B.inHand };
+    });
+    assert.ok(r.birds > 0, 'a bird appeared');
+    assert.equal(r.books, 1, 'it fell and became a book');
+    assert.ok(r.inHand, 'the hand took the book');
+    assert.ok(r.slot && r.spells >= 1, 'the book went into a slot with spells');
+    assert.ok(!r.left, 'the hand is empty');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

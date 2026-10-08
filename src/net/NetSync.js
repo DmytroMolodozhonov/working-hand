@@ -246,6 +246,18 @@ export class NetSync {
     }
 
     /** «Брейнрот» from a guest: the host makes the zombie a servant. */
+    birds(list, books) {
+        if (this.net.isHost) this.net.send({ t: 'birds', l: list, b: books });
+    }
+
+    bookTake(id) {
+        this.net.send({ t: 'btake', id });
+    }
+
+    bookGone(id, to) {
+        if (this.net.isHost) this.net.send({ t: 'bgone', id, to }, true);
+    }
+
     brainrot(zid) {
         this.net.send({ t: 'brainrot', id: zid, by: this.me });
     }
@@ -377,6 +389,9 @@ export class NetSync {
                 w.setRemoteTarget(m.s);
                 break;
             }
+            case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
+            case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
+            case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;
             case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;
             case 'spell': {
                 if (m.by === this.me) break;

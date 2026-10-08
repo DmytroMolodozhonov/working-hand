@@ -26,6 +26,8 @@ export function bombardoRadius(power = 1) {
 }
 
 /** Recognise a spell name in a voice transcript. Exported for tests. */
+const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Inferno', 'Sands', 'Ice', 'Bombardo', 'BombardoMaxima']);
+
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
@@ -161,6 +163,8 @@ export class SpellManager {
     cast(name, origin, direction, handSide, casterId = 'local') {
         const o = origin.clone();
         const d = direction.clone().normalize();
+        // book-birds are knocked down by the spells that fly
+        if (RAY_SPELLS.has(name) && this.hooks.birdRay) this.hooks.birdRay(o, d, 30, name.endsWith('Maxima') ? 2 : 1);
         switch (name) {
             case 'Sapira': this.castSapira(o, d, casterId); break;
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
