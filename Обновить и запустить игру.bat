@@ -51,17 +51,39 @@ pause
 exit /b 1
 
 :nogit
-echo Git ne najden - skachivayu igru arhivom (okolo 150 MB), podozhdite...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $z=Join-Path $env:TEMP 'zns_game.zip'; $t=Join-Path $env:TEMP 'zns_game'; Invoke-WebRequest -Uri '%ZIP%' -OutFile $z -UseBasicParsing; if (Test-Path $t) { Remove-Item $t -Recurse -Force }; Expand-Archive -Path $z -DestinationPath $t -Force; $src=(Get-ChildItem $t | Select-Object -First 1).FullName; New-Item -ItemType Directory -Force -Path '%DIR%' | Out-Null; Copy-Item -Path (Join-Path $src '*') -Destination '%DIR%' -Recurse -Force; Remove-Item $z, $t -Recurse -Force"
+rem ---- Without Git: the zip archive, downloaded only when there is a new version
+set NEWVER=
+set OLDVER=
+if exist "%TEMP%\zns_ver.txt" del "%TEMP%\zns_ver.txt"
+powershell -NoProfile -Command "try { (Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/DmytroMolodozhonov/working-hand/branches/%BRANCH%').commit.sha | Set-Content -Encoding Ascii -Path '%TEMP%\zns_ver.txt' } catch { }" 1>nul 2>&1
+if exist "%TEMP%\zns_ver.txt" set /p NEWVER=<"%TEMP%\zns_ver.txt"
+if exist "%DIR%\.zns-version" set /p OLDVER=<"%DIR%\.zns-version"
+if exist "%DIR%\server.py" if defined NEWVER if "%NEWVER%"=="%OLDVER%" (
+    echo Igra uzhe svezhaya, zapuskayu.
+    goto rundir
+)
+if exist "%DIR%\server.py" if not defined NEWVER (
+    echo Net svyazi s GitHub - zapuskayu uzhe skachannuyu versiyu.
+    goto rundir
+)
+echo Skachivayu svezhuyu versiyu igry (okolo 150 MB), podozhdite...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $z=Join-Path $env:TEMP 'zns_game.zip'; $t=Join-Path $env:TEMP 'zns_game'; Invoke-WebRequest -Uri '%ZIP%' -OutFile $z -UseBasicParsing; if (Test-Path $t) { Remove-Item $t -Recurse -Force }; New-Item -ItemType Directory -Force -Path $t | Out-Null; tar -xf $z -C $t; if ($LASTEXITCODE -ne 0) { throw 'unzip' }; $src=(Get-ChildItem $t | Select-Object -First 1).FullName; New-Item -ItemType Directory -Force -Path '%DIR%' | Out-Null; Copy-Item -Path (Join-Path $src '*') -Destination '%DIR%' -Recurse -Force; Remove-Item $z, $t -Recurse -Force"
 if errorlevel 1 (
+    if exist "%DIR%\server.py" (
+        echo Ne udalos obnovit - zapuskayu uzhe skachannuyu versiyu.
+        goto rundir
+    )
     echo Ne udalos skachat igru. Proverte internet i povtorite.
     pause
     exit /b 1
 )
+if defined NEWVER >"%DIR%\.zns-version" echo %NEWVER%
+
+:rundir
 cd "%DIR%"
 
 :run
 echo.
-echo Gotovo! Zapuskayu igru...
+echo Gotovo! Zapuskayu igru... Esli zakryli vkladku - otkrojte http://localhost:8000 poka eto okno otkryto.
 %PY% server.py
 pause

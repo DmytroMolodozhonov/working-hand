@@ -85,6 +85,11 @@
     $bat = Get-ChildItem -Path $src -Filter '*.bat' | Where-Object { Select-String -Path $_.FullName -Pattern 'set ZIP=' -Quiet } | Select-Object -First 1
     Copy-Item -Path $bat.FullName -Destination (Join-Path $base 'start.bat') -Force
     Remove-Item $zip, $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    # Номер версии: значок на рабочем столе скачивает игру заново только при обновлении
+    try {
+        $ver = (Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/DmytroMolodozhonov/working-hand/branches/main-fbxy0j').commit.sha
+        if ($ver) { Set-Content -Encoding Ascii -Path (Join-Path $game '.zns-version') -Value $ver }
+    } catch { }
 
     # ---- Значок на рабочем столе (создан здесь — Windows его не блокирует)
     $desk = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name Desktop -ErrorAction SilentlyContinue).Desktop
