@@ -330,14 +330,14 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 120000);
     const ids = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.localId)));
 
-    // Guest stands 8 m in front of the host's right hand
-    const aim = async () => {
-        const t = await ev(host.page, () => {
+    // Guest stands in front of the host's right hand (far enough to answer a fast charge)
+    const aim = async (dist = 25) => {
+        const t = await ev(host.page, (dist) => {
             const g = window.__zns.game;
             const o = g.character.getHandWorldPosition('right');
             const d = g.character.getHandDirection('right');
-            return o.clone().addScaledVector(d, 8).toArray();
-        });
+            return o.clone().addScaledVector(d, dist).toArray();
+        }, dist);
         await ev(guest.page, (t) => { const g = window.__zns.game; g.character.group.position.set(t[0], t[1] - 0.6, t[2]); g.knockback.set(0, 0, 0); }, t);
         await wf(host.page, (t) => { const r = [...window.__zns.game.remotes.values()][0]; return Math.hypot(r.position.x - t[0], r.position.z - t[2]) < 0.6; }, t, 20000);
     };
@@ -357,7 +357,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     // 1) Остолбеней: a charge flies (not instant) and stuns on arrival
     await aim();
     assert.equal(await hostCast('Stupefy'), 'Stupefy');
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 50));
     assert.equal(await ev(guest.page, () => window.__zns.game.combat.stunned), false, 'not instant');
     assert.ok(await ev(guest.page, () => window.__zns.game.duel.bolts.size === 1), 'the guest sees the charge coming');
     await wf(guest.page, () => window.__zns.game.combat.stunned, null, 40000);
@@ -374,7 +374,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await hostCast('Stupefy');
     await ev(guest.page, (hostId) => {
         const g = window.__zns.game;
-        g.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 8 } });
+        g.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 25 } });
     }, ids[0]);
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 40000);
     await wf(guest.page, () => window.__zns.game.duel.clashes.length === 1, null, 20000);
@@ -387,7 +387,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await ev(guest.page, () => { window.__zns.game.combat.fatigue = 30; window.__zns.game.combat.hp = 10; });
     await aim();
     await hostCast('Stupefy');
-    await ev(guest.page, (hostId) => window.__zns.game.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 8 } }), ids[0]);
+    await ev(guest.page, (hostId) => window.__zns.game.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 25 } }), ids[0]);
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 40000);
     // (the guest's hand off the opponent stops pushing — a quick, calm move away then a flick)
     await ev(guest.page, () => {

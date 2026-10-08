@@ -7,7 +7,7 @@
  *   Вингардиум Левиоса        on a creature: throws it up into the air
  *
  * A duel spell is not an instant beam: a crackling, jagged charge flies from
- * the hand to the target (about 3 m/s — 3–4 s over 10 m) and acts only when
+ * the hand to the target (fast, ~0.7 s over 10 m) and acts only when
  * it touches. Until then the target can:
  *   - raise a shield («Protection») — the charge bursts on it, or
  *   - answer with any duel spell aimed back: the two charges meet and push
@@ -36,7 +36,7 @@ export const DUEL_SPELLS = {
 };
 
 export const DUEL = {
-    SPEED: 4, // m/s — the charge needs time to arrive (≈2.5 s over 10 m)
+    SPEED: 15, // m/s — fast (≈0.7 s over 10 m), but still visible and answerable
     RANGE: 30, // m
     CONE: 0.4, // rad: what the hand is pointing at
     HIT_RADIUS: 0.8,
