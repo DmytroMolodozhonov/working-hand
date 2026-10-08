@@ -1340,4 +1340,6 @@ body {
     display: flex; align-items: center; justify-content: center; font-size: 26px;
 }
 .hotbar-slot .hb-count { position: absolute; right: 4px; bottom: 1px; color: #fff; font-weight: bold; font-size: 13px; text-shadow: 0 0 3px #000, 0 1px 1px #000; }
+.hotbar-slot.hand { width: 44px; height: 44px; margin-top: 10px; border-style: dashed; background: rgba(40, 30, 10, 0.6); }
+.hotbar-slot.hand .hb-icon { inset: 5px; font-size: 22px; }
 .hotbar-slot .hb-key { position: absolute; left: 4px; top: 1px; color: rgba(255, 255, 255, 0.55); font-size: 10px; }

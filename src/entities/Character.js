@@ -193,9 +193,9 @@ export class VoxelCharacter {
     }
 
     updateArmsLookAt(poseData, dt = 1 / 60) {
-        // 0.35 per frame at 60 FPS, frame-rate independent (the pose is already smoothed
+        // 0.55 per frame at 60 FPS, frame-rate independent (the pose is already smoothed
         // upstream; more smoothing here only made the arms trail behind the player)
-        const armK = 1 - Math.pow(0.65, Math.min(0.1, dt) * 60);
+        const armK = 1 - Math.pow(0.45, Math.min(0.1, dt) * 60);
         if (!poseData.leftShoulder || !poseData.leftElbow || !poseData.leftWrist ||
             !poseData.rightShoulder || !poseData.rightElbow || !poseData.rightWrist) {
             this._updateHands(poseData);

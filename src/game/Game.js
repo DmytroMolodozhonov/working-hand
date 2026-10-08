@@ -1385,26 +1385,34 @@ export class Game {
         const p = ch.group.position;
         const yaw = ch.group.rotation.y;
         const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-        const px = p.x, py = p.y, pz = p.z;
-        p.x += fx * out.forward * dt;
-        p.z += fz * out.forward * dt;
-        p.y = Math.min(110, p.y + out.up * dt);
-
-        // Terrain ahead: a slope we can glide up (follow the relief); a cliff,
-        // wall or tree trunk stops us and costs speed.
+        // Move in small steps (a fast flight must not jump through a ridge in
+        // one frame), checking the whole body — legs, chest and the head with
+        // the camera — and a bit ahead, so the view never enters a mountain.
         const ahead = 1.4;
-        const blocked = () => this.collision.pointBlocked(p.x, p.y, p.z) || this.collision.pointBlocked(p.x + fx * ahead, p.y, p.z + fz * ahead);
-        if (blocked()) {
-            const clear = Math.max(this.collision.groundY(p.x, p.z), this.collision.groundY(p.x + fx * ahead, p.z + fz * ahead)) + 2.1;
+        const col = this.collision;
+        const bodyBlocked = (x, y, z) => col.pointBlocked(x, y, z) || col.pointBlocked(x, y + 1.2, z) || col.pointBlocked(x, y + 2.4, z);
+        const blocked = () => bodyBlocked(p.x, p.y, p.z) || bodyBlocked(p.x + fx * ahead, p.y, p.z + fz * ahead);
+        const dist = out.forward * dt, climb = out.up * dt;
+        const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dist), Math.abs(climb)) / 0.5));
+        for (let i = 0; i < steps; i++) {
+            const px = p.x, py = p.y, pz = p.z;
+            p.x += fx * dist / steps;
+            p.z += fz * dist / steps;
+            p.y = Math.min(110, p.y + climb / steps);
+            if (climb > 0 && bodyBlocked(p.x, p.y, p.z)) { p.y = py; } // a ceiling / overhang above
+            if (!blocked()) continue;
+            // Terrain ahead: a slope we can glide up (follow the relief); a cliff,
+            // wall or tree trunk stops us and costs speed.
+            const clear = Math.max(col.groundY(p.x, p.z), col.groundY(p.x + fx * ahead, p.z + fz * ahead)) + 2.1;
             const rise = clear - p.y;
-            if (rise > 0 && rise < out.forward * dt * 1.6 + 0.6) {
+            if (rise > 0 && rise < Math.abs(dist / steps) * 1.6 + 0.6) {
                 p.y = clear; // glide up the slope
-                if (blocked()) { p.x = px; p.z = pz; flight.speed *= 0.35; }
-            } else {
-                p.x = px; p.z = pz;
-                if (this.collision.pointBlocked(p.x, p.y, p.z)) p.y = Math.max(p.y, py);
-                flight.speed *= 0.35;
+                if (!blocked()) continue;
             }
+            p.x = px; p.z = pz;
+            if (bodyBlocked(p.x, p.y, p.z)) p.y = Math.max(p.y, py);
+            flight.speed *= 0.35;
+            break;
         }
 
         // Ground: diving into it lands, otherwise we skim above it

@@ -57,9 +57,12 @@ export class PoseSmoother {
         if (!to) return null;
         const from = this.from;
         // Blend over half an interval (at most 40 ms): no visible jumps, but the hero
-        // reaches the newest pose quickly instead of trailing a whole result behind
-        const big = Math.max(0, (this.jump || 0) - 0.06) * 900; // +90 ms per 0.1 of the image beyond 6%
-        const duration = Math.max(16, Math.min(40, this.interval * 0.5)) + Math.min(140, big);
+        // reaches the newest pose quickly instead of trailing a whole result behind.
+        // Only a jump no real arm makes between two results (over a quarter of the
+        // image: a tracking glitch) is glided over a little longer — a fast but real
+        // swing must never be delayed (it made the whole body feel slow).
+        const big = Math.max(0, (this.jump || 0) - 0.25) * 600; // +60 ms per 0.1 of the image beyond 25%
+        const duration = Math.max(16, Math.min(40, this.interval * 0.5)) + Math.min(90, big);
         const k = from === to ? 1 : Math.min(1, Math.max(0, (now - this.startedAt) / duration));
         const out = Object.assign({}, to);
         if (k < 1) {

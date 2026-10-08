@@ -224,3 +224,10 @@ test('punch: only a fast fist that reaches the other player hurts — walking pa
     combat.updatePunches();
     assert.equal(hits.length, 1);
 });
+
+test('voice: «Escape» means Earthquake, «Сандер вейв» is Thunderwave (not Sand)', () => {
+    for (const w of ['escape', 'Эскейп', 'earthquake']) assert.equal(matchSpell(w), 'Earthquake', w);
+    assert.equal(matchSpell('escape maxima'), 'EarthquakeMaxima');
+    for (const w of ['thunder wave', 'Сандер вейв', 'тандер вейв', 'sander wave']) assert.equal(matchSpell(w), 'Thunderwave', w);
+    assert.equal(matchSpell('sand'), 'Sands');
+});

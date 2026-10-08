@@ -27,6 +27,7 @@ const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
 import { CollisionWorld } from './Collision.js';
 import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
+import { applyTreeDetail } from './VoxelShading.js';
 
 const GRASS_COLORS = [0x4CAF50, 0x66BB6A, 0x43A047, 0x81C784, 0x388E3C];
 export const MAP_CELL = 5; // metres per editor cell (original: 2.5x bigger than 2m)
@@ -238,8 +239,8 @@ export class VoxelWorld {
             { size: [2.2, 1.8, 2.2], pos: [-2.7, 8.0, -1.6], color: 0x338f30 },
             { size: [1.8, 1.4, 1.8], pos: [1.2, 9.9, 2.0], color: 0x3f9f38 },
         ]);
-        const trunkMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-        const leafMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+        const trunkMat = applyTreeDetail(new THREE.MeshLambertMaterial({ vertexColors: true }), 'bark');
+        const leafMat = applyTreeDetail(new THREE.MeshLambertMaterial({ vertexColors: true }), 'leaf');
         this.trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
         this.leafMesh = new THREE.InstancedMesh(crownGeo, leafMat, count);
         this.trunkMesh.castShadow = true;
