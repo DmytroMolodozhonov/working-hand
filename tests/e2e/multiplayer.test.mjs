@@ -411,14 +411,16 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     // 4) Protection Maxima stops Авада Кедавра
     await aim();
     await ev(guest.page, () => { window.__zns.game.combat.shield = { type: 2, side: 'right', left: 8 }; });
-    await hostCast('AvadaKedavra');
+    await ev(host.page, () => { window.__zns.game.combat.fatigue = 30; });
+    assert.equal(await hostCast('AvadaKedavra'), 'AvadaKedavra');
     await wf(guest.page, () => window.__zns.game.duel.bolts.size === 0, null, 40000);
     assert.equal(await ev(guest.page, () => window.__zns.game.combat.dead), false, 'shield saved the wizard');
 
     // 5) Авада Кедавра without a shield: instant death, back to the menu
     await ev(guest.page, () => { window.__zns.game.combat.shield = null; });
     await aim();
-    await hostCast('AvadaKedavra');
+    await ev(host.page, () => { window.__zns.game.combat.fatigue = 30; });
+    assert.equal(await hostCast('AvadaKedavra'), 'AvadaKedavra');
     await wf(guest.page, () => !document.getElementById('death-screen').classList.contains('hidden'), null, 40000);
     assert.match(await ev(guest.page, () => document.getElementById('death-text').innerText), /Авада Кедавра/);
 
