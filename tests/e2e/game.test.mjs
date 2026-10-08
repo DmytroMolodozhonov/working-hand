@@ -264,6 +264,84 @@ test('Бомбардо on a mountain: part of the mountain is blown away, zombie
     await page.close();
 });
 
+test('«Бомбардо Максима»: 3× stronger — bigger crater, burst from the hand, voice waits for «Максима»', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const THREE = window.__zns.THREE;
+        const t = g.terrain;
+        // Two tall mountain spots far apart
+        const spots = [];
+        for (let x = -110; x < 110 && spots.length < 2; x += 2) for (let z = -110; z < 110; z += 2) {
+            if (t.topLayer(x, z) >= 12 && spots.every((s) => Math.hypot(s.x - x, s.z - z) > 30)) { spots.push({ x, z }); break; }
+        }
+        const dig = (spot, power) => {
+            const h0 = [];
+            for (let dx = -9; dx <= 9; dx++) for (let dz = -9; dz <= 9; dz++) h0.push(t.topLayer(spot.x + dx, spot.z + dz));
+            const top = new THREE.Vector3(spot.x, t.topLayer(spot.x, spot.z) - 0.5, spot.z);
+            const t0 = performance.now();
+            g.explode(top, window.__zns.bombardoRadius(power), 'local', power);
+            const ms = performance.now() - t0;
+            let i = 0, removed = 0;
+            for (let dx = -9; dx <= 9; dx++) for (let dz = -9; dz <= 9; dz++) removed += Math.max(0, h0[i++] - t.topLayer(spot.x + dx, spot.z + dz));
+            return { removed, ms };
+        };
+        const normal = dig(spots[0], 1);
+        const maxima = dig(spots[1], 3);
+        // The spell itself: big orb + burst of magic from the hand
+        g.stats.worstFrameMs = 0;
+        const glowBefore = g.fx.glow.active;
+        g.spells.cast('BombardoMaxima', new THREE.Vector3(0, 3, -4), new THREE.Vector3(0, -0.3, -1).normalize(), 'right', 'local');
+        const burst = g.fx.glow.active - glowBefore;
+        const orb = g.spells.orbs.find((o) => o.visible);
+        const orbScale = orb ? orb.scale.x : 0;
+        const n0 = g.explosions.length;
+        for (let i = 0; i < 80 && g.explosions.length === n0; i++) await new Promise((res) => setTimeout(res, 100));
+        const blastRadius = g.explosions.length > n0 ? g.explosions[g.explosions.length - 1].r : 0;
+        await new Promise((res) => setTimeout(res, 1500));
+        return { normal, maxima, burst, orbScale, blastRadius, worst: g.stats.worstFrameMs };
+    });
+    assert.ok(r.maxima.removed > r.normal.removed * 3, `crater ${r.maxima.removed} blocks vs ${r.normal.removed}`);
+    assert.ok(r.burst >= 80, `magic bursts out of the hand (${r.burst} particles)`);
+    assert.ok(r.orbScale > 2, 'the orb is bigger');
+    assert.ok(r.blastRadius > 6, `big blast (${r.blastRadius})`);
+    assert.ok(r.maxima.ms < 400, `explosion computed in ${r.maxima.ms.toFixed(0)} ms`);
+
+    // Voice: an unfinished «бомбардо…» waits for «максима»
+    const voice = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const casts = [];
+        const orig = g.spells.cast.bind(g.spells);
+        g.spells.cast = (name, ...a) => { casts.push(name); return orig(name, ...a); };
+        const say = (text, fin) => { g.lastMagicTime = Date.now(); return g.castLocalSpell(text, fin); };
+        g.lastSpellCastTime = 0;
+        say('бомбардо', false);
+        const early = casts.length;
+        await new Promise((res) => setTimeout(res, 300));
+        say('бомбардо максима', false);
+        const afterMaxima = [...casts];
+        await new Promise((res) => setTimeout(res, 1200));
+        say('бомбардо максима', true); // final version of the same phrase: no double cast (cooldown)
+        // Plain «бомбардо» still works on its own after a short wait
+        await new Promise((res) => setTimeout(res, 1100));
+        casts.length = 0;
+        say('бомбардо', false);
+        await new Promise((res) => setTimeout(res, 1000));
+        const plain = [...casts];
+        say('бомбардо', true); // the final transcript of the same word
+        await new Promise((res) => setTimeout(res, 300));
+        return { early, afterMaxima, plain, total: casts.length };
+    });
+    assert.equal(voice.early, 0, 'does not fire «Бомбардо» while the phrase is unfinished');
+    assert.deepEqual(voice.afterMaxima, ['BombardoMaxima']);
+    assert.deepEqual(voice.plain, ['Bombardo'], 'plain Bombardo fires after a short wait');
+    assert.equal(voice.total, 1, 'the final transcript does not cast it twice');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
 test('every spell can be cast repeatedly without errors (pooled effects)', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');

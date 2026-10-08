@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="core" cx="45%" cy="40%" r="60%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.3" stop-color="#fff0a0"/>
+      <stop offset="0.65" stop-color="#ff7a00"/>
+      <stop offset="1" stop-color="#b01000"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0.4" stop-color="#ff4a00" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#ff1a00" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="63" fill="url(#glow)"/>
+  <circle cx="64" cy="64" r="52" fill="none" stroke="#ffd27a" stroke-width="4" stroke-dasharray="10 6"/>
+  <g fill="#ffcf5a">
+    <polygon points="64,0 74,30 54,30"/>
+    <polygon points="128,64 98,74 98,54"/>
+    <polygon points="64,128 54,98 74,98"/>
+    <polygon points="0,64 30,54 30,74"/>
+    <polygon points="110,18 90,48 80,38"/>
+    <polygon points="110,110 80,90 90,80"/>
+    <polygon points="18,110 38,80 48,90"/>
+    <polygon points="18,18 48,38 38,48"/>
+  </g>
+  <circle cx="64" cy="64" r="34" fill="url(#core)"/>
+  <text x="64" y="76" font-family="Arial, sans-serif" font-size="34" font-weight="bold" text-anchor="middle" fill="#8a1c00">×3</text>
+</svg>

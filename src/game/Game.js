@@ -15,11 +15,13 @@ import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
 import { WeaponSystem } from './Weapons.js';
 import { FlightController } from './Flight.js';
+import { PoseSmoother } from '../input/PoseSmoother.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK } from '../world/Terrain.js';
 
 const SPELL_COOLDOWN = 1000;
+const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 const PLAYER_RADIUS = 0.48;
 const ZOMBIE_RADIUS = 0.88;
 const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.STONE]: 0x8a8a8a, [BLOCK.SNOW]: 0xf2f6f8 };
@@ -36,6 +38,7 @@ export class Game {
         Object.assign(this, deps);
         this.active = false;
         this.currentPose = null;
+        this.poseSmoother = new PoseSmoother();
         this.firstPoseReceived = false;
         this.zombies = [];
         this.zombieById = new Map();
@@ -115,7 +118,7 @@ export class Game {
             damage: (z, amount, isWeapon, dir) => this.damageZombie(z, amount, isWeapon, dir, null),
             sand: (z) => this.sandZombie(z),
             chill: (z, amt) => z.applyChill(amt),
-            explode: (p, r, casterId) => this.explode(p, r, casterId),
+            explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
             handPose: (casterId, side) => this.handPose(casterId, side),
             collision: this.collision,
             terrain: () => this.terrain,
@@ -266,22 +269,27 @@ export class Game {
     }
 
     // ============================================================== explosion
-    /** Authoritative explosion (Bombardo): destroys world + damages + replicates. */
-    explode(pos, radius, casterId) {
-        this.applyExplosion(pos, radius, true);
+    /**
+     * Authoritative explosion (Bombardo): destroys world + damages + replicates.
+     * @param {number} [power] 1 = Bombardo, 3 = Bombardo Maxima
+     */
+    explode(pos, radius, casterId, power = 1) {
+        this.applyExplosion(pos, radius, true, power);
         this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius });
-        if (this.sync) this.sync.explosion(pos, radius);
+        if (this.sync) this.sync.explosion(pos, radius, power);
     }
 
     /** Visual + world part of an explosion (runs on every machine). */
-    applyExplosion(pos, radius, authoritative) {
+    applyExplosion(pos, radius, authoritative, power = 1) {
+        // `power` times the energy: damage × power, thrown objects × √power speed
+        const push = Math.sqrt(power);
         const out = this.world.explode(pos, radius);
         const debris = [];
         for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? 0x7a5230 });
         for (const p of out.props) debris.push(p);
-        this.fx.explosion(pos, radius);
-        this.fx.debrisFrom(debris, pos);
-        if (this.sound) this.sound.playExplosion(pos, this.character.group.position);
+        this.fx.explosion(pos, radius, power);
+        this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
+        if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
 
         // Weapons nearby wake up and get thrown
         for (const w of this.weapons.weapons) {
@@ -289,8 +297,8 @@ export class Game {
             if (d > radius + 5 || w.holder) continue;
             w.hover = null;
             w.wake();
-            _v1.subVectors(w.position, pos).setY(0).normalize().multiplyScalar(Math.max(0, 14 - d * 2));
-            _v1.y += Math.max(0, 9 - d);
+            _v1.subVectors(w.position, pos).setY(0).normalize().multiplyScalar(Math.max(0, 14 - d * 2 / push) * push);
+            _v1.y += Math.max(0, 9 - d / push) * push;
             if (!w.remoteTarget) {
                 w.velocity.add(_v1);
                 w.angularVelocity.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
@@ -300,9 +308,9 @@ export class Game {
         // Player knockback + camera shake
         const pp = this.character.group.position;
         const dPlayer = _v2.set(pp.x - pos.x, (pp.y - 1.5) - pos.y, pp.z - pos.z).length();
-        this.fx.shake = Math.max(this.fx.shake, Math.max(0, 1.2 - dPlayer / 30));
+        this.fx.shake = Math.max(this.fx.shake, Math.max(0, (power > 1 ? 2 : 1.2) - dPlayer / (power > 1 ? 45 : 30)));
         if (dPlayer < radius + 3) {
-            _v1.set(pp.x - pos.x, 0, pp.z - pos.z).normalize().multiplyScalar((radius + 3 - dPlayer) * 4);
+            _v1.set(pp.x - pos.x, 0, pp.z - pos.z).normalize().multiplyScalar((radius + 3 - dPlayer) * 4 * push);
             this.knockback.add(_v1);
         }
 
@@ -313,12 +321,12 @@ export class Game {
                 const d = _v1.set(zp.x - pos.x, zp.y + 0.5 - pos.y, zp.z - pos.z).length();
                 const blast = radius + 3;
                 if (d > blast) continue;
-                const dmg = Math.max(2, Math.round(8 * (1 - d / blast)));
+                const dmg = Math.max(2, Math.round(8 * power * (1 - d / blast)));
                 const dir = _v2.set(zp.x - pos.x, 0, zp.z - pos.z).normalize().clone();
                 this.damageZombie(z, dmg, false, dir, null);
                 // Thrown through the air, not just slid along the ground
-                z.velocity.addScaledVector(dir, 12 * (1 - d / blast));
-                z.vy = Math.max(z.vy || 0, 4 + 10 * (1 - d / blast));
+                z.velocity.addScaledVector(dir, 12 * push * (1 - d / blast));
+                z.vy = Math.max(z.vy || 0, (4 + 10 * (1 - d / blast)) * push);
             }
         }
     }
@@ -395,27 +403,55 @@ export class Game {
     }
 
     // ================================================================= spells
-    /** Voice command while the hand is raised. Returns the spell name or null. */
-    castLocalSpell(text) {
+    /**
+     * Voice command while the hand is raised. Returns the spell name or null.
+     * @param {string} text  what the microphone heard
+     * @param {boolean} [isFinal]  false for an unfinished (interim) phrase
+     */
+    castLocalSpell(text, isFinal = true) {
         if (!this.active) return null;
         const recent = this.isMagicActive || Date.now() - this.lastMagicTime < 1500;
         if (!recent) return null;
         const name = matchSpell(text);
         if (!name) return null;
         const now = Date.now();
-        if (now - this.lastSpellCastTime < SPELL_COOLDOWN) return null;
-        if (name === 'Flight') {
-            if (!this.startFlight()) return null;
-            this.lastSpellCastTime = now;
-            return name;
+        // «Бомбардо…» heard while the phrase is still going: wait a moment,
+        // the player may be saying «Бомбардо Максима».
+        if (name === 'Bombardo' && !isFinal) {
+            if (!this._pendingBombardo && now - this.lastSpellCastTime >= SPELL_COOLDOWN) this._pendingBombardo = { at: now };
+            return null;
         }
+        // The microphone's final version of a phrase that was already cast
+        // from its unfinished version: don't cast it a second time.
+        const early = this._interimCast;
+        if (isFinal && early && now - early.at < 3000) {
+            if (early.name === name) { this._interimCast = null; return null; }
+        }
+        if (name === 'Bombardo' || name === 'BombardoMaxima') this._pendingBombardo = null;
+        if (now - this.lastSpellCastTime < SPELL_COOLDOWN) return null;
+        if (name === 'Flight' && !this.startFlight()) return null;
+        this._interimCast = isFinal ? null : { name, at: now };
         this.lastSpellCastTime = now;
+        if (name === 'Flight') return name;
         const side = this.magicHand || this.lastMagicHand || 'right';
         const origin = this.character.getHandWorldPosition(side);
         const dir = this.character.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
         return name;
+    }
+
+    /** A «Бомбардо» that was not followed by «Максима» goes off now. */
+    _updatePendingSpell() {
+        const p = this._pendingBombardo;
+        if (!p || Date.now() - p.at < BOMBARDO_WAIT) return;
+        this._pendingBombardo = null;
+        this.lastMagicTime = Date.now(); // the hand was raised when the word started
+        if (this.castLocalSpell('бомбардо', true)) {
+            // The microphone will still send the finished «бомбардо»: ignore it then
+            this._interimCast = { name: 'Bombardo', at: Date.now() };
+            this.hud.setVoice('✨ <span style="color:#55efc4">BOMBARDO</span>');
+        }
     }
 
     /** Debug keys: cast in the camera direction. */
@@ -433,8 +469,14 @@ export class Game {
 
     // =================================================================== loop
     setPose(poseData) {
-        this.currentPose = poseData;
+        this.poseSmoother.push(poseData);
+        this.currentPose = this.poseSmoother.sample();
         this.firstPoseReceived = true;
+    }
+
+    clearPose() {
+        this.poseSmoother.reset();
+        this.currentPose = null;
     }
 
     /**
@@ -496,7 +538,9 @@ export class Game {
         this.fpsAccum += deltaTime;
         this.fpsFrames++;
         if (this.fpsFrames >= 20) {
-            this.hud.setFps(Math.round(this.fpsFrames / this.fpsAccum));
+            const ps = this.poseSmoother;
+            const aiFps = ps.lastPushAt && t0 - ps.lastPushAt < 1000 ? Math.round(1000 / ps.interval) : 0;
+            this.hud.setFps(Math.round(this.fpsFrames / this.fpsAccum), aiFps);
             this.fpsAccum = 0;
             this.fpsFrames = 0;
         }
@@ -513,6 +557,7 @@ export class Game {
 
         this.spells.update(dt);
         this._updateMagicGesture();
+        this._updatePendingSpell();
         if (!isTest) this._spawnWaves();
 
         for (const r of this.remotes.values()) r.update(dt);
@@ -544,6 +589,8 @@ export class Game {
 
     _updatePlayer(dt) {
         const ch = this.character;
+        // Blend between camera results so motion stays fluid at any frame rate
+        if (this.poseSmoother.to) this.currentPose = this.poseSmoother.sample();
         const pose = this.currentPose;
         const s = this.settings;
         const flight = this.flight;
@@ -552,11 +599,12 @@ export class Game {
             if (pose.headRotation) {
                 const targetYaw = pose.headRotation.yaw * s.sensitivity;
                 const targetPitch = pose.headRotation.pitch * s.sensitivity;
-                const alpha = pose.isRunning && !flying ? Math.min(s.smoothness, 0.1) : s.smoothness;
+                // Per-frame smoothing tuned at 60 FPS, scaled so 144 Hz screens behave the same
+                const alpha = frameAlpha(pose.isRunning && !flying ? Math.min(s.smoothness, 0.1) : s.smoothness, dt);
                 this.smoothHead.yaw += (targetYaw - this.smoothHead.yaw) * alpha;
                 this.smoothHead.pitch += (targetPitch - this.smoothHead.pitch) * alpha;
                 if (s.drifting) {
-                    if (Math.abs(this.smoothHead.yaw) > 0.1) this.cameraBaseRotation += this.smoothHead.yaw * 0.1;
+                    if (Math.abs(this.smoothHead.yaw) > 0.1) this.cameraBaseRotation += this.smoothHead.yaw * 6 * dt; // 0.1 per frame at 60 FPS
                     ch.setBodyRotation(this.cameraBaseRotation);
                 } else if (pose.bodyRotation !== undefined && !flying) {
                     this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
@@ -564,7 +612,7 @@ export class Game {
                 }
                 ch.updateHeadRotation(this.smoothHead.yaw, this.smoothHead.pitch);
             }
-            ch.updateArmsLookAt(pose);
+            ch.updateArmsLookAt(pose, dt);
             ch.setCrouching(flying ? false : pose.isCrouching);
             ch.setRunning(flying ? false : pose.isRunning, pose.runIntensity);
         }
@@ -845,7 +893,7 @@ export class Game {
             ch.getHeadQuaternion(this.camera.quaternion);
         } else {
             _v1.copy(this.cameraOffset).applyAxisAngle(_v2.set(0, 1, 0), ch.group.rotation.y).add(ch.group.position);
-            this.camera.position.lerp(_v1, 0.1);
+            this.camera.position.lerp(_v1, frameAlpha(0.1, dt));
             this.camera.lookAt(_v2.copy(ch.group.position).add(_v1.set(0, 2, 0)));
         }
         if (this.fx.shake > 0) {
@@ -900,4 +948,9 @@ export class Game {
             stats: { ...this.stats, fx: { sparks: this.fx.sparks.active, debris: this.fx.debris.active } },
         };
     }
+}
+
+/** Convert a per-frame blend factor (at 60 FPS) to this frame's duration. */
+function frameAlpha(alpha, dt) {
+    return 1 - Math.pow(1 - Math.min(1, alpha), Math.min(0.1, dt) * 60);
 }

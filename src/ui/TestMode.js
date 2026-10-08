@@ -108,7 +108,7 @@ export function setupTestMode(game, { renderer, camera, poseService, onExit }) {
             }
         } else {
             poseService.stop();
-            game.currentPose = null;
+            game.clearPose();
             ch.resetPose();
         }
     };

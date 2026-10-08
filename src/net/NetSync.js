@@ -191,8 +191,8 @@ export class NetSync {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
     }
 
-    explosion(pos, radius) {
-        if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius });
+    explosion(pos, radius, power = 1) {
+        if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power });
     }
 
     chestOpened(chest, weapon) {
@@ -259,7 +259,7 @@ export class NetSync {
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
                 break;
             }
-            case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false); g.explosions.push({ p: m.p, r: m.r }); } break;
+            case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1); g.explosions.push({ p: m.p, r: m.r }); } break;
             case 'chest': {
                 const c = g.chests.find((x) => x.id === m.id);
                 if (c && !this.net.isHost) g.openChest(c);

@@ -23,7 +23,7 @@ export class VisionRunner {
         this.delegate = null;
         this.lastTs = 0;
         this.frame = 0;
-        this.faceEvery = 1;
+        this.faceEvery = 2;
     }
 
     async init({ quality = 1, useModule = true } = {}) {
@@ -96,8 +96,10 @@ export class VisionRunner {
         let face = null;
         if (this.frame % this.faceEvery === 0) face = this.face.detectForVideo(image, ts);
         const cost = performance.now() - t0;
-        // Adaptive: if inference is slow, update the face (camera) every other frame.
-        this.faceEvery = cost > 45 ? 2 : 1;
+        // The face only steers the camera (head turn), which is smoothed anyway:
+        // every 2nd frame is enough and leaves more time for body and hands.
+        // On a slow computer, every 3rd.
+        this.faceEvery = cost > 45 ? 3 : 2;
         return {
             ts,
             cost,

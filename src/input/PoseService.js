@@ -39,6 +39,7 @@ export class PoseService {
         this._lastFace = null;
         this._lastDraw = 0;
         this._quality = 1;
+        this._delegate = null; // null = auto
         this.injected = false; // tests / replay can inject poses instead of the camera
     }
 
@@ -57,8 +58,10 @@ export class PoseService {
         this.skeletonCanvas = document.getElementById('skeleton-canvas');
         const quality = config.modelComplexity !== undefined ? parseInt(config.modelComplexity, 10) : 1;
 
-        if (this.ready && quality === this._quality) return;
+        const delegate = config.delegate === 'GPU' || config.delegate === 'CPU' ? config.delegate : null;
+        if (this.ready && quality === this._quality && (config.delegate === undefined || delegate === this._delegate)) return;
         this._quality = quality;
+        if (config.delegate !== undefined) this._delegate = delegate;
         await this._startModels(quality);
 
         let width = 640, height = 480;
@@ -109,7 +112,7 @@ export class PoseService {
                 }
             };
             worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || 'worker error')); };
-            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || null });
+            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || this._delegate || null });
         });
     }
 

@@ -184,7 +184,9 @@ export class VoxelCharacter {
         obj.quaternion.copy(_q1).slerp(_q2, speed);
     }
 
-    updateArmsLookAt(poseData) {
+    updateArmsLookAt(poseData, dt = 1 / 60) {
+        // 0.2 per frame at 60 FPS, frame-rate independent
+        const armK = 1 - Math.pow(0.8, Math.min(0.1, dt) * 60);
         if (!poseData.leftShoulder || !poseData.leftElbow || !poseData.leftWrist ||
             !poseData.rightShoulder || !poseData.rightElbow || !poseData.rightWrist) {
             this._updateHands(poseData);
@@ -200,13 +202,13 @@ export class VoxelCharacter {
             armAnchor.up.copy(_up);
             _v2.copy(armAnchor.position);
             armAnchor.parent.localToWorld(_v2).add(_v1);
-            this._smoothLookAt(armAnchor, _v2, 0.2);
+            this._smoothLookAt(armAnchor, _v2, armK);
             armAnchor.updateMatrixWorld(true);
             // Forearm
             this.getRelativeDirection(elbow, wrist, _v1).applyQuaternion(_qBody);
             elbowAnchor.up.copy(_up);
             elbowAnchor.getWorldPosition(_v2).add(_v1);
-            this._smoothLookAt(elbowAnchor, _v2, 0.2);
+            this._smoothLookAt(elbowAnchor, _v2, armK);
         };
         solveArm(this.leftArmAnchor, this.leftElbowAnchor, poseData.leftShoulder, poseData.leftElbow, poseData.leftWrist);
         solveArm(this.rightArmAnchor, this.rightElbowAnchor, poseData.rightShoulder, poseData.rightElbow, poseData.rightWrist);

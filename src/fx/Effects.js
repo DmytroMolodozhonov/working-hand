@@ -7,6 +7,9 @@ import * as THREE from 'three';
 import { ParticlePool, SegmentPool, CurvedBeam } from './Particles.js';
 
 const _v = new THREE.Vector3();
+const _bd = new THREE.Vector3();
+const _bs = new THREE.Vector3();
+const _bu = new THREE.Vector3();
 
 export class Effects {
     /**
@@ -19,7 +22,7 @@ export class Effects {
         const ground = (x, z) => collision.surfaceY(x, z);
 
         this.sparks = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 3000, transparent: true });
-        this.glow = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 600, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+        this.glow = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 1200, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
         this.sand = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 2000, ground, friction: 0.8 });
         this.shards = new ParticlePool(scene, { geometry: new THREE.ConeGeometry(0.4, 1, 4), capacity: 500, transparent: true, gravity: -9.8, ground, friction: 0.5 });
         this.debris = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 1600, lit: true, gravity: -22, ground, bounce: 0.25, friction: 0.6 });
@@ -217,25 +220,70 @@ export class Effects {
         }
     }
 
-    explosion(center, radius) {
+    /**
+     * @param {number} [power] 1 = Bombardo, 3 = Bombardo Maxima (bigger, brighter, a shock wave)
+     */
+    explosion(center, radius, power = 1) {
+        const big = power > 1;
+        const speed = Math.sqrt(power);
+        const colors = [0xffffff, 0xffe08a, 0xffa020, 0xff5a00, 0xd02000];
         // Fireball
-        for (let i = 0; i < 90; i++) {
+        const fire = big ? 220 : 90;
+        for (let i = 0; i < fire; i++) {
             const a = Math.random() * Math.PI * 2, b = Math.acos(2 * Math.random() - 1);
-            const sp = 6 + Math.random() * 14;
+            const sp = (6 + Math.random() * 14) * speed;
             const vx = Math.sin(b) * Math.cos(a) * sp, vy = Math.cos(b) * sp, vz = Math.sin(b) * Math.sin(a) * sp;
-            const colors = [0xffffff, 0xffe08a, 0xffa020, 0xff5a00, 0xd02000];
-            this.glow.spawn(center.x, center.y, center.z, vx, vy, vz, colors[(Math.random() * colors.length) | 0], 0.6 + Math.random() * 1.2, 0.35 + Math.random() * 0.45, { shrink: 0.9, spin: 6 });
+            this.glow.spawn(center.x, center.y, center.z, vx, vy, vz, colors[(Math.random() * colors.length) | 0], (0.6 + Math.random() * 1.2) * (big ? 1.7 : 1), (0.35 + Math.random() * 0.45) * (big ? 1.4 : 1), { shrink: 0.9, spin: 6 });
+        }
+        if (big) {
+            // Shock wave: a flat ring racing along the ground
+            for (let i = 0; i < 90; i++) {
+                const a = (i / 90) * Math.PI * 2 + Math.random() * 0.05;
+                const sp = 30 + Math.random() * 6;
+                this.glow.spawn(center.x, center.y + 0.3, center.z, Math.cos(a) * sp, 0.5 + Math.random(), Math.sin(a) * sp,
+                    i % 3 ? 0xffd27a : 0xffffff, 0.7 + Math.random() * 0.5, 0.45, { shrink: 1.2 });
+            }
         }
         // Smoke
-        for (let i = 0; i < 45; i++) {
+        const puffs = big ? 110 : 45;
+        for (let i = 0; i < puffs; i++) {
             const g = 120 + Math.floor(Math.random() * 70); // light-to-mid grey smoke
             this.smoke.spawn(
                 center.x + (Math.random() - 0.5) * radius, center.y + Math.random() * radius * 0.6, center.z + (Math.random() - 0.5) * radius,
-                (Math.random() - 0.5) * 3, 2 + Math.random() * 3, (Math.random() - 0.5) * 3,
-                (g << 16) | (g << 8) | g, 1.0 + Math.random() * 1.6, 1.8 + Math.random() * 1.5, { shrink: -0.35, spin: 1.5 },
+                (Math.random() - 0.5) * 3 * speed, (2 + Math.random() * 3) * speed, (Math.random() - 0.5) * 3 * speed,
+                (g << 16) | (g << 8) | g, (1.0 + Math.random() * 1.6) * (big ? 1.8 : 1), (1.8 + Math.random() * 1.5) * (big ? 1.5 : 1), { shrink: -0.35, spin: 1.5 },
             );
         }
-        this.lightFlash(center, 0xffaa55, 6, 0.35, radius * 8);
+        this.lightFlash(center, 0xffaa55, big ? 12 : 6, big ? 0.6 : 0.35, radius * 8);
+    }
+
+    /** «Бомбардо Максима»: the magic bursting out of the hand. */
+    castBurst(origin, direction) {
+        // Side vectors around the cast direction for the ring
+        const d = _bd.copy(direction).normalize();
+        const side = _bs.set(0, 1, 0).cross(d);
+        if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
+        side.normalize();
+        const up = _bu.copy(d).cross(side).normalize();
+        // Cone of fire along the cast direction
+        for (let i = 0; i < 80; i++) {
+            const sp = 8 + Math.random() * 22;
+            const spread = 0.35;
+            const sx = (Math.random() - 0.5) * spread * 2, sy = (Math.random() - 0.5) * spread * 2;
+            this.glow.spawn(origin.x, origin.y, origin.z,
+                (d.x + side.x * sx + up.x * sy) * sp, (d.y + side.y * sx + up.y * sy) * sp, (d.z + side.z * sx + up.z * sy) * sp,
+                [0xffffff, 0xffe08a, 0xffa020, 0xff5a00][(Math.random() * 4) | 0], 0.3 + Math.random() * 0.5, 0.25 + Math.random() * 0.3, { shrink: 2.0, spin: 5 });
+        }
+        // Ring of power around the hand
+        for (let i = 0; i < 36; i++) {
+            const a = (i / 36) * Math.PI * 2;
+            const c = Math.cos(a) * 9, s = Math.sin(a) * 9;
+            this.glow.spawn(origin.x, origin.y, origin.z,
+                side.x * c + up.x * s + d.x * 3, side.y * c + up.y * s + d.y * 3, side.z * c + up.z * s + d.z * 3,
+                0xffd27a, 0.35, 0.3, { shrink: 2.5 });
+        }
+        this.lightFlash(origin, 0xffb347, 5, 0.3, 30);
+        this.shake = Math.max(this.shake, 0.35);
     }
 
     lightFlash(pos, color, intensity, life, distance = 50) {

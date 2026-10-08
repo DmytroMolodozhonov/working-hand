@@ -17,13 +17,24 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
+/** Bombardo blast radius; «Бомбардо Максима» is MAXIMA_POWER times stronger. */
+export const BOMBARDO_RADIUS = 3.6;
+export const MAXIMA_POWER = 3;
+/** Crater radius for a given power: 3× the energy → ~1.7× wider, ~5× more ground removed. */
+export function bombardoRadius(power = 1) {
+    return BOMBARDO_RADIUS * Math.sqrt(power);
+}
+
 /** Recognise a spell name in a voice transcript. Exported for tests. */
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
     // New spell first: its words must never be mistaken for the short Sand/Ice tokens.
-    if (has('бомбар', 'бомбор', 'бамбар', 'бонбар', 'помбар', 'бомбард', 'bombar', 'bombor', 'bambar', 'бомба', 'bomb')) return 'Bombardo';
+    if (has('бомбар', 'бомбор', 'бамбар', 'бонбар', 'помбар', 'бомбард', 'bombar', 'bombor', 'bambar', 'бомба', 'bomb')) {
+        // «Бомбардо Максима»: the same word plus «максима»
+        return has('макс', 'max', 'мэкс', 'мекс', 'maks', 'мах') ? 'BombardoMaxima' : 'Bombardo';
+    }
     if (has('флайн', 'флаин', 'флайм', 'флай', 'флэй', 'флей', 'фляй', 'fly', 'flai', 'полёт', 'полет', 'взлёт', 'взлет')) return 'Flight';
     if (has('сап', 'sap', 'саб', 'sab', 'саф', 'saf', 'сат', 'sat', 'зап', 'zap')) return 'Sapira';
     if (has('танд', 'thun', 'молн', 'гром', 'удар')) return 'Thunderwave';
@@ -41,7 +52,7 @@ export class SpellManager {
      *   zombies(): Zombie[]
      *   authoritative(): boolean
      *   damage(z, amount, isWeapon, dir)
-     *   explode(pos, radius, casterId)   (authoritative only)
+     *   explode(pos, radius, casterId, power)   (authoritative only)
      *   handPose(casterId, side) -> {origin, dir} | null   (live hand for ice beam)
      *   collision: CollisionWorld
      *   terrain(): Terrain|null
@@ -83,6 +94,7 @@ export class SpellManager {
 
     _freeBall(m) {
         m.visible = false;
+        m.scale.setScalar(1);
         m.userData.free = true;
     }
 
@@ -128,6 +140,7 @@ export class SpellManager {
             case 'Sands': this.castSands(o, d); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
             case 'Bombardo': this.castBombardo(o, d, casterId); break;
+            case 'BombardoMaxima': this.castBombardo(o, d, casterId, MAXIMA_POWER); break;
             case 'Flight': return false; // handled by the game (it moves the caster)
             default: return false;
         }
@@ -325,32 +338,53 @@ export class SpellManager {
     }
 
     // ------------------------------------------------------------ Bombardo
-    castBombardo(origin, direction, casterId) {
+    castBombardo(origin, direction, casterId, power = 1) {
+        const maxima = power > 1;
         this._sound('playBombardoCast');
         const orb = this._takeBall(this.orbs);
-        orb.position.copy(origin).addScaledVector(direction, 0.8);
-        const vel = direction.clone().multiplyScalar(32);
+        const size = maxima ? 2.3 : 1;
+        orb.scale.setScalar(size);
+        orb.position.copy(origin).addScaledVector(direction, 0.8 * size);
+        const vel = direction.clone().multiplyScalar(maxima ? 27 : 32);
+        const gravity = maxima ? 3.5 : 6;
+        const radius = bombardoRadius(power);
+        const hitR2 = 1.3 * size * size;
         const prev = new THREE.Vector3();
         const collision = this.hooks.collision;
+        if (maxima) this.fx.castBurst(origin, direction);
+        const handOrigin = origin.clone();
+        let age = 0;
         let exploded = false;
         const explodeAt = (p) => {
             if (exploded) return;
             exploded = true;
-            if (this.auth && this.hooks.explode) this.hooks.explode(p.clone(), 3.6, casterId);
-            else this.fx.lightFlash(p, 0xffaa55, 2, 0.15, 20); // client: real blast arrives from the host
+            if (this.auth && this.hooks.explode) this.hooks.explode(p.clone(), radius, casterId, power);
+            else this.fx.lightFlash(p, 0xffaa55, 2 * size, 0.15, 20 * size); // client: real blast arrives from the host
         };
         this.spells.push({
-            life: 2.6,
+            life: maxima ? 3.2 : 2.6,
             onUpdate: (spell, dt) => {
                 prev.copy(orb.position);
-                vel.y -= 6 * dt;
+                age += dt;
+                vel.y -= gravity * dt;
                 orb.position.addScaledVector(vel, dt);
                 orb.rotation.y += dt * 8;
                 // Trail
-                for (let k = 0; k < 3; k++) {
+                const trail = maxima ? 8 : 3;
+                for (let k = 0; k < trail; k++) {
+                    const j = maxima ? 4 : 2;
                     this.fx.glow.spawn(orb.position.x, orb.position.y, orb.position.z,
-                        (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2,
-                        k === 0 ? 0xffd27a : 0xff6a00, 0.35 + Math.random() * 0.3, 0.3, { shrink: 2.0 });
+                        (Math.random() - 0.5) * j, (Math.random() - 0.5) * j, (Math.random() - 0.5) * j,
+                        k === 0 ? 0xffd27a : (maxima && k % 3 === 1 ? 0xff2a00 : 0xff6a00), (0.35 + Math.random() * 0.3) * (maxima ? 2 : 1), maxima ? 0.45 : 0.3, { shrink: 2.0 });
+                }
+                // Maxima: magic keeps pouring out of the hand for a moment
+                if (maxima && age < 0.45) {
+                    for (let k = 0; k < 5; k++) {
+                        const sp = 14 + Math.random() * 16;
+                        this.fx.glow.spawn(handOrigin.x, handOrigin.y, handOrigin.z,
+                            direction.x * sp + (Math.random() - 0.5) * 4, direction.y * sp + (Math.random() - 0.5) * 4, direction.z * sp + (Math.random() - 0.5) * 4,
+                            Math.random() < 0.4 ? 0xffffff : 0xffa030, 0.3 + Math.random() * 0.4, 0.25 + Math.random() * 0.2, { shrink: 2.5 });
+                    }
                 }
                 // Terrain (voxel DDA between last and current position)
                 const terrain = this.hooks.terrain ? this.hooks.terrain() : null;
@@ -369,7 +403,7 @@ export class SpellManager {
                     if (z.isDead) continue;
                     const zp = z.group.position;
                     const dx = orb.position.x - zp.x, dz = orb.position.z - zp.z;
-                    if (dx * dx + dz * dz < 1.3 && orb.position.y > zp.y - 1 && orb.position.y < zp.y + 3) {
+                    if (dx * dx + dz * dz < hitR2 && orb.position.y > zp.y - 1 - size && orb.position.y < zp.y + 3 + size) {
                         explodeAt(orb.position); spell.life = 0; return;
                     }
                 }

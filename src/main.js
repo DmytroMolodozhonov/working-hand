@@ -13,7 +13,7 @@ import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network } from './net/Network.js';
-import { matchSpell } from './fx/SpellManager.js';
+import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -142,6 +142,7 @@ function readConfig() {
         zombieCount: selectedMode === 'creative' ? parseInt(creativeZombieCount.value, 10) : 1,
         fpsLimit: parseInt($('fps-limit').value, 10),
         modelComplexity: parseInt($('model-quality').value, 10),
+        delegate: $('vision-delegate')?.value || 'auto',
         resolution: $('camera-res').value,
         cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
         showHands: showHandsToggle ? showHandsToggle.checked : false,
@@ -272,6 +273,7 @@ function renderItemsTab() {
         { name: 'Айс', desc: 'Заморозка (Айс).', dmg: '1/сек', icon: 'assets/icons/ice.png' },
         { name: 'Даст', desc: 'Пыль (Даст/Sand).', dmg: 'Мгновенно', icon: 'assets/icons/sand.png' },
         { name: 'Бомбардо', desc: 'Взрывной шар: разрушает блоки, горы, деревья и раскидывает зомби.', dmg: 'до 8 (взрыв)', icon: 'assets/icons/bombardo.svg' },
+        { name: 'Бомбардо Максима', desc: 'В 3 раза мощнее «Бомбардо»: из руки вырывается огромная волна магии, шар больше, воронка намного шире, всё разлетается дальше.', dmg: 'до 24 (взрыв)', icon: 'assets/icons/bombardo_maxima.svg' },
         { name: 'Флайн', desc: 'Полёт как у Супермена: обе руки вверх + «Флайн». Рулите корпусом, приземление — направьте себя в землю.', dmg: '—', icon: 'assets/icons/flight.svg' },
     ];
     for (const item of items) {
@@ -306,7 +308,7 @@ voiceToggleBtn?.addEventListener('click', () => {
     }
 });
 
-voice.onResult = (command) => {
+voice.onResult = (command, isFinal = true) => {
     if (!command) return;
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
@@ -318,7 +320,7 @@ voice.onResult = (command) => {
     }
     if (game && game.active) {
         if (game.isMagicActive || Date.now() - game.lastMagicTime < 1500) hud.setVoice(`🎤 СЛЫШУ: "${escapeHtml(command)}"`);
-        const name = game.castLocalSpell(command);
+        const name = game.castLocalSpell(command, isFinal);
         if (name) {
             hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span> (было: "${escapeHtml(command)}")`);
             if (voiceTestText && isMenuVoiceActive) voiceTestText.innerHTML = `✨ ${name.toUpperCase()} ✨`;
@@ -332,6 +334,7 @@ window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (k === 'm' || k === 'ь') game.castDebug('Inferno');
     if (k === 'b' || k === 'и') game.castDebug('Bombardo');
+    if (k === 'n' || k === 'т') game.castDebug('BombardoMaxima');
     if (k === 'g' || k === 'п') game.castDebug('Flight');
     if (k === 'f' || k === 'а') game.toggleFlashlight();
 });
@@ -547,5 +550,5 @@ function escapeHtml(s) {
 }
 
 // Hooks for automated tests (read-only helpers + pose injection)
-window.__zns = { THREE, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } };
+window.__zns = { THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } };
 console.log('ЗОМБИ НЕ СПЯТ: готово.');

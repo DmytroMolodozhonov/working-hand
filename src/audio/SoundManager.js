@@ -290,11 +290,13 @@ export class SoundManager {
     playIce() { this._play(this.sounds.ice, 1.4); }
     playBombardoCast() { this._play(this.sounds.cast, 0.9); }
 
-    playExplosion(position, listenerPos) {
+    playExplosion(position, listenerPos, power = 1) {
         if (!this.sounds.explosion) return;
+        const big = power > 1;
         const d = listenerPos ? position.distanceTo(listenerPos) : 0;
-        const vol = Math.max(0.15, 1.6 - d / 40);
-        this._play(this.sounds.explosion, vol, 0.95 + Math.random() * 0.1);
+        const vol = Math.max(0.15, (big ? 2.2 : 1.6) - d / (big ? 60 : 40));
+        // A bigger blast sounds deeper
+        this._play(this.sounds.explosion, vol, (big ? 0.7 : 0.95) + Math.random() * 0.1);
     }
 
     playChestOpen(position) {

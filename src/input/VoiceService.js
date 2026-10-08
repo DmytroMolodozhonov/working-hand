@@ -25,7 +25,7 @@ export class VoiceService {
         this.recognition.onresult = (event) => {
             const res = event.results[event.resultIndex] || event.results[0];
             const transcript = res[0].transcript.toLowerCase().trim();
-            if (this.onResult) this.onResult(transcript);
+            if (this.onResult) this.onResult(transcript, !!res.isFinal);
         };
         this.recognition.onerror = (event) => {
             if (event.error === 'not-allowed') console.error('Microphone access denied!');

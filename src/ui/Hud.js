@@ -39,10 +39,12 @@ export class Hud {
         this.el.punches.textContent = punches;
     }
 
-    setFps(fps) {
-        if (fps === this._lastFps) return;
-        this._lastFps = fps;
-        this.el.fps.innerText = `FPS: ${fps}`;
+    setFps(fps, aiFps = 0) {
+        const key = fps * 1000 + aiFps;
+        if (key === this._lastFps) return;
+        this._lastFps = key;
+        // "ИИ" = how many times per second the camera pose is recognised
+        this.el.fps.innerText = aiFps ? `FPS: ${fps} | ИИ: ${aiFps}` : `FPS: ${fps}`;
         this.el.fps.style.color = fps > 50 ? '#00ff00' : (fps > 25 ? '#ffff00' : '#ff0000');
     }
 
