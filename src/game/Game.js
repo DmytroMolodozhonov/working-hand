@@ -17,6 +17,7 @@ import { WeaponSystem } from './Weapons.js';
 import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
+import { Combat, PVP } from './Combat.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -105,7 +106,7 @@ export class Game {
         const isTest = config.mode === 'test';
         this.world = new VoxelWorld(this.scene, {
             seed: this.seed,
-            mountains: config.mode === 'creative' && !config.map,
+            mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map,
             map: config.map || null,
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
@@ -122,6 +123,7 @@ export class Game {
             chill: (z, amt) => z.applyChill(amt),
             explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
             handPose: (casterId, side) => this.handPose(casterId, side),
+            players: (casterId) => this._spellPlayers(casterId),
             collision: this.collision,
             terrain: () => this.terrain,
         });
@@ -140,6 +142,7 @@ export class Game {
 
         this.weapons = new WeaponSystem(this);
         this.water = new WaterMagic(this);
+        this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon) => this.onLocalHit(z, dmg, dir, isWeapon);
 
@@ -165,6 +168,7 @@ export class Game {
 
         this.net && this.net.active ? (this.sync = new NetSync(this, this.net)) : (this.sync = null);
 
+        if (this.combat.enabled) { this.maxHP = PVP.MAX_HP; this.playerHP = PVP.MAX_HP; } else this.hud.hidePvp();
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.hud.setHpVisible(config.mode !== 'creative');
         this.hud.setMultiplayer(null);
@@ -191,6 +195,11 @@ export class Game {
                 chest.boxId = this.collision.addBox(chest.getCollisionBox());
                 this.chests.push(chest);
             });
+        } else if (config.mode === 'freeworld') {
+            // Free world: no tables; players appear around spawn, not on top of each other
+            const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 14;
+            this.character.group.position.x = Math.cos(a) * d;
+            this.character.group.position.z = Math.sin(a) * d;
         } else {
             if (this.authority) {
                 const n = config.mode === 'creative' ? (config.zombieCount || 0) : 1;
@@ -259,6 +268,7 @@ export class Game {
 
     /** The local player's weapon/fist hit something. */
     onLocalHit(z, dmg, dir, isWeapon) {
+        if (z.isPlayer) { this.combat.hitRemote(z, dmg); return; }
         this.punchCount++;
         if (this.authority) {
             this.damageZombie(z, dmg, isWeapon, dir, this.localId);
@@ -278,13 +288,13 @@ export class Game {
      * @param {number} [power] 1 = Bombardo, 3 = Bombardo Maxima
      */
     explode(pos, radius, casterId, power = 1) {
-        this.applyExplosion(pos, radius, true, power);
+        this.applyExplosion(pos, radius, true, power, casterId);
         this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius });
-        if (this.sync) this.sync.explosion(pos, radius, power);
+        if (this.sync) this.sync.explosion(pos, radius, power, casterId);
     }
 
     /** Visual + world part of an explosion (runs on every machine). */
-    applyExplosion(pos, radius, authoritative, power = 1) {
+    applyExplosion(pos, radius, authoritative, power = 1, casterId = null) {
         // `power` times the energy: damage × power, thrown objects × √power speed
         const push = Math.sqrt(power);
         const out = this.world.explode(pos, radius);
@@ -293,6 +303,7 @@ export class Game {
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
+        this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
 
@@ -417,6 +428,10 @@ export class Game {
         if (!this.active) return null;
         let name = matchSpell(text);
         if (!name) return null;
+        if (this.combat.dead) return null;
+        if (this.combat.frozen) { this.hud.setVoice(this.combat.check(name), true); return null; }
+        // Shield: arm stretched out (or a T for Maxima), not raised to the face
+        if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
         // Water bending: the hand is at the water / holding the ball, not raised to the face
         const waterName = this._waterSpell(name);
         if (waterName) return this._castWater(waterName, text, isFinal);
@@ -442,7 +457,10 @@ export class Game {
         }
         if (name === 'Bombardo' || name === 'BombardoMaxima') this._pendingBombardo = null;
         if (now - this.lastSpellCastTime < SPELL_COOLDOWN) return null;
+        const tired = this.combat.check(name);
+        if (tired) { this.hud.setVoice(tired, true); return null; }
         if (name === 'Flight' && !this.startFlight()) return null;
+        this.combat.pay(name);
         this._interimCast = isFinal ? null : { name, at: now };
         this.lastSpellCastTime = now;
         if (name === 'Flight') return name;
@@ -468,7 +486,8 @@ export class Game {
         const early = this._interimCast;
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
         if (now - (this._lastWaterCast || 0) < WATER_COOLDOWN) return null;
-        let hint;
+        let hint = this.combat.check(name);
+        if (hint) { this.hud.setVoice(hint, true); return null; }
         if (name === 'Waterball') {
             hint = this.water.start();
             // «Waterbollow Максима» in one breath
@@ -482,8 +501,63 @@ export class Game {
             return null;
         }
         this._lastWaterCast = now;
+        this.combat.pay(name);
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
+    }
+
+    _castProtection(name, isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastShieldCast || 0) < 800) return null;
+        const hint = this.combat.enabled ? this.combat.castProtection(name === 'ProtectionMaxima') : '🛡️ Щит работает в режиме «Свободный мир»';
+        if (hint) { this.hud.setVoice(hint, true); return null; }
+        this._lastShieldCast = now;
+        this._interimCast = isFinal ? null : { name, at: now };
+        return name;
+    }
+
+    /** Targets for spells cast by `casterId` (players hit each other only in the free world). */
+    _spellPlayers(casterId) {
+        const c = this.combat;
+        if (!c.enabled) return [];
+        const out = [];
+        const me = this.localId;
+        if (!c.dead && casterId !== 'local' && casterId !== me) {
+            out.push({
+                local: true,
+                id: me,
+                center: () => c.center(),
+                hit: (kind, from, push) => (kind === 'Bounce' ? c.shieldFactor(from) >= 1 && (c._blocked(from), false) : c.hitBySpell(kind, from, casterId, push)),
+                blocks: (from) => c.shieldFactor(from) >= 1,
+                chill: (amount, from) => c.chillBy(amount, from, casterId),
+            });
+        }
+        for (const [id, r] of this.remotes) {
+            if (id === casterId || r.dead) continue;
+            out.push({
+                local: false,
+                id,
+                center: () => r.position.clone().add(_v1.set(0, 0.6, 0)),
+                hit: (kind, from) => { if (r.shieldBlocks(from)) r.showBlock(from, this.fx); return true; },
+                blocks: (from) => r.shieldBlocks(from),
+                chill: () => true,
+            });
+        }
+        return out;
+    }
+
+    playerName(id) {
+        if (id === this.localId) return this.net?.name || 'Вы';
+        return this.remotes.get(id)?.name || null;
+    }
+
+    /** My player was killed in the free world: show it, then back to the menu. */
+    onLocalDeath(text, byId) {
+        if (this.sync) this.sync.died(byId);
+        this.hud.setStatus('');
+        this.ui.died?.(text);
     }
 
     /** Ice blocks built with water forming become part of the world (and are synced). */
@@ -516,6 +590,7 @@ export class Game {
     castDebug(name) {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
         if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
+        if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);
@@ -611,9 +686,11 @@ export class Game {
 
         this.weapons.update(dt);
         this.water.update(dt);
+        this.combat.update(dt);
+        this.combat.updatePunches(!!(this.currentPose && this.currentPose.isPunching));
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
-        this.weapons.checkHits(this.zombies, dt);
+        this.weapons.checkHits(this.combat.enabled ? this.zombies.concat(this.combat.meleeTargets()) : this.zombies, dt);
 
         this.spells.update(dt);
         this._updateMagicGesture();
@@ -654,7 +731,9 @@ export class Game {
         const ch = this.character;
         // Blend between camera results so motion stays fluid at any frame rate
         if (this.poseSmoother.to) this.currentPose = this.poseSmoother.sample();
-        const pose = this.currentPose;
+        // Frozen in ice (free world): the body can't move at all
+        const iced = this.combat.frozen || this.combat.dead;
+        const pose = iced ? null : this.currentPose;
         const s = this.settings;
         const flight = this.flight;
         const flying = flight.busy;
@@ -682,6 +761,7 @@ export class Game {
         if (this.config.mode === 'test' && this.testState === 'setup') ch.setRunning(false);
 
         if (flying) this._updateFlight(dt, pose);
+        if (iced) ch.setRunning(false);
         ch.update(dt, this.collision, !flight.active);
 
         // Explosion knockback (decays)

@@ -30,6 +30,8 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
+    if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // New spell first: its words must never be mistaken for the short Sand/Ice tokens.
     if (has('бомбар', 'бомбор', 'бамбар', 'бонбар', 'помбар', 'бомбард', 'bombar', 'bombor', 'bambar', 'бомба', 'bomb')) {
         // «Бомбардо Максима»: the same word plus «максима»
@@ -60,6 +62,7 @@ export class SpellManager {
      *   damage(z, amount, isWeapon, dir)
      *   explode(pos, radius, casterId, power)   (authoritative only)
      *   handPose(casterId, side) -> {origin, dir} | null   (live hand for ice beam)
+ *   players(casterId) -> player targets (Свободный мир): {local, center(), hit(kind, from, push), blocks(from), chill(amount, from)}
      *   collision: CollisionWorld
      *   terrain(): Terrain|null
      */
@@ -140,10 +143,10 @@ export class SpellManager {
         const o = origin.clone();
         const d = direction.clone().normalize();
         switch (name) {
-            case 'Sapira': this.castSapira(o, d); break;
-            case 'Thunderwave': this.castThunderwave(o, d); break;
-            case 'Inferno': this.castInferno(o, d); break;
-            case 'Sands': this.castSands(o, d); break;
+            case 'Sapira': this.castSapira(o, d, casterId); break;
+            case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
+            case 'Inferno': this.castInferno(o, d, casterId); break;
+            case 'Sands': this.castSands(o, d, casterId); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
             case 'Bombardo': this.castBombardo(o, d, casterId); break;
             case 'BombardoMaxima': this.castBombardo(o, d, casterId, MAXIMA_POWER); break;
@@ -170,12 +173,18 @@ export class SpellManager {
         this.spells.length = 0;
     }
 
+    /** Players a spell from `casterId` can hit (never the caster). */
+    _players(casterId) {
+        return this.hooks.players ? this.hooks.players(casterId) : [];
+    }
+
     _damage(z, amount, isWeapon, dir) {
         if (this.auth && this.hooks.damage) this.hooks.damage(z, amount, isWeapon, dir);
     }
 
     // -------------------------------------------------------------- Inferno
-    castInferno(origin, direction) {
+    castInferno(origin, direction, casterId) {
+        const players = this._players(casterId);
         this._sound('playInferno');
         const right = new THREE.Vector3().crossVectors(direction, UP).normalize();
         if (right.lengthSq() < 0.01) right.set(1, 0, 0);
@@ -208,12 +217,17 @@ export class SpellManager {
                         z.damageCooldown = 0.1;
                     }
                 }
+                for (const p of players) {
+                    if (!p.local) continue;
+                    _a.subVectors(p.center(), origin);
+                    if (_a.length() < 30 && direction.angleTo(_a.normalize()) < 0.5) p.hit('Inferno', origin);
+                }
             },
         });
     }
 
     // --------------------------------------------------------- Thunderwave
-    castThunderwave(origin, direction) {
+    castThunderwave(origin, direction, casterId) {
         this._sound('playThunder');
         for (let i = 0; i < 20; i++) {
             _a.set((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5 + 3, (Math.random() - 0.5) * 5).add(origin);
@@ -246,11 +260,21 @@ export class SpellManager {
                 }
             }
         }
+        for (const p of this._players(casterId)) {
+            if (!p.local) continue;
+            const to = _a.subVectors(p.center(), origin);
+            const dist = to.length();
+            const dirTo = _b.copy(to).normalize();
+            if ((dist < 4.0 && direction.dot(dirTo) > -0.2) || (dist < range && direction.angleTo(dirTo) < 1.2)) {
+                p.hit('Thunderwave', origin, dirTo.clone().setY(0.2).multiplyScalar(26));
+            }
+        }
     }
 
     // --------------------------------------------------------------- Sands
-    castSands(origin, direction) {
+    castSands(origin, direction, casterId) {
         this._sound('playWhoosh');
+        const players = this._players(casterId);
         const ball = this._takeBall(this.sandBalls);
         ball.position.copy(origin);
         const velocity = direction.clone().multiplyScalar(25.0);
@@ -275,6 +299,22 @@ export class SpellManager {
                         return;
                     }
                 }
+                for (const p of players) {
+                    if (ball.position.distanceTo(p.center()) >= 1.5) continue;
+                    if (p.blocks(origin)) {
+                        // Bounces off the shield
+                        velocity.multiplyScalar(-0.8);
+                        ball.position.addScaledVector(velocity, dt * 2);
+                        p.hit('Sands', origin);
+                        continue;
+                    }
+                    if (p.local) p.hit('Sands', origin);
+                    for (let k = 0; k < 20; k++) {
+                        this.fx.spark(ball.position, 0xd2b48c, 0.4, _b.set((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10), 0.8);
+                    }
+                    spell.life = 0;
+                    return;
+                }
                 if (ball.position.distanceTo(origin) > 20) spell.life = 0;
             },
             onEnd: () => this._freeBall(ball),
@@ -292,6 +332,15 @@ export class SpellManager {
             if (dist > 20) continue;
             if (direction.angleTo(_a.normalize()) < 0.4 && dist < minDist) { minDist = dist; target = z; }
         }
+        // Players can be frozen too (Свободный мир)
+        let player = null;
+        for (const p of this._players(casterId)) {
+            _a.subVectors(p.center(), origin);
+            const dist = _a.length();
+            if (dist > 20) continue;
+            if (direction.angleTo(_a.normalize()) < 0.4 && dist < minDist) { minDist = dist; player = p; target = null; }
+        }
+        if (player) { this._icePlayer(origin, direction, handSide, casterId, player); return; }
         if (!target) {
             this.fx.straightBeam(origin, _a.copy(origin).addScaledVector(direction, 20), 0.4, 0x88ffff, 0.5, 0.5);
             return;
@@ -321,8 +370,35 @@ export class SpellManager {
         });
     }
 
+    /** Ice beam on a player: freezes in 5 s, breaks when they run out of it or a shield stops it. */
+    _icePlayer(origin, direction, handSide, casterId, player) {
+        this._sound('playIce');
+        const beam = this.fx.acquireIceBeam();
+        const initialDir = direction.clone();
+        const p0 = new THREE.Vector3(), p1 = new THREE.Vector3(), p2 = new THREE.Vector3(), dir = new THREE.Vector3();
+        this.spells.push({
+            life: 5.5,
+            onUpdate: (spell, dt) => {
+                p2.copy(player.center());
+                const live = this.hooks.handPose ? this.hooks.handPose(casterId, handSide) : null;
+                if (live) { p0.copy(live.origin); dir.copy(live.dir); } else { p0.copy(origin); dir.copy(initialDir); }
+                if (dir.angleTo(initialDir) > 0.45) { spell.life = 0; return; }
+                // The target got away: out of the beam's reach or direction
+                const to = _a.subVectors(p2, p0);
+                if (to.length() > 24 || dir.angleTo(to.normalize()) > 0.55) { spell.life = 0; return; }
+                const dist = p0.distanceTo(p2);
+                p1.copy(p0).addScaledVector(dir, dist * 0.5);
+                if (beam) beam.setCurve(p0, p1, p2);
+                if (player.local && !player.chill(dt / 5, p0)) { spell.life = 0; return; }
+                if (!player.local && player.blocks(p0)) { spell.life = 0; return; }
+                if (Math.random() > 0.5) this.fx.spark(p2, 0xaaddff, 0.4, _b.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), 0.5);
+            },
+            onEnd: () => this.fx.releaseIceBeam(beam),
+        });
+    }
+
     // -------------------------------------------------------------- Sapira
-    castSapira(origin, direction) {
+    castSapira(origin, direction, casterId) {
         this._sound('playSapira');
         const len = 100;
         const end = _a.copy(origin).addScaledVector(direction, len);
@@ -340,6 +416,15 @@ export class SpellManager {
             if (proj < 0 || proj > len) continue;
             _c.copy(origin).addScaledVector(direction, proj);
             if (_c.distanceTo(_b) < 1.5) this._damage(z, 10, true, direction);
+        }
+        for (const p of this._players(casterId)) {
+            if (!p.local) continue;
+            _b.copy(p.center());
+            _c.subVectors(_b, origin);
+            const proj = _c.dot(direction);
+            if (proj < 0 || proj > len) continue;
+            _c.copy(origin).addScaledVector(direction, proj);
+            if (_c.distanceTo(_b) < 1.5) p.hit('Sapira', origin);
         }
     }
 
@@ -359,6 +444,7 @@ export class SpellManager {
         const collision = this.hooks.collision;
         if (maxima) this.fx.castBurst(origin, direction);
         const handOrigin = origin.clone();
+        const players = this._players(casterId);
         let age = 0;
         let exploded = false;
         const explodeAt = (p) => {
@@ -403,6 +489,19 @@ export class SpellManager {
                 // Walls / tables / trees / floor
                 if (collision && collision.pointBlocked(orb.position.x, orb.position.y, orb.position.z)) {
                     explodeAt(prev); spell.life = 0; return;
+                }
+                // Players: a shield sends the orb back, otherwise it blows up on them
+                for (const p of players) {
+                    const pc = p.center();
+                    if (orb.position.distanceTo(pc) > 1.2 + size * 0.45) continue;
+                    if (p.blocks(origin)) {
+                        _a.subVectors(orb.position, pc).normalize();
+                        vel.reflect(_a).multiplyScalar(0.9);
+                        orb.position.copy(pc).addScaledVector(_a, 1.4 + size * 0.5);
+                        p.hit('Bounce', origin);
+                        continue;
+                    }
+                    explodeAt(orb.position); spell.life = 0; return;
                 }
                 // Zombies
                 for (const z of this.zombies) {

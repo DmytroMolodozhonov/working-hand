@@ -230,18 +230,20 @@ async function updateGameMapList(forceRefresh = false) {
         grid.appendChild(card);
     }
 
-    for (const m of [{ id: 'creative', name: 'ТВОРЧЕСТВО', cls: 'mode-card' }, { id: 'survival', name: 'ВЫЖИВАНИЕ', cls: 'mode-card survival' }]) {
+    const MODE_COLOR = { creative: '#2ecc71', survival: '#e74c3c', freeworld: '#3498db' };
+    const MODE_ICON = { creative: '🏗️', survival: '🧟', freeworld: '🌍' };
+    for (const m of [{ id: 'creative', name: 'ТВОРЧЕСТВО', cls: 'mode-card' }, { id: 'survival', name: 'ВЫЖИВАНИЕ', cls: 'mode-card survival' }, { id: 'freeworld', name: 'СВОБОДНЫЙ МИР', cls: 'mode-card freeworld' }]) {
         const card = document.createElement('div');
         card.className = `map-card ${m.cls}`;
         if (selectedMode === m.id && !selectedMap) {
-            const c = m.id === 'creative' ? '#2ecc71' : '#e74c3c';
+            const c = MODE_COLOR[m.id];
             card.style.borderColor = c;
             card.style.boxShadow = `0 0 15px ${c}`;
         }
         const icon = document.createElement('div');
         icon.style.fontSize = '40px';
         icon.style.margin = '10px 0';
-        icon.innerText = m.id === 'creative' ? '🏗️' : '🧟';
+        icon.innerText = MODE_ICON[m.id];
         const nameDiv = document.createElement('div');
         nameDiv.className = 'map-name';
         nameDiv.innerText = m.name;
@@ -264,19 +266,24 @@ function renderItemsTab() {
     const grid = $('items-grid');
     if (!grid) return;
     grid.innerHTML = '';
+    // say: how to cast it; pvp: damage to players in «Свободный мир»; cost: fatigue there
     const items = [
-        { name: 'Меч', desc: 'Острое оружие. Берётся рукой как настоящий: сожмите пальцы на рукояти.', dmg: '2 (сильный замах — больше)', icon: 'assets/icons/sword.png' },
-        { name: 'Топор', desc: 'Тяжелый топор.', dmg: '3 (сильный замах — больше)', icon: 'assets/icons/axe.png' },
-        { name: 'Инферно', desc: 'Огненное заклинание.', dmg: '1/tik', icon: 'assets/icons/inferno.png' },
-        { name: 'Тандервейв', desc: 'Призыв молний (Тандер).', dmg: '5', icon: 'assets/icons/thunder.png' },
-        { name: 'Сапира', desc: 'Луч смерти.', dmg: '10', icon: 'assets/icons/sapira.png' },
-        { name: 'Айс', desc: 'Заморозка (Айс).', dmg: '1/сек', icon: 'assets/icons/ice.png' },
-        { name: 'Даст', desc: 'Пыль (Даст/Sand).', dmg: 'Мгновенно', icon: 'assets/icons/sand.png' },
-        { name: 'Бомбардо', desc: 'Взрывной шар: разрушает блоки, горы, деревья и раскидывает зомби.', dmg: 'до 8 (взрыв)', icon: 'assets/icons/bombardo.svg' },
-        { name: 'Бомбардо Максима', desc: 'В 3 раза мощнее «Бомбардо»: из руки вырывается огромная волна магии, шар больше, воронка намного шире, всё разлетается дальше.', dmg: 'до 24 (взрыв)', icon: 'assets/icons/bombardo_maxima.svg' },
-        { name: 'Waterbollow', desc: 'Поднесите руку к реке или озеру и скажите «Waterbollow»: вода поднимается шаром и следует за рукой. «Максима» — больше воды (можно много раз), открытая вторая рука у шара тоже подливает воду. Резкое движение — шар падает.', dmg: 'ледяной шар: 3–10', icon: 'assets/icons/water.svg' },
-        { name: 'Water forming', desc: 'Пока вода жидкая: ведите шар, и за ним остаются водяные блоки — стены, башни, дома. Вода тратится, подпитывайте шар. «Frozen» превращает всё в лёд: сквозь него не пройти, на нём можно стоять.', dmg: '—', icon: 'assets/icons/water_forming.svg' },
-        { name: 'Флайн', desc: 'Полёт как у Супермена: обе руки вверх + «Флайн». Рулите корпусом, приземление — направьте себя в землю.', dmg: '—', icon: 'assets/icons/flight.svg' },
+        { name: 'Меч', desc: 'Острое оружие. Берётся рукой как настоящий: сожмите пальцы на рукояти.', dmg: '2 (сильный замах — больше)', pvp: '2–3', icon: 'assets/icons/sword.png' },
+        { name: 'Топор', desc: 'Тяжёлый топор.', dmg: '3 (сильный замах — больше)', pvp: '3–4', icon: 'assets/icons/axe.png' },
+        { name: 'Инферно', say: 'рука к лицу + «Инферно»', desc: 'Поток огня из руки.', dmg: '1/тик', pvp: '1 каждые 0,6 с', cost: 10, icon: 'assets/icons/inferno.png' },
+        { name: 'Тандервейв', say: 'рука к лицу + «Тандервейв» / «Гром»', desc: 'Веер молний, отбрасывает.', dmg: '5', pvp: '3 + отброс', cost: 15, icon: 'assets/icons/thunder.png' },
+        { name: 'Сапира', say: 'рука к лицу + «Сапира»', desc: 'Луч смерти.', dmg: '10', pvp: '4', cost: 20, icon: 'assets/icons/sapira.png' },
+        { name: 'Айс', say: 'рука к лицу + «Айс» / «Лёд»', desc: 'Ледяной луч: держите на цели 5 секунд — замораживает. Игрок заморожен на 20 секунд и не может двигаться; любой удар по замороженному смертелен. Убежать из луча — заклинание спадёт.', dmg: '1/сек', pvp: 'заморозка', cost: 10, icon: 'assets/icons/ice.png' },
+        { name: 'Даст', say: 'рука к лицу + «Даст» / «Санд»', desc: 'Шар песка: зомби рассыпается в песок.', dmg: 'Мгновенно', pvp: '3', cost: 8, icon: 'assets/icons/sand.png' },
+        { name: 'Бомбардо', say: 'рука к лицу + «Бомбардо»', desc: 'Взрывной шар: вырывает куски гор и земли, ломает деревья, раскидывает зомби и предметы.', dmg: 'до 8 (взрыв)', pvp: 'до 3 (щит −50%)', cost: 15, icon: 'assets/icons/bombardo.svg' },
+        { name: 'Бомбардо Максима', say: 'рука к лицу + «Бомбардо Максима»', desc: 'В 3 раза мощнее «Бомбардо»: из руки вырывается огромная волна магии, шар больше, воронка намного шире, всё разлетается дальше.', dmg: 'до 24 (взрыв)', pvp: 'до 9 (щит −50%)', cost: 25, icon: 'assets/icons/bombardo_maxima.svg' },
+        { name: 'Флайн', say: 'обе руки вверх + «Флайн»', desc: 'Полёт как у Супермена. Рулите корпусом, приземление — направьте себя в землю. В полёте работают все заклинания.', dmg: '—', cost: 10, icon: 'assets/icons/flight.svg' },
+        { name: 'Waterbollow', say: 'рука у самой воды + «Waterbollow»', desc: 'Вода из реки или озера плавно поднимается живым шаром и следует за рукой (большой шар — тяжелее и медленнее). Резкий рывок рукой — шар падает: жидкий сливается с водой, ледяной остаётся.', dmg: 'ледяной шар: 3–10', pvp: 'ледяной шар: 3', cost: 5, icon: 'assets/icons/water.svg' },
+        { name: 'Максима (вода)', say: '«Максима», пока держите водный шар', desc: 'Шар втягивает больше воды и растёт — говорите сколько угодно раз, до максимума. Открытая вторая рука рядом с шаром тоже подливает воду без слов.', dmg: '—', cost: 4, icon: 'assets/icons/water.svg' },
+        { name: 'Water forming', say: '«Water forming», пока вода жидкая', desc: 'Ведите шар — за ним остаются водяные блоки: стены, башни, дома. Вода тратится, подпитывайте шар. Изо льда формировать нельзя.', dmg: '—', cost: 5, icon: 'assets/icons/water_forming.svg' },
+        { name: 'Frozen', say: '«Frozen» с водным шаром', desc: 'Замораживает шар и всё сформированное: блоки становятся льдом — сквозь него не пройти, на нём можно стоять. Без водного шара работает как «Айс».', dmg: '—', cost: 5, icon: 'assets/icons/ice.png' },
+        { name: 'Protection', say: 'вытянуть руку + «Protection»', desc: 'Свободный мир. У руки на 3 секунды появляется синий щит: заклинания, пущенные прямо в вас, отскакивают. Взрыв Бомбардо рядом ранит вполовину.', dmg: '—', cost: 5, icon: 'assets/icons/shield.svg' },
+        { name: 'Protection Maxima', say: 'руки в стороны буквой «T» + «Protection Maxima»', desc: 'Купол вокруг всего тела на 3 секунды: отражает заклинания со всех сторон, взрывы ранят на 75% слабее.', dmg: '—', cost: 20, icon: 'assets/icons/shield_max.svg' },
     ];
     for (const item of items) {
         const card = document.createElement('div');
@@ -285,7 +292,12 @@ function renderItemsTab() {
             <img src='${item.icon}' class='item-icon' onerror="this.style.display='none'">
             <div class='item-name'>${item.name}</div>
             <div class='item-desc'>${item.desc}</div>
-            <div class='item-stats'><div class='stat-row'><span>Урон:</span><span class='stat-val'>${item.dmg}</span></div></div>`;
+            ${item.say ? `<div class='item-desc'><b>Как:</b> ${item.say}</div>` : ''}
+            <div class='item-stats'>
+                <div class='stat-row'><span>Урон:</span><span class='stat-val'>${item.dmg}</span></div>
+                ${item.pvp ? `<div class='stat-row'><span>По игрокам:</span><span class='stat-val'>${item.pvp}</span></div>` : ''}
+                ${item.cost ? `<div class='stat-row'><span>Усталость:</span><span class='stat-val'>${item.cost}</span></div>` : ''}
+            </div>`;
         grid.appendChild(card);
     }
 }
@@ -342,6 +354,8 @@ window.addEventListener('keydown', (e) => {
     if (k === 'x' || k === 'ч') game.castDebug('Maxima');
     if (k === 'c' || k === 'с') game.castDebug('WaterForming');
     if (k === 'z' || k === 'я') game.castDebug('Frozen');
+    if (k === 'p' || k === 'з') game.castDebug('Protection');
+    if (k === 'o' || k === 'щ') game.castDebug('ProtectionMaxima');
     if (k === 'f' || k === 'а') game.toggleFlashlight();
 });
 
@@ -358,6 +372,22 @@ const ui = {
         $('victory-score').innerText = `Счет: ${score}`;
         $('victory-screen').classList.remove('hidden');
         if (document.pointerLockElement) document.exitPointerLock();
+    },
+    /** Свободный мир: killed → message, then back to the menu. */
+    died(text) {
+        $('death-text').innerHTML = text;
+        const screen = $('death-screen');
+        screen.classList.remove('hidden');
+        if (document.pointerLockElement) document.exitPointerLock();
+        let left = 5;
+        $('death-count').textContent = left;
+        const back = () => location.reload();
+        $('death-menu-btn').onclick = back;
+        const timer = setInterval(() => {
+            left--;
+            $('death-count').textContent = Math.max(0, left);
+            if (left <= 0) { clearInterval(timer); back(); }
+        }, 1000);
     },
     isLoading: () => !loadingScreen.classList.contains('hidden'),
     isMenuVoiceActive: () => isMenuVoiceActive,

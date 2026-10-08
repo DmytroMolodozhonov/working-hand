@@ -263,6 +263,30 @@ export class VoxelCharacter {
         return h(this.leftElbowAnchor) > headTop && h(this.rightElbowAnchor) > headTop;
     }
 
+    /** Arm stretched out (hand far from the shoulder) — the shield gesture. */
+    isArmExtended(side) {
+        const shoulder = (side === 'left' ? this.leftArmAnchor : this.rightArmAnchor).getWorldPosition(_v3);
+        const hand = this.getHandWorldPosition(side, _v1);
+        return hand.distanceTo(shoulder) > 0.82 * (this.BONE_LENGTH_UPPER + this.BONE_LENGTH_LOWER);
+    }
+
+    /** Both arms stretched out sideways at shoulder height (a «T»). */
+    isTPose() {
+        if (!this.isArmExtended('left') || !this.isArmExtended('right')) return false;
+        this.group.updateMatrixWorld(true);
+        this.group.getWorldQuaternion(_qBody);
+        _up.set(0, 1, 0).applyQuaternion(_qBody);
+        const armLen = this.BONE_LENGTH_UPPER + this.BONE_LENGTH_LOWER;
+        for (const side of ['left', 'right']) {
+            const shoulder = (side === 'left' ? this.leftArmAnchor : this.rightArmAnchor).getWorldPosition(new THREE.Vector3());
+            const hand = this.getHandWorldPosition(side, _v1);
+            if (Math.abs(hand.sub(shoulder).dot(_up)) > 0.45 * armLen) return false;
+        }
+        const l = this.getHandWorldPosition('left', new THREE.Vector3());
+        const r = this.getHandWorldPosition('right', _v1);
+        return l.distanceTo(r) > 1.9 * armLen; // hands far apart: out to the sides, not forward
+    }
+
     /**
      * Flight pose: tilt the whole body forward (0 = upright, ~1.35 = Superman).
      * The rotation order is yaw-then-tilt so turning works while horizontal.

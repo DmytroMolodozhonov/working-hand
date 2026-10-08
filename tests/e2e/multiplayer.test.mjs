@@ -185,3 +185,130 @@ test('joining a wrong code shows a clear message', async () => {
     assert.match(text, /не найдена|ожидания/);
     await p.context.close();
 });
+
+test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players, shields, freezing + shatter, death', async () => {
+    const host = await openPlayer('Маг1');
+    await host.page.click('#mp-host-btn');
+    await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    const guest = await openPlayer('Маг2');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await wf(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
+
+    // Host picks the free world
+    await host.page.locator('.map-card.freeworld').click();
+    await host.page.click('#start-btn');
+    await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+
+    const st = await Promise.all([host.page, guest.page].map((p) => ev(p, () => {
+        const g = window.__zns.game;
+        return {
+            mode: g.config.mode, pvp: g.combat.enabled, hp: g.combat.hp, fatigue: g.combat.fatigue,
+            weapons: g.weapons.weapons.length, tables: g.world.tables.length, zombies: g.zombies.length,
+            bar: !document.getElementById('fatigue-container').classList.contains('hidden'),
+            hpBar: document.getElementById('hp-text').textContent,
+        };
+    })));
+    for (const s of st) {
+        assert.equal(s.mode, 'freeworld');
+        assert.ok(s.pvp);
+        assert.equal(s.hp, 10);
+        assert.equal(s.weapons, 0, 'no tables with weapons');
+        assert.equal(s.tables, 0);
+        assert.equal(s.zombies, 0);
+        assert.ok(s.bar, 'fatigue bar shown');
+        assert.match(s.hpBar, /10\/10/);
+    }
+
+    // Put the guest 12 m in front of the host's right hand
+    const ids = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.localId)));
+    const aim = async () => {
+        const target = await ev(host.page, () => {
+            const g = window.__zns.game;
+            const o = g.character.getHandWorldPosition('right');
+            const d = g.character.getHandDirection('right');
+            return { o: o.toArray(), d: d.toArray(), t: o.clone().addScaledVector(d, 12).toArray() };
+        });
+        await ev(guest.page, (t) => {
+            const g = window.__zns.game;
+            g.character.group.position.set(t[0], t[1] - 0.6, t[2]);
+            g.knockback.set(0, 0, 0);
+        }, target.t);
+        await wf(host.page, (t) => {
+            const r = [...window.__zns.game.remotes.values()][0];
+            return Math.hypot(r.position.x - t[0], r.position.z - t[2]) < 0.6;
+        }, target.t, 20000);
+        return target;
+    };
+    const castAt = (name) => ev(host.page, (n) => {
+        const g = window.__zns.game;
+        const o = g.character.getHandWorldPosition('right');
+        const d = g.character.getHandDirection('right');
+        g.spells.cast(n, o, d, 'right', g.localId);
+        g.sync.spell(n, o, d, 'right');
+    }, name);
+    const guestHp = () => ev(guest.page, () => window.__zns.game.combat.hp);
+
+    // Sapira hits the other player: 4 damage, the host sees it too
+    await aim();
+    await castAt('Sapira');
+    await wf(guest.page, () => window.__zns.game.combat.hp === 6, null, 20000);
+    await wf(host.page, () => [...window.__zns.game.remotes.values()][0].hp === 6, null, 20000);
+
+    // Fatigue: Sapira costs 20 of 30 — a second one right away is too tiring
+    const fat = await ev(host.page, () => {
+        const g = window.__zns.game;
+        g.lastMagicTime = Date.now(); g.lastSpellCastTime = 0;
+        const a = g.castLocalSpell('сапира', true);
+        const f1 = g.combat.fatigue;
+        g.lastSpellCastTime = 0;
+        const b = g.castLocalSpell('сапира', true);
+        return { a, b, f1 };
+    });
+    assert.equal(fat.a, 'Sapira');
+    assert.ok(fat.f1 <= 10.5, `fatigue spent (${fat.f1})`);
+    assert.equal(fat.b, null, 'not enough strength');
+    await wf(guest.page, () => window.__zns.game.combat.hp === 2, null, 20000).catch(() => {}); // the real cast may also hit
+    await ev(guest.page, () => { window.__zns.game.combat.hp = 10; });
+
+    // Protection Maxima on the guest: the host sees the dome, spells bounce off
+    await aim();
+    await ev(guest.page, () => { window.__zns.game.combat.shield = { type: 2, side: 'right', left: 3 }; });
+    await wf(host.page, () => [...window.__zns.game.remotes.values()][0].combat.shield === 2, null, 20000);
+    await castAt('Thunderwave');
+    await new Promise((r) => setTimeout(r, 1500));
+    assert.equal(await guestHp(), 10, 'shield stopped Thunderwave');
+    const domeSeen = await ev(host.page, () => [...window.__zns.game.remotes.values()][0].visuals.dome.visible);
+    assert.ok(domeSeen, 'the dome is visible to the other player');
+    await wf(guest.page, () => !window.__zns.game.combat.shield, null, 30000);
+
+    // Bombardo blast next to the guest hurts them (not the caster)
+    const hostHp0 = await ev(host.page, () => window.__zns.game.combat.hp);
+    await ev(host.page, (id) => {
+        const g = window.__zns.game;
+        const r = [...g.remotes.values()][0];
+        g.explode(r.position.clone(), 3.6, g.localId, 1);
+    });
+    await wf(guest.page, () => window.__zns.game.combat.hp < 10, null, 20000);
+    assert.equal(await ev(host.page, () => window.__zns.game.combat.hp), hostHp0);
+
+    // Frozen guest: everyone sees the ice; any punch shatters them → death screen, back to menu
+    await ev(guest.page, (by) => window.__zns.game.combat.freeze(by), ids[0]);
+    await wf(host.page, () => [...window.__zns.game.remotes.values()][0].combat.frozen, null, 20000);
+    const status = await ev(guest.page, () => document.getElementById('pvp-status').innerText);
+    assert.match(status, /заморозили.*20/s);
+    await ev(host.page, (to) => window.__zns.game.sync.playerHit(to, 1), ids[1]);
+    await wf(guest.page, () => !document.getElementById('death-screen').classList.contains('hidden'), null, 20000);
+    const death = await ev(guest.page, () => document.getElementById('death-text').innerText);
+    assert.match(death, /Маг1/);
+    assert.match(death, /заморож/);
+    await wf(host.page, () => [...window.__zns.game.remotes.values()][0]?.dead || window.__zns.game.remotes.size === 0, null, 20000);
+
+    for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
+    await host.context.close();
+    await guest.context.close();
+});

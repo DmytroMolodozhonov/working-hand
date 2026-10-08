@@ -6,9 +6,11 @@
 
 import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
+import { CombatVisuals } from '../game/Combat.js';
 
 const COLORS = [0xe67e22, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0xf1c40f, 0x2ecc71, 0xecf0f1, 0x34495e];
 const _q = new THREE.Quaternion();
+const _d = new THREE.Vector3();
 
 export class RemoteAvatar {
     constructor(scene, id, name, colorIndex = 0) {
@@ -26,6 +28,32 @@ export class RemoteAvatar {
         this.tag = makeNameTag(this.name);
         this.tag.position.set(0, 3.2, 0);
         this.character.group.add(this.tag);
+        this.scene = scene;
+        this.combat = { shield: 0, side: 'right', shieldLeft: 0, frozen: false }; // Свободный мир
+        this.visuals = null;
+        this.dead = false;
+    }
+
+    setDead(dead) {
+        this.dead = dead;
+        this.character.group.visible = !dead;
+    }
+
+    /** Would this player's shield stop something coming from `from`? */
+    shieldBlocks(from) {
+        const c = this.combat;
+        if (!c.shield || c.shieldLeft <= 0) return false;
+        if (c.shield === 2) return true;
+        const hp = this.handPose(c.side);
+        return hp.dir.dot(_d.subVectors(from, hp.origin).normalize()) > 0.25;
+    }
+
+    showBlock(from, fx) {
+        const c = this.combat;
+        const at = c.shield === 2
+            ? this.position.clone().add(_d.set(0, 0.6, 0)).addScaledVector(_d.subVectors(from, this.position).normalize(), 2.4)
+            : this.handPose(c.side).origin;
+        for (let i = 0; i < 20; i++) fx.spark(at, i % 2 ? 0x9fd8ff : 0xffffff, 0.15, _d.set((Math.random() - 0.5) * 8, Math.random() * 5, (Math.random() - 0.5) * 8), 0.4);
     }
 
     get position() {
@@ -36,6 +64,14 @@ export class RemoteAvatar {
         this.target = s;
         this.lastUpdate = performance.now();
         if (s.hp !== undefined) this.hp = s.hp;
+        if (s.c) {
+            // [shield type, side (1 = left), seconds left, frozen seconds left]
+            this.combat.shield = s.c[0];
+            this.combat.side = s.c[1] ? 'left' : 'right';
+            this.combat.shieldLeft = s.c[2];
+            this.combat.frozen = s.c[3] > 0;
+            if (!this.visuals) this.visuals = new CombatVisuals(this.scene);
+        }
     }
 
     update(dt) {
@@ -65,6 +101,11 @@ export class RemoteAvatar {
         ch.leftSimplifiedHand.applyState(s.s.lh);
         ch.rightSimplifiedHand.applyState(s.s.rh);
         ch.update(dt, null, false);
+        if (this.visuals) {
+            if (this.combat.shieldLeft > 0) this.combat.shieldLeft = Math.max(0, this.combat.shieldLeft - dt);
+            const hp = this.handPose(this.combat.side);
+            this.visuals.update(dt, this.combat, { center: this.position.clone().add(_d.set(0, 0.6, 0)), hand: hp.origin, dir: hp.dir });
+        }
     }
 
     /** Live hand pose for spells cast by this player (ice beam follows their hand). */
@@ -73,6 +114,7 @@ export class RemoteAvatar {
     }
 
     dispose() {
+        this.visuals?.dispose();
         this.tag.material.map.dispose();
         this.tag.material.dispose();
         this.character.dispose();

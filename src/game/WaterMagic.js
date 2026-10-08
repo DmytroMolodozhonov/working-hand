@@ -270,8 +270,8 @@ export class WaterMagic {
             if (Math.random() < 0.8) this._drop(s.source, 0.2, _v2.set(0, 4 + Math.random() * 3, 0));
             if (k >= 1) { s.phase = 'held'; this.column.visible = false; }
         } else {
-            // Follow the hand smoothly
-            s.pos.lerp(target, 1 - Math.exp(-dt * 9));
+            // Follow the hand smoothly — a big ball is heavy and drifts after it more slowly
+            s.pos.lerp(target, 1 - Math.exp(-dt * (s.frozen ? 10 : 9 / (1 + radiusOf(s.shown) * 0.9))));
             if (this._jerked(dt)) { this.drop(); return; }
 
             // Growing: «Максима» stream or the second hand feeding

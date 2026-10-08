@@ -20,6 +20,11 @@ export class Hud {
             voice: document.getElementById('voice-debug'),
             mp: document.getElementById('mp-hud'),
             minimap: document.getElementById('minimap'),
+            fatigue: document.getElementById('fatigue-container'),
+            fatigueFill: document.getElementById('fatigue-fill'),
+            fatigueText: document.getElementById('fatigue-text'),
+            status: document.getElementById('pvp-status'),
+            frozen: document.getElementById('frozen-overlay'),
         };
         this.mmCtx = this.el.minimap ? this.el.minimap.getContext('2d') : null;
         this.terrainImage = null;
@@ -49,6 +54,33 @@ export class Hud {
         // "ИИ" = how many times per second the camera pose is recognised
         this.el.fps.innerText = aiFps ? `FPS: ${fps} | ИИ: ${aiFps}` : `FPS: ${fps}`;
         this.el.fps.style.color = fps > 50 ? '#00ff00' : (fps > 25 ? '#ffff00' : '#ff0000');
+    }
+
+    /** Свободный мир: fatigue bar (white, bottom). */
+    setFatigue(value, max) {
+        const el = this.el;
+        if (!el.fatigue) return;
+        el.fatigue.classList.remove('hidden');
+        el.fatigueFill.style.width = `${Math.max(0, (value / max) * 100)}%`;
+        el.fatigueFill.classList.toggle('low', value < max * 0.3);
+        el.fatigueText.textContent = `Усталость: ${Math.floor(value)}/${max}`;
+    }
+
+    hidePvp() {
+        this.el.fatigue?.classList.add('hidden');
+        this.setStatus('');
+        this.setFrozenOverlay(0);
+    }
+
+    setStatus(html) {
+        const el = this.el.status;
+        if (!el) return;
+        el.classList.toggle('hidden', !html);
+        if (html && el.innerHTML !== html) el.innerHTML = html;
+    }
+
+    setFrozenOverlay(k) {
+        if (this.el.frozen) this.el.frozen.style.opacity = String(Math.max(0, Math.min(1, k)));
     }
 
     damageFlash() {

@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, realErrors } from './harness.mjs';
 
-const PORT = 8150;
+const PORT = 8155;
 let srv, browser;
 
 test.before(async () => {

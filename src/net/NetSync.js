@@ -19,6 +19,8 @@
  *   bite     host→player  zombie bit you;  win: someone reached the finish
  *   wb       player→all   water ball in hand (10×/s);  wdrop: ball dropped
  *   ice      player→all   ice blocks built with water forming
+ *   phit     player→all   my fist/weapon hit player `to` (Свободный мир)
+ *   pdead    player→all   I was killed (by `killer`)
  */
 
 import * as THREE from 'three';
@@ -143,7 +145,7 @@ export class NetSync {
             this.pTimer = 0;
             const held = [];
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());
-            this.net.send({ t: 'p', id: this.me, s: g.character.serializePose(), hp: g.playerHP, w: held }, true);
+            this.net.send({ t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP, c: g.combat.serialize(), w: held }, true);
         }
         // Water ball in my hand
         this.wbTimer += dt;
@@ -214,8 +216,16 @@ export class NetSync {
         this.net.send({ t: 'ice', by: this.me, c: cells }, true);
     }
 
-    explosion(pos, radius, power = 1) {
-        if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power });
+    playerHit(to, dmg) {
+        this.net.send({ t: 'phit', by: this.me, to, dmg }, true);
+    }
+
+    died(killer) {
+        this.net.send({ t: 'pdead', by: this.me, killer: killer || null }, true);
+    }
+
+    explosion(pos, radius, power = 1, casterId = null) {
+        if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
     }
 
     chestOpened(chest, weapon) {
@@ -282,7 +292,7 @@ export class NetSync {
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
                 break;
             }
-            case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1); g.explosions.push({ p: m.p, r: m.r }); } break;
+            case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;
             case 'chest': {
                 const c = g.chests.find((x) => x.id === m.id);
                 if (c && !this.net.isHost) g.openChest(c);
@@ -349,6 +359,17 @@ export class NetSync {
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 4000)); break;
+            case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(5, m.dmg | 0 || 1), m.by); break;
+            case 'pdead': {
+                if (m.by === this.me) break;
+                const r = g.remotes.get(m.by);
+                if (r) r.setDead(true);
+                const who = r ? r.name : 'Игрок';
+                const killer = m.killer === this.me ? 'вы' : (g.remotes.get(m.killer)?.name || null);
+                if (m.killer === this.me) g.killCount++;
+                g.hud.setVoice(killer ? `💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})` : `💀 ${escapeHtml(who)} погиб`, true);
+                break;
+            }
             case 'bite': g.damageLocalPlayer(m.dmg || 1); break;
             case 'win': g.victory(g.killCount * 100 + g.playerHP * 50); break;
             default: break;
