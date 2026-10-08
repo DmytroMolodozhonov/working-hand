@@ -231,7 +231,7 @@ export class Combat {
 
     /** Frozen or stunned: the body can't move. */
     get immobile() {
-        return this.frozen || this.stunned || this.dead;
+        return this.frozen || this.stunned || this.dead || this.webbed;
     }
 
     stun(seconds, byId, kind = 'stupefy') {
@@ -294,6 +294,7 @@ export class Combat {
             const hint = this.spend('ProtectionMaxima');
             if (hint) return hint;
             this.shield = { type: 2, side: 'right', left: PVP.DOME_TIME };
+            this.game.spiders?.onDome(); // the only way out of the spider's fangs
         } else {
             // The stretched-out hand; if none is fully stretched, the one reaching furthest
             let side = ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;

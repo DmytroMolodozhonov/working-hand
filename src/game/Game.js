@@ -32,6 +32,7 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals } from './Animals.js';
 import { Doors } from './Doors.js';
+import { Spiders } from './Spider.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -152,8 +153,12 @@ export class Game {
             blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
             quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
             storm: (origin) => this.storm?.start(origin, 13),
-            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); },
-            birdRay: (o, d, len, width) => { this.books?.hitRay(o, d, len, width); this.animals?.hitRay(o, d, len, width, 3, this.localId); },
+            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) this.spiders?.hitAt(point, 3, 20, 'Lightning'); },
+            birdRay: (o, d, len, width, name) => {
+                this.books?.hitRay(o, d, len, width);
+                this.animals?.hitRay(o, d, len, width, 3, this.localId);
+                if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
+            },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); },
             collision: this.collision,
             terrain: () => this.terrain,
@@ -189,6 +194,7 @@ export class Game {
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.doors = new Doors(this); // «Create a Door», opening by the handle
+        this.spiders = new Spiders(this); // the night boss: a giant spider
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -353,6 +359,7 @@ export class Game {
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
+        if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         this.punchCount++;
         if (this.authority) {
             this.damageZombie(z, dmg, isWeapon, dir, this.localId, hit);
@@ -392,7 +399,7 @@ export class Game {
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
-        if (authoritative) this.animals?.hitAt(pos, radius, 6 * power, casterId);
+        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo'); }
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -774,6 +781,11 @@ export class Game {
      * earth and stone rises out of the ground in front of you.
      * «Breakthrough Максима»: a wall twice as wide and higher.
      */
+    /** The night boss (the lightning can be aimed at it too). */
+    get bosses() {
+        return this.spiders ? this.spiders.list : [];
+    }
+
     _castBreakthrough(name, isFinal) {
         if (!isFinal && name === 'Breakthrough') return null; // (wait for «Максима»)
         if (this._bt?.pending) return null;
@@ -1522,6 +1534,7 @@ export class Game {
         this.bleeding.update(dt);
         this.animals.update(dt);
         this.doors.update(dt);
+        this.spiders.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
@@ -1538,7 +1551,7 @@ export class Game {
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
-        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets()), dt);
+        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets()), dt);
         mark('зомби');
 
         this.spells.update(dt);
@@ -1625,7 +1638,7 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding);
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held);
 
         // Explosion knockback (decays)
         if (this.knockback.lengthSq() > 0.0001) {
@@ -1993,6 +2006,7 @@ export class Game {
         this.bleeding?.dispose();
         this.animals?.dispose();
         this.doors?.dispose();
+        this.spiders?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

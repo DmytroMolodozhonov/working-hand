@@ -184,6 +184,12 @@ export class Gear {
                         }
                     }
                 }
+                if (g.authority) for (const sp of g.spiders?.targets() || []) {
+                    if (a.hit.has(sp) || _v.copy(sp.model.position).add(_v2.set(0, 2.5, 0)).distanceTo(p) > 2.8) continue;
+                    a.hit.add(sp);
+                    g.spiders.hit(sp, a.dmg, 'arrow');
+                    this._stick(a, sp.model);
+                }
                 for (const an of g.animals?.targets() || []) {
                     if (a.hit.has(an)) continue;
                     if (_v.copy(an.group.position).add(_v2.set(0, 0.9, 0)).distanceTo(p) < 1.0) { a.hit.add(an); if (a.by === g.localId) g.animals.hit(an, a.dmg, a.vel.clone(), a.by); this._stick(a, an.group); }

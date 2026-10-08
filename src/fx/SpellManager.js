@@ -178,7 +178,7 @@ export class SpellManager {
         const o = origin.clone();
         const d = direction.clone().normalize();
         // book-birds are knocked down by the spells that fly
-        if (RAY_SPELLS.has(name) && this.hooks.birdRay) this.hooks.birdRay(o, d, 30, name.endsWith('Maxima') ? 2 : 1);
+        if (RAY_SPELLS.has(name) && this.hooks.birdRay) this.hooks.birdRay(o, d, 30, name.endsWith('Maxima') ? 2 : 1, name);
         switch (name) {
             case 'Sapira': this.castSapira(o, d, casterId); break;
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;

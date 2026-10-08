@@ -357,6 +357,14 @@ export class NetSync {
     animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
     animalButt(to, dmg, p) { this.net.send({ t: 'abutt', to, dmg, p: [r3(p.x), r3(p.y), r3(p.z)] }, true); }
 
+    // ---- the spider (host)
+    bosses(list) { if (this.net.isHost) this.net.send({ t: 'boss', l: list }); }
+    bossHit(id, dmg, kind) { this.net.send({ t: 'bhit', id, dmg, kind }); }
+    bossShot(kind, from, to) { if (this.net.isHost) this.net.send({ t: 'bshot', kind, o: [r3(from.x), r3(from.y), r3(from.z)], to }, true); }
+    bossGrab(id, to) { if (this.net.isHost) this.net.send({ t: 'bgrab', id, to }, true); }
+    bossFree(id) { this.net.send({ t: 'bfree', id }, true); }
+    bossNotice() { if (this.net.isHost) this.net.send({ t: 'bnote' }, true); }
+
     door(d) { this.net.send({ t: 'door', d }, true); }
     doorAngle(id, a) { this.net.send({ t: 'dang', id, a: Math.round(a * 100) / 100 }, true); }
 
@@ -519,6 +527,12 @@ export class NetSync {
                 if (c && !this.net.isHost) g.openChest(c);
                 break;
             }
+            case 'boss': if (!this.net.isHost) g.spiders?.applyNet(m.l); break;
+            case 'bhit': if (this.net.isHost) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) g.spiders.hit(sp, Math.min(40, m.dmg || 1), m.kind); } break;
+            case 'bshot': if (!this.net.isHost) g.spiders?._fire(m.kind, vec(m.o), m.to); break;
+            case 'bgrab': if (m.to === this.me) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) { sp.holding = this.me; g.spiders._seized(sp); } } break;
+            case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
+            case 'bnote': g.hud.notify?.('🕷️ Из темноты выходит гигантская паучиха...'); break;
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'look': {

@@ -731,3 +731,60 @@ test('«Breakthrough»: arms low, then up — a wall of earth and stone rises in
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('the giant spider: Avada only 20, ice and wind do nothing, poison −7, web, grab + bite, Protection Maxima frees, a wand when it dies', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const S = g.spiders;
+        Object.defineProperty(g, 'isNight', { get: () => true }); // (it only comes at night)
+        S._nightDone = true;
+        const me = g.character.group.position;
+        const sp = S.spawn(new T.Vector3(me.x + 12, g.collision.groundY(me.x + 12, me.z), me.z));
+        sp.nextPoison = sp.nextWeb = sp.nextGrab = sp.nextAny = 999; // (tricks by hand below)
+        await frames(5);
+        const bar = document.getElementById('boss-bar').style.display;
+        S.boltAt(sp.model.position.clone().add(new T.Vector3(0, 2, 0)), 'AvadaKedavra');
+        const afterAvada = sp.hp;
+        S.hit(sp, 30, 'Ice'); S.hit(sp, 30, 'Wind');
+        const afterIce = sp.hp;
+        // poison
+        g.combat.hp = 20;
+        S._fire('poison', sp.model.position.clone().add(new T.Vector3(0, 2, 0)), g.localId);
+        for (let i = 0; i < 60 && S.shots.length; i++) await frames(1);
+        const afterPoison = g.combat.hp;
+        // web
+        S._fire('web', sp.model.position.clone().add(new T.Vector3(0, 2, 0)), g.localId);
+        for (let i = 0; i < 60 && S.shots.length; i++) await frames(1);
+        const webbed = g.combat.immobile;
+        S.webbed = 0;
+        await frames(2);
+        // grab + bite, then Protection Maxima
+        g.combat.hp = 20;
+        sp.holding = g.localId;
+        S._seized(sp);
+        const bitten = g.combat.hp;
+        const held = !!S.held;
+        S.onDome();
+        const freed = !S.held;
+        // kill it
+        S.hit(sp, 500, 'melee');
+        await frames(3);
+        const wands = [...g.items.loose.values()].filter((L) => L.item.kind === 'wand').length;
+        return { bar, afterAvada, afterIce, afterPoison, webbed, bitten, held, freed, dead: sp.dead, wands };
+    });
+    assert.equal(r.bar, 'block', 'the boss bar shows');
+    assert.equal(r.afterAvada, 180, 'Avada Kedavra takes only 20');
+    assert.equal(r.afterIce, 180, 'ice and wind do nothing');
+    assert.equal(r.afterPoison, 13, 'poison −7');
+    assert.ok(r.webbed, 'the web holds you');
+    assert.ok(r.held && r.bitten === 15, `seized and bitten −5 (${r.bitten})`);
+    assert.ok(r.freed, 'Protection Maxima frees');
+    assert.ok(r.dead && r.wands >= 1, 'it dies and leaves a wand');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
