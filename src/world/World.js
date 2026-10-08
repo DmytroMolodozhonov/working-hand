@@ -284,6 +284,21 @@ export class VoxelWorld {
     }
 
     /** A tree burnt down: the crown is gone, the trunk is charred (it still blocks the way). */
+    /** «Gather»: a spawn-area tree is taken away whole. */
+    removeTree(t) {
+        if (!this.trunkMesh || !t || !t.alive) return;
+        t.alive = false;
+        const dummy = new THREE.Object3D();
+        dummy.position.set(t.x, -1000, t.z);
+        dummy.scale.setScalar(0.0001);
+        dummy.updateMatrix();
+        this.trunkMesh.setMatrixAt(t.index, dummy.matrix);
+        this.leafMesh.setMatrixAt(t.index, dummy.matrix);
+        this.trunkMesh.instanceMatrix.needsUpdate = true;
+        this.leafMesh.instanceMatrix.needsUpdate = true;
+        this.collision.removeBox(t.boxId);
+    }
+
     burnTree(t) {
         if (!this.trunkMesh || !t.alive) return;
         const dummy = new THREE.Object3D();

@@ -22,6 +22,7 @@ import { Levitation } from './Levitation.js';
 import { Accio } from './Accio.js';
 import { Storm } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
+import { Builder, BUILD_SPELLS } from './Builder.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -168,6 +169,7 @@ export class Game {
         this.storm = new Storm(this); // «Lightning Strike» weather
         this.inventory = new Inventory(this); // five slots under the fatigue bar
         this.inventory.show(config.mode !== 'test');
+        this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -514,6 +516,12 @@ export class Game {
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
+        if (name === 'Stand') {
+            if (this.doors?.stand?.()) return 'Stand';
+            if (this.builder.build) { this.builder.finish(); return 'Stand'; }
+            return null;
+        }
+        if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // Levitation: point the hand at an object (or a creature: a duel spell)
         if (name === 'Levitation') {
@@ -829,6 +837,28 @@ export class Game {
             else this.damageLocalPlayer(6);
             this.hud.setVoice('⚡ Не успели навести — молния ударила в вас!', true);
         }
+    }
+
+    /** «Gather» and the building spells (learned from books outside creative). */
+    _castBuild(name, isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastBuild || 0) < 900) return null;
+        if (!this.builder.knows(name)) {
+            if (isFinal) this.hud.setVoice(`📖 «${BUILD_SPELLS[name].name}» ещё не изучено — найдите его в книге птицы`, true);
+            return null;
+        }
+        if (this.combat.enabled && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает сил'); return null; }
+        let hint;
+        if (name === 'Gather') hint = this.builder.gather();
+        else if (name === 'CreateDoor') hint = this.doors ? this.doors.create() : '🚪 Двери скоро будут';
+        else hint = this.builder.start(name);
+        if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
+        if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
+        this._lastBuild = now;
+        this._interimCast = isFinal ? null : { name, at: now };
+        return name;
     }
 
     /** The zombie becomes `by`'s servant for 45 s (authority: host / single player). */
@@ -1161,6 +1191,7 @@ export class Game {
         this.levitation.update(dt);
         this.accio.update(dt);
         this.inventory.update(dt);
+        this.builder.update(dt);
         this.storm.update(dt);
         this._updateLightning(dt);
         this.duel.update(dt);

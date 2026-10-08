@@ -32,6 +32,14 @@ export function matchSpell(text) {
     const has = (...words) => words.some((w) => s.includes(w));
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
+    // Building (before the short tokens of other spells)
+    if (has('stand', 'стэнд', 'стенд', 'стоп')) return 'Stand';
+    if (has('gather', 'гезер', 'гэзер', 'гатер', 'газер', 'гаазер', 'собери', 'собрать')) return 'Gather';
+    if (has('floor', 'флор', 'флоор', 'флур')) return 'CreateFloor';
+    if (has('ceiling', 'силинг', 'сейлинг', 'силин', 'эсилин', 'потол')) return 'CreateCeiling';
+    if (has('roof', 'руф', 'крыш')) return 'BuildRoof';
+    if (has('wall', 'уолл', 'уол', 'стену', 'стена')) return 'CreateWall';
+    if (has('door', 'двер', ' дор', 'дорь')) return 'CreateDoor';
     // New spell first: its words must never be mistaken for the short Sand/Ice tokens.
     if (has('бомбар', 'бомбор', 'бамбар', 'бонбар', 'помбар', 'бомбард', 'bombar', 'bombor', 'bambar', 'бомба', 'bomb')) {
         // «Бомбардо Максима»: the same word plus «максима»

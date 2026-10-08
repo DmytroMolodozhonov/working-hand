@@ -100,3 +100,15 @@ test('«Lightning Strike» is recognised (not taken for Thunderwave)', () => {
     for (const w of ['lightning strike', 'лайтнинг страйк', 'Лайтнинг', 'lightning']) assert.equal(matchSpell(w), 'LightningStrike', w);
     assert.equal(matchSpell('тандервейв'), 'Thunderwave');
 });
+
+test('building spells are recognised (and «Stand» is not a wall)', () => {
+    assert.equal(matchSpell('gather'), 'Gather');
+    assert.equal(matchSpell('create a floor'), 'CreateFloor');
+    assert.equal(matchSpell('create a wall'), 'CreateWall');
+    assert.equal(matchSpell('create a ceiling'), 'CreateCeiling');
+    assert.equal(matchSpell('build a roof'), 'BuildRoof');
+    assert.equal(matchSpell('create a door'), 'CreateDoor');
+    assert.equal(matchSpell('stand'), 'Stand');
+    assert.equal(matchSpell('стенд'), 'Stand');
+    assert.equal(matchSpell('флайн'), 'Flight');
+});

@@ -115,12 +115,16 @@ export class NetSync {
             ice: g.iceCells,
             players: this.net.playerList(),
             dayStart: g.dayStart,
+            edits: g.blockEdits || [],
+            treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
         };
     }
 
     /** Client: apply the host's world state after our own world was generated from the same seed. */
     applyWelcome(msg) {
         const g = this.game;
+        if (Array.isArray(msg.edits) && msg.edits.length) g.builder?.applyEdits(msg.edits.slice(-30000));
+        for (const i of msg.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
@@ -218,6 +222,16 @@ export class NetSync {
     zombieHit(z, res, by) {
         if (!this.net.isHost) return;
         this.net.send({ t: 'zhit', id: z.id, res, by });
+    }
+
+    /** Blocks I placed / removed (building, gathering, melting ice). */
+    blocks(list) {
+        for (let i = 0; i < list.length; i += 400) this.net.send({ t: 'blk', l: list.slice(i, i + 400) }, true);
+    }
+
+    /** A spawn-area tree was gathered. */
+    treeGone(index) {
+        this.net.send({ t: 'tree', i: index }, true);
     }
 
     /** A weapon went into my inventory (gone from the world) / came out of it. */
@@ -349,6 +363,8 @@ export class NetSync {
                 if (z && !z.isDead) g.damageZombie(z, Math.min(10, m.dmg | 0 || 1), !!m.w, vec(m.dir || [0, 0, 1]), m.from, h);
                 break;
             }
+            case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
+            case 'tree': { const t = g.world.trees?.find((x) => x.index === m.i); if (t && t.alive) g.world.removeTree(t); break; }
             case 'wgone': {
                 const w = g.weapons.byId.get(m.w);
                 if (w) { this.weaponOwners.delete(m.w); g.weapons.remove(w); }
