@@ -258,21 +258,90 @@ export class PoseService {
 
     async start() {
         if (this.isRunning) return;
-        this.isRunning = true;
         if (!this.stream) {
-            const { width, height } = this._resolution || { width: 640, height: 480 };
             this._status('Включение камеры...');
-            this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: width }, height: { ideal: height }, facingMode: 'user' }, audio: false });
-            this.videoElement.srcObject = this.stream;
-            this.videoElement.muted = true;
-            await this.videoElement.play().catch(() => {});
+            this.stream = await this._openCamera();
             if (this.previewElement) {
                 // Reuse the same camera stream for the preview (the original opened the camera twice)
                 this.previewElement.srcObject = this.stream;
                 this.previewElement.play().catch(() => {});
             }
         }
+        this.isRunning = true;
         this._pump();
+    }
+
+    /** All cameras of this computer (names appear once the camera is allowed). */
+    static async listCameras() {
+        if (!navigator.mediaDevices?.enumerateDevices) return [];
+        try {
+            return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+        } catch (e) { return []; }
+    }
+
+    /**
+     * Finds a camera that really works, in any browser: the camera chosen last
+     * time, the usual request, "any camera", then every camera one by one (a
+     * virtual or broken default camera is common). A camera that opens but
+     * shows nothing is skipped too. Throws the most telling error.
+     */
+    async _openCamera() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+            throw Object.assign(new Error('Браузер не даёт камеру на этом адресе'), { name: 'InsecureError' });
+        }
+        const { width, height } = this._resolution || { width: 640, height: 480 };
+        const size = { width: { ideal: width }, height: { ideal: height } };
+        let saved = this.cameraId || null;
+        if (!saved) { try { saved = localStorage.getItem('zns-camera-id'); } catch (e) { /* ignore */ } }
+        const tries = [];
+        if (saved) tries.push({ ...size, deviceId: { exact: saved } });
+        tries.push({ ...size, facingMode: 'user' }, true);
+        let lastErr = null, listed = false;
+        for (let i = 0; i < tries.length; i++) {
+            let stream = null;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: tries[i], audio: false });
+                if (await this._attach(stream)) {
+                    const id = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
+                    if (id) { try { localStorage.setItem('zns-camera-id', id); } catch (e) { /* ignore */ } }
+                    return stream;
+                }
+                lastErr = Object.assign(new Error('Камера включилась, но не показывает картинку'), { name: 'NoFramesError' });
+            } catch (e) {
+                lastErr = e;
+                // Forbidden by the browser or Windows: other cameras won't help
+                if (e.name === 'NotAllowedError' || e.name === 'SecurityError') throw e;
+            }
+            if (stream) for (const t of stream.getTracks()) t.stop();
+            if (i === tries.length - 1 && !listed) {
+                listed = true;
+                for (const c of await PoseService.listCameras()) {
+                    if (c.deviceId && c.deviceId !== saved) tries.push({ deviceId: { exact: c.deviceId } });
+                }
+            }
+        }
+        throw lastErr || Object.assign(new Error('Камера не найдена'), { name: 'NotFoundError' });
+    }
+
+    /** Shows the stream in the video element; false if no picture comes within 4 s. */
+    async _attach(stream) {
+        const v = this.videoElement;
+        v.srcObject = stream;
+        v.muted = true;
+        await v.play().catch(() => {});
+        const t0 = performance.now();
+        while (!(v.videoWidth > 0) && performance.now() - t0 < 4000) await new Promise((r) => setTimeout(r, 100));
+        return v.videoWidth > 0;
+    }
+
+    /** Use another camera (from the camera panel or the settings). */
+    async switchCamera(deviceId) {
+        this.cameraId = deviceId || null;
+        try { if (deviceId) localStorage.setItem('zns-camera-id', deviceId); else localStorage.removeItem('zns-camera-id'); } catch (e) { /* ignore */ }
+        const wasRunning = this.isRunning;
+        if (this.stream) { for (const t of this.stream.getTracks()) t.stop(); this.stream = null; }
+        this.isRunning = false;
+        if (wasRunning) await this.start();
     }
 
     stop() {
@@ -292,8 +361,9 @@ export class PoseService {
     _pump() {
         if (!this.isRunning) return;
         const v = this.videoElement;
+        const gen = (this._pumpGen = (this._pumpGen || 0) + 1); // one loop only, even after a camera switch
         const next = () => {
-            if (!this.isRunning) return;
+            if (!this.isRunning || gen !== this._pumpGen) return;
             if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => { this._onVideoFrame(); next(); });
             else requestAnimationFrame(() => { this._onVideoFrame(); next(); });
         };

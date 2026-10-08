@@ -368,7 +368,8 @@ export class VoxelCharacter {
             }
         }
 
-        const crouchAngle = this.isCrouching ? -0.8 : 0;
+        // Crouching lowers the body by 1 m: the legs fold back (kneeling) so they stay above the ground
+        const crouchAngle = this.isCrouching ? -1.35 : 0;
 
         if (move) {
             // Movement (original speeds)
