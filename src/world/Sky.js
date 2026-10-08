@@ -18,6 +18,8 @@ export const SKY_DAY = {
     fog: 0xc3e0fb,
 };
 
+const _dusk = new THREE.Color(0xff9a5a);
+
 export const SKY_NIGHT = {
     zenith: new THREE.Color(0x02040a),
     horizon: new THREE.Color(0x0b1424),
@@ -130,6 +132,17 @@ export class Sky {
         this.uniforms.uHorizon.value.copy(p.horizon);
         this.uniforms.uGround.value.copy(p.ground);
         this.uniforms.uNight.value = night ? 1 : 0;
+    }
+
+    /** 0 = day, 1 = night, anything between = dusk / dawn. */
+    setNightAmount(k) {
+        this.uniforms.uZenith.value.copy(SKY_DAY.zenith).lerp(SKY_NIGHT.zenith, k);
+        this.uniforms.uHorizon.value.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, k);
+        // a warm glow on the horizon at sunset / sunrise
+        const dusk = Math.max(0, 1 - Math.abs(k - 0.5) * 2.5);
+        this.uniforms.uHorizon.value.lerp(_dusk, dusk * 0.55);
+        this.uniforms.uGround.value.copy(SKY_DAY.ground).lerp(SKY_NIGHT.ground, k);
+        this.uniforms.uNight.value = k;
     }
 
     setSunDirection(v) {

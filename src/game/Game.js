@@ -31,6 +31,7 @@ const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 const PLAYER_RADIUS = 0.48;
+export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
 const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.STONE]: 0x8a8a8a, [BLOCK.SNOW]: 0xf2f6f8 };
 
@@ -116,6 +117,11 @@ export class Game {
             map: config.map || null,
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
+        // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
+        // Everyone in a game shares the host's clock (sent in the welcome message).
+        this.dayCycle = !config.map && !isTest && (config.mode === 'creative' || config.mode === 'freeworld');
+        this.dayStart = Date.now() - DAY_CYCLE_MS * 0.04; // a fresh world starts in the morning
+        if (this.dayCycle) this.world.setDayPhase(this.dayPhase());
         this.collision = this.world.collision;
         this.terrain = this.world.terrain;
         this.hud.setTerrain(this.terrain);
@@ -1059,6 +1065,7 @@ export class Game {
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
         this.world.update(this.character.group.position, this._viewBoost);
+        if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(this.character.group.position);
         mark('мир');
         this._updateCamera(dt);
@@ -1165,6 +1172,16 @@ export class Game {
             me.x = p.x + dx * MIN;
             me.z = p.z + dz * MIN;
         }
+    }
+
+    /** Where we are in the day: 0–0.5 day, 0.5–1 night. */
+    dayPhase() {
+        return (((Date.now() - this.dayStart) / DAY_CYCLE_MS) % 1 + 1) % 1;
+    }
+
+    /** Is it night now (spiders come out)? */
+    get isNight() {
+        return this.dayCycle ? this.world.nightAmount > 0.6 : this.config.mode === 'survival';
     }
 
     /** «Флайн»: Superman flight steered by the torso. */

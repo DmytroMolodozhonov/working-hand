@@ -114,12 +114,14 @@ export class NetSync {
             zombies: g.zombies.map((z) => z.serialize()),
             ice: g.iceCells,
             players: this.net.playerList(),
+            dayStart: g.dayStart,
         };
     }
 
     /** Client: apply the host's world state after our own world was generated from the same seed. */
     applyWelcome(msg) {
         const g = this.game;
+        if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);

@@ -11,6 +11,8 @@ import { createRng } from '../core/math.js';
 import { Terrain, BLOCK } from './Terrain.js';
 
 const _sun = new THREE.Vector3();
+const _nightFog = new THREE.Color();
+const _moon = new THREE.Color();
 const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
 import { CollisionWorld } from './Collision.js';
@@ -98,6 +100,45 @@ export class VoxelWorld {
             this.dirLight.intensity = 0.85;
             this.hemiLight.intensity = 0.35;
         }
+    }
+
+    /**
+     * Day and night, smoothly. `phase` 0..1 over the whole cycle: 0–0.5 day
+     * (the sun crosses the sky), 0.5–1 night (the moon); dusk and dawn blend.
+     */
+    setDayPhase(phase) {
+        const p = ((phase % 1) + 1) % 1;
+        // night amount: 0 by day, 1 by night, ~1.5 min blends around sunset (0.5) and sunrise (0/1)
+        const edge = 0.045;
+        const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+        const night = p < 0.5 ? ss(0.5 - edge, 0.5 + edge, p) + (1 - ss(-edge, edge, p)) : ss(0.5 - edge, 0.5 + edge, p) * (1 - ss(1 - edge, 1 + edge, p));
+        const k = Math.max(0, Math.min(1, night));
+        if (Math.abs(k - (this._night ?? -1)) < 0.002 && Math.abs(p - (this._phase ?? -1)) < 0.0005) return;
+        this._night = k;
+        this._phase = p;
+        // Sun (by day) or moon (by night) moves across the sky
+        const arc = (p < 0.5 ? p / 0.5 : (p - 0.5) / 0.5) * Math.PI; // 0 → π
+        const elev = Math.max(0.12, Math.sin(arc));
+        this.sunDir = (this.sunDir || new THREE.Vector3()).set(Math.cos(arc) * 0.9, elev, 0.35).normalize();
+        this.sky?.setNightAmount(k);
+        this.sky?.setSunDirection(this.sunDir);
+        const fogCol = (this._fogCol || (this._fogCol = new THREE.Color())).set(SKY_DAY.fog).lerp(_nightFog.set(SKY_NIGHT.fog), k);
+        if (!this.scene.fog) this.scene.fog = new THREE.Fog(fogCol, 25, 90);
+        this.scene.fog.color.copy(fogCol);
+        if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(fogCol);
+        else this.scene.background = fogCol.clone();
+        this.fogNear = 25 + (10 - 25) * k;
+        this.fogFar = 90 + (50 - 90) * k;
+        this.scene.fog.near = this.fogNear;
+        this.ambientLight.intensity = 0.3 + (0.15 - 0.3) * k;
+        this.dirLight.intensity = (0.85 + (0.18 - 0.85) * k) * (0.6 + 0.4 * elev);
+        this.dirLight.color.set(0xfff0d8).lerp(_moon.set(0x9fb6ff), k);
+        this.hemiLight.intensity = 0.35 + (0.08 - 0.35) * k;
+        this._shadowX = null; // re-aim the shadow
+    }
+
+    get nightAmount() {
+        return this._night ?? 0;
     }
 
     createSkybox() {
@@ -497,7 +538,9 @@ export class VoxelWorld {
         const x = Math.round(pos.x / texel) * texel, z = Math.round(pos.z / texel) * texel;
         if (x === this._shadowX && z === this._shadowZ) return;
         this._shadowX = x; this._shadowZ = z;
-        this.dirLight.position.set(x + 50, 100, z + 50);
+        const s = this.sunDir;
+        if (s) this.dirLight.position.set(x + s.x * 120, s.y * 120, z + s.z * 120);
+        else this.dirLight.position.set(x + 50, 100, z + 50);
         this.dirLight.target.position.set(x, 0, z);
         this.dirLight.target.updateMatrixWorld();
     }
