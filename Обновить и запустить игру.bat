@@ -24,26 +24,28 @@ if errorlevel 1 goto nogit
 if exist "%DIR%\.git" (
     echo Obnovlyayu igru...
     cd "%DIR%"
+    rem Always take the published version as is. Your own new maps are separate
+    rem files and stay; a stuck earlier update is cleaned up here.
+    git reset -q --hard >nul 2>&1
     git fetch origin %BRANCH%
-    git checkout -q %BRANCH%
-    rem Saved maps / settings must never block the update
-    git stash -q -u >nul 2>&1
-    git pull --ff-only origin %BRANCH%
-    git stash pop -q >nul 2>&1
+    if errorlevel 1 goto fail
+    git checkout -q -B %BRANCH% FETCH_HEAD
+    git reset -q --hard FETCH_HEAD
 ) else (
     echo Skachivayu igru pervyj raz, eto zajmet minutu...
     git clone -b %BRANCH% %REPO% "%DIR%"
     cd "%DIR%"
 )
-if errorlevel 1 (
-    echo Ne udalos obnovit. Proverte internet i povtorite.
-    pause
-    exit /b 1
-)
+if errorlevel 1 goto fail
 echo.
 echo Versiya igry:
 git log -1 --format="  %%cd  %%s" --date=format:"%%d.%%m.%%Y %%H:%%M"
 goto run
+
+:fail
+echo Ne udalos obnovit. Proverte internet i povtorite.
+pause
+exit /b 1
 
 :nogit
 echo Git ne najden - skachivayu igru arhivom (okolo 150 MB), podozhdite...
