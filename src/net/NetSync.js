@@ -122,7 +122,10 @@ export class NetSync {
         // Weapons the host no longer has (e.g. destroyed) — remove
         for (const id of known) { const w = g.weapons.byId.get(id); if (w) g.weapons.remove(w); }
         this._applyZombies(msg.zombies || []);
-        if (msg.players) this._syncPlayerList(msg.players);
+        if (msg.players) {
+            this.net.players = new Map(msg.players.map((p) => [p.id, { name: p.name, color: p.color }]));
+            this._syncPlayerList(msg.players);
+        }
     }
 
     // ================================================================ update

@@ -114,6 +114,7 @@ export class Network extends Emitter {
             this.lastSeen.set(conn.peer, performance.now());
             if (!msg || typeof msg !== 'object') return;
             if (msg.t === 'ping') return;
+            if (msg.t === 'bye') { this._dropClient(conn.peer); return; }
             msg.from = conn.peer;
             this.emit('message', msg);
             if (msg.relay) this.broadcast(msg, conn.peer);
@@ -121,6 +122,17 @@ export class Network extends Emitter {
         const drop = () => this._dropClient(conn.peer);
         conn.on('close', drop);
         conn.on('error', drop);
+        this._watchIce(conn, drop);
+    }
+
+    /** React to a dead WebRTC link quickly (closed tab, lost Wi-Fi). */
+    _watchIce(conn, onDead) {
+        let timer = null;
+        conn.on('iceStateChanged', (state) => {
+            clearTimeout(timer);
+            if (state === 'failed' || state === 'closed') onDead();
+            else if (state === 'disconnected') timer = setTimeout(onDead, 5000); // give it a chance to recover
+        });
     }
 
     _dropClient(id) {
@@ -153,6 +165,11 @@ export class Network extends Emitter {
             peer.on('error', fail);
             peer.on('open', (myId) => {
                 const conn = peer.connect(PREFIX + clean, { reliable: true, serialization: 'json', metadata: { name: this.name } });
+                const lost = () => {
+                    if (this.role !== 'client' || this.hostConn !== conn) return;
+                    this.emit('disconnected', { reason: 'Хост закрыл игру или связь потеряна' });
+                    this.leave();
+                };
                 conn.on('open', () => {
                     clearTimeout(timer);
                     settled = true;
@@ -170,19 +187,16 @@ export class Network extends Emitter {
                 conn.on('data', (msg) => {
                     this.lastSeen.set('H', performance.now());
                     if (!msg || typeof msg !== 'object' || msg.t === 'ping') return;
+                    if (msg.t === 'host-left') { lost(); return; }
                     if (msg.t === 'players') {
                         this.players = new Map(msg.players.map((p) => [p.id, { name: p.name, color: p.color }]));
                         this.emit('players', msg.players);
                     }
                     this.emit('message', msg);
                 });
-                const lost = () => {
-                    if (this.role !== 'client') return;
-                    this.emit('disconnected', { reason: 'Хост закрыл игру или связь потеряна' });
-                    this.leave();
-                };
                 conn.on('close', lost);
                 conn.on('error', lost);
+                this._watchIce(conn, lost);
             });
         });
     }
@@ -220,19 +234,33 @@ export class Network extends Emitter {
 
     _startHeartbeat() {
         clearInterval(this._heartbeat);
+        let lastTick = performance.now();
+        const TIMEOUT = 30000;
         this._heartbeat = setInterval(() => {
             const now = performance.now();
+            // If THIS tab was frozen (loading a level, tab in background), the
+            // silence is our fault, not the other side's: don't drop anybody.
+            if (now - lastTick > 4000) {
+                for (const id of this.lastSeen.keys()) this.lastSeen.set(id, now);
+            }
+            lastTick = now;
             if (this.isHost) {
                 this.broadcast({ t: 'ping' });
-                for (const [id, seen] of this.lastSeen) if (now - seen > 10000) this._dropClient(id);
+                for (const [id, seen] of this.lastSeen) if (now - seen > TIMEOUT) this._dropClient(id);
             } else if (this.isClient) {
                 this._sendConn(this.hostConn, { t: 'ping' });
-                if (now - (this.lastSeen.get('H') || now) > 10000) {
+                if (now - (this.lastSeen.get('H') || now) > TIMEOUT) {
                     this.emit('disconnected', { reason: 'Нет связи с хостом' });
                     this.leave();
                 }
             }
         }, 2000);
+    }
+
+    /** Tell the others we're leaving (closing the tab / back to menu). */
+    sayGoodbye() {
+        if (this.isClient) this._sendConn(this.hostConn, { t: 'bye' });
+        else if (this.isHost) this.broadcast({ t: 'host-left' });
     }
 
     leave() {

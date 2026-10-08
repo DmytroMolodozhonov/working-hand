@@ -457,7 +457,8 @@ $('test-mode-btn').addEventListener('click', async () => {
     game.start();
 });
 
-const backToMenu = () => { net.leave(); window.location.href = window.location.origin + window.location.pathname; };
+const backToMenu = () => { net.sayGoodbye(); net.leave(); window.location.href = window.location.origin + window.location.pathname; };
+window.addEventListener('pagehide', () => net.sayGoodbye());
 $('restart-btn').onclick = backToMenu;
 $('victory-menu-btn').onclick = backToMenu;
 
