@@ -51,6 +51,8 @@ export const SPELL_COST = {
     WaterForming: 5,
     Frozen: 5,
     Levitation: 6,
+    Stupefy: 12,
+    AvadaKedavra: 25,
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */
@@ -177,12 +179,31 @@ export class Combat {
         return this.frozenLeft > 0;
     }
 
+    /** Stunned by «Остолбеней»: can't move or cast (no ice, hits are normal). */
+    get stunned() {
+        return this.stunLeft > 0;
+    }
+
+    /** Frozen or stunned: the body can't move. */
+    get immobile() {
+        return this.frozen || this.stunned || this.dead;
+    }
+
+    stun(seconds, byId) {
+        this.stunLeft = Math.max(this.stunLeft || 0, seconds);
+        this.stunBy = byId;
+        if (this.game.flight?.busy) this.game.flight.land('stunned');
+        if (this.game.water?.active) this.game.water.drop();
+        if (this.game.levitation?.active) this.game.levitation.release(false);
+    }
+
     // ================================================================ fatigue
     /** Can I cast this now? null = yes, otherwise a hint for the player. */
     check(name) {
-        if (!this.enabled) return null;
         if (this.dead) return '💀';
         if (this.frozen) return `🧊 Вы заморожены — разморозка через ${Math.ceil(this.frozenLeft)} с`;
+        if (this.stunned) return `💫 Вы оглушены — ещё ${Math.ceil(this.stunLeft)} с`;
+        if (!this.enabled) return null;
         const cost = SPELL_COST[name] ?? 5;
         if (this.fatigue < cost) return `😮‍💨 Нет сил: нужно ${cost} усталости, есть ${Math.floor(this.fatigue)}`;
         return null;
@@ -333,7 +354,9 @@ export class Combat {
         this.dead = true;
         this.hp = 0;
         const name = byId ? this.game.playerName(byId) : null;
-        const text = how === 'shatter'
+        const text = how === 'avada'
+            ? `💚 Авада Кедавра. ${name ? `Вас победил ${name}` : 'Вы погибли'}`
+            : how === 'shatter'
             ? `🧊💥 ${name ? `${name} разбил вас` : 'Вас разбили'}, пока вы были заморожены`
             : `💀 ${name ? `Вас победил ${name}` : 'Вы погибли'}`;
         if (how === 'shatter') {
@@ -345,6 +368,10 @@ export class Combat {
 
     // ================================================================ update
     update(dt) {
+        if (this.stunLeft > 0) {
+            this.stunLeft = Math.max(0, this.stunLeft - dt);
+            this.game.hud.setStatus(this.stunLeft > 0 ? `💫 Остолбеней! Вы не можете двигаться ещё <b>${Math.ceil(this.stunLeft)}</b> с` : '');
+        }
         if (!this.enabled) {
             // Other modes: only the shield (no HP / fatigue rules)
             if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
@@ -380,11 +407,12 @@ export class Combat {
 
     _hud() {
         const hud = this.game.hud;
-        const key = `${this.hp}|${Math.floor(this.fatigue)}|${Math.ceil(this.frozenLeft)}|${Math.round(this.chill * 10)}`;
+        const key = `${this.hp}|${Math.floor(this.fatigue)}|${Math.ceil(this.frozenLeft)}|${Math.round(this.chill * 10)}|${Math.ceil(this.stunLeft || 0)}`;
         if (key === this._hudKey) return;
         this._hudKey = key;
         hud.update(this.hp, PVP.MAX_HP, this.game.killCount, this.game.punchCount);
         hud.setFatigue(this.fatigue, PVP.MAX_FATIGUE);
+        if (this.stunned) return; // the stun message is shown by update()
         hud.setStatus(this.frozen
             ? `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`
             : this.chill > 0.05 ? `❄️ Вас замораживают: ${Math.round(this.chill * 100)}% — убегайте из луча!` : '');

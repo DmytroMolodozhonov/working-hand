@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="g" cx="80%" cy="30%" r="40%"><stop offset="0" stop-color="#ffffff"/><stop offset="0.4" stop-color="#2dff5a"/><stop offset="1" stop-color="#2dff5a" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="100" cy="30" r="26" fill="url(#g)"/>
+  <polyline points="14,112 30,96 26,86 44,76 40,64 60,56 56,46 76,40 74,32 98,30" fill="none" stroke="#2dff5a" stroke-width="9" stroke-linejoin="round" opacity="0.5"/>
+  <polyline points="14,112 30,96 26,86 44,76 40,64 60,56 56,46 76,40 74,32 98,30" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="6" y="104" width="22" height="8" rx="3" transform="rotate(-40 17 108)" fill="#6b3f1e"/>
+</svg>

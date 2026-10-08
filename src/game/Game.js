@@ -19,6 +19,7 @@ import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { Combat, PVP } from './Combat.js';
 import { Levitation } from './Levitation.js';
+import { Duel } from './Duel.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -145,6 +146,7 @@ export class Game {
         this.water = new WaterMagic(this);
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
+        this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon) => this.onLocalHit(z, dmg, dir, isWeapon);
 
@@ -431,11 +433,22 @@ export class Game {
         let name = matchSpell(text);
         if (!name) return null;
         if (this.combat.dead) return null;
-        if (this.combat.frozen) { this.hud.setVoice(this.combat.check(name), true); return null; }
+        if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
-        // Levitation: point the hand at the object
-        if (name === 'Levitation') return this._castLevitation(isFinal);
+        // Duel magic: a charge flies at the creature the hand points at
+        if (name === 'Stupefy' || name === 'AvadaKedavra') return this._castDuel(name, name, isFinal);
+        // Ice / levitation aimed at a wizard become duel spells
+        if (name === 'Ice' || name === 'Frozen') {
+            const aim = this.water.active ? null : this.duel.pickSide(true);
+            if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
+        }
+        // Levitation: point the hand at an object (or a creature: a duel spell)
+        if (name === 'Levitation') {
+            const aim = this.levitation.active ? null : this.duel.pickSide(false);
+            if (aim && (aim.t.kind === 'p' || this._creatureCloserThanObject(aim))) return this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
+            return this._castLevitation(isFinal);
+        }
         // Water bending: the hand is at the water / holding the ball, not raised to the face
         const waterName = this._waterSpell(name);
         if (waterName) return this._castWater(waterName, text, isFinal);
@@ -521,6 +534,30 @@ export class Game {
         this._lastShieldCast = now;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
+    }
+
+    /** Is the pointed-at creature closer than any loose object (so levitation lifts the creature)? */
+    _creatureCloserThanObject(aim) {
+        const hand = this.character.getHandWorldPosition(aim.side);
+        for (const w of this.weapons.weapons) if (!w.holder && w.position.distanceTo(hand) < aim.t.dist) return false;
+        for (const b of this.water.resting) if (b.pos.distanceTo(hand) < aim.t.dist) return false;
+        return true;
+    }
+
+    /** Duel spell: costs fatigue, flies to the pointed-at creature (or straight ahead). */
+    _castDuel(costName, spell, isFinal, aim = undefined) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === costName && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastDuelCast || 0) < 900) return null;
+        const tired = this.combat.check(costName);
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        const target = aim === undefined ? this.duel.pickSide(false) : aim;
+        this.duel.cast(spell, target);
+        this.combat.pay(costName);
+        this._lastDuelCast = now;
+        this._interimCast = isFinal ? null : { name: costName, at: now };
+        return costName;
     }
 
     _castLevitation(isFinal) {
@@ -623,6 +660,7 @@ export class Game {
         if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
         if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
+        if (name === 'Stupefy' || name === 'AvadaKedavra') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);
@@ -721,6 +759,8 @@ export class Game {
         if (!isTest) this._checkVictory();
 
         this.levitation.update(dt);
+        this.duel.update(dt);
+        this.duel.updateVisuals(dt);
         this.weapons.update(dt);
         this.water.update(dt);
         this.combat.update(dt);
@@ -769,7 +809,7 @@ export class Game {
         // Blend between camera results so motion stays fluid at any frame rate
         if (this.poseSmoother.to) this.currentPose = this.poseSmoother.sample();
         // Frozen in ice (free world): the body can't move at all
-        const iced = this.combat.frozen || this.combat.dead;
+        const iced = this.combat.immobile;
         const pose = iced ? null : this.currentPose;
         const s = this.settings;
         const flight = this.flight;

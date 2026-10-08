@@ -64,6 +64,9 @@ export class RemoteAvatar {
         this.target = s;
         this.lastUpdate = performance.now();
         if (s.hp !== undefined) this.hp = s.hp;
+        if (s.ft !== undefined) this.fatigue = s.ft;
+        this.duelContact = s.dc ? s.dc[0] : 1;
+        this.duelJerk = s.dc ? s.dc[1] : 0;
         if (s.c) {
             // [shield type, side (1 = left), seconds left, frozen seconds left]
             this.combat.shield = s.c[0];

@@ -83,6 +83,15 @@ export class Hud {
         if (this.el.frozen) this.el.frozen.style.opacity = String(Math.max(0, Math.min(1, k)));
     }
 
+    /** A coloured flash around the screen (green for Avada Kedavra). */
+    flashColor(color) {
+        const f = this.el.flash;
+        if (!f) return;
+        f.style.boxShadow = `inset 0 0 160px ${color}`;
+        this.damageFlash();
+        setTimeout(() => { f.style.boxShadow = ''; }, 900);
+    }
+
     damageFlash() {
         const f = this.el.flash;
         if (!f) return;

@@ -312,3 +312,102 @@ test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players,
     await host.context.close();
     await guest.context.close();
 });
+
+test('duel magic: Остолбеней flies and stuns, charges meet and push, calm exit, shield, Авада Кедавра', async () => {
+    const host = await openPlayer('Гарри');
+    await host.page.click('#mp-host-btn');
+    await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    const guest = await openPlayer('Драко');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await wf(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
+    await host.page.locator('.map-card.freeworld').click();
+    await host.page.click('#start-btn');
+    await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+    const ids = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.localId)));
+
+    // Guest stands 8 m in front of the host's right hand
+    const aim = async () => {
+        const t = await ev(host.page, () => {
+            const g = window.__zns.game;
+            const o = g.character.getHandWorldPosition('right');
+            const d = g.character.getHandDirection('right');
+            return o.clone().addScaledVector(d, 8).toArray();
+        });
+        await ev(guest.page, (t) => { const g = window.__zns.game; g.character.group.position.set(t[0], t[1] - 0.6, t[2]); g.knockback.set(0, 0, 0); }, t);
+        await wf(host.page, (t) => { const r = [...window.__zns.game.remotes.values()][0]; return Math.hypot(r.position.x - t[0], r.position.z - t[2]) < 0.6; }, t, 20000);
+    };
+    const hostCast = (spell) => ev(host.page, (spell) => {
+        const g = window.__zns.game;
+        g._lastDuelCast = 0;
+        return g._castDuel(spell, spell, true);
+    }, spell);
+    // In the test browser there is no camera: the guest "keeps the hand on the opponent" by decree
+    const setContact = (page, ok, jerk) => ev(page, ([ok, jerk]) => { window.__zns.game.duel._contact = () => ({ ok, jerk }); }, [ok, jerk]);
+
+    // 1) Остолбеней: a charge flies (not instant) and stuns on arrival
+    await aim();
+    assert.equal(await hostCast('Stupefy'), 'Stupefy');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(await ev(guest.page, () => window.__zns.game.combat.stunned), false, 'not instant');
+    assert.ok(await ev(guest.page, () => window.__zns.game.duel.bolts.size === 1), 'the guest sees the charge coming');
+    await wf(guest.page, () => window.__zns.game.combat.stunned, null, 40000);
+    const st = await ev(guest.page, () => document.getElementById('pvp-status').innerText);
+    assert.match(st, /Остолбеней/);
+    await ev(guest.page, () => { window.__zns.game.combat.stunLeft = 0; });
+
+    // 2) Duel: the guest answers — charges meet and push; the rested wizard wins
+    await setContact(host.page, true, false);
+    await setContact(guest.page, true, false);
+    await ev(host.page, () => { window.__zns.game.combat.fatigue = 30; });
+    await ev(guest.page, () => { window.__zns.game.combat.fatigue = 3; window.__zns.game.combat.hp = 4; });
+    await aim();
+    await hostCast('Stupefy');
+    await ev(guest.page, (hostId) => {
+        const g = window.__zns.game;
+        g.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 8 } });
+    }, ids[0]);
+    await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 40000);
+    await wf(guest.page, () => window.__zns.game.duel.clashes.length === 1, null, 20000);
+    await wf(guest.page, () => window.__zns.game.combat.stunned, null, 90000);
+    assert.equal(await ev(host.page, () => window.__zns.game.combat.stunned), false, 'the stronger one wins');
+    await ev(guest.page, () => { window.__zns.game.combat.stunLeft = 0; });
+
+    // 3) Calm exit: hand off the opponent, then a flick → the duel just ends
+    await ev(host.page, () => { window.__zns.game.combat.fatigue = 30; });
+    await ev(guest.page, () => { window.__zns.game.combat.fatigue = 30; window.__zns.game.combat.hp = 10; });
+    await aim();
+    await hostCast('Stupefy');
+    await ev(guest.page, (hostId) => window.__zns.game.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 8 } }), ids[0]);
+    await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 40000);
+    await setContact(guest.page, false, false); // hand moved calmly away
+    await new Promise((r) => setTimeout(r, 1200));
+    await setContact(guest.page, false, true); // …then shaken off
+    await wf(host.page, () => window.__zns.game.duel.clashes.length === 0, null, 20000);
+    await new Promise((r) => setTimeout(r, 800));
+    assert.equal(await ev(guest.page, () => window.__zns.game.combat.stunned), false, 'nobody hit after a calm exit');
+    assert.equal(await ev(host.page, () => window.__zns.game.combat.stunned), false);
+    await setContact(guest.page, true, false);
+
+    // 4) Protection Maxima stops Авада Кедавра
+    await aim();
+    await ev(guest.page, () => { window.__zns.game.combat.shield = { type: 2, side: 'right', left: 8 }; });
+    await hostCast('AvadaKedavra');
+    await wf(guest.page, () => window.__zns.game.duel.bolts.size === 0, null, 40000);
+    assert.equal(await ev(guest.page, () => window.__zns.game.combat.dead), false, 'shield saved the wizard');
+
+    // 5) Авада Кедавра without a shield: instant death, back to the menu
+    await ev(guest.page, () => { window.__zns.game.combat.shield = null; });
+    await aim();
+    await hostCast('AvadaKedavra');
+    await wf(guest.page, () => !document.getElementById('death-screen').classList.contains('hidden'), null, 40000);
+    assert.match(await ev(guest.page, () => document.getElementById('death-text').innerText), /Авада Кедавра/);
+
+    for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
+    await host.context.close();
+    await guest.context.close();
+});

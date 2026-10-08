@@ -21,6 +21,8 @@
  *   ice      player→all   ice blocks built with water forming
  *   phit     player→all   my fist/weapon hit player `to` (Свободный мир)
  *   pdead    player→all   I was killed (by `killer`)
+ *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
+ *   clash    host→all     two charges are pushing (meeting point p); clashend: result
  */
 
 import * as THREE from 'three';
@@ -147,7 +149,10 @@ export class NetSync {
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());
             const floating = g.levitation?.heldWeapon();
             if (floating) held.push(floating.serialize());
-            this.net.send({ t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP, c: g.combat.serialize(), w: held }, true);
+            this.net.send({
+                t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP,
+                c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, dc: g.duel.myContact(), w: held,
+            }, true);
         }
         // Water ball in my hand
         this.wbTimer += dt;
@@ -216,6 +221,22 @@ export class NetSync {
 
     ice(cells) {
         this.net.send({ t: 'ice', by: this.me, c: cells }, true);
+    }
+
+    duelCast(b) {
+        this.net.send({ t: 'duel', id: b.id, by: b.by, s: b.spell, side: b.side, tk: b.tk, tid: b.tid, o: [r3(b.o.x), r3(b.o.y), r3(b.o.z)], d: [r3(b.dir.x), r3(b.dir.y), r3(b.dir.z)] }, true);
+    }
+
+    duelEnd(id, res) {
+        this.net.send({ t: 'dend', id, res }, true);
+    }
+
+    duelClash(a, b, p) {
+        if (this.net.isHost) this.net.send({ t: 'clash', a, b, p: Math.round(p * 1000) / 1000 });
+    }
+
+    duelClashEnd(a, b, loser) {
+        if (this.net.isHost) this.net.send({ t: 'clashend', a, b, loser });
     }
 
     playerHit(to, dmg) {
@@ -365,6 +386,10 @@ export class NetSync {
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
+            case 'duel': if (m.by !== this.me) g.duel.remoteCast(m); break;
+            case 'dend': g.duel.remoteEnd(m.id, m.res); break;
+            case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
+            case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
             case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(5, m.dmg | 0 || 1), m.by); break;
             case 'pdead': {
                 if (m.by === this.me) break;

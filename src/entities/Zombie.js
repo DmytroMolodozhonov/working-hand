@@ -205,6 +205,12 @@ export class Zombie {
             if (this.frozenTimer <= 0) this.unfreeze();
             return;
         }
+        // «Остолбеней»: stands still
+        if (this.stunTimer > 0) {
+            this.stunTimer -= dt;
+            if (pos.y > ground + 1.0 + 0.01) { this.vy = (this.vy || 0) - 25 * dt; pos.y = Math.max(ground + 1.0, pos.y + this.vy * dt); }
+            return;
+        }
 
         if (this.isSleeping) {
             if (targetPos && Math.sqrt(this.lastDistSq) < 15) this.isSleeping = false;
