@@ -392,7 +392,12 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     });
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 0, null, 20000);
     await new Promise((r) => setTimeout(r, 800));
-    assert.equal(await ev(guest.page, () => window.__zns.game.combat.stunned), false, 'nobody hit after a calm exit');
+    const exitStunned = await ev(guest.page, () => window.__zns.game.combat.stunned);
+    if (exitStunned) {
+        console.log('host duel log', JSON.stringify(await ev(host.page, () => window.__zns.game.duel.log)));
+        console.log('guest duel log', JSON.stringify(await ev(guest.page, () => window.__zns.game.duel.log)));
+    }
+    assert.equal(exitStunned, false, 'nobody hit after a calm exit');
     assert.equal(await ev(host.page, () => window.__zns.game.combat.stunned), false);
     await setContact(guest.page, true, false);
 

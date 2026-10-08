@@ -69,6 +69,7 @@ export class Duel {
             };
         }
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
+        this.log = []; // last duel events (for testing / debugging)
     }
 
     get me() {
@@ -225,6 +226,7 @@ export class Duel {
     }
 
     _arriveAtMe(b) {
+        this._note({ ev: 'arrive', id: b.id, by: b.by });
         const g = this.game;
         // Answered with a charge aimed back? Then the referee will start a duel — wait.
         for (const o of this.bolts.values()) if (o.by === this.me && o.tk === 'p' && o.tid === b.by && o.state === 'flying') return;
@@ -246,7 +248,13 @@ export class Duel {
 
     // ============================================================ effects
     /** A duel spell landed on my wizard. */
+    _note(e) {
+        this.log.push({ t: Math.round(this._t * 100) / 100, ...e });
+        if (this.log.length > 30) this.log.shift();
+    }
+
     applyToMe(spell, byId) {
+        this._note({ ev: 'hitMe', spell, byId });
         const g = this.game;
         const c = g.combat;
         const p = c.center(_v1);
@@ -333,6 +341,7 @@ export class Duel {
     }
 
     _startClash(a, b, p) {
+        this._note({ ev: 'clashStart', a: a.id, b: b.id, p });
         if (this.clashes.some((c) => c.a === a || c.b === b || c.a === b || c.b === a)) return;
         a.state = 'clash';
         b.state = 'clash';
@@ -420,6 +429,7 @@ export class Duel {
         c.sendT = (c.sendT || 0) - dt;
         if (c.sendT <= 0 && g.sync) { c.sendT = 0.1; g.sync.duelClash(a.id, b.id, c.p); }
         if (loser || dissolve) {
+            this._note({ ev: 'clashEnd', loser, dissolve, p: Math.round(c.p * 100) / 100, lostA: c.lostA, lostB: c.lostB, jerkA: ca.jerk, jerkB: cb.jerk, a: a.by, b: b.by });
             this._finishClash(c, loser);
             if (g.sync) g.sync.duelClashEnd(a.id, b.id, loser);
         }
