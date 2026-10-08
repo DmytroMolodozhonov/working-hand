@@ -33,7 +33,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGraphics, powe
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// soft shadows sample the shadow map many times per pixel; weak computers get plain ones
+renderer.shadowMap.type = lowGraphics ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
