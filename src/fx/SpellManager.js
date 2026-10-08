@@ -37,6 +37,7 @@ export function matchSpell(text) {
         // «Бомбардо Максима»: the same word plus «максима»
         return has('макс', 'max', 'мэкс', 'мекс', 'maks', 'мах') ? 'BombardoMaxima' : 'Bombardo';
     }
+    if (has('лайтнинг', 'лайтинг', 'лайтнин', 'лайтин', 'lightning', 'lightnin', 'lighting', 'страйк', 'strike', 'лайт нинг')) return 'LightningStrike';
     // Duel magic
     if (has('авада', 'кедавр', 'кидавр', 'avada', 'kedavr', 'kadavr', 'водокидавр', 'адакедавр')) return 'AvadaKedavra';
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
@@ -157,6 +158,9 @@ export class SpellManager {
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
             case 'Wind': this.castWind(o, d, casterId, 1); break;
             case 'Brainrot': this.castBrainrot(o, direction.clone()); break; // (its length = the distance)
+            case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
+            case 'LightningHold': this.castLightningHold(casterId, handSide); break;
+            case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'Earthquake': this.castEarthquake(o, d, casterId, 1); break;
             case 'EarthquakeMaxima': this.castEarthquake(o, d, casterId, 3); break;
             case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
@@ -288,6 +292,70 @@ export class SpellManager {
                 p.hit('Thunderwave', origin, dirTo.clone().setY(0.2).multiplyScalar(26));
             }
         }
+    }
+
+    // ------------------------------------------------------ Lightning Strike
+    /** The lightning sits in the caster's hand: a crackling bolt from the sky to it (≤ 5 s). */
+    castLightningHold(casterId, side) {
+        this._holds = this._holds || new Map();
+        const prev = this._holds.get(casterId);
+        if (prev) prev.life = 0;
+        const sky = new THREE.Vector3();
+        const spell = {
+            life: 5.5,
+            onUpdate: () => {
+                const hp = this.hooks.handPose ? this.hooks.handPose(casterId, side || 'right') : null;
+                if (!hp) return;
+                const hand = hp.origin;
+                sky.set(hand.x + 6, hand.y + 45, hand.z - 4);
+                this._jagged(sky, hand, 10, 1.6, 0.05);
+                if (Math.random() < 0.7) this.fx.spark(hand, Math.random() < 0.5 ? 0xffffff : 0x9fd8ff, 0.18, _b.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4), 0.25);
+            },
+            onEnd: () => { if (this._holds.get(casterId) === spell) this._holds.delete(casterId); },
+        };
+        this._holds.set(casterId, spell);
+        this.spells.push(spell);
+    }
+
+    /** A jagged bolt from a to b (segments live one frame unless `life`). */
+    _jagged(a, b, n, amp, life) {
+        const dir = _a.subVectors(b, a);
+        let prev = a.clone();
+        for (let i = 1; i <= n; i++) {
+            const p = a.clone().addScaledVector(dir, i / n);
+            if (i < n) p.add(_c.set((Math.random() - 0.5) * 2 * amp, (Math.random() - 0.5) * amp, (Math.random() - 0.5) * 2 * amp));
+            this.fx.bolts.add(prev, p, life);
+            prev = p;
+        }
+    }
+
+    /** The lightning strikes `point` from the sky: everything right there is hit hard. */
+    castLightningHit(point, casterId) {
+        const hold = this._holds && this._holds.get(casterId);
+        if (hold) hold.life = 0;
+        const sky = new THREE.Vector3(point.x + 8, point.y + 70, point.z - 5);
+        for (let k = 0; k < 3; k++) this._jagged(sky, point, 16, 3 - k, 0.35 + k * 0.05);
+        for (let k = 0; k < 6; k++) { // branches
+            const mid = sky.clone().lerp(point, 0.3 + Math.random() * 0.5);
+            this._jagged(mid, mid.clone().add(_b.set((Math.random() - 0.5) * 14, -6 - Math.random() * 8, (Math.random() - 0.5) * 14)), 5, 1, 0.3);
+        }
+        this.fx.lightFlash(point, 0xdde8ff, 14, 0.5, 120);
+        this.fx.shake = Math.max(this.fx.shake, 1.2);
+        for (let i = 0; i < 40; i++) this.fx.spark(point, i % 3 ? 0xffffff : 0x9fd8ff, 0.25, _b.set((Math.random() - 0.5) * 12, Math.random() * 9, (Math.random() - 0.5) * 12), 0.6);
+        this._sound('playThunder');
+        if (this.hooks.ignite) this.hooks.ignite(point.clone().add(UP.clone().multiplyScalar(4)), _b.set(0, -1, 0), 6);
+        const R = 3.2;
+        if (this.auth) {
+            for (const z of this.zombies) {
+                if (z.isDead) continue;
+                if (z.group.position.distanceTo(point) < R + 0.5) { z.damageCooldown = 0; this._damage(z, 20, false, _b.set(0, 0, 1)); }
+            }
+        }
+        for (const p of this._players(casterId)) {
+            if (!p.local) continue;
+            if (p.center().distanceTo(point) < R + 0.5) p.hit('Lightning', point);
+        }
+        if (this.hooks.lightningAt) this.hooks.lightningAt(point, casterId);
     }
 
     // ---------------------------------------------------------- Earthquake

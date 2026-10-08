@@ -20,6 +20,7 @@ import { WaterMagic } from './WaterMagic.js';
 import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Accio } from './Accio.js';
+import { Storm } from '../fx/Storm.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -139,6 +140,8 @@ export class Game {
             weapons: () => this.weapons.weapons,
             blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
             quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
+            storm: (origin) => this.storm?.start(origin, 13),
+            lightningAt: (point, casterId) => this.storm?.endIn(3),
             ignite: (o, d, len) => this.fire.igniteAlong(o, d, len),
             collision: this.collision,
             terrain: () => this.terrain,
@@ -161,6 +164,8 @@ export class Game {
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
+        this.storm = new Storm(this); // «Lightning Strike» weather
+        this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
@@ -503,6 +508,7 @@ export class Game {
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
+        if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // Levitation: point the hand at an object (or a creature: a duel spell)
         if (name === 'Levitation') {
@@ -734,6 +740,90 @@ export class Game {
         this.fx.shake = Math.max(this.fx.shake, 1.2);
         c.damage(power > 1 ? 9 : 3, casterId, 'Earthquake');
         return true;
+    }
+
+    // ============================================================ Lightning Strike
+    /**
+     * «Lightning Strike» (25): arms up + the words. 5 s the storm gathers, then the
+     * lightning comes down into your hands; within 5 s point it calmly at a
+     * creature (hold the aim ~0.5 s) — or it strikes you.
+     */
+    _castLightning(isFinal) {
+        if (this.lightning) return null;
+        const armsUp = this.character.areBothHandsUp() || Date.now() - (this._armsUpAt || 0) < 1500;
+        if (!armsUp) { if (isFinal) this.hud.setVoice('⛈️ Поднимите <b>обе руки вверх</b> и скажите «Lightning Strike»', true); return null; }
+        const tired = this.combat.check('LightningStrike');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('LightningStrike');
+        const p = this.character.group.position.clone();
+        this.spells.cast('Storm', p, _v1.set(0, 1, 0), null, this.localId);
+        if (this.sync) this.sync.spell('Storm', p, _v1.set(0, 1, 0), null);
+        this.lightning = { phase: 'gather', t: 0, aimT: 0, aim: null };
+        this.hud.setVoice('⛈️ Буря собирается... держитесь!', true);
+        return 'LightningStrike';
+    }
+
+    /** Creatures the lightning can be aimed at. */
+    _lightningTargets() {
+        const out = [];
+        for (const z of this.zombies) if (!z.isDead && !z.isThrall) out.push({ pos: z.group.position, key: 'z' + z.id });
+        for (const [id, r] of this.remotes) if (!r.dead) out.push({ pos: r.position, key: 'p' + id });
+        for (const b of this.bosses || []) if (!b.dead) out.push({ pos: b.position, key: 'b' + b.id });
+        return out;
+    }
+
+    _updateLightning(dt) {
+        const L = this.lightning;
+        if (!L) { this.hud.setTimer?.(null); return; }
+        L.t += dt;
+        if (L.phase === 'gather') {
+            this.hud.setTimer?.(1 - L.t / 5, '⛈️', Math.ceil(5 - L.t));
+            if (L.t >= 5) {
+                L.phase = 'hold';
+                L.t = 0;
+                L.side = this.magicHand || this.lastMagicHand || 'right';
+                this.spells.cast('LightningHold', this.character.group.position, _v1.set(0, 1, 0), L.side, this.localId);
+                if (this.sync) this.sync.spell('LightningHold', this.character.group.position, _v1.set(0, 1, 0), L.side);
+                this.fx.lightFlash(this.character.getHandWorldPosition(L.side), 0xdde8ff, 6, 0.3, 40);
+                this.hud.setVoice('⚡ Молния в руках! Плавно наведите руку на цель — у вас 5 секунд', true);
+            }
+            return;
+        }
+        // Aiming: the hand that points best at a creature; hold it there ~0.5 s
+        const ch = this.character;
+        let best = null;
+        for (const side of ['right', 'left']) {
+            const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
+            const dir = ch.getHandDirection(side, new THREE.Vector3());
+            for (const t of this._lightningTargets()) {
+                const to = _v2.copy(t.pos).add(_v1.set(0, 1, 0)).sub(hand);
+                const d = to.length();
+                if (d > 45 || d < 1.5) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang < 0.22 && (!best || ang < best.ang)) best = { key: t.key, pos: t.pos, ang, side };
+            }
+        }
+        if (best && L.aim === best.key) L.aimT += dt;
+        else { L.aim = best ? best.key : null; L.aimT = 0; }
+        this.hud.setTimer?.(1 - L.t / 5, best ? '🎯' : '⚡', Math.ceil(5 - L.t), best ? Math.min(1, L.aimT / 0.5) : 0);
+        if (best && L.aimT >= 0.5) {
+            this.lightning = null;
+            const point = best.pos.clone();
+            this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
+            if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
+            this.hud.setVoice('⚡ <span style="color:#9fd8ff">LIGHTNING STRIKE!</span>', true);
+            return;
+        }
+        if (L.t >= 5) {
+            // Too late: it strikes you
+            this.lightning = null;
+            const point = ch.group.position.clone();
+            this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
+            if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
+            if (this.combat.enabled) this.combat.damage(10, null, 'Lightning');
+            else this.damageLocalPlayer(6);
+            this.hud.setVoice('⚡ Не успели навести — молния ударила в вас!', true);
+        }
     }
 
     /** The zombie becomes `by`'s servant for 45 s (authority: host / single player). */
@@ -1039,6 +1129,8 @@ export class Game {
 
         this.levitation.update(dt);
         this.accio.update(dt);
+        this.storm.update(dt);
+        this._updateLightning(dt);
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);

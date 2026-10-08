@@ -76,7 +76,7 @@ export class QualityManager {
                 for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
             });
         }
-        world?.sky?.setClouds(q.clouds);
+        if (world) { world._cloudsWanted = q.clouds; world.sky?.setClouds(q.clouds || (world.storm || 0) > 0.1); }
         if (world) world.viewScale = q.view;
         if (this.auto) { try { localStorage.setItem('zns-quality-level', String(this.level)); } catch (e) { /* not remembered */ } }
     }

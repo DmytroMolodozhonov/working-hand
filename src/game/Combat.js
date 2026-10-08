@@ -54,6 +54,7 @@ export const SPELL_COST = {
     Accio: 5,
     Wind: 8,
     Brainrot: 15,
+    LightningStrike: 25,
     Earthquake: 10,
     EarthquakeMaxima: 25,
     WindMaxima: 20,
@@ -66,6 +67,7 @@ export const PLAYER_DAMAGE = {
     Inferno: 1, // per tick while in the flames
     Thunderwave: 3,
     Sapira: 4,
+    Lightning: 12,
     Sands: 3,
     IceBall: 3,
     Punch: 1,

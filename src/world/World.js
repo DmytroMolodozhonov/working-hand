@@ -13,6 +13,7 @@ import { Terrain, BLOCK } from './Terrain.js';
 const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
 const _moon = new THREE.Color();
+const _stormFog = new THREE.Color(0x2b3038);
 const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
 import { CollisionWorld } from './Collision.js';
@@ -100,6 +101,33 @@ export class VoxelWorld {
             this.dirLight.intensity = 0.85;
             this.hemiLight.intensity = 0.35;
         }
+        this._rememberBase(isNight ? 1 : 0);
+    }
+
+    /** The light without a storm (day/night), so a storm can darken it and give it back. */
+    _rememberBase(night) {
+        this._base = {
+            amb: this.ambientLight.intensity, dir: this.dirLight.intensity, hemi: this.hemiLight.intensity,
+            fog: this.scene.fog ? this.scene.fog.color.clone() : new THREE.Color(0x87ceeb),
+            far: this.fogFar ?? 90, night,
+        };
+        if ((this.storm || 0) > 0) this.setStorm(this.storm);
+    }
+
+    /** «Lightning Strike»: a storm darkens the world (0 = clear, 1 = full storm). */
+    setStorm(k) {
+        this.storm = k;
+        const b = this._base;
+        if (!b) return;
+        this.ambientLight.intensity = b.amb * (1 - 0.5 * k);
+        this.dirLight.intensity = b.dir * (1 - 0.8 * k);
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k);
+        if (this.scene.fog) {
+            this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
+            if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
+        }
+        this.sky?.setNightAmount(Math.max(b.night, 0.72 * k));
+        this.sky?.setClouds((this._cloudsWanted ?? true) || k > 0.1);
     }
 
     /**
@@ -135,6 +163,7 @@ export class VoxelWorld {
         this.dirLight.color.set(0xfff0d8).lerp(_moon.set(0x9fb6ff), k);
         this.hemiLight.intensity = 0.35 + (0.08 - 0.35) * k;
         this._shadowX = null; // re-aim the shadow
+        this._rememberBase(k);
     }
 
     get nightAmount() {
@@ -521,7 +550,7 @@ export class VoxelWorld {
         this._lastUpdate = now;
         if (this.scene.fog && this.fogFar) {
             // In flight the view opens up so the land below is visible
-            const far = this.fogFar * (this.viewScale ?? 1) * (1 + viewBoost * 1.2);
+            const far = this.fogFar * (this.viewScale ?? 1) * (1 + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0));
             this.scene.fog.far = far;
             this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5);
             if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;

@@ -95,3 +95,8 @@ test('«Earthquake» / «Earthquake Максима» are recognised', () => {
     for (const w of ['earthquake', 'эрсквейк', 'Earthcake', 'землетрясение']) assert.equal(matchSpell(w), 'Earthquake', w);
     for (const w of ['earthquake maxima', 'эрсквейк максима']) assert.equal(matchSpell(w), 'EarthquakeMaxima', w);
 });
+
+test('«Lightning Strike» is recognised (not taken for Thunderwave)', () => {
+    for (const w of ['lightning strike', 'лайтнинг страйк', 'Лайтнинг', 'lightning']) assert.equal(matchSpell(w), 'LightningStrike', w);
+    assert.equal(matchSpell('тандервейв'), 'Thunderwave');
+});

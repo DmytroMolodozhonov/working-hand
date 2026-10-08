@@ -169,6 +169,29 @@ export class Hud {
         setTimeout(() => item.remove(), ms + 600);
     }
 
+    /**
+     * A round timer at the bottom right (e.g. «Lightning Strike»): `frac` of the
+     * time left (null hides it), an icon, the seconds, and an inner "aim" ring.
+     */
+    setTimer(frac, icon = '⚡', secs = 0, lock = 0) {
+        let el = this._timerEl;
+        if (frac == null) { if (el) el.style.display = 'none'; return; }
+        if (!el) {
+            el = this._timerEl = document.createElement('div');
+            el.id = 'hud-timer';
+            el.innerHTML = '<div class="ring"></div><div class="lock"></div><div class="icon"></div><div class="secs"></div>';
+            document.body.appendChild(el);
+        }
+        el.style.display = 'block';
+        const deg = Math.max(0, Math.min(1, frac)) * 360;
+        const low = frac < 0.35;
+        el.querySelector('.ring').style.background = `conic-gradient(${low ? '#ff5a5a' : '#7fd3ff'} ${deg}deg, rgba(255,255,255,0.12) ${deg}deg)`;
+        el.querySelector('.lock').style.background = lock > 0 ? `conic-gradient(#ffe066 ${lock * 360}deg, transparent ${lock * 360}deg)` : 'transparent';
+        el.querySelector('.icon').textContent = icon;
+        el.querySelector('.secs').textContent = secs > 0 ? secs : '';
+        el.classList.toggle('low', low);
+    }
+
     setMultiplayer(html) {
         if (!this.el.mp) return;
         if (!html) { this.el.mp.classList.add('hidden'); return; }

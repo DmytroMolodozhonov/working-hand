@@ -1273,3 +1273,29 @@ body {
     border-color: #3498db;
     box-shadow: 0 0 15px rgba(52, 152, 219, 0.7);
 }
+
+/* «Lightning Strike» timer — bottom right, above the camera preview */
+#hud-timer {
+    position: fixed;
+    right: 24px;
+    bottom: 200px;
+    width: 92px;
+    height: 92px;
+    z-index: 60;
+    pointer-events: none;
+    display: none;
+}
+#hud-timer .ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 14px rgba(120, 200, 255, 0.7); }
+#hud-timer .lock { position: absolute; inset: 9px; border-radius: 50%; }
+#hud-timer .icon {
+    position: absolute; inset: 14px; border-radius: 50%;
+    background: radial-gradient(circle, #1b2a44, #0b1220);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px;
+}
+#hud-timer .secs {
+    position: absolute; left: 0; right: 0; bottom: -22px;
+    text-align: center; color: #fff; font-weight: bold; font-size: 18px; text-shadow: 0 0 4px #000;
+}
+#hud-timer.low .ring { animation: timer-pulse 0.5s ease-in-out infinite; }
+@keyframes timer-pulse { 50% { filter: brightness(1.6); } }
