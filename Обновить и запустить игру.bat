@@ -54,18 +54,23 @@ exit /b 1
 rem ---- Without Git: the zip archive, downloaded only when there is a new version
 set NEWVER=
 set OLDVER=
+set VLINE=
+rem Latest version number: 1) git refs via curl.exe (built into Windows 10/11), 2) GitHub API
+for /f "delims=" %%a in ('curl.exe -s -m 20 "https://github.com/DmytroMolodozhonov/working-hand/info/refs?service=git-upload-pack" 2^>nul ^| findstr /c:"refs/heads/%BRANCH%"') do set "VLINE=%%a"
+if defined VLINE set "NEWVER=%VLINE:~4,40%"
+if defined NEWVER goto havever
 if exist "%TEMP%\zns_ver.txt" del "%TEMP%\zns_ver.txt"
 powershell -NoProfile -Command "try { (Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/DmytroMolodozhonov/working-hand/branches/%BRANCH%').commit.sha | Set-Content -Encoding Ascii -Path '%TEMP%\zns_ver.txt' } catch { }" 1>nul 2>&1
 if exist "%TEMP%\zns_ver.txt" set /p NEWVER=<"%TEMP%\zns_ver.txt"
+:havever
 if exist "%DIR%\.zns-version" set /p OLDVER=<"%DIR%\.zns-version"
+echo Versiya na kompyutere: %OLDVER%
+echo Versiya na GitHub:     %NEWVER%
 if exist "%DIR%\server.py" if defined NEWVER if "%NEWVER%"=="%OLDVER%" (
     echo Igra uzhe svezhaya, zapuskayu.
     goto rundir
 )
-if exist "%DIR%\server.py" if not defined NEWVER (
-    echo Net svyazi s GitHub - zapuskayu uzhe skachannuyu versiyu.
-    goto rundir
-)
+rem Unknown latest version: download anyway (if that fails, the old version starts)
 echo Skachivayu svezhuyu versiyu igry (okolo 150 MB), podozhdite...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $z=Join-Path $env:TEMP 'zns_game.zip'; $t=Join-Path $env:TEMP 'zns_game'; Invoke-WebRequest -Uri '%ZIP%' -OutFile $z -UseBasicParsing; if (Test-Path $t) { Remove-Item $t -Recurse -Force }; New-Item -ItemType Directory -Force -Path $t | Out-Null; tar -xf $z -C $t; if ($LASTEXITCODE -ne 0) { throw 'unzip' }; $src=(Get-ChildItem $t | Select-Object -First 1).FullName; New-Item -ItemType Directory -Force -Path '%DIR%' | Out-Null; Copy-Item -Path (Join-Path $src '*') -Destination '%DIR%' -Recurse -Force; Remove-Item $z, $t -Recurse -Force"
 if errorlevel 1 (

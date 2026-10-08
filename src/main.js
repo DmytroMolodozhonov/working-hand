@@ -326,6 +326,17 @@ function renderItemsTab() {
     }
 }
 
+// ------------------------------------------------------------------ version
+// Shown in the menu so everyone can see at a glance that the game is up to date
+fetch('/api/version').then((r) => r.json()).then((v) => {
+    if (!v || !v.date) return;
+    const el = document.createElement('div');
+    el.id = 'game-version';
+    el.textContent = `Версия от ${v.date}` + (v.sha ? ` (${v.sha})` : '');
+    el.style.cssText = 'position:absolute;left:12px;bottom:8px;font-size:12px;color:rgba(255,255,255,.55);pointer-events:none;z-index:5';
+    $('main-menu')?.appendChild(el);
+}).catch(() => {});
+
 // ------------------------------------------------------------------ voice
 const voiceToggleBtn = $('voice-toggle-btn');
 const voiceTestText = $('voice-test-text');

@@ -10,12 +10,16 @@ API:
   DELETE /api/maps?name=...   — удалить карту
   GET    /api/rig             — настройки рига рук
   POST   /api/rig             — сохранить настройки рига рук
+  GET    /api/version         — дата версии игры (видна в меню)
 """
 
+import glob
 import http.server
 import json
 import mimetypes
 import os
+import shutil
+import time
 import socketserver
 import sys
 import threading
@@ -49,6 +53,80 @@ FORCED_TYPES = {
 }
 for ext, ctype in FORCED_TYPES.items():
     mimetypes.add_type(ctype.split(";")[0], ext)
+
+
+def game_version():
+    """Date of the newest game file (archives keep the commit time) and the commit id."""
+    newest = 0.0
+    for base, _dirs, files in os.walk("src"):
+        for f in files:
+            try:
+                newest = max(newest, os.path.getmtime(os.path.join(base, f)))
+            except OSError:
+                pass
+    for f in ("index.html", "server.py"):
+        try:
+            newest = max(newest, os.path.getmtime(f))
+        except OSError:
+            pass
+    sha = ""
+    try:
+        with open(".zns-version", encoding="ascii") as fh:
+            sha = fh.read().strip()
+    except OSError:
+        try:
+            with open(os.path.join(".git", "HEAD"), encoding="ascii") as fh:
+                head = fh.read().strip()
+            if head.startswith("ref: "):
+                with open(os.path.join(".git", head[5:]), encoding="ascii") as fh:
+                    sha = fh.read().strip()
+            else:
+                sha = head
+        except OSError:
+            pass
+    date = time.strftime("%d.%m.%Y %H:%M", time.localtime(newest)) if newest else ""
+    return {"date": date, "sha": sha[:7]}
+
+
+def update_desktop_launcher():
+    """The desktop icon runs a copy of the launcher made at install time:
+    keep that copy as new as the game, so launcher fixes reach everyone.
+
+    That copy is running right now (it started this server) and cmd.exe reads a
+    .bat line by line by byte offset: when the server stops it continues at the
+    offset just after its "%PY% server.py" line. The new file therefore gets an
+    "exit /b" exactly at that offset (and jumps over it at its own start)."""
+    if os.name != "nt":
+        return
+    target = os.path.join(os.environ.get("LOCALAPPDATA", ""), "ZombieNeSpyat", "start.bat")
+    if not os.path.isfile(target):
+        return
+    for src in glob.glob(os.path.join(ROOT, "*.bat")):
+        try:
+            with open(src, "rb") as fh:
+                new = fh.read()
+            if b"set ZIP=" not in new:
+                continue
+            with open(target, "rb") as fh:
+                old = fh.read()
+            if old.endswith(new):
+                return  # already the newest
+            mark = b"\r\n%PY% server.py\r\n"
+            i = old.find(mark)
+            if i < 0:
+                return
+            resume_at = i + len(mark)  # where cmd.exe continues after the server
+            head = b"@echo off\r\ngoto zns_begin\r\nrem "
+            pad = resume_at - len(head) - 2  # "\r\n" closes the rem line
+            if pad < 0 or pad > 7000:
+                return
+            data = head + b"-" * pad + b"\r\nexit /b\r\n:zns_begin\r\n" + new
+            with open(target, "wb") as fh:
+                fh.write(data)
+            print("  Запускатор на рабочем столе обновлён.")
+        except OSError:
+            pass
+        return
 
 
 def safe_map_name(name):
@@ -90,6 +168,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     # ---------- GET ----------
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/version":
+            return self._json(200, game_version())
         if path == "/api/maps":
             maps = {}
             if os.path.isdir(MAPS_DIR):
@@ -182,6 +262,7 @@ def open_server():
 
 def main():
     no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
+    update_desktop_launcher()
     httpd, port = open_server()
     url = f"http://localhost:{port}"
     print("=" * 50)
