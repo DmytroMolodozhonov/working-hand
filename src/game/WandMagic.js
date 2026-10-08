@@ -45,7 +45,9 @@ export class WandMagic {
         this.holo = null; // {mesh, until, target}
         // The lights exist from the start (intensity 0): adding a light later
         // would make every material recompile — a freeze in the middle of play
-        this.lights = [0, 1, 2].map(() => { const l = new THREE.PointLight(0xfff6d8, 0, 14, 2); game.scene.add(l); return l; });
+        // (only one: every light costs on every pixel, even switched off)
+        this.lights = [new THREE.PointLight(0xfff6d8, 0, 14, 2)];
+        game.scene.add(this.lights[0]);
     }
 
     get wand() { return this.game.items?.wand || null; }
@@ -118,8 +120,9 @@ export class WandMagic {
         const g = this.game;
         const l = this.light;
         const p = l.mesh.position.clone();
-        const point = this.lights.slice(1).find((x) => !this.thrown.some((t) => t.point === x));
-        if (!point) return;
+        // the light itself flies away (the tip glows again when it fades)
+        if (this.thrown.length) return;
+        const point = this.lights[0];
         point.intensity = l.point.intensity * 1.5;
         point.distance = l.point.distance + 8;
         const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
@@ -224,7 +227,11 @@ export class WandMagic {
         if (this.light) {
             const tip = this.tip(new THREE.Vector3(), _v2);
             this.light.mesh.position.copy(tip);
-            this.light.point.position.copy(tip);
+            if (!this.thrown.length) {
+                this.light.point.position.copy(tip);
+                this.light.point.intensity = 0.8 + this.light.level * 0.9;
+                this.light.point.distance = 10 + this.light.level * 6;
+            }
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
             const side = g.items.heldOf('wand').side;
             const v = g.character.handVelocity[side];
@@ -239,7 +246,7 @@ export class WandMagic {
             const k = Math.max(0, t.life / t.max);
             t.point.intensity *= Math.pow(0.6, dt);
             t.mesh.scale.setScalar(0.4 + k * 0.6);
-            if (t.life <= 0) { t.point.intensity = 0; g.scene.remove(t.mesh); t.mesh.geometry.dispose(); t.mesh.material.dispose(); this.thrown.splice(i, 1); }
+            if (t.life <= 0) { if (!this.light) t.point.intensity = 0; g.scene.remove(t.mesh); t.mesh.geometry.dispose(); t.mesh.material.dispose(); this.thrown.splice(i, 1); }
         }
         // drawing in the air
         const d = this.drawing;

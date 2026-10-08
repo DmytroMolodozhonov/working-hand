@@ -211,7 +211,8 @@ test('Вингардиум Левиоса, Protection in creative, Флайн by
         for (let i = 0; i < 40 && Math.abs(w.position.x - (start.x + 5)) > 1.2; i++) await sleep(100);
         out.followed = w.position.x - start.x;
         out.floats = w.position.y > g.collision.surfaceY(w.position.x, w.position.z) + 0.3;
-        // A sharp jerk of the hand lets go
+        // A sharp jerk of the hand lets go (after the short grace time)
+        for (let i = 0; i < 50 && g.levitation.state && g.levitation.state.age < 0.9; i++) await sleep(100);
         const s = g.levitation.state;
         s.history.unshift({ t: g.levitation._t, x: 50, y: 0, z: 0 });
         s.history.length = 1;

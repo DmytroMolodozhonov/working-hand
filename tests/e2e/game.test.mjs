@@ -548,6 +548,7 @@ test('map editor: draw a map, save it, it appears in the game list, delete it', 
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await page.click('[data-tab="tab-editor"]');
     await page.waitForSelector('#editor-canvas');
+    await page.locator('#editor-canvas').scrollIntoViewIfNeeded();
     const box = await page.locator('#editor-canvas').boundingBox();
     const cell = (x, z) => ({ x: box.x + (x + 0.5) * box.width / 20, y: box.y + (z + 0.5) * box.height / 20 });
     // Walls (drag), spawn, chest
