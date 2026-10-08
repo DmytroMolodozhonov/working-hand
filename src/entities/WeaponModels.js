@@ -213,7 +213,22 @@ export function buildWeapon(type, renderer) {
         shape.lineTo(-0.06, 0.05);
         shape.lineTo(-0.06, -0.05);
         shape.closePath();
-        const head = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.008, bevelSegments: 2 }), steelMat);
+        // A real wedge: thick at the eye, thinning to a sharp edge at the bit
+        const headGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: false, curveSegments: 12 });
+        const pos = headGeo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i), z = pos.getZ(i);
+            const t = Math.min(1, Math.max(0, (x - 0.06) / 0.28));
+            const k = 1 - 0.94 * t * t * (3 - 2 * t); // smooth taper to ~3 mm
+            pos.setZ(i, 0.025 + (z - 0.025) * k);
+        }
+        headGeo.computeVertexNormals();
+        const head = new THREE.Mesh(headGeo, steelMat);
+        // the honed edge catches the light
+        const edgeMat = new THREE.MeshStandardMaterial({ color: 0xf4f7fa, roughness: 0.12, metalness: 1.0, envMap: env, envMapIntensity: 1.4 });
+        const edgeCurve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0.33, -0.16, 0.025), new THREE.Vector3(0.385, -0.02, 0.025), new THREE.Vector3(0.33, 0.12, 0.025));
+        const edge = new THREE.Mesh(new THREE.TubeGeometry(edgeCurve, 16, 0.004, 4, false), edgeMat);
+        head.add(edge);
         head.position.set(0, 0.76, -0.025);
         group.add(head);
         const cap = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), steelMat);

@@ -38,14 +38,14 @@ test('menu: maps, modes and the new spell are listed; no errors on load', async 
     await page.close();
 });
 
-test('creative: world with mountains, tables with weapons, hands follow the body', async () => {
+test('creative: world with mountains, weapons floating over pedestals, hands follow the body', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
     const s = await state(page);
     assert.equal(s.mode, 'creative');
     assert.deepEqual(s.weapons.map((w) => w.type).sort(), ['axe', 'sword']);
-    for (const w of s.weapons) assert.ok(w.pos[1] > 1.9, `${w.type} is on its table (${w.pos[1]})`);
+    for (const w of s.weapons) assert.ok(w.pos[1] > 1.9, `${w.type} floats over its pedestal (${w.pos[1]})`);
     const terrain = await page.evaluate(() => {
         const t = window.__zns.game.terrain;
         let max = 0;
@@ -85,6 +85,7 @@ test('sword: real grab with closing fingers, swing kills a zombie, open hand dro
         const place = () => {
             if (!placing) return;
             if (g.weapons.hands.right.held) { placing = false; return; } // the hand has it now
+            w.hover = null; // (it floats over its pedestal until taken)
             const grip = g.character.getGripObject('right');
             grip.updateMatrixWorld(true);
             const e = grip.matrixWorld.elements;

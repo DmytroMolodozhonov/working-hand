@@ -222,12 +222,12 @@ export class Game {
                 const n = config.mode === 'creative' ? (config.zombieCount || 0) : 1;
                 for (let i = 0; i < n; i++) this.spawnZombieWave();
             }
-            // Tables with an axe and a sword (same places as before)
-            const tableZ = -5.0;
-            const s1 = this.world.createTable(-7, tableZ);
-            this.weapons.spawnLying('axe', -7, s1, tableZ, Math.PI / 4, 'tA');
-            const s2 = this.world.createTable(7, tableZ);
-            this.weapons.spawnLying('sword', 7, s2, tableZ, -Math.PI / 4, 'tS');
+            // An axe and a sword floating by magic over two pedestals (same places as the old tables)
+            const pz = -5.0;
+            const s1 = this.world.createPedestal(-7, pz);
+            this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 1.3, pz), 'tA');
+            const s2 = this.world.createPedestal(7, pz);
+            this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 1.3, pz), 'tS');
         }
     }
 

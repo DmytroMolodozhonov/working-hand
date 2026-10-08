@@ -220,6 +220,52 @@ export class VoxelWorld {
         return true;
     }
 
+    // --------------------------------------------------------------- pedestals
+    /**
+     * A stone pedestal with a glowing rune ring; a weapon floats above it as
+     * if held by magic. Returns the top surface Y.
+     */
+    createPedestal(x, z) {
+        const g = new THREE.Group();
+        g.position.set(x, 0, z);
+        const stone = new THREE.MeshLambertMaterial({ color: 0x6d6a75 });
+        const stoneLight = new THREE.MeshLambertMaterial({ color: 0x8e8a99 });
+        const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.9 });
+        const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+        add(new THREE.CylinderGeometry(1.35, 1.6, 0.45, 8), stone, -0.25);
+        add(new THREE.CylinderGeometry(1.05, 1.2, 0.3, 8), stoneLight, 0.12);
+        add(new THREE.CylinderGeometry(0.55, 0.7, 1.4, 8), stoneLight, 0.97);
+        add(new THREE.CylinderGeometry(0.95, 0.6, 0.3, 8), stone, 1.82);
+        const rim = add(new THREE.TorusGeometry(0.95, 0.05, 6, 24), gold, 1.97);
+        rim.rotation.x = Math.PI / 2;
+        // magic: a glowing disc and a slowly turning rune ring above the top
+        const glowMat = new THREE.MeshBasicMaterial({ color: 0x9b7bff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(0.85, 24), glowMat);
+        disc.rotation.x = -Math.PI / 2;
+        disc.position.y = 1.99;
+        g.add(disc);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.035, 6, 32), new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+        ring.position.y = 2.6;
+        ring.rotation.x = Math.PI / 2;
+        g.add(ring);
+        this.scene.add(g);
+        const surfaceY = 1.97;
+        this.collision.addBox({ minX: x - 1.4, maxX: x + 1.4, minY: -0.5, maxY: surfaceY, minZ: z - 1.4, maxZ: z + 1.4, kind: 'table' });
+        this.pedestals = this.pedestals || [];
+        this.pedestals.push({ ring, disc, t: Math.random() * 6 });
+        return surfaceY;
+    }
+
+    /** Rune rings turn and breathe. */
+    _animatePedestals(dt) {
+        for (const p of this.pedestals || []) {
+            p.t += dt;
+            p.ring.rotation.z += dt * 0.8;
+            p.ring.position.y = 2.6 + Math.sin(p.t * 1.6) * 0.08;
+            p.disc.material.opacity = 0.35 + Math.sin(p.t * 2.2) * 0.12;
+        }
+    }
+
     // ------------------------------------------------------------------ tables
     /** Original createTable(): returns the surface Y (top of the table). */
     createTable(x, z) {
@@ -429,6 +475,9 @@ export class VoxelWorld {
      * @param {number} [viewBoost]  0..1 — see further (in flight)
      */
     update(focus, viewBoost = 0) {
+        const now = performance.now();
+        if (this.pedestals) this._animatePedestals(Math.min(0.1, (now - (this._lastUpdate || now)) / 1000));
+        this._lastUpdate = now;
         if (this.scene.fog && this.fogFar) {
             // In flight the view opens up so the land below is visible
             const far = this.fogFar * (this.viewScale ?? 1) * (1 + viewBoost * 1.2);
