@@ -228,7 +228,7 @@ export class Effects {
         }
         // Smoke
         for (let i = 0; i < 45; i++) {
-            const g = 40 + Math.floor(Math.random() * 50);
+            const g = 120 + Math.floor(Math.random() * 70); // light-to-mid grey smoke
             this.smoke.spawn(
                 center.x + (Math.random() - 0.5) * radius, center.y + Math.random() * radius * 0.6, center.z + (Math.random() - 0.5) * radius,
                 (Math.random() - 0.5) * 3, 2 + Math.random() * 3, (Math.random() - 0.5) * 3,

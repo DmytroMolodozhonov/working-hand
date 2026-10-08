@@ -207,3 +207,13 @@ test('a fast swing through a zombie hits it; a slow touch does not', () => {
     assert.ok(hits[0].dmg >= 2);
     assert.ok(hits[0].dir.x > 0.9, 'knockback follows the swing');
 });
+
+test('particle pools keep a full-size colour buffer (no black particles)', async () => {
+    const { ParticlePool } = await import('../../src/fx/Particles.js');
+    const pool = new ParticlePool(new THREE.Scene(), { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 50, lit: true });
+    assert.equal(pool.mesh.instanceColor.array.length, 150);
+    pool.spawn(0, 0, 0, 0, 0, 0, 0x4CAF50, 1, 1);
+    pool.update(0.016);
+    const c = pool.mesh.instanceColor.array;
+    assert.ok(Math.abs(c[0] - 0x4C / 255) < 1e-6 && Math.abs(c[1] - 0xAF / 255) < 1e-6);
+});

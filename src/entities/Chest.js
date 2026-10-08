@@ -28,7 +28,6 @@ function shared() {
         bottom: new THREE.BoxGeometry(1.2, 0.5, 0.8),
         lid: new THREE.BoxGeometry(1.25, 0.2, 0.85),
         band: new THREE.BoxGeometry(1.3, 0.08, 0.9),
-        lidBand: new THREE.BoxGeometry(1.3, 0.06, 0.9),
         lock: new THREE.BoxGeometry(0.15, 0.2, 0.05),
         corner: new THREE.BoxGeometry(0.1, 0.6, 0.1),
         hollow: new THREE.BoxGeometry(1.08, 0.02, 0.68),
@@ -85,9 +84,6 @@ export class Chest {
         this.lid.position.set(0, 0.1, 0.4);
         this.lid.castShadow = true;
         this.lidGroup.add(this.lid);
-        const lidBand = new THREE.Mesh(s.lidBand, s.gold);
-        lidBand.position.set(0, 0.0, 0.4);
-        this.lidGroup.add(lidBand);
         const lidLock = new THREE.Mesh(s.lock, s.gold);
         lidLock.position.set(0, 0.05, 0.83);
         lidLock.scale.set(1, 0.6, 1);

@@ -427,10 +427,27 @@ export class Game {
         this.firstPoseReceived = true;
     }
 
+    /**
+     * Compile every shader the session can ever need NOW (during loading):
+     * effects that are hidden until first use would otherwise compile in the
+     * middle of a fight and freeze the game for a moment.
+     */
+    prewarm() {
+        const hidden = [];
+        this.scene.traverse((o) => {
+            if ((o.isMesh || o.isPoints || o.isSprite) && !o.visible) { hidden.push(o); o.visible = true; }
+        });
+        const savedIntensity = this.flashlight.intensity;
+        this.renderer.compile(this.scene, this.camera);
+        for (const o of hidden) o.visible = false;
+        this.flashlight.intensity = savedIntensity;
+        this.prewarmedPrograms = this.renderer.info.programs.length;
+    }
+
     start() {
         this.active = true;
         this.lastTime = performance.now();
-        this.renderer.compile(this.scene, this.camera);
+        this.prewarm();
         const loop = (t) => {
             if (!this.active) return;
             this._raf = requestAnimationFrame(loop);
@@ -501,6 +518,10 @@ export class Game {
             this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
         }
+
+        const logic = performance.now() - t0;
+        this.stats.logicMs = (this.stats.logicMs || logic) * 0.95 + logic * 0.05;
+        if (logic > (this.stats.worstLogicMs || 0)) this.stats.worstLogicMs = logic;
 
         this.renderer.render(this.scene, this.camera);
 

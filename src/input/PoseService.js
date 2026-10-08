@@ -228,7 +228,7 @@ export class PoseService {
     }
 
     _drawSkeleton(results) {
-        const c = this.skeletonCanvas;
+        const c = this.skeletonCanvas || (this.skeletonCanvas = document.getElementById('skeleton-canvas'));
         if (!c) return;
         const box = c.parentElement;
         if (box && box.style.display === 'none') return; // preview hidden → don't spend time drawing

@@ -53,10 +53,11 @@ export class ParticlePool {
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.mesh.frustumCulled = false;
         this.mesh.castShadow = !!o.castShadow;
-        this.mesh.count = 0;
-        // instanceColor
-        this.mesh.setColorAt(0, _c.setHex(0xffffff));
+        // Per-instance colour buffer sized for the full capacity
+        // (setColorAt() would size it from the current count, which is 0 here).
+        this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.capacity * 3).fill(1), 3);
         this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        this.mesh.count = 0;
         if (o.transparent) {
             this.alpha = new THREE.InstancedBufferAttribute(new Float32Array(this.capacity).fill(1), 1);
             this.alpha.setUsage(THREE.DynamicDrawUsage);

@@ -194,6 +194,8 @@ test('every spell can be cast repeatedly without errors (pooled effects)', async
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
+    await sleep(2000); // first frames also build the shadow-map shaders (still loading time)
+    const warm = await page.evaluate(() => window.__zns.game.renderer.info.programs.length);
     await page.evaluate(() => {
         const g = window.__zns.game;
         const THREE = window.__zns.THREE;
@@ -202,9 +204,46 @@ test('every spell can be cast repeatedly without errors (pooled effects)', async
         for (const name of ['Inferno', 'Thunderwave', 'Sapira', 'Sands', 'Ice', 'Inferno', 'Thunderwave']) g.spells.cast(name, o, d, 'right', 'local');
     });
     await sleep(5000);
+    // Bombardo + a zombie losing limbs/head (flying parts) + ice shatter
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const THREE = window.__zns.THREE;
+        g.explode(new THREE.Vector3(5, -0.5, -20), 3.2, 'local');
+        const z = g._createZombie(new THREE.Vector3(-6, 0.5, -8));
+        z.decapitate(); z.severLimb(Math.random, 2); z.freeze(); z.takeDamage(1, true);
+    });
+    await sleep(3000);
     const s = await page.evaluate(() => ({ programs: window.__zns.game.renderer.info.programs.length, ...window.__zns.game.debugState().stats }));
-    // Shader programs must not explode in number (no per-spark materials)
+    // Every effect's shader was compiled during loading: nothing new compiles
+    // in a fight (that was a source of freezes), and no per-spark materials.
+    assert.equal(s.programs, warm, `shader programs ${s.programs} vs after loading ${warm}`);
     assert.ok(s.programs < 40, `shader programs ${s.programs}`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('stress: 40 zombies + Inferno + explosions — game logic stays fast', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const THREE = window.__zns.THREE;
+        for (let i = 0; i < 40; i++) g._createZombie(new THREE.Vector3(-20 + (i % 10) * 4, 0.5, -15 - Math.floor(i / 10) * 4));
+        g.stats.worstLogicMs = 0;
+        let n = 0;
+        window.__stress = setInterval(() => {
+            const o = new THREE.Vector3(0, 3, 0);
+            g.spells.cast('Inferno', o, new THREE.Vector3(Math.sin(n) * 0.5, -0.1, -1).normalize(), 'right', 'local');
+            if (n % 3 === 0) g.explode(new THREE.Vector3(-15 + (n * 7) % 30, -0.5, -30), 3.2, 'local');
+            n++;
+        }, 1500);
+    });
+    await sleep(15000);
+    const st = await page.evaluate(() => { clearInterval(window.__stress); return window.__zns.game.debugState().stats; });
+    console.log('stress stats', JSON.stringify({ logicMs: st.logicMs.toFixed(2), worstLogicMs: st.worstLogicMs.toFixed(1), frames: st.frames }));
+    assert.ok(st.logicMs < 12, `average game logic ${st.logicMs.toFixed(2)} ms per frame`);
+    assert.ok(st.worstLogicMs < 120, `worst game-logic frame ${st.worstLogicMs.toFixed(1)} ms (software rendering machine)`);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
