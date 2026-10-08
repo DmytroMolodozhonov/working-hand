@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, sleep, realErrors, fakeVideo } from './harness.mjs';
 import { feed } from './poses.mjs';
 
-const PORT = 8140;
+const PORT = Number(process.env.ZNS_TEST_PORT) || 8140;
 let srv, browser;
 
 test.before(async () => {

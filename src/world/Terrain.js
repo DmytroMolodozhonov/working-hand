@@ -175,6 +175,7 @@ function hash01(a, b, seed) {
 }
 
 const TREE_CELL = 12; // one possible tree per 12×12 m cell
+const CAVE_CELL = 90; // at most one cave per 90×90 m
 const TREE_MIN_DIST = 128; // trees closer to spawn are the original (instanced) ones
 
 export class TerrainData {
@@ -196,6 +197,7 @@ export class TerrainData {
         this.seed = seed;
         this.mountains = mountains;
         this.heightAt = createHeightField(seed, mountains);
+        this._caves = new Map();
         this.chunks.clear();
         this._last = null;
         this.version++;
@@ -250,8 +252,103 @@ export class TerrainData {
             }
         }
         const c = { cx, cz, blocks, top, maxTop, modified: false };
-        if (this.mountains) this._plantTrees(c);
+        if (this.mountains) { this._carveCaves(c); this._plantTrees(c); }
         return c;
+    }
+
+    // ------------------------------------------------------------ caves
+    /**
+     * A cave (or none) for a CAVE_CELL×CAVE_CELL cell: a chamber inside a
+     * mountain and a tunnel to it from the low ground at the mountain's foot.
+     * Deterministic (the same on every computer for the seed).
+     */
+    caveOf(gx, gz) {
+        const key = gx + ',' + gz;
+        this._caves = this._caves || new Map();
+        if (this._caves.has(key)) return this._caves.get(key);
+        let cave = null;
+        const H = this.heightAt;
+        if (hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101) < 0.6) {
+            for (let t = 0; t < 8 && !cave; t++) {
+                const kx = gx * CAVE_CELL + 12 + Math.floor(hash01(gx + t * 31, gz - t * 17, this.seed + 202) * (CAVE_CELL - 24));
+                const kz = gz * CAVE_CELL + 12 + Math.floor(hash01(gz + t * 29, gx + t * 11, this.seed + 303) * (CAVE_CELL - 24));
+                if (Math.hypot(kx, kz) < 150) continue; // not next to the spawn
+                const hk = H(kx, kz);
+                if (H.water || hk < 13) continue;
+                // the way out: towards the lowest ground around
+                let best = null;
+                for (let a = 0; a < 8; a++) {
+                    const dx = Math.cos(a * Math.PI / 4), dz = Math.sin(a * Math.PI / 4);
+                    for (let d = 8; d <= 44; d++) {
+                        const ex = Math.round(kx + dx * d), ez = Math.round(kz + dz * d);
+                        const he = H(ex, ez);
+                        if (H.water) break;
+                        if (he <= hk - 9 && he >= 0) { if (!best || d < best.d) best = { d, ex, ez, he }; break; }
+                    }
+                }
+                if (!best) continue;
+                cave = { id: 'cv' + gx + '_' + gz, kx, kz, ex: best.ex, ez: best.ez, F: best.he, r: 6 + Math.floor(hash01(gx, gz, this.seed + 404) * 3) };
+            }
+        }
+        this._caves.set(key, cave);
+        return cave;
+    }
+
+    /** Caves whose chamber is within `r` of a point. */
+    cavesNear(x, z, r) {
+        const out = [];
+        const g0x = Math.floor((x - r) / CAVE_CELL), g1x = Math.floor((x + r) / CAVE_CELL);
+        const g0z = Math.floor((z - r) / CAVE_CELL), g1z = Math.floor((z + r) / CAVE_CELL);
+        for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {
+            const c = this.caveOf(gx, gz);
+            if (c && Math.hypot(c.kx - x, c.kz - z) <= r) out.push(c);
+        }
+        return out;
+    }
+
+    _carveCaves(c) {
+        const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
+        const reach = 60;
+        const caves = [];
+        for (let gz = Math.floor((z0 - reach) / CAVE_CELL); gz <= Math.floor((z0 + CHUNK + reach) / CAVE_CELL); gz++) {
+            for (let gx = Math.floor((x0 - reach) / CAVE_CELL); gx <= Math.floor((x0 + CHUNK + reach) / CAVE_CELL); gx++) {
+                const cv = this.caveOf(gx, gz);
+                if (cv) caves.push(cv);
+            }
+        }
+        if (!caves.length) return;
+        for (let lz = 0; lz < CHUNK; lz++) {
+            for (let lx = 0; lx < CHUNK; lx++) {
+                const x = x0 + lx, z = z0 + lz;
+                const col = lz * CHUNK + lx;
+                let carved = false;
+                for (const cv of caves) {
+                    // tunnel: E → K, 3 wide, 4 high; chamber: a dome around K
+                    const sx = cv.kx - cv.ex, sz = cv.kz - cv.ez;
+                    const len2 = sx * sx + sz * sz || 1;
+                    const t = Math.max(0, Math.min(1, ((x - cv.ex) * sx + (z - cv.ez) * sz) / len2));
+                    const dT = Math.hypot(x - (cv.ex + sx * t), z - (cv.ez + sz * t));
+                    const dK = Math.hypot(x - cv.kx, z - cv.kz);
+                    let hgt = 0;
+                    if (dT <= 1.6) hgt = 4;
+                    if (dK <= cv.r) hgt = Math.max(hgt, Math.round(3 + 3 * (1 - (dK * dK) / (cv.r * cv.r))));
+                    if (!hgt) continue;
+                    for (let L = cv.F + 1; L <= cv.F + hgt && L <= c.top[col]; L++) {
+                        const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+                        if (c.blocks[i] !== BLOCK.WATER) { c.blocks[i] = BLOCK.AIR; carved = true; }
+                    }
+                }
+                if (carved) {
+                    // an opening on the slope can lower the column's top
+                    let top = MIN_LAYER - 1;
+                    for (let L = c.top[col]; L >= MIN_LAYER; L--) {
+                        const b = c.blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx];
+                        if (b !== BLOCK.AIR && b !== BLOCK.WATER) { top = L; break; }
+                    }
+                    c.top[col] = top;
+                }
+            }
+        }
     }
 
     /** Voxel trees far from spawn (same shape and colours as the spawn trees). */
@@ -390,6 +487,35 @@ export class TerrainData {
     /** World Y of the walkable surface at a world point. */
     surfaceY(x, z) {
         return this.topLayer(Math.round(x), Math.round(z)) - 0.5;
+    }
+
+    /**
+     * The highest solid layer at or below layer L in a column — the floor
+     * under someone standing at L (under a ceiling, in a cave, in a house).
+     */
+    floorBelow(ix, iz, L) {
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        const col = (iz & MASK) * CHUNK + (ix & MASK);
+        const top = c.top[col];
+        if (L >= top) return top; // (open sky: the usual case)
+        const base = (iz & MASK) * CHUNK + (ix & MASK);
+        for (let l = Math.min(L, MAX_LAYER); l >= MIN_LAYER; l--) {
+            const b = c.blocks[(l - MIN_LAYER) * CHUNK * CHUNK + base];
+            if (b !== BLOCK.AIR && b !== BLOCK.WATER && b !== BLOCK.ICE_SHAPE) return l;
+        }
+        return MIN_LAYER - 1;
+    }
+
+    /** Is any solid block in layers L0…L1 of a column? */
+    solidIn(ix, iz, L0, L1) {
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        const col = (iz & MASK) * CHUNK + (ix & MASK);
+        const hi = Math.min(L1, c.top[col]);
+        for (let l = Math.max(L0, MIN_LAYER); l <= hi; l++) {
+            const b = c.blocks[(l - MIN_LAYER) * CHUNK * CHUNK + col];
+            if (b !== BLOCK.AIR && b !== BLOCK.WATER && b !== BLOCK.ICE_SHAPE) return true;
+        }
+        return false;
     }
 
     /** Is the world-space point inside a solid block? (water is not solid) */
@@ -837,6 +963,8 @@ export class Terrain {
 
     surfaceY(x, z) { return this.data.surfaceY(x, z); }
     topLayer(ix, iz) { return this.data.topLayer(ix, iz); }
+    floorBelow(ix, iz, L) { return this.data.floorBelow(ix, iz, L); }
+    solidIn(ix, iz, L0, L1) { return this.data.solidIn(ix, iz, L0, L1); }
     raycast(origin, dir, maxDist) { return this.data.raycast(origin, dir, maxDist); }
     removeSphere(x, y, z, r) { return this.data.removeSphere(x, y, z, r); }
 

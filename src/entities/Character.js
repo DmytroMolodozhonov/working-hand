@@ -407,7 +407,9 @@ export class VoxelCharacter {
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
             }
             // Ground following + gravity (flat ground keeps the original baseY exactly)
-            const ground = collision ? collision.groundY(this.group.position.x, this.group.position.z) : -0.5;
+            // the floor under the feet (not a ceiling / roof / cave rock above)
+            const feetNow = this.group.position.y - PLAYER_GROUND_OFFSET + (this.isCrouching ? 1.0 : 0);
+            const ground = collision ? (collision.groundAt ? collision.groundAt(this.group.position.x, this.group.position.z, feetNow + 1.1) : collision.groundY(this.group.position.x, this.group.position.z)) : -0.5;
             this.groundY = ground;
             const crouchDrop = this.knockedDown ? 1.45 : this.isCrouching ? 1.0 : 0;
             const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;

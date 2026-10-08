@@ -32,6 +32,11 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // Wand spells
+    if (has('раскрой', 'раскрои', 'секрет', 'тайны', 'reveal', 'secret')) return 'Reveal';
+    if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';
+    if (has('нокс', 'nox', 'нокса', 'knox')) return 'Nox';
+    if (has('латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)

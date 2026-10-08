@@ -23,9 +23,11 @@ import { Accio } from './Accio.js';
 import { Storm } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
-import { BookBirds } from './BookBirds.js';
+import { BookBirds, makeBookModel } from './BookBirds.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { Swimming } from './Swimming.js';
+import { ItemSystem } from './Items.js';
+import { WandMagic } from './WandMagic.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -176,6 +178,8 @@ export class Game {
         this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
         this.books = isTest ? null : new BookBirds(this); // book-birds: building spells are learned from their books
         this.swim = new Swimming(this); // deep water: swimming, air, «Air Bubble»
+        this.items = new ItemSystem(this); // wands, scrolls, shields, backpacks, bows, food… in the world and the hands
+        this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -184,7 +188,7 @@ export class Game {
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
         this.quality.apply(this.world);
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
-        this.weapons.onHit = (z, dmg, dir, isWeapon, w, hit) => this.onLocalHit(z, dmg, dir, isWeapon, hit);
+        this.weapons.onHit = (z, dmg, dir, isWeapon, w, hit) => this.onLocalHit(z, isWeapon && w ? dmg * (w.damageScale || 1) : dmg, dir, isWeapon, hit, w);
 
         // Flashlight: always present (intensity 0 when off) so toggling never recompiles shaders.
         this.flashlight = new THREE.SpotLight(0xffffff, 0);
@@ -303,6 +307,8 @@ export class Game {
     /** Authoritative damage. `by` = player id that dealt it (for kill counting). */
     damageZombie(z, amount, isWeapon, dir, by, hit = null) {
         if (z.isDead) return null;
+        // my spells with a wand in the hand hit harder
+        if (!isWeapon && by == null && this._lastSpell && performance.now() - this._lastSpell.at < 6000) amount *= this._lastSpell.pw;
         const res = z.takeDamage(amount, isWeapon, dir, Math.random, hit);
         if (this.sound) {
             if (res.shattered) { /* zombie plays the shatter sound */ } else this.sound.playHit();
@@ -319,8 +325,8 @@ export class Game {
     }
 
     /** The local player's weapon/fist hit something. */
-    onLocalHit(z, dmg, dir, isWeapon, hit = null) {
-        if (z.isPlayer) { this.combat.hitRemote(z, dmg); return; }
+    onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
+        if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic); return; }
         this.punchCount++;
         if (this.authority) {
             this.damageZombie(z, dmg, isWeapon, dir, this.localId, hit);
@@ -340,6 +346,8 @@ export class Game {
      * @param {number} [power] 1 = Bombardo, 3 = Bombardo Maxima
      */
     explode(pos, radius, casterId, power = 1) {
+        // a wand makes my Bombardo destroy more
+        if ((casterId === 'local' || casterId === this.localId) && this._lastSpell && performance.now() - this._lastSpell.at < 6000) radius *= 1 + (this._lastSpell.pw - 1) * 0.5;
         this.applyExplosion(pos, radius, true, power, casterId);
         this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius });
         if (this.sync) this.sync.explosion(pos, radius, power, casterId);
@@ -441,6 +449,15 @@ export class Game {
         if (!chest.open()) return;
         if (this.sound) this.sound.playChestOpen(chest.getPosition());
         const id = rewardId || `c${chest.id}`;
+        if (chest.itemType === 'loot') {
+            // a cave chest: wands, scrolls, shields… float up out of it
+            if (this.authority) {
+                chest.mesh.updateMatrixWorld(true);
+                this.items.lootChest(chest.getRewardPosition(new THREE.Vector3()));
+                if (this.sync) this.sync.chestOpenedLoot?.(chest);
+            }
+            return;
+        }
         if (this.authority) {
             chest.mesh.updateMatrixWorld(true);
             const pos = chest.getRewardPosition(new THREE.Vector3());
@@ -448,6 +465,45 @@ export class Game {
             const w = this.weapons.spawnHovering(chest.itemType, pos, id);
             if (this.sync) this.sync.chestOpened(chest, w);
         }
+    }
+
+    /**
+     * Caves: a chest in every cave chamber (and sleeping zombies in the dark,
+     * in «Свободный мир»); the light fades inside.
+     */
+    _updateCaves(dt) {
+        const t = this.terrain?.data;
+        if (!t || !t.cavesNear || this.config.map || this.config.mode === 'test') return;
+        const p = this.character.group.position;
+        this._caveT = (this._caveT || 0) - dt;
+        if (this._caveT <= 0) {
+            this._caveT = 1;
+            this._caveChests = this._caveChests || new Set();
+            for (const cv of t.cavesNear(p.x, p.z, 90)) {
+                if (this._caveChests.has(cv.id)) continue;
+                this._caveChests.add(cv.id);
+                const pos = new THREE.Vector3(cv.kx + 0.5, cv.F, cv.kz + 0.5);
+                const chest = new Chest(this.scene, pos, 'loot', Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz), cv.id);
+                chest.mesh.updateMatrixWorld(true);
+                chest.boxId = this.collision.addBox(chest.getCollisionBox());
+                this.chests.push(chest);
+                if (this._openedChests?.has(cv.id)) chest.setOpenInstant();
+                if (this.authority && this.config.mode === 'freeworld') {
+                    const n = 2 + (cv.r % 3);
+                    for (let i = 0; i < n; i++) {
+                        const a = (i / n) * Math.PI * 2;
+                        const zp = new THREE.Vector3(cv.kx + Math.cos(a) * 3.5, cv.F - 0.5, cv.kz + Math.sin(a) * 3.5);
+                        const z = this._createZombie(zp);
+                        z.setSleeping?.(true);
+                    }
+                }
+            }
+        }
+        // darkness: rock above the head
+        const head = Math.floor(p.y + 2.4 + 1.5);
+        const covered = t.solidIn(Math.round(p.x), Math.round(p.z), head, head + 14) ? 1 : 0;
+        this._caveK = (this._caveK || 0) + (covered - (this._caveK || 0)) * Math.min(1, dt * 1.5);
+        this.world.setCave?.(this._caveK);
     }
 
     // ============================================================== players
@@ -524,6 +580,11 @@ export class Game {
             return name;
         }
         if (name === 'WaveAttack' || name === 'WaveAttackMaxima') return this._castWave(name, isFinal);
+        if (name === 'Lumos' || name === 'LumosMaxima' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
+        // the spell's strength with the wand in the hand (used by damage while it acts)
+        this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
+        // Inferno with a scroll in the hand burns it: its power is yours
+        if (name === 'Inferno' && this.items.heldOf('scroll')) { this.items.burnHeldScroll(); return 'Inferno'; }
         // Duel magic: a charge flies at the creature the hand points at
         // Duel spells need a raised, pointing hand: the word alone (e.g. a friend's voice
         // reaching this microphone) never fires them while the arms hang down
@@ -1190,7 +1251,19 @@ export class Game {
             if ((o.isMesh || o.isPoints || o.isSprite) && !o.visible) { hidden.push(o); o.visible = true; }
         });
         const savedIntensity = this.flashlight.intensity;
+        // things that appear only later (book-birds, bubbles, waves, items): one sample each
+        const zoo = new THREE.Group();
+        zoo.position.copy(this.character.group.position);
+        zoo.add(makeBookModel(0x8e2b2b));
+        const glow = new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        zoo.add(new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 8), glow));
+        zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
+        zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
+        for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
+        this.scene.add(zoo);
         this.renderer.compile(this.scene, this.camera);
+        this.scene.remove(zoo);
+        zoo.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.prewarmedPrograms = this.renderer.info.programs.length;
@@ -1287,6 +1360,10 @@ export class Game {
         this.builder.update(dt);
         this.books?.update(dt);
         this.swim.update(dt);
+        this.items.update(dt);
+        this.items.updateRemote();
+        this.wandMagic.update(dt);
+        this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
         this._updateLightning(dt);
@@ -1750,6 +1827,8 @@ export class Game {
         this.inventory?.dispose();
         this.books?.dispose();
         this.swim?.dispose();
+        this.items?.dispose();
+        this.wandMagic?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

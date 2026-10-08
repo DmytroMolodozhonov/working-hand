@@ -64,6 +64,8 @@ export const SPELL_COST = {
     WaveAttackMaxima: 18,
     AirBubble: 4,
     AirBubbleMaxima: 10,
+    Lumos: 2,
+    LumosMaxima: 4,
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */
@@ -185,7 +187,7 @@ export class Combat {
         this.game = game;
         this.enabled = game.config.mode === 'freeworld';
         this.hp = PVP.MAX_HP;
-        this.fatigue = PVP.MAX_FATIGUE;
+        this.fatigue = this.maxFatigue || PVP.MAX_FATIGUE;
         this.shield = null; // {type: 1 hand | 2 dome, side, left}
         this.frozenLeft = 0;
         this.frozenBy = null;
@@ -202,7 +204,7 @@ export class Combat {
     /** Back to life (respawn): full health and strength, no ice / stun / shield. */
     revive() {
         this.hp = PVP.MAX_HP;
-        this.fatigue = PVP.MAX_FATIGUE;
+        this.fatigue = this.maxFatigue || PVP.MAX_FATIGUE;
         this.shield = null;
         this.frozenLeft = 0;
         this.frozenBy = null;
@@ -245,7 +247,7 @@ export class Combat {
         if (this.frozen) return `🧊 Вы заморожены — разморозка через ${Math.ceil(this.frozenLeft)} с`;
         if (this.stunned) return `💫 Вы оглушены — ещё ${Math.ceil(this.stunLeft)} с`;
         if (!this.enabled) return null;
-        const cost = SPELL_COST[name] ?? 5;
+        const cost = this.costOf(name);
         if (this.fatigue < cost) {
             const msg = `😮‍💨 Не хватает сил: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
             this.game.hud?.toast?.(msg); // a short note that fades by itself
@@ -255,8 +257,20 @@ export class Combat {
     }
 
     /** Pay the fatigue of a spell that was cast. */
+    /** Fatigue a spell costs (a wand in the hand saves 15%). */
+    costOf(name) {
+        const base = SPELL_COST[name] ?? 5;
+        return this.game.items?.wand ? Math.round(base * 0.85 * 10) / 10 : base;
+    }
+
     pay(name) {
-        if (this.enabled) this.fatigue = Math.max(0, this.fatigue - (SPELL_COST[name] ?? 5));
+        if (this.enabled) this.fatigue = Math.max(0, this.fatigue - this.costOf(name));
+    }
+
+    /** A burnt scroll: more strength for good. */
+    addMaxFatigue(n) {
+        this.maxFatigue = (this.maxFatigue || PVP.MAX_FATIGUE) + n;
+        this.fatigue = Math.min(this.maxFatigue, this.fatigue + n);
     }
 
     spend(name) {
@@ -286,7 +300,8 @@ export class Combat {
             }
             const hint = this.spend('Protection');
             if (hint) return hint;
-            this.shield = { type: 1, side, left: PVP.SHIELD_TIME };
+            const fav = this.game.items?.wand?.fav === 'Protection' ? 1.4 : 1;
+            this.shield = { type: 1, side, left: PVP.SHIELD_TIME * fav };
         }
         if (this.game.sound) this.game.sound.playIce?.();
         return null;
@@ -377,8 +392,15 @@ export class Combat {
     }
 
     /** Someone hit me with a fist or a weapon. A frozen player shatters. */
-    meleeHit(dmg, byId) {
+    meleeHit(dmg, byId, magic = false) {
         if (!this.enabled || this.dead) return;
+        // a magic weapon breaks an ordinary «Protection» it touches
+        if (magic && this.shield && this.shield.type === 1) {
+            this.shield.left = 0;
+            this.game.hud.setVoice?.('💥 Волшебное оружие разбило ваш щит!', true);
+            const p = this.center(_v1);
+            for (let i = 0; i < 25; i++) this.game.fx.spark(p, 0x7fd8ff, 0.12, _v2.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.6);
+        }
         if (this.frozen) { this.die(byId, 'shatter'); return; }
         this.damage(dmg, byId, 'melee');
     }
@@ -426,7 +448,7 @@ export class Combat {
             this._updateVisuals(dt);
             return;
         }
-        if (!this.dead) this.fatigue = Math.min(PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
+        if (!this.dead) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
         if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
         if (this.frozenLeft > 0) {
             this.frozenLeft = Math.max(0, this.frozenLeft - dt);
@@ -459,7 +481,7 @@ export class Combat {
         if (key === this._hudKey) return;
         this._hudKey = key;
         hud.update(this.hp, PVP.MAX_HP, this.game.killCount, this.game.punchCount);
-        hud.setFatigue(this.fatigue, PVP.MAX_FATIGUE);
+        hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE);
         if (this.stunned) return; // the stun message is shown by update()
         hud.setStatus(this.frozen
             ? `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`
@@ -502,10 +524,10 @@ export class Combat {
     }
 
     /** My fist or weapon hit another player. */
-    hitRemote(target, dmg) {
+    hitRemote(target, dmg, magic = false) {
         if (target.damageCooldown > 0) return;
         target.damageCooldown = 0.45;
-        if (this.game.sync) this.game.sync.playerHit(target.id, dmg);
+        if (this.game.sync) this.game.sync.playerHit(target.id, dmg, magic);
         const p = _v1.copy(target.group.position).add(_v2.set(0, 1.2, 0));
         for (let i = 0; i < 8; i++) this.game.fx.spark(p, 0xff3030, 0.15, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
         if (this.game.sound) this.game.sound.playHit();

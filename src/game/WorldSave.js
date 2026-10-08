@@ -90,7 +90,8 @@ export function playerSnapshot(game) {
         learned: game.books ? [...game.books.learned] : [],
         pos: [r2(p.x), r2(p.y), r2(p.z)],
         hp: game.playerHP,
-        bonus: game.bonus || null, // (scrolls: more health / strength — later)
+        bonus: game.bonus || null, // scrolls burnt: more health / strength for good
+        gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
     };
 }
 
@@ -107,7 +108,12 @@ export function applyPlayerSnapshot(game, s) {
     if (game.books && Array.isArray(s.learned)) for (const k of s.learned) game.books.learned.add(k);
     if (Array.isArray(s.pos) && s.pos.every(Number.isFinite)) game.character.group.position.set(s.pos[0], s.pos[1] + 0.5, s.pos[2]);
     if (Number.isFinite(s.hp) && s.hp > 0) game.playerHP = Math.min(game.maxHP, s.hp);
-    if (s.bonus) game.bonus = s.bonus;
+    if (s.bonus) {
+        game.bonus = { ...s.bonus };
+        if (s.bonus.hp) { game.maxHP += s.bonus.hp; game.playerHP = Math.min(game.maxHP, game.playerHP + s.bonus.hp); }
+        if (s.bonus.fatigue) game.combat.addMaxFatigue?.(s.bonus.fatigue);
+    }
+    if (s.gear) game.items?.restore(s.gear);
 }
 
 /**
@@ -155,7 +161,8 @@ export class WorldKeeper {
             edits: (g.blockEdits || []).slice(-30000),
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
             ice: g.iceCells || [],
-            chests: (g.chests || []).filter((c) => c.isOpen).map((c) => c.id),
+            chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
+            items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             players: this.players,
         };
@@ -189,7 +196,8 @@ export function restoreWorld(game, save, THREE) {
         g.explosions.push(e);
     }
     if (save.ice && save.ice.length) g.applyIce(save.ice);
-    for (const id of save.chests || []) { const c = g.chests?.find((x) => x.id === id); if (c) c.setOpenInstant(); }
+    for (const id of save.chests || []) { (g._openedChests = g._openedChests || new Set()).add(id); const c = g.chests?.find((x) => x.id === id); if (c) c.setOpenInstant(); }
+    for (const e of save.items || []) g.items?.spawnLoose(e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());
     // things lying around: exactly what was there (a sword taken into a slot is not on its pedestal any more)
@@ -203,7 +211,7 @@ export function restoreWorld(game, save, THREE) {
             let w = g.weapons.byId.get(s[0]);
             const pos = new THREE.Vector3(s[2], s[3], s[4]);
             const q = new THREE.Quaternion(s[5], s[6], s[7], s[8]);
-            if (!w) { w = g.weapons.spawn(s[1], pos, q, s[0]); w.wake(); }
+            if (!w) { w = g.weapons.markMagic(g.weapons.spawn(s[1], pos, q, s[0]), s[10]); w.wake(); }
             else if (!w.hover) w.placeAt(pos, q);
         }
     }

@@ -81,6 +81,15 @@ export class WeaponSystem {
     }
 
     /** Chest reward: rises out of the chest and floats until grabbed. */
+    /** A magic weapon (from a chest): glows, hits `bonus` % harder. */
+    markMagic(w, bonus) {
+        if (!w || !(bonus > 0)) return w;
+        w.magic = true;
+        w.bonus = bonus;
+        w.applyMagicLook?.();
+        return w;
+    }
+
     spawnHovering(type, pos, id) {
         const q = new THREE.Quaternion();
         const w = this.spawn(type, pos.clone(), q, id);
@@ -170,6 +179,7 @@ export class WeaponSystem {
         }
 
         if (!allowGrab || !visible) return;
+        if (this.game.items?.held[side]) return; // the hand holds another thing
         // "Recently open" in time OR in frames (slow computers render few frames per second)
         const closing = curl > CLOSE_CURL && (now - hs.lastOpen < CLOSE_WINDOW_MS || this.frame - hs.lastOpenFrame <= 12);
         if (!closing) return;

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { PeerServer } from 'peer';
 import { startServer, launch, sleep, realErrors } from './harness.mjs';
 
-const PORT = 8150;
+const PORT = Number(process.env.ZNS_TEST_PORT) || 8150;
 const PEER_PORT = 9010;
 let srv, browser, peerServer;
 

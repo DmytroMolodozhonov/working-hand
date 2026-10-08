@@ -52,7 +52,7 @@ export function bookSpells(id) {
 }
 
 // ---------------------------------------------------------------- models
-function makeBookModel(color) {
+export function makeBookModel(color) {
     const g = new THREE.Group();
     const cover = new THREE.MeshLambertMaterial({ color });
     const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 });

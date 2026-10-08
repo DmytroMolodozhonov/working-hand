@@ -164,7 +164,7 @@ export class Zombie {
     update(dt, targetPos, camera, collision) {
         const pos = this.group.position;
         this.lastDistSq = targetPos ? pos.distanceToSquared(targetPos) : Infinity;
-        const ground = collision ? collision.groundY(pos.x, pos.z) : -0.5;
+        const ground = collision ? (collision.groundAt ? collision.groundAt(pos.x, pos.z, pos.y - 1.0 + 1.1) : collision.groundY(pos.x, pos.z)) : -0.5;
 
         if (this.damageCooldown > 0) this.damageCooldown -= dt;
         this._spinHalo(dt);

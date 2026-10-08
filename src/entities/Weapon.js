@@ -96,6 +96,30 @@ export class Weapon {
         if (opts.position) this.position.copy(opts.position);
         if (opts.quaternion) this.quaternion.copy(opts.quaternion);
         this.mesh.updateMatrixWorld(true);
+        // Magic weapons: a little glow and a tint; hit harder by `bonus` %
+        this.magic = false;
+        this.bonus = 0;
+    }
+
+    /** Look of a magic weapon (a soft blue glow, slightly tinted metal). */
+    applyMagicLook() {
+        if (!this.magic || this._glow) return;
+        this.model.traverse((o) => {
+            if (!o.isMesh || !o.material) return;
+            const m = o.material.clone();
+            if (m.emissive) { m.emissive.setHex(0x2a5cff); m.emissiveIntensity = 0.35; }
+            if (m.color) m.color.lerp(new THREE.Color(0x9fd8ff), 0.25);
+            o.material = m;
+        });
+        const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), new THREE.MeshBasicMaterial({ color: 0x6fb8ff, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+        glow.scale.set(0.35, 1.6, 0.35);
+        this.mesh.add(glow);
+        this._glow = glow;
+    }
+
+    /** Damage multiplier of this weapon (magic ones hit harder). */
+    get damageScale() {
+        return this.magic ? 1 + (this.bonus || 0) / 100 : 1;
     }
 
     // ------------------------------------------------------------ geometry
@@ -305,7 +329,7 @@ export class Weapon {
     serialize() {
         const p = this.position, q = this.quaternion;
         const r = (v) => Math.round(v * 1000) / 1000;
-        return [this.id, this.type, r(p.x), r(p.y), r(p.z), r(q.x), r(q.y), r(q.z), r(q.w), this.sleeping ? 1 : 0];
+        return [this.id, this.type, r(p.x), r(p.y), r(p.z), r(q.x), r(q.y), r(q.z), r(q.w), this.sleeping ? 1 : 0, this.magic ? this.bonus || 1 : 0];
     }
 
     /** Follow a pose owned by someone else (holder on another machine / host physics). */

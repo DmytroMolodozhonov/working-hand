@@ -20,6 +20,7 @@
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
+import { ITEM_INFO } from './ItemTypes.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -115,6 +116,22 @@ export class Inventory {
         return true;
     }
 
+    /** A found thing into a slot (food stacks up to 10). */
+    storeItem(item) {
+        const max = ITEM_INFO[item.kind]?.stack;
+        if (max) {
+            for (const s of this.slots) {
+                if (s && s.kind === item.kind && (s.count || 1) < max) {
+                    const n = Math.min(max - (s.count || 1), item.count || 1);
+                    s.count = (s.count || 1) + n;
+                    item.count = (item.count || 1) - n;
+                    if (item.count <= 0) { this._render(); return true; }
+                }
+            }
+        }
+        return this.store(item);
+    }
+
     /** Put an item (weapon / book) into a free slot (the chosen one first). */
     store(item) {
         let i = this.selected >= 0 && !this.slots[this.selected] ? this.selected : this.slots.findIndex((s) => !s);
@@ -156,7 +173,7 @@ export class Inventory {
             if (g.weapons.hands.right.held) return; // the hand is busy
             const ch = g.character;
             const p = ch.getGripObject('right').getWorldPosition(new THREE.Vector3());
-            const w = g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id);
+            const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id), s.magic ? s.bonus : 0);
             if (g.sync) g.sync.weaponAppeared?.(w);
             w.wake();
             g.weapons.grab(w, 'right', 0.5);
@@ -171,7 +188,13 @@ export class Inventory {
             this.inHand = { kind: 'book' };
             return;
         }
-        if (s.kind === 'res') this.inHand = { kind: 'res', stack: s };
+        if (s.kind === 'res') { this.inHand = { kind: 'res', stack: s }; return; }
+        // any other thing (wand, scroll, shield, food…)
+        if (g.items && !g.items.held.right && !g.weapons.hands.right.held) {
+            g.items.takeIntoHand(s, 'right');
+            this.slots[this.selected] = null;
+            this.inHand = { kind: 'item', item: s };
+        }
     }
 
     /** Switching slots: a weapon taken out of the chosen slot goes back into it. */
@@ -182,11 +205,12 @@ export class Inventory {
         const slot = this.selected >= 0 && !this.slots[this.selected] ? this.selected : null;
         if (h.kind === 'weapon' && this.game.weapons.hands.right.held === h.weapon) this._storeWeapon(h.weapon, slot);
         if (h.kind === 'book' && this.game.books?.inHand) { const b = this.game.books.putAway(); if (slot != null) this.slots[slot] = b; else this.store(b); }
+        if (h.kind === 'item' && this.game.items?.held.right?.item === h.item) { const it = this.game.items.releaseHand('right'); if (slot != null) this.slots[slot] = it; else this.storeItem(it); }
     }
 
     _storeWeapon(w, slot = null) {
         const g = this.game;
-        const item = { kind: 'weapon', type: w.type, id: w.id };
+        const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0 };
         for (const side of ['left', 'right']) if (g.weapons.hands[side].held === w) g.weapons._forget(side, g.character.getActiveHands()[side]);
         if (slot != null && !this.slots[slot]) { this.slots[slot] = item; this._render(); } else if (!this.store(item)) return false;
         if (g.sync) g.sync.weaponGone?.(w);
@@ -204,6 +228,16 @@ export class Inventory {
                 if (this._storeWeapon(w)) { this._fx('🎒 ' + (w.type === 'axe' ? 'Топор' : 'Меч') + ' в ячейке'); this.selected = -1; this._render(); }
                 return;
             }
+        }
+        for (const side of ['right', 'left']) {
+            const h = g.items?.held[side];
+            if (!h) continue;
+            const it = g.items.releaseHand(side);
+            if (this.inHand?.item === it) this.inHand = null;
+            if (this.storeItem(it)) this._fx('🎒 ' + (ITEM_INFO[it.kind]?.name || 'Предмет') + ' в ячейке');
+            this.selected = -1;
+            this._render();
+            return;
         }
         if (g.books?.inHand) {
             const book = g.books.putAway();
@@ -315,6 +349,7 @@ export class Inventory {
             c.classList.toggle('sel', i === this.selected);
             c.title = '';
             icon.style.background = 'none';
+            icon.style.textShadow = '';
             icon.textContent = '';
             count.textContent = '';
             if (!s) return;
@@ -326,8 +361,16 @@ export class Inventory {
                 c.title = r?.name || '';
             } else if (s.kind === 'weapon') {
                 icon.textContent = s.type === 'axe' ? '🪓' : '🗡️';
+                if (s.magic) icon.style.textShadow = '0 0 8px #6fb8ff, 0 0 3px #fff';
             } else if (s.kind === 'book') {
                 icon.textContent = '📖';
+            } else {
+                icon.textContent = ITEM_INFO[s.kind]?.icon || '❔';
+                if (s.kind === 'wand' && s.color != null) icon.style.background = `radial-gradient(circle, #${(s.color >>> 0).toString(16).padStart(6, '0')}55, transparent 70%)`;
+                if (s.kind === 'weapon') icon.textContent = s.type === 'axe' ? '🪓' : '🗡️';
+                if (s.count > 1) count.textContent = s.count;
+                if (s.kind === 'bow') count.textContent = s.arrows ?? '';
+                c.title = ITEM_INFO[s.kind]?.name || '';
             }
         });
     }

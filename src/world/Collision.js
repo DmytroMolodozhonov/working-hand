@@ -88,6 +88,15 @@ export class CollisionWorld {
         return this.terrain ? this.terrain.surfaceY(x, z) : this.flatGroundY;
     }
 
+    /**
+     * The floor under a body whose feet can reach up to `reachY` (a step):
+     * a ceiling, a roof or a cave above is not «ground».
+     */
+    groundAt(x, z, reachY) {
+        if (!this.terrain || !this.terrain.floorBelow) return this.groundY(x, z);
+        return this.terrain.floorBelow(Math.round(x), Math.round(z), Math.floor(reachY + 1.5)) - 0.5;
+    }
+
     /** Visible floor / terrain height for physical objects (weapons, debris). */
     surfaceY(x, z) {
         return this.terrain ? this.terrain.surfaceY(x, z) : this.floorY;
@@ -147,6 +156,8 @@ export class CollisionWorld {
                     for (let ix = ix0; ix <= ix1; ix++) {
                         const top = this.terrain.topLayer(ix, iz) - 0.5;
                         if (top <= feetY + stepHeight) continue;
+                        // something above the step — but is it in the way of the body (not a ceiling over the head)?
+                        if (this.terrain.solidIn && !this.terrain.solidIn(ix, iz, Math.ceil(feetY + stepHeight + 0.5 + 1e-3), Math.floor(feetY + height + 1.5 - 1e-3))) continue;
                         if (pushOutOfRect(pos, radius, ix - 0.5, ix + 0.5, iz - 0.5, iz + 0.5)) moved = true;
                     }
                 }

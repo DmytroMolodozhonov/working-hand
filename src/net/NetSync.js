@@ -115,7 +115,8 @@ export class NetSync {
             t: 'welcome',
             config: sanitizeConfig(g.config),
             explosions: g.explosions,
-            chests: g.chests.filter((c) => c.isOpen).map((c) => c.id),
+            chests: [...new Set([...g.chests.filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
+            items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r3(L.model.position.x), r3(L.model.position.y), r3(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
             weapons: g.weapons.weapons.map((w) => ({ s: w.serialize(), owner: this.weaponOwners.get(w.id) || (w.holder ? this.me : null), hover: !!w.hover })),
             zombies: g.zombies.map((z) => z.serialize()),
             ice: g.iceCells,
@@ -138,13 +139,15 @@ export class NetSync {
         }
         if (msg.ice && msg.ice.length) g.applyIce(msg.ice);
         for (const id of msg.chests || []) {
+            (g._openedChests = g._openedChests || new Set()).add(id);
             const c = g.chests.find((x) => x.id === id);
             if (c) c.setOpenInstant();
         }
+        for (const e of msg.items || []) g.items?.spawnLoose(e.item, vec(e.p), { hover: !!e.h, broadcast: false });
         const known = new Set(g.weapons.weapons.map((w) => w.id));
         for (const wd of msg.weapons || []) {
             let w = g.weapons.byId.get(wd.s[0]);
-            if (!w) w = g.weapons.spawn(wd.s[1], vec([wd.s[2], wd.s[3], wd.s[4]]), new THREE.Quaternion(wd.s[5], wd.s[6], wd.s[7], wd.s[8]), wd.s[0]);
+            if (!w) w = g.weapons.markMagic(g.weapons.spawn(wd.s[1], vec([wd.s[2], wd.s[3], wd.s[4]]), new THREE.Quaternion(wd.s[5], wd.s[6], wd.s[7], wd.s[8]), wd.s[0]), wd.s[10]);
             known.delete(wd.s[0]);
             w.setRemoteTarget(wd.s);
             if (wd.owner) this.weaponOwners.set(w.id, wd.owner);
@@ -313,8 +316,8 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'clashend', a, b, loser });
     }
 
-    playerHit(to, dmg) {
-        this.net.send({ t: 'phit', by: this.me, to, dmg }, true);
+    playerHit(to, dmg, magic = false) {
+        this.net.send({ t: 'phit', by: this.me, to, dmg, mg: magic ? 1 : 0 }, true);
     }
 
     died(killer) {
@@ -328,6 +331,38 @@ export class NetSync {
 
     explosion(pos, radius, power = 1, casterId = null) {
         if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
+    }
+
+    chestOpenedLoot(chest) {
+        if (this.net.isHost) this.net.send({ t: 'chest', id: chest.id });
+    }
+
+    itemNew(item, p, v, hover) {
+        if (this.net.isHost) this.net.send({ t: 'inew', item, p: [r3(p.x), r3(p.y), r3(p.z)], v: v ? [r3(v.x), r3(v.y), r3(v.z)] : null, h: hover ? 1 : 0 }, true);
+    }
+
+    itemPositions(list) {
+        if (this.net.isHost) this.net.send({ t: 'ipos', l: list });
+    }
+
+    itemTake(uid, side) {
+        this.net.send({ t: 'itake', uid, side });
+    }
+
+    itemGone(uid, to, side) {
+        if (this.net.isHost) this.net.send({ t: 'igone', uid, to, side }, true);
+    }
+
+    itemThrow(item, p, v) {
+        this.net.send({ t: 'ithrow', item, p: [r3(p.x), r3(p.y), r3(p.z)], v: [r3(v.x), r3(v.y), r3(v.z)] });
+    }
+
+    itemGive(to, item, side) {
+        this.net.send({ t: 'igive', to, item, side }, true);
+    }
+
+    itemHold(side, item) {
+        this.net.send({ t: 'ihold', by: this.me, side, item }, true);
     }
 
     chestOpened(chest, weapon) {
@@ -399,7 +434,7 @@ export class NetSync {
             }
             case 'wnew': {
                 if (g.weapons.byId.has(m.w)) break;
-                const w = g.weapons.spawn(m.type === 'axe' ? 'axe' : 'sword', vec(m.s.slice(2, 5)), new THREE.Quaternion(m.s[5], m.s[6], m.s[7], m.s[8]), m.w);
+                const w = g.weapons.markMagic(g.weapons.spawn(m.type === 'axe' ? 'axe' : 'sword', vec(m.s.slice(2, 5)), new THREE.Quaternion(m.s[5], m.s[6], m.s[7], m.s[8]), m.w), m.s[10]);
                 this.weaponOwners.set(m.w, m.owner || m.from);
                 w.setRemoteTarget(m.s);
                 break;
@@ -416,13 +451,27 @@ export class NetSync {
             }
             case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;
             case 'chest': {
+                (g._openedChests = g._openedChests || new Set()).add(m.id);
                 const c = g.chests.find((x) => x.id === m.id);
                 if (c && !this.net.isHost) g.openChest(c);
                 break;
             }
+            // ---- things (wands, scrolls, shields…)
+            case 'inew': if (!this.net.isHost && m.item) g.items?.spawnLoose(m.item, vec(m.p), { vel: m.v ? vec(m.v) : null, hover: !!m.h, broadcast: false }); break;
+            case 'ipos': if (!this.net.isHost) g.items?.applyPositions(m.l); break;
+            case 'itake': if (this.net.isHost) g.items?.pickUp(m.uid, m.from, m.side === 'left' ? 'left' : 'right'); break;
+            case 'igone': {
+                if (this.net.isHost) break;
+                const it = g.items?.removeLoose(m.uid);
+                if (m.to === this.me && it) g.items._gotItem(it, m.side === 'left' ? 'left' : 'right');
+                break;
+            }
+            case 'ithrow': if (this.net.isHost && m.item) { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v) }); if (L) L.thrower = m.from; } break;
+            case 'igive': if (m.to === this.me && m.item) { if (!g.items.takeIntoHand(m.item, m.side === 'left' ? 'left' : 'right')) g.inventory.storeItem(m.item); g.hud.setVoice?.('🤝 Вам передали предмет', true); } break;
+            case 'ihold': if (m.by !== this.me) g.items?.setRemoteHeld(m.by, m.side, m.item || null); break;
             case 'wspawn': {
                 if (this.net.isHost || g.weapons.byId.has(m.s[0])) break;
-                const w = g.weapons.spawnHovering(m.s[1], vec(m.hover), m.s[0]);
+                const w = g.weapons.markMagic(g.weapons.spawnHovering(m.s[1], vec(m.hover), m.s[0]), m.s[10]);
                 w.setRemoteTarget(m.s);
                 break;
             }
@@ -489,7 +538,7 @@ export class NetSync {
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
-            case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(5, m.dmg | 0 || 1), m.by); break;
+            case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg); break;
             case 'pdead': {
                 if (m.by === this.me) break;
                 const r = g.remotes.get(m.by);

@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, realErrors } from './harness.mjs';
 
-const PORT = 8155;
+const PORT = Number(process.env.ZNS_TEST_PORT) || 8155;
 let srv, browser;
 
 test.before(async () => {
@@ -418,6 +418,76 @@ test('worlds save themselves: built blocks and the inventory are there after «�
     assert.equal(after.block, 3, 'the built block is still there');
     assert.equal(after.stone, 42, 'the stone is in the slot');
     assert.ok(after.learned, 'the learned spell is remembered');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «Раскрой свои секреты», Люмос, eating', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const ch = g.character;
+        // the nearest cave
+        let cave = null;
+        for (let rad = 200; rad <= 1600 && !cave; rad += 200) cave = g.terrain.data.cavesNear(0, 0, rad).sort((a, b) => Math.hypot(a.kx, a.kz) - Math.hypot(b.kx, b.kz))[0];
+        if (!cave) return { noCave: true };
+        // walk in: stand at the entrance, then inside the chamber (under the rock)
+        ch.group.position.set(cave.kx + 2, cave.F + 1.6, cave.kz + 2);
+        await frames(40);
+        const p = ch.group.position;
+        const floorOk = Math.abs((p.y - 2.0) - (cave.F - 0.5)) < 0.6; // standing on the cave floor, not on the mountain
+        const dark = g._caveK;
+        const chest = g.chests.find((c) => c.id === cave.id);
+        for (let i = 0; i < 100 && chest && !chest.isOpen; i++) await frames(1);
+        await frames(20);
+        const loot = g.items.loose.size + g.weapons.weapons.filter((w) => w.hover && w.position.distanceTo(chest.getPosition()) < 5).length;
+        // a wand in the hand, a thing lying next to it
+        const wand = { kind: 'wand', uid: 'tw1', model: 3, color: 0x44aaff, dir: 'destroy', fav: 'Bombardo', power: 20 };
+        g.items.takeIntoHand(wand, 'right');
+        const scroll = { kind: 'scroll', uid: 'ts1', stat: 'fatigue', amount: 7 };
+        g.items.takeIntoHand(scroll, 'left');
+        const pw = g.wandMagic.power('BombardoMaxima');
+        g.wandMagic.reveal();
+        const holo = !!g.wandMagic.holo;
+        await frames(5);
+        g.combat.fatigue = 30;
+        const lumos = g.castLocalSpell('Люмос Максима', true);
+        await frames(3);
+        const light = g.wandMagic.lights[0].intensity;
+        // burn the scroll: max strength +7
+        const maxF0 = g.combat.maxFatigue || 30;
+        g.castLocalSpell('Инферно', true);
+        const maxF1 = g.combat.maxFatigue;
+        // eat an apple (hold it to the mouth)
+        g.playerHP = 5;
+        g.items.takeIntoHand({ kind: 'apple', uid: 'ta1', count: 1 }, 'left');
+        // (no camera here: hold it at the mouth by hand)
+        for (let i = 0; i < 20 && g.items.held.left; i++) {
+            g.items.held.left.model.position.copy(ch.head.getWorldPosition(new T.Vector3()).add(new T.Vector3(0, -0.25, 0)));
+            g.items._eat(0.1, ch);
+        }
+        const hpAfter = g.playerHP;
+        // pocket the wand
+        g.inventory.pocketRight();
+        const inSlot = g.inventory.slots.some((s) => s && s.kind === 'wand');
+        return { floorOk, dark, chest: !!chest, opened: chest?.isOpen, loot, pw, holo, lumos, light, maxF0, maxF1, hpAfter, inSlot, y: p.y, F: cave.F };
+    });
+    if (r.noCave) assert.fail('no cave found');
+    assert.ok(r.floorOk, `standing on the cave floor (y ${r.y}, floor ${r.F})`);
+    assert.ok(r.dark > 0.3, `dark in the cave (${r.dark})`);
+    assert.ok(r.chest && r.opened, 'a chest in the cave opens');
+    assert.ok(r.loot >= 1, 'loot floats out of it');
+    assert.ok(r.pw > 2, `a destruction wand favouring Bombardo makes Bombardo Maxima much stronger (×${r.pw.toFixed(2)})`);
+    assert.ok(r.holo, 'a hologram tells the secrets');
+    assert.equal(r.lumos, 'LumosMaxima');
+    assert.ok(r.light > 1, 'light at the tip');
+    assert.equal(r.maxF1, r.maxF0 + 7, 'the burnt scroll gave +7 strength');
+    assert.ok(r.hpAfter >= 15, `the apple healed (+10): ${r.hpAfter}`);
+    assert.ok(r.inSlot, 'the wand went into a slot');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

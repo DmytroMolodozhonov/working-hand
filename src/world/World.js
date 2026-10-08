@@ -121,7 +121,15 @@ export class VoxelWorld {
             fog: this.scene.fog ? this.scene.fog.color.clone() : new THREE.Color(0x87ceeb),
             far: this.fogFar ?? 90, night,
         };
-        if ((this.storm || 0) > 0) this.setStorm(this.storm);
+        if ((this.storm || 0) > 0 || (this.cave || 0) > 0) this.setStorm(this.storm || 0);
+    }
+
+    /** Inside a cave it is dark (0 = outside, 1 = deep inside). */
+    setCave(k) {
+        if (Math.abs(k - (this.cave || 0)) < 0.01) return;
+        this.cave = k;
+        if (!this._base) this._rememberBase(this._night ?? 0);
+        this.setStorm(this.storm || 0);
     }
 
     /** «Lightning Strike»: a storm darkens the world (0 = clear, 1 = full storm). */
@@ -129,9 +137,10 @@ export class VoxelWorld {
         this.storm = k;
         const b = this._base;
         if (!b) return;
-        this.ambientLight.intensity = b.amb * (1 - 0.5 * k);
-        this.dirLight.intensity = b.dir * (1 - 0.8 * k);
-        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k);
+        const cave = 1 - 0.78 * (this.cave || 0);
+        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * cave;
+        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * (1 - 0.95 * (this.cave || 0));
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * cave;
         if (this.scene.fog) {
             this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
