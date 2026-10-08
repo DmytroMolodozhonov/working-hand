@@ -234,7 +234,8 @@ export class TerrainData {
                     if (L === MIN_LAYER) type = BLOCK.BEDROCK;
                     else if (water && L === h) type = BLOCK.SAND;
                     else if (L === h) {
-                        if (h >= 17) type = BLOCK.SNOW;
+                        // snow only on the peaks (a few patches on the tips, solid higher up)
+                        if (h >= 24 || (h >= 21 && rng() < smoothstep(21, 24, h))) type = BLOCK.SNOW;
                         else if (h >= 11 && rng() < smoothstep(11, 16, h)) type = BLOCK.STONE;
                         else type = BLOCK.GRASS;
                     } else if (L >= h - 2 && L >= 0) type = BLOCK.DIRT;
