@@ -594,5 +594,44 @@ function escapeHtml(s) {
 }
 
 // Hooks for automated tests (read-only helpers + pose injection)
+// ------------------------------------------------------------------ remembered settings
+// Volumes, graphics, camera… are kept in this browser between launches.
+(function rememberSettings() {
+    const KEY = 'zns-settings';
+    const IDS = ['zombie-vol', 'music-vol', 'audio-ambient-toggle', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+        'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
+        'show-hands-toggle', 'drift-camera', 'creative-zombie-count'];
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
+    const save = () => {
+        const out = {};
+        for (const id of IDS) {
+            const el = $(id);
+            if (el) out[id] = el.type === 'checkbox' ? el.checked : el.value;
+        }
+        const hv = document.querySelector('input[name="hand-version"]:checked');
+        if (hv) out.handVersion = hv.value;
+        try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* private mode: just not remembered */ }
+    };
+    // Restore, and let each control's own handler apply the value (labels, sound, camera…)
+    for (const id of IDS) {
+        const el = $(id);
+        if (!el || saved[id] === undefined) continue;
+        if (el.type === 'checkbox') el.checked = !!saved[id];
+        else if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === String(saved[id]))) continue;
+        else el.value = saved[id];
+        el.dispatchEvent(new Event(el.type === 'range' ? 'input' : 'change'));
+    }
+    if (saved.handVersion) {
+        const r = document.querySelector(`input[name="hand-version"][value="${saved.handVersion}"]`);
+        if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+    }
+    for (const id of IDS) {
+        const el = $(id);
+        if (el) { el.addEventListener('input', save); el.addEventListener('change', save); }
+    }
+    for (const r of document.querySelectorAll('input[name="hand-version"]')) r.addEventListener('change', save);
+})();
+
 window.__zns = { THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } };
 console.log('ЗОМБИ НЕ СПЯТ: готово.');
