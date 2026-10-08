@@ -50,6 +50,7 @@ export const ITEM_INFO = {
     meat: { name: 'Сырое мясо', icon: '🥩', weight: 0.4, stack: 10 },
     steak: { name: 'Жареный стейк', icon: '🍖', weight: 0.4, stack: 10 },
     book: { name: 'Книга заклинаний', icon: '📖', weight: 0.6 },
+    arrows: { name: 'Стрелы', icon: '➶', weight: 0.3 },
 };
 
 const SHIELD_KINDS = [
@@ -92,7 +93,8 @@ export function rollLoot(r = Math.random, { cave = true } = {}) {
             out.push({ kind: 'shield', uid: newUid(), type: t, magic, max: magic ? randInt(r, 20, 50) : 0 });
         } else if (x < 0.77) out.push({ kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) });
         else if (x < 0.88) out.push({ kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: r() < 0.4, bonus: randInt(r, 1, 60), arrows: 10 });
-        else if (x < 0.92) out.push({ kind: 'hammer', uid: newUid(), charges: 0 });
+        else if (x < 0.91) out.push({ kind: 'hammer', uid: newUid(), charges: 0 });
+        else if (x < 0.96) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) });
         else out.push({ kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) });
     }
     return out;
@@ -125,6 +127,7 @@ export function describeItem(it) {
             return { title: '🏹 ' + BOW_KINDS[it.type || 0] + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: [it.magic ? `Стрелы бьют сильнее на <b>${it.bonus}%</b>` : 'Обычный лук', `Стрел: <b>${it.arrows ?? 0}</b> (до 25)`] };
         case 'hammer':
             return { title: '🔨 Молот Тора', color: 0xbfe3ff, lines: ['В грозу поднимите его вверх — в него ударит молния', 'Наведите на цель: молния бьёт туда (до 3 раз)', `Заряды: <b>${it.charges || 0}</b>`] };
+        case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком'] };
         case 'meat': return { title: '🥩 Сырое мясо', color: 0xd9534f, lines: ['Поднесите ко рту: +2 HP', 'Пожарьте «Инферно» — будет +4'] };
         case 'steak': return { title: '🍖 Стейк', color: 0xb5651d, lines: ['Поднесите ко рту: +4 HP'] };
@@ -282,6 +285,7 @@ export function makeItemModel(it) {
         case 'hammer': return hammerModel(it);
         case 'apple': return appleModel(it);
         case 'meat': return meatModel(false);
+        case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.05, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }

@@ -215,6 +215,19 @@ export class ItemSystem {
     }
 
     _gotItem(item, side) {
+        // arrows go straight into a bow's quiver (in a hand or in a slot), up to 25
+        if (item.kind === 'arrows') {
+            const g = this.game;
+            const bow = this.heldOf('bow')?.item || g.inventory.slots.find((s) => s && s.kind === 'bow');
+            if (bow && (bow.arrows || 0) < 25) {
+                const n = Math.min(25 - (bow.arrows || 0), item.count || 1);
+                bow.arrows = (bow.arrows || 0) + n;
+                item.count -= n;
+                g.inventory._render?.();
+                g.hud.setVoice?.(`🏹 +${n} стрел (в колчане ${bow.arrows})`, true);
+                if (item.count <= 0) return;
+            }
+        }
         if (!this.takeIntoHand(item, side) && !this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
             this.game.inventory.storeItem?.(item);
             return;
