@@ -31,6 +31,7 @@ import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals } from './Animals.js';
+import { Doors } from './Doors.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -187,6 +188,7 @@ export class Game {
         this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
+        this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -1134,8 +1136,15 @@ export class Game {
         const tired = this.levitation.active ? null : this.combat.check('Levitation');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         const wasActive = this.levitation.active;
+        // a door being carried: put it down; a door pointed at: lift it
+        if (this.doors.carried) { this.doors._putDown(); this._lastLevitate = now; return 'Levitation'; }
         const hint = this.levitation.cast();
-        if (hint) { this.hud.setVoice(hint, true); return null; }
+        if (hint) {
+            const side = ['right', 'left'].find((sd) => this.character.isArmRaised(sd)) || 'right';
+            if (this.doors.tryLift(side)) { this.combat.pay('Levitation'); this._lastLevitate = now; return 'Levitation'; }
+            this.hud.setVoice(hint, true);
+            return null;
+        }
         if (!wasActive) this.combat.pay('Levitation');
         this._lastLevitate = now;
         this._interimCast = isFinal ? null : { name: 'Levitation', at: now };
@@ -1411,6 +1420,7 @@ export class Game {
         this.gear.update(dt);
         this.bleeding.update(dt);
         this.animals.update(dt);
+        this.doors.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
@@ -1880,6 +1890,7 @@ export class Game {
         this.gear?.dispose();
         this.bleeding?.dispose();
         this.animals?.dispose();
+        this.doors?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

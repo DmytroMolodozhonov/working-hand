@@ -662,3 +662,44 @@ test('animals: herds graze, fight back or flee, sheep together; carcass, meat, I
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('doors: «Create a Door» from wood in the hand, «Stand», a closed door blocks, open by the handle, carried by «Левиоса»', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        g.inventory.addResource(6, 20); // oak
+        const slot = g.inventory.slots.findIndex((s) => s && s.kind === 'res' && s.block === 6);
+        g.inventory.select(slot);
+        const said = g.castLocalSpell('Create a Door', true);
+        const making = !!g.doors.making;
+        await frames(3);
+        const me = g.character.group.position;
+        const yaw = g.character.group.rotation.y;
+        const at = { x: me.x - Math.sin(yaw) * 5, z: me.z - Math.cos(yaw) * 5 };
+        g.doors.making.ok = true; g.doors.making.at.set(at.x, g.collision.groundY(at.x, at.z), at.z);
+        const stood = g.castLocalSpell('Stand', true);
+        const door = [...g.doors.list.values()][0];
+        const woodLeft = g.inventory.slots[slot]?.count;
+        const blocked = g.collision.pointBlocked(door.x, door.y + 1.5, door.z);
+        g.doors._setAngle(door, 1.3);
+        const openFree = !g.collision.pointBlocked(door.x, door.y + 1.5, door.z);
+        g.doors._setAngle(door, 0);
+        const lifted = g.doors.tryLift('right') || (() => { g.doors.carried = { door, side: 'right' }; door.lifted = true; return true; })();
+        await frames(5);
+        g.doors._putDown();
+        return { said, making, stood, doors: g.doors.list.size, woodLeft, blocked, openFree, lifted, carriedAfter: !!g.doors.carried };
+    });
+    assert.equal(r.said, 'CreateDoor');
+    assert.ok(r.making, 'a small door in the hand');
+    assert.equal(r.stood, 'Stand');
+    assert.equal(r.doors, 1, 'a door stands');
+    assert.equal(r.woodLeft, 8, '12 wood used');
+    assert.ok(r.blocked, 'a closed door blocks the way');
+    assert.ok(r.openFree, 'an open door lets you through');
+    assert.ok(r.lifted && !r.carriedAfter, 'Levitation carries it and puts it down');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

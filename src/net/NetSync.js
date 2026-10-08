@@ -128,6 +128,7 @@ export class NetSync {
             ice: g.iceCells,
             players: this.net.playerList(),
             dayStart: g.dayStart,
+            doors: g.doors?.snapshot() || [],
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
@@ -141,6 +142,7 @@ export class NetSync {
         for (const i of msg.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
+        if (msg.doors) g.doors?.restore(msg.doors);
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);
@@ -355,6 +357,9 @@ export class NetSync {
     animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
     animalButt(to, dmg, p) { this.net.send({ t: 'abutt', to, dmg, p: [r3(p.x), r3(p.y), r3(p.z)] }, true); }
 
+    door(d) { this.net.send({ t: 'door', d }, true); }
+    doorAngle(id, a) { this.net.send({ t: 'dang', id, a: Math.round(a * 100) / 100 }, true); }
+
     /** My hero's look, for everybody (on start and whenever somebody joins). */
     sendLook() {
         const look = this.game.character.look;
@@ -514,6 +519,8 @@ export class NetSync {
                 if (c && !this.net.isHost) g.openChest(c);
                 break;
             }
+            case 'door': if (m.d) g.doors?.applyNet(m.d); break;
+            case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'look': {
                 if (m.by === this.me || !m.look) break;
                 this.looks = this.looks || new Map();
