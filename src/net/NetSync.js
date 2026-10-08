@@ -156,6 +156,7 @@ export class NetSync {
             this.pTimer = 0;
             const held = [];
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());
+            for (const w of g.weapons.stuckWeapons()) held.push(w.serialize()); // stuck in a zombie: still mine
             const floating = g.levitation?.heldWeapon();
             if (floating) held.push(floating.serialize());
             this.net.send({
@@ -228,8 +229,8 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'zsand', id: z.id });
     }
 
-    sendHit(z, dmg, dir, isWeapon) {
-        this.net.send({ t: 'hit', id: z.id, dmg, dir: [r3(dir.x), r3(dir.y), r3(dir.z)], w: isWeapon ? 1 : 0 });
+    sendHit(z, dmg, dir, isWeapon, hit = null) {
+        this.net.send({ t: 'hit', id: z.id, dmg, dir: [r3(dir.x), r3(dir.y), r3(dir.z)], w: isWeapon ? 1 : 0, h: hit ? [r3(hit.y), hit.side, r3(hit.speed)] : null });
     }
 
     spell(name, origin, dir, side) {
@@ -328,7 +329,8 @@ export class NetSync {
             case 'hit': {
                 if (!this.net.isHost) break;
                 const z = g.zombieById.get(m.id);
-                if (z && !z.isDead) g.damageZombie(z, Math.min(10, m.dmg | 0 || 1), !!m.w, vec(m.dir || [0, 0, 1]), m.from);
+                const h = Array.isArray(m.h) ? { y: +m.h[0] || 0, side: m.h[1] > 0 ? 1 : -1, speed: Math.min(40, +m.h[2] || 0) } : null;
+                if (z && !z.isDead) g.damageZombie(z, Math.min(10, m.dmg | 0 || 1), !!m.w, vec(m.dir || [0, 0, 1]), m.from, h);
                 break;
             }
             case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;

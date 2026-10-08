@@ -33,6 +33,7 @@ function shared() {
 const SKIN = 0x6DA36D, SHIRT = 0x5D4037, PANTS = 0x212121;
 const ICE = new THREE.Color(0xaaddff);
 const _v = new THREE.Vector3();
+const _partVel = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _c = new THREE.Color();
 
@@ -347,7 +348,11 @@ export class Zombie {
      * @param {function} [rand]  random source (host passes Math.random; events are replicated)
      * @returns {object} what happened (for network replication)
      */
-    takeDamage(amount, isWeapon, hitDir = null, rand = Math.random) {
+    /**
+     * @param {object} [hit] where a blade hit: {y: height above the zombie's origin,
+     *   side: -1 left / +1 right, speed: m/s} — that part is cut off and flies along the blow
+     */
+    takeDamage(amount, isWeapon, hitDir = null, rand = Math.random, hit = null) {
         const result = { severed: -1, decap: false, died: false, shattered: false };
         if (this.isDead) return result;
         if (this.isFrozen) {
@@ -364,7 +369,21 @@ export class Zombie {
         this.hitFlashTimer = 0.15;
         this._setColor(0xff0000);
 
-        if (isWeapon) {
+        if (isWeapon && hit) {
+            // The part the blade went through; a faster swing cuts more surely
+            const vel = _partVel.set(0, 0, 0);
+            if (hitDir) vel.set(hitDir.x, 0, hitDir.z).normalize().multiplyScalar(4 + hit.speed * 0.9);
+            vel.y = 5 + hit.speed * 0.4;
+            const chance = Math.min(1, Math.max(0.15, (hit.speed - 4) / 8));
+            if (hit.y > 1.8) {
+                if (rand() < chance || this.health <= 0) { this.decapitate(vel); result.decap = true; this.health = Math.min(this.health, 0); }
+            } else if (rand() < chance) {
+                const right = hit.side > 0;
+                const bit = hit.y > 0.95 ? (right ? 4 : 2) : (right ? 16 : 8);
+                result.severed = this.severLimb(rand, (this.limbMask & bit) ? -1 : bit, vel);
+            }
+            if (this.health <= 0 && !result.decap) { this.decapitate(vel); result.decap = true; }
+        } else if (isWeapon) {
             if (this.health <= 0) {
                 this.decapitate();
                 result.decap = true;
@@ -392,15 +411,15 @@ export class Zombie {
         return result;
     }
 
-    decapitate() {
+    decapitate(vel = null) {
         if (this.limbMask & 1) return;
         this.limbMask |= 1;
         this.head.visible = false;
-        this._spawnPart('head');
+        this._spawnPart('head', vel);
         this._blood(2.1, 15);
     }
 
-    severLimb(rand = Math.random, forced = -1) {
+    severLimb(rand = Math.random, forced = -1, vel = null) {
         const limbs = [
             { bit: 2, part: this.leftArm, y: 1.4, type: 'arm' },
             { bit: 4, part: this.rightArm, y: 1.4, type: 'arm' },
@@ -413,17 +432,17 @@ export class Zombie {
         if (!chosen || (this.limbMask & chosen.bit)) return -1;
         this.limbMask |= chosen.bit;
         chosen.part.visible = false;
-        this._spawnPart(chosen.type);
+        this._spawnPart(chosen.type, vel);
         if (chosen.type === 'leg') this.speed = Math.max(0.5, this.speed - 1.0);
         this._blood(chosen.y, 8);
         return chosen.bit;
     }
 
-    _spawnPart(type) {
+    _spawnPart(type, vel = null) {
         const fx = this.ctx.fx;
         if (!fx) return;
         const startY = type === 'head' ? 2.1 : type === 'arm' ? 1.4 : 0.5;
-        fx.flyingPart(type, this.group.position.x, this.group.position.y + startY, this.group.position.z);
+        fx.flyingPart(type, this.group.position.x, this.group.position.y + startY, this.group.position.z, vel);
     }
 
     _blood(localY, count) {

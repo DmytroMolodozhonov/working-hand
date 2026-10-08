@@ -172,7 +172,7 @@ export class Game {
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
         this.quality.apply(this.world);
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
-        this.weapons.onHit = (z, dmg, dir, isWeapon) => this.onLocalHit(z, dmg, dir, isWeapon);
+        this.weapons.onHit = (z, dmg, dir, isWeapon, w, hit) => this.onLocalHit(z, dmg, dir, isWeapon, hit);
 
         // Flashlight: always present (intensity 0 when off) so toggling never recompiles shaders.
         this.flashlight = new THREE.SpotLight(0xffffff, 0);
@@ -278,9 +278,9 @@ export class Game {
     }
 
     /** Authoritative damage. `by` = player id that dealt it (for kill counting). */
-    damageZombie(z, amount, isWeapon, dir, by) {
+    damageZombie(z, amount, isWeapon, dir, by, hit = null) {
         if (z.isDead) return null;
-        const res = z.takeDamage(amount, isWeapon, dir);
+        const res = z.takeDamage(amount, isWeapon, dir, Math.random, hit);
         if (this.sound) {
             if (res.shattered) { /* zombie plays the shatter sound */ } else this.sound.playHit();
         }
@@ -296,17 +296,17 @@ export class Game {
     }
 
     /** The local player's weapon/fist hit something. */
-    onLocalHit(z, dmg, dir, isWeapon) {
+    onLocalHit(z, dmg, dir, isWeapon, hit = null) {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg); return; }
         this.punchCount++;
         if (this.authority) {
-            this.damageZombie(z, dmg, isWeapon, dir, this.localId);
+            this.damageZombie(z, dmg, isWeapon, dir, this.localId, hit);
         } else {
             // Immediate feedback, the host decides the outcome
             z.hitFlashTimer = 0.15;
             z._setColor(0xff0000);
             if (this.sound) z.isFrozen ? this.sound.playFrozenHit() : this.sound.playHit();
-            this.sync.sendHit(z, dmg, dir, isWeapon);
+            this.sync.sendHit(z, dmg, dir, isWeapon, hit);
         }
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
     }

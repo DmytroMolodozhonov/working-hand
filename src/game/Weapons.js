@@ -37,6 +37,8 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _e = new THREE.Vector3();
+const _f = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _qPalm = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
@@ -118,10 +120,12 @@ export class WeaponSystem {
             for (const side of ['left', 'right']) this._updateHand(side, dt, now, ch, allowGrab);
         }
 
+        this._updateStuck();
         // The player's visible hands are solid for free weapons nearby
         const handMeshes = ch ? this._handMeshes(ch) : null;
         for (const w of this.weapons) {
             if (w.hover && !w.holder) continue;
+            if (w.stuckIn) continue; // moves with its zombie
             // (only just after letting go, or while it lies on a hand — reaching for a weapon
             // on the ground must not push it away)
             const fresh = w.onHand || now - (w.releasedAt || -1e9) < 3000;
@@ -175,7 +179,7 @@ export class WeaponSystem {
         const owners = this.game.sync ? this.game.sync.weaponOwners : null;
         const me = this.game.localId;
         for (const w of this.weapons) {
-            if (w.holder) continue;
+            if (w.holder && !(w.stuckIn && w.holder.stuck)) continue; // (a blade stuck in a zombie can be pulled out)
             // In multiplayer a weapon in someone else's hand can't be taken.
             if (owners && owners.has(w.id) && owners.get(w.id) !== me) continue;
             if (w.position.distanceToSquared(_G) > 16) continue;
@@ -222,6 +226,7 @@ export class WeaponSystem {
         const ch = this.game.character;
         const hs = this.hands[side];
         if (hs.held) return false;
+        if (w.stuckIn) this._unstick(w, false);
         this._palmFrame(ch, side);
 
         // Where along the handle: keep the grabbed point but never on the guard/pommel.
@@ -405,16 +410,35 @@ export class WeaponSystem {
                         hit = segmentSegmentDistSq([bx, by, bz], [tx, ty, tz], zb, zt) <= r * r;
                     }
                     if (!hit) continue;
+                    // Where the blade went through: the blade point closest to the body's axis
+                    let bestD = Infinity, hy = 1.2;
+                    for (let k = 0; k <= 8; k++) {
+                        _e.copy(base).lerp(tip, k / 8);
+                        const dd = (_e.x - zp.x) ** 2 + (_e.z - zp.z) ** 2;
+                        if (dd < bestD) { bestD = dd; hy = _e.y - zp.y; _f.copy(_e); }
+                    }
+                    const ry = z.group.rotation.y;
+                    const side = ((_f.x - zp.x) * Math.cos(ry) - (_f.z - zp.z) * Math.sin(ry)) >= 0 ? 1 : -1;
+                    // A thrust (the blade moving along itself, point first) sticks it into the body
+                    _e.subVectors(tip, base).normalize();
+                    const along = tipVel.dot(_e);
+                    const stab = !z.isPlayer && along > 6 && along > 0.8 * speed && hs !== this._levSlot && hy > 0.4 && hy < 2.2;
                     const factor = clamp(speed / 9, 0.7, 1.6);
                     const damage = Math.max(1, Math.round(w.spec.damage * factor));
                     const dir = tipVel.clone().setY(0);
                     if (dir.lengthSq() < 1e-4) dir.subVectors(zp, this.game.character.group.position).setY(0);
                     dir.normalize();
                     w.lastHitTime = now(this);
+                    if (stab) {
+                        // Run through: double damage, no cut, and the sword stays in the zombie
+                        if (this.onHit) this.onHit(z, damage * 2, dir, true, w, null);
+                        if (!z.isDead) this._stick(w, z, hs);
+                        break;
+                    }
                     // The blade loses energy in the hit
                     w.velocity.multiplyScalar(0.4);
                     w.angularVelocity.multiplyScalar(0.4);
-                    if (this.onHit) this.onHit(z, damage, dir, true, w);
+                    if (this.onHit) this.onHit(z, damage, dir, true, w, { y: hy, side, speed });
                 }
             }
             hs.basePrev.copy(base);
@@ -422,7 +446,56 @@ export class WeaponSystem {
         }
     }
 
+    // ------------------------------------------------------- stuck in a zombie
+    /** The sword goes into the zombie and stays there (the hand lets go). */
+    _stick(w, z, hs) {
+        const side = hs === this.hands.left ? 'left' : hs === this.hands.right ? 'right' : null;
+        if (side) this._forget(side, this.game.character?.getActiveHands()[side]);
+        w.drive = null;
+        w.holder = { stuck: true, side: null };
+        z.group.updateMatrixWorld(true);
+        _m.copy(z.group.matrixWorld).invert().multiply(w.mesh.matrixWorld);
+        const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3();
+        _m.decompose(pos, quat, scl);
+        w.stuckIn = { z, pos, quat };
+        w.velocity.set(0, 0, 0);
+        w.angularVelocity.set(0, 0, 0);
+        w.sleeping = true;
+        (this.stuck || (this.stuck = new Set())).add(w);
+    }
+
+    _unstick(w, fall) {
+        if (!w.stuckIn) return;
+        w.stuckIn = null;
+        this.stuck?.delete(w);
+        w.holder = null;
+        if (fall) {
+            w.wake();
+            w.velocity.set((Math.random() - 0.5) * 2, 1.5, (Math.random() - 0.5) * 2);
+            if (this.onRelease) this.onRelease(w, null);
+        }
+    }
+
+    /** Stuck swords move with their zombie; fall out when it dies. */
+    _updateStuck() {
+        if (!this.stuck || !this.stuck.size) return;
+        for (const w of [...this.stuck]) {
+            const z = w.stuckIn.z;
+            if (z.isDead || z.removable || !z.group.parent) { this._unstick(w, true); continue; }
+            z.group.updateMatrixWorld(true);
+            _m.compose(w.stuckIn.pos, w.stuckIn.quat, _e.set(1, 1, 1)).premultiply(z.group.matrixWorld);
+            _m.decompose(w.position, w.quaternion, _e);
+            w.mesh.updateMatrixWorld(true);
+        }
+    }
+
+    /** Weapons stuck in zombies (multiplayer: their position goes out with my pose). */
+    stuckWeapons() {
+        return this.stuck ? [...this.stuck] : [];
+    }
+
     clear() {
+        this.stuck?.clear();
         for (const w of this.weapons) w.dispose();
         this.weapons.length = 0;
         this.byId.clear();

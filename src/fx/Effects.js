@@ -133,7 +133,7 @@ export class Effects {
         }
     }
 
-    flyingPart(type, x, y, z) {
+    flyingPart(type, x, y, z, vel = null) {
         let slot = this.parts.find((p) => p.type === type && p.life <= 0);
         if (!slot) {
             // Recycle the oldest part of that type
@@ -143,7 +143,8 @@ export class Effects {
         slot.mesh.visible = true;
         slot.mesh.position.set(x, y, z);
         slot.mesh.rotation.set(0, 0, 0);
-        slot.vel.set((Math.random() - 0.5) * 20, 10 + Math.random() * 10, (Math.random() - 0.5) * 20);
+        if (vel) slot.vel.copy(vel); // flies along the blow
+        else slot.vel.set((Math.random() - 0.5) * 20, 10 + Math.random() * 10, (Math.random() - 0.5) * 20);
         slot.rotVel.set((Math.random() - 0.5) * 25, (Math.random() - 0.5) * 25, (Math.random() - 0.5) * 25);
     }
 
