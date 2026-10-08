@@ -467,6 +467,13 @@ export class Game {
         if (!name) return null;
         if (this.combat.dead) return null;
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
+        // «Паузин» in the air: hover; «Флайн» while hovering: fly on (no new take-off)
+        if (name === 'Pause') {
+            if (this.flight.pause()) { this.hud.setVoice('🛑 Паузин — вы парите на месте. Скажите «Флайн», чтобы лететь дальше', true); return 'Pause'; }
+            if (isFinal) this.hud.setVoice('«Паузин» работает только в полёте', true);
+            return null;
+        }
+        if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
         // Duel magic: a charge flies at the creature the hand points at
@@ -1178,6 +1185,17 @@ export class Game {
         if (!flight.active) {
             if (flight.state === 'idle') { ch.flying = false; ch.setFlightTilt(0); }
             return;
+        }
+
+        // Flying costs strength (free world): more than it comes back; at 0 the hero falls
+        const c = this.combat;
+        if (c.enabled) {
+            c.fatigue = Math.max(0, c.fatigue - (flight.hovering ? 1.8 : 2.5) * dt);
+            if (c.fatigue <= 0) {
+                flight.land('tired');
+                this.hud.toast?.('😮‍💨 Нет сил лететь — вы падаете!', 2200);
+                return;
+            }
         }
 
         // Turning with the torso

@@ -104,3 +104,25 @@ test('torso metrics: lean directions from pose landmarks', () => {
     assert.equal(m.hips, false);
     assert.ok(m.lateral > 0.2);
 });
+
+test('«Паузин»: hover on the spot, «Флайн» flies on', () => {
+    const f = new FlightController();
+    f.start();
+    let o;
+    for (let i = 0; i < 60 * 4; i++) o = f.update(1 / 60, { armsUp: true, torso: { lateral: 0, noseRel: 0, depth: 0 } });
+    assert.equal(f.state, 'cruise');
+    assert.ok(o.forward > 5);
+    assert.equal(f.pause(), true);
+    for (let i = 0; i < 60 * 3; i++) o = f.update(1 / 60, { torso: { lateral: 0, noseRel: 0, depth: 0 } });
+    assert.equal(o.forward, 0, 'stopped');
+    assert.ok(Math.abs(o.up) < 0.3, 'stays at its height (gentle bob)');
+    assert.ok(o.tilt < 0.3, 'upright in the air');
+    assert.equal(f.touchGround(0.5), false, 'hovering never lands by itself');
+    assert.equal(f.resume(), true);
+    for (let i = 0; i < 60 * 2; i++) o = f.update(1 / 60, { torso: { lateral: 0, noseRel: 0, depth: 0 } });
+    assert.ok(o.forward > 5, 'flies on');
+});
+
+test('«Паузин» is recognised', () => {
+    for (const w of ['паузин', 'Паузин', 'пауза', 'pause']) assert.equal(matchSpell(w), 'Pause', w);
+});

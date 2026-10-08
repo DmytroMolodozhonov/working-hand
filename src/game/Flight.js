@@ -10,6 +10,9 @@
  *      The torso steers: lean sideways to turn, lean forward to dive, lean
  *      back to climb (looking down/up helps as well).
  *   3. Landing: point yourself at the ground; touching it ends the flight.
+ *   «Паузин» in the air: slow down and hover on the spot (upright, gently
+ *   bobbing). «Флайн» again flies on.
+ *   In the free world flying costs strength: at 0 fatigue the hero falls.
  *
  * Pure logic (no THREE): Game.js feeds inputs and applies the outputs.
  */
@@ -51,6 +54,22 @@ export class FlightController {
         this.neutral = null;
         this.samples = 0;
         this.lastEvent = null;
+        this.hovering = false;
+    }
+
+    /** «Паузин»: hover on the spot. */
+    pause() {
+        if (this.state !== 'cruise') return false;
+        this.hovering = true;
+        return true;
+    }
+
+    /** «Флайн» while hovering: fly on. */
+    resume() {
+        if (!this.hovering) return false;
+        this.hovering = false;
+        this.t = 2; // (no automatic levelling-out phase)
+        return true;
     }
 
     get active() {
@@ -144,6 +163,18 @@ export class FlightController {
                 this.t = 0;
                 this.pitch = 0.9; // still climbing, then follows the torso
             }
+        } else if (this.hovering) {
+            // Hover: brake to a stop, stand up in the air, bob gently; turning still works
+            const steer = this.steering(input.torso, input.headPitch || 0);
+            this.speed = Math.max(0, this.speed - 18 * dt);
+            this.pitch += (0 - this.pitch) * Math.min(1, dt * 3);
+            this.tilt += clamp(0.15 - this.tilt, -FLIGHT.TILT_RATE * 2 * dt, FLIGHT.TILT_RATE * 2 * dt);
+            out.yawRate = steer.turn * FLIGHT.TURN_RATE * 0.7;
+            out.forward = this.speed;
+            out.up = Math.sin(this.t * 2.2) * 0.25;
+            out.tilt = this.tilt;
+            out.pitch = this.pitch;
+            return out;
         } else {
             // Cruise
             const steer = this.steering(input.torso, input.headPitch || 0);
@@ -171,7 +202,7 @@ export class FlightController {
      * @returns {boolean} true if the flight ended now
      */
     touchGround(altitude) {
-        if (this.state !== 'cruise') return false;
+        if (this.state !== 'cruise' || this.hovering) return false;
         if (altitude < FLIGHT.LAND_ALTITUDE && this.pitch < FLIGHT.LAND_PITCH) {
             this.land('landed');
             return true;
