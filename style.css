@@ -1388,3 +1388,11 @@ body {
 /* In the menu: no minimap / empty camera box over the menu */
 body:has(#main-menu:not(.hidden)) #minimap-container,
 body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
+.world-row { display: grid; grid-template-columns: 1.4fr 1.2fr auto auto; gap: 8px; align-items: center; padding: 6px 4px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.world-name { color: #ecf0f1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-meta { color: #8395a7; font-size: 0.85rem; }
+#air-bar { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); display: none; gap: 3px; z-index: 1200; pointer-events: none; align-items: center; }
+#air-bar i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.08); }
+#air-bar i.on { background: radial-gradient(circle at 35% 35%, #ffffff, #8fdcff 55%, #2f8fd0); }
+#air-bar .air-txt { color: #bff3ff; font-size: 12px; margin-right: 6px; text-shadow: 0 0 3px #000; }
+#underwater-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.3s; background: radial-gradient(ellipse at center, rgba(30, 110, 170, 0.35), rgba(5, 40, 80, 0.85)); }

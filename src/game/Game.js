@@ -24,6 +24,8 @@ import { Storm } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { BookBirds } from './BookBirds.js';
+import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
+import { Swimming } from './Swimming.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -173,6 +175,7 @@ export class Game {
         this.inventory.show(config.mode !== 'test');
         this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
         this.books = isTest ? null : new BookBirds(this); // book-birds: building spells are learned from their books
+        this.swim = new Swimming(this); // deep water: swimming, air, «Air Bubble»
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -210,6 +213,17 @@ export class Game {
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.hud.setHpVisible(config.mode !== 'creative');
         this.hud.setMultiplayer(null);
+
+        // The world is saved by itself on the host's (or single player's) computer
+        if (!isTest && !config.map && this.authority) {
+            const sv = config.saved;
+            this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players } : { name: config.worldName });
+            if (sv) {
+                restoreWorld(this, sv, THREE);
+                applyPlayerSnapshot(this, sv.players?.[this.keeper.myName]);
+                this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
+            }
+        }
     }
 
     _populate(config) {
@@ -499,6 +513,17 @@ export class Game {
         if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
+        // In a duel nothing else can be cast (only the shield, with the other hand)
+        if (this._inDuel()) { if (isFinal) this.hud.setVoice('⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)', true); return null; }
+        if (name === 'AirBubble' || name === 'AirBubbleMaxima') {
+            const tired = this.combat.check(name);
+            if (tired) { this.hud.setVoice(tired, true); return null; }
+            const hint = this.swim.castBubble(name === 'AirBubbleMaxima');
+            if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
+            this.combat.pay(name);
+            return name;
+        }
+        if (name === 'WaveAttack' || name === 'WaveAttackMaxima') return this._castWave(name, isFinal);
         // Duel magic: a charge flies at the creature the hand points at
         // Duel spells need a raised, pointing hand: the word alone (e.g. a friend's voice
         // reaching this microphone) never fires them while the arms hang down
@@ -648,6 +673,69 @@ export class Game {
     }
 
     /** «Вайнд» / «Вайнд Максима»: from the raised hand, where it points. */
+    /** Is my charge in a duel right now? */
+    _inDuel() {
+        const me = this.localId;
+        return this.duel.clashes.some((c) => c.a?.by === me || c.b?.by === me);
+    }
+
+    /**
+     * «Wave Attack»: stand by the water and point the hand AT the water, say it;
+     * the water rises — then turn the hand to the one you want to wash away
+     * (and hold it there a moment): the wave rolls to them. Harmless.
+     */
+    _castWave(name, isFinal) {
+        if (!isFinal && name === 'WaveAttack') return null; // (wait for a possible «Максима»)
+        if (this._wave) return null;
+        const ch = this.character;
+        const side = ['right', 'left'].find((s) => ch.isArmRaised(s)) || this.magicHand || 'right';
+        const o = ch.getHandWorldPosition(side);
+        const d = ch.getHandDirection(side);
+        // the hand must point at water nearby
+        let src = null;
+        const t = this.terrain?.data;
+        for (let k = 0.5; k < 14 && t; k += 0.5) {
+            const x = o.x + d.x * k, y = o.y + d.y * k, z = o.z + d.z * k;
+            if (t.get(Math.round(x), Math.floor(y + 1.5), Math.round(z)) === BLOCK.WATER) { src = new THREE.Vector3(x, y, z); break; }
+            if (t.isSolidAt?.(x, y, z)) break;
+        }
+        if (!src) { if (isFinal) this.hud.setVoice('🌊 Встаньте у воды и покажите рукой прямо НА воду — тогда скажите «Wave Attack»', true); return null; }
+        const tired = this.combat.check(name);
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay(name);
+        this._wave = { name, side, src, t: 0, still: 0, last: d.clone() };
+        this.hud.setVoice('🌊 Вода поднимается… наведите руку на цель и задержите', true);
+        return name;
+    }
+
+    _updateWave(dt) {
+        const W = this._wave;
+        if (!W) return;
+        const ch = this.character;
+        W.t += dt;
+        // the water bulges where it will start
+        if (Math.random() < 0.7) this.fx.spark(W.src, 0x9fd8ff, 0.18, new THREE.Vector3((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.6);
+        const d = ch.getHandDirection(W.side);
+        const moved = d.angleTo(W.last);
+        W.last.copy(d);
+        W.still = moved < 0.6 * dt * 2 ? W.still + dt : 0;
+        const awayFromWater = W.t > 0.6;
+        if (!(awayFromWater && (W.still > 0.45 || W.t > 4))) return;
+        // the target: the creature the hand points at, or the ground the hand points to
+        const o = ch.getHandWorldPosition(W.side);
+        const aim = this.duel.pickSide(false);
+        let target = aim ? this.duel._targetPos({ tk: aim.t.kind, tid: aim.t.id }, new THREE.Vector3()) : null;
+        if (!target) {
+            target = o.clone().addScaledVector(d, 18);
+            target.y = this.collision.groundY(target.x, target.z);
+        }
+        const vec = target.clone().sub(W.src);
+        this.spells.cast(W.name, W.src, vec, W.side, this.localId);
+        if (this.sync) this.sync.spell(W.name, W.src, vec, W.side);
+        this.hud.setVoice('🌊 Волна!', true);
+        this._wave = null;
+    }
+
     _castWind(name, isFinal) {
         const now = Date.now();
         const early = this._interimCast;
@@ -1198,8 +1286,11 @@ export class Game {
         this.inventory.update(dt);
         this.builder.update(dt);
         this.books?.update(dt);
+        this.swim.update(dt);
+        this.keeper?.update(dt);
         this.storm.update(dt);
         this._updateLightning(dt);
+        this._updateWave(dt);
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);
@@ -1658,6 +1749,8 @@ export class Game {
         this.stop();
         this.inventory?.dispose();
         this.books?.dispose();
+        this.swim?.dispose();
+        if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;
         for (const r of this.remotes.values()) r.dispose();

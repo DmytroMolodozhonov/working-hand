@@ -27,6 +27,7 @@
 
 import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
+import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 
 const _v = new THREE.Vector3();
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -58,6 +59,7 @@ export class NetSync {
     }
 
     dispose() {
+        try { this._sendMine(); } catch (e) { /* closing */ }
         for (const off of this._off) off();
     }
 
@@ -83,7 +85,11 @@ export class NetSync {
             if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${name}`);
         }
         // Late joiner: send the whole world state
-        if (this.net.isHost) this.net.sendTo(id, this.welcomeMessage());
+        if (this.net.isHost) {
+            const msg = this.welcomeMessage();
+            msg.you = this.game.keeper?.players[name] || null; // a player coming back gets their things
+            this.net.sendTo(id, msg);
+        }
     }
 
     _onLeave(id) {
@@ -150,11 +156,20 @@ export class NetSync {
             this.net.players = new Map(msg.players.map((p) => [p.id, { name: p.name, color: p.color }]));
             this._syncPlayerList(msg.players);
         }
+        if (msg.you && !this._gotMine) { this._gotMine = true; applyPlayerSnapshot(g, msg.you); g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
+    }
+
+    /** Guests send their own things to the host now and then (the host keeps the world). */
+    _sendMine() {
+        if (this.net.isHost) return;
+        this.net.send({ t: 'pstate', name: this.net.name, s: playerSnapshot(this.game) });
     }
 
     // ================================================================ update
     update(dt) {
         const g = this.game;
+        this._mineT = (this._mineT || 0) + dt;
+        if (this._mineT > 8) { this._mineT = 0; this._sendMine(); }
         this.pTimer += dt;
         if (this.pTimer >= 0.05) {
             this.pTimer = 0;
@@ -389,6 +404,7 @@ export class NetSync {
                 w.setRemoteTarget(m.s);
                 break;
             }
+            case 'pstate': if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.name || m.name, m.s); break;
             case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;

@@ -85,7 +85,7 @@ const SHADES = {
 };
 const GRASS_SIDE = 0x6b4a2a; // dirt-coloured sides under a grass top
 
-export const MIN_LAYER = -4; // bedrock layer (indestructible)
+export const MIN_LAYER = -9; // bedrock layer (indestructible); deep lakes reach down to -7
 export const MAX_LAYER = 40;
 export const CHUNK = 32;
 const SHIFT = 5; // log2(CHUNK)
@@ -154,7 +154,8 @@ export function createHeightField(seed, mountains) {
             const ln = lakes(ix / 110, iz / 110) * wet;
             const d = (ln - 0.42) * 14;
             if (d > 0) {
-                const depth = Math.min(3, 1 + Math.floor(d));
+                // shallow at the shore, deep enough to swim in the middle (up to 7 blocks)
+                const depth = Math.min(7, 1 + Math.floor(d * 1.6));
                 fn.water = depth;
                 return -depth;
             }

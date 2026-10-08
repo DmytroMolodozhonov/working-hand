@@ -231,3 +231,11 @@ test('voice: «Escape» means Earthquake, «Сандер вейв» is Thunderwa
     for (const w of ['thunder wave', 'Сандер вейв', 'тандер вейв', 'sander wave']) assert.equal(matchSpell(w), 'Thunderwave', w);
     assert.equal(matchSpell('sand'), 'Sands');
 });
+
+test('voice: water spells «Wave Attack» / «Air Bubble» (+ Максима)', () => {
+    for (const w of ['wave attack', 'Вейв атак', 'вэйв аттак']) assert.equal(matchSpell(w), 'WaveAttack', w);
+    assert.equal(matchSpell('wave attack maxima'), 'WaveAttackMaxima');
+    for (const w of ['air bubble', 'эйр бабл', 'Эйр баббл']) assert.equal(matchSpell(w), 'AirBubble', w);
+    assert.equal(matchSpell('эйр бабл максима'), 'AirBubbleMaxima');
+    assert.equal(matchSpell('thunder wave'), 'Thunderwave');
+});

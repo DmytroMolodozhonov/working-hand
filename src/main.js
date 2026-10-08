@@ -14,6 +14,7 @@ import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS } from './net/Network.js';
 import { renderSpellsTab, renderItemsTab } from './ui/Codex.js';
+import { listWorlds, loadWorld, deleteWorld } from './game/WorldSave.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
 
@@ -94,10 +95,10 @@ tabBtns.forEach((btn) => {
             if (!window.mapEditor) window.mapEditor = new MapEditor();
             else window.mapEditor.refreshMapList();
         }
-        if (btn.dataset.tab === 'tab-game') updateGameMapList();
+        if (btn.dataset.tab === 'tab-game') { updateGameMapList(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-items') renderItemsTab();
         if (btn.dataset.tab === 'tab-spells') renderSpellsTab();
-        if (btn.dataset.tab === 'tab-mp') refreshServers();
+        if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-character') window.__charEditor?.show();
     });
 });
@@ -510,8 +511,47 @@ $('start-btn').addEventListener('click', () => {
         setMpStatus('Вы подключены к чужой игре — её запускает хост.');
         return;
     }
-    startGame(readConfig());
+    const cfg = readConfig();
+    if (!cfg.map) cfg.worldName = `${MODE_LABEL[cfg.mode] || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+    startGame(cfg);
 });
+
+// ------------------------------------------------------------------ saved worlds
+// Every world you play (not the maps) is saved by itself; continue it here.
+const MODE_LABEL = { freeworld: 'Свободный мир', creative: 'Творчество', survival: 'Выживание' };
+async function renderSavedWorlds() {
+    const box = $('saved-worlds');
+    const sel = $('mp-world');
+    const worlds = await listWorlds();
+    if (sel) {
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">✨ Новый мир</option>' + worlds.map((w) => `<option value="${w.id}">💾 ${escapeHtml(w.name)}</option>`).join('');
+        if (worlds.some((w) => w.id === cur)) sel.value = cur;
+    }
+    if (!box) return;
+    if (!worlds.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<h4 class="menu-h4" style="margin-bottom:8px">💾 Мои миры (сохраняются сами)</h4>' + worlds.map((w) => `
+        <div class="world-row" data-id="${w.id}">
+            <span class="world-name">${escapeHtml(w.name)}</span>
+            <span class="world-meta">${MODE_LABEL[w.mode] || ''} · ${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+            <button class="mp-btn world-play">▶ Продолжить</button>
+            <button class="mp-btn mp-btn-grey world-del" title="Удалить">🗑</button>
+        </div>`).join('');
+    for (const row of box.querySelectorAll('.world-row')) {
+        const id = row.dataset.id;
+        row.querySelector('.world-play').onclick = async () => {
+            const w = await loadWorld(id);
+            if (!w) return;
+            startGame({ ...readConfig(), mode: w.mode, map: null, seed: w.seed, saved: w });
+        };
+        row.querySelector('.world-del').onclick = async () => {
+            if (!confirm('Удалить мир «' + (row.querySelector('.world-name').textContent) + '» навсегда?')) return;
+            await deleteWorld(id);
+            renderSavedWorlds();
+        };
+    }
+}
+renderSavedWorlds();
 
 // Test mode (camera / hand setup)
 $('test-mode-btn').addEventListener('click', async () => {
@@ -527,7 +567,7 @@ $('test-mode-btn').addEventListener('click', async () => {
 });
 
 const backToMenu = () => { net.sayGoodbye(); net.leave(); window.location.href = window.location.origin + window.location.pathname; };
-window.addEventListener('pagehide', () => net.sayGoodbye());
+window.addEventListener('pagehide', () => { try { game?.sync?._sendMine?.(); } catch (e) { /* closing */ } net.sayGoodbye(); });
 $('restart-btn').onclick = backToMenu;
 $('victory-menu-btn').onclick = backToMenu;
 
@@ -619,7 +659,9 @@ $('mp-host-btn').addEventListener('click', async () => {
     net.stopProbe();
     const srvName = ($('mp-srv-name').value || '').trim().slice(0, 24) || `Сервер ${playerName()}`;
     try { localStorage.setItem('zns-srv-name', srvName); } catch (e) { /* ignore */ }
-    const mode = $('mp-mode').value;
+    const savedId = $('mp-world')?.value || '';
+    const saved = savedId ? await loadWorld(savedId) : null;
+    const mode = saved ? saved.mode : $('mp-mode').value;
     setMpStatus('Создаём сервер...');
     try {
         await net.host(playerName(), mpServer.value, null, { slots: true });
@@ -627,7 +669,7 @@ $('mp-host-btn').addEventListener('click', async () => {
         setMpStatus('🟢 Сервер создан — он виден всем в списке. Запускаем...');
         selectedMode = mode;
         selectedMap = null;
-        startGame({ ...readConfig(), mode, map: null, world: $('mp-world')?.value || null });
+        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: srvName });
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
     }

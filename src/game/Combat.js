@@ -60,6 +60,10 @@ export const SPELL_COST = {
     WindMaxima: 20,
     Stupefy: 12,
     AvadaKedavra: 25,
+    WaveAttack: 8,
+    WaveAttackMaxima: 18,
+    AirBubble: 4,
+    AirBubbleMaxima: 10,
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */

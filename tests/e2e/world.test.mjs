@@ -329,3 +329,95 @@ test('book-birds: a spell knocks one down, the book is taken by hand, read, and 
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('deep lakes: swim with the legs or sink, air runs out, «Air Bubble», «Wave Attack» washes a zombie away', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const ch = g.character;
+        // find a deep lake
+        let spot = null;
+        for (let rad = 110; rad < 900 && !spot; rad += 12) {
+            for (let a = 0; a < 64 && !spot; a++) {
+                const x = Math.cos(a / 64 * Math.PI * 2) * rad, z = Math.sin(a / 64 * Math.PI * 2) * rad;
+                g.terrain.data.ensure?.(Math.round(x), Math.round(z));
+                const w = g.swim.waterAt(x, z);
+                if (w && w.depth >= 5) spot = { x, z, w };
+            }
+        }
+        if (!spot) return { noLake: true };
+        ch.group.position.set(spot.x, spot.w.surface + 1, spot.z);
+        g.currentPose = null; // no legs moving
+        const y0 = ch.group.position.y;
+        await frames(60);
+        const sank = y0 - ch.group.position.y;
+        const swimming = g.swim.swimming;
+        const air0 = g.swim.air;
+        // legs moving: floats up
+        g.swim.kick = 1;
+        const yLow = ch.group.position.y;
+        for (let i = 0; i < 40; i++) { g.swim.kick = 1; await frames(1); }
+        const rose = ch.group.position.y - yLow;
+        // air bubble needs the hands at the head (forced here)
+        ch.isTPose = () => true;
+        g.combat.fatigue = 30;
+        const bubble = g.castLocalSpell('Air Bubble Maxima', true);
+        const hasBubble = !!g.swim.bubble;
+        // a zombie on the shore, a wave from the lake
+        ch.group.position.set(spot.x, spot.w.surface + 3, spot.z);
+        const z = g._createZombie(new window.__zns.THREE.Vector3(spot.x + 8, g.collision.groundY(spot.x + 8, spot.z), spot.z));
+        const zx0 = z.group.position.x;
+        g.spells.cast('WaveAttack', new window.__zns.THREE.Vector3(spot.x, spot.w.surface, spot.z), new window.__zns.THREE.Vector3(8, 0, 0), 'right', g.localId);
+        let zMoved = -99;
+        for (let i = 0; i < 40; i++) { await frames(1); zMoved = Math.max(zMoved, z.group.position.x - zx0); }
+        return { sank, swimming, air0, rose, bubble, hasBubble, zMoved, hp: g.playerHP };
+    });
+    if (r.noLake) { assert.fail('no deep lake found near spawn'); }
+    assert.ok(r.swimming, 'in deep water the hero swims');
+    assert.ok(r.sank > 0.5, `without moving the legs the hero sinks (${r.sank.toFixed(2)})`);
+    assert.ok(r.air0 < 20, `under water the air goes down (${r.air0.toFixed(1)})`);
+    assert.ok(r.rose > 0.5, `moving the legs lifts the hero (${r.rose.toFixed(2)})`);
+    assert.equal(r.bubble, 'AirBubbleMaxima');
+    assert.ok(r.hasBubble, 'a bubble of air');
+    assert.ok(r.zMoved > 2, `the wave washed the zombie away (${r.zMoved.toFixed(1)} m)`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('worlds save themselves: built blocks and the inventory are there after «Продолжить»', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await page.evaluate(async () => { const m = await import('/src/game/WorldSave.js'); for (const w of await m.listWorlds()) await m.deleteWorld(w.id); });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const before = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const p = g.character.group.position;
+        const cell = { x: Math.round(p.x) + 4, L: Math.floor(p.y + 1.5) + 2, z: Math.round(p.z) };
+        g.builder.applyEdits([[cell.x, cell.L, cell.z, 3]]);
+        g.inventory.addResource(3, 42);
+        g.books.learned.add('CreateWall');
+        await g.keeper.save();
+        return { cell, seed: g.seed, block: g.terrain.data.get(cell.x, cell.L, cell.z) };
+    });
+    assert.equal(before.block, 3, 'a stone block was built');
+    // back to the menu (a new page), the world is in «Мои миры»
+    await page.reload();
+    await page.waitForFunction(() => !!window.__zns);
+    await page.waitForSelector('.world-row .world-play', { timeout: 20000 });
+    await page.click('.world-row .world-play');
+    await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 90000 });
+    const after = await page.evaluate((c) => {
+        const g = window.__zns.game;
+        const st = g.inventory.slots.find((s) => s && s.kind === 'res' && s.block === 3);
+        return { seed: g.seed, block: g.terrain.data.get(c.x, c.L, c.z), stone: st ? st.count : 0, learned: g.books.learned.has('CreateWall') };
+    }, before.cell);
+    assert.equal(after.seed, before.seed, 'the same world');
+    assert.equal(after.block, 3, 'the built block is still there');
+    assert.equal(after.stone, 42, 'the stone is in the slot');
+    assert.ok(after.learned, 'the learned spell is remembered');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

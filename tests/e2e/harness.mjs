@@ -77,7 +77,8 @@ export async function openPage(browser, url, { noCamera = false, viewport = { wi
 export async function startFromMenu(page, mode = 'creative', { zombies = 0 } = {}) {
     await page.waitForSelector('.map-card');
     if (mode === 'survival') await page.click('.mode-card.survival');
-    else if (mode === 'creative') await page.click('.mode-card:not(.survival)');
+    else if (mode === 'creative') await page.click('.mode-card:not(.survival):not(.freeworld)');
+    else if (mode === 'freeworld') await page.click('.mode-card.freeworld');
     else await page.click(`.map-card[data-name="${mode}"]`);
     if (mode === 'creative' && zombies) {
         await page.evaluate((n) => { const el = document.getElementById('creative-zombie-count'); el.value = String(n); }, zombies);

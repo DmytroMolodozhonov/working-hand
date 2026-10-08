@@ -401,7 +401,7 @@ export class VoxelCharacter {
             // Movement (original speeds)
             if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 7.5;
-                const speed = walkSpeed + (runSpeed - walkSpeed) * this.runIntensity;
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * this.runIntensity) * (this.speedScale ?? 1);
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
@@ -412,7 +412,12 @@ export class VoxelCharacter {
             const crouchDrop = this.knockedDown ? 1.45 : this.isCrouching ? 1.0 : 0;
             const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;
             const y = this.group.position.y;
-            if (y > targetY + 0.6 && !this.isCrouching) {
+            if (this.swimY != null) {
+                // Swimming: the water holds the body (Swimming.js decides how high)
+                this.verticalVelocity = 0;
+                this.onGround = false;
+                this.group.position.y += (Math.max(this.swimY, targetY) - y) * Math.min(1, 6 * dt);
+            } else if (y > targetY + 0.6 && !this.isCrouching) {
                 // Falling into a crater / off a ledge
                 this.verticalVelocity -= 20 * dt;
                 this.group.position.y = Math.max(targetY, y + this.verticalVelocity * dt);
