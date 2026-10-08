@@ -121,7 +121,7 @@ test('a closed fist that touches the sword does NOT glue to it', () => {
     game.character.group.updateMatrixWorld(true);
     handleAtPalm(game, w);
     for (let i = 0; i < 30; i++) { game.advance(16); game.weapons.update(1 / 60); }
-    assert.equal(game.weapons.hands.right.held, null);
+    assert.equal(game.weapons.hands.right.held?.id ?? null, null);
 });
 
 test('open hand at the handle + closing fingers = grab; grip point and direction kept; open = release', () => {
@@ -135,7 +135,7 @@ test('open hand at the handle + closing fingers = grab; grip point and direction
     game.advance(16); game.weapons.update(1 / 60); // hand seen open
     setCurl(hand, 0.9);
     game.advance(16); game.weapons.update(1 / 60);
-    assert.equal(game.weapons.hands.right.held, w, 'grabbed');
+    assert.equal(game.weapons.hands.right.held?.id, w.id, 'grabbed');
     assert.equal(w.holder.side, 'right');
     assert.ok(hand.gripOverride, 'fingers wrap the handle');
 
@@ -160,14 +160,22 @@ test('open hand at the handle + closing fingers = grab; grip point and direction
     game.advance(16); game.weapons.update(1 / 60);
     setCurl(hand, 0.9);
     game.advance(16); game.weapons.update(1 / 60);
-    assert.equal(game.weapons.hands.right.held, w, 'still held after a glitch');
+    assert.equal(game.weapons.hands.right.held?.id, w.id, 'still held after a glitch');
 
-    // Really opening the hand drops it, physics takes over
-    setCurl(hand, 0.05);
+    // Really opening the hand drops it, physics takes over — even though the
+    // drawn fingers are still wrapped around the handle (grip override)
+    // (hand lost by the camera: never drops)
+    hand.lastTrackingTime = Date.now() - 5000;
+    hand.targetState.fingers.index = hand.targetState.fingers.middle = hand.targetState.fingers.ring = 0.05;
     for (let i = 0; i < 20; i++) { game.advance(16); game.weapons.update(1 / 60); }
-    assert.equal(game.weapons.hands.right.held, null, 'released');
-    assert.equal(w.holder, null);
-    assert.equal(hand.gripOverride, null);
+    assert.equal(game.weapons.hands.right.held?.id, w.id, 'not dropped while the hand is not tracked');
+    hand.lastTrackingTime = Date.now(); // tracked again, really open
+    for (let i = 0; i < 3; i++) hand.update(null); // drawn state stays clamped to the handle
+    assert.ok(hand.currentState.fingers.index > 0.4, 'drawn fingers still wrap the handle');
+    for (let i = 0; i < 20; i++) { game.advance(16); game.weapons.update(1 / 60); }
+    assert.equal(game.weapons.hands.right.held?.id ?? null, null, 'released');
+    assert.equal(w.holder ?? null, null);
+    assert.equal(hand.gripOverride ?? null, null);
     assert.equal(w.sleeping, false, 'falls with physics');
 });
 
@@ -188,10 +196,12 @@ test('a fast swing through a zombie hits it; a slow touch does not', () => {
     game.weapons.checkHits([z], 1 / 60);
     game.weapons.checkHits([z], 1 / 60);
     assert.equal(hits.length, 0, 'no damage from a slow touch');
-    // Fast swing across the zombie
-    w.velocity.set(12, 0, 0);
-    w.position.set(-1, 2, -3.6);
-    w.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2); // blade points -Z
+    // Fast swing across the zombie: blade (pointing -Z) sweeps from x=-1.2 to x=+0.2 in one frame
+    w.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+    w.position.set(-1.2, 2, -3.6);
+    hs.hasPrev = false;
+    game.weapons.checkHits([z], 1 / 60); // previous blade position
+    w.position.set(0.2, 2, -3.6);
     game.weapons.checkHits([z], 1 / 60);
     assert.equal(hits.length, 1, 'hit registered');
     assert.ok(hits[0].dmg >= 2);

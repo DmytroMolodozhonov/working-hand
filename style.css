@@ -997,11 +997,39 @@ body {
     text-align: left;
 }
 
+#mp-panel > summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+#mp-panel > summary::-webkit-details-marker {
+    display: none;
+}
+
 #mp-panel h4 {
+    display: inline-block;
     color: #3498db;
     margin: 0 0 10px 0;
     text-transform: uppercase;
     letter-spacing: 1px;
+}
+
+#mp-panel > summary h4::after {
+    content: ' ▸';
+}
+
+#mp-panel[open] > summary h4::after {
+    content: ' ▾';
+}
+
+/* A taller menu (e.g. multiplayer open) scrolls instead of being cut off */
+#main-menu {
+    overflow-y: auto;
+}
+
+#main-menu > .menu-container {
+    margin: auto;
 }
 
 .mp-row {

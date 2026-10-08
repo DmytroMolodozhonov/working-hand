@@ -92,5 +92,5 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Errors that are expected in a headless sandbox (no audio device, no speech API etc.). */
 export function realErrors(errors) {
-    return errors.filter((e) => !/Web Speech API|AudioContext|Failed to load resource: the server responded with a status of 404 \(File not found\).*favicon|favicon\.ico|WebGL: INVALID|GPU stall|GL Driver Message/i.test(e));
+    return errors.filter((e) => !/Created TensorFlow Lite XNNPACK delegate|Web Speech API|AudioContext|Failed to load resource: the server responded with a status of 404 \(File not found\).*favicon|favicon\.ico|WebGL: INVALID|GPU stall|GL Driver Message/i.test(e));
 }

@@ -59,7 +59,7 @@ export class WeaponSystem {
     }
 
     _handState() {
-        return { held: null, lastOpen: 0, openSince: 0, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false };
+        return { held: null, lastOpen: 0, lastOpenFrame: -1000, openSince: 0, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false };
     }
 
     spawn(type, position, quaternion, id) {
@@ -98,6 +98,7 @@ export class WeaponSystem {
     // ------------------------------------------------------------------ frame
     update(dt, { allowGrab = true } = {}) {
         const now = this.game.now();
+        this.frame = (this.frame || 0) + 1;
         const ch = this.game.character;
         const collision = this.game.world.collision;
 
@@ -137,8 +138,11 @@ export class WeaponSystem {
         const hand = ch.getActiveHands()[side];
         const visible = hand && hand.group.visible;
         const curl = visible ? ch.getGripCurl(side) : (hs.held ? 1 : 0);
-        if (curl < OPEN_CURL) hs.lastOpen = now;
-        if (curl < RELEASE_CURL) { if (!hs.openSince) hs.openSince = now; } else hs.openSince = 0;
+        // While the camera has lost this hand we never drop the weapon (safeguard):
+        // the model then only shows the last pose / slowly relaxes.
+        const tracked = !hand || !hand.lastTrackingTime || Date.now() - hand.lastTrackingTime < 400;
+        if (curl < OPEN_CURL && tracked) { hs.lastOpen = now; hs.lastOpenFrame = this.frame; }
+        if (curl < RELEASE_CURL && tracked) { if (!hs.openSince) hs.openSince = now; } else hs.openSince = 0;
 
         if (hs.held) {
             const w = hs.held;
@@ -153,7 +157,8 @@ export class WeaponSystem {
         }
 
         if (!allowGrab || !visible) return;
-        const closing = curl > CLOSE_CURL && now - hs.lastOpen < CLOSE_WINDOW_MS;
+        // "Recently open" in time OR in frames (slow computers render few frames per second)
+        const closing = curl > CLOSE_CURL && (now - hs.lastOpen < CLOSE_WINDOW_MS || this.frame - hs.lastOpenFrame <= 12);
         if (!closing) return;
 
         this._palmFrame(ch, side);
@@ -180,7 +185,9 @@ export class WeaponSystem {
     /** Orthonormal palm frame (X across the palm, Y towards the fingers, Z back of hand). Writes _P,_X,_Y,_Z,_G,_qPalm. */
     _palmFrame(ch, side) {
         const grip = ch.getGripObject(side);
-        grip.updateMatrixWorld(true);
+        // Fresh world matrix through the whole parent chain (the body may have
+        // moved/turned after the arms were posed this frame).
+        grip.updateWorldMatrix(true, false);
         const e = grip.matrixWorld.elements;
         _P.set(e[12], e[13], e[14]);
         if (grip.name === 'palm') {
@@ -327,27 +334,37 @@ export class WeaponSystem {
             const w = hs.held;
             if (!w) continue;
             const [base, tip] = w.getBladeSegment(_a, _b);
-            const tipVel = w.pointVelocity(tip, _c);
-            const speed = tipVel.length();
             if (!hs.hasPrev) {
                 hs.basePrev.copy(base); hs.tipPrev.copy(tip); hs.hasPrev = true;
                 continue;
             }
+            // Real swing speed = how far the tip actually travelled this frame
+            // (the spring towards the hand settles within a frame, so its
+            // instantaneous velocity under-reports fast swings).
+            const tipVel = _c.subVectors(tip, hs.tipPrev).divideScalar(Math.max(dt, 1 / 240));
+            const bodyVel = w.pointVelocity(tip, _d);
+            if (bodyVel.lengthSq() > tipVel.lengthSq()) tipVel.copy(bodyVel);
+            const speed = tipVel.length();
             if (speed >= MIN_SWING_SPEED) {
-                // Swept test: current blade and the blade half-way through the frame
-                const midBase = _d.copy(base).add(hs.basePrev).multiplyScalar(0.5);
-                const midTip = new THREE.Vector3().copy(tip).add(hs.tipPrev).multiplyScalar(0.5);
+                // Swept test: interpolate the blade between last and this frame so a
+                // fast swing (or a slow computer) can't skip through a body.
+                const moved = Math.max(hs.tipPrev.distanceTo(tip), hs.basePrev.distanceTo(base));
+                const steps = Math.min(8, Math.max(1, Math.ceil(moved / 0.4)));
                 for (const z of zombies) {
                     if (z.isDead || z.damageCooldown > 0) continue;
                     const zp = z.group.position;
-                    if (Math.abs(zp.x - tip.x) > 7 || Math.abs(zp.z - tip.z) > 7) continue;
+                    if (Math.abs(zp.x - tip.x) > 8 || Math.abs(zp.z - tip.z) > 8) continue;
                     if (now(this) - (w.lastHitTime || 0) < 120) continue;
-                    const feet = zp.y - 0.6, head = zp.y + 2.9;
-                    const zb = [zp.x, feet, zp.z], zt = [zp.x, head, zp.z];
+                    const zb = [zp.x, zp.y - 0.6, zp.z], zt = [zp.x, zp.y + 2.9, zp.z];
                     const r = 0.8 + 0.12;
-                    const d1 = segmentSegmentDistSq([base.x, base.y, base.z], [tip.x, tip.y, tip.z], zb, zt);
-                    const d2 = segmentSegmentDistSq([midBase.x, midBase.y, midBase.z], [midTip.x, midTip.y, midTip.z], zb, zt);
-                    if (Math.min(d1, d2) > r * r) continue;
+                    let hit = false;
+                    for (let k = 1; k <= steps && !hit; k++) {
+                        const t = k / steps;
+                        const bx = hs.basePrev.x + (base.x - hs.basePrev.x) * t, by = hs.basePrev.y + (base.y - hs.basePrev.y) * t, bz = hs.basePrev.z + (base.z - hs.basePrev.z) * t;
+                        const tx = hs.tipPrev.x + (tip.x - hs.tipPrev.x) * t, ty = hs.tipPrev.y + (tip.y - hs.tipPrev.y) * t, tz = hs.tipPrev.z + (tip.z - hs.tipPrev.z) * t;
+                        hit = segmentSegmentDistSq([bx, by, bz], [tx, ty, tz], zb, zt) <= r * r;
+                    }
+                    if (!hit) continue;
                     const factor = clamp(speed / 9, 0.7, 1.6);
                     const damage = Math.max(1, Math.round(w.spec.damage * factor));
                     const dir = tipVel.clone().setY(0);

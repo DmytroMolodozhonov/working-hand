@@ -229,7 +229,9 @@ export class PoseService {
 
     _drawSkeleton(results) {
         const c = this.skeletonCanvas;
-        if (!c || !c.offsetParent) return; // preview hidden → don't spend time drawing
+        if (!c) return;
+        const box = c.parentElement;
+        if (box && box.style.display === 'none') return; // preview hidden → don't spend time drawing
         const now = performance.now();
         if (now - this._lastDraw < 66) return; // ~15 FPS is plenty for a debug view
         this._lastDraw = now;

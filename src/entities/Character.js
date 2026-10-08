@@ -416,11 +416,15 @@ export class VoxelCharacter {
             : { left: this.leftDetailedHand, right: this.rightDetailedHand };
     }
 
-    /** Average finger closure 0..1 (index, middle, ring) — used for grabbing. */
+    /**
+     * Average finger closure 0..1 (index, middle, ring) as TRACKED — used for
+     * grabbing/releasing. (The drawn fingers may be wrapped around a handle,
+     * so the visual state must not be used here.)
+     */
     getGripCurl(side) {
         const hand = this.getActiveHands()[side];
-        if (!hand || !hand.currentState) return 0;
-        const f = hand.currentState.fingers;
+        if (!hand) return 0;
+        const f = (hand.targetState || hand.currentState).fingers;
         return (f.index + f.middle + f.ring) / 3;
     }
 
