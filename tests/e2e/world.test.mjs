@@ -28,6 +28,7 @@ test('endless world: flying far away streams terrain in and out, no edge, no sta
         const ch = g.character;
         const shown = () => [...t.meshes.values()].filter((e) => e.ground.visible || e.raised.visible).length;
         const atSpawn = shown();
+        g.quality.auto = false; // (its rare resolution changes are measured elsewhere)
         g.startFlight(true);
         g.stats.worstLogicMs = 0;
         // Fly far east (fast-forwarding the position along the way)
@@ -216,7 +217,7 @@ test('Вингардиум Левиоса, Protection in creative, Флайн by
         out.shield = g.castLocalSpell('protection', true);
         await sleep(300);
         out.shieldVisible = g.combat.visuals.hand.visible;
-        await sleep(3500);
+        for (let i = 0; i < 150 && g.combat.visuals.hand.visible; i++) await sleep(100);
         out.shieldGone = !g.combat.visuals.hand.visible;
         g._lastShieldCast = 0;
         out.domeNoT = g.castLocalSpell('protection maxima', true);

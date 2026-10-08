@@ -36,7 +36,7 @@ export const DUEL_SPELLS = {
 };
 
 export const DUEL = {
-    SPEED: 3, // m/s — the charge needs time to arrive
+    SPEED: 4, // m/s — the charge needs time to arrive (≈2.5 s over 10 m)
     RANGE: 30, // m
     CONE: 0.4, // rad: what the hand is pointing at
     HIT_RADIUS: 0.8,
@@ -51,6 +51,7 @@ export const DUEL = {
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vector3(), _ds = new THREE.Vector3(), _du = new THREE.Vector3();
 
 let nextId = 1;
 
@@ -64,8 +65,8 @@ export class Duel {
         this.pools = {};
         for (const [key, s] of Object.entries(DUEL_SPELLS)) {
             this.pools[key] = {
-                core: new SegmentPool(game.scene, { capacity: 160, radius: 0.035, color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }),
-                glow: new SegmentPool(game.scene, { capacity: 160, radius: 0.14, color: s.color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
+                core: new SegmentPool(game.scene, { capacity: 200, radius: 0.055, color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }),
+                glow: new SegmentPool(game.scene, { capacity: 200, radius: 0.24, color: s.color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
             };
         }
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
@@ -156,6 +157,9 @@ export class Duel {
         });
         if (g.sync) g.sync.duelCast(b);
         if (g.sound) g.sound.playSapira?.();
+        // the spell leaves the hand with a flash
+        this._burst(origin, DUEL_SPELLS[spell].color, 18);
+        g.fx.lightFlash(origin, DUEL_SPELLS[spell].color, 2.5, 0.25, 12);
         return b;
     }
 
@@ -182,6 +186,8 @@ export class Duel {
     // ============================================================= update
     update(dt) {
         this._t += dt;
+        // segments live exactly one frame, whatever the frame rate
+        this._segLife = dt + 1e-4;
         this._trackHands();
         for (const b of [...this.bolts.values()]) this._updateBolt(b, dt);
         if (this._referee()) this._detectClashes();
@@ -197,8 +203,8 @@ export class Duel {
         b.age += dt;
         if (b.state === 'clash') return;
         if (b.age > 14) { this._end(b, 'fizzle'); return; }
-        const origin = _v3;
-        const hdir = new THREE.Vector3();
+        const origin = b._origin || (b._origin = new THREE.Vector3());
+        const hdir = b._hdir || (b._hdir = new THREE.Vector3());
         if (!this._handOf(b.by, b.side, origin, hdir)) origin.copy(b.o);
         const tp = b.tk !== 'n' ? this._targetPos(b, new THREE.Vector3()) : null;
         if (b.tk !== 'n' && !tp) { this._end(b, 'fizzle'); return; }
@@ -500,17 +506,19 @@ export class Duel {
 
     // =========================================================== visuals
     /** A jagged, flickering electric charge from a to b. */
-    _drawBolt(spell, a, b) {
+    _drawBolt(spell, from, to) {
         const pool = this.pools[spell];
         if (!pool) return;
+        // own copies: the caller may pass the shared temp vectors
+        const a = _da.copy(from), b = _db.copy(to);
         const len = a.distanceTo(b);
         if (len < 0.05) return;
         const n = Math.max(3, Math.min(24, Math.round(len * 1.6)));
-        const dir = _v1.subVectors(b, a).divideScalar(len);
-        const side = _v2.set(-dir.z, 0, dir.x);
+        const dir = _dd.subVectors(b, a).divideScalar(len);
+        const side = _ds.set(-dir.z, 0, dir.x);
         if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
         side.normalize();
-        const up = _v3.crossVectors(dir, side).normalize();
+        const up = _du.crossVectors(dir, side).normalize();
         let prev = a.clone();
         const amp = Math.min(0.35, 0.08 + len * 0.02);
         for (let i = 1; i <= n; i++) {
@@ -520,12 +528,13 @@ export class Duel {
                 const k = Math.sin(Math.PI * t);
                 p.addScaledVector(side, (Math.random() - 0.5) * 2 * amp * k).addScaledVector(up, (Math.random() - 0.5) * 2 * amp * k);
             }
-            pool.core.add(prev, p, 0.05);
-            pool.glow.add(prev, p, 0.05);
+            pool.core.add(prev, p, this._segLife || 0.05);
+            pool.glow.add(prev, p, this._segLife || 0.05);
             prev = p;
         }
-        // bright head
-        if (Math.random() < 0.8) this.game.fx.spark(b, DUEL_SPELLS[spell].color, 0.18, _v1.set((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2), 0.25);
+        // bright head, and a glow at the hand it comes from
+        if (Math.random() < 0.8) this.game.fx.spark(b, DUEL_SPELLS[spell].color, 0.22, _v1.set((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2), 0.25);
+        if (Math.random() < 0.5) this.game.fx.spark(a, DUEL_SPELLS[spell].color, 0.12, _v1.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5), 0.2);
     }
 
     _burst(p, color, n) {
