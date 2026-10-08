@@ -66,6 +66,7 @@ export class SpellManager {
      *   damage(z, amount, isWeapon, dir)
      *   explode(pos, radius, casterId, power)   (authoritative only)
      *   handPose(casterId, side) -> {origin, dir} | null   (live hand for ice beam)
+ *   ignite(origin, dir, length) / igniteAt(pos, radius)   set trees on fire
  *   players(casterId) -> player targets (Свободный мир): {local, center(), hit(kind, from, push), blocks(from), chill(amount, from)}
      *   collision: CollisionWorld
      *   terrain(): Terrain|null
@@ -189,6 +190,7 @@ export class SpellManager {
     // -------------------------------------------------------------- Inferno
     castInferno(origin, direction, casterId) {
         const players = this._players(casterId);
+        let igniteT = 0;
         this._sound('playInferno');
         const right = new THREE.Vector3().crossVectors(direction, UP).normalize();
         if (right.lengthSq() < 0.01) right.set(1, 0, 0);
@@ -226,6 +228,9 @@ export class SpellManager {
                     _a.subVectors(p.center(), origin);
                     if (_a.length() < 30 && direction.angleTo(_a.normalize()) < 0.5) p.hit('Inferno', origin);
                 }
+                // Trees in the flames catch fire
+                igniteT -= dt;
+                if (igniteT <= 0 && this.hooks.ignite) { igniteT = 0.25; this.hooks.ignite(origin, direction, 26); }
             },
         });
     }

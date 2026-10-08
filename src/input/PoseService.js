@@ -19,6 +19,8 @@ const HAND_LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 
 
 // Auto mode: above this many ms per camera frame on the CPU (< ~12 recognitions/s), use the graphics card
 const AUTO_GPU_ABOVE_MS = 85;
+// Minimum ms between Holistic runs (it runs on the game's own thread)
+const HOLISTIC_INTERVAL = 44;
 
 export class PoseService {
     constructor({ faceSolver = null, baseUrl = null } = {}) {
@@ -101,8 +103,9 @@ export class PoseService {
         if (!globalThis.Holistic) await loadScript(dir + 'holistic.js');
         const holistic = new globalThis.Holistic({ locateFile: (file) => dir + file });
         holistic.setOptions({
-            // The original always used the heavy model; «Lite» in the settings still lightens it
-            modelComplexity: quality === 0 ? 0 : 2,
+            // «Качество ИИ» in the settings: Lite / Full (default) / Heavy (the original's choice,
+            // heavier on the game: the network runs on the game's own thread)
+            modelComplexity: Math.max(0, Math.min(2, quality)),
             smoothLandmarks: true,
             enableSegmentation: false,
             smoothSegmentation: false,
@@ -135,7 +138,9 @@ export class PoseService {
             leftHandLandmarks: results.leftHandLandmarks || null,
             rightHandLandmarks: results.rightHandLandmarks || null,
         };
-        // A hand Holistic lost: take it from the hand helper (fresh results only)
+        // A hand Holistic lost: take it from the hand helper (fresh results only).
+        // The helper only works while a hand is missing (it costs CPU).
+        if (!r.leftHandLandmarks || !r.rightHandLandmarks) this._handMissingAt = performance.now();
         const helper = this._helperHands;
         if (helper && (!r.leftHandLandmarks || !r.rightHandLandmarks) && performance.now() - helper.at < 250) {
             const assigned = assignHands(helper.hands, r.poseLandmarks);
@@ -303,8 +308,14 @@ export class PoseService {
         this.stats.frames++;
         const ts = performance.now();
         if (this.holistic) {
+            // Holistic shares the game's thread: ~22 recognitions a second are plenty
+            // (motion between them is blended), the rest of the time goes to the game.
+            if (ts - (this._holisticAt || 0) < HOLISTIC_INTERVAL) { this.stats.frames--; return; }
+            this._holisticAt = ts;
             // The hand helper gets the same frame (in parallel, its own thread)
-            if (this.handWorker && !this.handInFlight) {
+            const wantHelper = performance.now() - (this._handMissingAt || 0) < 1500 && ts - (this._helperSentAt || 0) > 66;
+            if (this.handWorker && !this.handInFlight && wantHelper) {
+                this._helperSentAt = ts;
                 this.handInFlight = true;
                 createImageBitmap(v).then((bitmap) => {
                     if (this.handWorker) this.handWorker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);

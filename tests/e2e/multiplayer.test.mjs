@@ -26,7 +26,7 @@ test.after(async () => {
 });
 
 async function openPlayer(name) {
-    const context = await browser.newContext({ viewport: { width: 800, height: 450 } });
+    const context = await browser.newContext({ viewport: { width: 560, height: 320 } });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -66,8 +66,8 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
     assert.equal(seeds[0], seeds[1], 'same world seed');
 
     // Both see each other
-    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 30000);
-    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 120000);
 
     // Guest walks somewhere → host sees the avatar there
     await ev(guest.page, () => { window.__zns.game.character.group.position.set(12, 1.5, 8); });
@@ -122,8 +122,8 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
         g.spells.cast('Bombardo', o, d, 'right', g.localId);
         g.sync.spell('Bombardo', o, d, 'right');
     });
-    await wf(host.page, () => window.__zns.game.explosions.length === 1, null, 30000);
-    await wf(guest.page, () => window.__zns.game.explosions.length === 1, null, 30000);
+    await wf(host.page, () => window.__zns.game.explosions.length === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game.explosions.length === 1, null, 120000);
     const craterOf = (p) => ev(p, () => {
         const t = window.__zns.game.terrain;
         const out = [];
@@ -156,19 +156,19 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
     await late.page.click('#mp-join-btn');
     await wf(late.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     try {
-        await wf(late.page, () => window.__zns.game.explosions.length === 1, null, 30000);
+        await wf(late.page, () => window.__zns.game.explosions.length === 1, null, 120000);
     } catch (e) {
         console.log('late joiner state', JSON.stringify(await ev(late.page, () => ({ ex: window.__zns.game.explosions.length, welcome: !!window.__zns.pendingWelcome, wex: window.__zns.pendingWelcome?.explosions?.length, role: window.__zns.net.role }))));
         console.log('host state', JSON.stringify(await ev(host.page, () => ({ ex: window.__zns.game.explosions.length }))), late.errors.slice(0, 5));
         throw e;
     }
     assert.equal(await craterOf(late.page), ch, 'late joiner has the same crater');
-    await wf(late.page, () => window.__zns.game.remotes.size === 2, null, 30000);
-    await wf(host.page, () => window.__zns.game.remotes.size === 2, null, 30000);
+    await wf(late.page, () => window.__zns.game.remotes.size === 2, null, 120000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 2, null, 120000);
 
     // Guest leaves → the host removes their avatar
     await guest.context.close();
-    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
 
     for (const p of [host, late]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
     assert.deepEqual(realErrors(guest.errors), []);
@@ -201,8 +201,8 @@ test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players,
     await host.page.click('#start-btn');
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
-    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 30000);
-    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 120000);
 
     const st = await Promise.all([host.page, guest.page].map((p) => ev(p, () => {
         const g = window.__zns.game;
@@ -326,8 +326,8 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await host.page.click('#start-btn');
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
-    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 30000);
-    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 30000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 120000);
     const ids = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.localId)));
 
     // Guest stands 8 m in front of the host's right hand

@@ -21,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('game-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -144,6 +144,7 @@ function readConfig() {
         modelComplexity: parseInt($('model-quality').value, 10),
         delegate: $('vision-delegate')?.value || 'auto',
         engine: $('vision-engine')?.value || 'classic',
+        graphics: $('graphics-quality')?.value || 'auto',
         resolution: $('camera-res').value,
         cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
         showHands: showHandsToggle ? showHandsToggle.checked : false,

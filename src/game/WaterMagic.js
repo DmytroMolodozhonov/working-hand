@@ -29,7 +29,7 @@ import { createWaterMaterial } from '../fx/WaterMaterial.js';
 export const WATER = {
     REACH: 6, // m from the spot in front of the hand to the water
     ABOVE_MAX: 4.5, // m: that spot must be this close above the surface
-    HOLD: 0.85, // m between the palm and the ball's surface (magic, not in the hand)
+    HOLD: 1.8, // m between the palm and the ball's surface (magic, not in the hand)
     START_VOLUME: 2, // m³ (one formed block = 1 m³)
     MAXIMA_ADD: 4,
     MAX_VOLUME: 60,
@@ -230,23 +230,75 @@ export class WaterMagic {
         if (s.frozen && !s.formed.length) return 'Уже лёд';
         const blobs = s.formed;
         if (blobs.length) {
-            this.game.placeIce(blobs);
+            // Ice is heavy: the frozen shape falls as one piece and stays where it lands
+            this._dropShape(blobs);
             for (const b of blobs) if (Math.random() < 0.3) this._sparkle(_v1.set(b.x, b.y, b.z), 3);
         }
         s.formed = [];
         this._syncFormed();
         s.forming = false;
-        if (s.volume >= 0.3) {
-            s.frozen = true;
-            this.ball.material = this._freezeShape(this.liquidMat);
-            this.core.visible = false;
-            this.droplets.visible = false;
+        this.frozenAt = performance.now();
+        if (s.volume >= 0.3 && s.phase === 'held') {
+            // The frozen ball can't be held by water magic any more: it drops
+            const iceMat = this._freezeShape(this.liquidMat);
             this._sparkle(s.pos, 30);
-        } else {
-            this._end();
+            const ball = { pos: s.pos.clone(), vel: new THREE.Vector3(0, -0.5, 0), r: radiusOf(s.volume), frozen: true, local: true, mat: iceMat };
+            this._spawnFalling(ball);
+            if (this.game.sync) this.game.sync.waterDrop(ball);
         }
+        this._end();
         if (this.game.sound) this.game.sound.playIce?.();
         return null;
+    }
+
+    /** A frozen shape falling as one rigid piece until it touches ground or ice. */
+    _dropShape(blobs) {
+        const piece = { blobs: blobs.map((b) => ({ ...b })), vy: 0, t: 0 };
+        piece.mesh = new THREE.InstancedMesh(this.blobGeo, this.iceShapeMat, piece.blobs.length);
+        piece.mesh.frustumCulled = false;
+        piece.mesh.castShadow = true;
+        this.scene.add(piece.mesh);
+        this._syncPiece(piece);
+        (this.fallingShapes || (this.fallingShapes = [])).push(piece);
+    }
+
+    _syncPiece(piece) {
+        piece.blobs.forEach((b, i) => {
+            _m.makeScale(b.r, b.r, b.r).setPosition(b.x, b.y, b.z);
+            piece.mesh.setMatrixAt(i, _m);
+        });
+        piece.mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    _updateFallingShapes(dt) {
+        const list = this.fallingShapes;
+        if (!list || !list.length) return;
+        const t = this.terrain;
+        const col = this.game.collision;
+        for (let i = list.length - 1; i >= 0; i--) {
+            const piece = list[i];
+            piece.t += dt;
+            piece.vy -= 18 * dt;
+            let dy = piece.vy * dt;
+            // How far can it fall before some blob touches the ground / solid ice / water bottom?
+            let landed = false;
+            for (const b of piece.blobs) {
+                const ground = col.surfaceY(b.x, b.z);
+                const bottom = b.y - b.r * 0.85;
+                if (bottom + dy <= ground) { dy = Math.max(dy, ground - bottom); landed = true; }
+                if (t && t.isSolidAt(b.x, bottom + dy, b.z) && bottom > ground + 0.1) { dy = 0; landed = true; }
+            }
+            for (const b of piece.blobs) b.y += dy;
+            this._syncPiece(piece);
+            if (landed || piece.t > 6) {
+                list.splice(i, 1);
+                this.scene.remove(piece.mesh);
+                piece.mesh.dispose?.();
+                this._splash(_v1.set(piece.blobs[0].x, piece.blobs[0].y - piece.blobs[0].r, piece.blobs[0].z), 0.8, 10);
+                if (this.game.sound) this.game.sound.playFrozenHit?.();
+                this.game.placeIce(piece.blobs);
+            }
+        }
     }
 
     /** A new ice material holding the water exactly in its current shape. */
@@ -266,6 +318,7 @@ export class WaterMagic {
         for (const m of this._mats) m.userData.uniforms.uTime.value += dt;
         if (this.state) this._updateHeld(dt);
         this._updateFalling(dt);
+        this._updateFallingShapes(dt);
     }
 
     _handTarget(side, out) {

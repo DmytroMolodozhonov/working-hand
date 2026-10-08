@@ -192,11 +192,25 @@ export class VoxelWorld {
             this.trees.push({ x, z, alive: true, index: placed, boxId });
             placed++;
         }
+        for (let i = 0; i < placed; i++) this.trunkMesh.setColorAt(i, tint.setRGB(1, 1, 1));
         this.trunkMesh.count = placed;
         this.leafMesh.count = placed;
         if (this.leafMesh.instanceColor) this.leafMesh.instanceColor.needsUpdate = true;
         this.scene.add(this.trunkMesh);
         this.scene.add(this.leafMesh);
+    }
+
+    /** A tree burnt down: the crown is gone, the trunk is charred (it still blocks the way). */
+    burnTree(t) {
+        if (!this.trunkMesh || !t.alive) return;
+        const dummy = new THREE.Object3D();
+        dummy.position.set(t.x, -1000, t.z);
+        dummy.scale.setScalar(0.0001);
+        dummy.updateMatrix();
+        this.leafMesh.setMatrixAt(t.index, dummy.matrix);
+        this.leafMesh.instanceMatrix.needsUpdate = true;
+        this.trunkMesh.setColorAt(t.index, new THREE.Color(0x3a3029));
+        if (this.trunkMesh.instanceColor) this.trunkMesh.instanceColor.needsUpdate = true;
     }
 
     _flatAround(x, z, r) {
@@ -417,7 +431,7 @@ export class VoxelWorld {
     update(focus, viewBoost = 0) {
         if (this.scene.fog && this.fogFar) {
             // In flight the view opens up so the land below is visible
-            const far = this.fogFar * (1 + viewBoost * 1.2);
+            const far = this.fogFar * (this.viewScale ?? 1) * (1 + viewBoost * 1.2);
             this.scene.fog.far = far;
             this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5);
             if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;

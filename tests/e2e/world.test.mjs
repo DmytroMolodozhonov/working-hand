@@ -101,17 +101,20 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
         out.formed = W.state ? W.state.formed.length : -1;
         out.v2 = W.state ? W.state.volume : -1;
         out.formedVisible = W.formedMesh.visible && W.formedMesh.count === out.formed;
-        const blobs = W.state ? W.state.formed.slice() : [];
+        const minY0 = Math.min(...(W.state ? W.state.formed : []).map((b) => b.y));
         out.frozen = await say('frozen');
+        out.ballDropped = !W.state && W.falling.length === 1 && W.falling[0].frozen;
+        // The frozen shape falls as one piece, then becomes solid where it landed
+        for (let i = 0; i < 300 && W.fallingShapes && W.fallingShapes.length; i++) await sleep(100);
+        const blobs = W.iceShapes.slice();
+        out.fell = blobs.length ? Math.min(...blobs.map((b) => b.y)) <= minY0 + 1e-6 : false;
         // Every frozen blob is solid inside (ICE_SHAPE) and drawn as a smooth ice shape, not cubes
         out.ice = blobs.filter((b) => t.get(Math.round(b.x), Math.floor(b.y + 1.5), Math.round(b.z)) === 11).length;
         out.iceSolid = blobs.length ? t.isSolidAt(blobs[0].x, blobs[0].y, blobs[0].z) : false;
         out.iceShapes = W.iceShapes.length;
         out.iceMeshVisible = W.iceMesh.visible;
-        out.ballFrozen = W.state ? W.state.frozen : null;
-        out.formIce = await say('water forming'); // not possible from ice
-        // Drop the ice ball: it falls and stays in the world (solid)
-        W.drop();
+        out.noIceBeam = g.castLocalSpell('frozen', true) === null; // right after: never the ice beam
+        // The frozen ball fell on its own and stays in the world (solid)
         for (let i = 0; i < 300 && W.falling.length; i++) await sleep(100);
         out.resting = W.resting.length;
         out.restBox = W.resting[0] ? !!g.collision.boxes.get(W.resting[0].boxId) : false;
@@ -129,6 +132,7 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
         for (let i = 0; i < 300 && W.falling.length; i++) await sleep(100);
         out.restingAfterLiquid = W.resting.length;
         // «Frozen» without a water ball is the normal ice beam
+        await sleep(4200); // later, without water, «Frozen» is the ice beam again
         g.lastMagicTime = Date.now();
         g.lastSpellCastTime = 0;
         out.iceBeam = await say('frozen');
@@ -154,8 +158,9 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
     assert.ok(r.iceSolid, 'ice is solid');
     assert.equal(r.iceShapes, r.formed);
     assert.ok(r.iceMeshVisible, 'the frozen shape is drawn');
-    assert.ok(r.ballFrozen === true || r.ballFrozen === null);
-    assert.equal(r.formIce, null, 'ice cannot be formed');
+    assert.ok(r.ballDropped, 'the frozen ball drops (not left hanging in the air)');
+    assert.ok(r.fell, 'the frozen shape fell down');
+    assert.ok(r.noIceBeam, '«Frozen» with water never casts the ice beam');
     assert.equal(r.resting, 1, 'the dropped ice ball stays in the world');
     assert.ok(r.restBox, 'and it is solid');
     assert.equal(r.cast2, 'Waterball');
@@ -245,6 +250,36 @@ test('Вингардиум Левиоса, Protection in creative, Флайн by
     assert.ok(r.domeLeft > 4.5, 'dome lasts 5 s');
     assert.equal(r.fly, 'Flight');
     assert.ok(r.flying);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('fire: Inferno sets a tree on fire, it spreads and burns down; adaptive graphics is on', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 480, height: 300 } });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const THREE = window.__zns.THREE;
+        const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+        const trees = g.world.trees;
+        // a tree with a neighbour close by
+        let t = null;
+        for (const a of trees) if (trees.some((b) => b !== a && Math.hypot(a.x - b.x, a.z - b.z) < 8)) { t = a; break; }
+        if (!t) t = trees[0];
+        const origin = new THREE.Vector3(t.x + 10, 3, t.z);
+        const dir = new THREE.Vector3(-1, 0.1, 0).normalize();
+        g.spells.cast('Inferno', origin, dir, 'right', g.localId);
+        await sleep(1500);
+        const burning = !!t.burning;
+        for (let i = 0; i < 300 && !t.burnt; i++) await sleep(100);
+        const burntCount = trees.filter((x) => x.burnt || x.burning).length;
+        return { burning, burnt: !!t.burnt, burntCount, quality: g.quality.current.name, fps: document.getElementById('fps-counter').innerText };
+    });
+    assert.ok(r.burning, 'the tree caught fire');
+    assert.ok(r.burnt, 'and burnt down');
+    assert.ok(r.burntCount >= 2, `the fire spread (${r.burntCount} trees)`);
+    assert.ok(r.quality, 'graphics level chosen');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

@@ -20,6 +20,8 @@ import { WaterMagic } from './WaterMagic.js';
 import { Combat, PVP } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Duel } from './Duel.js';
+import { QualityManager } from './Quality.js';
+import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -126,6 +128,7 @@ export class Game {
             explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
             handPose: (casterId, side) => this.handPose(casterId, side),
             players: (casterId) => this._spellPlayers(casterId),
+            ignite: (o, d, len) => this.fire.igniteAlong(o, d, len),
             collision: this.collision,
             terrain: () => this.terrain,
         });
@@ -147,6 +150,10 @@ export class Game {
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
+        this.fire = new FireSystem(this); // burning trees
+        // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
+        this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
+        this.quality.apply(this.world);
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon) => this.onLocalHit(z, dmg, dir, isWeapon);
 
@@ -307,6 +314,8 @@ export class Game {
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
+        // A blast sets the trees around it on fire
+        this.fire.ignite(pos, radius + 2);
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -439,7 +448,7 @@ export class Game {
         // Duel magic: a charge flies at the creature the hand points at
         if (name === 'Stupefy' || name === 'AvadaKedavra') return this._castDuel(name, name, isFinal);
         // Ice / levitation aimed at a wizard become duel spells
-        if (name === 'Ice' || name === 'Frozen') {
+        if ((name === 'Ice' || name === 'Frozen') && performance.now() - (this.water.frozenAt || -1e9) > 4000) {
             const aim = this.water.active ? null : this.duel.pickSide(true);
             if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
         }
@@ -453,6 +462,8 @@ export class Game {
         const waterName = this._waterSpell(name);
         if (waterName) return this._castWater(waterName, text, isFinal);
         if (name === 'Frozen') name = 'Ice';
+        // «Frozen» / ice words right after freezing water belong to the water — never an ice beam
+        if (name === 'Ice' && performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
         if (name === 'Maxima') return null;
         const recent = this.isMagicActive || Date.now() - this.lastMagicTime < 1500;
         // Flight has its own gesture (both arms up) — checked in startFlight
@@ -748,7 +759,7 @@ export class Game {
         if (this.fpsFrames >= 20) {
             const ps = this.poseSmoother;
             const aiFps = ps.lastPushAt && t0 - ps.lastPushAt < 1000 ? Math.round(1000 / ps.interval) : 0;
-            this.hud.setFps(Math.round(this.fpsFrames / this.fpsAccum), aiFps);
+            this.hud.setFps(Math.round(this.fpsFrames / this.fpsAccum), aiFps, this.quality.current.name);
             this.fpsAccum = 0;
             this.fpsFrames = 0;
         }
@@ -761,6 +772,7 @@ export class Game {
         this.levitation.update(dt);
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
+        this.fire.update(dt);
         this.weapons.update(dt);
         this.water.update(dt);
         this.combat.update(dt);
@@ -791,6 +803,7 @@ export class Game {
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
         }
 
+        this.quality.update(deltaTime);
         const logic = performance.now() - t0;
         this.stats.logicMs = (this.stats.logicMs || logic) * 0.95 + logic * 0.05;
         if (logic > (this.stats.worstLogicMs || 0)) this.stats.worstLogicMs = logic;

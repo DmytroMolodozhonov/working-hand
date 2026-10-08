@@ -47,12 +47,12 @@ export class Hud {
         this.el.punches.textContent = punches;
     }
 
-    setFps(fps, aiFps = 0) {
-        const key = fps * 1000 + aiFps;
+    setFps(fps, aiFps = 0, quality = '') {
+        const key = `${fps}|${aiFps}|${quality}`;
         if (key === this._lastFps) return;
         this._lastFps = key;
-        // "ИИ" = how many times per second the camera pose is recognised
-        this.el.fps.innerText = aiFps ? `FPS: ${fps} | ИИ: ${aiFps}` : `FPS: ${fps}`;
+        // "ИИ" = how many times per second the camera pose is recognised; then the graphics level
+        this.el.fps.innerText = `FPS: ${fps}` + (aiFps ? ` | ИИ: ${aiFps}` : '') + (quality ? ` | графика: ${quality}` : '');
         this.el.fps.style.color = fps > 50 ? '#00ff00' : (fps > 25 ? '#ffff00' : '#ff0000');
     }
 
