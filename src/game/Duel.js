@@ -442,10 +442,13 @@ export class Duel {
 
     remoteClashEnd(m) {
         const a = this.bolts.get(m.a), b = this.bolts.get(m.b);
-        const c = this.clashes.find((x) => x.a === a && x.b === b);
-        if (c) this._finishClash(c, m.loser);
-        else if (m.loser === this.me && (a || b)) {
-            const w = a && a.by !== this.me ? a : b;
+        const c = this.clashes.find((x) => (a && (x.a === a || x.b === a)) || (b && (x.a === b || x.b === b)));
+        if (c) { this._finishClash(c, m.loser); return; }
+        // The duel ended before this computer even saw it start: both charges are gone anyway
+        this.bolts.delete(m.a);
+        this.bolts.delete(m.b);
+        if (m.loser === this.me) {
+            const w = a && a.by !== this.me ? a : b && b.by !== this.me ? b : null;
             if (w) this.applyToMe(w.spell, w.by);
         }
     }
