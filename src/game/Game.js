@@ -14,6 +14,7 @@ import { Chest } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
 import { WeaponSystem } from './Weapons.js';
+import { FlightController } from './Flight.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -55,6 +56,7 @@ export class Game {
         this.smoothHead = { yaw: 0, pitch: 0 };
         this.smoothBody = 0;
         this.knockback = new THREE.Vector3();
+        this.flight = new FlightController();
         this.frameCount = 0;
         this.fpsAccum = 0;
         this.fpsFrames = 0;
@@ -314,7 +316,9 @@ export class Game {
                 const dmg = Math.max(2, Math.round(8 * (1 - d / blast)));
                 const dir = _v2.set(zp.x - pos.x, 0, zp.z - pos.z).normalize().clone();
                 this.damageZombie(z, dmg, false, dir, null);
-                z.velocity.addScaledVector(dir, 10 * (1 - d / blast));
+                // Thrown through the air, not just slid along the ground
+                z.velocity.addScaledVector(dir, 12 * (1 - d / blast));
+                z.vy = Math.max(z.vy || 0, 4 + 10 * (1 - d / blast));
             }
         }
     }
@@ -400,6 +404,11 @@ export class Game {
         if (!name) return null;
         const now = Date.now();
         if (now - this.lastSpellCastTime < SPELL_COOLDOWN) return null;
+        if (name === 'Flight') {
+            if (!this.startFlight()) return null;
+            this.lastSpellCastTime = now;
+            return name;
+        }
         this.lastSpellCastTime = now;
         const side = this.magicHand || this.lastMagicHand || 'right';
         const origin = this.character.getHandWorldPosition(side);
@@ -411,6 +420,7 @@ export class Game {
 
     /** Debug keys: cast in the camera direction. */
     castDebug(name) {
+        if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);
@@ -536,32 +546,32 @@ export class Game {
         const ch = this.character;
         const pose = this.currentPose;
         const s = this.settings;
+        const flight = this.flight;
+        const flying = flight.busy;
         if (pose) {
             if (pose.headRotation) {
                 const targetYaw = pose.headRotation.yaw * s.sensitivity;
                 const targetPitch = pose.headRotation.pitch * s.sensitivity;
-                const alpha = pose.isRunning ? Math.min(s.smoothness, 0.1) : s.smoothness;
+                const alpha = pose.isRunning && !flying ? Math.min(s.smoothness, 0.1) : s.smoothness;
                 this.smoothHead.yaw += (targetYaw - this.smoothHead.yaw) * alpha;
                 this.smoothHead.pitch += (targetPitch - this.smoothHead.pitch) * alpha;
                 if (s.drifting) {
                     if (Math.abs(this.smoothHead.yaw) > 0.1) this.cameraBaseRotation += this.smoothHead.yaw * 0.1;
                     ch.setBodyRotation(this.cameraBaseRotation);
-                    ch.updateHeadRotation(this.smoothHead.yaw, this.smoothHead.pitch);
-                } else {
-                    ch.updateHeadRotation(this.smoothHead.yaw, this.smoothHead.pitch);
-                    if (pose.bodyRotation !== undefined) {
-                        this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
-                        ch.setBodyRotation(this.smoothBody);
-                    }
+                } else if (pose.bodyRotation !== undefined && !flying) {
+                    this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
+                    ch.setBodyRotation(this.smoothBody);
                 }
+                ch.updateHeadRotation(this.smoothHead.yaw, this.smoothHead.pitch);
             }
             ch.updateArmsLookAt(pose);
-            ch.setCrouching(pose.isCrouching);
-            ch.setRunning(pose.isRunning, pose.runIntensity);
+            ch.setCrouching(flying ? false : pose.isCrouching);
+            ch.setRunning(flying ? false : pose.isRunning, pose.runIntensity);
         }
         if (this.config.mode === 'test' && this.testState === 'setup') ch.setRunning(false);
 
-        ch.update(dt, this.collision, true);
+        if (flying) this._updateFlight(dt, pose);
+        ch.update(dt, this.collision, !flight.active);
 
         // Explosion knockback (decays)
         if (this.knockback.lengthSq() > 0.0001) {
@@ -569,12 +579,108 @@ export class Game {
             this.knockback.multiplyScalar(Math.max(0, 1 - 4 * dt));
         }
 
-        // Collisions: walls, tables, chests, trunks, mountains
-        const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
-        this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
+        // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
+        if (!flight.active) {
+            const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
+            this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
+        }
         // Stay inside the world
         ch.group.position.x = Math.max(-119, Math.min(119, ch.group.position.x));
         ch.group.position.z = Math.max(-119, Math.min(119, ch.group.position.z));
+    }
+
+    /** «Флайн»: Superman flight steered by the torso. */
+    _updateFlight(dt, pose) {
+        const ch = this.character;
+        const flight = this.flight;
+        const out = flight.update(dt, {
+            armsUp: ch.areBothHandsUp(),
+            torso: pose ? pose.torso : null,
+            headPitch: this.smoothHead.pitch,
+        });
+        ch.flying = flight.active;
+        ch.setFlightTilt(out.tilt);
+        // The head looks where we fly (counter the body tilt)
+        const view = flight.active ? Math.max(-1.0, Math.min(0.35, out.pitch)) : 0;
+        ch.head.rotation.x = this.smoothHead.pitch + out.tilt + view;
+
+        if (!flight.active) {
+            if (flight.state === 'idle') { ch.flying = false; ch.setFlightTilt(0); }
+            return;
+        }
+
+        // Turning with the torso
+        if (out.yawRate) {
+            if (this.settings.drifting) this.cameraBaseRotation += out.yawRate * dt;
+            else this.smoothBody += out.yawRate * dt;
+            ch.setBodyRotation(this.settings.drifting ? this.cameraBaseRotation : this.smoothBody);
+        }
+
+        const p = ch.group.position;
+        const yaw = ch.group.rotation.y;
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        const px = p.x, py = p.y, pz = p.z;
+        p.x += fx * out.forward * dt;
+        p.z += fz * out.forward * dt;
+        p.y = Math.min(110, p.y + out.up * dt);
+
+        // Terrain ahead: a slope we can glide up (follow the relief); a cliff,
+        // wall or tree trunk stops us and costs speed.
+        const ahead = 1.4;
+        const blocked = () => this.collision.pointBlocked(p.x, p.y, p.z) || this.collision.pointBlocked(p.x + fx * ahead, p.y, p.z + fz * ahead);
+        if (blocked()) {
+            const clear = Math.max(this.collision.groundY(p.x, p.z), this.collision.groundY(p.x + fx * ahead, p.z + fz * ahead)) + 2.1;
+            const rise = clear - p.y;
+            if (rise > 0 && rise < out.forward * dt * 1.6 + 0.6) {
+                p.y = clear; // glide up the slope
+                if (blocked()) { p.x = px; p.z = pz; flight.speed *= 0.35; }
+            } else {
+                p.x = px; p.z = pz;
+                if (this.collision.pointBlocked(p.x, p.y, p.z)) p.y = Math.max(p.y, py);
+                flight.speed *= 0.35;
+            }
+        }
+
+        // Ground: diving into it lands, otherwise we skim above it
+        const ground = this.collision.groundY(p.x, p.z);
+        const altitude = p.y - ground;
+        if (flight.touchGround(altitude)) {
+            this.hud.setVoice('🦸 Приземление', true);
+            this._flightMsgUntil = performance.now() + 1500;
+            if (this.sound) this.sound.playBombardoCast();
+        } else if (altitude < 1.6 + 0.4) {
+            p.y = ground + 2.0;
+        }
+
+        // Speed lines
+        if (flight.speed > 10 && this.cameraMode === 'fpv') {
+            const n = flight.speed > 20 ? 3 : 1;
+            for (let i = 0; i < n; i++) {
+                const ox = (Math.random() - 0.5) * 7, oy = (Math.random() - 0.5) * 4, oz = (Math.random() - 0.5) * 7;
+                _v1.set(p.x + fx * 9 + ox, p.y + 1.5 + oy, p.z + fz * 9 + oz);
+                _v2.set(-fx * flight.speed * 0.8, -out.up * 0.8, -fz * flight.speed * 0.8);
+                this.fx.spark(_v1, 0xffffff, 0.07, _v2, 0.35);
+            }
+        }
+    }
+
+    /** Start the flight spell (arms must be up). Returns true when it started. */
+    startFlight(force = false) {
+        if (this.flight.active) return false;
+        if (!force && !this.character.areBothHandsUp()) {
+            this.hud.setVoice('🦸 Для полёта поднимите <b>обе руки вверх</b> и скажите «Флайн»', true);
+            return false;
+        }
+        this.flight.start();
+        this.character.flying = true;
+        if (this.sound) this.sound.playBombardoCast();
+        this.fx.lightFlash(this.character.group.position, 0x9fd8ff, 1.5, 0.4, 25);
+        for (let i = 0; i < 40; i++) {
+            const a = Math.random() * Math.PI * 2;
+            _v1.copy(this.character.group.position).add(_v2.set(Math.cos(a) * 1.2, -1.8, Math.sin(a) * 1.2));
+            this.fx.spark(_v1, 0xdff4ff, 0.25, _v2.set(Math.cos(a) * 6, 1 + Math.random() * 2, Math.sin(a) * 6), 0.6);
+        }
+        return true;
     }
 
     _checkVictory() {
@@ -790,6 +896,7 @@ export class Game {
             weapons: this.weapons.weapons.map((w) => ({ id: w.id, type: w.type, held: w.holder ? w.holder.side : null, sleeping: w.sleeping, pos: [w.position.x, w.position.y, w.position.z] })),
             remotes: [...this.remotes.entries()].map(([id, r]) => ({ id, name: r.name, pos: [r.position.x, r.position.y, r.position.z] })),
             explosions: this.explosions.length,
+            flight: { state: this.flight.state, speed: this.flight.speed, tilt: this.flight.tilt, pitch: this.flight.pitch },
             stats: { ...this.stats, fx: { sparks: this.fx.sparks.active, debris: this.fx.debris.active } },
         };
     }

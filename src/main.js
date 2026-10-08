@@ -272,6 +272,7 @@ function renderItemsTab() {
         { name: 'Айс', desc: 'Заморозка (Айс).', dmg: '1/сек', icon: 'assets/icons/ice.png' },
         { name: 'Даст', desc: 'Пыль (Даст/Sand).', dmg: 'Мгновенно', icon: 'assets/icons/sand.png' },
         { name: 'Бомбардо', desc: 'Взрывной шар: разрушает блоки, горы, деревья и раскидывает зомби.', dmg: 'до 8 (взрыв)', icon: 'assets/icons/bombardo.svg' },
+        { name: 'Флайн', desc: 'Полёт как у Супермена: обе руки вверх + «Флайн». Рулите корпусом, приземление — направьте себя в землю.', dmg: '—', icon: 'assets/icons/flight.svg' },
     ];
     for (const item of items) {
         const card = document.createElement('div');
@@ -331,6 +332,7 @@ window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (k === 'm' || k === 'ь') game.castDebug('Inferno');
     if (k === 'b' || k === 'и') game.castDebug('Bombardo');
+    if (k === 'g' || k === 'п') game.castDebug('Flight');
     if (k === 'f' || k === 'а') game.toggleFlashlight();
 });
 

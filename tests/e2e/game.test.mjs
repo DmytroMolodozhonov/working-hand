@@ -190,6 +190,80 @@ test('Бомбардо: explodes on the ground, digs a crater, throws debris, hu
     await page.close();
 });
 
+test('«Флайн»: arms up + word → take-off, Superman pose, torso steering, spells in the air, dive to land', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    // Saying it with the arms down does nothing
+    await feed(page, { arms: 'forward' }, 15, 60);
+    const refused = await page.evaluate(() => { const g = window.__zns.game; g.lastMagicTime = Date.now(); g.lastSpellCastTime = 0; return g.castLocalSpell('флайн'); });
+    assert.equal(refused, null);
+    // Both arms up + the word
+    await feed(page, { arms: 'up' }, 20, 60);
+    const name = await page.evaluate(() => { const g = window.__zns.game; g.lastSpellCastTime = 0; return g.castLocalSpell('флайн'); });
+    assert.equal(name, 'Flight');
+    const y0 = await page.evaluate(() => window.__zns.game.character.group.position.y);
+    await feed(page, { arms: 'up' }, 20, 70); // keep the arms up while taking off
+    await page.waitForFunction(() => window.__zns.game.flight.state === 'cruise', null, { timeout: 30000 });
+    const takeoff = await page.evaluate(() => window.__zns.game.character.group.position.y);
+    assert.ok(takeoff > y0 + 3, `rose into the air (${y0.toFixed(1)} → ${takeoff.toFixed(1)})`);
+    // Cruise with arms forward: Superman pose, flying ahead
+    await feed(page, { arms: 'forward' }, 40, 70);
+    let st = await page.evaluate(() => { const g = window.__zns.game; return { ...g.debugState().flight, rx: g.character.group.rotation.x, pos: g.character.group.position.toArray(), yaw: g.character.group.rotation.y }; });
+    assert.ok(st.tilt > 1.0 && st.rx < -1.0, `body horizontal (tilt ${st.tilt.toFixed(2)})`);
+    assert.ok(st.speed > 8, `speed ${st.speed.toFixed(1)}`);
+    // Lean to the left → turn left (yaw grows)
+    const yawBefore = st.yaw;
+    await feed(page, { arms: 'forward', lean: 0.06 }, 30, 70);
+    st = await page.evaluate(() => ({ yaw: window.__zns.game.character.group.rotation.y }));
+    assert.ok(st.yaw > yawBefore + 0.3, `turned left (${yawBefore.toFixed(2)} → ${st.yaw.toFixed(2)})`);
+    // Spells work in the air
+    const cast = await page.evaluate(() => { const g = window.__zns.game; g.lastMagicTime = Date.now(); g.lastSpellCastTime = 0; return g.castLocalSpell('инферно'); });
+    assert.equal(cast, 'Inferno');
+    // Lean forward → dive → touch the ground → flight ends, standing again
+    await feed(page, { arms: 'forward', forward: 0.15 }, 60, 70);
+    await page.waitForFunction(() => window.__zns.game.flight.state === 'idle', null, { timeout: 60000 });
+    await sleep(1500);
+    st = await page.evaluate(() => { const g = window.__zns.game; const p = g.character.group.position; return { y: p.y, ground: g.collision.groundY(p.x, p.z), rx: g.character.group.rotation.x }; });
+    assert.ok(Math.abs(st.y - (st.ground + 2.0)) < 0.3, `standing on the ground (${st.y.toFixed(2)} vs ${st.ground})`);
+    assert.ok(Math.abs(st.rx) < 0.01, 'upright again');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('Бомбардо on a mountain: part of the mountain is blown away, zombies are thrown into the air', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const THREE = window.__zns.THREE;
+        const t = g.terrain;
+        // Find a mountain column
+        let best = null;
+        for (let x = -110; x < 110 && !best; x += 2) for (let z = -110; z < 110; z += 2) if (t.topLayer(x, z) >= 8) { best = { x, z }; break; }
+        const h0 = t.topLayer(best.x, best.z);
+        const top = new THREE.Vector3(best.x, h0 - 0.5, best.z);
+        // A zombie standing next to the blast on flat ground near the player
+        const z = g._createZombie(new THREE.Vector3(2, 0.5, -12));
+        z.health = 50;
+        g.explode(new THREE.Vector3(1, -0.5, -12), 3.6, 'local');
+        const flew = { maxY: z.group.position.y };
+        g.explode(top, 3.6, 'local');
+        for (let i = 0; i < 20; i++) { await new Promise((r) => setTimeout(r, 50)); flew.maxY = Math.max(flew.maxY, z.group.position.y); }
+        await new Promise((r) => setTimeout(r, 3000));
+        let removed = 0;
+        for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) removed += Math.max(0, h0 - t.topLayer(best.x + dx, best.z + dz));
+        return { h0, after: t.topLayer(best.x, best.z), removed, flewY: flew.maxY, landedY: z.group.position.y, ground: g.collision.groundY(z.group.position.x, z.group.position.z) };
+    });
+    assert.ok(r.after < r.h0, `mountain lost height (${r.h0} → ${r.after})`);
+    assert.ok(r.removed > 15, `a chunk of the mountain is gone (${r.removed} blocks)`);
+    assert.ok(r.flewY > 1.5, `zombie thrown into the air (max y ${r.flewY.toFixed(2)})`);
+    assert.ok(Math.abs(r.landedY - (r.ground + 1.0)) < 0.2, 'zombie landed back on the ground');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
 test('every spell can be cast repeatedly without errors (pooled effects)', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');

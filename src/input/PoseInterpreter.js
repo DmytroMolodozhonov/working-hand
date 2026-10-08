@@ -45,6 +45,7 @@ export class PoseInterpreter {
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));
+            data.torso = torsoMetrics(lm);
 
             // Run intensity from shoulder bobbing (8-frame window)
             this.shoulderHistory.push((lm[11].y + lm[12].y) / 2);
@@ -90,4 +91,34 @@ export class PoseInterpreter {
         }
         return data;
     }
+}
+
+/**
+ * Raw torso measurements used to steer flight (the body is the steering
+ * wheel). Values are relative; the flight controller calibrates a neutral
+ * pose at take-off and works with the differences.
+ *   lateral  — sideways lean (shoulder centre vs hip centre, or shoulder roll
+ *              when the hips are out of the camera), + = leaning to the
+ *              person's LEFT
+ *   depth    — shoulders' depth relative to the hips (smaller = leaning
+ *              forward towards the camera); null without hips
+ *   noseRel  — nose height above the shoulder line / shoulder width
+ *              (drops when leaning forward or looking down)
+ */
+export function torsoMetrics(lm) {
+    const ls = lm[11], rs = lm[12], lh = lm[23], rh = lm[24], nose = lm[0];
+    const sw = Math.max(0.05, Math.abs(ls.x - rs.x));
+    const sMidX = (ls.x + rs.x) / 2, sMidY = (ls.y + rs.y) / 2, sMidZ = ((ls.z || 0) + (rs.z || 0)) / 2;
+    const hipsOk = lh && rh && (lh.visibility ?? 1) > 0.5 && (rh.visibility ?? 1) > 0.5 && lh.y > sMidY;
+    let lateral, depth = null;
+    if (hipsOk) {
+        const hMidX = (lh.x + rh.x) / 2, hMidZ = ((lh.z || 0) + (rh.z || 0)) / 2;
+        // Image is not mirrored: the person's left is the image right.
+        lateral = (sMidX - hMidX) / sw;
+        depth = sMidZ - hMidZ;
+    } else {
+        // Shoulder roll: leaning left drops the person's left shoulder (lm 11)
+        lateral = (ls.y - rs.y) / sw;
+    }
+    return { lateral, depth, noseRel: (sMidY - nose.y) / sw, hips: !!hipsOk };
 }

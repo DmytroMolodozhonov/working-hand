@@ -24,6 +24,7 @@ export function matchSpell(text) {
     const has = (...words) => words.some((w) => s.includes(w));
     // New spell first: its words must never be mistaken for the short Sand/Ice tokens.
     if (has('бомбар', 'бомбор', 'бамбар', 'бонбар', 'помбар', 'бомбард', 'bombar', 'bombor', 'bambar', 'бомба', 'bomb')) return 'Bombardo';
+    if (has('флайн', 'флаин', 'флайм', 'флай', 'флэй', 'флей', 'фляй', 'fly', 'flai', 'полёт', 'полет', 'взлёт', 'взлет')) return 'Flight';
     if (has('сап', 'sap', 'саб', 'sab', 'саф', 'saf', 'сат', 'sat', 'зап', 'zap')) return 'Sapira';
     if (has('танд', 'thun', 'молн', 'гром', 'удар')) return 'Thunderwave';
     if (has('инфер', 'infer', 'огон', 'фаер', 'fire')) return 'Inferno';
@@ -127,6 +128,7 @@ export class SpellManager {
             case 'Sands': this.castSands(o, d); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
             case 'Bombardo': this.castBombardo(o, d, casterId); break;
+            case 'Flight': return false; // handled by the game (it moves the caster)
             default: return false;
         }
         return true;
@@ -334,7 +336,7 @@ export class SpellManager {
         const explodeAt = (p) => {
             if (exploded) return;
             exploded = true;
-            if (this.auth && this.hooks.explode) this.hooks.explode(p.clone(), 3.2, casterId);
+            if (this.auth && this.hooks.explode) this.hooks.explode(p.clone(), 3.6, casterId);
             else this.fx.lightFlash(p, 0xffaa55, 2, 0.15, 20); // client: real blast arrives from the host
         };
         this.spells.push({

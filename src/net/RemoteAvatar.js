@@ -51,6 +51,8 @@ export class RemoteAvatar {
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
         ch.group.rotation.y += d * k;
+        ch.group.rotation.x += ((s.s.rx || 0) - ch.group.rotation.x) * k; // flight tilt
+        ch.flying = Math.abs(s.s.rx || 0) > 0.05;
         ch.head.rotation.y += (s.s.hy - ch.head.rotation.y) * k;
         ch.head.rotation.x += (s.s.hp - ch.head.rotation.x) * k;
         const slerp = (obj, arr) => { if (arr) obj.quaternion.slerp(_q.set(arr[0], arr[1], arr[2], arr[3]), k); };

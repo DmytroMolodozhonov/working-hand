@@ -31,12 +31,14 @@ export function hand(wx, wy, { size = 0.09, curl = 0 } = {}) {
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
  */
-export function frame({ arms = 'forward', leftCurl = 0, rightCurl = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0] } = {}) {
+export function frame({ arms = 'forward', leftCurl = 0, rightCurl = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
+    // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
-    p[0] = { x: 0.5, y: noseY, z: -0.4, visibility: 0.99 };
-    p[11] = { x: 0.6, y: sh, z: 0, visibility: 0.99 };
-    p[12] = { x: 0.4, y: sh, z: 0, visibility: 0.99 };
+    const sz = -forward;
+    p[0] = { x: 0.5 + lean * 1.3, y: noseY, z: -0.4 + sz, visibility: 0.99 };
+    p[11] = { x: 0.6 + lean, y: sh, z: sz, visibility: 0.99 };
+    p[12] = { x: 0.4 + lean, y: sh, z: sz, visibility: 0.99 };
     let lElbow, lWrist, rElbow, rWrist;
     if (arms === 'forward') {
         lElbow = [0.6, sh + 0.03]; lWrist = [0.6 + wristOffset[0], sh + 0.02 + wristOffset[1]];
@@ -48,6 +50,7 @@ export function frame({ arms = 'forward', leftCurl = 0, rightCurl = 0, noseY = 0
         lElbow = [0.64, sh + 0.15]; lWrist = [0.65, sh + 0.3];
         rElbow = [0.36, sh + 0.15]; rWrist = [0.35, sh + 0.3];
     }
+    if (lean) { lElbow[0] += lean; lWrist[0] += lean; rElbow[0] += lean; rWrist[0] += lean; }
     p[13] = { x: lElbow[0], y: lElbow[1], z: -0.2, visibility: 0.99 };
     p[14] = { x: rElbow[0], y: rElbow[1], z: -0.2, visibility: 0.99 };
     p[15] = { x: lWrist[0], y: lWrist[1], z: -0.4, visibility: 0.99 };

@@ -60,6 +60,7 @@ export class Zombie {
         this.isDead = false;
         this.isDying = false;
         this.velocity = new THREE.Vector3();
+        this.vy = 0; // vertical speed (thrown by explosions, stepping off ledges)
         this.rotVelocity = new THREE.Vector3();
         this.bodyParts = [];
         this.materials = [];
@@ -174,7 +175,10 @@ export class Zombie {
             const targetRot = -Math.PI / 2;
             this.group.rotation.x += (targetRot - this.group.rotation.x) * 5 * dt;
             const restY = ground + 0.8;
-            if (pos.y > restY) pos.y -= dt * 2; else pos.y = restY;
+            if (pos.y > restY) {
+                this.vy -= 25 * dt;
+                pos.y = Math.max(restY, pos.y + Math.min(this.vy, -2) * dt);
+            } else { pos.y = restY; this.vy = 0; }
             pos.addScaledVector(this.velocity, dt);
             this.velocity.multiplyScalar(0.95);
             if (this.deathAnimTimer <= 0) {
@@ -228,14 +232,14 @@ export class Zombie {
                 this.rightArm.rotation.x *= 0.9;
                 pos.addScaledVector(this.velocity, dt);
                 this.velocity.multiplyScalar(0.9);
-                pos.y = ground + ZOMBIE_GROUND_OFFSET;
+                this._settleY(dt, ground);
                 return;
             }
         }
 
         pos.addScaledVector(this.velocity, dt);
         this.velocity.multiplyScalar(0.9);
-        pos.y = ground + ZOMBIE_GROUND_OFFSET;
+        this._settleY(dt, ground);
 
         this.group.rotation.z += this.rotVelocity.z * dt;
         this.group.rotation.x += this.rotVelocity.x * dt;
@@ -276,6 +280,19 @@ export class Zombie {
         }
 
         if (this.isAttacking) this._animateAttack(dt, targetPos);
+    }
+
+    /** Stand on the ground, or fly/fall with gravity when thrown or stepping off a ledge. */
+    _settleY(dt, ground) {
+        const pos = this.group.position;
+        const floor = ground + ZOMBIE_GROUND_OFFSET;
+        if (this.vy !== 0 || pos.y > floor + 0.05) {
+            this.vy -= 25 * dt;
+            pos.y += this.vy * dt;
+            if (pos.y <= floor) { pos.y = floor; this.vy = 0; }
+        } else {
+            pos.y = floor;
+        }
     }
 
     _animateWalk() {

@@ -61,6 +61,10 @@ export class VoxelCharacter {
         this.createCharacter();
         this.scene.add(this.group);
         this.group.position.set(0, this.baseY, 0);
+        // Yaw first, then tilt (flight). Identical to the old order while upright.
+        this.group.rotation.order = 'YXZ';
+        this.flightTilt = 0;
+        this.flying = false;
     }
 
     createCharacter() {
@@ -224,11 +228,16 @@ export class VoxelCharacter {
     isHandRaised() {
         if (!this.head) return null;
         this.group.updateMatrixWorld(true);
+        // Heights are measured along the BODY's up axis, so the gesture works
+        // the same standing and lying horizontally in flight.
+        this.group.getWorldQuaternion(_qBody);
+        _up.set(0, 1, 0).applyQuaternion(_qBody);
         this.head.getWorldPosition(_v3);
+        const headH = _v3.sub(this.group.position).dot(_up);
         const threshold = 1.3;
         const stats = (elbowAnchor) => {
-            _v1.set(0, 0, this.BONE_LENGTH_LOWER).applyMatrix4(elbowAnchor.matrixWorld);
-            const height = _v1.y - (_v3.y - threshold);
+            _v1.set(0, 0, this.BONE_LENGTH_LOWER).applyMatrix4(elbowAnchor.matrixWorld).sub(this.group.position);
+            const height = _v1.dot(_up) - (headH - threshold);
             return { height, valid: height > 0 };
         };
         const l = stats(this.leftElbowAnchor);
@@ -239,6 +248,26 @@ export class VoxelCharacter {
         else if (l.valid) side = 'left';
         const bothLevel = l.valid && r.valid && Math.abs(l.height - r.height) < 0.3;
         return { side, bothLevel };
+    }
+
+    /** Both wrists above the top of the head ("руки вверх") — the flight gesture. */
+    areBothHandsUp() {
+        this.group.updateMatrixWorld(true);
+        this.group.getWorldQuaternion(_qBody);
+        _up.set(0, 1, 0).applyQuaternion(_qBody);
+        this.head.getWorldPosition(_v3);
+        const headTop = _v3.sub(this.group.position).dot(_up) + 0.2;
+        const h = (elbowAnchor) => _v1.set(0, 0, this.BONE_LENGTH_LOWER).applyMatrix4(elbowAnchor.matrixWorld).sub(this.group.position).dot(_up);
+        return h(this.leftElbowAnchor) > headTop && h(this.rightElbowAnchor) > headTop;
+    }
+
+    /**
+     * Flight pose: tilt the whole body forward (0 = upright, ~1.35 = Superman).
+     * The rotation order is yaw-then-tilt so turning works while horizontal.
+     */
+    setFlightTilt(tilt) {
+        this.flightTilt = tilt;
+        this.group.rotation.x = -tilt;
     }
 
     getHandDirection(side, out = new THREE.Vector3()) {
@@ -340,7 +369,14 @@ export class VoxelCharacter {
             }
         }
 
-        if (this.isRunning) {
+        if (this.flying) {
+            // Superman: legs straight back, slight flutter
+            this.runCycle += dt * 6;
+            const k = Math.min(1, 6 * dt);
+            const flutter = Math.sin(this.runCycle) * 0.05;
+            this.leftLegPivot.rotation.x += (flutter - this.leftLegPivot.rotation.x) * k;
+            this.rightLegPivot.rotation.x += (-flutter - this.rightLegPivot.rotation.x) * k;
+        } else if (this.isRunning) {
             const animSpeed = 8 + (this.runIntensity * 12);
             this.runCycle += dt * animSpeed;
             const swingAmplitude = 0.5 + (this.runIntensity * 0.3);
@@ -435,6 +471,7 @@ export class VoxelCharacter {
         return {
             p: [r2(this.group.position.x), r2(this.group.position.y), r2(this.group.position.z)],
             ry: r3(this.group.rotation.y),
+            rx: r3(this.group.rotation.x),
             hy: r3(this.head.rotation.y),
             hp: r3(this.head.rotation.x),
             la: q(this.leftArmAnchor), le: q(this.leftElbowAnchor),
