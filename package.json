@@ -1,0 +1,17 @@
+{
+  "name": "zombie-ne-spyat",
+  "private": true,
+  "version": "2.0.0",
+  "description": "ЗОМБИ НЕ СПЯТ — 3D-игра с управлением телом и руками через веб-камеру",
+  "type": "module",
+  "scripts": {
+    "start": "python server.py",
+    "test": "node --test \"tests/unit/*.test.js\"",
+    "test:e2e": "node --test --test-concurrency=1 \"tests/e2e/*.test.mjs\""
+  },
+  "devDependencies": {
+    "peer": "1.0.2",
+    "playwright": "1.56.1",
+    "three": "^0.128.0"
+  }
+}

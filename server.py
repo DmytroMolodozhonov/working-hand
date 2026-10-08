@@ -1,193 +1,189 @@
+"""
+ЗОМБИ НЕ СПЯТ — локальный игровой сервер.
+
+Запуск:  python server.py   (или двойной клик по «Запустить игру.bat»)
+Откроется браузер на http://localhost:8000
+
+API:
+  GET    /api/maps            — все карты из папки maps/
+  POST   /api/maps            — сохранить новую карту
+  DELETE /api/maps?name=...   — удалить карту
+  GET    /api/rig             — настройки рига рук
+  POST   /api/rig             — сохранить настройки рига рук
+"""
+
 import http.server
-import socketserver
 import json
+import mimetypes
 import os
+import socketserver
 import sys
+import threading
+import webbrowser
+from urllib.parse import parse_qs, urlparse
 
-# Change directory to the script's directory to serve files correctly
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.abspath(__file__))
+os.chdir(ROOT)
 
-PORT = 8000
-MAPS_DIR = 'maps'
+PORT = int(os.environ.get("ZNS_PORT", "8000"))
+MAPS_DIR = "maps"
+RIG_FILE = "hand_rig.json"
+MAX_BODY = 5 * 1024 * 1024  # 5 MB is plenty for a map
+
+# Windows often maps .js to text/plain in the registry, which breaks ES modules.
+# Force correct types for everything the game serves.
+FORCED_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".wasm": "application/wasm",
+    ".task": "application/octet-stream",
+    ".tflite": "application/octet-stream",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".jpg": "image/jpeg",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+}
+for ext, ctype in FORCED_TYPES.items():
+    mimetypes.add_type(ctype.split(";")[0], ext)
+
+
+def safe_map_name(name):
+    if not isinstance(name, str):
+        return ""
+    return "".join(c for c in name if c.isalpha() or c.isdigit() or c in (" ", "-", "_")).strip()[:64]
+
 
 class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
+    extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map, **FORCED_TYPES}
+
+    def log_message(self, fmt, *args):
+        # Quiet static-file spam; keep API and errors visible.
+        if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
+            super().log_message(fmt, *args)
+
+    def end_headers(self):
+        # Game code changes between versions — never serve stale scripts.
+        path = urlparse(self.path).path
+        if path.endswith((".js", ".mjs", ".html", ".css", ".json")) or path == "/":
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
+    # ---------- helpers ----------
+    def _json(self, code, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0 or length > MAX_BODY:
+            raise ValueError("Bad request body size")
+        return json.loads(self.rfile.read(length).decode("utf-8"))
+
+    # ---------- GET ----------
     def do_GET(self):
-        # API: Get all maps
-        if self.path == '/api/maps':
+        path = urlparse(self.path).path
+        if path == "/api/maps":
             maps = {}
-            if os.path.exists(MAPS_DIR):
-                for filename in os.listdir(MAPS_DIR):
-                    if filename.endswith('.json'):
-                        map_name = filename[:-5] # remove .json
+            if os.path.isdir(MAPS_DIR):
+                for filename in sorted(os.listdir(MAPS_DIR)):
+                    if filename.endswith(".json"):
                         try:
-                            with open(os.path.join(MAPS_DIR, filename), 'r', encoding='utf-8') as f:
-                                maps[map_name] = json.load(f)
-                        except Exception as e:
+                            with open(os.path.join(MAPS_DIR, filename), "r", encoding="utf-8") as f:
+                                maps[filename[:-5]] = json.load(f)
+                        except Exception as e:  # noqa: BLE001 - a broken map must not break the list
                             print(f"Error loading map {filename}: {e}")
-            
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(maps).encode('utf-8'))
-            return
+            return self._json(200, maps)
 
-        # Default static file serving
-        super().do_GET()
-
-    def do_DELETE(self):
-        # API: Delete map
-        if self.path.startswith('/api/maps'):
-            try:
-                # Parse query params or just take the name from the query string ?name=...
-                # Simpler: Expect {"name": "mapname"} in body or handle url parsing
-                # Let's use reading body for consistency with POST, or query param. 
-                # Query param is standard for DELETE usually.
-                
-                from urllib.parse import urlparse, parse_qs
-                query = parse_qs(urlparse(self.path).query)
-                map_name = query.get('name', [None])[0]
-                
-                if not map_name:
-                    content_length = int(self.headers['Content-Length'])
-                    if content_length > 0:
-                        body = self.rfile.read(content_length).decode('utf-8')
-                        data = json.loads(body)
-                        map_name = data.get('name')
-
-                if not map_name:
-                     raise ValueError("No map name provided")
-
-                # Sanitize
-                safe_name = "".join([c for c in map_name if c.isalpha() or c.isdigit() or c in (' ', '-', '_')]).strip()
-                file_path = os.path.join(MAPS_DIR, f"{safe_name}.json")
-
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "success", "message": f"Map '{safe_name}' deleted"}).encode('utf-8'))
-                else:
-                    self.send_error(404, "Map not found")
-            
-            except Exception as e:
-                print(f"Error deleting map: {e}")
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
-            return
-        
-        # API: Get rigging data
-        if self.path == '/api/rig':
-            rig_path = 'hand_rig.json'
-            if os.path.exists(rig_path):
+        if path == "/api/rig":
+            if os.path.exists(RIG_FILE):
                 try:
-                    with open(rig_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps(data).encode('utf-8'))
-                except Exception as e:
-                    self.send_error(500, str(e))
-            else:
-                # Return empty default
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({}).encode('utf-8'))
-            return
+                    with open(RIG_FILE, "r", encoding="utf-8") as f:
+                        return self._json(200, json.load(f))
+                except Exception as e:  # noqa: BLE001
+                    return self._json(500, {"status": "error", "message": str(e)})
+            return self._json(200, {})
 
-        self.send_error(404)
+        return super().do_GET()
 
+    # ---------- POST ----------
     def do_POST(self):
-        # API: Save rigging data
-        if self.path == '/api/rig':
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            
-            try:
-                rig_data = json.loads(post_data.decode('utf-8'))
-                with open('hand_rig.json', 'w', encoding='utf-8') as f:
-                    json.dump(rig_data, f, ensure_ascii=False, indent=2)
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "success", "message": "Rig saved"}).encode('utf-8'))
-            except Exception as e:
-                self.send_error(500, str(e))
-            return
+        path = urlparse(self.path).path
+        try:
+            if path == "/api/rig":
+                data = self._read_json()
+                with open(RIG_FILE, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                return self._json(200, {"status": "success", "message": "Rig saved"})
 
-        # API: Save map
-        if self.path == '/api/maps':
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            
-            try:
-                map_data = json.loads(post_data.decode('utf-8'))
-                map_name = map_data.get('name')
-                
-                if not map_name:
-                    raise ValueError("No map name provided")
-                
-                # Sanitize filename (basic)
-                safe_name = "".join([c for c in map_name if c.isalpha() or c.isdigit() or c in (' ', '-', '_')]).strip()
+            if path == "/api/maps":
+                map_data = self._read_json()
+                safe_name = safe_map_name(map_data.get("name"))
                 if not safe_name:
                     raise ValueError("Invalid map name")
-
-                if not os.path.exists(MAPS_DIR):
-                    os.makedirs(MAPS_DIR)
-
+                os.makedirs(MAPS_DIR, exist_ok=True)
                 file_path = os.path.join(MAPS_DIR, f"{safe_name}.json")
-                
-                # Check if exists (Prevent Overwrite)
                 if os.path.exists(file_path):
-                    self.send_response(409) # Conflict
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": "Map with this name already exists"}).encode('utf-8'))
-                    return
-                
-                with open(file_path, 'w', encoding='utf-8') as f:
+                    return self._json(409, {"status": "error", "message": "Map with this name already exists"})
+                with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(map_data, f, ensure_ascii=False, indent=2)
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "success", "message": f"Map '{safe_name}' saved"}).encode('utf-8'))
-                
-            except Exception as e:
-                print(f"Error saving map: {e}")
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
-            return
-            
-        self.send_error(404)
+                return self._json(200, {"status": "success", "message": f"Map '{safe_name}' saved"})
+        except Exception as e:  # noqa: BLE001
+            print(f"POST {path} failed: {e}")
+            return self._json(500, {"status": "error", "message": str(e)})
+        return self._json(404, {"status": "error", "message": "Not found"})
 
-print(f"Starting Game Server on port {PORT}...")
-print(f"Maps directory: {os.path.abspath(MAPS_DIR)}")
+    # ---------- DELETE ----------
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/api/maps":
+            return self._json(404, {"status": "error", "message": "Not found"})
+        try:
+            name = parse_qs(parsed.query).get("name", [None])[0]
+            if not name and int(self.headers.get("Content-Length") or 0) > 0:
+                name = self._read_json().get("name")
+            safe_name = safe_map_name(name)
+            if not safe_name:
+                raise ValueError("No map name provided")
+            file_path = os.path.join(MAPS_DIR, f"{safe_name}.json")
+            if not os.path.exists(file_path):
+                return self._json(404, {"status": "error", "message": "Map not found"})
+            os.remove(file_path)
+            return self._json(200, {"status": "success", "message": f"Map '{safe_name}' deleted"})
+        except Exception as e:  # noqa: BLE001
+            return self._json(500, {"status": "error", "message": str(e)})
 
-# Allow address reuse to prevent "Address already in use" errors on restart
-socketserver.TCPServer.allow_reuse_address = True
 
-with socketserver.TCPServer(("", PORT), GameRequestHandler) as httpd:
+class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def main():
+    no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
+    httpd = ThreadingServer(("", PORT), GameRequestHandler)
+    url = f"http://localhost:{PORT}"
+    print("=" * 50)
+    print("  ЗОМБИ НЕ СПЯТ — сервер запущен")
+    print(f"  Откройте в браузере: {url}")
+    print("  Чтобы остановить — закройте это окно (или Ctrl+C)")
+    print("=" * 50)
+    if not no_browser:
+        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     try:
-        # Open browser in a separate thread after a slight delay
-        def open_browser():
-            import time
-            import webbrowser
-            time.sleep(1.5) # Wait for server to start
-            webbrowser.open(f'http://localhost:{PORT}')
-            print("Browser tab opened!")
-
-        import threading
-        threading.Thread(target=open_browser, daemon=True).start()
-
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down server...")
-        httpd.shutdown()
+        print("\nСервер остановлен.")
+    finally:
+        httpd.server_close()
+
+
+if __name__ == "__main__":
+    main()

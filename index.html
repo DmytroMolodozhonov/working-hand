@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Voxel Game - Pose Control</title>
-    <link rel="stylesheet" href="style.css?v=4">
+    <title>ЗОМБИ НЕ СПЯТ</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -20,6 +20,7 @@
             <p>Ударов: <span id="punch-count">0</span></p>
             <p id="fps-counter" style="color: #00ff00; font-family: monospace;">FPS: 60</p>
         </div>
+        <div id="mp-hud" class="hidden"></div>
     </div>
     <div id="damage-flash" class="hidden"></div>
 
@@ -98,6 +99,27 @@
                             <input type="range" id="creative-zombie-count" min="0" max="50" value="0"
                                 style="width: 100%;">
                         </div>
+                    </div>
+
+                    <!-- MULTIPLAYER -->
+                    <div id="mp-panel">
+                        <h4>Мультиплеер (по интернету)</h4>
+                        <div class="mp-row">
+                            <label for="mp-name">Ваше имя:</label>
+                            <input type="text" id="mp-name" maxlength="16" placeholder="Игрок">
+                        </div>
+                        <div class="mp-row">
+                            <button id="mp-host-btn" class="mp-btn">🌐 Создать игру</button>
+                            <span class="mp-or">или</span>
+                            <input type="text" id="mp-code" maxlength="8" placeholder="КОД">
+                            <button id="mp-join-btn" class="mp-btn">Подключиться</button>
+                        </div>
+                        <div id="mp-status"></div>
+                        <div id="mp-players"></div>
+                        <details id="mp-advanced">
+                            <summary>Свой сервер связи (необязательно)</summary>
+                            <input type="text" id="mp-server" placeholder="например: localhost:9000/zns">
+                        </details>
                     </div>
 
                     <button id="start-btn" style="margin-top: 20px;">ИГРАТЬ</button>
@@ -217,7 +239,7 @@
                     <div class="settings-group">
                         <h3 style="color: #ff4757; margin-bottom: 15px;">🎤 Проверка Голоса</h3>
                         <p style="color: #a4b0be; margin-bottom: 20px;">Произнесите команду (например: "Инферно", "Лед",
-                            "Гром"), и система отобразит распознанный текст ниже.</p>
+                            "Гром", "Бомбардо"), и система отобразит распознанный текст ниже.</p>
 
                         <div id="voice-test-output"
                             style="background: rgba(0,0,0,0.4); padding: 30px; border-radius: 12px; border: 2px dashed #ff4757; text-align: center; margin-bottom: 20px;">
@@ -440,39 +462,12 @@
             style="width: 100%; height: 100%; background: #000;"></canvas>
     </div>
 
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
-
-    <!-- MediaPipe -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js"
-        crossorigin="anonymous"></script>
-
-    <!-- Kalidokit - proper pose solver -->
-    <script src="https://cdn.jsdelivr.net/npm/kalidokit@1.1/dist/kalidokit.umd.js"></script>
-
-    <!-- Game Scripts -->
-    <script src="poseService.js?v=26"></script>
-    <script src="test_api.py?v=26" type="text/python"></script>
-    <script src="SoundManager.js?v=27"></script>
-    <script src="VoiceService.js?v=27"></script>
-    <script src="SpellManager.js?v=27"></script>
-    <script src="Item.js?v=27"></script>
-    <script src="Chest.js?v=27"></script>
-    <script src="Zombie.js?v=27"></script>
-    <script src="Zombie.js?v=27"></script>
-    <script src="DetailedHand.js"></script>
-    <script src="SimplifiedHand.js"></script>
-    <script src="Character.js?v=27"></script>
-    <script src="World.js?v=27"></script>
-    <script src="MapEditor.js?v=27"></script>
-    <script src="WeaponEditor.js?v=27"></script>
-    <script src="RiggingManager.js?v=1"></script>
-    <script src="main.js?v=43"></script>
+    <!-- Libraries are bundled locally in vendor/ (works offline, no CDN outages) -->
+    <script src="vendor/peerjs/peerjs.min.js"></script>
+    <script type="importmap">
+        { "imports": { "three": "./vendor/three/three.module.js" } }
+    </script>
+    <script type="module" src="src/main.js"></script>
 </body>
 
 </html>

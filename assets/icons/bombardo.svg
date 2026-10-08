@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="core" cx="45%" cy="40%" r="60%">
+      <stop offset="0" stop-color="#fff6c8"/>
+      <stop offset="0.35" stop-color="#ffc247"/>
+      <stop offset="0.75" stop-color="#ff5a00"/>
+      <stop offset="1" stop-color="#8a1c00"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0.5" stop-color="#ff7a00" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ff3d00" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#glow)"/>
+  <g fill="#ffb347">
+    <polygon points="64,4 72,34 56,34"/>
+    <polygon points="124,64 94,72 94,56"/>
+    <polygon points="64,124 56,94 72,94"/>
+    <polygon points="4,64 34,56 34,72"/>
+    <polygon points="106,22 88,46 82,40"/>
+    <polygon points="106,106 82,88 88,82"/>
+    <polygon points="22,106 40,82 46,88"/>
+    <polygon points="22,22 46,40 40,46"/>
+  </g>
+  <circle cx="64" cy="64" r="30" fill="url(#core)"/>
+  <rect x="56" y="56" width="7" height="7" fill="#7a5230"/>
+  <rect x="68" y="66" width="6" height="6" fill="#8a8a8a"/>
+  <rect x="58" y="70" width="5" height="5" fill="#4CAF50"/>
+</svg>

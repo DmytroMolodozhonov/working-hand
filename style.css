@@ -989,3 +989,98 @@ body {
     color: #ff4757;
     font-weight: bold;
 }
+/* ---------------- Multiplayer ---------------- */
+#mp-panel {
+    margin-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 15px;
+    text-align: left;
+}
+
+#mp-panel h4 {
+    color: #3498db;
+    margin: 0 0 10px 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.mp-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.mp-row label {
+    color: #bdc3c7;
+}
+
+#mp-panel input[type="text"] {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid #34495e;
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+#mp-code {
+    width: 90px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-align: center;
+}
+
+.mp-btn {
+    padding: 8px 14px !important;
+    font-size: 0.9rem !important;
+    margin: 0 !important;
+    background: #2980b9 !important;
+}
+
+.mp-or {
+    color: #7f8c8d;
+}
+
+#mp-status {
+    color: #f1c40f;
+    min-height: 1.2em;
+    font-size: 0.9rem;
+}
+
+#mp-status .mp-code-big {
+    font-size: 1.6rem;
+    letter-spacing: 4px;
+    color: #2ecc71;
+    font-weight: bold;
+    user-select: all;
+}
+
+#mp-players {
+    color: #ecf0f1;
+    font-size: 0.85rem;
+    margin-top: 4px;
+}
+
+#mp-advanced {
+    margin-top: 6px;
+    color: #7f8c8d;
+    font-size: 0.8rem;
+}
+
+#mp-advanced input {
+    margin-top: 6px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#mp-hud {
+    margin-top: 8px;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: #ecf0f1;
+    line-height: 1.4;
+}
