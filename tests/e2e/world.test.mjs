@@ -576,13 +576,13 @@ test('«Левиоса» + «Атак»: the floating sword flies into a zombie 
         for (let i = 0; i < 60 && !w.stuckIn; i++) await frames(1);
         const stuck = !!w.stuckIn;
         const hp1 = z.health;
-        await new Promise((res) => setTimeout(res, 2500));
+        for (let i = 0; i < 80 && !z.isDead && z.health >= hp1; i++) await frames(1); // (game time: slow test machines)
         const hp2 = z.isDead ? -1 : z.health;
         // my own bleeding (in creative nobody bleeds): switch to a survival-like check
         g.config.mode = 'survival';
         g.playerHP = 20;
         g.bleeding.start(1);
-        await new Promise((res) => setTimeout(res, 5000));
+        for (let i = 0; i < 200 && g.playerHP > 18; i++) await frames(1);
         const bled = g.playerHP;
         const c0 = g.combat.center.bind(g.combat);
         g.combat.center = (out) => g.character.getHandWorldPosition('right', out || new T.Vector3());
