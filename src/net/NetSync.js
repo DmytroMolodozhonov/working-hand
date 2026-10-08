@@ -220,6 +220,17 @@ export class NetSync {
         this.net.send({ t: 'zhit', id: z.id, res, by });
     }
 
+    /** A weapon went into my inventory (gone from the world) / came out of it. */
+    weaponGone(w) {
+        this.weaponOwners.delete(w.id);
+        this.net.send({ t: 'wgone', w: w.id }, true);
+    }
+
+    weaponAppeared(w) {
+        this.weaponOwners.set(w.id, this.me);
+        this.net.send({ t: 'wnew', w: w.id, type: w.type, s: w.serialize(), owner: this.me }, true);
+    }
+
     /** «Брейнрот» from a guest: the host makes the zombie a servant. */
     brainrot(zid) {
         this.net.send({ t: 'brainrot', id: zid, by: this.me });
@@ -331,6 +342,18 @@ export class NetSync {
                 const z = g.zombieById.get(m.id);
                 const h = Array.isArray(m.h) ? { y: +m.h[0] || 0, side: m.h[1] > 0 ? 1 : -1, speed: Math.min(40, +m.h[2] || 0) } : null;
                 if (z && !z.isDead) g.damageZombie(z, Math.min(10, m.dmg | 0 || 1), !!m.w, vec(m.dir || [0, 0, 1]), m.from, h);
+                break;
+            }
+            case 'wgone': {
+                const w = g.weapons.byId.get(m.w);
+                if (w) { this.weaponOwners.delete(m.w); g.weapons.remove(w); }
+                break;
+            }
+            case 'wnew': {
+                if (g.weapons.byId.has(m.w)) break;
+                const w = g.weapons.spawn(m.type === 'axe' ? 'axe' : 'sword', vec(m.s.slice(2, 5)), new THREE.Quaternion(m.s[5], m.s[6], m.s[7], m.s[8]), m.w);
+                this.weaponOwners.set(m.w, m.owner || m.from);
+                w.setRemoteTarget(m.s);
                 break;
             }
             case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;

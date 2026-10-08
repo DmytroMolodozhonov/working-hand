@@ -18,9 +18,9 @@ const _stormFog = new THREE.Color(0x2b3038);
 // (oak, birch, spruce, cherry, dark oak) — the same kinds as the voxel trees further out
 const SPAWN_TREE_TINTS = [
     { leaf: [1, 1, 1], trunk: [1, 1, 1] },
-    { leaf: [1.45, 1.2, 0.75], trunk: [2.6, 3.2, 3.9] },
+    { leaf: [1.45, 1.2, 0.75], trunk: [1.6, 3.2, 10.7] }, // white bark (brown × these ≈ white)
     { leaf: [0.55, 0.62, 0.8], trunk: [0.68, 0.75, 0.8] },
-    { leaf: [3.2, 1.25, 2.6], trunk: [0.82, 0.62, 0.72] },
+    { leaf: [5.2, 1.2, 4.2], trunk: [0.82, 0.62, 0.72] }, // pink blossom
     { leaf: [0.75, 0.62, 0.55], trunk: [0.48, 0.45, 0.42] },
 ];
 const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog

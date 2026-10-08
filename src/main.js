@@ -397,6 +397,7 @@ voice.onResult = (command, isFinal = true) => {
 window.addEventListener('keydown', (e) => {
     if (!game || !game.active || e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
+    if (k >= '1' && k <= '5' && game.inventory) game.inventory.select(parseInt(k, 10) - 1);
     if (k === 'm' || k === 'ь') game.castDebug('Inferno');
     if (k === 'b' || k === 'и') game.castDebug('Bombardo');
     if (k === 'n' || k === 'т') game.castDebug('BombardoMaxima');

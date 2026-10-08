@@ -21,6 +21,7 @@ import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Accio } from './Accio.js';
 import { Storm } from '../fx/Storm.js';
+import { Inventory } from './Inventory.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -165,6 +166,8 @@ export class Game {
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
+        this.inventory = new Inventory(this); // five slots under the fatigue bar
+        this.inventory.show(config.mode !== 'test');
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
@@ -1129,6 +1132,7 @@ export class Game {
 
         this.levitation.update(dt);
         this.accio.update(dt);
+        this.inventory.update(dt);
         this.storm.update(dt);
         this._updateLightning(dt);
         this.duel.update(dt);
@@ -1579,6 +1583,7 @@ export class Game {
     // ================================================================ cleanup
     dispose() {
         this.stop();
+        this.inventory?.dispose();
         if (this.sync) this.sync.dispose();
         this.sync = null;
         for (const r of this.remotes.values()) r.dispose();
