@@ -447,8 +447,18 @@ export class Game {
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
         // Duel magic: a charge flies at the creature the hand points at
-        if (name === 'Stupefy' || name === 'AvadaKedavra') return this._castDuel(name, name, isFinal);
-        if (name === 'Sapira') return this._castDuel('Sapira', 'SapiraDuel', isFinal);
+        // Duel spells need a raised, pointing hand: the word alone (e.g. a friend's voice
+        // reaching this microphone) never fires them while the arms hang down
+        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : (name === 'Stupefy' || name === 'AvadaKedavra') ? name : null;
+        if (duelSpell) {
+            const aim = this.duel.pickSide(false);
+            const side = aim ? aim.side : (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : ['right', 'left'].find((s) => this.character.isArmRaised(s)));
+            if (!side || !this.character.isArmRaised(side)) {
+                if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
+                return null;
+            }
+            return this._castDuel(name, duelSpell, isFinal, aim || null, side);
+        }
         // Ice / levitation aimed at a wizard become duel spells
         if ((name === 'Ice' || name === 'Frozen') && performance.now() - (this.water.frozenAt || -1e9) > 4000) {
             const aim = this.water.active ? null : this.duel.pickSide(true);
@@ -558,7 +568,7 @@ export class Game {
     }
 
     /** Duel spell: costs fatigue, flies to the pointed-at creature (or straight ahead). */
-    _castDuel(costName, spell, isFinal, aim = undefined) {
+    _castDuel(costName, spell, isFinal, aim = undefined, side = null) {
         const now = Date.now();
         const early = this._interimCast;
         if (isFinal && early && early.name === costName && now - early.at < 3000) { this._interimCast = null; return null; }
@@ -566,7 +576,7 @@ export class Game {
         const tired = this.combat.check(costName);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         const target = aim === undefined ? this.duel.pickSide(false) : aim;
-        this.duel.cast(spell, target);
+        this.duel.cast(spell, target, side);
         this.combat.pay(costName);
         this._lastDuelCast = now;
         this._interimCast = isFinal ? null : { name: costName, at: now };

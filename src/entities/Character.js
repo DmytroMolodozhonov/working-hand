@@ -274,6 +274,20 @@ export class VoxelCharacter {
         return hand.distanceTo(shoulder) > 0.82 * (this.BONE_LENGTH_UPPER + this.BONE_LENGTH_LOWER);
     }
 
+    /**
+     * Is this arm lifted (pointing somewhere), not hanging down along the body?
+     * The hand is more than ~60° up from straight down.
+     */
+    isArmRaised(side) {
+        const anchor = side === 'left' ? this.leftArmAnchor : this.rightArmAnchor;
+        anchor.updateMatrixWorld(true);
+        const shoulder = anchor.getWorldPosition(_v2);
+        const hand = this.getHandWorldPosition(side, _v1);
+        const v = hand.sub(shoulder);
+        const len = v.length();
+        return len > 1e-3 && v.y / len > -0.5;
+    }
+
     /** Both arms stretched out sideways at shoulder height (a «T»). */
     isTPose() {
         if (!this.isArmExtended('left') || !this.isArmExtended('right')) return false;

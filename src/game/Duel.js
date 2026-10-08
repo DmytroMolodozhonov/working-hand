@@ -148,9 +148,9 @@ export class Duel {
      * @param {string} spell  key of DUEL_SPELLS
      * @param {object} [aim] {side, t} from pickSide (else: straight ahead from the spell hand)
      */
-    cast(spell, aim = null) {
+    cast(spell, aim = null, handSide = null) {
         const g = this.game;
-        const side = aim ? aim.side : (g.magicHand || g.lastMagicHand || 'right');
+        const side = aim ? aim.side : (handSide || g.magicHand || g.lastMagicHand || 'right');
         const origin = g.character.getHandWorldPosition(side, new THREE.Vector3());
         const dir = g.character.getHandDirection(side, new THREE.Vector3());
         const b = this._addBolt({

@@ -263,12 +263,18 @@ test('Свободный мир: no tables, 10 HP, fatigue, spells hurt players,
     const fat = await ev(host.page, () => {
         const g = window.__zns.game;
         g.lastMagicTime = Date.now(); g.lastSpellCastTime = 0;
+        // Arms hanging down (no camera here): the word alone — e.g. the other player's
+        // voice reaching this microphone — casts nothing
+        g.character.isArmRaised = () => false; // (without a camera the arms stick out forward)
+        const hanging = g.castLocalSpell('сапира', true);
+        g.character.isArmRaised = () => true; // now the hand is raised and points at the guest
         const a = g.castLocalSpell('сапира', true);
         const f1 = g.combat.fatigue;
         g.lastSpellCastTime = 0;
         const b = g.castLocalSpell('сапира', true);
-        return { a, b, f1 };
+        return { hanging, a, b, f1 };
     });
+    assert.equal(fat.hanging, null, 'no duel spell with the arms down');
     assert.equal(fat.a, 'Sapira');
     assert.ok(fat.f1 <= 10.5, `fatigue spent (${fat.f1})`);
     assert.equal(fat.b, null, 'not enough strength');
