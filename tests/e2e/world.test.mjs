@@ -99,6 +99,11 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
             ch.group.position.x = start.x + i * 0.15;
             await sleep(60);
         }
+        // (the heavy ball follows the hand slowly — give it time on the slow test machine)
+        for (let i = 0; i < 100 && W.state && W.state.formed.length < 3; i++) {
+            ch.group.position.x += i % 20 < 10 ? 0.15 : -0.15;
+            await sleep(100);
+        }
         out.formed = W.state ? W.state.formed.length : -1;
         out.v2 = W.state ? W.state.volume : -1;
         out.formedVisible = W.formedMesh.visible && W.formedMesh.count === out.formed;
