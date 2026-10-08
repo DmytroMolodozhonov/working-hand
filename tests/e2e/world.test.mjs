@@ -437,7 +437,7 @@ test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «
         for (let rad = 200; rad <= 1600 && !cave; rad += 200) cave = g.terrain.data.cavesNear(0, 0, rad).sort((a, b) => Math.hypot(a.kx, a.kz) - Math.hypot(b.kx, b.kz))[0];
         if (!cave) return { noCave: true };
         // walk in: stand at the entrance, then inside the chamber (under the rock)
-        ch.group.position.set(cave.kx + 2, cave.F + 1.6, cave.kz + 2);
+        ch.group.position.set(cave.kx + 0.5, cave.F + 1.6, cave.kz + 1.5); // (in the middle of the chamber, under the rock)
         await frames(40);
         const p = ch.group.position;
         const floorOk = Math.abs((p.y - 2.0) - (cave.F - 0.5)) < 0.6; // standing on the cave floor, not on the mountain

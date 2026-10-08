@@ -535,7 +535,10 @@ export class Game {
         }
         // darkness: rock above the head
         const head = Math.floor(p.y + 2.4 + 1.5);
-        const covered = t.solidIn(Math.round(p.x), Math.round(p.z), head, head + 14) ? 1 : 0;
+        // rock above the head here and around (so the light doesn't flicker at the edges)
+        let n = 0;
+        for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) if (t.solidIn(Math.round(p.x) + dx, Math.round(p.z) + dz, head, head + 14)) n++;
+        const covered = n >= 3 ? 1 : 0;
         this._caveK = (this._caveK || 0) + (covered - (this._caveK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
     }
