@@ -64,6 +64,8 @@ export class VoxelCharacter {
         // Yaw first, then tilt (flight). Identical to the old order while upright.
         this.group.rotation.order = 'YXZ';
         this.flightTilt = 0;
+        this.knockedDown = false; // «Earthquake»: lying on the ground for a few seconds
+        this._fallRoll = 0;
         this.flying = false;
     }
 
@@ -391,6 +393,9 @@ export class VoxelCharacter {
 
         // Crouching lowers the body by 1 m: the legs fold back (kneeling) so they stay above the ground
         const crouchAngle = this.isCrouching ? -1.1 : 0;
+        // Knocked down: falls on its side (and gets up again)
+        this._fallRoll += ((this.knockedDown ? 1.4 : 0) - this._fallRoll) * Math.min(1, dt * 6);
+        if (Math.abs(this._fallRoll) > 0.002 || this.group.rotation.z !== 0) this.group.rotation.z = this._fallRoll;
 
         if (move) {
             // Movement (original speeds)
@@ -404,7 +409,7 @@ export class VoxelCharacter {
             // Ground following + gravity (flat ground keeps the original baseY exactly)
             const ground = collision ? collision.groundY(this.group.position.x, this.group.position.z) : -0.5;
             this.groundY = ground;
-            const crouchDrop = this.isCrouching ? 1.0 : 0;
+            const crouchDrop = this.knockedDown ? 1.45 : this.isCrouching ? 1.0 : 0;
             const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;
             const y = this.group.position.y;
             if (y > targetY + 0.6 && !this.isCrouching) {
@@ -529,6 +534,7 @@ export class VoxelCharacter {
             ra: q(this.rightArmAnchor), re: q(this.rightElbowAnchor),
             run: this.isRunning ? r2(this.runIntensity) : -1,
             cr: this.isCrouching ? 1 : 0,
+            kd: this.knockedDown ? 1 : 0,
             lh: this.leftSimplifiedHand.serializeState(),
             rh: this.rightSimplifiedHand.serializeState(),
         };

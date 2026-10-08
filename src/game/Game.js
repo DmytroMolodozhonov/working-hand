@@ -132,6 +132,7 @@ export class Game {
             players: (casterId) => this._spellPlayers(casterId),
             weapons: () => this.weapons.weapons,
             blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
+            quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
             ignite: (o, d, len) => this.fire.igniteAlong(o, d, len),
             collision: this.collision,
             terrain: () => this.terrain,
@@ -489,6 +490,7 @@ export class Game {
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
+        if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // Levitation: point the hand at an object (or a creature: a duel spell)
         if (name === 'Levitation') {
             const aim = this.levitation.active ? null : this.duel.pickSide(false);
@@ -672,6 +674,53 @@ export class Game {
             else if (this.sync) this.sync.brainrot(zid);
         }, arrive);
         return 'Brainrot';
+    }
+
+    /**
+     * «Earthquake»: lift a leg and stomp, both hands pointing where the quake
+     * should run. (If the camera doesn't see the legs, the hands are enough.)
+     */
+    _castEarthquake(name, isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (name === 'Earthquake' && !isFinal) return null; // wait: maybe «…Максима»
+        if (now - (this._lastQuake || 0) < 1500) return null;
+        const ch = this.character;
+        const hint = (t) => { if (isFinal) this.hud.setVoice(t, true); return null; };
+        if (!ch.isArmRaised('left') || !ch.isArmRaised('right')) return hint('🌋 Поднимите <b>обе руки</b> в сторону удара, топните ногой и скажите «Earthquake»');
+        const pose = this.currentPose || {};
+        const t = performance.now();
+        const legsVisible = pose.legsSeenAt && t - pose.legsSeenAt < 3000;
+        if (legsVisible && !(pose.stompAt && t - pose.stompAt < 2500)) return hint('🌋 Поднимите ногу и <b>топните</b> — и сразу скажите «Earthquake»');
+        const tired = this.combat.check(name);
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        const dir = ch.getHandDirection('left').add(ch.getHandDirection('right')).setY(0);
+        if (dir.lengthSq() < 0.01) dir.set(-Math.sin(ch.group.rotation.y), 0, -Math.cos(ch.group.rotation.y));
+        dir.normalize();
+        const origin = ch.group.position.clone();
+        origin.y = this.collision.surfaceY(origin.x, origin.z);
+        this.spells.cast(name, origin, dir, 'right', this.localId);
+        if (this.sync) this.sync.spell(name, origin, dir, 'right');
+        this.fx.shake = Math.max(this.fx.shake, name === 'EarthquakeMaxima' ? 1.4 : 0.8);
+        this.combat.pay(name);
+        this._lastQuake = now;
+        this._interimCast = isFinal ? null : { name, at: now };
+        return name;
+    }
+
+    /** Another wizard's quake ran under me: I fall for a few seconds and get hurt. */
+    _quakeMe(casterId, origin, reached, power) {
+        if (casterId === 'local' || casterId === this.localId) return false;
+        const c = this.combat;
+        if (!c.enabled || c.dead || this.flight.active) return false;
+        if (!reached(this.character.group.position)) return false;
+        if (c.shield && c.shield.type === 2 && c.shield.left > 0) { c._blocked(origin); return true; } // the dome holds
+        c.stun(power > 1 ? 4 : 2.5, casterId, 'quake');
+        this.character.knockedDown = true;
+        this.fx.shake = Math.max(this.fx.shake, 1.2);
+        c.damage(power > 1 ? 9 : 3, casterId, 'Earthquake');
+        return true;
     }
 
     /** The zombie becomes `by`'s servant for 45 s (authority: host / single player). */

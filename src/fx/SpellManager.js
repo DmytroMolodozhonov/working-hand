@@ -41,6 +41,7 @@ export function matchSpell(text) {
     if (has('авада', 'кедавр', 'кидавр', 'avada', 'kedavr', 'kadavr', 'водокидавр', 'адакедавр')) return 'AvadaKedavra';
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
     if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return 'Levitation';
+    if (has('earthquake', 'earth quake', 'earthcake', 'эрсквейк', 'эртквейк', 'ерсквейк', 'эрскейк', 'эрткейк', 'эрс квейк', 'квейк', 'quake', 'землетряс', 'эрскейп')) return has('макс', 'max', 'мах') ? 'EarthquakeMaxima' : 'Earthquake';
     if (has('брейнрот', 'брейн рот', 'брейнрод', 'брэйнрот', 'brainrot', 'brain rot', 'брейн', 'брэйн', 'brain')) return 'Brainrot';
     if (has('вайнд', 'винд', 'вайн', 'уинд', 'wind', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
@@ -119,9 +120,9 @@ export class SpellManager {
         this.soundManager = sm;
     }
 
-    _sound(fn) {
+    _sound(fn, ...args) {
         if (!this.soundManager || !this.soundManager[fn]) return;
-        try { this.soundManager[fn](); } catch (e) { console.warn('Sound error', e); }
+        try { this.soundManager[fn](...args); } catch (e) { console.warn('Sound error', e); }
     }
 
     get zombies() {
@@ -154,7 +155,9 @@ export class SpellManager {
             case 'Sapira': this.castSapira(o, d, casterId); break;
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
             case 'Wind': this.castWind(o, d, casterId, 1); break;
-            case 'Brainrot': this.castBrainrot(o, d); break;
+            case 'Brainrot': this.castBrainrot(o, direction.clone()); break; // (its length = the distance)
+            case 'Earthquake': this.castEarthquake(o, d, casterId, 1); break;
+            case 'EarthquakeMaxima': this.castEarthquake(o, d, casterId, 3); break;
             case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
             case 'Inferno': this.castInferno(o, d, casterId); break;
             case 'Sands': this.castSands(o, d, casterId); break;
@@ -284,6 +287,100 @@ export class SpellManager {
                 p.hit('Thunderwave', origin, dirTo.clone().setY(0.2).multiplyScalar(26));
             }
         }
+    }
+
+    // ---------------------------------------------------------- Earthquake
+    /**
+     * «Earthquake»: a stomp sends a quake along the ground in one direction — a
+     * crack opens, dust and stones jump, and everything it runs under falls
+     * down for a few seconds and gets hurt. Maxima: 3× stronger, longer, wider.
+     */
+    castEarthquake(origin, direction, casterId, power = 1) {
+        this._sound('playExplosion', origin, origin, power > 1 ? 2 : 1);
+        const dir = direction.clone().setY(0);
+        if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1);
+        dir.normalize();
+        const side = new THREE.Vector3(-dir.z, 0, dir.x);
+        const length = power > 1 ? 32 : 20;
+        const half = power > 1 ? 4 : 2.4; // half-width of the hit strip
+        const SPEED = 16; // m/s the wave runs
+        const ground = (x, z) => (this.hooks.collision ? this.hooks.collision.surfaceY(x, z) : 0);
+        // The crack: a jagged dark line on the ground that opens as the wave passes
+        const crackMat = new THREE.MeshBasicMaterial({ color: 0x1c120c, transparent: true, opacity: 0.95, depthWrite: false });
+        const glowMat = new THREE.MeshBasicMaterial({ color: power > 1 ? 0xff6a2a : 0xd08a4a, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false });
+        const crack = new THREE.Group();
+        this.scene.add(crack);
+        const segs = [];
+        let prev = origin.clone().addScaledVector(dir, 1);
+        const w = power > 1 ? 0.55 : 0.32;
+        for (let d = 2; d <= length; d += 1.6) {
+            const p = origin.clone().addScaledVector(dir, d).addScaledVector(side, (Math.random() - 0.5) * 1.2);
+            for (const q of [prev, p]) q.y = ground(q.x, q.z) + 0.04;
+            const len = prev.distanceTo(p);
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, len), crackMat);
+            m.position.copy(prev).lerp(p, 0.5);
+            m.lookAt(p);
+            m.scale.set(0.01, 1, 1);
+            const glow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.35, 0.05, len), glowMat);
+            glow.position.y = 0.01;
+            m.add(glow);
+            crack.add(m);
+            segs.push({ m, d });
+            prev = p;
+        }
+        const hit = new Set();
+        let t = 0;
+        this.spells.push({
+            life: length / SPEED + 8,
+            onUpdate: (spell, dt) => {
+                t += dt;
+                const front = t * SPEED;
+                for (const s of segs) {
+                    if (s.d > front) continue;
+                    s.m.scale.x = Math.min(1, s.m.scale.x + dt * 6);
+                    // dust and stones jump where the wave passes now
+                    if (s.d > front - SPEED * dt * 1.5 && !s.burst) {
+                        s.burst = true;
+                        const p = s.m.position;
+                        for (let i = 0; i < (power > 1 ? 7 : 4); i++) {
+                            this.fx.spark(_a.set(p.x + (Math.random() - 0.5) * half, p.y + 0.2, p.z + (Math.random() - 0.5) * half), [0x8a6a4a, 0x6b5440, 0xa38766][i % 3], 0.3 + Math.random() * 0.3 * power, _b.set((Math.random() - 0.5) * 3, 3 + Math.random() * 4 * power, (Math.random() - 0.5) * 3), 1.0);
+                        }
+                    }
+                }
+                // Whatever the wave runs under falls down (once)
+                if (front <= length + 1) {
+                    const reached = (pos) => {
+                        const to = _a.subVectors(pos, origin);
+                        const along = to.dot(dir);
+                        if (along < 0.5 || along > length || along > front) return false;
+                        return Math.abs(to.dot(side)) < half;
+                    };
+                    if (this.auth) {
+                        for (const z of this.zombies) {
+                            if (z.isDead || hit.has(z)) continue;
+                            if (!reached(z.group.position)) continue;
+                            hit.add(z);
+                            z.stunTimer = Math.max(z.stunTimer || 0, power > 1 ? 4 : 2.5);
+                            z.vy = Math.max(z.vy || 0, 4 + power * 2);
+                            z.damageCooldown = 0;
+                            this._damage(z, power > 1 ? 12 : 4, false, dir);
+                        }
+                    }
+                    if (this.hooks.quakeMe && !hit.has('me')) {
+                        if (this.hooks.quakeMe(casterId, origin, reached, power)) hit.add('me');
+                    }
+                }
+                // the crack fades away after a while
+                const fade = t - length / SPEED - 5;
+                if (fade > 0) { crackMat.opacity = Math.max(0, 0.95 - fade / 3); glowMat.opacity = Math.max(0, 0.7 - fade / 3); }
+                else glowMat.opacity = 0.45 + Math.sin(t * 9) * 0.25;
+            },
+            onEnd: () => {
+                this.scene.remove(crack);
+                crack.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+                crackMat.dispose(); glowMat.dispose();
+            },
+        });
     }
 
     // ------------------------------------------------------------ Brainrot

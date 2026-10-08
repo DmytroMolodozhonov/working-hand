@@ -90,3 +90,8 @@ test('«Вайнд» / «Вайнд Максима» are recognised', () => {
 test('«Брейнрот» is recognised', () => {
     for (const w of ['брейнрот', 'brainrot', 'брейн рот', 'Брэйнрот']) assert.equal(matchSpell(w), 'Brainrot', w);
 });
+
+test('«Earthquake» / «Earthquake Максима» are recognised', () => {
+    for (const w of ['earthquake', 'эрсквейк', 'Earthcake', 'землетрясение']) assert.equal(matchSpell(w), 'Earthquake', w);
+    for (const w of ['earthquake maxima', 'эрсквейк максима']) assert.equal(matchSpell(w), 'EarthquakeMaxima', w);
+});

@@ -14,6 +14,31 @@ export class PoseInterpreter {
         this.prevWrists = null;
         this.wasCrouching = false;
         this.lastHead = { yaw: 0, pitch: 0 };
+        // «Earthquake» stomp: a knee lifted, then put down hard
+        this.legs = { left: { liftedAt: 0 }, right: { liftedAt: 0 } };
+        this.stompAt = 0;
+        this.legsSeenAt = 0;
+    }
+
+    /**
+     * Knee lift and stomp. Image y grows downwards; a standing knee is about half
+     * a torso below the hip, a lifted knee comes up to the hip's height.
+     */
+    _legs(lm, data, now = performance.now()) {
+        const torso = Math.abs((lm[23].y + lm[24].y) / 2 - (lm[11].y + lm[12].y) / 2) || 0.3;
+        for (const [side, hip, knee] of [['left', 23, 25], ['right', 24, 26]]) {
+            const k = lm[knee], h = lm[hip];
+            if ((k.visibility ?? 1) < 0.5 || (h.visibility ?? 1) < 0.5) continue;
+            this.legsSeenAt = now;
+            const below = (k.y - h.y) / torso; // ~0.5 standing, ~0 knee up
+            const leg = this.legs[side];
+            if (below < 0.28) leg.liftedAt = now;
+            else if (below > 0.42 && leg.liftedAt && now - leg.liftedAt < 1500) {
+                this.stompAt = now; // put down after a lift
+                leg.liftedAt = 0;
+            }
+            data[side + 'KneeUp'] = below < 0.28;
+        }
     }
 
     /**
@@ -66,6 +91,8 @@ export class PoseInterpreter {
             data.isPunching = leftDist > punchThreshold || rightDist > punchThreshold;
             data.punchingHand = leftDist > rightDist ? 'left' : 'right';
 
+            this._legs(lm, data);
+
             // Crouch with hysteresis
             const noseY = data.nose.y;
             if (!this.wasCrouching) { if (noseY > 0.5) this.wasCrouching = true; }
@@ -73,6 +100,8 @@ export class PoseInterpreter {
             data.isCrouching = this.wasCrouching;
         }
 
+        data.stompAt = this.stompAt;
+        data.legsSeenAt = this.legsSeenAt;
         if (results.rightHandLandmarks) data.rightHandLandmarks = results.rightHandLandmarks;
         if (results.leftHandLandmarks) data.leftHandLandmarks = results.leftHandLandmarks;
 

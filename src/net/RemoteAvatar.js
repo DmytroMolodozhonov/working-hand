@@ -102,6 +102,7 @@ export class RemoteAvatar {
         slerp(ch.rightElbowAnchor, s.s.re);
         ch.setRunning(s.s.run >= 0, Math.max(0, s.s.run));
         ch.setCrouching(!!s.s.cr);
+        ch.knockedDown = !!s.s.kd;
         ch.leftSimplifiedHand.applyState(s.s.lh);
         ch.rightSimplifiedHand.applyState(s.s.rh);
         ch.update(dt, null, false);

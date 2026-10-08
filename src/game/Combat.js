@@ -54,6 +54,8 @@ export const SPELL_COST = {
     Accio: 5,
     Wind: 8,
     Brainrot: 15,
+    Earthquake: 10,
+    EarthquakeMaxima: 25,
     WindMaxima: 20,
     Stupefy: 12,
     AvadaKedavra: 25,
@@ -205,9 +207,10 @@ export class Combat {
         return this.frozen || this.stunned || this.dead;
     }
 
-    stun(seconds, byId) {
+    stun(seconds, byId, kind = 'stupefy') {
         this.stunLeft = Math.max(this.stunLeft || 0, seconds);
         this.stunBy = byId;
+        this.stunKind = kind;
         if (this.game.flight?.busy) this.game.flight.land('stunned');
         if (this.game.water?.active) this.game.water.drop();
         if (this.game.levitation?.active) this.game.levitation.release(false);
@@ -389,7 +392,11 @@ export class Combat {
     update(dt) {
         if (this.stunLeft > 0) {
             this.stunLeft = Math.max(0, this.stunLeft - dt);
-            this.game.hud.setStatus(this.stunLeft > 0 ? `💫 Остолбеней! Вы не можете двигаться ещё <b>${Math.ceil(this.stunLeft)}</b> с` : '');
+            const left = `<b>${Math.ceil(this.stunLeft)}</b> с`;
+            this.game.hud.setStatus(this.stunLeft > 0
+                ? (this.stunKind === 'quake' ? `🌋 Вас сбило землетрясением — встанете через ${left}` : `💫 Остолбеней! Вы не можете двигаться ещё ${left}`)
+                : '');
+            if (this.stunLeft <= 0 && this.stunKind === 'quake') this.game.character.knockedDown = false;
         }
         if (!this.enabled) {
             // Other modes: only the shield (no HP / fatigue rules)
