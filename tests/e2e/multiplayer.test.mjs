@@ -35,7 +35,7 @@ async function openPlayer(name) {
     await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; });
     await page.goto(srv.url);
     await page.waitForFunction(() => !!window.__zns);
-    await page.click('#mp-panel > summary');
+    await page.click('[data-tab="tab-mp"]');
     await page.fill('#mp-name', name);
     await page.click('#mp-advanced > summary');
     await page.fill('#mp-server', `127.0.0.1:${PEER_PORT}/zns`);
@@ -47,7 +47,7 @@ const ev = (page, fn, arg) => page.evaluate(fn, arg);
 
 test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, late join', async () => {
     const host = await openPlayer('Хост');
-    await host.page.click('#mp-host-btn');
+    await host.page.click('#mp-private-btn');
     await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
     const code = await host.page.textContent('.mp-code-big');
     assert.match(code, /^[A-Z2-9]{5}$/);
@@ -59,7 +59,7 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
     await wf(host.page, () => document.getElementById('mp-players').textContent.includes('Гость'), null, 15000);
 
     // Host starts creative → guest starts automatically with the same world
-    await host.page.click('#start-btn');
+    await host.page.click('[data-tab="tab-game"]'); await host.page.click('#start-btn');
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     const seeds = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.seed)));
@@ -188,7 +188,7 @@ test('joining a wrong code shows a clear message', async () => {
 
 test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players, shields, freezing + shatter, death', async () => {
     const host = await openPlayer('Маг1');
-    await host.page.click('#mp-host-btn');
+    await host.page.click('#mp-private-btn');
     await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
     const code = await host.page.textContent('.mp-code-big');
     const guest = await openPlayer('Маг2');
@@ -197,8 +197,8 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
     await wf(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
 
     // Host picks the free world
-    await host.page.locator('.map-card.freeworld').click();
-    await host.page.click('#start-btn');
+    await host.page.click('[data-tab="tab-game"]'); await host.page.locator('.map-card.freeworld').click();
+    await host.page.click('[data-tab="tab-game"]'); await host.page.click('#start-btn');
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
@@ -332,15 +332,15 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
 
 test('duel magic: Остолбеней flies and stuns, charges meet and push, calm exit, shield, Авада Кедавра', async () => {
     const host = await openPlayer('Гарри');
-    await host.page.click('#mp-host-btn');
+    await host.page.click('#mp-private-btn');
     await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
     const code = await host.page.textContent('.mp-code-big');
     const guest = await openPlayer('Драко');
     await guest.page.fill('#mp-code', code);
     await guest.page.click('#mp-join-btn');
     await wf(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
-    await host.page.locator('.map-card.freeworld').click();
-    await host.page.click('#start-btn');
+    await host.page.click('[data-tab="tab-game"]'); await host.page.locator('.map-card.freeworld').click();
+    await host.page.click('[data-tab="tab-game"]'); await host.page.click('#start-btn');
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
@@ -446,23 +446,28 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await guest.context.close();
 });
 
-test('«Общий сервер»: one button switches it on, the other player sees «включён» and joins without a code', async () => {
+test('server list: «Создать сервер» starts a game that the other player sees in the list and joins without a code', async () => {
     const a = await openPlayer('Дима');
     const b = await openPlayer('Друг');
-    // Off at first
-    await wf(b.page, () => /выключен|нет связи/.test(document.getElementById('mp-world-status').textContent), null, 40000);
-    await a.page.click('#mp-world-btn');
-    await wf(a.page, () => document.getElementById('mp-status').textContent.includes('Общий сервер включён'), null, 30000);
-    // The other menu notices by itself (checks every 10 s)
-    await wf(b.page, () => document.getElementById('mp-world-status').textContent.includes('включён'), null, 40000);
-    assert.match(await b.page.textContent('#mp-world-status'), /Дима/);
-    await b.page.click('#mp-world-btn');
-    await wf(b.page, () => document.getElementById('mp-status').textContent.includes('Вы на общем сервере'), null, 30000);
-    await wf(a.page, () => document.getElementById('mp-players').textContent.includes('Друг'), null, 15000);
-    // The host starts: the friend enters the same game
-    await a.page.click('#start-btn');
+    // An empty list at first
+    await b.page.click('#mp-refresh-btn');
+    await wf(b.page, () => /нет ни одного/.test(document.getElementById('mp-server-list').textContent), null, 40000);
+    await a.page.click('#mp-create-open');
+    await a.page.fill('#mp-srv-name', 'Замок Димы');
+    await a.page.selectOption('#mp-mode', 'freeworld');
+    await a.page.click('#mp-host-btn');
     await wf(a.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    // The friend's list shows it (name, mode, players)
+    await b.page.click('#mp-refresh-btn');
+    await wf(b.page, () => document.getElementById('mp-server-list').textContent.includes('Замок Димы'), null, 40000);
+    const row = await b.page.textContent('.mp-server-row');
+    assert.match(row, /Свободный мир/);
+    assert.match(row, /1\/10/);
+    await b.page.click('.mp-server-row');
+    await wf(b.page, () => document.getElementById('mp-server-info').textContent.includes('Дима'), null, 10000);
+    await b.page.click('#mp-enter-btn');
     await wf(b.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    assert.equal(await ev(b.page, () => window.__zns.game.config.mode), 'freeworld');
     await wf(a.page, () => window.__zns.game.remotes.size === 1, null, 60000);
     assert.deepEqual(realErrors(a.errors), []);
     assert.deepEqual(realErrors(b.errors), []);

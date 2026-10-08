@@ -7,16 +7,20 @@
  * No game server is needed — PeerJS's public broker only introduces the
  * browsers to each other (a custom PeerServer can be set in the menu).
  *
- * «Общий сервер»: one fixed room everybody can see in the menu (on / off and
- * who is in). The first player to switch it on hosts it; the others just
- * press «Войти» — no codes. Room codes stay for private games.
+ * Server list: a created server takes one of SERVER_SLOTS well-known rooms
+ * (SRV1, SRV2…). The menu asks all of them at once who is there, so everybody
+ * sees the list of servers (name, mode, players) and joins with one click —
+ * no codes (a code still works for a private game). Up to MAX_PLAYERS each.
  */
 
 import { Emitter } from '../core/events.js';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
 const PREFIX = 'zns-room-';
-export const WORLD_CODE = 'ZNS-DMYTRO-WORLD'; // the shared server's room
+export const WORLD_CODE = 'ZNS-DMYTRO-WORLD'; // (the old single shared server)
+export const SERVER_SLOTS = 12;
+export const MAX_PLAYERS = 10;
+export const slotCode = (i) => 'SRV' + i;
 const ICE = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -74,7 +78,7 @@ export class Network extends Emitter {
      * Create a room. Resolves with the room code.
      * @param {string} [fixedCode]  a fixed room (the shared server) instead of a random code
      */
-    host(name, server, fixedCode = null) {
+    host(name, server, fixedCode = null, { slots = false } = {}) {
         this.leave();
         this.name = name || 'Игрок';
         const Peer = this._PeerCtor();
@@ -82,11 +86,13 @@ export class Network extends Emitter {
             let attempts = 0;
             const tryCode = () => {
                 attempts++;
-                const code = fixedCode || randomCode();
+                const code = slots ? slotCode(attempts) : fixedCode || randomCode();
                 const peer = new Peer(PREFIX + code, parseServer(server));
                 const fail = (err) => {
                     peer.destroy();
-                    if (err?.type === 'unavailable-id' && attempts < 5 && !fixedCode) tryCode();
+                    if (err?.type === 'unavailable-id' && slots && attempts < SERVER_SLOTS) tryCode();
+                    else if (err?.type === 'unavailable-id' && slots) reject(Object.assign(new Error('Все места для серверов заняты — попробуйте позже'), { type: 'full' }));
+                    else if (err?.type === 'unavailable-id' && attempts < 5 && !fixedCode) tryCode();
                     else reject(Object.assign(new Error(humanError(err)), { type: err?.type }));
                 };
                 peer.once('error', fail);
@@ -112,13 +118,18 @@ export class Network extends Emitter {
         // A menu asking "is the shared server on, who is in?" — answer and hang up
         if (conn.metadata?.probe) {
             conn.on('open', () => {
-                this._sendConn(conn, { t: 'info', players: this.playerList().map((p) => p.name), playing: !!this.info?.playing });
+                this._sendConn(conn, { t: 'info', players: this.playerList().map((p) => p.name), playing: !!this.info?.playing, name: this.info?.name || this.name, mode: this.info?.mode || '', max: MAX_PLAYERS });
                 setTimeout(() => { try { conn.close(); } catch (e) { /* ignore */ } }, 1500);
             });
             return;
         }
         conn.on('open', () => {
             const id = conn.peer;
+            if (this.conns.size + 1 >= MAX_PLAYERS) { // full: say so and hang up
+                this._sendConn(conn, { t: 'full', max: MAX_PLAYERS });
+                setTimeout(() => { try { conn.close(); } catch (e) { /* ignore */ } }, 800);
+                return;
+            }
             const name = String(conn.metadata?.name || 'Игрок').slice(0, 16);
             this.conns.set(id, conn);
             this.players.set(id, { name, color: this._colorCounter++ });
@@ -203,6 +214,12 @@ export class Network extends Emitter {
                 conn.on('data', (msg) => {
                     this.lastSeen.set('H', performance.now());
                     if (!msg || typeof msg !== 'object' || msg.t === 'ping') return;
+                    if (msg.t === 'full') {
+                        this.role = null; this.hostConn = null;
+                        try { peer.destroy(); } catch (e) { /* ignore */ }
+                        this.emit('disconnected', { reason: `Сервер заполнен (${msg.max || MAX_PLAYERS} из ${msg.max || MAX_PLAYERS})` });
+                        return;
+                    }
                     if (msg.t === 'host-left') { lost(); return; }
                     if (msg.t === 'players') {
                         this.players = new Map(msg.players.map((p) => [p.id, { name: p.name, color: p.color }]));
@@ -229,6 +246,8 @@ export class Network extends Emitter {
             const timer = setTimeout(() => done({ online: false, unknown: true, players: [] }), 9000);
             const go = (peer) => {
                 const onErr = (err) => {
+                    // (several checks share one helper: only this room's "not found" is ours)
+                    if (err?.type === 'peer-unavailable' && err.message && !err.message.includes(PREFIX + code)) return;
                     peer.off('error', onErr);
                     if (err?.type === 'peer-unavailable') done({ online: false, players: [] });
                     else { this._probePeer = null; try { peer.destroy(); } catch (e) { /* ignore */ } done({ online: false, unknown: true, players: [] }); }
@@ -238,12 +257,13 @@ export class Network extends Emitter {
                 conn.on('data', (msg) => {
                     if (msg?.t !== 'info') return;
                     peer.off('error', onErr);
-                    done({ online: true, players: msg.players || [], playing: !!msg.playing });
+                    done({ online: true, players: msg.players || [], playing: !!msg.playing, name: msg.name || '', mode: msg.mode || '', max: msg.max || MAX_PLAYERS });
                     try { conn.close(); } catch (e) { /* ignore */ }
                 });
             };
             const p = this._probePeer;
             if (p && !p.destroyed && p.open && this._probeKey === key) { go(p); return; }
+            if (p && !p.destroyed && !p.open && this._probeKey === key) { p.once('open', () => go(p)); return; } // (still connecting)
             try { p?.destroy(); } catch (e) { /* ignore */ }
             const peer = new Peer({ ...parseServer(server), debug: 0 }); // (a switched-off server is normal: no error logs)
             this._probePeer = peer;
@@ -251,6 +271,14 @@ export class Network extends Emitter {
             peer.once('open', () => go(peer));
             peer.once('error', () => { this._probePeer = null; done({ online: false, unknown: true, players: [] }); });
         });
+    }
+
+    /** All server slots at once: [{slot, code, name, mode, players[], max}] of the ones that are on. */
+    async listServers(server) {
+        const codes = Array.from({ length: SERVER_SLOTS }, (_, i) => slotCode(i + 1));
+        const res = await Promise.all(codes.map((c) => this.probe(c, server).then((r) => ({ ...r, code: c }))));
+        if (res.every((r) => r.unknown)) return null; // no connection to the broker
+        return res.filter((r) => r.online);
     }
 
     /** Stop checking the shared server (when playing). */

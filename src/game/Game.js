@@ -178,6 +178,7 @@ export class Game {
         this.fire = new FireSystem(this); // burning trees
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
+        if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
         this.quality.apply(this.world);
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon, w, hit) => this.onLocalHit(z, dmg, dir, isWeapon, hit);

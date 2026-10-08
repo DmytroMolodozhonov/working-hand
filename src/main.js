@@ -12,7 +12,8 @@ import { Hud } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
-import { Network, WORLD_CODE } from './net/Network.js';
+import { Network, MAX_PLAYERS } from './net/Network.js';
+import { renderSpellsTab, renderItemsTab } from './ui/Codex.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
 
@@ -95,6 +96,16 @@ tabBtns.forEach((btn) => {
         }
         if (btn.dataset.tab === 'tab-game') updateGameMapList();
         if (btn.dataset.tab === 'tab-items') renderItemsTab();
+        if (btn.dataset.tab === 'tab-spells') renderSpellsTab();
+        if (btn.dataset.tab === 'tab-mp') refreshServers();
+        if (btn.dataset.tab === 'tab-character') window.__charEditor?.show();
+    });
+});
+// Settings sub-tabs
+document.querySelectorAll('#tab-settings .sub-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('#tab-settings .sub-tab').forEach((b) => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('#tab-settings .sub-pane').forEach((p) => p.classList.toggle('active', p.id === btn.dataset.sub));
     });
 });
 
@@ -282,73 +293,12 @@ async function updateGameMapList(forceRefresh = false) {
 window.updateGameMapList = updateGameMapList;
 updateGameMapList();
 
-// ------------------------------------------------------------------ items tab
-function renderItemsTab() {
-    const grid = $('items-grid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    // say: how to cast it; pvp: damage to players in «Свободный мир»; cost: fatigue there
-    const items = [
-        { name: 'Меч', desc: 'Острое оружие. Берётся рукой как настоящий: сожмите пальцы на рукояти.', dmg: '2 (сильный замах — больше)', pvp: '2–3', icon: 'assets/icons/sword.png' },
-        { name: 'Топор', desc: 'Тяжёлый топор.', dmg: '3 (сильный замах — больше)', pvp: '3–4', icon: 'assets/icons/axe.png' },
-        { name: 'Инферно', say: 'рука к лицу + «Инферно»', desc: 'Поток огня из руки.', dmg: '1/тик', pvp: '1 каждые 0,6 с', cost: 10, icon: 'assets/icons/inferno.png' },
-        { name: 'Тандервейв', say: 'рука к лицу + «Тандервейв» / «Гром»', desc: 'Веер молний, отбрасывает.', dmg: '5', pvp: '3 + отброс', cost: 15, icon: 'assets/icons/thunder.png' },
-        { name: 'Сапира', say: 'направить руку на цель + «Сапира»', desc: 'Дуэльное: медленный тяжёлый фиолетовый заряд летит к цели; его можно отбить щитом или встречным заклинанием.', dmg: '10', pvp: '4', cost: 20, icon: 'assets/icons/sapira.png' },
-        { name: 'Айс', say: 'рука к лицу + «Айс» / «Лёд»', desc: 'Ледяной луч: держите на цели 5 секунд — замораживает. Игрок заморожен на 20 секунд и не может двигаться; любой удар по замороженному смертелен. Убежать из луча — заклинание спадёт.', dmg: '1/сек', pvp: 'заморозка', cost: 10, icon: 'assets/icons/ice.png' },
-        { name: 'Даст', say: 'рука к лицу + «Даст» / «Санд»', desc: 'Шар песка: зомби рассыпается в песок.', dmg: 'Мгновенно', pvp: '3', cost: 8, icon: 'assets/icons/sand.png' },
-        { name: 'Бомбардо', say: 'рука к лицу + «Бомбардо»', desc: 'Взрывной шар: вырывает куски гор и земли, ломает деревья, раскидывает зомби и предметы.', dmg: 'до 8 (взрыв)', pvp: 'до 3 (щит −50%)', cost: 15, icon: 'assets/icons/bombardo.svg' },
-        { name: 'Бомбардо Максима', say: 'рука к лицу + «Бомбардо Максима»', desc: 'В 3 раза мощнее «Бомбардо»: из руки вырывается огромная волна магии, шар больше, воронка намного шире, всё разлетается дальше.', dmg: 'до 24 (взрыв)', pvp: 'до 9 (щит −50%)', cost: 25, icon: 'assets/icons/bombardo_maxima.svg' },
-        { name: 'Флайн', say: 'обе руки вверх + «Флайн»', desc: 'Полёт как у Супермена. Рулите корпусом, приземление — направьте себя в землю. В полёте работают все заклинания. На картах (лабиринтах) не работает.', dmg: '—', cost: 10, icon: 'assets/icons/flight.svg' },
-        { name: 'Waterbollow', say: 'рука у самой воды + «Waterbollow»', desc: 'Вода из реки или озера плавно поднимается живым шаром и следует за рукой (большой шар — тяжелее и медленнее). Резкий рывок рукой — шар падает: жидкий сливается с водой, ледяной остаётся.', dmg: 'ледяной шар: 3–10', pvp: 'ледяной шар: 3', cost: 5, icon: 'assets/icons/water.svg' },
-        { name: 'Максима (вода)', say: '«Максима», пока держите водный шар', desc: 'Шар втягивает больше воды и растёт — говорите сколько угодно раз, до максимума. Открытая вторая рука рядом с шаром тоже подливает воду без слов.', dmg: '—', cost: 4, icon: 'assets/icons/water.svg' },
-        { name: 'Water forming', say: '«Water forming», пока вода жидкая', desc: 'Ведите шар — за ним остаются водяные блоки: стены, башни, дома. Вода тратится, подпитывайте шар. Изо льда формировать нельзя.', dmg: '—', cost: 5, icon: 'assets/icons/water_forming.svg' },
-        { name: 'Frozen', say: '«Frozen» с водным шаром', desc: 'Замораживает шар и всё сформированное: блоки становятся льдом — сквозь него не пройти, на нём можно стоять. Без водного шара работает как «Айс».', dmg: '—', cost: 5, icon: 'assets/icons/ice.png' },
-        { name: 'Остолбеней', say: 'направить руку на противника + «Остолбеней»', desc: 'Дуэльное. Красный электрический заряд быстро летит к цели (10 м — меньше секунды). Попал — цель замирает на 15 секунд. Защита: щит или встречное дуэльное заклинание.', dmg: 'оглушение 15 с', pvp: 'оглушение 15 с', cost: 12, icon: 'assets/icons/stupefy.svg' },
-        { name: 'Авада Кедавра', say: 'направить руку на противника + «Авада Кедавра»', desc: 'Дуэльное. Зелёный заряд — мгновенная смерть при попадании. Защита: щит или встречное дуэльное заклинание.', dmg: 'смерть', pvp: 'смерть', cost: 25, icon: 'assets/icons/avada.svg' },
-        { name: 'Дуэль', say: 'встречное дуэльное заклинание в ответ', desc: 'Два заряда встречаются и давят друг на друга: точка смещается к более слабому (сначала усталость, потом HP, немного удачи). Держите руку на сопернике! Выйти без потерь: плавно отвести руку и потом стряхнуть. Резко дёрнуть сразу — сдаться (заклинание попадёт в вас).', dmg: '—', icon: 'assets/icons/duel.svg' },
-        { name: 'Вайнд', say: 'поднять руку в нужную сторону + «Вайнд»', desc: 'Порыв ветра из руки сдувает зомби, игроков и предметы на несколько метров. Не ранит.', dmg: '—', pvp: 'отбрасывает', cost: 8, icon: 'assets/icons/wind.svg' },
-        { name: 'Вайнд Максима', say: 'поднять руку + «Вайнд Максима»', desc: 'То же, но в 3 раза сильнее и дальше (до 24 м).', dmg: '—', pvp: 'отбрасывает сильно', cost: 20, icon: 'assets/icons/wind.svg' },
-        { name: 'Lightning Strike', say: 'обе руки вверх + «Lightning Strike»', desc: 'Очень сложное: 5 с небо темнеет и начинается дождь, потом молния бьёт вам в руки. За 5 с плавно наведите руку на цель и задержите — молния ударит туда (убивает зомби, сильно ранит игроков). Не успели — молния ударит в вас. Таймер — справа внизу.', dmg: '20', pvp: '12', cost: 25, icon: 'assets/icons/thunder.png' },
-        { name: 'Gather', say: 'поднять руку на дерево / камень / землю + «Gather»', desc: 'Строительство (вне творческого — из книги птицы). Магия разбирает то, на что указывает рука (до 10 м), и кладёт в ячейку: целое дерево — 20 древесины своего вида; камень, земля, листва — горстью.', dmg: '—', cost: 3, icon: 'assets/icons/earthquake.svg' },
-        { name: 'Create a Floor', say: 'выбрать ресурс (левый карман) + «Create a Floor», тянуть руку', desc: 'Появляется блок, куда указывает рука; тяните руку — пол растёт блок за блоком, пока хватает ресурса. Опустить руку или «Stand» — готово. С водяным шаром в руке — изо льда (тает за игровые сутки).', dmg: '—', cost: 4, icon: 'assets/icons/water_forming.svg' },
-        { name: 'Create a Wall', say: '«Create a Wall», тянуть руку вбок и вверх', desc: 'Стена поперёк взгляда растёт за рукой — в ширину и в высоту.', dmg: '—', cost: 4, icon: 'assets/icons/water_forming.svg' },
-        { name: 'Create a Ceiling', say: '«Create a Ceiling», тянуть руку', desc: 'Потолок на высоте 3 блоков над землёй растёт за рукой.', dmg: '—', cost: 4, icon: 'assets/icons/water_forming.svg' },
-        { name: 'Build a Roof', say: '«Build a Roof», тянуть руку', desc: 'Двускатная крыша: ступени поднимаются от длинных краёв к коньку.', dmg: '—', cost: 6, icon: 'assets/icons/water_forming.svg' },
-        { name: 'Паузин', say: 'в полёте: «Паузин»', desc: 'Остановиться и парить на месте. «Флайн» — лететь дальше. В Свободном мире полёт и парение тратят усталость; когда сил нет — вы падаете.', dmg: '—', cost: 0, icon: 'assets/icons/flight.svg' },
-        { name: 'Earthquake', say: 'поднять обе руки в сторону удара, поднять ногу и топнуть + «Earthquake»', desc: 'Землетрясение бежит по земле в сторону, куда указывают руки: трещина, пыль, камни. Всё на пути падает на несколько секунд и получает урон.', dmg: '4', pvp: '3 + падение 2,5 с', cost: 10, icon: 'assets/icons/earthquake.svg' },
-        { name: 'Earthquake Максима', say: 'то же + «Earthquake Максима»', desc: 'В 3 раза сильнее: длиннее (32 м) и шире волна.', dmg: '12', pvp: '9 + падение 4 с', cost: 25, icon: 'assets/icons/earthquake.svg' },
-        { name: 'Брейнрот', say: 'посмотреть на зомби + «Брейнрот» (руку поднимать не нужно)', desc: 'Только против зомби. Из-над головы мага к зомби катятся гипнотические кольца — он становится вашим слугой на 45 с: нападает на других зомби, а они — на него.', dmg: '—', cost: 15, icon: 'assets/icons/brainrot.svg' },
-        { name: 'Акцио', say: 'поднять руку, указать на предмет + «Акцио»', desc: 'Меч, топор или другой предмет до 30 м прилетает прямо в руку. Он останется в руке, даже если она открыта; бросить — сжать и разжать кулак.', dmg: '—', cost: 5, icon: 'assets/icons/accio.svg' },
-        { name: 'Вингардиум Левиоса', say: 'направить руку на предмет + «Вингардиум Левиоса»', desc: 'Меч, топор или ледяной шар до 10 м поднимается и плавно следует за рукой. Резкое движение — заклинание спадает и предмет летит дальше (так можно бросать). Сказать ещё раз — мягко опустить. Направленная на существо — дуэльное заклинание: подбрасывает его в воздух.', dmg: '—', cost: 6, icon: 'assets/icons/levitation.svg' },
-        { name: 'Protection', say: 'вытянуть руку + «Protection»', desc: 'Работает в любом режиме. У вытянутой руки на 3 секунды появляется голубой щит. В «Свободном мире» заклинания, пущенные прямо в вас, отскакивают, а взрыв Бомбардо рядом ранит вполовину.', dmg: '—', cost: 5, icon: 'assets/icons/shield.svg' },
-        { name: 'Protection Maxima', say: 'руки в стороны буквой «T» + «Protection Maxima»', desc: 'Голубой шар вокруг всего тела на 5 секунд: отражает заклинания со всех сторон, взрывы ранят на 75% слабее.', dmg: '—', cost: 20, icon: 'assets/icons/shield_max.svg' },
-    ];
-    for (const item of items) {
-        const card = document.createElement('div');
-        card.className = 'item-card';
-        card.innerHTML = `
-            <img src='${item.icon}' class='item-icon' onerror="this.style.display='none'">
-            <div class='item-name'>${item.name}</div>
-            <div class='item-desc'>${item.desc}</div>
-            ${item.say ? `<div class='item-desc'><b>Как:</b> ${item.say}</div>` : ''}
-            <div class='item-stats'>
-                <div class='stat-row'><span>Урон:</span><span class='stat-val'>${item.dmg}</span></div>
-                ${item.pvp ? `<div class='stat-row'><span>По игрокам:</span><span class='stat-val'>${item.pvp}</span></div>` : ''}
-                ${item.cost ? `<div class='stat-row'><span>Усталость:</span><span class='stat-val'>${item.cost}</span></div>` : ''}
-            </div>`;
-        grid.appendChild(card);
-    }
-}
-
 // ------------------------------------------------------------------ version
 // Shown in the menu so everyone can see at a glance that the game is up to date
 fetch('/api/version').then((r) => r.json()).then((v) => {
     if (!v || !v.date) return;
-    const el = document.createElement('div');
-    el.id = 'game-version';
-    el.textContent = `Версия от ${v.date}` + (v.sha ? ` (${v.sha})` : '');
-    el.style.cssText = 'position:absolute;left:12px;bottom:8px;font-size:12px;color:rgba(255,255,255,.55);pointer-events:none;z-index:5';
-    $('main-menu')?.appendChild(el);
+    const el = $('game-version-top');
+    if (el) el.innerHTML = `Версия от <b>${v.date}</b>` + (v.sha ? ` <span class="ver-sha">(${v.sha})</span>` : '');
 }).catch(() => {});
 
 // ------------------------------------------------------------------ voice
@@ -528,7 +478,7 @@ async function startGameInner(config, welcome) {
         await new Promise((r) => requestAnimationFrame(r));
         game.start();
         if (net.isHost && game.sync) net.broadcast(game.sync.welcomeMessage());
-        net.info = { playing: true }; // (the shared server's status in other players' menus)
+        net.info = { ...(net.info || {}), mode: config.mode, playing: true }; // (shown in other players' server lists)
         updateProgress(100, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...');
 
         const reveal = () => {
@@ -582,14 +532,19 @@ $('restart-btn').onclick = backToMenu;
 $('victory-menu-btn').onclick = backToMenu;
 
 // ------------------------------------------------------------------ multiplayer lobby
+// «Мультиплеер» tab: a list of servers. «Создать сервер» starts a game that
+// appears in everybody's list (name, mode, players); others click it and
+// «Войти». Up to 10 players each. A private game by code is still possible.
 const mpStatus = $('mp-status');
 const mpPlayers = $('mp-players');
 const mpName = $('mp-name');
 const mpCode = $('mp-code');
 const mpServer = $('mp-server');
+const MODE_NAME = { freeworld: '🌍 Свободный мир', creative: '🏗️ Творчество', survival: '🧟 Выживание' };
 try {
     mpName.value = localStorage.getItem('zns-name') || '';
     mpServer.value = localStorage.getItem('zns-server') || '';
+    $('mp-srv-name').value = localStorage.getItem('zns-srv-name') || '';
 } catch (e) { /* ignore */ }
 
 function setMpStatus(html) { mpStatus.innerHTML = html; }
@@ -603,11 +558,88 @@ function playerName() {
     return n;
 }
 
+let servers = null; // null: not checked yet / no connection
+let pickedServer = null;
+let refreshing = false;
+async function refreshServers() {
+    if (refreshing || net.active || (game && game.active) || window.__ZNS_NO_WORLD_PROBE__) { renderServers(); return; }
+    refreshing = true;
+    try { servers = await net.listServers(mpServer.value); } catch (e) { servers = null; }
+    refreshing = false;
+    renderServers();
+}
+function renderServers() {
+    const list = $('mp-server-list');
+    if (!list) return;
+    if (servers === null) {
+        list.innerHTML = `<div class="mp-empty">${refreshing ? 'Ищем серверы...' : 'Нет связи с сетью — проверьте интернет и нажмите «Обновить»'}</div>`;
+    } else if (!servers.length) {
+        list.innerHTML = '<div class="mp-empty">Пока нет ни одного сервера. Создайте свой — он появится здесь у всех!</div>';
+    } else {
+        list.innerHTML = '';
+        for (const sv of servers) {
+            const row = document.createElement('div');
+            row.className = 'mp-server-row' + (pickedServer?.code === sv.code ? ' sel' : '');
+            row.dataset.code = sv.code;
+            const full = sv.players.length >= (sv.max || MAX_PLAYERS);
+            row.innerHTML = `<span class="mp-srv-name">${escapeHtml(sv.name || 'Сервер')}</span><span>${MODE_NAME[sv.mode] || '—'}</span><span class="${full ? 'mp-full' : ''}">${sv.players.length}/${sv.max || MAX_PLAYERS}</span>`;
+            row.onclick = () => { pickedServer = sv; renderServers(); };
+            list.appendChild(row);
+        }
+    }
+    const info = $('mp-server-info');
+    const sv = pickedServer && servers?.find((x) => x.code === pickedServer.code);
+    if (!sv) { info.innerHTML = '<div class="mp-empty">Нажмите на сервер — здесь появятся игроки и кнопка «Войти»</div>'; return; }
+    const full = sv.players.length >= (sv.max || MAX_PLAYERS);
+    info.innerHTML = `<h4>${escapeHtml(sv.name || 'Сервер')}</h4><div class="mp-info-mode">${MODE_NAME[sv.mode] || ''}${sv.playing ? ' · идёт игра' : ''}</div>
+        <div class="mp-info-players">${sv.players.map((n) => `<div>🧙 ${escapeHtml(n)}</div>`).join('')}</div>
+        <button id="mp-enter-btn" class="mp-btn" ${full ? 'disabled' : ''}>${full ? 'Заполнен' : '▶ Войти'}</button>`;
+    $('mp-enter-btn').onclick = () => joinRoom(sv.code);
+}
+setTimeout(refreshServers, 800);
+setInterval(() => { if ($('tab-mp')?.classList.contains('active')) refreshServers(); }, 8000);
+$('mp-refresh-btn').addEventListener('click', () => { servers = null; refreshing = false; renderServers(); refreshServers(); });
+$('mp-create-open').addEventListener('click', () => $('mp-create').classList.toggle('hidden'));
+
+async function joinRoom(code) {
+    net.stopProbe();
+    setMpStatus('Подключаемся...');
+    try {
+        await net.join(code, playerName(), mpServer.value);
+        if (!net.active) return; // (the server was full)
+        setMpStatus('✅ Подключено! Входим в игру...');
+        renderPlayers();
+    } catch (e) {
+        setMpStatus('❌ ' + escapeHtml(e.message));
+    }
+}
+
+// Create a server: it takes a free place in the list and the game starts at once
 $('mp-host-btn').addEventListener('click', async () => {
-    setMpStatus('Создаём комнату...');
+    net.stopProbe();
+    const srvName = ($('mp-srv-name').value || '').trim().slice(0, 24) || `Сервер ${playerName()}`;
+    try { localStorage.setItem('zns-srv-name', srvName); } catch (e) { /* ignore */ }
+    const mode = $('mp-mode').value;
+    setMpStatus('Создаём сервер...');
+    try {
+        await net.host(playerName(), mpServer.value, null, { slots: true });
+        net.info = { name: srvName, mode, playing: false };
+        setMpStatus('🟢 Сервер создан — он виден всем в списке. Запускаем...');
+        selectedMode = mode;
+        selectedMap = null;
+        startGame({ ...readConfig(), mode, map: null, world: $('mp-world')?.value || null });
+    } catch (e) {
+        setMpStatus('❌ ' + escapeHtml(e.message));
+    }
+});
+
+// Private game by code (old way)
+$('mp-private-btn').addEventListener('click', async () => {
+    setMpStatus('Создаём закрытую комнату...');
     try {
         const code = await net.host(playerName(), mpServer.value);
-        setMpStatus(`Код комнаты: <span class="mp-code-big">${code}</span><br>Отправьте его друзьям, выберите режим/карту и нажмите «ИГРАТЬ».`);
+        net.info = { name: 'Закрытая игра', mode: selectedMode, playing: false };
+        setMpStatus(`Код комнаты: <span class="mp-code-big">${code}</span><br>Отправьте его друзьям, выберите режим во вкладке «Одиночная игра» и нажмите «ИГРАТЬ».`);
         renderPlayers();
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
@@ -629,74 +661,11 @@ $('mp-join-btn').addEventListener('click', async () => {
 
 net.on('peer-join', ({ name }) => {
     renderPlayers();
-    renderWorld();
     if (game && game.active) return;
-    setMpStatus(net.code === WORLD_CODE
-        ? `К вам на общий сервер зашёл: ${escapeHtml(name)}. Выберите режим и нажмите «ИГРАТЬ».`
-        : `К вам подключился: ${escapeHtml(name)}. Код: <span class="mp-code-big">${net.code}</span>`);
+    setMpStatus(`К вам подключился: ${escapeHtml(name)}. Код: <span class="mp-code-big">${net.code}</span>`);
 });
-
-// ---- «Общий сервер»: one fixed room, on/off and who is in — no codes
-const worldStatus = $('mp-world-status');
-const worldBtn = $('mp-world-btn');
-const worldBadge = $('mp-world-badge');
-let worldState = null;
-function renderWorld() {
-    if (net.active && net.code === WORLD_CODE) {
-        const who = net.playerList().map((p) => escapeHtml(p.name)).join(', ');
-        worldStatus.innerHTML = net.isHost ? `🟢 Общий сервер включён — его держите вы. Сейчас: ${who}` : `🟢 Вы на общем сервере. Сейчас: ${who}`;
-        worldBtn.style.display = 'none';
-        worldBadge.textContent = '— 🟢 вы на общем сервере';
-        return;
-    }
-    worldBtn.style.display = net.active ? 'none' : '';
-    if (!worldState) { worldStatus.textContent = '🌍 Общий сервер: проверяем...'; worldBadge.textContent = ''; return; }
-    if (worldState.online) {
-        const who = worldState.players.map(escapeHtml).join(', ');
-        worldStatus.innerHTML = `🟢 Общий сервер <b>включён</b>: ${who || '...'}${worldState.playing ? ' (идёт игра)' : ''}`;
-        worldBtn.textContent = '🌍 Войти';
-        worldBadge.textContent = `— 🟢 общий сервер включён (${worldState.players.length})`;
-    } else {
-        worldStatus.innerHTML = worldState.unknown ? '⚪ Общий сервер: нет связи, попробуйте включить' : '⚪ Общий сервер <b>выключен</b> — включите его, и друзья смогут войти';
-        worldBtn.textContent = '🌍 Включить сервер';
-        worldBadge.textContent = '— ⚪ общий сервер выключен';
-    }
-}
-async function checkWorld() {
-    if (net.active || (game && game.active) || window.__ZNS_NO_WORLD_PROBE__) { renderWorld(); return; }
-    try { worldState = await net.probe(WORLD_CODE, mpServer.value); } catch (e) { worldState = { online: false, unknown: true, players: [] }; }
-    renderWorld();
-}
-setTimeout(checkWorld, 800);
-setInterval(checkWorld, 10000);
-worldBtn.addEventListener('click', async () => {
-    net.stopProbe();
-    const name = playerName();
-    const join = async () => {
-        setMpStatus('Входим на общий сервер...');
-        await net.join(WORLD_CODE, name, mpServer.value);
-        setMpStatus('✅ Вы на общем сервере! Ждём, когда начнётся игра (если она уже идёт — вы войдёте сразу).');
-    };
-    try {
-        if (worldState?.online) await join();
-        else {
-            setMpStatus('Включаем общий сервер...');
-            try {
-                await net.host(name, mpServer.value, WORLD_CODE);
-                setMpStatus('🟢 Общий сервер включён — вы его держите. Друзья увидят «включён» и войдут одной кнопкой. Выберите режим и нажмите «ИГРАТЬ».');
-            } catch (e) {
-                if (e.type === 'unavailable-id') await join(); // someone switched it on a moment earlier
-                else throw e;
-            }
-        }
-    } catch (e) {
-        setMpStatus('❌ ' + escapeHtml(e.message));
-    }
-    renderPlayers();
-    renderWorld();
-});
-net.on('peer-leave', () => { renderPlayers(); renderWorld(); });
-net.on('players', () => { renderPlayers(); renderWorld(); });
+net.on('peer-leave', () => renderPlayers());
+net.on('players', () => renderPlayers());
 net.on('status', (text) => setMpStatus('⚠️ ' + escapeHtml(text)));
 net.on('disconnected', ({ reason }) => {
     if (game && game.active) {
