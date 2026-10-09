@@ -1430,3 +1430,40 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #mp-bycode #mp-code { text-transform: uppercase; letter-spacing: 3px; width: 9em; font-size: 1.1em; }
 
 #gpu-warning { background: #5a1f12; color: #ffe2c4; border: 2px solid #ff8a3d; border-radius: 10px; padding: 10px 14px; margin: 8px auto 12px; max-width: 900px; font-size: 15px; line-height: 1.4; }
+
+/* Escape in the game: continue or go back to the main menu */
+#pause-menu {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 3100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#pause-menu.hidden { display: none; }
+.pause-box {
+    text-align: center;
+    color: #fff;
+    padding: 26px 40px;
+    border: 3px solid #55efc4;
+    border-radius: 16px;
+    background: rgba(10, 20, 30, 0.85);
+    min-width: 280px;
+}
+.pause-title { font-size: 28px; margin-bottom: 16px; }
+.pause-box button {
+    display: block;
+    width: 100%;
+    margin: 10px 0;
+    font-size: 20px;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+}
+#pause-continue-btn { background: linear-gradient(135deg, #27ae60, #2ecc71); }
+#pause-exit-btn { background: linear-gradient(135deg, #c0392b, #e74c3c); }
+.pause-hint { font-size: 13px; opacity: 0.75; margin-top: 10px; }

@@ -383,7 +383,10 @@ voice.onResult = (command, isFinal = true) => {
 
 // ------------------------------------------------------------------ keyboard
 window.addEventListener('keydown', (e) => {
+    // Escape: the pause menu (continue / back to the main menu)
+    if (e.key === 'Escape' && game && game.active) { e.preventDefault(); togglePauseMenu(); return; }
     if (!game || !game.active || e.target.tagName === 'INPUT') return;
+    if (!$('pause-menu').classList.contains('hidden')) return; // (the menu is open)
     const k = e.key.toLowerCase();
     if (k >= '1' && k <= '9' && game.inventory) game.inventory.select(Math.min(parseInt(k, 10), game.inventory.slots.length) - 1);
     if ((k === '0' || k === '`' || k === 'ё') && game.inventory) game.inventory.select(-1);
@@ -601,6 +604,24 @@ $('test-mode-btn').addEventListener('click', async () => {
 });
 
 const backToMenu = () => { net.sayGoodbye(); net.leave(); window.location.href = window.location.origin + window.location.pathname; };
+
+// ------------------------------------------------------------------ pause menu (Escape)
+// (in a game with others the world goes on; alone it waits)
+function togglePauseMenu(show) {
+    const el = $('pause-menu');
+    const open = show ?? el.classList.contains('hidden');
+    el.classList.toggle('hidden', !open);
+    if (open && document.pointerLockElement) document.exitPointerLock();
+    if (game && !(net && net.active)) game.paused = open;
+}
+$('pause-continue-btn').onclick = () => togglePauseMenu(false);
+$('pause-exit-btn').onclick = async () => {
+    $('pause-exit-btn').disabled = true;
+    $('pause-exit-btn').textContent = '💾 Сохраняем мир...';
+    try { game?.sync?._sendMine?.(); } catch (e) { /* ignore */ }
+    try { await Promise.race([game?.keeper?.save?.(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) { /* the page still leaves */ }
+    backToMenu();
+};
 window.addEventListener('pagehide', () => { try { game?.sync?._sendMine?.(); } catch (e) { /* closing */ } net.sayGoodbye(); });
 $('restart-btn').onclick = backToMenu;
 $('victory-menu-btn').onclick = backToMenu;

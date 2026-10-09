@@ -1595,6 +1595,8 @@ export class Game {
             const limit = this.config.fpsLimit || 0;
             if (limit > 0 && t - this.lastRender < 1000 / limit - 1.5) return;
             this.lastRender = t;
+            // the pause menu (alone in the world): the picture stays, time stands still
+            if (this.paused) { this.lastTime = performance.now(); this.renderer.render(this.scene, this.camera); return; }
             try {
                 this.frame();
             } catch (e) {
