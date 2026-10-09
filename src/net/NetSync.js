@@ -102,6 +102,7 @@ export class NetSync {
         const r = this.game.remotes.get(id);
         if (r) {
             if (this._announce) this.game.hud.notify?.(`🔴 Вышел: ${r.name}`);
+            this.game.bleeding?.clearCuts(r.character);
             r.dispose();
             this.game.remotes.delete(id);
         }
@@ -327,8 +328,15 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'clashend', a, b, loser });
     }
 
-    playerHit(to, dmg, magic = false) {
-        this.net.send({ t: 'phit', by: this.me, to, dmg, mg: magic ? 1 : 0 }, true);
+    playerHit(to, dmg, magic = false, hit = null) {
+        const r = (v) => Math.round(v * 100) / 100;
+        const h = hit && Number.isFinite(hit.lx) ? [r(hit.lx), r(hit.y), r(hit.lz)] : undefined;
+        this.net.send({ t: 'phit', by: this.me, to, dmg, mg: magic ? 1 : 0, h }, true);
+    }
+
+    /** A light cut on me (everybody draws it on my body). */
+    cut(h) {
+        this.net.send({ t: 'cut', by: this.me, h }, true);
     }
 
     died(killer) {
@@ -642,7 +650,12 @@ export class NetSync {
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
-            case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg); break;
+            case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg, Array.isArray(m.h) ? m.h.slice(0, 3).map(Number) : null); break;
+            case 'cut': {
+                const r = m.by !== this.me && g.remotes.get(m.by);
+                if (r && Array.isArray(m.h)) g.bleeding?.addCut(r.character, m.h.slice(0, 3).map((v) => Math.max(-3, Math.min(3, Number(v)))));
+                break;
+            }
             case 'pdead': {
                 if (m.by === this.me) break;
                 const r = g.remotes.get(m.by);

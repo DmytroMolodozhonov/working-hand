@@ -398,7 +398,7 @@ export class Combat {
     }
 
     /** Someone hit me with a fist or a weapon. A frozen player shatters. */
-    meleeHit(dmg, byId, magic = false) {
+    meleeHit(dmg, byId, magic = false, cut = null) {
         if (!this.enabled || this.dead) return;
         // a shield in the hand turned to the attacker takes the blow
         const att = this.game.remotes?.get(byId)?.position;
@@ -412,6 +412,8 @@ export class Combat {
         }
         if (this.frozen) { this.die(byId, 'shatter'); return; }
         this.damage(dmg, byId, 'melee');
+        // a slash with a blade leaves a light cut (heals by itself)
+        if (cut && !this.dead) this.game.bleeding?.cut(cut);
     }
 
     damage(amount, byId, kind) {
@@ -533,10 +535,10 @@ export class Combat {
     }
 
     /** My fist or weapon hit another player. */
-    hitRemote(target, dmg, magic = false) {
+    hitRemote(target, dmg, magic = false, hit = null) {
         if (target.damageCooldown > 0) return;
         target.damageCooldown = 0.45;
-        if (this.game.sync) this.game.sync.playerHit(target.id, dmg, magic);
+        if (this.game.sync) this.game.sync.playerHit(target.id, dmg, magic, hit);
         const p = _v1.copy(target.group.position).add(_v2.set(0, 1.2, 0));
         for (let i = 0; i < 8; i++) this.game.fx.spark(p, 0xff3030, 0.15, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
         if (this.game.sound) this.game.sound.playHit();

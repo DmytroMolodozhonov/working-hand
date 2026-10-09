@@ -277,6 +277,32 @@ export class SoundManager {
         this._play(this.sounds.hits[this.hitIndex], 1.0);
     }
 
+    /** Blade on blade: a ringing metal clang (made here, no file needed). `power` 0..1. */
+    playClang(power = 0.6) {
+        if (!this.enabled) return;
+        if (!this._clangBuf) {
+            const ctx = this.context;
+            if (!ctx) return;
+            const rate = ctx.sampleRate, len = Math.floor(rate * 0.9);
+            const buf = ctx.createBuffer(1, len, rate);
+            const d = buf.getChannelData(0);
+            // the modes of a free metal bar ring at these inharmonic ratios
+            const f0 = 1180;
+            const modes = [[1, 0.55, 0.5], [2.756, 0.35, 0.32], [5.404, 0.22, 0.18], [8.933, 0.12, 0.1], [1.012, 0.25, 0.45]];
+            let seed = 7;
+            const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+            for (let i = 0; i < len; i++) {
+                const t = i / rate;
+                let s = 0;
+                for (const [r, a, decay] of modes) s += a * Math.exp(-t / decay) * Math.sin(2 * Math.PI * f0 * r * t);
+                s += rnd() * 0.8 * Math.exp(-t / 0.006); // the hit itself
+                d[i] = Math.tanh(s * 1.2) * 0.8;
+            }
+            this._clangBuf = buf;
+        }
+        this._play(this._clangBuf, 0.45 + 0.6 * Math.min(1, power), 0.85 + Math.random() * 0.35);
+    }
+
     playFrozenHit() {
         if (this.sounds.shatter) this._play(this.sounds.shatter, 1.2);
         else this.playHit();

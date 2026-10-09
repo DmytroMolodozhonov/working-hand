@@ -648,6 +648,7 @@ $('mp-create-open').addEventListener('click', () => $('mp-create').classList.tog
 async function joinRoom(code) {
     net.stopProbe();
     setMpStatus('Подключаемся...');
+    net.serverName = servers?.find((x) => x.code === code)?.name || 'Сервер';
     try {
         await net.join(code, playerName(), mpServer.value);
         if (!net.active) return; // (the server was full)
@@ -696,6 +697,7 @@ $('mp-join-btn').addEventListener('click', async () => {
     const code = (mpCode.value || '').trim().toUpperCase();
     if (code.length < 4) { setMpStatus('Введите код комнаты от друга.'); return; }
     setMpStatus('Подключаемся...');
+    net.serverName = 'Закрытая игра';
     try {
         await net.join(code, playerName(), mpServer.value);
         setMpStatus('✅ Подключено! Ждём, когда хост начнёт игру...');

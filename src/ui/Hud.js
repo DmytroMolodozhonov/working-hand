@@ -256,7 +256,7 @@ export class Hud {
         ti.version = d.version;
     }
 
-    drawMinimap(charPos, rotY, world, zombies, others = []) {
+    drawMinimap(charPos, rotY, world, zombies, others = [], server = null) {
         const ctx = this.mmCtx;
         if (!ctx) return;
         const cvs = this.el.minimap;
@@ -305,6 +305,31 @@ export class Hud {
         // map an arrow on the edge shows which way to look (with the distance)
         ctx.font = 'bold 10px sans-serif';
         ctx.textAlign = 'center';
+        const label = (text, x, y) => { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(text, x, y); ctx.fillText(text, x, y); };
+        // The server: a flag at its start point (an arrow on the edge when far)
+        this.minimapServer = server ? server.name : null;
+        if (server && server.home) {
+            const sx = (server.home.x - charPos.x) * scale, sz = (server.home.z - charPos.z) * scale;
+            const sname = String(server.name || 'Сервер').slice(0, 14);
+            if (inside(sx, sz, 8)) {
+                ctx.strokeStyle = '#3b2a10'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(sx, sz + 6); ctx.lineTo(sx, sz - 10); ctx.stroke();
+                ctx.fillStyle = '#ffcc33'; ctx.strokeStyle = '#7a4b00'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(sx, sz - 10); ctx.lineTo(sx + 10, sz - 6.5); ctx.lineTo(sx, sz - 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+                label('🏰 ' + sname, sx, sz + 17);
+            } else {
+                const a = Math.atan2(sz, sx);
+                const k = Math.min((hw - 9) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - 9) / Math.max(1e-6, Math.abs(Math.sin(a))));
+                ctx.save();
+                ctx.translate(Math.cos(a) * k, Math.sin(a) * k);
+                ctx.rotate(a);
+                ctx.fillStyle = '#ffcc33'; ctx.strokeStyle = '#7a4b00'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+                const tx = Math.max(-hw + 36, Math.min(hw - 36, Math.cos(a) * (k - 16))), ty = Math.max(-hh + 10, Math.min(hh - 4, Math.sin(a) * (k - 16) + 3));
+                label(`🏰 ${Math.round(Math.hypot(sx, sz) / scale)} м`, tx, ty);
+            }
+        }
         for (const o of others) {
             const ox = (o.x - charPos.x) * scale, oz = (o.z - charPos.z) * scale;
             const col = o.color != null ? '#' + o.color.toString(16).padStart(6, '0') : '#3498db';
@@ -343,5 +368,18 @@ export class Hud {
         ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2.5); ctx.lineTo(-5, 5); ctx.closePath();
         ctx.fill(); ctx.stroke();
         ctx.restore();
+        // which server I am on: a badge at the top of the map
+        if (server) {
+            const text = `🌐 ${String(server.name || 'Сервер').slice(0, 18)} · 👥 ${server.players}`;
+            ctx.font = 'bold 11px sans-serif';
+            const w = ctx.measureText(text).width + 14;
+            ctx.fillStyle = 'rgba(15, 25, 40, 0.72)';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(hw - w / 2, 4, w, 18, 9); else ctx.rect(hw - w / 2, 4, w, 18);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, hw, 17);
+        }
     }
 }

@@ -357,7 +357,7 @@ export class Game {
 
     /** The local player's weapon/fist hit something. */
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
-        if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic); return; }
+        if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         this.punchCount++;
@@ -1317,6 +1317,7 @@ export class Game {
     /** Back into the game: full health, a new place near the start. */
     respawn() {
         const ch = this.character;
+        this.bleeding?.clearCuts(ch);
         this.combat.revive();
         this.playerHP = this.maxHP;
         this.isDeadLocal = false;
@@ -1582,7 +1583,10 @@ export class Game {
         if (this.frameCount % 5 === 0) {
             const cp = this.character.group.position;
             const others = [...this.remotes.values()].filter((r) => !r.dead).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
-            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others);
+            // on a server: its name on the map and a mark at its start point
+            const online = this.net && this.net.active;
+            const server = online ? { name: (this.net.isHost ? this.net.info?.name : this.net.serverName) || 'Сервер', players: this.remotes.size + 1, home: this.world.mapResult?.playerSpawn || { x: 0, z: 0 } } : null;
+            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
         }
 

@@ -141,7 +141,7 @@ export function closestTOnSegment(ax, ay, az, bx, by, bz, px, py, pz) {
  * Squared distance between two 3D segments (P0P1, Q0Q1).
  * Used for blade-vs-body hit tests. Arrays [x,y,z].
  */
-export function segmentSegmentDistSq(p0, p1, q0, q1) {
+export function segmentSegmentDistSq(p0, p1, q0, q1, out = null) {
     const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
     const vx = q1[0] - q0[0], vy = q1[1] - q0[1], vz = q1[2] - q0[2];
     const wx = p0[0] - q0[0], wy = p0[1] - q0[1], wz = p0[2] - q0[2];
@@ -173,5 +173,6 @@ export function segmentSegmentDistSq(p0, p1, q0, q1) {
     const dx = wx + sc * ux - tc * vx;
     const dy = wy + sc * uy - tc * vy;
     const dz = wz + sc * uz - tc * vz;
+    if (out) { out[0] = sc; out[1] = tc; } // where on each segment the closest points are (0..1)
     return dx * dx + dy * dy + dz * dz;
 }

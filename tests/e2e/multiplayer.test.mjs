@@ -471,6 +471,24 @@ test('server list: «Создать сервер» starts a game that the other 
     await wf(a.page, () => window.__zns.game.remotes.size === 1, null, 60000);
     // the friend's own hero (made in «Персонаж») is what the host sees
     await wf(a.page, () => !!([...window.__zns.game.remotes.values()][0].character.look), null, 30000);
+    // the minimap says which server this is (both sides)
+    await wf(a.page, () => window.__zns.game.hud.minimapServer === 'Замок Димы', null, 10000);
+    await wf(b.page, () => window.__zns.game.hud.minimapServer === 'Замок Димы', null, 10000);
+    // a sword slash on the friend: a light cut on their body, seen by both, no bleeding drain
+    await ev(a.page, () => {
+        const g = window.__zns.game;
+        const t = g.combat.meleeTargets()[0];
+        g.combat.hitRemote(t, 2, false, { lx: 0.2, y: 0.9, lz: -0.6, side: 1, speed: 9 });
+    });
+    await wf(b.page, () => window.__zns.game.bleeding.cuts.length === 1, null, 15000);
+    await wf(a.page, () => window.__zns.game.bleeding.cuts.length === 1, null, 15000);
+    const cutB = await ev(b.page, () => { const g = window.__zns.game; return { rate: g.bleeding.rate, hp: g.combat.hp, onBody: g.bleeding.cuts[0].mesh.parent === g.character.body }; });
+    assert.equal(cutB.rate, 0, 'a cut is not a deep wound');
+    assert.equal(cutB.hp, 18);
+    assert.ok(cutB.onBody, 'on the body');
+    assert.ok(await ev(a.page, () => { const g = window.__zns.game; return g.bleeding.cuts[0].mesh.parent === [...g.remotes.values()][0].character.body; }), 'seen on the friend');
+    // blade on blade: the clang and the sparks work in a real browser
+    assert.equal(await ev(a.page, () => { const ws = window.__zns.game.weapons; ws._clang([0, 2, 0], 8); return ws.clangCount; }), 1);
     assert.deepEqual(realErrors(a.errors), []);
     assert.deepEqual(realErrors(b.errors), []);
     await a.context.close();

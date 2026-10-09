@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { Weapon } from '../entities/Weapon.js';
 import { segmentSegmentDistSq, clamp } from '../core/math.js';
+import { bladeContact, bladePower, overpowers } from './BladeClash.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
 const CLOSE_CURL = 0.55; // fingers closed
@@ -42,6 +43,7 @@ const _f = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _qPalm = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
+const A0 = [0, 0, 0], A1 = [0, 0, 0], B0 = [0, 0, 0], B1 = [0, 0, 0];
 
 export class WeaponSystem {
     /**
@@ -143,6 +145,9 @@ export class WeaponSystem {
             w.step(dt, collision);
         }
 
+        // Blade against another player's blade: stopped, metal rings
+        if (ch) this._bladeClash(dt, now);
+
         // Hand is blocked by what the blade hits (no clipping through walls)
         if (ch) {
             for (const side of ['left', 'right']) {
@@ -150,6 +155,97 @@ export class WeaponSystem {
                 if (!hs.held || hs.held.contactHard < 0.02) continue;
                 this._pushHandBack(side, hs.held, ch);
             }
+        }
+    }
+
+    // ------------------------------------------------------- blade vs blade
+    /** A weapon in another player's hand (only those can block my blade). */
+    _isForeignHeld(w) {
+        if (w.stuckIn || w.hover) return false;
+        if (w.foreignHeld) return true; // (tests)
+        const o = this.game.sync?.weaponOwners?.get(w.id);
+        return !!o && o !== this.game.localId;
+    }
+
+    /** How fast the tip moved since the last frame (m/s); keeps `_clashVel`. */
+    _tipSpeed(w, dt) {
+        const tip = w.getTipPosition(_e);
+        if (!w._clashTip) { w._clashTip = tip.clone(); w._clashVel = new THREE.Vector3(); }
+        else if (w._clashFrame === this.frame - 1) w._clashVel.subVectors(tip, w._clashTip).divideScalar(Math.max(dt, 1 / 240));
+        else w._clashVel.set(0, 0, 0);
+        w._clashTip.copy(tip);
+        w._clashFrame = this.frame;
+        return w._clashVel.length();
+    }
+
+    /**
+     * My held blades against blades in other players' hands: they don't pass
+     * through each other — mine stops on theirs (the hand too), metal rings.
+     * A much stronger blow beats the other blade aside and goes on.
+     */
+    _bladeClash(dt, now) {
+        const foreign = this._foreign || (this._foreign = []);
+        foreign.length = 0;
+        for (const w of this.weapons) if (this._isForeignHeld(w)) foreign.push(w);
+        const pairs = this._pairs || (this._pairs = new Map());
+        if (!foreign.length) { pairs.clear(); return; }
+        for (const o of foreign) o._clashSpeed = this._tipSpeed(o, dt);
+        for (const side of ['left', 'right']) {
+            const w = this.hands[side].held;
+            if (!w || !w.drive) continue;
+            const mySpeed = this._tipSpeed(w, dt);
+            const myPow = bladePower(mySpeed, w.mass);
+            for (const o of foreign) {
+                if (o.position.distanceToSquared(w.position) > 16) continue;
+                const key = w.id + '|' + o.id;
+                let pr = pairs.get(key);
+                if (!pr) { pr = { n: null, touching: false, passUntil: 0, clangAt: -1e9, frame: 0 }; pairs.set(key, pr); }
+                if (pr.frame !== this.frame - 1) { pr.n = null; pr.touching = false; }
+                pr.frame = this.frame;
+                w.getBladeSegment(_a, _b); o.getBladeSegment(_c, _d);
+                _a.toArray(A0); _b.toArray(A1); _c.toArray(B0); _d.toArray(B1);
+                const c = bladeContact(A0, A1, B0, B1, now < pr.passUntil ? null : pr.n);
+                if (!c.touch) {
+                    pr.touching = false;
+                    pr.n = c.n && c.d < 0.6 ? c.n : null;
+                    continue;
+                }
+                const oPow = bladePower(o._clashSpeed, o.mass);
+                const start = !pr.touching;
+                pr.touching = true;
+                if (start) {
+                    const rel = _e.copy(w._clashVel).sub(o._clashVel).length();
+                    if (rel > 0.8 && now - pr.clangAt > 120) { pr.clangAt = now; this._clang(c.point, rel); }
+                    if (overpowers(myPow, mySpeed, oPow)) pr.passUntil = now + 300;
+                }
+                if (now < pr.passUntil) { pr.n = null; continue; } // beat the other blade aside
+                // stopped on the other blade
+                _e.fromArray(c.n);
+                const depth = Math.min(c.depth, 0.5);
+                w.position.addScaledVector(_e, depth);
+                const vn = w.velocity.dot(_e);
+                if (vn < 0) w.velocity.addScaledVector(_e, -vn);
+                w.angularVelocity.multiplyScalar(0.6);
+                // a much stronger blow knocks my blade away
+                if (start && overpowers(oPow, o._clashSpeed, myPow)) w.velocity.addScaledVector(o._clashVel, 0.6);
+                w.contactHard = Math.max(w.contactHard, depth + 0.02);
+                w.mesh.updateMatrixWorld(true);
+                w.clashes = (w.clashes || 0) + 1;
+            }
+            w.getTipPosition(w._clashTip);
+        }
+        if (this.frame % 120 === 0) for (const [k, pr] of pairs) if (pr.frame < this.frame - 60) pairs.delete(k);
+    }
+
+    _clang(point, relSpeed) {
+        const g = this.game;
+        this.clangCount = (this.clangCount || 0) + 1;
+        g.sound?.playClang?.(Math.min(1, relSpeed / 12));
+        if (!g.fx) return;
+        _f.fromArray(point);
+        const n = 6 + Math.min(14, Math.round(relSpeed));
+        for (let i = 0; i < n; i++) {
+            g.fx.spark(_f, Math.random() < 0.6 ? 0xfff2a8 : 0xffffff, 0.06, _e.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.35);
         }
     }
 
@@ -428,7 +524,9 @@ export class WeaponSystem {
                         if (dd < bestD) { bestD = dd; hy = _e.y - zp.y; _f.copy(_e); }
                     }
                     const ry = z.group.rotation.y;
-                    const side = ((_f.x - zp.x) * Math.cos(ry) - (_f.z - zp.z) * Math.sin(ry)) >= 0 ? 1 : -1;
+                    const lx = (_f.x - zp.x) * Math.cos(ry) - (_f.z - zp.z) * Math.sin(ry);
+                    const lz = (_f.x - zp.x) * Math.sin(ry) + (_f.z - zp.z) * Math.cos(ry);
+                    const side = lx >= 0 ? 1 : -1;
                     // A thrust (the blade moving along itself, point first) sticks it into the body
                     _e.subVectors(tip, base).normalize();
                     const along = tipVel.dot(_e);
@@ -448,7 +546,7 @@ export class WeaponSystem {
                     // The blade loses energy in the hit
                     w.velocity.multiplyScalar(0.4);
                     w.angularVelocity.multiplyScalar(0.4);
-                    if (this.onHit) this.onHit(z, damage, dir, true, w, { y: hy, side, speed });
+                    if (this.onHit) this.onHit(z, damage, dir, true, w, { y: hy, side, speed, lx, lz });
                 }
             }
             hs.basePrev.copy(base);

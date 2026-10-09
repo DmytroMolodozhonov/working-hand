@@ -8,12 +8,47 @@
  * «Rescue» stops the bleeding: point the fingers at your own wound (the hand
  * at your body), or point the hand at the wounded player. If the blade is
  * still in, «Rescue» takes it out too.
+ *
+ * Light cuts: a slash with a sword / axe leaves a small red cut where the
+ * blade went (everybody sees it on the body). It bleeds a little for a few
+ * seconds, stops by itself, darkens and heals in about a minute and a half —
+ * no HP loss, nothing to treat.
  */
 
 import * as THREE from 'three';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const CUT_BLEED = 8; // s of light bleeding
+const CUT_LIFE = 90; // s until it has healed
+const MAX_CUTS = 12; // per body
+const _cutGeo = new THREE.BoxGeometry(1, 1, 1);
+const _fresh = new THREE.Color(0xc0001c), _scab = new THREE.Color(0x5a1810);
+
+/**
+ * Where on the body a cut goes: the part and the point on its surface.
+ * `h` = [x, y, z] in the character's own frame (feet at y −1.95, face to −Z).
+ * @returns {{part:string, pos:number[], normal:number[]}}
+ */
+export function cutPlace(h) {
+    const [x, y, z] = h;
+    let part, c, half;
+    if (y > 1.45) { part = 'head'; c = [0, 2.1, 0]; half = [0.6, 0.6, 0.6]; }
+    else if (y > -0.05) { part = 'body'; c = [0, 0.75, 0]; half = [0.6, 0.75, 0.4]; }
+    else { part = x < 0 ? 'leftLeg' : 'rightLeg'; c = [x < 0 ? -0.3 : 0.3, -0.975, 0]; half = [0.25, 0.975, 0.25]; }
+    // the point inside the box, then out to its nearest face
+    const p = [x - c[0], y - c[1], z - c[2]].map((v, i) => Math.max(-half[i], Math.min(half[i], v)));
+    let k = 0, best = -1;
+    for (let i = 0; i < 3; i++) {
+        if (part === 'head' && i === 1 && p[1] > 0) continue; // (not on top: there is hair)
+        const r = Math.abs(p[i]) / half[i];
+        if (r > best) { best = r; k = i; }
+    }
+    const normal = [0, 0, 0];
+    normal[k] = p[k] >= 0 ? 1 : -1;
+    p[k] = normal[k] * (half[k] + 0.012);
+    return { part, pos: p, normal };
+}
 
 export class Bleeding {
     constructor(game) {
@@ -24,6 +59,8 @@ export class Bleeding {
         this.remote = new Map(); // playerId -> rate (to draw their blood)
         this._zT = 0;
         this._touch = new Map();
+        this.cuts = []; // {mesh, mat, age, char}
+        this._cutMsg = -1e9;
         this._overlay = typeof document !== 'undefined' ? document.getElementById('bleed-overlay') || this._makeOverlay() : null;
     }
 
@@ -55,6 +92,66 @@ export class Bleeding {
         this.game.hud.setVoice('✚ Кровотечение остановлено', true);
         const c = this.game.character.group.position;
         for (let i = 0; i < 25; i++) this.game.fx.spark(_v.set(c.x, c.y + 0.6, c.z), 0x9fffb0, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.8);
+    }
+
+    /** A blade slashed me (not a deep wound): a cut that heals by itself. */
+    cut(h) {
+        if (!h || this.game.config.mode === 'creative') return;
+        this.addCut(this.game.character, h);
+        this.game.sync?.cut?.(h);
+        const now = performance.now();
+        if (now - this._cutMsg > 8000) {
+            this._cutMsg = now;
+            this.game.hud.setVoice('🩸 Порез — неглубокий, кровь скоро остановится сама', true);
+        }
+    }
+
+    /** Put a cut on a character's body (mine or another player's). */
+    addCut(character, h) {
+        if (!character || !Array.isArray(h) || h.length < 3 || !h.every(Number.isFinite)) return null;
+        const { part, pos, normal } = cutPlace(h);
+        const parent = part === 'head' ? character.head
+            : part === 'body' ? character.body
+            : (part === 'leftLeg' ? character.leftLegPivot : character.rightLegPivot)?.children.find((c) => c.isMesh);
+        if (!parent) return null;
+        const mat = new THREE.MeshBasicMaterial({ color: _fresh });
+        const mesh = new THREE.Mesh(_cutGeo, mat);
+        // a thin slash lying on the face, at a random slant
+        const len = 0.22 + Math.random() * 0.16;
+        if (normal[0]) mesh.scale.set(0.02, 0.05, len);
+        else if (normal[1]) mesh.scale.set(len, 0.02, 0.05);
+        else mesh.scale.set(len, 0.05, 0.02);
+        mesh.rotation.set(normal[0] ? Math.random() * 1.4 - 0.7 : 0, normal[1] ? Math.random() * 1.4 - 0.7 : 0, normal[2] ? Math.random() * 1.4 - 0.7 : 0);
+        mesh.position.fromArray(pos);
+        mesh.name = 'cut';
+        parent.add(mesh);
+        this.cuts.push({ mesh, mat, age: 0, char: character, len, axis: normal[0] ? 'z' : 'x' });
+        // too many on one body: the oldest is healed
+        const mine = this.cuts.filter((c) => c.char === character);
+        if (mine.length > MAX_CUTS) this._removeCut(mine[0]);
+        return mesh;
+    }
+
+    _removeCut(c) {
+        c.mesh.parent?.remove(c.mesh);
+        c.mat.dispose();
+        const i = this.cuts.indexOf(c);
+        if (i >= 0) this.cuts.splice(i, 1);
+    }
+
+    _updateCuts(dt) {
+        for (let i = this.cuts.length - 1; i >= 0; i--) {
+            const c = this.cuts[i];
+            c.age += dt;
+            if (c.age >= CUT_LIFE || !c.mesh.parent) { this._removeCut(c); continue; }
+            // the blood stops by itself, the cut darkens, then closes up
+            c.mat.color.copy(_fresh).lerp(_scab, Math.min(1, c.age / 20));
+            if (c.age > CUT_LIFE - 15) c.mesh.scale[c.axis] = Math.max(0.03, c.len * (CUT_LIFE - c.age) / 15);
+            if (c.age < CUT_BLEED && Math.random() < dt * 4 * (1 - c.age / CUT_BLEED)) {
+                c.mesh.getWorldPosition(_v);
+                this._drip(_v, 0.08);
+            }
+        }
     }
 
     /** Blades in me (from the impale messages). */
@@ -140,6 +237,7 @@ export class Bleeding {
             }
         }
         for (const w of g.weapons.stuckWeapons()) if (Math.random() < dt * 6) this._drip(w.position);
+        this._updateCuts(dt);
         // pulling a blade out of somebody by hand: touch its handle for a moment
         if (g.currentPose) {
             for (const [wid] of this.impaled) {
@@ -153,11 +251,17 @@ export class Bleeding {
         }
     }
 
-    _drip(p) {
-        this.game.fx.spark(_v2.set(p.x + (Math.random() - 0.5) * 0.4, p.y + (Math.random() - 0.5) * 0.4, p.z + (Math.random() - 0.5) * 0.4), Math.random() < 0.5 ? 0xb3001b : 0x7a0010, 0.07, new THREE.Vector3((Math.random() - 0.5) * 0.5, -1.5, (Math.random() - 0.5) * 0.5), 0.9);
+    _drip(p, spread = 0.4) {
+        this.game.fx.spark(_v2.set(p.x + (Math.random() - 0.5) * spread, p.y + (Math.random() - 0.5) * spread, p.z + (Math.random() - 0.5) * spread), Math.random() < 0.5 ? 0xb3001b : 0x7a0010, 0.07, new THREE.Vector3((Math.random() - 0.5) * 0.5, -1.5, (Math.random() - 0.5) * 0.5), 0.9);
+    }
+
+    /** A player left / their avatar is gone: forget the cuts on it. */
+    clearCuts(character) {
+        for (const c of this.cuts.slice()) if (!character || c.char === character) this._removeCut(c);
     }
 
     dispose() {
+        this.clearCuts();
         if (this._overlay) this._overlay.style.opacity = '0';
     }
 }
