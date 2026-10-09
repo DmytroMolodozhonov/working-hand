@@ -315,6 +315,12 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     # busy — the browser would then keep talking to an OLD game window.
     allow_reuse_address = os.name != "nt"
 
+    def handle_error(self, request, client_address):
+        # the browser closed a connection (a page reload, the end of a game): nothing to report
+        if isinstance(sys.exc_info()[1], (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
+
 
 def open_server():
     """Start on PORT; if an old game window still holds it, take the next free port."""

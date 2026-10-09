@@ -20,6 +20,10 @@ Two ways inside MediaPipe, whichever this version has:
 import json
 import os
 import sys
+
+# (MediaPipe's own technical messages would fill the game's console)
+os.environ.setdefault("GLOG_minloglevel", "2")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 import threading
 import time
 
@@ -206,7 +210,7 @@ class NativePose:
             n[0] += 1
             jp = pool.submit(pose.detect_for_video, img, ts)
             jh = pool.submit(hands.detect_for_video, img, ts)
-            jf = pool.submit(face.detect_for_video, img, ts) if n[0] % 2 == 0 else None  # (the face only turns the head)
+            jf = pool.submit(face.detect_for_video, img, ts)  # (every picture: a steady head turn)
             p, h = jp.result(), jh.result()
             out = {
                 "poseLandmarks": _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None,

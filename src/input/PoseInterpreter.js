@@ -14,6 +14,8 @@ export class PoseInterpreter {
         this.prevWrists = null;
         this.wasCrouching = false;
         this.lastHead = { yaw: 0, pitch: 0 };
+        // the head's turn: still → small jitter smoothed away; a real turn passes at once
+        this.headFilter = { yaw: new OneEuro(0.2, 0.5), pitch: new OneEuro(0.2, 0.5) };
         // «Earthquake» stomp: a knee lifted, then put down hard
         this.legs = { left: { liftedAt: 0 }, right: { liftedAt: 0 } };
         this.stompAt = 0;
@@ -109,8 +111,9 @@ export class PoseInterpreter {
             try {
                 const faceRig = this.faceSolver.solve(results.faceLandmarks, { runtime: 'mediapipe', video, smooth: true });
                 if (faceRig && faceRig.head) {
-                    this.lastHead.yaw = -(faceRig.head.y || 0);
-                    this.lastHead.pitch = faceRig.head.x || 0;
+                    const t = performance.now() / 1000;
+                    this.lastHead.yaw = this.headFilter.yaw.filter(-(faceRig.head.y || 0), t);
+                    this.lastHead.pitch = this.headFilter.pitch.filter(faceRig.head.x || 0, t);
                     data.headRotation.yaw = this.lastHead.yaw;
                     data.headRotation.pitch = this.lastHead.pitch;
                 }
@@ -150,4 +153,28 @@ export function torsoMetrics(lm) {
         lateral = (ls.y - rs.y) / sw;
     }
     return { lateral, depth, noseRel: (sMidY - nose.y) / sw, hips: !!hipsOk };
+}
+
+/**
+ * The 1€ filter (Casiez, Roussel, Vogel 2012): smoothing that adapts to speed —
+ * strong while the value barely moves (kills jitter), weak while it moves fast
+ * (no lag on a real movement).
+ */
+export class OneEuro {
+    constructor(minCutoff = 1, beta = 0.5, dCutoff = 1) {
+        this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff;
+        this.x = null; this.dx = 0; this.t = 0;
+    }
+
+    filter(v, t) {
+        if (this.x === null || !Number.isFinite(this.x)) { this.x = v; this.t = t; return v; }
+        const dt = Math.max(1e-3, t - this.t);
+        this.t = t;
+        const a = (cutoff) => 1 / (1 + 1 / (2 * Math.PI * cutoff * dt));
+        const dv = (v - this.x) / dt;
+        this.dx += a(this.dCutoff) * (dv - this.dx);
+        const cutoff = this.minCutoff + this.beta * Math.abs(this.dx);
+        this.x += a(cutoff) * (v - this.x);
+        return this.x;
+    }
 }
