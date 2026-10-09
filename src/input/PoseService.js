@@ -107,9 +107,10 @@ export class PoseService {
         let started = false;
         if (!onGameThread && typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !globalThis.__ZNS_HOLISTIC_MAIN__) {
             try {
-                this.holisticWorker = await this._spawnHolisticWorker(quality);
-                this.stats.mode = 'worker-gpu';
+                await this._startSplit(quality);
+                this.stats.mode = 'worker-cpu';
                 this.stats.thread = 'worker';
+                this.stats.delegate = globalThis.__ZNS_DELEGATE__ || 'CPU';
                 this._holisticDir = dir;
                 started = true;
             } catch (e) {
@@ -126,26 +127,21 @@ export class PoseService {
     }
 
     /**
-     * The camera network in a worker, on the graphics card: MediaPipe's three
-     * fast networks (body, hands, face — the same points as Holistic). The old
-     * Holistic library can't use the graphics card from a worker (10× slower
-     * there), and the new Holistic Landmarker is slow in a browser (~250 ms).
+     * The camera network in its own threads, on the processor: MediaPipe's fast
+     * networks — body + face in one worker, both hands in another, running in
+     * parallel on two cores. The game's thread never waits for them, and they
+     * don't queue behind the game for the graphics card (in a worker the browser
+     * serves WebGL last: there the same networks took 160–250 ms a frame).
      */
-    _spawnHolisticWorker(quality) {
-        return new Promise((resolve, reject) => {
+    async _startSplit(quality) {
+        const spawn = (part) => new Promise((resolve, reject) => {
             const worker = new Worker(new URL('./vision.worker.js', import.meta.url), { type: 'module' });
-            const timeout = setTimeout(() => { worker.terminate(); reject(new Error('holistic worker init timeout')); }, 90000);
+            const timeout = setTimeout(() => { worker.terminate(); reject(new Error(part + ' worker init timeout')); }, 90000);
             worker.onmessage = (ev) => {
                 const msg = ev.data;
                 if (msg.type === 'ready') {
                     clearTimeout(timeout);
-                    this.stats.delegate = msg.delegate;
-                    this.stats.gpu = msg.gpu || '';
-                    worker.onmessage = (e) => {
-                        if (worker !== this.holisticWorker) return;
-                        const m = e.data;
-                        this._onHolisticWorker(m.type === 'result' ? { type: 'result', ...m.result } : m);
-                    };
+                    worker.onmessage = (e) => { if (this.split && this.split[part] === worker) this._onSplit(part, e.data); };
                     resolve(worker);
                 } else if (msg.type === 'error') {
                     clearTimeout(timeout);
@@ -153,37 +149,47 @@ export class PoseService {
                     reject(new Error(msg.message));
                 }
             };
-            worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || 'holistic worker error')); };
-            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || 'GPU' });
+            worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || part + ' worker error')); };
+            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || 'CPU', bodyOnly: part === 'body', handsOnly: part === 'hands' });
         });
+        const [body, hands] = await Promise.all([spawn('body'), spawn('hands')]);
+        this.split = { body, hands, pending: new Map() };
     }
 
-    _onHolisticWorker(msg) {
-        if (msg.type === 'result' || msg.type === 'dropped' || msg.type === 'error') this._hwOut = Math.max(0, (this._hwOut || 0) - 1);
-        if (msg.type === 'result') {
-            this.lastSendEnd = performance.now();
-            // (the first answers include the graphics card's warm-up — seconds — they don't count)
-            const n = (this._hwN = (this._hwN || 0) + 1);
-            if (msg.cost && n > 10) {
-                this.stats.avgCost = this.stats.avgCost && n > 11 ? this.stats.avgCost * 0.9 + msg.cost * 0.1 : msg.cost;
-                const w = this._hwCosts || (this._hwCosts = []);
-                w.push(msg.cost);
-                if (w.length > 30) w.shift();
-            }
-            if (!msg.empty) this._handleResult(msg); // (the same guards as the networks always had)
-            // really too slow in the worker on this computer (no graphics card for it): Holistic on the game's thread
-            const med = this._hwCosts && this._hwCosts.length >= 30 ? this._hwCosts.slice().sort((x, y) => x - y)[15] : 0;
-            if (med > 70 && !this._fellBack && !globalThis.__ZNS_KEEP_WORKER__) {
-                this._fellBack = true;
-                this.stats.why = `в своём потоке ${Math.round(med)} мс на кадр (${this.stats.delegate}) — медленно, перешли в поток игры`;
-                console.warn('[PoseService] ' + this.stats.why);
-                const q = this._quality;
-                this._closeModels();
-                this._startHolisticMain(this._holisticDir || this.baseUrl + 'vendor/mediapipe-holistic/', q).then(() => this._startHandHelper(q));
-            }
-        } else if (msg.type === 'error') {
-            this._frameErrors = (this._frameErrors || 0) + 1;
-            if (this._frameErrors < 5) console.warn('[PoseService] Holistic worker frame failed:', msg.message);
+    /** One half of a camera frame is ready (body+face, or hands): both halves → one result. */
+    _onSplit(part, m) {
+        const S = this.split;
+        if (m.type !== 'result' && m.type !== 'error') return;
+        const P = S.pending.get(m.sent);
+        if (!P) return;
+        P[part] = m.type === 'result' ? m.result : { failed: true };
+        const now = performance.now();
+        // (a half that never came must not hold the camera back)
+        for (const [k, q] of S.pending) if (now - q.at > 800) S.pending.delete(k);
+        if (!P.body || !P.hands) return;
+        S.pending.delete(m.sent);
+        const b = P.body.failed ? null : P.body, h = P.hands.failed ? null : P.hands;
+        if (!b && !h) return;
+        this.lastSendEnd = now;
+        const cost = Math.max(b?.cost || 0, h?.cost || 0);
+        // (the first answers include the warm-up — they don't count)
+        const n = (this._splitN = (this._splitN || 0) + 1);
+        if (n > 10) {
+            const w = this._splitCosts || (this._splitCosts = []);
+            w.push(cost);
+            if (w.length > 30) w.shift();
+            this.stats.latency = Math.round(now - P.at);
+        }
+        this._handleResult({ ts: b?.ts ?? h?.ts, cost: n > 10 ? cost : 0, poseLandmarks: b ? b.poseLandmarks : null, faceLandmarks: b ? b.faceLandmarks : undefined, hands: h ? h.hands : [] });
+        // really too slow on this computer: Holistic on the game's thread
+        const med = this._splitCosts && this._splitCosts.length >= 30 ? this._splitCosts.slice().sort((x, y) => x - y)[15] : 0;
+        if (med > 90 && !this._fellBack && !globalThis.__ZNS_KEEP_WORKER__) {
+            this._fellBack = true;
+            this.stats.why = `в своих потоках ${Math.round(med)} мс на кадр — медленно, перешли в поток игры`;
+            console.warn('[PoseService] ' + this.stats.why);
+            const q = this._quality;
+            this._closeModels();
+            this._startHolisticMain(this._holisticDir || this.baseUrl + 'vendor/mediapipe-holistic/', q).then(() => this._startHandHelper(q));
         }
     }
 
@@ -210,12 +216,12 @@ export class PoseService {
     }
 
     _startHandHelper(quality) {
-        const owner = this.holistic || this.holisticWorker;
+        const owner = this.holistic;
         // Hand helper: the newer Hand Landmarker in a worker finds hands that
         // Holistic loses (hand over the arm / body). Optional — Holistic alone works too.
         if (typeof Worker !== 'undefined' && !globalThis.__ZNS_NO_HAND_HELPER__) {
             this._spawnWorker(quality, 'CPU', true).then((w) => {
-                if ((this.holistic || this.holisticWorker) !== owner) { w.terminate(); return; }
+                if (this.holistic !== owner) { w.terminate(); return; }
                 this.handWorker = w;
                 this.stats.handHelper = true;
             }).catch((e) => console.warn('[PoseService] hand helper unavailable:', e?.message || e));
@@ -344,10 +350,9 @@ export class PoseService {
 
     _closeModels() {
         if (this.holistic) { try { this.holistic.close(); } catch (e) { /* ignore */ } this.holistic = null; }
-        if (this.holisticWorker) { this.holisticWorker.postMessage({ type: 'close' }); this.holisticWorker.terminate(); this.holisticWorker = null; }
-        this._hwOut = 0;
-        this._hwN = 0;
-        this._hwCosts = null;
+        if (this.split) { for (const w of [this.split.body, this.split.hands]) { w.postMessage({ type: 'close' }); w.terminate(); } this.split = null; }
+        this._splitN = 0;
+        this._splitCosts = null;
         if (this.handWorker) { this.handWorker.terminate(); this.handWorker = null; }
         this._helperHands = null;
         if (this.worker) { this.worker.postMessage({ type: 'close' }); this.worker.terminate(); this.worker = null; }
@@ -476,22 +481,22 @@ export class PoseService {
         this._lastVideoTime = v.currentTime;
         this.stats.frames++;
         const ts = performance.now();
-        if (this.holisticWorker) {
-            // its own thread: every camera frame; up to two on the way (one being recognised,
-            // the next one waiting there), so the network never waits for the next picture
-            if ((this._hwOut || 0) >= 2 || ts - (this._holisticAt || 0) < 25) { this.stats.frames--; return; }
+        if (this.split) {
+            // its own threads: every camera frame, at most two on the way (one being
+            // recognised, the next one waiting), the same picture to both workers
+            const S = this.split;
+            if (S.pending.size >= 2 || ts - (this._holisticAt || 0) < 25) { this.stats.frames--; return; }
             this._holisticAt = ts;
-            this._hwOut = (this._hwOut || 0) + 1;
+            S.pending.set(ts, { at: ts });
             this.lastSendStart = ts;
             try {
-                const bitmap = await createImageBitmap(v);
-                if (this.holisticWorker) this.holisticWorker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
-                else { bitmap.close?.(); this._hwOut = 0; }
+                const [a, b] = await Promise.all([createImageBitmap(v), createImageBitmap(v)]);
+                if (this.split !== S) { a.close?.(); b.close?.(); return; }
+                S.body.postMessage({ type: 'frame', bitmap: a, ts }, [a]);
+                S.hands.postMessage({ type: 'frame', bitmap: b, ts }, [b]);
             } catch (e) {
-                this._hwOut = Math.max(0, this._hwOut - 1);
+                S.pending.delete(ts);
             }
-            // (a lost answer must not stop the camera for good)
-            if (!this._hwWatch) this._hwWatch = setInterval(() => { if (this._hwOut && performance.now() - (this.lastSendEnd || 0) > 1500 && performance.now() - this.lastSendStart > 1500) this._hwOut = 0; }, 1000);
         } else if (this.holistic) {
             // Holistic shares the game's thread: ~22 recognitions a second are plenty
             // (motion between them is blended), the rest of the time goes to the game.

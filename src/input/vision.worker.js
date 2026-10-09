@@ -17,19 +17,19 @@ self.onmessage = async (event) => {
         if (msg.type === 'init') {
             if (msg.delegate) self.__ZNS_DELEGATE__ = msg.delegate;
             runner = new VisionRunner(msg.baseUrl);
-            const info = await runner.init({ quality: msg.quality, useModule: true, handsOnly: !!msg.handsOnly });
+            const info = await runner.init({ quality: msg.quality, useModule: true, handsOnly: !!msg.handsOnly, bodyOnly: !!msg.bodyOnly });
             self.postMessage({ type: 'ready', ...info });
         } else if (msg.type === 'frame') {
             if (!runner) { msg.bitmap?.close?.(); return; }
             const result = runner.detect(msg.bitmap, msg.ts);
             msg.bitmap.close?.();
-            self.postMessage({ type: 'result', result });
+            self.postMessage({ type: 'result', result, sent: msg.ts });
         } else if (msg.type === 'close') {
             runner?.close();
             runner = null;
         }
     } catch (e) {
         msg.bitmap?.close?.();
-        self.postMessage({ type: 'error', message: String(e?.message || e), during: msg.type });
+        self.postMessage({ type: 'error', message: String(e?.message || e), during: msg.type, sent: msg.ts });
     }
 };

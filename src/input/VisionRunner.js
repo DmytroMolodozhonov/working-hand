@@ -30,9 +30,11 @@ export class VisionRunner {
      * @param {object} o
      *   handsOnly: only the Hand Landmarker (helper next to Holistic, which
      *   loses hands that overlap the arm/body; this network has its own palm detector)
+     *   bodyOnly: body + face only (the hands run in another worker, in parallel)
      */
-    async init({ quality = 1, useModule = true, handsOnly = false } = {}) {
+    async init({ quality = 1, useModule = true, handsOnly = false, bodyOnly = false } = {}) {
         this.handsOnly = handsOnly;
+        this.bodyOnly = bodyOnly;
         const fileset = await FilesetResolver.forVisionTasks(this.baseUrl + 'vendor/mediapipe/wasm', useModule);
         // With the ES-module loader the library clears self.ModuleFactory after
         // creating a task, and a second import() of the same module does not
@@ -66,7 +68,7 @@ export class VisionRunner {
                 minTrackingConfidence: 0.5,
             });
             restoreFactory();
-            const hands = await HandLandmarker.createFromOptions(fileset, {
+            const hands = bodyOnly ? null : await HandLandmarker.createFromOptions(fileset, {
                 ...common('hand_landmarker.task'),
                 numHands: 2,
                 minHandDetectionConfidence: 0.5,
@@ -109,7 +111,7 @@ export class VisionRunner {
         this.frame++;
         const t0 = performance.now();
         const pose = this.pose ? this.pose.detectForVideo(image, ts) : { landmarks: [] };
-        const hands = this.hands.detectForVideo(image, ts);
+        const hands = this.hands ? this.hands.detectForVideo(image, ts) : { landmarks: [] };
         let face = null;
         if (this.face && this.frame % this.faceEvery === 0) face = this.face.detectForVideo(image, ts);
         const cost = performance.now() - t0;
@@ -128,6 +130,7 @@ export class VisionRunner {
             })),
             faceLandmarks: face && face.faceLandmarks?.[0] ? plain(face.faceLandmarks[0], false) : (face ? null : undefined),
             handsOnly: this.handsOnly,
+            part: this.handsOnly ? 'hands' : this.bodyOnly ? 'body' : 'all',
         };
     }
 
