@@ -51,7 +51,40 @@ export const ITEM_INFO = {
     steak: { name: 'Жареный стейк', icon: '🍖', weight: 0.4, stack: 10 },
     book: { name: 'Книга заклинаний', icon: '📖', weight: 0.6 },
     arrows: { name: 'Стрелы', icon: '➶', weight: 0.3 },
+    // castles: money and market food
+    coins: { name: 'Монеты', icon: '💰', weight: 0.3, stack: 500 },
+    bread: { name: 'Хлеб', icon: '🍞', weight: 0.3, stack: 10, heal: 3 },
+    cheese: { name: 'Сыр', icon: '🧀', weight: 0.3, stack: 10, heal: 3 },
+    pie: { name: 'Пирог', icon: '🥧', weight: 0.4, stack: 10, heal: 5 },
 };
+
+/**
+ * What a thing is worth at a castle market (the merchant pays about this much;
+ * magic things are dear). Weapons lying on a stall count too.
+ */
+export function itemValue(it) {
+    if (!it) return 0;
+    switch (it.kind) {
+        case 'wand': return 150 + 2 * (it.power || 0);
+        case 'weapon': return it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
+        case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
+        case 'scroll': return it.stat === 'flight' ? 220 : 60;
+        case 'backpack': return 30 + 5 * (it.slots || 3);
+        case 'bow': return it.magic ? 90 + (it.bonus || 0) : 25;
+        case 'hammer': return 300;
+        case 'book': return 50;
+        case 'apple': return 12 * (it.count || 1);
+        case 'meat': return 1 * (it.count || 1);
+        case 'steak': return 3 * (it.count || 1);
+        case 'arrows': return Math.max(1, Math.round((it.count || 1) * 0.6));
+        case 'bread': case 'cheese': return 1 * (it.count || 1);
+        case 'pie': return 2 * (it.count || 1);
+        default: return 0;
+    }
+}
+
+/** Is it a magic thing? (for the merchant and the conversation) */
+export const isMagicItem = (it) => !!it && (it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'book' || it.magic === true || (it.kind === 'scroll'));
 
 const SHIELD_KINDS = [
     { name: 'Деревянный щит', color: 0x8b5a2b, rim: 0x5a3a1e },
@@ -136,6 +169,8 @@ export function describeItem(it) {
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком'] };
         case 'meat': return { title: '🥩 Сырое мясо', color: 0xd9534f, lines: ['Поднесите ко рту: +2 HP', 'Пожарьте «Инферно» — будет +4'] };
         case 'steak': return { title: '🍖 Стейк', color: 0xb5651d, lines: ['Поднесите ко рту: +4 HP'] };
+        case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b> (до 500 в ячейке)`, 'Платите ими на рынке замка'] };
+        case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
 }
@@ -272,6 +307,42 @@ function appleModel() {
     return g;
 }
 
+/** A pouch of coins (a few gold coins spilling on top). */
+function coinsModel() {
+    const g = new THREE.Group();
+    const sack = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), mat(0x8b5a2b));
+    sack.scale.set(1, 0.85, 1);
+    g.add(sack);
+    g.add(cyl(0.05, 0.07, 0.07, mat(0x7a4a22), 0, 0.12));
+    g.add(cyl(0.055, 0.055, 0.015, mat(0xc9a227), 0, 0.1));
+    const gold = mat(0xffd700, { standard: true, metal: 0.8, rough: 0.3, emissive: 0x332200 });
+    for (let i = 0; i < 3; i++) { const c = cyl(0.045, 0.045, 0.012, gold, -0.06 + i * 0.06, -0.09 + i * 0.012, 0.12); c.rotation.x = 0.3; g.add(c); }
+    return g;
+}
+
+function breadModel() {
+    const g = new THREE.Group();
+    g.add(box(0.3, 0.12, 0.15, mat(0xc68a3e)));
+    g.add(box(0.26, 0.04, 0.12, mat(0xa86b2a), 0, 0.07));
+    for (let i = -1; i <= 1; i++) g.add(box(0.03, 0.01, 0.13, mat(0xe8c48a), i * 0.08, 0.095));
+    return g;
+}
+
+function cheeseModel() {
+    const g = new THREE.Group();
+    g.add(box(0.22, 0.12, 0.16, mat(0xf2c94c)));
+    for (const [x, y, z] of [[-0.05, 0.02, 0.081], [0.06, -0.02, 0.081], [0.02, 0.061, 0.02]]) g.add(box(0.03, 0.03, 0.005, mat(0xc9a227), x, y, z));
+    return g;
+}
+
+function pieModel() {
+    const g = new THREE.Group();
+    g.add(cyl(0.15, 0.13, 0.07, mat(0xc68a3e)));
+    g.add(cyl(0.13, 0.15, 0.025, mat(0xe0a95a), 0, 0.045));
+    g.add(cyl(0.05, 0.05, 0.01, mat(0x8e2b2b), 0, 0.06));
+    return g;
+}
+
 function meatModel(cooked) {
     const g = new THREE.Group();
     g.add(box(0.26, 0.1, 0.18, mat(cooked ? 0x8b4513 : 0xd9534f)));
@@ -292,6 +363,10 @@ export function makeItemModel(it) {
         case 'meat': return meatModel(false);
         case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.05, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);
+        case 'coins': return coinsModel();
+        case 'bread': return breadModel();
+        case 'cheese': return cheeseModel();
+        case 'pie': return pieModel();
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
 }

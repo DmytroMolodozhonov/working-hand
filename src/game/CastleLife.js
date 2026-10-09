@@ -27,6 +27,7 @@ import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET 
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 import { createRng } from '../core/math.js';
+import { CastleTalk } from './CastleTalk.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -165,6 +166,8 @@ export class CastleLife {
         this._chatT = 4;
         this._lockMsgT = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test';
+        this.talk = new CastleTalk(game, this); // conversations and the market
+        this.brainLine = (v) => this.talk.ambientLine(v);
     }
 
     get auth() { return this.game.authority; }
@@ -327,6 +330,7 @@ export class CastleLife {
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
             chest.locked = !st.kingDead;
             chest.castle = cs.def;
+            chest.room = c.room;
             g.chests.push(chest);
             if (g._openedChests?.has(c.id)) chest.setOpenInstant();
             cs.chests.push(chest);
@@ -507,6 +511,26 @@ export class CastleLife {
         }
         v.bowT -= dt;
         if (v.bowing > 0) { v.bowing -= dt; v.mode = 'bow'; v.speed = 0; return; }
+        // talking with a player: stops and looks at them (the king keeps his seat)
+        if (v.talking > 0 && v.job !== 'king') {
+            const tp = this._playerPos(v.talkTo || g.localId);
+            if (tp) v.yaw = turn(v.yaw, Math.atan2(-(tp.x - v.x), -(tp.z - v.z)), dt * 6);
+            v.mode = 'talk'; v.speed = 0;
+            this._ground(v);
+            return;
+        }
+        // following a player who asked («иди за мной»)
+        if (v.follow) {
+            v.followT -= dt;
+            const fp = this._playerPos(v.follow);
+            if (!fp || v.followT <= 0 || !this._inLand(cs.def, fp, 20)) { v.follow = null; v.path = null; }
+            else {
+                const d = this._steer(v, fp.x, fp.z, Math.hypot(fp.x - v.x, fp.z - v.z) > 8 ? RUN : WALK, dt, 3);
+                v.mode = d > 3.2 ? (v.speed > WALK ? 'run' : 'walk') : 'idle';
+                this._ground(v);
+                return;
+            }
+        }
         switch (v.job) {
             case 'king':
             case 'guard':
@@ -739,6 +763,13 @@ export class CastleLife {
         else g.hud.notify?.(`👑 ${st.ownerName || 'Кто-то'} захватил ${cs.def.name}`);
     }
 
+    /** A villager saw / suffered a crime (theft, threats) by a player. */
+    reportCrime(v, by, kind = 'crime') {
+        if (!v || v.dead) return;
+        if (!this.auth) { this.game.sync?.villagerCrime?.(v.id, kind); return; }
+        this._offence(v.cs, by, v, false, { x: v.x, y: v.y, z: v.z });
+    }
+
     /** A player died: the castles forget them. */
     playerDied(id) {
         for (const cs of this.castles.values()) {
@@ -767,6 +798,7 @@ export class CastleLife {
         v.sayT = 1.5;
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, color: v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
+        this.talk.voice(v, text);
         if (broadcast && this.auth) this.game.sync?.villagerSay?.(v.id, text);
     }
 
@@ -833,6 +865,7 @@ export class CastleLife {
             }
         }
         this._chatter(dt);
+        this.talk.update(dt);
         this._lockHint(dt);
         this._netSend(dt);
     }
@@ -959,6 +992,7 @@ export class CastleLife {
     ownerOf(castleId) { return this.state(castleId).owner; }
 
     dispose() {
+        this.talk.dispose();
         for (const v of [...this.byId.values()]) this._deactivate(v);
         this.castles.clear();
     }

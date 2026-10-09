@@ -116,7 +116,37 @@ export class Inventory {
         return true;
     }
 
-    /** A found thing into a slot (food stacks up to 10). */
+    /** All the coins I have (in the slots and in my hands). */
+    coins() {
+        let n = 0;
+        for (const s of this.slots) if (s && s.kind === 'coins') n += s.count || 0;
+        for (const side of ['right', 'left']) { const h = this.game.items?.held[side]; if (h && h.item.kind === 'coins') n += h.item.count || 0; }
+        return n;
+    }
+
+    /** Pay `n` coins (false — not enough). */
+    spendCoins(n) {
+        if (this.coins() < n) return false;
+        let left = n;
+        for (const side of ['right', 'left']) {
+            const h = this.game.items?.held[side];
+            if (!h || h.item.kind !== 'coins' || left <= 0) continue;
+            const k = Math.min(left, h.item.count || 0);
+            h.item.count -= k; left -= k;
+            if (h.item.count <= 0) this.game.items.releaseHand(side);
+        }
+        for (let i = 0; i < this.slots.length && left > 0; i++) {
+            const s = this.slots[i];
+            if (!s || s.kind !== 'coins') continue;
+            const k = Math.min(left, s.count || 0);
+            s.count -= k; left -= k;
+            if (s.count <= 0) this.slots[i] = null;
+        }
+        this._render();
+        return true;
+    }
+
+    /** A found thing into a slot (food stacks up to 10, coins up to 500). */
     storeItem(item) {
         const max = ITEM_INFO[item.kind]?.stack;
         if (max) {

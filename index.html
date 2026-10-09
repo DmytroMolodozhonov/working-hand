@@ -308,6 +308,22 @@
                             <option value="0">Выключены</option>
                         </select>
                     </div>
+                    <div class="settings-group">
+                        <label>Голоса жителей замков:</label>
+                        <select id="villager-voice">
+                            <option value="1">Говорят вслух</option>
+                            <option value="0">Только текст над головой</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>Умные жители (нейросеть в браузере):</label>
+                        <select id="villager-ai">
+                            <option value="off" selected>Выключено — готовые фразы</option>
+                            <option value="smart">Включено (Qwen3, ~570 МБ один раз)</option>
+                            <option value="light">Включено (Gemma 3, ~430–800 МБ один раз)</option>
+                        </select>
+                        <p class="info-text" style="font-size:0.85rem;color:#a4b0be;margin-top:6px">Нейросеть скачивается один раз и работает прямо на вашем компьютере (лучше с видеокартой). Без неё жители тоже разговаривают — готовыми фразами.</p>
+                    </div>
                     </div>
                     <div id="set-voice" class="sub-pane">
                     <div class="settings-group">

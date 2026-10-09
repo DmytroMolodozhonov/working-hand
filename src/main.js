@@ -185,6 +185,8 @@ function readConfig() {
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
         look: activeLook(), // the hero from the «Персонаж» tab
+        villagerVoice: ($('villager-voice')?.value ?? '1') !== '0',
+        villagerAI: $('villager-ai')?.value || 'off',
     };
 }
 
@@ -344,6 +346,11 @@ voice.onResult = (command, isFinal = true) => {
             return;
         }
         const name = game.castLocalSpell(command, isFinal);
+        // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
+        if (!name && isFinal && !matchSpell(command) && game.castleLife?.talk?.hear(command)) {
+            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
+            return;
+        }
         if (name) {
             voice.learnOwnVoice();
             hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span> (было: "${escapeHtml(command)}")`);
@@ -741,7 +748,7 @@ function escapeHtml(s) {
 // Volumes, graphics, camera… are kept in this browser between launches.
 (function rememberSettings() {
     const KEY = 'zns-settings';
-    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'voice-filter', 'audio-ambient-toggle', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count'];
     let saved = {};

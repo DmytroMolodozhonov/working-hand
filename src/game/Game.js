@@ -32,6 +32,7 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
+import { newUid } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Spiders, spiderModel } from './Spider.js';
@@ -492,7 +493,11 @@ export class Game {
             // a cave chest: wands, scrolls, shields… float up out of it
             if (this.authority) {
                 chest.mesh.updateMatrixWorld(true);
-                this.items.lootChest(chest.getRewardPosition(new THREE.Vector3()));
+                const rp = chest.getRewardPosition(new THREE.Vector3());
+                this.items.lootChest(rp);
+                // a pouch of coins too (a castle's treasury holds much more)
+                const coins = chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
+                this.items.spawnLoose({ kind: 'coins', uid: newUid(), count: coins }, rp.clone().add(new THREE.Vector3(0, 3.2, 0)), { hover: true });
                 if (this.sync) this.sync.chestOpenedLoot?.(chest);
             }
             return;

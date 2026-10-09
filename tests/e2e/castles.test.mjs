@@ -121,3 +121,100 @@ test('castles: people, knights at their posts, the king on his throne; seen viol
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('market and talk: buy from a counter with «да», sell a wand for a pouch of coins, theft calls the guard; only near villagers hear you', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const c = g.world.terrain.data.castles.near(0, 0, 2500).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+        window.__castle = c;
+        const s = c.stalls[0];
+        g.character.group.position.set(s.front.x, s.front.y + 2.2, s.front.z);
+        g.world.terrain.flushAround(s.front.x, s.front.z);
+        g.inventory.storeItem({ kind: 'coins', uid: 'test-coins', count: 100 });
+    });
+    // goods appear on the counters
+    let goods = [];
+    for (let i = 0; i < 20 && goods.length < 1; i++) {
+        await frames(page, 10);
+        goods = await page.evaluate(() => { const T = window.__zns.game.castleLife.talk; const s = T.stalls.get(window.__castle.id + ':s0'); return s ? s.goods : []; });
+    }
+    assert.ok(goods.length >= 1, 'goods on the counter');
+    // buy: take it — the price — «да»
+    const buy = await page.evaluate((uid) => {
+        const g = window.__zns.game, T = g.castleLife.talk;
+        const L = g.items.loose.get(uid);
+        const price = L.item.shop.price;
+        g.items.pickUp(uid, g.localId, 'right');
+        const offered = T.offer && T.offer.kind === 'buy' && T.offer.price === price;
+        const merchant = T.offer?.v;
+        const heard = T.hear('да');
+        const item = g.items.held.right?.item;
+        return { price, offered, heard, coins: g.inventory.coins(), paid: item && !item.shop, said: merchant?.bubble?.visible };
+    }, goods[0]);
+    assert.ok(buy.offered && buy.heard && buy.paid, JSON.stringify(buy));
+    assert.equal(buy.coins, 100 - buy.price);
+    // sell: a wand put on the counter — the merchant names a price — «да» — a pouch to take
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        g.items.releaseHand('right');
+        const c = window.__castle.stalls[0].counter;
+        g.items.spawnLoose({ kind: 'wand', uid: 'test-wand', model: 1, color: 0x8844ff, dir: 'duel', fav: 'Inferno', power: 20 }, { x: (c.x0 + c.x1) / 2, y: c.top + 0.6, z: (c.z0 + c.z1) / 2, clone() { return { ...this }; } });
+    });
+    let sellOffer = null;
+    for (let i = 0; i < 20 && !sellOffer; i++) {
+        await frames(page, 8);
+        sellOffer = await page.evaluate(() => { const o = window.__zns.game.castleLife.talk.offer; return o && o.kind === 'sell' ? { price: o.price, uid: o.uid } : null; });
+    }
+    assert.ok(sellOffer && sellOffer.uid === 'test-wand' && sellOffer.price >= 150, `a magic wand is dear: ${JSON.stringify(sellOffer)}`);
+    const sold = await page.evaluate(() => {
+        const g = window.__zns.game, T = g.castleLife.talk;
+        const before = g.inventory.coins();
+        T.hear('да');
+        const wandGone = !g.items.loose.has('test-wand');
+        const pouch = [...g.items.loose.values()].find((L) => L.item.kind === 'coins');
+        if (pouch) g.items.pickUp(pouch.item.uid, g.localId, 'right');
+        return { wandGone, pouch: !!pouch, gained: g.inventory.coins() - before };
+    });
+    assert.ok(sold.wandGone && sold.pouch, JSON.stringify(sold));
+    assert.equal(sold.gained, sellOffer.price);
+    // only villagers near me hear me
+    const ear = await page.evaluate(() => {
+        const g = window.__zns.game, T = g.castleLife.talk;
+        const near = T.hear('привет как тебя зовут');
+        const p = g.character.group.position.clone();
+        // far from everybody
+        const all = [...g.castleLife.byId.values()];
+        let spot = null;
+        for (let r = 30; r < 90 && !spot; r += 5) for (let a = 0; a < 12 && !spot; a++) {
+            const x = p.x + Math.cos(a / 2) * r, z = p.z + Math.sin(a / 2) * r;
+            if (all.every((v) => Math.hypot(v.x - x, v.z - z) > 12)) spot = { x, z };
+        }
+        g.character.group.position.x = spot.x; g.character.group.position.z = spot.z;
+        const far = T.hear('привет');
+        g.character.group.position.copy(p);
+        return { near, far };
+    });
+    assert.deepEqual(ear, { near: true, far: false });
+    // theft: take a good and walk away unpaid — the castle turns on me
+    let uid2 = null;
+    for (let i = 0; i < 30 && !uid2; i++) {
+        await frames(page, 10);
+        uid2 = await page.evaluate(() => { const g = window.__zns.game; for (const [k, s] of g.castleLife.talk.stalls) for (const u of s.goods) if (g.items.loose.get(u)?.item.shop) return u; return null; });
+    }
+    assert.ok(uid2, 'another good');
+    await page.evaluate((uid) => {
+        const g = window.__zns.game;
+        if (g.items.held.right) g.items.releaseHand('right');
+        if (g.items.held.left) g.items.releaseHand('left');
+        g.items.pickUp(uid, g.localId, 'right');
+        g.character.group.position.x += 25;
+    }, uid2);
+    await frames(page, 15);
+    const theft = await page.evaluate(() => { const g = window.__zns.game; const cs = g.castleLife.castles.get(window.__castle.id); return { hostile: cs.hostile.has(g.localId), stolen: !g.items.held.right?.item.shop }; });
+    assert.deepEqual(theft, { hostile: true, stolen: true });
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

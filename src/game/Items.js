@@ -215,6 +215,14 @@ export class ItemSystem {
     }
 
     _gotItem(item, side) {
+        // money goes into the purse (a slot, up to 500 coins)
+        if (item.kind === 'coins') {
+            const g = this.game;
+            const n = item.count || 0;
+            if (g.inventory.storeItem(item)) { g.hud.setVoice?.(`💰 +${n} монет (всего ${g.inventory.coins()})`, true); return; }
+        }
+        // a good from a market stall: the merchant names the price
+        if (item.shop) this.game.castleLife?.talk?.tookGood(item);
         // arrows go straight into a bow's quiver (in a hand or in a slot), up to 25
         if (item.kind === 'arrows') {
             const g = this.game;
@@ -239,13 +247,14 @@ export class ItemSystem {
     _eat(dt, ch) {
         const g = this.game;
         let food = null;
-        for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak')) food = { side, h }; }
+        for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
         if (!food) { this._eatT = 0; return; }
         const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
         if (food.h.model.position.distanceTo(mouth) < 0.55) this._eatT += dt; else this._eatT = 0;
         if (this._eatT < 0.6) return;
         this._eatT = 0;
-        const heal = { apple: 10, meat: 2, steak: 4 }[food.h.item.kind];
+        if (food.h.item.shop) { g.hud.setVoice?.('💰 Сначала заплатите торговцу (скажите «да»)', true); return; }
+        const heal = { apple: 10, meat: 2, steak: 4 }[food.h.item.kind] ?? ITEM_INFO[food.h.item.kind]?.heal ?? 1;
         g.playerHP = Math.min(g.maxHP, g.playerHP + heal);
         g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
         g.hud.setVoice?.(`😋 +${heal} HP`, true);
@@ -405,7 +414,7 @@ export class ItemSystem {
 
     /** One model of each kind, for compiling the shaders while loading. */
     sampleModels() {
-        return [{ kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'apple' }, { kind: 'meat' }].map((it) => makeItemModel(it));
+        return [{ kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'apple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
     }
 
     /** Everything this player carries (for the save). */
