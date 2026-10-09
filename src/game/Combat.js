@@ -69,6 +69,8 @@ export const SPELL_COST = {
     BreakthroughMaxima: 20,
     Lumos: 2,
     LumosMaxima: 4,
+    CreateBed: 6,
+    ChangeColor: 2,
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */

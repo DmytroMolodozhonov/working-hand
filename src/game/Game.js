@@ -35,6 +35,7 @@ import { CastleLife } from './CastleLife.js';
 import { newUid } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
+import { Beds } from './Beds.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
@@ -199,6 +200,7 @@ export class Game {
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
         this.doors = new Doors(this); // «Create a Door», opening by the handle
+        this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
@@ -639,6 +641,7 @@ export class Game {
             if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
             return 'Attack';
         }
+        if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
         // Inferno with a scroll in the hand burns it: its power is yours
@@ -1448,6 +1451,7 @@ export class Game {
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b));
+        for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const v of prewarmVillagers()) zoo.add(v);
         zoo.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, depthWrite: false })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
@@ -1560,6 +1564,7 @@ export class Game {
         this.animals.update(dt);
         this.castleLife.update(dt);
         this.doors.update(dt);
+        this.beds.update(dt);
         this.spiders.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
@@ -1669,7 +1674,7 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held);
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying);
 
         // Explosion knockback (decays)
         if (this.knockback.lengthSq() > 0.0001) {
@@ -1681,7 +1686,7 @@ export class Game {
         if (!flight.active) this._pushOutOfPlayers(ch.group.position);
 
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
-        if (!flight.active) {
+        if (!flight.active && !this.beds?.lying) {
             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
         }
@@ -2047,6 +2052,7 @@ export class Game {
         this.animals?.dispose();
         this.castleLife?.dispose();
         this.doors?.dispose();
+        this.beds?.dispose();
         this.spiders?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();

@@ -215,6 +215,8 @@ export class ItemSystem {
     }
 
     _gotItem(item, side) {
+        // a bundle of logs goes back into the wood stack (Beds.js)
+        if (this.game.beds?.gotItem(item)) return;
         // money goes into the purse (a slot, up to 500 coins)
         if (item.kind === 'coins') {
             const g = this.game;
