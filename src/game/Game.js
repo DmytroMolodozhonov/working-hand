@@ -31,6 +31,8 @@ import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
+import { CastleLife } from './CastleLife.js';
+import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Duel } from './Duel.js';
@@ -153,11 +155,12 @@ export class Game {
             blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
             quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
             storm: (origin) => this.storm?.start(origin, 13),
-            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) this.spiders?.hitAt(point, 3, 20, 'Lightning'); },
+            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning'); this.castleLife?.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 this.books?.hitRay(o, d, len, width);
                 this.animals?.hitRay(o, d, len, width, 3, this.localId);
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
+                if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
             },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); },
             collision: this.collision,
@@ -193,6 +196,7 @@ export class Game {
         this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
+        this.castleLife = new CastleLife(this); // the people of the castles
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.lightning = null; // my «Lightning Strike» in progress
@@ -359,6 +363,7 @@ export class Game {
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
+        if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic }); return; }
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         this.punchCount++;
         if (this.authority) {
@@ -399,7 +404,7 @@ export class Game {
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
-        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo'); }
+        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo'); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); }
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -467,7 +472,7 @@ export class Game {
         const players = this._playerPositions();
         for (const chest of this.chests) {
             chest.update(dt);
-            if (chest.isOpen || !this.authority) continue;
+            if (chest.isOpen || chest.locked || !this.authority) continue; // (castle chests: locked while the king lives)
             const cp = chest.getPosition();
             for (const p of players) {
                 const dx = p.x - cp.x, dz = p.z - cp.z;
@@ -1308,6 +1313,7 @@ export class Game {
      */
     onLocalDeath(text, byId) {
         if (this.sync) this.sync.died(byId);
+        this.castleLife?.playerDied(this.localId);
         this.hud.setStatus('');
         if (this.flight.busy) this.flight.land('dead');
         this.weapons.releaseAll?.();
@@ -1433,6 +1439,8 @@ export class Game {
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b));
+        for (const v of prewarmVillagers()) zoo.add(v);
+        zoo.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, depthWrite: false })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
         this.scene.add(zoo);
         this.renderer.compile(this.scene, this.camera);
@@ -1541,6 +1549,7 @@ export class Game {
         this.gear.update(dt);
         this.bleeding.update(dt);
         this.animals.update(dt);
+        this.castleLife.update(dt);
         this.doors.update(dt);
         this.spiders.update(dt);
         this._updateCaves(dt);
@@ -1559,7 +1568,7 @@ export class Game {
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
-        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets()), dt);
+        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets()), dt);
         mark('зомби');
 
         this.spells.update(dt);
@@ -2018,6 +2027,7 @@ export class Game {
         this.gear?.dispose();
         this.bleeding?.dispose();
         this.animals?.dispose();
+        this.castleLife?.dispose();
         this.doors?.dispose();
         this.spiders?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }

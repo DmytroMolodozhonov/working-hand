@@ -166,6 +166,7 @@ export class WorldKeeper {
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             animals: g.animals?.snapshot() || [],
             doors: g.doors?.snapshot() || [],
+            castles: g.castleLife?.snapshot() || {},
             players: this.players,
         };
     }
@@ -202,6 +203,7 @@ export function restoreWorld(game, save, THREE) {
     for (const e of save.items || []) g.items?.spawnLoose(e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (save.animals) g.animals?.restore(save.animals);
     if (save.doors) g.doors?.restore(save.doors);
+    if (save.castles) g.castleLife?.restore(save.castles);
     if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());
     // things lying around: exactly what was there (a sword taken into a slot is not on its pedestal any more)

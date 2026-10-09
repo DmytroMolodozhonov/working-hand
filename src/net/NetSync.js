@@ -130,6 +130,7 @@ export class NetSync {
             players: this.net.playerList(),
             dayStart: g.dayStart,
             doors: g.doors?.snapshot() || [],
+            castles: g.castleLife?.snapshot() || {},
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
@@ -144,6 +145,7 @@ export class NetSync {
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         if (msg.doors) g.doors?.restore(msg.doors);
+        if (msg.castles) g.castleLife?.restore(msg.castles);
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);
@@ -354,6 +356,14 @@ export class NetSync {
 
     // ---- animals (the host owns them)
     animals(list) { if (this.net.isHost) this.net.send({ t: 'an', l: list }); }
+
+    // castles: the host runs the people; guests send their hits
+    villagers(list) { if (this.net.isHost) this.net.send({ t: 'vil', l: list }); }
+    villagerHit(id, dmg, d, mg) { this.net.send({ t: 'vhit', by: this.me, id, dmg, d, mg }, true); }
+    villagerStrike(to, dmg, x, z, who) { if (this.net.isHost) this.net.send({ t: 'vstr', to, dmg, x, z, who }); }
+    villagerSay(id, text) { this.net.send({ t: 'vsay', by: this.me, id, text: String(text).slice(0, 200) }, true); }
+    villagerAlarm(to, name) { if (this.net.isHost) this.net.send({ t: 'valarm', to, name }); }
+    castleState(id, s) { if (this.net.isHost) this.net.send({ t: 'cst', id, s }); }
     animalHit(id, dmg, dir, fire) { this.net.send({ t: 'ahit', id, dmg, d: dir ? [r3(dir.x), r3(dir.y), r3(dir.z)] : null, f: fire ? 1 : 0, by: this.me }); }
     animalMeat(id, side) { this.net.send({ t: 'ameat', id, side }); }
     animalMeatTo(to, item, side) { this.net.send({ t: 'agive', to, item, side }, true); }
@@ -551,6 +561,12 @@ export class NetSync {
                 break;
             }
             case 'an': if (!this.net.isHost) g.animals?.applyNet(m.l); break;
+            case 'vil': if (!this.net.isHost) g.castleLife?.applyNet(m.l); break;
+            case 'vhit': if (this.net.isHost && m.by !== this.me) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.hit(v, Math.min(30, +m.dmg || 1), Array.isArray(m.d) ? new THREE.Vector3(m.d[0], 0, m.d[1]) : null, m.by, { magic: !!m.mg }); } break;
+            case 'vstr': if (m.to === this.me) g.castleLife?.struck(Math.min(10, +m.dmg || 1), +m.x || 0, +m.z || 0, String(m.who || 'Рыцарь').slice(0, 30)); break;
+            case 'vsay': if (m.by !== this.me) g.castleLife?.heard(m.id, String(m.text || '').slice(0, 200)); break;
+            case 'valarm': if (m.to === this.me) g.hud.setVoice('⚔️ Вас заметили! Стража замка идёт за вами', true); break;
+            case 'cst': if (!this.net.isHost && m.s) g.castleLife?.applyState(m.id, m.s); break;
             case 'ahit': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals.hit(a, Math.min(30, m.dmg || 1), m.d ? vec(m.d) : null, m.from || m.by, !!m.f); } break;
             case 'ameat': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals._takeMeat(a, m.from, m.side); } break;
             case 'agath': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) { const n = a.meat; for (let i = 0; i < n; i++) g.animals._takeMeat(a, m.from, null); } } break;
@@ -658,6 +674,7 @@ export class NetSync {
             }
             case 'pdead': {
                 if (m.by === this.me) break;
+                g.castleLife?.playerDied(m.by);
                 const r = g.remotes.get(m.by);
                 if (r) r.setDead(true);
                 const who = r ? r.name : 'Игрок';
