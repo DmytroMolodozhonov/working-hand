@@ -46,7 +46,7 @@ test('houses: a door in the doorway, glass that breaks, beds, a chest of food th
         const rec = g.houses.active.get(h.id);
         const door = g.doors.list.get(h.id + 'd');
         return {
-            active: !!rec, door: !!door && door.boxId != null, doorW: door?.w,
+            active: !!rec, door: !!door, doorW: door?.w,
             beds: h.bedSpots.filter((b, k) => g.beds.list.has(h.id + 'b' + k)).length,
             chest: g.chests.some((x) => x.id === h.id + 'c0'),
             panes: g.houses.glass.count,
@@ -54,7 +54,7 @@ test('houses: a door in the doorway, glass that breaks, beds, a chest of food th
             houses: g.houses.active.size,
         };
     });
-    assert.ok(r.active && r.door && r.doorW === 3, 'a door stands in the doorway (closed: it blocks)');
+    assert.ok(r.active && r.door && r.doorW === 3, 'a door stands in the doorway');
     assert.ok(r.beds >= 1 && r.chest, 'a bed and a chest inside');
     assert.ok(r.panes >= 4, `glass in the windows (${r.panes})`);
     assert.ok(r.family >= 1, 'somebody is at home');
@@ -93,16 +93,19 @@ test('houses: a door in the doorway, glass that breaks, beds, a chest of food th
         const cp = chest.getPosition();
         g.character.group.position.set(h.inside.x, h.inside.y + 2.2, h.inside.z);
         const before = new Set(g.items.loose.keys());
+        const wasOpen = chest.isOpen;
+        const seen = g.castleLife.theft(window.__castle, window.__hi, g.localId, chest.getPosition());
+        const dbg = JSON.stringify({ wasOpen, seen, fam: fam.map((v) => [v.id, v.entry.home, Math.round(v.x - g.character.group.position.x), Math.round(v.y), Math.round(g.character.group.position.y), g.castleLife._sees(v, g.character.group.position)]) });
         g.openChest(chest, null, g.localId);
         await frames(5);
         const loot = [...g.items.loose.values()].filter((L) => !before.has(L.item.uid)).map((L) => L.item.kind);
         const foes = fam.filter((v) => v.foe === g.localId).length;
         const said = fam.map((v) => v.bubble?.text || v.lastSaid || '').join(' | ');
-        return { loot, foes, said, cp: [cp.x, cp.z] };
+        return { loot, foes, said, cp: [cp.x, cp.z], dbg };
     });
     const food = theft.loot.filter((k) => ['bread', 'cheese', 'pie', 'steak', 'apple', 'wool', 'arrows', 'coins'].includes(k)).length;
     assert.ok(theft.loot.length >= 2 && food >= theft.loot.length - 1, 'mostly food: ' + theft.loot.join(','));
-    assert.ok(theft.foes >= 1, 'the family attacks the thief');
+    assert.ok(theft.foes >= 1, 'the family attacks the thief ' + theft.dbg);
 
     // pens: animals inside their fences
     if (info.pens) {

@@ -282,7 +282,9 @@ test('knights fight smart: climb out of a shallow crater (not a deep one), keep 
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
         const t = g.world.terrain.data;
         const cs = L.castles.get(c.id);
-        const knights = [...cs.active.values()].filter((v) => v.role === 'knight' && !v.dead).slice(0, 4);
+        const knights = [...cs.active.values()].filter((v) => v.role === 'knight' && !v.dead).sort((a, b) => Math.hypot(a.x - c.gate.x, a.z - c.gate.z) - Math.hypot(b.x - c.gate.x, b.z - c.gate.z)).slice(0, 4);
+        // (the hero can't die in this test: we watch how they fight)
+        g.combat.damage = () => {}; g.damageLocalPlayer = () => {}; if (g.knockback) g.knockback.add = () => {};
         // out on the open field in front of the gate, 30 m out
         const out = new T.Vector3(c.gate.x - c.x, 0, c.gate.z - c.z).normalize();
         const at = (k) => ({ x: Math.round(c.gate.x + out.x * k), z: Math.round(c.gate.z + out.z * k) });
@@ -311,29 +313,50 @@ test('knights fight smart: climb out of a shallow crater (not a deep one), keep 
             await frames(2);
         }
         const outA = k1.y > topA - 1;
+        // two more come from the gate side
+        for (const [k, side] of [[knights[2], 1], [knights[3], -1]]) {
+            if (!k) continue;
+            const p = at(18);
+            k.x = p.x + side * 6; k.z = p.z; k.y = g.collision.groundY(k.x, k.z); k.path = null; k.post = null; k.job = 'yard';
+        }
         const stillB = k2.y < topB - 3;
         // the four come round me: wait, then look at their places
         const t1 = performance.now();
         while (performance.now() - t1 < 15000) {
             g.character.group.position.set(me.x, g.collision.groundY(me.x, me.z) + 2.2, me.z);
             const near = knights.filter((k) => k !== k2 && Math.hypot(k.x - me.x, k.z - me.z) < 8).length;
-            if (near >= 3) { await frames(30); break; }
+            if (near >= 3) { await frames(80); break; }
             await frames(3);
         }
         const near = knights.filter((k) => k !== k2 && Math.hypot(k.x - me.x, k.z - me.z) < 8);
-        const angles = near.map((k) => Math.atan2(k.z - me.z, k.x - me.x));
+        // (those striking: within reach — from different sides)
+        const close = near.filter((k) => Math.hypot(k.x - me.x, k.z - me.z) < 4.5);
+        const angles = close.map((k) => Math.atan2(k.z - me.z, k.x - me.x));
         let minGap = Infinity;
         for (let i = 0; i < angles.length; i++) for (let j = i + 1; j < angles.length; j++) { let d = Math.abs(angles[i] - angles[j]); if (d > Math.PI) d = 2 * Math.PI - d; minGap = Math.min(minGap, d); }
         let minDist = Infinity;
         for (let i = 0; i < near.length; i++) for (let j = i + 1; j < near.length; j++) minDist = Math.min(minDist, Math.hypot(near[i].x - near[j].x, near[i].z - near[j].z));
-        return { climbed, outA, stillB, near: near.length, minGap, minDist, bubbleShout: knights.some((k) => k.bubble?.shout) };
+        // «Авада Кедавра» not aimed right at him (at his knees, no lock): it still hits him as it passes
+        const victim = close[0] || knights[0];
+        const T3 = window.__zns.THREE, ch = g.character;
+        const hand = ch.getHandWorldPosition('right', new T3.Vector3());
+        const od = ch.getHandDirection.bind(ch);
+        ch.getHandDirection = (side, out = new T3.Vector3()) => out.set(victim.x, victim.y + 0.9, victim.z).sub(hand).normalize();
+        g.duel.cast('AvadaKedavra', null, 'right');
+        const t2 = performance.now();
+        while (!victim.dead && performance.now() - t2 < 6000) await frames(2);
+        ch.getHandDirection = od;
+        const avada = victim.dead;
+        const info = knights.map((k) => [Math.round(Math.hypot(k.x - me.x, k.z - me.z) * 10) / 10, k.mode, k.foe ? 1 : 0, k.slotI, k.slotN, Math.round(k.y)]);
+        return { avada, climbed, outA, stillB, near: near.length, close: close.length, minGap, minDist, bubbleShout: knights.some((k) => k.bubble?.shout), info: JSON.stringify(info) };
     });
     assert.ok(r.climbed && r.outA, `climbed out of the shallow pit (climb seen: ${r.climbed})`);
     assert.ok(r.stillB, 'a deep pit holds them');
-    assert.ok(r.near >= 3, `they came round me (${r.near})`);
-    assert.ok(r.minGap > 0.6, `from different sides (min angle ${r.minGap.toFixed(2)} rad)`);
+    assert.ok(r.near >= 3, `they came round me (${r.near}): ${r.info}`);
+    assert.ok(r.close >= 2 && r.minGap > 1.0, `from different sides (${r.close} close, min angle ${r.minGap.toFixed(2)} rad): ${r.info}`);
     assert.ok(r.minDist > 1.3, `not inside each other (${r.minDist.toFixed(2)} m)`);
     assert.ok(r.bubbleShout, 'battle cries are shouted');
+    assert.ok(r.avada, '«Авада Кедавра» passing through a knight kills him (no exact lock needed)');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

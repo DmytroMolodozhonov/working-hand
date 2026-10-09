@@ -328,6 +328,25 @@ export class WeaponSystem {
         _qPalm.setFromRotationMatrix(_m);
     }
 
+    /**
+     * The palm of a hand (for things held like the sword): P palm, X across the palm,
+     * Y towards the fingers, Z the back of the hand, G the grip point in the closed
+     * fingers, q the palm's rotation, thumb: which way along X the thumb is (±1).
+     */
+    palmFrame(side, out = {}) {
+        const ch = this.game.character;
+        this._palmFrame(ch, side);
+        out.P = (out.P || new THREE.Vector3()).copy(_P);
+        out.X = (out.X || new THREE.Vector3()).copy(_X);
+        out.Y = (out.Y || new THREE.Vector3()).copy(_Y);
+        out.Z = (out.Z || new THREE.Vector3()).copy(_Z);
+        out.G = (out.G || new THREE.Vector3()).copy(_G);
+        out.q = (out.q || new THREE.Quaternion()).copy(_qPalm);
+        const thumb = ch.getActiveHands()[side]?.fingerMeshes?.thumb?.[0]?.pivot;
+        if (thumb) { thumb.getWorldPosition(_c); out.thumb = Math.sign(_c.sub(_P).dot(_X)) || 1; } else out.thumb = side === 'left' ? -1 : 1;
+        return out;
+    }
+
     grab(w, side, t = 0.5) {
         const ch = this.game.character;
         const hs = this.hands[side];

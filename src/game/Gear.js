@@ -21,7 +21,7 @@
  */
 
 import * as THREE from 'three';
-import { arrowModel, disposeModel } from './ItemTypes.js';
+import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
 import { SPELL_COST } from './Combat.js';
 
 const _v = new THREE.Vector3();
@@ -89,6 +89,8 @@ export class Gear {
         if (!bow) { this._dropNock(); return; }
         const other = bow.side === 'right' ? 'left' : 'right';
         const held = g.items.held[bow.side];
+        // into the other hand: grab the bow with that fist and open the bow hand (not while drawing)
+        if (this._switchBow(bow, other, dt)) return;
         if (g.items.held[other] || g.weapons.hands[other].held) { this._dropNock(); if (held) held.aim = null; return; }
         const it = bow.item;
         ch.group.updateMatrixWorld(true);
@@ -111,7 +113,7 @@ export class Gear {
                 this.nock = { side: other, model, state: atBow ? 'nocked' : 'hand', draw: 0, peak: 0, open: 0, t: 0 };
                 g.hud.setVoice(atBow ? '🏹 Стрела на тетиве — отведите руку назад и отпустите' : '🏹 Стрела в руке — поднесите её к луку', true);
             }
-            this._bowString(bow, 0);
+            this._bowString(bow);
             return;
         }
         const n = this.nock;
@@ -127,11 +129,17 @@ export class Gear {
         n.draw = Math.max(0, Math.min(1, (dist - 0.6) / 1.3));
         n.peak = Math.max(n.peak * 0.985, n.draw);
         const dir = _v3.subVectors(bowPos, hand).normalize();
-        // the bow turns to where the arrow goes; the arrow lies on it, its nock at the string
+        // the bow turns to where the arrow goes; the string follows the drawing fingers
+        // (a «V» from the tips), the arrow lies on the bow with its nock on the string
         if (held) held.aim = dir.clone();
-        n.model.position.copy(bowPos).addScaledVector(dir, 1.0 - Math.min(dist, 2.2) * 0.5 + 0.2);
+        const S = bow.model.userData.bowString;
+        const sc = bow.model.scale.x;
+        const pull = Math.min(dist, S ? S.R * 1.1 * sc : 1.5);
+        if (S) setBowString(bow.model, S.tipX - pull / sc);
+        const nock = _v2.copy(bowPos).addScaledVector(dir, (S ? S.tipX * sc : 0) - pull);
+        const half = 0.4 * ARROW_SCALE;
+        n.model.position.copy(nock).addScaledVector(dir, half);
         n.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), dir);
-        this._bowString(bow, n.draw);
         // 3) let go: the fingers open, or the hand jumps forward, or the draw collapses fast
         const curl = ch.getGripCurl ? ch.getGripCurl(other) : 1;
         if (curl > 0.55) n.closed = true; // (the fingers held the string)
@@ -144,9 +152,26 @@ export class Gear {
         }
     }
 
-    _bowString(bow, draw) {
-        const s = bow.model.userData.string;
-        if (s) s.position.x = (Math.cos(0.9) * 0.6 * 0.35 - 0.6 * 0.35) - draw * 0.35;
+    _bowString(bow) { setBowString(bow.model, null); } // (at rest: straight)
+
+    /**
+     * The bow into the other hand: that hand's fist on the bow and the bow hand
+     * opened for a moment (not while an arrow is drawn).
+     */
+    _switchBow(bow, other, dt) {
+        const g = this.game;
+        const ch = g.character;
+        if (this.nock && this.nock.draw > 0.15) { this._swT = 0; return false; }
+        const near = ch.getHandWorldPosition(other, _v).distanceTo(bow.model.position) < 1.0;
+        const fist = (ch.getGripCurl?.(other) ?? 0) > 0.6, open = (ch.getGripCurl?.(bow.side) ?? 1) < 0.3;
+        this._swT = near && fist && open ? (this._swT || 0) + dt : 0;
+        if (this._swT < 0.45) return false;
+        this._swT = 0;
+        this._dropNock();
+        const item = g.items.releaseHand(bow.side);
+        g.items.takeIntoHand(item, other);
+        g.hud.setVoice('🏹 Лук в другой руке', true);
+        return true;
     }
 
     _dropNock() {
@@ -162,6 +187,7 @@ export class Gear {
         // from the bow, a little in front of it
         const from = bow.model.position.clone().addScaledVector(dir, 0.8);
         this._dropNock();
+        setBowString(bow.model, null); // (the string snaps back)
         if (!this._endless()) it.arrows = Math.max(0, (it.arrows || 0) - 1);
         const speed = 22 + draw * 58;
         const dmg = (2 + draw * 7) * (it.magic ? 1 + (it.bonus || 0) / 100 : 1);

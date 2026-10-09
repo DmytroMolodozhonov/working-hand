@@ -487,6 +487,8 @@ export class CastleLife {
         v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 10);
         if (d <= stopAt) { v.speed = 0; return d; }
         const s = Math.min(d - stopAt, speed * dt);
+        // a ledge right ahead (half a body high): climb it rather than inch at it
+        if (!this._walkable(v.x + dx / d * 0.75, v.z + dz / d * 0.75, v.y) && this._tryClimb(v, dx / d, dz / d)) { v.speed = 0; return d; }
         const nx = v.x + dx / d * s, nz = v.z + dz / d * s;
         if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; v.speed = speed; }
         else if (this._walkable(nx, v.z, v.y)) { v.x = nx; v.speed = speed; }
@@ -783,8 +785,19 @@ export class CastleLife {
         const base = v.slotBase ?? Math.atan2(v.z - fp.z, v.x - fp.x);
         const a = engaged ? base + (i - (front - 1) / 2) * (front === 2 ? Math.PI * 0.8 : Math.PI * 2 / 3) : base + Math.PI + (i - front) * (Math.PI * 2 / Math.max(1, n - front));
         const R = engaged ? 2.3 : 6.5;
-        const tx = fp.x + Math.cos(a) * R, tz = fp.z + Math.sin(a) * R;
+        let tx = fp.x + Math.cos(a) * R, tz = fp.z + Math.sin(a) * R;
         const toSlot = Math.hypot(tx - v.x, tz - v.z);
+        // the place is on the other side: go round the enemy (along the circle), not through them
+        const cur = Math.atan2(v.z - fp.z, v.x - fp.x);
+        let da = a - cur;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) > 0.5 && d < R + 4) {
+            const step = cur + Math.sign(da) * 0.6, rr = Math.max(R, Math.min(d, R + 1.5));
+            tx = fp.x + Math.cos(step) * rr; tz = fp.z + Math.sin(step) * rr;
+        }
+        // (never right on top of them)
+        if (d < 1.6 && d > 1e-3) { const k = (1.6 - d) * 0.5; const nx = v.x + (v.x - fp.x) / d * k, nz = v.z + (v.z - fp.z) / d * k; if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; } }
         if (toSlot > 0.8) {
             this._steer(v, tx, tz, toSlot > 3 ? RUN : WALK * 1.3, dt, 0.3);
             v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : (engaged ? 'attack' : 'block');
@@ -810,15 +823,24 @@ export class CastleLife {
             if (v.dead || !v.foe) continue;
             (groups.get(v.foe) || groups.set(v.foe, []).get(v.foe)).push(v);
         }
-        for (const [foe, list] of groups) {
+        const now = Date.now();
+        this._slotBase = this._slotBase || new Map();
+        for (const [foe, all] of groups) {
             const fp = this._playerPos(foe);
             if (!fp) continue;
-            // (the order by id is stable; the circle starts where most of them are)
+            // (one stuck deep down in a pit can't take a place round the enemy)
+            const list = all.filter((v) => v.y > fp.y - 2 - 3);
+            for (const v of all) if (!list.includes(v)) { v.slotI = 0; v.slotN = 1; v.slotBase = null; }
+            // (the order by id is stable; the circle is set where most of them came from and kept a while)
             list.sort((a, b) => (a.id < b.id ? -1 : 1));
-            let sx = 0, sz = 0;
-            for (const v of list) { sx += v.x - fp.x; sz += v.z - fp.z; }
-            const base = Math.atan2(sz, sx);
-            list.forEach((v, k) => { v.slotI = k; v.slotN = list.length; v.slotBase = base; });
+            let b = this._slotBase.get(foe);
+            if (!b || now > b.until) {
+                let sx = 0, sz = 0;
+                for (const v of list) { sx += v.x - fp.x; sz += v.z - fp.z; }
+                b = { a: Math.atan2(sz, sx), until: now + 10000 };
+                this._slotBase.set(foe, b);
+            }
+            list.forEach((v, k) => { v.slotI = k; v.slotN = list.length; v.slotBase = b.a; });
         }
     }
 
@@ -1158,7 +1180,7 @@ export class CastleLife {
             if (v.dead) continue;
             const fam = v.entry.home === hIdx && v.role !== 'knight' && v.role !== 'king';
             if (Math.hypot(v.x - bp.x, v.z - bp.z) > (fam ? 30 : 22)) continue;
-            if (this._sees(v, { x: bp.x, y: bp.y - 1, z: bp.z })) seers.push({ v, fam });
+            if (this._sees(v, bp)) seers.push({ v, fam });
         }
         if (!seers.length) return false;
         cs.hostile.set(by, Date.now() + HOSTILE_MS);

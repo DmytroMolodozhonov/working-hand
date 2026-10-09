@@ -294,7 +294,8 @@ export class VoxelCharacter {
         const hand = this.getHandWorldPosition(side, _v1);
         const v = hand.sub(shoulder);
         const len = v.length();
-        return len > 1e-3 && v.y / len > -0.5;
+        // (a hand lifted ~15° from hanging is enough to cast)
+        return len > 1e-3 && v.y / len > -0.96;
     }
 
     /** Both arms stretched out sideways at shoulder height (a «T»). */

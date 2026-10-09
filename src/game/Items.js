@@ -26,6 +26,14 @@ const _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
 const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
+/** Held in the fist like the sword: handle (model y, before scaling) at the fingers, the axis across the palm. */
+const GRIPPED = {
+    wand: { axis: 'y', handle: 0.1 },
+    hammer: { axis: 'y', handle: 0.12 },
+    bow: { axis: 'y', handle: 0 },
+    scroll: { axis: 'x', handle: 0, curl: 0.5 },
+    shield: { axis: 'y', handle: 0, face: 'back' },
+};
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _f = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
@@ -101,10 +109,42 @@ export class ItemSystem {
         const h = this.held[side];
         if (!h) return null;
         this.held[side] = null;
+        if (h.gripped) { const hand = this.game.character.getActiveHands?.()[side]; if (hand && hand.setGrip) hand.setGrip(null); }
         this.game.scene.remove(h.model);
         disposeModel(h.model);
         if (this.game.sync) this.game.sync.itemHold?.(side, null);
         return h.item;
+    }
+
+    /**
+     * A thing in the fist, like the sword: its handle lies across the palm in the
+     * closed fingers (out past the thumb), and it turns with the wrist. The hand's
+     * fingers close round it.
+     */
+    _gripHold(side, h, dt) {
+        const g = this.game;
+        const f = g.weapons.palmFrame(side, this._pf || (this._pf = {}));
+        const spec = GRIPPED[h.item.kind];
+        const s = h.thumb ?? (h.thumb = f.thumb); // (the side the thumb was on when taken)
+        // the item's axis out of the thumb side; its "front" towards the knuckles
+        const ax = _a.copy(f.X).multiplyScalar(s);
+        let x, y, z;
+        if (spec.axis === 'y') { y = ax; x = _b.copy(f.Y); z = _c.crossVectors(x, y); } // wand, hammer, bow (limbs), shield (upright)
+        else { x = ax; y = _b.copy(f.Y).negate(); z = _c.crossVectors(x, y); } // scroll: rolled along X
+        if (spec.face === 'back') { z = _c.copy(f.Z); x = _b.crossVectors(y, z); } // shield: the face where the back of the hand looks
+        _m4.makeBasis(x, y, z);
+        _q.setFromRotationMatrix(_m4);
+        if (!h.q) h.q = _q.clone(); else h.q.slerp(_q, Math.min(1, dt * 28));
+        h.model.quaternion.copy(h.q);
+        // the handle point in the fingers
+        const sc = h.model.scale.x;
+        h.model.position.copy(f.G).sub(_d.set(0, spec.handle * sc, 0).applyQuaternion(h.q));
+        if (spec.face === 'back') h.model.position.addScaledVector(f.Z, 0.25);
+        if (!h.gripped) {
+            h.gripped = true;
+            const hand = g.character.getActiveHands()[side];
+            if (hand && hand.setGrip) hand.setGrip(spec.curl ?? 0.62);
+        }
     }
 
     /** Where a held bow / wand / hammer / shield points (world quaternion into `out`). */
@@ -183,7 +223,10 @@ export class ItemSystem {
             const grip = ch.getGripObject(side);
             grip.getWorldPosition(h.model.position);
             const kind = h.item.kind;
-            if (AIMED.has(kind)) {
+            if (GRIPPED[kind] && g.weapons?.palmFrame && !h.aim) {
+                // held in the fist like the sword: the handle across the palm, turning with the wrist
+                this._gripHold(side, h, dt);
+            } else if (AIMED.has(kind)) {
                 // a bow, a wand, a hammer, a shield: set by the arm (shoulder → hand,
                 // steady) rather than by the shaky palm, and smoothed
                 this._aimQuat(side, kind, h, _q);
@@ -224,6 +267,8 @@ export class ItemSystem {
             for (const e of hist) if (!peak || e.s > peak.s) peak = e;
             // a real throw: a fast swing (several fast moments, one way) that suddenly stops —
             // the jitter of the camera makes single fast jumps, not swings; heavy things need more
+            // (and the fingers let go — a flick of a wand in the fist is a spell, not a throw)
+            if ((ch.getGripCurl ? ch.getGripCurl(side) : 0) > 0.45) continue;
             const need = 7 + Math.min(4, (ITEM_INFO[h.item.kind]?.weight ?? 1) * 1.2);
             if (!peak || peak.s < need || v.length() > peak.s * 0.35 || now - peak.t > 200) continue;
             let swing = 0;
@@ -297,6 +342,12 @@ export class ItemSystem {
                 g.hud.setVoice?.(`🏹 +${n} стрел (в колчане ${bow.arrows})`, true);
                 if (item.count <= 0) return;
             }
+        }
+        // a bow goes into the spell hand (the hand that casts; the other one draws)
+        if (item.kind === 'bow') {
+            const g = this.game;
+            const bowHand = g.lastMagicHand || 'left';
+            if (bowHand !== side && !this.held[bowHand] && !g.weapons.hands[bowHand].held) side = bowHand;
         }
         if (!this.takeIntoHand(item, side) && !this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
             this.game.inventory.storeItem?.(item);

@@ -336,12 +336,36 @@ function bowModel(it) {
         seg.rotation.z = a;
         g.add(seg);
     }
-    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 2 * Math.sin(0.9) * R, 4), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
-    string.position.x = Math.cos(0.9) * R * 0.35 - R * 0.35;
-    g.add(string);
-    g.userData.string = string;
+    // the string: two halves from the tips to the nock point (pulled back into a «V» when drawn)
+    const tipX = Math.cos(0.9) * R * 0.35 - R * 0.35, tipY = Math.sin(0.9) * R;
+    const strMat = new THREE.MeshBasicMaterial({ color: 0xf2efe6 });
+    const strGeo = new THREE.CylinderGeometry(0.007, 0.007, 1, 4);
+    const up = new THREE.Mesh(strGeo, strMat), down = new THREE.Mesh(strGeo, strMat);
+    g.add(up, down);
+    g.add(box(0.07, 0.16, 0.07, mat(0x3b2414), 0, 0, 0)); // the leather grip
+    g.userData.bowString = { up, down, tipX, tipY, R };
+    setBowString(g, null);
     if (it.magic) g.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: 0xc39bff }))).position.set(-0.02, 0, 0);
     return g;
+}
+
+const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _sy = new THREE.Vector3(0, 1, 0);
+function strandBetween(m, ax, ay, bx, by) {
+    _sa.set(bx - ax, by - ay, 0);
+    const len = _sa.length();
+    m.position.set((ax + bx) / 2, (ay + by) / 2, 0);
+    m.scale.set(1, Math.max(1e-3, len), 1);
+    m.quaternion.setFromUnitVectors(_sy, _sb.copy(_sa).normalize());
+}
+
+/** Pull a bow's string to a nock point (bow-local x, or null: at rest, straight). */
+export function setBowString(bow, nockX) {
+    const S = bow.userData.bowString;
+    if (!S) return;
+    const nx = nockX == null ? S.tipX : Math.min(S.tipX, nockX);
+    strandBetween(S.up, S.tipX, S.tipY, nx, 0);
+    strandBetween(S.down, S.tipX, -S.tipY, nx, 0);
+    S.nockX = nx;
 }
 
 export const ARROW_SCALE = 2.4;
@@ -422,7 +446,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 1.45, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8 };
+export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
