@@ -113,8 +113,11 @@ export class PoseService {
                 this._holisticDir = dir;
                 started = true;
             } catch (e) {
+                this.stats.why = 'свой поток не запустился: ' + String(e?.message || e).slice(0, 120);
                 console.warn('[PoseService] Holistic worker failed, running it on the game thread:', e?.message || e);
             }
+        } else if (onGameThread) {
+            this.stats.why = 'в настройках выбран «поток игры»';
         }
         if (!started) await this._startHolisticMain(dir, quality);
         this._startHandHelper(quality);
@@ -155,12 +158,21 @@ export class PoseService {
         if (msg.type === 'result' || msg.type === 'dropped' || msg.type === 'error') this._hwOut = Math.max(0, (this._hwOut || 0) - 1);
         if (msg.type === 'result') {
             this.lastSendEnd = performance.now();
-            if (msg.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + msg.cost * 0.1 : msg.cost;
+            // (the first answers include the graphics card's warm-up — seconds — they don't count)
+            const n = (this._hwN = (this._hwN || 0) + 1);
+            if (msg.cost && n > 10) {
+                this.stats.avgCost = this.stats.avgCost && n > 11 ? this.stats.avgCost * 0.9 + msg.cost * 0.1 : msg.cost;
+                const w = this._hwCosts || (this._hwCosts = []);
+                w.push(msg.cost);
+                if (w.length > 30) w.shift();
+            }
             if (!msg.empty) this._onHolistic(msg);
-            // too slow in the worker on this computer (no graphics card for it): the game's thread
-            if (this.stats.results > 30 && this.stats.avgCost > 110 && !this._fellBack && !globalThis.__ZNS_ALLOW_CPU_HOLISTIC__) {
+            // really too slow in the worker on this computer (no graphics card for it): the game's thread
+            const med = this._hwCosts && this._hwCosts.length >= 30 ? this._hwCosts.slice().sort((x, y) => x - y)[15] : 0;
+            if (med > 110 && !this._fellBack && !globalThis.__ZNS_ALLOW_CPU_HOLISTIC__) {
                 this._fellBack = true;
-                console.warn(`[PoseService] Holistic in the worker: ${this.stats.avgCost.toFixed(0)} ms a frame — back to the game thread`);
+                this.stats.why = `в своём потоке ${Math.round(med)} мс на кадр (${this.stats.delegate}) — медленно, перешли в поток игры`;
+                console.warn('[PoseService] ' + this.stats.why);
                 const q = this._quality;
                 this._closeModels();
                 this._startHolisticMain(this._holisticDir || this.baseUrl + 'vendor/mediapipe-holistic/', q).then(() => this._startHandHelper(q));
@@ -328,6 +340,8 @@ export class PoseService {
         if (this.holistic) { try { this.holistic.close(); } catch (e) { /* ignore */ } this.holistic = null; }
         if (this.holisticWorker) { this.holisticWorker.postMessage({ type: 'close' }); this.holisticWorker.terminate(); this.holisticWorker = null; }
         this._hwOut = 0;
+        this._hwN = 0;
+        this._hwCosts = null;
         if (this.handWorker) { this.handWorker.terminate(); this.handWorker = null; }
         this._helperHands = null;
         if (this.worker) { this.worker.postMessage({ type: 'close' }); this.worker.terminate(); this.worker = null; }

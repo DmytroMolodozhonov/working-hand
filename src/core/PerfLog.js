@@ -65,7 +65,7 @@ export class PerfLog {
             .join(', ');
         const ps = g.poseService;
         const st = ps?.stats || {};
-        const ai = ps ? `ИИ ${st.thread === 'worker' ? 'свой поток' : st.thread === 'main' ? 'ПОТОК ИГРЫ' : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.handHelper ? ', помощник рук' : ''}` : 'ИИ —';
+        const ai = ps ? `ИИ ${st.thread === 'worker' ? 'свой поток' : st.thread === 'main' ? 'ПОТОК ИГРЫ' : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.handHelper ? ', помощник рук' : ''}${st.delegate ? ', ' + st.delegate : ''}${st.why && st.thread === 'main' ? ` (почему: ${st.why})` : ''}` : 'ИИ —';
         this._aiPrev = st.results || 0;
         const info = g.renderer?.info;
         const mem = globalThis.performance?.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} МБ` : '';

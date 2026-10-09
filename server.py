@@ -220,7 +220,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                     # the short version: FPS, frame times and the camera network first
                     parts = line.split(" | ")
                     short = " | ".join([p for p in parts if p.startswith(("FPS", "кадр", "ИИ", "рывки"))])
-                    print("  [FPS] " + (short or line)[:200])
+                    print("  [FPS] " + (short or line)[:300])
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/maps":
