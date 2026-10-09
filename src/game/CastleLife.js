@@ -360,7 +360,9 @@ export class CastleLife {
         cs.spawnT = 0.7;
         const players = this._players().filter((pl) => this._inLand(def, pl.p, 40));
         if (!players.length) return;
-        const want = Math.round(Math.min(26, 8 + def.population / 45) * (this.game.isNight ? 0.35 : 1));
+        // (a weaker computer — fewer people round you; fewer at night)
+        const q = [0.45, 0.65, 0.85, 1][this.game.quality?.level ?? 3] ?? 1;
+        const want = Math.round(Math.min(26, 8 + def.population / 45) * (this.game.isNight ? 0.35 : 1) * q);
         let count = 0;
         for (const v of cs.active.values()) if (v.job === 'wander' && !v.dead) count++;
         // too far from everyone: goes home (disappears)
@@ -799,7 +801,7 @@ export class CastleLife {
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, color: v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
         this.talk.voice(v, text);
-        if (broadcast && this.auth) this.game.sync?.villagerSay?.(v.id, text);
+        if (broadcast) this.game.sync?.villagerSay?.(v.id, text); // (everybody near sees the bubble)
     }
 
     /** (network) a villager said something. */

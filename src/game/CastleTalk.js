@@ -112,6 +112,7 @@ export class CastleTalk {
         const ctx = this._ctx(v);
         v.talking = 4;
         v.talkTo = g.localId;
+        if (!g.authority) g.sync?.villagerTalk?.(v.id); // (the host stops them for the talk)
         const done = (res) => this._apply(v, res);
         if (this.llm?.ready) b.hearSmart(text, ctx, this.llm).then(done, () => done(b.hear(text, ctx)));
         else done(b.hear(text, ctx));

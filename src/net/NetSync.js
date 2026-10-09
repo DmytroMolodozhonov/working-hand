@@ -365,6 +365,7 @@ export class NetSync {
     villagerAlarm(to, name) { if (this.net.isHost) this.net.send({ t: 'valarm', to, name }); }
     castleState(id, s) { if (this.net.isHost) this.net.send({ t: 'cst', id, s }); }
     villagerCrime(id, kind) { this.net.send({ t: 'vcrime', id, kind }); }
+    villagerTalk(id) { this.net.send({ t: 'vtalk', id }); }
     tradeSell(uid, wid, price, p) { this.net.send({ t: 'tsell', uid, wid, price, p }); }
     animalHit(id, dmg, dir, fire) { this.net.send({ t: 'ahit', id, dmg, d: dir ? [r3(dir.x), r3(dir.y), r3(dir.z)] : null, f: fire ? 1 : 0, by: this.me }); }
     animalMeat(id, side) { this.net.send({ t: 'ameat', id, side }); }
@@ -569,6 +570,7 @@ export class NetSync {
             case 'vsay': if (m.by !== this.me) g.castleLife?.heard(m.id, String(m.text || '').slice(0, 200)); break;
             case 'valarm': if (m.to === this.me) g.hud.setVoice('⚔️ Вас заметили! Стража замка идёт за вами', true); break;
             case 'cst': if (!this.net.isHost && m.s) g.castleLife?.applyState(m.id, m.s); break;
+            case 'vtalk': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v && !v.foe) { v.talking = 5; v.talkTo = m.from; } } break;
             case 'vcrime': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.reportCrime(v, m.from, String(m.kind || '')); } break;
             case 'tsell': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.talk.sellNow(m.uid || null, m.wid || null, Math.min(2000, +m.price || 1), vec(m.p)); break;
             case 'ahit': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals.hit(a, Math.min(30, m.dmg || 1), m.d ? vec(m.d) : null, m.from || m.by, !!m.f); } break;
