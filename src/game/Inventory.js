@@ -234,12 +234,6 @@ export class Inventory {
             this.inHand = { kind: 'weapon', weapon: w };
             return;
         }
-        if (s.kind === 'book') {
-            g.books?.takeIntoHand(s);
-            this.slots[this.selected] = null;
-            this.inHand = { kind: 'book' };
-            return;
-        }
         if (s.kind === 'res') { this.inHand = { kind: 'res', stack: s }; return; }
         // any other thing (wand, scroll, shield, food…)
         if (g.items && !g.items.held.right && !g.weapons.hands.right.held) {
@@ -256,7 +250,6 @@ export class Inventory {
         if (!h) return;
         const slot = this.selected >= 0 && !this.slots[this.selected] ? this.selected : null;
         if (h.kind === 'weapon' && this.game.weapons.hands.right.held === h.weapon) this._storeWeapon(h.weapon, slot);
-        if (h.kind === 'book' && this.game.books?.inHand) { const b = this.game.books.putAway(); if (slot != null) this.slots[slot] = b; else this.store(b); }
         if (h.kind === 'item' && this.game.items?.held.right?.item === h.item) { const it = this.game.items.releaseHand('right'); if (slot != null) this.slots[slot] = it; else this.storeItem(it); }
     }
 
@@ -290,13 +283,6 @@ export class Inventory {
             this.selected = -1;
             this._render();
             return;
-        }
-        if (g.books?.inHand) {
-            const book = g.books.putAway();
-            if (this.store(book)) this._fx('🎒 Книга в ячейке');
-            if (this.inHand?.kind === 'book') this.inHand = null;
-            this.selected = -1;
-            this._render();
         }
     }
 

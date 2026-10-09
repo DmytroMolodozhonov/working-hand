@@ -317,11 +317,51 @@ test('book-birds: a spell knocks one down, the book is taken by hand, read, and 
         bk.model.position.copy(hand);
         for (let i = 0; i < 100 && !B.inHand; i++) await frames(1);
         const inHand = !!B.inHand;
-        // the right pocket puts it into a slot
+        // both hands up in front: it opens between them, twice as big, the pages to the reader
+        const T = window.__zns.THREE, ch = g.character;
+        const closedSize = 1.6; // (ITEM_SCALE.book)
+        const origR = ch.isArmRaised.bind(ch);
+        ch.isArmRaised = () => true;
+        B._inFront = () => true; // (no camera here: the hands are said to be up in front)
+        for (let i = 0; i < 60 && !(B._read && B._read.open > 0.97); i++) await frames(1);
+        await frames(20);
+        const R = B._read, m = B.inHand.model;
+        const cam = g.camera.position.clone();
+        const n = new T.Vector3(0, 0, 1).applyQuaternion(m.getWorldQuaternion(new T.Quaternion()));
+        const facing = n.dot(cam.clone().sub(m.position).normalize());
+        const open = { k: R?.open || 0, grow: m.scale.x / closedSize, facing, camDist: cam.distanceTo(m.position), map: !!m.userData.book.faceR.material.map, learned: B.learned.size };
+        // turn a page (if there are two): the sheet swings over and the next spread shows
+        let turned = null;
+        if (R.item.spells.length > 1) {
+            B._turn(R, +1);
+            const sheet = !!R.turning;
+            for (let i = 0; i < 60 && R.turning; i++) await frames(1);
+            turned = { sheet, page: R.page, map: m.userData.book.faceL.material.map === R.tex[1].left };
+        }
+        // hands down: it closes in the fist again
+        ch.isArmRaised = () => false;
+        for (let i = 0; i < 80 && B._read; i++) await frames(1);
+        const closed = { read: !!B._read, size: m.scale.x, open: m.userData.book.open };
+        ch.isArmRaised = origR;
+        // a throw: it flies, lands flat, and a hand takes it again
+        const side = B.inHand.side;
+        g.items._throw(side, new T.Vector3(0, 3, -4));
+        const L = [...g.items.loose.values()].find((x) => x.item.kind === 'book');
+        for (let i = 0; i < 200 && L && !L.rest; i++) await frames(1);
+        const thrown = { loose: !!L, rest: !!L?.rest, empty: !B.inHand };
+        // the right pocket puts the book (in the hand again) into a slot
+        g.items._gotItem(g.items.removeLoose(L.item.uid), 'right');
         g.inventory.pocketRight();
         const slot = g.inventory.slots.find((s) => s && s.kind === 'book');
-        return { birds, books, inHand, slot: !!slot, spells: slot?.spells?.length || 0, left: !!B.inHand };
+        return { birds, books, inHand, open, turned, closed, thrown, slot: !!slot, spells: slot?.spells?.length || 0, left: !!B.inHand };
     });
+    assert.ok(r.open.k > 0.95 && r.open.grow > 1.9, `opened between the hands, twice as big ` + JSON.stringify(r.open));
+    assert.ok(r.open.facing > 0.7, `the pages look at the camera (${r.open.facing.toFixed(2)})`);
+    assert.ok(r.open.camDist < 6, `the camera came to the pages (${r.open.camDist.toFixed(1)} m)`);
+    assert.ok(r.open.map && r.open.learned >= 1, 'the spread is drawn on the pages and teaches its spell');
+    if (r.turned) assert.ok(r.turned.sheet && r.turned.page === 1 && r.turned.map, 'a page turns: ' + JSON.stringify(r.turned));
+    assert.ok(!r.closed.read && r.closed.open === 0 && r.closed.size < 2, 'hands down: closed in the fist ' + JSON.stringify(r.closed));
+    assert.ok(r.thrown.loose && r.thrown.rest && r.thrown.empty, 'thrown, it lies on the ground ' + JSON.stringify(r.thrown));
     assert.ok(r.birds > 0, 'a bird appeared');
     assert.equal(r.books, 1, 'it fell and became a book');
     assert.ok(r.inHand, 'the hand took the book');

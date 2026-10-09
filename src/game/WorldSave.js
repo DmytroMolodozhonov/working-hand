@@ -79,10 +79,6 @@ export function playerSnapshot(game) {
         const i = slots.findIndex((s) => !s);
         if (i >= 0) slots[i] = { kind: 'weapon', type: h.weapon.type, id: h.weapon.id };
     }
-    if (game.books?.inHand) {
-        const i = slots.findIndex((s) => !s);
-        if (i >= 0) slots[i] = { ...game.books.inHand.item };
-    }
     const p = game.character.group.position;
     return {
         slots,

@@ -4,8 +4,9 @@
  * A few birds that are books: the covers are the wings, the pages flutter.
  * They fly from tree to tree (rarely landing on the ground). Hit one with a
  * spell and it falls — a book lies there, glowing. Take it with the hand: it
- * stays in the hand (the right pocket puts it into a slot). Raise both hands
- * in front to open it, swipe the hand sideways to turn a page; each spread
+ * is held by its spine in the fist like any thing (thrown, put into a slot,
+ * given away). Raise both hands in front: it opens between them, twice as
+ * big, the pages to the reader; swipe the right hand sideways to turn a page; each spread
  * shows one spell (a drawing of the gesture and the words). Reading it
  * teaches the spell — outside creative, building magic is learned only so.
  * Every book holds up to three spells, picked at random (they repeat).
@@ -17,6 +18,8 @@
 import * as THREE from 'three';
 import { isLeaves } from '../world/Terrain.js';
 import { BUILD_SPELLS } from './Builder.js';
+import { BOOK, setBookOpen } from './BookModel.js';
+import { ITEM_SCALE } from './ItemTypes.js';
 
 export const BOOK_POOL = ['Gather', 'CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor'];
 const BIRDS = 4;
@@ -36,6 +39,9 @@ const HOW = {
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3(), _v7 = new THREE.Vector3(), _v8 = new THREE.Vector3(), _v9 = new THREE.Vector3();
+const _m4 = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
 
 function rngFrom(seed) {
     let s = seed >>> 0 || 1;
@@ -147,11 +153,12 @@ export class BookBirds {
         this.birds = new Map(); // id -> bird
         this.books = new Map(); // id -> book lying on the ground
         this.learned = new Set();
-        this.inHand = null; // {spells, model, open, page}
+        this._read = null; // the book being read: {model, item, open, page, tex…}
+        this.readingSide = null;
+        this.readCam = null; // {at, from, k}: the camera over the shoulder to the pages
         this._nextId = 1 + Math.floor(Math.random() * 100000) * 100;
         this._spawnT = 1;
         this._netT = 0;
-        this._reader = null;
     }
 
     get auth() {
@@ -321,14 +328,14 @@ export class BookBirds {
             bk.glow.material.opacity = 0.35 + Math.sin(bk.t * 3) * 0.25;
             if (Math.random() < 0.08) g.fx.spark(bk.model.position, 0xffe9a8, 0.07, _v1.set(0, 0.8, 0), 0.8);
         }
-        if (this.inHand || g.combat.dead) return;
-        // A hand that reaches a book takes it
+        if (g.combat.dead || !g.items) return;
+        // A free hand that reaches a book takes it
         for (const side of ['right', 'left']) {
-            if (g.weapons.hands[side].held) continue;
+            if (g.weapons.hands[side].held || g.items.held[side]) continue;
             const hand = g.character.getHandWorldPosition(side, _v1);
             for (const bk of this.books.values()) {
                 if (bk.model.position.distanceTo(hand) < 1.3) {
-                    if (this.auth) this._take(bk.id, g.localId);
+                    if (this.auth) this._take(bk.id, g.localId, side);
                     else if (!bk.asked) { bk.asked = true; g.sync?.bookTake?.(bk.id); setTimeout(() => { bk.asked = false; }, 2000); }
                     return;
                 }
@@ -337,19 +344,26 @@ export class BookBirds {
     }
 
     /** The host gives the book to the first one who reached it. */
-    _take(id, toId) {
+    _take(id, toId, side = 'right') {
         const bk = this.books.get(id);
         if (!bk) return;
         this._removeBook(bk);
         if (this.game.sync) this.game.sync.bookGone?.(id, toId);
-        if (toId === this.game.localId) this.takeIntoHand({ kind: 'book', spells: bk.spells, id });
+        if (toId === this.game.localId) this._toHand(id, bk.spells, side);
     }
 
     /** (guests) The host gave a book away. */
     netGone(id, toId) {
         const bk = this.books.get(id);
         if (bk) this._removeBook(bk);
-        if (toId === this.game.localId) this.takeIntoHand({ kind: 'book', spells: bookSpells(id), id });
+        if (toId === this.game.localId) this._toHand(id, bookSpells(id), this.game.items?.held.right ? 'left' : 'right');
+    }
+
+    /** The book is a thing like any other now: in the fist, thrown, put into a slot, given away. */
+    _toHand(id, spells, side) {
+        const g = this.game;
+        g.items?._gotItem({ kind: 'book', uid: 'book' + id, id, spells }, side);
+        g.hud.toast?.('📖 Книга в руке: поднимите обе руки перед собой — она откроется', 2500);
     }
 
     _removeBook(bk) {
@@ -358,126 +372,180 @@ export class BookBirds {
         bk.model.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose?.(); } });
     }
 
-    /** A book (from the ground or a slot) is in the right hand, closed. */
-    takeIntoHand(item) {
-        if (this.inHand) this.putAway();
-        const model = makeBookModel(COVERS[(item.id || 1) % COVERS.length]);
-        model.scale.setScalar(0.9);
-        this.game.scene.add(model);
-        this.inHand = { item, model, open: 0, page: 0, read: new Set() };
-        this.game.hud.toast?.('📖 Книга в руке: поднимите обе руки перед собой — она откроется', 2500);
-    }
-
-    /** Out of the hand (into a slot): returns the inventory item. */
-    putAway() {
-        const h = this.inHand;
-        if (!h) return null;
-        this._closeReader();
-        this.game.scene.remove(h.model);
-        h.model.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose?.(); } });
-        this.inHand = null;
-        return h.item;
+    /** The book in my hands, if any (it is held as an item). */
+    get inHand() {
+        return this.game.items?.heldOf('book') || null;
     }
 
     // ------------------------------------------------------------ reading
+    /**
+     * Both hands up in front and apart: the book leaves the fist, opens between
+     * the hands and grows twice as big; its pages look at the reader, the camera
+     * comes over the shoulder to them. A swipe of the right hand turns a page.
+     */
     _updateHeld(dt) {
-        const h = this.inHand;
-        if (!h) return;
         const g = this.game;
+        const hb = this.inHand;
+        const r = this._read;
+        if (!hb || (r && r.model !== hb.model)) this._stopReading(!hb || !hb.model.parent);
+        if (!hb) return;
         const ch = g.character;
-        const reading = ch.isArmRaised('left') && ch.isArmRaised('right') && ch.getHandWorldPosition('left', _v1).distanceTo(ch.getHandWorldPosition('right', _v2)) > 0.7;
-        h.open += ((reading ? 1 : 0) - h.open) * Math.min(1, dt * 5);
-        if (h.open > 0.5) this._showReader(dt);
-        else this._closeReader();
-        // the closed book sits in the right hand
-        const grip = ch.getGripObject('right');
-        grip.getWorldPosition(h.model.position);
-        h.model.position.y += 0.15;
-        h.model.rotation.set(0, ch.group.rotation.y, 0);
-        h.model.visible = h.open < 0.5;
+        const hl = ch.getHandWorldPosition('left', _v1), hr = ch.getHandWorldPosition('right', _v2);
+        const want = !g.combat.dead && ch.isArmRaised('left') && ch.isArmRaised('right') && hl.distanceTo(hr) > 0.7 && this._inFront(hl) && this._inFront(hr);
+        const R = this._read || (this._read = { model: hb.model, item: hb.item, open: 0, page: 0, tex: null, turning: null, c: null, q: new THREE.Quaternion() });
+        R.open += ((want ? 1 : 0) - R.open) * Math.min(1, dt * 5);
+        if (!want && R.open < 0.02) { this._stopReading(false); return; }
+        this.readingSide = hb.side;
+        const m = hb.model;
+        // where: between the hands; facing: the reader's eyes (over the shoulder in the third person)
+        // (a little beyond the hands, so that the arms hold it from below and don't hide the pages)
+        const c = _v3.addVectors(hl, hr).multiplyScalar(0.5);
+        const eye = this._eye(_v4);
+        c.addScaledVector(_v5.subVectors(c, eye).setY(0).normalize(), 0.7);
+        c.y += 0.45;
+        if (!R.c) R.c = c.clone(); else R.c.lerp(c, Math.min(1, dt * 10));
+        const n = _v5.subVectors(eye, R.c).normalize();
+        const up = _v6.set(0, 1, 0).addScaledVector(n, -n.y);
+        if (up.lengthSq() < 1e-4) up.set(0, 0, -1); else up.normalize();
+        const x = _v7.crossVectors(up, n);
+        _m4.makeBasis(x, up, n);
+        _q.setFromRotationMatrix(_m4);
+        R.q.slerp(_q, R.qSet ? Math.min(1, dt * 10) : 1);
+        R.qSet = true;
+        const k = R.open;
+        m.position.lerp(R.c, k);
+        m.quaternion.slerp(R.q, k);
+        const base = ITEM_SCALE.book || 1.6;
+        m.scale.setScalar(base * (1 + k)); // twice as big when open
+        setBookOpen(m, k);
+        if (k > 0.35) this._pages(dt, R);
+        // the camera: over the shoulder to the pages, so that they fill most of the view
+        if (g.cameraMode !== 'fpv') {
+            const width = 2 * (BOOK.W + BOOK.T + BOOK.B) * base * 2;
+            const cam = g.camera;
+            const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect);
+            const vfov = THREE.MathUtils.degToRad(cam.fov);
+            const dist = Math.max(width / 0.68 / (2 * Math.tan(hfov / 2)), BOOK.H * base * 2 / 0.68 / (2 * Math.tan(vfov / 2)));
+            this.readCam = { at: R.c, from: _v8.copy(R.c).addScaledVector(n, dist), k: Math.min(1, k * 1.2) };
+        } else this.readCam = null;
     }
 
-    _showReader(dt) {
-        const h = this.inHand;
+    /** A hand up in front of the body (not hanging at the side): at the chest or higher, ahead of it. */
+    _inFront(p) {
+        const ch = this.game.character;
+        ch.group.updateMatrixWorld(true);
+        const l = _v9.copy(p).applyMatrix4(_m4.copy(ch.group.matrixWorld).invert());
+        return l.y > 0.45 && l.z < -0.25; // (the body looks along −Z; shoulders at y 1.25)
+    }
+
+    /** Where the reader looks from: the head (first person) or above and behind it. */
+    _eye(out) {
+        const g = this.game, ch = g.character;
+        ch.head.getWorldPosition(out);
+        if (g.cameraMode === 'fpv') return out;
+        const yaw = ch.group.rotation.y;
+        return out.add(_v9.set(Math.sin(yaw) * 1.4, 1.1, Math.cos(yaw) * 1.4)); // (the body looks along −Z)
+    }
+
+    /** The spread on the pages; reading it teaches its spell; a swipe turns a page. */
+    _pages(dt, R) {
         const g = this.game;
-        const spells = h.item.spells;
-        if (!this._reader) {
-            const r = new THREE.Group();
-            const mk = () => new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.48), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-            r.userData = { left: mk(), right: mk(), turning: null };
-            r.userData.left.position.set(-0.175, 0, 0);
-            r.userData.right.position.set(0.175, 0, 0);
-            const cover = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.54), new THREE.MeshBasicMaterial({ color: COVERS[(h.item.id || 1) % COVERS.length] }));
-            cover.position.z = -0.005;
-            r.add(cover, r.userData.left, r.userData.right);
-            r.position.set(0, -0.12, -0.75);
-            r.rotation.x = -0.35;
-            g.camera.add(r);
-            this._reader = r;
-            this._setSpread(0);
+        const spells = R.item.spells || [];
+        const b = R.model.userData.book;
+        if (!b || !spells.length) return;
+        if (!R.tex) {
+            // every page drawn once; the page faces show them, bright to read
+            R.tex = spells.map((s) => ({ left: drawPage(s, 'left'), right: drawPage(s, 'right') }));
+            R.matL = new THREE.MeshBasicMaterial({ map: R.tex[0].left });
+            R.matR = new THREE.MeshBasicMaterial({ map: R.tex[0].right });
+            b.faceL.material = R.matL;
+            b.faceR.material = R.matR;
+            R.page = Math.min(R.page, spells.length - 1);
+            this._setSpread(R, R.page);
         }
         // turn a page: swipe the right hand sideways (in the view)
         const ch = g.character;
         const v = ch.handVelocity.right;
-        const camRight = _v3.set(1, 0, 0).applyQuaternion(g.camera.quaternion);
-        const side = v.dot(camRight);
+        const side = v.dot(_v1.set(1, 0, 0).applyQuaternion(g.camera.quaternion));
         const now = performance.now();
-        if (now - (h.turnedAt || 0) > 700) {
-            if (side < -2.2 && h.page < spells.length - 1) { h.turnedAt = now; this._turn(+1); }
-            else if (side > 2.2 && h.page > 0) { h.turnedAt = now; this._turn(-1); }
+        if (!R.turning && now - (R.turnedAt || 0) > 700) {
+            if (side < -2.2 && R.page < spells.length - 1) { R.turnedAt = now; this._turn(R, +1); }
+            else if (side > 2.2 && R.page > 0) { R.turnedAt = now; this._turn(R, -1); }
         }
-        // the page that turns: a curling sheet sweeping over the spine
-        const tu = this._reader.userData.turning;
+        // the sheet that turns: it swings over the spine
+        const tu = R.turning;
         if (tu) {
-            tu.t += dt * 2.5;
-            const a = Math.min(1, tu.t) * Math.PI;
-            tu.mesh.rotation.y = tu.dir > 0 ? -a : a;
-            tu.mesh.position.x = Math.cos(a) * 0.17 * (tu.dir > 0 ? 1 : -1);
-            tu.mesh.position.z = Math.sin(a) * 0.08;
-            if (tu.t >= 1) { this._reader.remove(tu.mesh); tu.mesh.geometry.dispose(); tu.mesh.material.dispose(); this._reader.userData.turning = null; }
+            tu.t += dt * 2.2;
+            const a = Math.min(1, tu.t);
+            const e = a * a * (3 - 2 * a);
+            tu.sheet.rotation.y = (tu.dir > 0 ? -1 : 1) * Math.PI * e;
+            if (a >= 1) {
+                R.model.remove(tu.pv);
+                tu.pv.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+                R.turning = null;
+                this._setSpread(R, R.page);
+            }
         }
         // reading a spread teaches its spell
-        const s = spells[h.page];
-        if (s && !this.learned.has(s)) {
+        const s = spells[R.page];
+        if (s && !this.learned.has(s) && R.open > 0.8 && !R.turning) {
             this.learned.add(s);
             g.hud.toast?.(`📖 Изучено заклинание: «${BUILD_SPELLS[s]?.name || s}»`, 2500);
-            g.fx.lightFlash?.(ch.getHandWorldPosition('right'), 0xffe9a8, 2, 0.3, 10);
+            g.fx.lightFlash?.(R.c, 0xffe9a8, 2, 0.3, 10);
         }
     }
 
-    _setSpread(page) {
-        const h = this.inHand;
-        const s = h.item.spells[page];
-        const ud = this._reader.userData;
-        for (const [k, mesh] of [['left', ud.left], ['right', ud.right]]) {
-            mesh.material.map?.dispose();
-            mesh.material.map = drawPage(s, k);
-            mesh.material.needsUpdate = true;
+    _setSpread(R, page, only = null) {
+        const t = R.tex[page];
+        if (!t) return;
+        if (only !== 'right') { R.matL.map = t.left; R.matL.needsUpdate = true; }
+        if (only !== 'left') { R.matR.map = t.right; R.matR.needsUpdate = true; }
+        this.game.hud.setVoice?.(`📖 Страница ${page + 1} из ${R.tex.length} — проведите правой рукой в сторону, чтобы перелистнуть`, true);
+    }
+
+    /** A sheet swings over the spine: it carries the old page on its front and the new one on its back. */
+    _turn(R, dir) {
+        const { W, H, T } = BOOK;
+        const old = R.tex[R.page], next = R.tex[R.page + dir];
+        const arc = new THREE.Group(); // (squashed towards the reader: the sheet swings low over the book)
+        arc.position.z = T + 0.004;
+        arc.scale.z = 0.3;
+        const pv = new THREE.Group();
+        arc.add(pv);
+        const geo = () => new THREE.PlaneGeometry(W - 0.03, H - 0.04);
+        const sx = dir > 0 ? 1 : -1;
+        const front = new THREE.Mesh(geo(), new THREE.MeshBasicMaterial({ map: dir > 0 ? old.right : old.left }));
+        front.position.x = sx * (W / 2 + T - 0.005);
+        const back = new THREE.Mesh(geo(), new THREE.MeshBasicMaterial({ map: dir > 0 ? next.left : next.right }));
+        back.position.x = front.position.x;
+        back.rotation.y = Math.PI;
+        back.position.z = -0.001;
+        pv.add(front, back);
+        R.model.add(arc);
+        R.turning = { pv: arc, sheet: pv, t: 0, dir };
+        R.page += dir;
+        // the page under the sheet shows the new spread at once; the other one when the sheet lands
+        this._setSpread(R, R.page, dir > 0 ? 'right' : 'left');
+    }
+
+    /** Back into the fist (or the book is gone: thrown, in a slot, given away). */
+    _stopReading(gone) {
+        const R = this._read;
+        this.readingSide = null;
+        this.readCam = null;
+        if (!R) return;
+        this._read = null;
+        const b = R.model.userData.book;
+        if (R.turning) { R.model.remove(R.turning.pv); R.turning.pv.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
+        if (R.tex) {
+            if (b && !gone) { b.faceL.material = b.paper; b.faceR.material = b.paper; }
+            if (b && gone) b.paper.dispose();
+            R.matL.dispose(); R.matR.dispose();
+            for (const t of R.tex) { t.left.dispose(); t.right.dispose(); }
         }
-        this.game.hud.setVoice?.(`📖 Страница ${page + 1} из ${h.item.spells.length} — проведите рукой в сторону, чтобы перелистнуть`, true);
-    }
-
-    _turn(dir) {
-        const h = this.inHand;
-        const ud = this._reader.userData;
-        // the sheet that flips (it carries the old page while turning)
-        const src = dir > 0 ? ud.right : ud.left;
-        const sheet = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.48, 8, 1), new THREE.MeshBasicMaterial({ map: src.material.map ? src.material.map.clone() : null, side: THREE.DoubleSide }));
-        if (sheet.material.map) sheet.material.map.needsUpdate = true;
-        sheet.position.copy(src.position);
-        sheet.position.z = 0.003;
-        this._reader.add(sheet);
-        ud.turning = { mesh: sheet, t: 0, dir };
-        h.page += dir;
-        this._setSpread(h.page);
-    }
-
-    _closeReader() {
-        if (!this._reader) return;
-        const r = this._reader;
-        this.game.camera.remove(r);
-        r.traverse((o) => { if (o.isMesh) { o.material.map?.dispose(); o.material.dispose(); o.geometry.dispose(); } });
-        this._reader = null;
+        if (!gone) { setBookOpen(R.model, 0); R.model.scale.setScalar(ITEM_SCALE.book || 1.6); }
+        const hud = this.game.hud;
+        if (hud._lastVoice?.startsWith?.('📖 Страница')) hud.setVoice('', false);
     }
 
     // ------------------------------------------------------------ frame
@@ -540,7 +608,7 @@ export class BookBirds {
     }
 
     dispose() {
-        this.putAway();
+        this._stopReading(true);
         for (const b of [...this.birds.values()]) this._removeBird(b);
         for (const bk of [...this.books.values()]) this._removeBook(bk);
     }

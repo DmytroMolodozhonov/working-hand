@@ -1674,10 +1674,10 @@ export class Game {
         this.accio.update(dt);
         this.inventory.update(dt);
         this.builder.update(dt);
-        this.books?.update(dt);
         this.swim.update(dt);
         this.items.update(dt);
         this.items.updateRemote();
+        this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
         this.wandMagic.update(dt);
         this.gear.update(dt);
         this.bleeding.update(dt);
@@ -2174,7 +2174,16 @@ export class Game {
         } else {
             _v1.copy(this.cameraOffset).applyAxisAngle(_v2.set(0, 1, 0), ch.group.rotation.y).add(ch.group.position);
             this.camera.position.lerp(_v1, frameAlpha(0.1, dt));
-            this.camera.lookAt(_v2.copy(ch.group.position).add(_v1.set(0, 2, 0)));
+            _v2.copy(ch.group.position).add(_v1.set(0, 2, 0));
+            // reading the open book: over the shoulder, the pages filling the view
+            const rc = this.books?.readCam;
+            this._readK = (this._readK || 0) + ((rc ? rc.k : 0) - (this._readK || 0)) * Math.min(1, dt * 6);
+            if (rc) { this._readFrom = (this._readFrom || new THREE.Vector3()).copy(rc.from); this._readAt = (this._readAt || new THREE.Vector3()).copy(rc.at); }
+            if (this._readK > 0.001 && this._readFrom) {
+                this.camera.position.lerp(this._readFrom, this._readK);
+                _v2.lerp(this._readAt, this._readK);
+            }
+            this.camera.lookAt(_v2);
         }
         if (this.fx.shake > 0) {
             const s = this.fx.shake * 0.25;

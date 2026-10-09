@@ -23,6 +23,7 @@
 
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
+import { makeSpellBookModel, COVERS } from './BookModel.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation'] },
@@ -473,6 +474,7 @@ function buildItemModel(it) {
         case 'pie': return pieModel();
         case 'wool': return woolModel();
         case 'logs': return logsModel(it.color);
+        case 'book': return makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
 }

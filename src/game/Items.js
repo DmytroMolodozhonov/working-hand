@@ -33,6 +33,7 @@ const GRIPPED = {
     bow: { axis: 'y', handle: 0 },
     scroll: { axis: 'x', handle: 0, curl: 0.5 },
     shield: { axis: 'y', handle: 0, face: 'back' },
+    book: { axis: 'book', handle: 0, curl: 0.55 }, // by the spine: the covers between the thumb and the fingers
 };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _f = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -97,6 +98,7 @@ export class ItemSystem {
     /** A thing (from a slot / the ground / another player) into a hand. */
     takeIntoHand(item, side = 'right') {
         if (this.held[side]) return false;
+        if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
         const model = makeItemModel(item);
         this.game.scene.add(model);
         this.held[side] = { item, model, since: performance.now() };
@@ -139,6 +141,9 @@ export class ItemSystem {
             if (x.lengthSq() < 1e-4) x.set(1, 0, 0);
             x.normalize();
             z = _c.crossVectors(x, y);
+        } else if (spec.axis === 'book') {
+            // the spine across the palm (like a handle), the book standing out of the palm
+            y = ax; z = _c.copy(f.Z).negate(); x = _b.crossVectors(y, z);
         } else if (spec.axis === 'y') { y = ax; x = _b.copy(f.Y); z = _c.crossVectors(x, y); } // hammer, bow (limbs), shield (upright)
         else { x = ax; y = _b.copy(f.Y).negate(); z = _c.crossVectors(x, y); } // scroll: rolled along X
         if (spec.face === 'back') { z = _c.copy(f.Z); x = _b.crossVectors(y, z); } // shield: the face where the back of the hand looks
@@ -258,7 +263,7 @@ export class ItemSystem {
         const now = performance.now();
         // pick up: an empty hand touching a thing
         for (const side of ['right', 'left']) {
-            if (this.held[side] || g.weapons.hands[side].held || (side === 'right' && g.books?.inHand)) continue;
+            if (this.held[side] || g.weapons.hands[side].held) continue;
             const hand = ch.getHandWorldPosition(side, _v);
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
@@ -277,7 +282,7 @@ export class ItemSystem {
             const h = this.held[side];
             if (!h) continue;
             // (not just after taking it; never a bow with an arrow on the string)
-            if (now - (h.since || 0) < 1000 || (h.item.kind === 'bow' && g.gear?.nock)) continue;
+            if (now - (h.since || 0) < 1000 || (h.item.kind === 'bow' && g.gear?.nock) || (h.item.kind === 'book' && g.books?.readingSide)) continue;
             let peak = null;
             for (const e of hist) if (!peak || e.s > peak.s) peak = e;
             // a real throw: a fast swing (several fast moments, one way) that suddenly stops —
@@ -321,7 +326,7 @@ export class ItemSystem {
         if (m.position.y < ground + 0.12) {
             m.position.y = ground + 0.12;
             if (L.vel.y < -3) { L.vel.y *= -0.25; L.vel.x *= 0.5; L.vel.z *= 0.5; L.spin.multiplyScalar(0.4); }
-            else { L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true; m.rotation.x = L.item.kind === 'shield' || L.item.kind === 'bow' ? -Math.PI / 2 : 0; m.rotation.z = 0; } // (a shield / a bow lies flat)
+            else { L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true; m.rotation.x = L.item.kind === 'shield' || L.item.kind === 'bow' ? -Math.PI / 2 : 0; m.rotation.z = L.item.kind === 'book' ? Math.PI / 2 : 0; } // (a shield / a bow / a book lies flat)
         }
     }
 
