@@ -109,7 +109,10 @@ export class PoseService {
         const dir = this.baseUrl + 'vendor/mediapipe-holistic/';
         this._holisticDir = dir;
         let started = false;
-        if (onGameThread || globalThis.__ZNS_HOLISTIC_MAIN__) this.stats.why = 'выбран поток игры';
+        // (a separate process kept the game at 75 FPS on an RTX 3050 PC, but there Holistic
+        // managed only 3–4 pictures a second — worse to play. Off until that is solved;
+        // window.__ZNS_AI_PROCESS__ = true turns it on for trying.)
+        if (onGameThread || globalThis.__ZNS_HOLISTIC_MAIN__ || !globalThis.__ZNS_AI_PROCESS__) this.stats.why = 'в отдельном процессе слишком медленно (3–4 кадра/с), поэтому поток игры';
         else {
             try {
                 await this._startHolisticFrame(quality);
