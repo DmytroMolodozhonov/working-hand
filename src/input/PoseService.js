@@ -108,7 +108,7 @@ export class PoseService {
         if (!onGameThread && typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !globalThis.__ZNS_HOLISTIC_MAIN__) {
             try {
                 this.holisticWorker = await this._spawnHolisticWorker(quality);
-                this.stats.mode = 'holistic';
+                this.stats.mode = 'worker-gpu';
                 this.stats.thread = 'worker';
                 this._holisticDir = dir;
                 started = true;
@@ -119,14 +119,17 @@ export class PoseService {
         } else if (onGameThread) {
             this.stats.why = 'в настройках выбран «поток игры»';
         }
-        if (!started) await this._startHolisticMain(dir, quality);
-        this._startHandHelper(quality);
+        if (!started) {
+            await this._startHolisticMain(dir, quality);
+            this._startHandHelper(quality);
+        }
     }
 
     /**
-     * Holistic in a worker: MediaPipe's Holistic Landmarker (the same network,
-     * made for workers) on the graphics card. (The old Holistic library can't use
-     * the graphics card from a worker — there it was 10× slower.)
+     * The camera network in a worker, on the graphics card: MediaPipe's three
+     * fast networks (body, hands, face — the same points as Holistic). The old
+     * Holistic library can't use the graphics card from a worker (10× slower
+     * there), and the new Holistic Landmarker is slow in a browser (~250 ms).
      */
     _spawnHolisticWorker(quality) {
         return new Promise((resolve, reject) => {
@@ -137,6 +140,7 @@ export class PoseService {
                 if (msg.type === 'ready') {
                     clearTimeout(timeout);
                     this.stats.delegate = msg.delegate;
+                    this.stats.gpu = msg.gpu || '';
                     worker.onmessage = (e) => {
                         if (worker !== this.holisticWorker) return;
                         const m = e.data;
@@ -150,7 +154,7 @@ export class PoseService {
                 }
             };
             worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || 'holistic worker error')); };
-            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: 'GPU', holistic: true, allowCpuHolistic: !!globalThis.__ZNS_ALLOW_CPU_HOLISTIC__ });
+            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || 'GPU' });
         });
     }
 
@@ -166,10 +170,10 @@ export class PoseService {
                 w.push(msg.cost);
                 if (w.length > 30) w.shift();
             }
-            if (!msg.empty) this._onHolistic(msg);
-            // really too slow in the worker on this computer (no graphics card for it): the game's thread
+            if (!msg.empty) this._handleResult(msg); // (the same guards as the networks always had)
+            // really too slow in the worker on this computer (no graphics card for it): Holistic on the game's thread
             const med = this._hwCosts && this._hwCosts.length >= 30 ? this._hwCosts.slice().sort((x, y) => x - y)[15] : 0;
-            if (med > 110 && !this._fellBack && !globalThis.__ZNS_ALLOW_CPU_HOLISTIC__) {
+            if (med > 70 && !this._fellBack && !globalThis.__ZNS_KEEP_WORKER__) {
                 this._fellBack = true;
                 this.stats.why = `в своём потоке ${Math.round(med)} мс на кадр (${this.stats.delegate}) — медленно, перешли в поток игры`;
                 console.warn('[PoseService] ' + this.stats.why);
@@ -477,7 +481,6 @@ export class PoseService {
             // the next one waiting there), so the network never waits for the next picture
             if ((this._hwOut || 0) >= 2 || ts - (this._holisticAt || 0) < 25) { this.stats.frames--; return; }
             this._holisticAt = ts;
-            this._sendHandHelper(v, ts);
             this._hwOut = (this._hwOut || 0) + 1;
             this.lastSendStart = ts;
             try {

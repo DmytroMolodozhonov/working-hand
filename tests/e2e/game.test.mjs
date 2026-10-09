@@ -606,8 +606,8 @@ test('real camera pipeline (classic Holistic, as in the original): webcam → bo
         const r = window.__zns.poseService.lastResults || {};
         return { ...window.__zns.poseService.stats, found: ['poseLandmarks', 'faceLandmarks', 'leftHandLandmarks', 'rightHandLandmarks'].filter((k) => r[k]) };
     });
-    assert.equal(st.mode, 'holistic');
-    assert.equal(st.thread, 'worker', 'Holistic runs in its own thread (the game never waits for it)');
+    assert.equal(st.mode, 'worker-gpu');
+    assert.equal(st.thread, 'worker', 'the camera network runs in its own thread (the game never waits for it)');
     assert.ok(st.results >= 3, 'Holistic answers every camera frame');
     // (with a real person in the picture it finds body, face and hands — checked by hand
     // with tests/fixtures-like portrait video; this fixture photo is not a full person)

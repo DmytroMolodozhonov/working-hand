@@ -8,11 +8,9 @@
  *   - Pose Landmarker lite / full / heavy (menu "Качество ИИ")
  *   - Hand Landmarker (2 hands)
  *   - Face Landmarker (478 points, used for head rotation)
- *   - Holistic Landmarker (body, hands, face in one: the same network as the
- *     original game's Holistic, made for a worker and the graphics card)
  */
 
-import { FilesetResolver, PoseLandmarker, HandLandmarker, FaceLandmarker, HolisticLandmarker } from '../../vendor/mediapipe/vision_bundle.mjs';
+import { FilesetResolver, PoseLandmarker, HandLandmarker, FaceLandmarker } from '../../vendor/mediapipe/vision_bundle.mjs';
 
 const POSE_MODELS = ['pose_landmarker_lite.task', 'pose_landmarker_full.task', 'pose_landmarker_heavy.task'];
 
@@ -33,9 +31,8 @@ export class VisionRunner {
      *   handsOnly: only the Hand Landmarker (helper next to Holistic, which
      *   loses hands that overlap the arm/body; this network has its own palm detector)
      */
-    async init({ quality = 1, useModule = true, handsOnly = false, holistic = false } = {}) {
+    async init({ quality = 1, useModule = true, handsOnly = false } = {}) {
         this.handsOnly = handsOnly;
-        this.isHolistic = holistic;
         const fileset = await FilesetResolver.forVisionTasks(this.baseUrl + 'vendor/mediapipe/wasm', useModule);
         // With the ES-module loader the library clears self.ModuleFactory after
         // creating a task, and a second import() of the same module does not
@@ -49,21 +46,6 @@ export class VisionRunner {
             // GPU processing needs a canvas per task; in a worker that is an OffscreenCanvas.
             const canvasFor = () => (delegate === 'GPU' && typeof OffscreenCanvas !== 'undefined' ? { canvas: new OffscreenCanvas(1, 1) } : {});
             const common = (path) => ({ baseOptions: { modelAssetPath: model(path), delegate }, runningMode: 'VIDEO', ...canvasFor() });
-            if (holistic) {
-                restoreFactory();
-                const hl = await HolisticLandmarker.createFromOptions(fileset, {
-                    ...common('holistic_landmarker.task'),
-                    minPoseDetectionConfidence: 0.5,
-                    minPosePresenceConfidence: 0.5,
-                    minPoseSuppressionThreshold: 0.3,
-                    minFaceDetectionConfidence: 0.5,
-                    minFacePresenceConfidence: 0.5,
-                    minHandLandmarksConfidence: 0.5,
-                    outputFaceBlendshapes: false,
-                    outputPoseSegmentationMasks: false,
-                });
-                return { pose: null, hands: null, face: null, holistic: hl };
-            }
             if (handsOnly) {
                 restoreFactory();
                 const hands = await HandLandmarker.createFromOptions(fileset, {
@@ -103,8 +85,6 @@ export class VisionRunner {
 
         let models;
         const forced = (typeof self !== 'undefined' && self.__ZNS_DELEGATE__) || (softwareGpu() ? 'CPU' : null);
-        // (Holistic in a worker is only worth it on the graphics card: on the CPU it is slow)
-        if (holistic && forced === 'CPU' && !(typeof self !== 'undefined' && self.__ZNS_ALLOW_CPU_HOLISTIC__)) throw new Error('no hardware GPU for Holistic');
         try {
             if (forced === 'CPU') throw new Error('no hardware GPU — CPU is faster here');
             models = await create('GPU');
@@ -115,7 +95,7 @@ export class VisionRunner {
             this.delegate = 'CPU';
         }
         Object.assign(this, models);
-        return { delegate: this.delegate, poseModel };
+        return { delegate: this.delegate, poseModel, gpu: gpuName() };
     }
 
     /**
@@ -128,16 +108,6 @@ export class VisionRunner {
         this.lastTs = ts;
         this.frame++;
         const t0 = performance.now();
-        if (this.holistic) {
-            const r = this.holistic.detectForVideo(image, ts);
-            return {
-                ts, cost: performance.now() - t0, holistic: true,
-                poseLandmarks: r.poseLandmarks?.[0] ? plain(r.poseLandmarks[0], true) : null,
-                faceLandmarks: r.faceLandmarks?.[0] ? plain(r.faceLandmarks[0], false) : null,
-                leftHandLandmarks: r.leftHandLandmarks?.[0] ? plain(r.leftHandLandmarks[0], false) : null,
-                rightHandLandmarks: r.rightHandLandmarks?.[0] ? plain(r.rightHandLandmarks[0], false) : null,
-            };
-        }
         const pose = this.pose ? this.pose.detectForVideo(image, ts) : { landmarks: [] };
         const hands = this.hands.detectForVideo(image, ts);
         let face = null;
@@ -162,7 +132,7 @@ export class VisionRunner {
     }
 
     close() {
-        try { this.pose?.close(); this.hands?.close(); this.face?.close(); this.holistic?.close(); } catch (e) { /* ignore */ }
+        try { this.pose?.close(); this.hands?.close(); this.face?.close(); } catch (e) { /* ignore */ }
     }
 }
 
@@ -181,6 +151,21 @@ export function softwareGpu() {
         return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
     } catch (e) {
         return false;
+    }
+}
+
+/** Which graphics chip WebGL uses here (in a worker too). */
+export function gpuName() {
+    try {
+        const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (!gl) return 'нет WebGL';
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        const name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+        return name.replace(/^ANGLE \((?:[^,]*,\s*)?/, '').replace(/\s*\(0x[0-9a-f]+\).*$/i, '').replace(/ Direct3D.*$/, '').slice(0, 48);
+    } catch (e) {
+        return '';
     }
 }
 
