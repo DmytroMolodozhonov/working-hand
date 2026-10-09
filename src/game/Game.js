@@ -1643,6 +1643,7 @@ export class Game {
             const aiFps = ps.lastPushAt && t0 - ps.lastPushAt < 1000 ? Math.round(1000 / ps.interval) : 0;
             const sp = this.stats.spike;
             const fps = Math.round(this.fpsFrames / this.fpsAccum);
+            if (this.poseService) this.poseService.gameFps = fps; // (the camera network eases off when the game is slow)
             // what takes the frame's time (shown when it is slow): the heaviest part, the network (camera AI), draw calls
             let slow = '';
             if (fps < 45) {

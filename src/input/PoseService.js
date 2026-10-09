@@ -380,7 +380,11 @@ export class PoseService {
         if (this.holistic) {
             // Holistic shares the game's thread: ~22 recognitions a second are plenty
             // (motion between them is blended), the rest of the time goes to the game.
-            if (ts - (this._holisticAt || 0) < HOLISTIC_INTERVAL) { this.stats.frames--; return; }
+            // (a heavy network on a slow frame rate: recognise less often — up to ~14 times a second —
+            // so the game keeps its frames; set by the game through `gameFps`)
+            const heavy = this.stats.avgCost > 14 && this.gameFps && this.gameFps < 40;
+            const interval = heavy ? Math.min(72, HOLISTIC_INTERVAL + this.stats.avgCost) : HOLISTIC_INTERVAL;
+            if (ts - (this._holisticAt || 0) < interval) { this.stats.frames--; return; }
             this._holisticAt = ts;
             // The hand helper gets the same frame (in parallel, its own thread)
             const wantHelper = performance.now() - (this._handMissingAt || 0) < 1500 && ts - (this._helperSentAt || 0) > 66;
