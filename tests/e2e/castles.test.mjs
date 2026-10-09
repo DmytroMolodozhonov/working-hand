@@ -218,3 +218,49 @@ test('market and talk: buy from a counter with «да», sell a wand for a pouch
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('wrecking a castle wall with Bombardo: the guards hear it, come to look and go for the one who did it', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const c = g.world.terrain.data.castles.near(0, 0, 2500).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+        window.__castle = c;
+        const p = c.gate;
+        g.character.group.position.set(p.x, p.y + 2.2, p.z);
+        g.world.terrain.flushAround(p.x, p.z);
+    });
+    await frames(page, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, L = g.castleLife, c = window.__castle;
+        const T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        // a fire nobody is blamed for: the guards come to look, nobody is hunted
+        L.damaged({ x: c.gate.x, y: c.gate.y, z: c.gate.z }, null, 3, false);
+        const looking = [...L.byId.values()].filter((v) => v.investigate).length;
+        const hostile0 = [...L.castles.values()].some((cs) => cs.hostile.size);
+        for (const v of L.byId.values()) v.investigate = null;
+        // the wall to the side of the gate, me 22 m outside in the open
+        const inward = new T.Vector3(c.x - c.gate.x, 0, c.z - c.gate.z).normalize();
+        const along = new T.Vector3(-inward.z, 0, inward.x);
+        const wall = new T.Vector3(c.gate.x, c.gate.y + 3, c.gate.z).addScaledVector(inward, 5).addScaledVector(along, 16);
+        const me = wall.clone().addScaledVector(inward, -22);
+        g.character.group.position.set(me.x, g.collision.groundY(me.x, me.z) + 2.2, me.z);
+        const before = g.world.terrain.data.get(Math.round(wall.x), Math.floor(wall.y + 1.5), Math.round(wall.z));
+        g.explode(wall, 4, g.localId, 3);
+        const after = g.world.terrain.data.get(Math.round(wall.x), Math.floor(wall.y + 1.5), Math.round(wall.z));
+        const comeNow = [...L.byId.values()].filter((v) => v.role === 'knight' && (v.investigate || v.foe === g.localId)).length;
+        let foes = 0;
+        for (let i = 0; i < 60 && !foes; i++) { await frames(5); foes = [...L.byId.values()].filter((v) => v.foe === g.localId).length; }
+        const cs = L.castles.get(c.id);
+        return { looking, hostile0, before, after, comeNow, foes, hostile: cs.hostile.has(g.localId), wrecked: L.state(c.id).wrecked || 0, voice: g.hud.lastVoice || '' };
+    });
+    assert.ok(r.looking >= 1, `the guards come to look at a fire (${r.looking})`);
+    assert.equal(r.hostile0, false, 'nobody is blamed for a fire of nobody');
+    assert.ok(r.wrecked > 0, `the wall was wrecked (${r.before} → ${r.after}, ${r.wrecked} blocks)`);
+    assert.ok(r.comeNow >= 2, `knights come at once (${r.comeNow})`);
+    assert.ok(r.foes >= 1 && r.hostile, `the guard goes for me (${r.foes})`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

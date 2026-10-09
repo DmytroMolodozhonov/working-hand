@@ -35,6 +35,8 @@ export const BLOCK = {
     CARPET_RED: 33, GOLD: 34, FARMLAND: 35, WHEAT: 36, PATH: 37, CARPET_BLUE: 38, CARPET_GREEN: 39,
     LANTERN: 40, HAY: 41, CLOTH_WHITE: 42, BOOKS: 43, CLOTH_YELLOW: 44,
 };
+/** Built by people (castles, villages): wrecking it is a crime there. */
+export const isCastleBlock = (t) => t >= BLOCK.CS_GREY;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
 export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11 };
 const PATTERN_OF = {};

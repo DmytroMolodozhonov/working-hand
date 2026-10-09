@@ -17,7 +17,7 @@
  */
 
 import * as THREE from 'three';
-import { BLOCK, TREE_KINDS, isWood, isLeaves } from '../world/Terrain.js';
+import { BLOCK, TREE_KINDS, isWood, isLeaves, isCastleBlock } from '../world/Terrain.js';
 import { RESOURCE, STACK, resourceOf } from './Inventory.js';
 
 export const BUILD_SPELLS = {
@@ -101,9 +101,10 @@ export class Builder {
         }
         const data = this.data;
         let cells, res, amount;
-        if (isWood(cell.type)) {
+        const treeKind = TREE_KINDS.find((k) => k.wood === cell.type);
+        if (treeKind) {
             // the whole tree: its trunk and its crown
-            const kind = TREE_KINDS.find((k) => k.wood === cell.type);
+            const kind = treeKind;
             cells = this._flood(cell, (t) => t === kind.wood || t === kind.leaves, 6, 500);
             res = kind.wood;
             amount = WOOD_PER_TREE;
@@ -115,11 +116,13 @@ export class Builder {
         }
         const room = this._room(res);
         if (room <= 0) return '🎒 Ячейки полны — освободите ячейку (правый карман)';
-        if (!isWood(cell.type) && cells.length > room) cells.length = room;
+        if (!treeKind && cells.length > room) cells.length = room;
         amount = Math.min(amount, room);
         const edits = [];
         for (const c of cells) { data.set(c.x, c.L, c.z, BLOCK.AIR); edits.push([c.x, c.L, c.z, BLOCK.AIR]); }
         this._sendEdits(edits);
+        // pulling a castle / a house apart: whoever sees it calls the guard
+        if (isCastleBlock(cell.type)) g.castleLife?.damaged({ x: cell.x, y: cell.L - 1, z: cell.z }, g.localId, cells.length, false);
         const color = RESOURCE[res]?.color ?? 0xffffff;
         for (let i = 0; i < Math.min(cells.length, 30); i++) this._flyToHand(_v2.set(cells[i].x, cells[i].L - 1, cells[i].z), color, 2, h.side);
         g.inventory.addResource(res, amount);

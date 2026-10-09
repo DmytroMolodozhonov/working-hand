@@ -35,6 +35,7 @@ const SEE = 32; // m: villagers see violence this far (with a free line of sight
 const VIEW = 92; // m: farther villagers are not drawn
 const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
+const HEAR_BOOM = 110; // m: a blast is heard this far (the guards come to look)
 export const STATS = {
     builder: { hp: 8, armor: 0, dmg: 1 },
     farmer: { hp: 8, armor: 0, dmg: 1 },
@@ -54,6 +55,9 @@ const SHOUT = {
     king: ['Стража! Ко мне!', 'Как ты смеешь?!', 'Рыцари! Защитите своего короля!'],
     hurt: ['Ай!', 'За что?!', 'Ох...', 'Больно же!'],
     bow: ['Ваше Величество!', 'Да здравствует король!', 'Слава новому королю!', 'Добро пожаловать, повелитель!'],
+    boom: ['Что это было?!', 'Взрыв! Бегите!', 'Стену ломают!', 'Спасайтесь!', 'Стража! Тут колдун!'],
+    investigate: ['Что там грохнуло? За мной!', 'К стене, живо!', 'Кто посмел?! Проверить!'],
+    wrecker: ['Вот он, разрушитель!', 'Держи колдуна!', 'Ты сломал нашу стену — ответишь!', 'Взять его, он ломает замок!'],
     captured: ['Король пал! Да здравствует новый король!', 'Мы служим вам, Ваше Величество!'],
     ambient: {
         merchant: ['Свежий хлеб! Подходи!', 'Яблоки, сыр, мясо — всё свежее!', 'Покупайте, не стесняйтесь!', 'Кладите товар на прилавок — куплю!'],
@@ -532,6 +536,7 @@ export class CastleLife {
             }
         }
         if (v.foe) { this._fight(v, dt); return; }
+        if (v.investigate && this._investigate(v, dt)) return;
         if (v.fleeT > 0) {
             v.fleeT -= dt;
             const fp = v.fleeFrom ? this._playerPos(v.fleeFrom) : null;
@@ -831,6 +836,122 @@ export class CastleLife {
         const g = this.game;
         if (st.owner === g.localId) g.hud.notify?.(`👑 Вы победили короля! ${cs.def.name} теперь ваш — сундуки открыты`);
         else g.hud.notify?.(`👑 ${st.ownerName || 'Кто-то'} захватил ${cs.def.name}`);
+    }
+
+    /**
+     * Someone wrecked part of a castle or village (a blast, «Gather», fire): the
+     * noise brings the guards to look, people run, and if anybody sees the
+     * culprit — the whole guard goes for them.
+     * @param {{x,y,z}} pos  where it happened
+     * @param {string|null} by  the player who did it (if known)
+     * @param {number} blocks  castle blocks destroyed
+     * @param {boolean} [loud]  a blast (heard far) or quiet work (seen near)
+     */
+    damaged(pos, by, blocks, loud = true) {
+        if (!this.enabled || !this.index) return;
+        const g = this.game;
+        if (!this.auth) { if (by === g.localId) g.sync?.villagerVandal?.([Math.round(pos.x), Math.round(pos.y), Math.round(pos.z)], blocks, loud ? 1 : 0); return; }
+        const isPlayer = !!by && (by === g.localId || g.remotes.has(by));
+        for (const def of this.index.near(pos.x, pos.z, 0)) {
+            if (!this._inLand(def, pos, 12)) continue;
+            const cs = this._runtime(def);
+            if (!cs.awake) continue;
+            const st = this.state(def.id);
+            if (by && by === st.owner) continue; // (the king may pull down his own walls)
+            const hear = loud ? HEAR_BOOM : 30;
+            const bp = isPlayer ? this._playerPos(by) : null;
+            let seen = false;
+            let comers = 0;
+            for (const v of cs.active.values()) {
+                if (v.dead) continue;
+                const d = Math.hypot(v.x - pos.x, v.z - pos.z);
+                if (d > hear) continue;
+                // a blast draws every eye: whoever sees the culprit knows who it was
+                if (bp && blocks > 0 && Math.hypot(bp.x - v.x, bp.z - v.z) < SEE * 1.6 && this._sees(v, bp)) seen = true;
+                if (v.role === 'knight') {
+                    if (!v.foe) { v.investigate = { x: pos.x, y: pos.y, z: pos.z, by: isPlayer ? by : null, t: 45 }; v.path = null; v.lookT = 0; comers++; }
+                } else if (v.role !== 'king' && isPlayer && d < 45 && !(v.fleeT > 0)) {
+                    v.fleeFrom = by; v.fleeT = 10 + Math.random() * 8; v.fleeing = false; v.path = null;
+                    if (Math.random() < 0.6) this._say(v, pick(loud ? SHOUT.boom : SHOUT.help));
+                }
+            }
+            if (!isPlayer || blocks <= 0) continue;
+            st.wrecked = (st.wrecked || 0) + blocks;
+            // a big blast: more knights run out of the barracks and the gate to see
+            if (loud && comers < 4) this._sendGuards(cs, pos, by, 4 - comers);
+            if (seen) this._catch(cs, by, pos);
+        }
+    }
+
+    /** A few knights come out (barracks, keep, gate) and run to look at a place. */
+    _sendGuards(cs, pos, by, n) {
+        const def = cs.def;
+        const st = this.state(def.id);
+        const from = cs.graph.tagged('barracksDoor').concat(cs.graph.tagged('gateIn'), cs.graph.tagged('keepDoor'), cs.graph.tagged('yard'));
+        if (!from.length) return;
+        // (the nearest doors first)
+        from.sort((a, b) => Math.hypot(cs.graph.nodes[a].x - pos.x, cs.graph.nodes[a].z - pos.z) - Math.hypot(cs.graph.nodes[b].x - pos.x, cs.graph.nodes[b].z - pos.z));
+        let sent = 0;
+        for (let k = 1; k <= def.knights && sent < n; k++) {
+            if (cs.active.has(k) || st.killed.has(k)) continue;
+            const node = cs.graph.nodes[from[sent % Math.min(2, from.length)]];
+            const v = this._activate(cs, k, { x: node.x + (Math.random() - 0.5) * 2, y: node.y, z: node.z + (Math.random() - 0.5) * 2 }, 'yard');
+            if (!v) continue;
+            v.investigate = { x: pos.x, y: pos.y, z: pos.z, by, t: 50 };
+            if (sent === 0) this._say(v, pick(SHOUT.investigate));
+            sent++;
+        }
+    }
+
+    /** The culprit is known: the castle turns on them, every knight near comes. */
+    _catch(cs, by, pos) {
+        const g = this.game;
+        const was = cs.hostile.get(by) > Date.now();
+        cs.hostile.set(by, Date.now() + HOSTILE_MS);
+        let shouted = false;
+        for (const k of cs.active.values()) {
+            if (k.dead || k.foe || (k.role !== 'knight' && k.role !== 'king')) continue;
+            if (k.role === 'king' && Math.hypot(k.x - pos.x, k.z - pos.z) > 30) continue;
+            if (Math.hypot(k.x - pos.x, k.z - pos.z) < 110) {
+                k.foe = by; k.investigate = null;
+                if (!shouted) { shouted = true; this._say(k, pick(SHOUT.wrecker)); }
+            }
+        }
+        if (!was && by === g.localId) g.hud.setVoice('⚔️ Стража видела, кто ломает замок! Рыцари идут за вами', true);
+        else if (!was) g.sync?.villagerAlarm?.(by, cs.def.name);
+    }
+
+    /** A knight goes to the place of a blast and looks round; the culprit near → caught. */
+    _investigate(v, dt) {
+        const I = v.investigate;
+        I.t -= dt;
+        if (I.t <= 0) { v.investigate = null; v.path = null; return false; }
+        // who is about? the one who did it, seen near the place, is caught
+        v.lookT = (v.lookT || 0) - dt;
+        if (v.lookT <= 0) {
+            v.lookT = 0.5;
+            const p = I.by ? this._playerPos(I.by) : null;
+            if (p && Math.hypot(p.x - I.x, p.z - I.z) < 40 && Math.hypot(p.x - v.x, p.z - v.z) < 32 && this._sees(v, p)) {
+                this._catch(v.cs, I.by, I);
+                return false;
+            }
+        }
+        const d = Math.hypot(I.x - v.x, I.z - v.z);
+        if (d > 6) {
+            v.chaseT = (v.chaseT || 0) - dt;
+            if (!v.path || v.chaseT <= 0) { v.chaseT = 3; this._goTo(v, v.cs.graph.nearest(I.x, I.y, I.z, 8)); }
+            const end = this._followPath(v, dt, RUN);
+            if (end) this._steer(v, I.x, I.z, RUN * 0.6, dt, 5);
+            v.mode = v.speed > 0 ? 'run' : 'idle';
+        } else {
+            // there: looking round
+            v.speed = 0; v.path = null;
+            v.yaw = turn(v.yaw, v.yaw + 1, dt * 0.8);
+            v.mode = 'idle';
+            if (I.t > 12) I.t = 12;
+        }
+        this._ground(v);
+        return true;
     }
 
     /** A villager saw / suffered a crime (theft, threats) by a player. */

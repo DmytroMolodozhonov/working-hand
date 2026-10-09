@@ -43,7 +43,7 @@ import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock } from '../world/Terrain.js';
 
 const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
@@ -207,6 +207,7 @@ export class Game {
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.fire = new FireSystem(this); // burning trees
+        this.fire.onCastleBurn = (x, L, z) => this._castleBurnt(x, L, z);
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
@@ -401,6 +402,12 @@ export class Game {
         // `power` times the energy: damage × power, thrown objects × √power speed
         const push = Math.sqrt(power);
         const out = this.world.explode(pos, radius);
+        // a blast in a castle or a village: the guards hear it (and want to know who)
+        if (authoritative) {
+            let wrecked = 0;
+            for (const b of out.blocks) if (isCastleBlock(b.type)) wrecked++;
+            this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true);
+        }
         const debris = [];
         for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? 0x7a5230 });
         for (const p of out.props) debris.push(p);
@@ -650,6 +657,7 @@ export class Game {
         if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
+        this.noteCaster(name, this.localId);
         // Inferno with a scroll in the hand burns it: its power is yours
         if (name === 'Inferno' && this.items.heldOf('scroll')) { this.items.burnHeldScroll(); return 'Inferno'; }
         // Duel magic: a charge flies at the creature the hand points at
@@ -1852,6 +1860,21 @@ export class Game {
     /** «Флайн» is known: everywhere but «Свободный мир», where only a scroll of flight teaches it. */
     knowsFlight() {
         return this.config.mode !== 'freeworld' || !!this.bonus?.flight;
+    }
+
+    /** Who last cast a fire / blast spell (a castle that catches fire blames them). */
+    noteCaster(name, by) {
+        if (/^(Inferno|Fire|Bombardo|Lightning|Earthquake)/.test(name || '')) this._fireBy = { by, at: performance.now() };
+    }
+
+    /** A castle / village block burnt down: the guards come; the last fire-caster near is blamed. */
+    _castleBurnt(x, L, z) {
+        const now = performance.now();
+        if (now - (this._burnNoteAt || 0) < 1500) return;
+        this._burnNoteAt = now;
+        const f = this._fireBy;
+        const by = f && now - f.at < 120000 ? f.by : null;
+        this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false);
     }
 
     /** Outside Creative «Lightning Strike» and «Thunderwave» are learnt from a burnt scroll only. */
