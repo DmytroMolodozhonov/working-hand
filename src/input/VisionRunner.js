@@ -118,10 +118,13 @@ export class VisionRunner {
             return { ts, cost: performance.now() - t0, part: 'face', faceLandmarks: face.faceLandmarks?.[0] ? plain(face.faceLandmarks[0], false) : null };
         }
         const pose = this.pose ? this.pose.detectForVideo(image, ts) : { landmarks: [] };
+        const t1 = performance.now();
         const hands = this.hands ? this.hands.detectForVideo(image, ts) : { landmarks: [] };
+        const t2 = performance.now();
         let face = null;
         if (this.face && this.frame % this.faceEvery === 0) face = this.face.detectForVideo(image, ts);
         const cost = performance.now() - t0;
+        const parts = { pose: t1 - t0, hands: t2 - t1, face: face ? performance.now() - t2 : null };
         // The face only steers the camera (head turn), which is smoothed anyway:
         // every 2nd frame is enough and leaves more time for body and hands.
         // On a slow computer, every 3rd.
@@ -129,6 +132,7 @@ export class VisionRunner {
         return {
             ts,
             cost,
+            parts,
             poseLandmarks: pose.landmarks?.[0] ? plain(pose.landmarks[0], true) : null,
             hands: (hands.landmarks || []).map((lm, i) => ({
                 landmarks: plain(lm, false),

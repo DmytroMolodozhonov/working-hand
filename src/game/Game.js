@@ -1629,7 +1629,7 @@ export class Game {
         if (worst < 35) {
             // The previous frame itself was quick: something ran between frames
             const ps = this.poseService;
-            const ai = ps && ps.holistic && ps.lastSendEnd > this._frameEnd - 5 && ps.lastSendEnd - ps.lastSendStart > 30; // (only when it shares the game's thread)
+            const ai = ps && (ps.holistic || ps.runner) && ps.lastSendEnd > this._frameEnd - 5 && ps.lastSendEnd - ps.lastSendStart > 30; // (only when it shares the game's thread)
             reason = ai ? 'нейросеть камеры' : 'браузер (память/вкладка)';
         }
         this.stats.spike = { ms: gapMs, reason, at: now };
