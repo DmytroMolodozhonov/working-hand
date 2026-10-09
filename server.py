@@ -11,6 +11,7 @@ API:
   GET    /api/rig             — настройки рига рук
   POST   /api/rig             — сохранить настройки рига рук
   GET    /api/version         — дата версии игры (видна в меню)
+  POST   /api/perflog         — строка дневника производительности → zns-perf.log
 """
 
 import glob
@@ -32,6 +33,7 @@ os.chdir(ROOT)
 PORT = int(os.environ.get("ZNS_PORT", "8000"))
 MAPS_DIR = "maps"
 RIG_FILE = "hand_rig.json"
+PERF_LOG = "zns-perf.log"  # the game's performance diary (send it to the developer)
 MAX_BODY = 5 * 1024 * 1024  # 5 MB is plenty for a map
 
 # Windows often maps .js to text/plain in the registry, which breaks ES modules.
@@ -140,6 +142,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
+        if "/api/perflog" in (self.path or ""):
+            return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
 
@@ -202,6 +206,19 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with open(RIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 return self._json(200, {"status": "success", "message": "Rig saved"})
+
+            if path == "/api/perflog":
+                line = str(self._read_json().get("line", ""))[:4000].replace("\r", " ").replace("\n", " ")
+                if line.startswith("==="):
+                    # a new game: start the file afresh when it has grown big
+                    if os.path.exists(PERF_LOG) and os.path.getsize(PERF_LOG) > 3 * 1024 * 1024:
+                        os.replace(PERF_LOG, PERF_LOG + ".old")
+                    print("  [FPS-дневник] пишется в " + os.path.join(ROOT, PERF_LOG))
+                with open(PERF_LOG, "a", encoding="utf-8") as f:
+                    f.write(time.strftime("%H:%M:%S ") + line + "\n")
+                if not line.startswith("==="):
+                    print("  [FPS] " + line[:150])
+                return self._json(200, {"status": "ok"})
 
             if path == "/api/maps":
                 map_data = self._read_json()

@@ -94,12 +94,67 @@ export class PoseService {
     /**
      * The original game's recognition: one MediaPipe Holistic network (pose,
      * hands, face together) with its built-in landmark smoothing — the
-     * smooth, steady feel the game was tuned with. Runs on the main thread.
+     * smooth, steady feel the game was tuned with. Runs in its own thread
+     * (holistic.worker.js); on the main thread only if a worker can't start.
      */
     async _startHolistic(quality) {
         this._closeModels();
         this._status('Загрузка нейросети...');
         const dir = this.baseUrl + 'vendor/mediapipe-holistic/';
+        // Its own thread first: then the game never waits for the camera (the main reason
+        // a strong computer still lost frames); the game's thread only as a fallback.
+        let started = false;
+        if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !globalThis.__ZNS_HOLISTIC_MAIN__) {
+            try {
+                this.holisticWorker = await this._spawnHolisticWorker(dir, quality);
+                this.stats.mode = 'holistic';
+                this.stats.thread = 'worker';
+                this.stats.delegate = 'GPU';
+                started = true;
+            } catch (e) {
+                console.warn('[PoseService] Holistic worker failed, running it on the game thread:', e?.message || e);
+            }
+        }
+        if (!started) await this._startHolisticMain(dir, quality);
+        this._startHandHelper(quality);
+    }
+
+    _spawnHolisticWorker(dir, quality) {
+        return new Promise((resolve, reject) => {
+            const worker = new Worker(new URL('./holistic.worker.js', import.meta.url));
+            const timeout = setTimeout(() => { worker.terminate(); reject(new Error('holistic worker init timeout')); }, 90000);
+            worker.onmessage = (ev) => {
+                const msg = ev.data;
+                if (msg.type === 'ready') {
+                    clearTimeout(timeout);
+                    worker.onmessage = (e) => { if (worker === this.holisticWorker) this._onHolisticWorker(e.data); };
+                    resolve(worker);
+                } else if (msg.type === 'error') {
+                    clearTimeout(timeout);
+                    worker.terminate();
+                    reject(new Error(msg.message));
+                }
+            };
+            worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || 'holistic worker error')); };
+            worker.postMessage({ type: 'init', dir, quality });
+        });
+    }
+
+    _onHolisticWorker(msg) {
+        if (msg.type === 'result') {
+            this.inFlight = false;
+            this.lastSendEnd = performance.now();
+            if (msg.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + msg.cost * 0.1 : msg.cost;
+            if (!msg.empty) this._onHolistic(msg);
+        } else if (msg.type === 'error') {
+            this.inFlight = false;
+            this._frameErrors = (this._frameErrors || 0) + 1;
+            if (this._frameErrors < 5) console.warn('[PoseService] Holistic worker frame failed:', msg.message);
+        }
+    }
+
+    async _startHolisticMain(dir, quality) {
+        this.stats.thread = 'main';
         if (!globalThis.Holistic) await loadScript(dir + 'holistic.js');
         const holistic = new globalThis.Holistic({ locateFile: (file) => dir + file });
         holistic.setOptions({
@@ -118,11 +173,15 @@ export class PoseService {
         this.holistic = holistic;
         this.stats.mode = 'holistic';
         this.stats.delegate = 'GPU';
+    }
+
+    _startHandHelper(quality) {
+        const owner = this.holistic || this.holisticWorker;
         // Hand helper: the newer Hand Landmarker in a worker finds hands that
         // Holistic loses (hand over the arm / body). Optional — Holistic alone works too.
         if (typeof Worker !== 'undefined' && !globalThis.__ZNS_NO_HAND_HELPER__) {
             this._spawnWorker(quality, 'CPU', true).then((w) => {
-                if (this.holistic !== holistic) { w.terminate(); return; }
+                if ((this.holistic || this.holisticWorker) !== owner) { w.terminate(); return; }
                 this.handWorker = w;
                 this.stats.handHelper = true;
             }).catch((e) => console.warn('[PoseService] hand helper unavailable:', e?.message || e));
@@ -249,6 +308,7 @@ export class PoseService {
 
     _closeModels() {
         if (this.holistic) { try { this.holistic.close(); } catch (e) { /* ignore */ } this.holistic = null; }
+        if (this.holisticWorker) { this.holisticWorker.postMessage({ type: 'close' }); this.holisticWorker.terminate(); this.holisticWorker = null; }
         if (this.handWorker) { this.handWorker.terminate(); this.handWorker = null; }
         this._helperHands = null;
         if (this.worker) { this.worker.postMessage({ type: 'close' }); this.worker.terminate(); this.worker = null; }
@@ -377,7 +437,24 @@ export class PoseService {
         this._lastVideoTime = v.currentTime;
         this.stats.frames++;
         const ts = performance.now();
-        if (this.holistic) {
+        if (this.holisticWorker) {
+            // its own thread: every camera frame it can take (one at a time), the game is not touched
+            if (ts - (this._holisticAt || 0) < 30) { this.stats.frames--; return; }
+            this._holisticAt = ts;
+            this._sendHandHelper(v, ts);
+            this.inFlight = true;
+            this.lastSendStart = ts;
+            try {
+                const bitmap = await createImageBitmap(v);
+                if (this.holisticWorker) this.holisticWorker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
+                else { bitmap.close?.(); this.inFlight = false; }
+            } catch (e) {
+                this.inFlight = false;
+            }
+            // (a lost answer must not stop the camera for good)
+            const sent = ts;
+            setTimeout(() => { if (this.inFlight && this.lastSendStart === sent) this.inFlight = false; }, 1500);
+        } else if (this.holistic) {
             // Holistic shares the game's thread: ~22 recognitions a second are plenty
             // (motion between them is blended), the rest of the time goes to the game.
             // (a heavy network on a slow frame rate: recognise less often — up to ~14 times a second —
@@ -386,16 +463,7 @@ export class PoseService {
             const interval = heavy ? Math.min(72, HOLISTIC_INTERVAL + this.stats.avgCost) : HOLISTIC_INTERVAL;
             if (ts - (this._holisticAt || 0) < interval) { this.stats.frames--; return; }
             this._holisticAt = ts;
-            // The hand helper gets the same frame (in parallel, its own thread)
-            const wantHelper = performance.now() - (this._handMissingAt || 0) < 1500 && ts - (this._helperSentAt || 0) > 66;
-            if (this.handWorker && !this.handInFlight && wantHelper) {
-                this._helperSentAt = ts;
-                this.handInFlight = true;
-                createImageBitmap(v).then((bitmap) => {
-                    if (this.handWorker) this.handWorker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
-                    else { bitmap.close?.(); this.handInFlight = false; }
-                }).catch(() => { this.handInFlight = false; });
-            }
+            this._sendHandHelper(v, ts);
             // One frame at a time, like the original camera loop
             this.inFlight = true;
             this.lastSendStart = performance.now();
@@ -426,6 +494,18 @@ export class PoseService {
             }
             this.inFlight = false;
         }
+    }
+
+    /** The hand helper gets the same frame (in parallel, its own thread) while a hand is lost. */
+    _sendHandHelper(v, ts) {
+        const wantHelper = performance.now() - (this._handMissingAt || 0) < 1500 && ts - (this._helperSentAt || 0) > 66;
+        if (!this.handWorker || this.handInFlight || !wantHelper) return;
+        this._helperSentAt = ts;
+        this.handInFlight = true;
+        createImageBitmap(v).then((bitmap) => {
+            if (this.handWorker) this.handWorker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
+            else { bitmap.close?.(); this.handInFlight = false; }
+        }).catch(() => { this.handInFlight = false; });
     }
 
     /** Raw model output → guarded holistic-style results → poseData. */

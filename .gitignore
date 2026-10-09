@@ -7,3 +7,4 @@ __pycache__
 test-results
 hand_rig.json
 .claude/
+zns-perf.log*

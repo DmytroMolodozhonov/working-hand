@@ -24,6 +24,7 @@ import { Storm } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
+import { PerfLog } from '../core/PerfLog.js';
 import { BookBirds, makeBookModel } from './BookBirds.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { Swimming } from './Swimming.js';
@@ -222,6 +223,7 @@ export class Game {
         this.fire.onCastleBurn = (x, L, z) => this._castleBurnt(x, L, z);
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
+        this.perf = config.mode === 'test' ? null : new PerfLog(this); // the performance diary (zns-perf.log)
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
         this.quality.apply(this.world);
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
@@ -418,6 +420,7 @@ export class Game {
      * @param {number} [power] 1 = Bombardo, 3 = Bombardo Maxima
      */
     explode(pos, radius, casterId, power = 1) {
+        this.perf?.note(`взрыв r${radius.toFixed(0)}${power > 1 ? ' максима' : ''}`);
         // a wand makes my Bombardo destroy more
         if ((casterId === 'local' || casterId === this.localId) && this._lastSpell && performance.now() - this._lastSpell.at < 6000) radius *= 1 + (this._lastSpell.pw - 1) * 0.5;
         this.applyExplosion(pos, radius, true, power, casterId);
@@ -703,6 +706,7 @@ export class Game {
         if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
+        this.perf?.note('заклинание ' + name);
         this.noteCaster(name, this.localId);
         // Inferno with a scroll in the hand burns it: its power is yours
         if (name === 'Inferno' && this.items.heldOf('scroll')) { this.items.burnHeldScroll(); return 'Inferno'; }
@@ -1623,7 +1627,7 @@ export class Game {
         if (worst < 35) {
             // The previous frame itself was quick: something ran between frames
             const ps = this.poseService;
-            const ai = ps && ps.lastSendEnd > this._frameEnd - 5 && ps.lastSendEnd - ps.lastSendStart > 30;
+            const ai = ps && ps.holistic && ps.lastSendEnd > this._frameEnd - 5 && ps.lastSendEnd - ps.lastSendStart > 30; // (only when it shares the game's thread)
             reason = ai ? 'нейросеть камеры' : 'браузер (память/вкладка)';
         }
         this.stats.spike = { ms: gapMs, reason, at: now };
@@ -1750,6 +1754,7 @@ export class Game {
         this.renderer.render(this.scene, this.camera);
         mark('графика');
         this._frameEnd = performance.now();
+        this.perf?.frame(deltaTime * 1000, parts);
 
         const ms = performance.now() - t0;
         this.stats.frames++;
