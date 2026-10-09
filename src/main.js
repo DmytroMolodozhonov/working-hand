@@ -816,14 +816,8 @@ function escapeHtml(s) {
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
-    // (once: the camera network moves into its own thread for everybody — a «game thread»
-    // chosen while testing stays from an older version otherwise)
-    try {
-        if (!localStorage.getItem('zns-engine-v2')) {
-            if (saved['vision-engine'] === 'classic-main') saved['vision-engine'] = 'classic';
-            localStorage.setItem('zns-engine-v2', '1');
-        }
-    } catch (e) { /* ignore */ }
+    // (the camera network always starts in its own thread; the «game thread» choice is gone)
+    if (saved['vision-engine'] === 'classic-main') saved['vision-engine'] = 'classic';
     const save = () => {
         const out = {};
         for (const id of IDS) {
