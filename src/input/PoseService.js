@@ -128,8 +128,8 @@ export class PoseService {
 
     /**
      * The camera network in its own threads, on the processor: MediaPipe's fast
-     * networks — body + face in one worker, both hands in another, running in
-     * parallel on two cores. The game's thread never waits for them, and they
+     * networks — the body, both hands and the face each in its own worker,
+     * running in parallel on three cores (nobody waits for the face). The game's thread never waits for them, and they
      * don't queue behind the game for the graphics card (in a worker the browser
      * serves WebGL last: there the same networks took 160–250 ms a frame).
      */
@@ -141,7 +141,8 @@ export class PoseService {
                 const msg = ev.data;
                 if (msg.type === 'ready') {
                     clearTimeout(timeout);
-                    worker.onmessage = (e) => { if (this.split && this.split[part] === worker) this._onSplit(part, e.data); };
+                    const key = part === 'pose' ? 'body' : part;
+                    worker.onmessage = (e) => { if (this.split && this.split[key] === worker) this._onSplit(key, e.data); };
                     resolve(worker);
                 } else if (msg.type === 'error') {
                     clearTimeout(timeout);
@@ -150,16 +151,26 @@ export class PoseService {
                 }
             };
             worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || part + ' worker error')); };
-            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || 'CPU', bodyOnly: part === 'body', handsOnly: part === 'hands' });
+            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: globalThis.__ZNS_DELEGATE__ || 'CPU', only: part });
         });
-        const [body, hands] = await Promise.all([spawn('body'), spawn('hands')]);
-        this.split = { body, hands, pending: new Map() };
+        const [body, hands, face] = await Promise.all([spawn('pose'), spawn('hands'), spawn('face')]);
+        this.split = { body, hands, face, faceBusy: false, pending: new Map() };
+        this.stats.parts = { pose: 0, hands: 0, face: 0 };
     }
 
     /** One half of a camera frame is ready (body+face, or hands): both halves → one result. */
     _onSplit(part, m) {
         const S = this.split;
         if (m.type !== 'result' && m.type !== 'error') return;
+        // each network's own time (shown in the diary)
+        const ema = (k, v) => { this.stats.parts[k] = this.stats.parts[k] ? this.stats.parts[k] * 0.9 + v * 0.1 : v; };
+        if (m.type === 'result') ema(part === 'body' ? 'pose' : part, m.result.cost || 0);
+        // the face only turns the head: it comes when it comes, nobody waits for it
+        if (part === 'face') {
+            S.faceBusy = false;
+            if (m.type === 'result') this._lastFace = m.result.faceLandmarks;
+            return;
+        }
         const P = S.pending.get(m.sent);
         if (!P) return;
         P[part] = m.type === 'result' ? m.result : { failed: true };
@@ -180,12 +191,13 @@ export class PoseService {
             if (w.length > 30) w.shift();
             this.stats.latency = Math.round(now - P.at);
         }
-        this._handleResult({ ts: b?.ts ?? h?.ts, cost: n > 10 ? cost : 0, poseLandmarks: b ? b.poseLandmarks : null, faceLandmarks: b ? b.faceLandmarks : undefined, hands: h ? h.hands : [] });
+        this._handleResult({ ts: b?.ts ?? h?.ts, cost: n > 10 ? cost : 0, poseLandmarks: b ? b.poseLandmarks : null, hands: h ? h.hands : [] });
         // really too slow on this computer: Holistic on the game's thread
         const med = this._splitCosts && this._splitCosts.length >= 30 ? this._splitCosts.slice().sort((x, y) => x - y)[15] : 0;
         if (med > 90 && !this._fellBack && !globalThis.__ZNS_KEEP_WORKER__) {
             this._fellBack = true;
-            this.stats.why = `в своих потоках ${Math.round(med)} мс на кадр — медленно, перешли в поток игры`;
+            const P = this.stats.parts || {};
+            this.stats.why = `в своих потоках ${Math.round(med)} мс на кадр (тело ${Math.round(P.pose || 0)}, руки ${Math.round(P.hands || 0)}, лицо ${Math.round(P.face || 0)}) — медленно, перешли в поток игры`;
             console.warn('[PoseService] ' + this.stats.why);
             const q = this._quality;
             this._closeModels();
@@ -350,7 +362,7 @@ export class PoseService {
 
     _closeModels() {
         if (this.holistic) { try { this.holistic.close(); } catch (e) { /* ignore */ } this.holistic = null; }
-        if (this.split) { for (const w of [this.split.body, this.split.hands]) { w.postMessage({ type: 'close' }); w.terminate(); } this.split = null; }
+        if (this.split) { for (const w of [this.split.body, this.split.hands, this.split.face]) { w.postMessage({ type: 'close' }); w.terminate(); } this.split = null; }
         this._splitN = 0;
         this._splitCosts = null;
         if (this.handWorker) { this.handWorker.terminate(); this.handWorker = null; }
@@ -490,10 +502,12 @@ export class PoseService {
             S.pending.set(ts, { at: ts });
             this.lastSendStart = ts;
             try {
-                const [a, b] = await Promise.all([createImageBitmap(v), createImageBitmap(v)]);
-                if (this.split !== S) { a.close?.(); b.close?.(); return; }
+                const withFace = !S.faceBusy;
+                const [a, b, c] = await Promise.all([createImageBitmap(v), createImageBitmap(v), withFace ? createImageBitmap(v) : null]);
+                if (this.split !== S) { a.close?.(); b.close?.(); c?.close?.(); return; }
                 S.body.postMessage({ type: 'frame', bitmap: a, ts }, [a]);
                 S.hands.postMessage({ type: 'frame', bitmap: b, ts }, [b]);
+                if (c) { S.faceBusy = true; S.face.postMessage({ type: 'frame', bitmap: c, ts }, [c]); setTimeout(() => { if (this.split === S) S.faceBusy = false; }, 1000); }
             } catch (e) {
                 S.pending.delete(ts);
             }

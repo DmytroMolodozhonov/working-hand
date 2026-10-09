@@ -65,7 +65,7 @@ export class PerfLog {
             .join(', ');
         const ps = g.poseService;
         const st = ps?.stats || {};
-        const ai = ps ? `ИИ ${st.thread === 'worker' ? 'свои потоки (тело+лицо | руки)' : st.thread === 'main' ? 'ПОТОК ИГРЫ' : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.latency && st.thread === 'worker' ? ` (задержка ${st.latency} мс)` : ''}${st.handHelper ? ', помощник рук' : ''}${st.delegate ? ', ' + st.delegate : ''}${st.why && st.thread === 'main' ? ` (почему: ${st.why})` : ''}` : 'ИИ —';
+        const ai = ps ? `ИИ ${st.thread === 'worker' ? 'свои потоки' : st.thread === 'main' ? 'ПОТОК ИГРЫ' : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.latency && st.thread === 'worker' ? ` (задержка ${st.latency} мс; тело ${Math.round(st.parts?.pose || 0)}, руки ${Math.round(st.parts?.hands || 0)}, лицо ${Math.round(st.parts?.face || 0)})` : ''}${st.handHelper ? ', помощник рук' : ''}${st.delegate ? ', ' + st.delegate : ''}${st.why && st.thread === 'main' ? ` (почему: ${st.why})` : ''}` : 'ИИ —';
         this._aiPrev = st.results || 0;
         const info = g.renderer?.info;
         const mem = globalThis.performance?.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} МБ` : '';

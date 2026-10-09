@@ -32,9 +32,12 @@ export class VisionRunner {
      *   loses hands that overlap the arm/body; this network has its own palm detector)
      *   bodyOnly: body + face only (the hands run in another worker, in parallel)
      */
-    async init({ quality = 1, useModule = true, handsOnly = false, bodyOnly = false } = {}) {
+    async init({ quality = 1, useModule = true, handsOnly = false, bodyOnly = false, only = null } = {}) {
+        // only: 'pose' | 'face' — one network per worker (several workers run in parallel)
+        if (only === 'hands') handsOnly = true;
         this.handsOnly = handsOnly;
-        this.bodyOnly = bodyOnly;
+        this.bodyOnly = bodyOnly || only === 'pose';
+        this.only = only;
         const fileset = await FilesetResolver.forVisionTasks(this.baseUrl + 'vendor/mediapipe/wasm', useModule);
         // With the ES-module loader the library clears self.ModuleFactory after
         // creating a task, and a second import() of the same module does not
@@ -60,7 +63,7 @@ export class VisionRunner {
                 return { pose: null, hands, face: null };
             }
             restoreFactory();
-            const pose = await PoseLandmarker.createFromOptions(fileset, {
+            const pose = only === 'face' ? null : await PoseLandmarker.createFromOptions(fileset, {
                 ...common(poseModel),
                 numPoses: 1,
                 minPoseDetectionConfidence: 0.5,
@@ -76,7 +79,7 @@ export class VisionRunner {
                 minTrackingConfidence: 0.5,
             });
             restoreFactory();
-            const face = await FaceLandmarker.createFromOptions(fileset, {
+            const face = only === 'pose' ? null : await FaceLandmarker.createFromOptions(fileset, {
                 ...common('face_landmarker.task'),
                 numFaces: 1,
                 outputFaceBlendshapes: false,
@@ -110,6 +113,10 @@ export class VisionRunner {
         this.lastTs = ts;
         this.frame++;
         const t0 = performance.now();
+        if (this.only === 'face') {
+            const face = this.face.detectForVideo(image, ts);
+            return { ts, cost: performance.now() - t0, part: 'face', faceLandmarks: face.faceLandmarks?.[0] ? plain(face.faceLandmarks[0], false) : null };
+        }
         const pose = this.pose ? this.pose.detectForVideo(image, ts) : { landmarks: [] };
         const hands = this.hands ? this.hands.detectForVideo(image, ts) : { landmarks: [] };
         let face = null;
@@ -130,7 +137,7 @@ export class VisionRunner {
             })),
             faceLandmarks: face && face.faceLandmarks?.[0] ? plain(face.faceLandmarks[0], false) : (face ? null : undefined),
             handsOnly: this.handsOnly,
-            part: this.handsOnly ? 'hands' : this.bodyOnly ? 'body' : 'all',
+            part: this.handsOnly ? 'hands' : this.only === 'pose' ? 'pose' : this.bodyOnly ? 'body' : 'all',
         };
     }
 
