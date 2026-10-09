@@ -396,6 +396,14 @@ function buildKeep(p, s, rng, out) {
     p.box(-2, -2, 1, 2, hallV1 - 1, hallV1, BLOCK.GOLD); // armrests
     p.box(2, 2, 1, 2, hallV1 - 1, hallV1, BLOCK.GOLD);
     p.box(-hw, hw, 9, 13, hallV1 + 1, hallV1 + 1, s.carpet); // a big banner behind it
+    // light: lanterns along both walls, beside the throne, a chandelier over the hall
+    for (let v = iv0 + 2; v <= hallV1 - 1; v += 3) { p.box(-hw, -hw, 7, 7, v, v, BLOCK.LANTERN); p.box(hw, hw, 7, 7, v, v, BLOCK.LANTERN); }
+    p.box(-3, -3, 1, 3, hallV1, hallV1, BLOCK.LANTERN); p.box(3, 3, 1, 3, hallV1, hallV1, BLOCK.LANTERN);
+    for (const cv of [Math.round((iv0 + hallV1) / 2) - 5, Math.round((iv0 + hallV1) / 2) + 3]) {
+        p.box(0, 0, 13, 15, cv, cv, BLOCK.GOLD);
+        p.box(-2, 2, 12, 12, cv, cv, BLOCK.GOLD); p.box(0, 0, 12, 12, cv - 2, cv + 2, BLOCK.GOLD);
+        for (const [a, b] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) p.box(a, a, 11, 11, cv + b, cv + b, BLOCK.LANTERN);
+    }
     // (the king sits facing the door: local −v)
     out.throne = { ...p.pt(0, hallV1 - 1, 2), yaw: p.yaw(0) };
     out.throneFront = p.pt(0, hallV1 - 7, 0);

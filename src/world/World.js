@@ -132,15 +132,26 @@ export class VoxelWorld {
         this.setStorm(this.storm || 0);
     }
 
+    /** Inside a castle / house (0..1): no sun, but warm light from lanterns and windows. */
+    setIndoor(k) {
+        if (Math.abs(k - (this.indoor || 0)) < 0.01) return;
+        this.indoor = k;
+        if (!this._base) this._rememberBase(this._night ?? 0);
+        this.setStorm(this.storm || 0);
+    }
+
     /** «Lightning Strike»: a storm darkens the world (0 = clear, 1 = full storm). */
     setStorm(k) {
         this.storm = k;
         const b = this._base;
         if (!b) return;
         const cave = 1 - 0.78 * (this.cave || 0);
-        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * cave;
-        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * (1 - 0.95 * (this.cave || 0));
-        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * cave;
+        const ind = this.indoor || 0;
+        // indoors: the sun is outside, the rooms are lit (brighter at night than the dark outside)
+        const lamp = 1 + ind * (b.night > 0.5 ? 2.6 : 1.1);
+        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * cave * lamp;
+        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * (1 - 0.95 * (this.cave || 0)) * (1 - 0.6 * ind);
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * cave * (1 + ind * 0.8);
         if (this.scene.fog) {
             this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
