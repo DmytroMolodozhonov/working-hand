@@ -71,7 +71,7 @@ export function pocketStrike(hist, local, sx) {
     // the hand stopped on the hip (a hit), it did not just go on down
     const lastDt = (hist[n - 1].t - hist[n - 2].t) / 1000;
     const now = lastDt > 0 ? (hist[n - 2].y - hist[n - 1].y) / lastDt : fast;
-    return top - local.y > 0.8 && fast > 4.5 && fastI < n - 1 && now < fast * 0.4;
+    return top - local.y > 0.6 && fast > 3.2 && fastI < n - 1 && now < fast * 0.5;
 }
 
 /** Things that go on the back (over the shoulder) rather than into a pocket. */

@@ -62,12 +62,32 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { L, side, score };
             }
+            // a fallen book-bird's book
+            for (const bk of g.books?.books?.values() || []) {
+                const to = _v1.subVectors(bk.model.position, hand);
+                const d = to.length();
+                if (d > ACCIO.RANGE || d < 0.3) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang > ACCIO.CONE) continue;
+                const score = ang * 5 + d * 0.05;
+                if (!best || score < best.score) best = { bk, side, score };
+            }
         }
         if (!best) {
             const busy = g.weapons.hands.left.held && g.weapons.hands.right.held;
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку…) не дальше 30 м — и скажите «Акцио»';
         }
         if (best.L) return this._castItem(best.L, best.side);
+        if (best.bk) {
+            // the book flies into the hand (the host gives it, as when a hand reaches it)
+            const from = best.bk.model.position.clone();
+            const hand = ch.getHandWorldPosition(best.side, new THREE.Vector3());
+            for (let i = 0; i < 24; i++) g.fx.spark(_v2.copy(from).lerp(hand, i / 24), i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v1.set(0, 0.5, 0), 0.5);
+            if (g.books.auth) g.books._take(best.bk.id, g.localId, best.side);
+            else g.sync?.bookTake?.(best.bk.id);
+            if (g.sound) g.sound.playWhoosh?.();
+            return null;
+        }
         const w = best.w;
         w.hover = null;
         w.attach({ levitate: true, side: null }); // flies under my control (others see it fly)
