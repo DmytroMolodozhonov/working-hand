@@ -35,6 +35,7 @@ import { CastleLife } from './CastleLife.js';
 import { newUid } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
+import { Campfires } from './Campfires.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
@@ -199,6 +200,7 @@ export class Game {
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
         this.doors = new Doors(this); // «Create a Door», opening by the handle
+        this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
@@ -662,6 +664,7 @@ export class Game {
             if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
         }
         if (name === 'Accio') return this._castAccio(isFinal);
+        if (name === 'Fire') return this.campfires.cast(isFinal);
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
@@ -1394,6 +1397,7 @@ export class Game {
         if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
         if (name === 'Accio') { this._lastAccio = 0; return this._castAccio(true); }
+        if (name === 'Fire') { this.campfires._lastCast = 0; return this.campfires.cast(true, true); }
         if (name === 'Wind' || name === 'WindMaxima') {
             this._lastWind = 0;
             const origin = this.character.getHandWorldPosition('right');
@@ -1447,7 +1451,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
-        zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b));
+        zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b), this.campfires.sampleModel());
         for (const v of prewarmVillagers()) zoo.add(v);
         zoo.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, depthWrite: false })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
@@ -1560,6 +1564,7 @@ export class Game {
         this.animals.update(dt);
         this.castleLife.update(dt);
         this.doors.update(dt);
+        this.campfires.update(dt);
         this.spiders.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
@@ -2047,6 +2052,7 @@ export class Game {
         this.animals?.dispose();
         this.castleLife?.dispose();
         this.doors?.dispose();
+        this.campfires?.dispose();
         this.spiders?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();

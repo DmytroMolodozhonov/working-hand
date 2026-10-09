@@ -80,7 +80,9 @@ export function matchSpell(text) {
     if (has('тандер', 'сандер', 'сандэр', 'thunder', 'sander', 'сандр', 'тандр') || (has('вейв', 'wave', 'вэйв', 'уэйв') && has('сан', 'тан', 'san', 'tan', 'сун', 'фан'))) return 'Thunderwave';
     if (has('сап', 'sap', 'саб', 'sab', 'саф', 'saf', 'сат', 'sat', 'зап', 'zap')) return 'Sapira';
     if (has('танд', 'thun', 'молн', 'гром', 'удар')) return 'Thunderwave';
-    if (has('инфер', 'infer', 'огон', 'фаер', 'fire')) return 'Inferno';
+    // «Fire» (a campfire) before Inferno: «Инферно» never contains these words
+    if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер', 'костёр', 'костер', 'костр')) return 'Fire';
+    if (has('инфер', 'infer', 'огон')) return 'Inferno';
     if (has('санд', 'sand', 'сенд', 'send', 'санс', 'sans', 'песо', 'peso', 'цент', 'cent', 'даст', 'dust', 'sun', 'son', 'sam', 'set', 'sed')) return 'Sands';
     if (has('айс', 'ice', 'аис', 'ais', 'лед', 'лёд', 'led', 'мороз', 'moroz', 'холод', 'cold', 'луч', 'beam', 'eyes', 'ace', 'is', 'snow', 'freeze', 'froze')) return 'Ice';
     return null;

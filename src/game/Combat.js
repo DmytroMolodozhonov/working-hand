@@ -43,6 +43,7 @@ export const SPELL_COST = {
     Thunderwave: 15,
     Sapira: 20,
     Inferno: 10,
+    Fire: 4, // a campfire
     Ice: 10,
     Sands: 8,
     Flight: 10,
