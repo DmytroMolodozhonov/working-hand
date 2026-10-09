@@ -23,7 +23,7 @@ import { SKIN_TONES } from './Appearance.js';
 
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king'];
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb'];
 /** group.position.y = ground surface + this (feet at local −1.95). */
 export const VILLAGER_FOOT_OFFSET = 1.95;
 /** Sitting: group.position.y = seat top + this (thighs 0.5 thick; feet reach the floor for a seat 0.7 high). */
@@ -865,6 +865,19 @@ export class VillagerModel {
                 T.headY = Math.sin(t * 3) * 0.3;
                 T.wrist = -0.4;
                 break;
+            case 'climb': {
+                // hands up on the edge, pulling in turns; legs kicking up the wall
+                const c = Math.sin(t * 7);
+                T.aLX = 2.7 + c * 0.35; T.aRX = 2.7 - c * 0.35;
+                T.aLZ = -0.12; T.aRZ = 0.12;
+                T.hx = -0.4; T.headX = 0.25;
+                T.lL = 0.7 + c * 0.55; T.lR = 0.7 - c * 0.55;
+                T.kL = -1.0 - Math.max(0, c) * 0.6; T.kR = -1.0 - Math.max(0, -c) * 0.6;
+                T.wrist = -0.3;
+                rate = 22;
+                breathe = 0;
+                break;
+            }
             case 'bow':
                 T.hx = -0.5; T.headX = -0.3;
                 T.aLX = 0.45; T.aRX = 1.4; T.aRZ = -0.9;

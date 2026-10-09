@@ -723,64 +723,206 @@ function buildCastle(p, s, rng, out) {
 
 // ---------------------------------------------------------------- village
 /** One house on a lot; its door looks at the road (local −v of the lot). */
+// House kinds: half-sizes (w across the front, d deep), wall height, wealth
+const HOUSE_KINDS = {
+    hut: { w: 4, d: 4, h: 6, rich: false },
+    cottage: { w: 5, d: 4, h: 6, rich: false },
+    longhouse: { w: 6, d: 4, h: 6, rich: false },
+    barn: { w: 6, d: 5, h: 7, rich: false, barn: true },
+    manor: { w: 6, d: 5, h: 7, rich: true },
+    stone: { w: 6, d: 5, h: 7, rich: true },
+    brick: { w: 6, d: 5, h: 7, rich: true },
+    towerhouse: { w: 4, d: 4, h: 11, rich: true },
+};
+export const POOR_HOUSES = ['hut', 'cottage', 'cottage', 'longhouse', 'hut', 'barn'];
+export const RICH_HOUSES = ['manor', 'stone', 'brick', 'manor', 'towerhouse'];
+
+/**
+ * A house on a lot: the door side (−b) towards the road. Poor houses: one room
+ * (a bed, a hearth, a table, a chest); rich ones: a living room and a bedroom,
+ * carpets, books, two chests. Each one a little different (windows, chimney,
+ * flower boxes, a woodpile...). The game puts the real door, the glass, the
+ * beds and the chests in (src/game/Houses.js) from the records in `out.houses`.
+ */
 function buildHouse(p, kind, cu, cv, face, rng, s, out) {
-    // rotate the house inside the plan: the door side towards `face` (0: −v, 1: +u, 2: +v, 3: −u)
     const P = {
         box: (a0, a1, l0, l1, b0, b1, t) => {
             const [x0, z0] = rotLot(a0, b0, face), [x1, z1] = rotLot(a1, b1, face);
             p.box(cu + x0, cu + x1, l0, l1, cv + z0, cv + z1, t);
         },
-        pt: (a, b, l) => { const [x, z] = rotLot(a, b, face); return p.pt(cu + x, cv + z, l); },
+        pt: (a, b, l = 0) => { const [x, z] = rotLot(a, b, face); return p.pt(cu + x, cv + z, l); },
         node: (a, b, l, tag) => { const [x, z] = rotLot(a, b, face); return p.node(cu + x, cv + z, l, tag); },
+        // world yaw of a facing along lot (a, b) (character yaw: the model faces −Z)
+        yaw: (a, b) => { const o = P.pt(0, 0), q = P.pt(a, b); return Math.atan2(-(q.x - o.x), -(q.z - o.z)); },
+        // world rotation.y of a thin thing lying along lot direction (a, b) (a door, a pane)
+        along: (a, b) => { const o = P.pt(0, 0), q = P.pt(a, b); return Math.atan2(-(q.z - o.z), q.x - o.x); },
     };
-    const types = {
-        hut: { w: 3, d: 3, h: 5, wall: BLOCK.PLANKS, base: BLOCK.PLANKS_DARK, roof: BLOCK.THATCH },
-        cottage: { w: 4, d: 3, h: 6, wall: BLOCK.PLANKS, base: BLOCK.COBBLE, roof: s.villageRoof },
-        longhouse: { w: 5, d: 3, h: 5, wall: BLOCK.PLANKS_DARK, base: BLOCK.PLANKS_DARK, roof: BLOCK.THATCH },
-        stone: { w: 4, d: 4, h: 7, wall: s.houseStone, base: s.houseStone, roof: s.villageRoof },
-        brick: { w: 4, d: 3, h: 6, wall: BLOCK.BRICK, base: BLOCK.COBBLE, roof: BLOCK.ROOF_SLATE },
-        towerhouse: { w: 3, d: 3, h: 11, wall: s.houseStone, base: s.houseStone, roof: s.roof },
-        barn: { w: 5, d: 4, h: 6, wall: BLOCK.PLANKS, base: BLOCK.PLANKS_DARK, roof: BLOCK.ROOF_RED },
+    const T = HOUSE_KINDS[kind];
+    const { w, d, h, rich } = T;
+    const wall = kind === 'brick' ? BLOCK.BRICK : kind === 'stone' || kind === 'towerhouse' ? s.houseStone : rich ? BLOCK.PLASTER : kind === 'longhouse' ? BLOCK.PLANKS_DARK : s.poorWall;
+    const base = rich ? s.houseStone : kind === 'cottage' ? BLOCK.COBBLE : BLOCK.PLANKS_DARK;
+    const roof = kind === 'towerhouse' ? s.roof : rich ? s.villageRoof : kind === 'barn' ? BLOCK.ROOF_RED : s.poorRoof;
+    const timber = BLOCK.PLANKS_DARK;
+    const L = (l) => p.L(l);
+    const house = {
+        kind, rich, id: null, door: null, inside: null, doorNode: null, homeNode: null, beds: 0,
+        doorRec: null, windows: [], chests: [], bedSpots: [], c: P.pt(0, 0), r: Math.max(w, d) + 1,
     };
-    const T = types[kind];
-    const { w, d, h } = T;
-    // floor, walls, the lower course in the base material
-    P.box(-w, w, -1, -1, -d, d, BLOCK.PLANKS_DARK);
-    P.box(-w, w, 0, h - 1, -d, -d, T.wall); P.box(-w, w, 0, h - 1, d, d, T.wall);
-    P.box(-w, -w, 0, h - 1, -d, d, T.wall); P.box(w, w, 0, h - 1, -d, d, T.wall);
-    P.box(-w, w, 0, 1, -d, -d, T.base); P.box(-w, w, 0, 1, d, d, T.base);
-    P.box(-w, -w, 0, 1, -d, d, T.base); P.box(w, w, 0, 1, -d, d, T.base);
-    // corner posts
-    for (const [a, b] of [[-w, -d], [w, -d], [-w, d], [w, d]]) P.box(a, a, 0, h - 1, b, b, BLOCK.PLANKS_DARK);
-    // the door and windows
-    const dw = kind === 'barn' ? 2 : 1;
-    P.box(-dw, dw, 0, 4, -d, -d, 0);
-    for (const a of [-w + 2, w - 2]) if (Math.abs(a) > dw + 1) P.box(a, a, 2, 3, -d, -d, 0);
-    P.box(-w, -w, 2, 3, 0, 0, 0); P.box(w, w, 2, 3, 0, 0, 0);
-    // the roof
-    if (kind === 'towerhouse') {
-        P.box(-w, w, h, h, -d, d, T.wall);
-        for (let k = 0; k <= w + 1; k++) P.box(-w - 1 + k, w + 1 - k, h + 1 + k, h + 1 + k, -d - 1 + k, d + 1 - k, T.roof);
+    // ---- the shell: floor, walls, a stone course below, corner posts
+    P.box(-w, w, -1, -1, -d, d, rich ? BLOCK.PLANKS : BLOCK.PLANKS_DARK);
+    P.box(-w, w, 0, h - 1, -d, -d, wall); P.box(-w, w, 0, h - 1, d, d, wall);
+    P.box(-w, -w, 0, h - 1, -d, d, wall); P.box(w, w, 0, h - 1, -d, d, wall);
+    P.box(-w, w, 0, 0, -d, -d, base); P.box(-w, w, 0, 0, d, d, base);
+    P.box(-w, -w, 0, 0, -d, d, base); P.box(w, w, 0, 0, -d, d, base);
+    P.box(-w + 1, w - 1, 0, h - 1, -d + 1, d - 1, 0); // (nothing grows inside)
+    for (const [a, b] of [[-w, -d], [w, -d], [-w, d], [w, d]]) P.box(a, a, 0, h - 1, b, b, kind === 'stone' || kind === 'brick' ? s.houseStone : timber);
+    if (kind === 'manor') { // half-timbering: a beam under the eaves and one across the middle
+        P.box(-w, w, h - 1, h - 1, -d, -d, timber); P.box(-w, w, h - 1, h - 1, d, d, timber);
+        P.box(-w, w, 3, 3, -d, -d, timber); P.box(-w, w, 3, 3, d, d, timber);
+    }
+    // ---- the door (3 wide, 5 high; a barn: 5 wide, open)
+    const da = rich && kind !== 'towerhouse' ? -2 : 0;
+    const dw = T.barn ? 2 : 1;
+    P.box(da - dw, da + dw, 0, 4, -d, -d, 0);
+    P.box(da - dw - 1, da + dw + 1, 5, 5, -d, -d, timber); // the lintel
+    P.box(da - dw, da + dw, -1, -1, -d - 2, -d - 1, BLOCK.PATH); // the doorstep
+    if (!T.barn) {
+        const dp = P.pt(da, -d);
+        house.doorRec = { x: dp.x, y: dp.y, z: dp.z, ry: P.along(1, 0), w: 3, h: 5 };
+    }
+    // ---- windows (holes the game glazes): front, sides, the back of a rich house
+    const win = (a0, a1, b0, b1, l0, l1) => {
+        P.box(a0, a1, l0, l1, b0, b1, 0);
+        const q0 = P.pt(a0, b0), q1 = P.pt(a1, b1);
+        const alongA = b0 === b1;
+        house.windows.push({
+            x: (q0.x + q1.x) / 2, z: (q0.z + q1.z) / 2, y: (L(l0) + L(l1)) / 2 - 1,
+            ry: alongA ? P.along(1, 0) : P.along(0, 1),
+            w: (alongA ? a1 - a0 : b1 - b0) + 1, h: l1 - l0 + 1,
+        });
+    };
+    const wl0 = 2, wl1 = rich ? 4 : 3;
+    if (rich && kind !== 'towerhouse') {
+        win(1, 2, -d, -d, wl0, wl1); win(4, 4, -d, -d, wl0, wl1);
+        win(-w, -w, -3, -2, wl0, wl1); win(w, w, -3, -2, wl0, wl1);
+        win(-4, -3, d, d, wl0, wl1);
+        if (rng() < 0.6) for (const a of [1, 2, 4]) P.box(a, a, 1, 1, -d - 1, -d - 1, BLOCK.FLOWERS); // flower boxes
+    } else if (T.barn) {
+        win(-w, -w, 0, 0, 3, 4); win(w, w, 0, 0, 3, 4);
     } else {
-        // a gable roof along u: a sloping shell, the gable ends in the wall material
+        const fa = w - 2;
+        win(-fa, -fa, -d, -d, wl0, wl1);
+        if (rng() < 0.75) win(fa, fa, -d, -d, wl0, wl1);
+        win(-w, -w, -2, -2, wl0, wl1);
+        if (rng() < 0.5) win(w, w, -2, -2, wl0, wl1);
+        if (kind === 'towerhouse') { win(0, 0, -d, -d, 7, 8); win(0, 0, d, d, 7, 8); win(-w, -w, 1, 1, 7, 8); win(w, w, 1, 1, 7, 8); }
+        if (rng() < 0.3) P.box(-fa, -fa, 1, 1, -d - 1, -d - 1, BLOCK.FLOWERS);
+    }
+    // ---- the roof (a gable along a; a towerhouse: a pyramid)
+    let top;
+    if (kind === 'towerhouse') {
+        P.box(-w, w, h, h, -d, d, wall);
+        for (let k = 0; k <= w + 1; k++) P.box(-w - 1 + k, w + 1 - k, h + 1 + k, h + 1 + k, -d - 1 + k, d + 1 - k, roof);
+        top = h + w + 2;
+    } else {
         for (let k = 0; k <= d + 1; k++) {
-            P.box(-w - 1, w + 1, h + k, h + k, -d - 1 + k, d + 1 - k, T.roof);
+            P.box(-w - 1, w + 1, h + k, h + k, -d - 1 + k, d + 1 - k, roof);
             if (k <= d) P.box(-w + 1, w - 1, h + k, h + k, -d + k, d - k, 0);
-            if (k >= 1 && k <= d) { P.box(-w, -w, h + k, h + k, -d + k, d - k, T.wall); P.box(w, w, h + k, h + k, -d + k, d - k, T.wall); }
+            if (k >= 1 && k <= d) { P.box(-w, -w, h + k, h + k, -d + k, d - k, wall); P.box(w, w, h + k, h + k, -d + k, d - k, wall); }
         }
+        top = h + d + 1;
     }
-    // inside: a bed, a table (or hay in a barn)
-    if (kind === 'barn') { P.box(-w + 1, -w + 2, 0, 1, d - 2, d - 1, BLOCK.HAY); P.box(w - 2, w - 1, 0, 2, d - 2, d - 1, BLOCK.HAY); }
-    else {
-        P.box(w - 2, w - 1, 0, 0, d - 3, d - 1, BLOCK.PLANKS_DARK);
-        P.box(w - 2, w - 1, 1, 1, d - 3, d - 2, BLOCK.CLOTH_WHITE);
-        P.box(-w + 1, -w + 2, 0, 1, d - 1, d - 1, BLOCK.PLANKS);
+    // ---- inside
+    const L0 = 0;
+    const lantern = (a, b, l) => P.box(a, a, l, l, b, b, BLOCK.LANTERN);
+    const chest = (a, b, fa, fb) => { const q = P.pt(a, b, L0); house.chests.push({ ...q, yaw: P.yaw(fa, fb) }); };
+    // a bed against the back wall, pillow to the wall (Beds: 2.5 × 5.5 m)
+    const bed = (a) => {
+        const q = P.pt(a, d - 0.5 - 2.85, L0);
+        house.bedSpots.push({ ...q, yaw: P.yaw(0, 1) });
+    };
+    const hearth = (a, b) => {
+        // a stone hearth on the side wall with a glowing fire, the chimney above the roof
+        const sx = a < 0 ? -1 : 1;
+        P.box(a, a, 0, 3, b - 1, b + 1, BLOCK.COBBLE);
+        P.box(a, a, 0, 0, b, b, BLOCK.LANTERN);
+        P.box(a + sx, a + sx, 0, top + 2, b, b, BLOCK.COBBLE);
+    };
+    const bedColour = rich ? s.bedRich : (rng() < 0.5 ? 'white' : rng() < 0.5 ? 'brown' : 'gray');
+    if (T.barn) {
+        P.box(-w + 1, -w + 2, 0, 1, d - 2, d - 1, BLOCK.HAY); P.box(w - 2, w - 1, 0, 2, d - 2, d - 1, BLOCK.HAY);
+        P.box(-1, 1, 0, 0, d - 1, d - 1, BLOCK.PLANKS); // a trough
+        lantern(0, 0, h - 1);
+        const q = P.pt(0, 0);
+        house.pen = { x: q.x, y: q.y, z: q.z, r: Math.min(w, d) - 2, animals: rng() < 0.5 ? ['cow', 'cow'] : ['pig', 'pig', 'sheep'] };
+    } else if (rich && kind !== 'towerhouse') {
+        // a wall between the living room (left) and the bedroom (right), a doorway in it
+        P.box(1, 1, 0, h - 1, -d + 1, d - 1, wall === BLOCK.PLASTER ? timber : wall);
+        P.box(1, 1, 0, 4, -2, 0, 0);
+        P.box(-4, 0, -1, -1, -3, 1, s.carpet); // a rug
+        hearth(-w + 1, 1);
+        P.box(-3, -2, 0, 1, 2, 3, BLOCK.PLANKS); // the table, benches
+        P.box(-4, -4, 0, 0, 2, 3, timber); P.box(-1, -1, 0, 0, 2, 3, timber);
+        P.box(-2, 0, 0, 3, d - 1, d - 1, BLOCK.BOOKS); // shelves
+        lantern(-2, 0, h - 1); lantern(3, -1, h - 1);
+        bed(w - 1.85);
+        chest(2, d - 1, 0, -1);
+        chest(-w + 1, -d + 1, 1, 0);
+        P.box(w - 1, w - 1, 0, 3, -d + 1, -d + 2, BLOCK.PLANKS_DARK); // a wardrobe
+        if (rng() < 0.5) P.box(w - 1, w - 1, 0, 0, -2, -2, BLOCK.GOLD); // something precious
+        house.beds = 2;
+    } else {
+        hearth(-w + 1, 0);
+        const ta = -w + 3;
+        P.box(ta, ta + 1, 0, 1, 1, 2, BLOCK.PLANKS); // a table and a bench
+        P.box(ta - 1, ta - 1, 0, 0, 1, 2, timber);
+        lantern(0, -1, h - 1);
+        bed(w - 1.85);
+        chest(-w + 1, d - 1, 0, -1);
+        if (rich) chest(w - 1, -d + 1, -1, 0); // (a towerhouse: the rich have more)
+        house.beds = kind === 'longhouse' ? 4 : 2;
     }
-    const door = P.node(0, -d - 3, 0);
-    const inside = P.node(0, 0, 0, 'home');
+    // a woodpile by a poor house
+    if (!rich && !T.barn && rng() < 0.6) P.box(w + 1, w + 1, 0, 1, 1, 3, BLOCK.WOOD);
+    // the walking graph: in front of the door → inside (→ the bedroom)
+    const door = P.node(da, -d - 3, 0);
+    const inside = P.node(da, -1, 0, 'home');
     p.link(door, inside);
-    out.houses.push({ kind, door: P.pt(0, -d - 3, 0), inside: P.pt(0, 0, 0), doorNode: door, homeNode: inside, beds: kind === 'barn' ? 0 : kind === 'longhouse' ? 6 : kind === 'towerhouse' ? 3 : 4 });
+    if (rich && kind !== 'towerhouse') { const mid = P.node(1, -1, 0); p.link(inside, mid); p.link(mid, P.node(3, -2, 0, 'home')); }
+    house.door = P.pt(da, -d - 3, 0);
+    house.inside = P.pt(da, -1, 0);
+    house.doorNode = door; house.homeNode = inside;
+    house.bedColour = bedColour;
+    out.houses.push(house);
     return door;
+}
+
+/** A fenced garden (vegetable rows, flowers) or a pen with animals on a free lot. */
+function buildYard(p, cu, cv, face, rng, s, out, pen) {
+    const P = {
+        box: (a0, a1, l0, l1, b0, b1, t) => {
+            const [x0, z0] = rotLot(a0, b0, face), [x1, z1] = rotLot(a1, b1, face);
+            p.box(cu + x0, cu + x1, l0, l1, cv + z0, cv + z1, t);
+        },
+        pt: (a, b, l = 0) => { const [x, z] = rotLot(a, b, face); return p.pt(cu + x, cv + z, l); },
+    };
+    const R = 5;
+    // the fence: rails one high, posts two high every 3, a gate towards the road
+    P.box(-R, R, 0, 0, -R, -R, BLOCK.FENCE); P.box(-R, R, 0, 0, R, R, BLOCK.FENCE);
+    P.box(-R, -R, 0, 0, -R, R, BLOCK.FENCE); P.box(R, R, 0, 0, -R, R, BLOCK.FENCE);
+    for (let k = -R; k <= R; k += 3) for (const [a, b] of [[k, -R], [k, R], [-R, k], [R, k]]) P.box(a, a, 1, 1, b, b, BLOCK.FENCE);
+    P.box(-1, 1, 0, 1, -R, -R, 0);
+    if (pen) {
+        P.box(-R + 1, R - 1, -1, -1, -R + 1, R - 1, BLOCK.DIRT);
+        P.box(R - 2, R - 1, 0, 0, R - 2, R - 1, BLOCK.HAY);
+        P.box(-R + 1, -R + 3, 0, 0, R - 1, R - 1, BLOCK.PLANKS); // a trough
+        const q = P.pt(0, 0);
+        const kinds = [['sheep', 'sheep', 'sheep'], ['pig', 'pig'], ['cow', 'cow'], ['sheep', 'pig', 'sheep']];
+        out.pens.push({ x: q.x, y: q.y, z: q.z, r: R - 1.5, animals: kinds[Math.floor(rng() * kinds.length)] });
+    } else {
+        P.box(-R + 1, R - 1, -1, -1, -R + 1, R - 1, BLOCK.FARMLAND);
+        for (let a = -R + 1; a <= R - 1; a += 2) P.box(a, a, 0, 0, -R + 2, R - 1, rng() < 0.75 ? BLOCK.VEG : BLOCK.FLOWERS);
+    }
 }
 
 /** Rotate lot-local (a, b) so that −b (the door side) points to `face`. */
@@ -859,21 +1001,19 @@ function buildVillage(p, s, rng, out) {
         if (Math.abs(u) <= 16 + r && v >= mv0 - r - 2 && v <= mv1 + r + 2) return false; // market
         return true;
     };
-    const kindsPool = ['hut', 'cottage', 'cottage', 'longhouse', 'stone', 'brick', 'towerhouse', 'barn', 'hut', 'cottage'];
-    const addLots = (along, fixed, from, to, side, face) => {
+    const addLots = (along, fixed, from, to, side, face, inner) => {
         // along u (fixed v) or along v (fixed u); `side` = which way from the road the lot lies
-        for (let t = from; t <= to; t += 13) {
+        for (let t = from; t <= to; t += 17) {
             const off = 9;
             const u = along === 'u' ? t : fixed + side * off;
             const v = along === 'u' ? fixed + side * off : t;
-            if (!free(u, v, 6)) continue;
-            if (rng() < 0.18) continue; // gardens / empty lots
-            lots.push({ u, v, face });
+            if (!free(u, v, 7)) continue;
+            lots.push({ u, v, face, inner });
         }
     };
     // inner ring: lots outside it (between the rings), facing the inner road
-    addLots('u', -R1z, -R1 + 4, R1 - 4, -1, 2); addLots('u', R1z, -R1 + 4, R1 - 4, 1, 0);
-    addLots('v', -R1, -R1z + 4, R1z - 4, -1, 1); addLots('v', R1, -R1z + 4, R1z - 4, 1, 3);
+    addLots('u', -R1z, -R1 + 4, R1 - 4, -1, 2, true); addLots('u', R1z, -R1 + 4, R1 - 4, 1, 0, true);
+    addLots('v', -R1, -R1z + 4, R1z - 4, -1, 1, true); addLots('v', R1, -R1z + 4, R1z - 4, 1, 3, true);
     // outer ring: lots inside it (back to back with the first row) and outside it
     addLots('u', -R2z, -R2 + 8, R2 - 8, 1, 0); addLots('u', R2z, -R2 + 8, R2 - 8, -1, 2);
     addLots('v', -R2, -R2z + 8, R2z - 8, 1, 3); addLots('v', R2, -R2z + 8, R2z - 8, -1, 1);
@@ -883,26 +1023,31 @@ function buildVillage(p, s, rng, out) {
     const used = [];
     const fields = [];
     for (const lot of lots) {
-        if (used.some((o) => Math.abs(o.u - lot.u) < 12 && Math.abs(o.v - lot.v) < 12)) continue;
+        if (used.some((o) => Math.abs(o.u - lot.u) < 14 && Math.abs(o.v - lot.v) < 14)) continue;
         used.push(lot);
         const outer = Math.abs(lot.u) > R2 || Math.abs(lot.v) > R2z;
-        if (outer && rng() < 0.45) {
+        const [ra, rb] = rotLot(0, -9, lot.face);
+        const roadNode = () => p.node(lot.u + ra, lot.v + rb, 0);
+        if (outer && rng() < 0.4) {
             // a field: ploughed rows of wheat
-            const fu0 = lot.u - 5, fu1 = lot.u + 5, fv0 = lot.v - 5, fv1 = lot.v + 5;
+            const fu0 = lot.u - 6, fu1 = lot.u + 6, fv0 = lot.v - 6, fv1 = lot.v + 6;
             p.box(fu0, fu1, -1, -1, fv0, fv1, BLOCK.FARMLAND);
             for (let k = fu0; k <= fu1; k += 2) p.box(k, k, 0, 0, fv0, fv1, BLOCK.WHEAT);
             const fnode = p.node(lot.u, lot.v, 1, 'field');
             fields.push({ ...p.pt(lot.u, lot.v, 1), ...p.rect(fu0, fu1, fv0, fv1), node: fnode });
-            // reach it from the road
-            const [ra, rb] = rotLot(0, -9, lot.face);
-            p.link(fnode, p.node(lot.u + ra, lot.v + rb, 0));
+            p.link(fnode, roadNode());
             continue;
         }
-        const kind = kindsPool[Math.floor(rng() * kindsPool.length)];
+        // gardens and pens between the houses
+        const y = rng();
+        if (y < 0.16) { buildYard(p, lot.u, lot.v, lot.face, rng, s, out, rng() < 0.5); continue; }
+        // the rich live near the castle
+        const rich = rng() < (lot.inner ? 0.5 : 0.12);
+        const pool = rich ? RICH_HOUSES : POOR_HOUSES;
+        const kind = pool[Math.floor(rng() * pool.length)];
         const door = buildHouse(p, kind, lot.u, lot.v, lot.face, rng, s, out);
         // the door node joins the nearest road node in front
-        const [ra, rb] = rotLot(0, -9, lot.face);
-        p.link(door, p.node(lot.u + ra, lot.v + rb, 0));
+        p.link(door, roadNode());
     }
     out.fields = fields;
 }
@@ -933,6 +1078,10 @@ function pickStyle(rng) {
     s.roof = roofs[Math.floor(rng() * roofs.length)];
     s.villageRoof = rng() < 0.5 ? BLOCK.ROOF_RED : s.roof;
     s.houseStone = rng() < 0.5 ? BLOCK.COBBLE : s.stone;
+    // the village's own look: the same walls / roofs / bed colours throughout
+    s.poorWall = rng() < 0.6 ? BLOCK.PLANKS : BLOCK.PLASTER;
+    s.poorRoof = rng() < 0.55 ? BLOCK.THATCH : s.villageRoof;
+    s.bedRich = ['red', 'blue', 'green', 'purple', 'yellow'][Math.floor(rng() * 5)];
     s.carpet = col.carpet;
     s.color = col.hex;
     s.colorName = col.name;
@@ -1010,7 +1159,7 @@ export class CastleIndex {
     _buildCastle(gx, gz, X, Z, F, s, rng, zone) {
         const rot = Math.floor(rng() * 4);
         const p = new Plan(X, Z, F, rot);
-        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [] };
+        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [] };
         buildVillage(p, s, rng, out);
         buildCastle(p, s, rng, out);
         p.joinRoads();
@@ -1028,7 +1177,8 @@ export class CastleIndex {
             keep: p.rect(-s.KW, s.KW, s.kv - s.KD, s.kv + s.KD),
             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
             throne: out.throne, throneFront: out.throneFront, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
-            houses: out.houses, stalls: out.stalls, fields: out.fields, market: out.market, posts: out.posts,
+            houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),
+            stalls: out.stalls, fields: out.fields, market: out.market, posts: out.posts,
             nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk,
             parts: p.parts,
             topL: F + 1 + s.H + s.towerExtra + 30,

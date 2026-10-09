@@ -44,22 +44,42 @@ TREE_KINDS.forEach((k, i) => {
 export const resourceOf = (block) => (block === BLOCK.GRASS ? BLOCK.DIRT : block);
 
 const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _z = new THREE.Vector3(0, 0, 1);
+const _y = new THREE.Vector3(0, 1, 0);
 
 /**
  * Is it a strike on the pocket? `hist` — the hand's recent heights (body
  * space, y up from the hips), `local` — where it is now, `sx` — +1 right, −1 left.
  */
 export function pocketStrike(hist, local, sx) {
-    if (!(local.x * sx > 0.3 && local.y < 0.55 && local.y > -1.3 && Math.abs(local.z) < 0.85)) return false;
-    let top = -Infinity, fast = 0;
-    for (let i = 0; i < hist.length; i++) {
+    // at the hip on its own side (the hero's body: shoulders at y 1.25, hips near −0.3)
+    if (!(local.x * sx > 0.3 && local.y < 0.4 && local.y > -1.1 && Math.abs(local.z) < 0.8)) return false;
+    const n = hist.length;
+    if (n < 3) return false;
+    let top = -Infinity, fast = 0, fastI = -1;
+    for (let i = 0; i < n; i++) {
         top = Math.max(top, hist[i].y);
         if (i > 0) {
             const dt = (hist[i].t - hist[i - 1].t) / 1000;
-            if (dt > 0) fast = Math.max(fast, (hist[i - 1].y - hist[i].y) / dt);
+            const sp = dt > 0 ? (hist[i - 1].y - hist[i].y) / dt : 0;
+            if (sp > fast) { fast = sp; fastI = i; }
         }
     }
-    return top - local.y > 0.45 && fast > 2.4;
+    // the hand stopped on the hip (a hit), it did not just go on down
+    const lastDt = (hist[n - 1].t - hist[n - 2].t) / 1000;
+    const now = lastDt > 0 ? (hist[n - 2].y - hist[n - 1].y) / lastDt : fast;
+    return top - local.y > 0.8 && fast > 4.5 && fastI < n - 1 && now < fast * 0.4;
+}
+
+/** Things that go on the back (over the shoulder) rather than into a pocket. */
+export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield']);
+
+/** The hand is over the shoulder, behind the head, and keeps still there. */
+export function behindBack(local, speed) {
+    return local.y > 1.55 && local.z > -0.15 && Math.abs(local.x) < 1.05 && speed < 2.2;
 }
 const _inv = new THREE.Matrix4();
 
@@ -70,6 +90,8 @@ export class Inventory {
         this.selected = -1; // -1: the «hand» cell (free right hand)
         this.inHand = null; // {slot, kind, weapon?}: what of the selected slot is in the right hand
         this._pocket = { left: { out: 0, hist: [] }, right: { out: 0, hist: [] } };
+        this._back = { left: { t: 0, at: 0 }, right: { t: 0, at: 0 } };
+        this._backModels = []; // the weapons seen on the back
         this._handBlock = null;
         this._buildBar();
     }
@@ -278,9 +300,9 @@ export class Inventory {
         }
     }
 
-    _fx(text) {
+    _fx(text, side = 'right') {
         this.game.hud.toast?.(text, 1200);
-        const p = this.game.character.getHandWorldPosition('right');
+        const p = this.game.character.getHandWorldPosition(side);
         for (let i = 0; i < 12; i++) this.game.fx.spark(p, i % 2 ? 0xfff2a8 : 0xffffff, 0.08, _v.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.4);
     }
 
@@ -313,8 +335,118 @@ export class Inventory {
                 if (side === 'right') this.pocketRight();
                 else this.select(this.selected + 1);
             } else if (local.y > 0.7) st.inZone = false;
+            // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
+            const b = this._back[side];
+            if (behindBack(local, ch.handVelocity[side].length())) b.t += dt; else b.t = 0;
+            if (b.t > 0.5 && now - b.at > 1200) { b.t = 0; b.at = now; this._backGesture(side); }
         }
         this._updateHandBlock();
+        this._updateBack();
+    }
+
+    /** What the hand holds, if it goes on the back: {kind:'weapon', w} | {kind:'item', h}. */
+    _backThing(side) {
+        const g = this.game;
+        const w = g.weapons.hands[side].held;
+        if (w) return { kind: 'weapon', w };
+        const h = g.items?.held[side];
+        if (h && BACK_KINDS.has(h.item.kind)) return { kind: 'item', h };
+        return null;
+    }
+
+    _backGesture(side) {
+        const g = this.game;
+        const t = this._backThing(side);
+        if (t) {
+            // on the back (and into a slot)
+            if (t.kind === 'weapon') {
+                if (this.inHand?.weapon === t.w) this.inHand = null;
+                if (this._storeWeapon(t.w)) this._fx((t.w.type === 'axe' ? '🪓 Топор' : '🗡️ Меч') + ' за спиной', side);
+            } else {
+                const it = g.items.releaseHand(side);
+                if (this.inHand?.item === it) this.inHand = null;
+                if (this.storeItem(it)) this._fx(`${ITEM_INFO[it.kind]?.icon || '🎒'} ${ITEM_INFO[it.kind]?.name || 'Предмет'} за спиной`, side);
+            }
+            this.selected = -1;
+            this._render();
+            return;
+        }
+        // an empty hand over the shoulder takes what is on the back (the bow hand's other hand takes arrows instead)
+        const other = side === 'right' ? 'left' : 'right';
+        if (g.items?.held[side] || g.weapons.hands[side].held || g.items?.held[other]?.item.kind === 'bow') return;
+        const i = this.slots.findIndex((s) => s && BACK_KINDS.has(s.kind));
+        if (i < 0) return;
+        if (this._fromSlot(i, side)) this._fx('✋ Достали со спины', side);
+        this._render();
+    }
+
+    /** A slot's thing into a hand (weapon, bow, shield, hammer…). */
+    _fromSlot(i, side) {
+        const g = this.game;
+        const s = this.slots[i];
+        if (!s) return false;
+        if (s.kind === 'weapon') {
+            if (g.weapons.hands[side].held) return false;
+            const p = g.character.getGripObject(side).getWorldPosition(new THREE.Vector3());
+            const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id), s.magic ? s.bonus : 0);
+            if (g.sync) g.sync.weaponAppeared?.(w);
+            w.wake();
+            g.weapons.grab(w, side, 0.5);
+            g.weapons.hands[side].waitClose = true;
+            this.slots[i] = null;
+            return true;
+        }
+        if (g.items && !g.items.held[side] && !g.weapons.hands[side].held) {
+            g.items.takeIntoHand(s, side);
+            this.slots[i] = null;
+            return true;
+        }
+        return false;
+    }
+
+    /** The weapons (and bow / shield / hammer) in the slots are seen on the back. */
+    _updateBack() {
+        const g = this.game;
+        const ch = g.character;
+        const want = this.slots.filter((s) => s && BACK_KINDS.has(s.kind)).slice(0, 3);
+        const key = want.map((s) => s.kind + (s.type ?? '') + (s.uid || s.id || '')).join('|');
+        if (key !== this._backKey) {
+            this._backKey = key;
+            for (const m of this._backModels) g.scene.remove(m);
+            this._backModels = want.map((s) => this._backModel(s)).filter(Boolean);
+            for (const m of this._backModels) g.scene.add(m);
+        }
+        if (!this._backModels.length) return;
+        const vis = !(g.config?.handsHidden) && ch.group.visible;
+        ch.torso.getWorldPosition(_v);
+        const q = ch.group.getWorldQuaternion(_q);
+        const pack = g.items?.worn?.backpack ? 0.45 : 0;
+        this._backModels.forEach((m, k) => {
+            m.visible = vis;
+            const tilt = [0.55, -0.55, 0][k] ?? 0;
+            m.position.copy(_v).add(_v2.set((k - 1) * 0.25, 0.15, 0.55 + pack + k * 0.12).applyQuaternion(q));
+            m.quaternion.copy(q).multiply(_q2.setFromAxisAngle(_z, Math.PI + tilt));
+            if (m.userData.flat) m.quaternion.multiply(_q2.setFromAxisAngle(_y, Math.PI));
+        });
+    }
+
+    _backModel(s) {
+        const g = this.game;
+        if (s.kind === 'weapon') {
+            if (!this._buildWeapon) return null;
+            const { group, spec } = this._buildWeapon(s.type, g.renderer);
+            group.scale.setScalar(spec?.scale || 2.6);
+            const holder = new THREE.Group();
+            group.position.y = -0.9; // (the handle up over the shoulder)
+            holder.add(group);
+            return holder;
+        }
+        if (!this._makeItemModel) return null;
+        const m = this._makeItemModel(s);
+        const holder = new THREE.Group();
+        holder.add(m);
+        holder.userData.flat = s.kind === 'shield' || s.kind === 'bow';
+        return holder;
     }
 
     /** A small glowing block of the chosen resource floats in the right hand. */

@@ -26,6 +26,7 @@ import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 
 export const HEAR = 7; // m: a villager hears you this far
 const VOICE = 18; // m: a villager's voice carries this far
+const SHOUT_RANGE = 55; // m: a battle cry / a call for help carries much farther
 const GOODS = [
     { kind: 'bread', price: 3 }, { kind: 'cheese', price: 4 }, { kind: 'pie', price: 6 }, { kind: 'steak', price: 6 },
     { kind: 'apple', price: 30 }, { kind: 'arrows', price: 8, count: 10 }, { kind: 'shield', price: 25, type: 0 }, { kind: 'bow', price: 30, type: 0 },
@@ -91,14 +92,17 @@ export class CastleTalk {
 
     // ---------------------------------------------------------- speaking
     /** A villager says a line: over the head, and aloud for those close enough. */
-    voice(v, text) {
+    voice(v, text, shout = false) {
         if (!this.voiceOn || !this.speech.supported || !text) return;
         const me = this.game.character.group.position;
         const d = Math.hypot(v.x - me.x, v.z - me.z);
-        if (d > VOICE) return;
-        const volume = Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
+        const range = shout ? SHOUT_RANGE : VOICE;
+        if (d > range) return;
+        // a shout carries far and stays loud; a word is quiet beyond a few metres
+        const volume = shout ? Math.max(0.3, Math.min(1, 1 - (d - 8) / (range - 8) * 0.7)) : Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
         this._lastSpoken = text;
-        this.speech.say(text, { voiceKey: v.id, role: v.role, female: v.entry.female, volume });
+        const extra = shout ? this.speech.voiceParams({ voiceKey: v.id, role: v.role, female: v.entry.female }) : null;
+        this.speech.say(text, { voiceKey: v.id, role: v.role, female: v.entry.female, volume, ...(extra ? { pitch: Math.min(2, extra.pitch + 0.12), rate: Math.min(2, extra.rate * 1.15) } : {}) });
     }
 
     /** The microphone heard a sentence (not a spell). Returns true if a villager heard it. */

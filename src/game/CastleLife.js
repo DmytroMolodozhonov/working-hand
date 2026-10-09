@@ -35,6 +35,7 @@ const SEE = 32; // m: villagers see violence this far (with a free line of sight
 const VIEW = 92; // m: farther villagers are not drawn
 const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
+const LEASH = 20; // m: out of their land, knights chase on until the enemy is this far ahead
 const HEAR_BOOM = 110; // m: a blast is heard this far (the guards come to look)
 export const STATS = {
     builder: { hp: 8, armor: 0, dmg: 1 },
@@ -56,6 +57,9 @@ const SHOUT = {
     hurt: ['Ай!', 'За что?!', 'Ох...', 'Больно же!'],
     bow: ['Ваше Величество!', 'Да здравствует король!', 'Слава новому королю!', 'Добро пожаловать, повелитель!'],
     boom: ['Что это было?!', 'Взрыв! Бегите!', 'Стену ломают!', 'Спасайтесь!', 'Стража! Тут колдун!'],
+    swear: ['Получай, сволочь!', 'Ах ты ж гад!', 'Чтоб тебя!', 'Вот тебе, зараза!', 'Чёрт тебя дери!', 'Да чтоб ты провалился!', 'На, получи, мерзавец!'],
+    thief: ['Ах ты ж ворюга!', 'Положи на место, зараза!', 'Ах ты, сволочь, в мой сундук полез?!', 'Чёрт бы тебя побрал, вор!', 'Ну всё, гад, получишь!', 'Вон из моего дома, паскуда!'],
+    thiefSeen: ['Вор! Держи вора!', 'Грабят!', 'Стража! Вор в доме!'],
     investigate: ['Что там грохнуло? За мной!', 'К стене, живо!', 'Кто посмел?! Проверить!'],
     wrecker: ['Вот он, разрушитель!', 'Держи колдуна!', 'Ты сломал нашу стену — ответишь!', 'Взять его, он ломает замок!'],
     captured: ['Король пал! Да здравствует новый король!', 'Мы служим вам, Ваше Величество!'],
@@ -440,6 +444,8 @@ export class CastleLife {
     }
 
     _homeNode(v) {
+        const own = v.cs.def.houses[v.entry.home];
+        if (own && own.homeNode != null) return own.homeNode;
         const homes = v.cs.graph.tagged('home');
         return homes.length ? homes[Math.abs(v.entry.home) % homes.length] : v.cs.graph.nearest(v.x, v.y, v.z);
     }
@@ -485,8 +491,52 @@ export class CastleLife {
         if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; v.speed = speed; }
         else if (this._walkable(nx, v.z, v.y)) { v.x = nx; v.speed = speed; }
         else if (this._walkable(v.x, nz, v.y)) { v.z = nz; v.speed = speed; }
-        else v.speed = 0;
+        else if (this._tryClimb(v, dx / d, dz / d)) v.speed = 0;
+        else {
+            // a wall ahead too high to climb: try round it (along the wall, either way)
+            v.speed = 0;
+            const a0 = Math.atan2(dz, dx);
+            for (const da of [0.8, -0.8, 1.6, -1.6, 2.4, -2.4]) {
+                const ax = Math.cos(a0 + da), az = Math.sin(a0 + da);
+                if (this._walkable(v.x + ax * s, v.z + az * s, v.y)) { v.x += ax * s; v.z += az * s; v.speed = speed; break; }
+                if (Math.abs(da) <= 1.6 && this._tryClimb(v, ax, az)) break;
+            }
+        }
         return d;
+    }
+
+    /**
+     * A ledge ahead (the side of a crater, a wall of 2–3 blocks — up to about half
+     * a body): grab the edge and climb up. Higher than that: no way.
+     */
+    _tryClimb(v, nx, nz) {
+        const t = this.game.world?.terrain?.data;
+        if (!t || v.climb) return false;
+        const L = Math.round(v.y + 1.5); // the air layer the feet stand in
+        const ax = Math.round(v.x + nx * 1.1), az = Math.round(v.z + nz * 1.1);
+        if (ax === Math.round(v.x) && az === Math.round(v.z)) return false;
+        const f = t.floorBelow(ax, az, L + 4);
+        const rise = f - (L - 1);
+        if (rise < 2 || rise > 3) return false;
+        if (t.solidIn(ax, az, f + 1, f + 5)) return false; // (no room on top)
+        v.climb = { t: 0, dur: 0.7 + rise * 0.45, x0: v.x, y0: v.y, z0: v.z, x1: ax, y1: f - 0.5, z1: az };
+        v.yaw = Math.atan2(-nx, -nz);
+        return true;
+    }
+
+    /** Climbing out: hands on the edge, pull up, a knee over, stand up on top. */
+    _climbStep(v, dt) {
+        const c = v.climb;
+        c.t += dt;
+        const k = Math.min(1, c.t / c.dur);
+        const up = k < 0.75 ? k / 0.75 : 1;
+        const fwd = k < 0.55 ? 0.15 * (k / 0.55) : 0.15 + 0.85 * ((k - 0.55) / 0.45);
+        v.y = c.y0 + (c.y1 - c.y0) * (up * up * (3 - 2 * up));
+        v.x = c.x0 + (c.x1 - c.x0) * fwd;
+        v.z = c.z0 + (c.z1 - c.z0) * fwd;
+        v.mode = 'climb';
+        v.speed = 0;
+        if (k >= 1) v.climb = null;
     }
 
     _walkable(x, z, y) {
@@ -523,6 +573,7 @@ export class CastleLife {
             v.mode = 'idle'; v.speed = 0;
             return;
         }
+        if (v.climb) { this._climbStep(v, dt); return; }
         // a hostile player in sight: knights go for them
         if ((v.role === 'knight' || v.role === 'king') && !v.foe) {
             v.lookT = (v.lookT || 0) - dt;
@@ -531,6 +582,8 @@ export class CastleLife {
                 for (const [pid, until] of cs.hostile) {
                     if (until < Date.now()) { cs.hostile.delete(pid); continue; }
                     const p = this._playerPos(pid);
+                    // (just given up on them out there: only if they come back near)
+                    if (p && v.gaveUp?.id === pid && v.gaveUp.until > Date.now() && (Math.hypot(p.x - v.x, p.z - v.z) > 12 || !this._inLand(cs.def, p, 30))) continue;
                     if (p && Math.hypot(p.x - v.x, p.z - v.z) < 26 && this._sees(v, p)) { v.foe = pid; this._say(v, pick(SHOUT.knight)); break; }
                 }
             }
@@ -616,6 +669,23 @@ export class CastleLife {
                 v.seated = false;
                 break;
             }
+            case 'home': {
+                // at home: pottering about the room, now and then a few steps
+                const p = v.homeAt;
+                if (Math.hypot(p.x - v.x, p.z - v.z) > 5) {
+                    // (back from a fight / a run: along the paths, through the door)
+                    if (!v.path) this._goTo(v, this._homeNode(v));
+                    if (this._followPath(v, dt, WALK)) v.path = null;
+                    v.mode = 'walk';
+                    break;
+                }
+                if (v.waitT > 0) { v.waitT -= dt; v.speed = 0; v.mode = v.talking > 0 ? 'talk' : 'idle'; break; }
+                if (!v.spot) v.spot = { x: p.x + (Math.random() - 0.5) * 3, z: p.z + (Math.random() - 0.5) * 3 };
+                const d = this._steer(v, v.spot.x, v.spot.z, WALK * 0.6, dt, 0.4);
+                v.mode = v.speed > 0 ? 'walk' : 'idle';
+                if (d < 0.5 || v.speed === 0) { v.spot = null; v.waitT = 6 + Math.random() * 14; }
+                break;
+            }
             case 'patrol': {
                 const loop = v.cs.def.wallWalk;
                 if (!v.path || v.pathI >= v.path.length) {
@@ -680,26 +750,98 @@ export class CastleLife {
     _fight(v, dt) {
         const cs = v.cs;
         const fp = this._playerPos(v.foe);
-        if (!fp || !this._inLand(cs.def, fp, 30) || !(cs.hostile.get(v.foe) > Date.now())) {
+        const d = fp ? Math.hypot(fp.x - v.x, fp.z - v.z) : Infinity;
+        // they don't stop at the edge of their land: only when the enemy got well
+        // away from them (~20 m) beyond it — or very far from the castle
+        const gone = !fp || (!this._inLand(cs.def, fp, 30) && (d > LEASH || !this._inLand(cs.def, fp, 160)));
+        if (gone || !(cs.hostile.get(v.foe) > Date.now())) {
+            if (fp && gone) v.gaveUp = { id: v.foe, until: Date.now() + 15000 }; // (not straight back at them)
             v.foe = null; v.path = null; v.chaseT = 0;
             return;
         }
-        const d = Math.hypot(fp.x - v.x, fp.z - v.z);
         v.seated = false;
-        if (d > 2.6) {
-            // far or behind walls: along the paths; near and in sight: straight at them
+        if (d > 11 || (d > 6 && !this._sees(v, fp))) {
+            // far or behind walls: along the paths
             v.chaseT = (v.chaseT || 0) - dt;
-            if (d > 10 && !this._sees(v, fp)) {
+            // (out in the open beyond their land there are no paths: straight at them)
+            if (d > 10 && !this._sees(v, fp) && this._inLand(cs.def, fp, 0)) {
                 if (v.chaseT <= 0 || !v.path) { v.chaseT = 1.5; this._goTo(v, cs.graph.nearest(fp.x, fp.y - 1.95, fp.z, 6)); }
                 this._followPath(v, dt, RUN);
             } else this._steer(v, fp.x, fp.z, RUN, dt, 2.2);
             v.mode = 'run';
+            this._ground(v);
+            return;
+        }
+        // near: the attackers share the circle round the enemy — up to three strike
+        // at once from different sides (one gets behind), the others wait a little
+        // farther with shields up and take turns
+        const n = v.slotN || 1;
+        const turn8 = Math.floor(Date.now() / 8000);
+        const i = ((v.slotI || 0) + turn8) % n;
+        const front = Math.min(n, 3);
+        const engaged = i < front;
+        const base = v.slotBase ?? Math.atan2(v.z - fp.z, v.x - fp.x);
+        const a = engaged ? base + (i - (front - 1) / 2) * (front === 2 ? Math.PI * 0.8 : Math.PI * 2 / 3) : base + Math.PI + (i - front) * (Math.PI * 2 / Math.max(1, n - front));
+        const R = engaged ? 2.3 : 6.5;
+        const tx = fp.x + Math.cos(a) * R, tz = fp.z + Math.sin(a) * R;
+        const toSlot = Math.hypot(tx - v.x, tz - v.z);
+        if (toSlot > 0.8) {
+            this._steer(v, tx, tz, toSlot > 3 ? RUN : WALK * 1.3, dt, 0.3);
+            v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : (engaged ? 'attack' : 'block');
+            // already within reach on the way round: strike anyway
+            if (engaged && d < 3.2) { v.yaw = turn(v.yaw, Math.atan2(-(fp.x - v.x), -(fp.z - v.z)), dt * 9); v.mode = 'attack'; }
         } else {
-            this._steer(v, fp.x, fp.z, 0, dt, 9);
-            v.mode = 'attack';
+            this._steer(v, fp.x, fp.z, 0, dt, 9); // (turned to the enemy)
             v.speed = 0;
+            v.mode = engaged ? 'attack' : 'block';
+        }
+        if (v.mode === 'attack') {
+            // now and then a curse in the heat of the fight
+            v.swearT = (v.swearT ?? 2 + Math.random() * 4) - dt;
+            if (v.swearT <= 0) { v.swearT = 7 + Math.random() * 10; if (Math.random() < 0.45) this._say(v, pick(SHOUT.swear), 2.5); }
         }
         this._ground(v);
+    }
+
+    /** Who fights whom: places round each enemy (each attacker its own), once a frame. */
+    _assignSlots() {
+        const groups = new Map();
+        for (const v of this.byId.values()) {
+            if (v.dead || !v.foe) continue;
+            (groups.get(v.foe) || groups.set(v.foe, []).get(v.foe)).push(v);
+        }
+        for (const [foe, list] of groups) {
+            const fp = this._playerPos(foe);
+            if (!fp) continue;
+            // (the order by id is stable; the circle starts where most of them are)
+            list.sort((a, b) => (a.id < b.id ? -1 : 1));
+            let sx = 0, sz = 0;
+            for (const v of list) { sx += v.x - fp.x; sz += v.z - fp.z; }
+            const base = Math.atan2(sz, sx);
+            list.forEach((v, k) => { v.slotI = k; v.slotN = list.length; v.slotBase = base; });
+        }
+    }
+
+    /** People don't walk through each other: the near ones push apart. */
+    _separate(dt) {
+        const list = [];
+        for (const v of this.byId.values()) if (!v.dead && !v.climb && !v.seated && v.group.visible) list.push(v);
+        const k = Math.min(1, dt * 10);
+        for (let a = 0; a < list.length; a++) {
+            const p = list[a];
+            for (let b = a + 1; b < list.length; b++) {
+                const q = list[b];
+                const dx = q.x - p.x, dz = q.z - p.z;
+                if (Math.abs(dx) > 2 || Math.abs(dz) > 2 || Math.abs(q.y - p.y) > 2.5) continue;
+                const R = p.role === 'knight' || q.role === 'knight' || p.role === 'king' || q.role === 'king' ? 1.8 : 1.35;
+                const d = Math.hypot(dx, dz);
+                if (d >= R) continue;
+                const ux = d > 1e-3 ? dx / d : Math.random() - 0.5, uz = d > 1e-3 ? dz / d : Math.random() - 0.5;
+                const push = (R - d) * 0.5 * k;
+                if (this._walkable(p.x - ux * push, p.z - uz * push, p.y)) { p.x -= ux * push; p.z -= uz * push; }
+                if (this._walkable(q.x + ux * push, q.z + uz * push, q.y)) { q.x += ux * push; q.z += uz * push; }
+            }
+        }
     }
 
     /** (host) the swing of a knight / the king hits its target. */
@@ -954,6 +1096,82 @@ export class CastleLife {
         return true;
     }
 
+    // ------------------------------------------------------------ homes
+    /** Roster numbers of the people of each house (house index → [idx…]), cached. */
+    _homesOf(def) {
+        if (def._homes) return def._homes;
+        const m = new Map();
+        const first = def.knights + 1 + def.stalls.length;
+        const last = Math.min(Math.max(first + 1, def.population), first + 900);
+        for (let idx = first; idx < last; idx++) {
+            const e = rosterEntry(def, idx);
+            if (e.home < 0) continue;
+            (m.get(e.home) || m.set(e.home, []).get(e.home)).push(idx);
+        }
+        def._homes = m;
+        return m;
+    }
+
+    /** (host) A house near a player: one or two of its people are at home. */
+    spawnFamily(def, hIdx) {
+        if (!this.enabled || !this.auth) return [];
+        const cs = this._runtime(def);
+        if (!cs.awake) return [];
+        const house = def.houses[hIdx];
+        const st = this.state(def.id);
+        const out = [];
+        const want = house.rich ? 2 : 1 + (strHash(house.id) % 2);
+        for (const idx of this._homesOf(def).get(hIdx) || []) {
+            if (out.length >= want) break;
+            if (cs.active.has(idx) || st.killed.has(idx)) { if (cs.active.get(idx)?.job === 'home') out.push(cs.active.get(idx)); continue; }
+            const at = house.inside;
+            const v = this._activate(cs, idx, { x: at.x + (Math.random() - 0.5) * 2, y: at.y, z: at.z + (Math.random() - 0.5) * 2, yaw: Math.random() * 6 }, 'home');
+            if (!v) continue;
+            v.house = hIdx; v.homeAt = at; v.waitT = Math.random() * 10;
+            out.push(v);
+        }
+        return out;
+    }
+
+    /** (host) Nobody is near the house any more: its people go out of sight. */
+    releaseFamily(def, hIdx) {
+        const cs = this.castles.get(def.id);
+        if (!cs) return;
+        for (const v of [...cs.active.values()]) if (v.job === 'home' && v.house === hIdx && !v.foe && !v.dead) this._deactivate(v);
+    }
+
+    /**
+     * (host) A player takes from a house chest / breaks in: whoever of the house
+     * sees it attacks (swearing), neighbours shout, near knights come.
+     * Returns true when somebody saw it.
+     */
+    theft(def, hIdx, by, pos) {
+        if (!this.enabled) return false;
+        const g = this.game;
+        const cs = this.castles.get(def.id);
+        if (!cs || !by) return false;
+        const st = this.state(def.id);
+        if (by === st.owner) return false;
+        const bp = this._playerPos(by) || pos;
+        const seers = [];
+        for (const v of cs.active.values()) {
+            if (v.dead) continue;
+            const fam = v.entry.home === hIdx && v.role !== 'knight' && v.role !== 'king';
+            if (Math.hypot(v.x - bp.x, v.z - bp.z) > (fam ? 30 : 22)) continue;
+            if (this._sees(v, { x: bp.x, y: bp.y - 1, z: bp.z })) seers.push({ v, fam });
+        }
+        if (!seers.length) return false;
+        cs.hostile.set(by, Date.now() + HOSTILE_MS);
+        for (const { v, fam } of seers) {
+            if (fam || v.role === 'knight') { v.foe = by; v.fleeT = 0; v.path = null; this._say(v, pick(fam ? SHOUT.thief : SHOUT.knight)); }
+            else { v.fleeFrom = by; v.fleeT = 8 + Math.random() * 6; v.fleeing = false; v.path = null; if (Math.random() < 0.6) this._say(v, pick(SHOUT.thiefSeen)); }
+        }
+        for (const k of cs.active.values()) if (!k.dead && !k.foe && k.role === 'knight' && Math.hypot(k.x - bp.x, k.z - bp.z) < 45) k.foe = by;
+        if (by === g.localId) g.hud.setVoice('😡 Хозяева увидели, что вы берёте их вещи! Они идут на вас', true);
+        else g.sync?.villagerAlarm?.(by, def.name);
+        return true;
+    }
+
     /** A villager saw / suffered a crime (theft, threats) by a player. */
     reportCrime(v, by, kind = 'crime') {
         if (!v || v.dead) return;
@@ -988,8 +1206,10 @@ export class CastleLife {
         if (!text || v.sayT > 0 && !broadcast) return;
         v.sayT = 1.5;
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
-        v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, color: v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
-        this.talk.voice(v, text);
+        // a cry in a fight, a call for help, an alarm: shouted (seen and heard far)
+        const shout = /!$/.test(text) && (!!v.foe || !!v.investigate || v.fleeT > 0 || v.role === 'knight' || v.role === 'king');
+        v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
+        this.talk.voice(v, text, shout);
         if (broadcast) this.game.sync?.villagerSay?.(v.id, text); // (everybody near sees the bubble)
     }
 
@@ -1019,7 +1239,9 @@ export class CastleLife {
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
             for (const cs of this.castles.values()) if (cs.awake) this._crowd(cs, dt);
+            this._assignSlots();
             for (const v of [...this.byId.values()]) this._think(v, dt);
+            this._separate(dt);
         } else {
             for (const v of this.byId.values()) {
                 if (!v.net) continue;

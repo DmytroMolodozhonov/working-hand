@@ -50,6 +50,8 @@ export function matchSpell(text) {
     if (has('roof', 'руф', 'крыш')) return 'BuildRoof';
     if (has('wall', 'уолл', 'уол', 'стену', 'стена')) return 'CreateWall';
     if (has('door', 'двер', ' дор', 'дорь')) return 'CreateDoor';
+    // «To the Sun» (before «Даст»: «sun» is one of its words)
+    if (has('to the sun', 'to the son', 'tothesun', 'ту зе сан', 'ту зэ сан', 'ту за сан', 'ту де сан', 'ту ze сан', 'тузесан', 'тузэсан', 'тузасан', 'к солнцу', 'солнц')) return 'ToTheSun';
     // New spell first: its words must never be mistaken for the short Sand/Ice tokens.
     if (has('бомбар', 'бомбор', 'бамбар', 'бонбар', 'помбар', 'бомбард', 'bombar', 'bombor', 'bambar', 'бомба', 'bomb')) {
         // «Бомбардо Максима»: the same word plus «максима»
@@ -190,6 +192,7 @@ export class SpellManager {
             case 'Wind': this.castWind(o, d, casterId, 1); break;
             case 'Brainrot': this.castBrainrot(o, direction.clone()); break; // (its length = the distance)
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
+            case 'ToTheSun': this.hooks.sun?.(o); break;
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;

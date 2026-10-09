@@ -123,21 +123,43 @@ export class Duel {
         const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
         const dir = ch.getHandDirection(side, new THREE.Vector3());
         let best = null;
-        const consider = (kind, id, pos) => {
+        // (a big target — a knight, a cow — is easier to point at than a small one)
+        const consider = (kind, id, pos, size = 0.5) => {
             const to = _v1.subVectors(pos, hand);
             const d = to.length();
             if (d > DUEL.RANGE || d < 0.5) return;
             const ang = dir.angleTo(to.normalize());
-            if (ang > DUEL.CONE) return;
+            if (ang > DUEL.CONE + Math.atan2(size, d)) return;
             const score = ang * 8 + d * 0.05;
             if (!best || score < best.score) best = { kind, id, score, dist: d };
         };
         for (const [id, r] of g.remotes) if (!r.dead) consider('p', id, r.position.clone().add(_v2.set(0, 0.6, 0)));
-        for (const z of g.zombies) if (!z.isDead) consider('z', z.id, z.group.position.clone().add(_v2.set(0, 1.0, 0)));
+        for (const z of g.zombies) if (!z.isDead) consider('z', z.id, z.group.position.clone().add(_v2.set(0, 1.0, 0)), 1.2);
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
-        for (const a of g.animals?.targets() || []) consider('a', a.id, this._creaturePoint(a, new THREE.Vector3()));
-        for (const v of g.castleLife?.targets() || []) consider('v', v.id, this._creaturePoint(v, new THREE.Vector3()));
+        for (const a of g.animals?.targets() || []) consider('a', a.id, this._creaturePoint(a, new THREE.Vector3()), 1.0 * a.group.scale.y);
+        for (const v of g.castleLife?.targets() || []) consider('v', v.id, this._creaturePoint(v, new THREE.Vector3()), 1.6);
+        for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall') consider('b', b.id, b.model.position.clone());
         return best;
+    }
+
+    /** A creature whose body the point is inside (zombies, animals, castle people, book-birds). */
+    _bodyAt(p, by) {
+        const g = this.game;
+        for (const v of g.castleLife?.byId.values() || []) {
+            if (v.dead) continue;
+            if (Math.hypot(v.x - p.x, v.z - p.z) < 1.3 && p.y > v.y - 0.3 && p.y < v.y + 4.8) return { kind: 'v', id: v.id };
+        }
+        for (const z of g.zombies) {
+            if (z.isDead) continue;
+            const zp = z.group.position;
+            if (Math.hypot(zp.x - p.x, zp.z - p.z) < 1.2 && p.y > zp.y - 2.2 && p.y < zp.y + 2.6) return { kind: 'z', id: z.id };
+        }
+        for (const a of g.animals?.targets() || []) {
+            const c = this._creaturePoint(a, _v3);
+            if (c.distanceTo(p) < 1.1 * a.group.scale.y) return { kind: 'a', id: a.id };
+        }
+        for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall' && bd.model.position.distanceTo(p) < 1.0) return { kind: 'b', id: bd.id };
+        return null;
     }
 
     /** Which hand casts: the one pointing at a creature (or the spell hand). */
@@ -153,6 +175,7 @@ export class Duel {
 
     /** The middle of an animal / a villager (where a charge flies). */
     _creaturePoint(c, out) {
+        if (c.isBird) return out.copy(c.model.position);
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, 0.8 * c.group.scale.y, 0));
         return out.set(c.x, c.y + 2.4, c.z);
     }
@@ -161,12 +184,13 @@ export class Duel {
         const g = this.game;
         if (kind === 'a') { const a = g.animals?.byId.get(id); return a && !a.dead ? a : null; }
         if (kind === 'v') { const v = g.castleLife?.byId.get(id); return v && !v.dead ? v : null; }
+        if (kind === 'b') { const b = g.books?.birds?.get(id); return b && b.state !== 'fall' ? b : null; }
         return null;
     }
 
     _targetPos(b, out) {
         const g = this.game;
-        if (b.tk === 'a' || b.tk === 'v') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
             const r = g.remotes.get(b.tid);
@@ -273,6 +297,9 @@ export class Duel {
         b.traveled += step;
         this._drawBolt(b.spell, origin, b.front, b.by);
         if (!tp) {
+            // a charge flying free hits the first creature it passes through
+            const hit = this._bodyAt(b.front, b.by);
+            if (hit) { b.tk = hit.kind; b.tid = hit.id; return; }
             const t = this.game.terrain;
             if (b.traveled > DUEL.RANGE || (t && t.data.isSolidAt(b.front.x, b.front.y, b.front.z))) this._end(b, 'fizzle');
             return;
@@ -281,7 +308,7 @@ export class Duel {
         // Arrived: who decides?
         if (b.tk === 'p' && b.tid === this.me) this._arriveAtMe(b);
         else if (b.tk === 'z' && this._referee()) this._arriveAtZombie(b);
-        else if ((b.tk === 'a' || b.tk === 'v') && this._referee()) this._arriveAtCreature(b);
+        else if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b') && this._referee()) this._arriveAtCreature(b);
         else if (b.state === 'flying') { b.state = 'waiting'; b.waitT = 0; }
         if (b.state === 'waiting') {
             b.waitT += dt;
@@ -322,6 +349,8 @@ export class Duel {
         const g = this.game;
         const p = this._creaturePoint(c, _v1);
         this._burst(p, DUEL_SPELLS[spell].color, 30);
+        // a book-bird: any charge knocks it out of the air (it falls as a book)
+        if (c.isBird) { g.books.hitBird(c, 99); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);

@@ -32,18 +32,21 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
-import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, baseSpell } from './ItemTypes.js';
+import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, baseSpell, makeItemModel } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Campfires } from './Campfires.js';
 import { Beds } from './Beds.js';
+import { Houses } from './Houses.js';
+import { SunBeam } from '../fx/SunBeam.js';
+import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS } from '../world/Terrain.js';
 
 const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
@@ -158,9 +161,11 @@ export class Game {
             blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
             quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
             storm: (origin) => this.storm?.start(origin, 13),
-            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning'); this.castleLife?.hitAt(point, 3, 12, casterId); } },
+            sun: (origin) => this.sun?.cast(origin),
+            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning'); this.castleLife?.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 this.books?.hitRay(o, d, len, width);
+                this.houses?.hitRay(o, d, len, width);
                 this.animals?.hitRay(o, d, len, width, 3, this.localId, name);
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
@@ -189,7 +194,10 @@ export class Game {
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
+        this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
         this.inventory = new Inventory(this); // five slots under the fatigue bar
+        this.inventory._buildWeapon = buildWeapon; // (models of the weapons seen on the back)
+        this.inventory._makeItemModel = makeItemModel;
         this.inventory.show(config.mode !== 'test');
         this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
         this.books = isTest ? null : new BookBirds(this); // book-birds: building spells are learned from their books
@@ -203,6 +211,7 @@ export class Game {
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
+        this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
@@ -307,6 +316,22 @@ export class Game {
                     const top = this.world.createPedestal(x, z);
                     this.items.spawnLoose(it, new THREE.Vector3(x, top + 1.3, z), { hover: true, broadcast: false });
                 });
+                // …and a wand, scrolls (flight, the spell scrolls, health) and a book of building spells
+                const magic = [
+                    { kind: 'wand', uid: 'cw0', color: 0x8e5bd8, model: 4, fav: 'Inferno', power: 30, dir: 'destroy' },
+                    { kind: 'scroll', uid: 'cr0', stat: 'flight' },
+                    { kind: 'scroll', uid: 'cr1', stat: 'spell', spell: 'LightningStrike' },
+                    { kind: 'scroll', uid: 'cr2', stat: 'spell', spell: 'Thunderwave' },
+                    { kind: 'scroll', uid: 'cr3', stat: 'hp', amount: 3 },
+                ];
+                magic.forEach((it, i) => {
+                    const x = -12.5 + i * 5, z = -18;
+                    const top = this.world.createPedestal(x, z);
+                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 1.3, z), { hover: true, broadcast: false });
+                });
+                const bx = -12.5 + magic.length * 5, bz = -18;
+                const btop = this.world.createPedestal(bx, bz);
+                this.books?.placeBook(new THREE.Vector3(bx, btop + 1.0, bz), 777001);
             }
         }
     }
@@ -409,13 +434,14 @@ export class Game {
             this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true);
         }
         const debris = [];
-        for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? 0x7a5230 });
+        for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? BASE_COLORS[b.type] ?? 0x7a5230 });
         for (const p of out.props) debris.push(p);
         this.fx.explosion(pos, radius, power);
         this.water.explode(pos, radius);
         // A blast sets the trees around it on fire
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
+        this.houses?.hitAt(pos, radius);
         if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo'); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); }
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
@@ -482,21 +508,23 @@ export class Game {
     _updateChests(dt) {
         if (!this.chests.length) return;
         const players = this._playerPositions();
+        const ids = [this.localId, ...this.remotes.keys()];
         for (const chest of this.chests) {
             chest.update(dt);
             if (chest.isOpen || chest.locked || !this.authority) continue; // (castle chests: locked while the king lives)
             const cp = chest.getPosition();
-            for (const p of players) {
+            for (let i = 0; i < players.length; i++) {
+                const p = players[i];
                 const dx = p.x - cp.x, dz = p.z - cp.z;
                 if (dx * dx + dz * dz < 4.5 * 4.5 + 9) {
-                    this.openChest(chest);
+                    this.openChest(chest, null, ids[i]);
                     break;
                 }
             }
         }
     }
 
-    openChest(chest, rewardId = null) {
+    openChest(chest, rewardId = null, by = null) {
         if (!chest.open()) return;
         if (this.sound) this.sound.playChestOpen(chest.getPosition());
         const id = rewardId || `c${chest.id}`;
@@ -505,10 +533,13 @@ export class Game {
             if (this.authority) {
                 chest.mesh.updateMatrixWorld(true);
                 const rp = chest.getRewardPosition(new THREE.Vector3());
-                this.items.lootChest(rp);
-                // a pouch of coins too (a castle's treasury holds much more)
-                const coins = chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
-                this.items.spawnLoose({ kind: 'coins', uid: newUid(), count: coins }, rp.clone().add(new THREE.Vector3(0, 3.2, 0)), { hover: true });
+                this.items.lootChest(rp, Math.random, chest.house || null);
+                // a pouch of coins too (a castle's treasury holds much more; a poor house — little or nothing)
+                const coins = chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
+                    : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
+                if (coins > 0) this.items.spawnLoose({ kind: 'coins', uid: newUid(), count: coins }, rp.clone().add(new THREE.Vector3(0, 3.2, 0)), { hover: true });
+                // a house chest: the family may be watching
+                if (chest.house) this.houses?.chestOpened(chest, by);
                 if (this.sync) this.sync.chestOpenedLoot?.(chest);
             }
             return;
@@ -683,6 +714,7 @@ export class Game {
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
+        if (name === 'ToTheSun') return this._castSun(isFinal);
         if (name === 'Stand') {
             if (this.doors?.stand?.()) return 'Stand';
             if (this.builder.build) { this.builder.finish(); return 'Stand'; }
@@ -1111,6 +1143,32 @@ export class Game {
         return 'LightningStrike';
     }
 
+    // ============================================================ To the Sun
+    /** «To the Sun»: a hand raised to the sky, in the rain — the clouds part and the rain stops. */
+    _castSun(isFinal) {
+        const raining = this.storm && (this.storm.k > 0.2 || performance.now() < this.storm.until);
+        if (!raining) { if (isFinal) this.hud.setVoice('☀️ «To the Sun» работает только во время дождя', true); return null; }
+        const ch = this.character;
+        let side = null;
+        for (const s of ['right', 'left']) {
+            if (!ch.isArmRaised(s)) continue;
+            const d = ch.getHandDirection(s, _v1);
+            const anchor = s === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor;
+            const arm = ch.getHandWorldPosition(s, _v2).sub(anchor.getWorldPosition(new THREE.Vector3())).normalize();
+            if (d.y > 0.5 || arm.y > 0.6) { side = s; break; }
+        }
+        if (!side && !ch.areBothHandsUp()) { if (isFinal) this.hud.setVoice('☀️ Поднимите руку к небу и скажите «To the Sun»', true); return null; }
+        side = side || 'right';
+        const tired = this.combat.check('ToTheSun');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('ToTheSun');
+        const o = ch.getHandWorldPosition(side, new THREE.Vector3());
+        this.spells.cast('ToTheSun', o, _v1.set(0, 1, 0), side, this.localId);
+        if (this.sync) this.sync.spell('ToTheSun', o, _v1.set(0, 1, 0), side);
+        this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Тучи расходятся, дождь стихает', true);
+        return 'ToTheSun';
+    }
+
     /** Creatures the lightning can be aimed at (everything alive). */
     _lightningTargets() {
         const out = [];
@@ -1489,7 +1547,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
-        zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b), this.campfires.sampleModel());
+        zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), this.campfires.sampleModel());
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const v of prewarmVillagers()) zoo.add(v);
         zoo.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, depthWrite: false })));
@@ -1605,10 +1663,12 @@ export class Game {
         this.doors.update(dt);
         this.campfires.update(dt);
         this.beds.update(dt);
+        this.houses.update(dt);
         this.spiders.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
+        this.sun.update(dt);
         this._updateLightning(dt);
         this._updateWave(dt);
         this._updateBreakthrough(dt);
@@ -2116,6 +2176,7 @@ export class Game {
         this.castleLife?.dispose();
         this.doors?.dispose();
         this.campfires?.dispose();
+        this.houses?.dispose();
         this.beds?.dispose();
         this.spiders?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }

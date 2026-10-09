@@ -264,3 +264,76 @@ test('wrecking a castle wall with Bombardo: the guards hear it, come to look and
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('knights fight smart: climb out of a shallow crater (not a deep one), keep apart, surround the enemy from different sides', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const c = g.world.terrain.data.castles.near(0, 0, 2500).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+        window.__castle = c;
+        g.character.group.position.set(c.gate.x, c.gate.y + 2.2, c.gate.z);
+        g.world.terrain.flushAround(c.gate.x, c.gate.z);
+    });
+    await frames(page, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, L = g.castleLife, c = window.__castle, T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const t = g.world.terrain.data;
+        const cs = L.castles.get(c.id);
+        const knights = [...cs.active.values()].filter((v) => v.role === 'knight' && !v.dead).slice(0, 4);
+        // out on the open field in front of the gate, 30 m out
+        const out = new T.Vector3(c.gate.x - c.x, 0, c.gate.z - c.z).normalize();
+        const at = (k) => ({ x: Math.round(c.gate.x + out.x * k), z: Math.round(c.gate.z + out.z * k) });
+        const dig = (p, r, depth) => {
+            const top = t.topLayer(p.x, p.z);
+            for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) for (let k = 0; k < depth; k++) t.set(p.x + dx, top - k, p.z + dz, 0);
+            g.world.terrain.flushAround(p.x, p.z);
+            return top;
+        };
+        // a shallow pit (2) and a deep one (5)
+        const A = at(26), B = at(40);
+        const topA = dig(A, 2, 2), topB = dig(B, 2, 5);
+        const k1 = knights[0], k2 = knights[1];
+        k1.x = A.x; k1.z = A.z; k1.y = topA - 2 - 0.5; k1.job = 'yard'; k1.path = null; k1.post = null;
+        k2.x = B.x; k2.z = B.z; k2.y = topB - 5 - 0.5; k2.job = 'yard'; k2.path = null; k2.post = null;
+        const me = at(32);
+        g.character.group.position.set(me.x, g.collision.groundY(me.x, me.z) + 2.2, me.z);
+        cs.hostile.set(g.localId, Date.now() + 120000);
+        for (const k of knights) { k.foe = g.localId; k.investigate = null; }
+        let climbed = false;
+        const t0 = performance.now();
+        while (performance.now() - t0 < 20000) {
+            if (k1.mode === 'climb') climbed = true;
+            if (k1.y > topA - 1) break;
+            g.character.group.position.set(me.x, g.collision.groundY(me.x, me.z) + 2.2, me.z);
+            await frames(2);
+        }
+        const outA = k1.y > topA - 1;
+        const stillB = k2.y < topB - 3;
+        // the four come round me: wait, then look at their places
+        const t1 = performance.now();
+        while (performance.now() - t1 < 15000) {
+            g.character.group.position.set(me.x, g.collision.groundY(me.x, me.z) + 2.2, me.z);
+            const near = knights.filter((k) => k !== k2 && Math.hypot(k.x - me.x, k.z - me.z) < 8).length;
+            if (near >= 3) { await frames(30); break; }
+            await frames(3);
+        }
+        const near = knights.filter((k) => k !== k2 && Math.hypot(k.x - me.x, k.z - me.z) < 8);
+        const angles = near.map((k) => Math.atan2(k.z - me.z, k.x - me.x));
+        let minGap = Infinity;
+        for (let i = 0; i < angles.length; i++) for (let j = i + 1; j < angles.length; j++) { let d = Math.abs(angles[i] - angles[j]); if (d > Math.PI) d = 2 * Math.PI - d; minGap = Math.min(minGap, d); }
+        let minDist = Infinity;
+        for (let i = 0; i < near.length; i++) for (let j = i + 1; j < near.length; j++) minDist = Math.min(minDist, Math.hypot(near[i].x - near[j].x, near[i].z - near[j].z));
+        return { climbed, outA, stillB, near: near.length, minGap, minDist, bubbleShout: knights.some((k) => k.bubble?.shout) };
+    });
+    assert.ok(r.climbed && r.outA, `climbed out of the shallow pit (climb seen: ${r.climbed})`);
+    assert.ok(r.stillB, 'a deep pit holds them');
+    assert.ok(r.near >= 3, `they came round me (${r.near})`);
+    assert.ok(r.minGap > 0.6, `from different sides (min angle ${r.minGap.toFixed(2)} rad)`);
+    assert.ok(r.minDist > 1.3, `not inside each other (${r.minDist.toFixed(2)} m)`);
+    assert.ok(r.bubbleShout, 'battle cries are shouted');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

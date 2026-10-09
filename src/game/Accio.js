@@ -50,11 +50,24 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { w, side, score };
             }
+            // any other thing lying about (a bow, a shield, a wand, a scroll, food, coins…)
+            if (g.items?.held[side]) continue;
+            for (const L of g.items?.loose.values() || []) {
+                if (L.asked || L.accio) continue;
+                const to = _v1.subVectors(L.model.position, hand);
+                const d = to.length();
+                if (d > ACCIO.RANGE || d < 0.3) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang > ACCIO.CONE) continue;
+                const score = ang * 5 + d * 0.05;
+                if (!best || score < best.score) best = { L, side, score };
+            }
         }
         if (!best) {
             const busy = g.weapons.hands.left.held && g.weapons.hands.right.held;
-            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, топор) не дальше 30 м — и скажите «Акцио»';
+            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку…) не дальше 30 м — и скажите «Акцио»';
         }
+        if (best.L) return this._castItem(best.L, best.side);
         const w = best.w;
         w.hover = null;
         w.attach({ levitate: true, side: null }); // flies under my control (others see it fly)
@@ -65,9 +78,49 @@ export class Accio {
         return null;
     }
 
+    /** A loose thing flies to the hand (the host moves it; a guest asks the host for it). */
+    _castItem(L, side) {
+        const g = this.game;
+        for (let i = 0; i < 16; i++) g.fx.spark(L.model.position, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
+        if (g.sound) g.sound.playWhoosh?.();
+        if (!g.items.auth) {
+            L.asked = true;
+            g.sync?.itemTake?.(L.item.uid, side);
+            setTimeout(() => { L.asked = false; }, 1500);
+            return null;
+        }
+        L.hover = null;
+        L.rest = false;
+        L.accio = true;
+        this.state = { L, side, t: 0 };
+        return null;
+    }
+
+    _updateItem(dt) {
+        const s = this.state;
+        const g = this.game;
+        const L = s.L;
+        s.t += dt;
+        if (!g.items.loose.has(L.item.uid)) { this.state = null; return; }
+        const hand = g.character.getGripObject(s.side).getWorldPosition(_v1);
+        const p = L.model.position;
+        const to = _v2.subVectors(hand, p);
+        const d = to.length();
+        if (d > 1e-3) p.addScaledVector(to, Math.min(1, (ACCIO.SPEED * dt) / d));
+        L.model.rotation.y += dt * 6;
+        if (Math.random() < 0.5) g.fx.spark(p, 0xfff2a8, 0.07, _v2.set(0, 0.4, 0), 0.3);
+        if (d < ACCIO.CATCH || s.t > ACCIO.MAX_TIME) {
+            this.state = null;
+            L.accio = false;
+            if (d < ACCIO.CATCH && !g.items.held[s.side]) g.items.pickUp(L.item.uid, g.localId, s.side);
+            else { L.vel = L.vel || new THREE.Vector3(); L.vel.set(0, 0, 0); }
+        }
+    }
+
     update(dt) {
         const s = this.state;
         if (!s) return;
+        if (s.L) { this._updateItem(dt); return; }
         const g = this.game;
         const w = s.w;
         s.t += dt;

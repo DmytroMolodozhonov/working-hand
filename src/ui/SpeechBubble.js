@@ -24,6 +24,7 @@ const MAX_CHARS = 28;
 const MAX_LINES = 4;
 const PX = 0.0105; // world metres per canvas pixel (2 lines ≈ 1.2 m tall)
 const FAR = 30; // hidden beyond this distance
+const FAR_SHOUT = 85; // a shout (a battle cry) is seen this far
 const NEAR_SCALE_D = 12; // beyond this the bubble grows to stay readable
 const FADE_IN = 0.2, FADE_OUT = 0.4;
 
@@ -99,7 +100,8 @@ export class SpeechBubble {
      * @param {string} text
      * @param {{name?: string, seconds?: number, color?: number|string}} [o]  color: the name line / border tint
      */
-    show(text, { name = '', seconds = 5, color } = {}) {
+    show(text, { name = '', seconds = 5, color, shout = false } = {}) {
+        this.shout = !!shout; // (a battle cry: bigger, seen from much farther)
         this.text = String(text ?? '');
         this.name = name ? String(name) : '';
         this._time = Math.max(0.1, seconds);
@@ -134,8 +136,8 @@ export class SpeechBubble {
         x.closePath();
         x.fillStyle = 'rgba(255,255,255,0.95)';
         x.fill();
-        x.lineWidth = 4;
-        x.strokeStyle = edge;
+        x.lineWidth = this.shout ? 8 : 4;
+        x.strokeStyle = this.shout ? '#b3261e' : edge;
         x.stroke();
         // text
         x.textAlign = 'center';
@@ -173,8 +175,8 @@ export class SpeechBubble {
         if (camera) {
             camera.getWorldPosition(_cam);
             const d = _cam.distanceTo(s.position);
-            if (d > FAR) { s.visible = false; return; }
-            k = Math.min(2.2, Math.max(1, d / NEAR_SCALE_D));
+            if (d > (this.shout ? FAR_SHOUT : FAR)) { s.visible = false; return; }
+            k = Math.min(this.shout ? 4 : 2.2, Math.max(1, d / NEAR_SCALE_D)) * (this.shout ? 1.3 : 1);
         }
         s.scale.set(this._baseW * k, this._baseH * k, 1);
         this.material.opacity = this._alpha;

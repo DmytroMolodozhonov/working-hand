@@ -34,6 +34,8 @@ export const BLOCK = {
     PLANKS: 27, PLANKS_DARK: 28, ROOF_RED: 29, ROOF_BLUE: 30, ROOF_SLATE: 31, THATCH: 32,
     CARPET_RED: 33, GOLD: 34, FARMLAND: 35, WHEAT: 36, PATH: 37, CARPET_BLUE: 38, CARPET_GREEN: 39,
     LANTERN: 40, HAY: 41, CLOTH_WHITE: 42, BOOKS: 43, CLOTH_YELLOW: 44,
+    // houses: fences, vegetable beds, flowers, whitewashed plaster
+    FENCE: 45, VEG: 46, FLOWERS: 47, PLASTER: 48,
 };
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY;
@@ -51,7 +53,7 @@ export const TREE_KINDS = [
 export const isWood = (t) => t === BLOCK.WOOD || t === BLOCK.BIRCH || t === BLOCK.SPRUCE || t === BLOCK.CHERRY || t === BLOCK.DARK || t === BLOCK.PLANKS || t === BLOCK.PLANKS_DARK;
 export const isLeaves = (t) => t === BLOCK.LEAVES || t === BLOCK.BIRCH_LEAVES || t === BLOCK.SPRUCE_LEAVES || t === BLOCK.CHERRY_LEAVES || t === BLOCK.DARK_LEAVES;
 /** Burns (wood and leaves of every tree). */
-export const isFlammable = (t) => isWood(t) || isLeaves(t) || t === BLOCK.THATCH || t === BLOCK.HAY || t === BLOCK.WHEAT || t === BLOCK.BOOKS;
+export const isFlammable = (t) => isWood(t) || isLeaves(t) || t === BLOCK.THATCH || t === BLOCK.HAY || t === BLOCK.WHEAT || t === BLOCK.BOOKS || t === BLOCK.FENCE || t === BLOCK.VEG;
 // ICE_SHAPE: solid space inside frozen water shapes (drawn by WaterMagic, not as cubes)
 
 /** Water is not solid: you can see, walk and shoot through it. */
@@ -105,11 +107,15 @@ export const BASE_COLORS = {
     [BLOCK.CLOTH_WHITE]: 0xf0ece2,
     [BLOCK.BOOKS]: 0x7a4a2a,
     [BLOCK.CLOTH_YELLOW]: 0xe9c43a,
+    [BLOCK.FENCE]: 0x8a6238,
+    [BLOCK.VEG]: 0x4e9a35,
+    [BLOCK.FLOWERS]: 0xd9548c,
+    [BLOCK.PLASTER]: 0xe8e0cc,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
     [BLOCK.CS_MOSSY]: PATTERN.COBBLE, [BLOCK.COBBLE]: PATTERN.COBBLE, [BLOCK.PATH]: PATTERN.COBBLE, [BLOCK.BRICK]: PATTERN.BRICK,
-    [BLOCK.PLANKS]: PATTERN.PLANKS, [BLOCK.PLANKS_DARK]: PATTERN.PLANKS,
+    [BLOCK.PLANKS]: PATTERN.PLANKS, [BLOCK.PLANKS_DARK]: PATTERN.PLANKS, [BLOCK.FENCE]: PATTERN.PLANKS,
     [BLOCK.ROOF_RED]: PATTERN.TILES, [BLOCK.ROOF_BLUE]: PATTERN.TILES, [BLOCK.ROOF_SLATE]: PATTERN.TILES,
     [BLOCK.THATCH]: PATTERN.STRAW, [BLOCK.HAY]: PATTERN.STRAW, [BLOCK.WHEAT]: PATTERN.STRAW,
     [BLOCK.CARPET_RED]: PATTERN.CLOTH, [BLOCK.CARPET_BLUE]: PATTERN.CLOTH, [BLOCK.CARPET_GREEN]: PATTERN.CLOTH, [BLOCK.CLOTH_WHITE]: PATTERN.CLOTH, [BLOCK.CLOTH_YELLOW]: PATTERN.CLOTH,

@@ -29,11 +29,23 @@ function woodColor(block) {
     return [0x8b5a2b, 0xd9cfb5, 0x5a3a1e, 0x8a3f38, 0x3e2716][Math.max(0, k)];
 }
 
+const _mats = new Map(); // colour -> materials (shared by all doors of that wood)
+function doorMats(color) {
+    let m = _mats.get(color);
+    if (!m) {
+        m = {
+            wood: new THREE.MeshLambertMaterial({ color }),
+            dark: new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(0.65) }),
+            gold: _mats.gold || (_mats.gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.85, roughness: 0.3 })),
+        };
+        _mats.set(color, m);
+    }
+    return m;
+}
+
 export function doorModel(color) {
     const g = new THREE.Group();
-    const wood = new THREE.MeshLambertMaterial({ color });
-    const dark = new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(0.65) });
-    const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.85, roughness: 0.3 });
+    const { wood, dark, gold } = doorMats(color);
     // frame
     for (const [w, h, x, y] of [[0.16, H + 0.16, -W / 2 - 0.08, H / 2], [0.16, H + 0.16, W / 2 + 0.08, H / 2], [W + 0.32, 0.16, 0, H + 0.08]]) {
         const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, T + 0.08), dark);
@@ -119,6 +131,8 @@ export class Doors {
         const model = doorModel(d.color);
         model.position.set(d.x, d.y, d.z);
         model.rotation.y = d.ry;
+        // (a house door fills its opening: wider and taller than a made one)
+        if (d.w || d.h) model.scale.set((d.w || W) / W, (d.h || H) / H, 1);
         g.scene.add(model);
         const door = { ...d, model, boxId: null, holdSide: null };
         this.list.set(d.id, door);
@@ -141,8 +155,9 @@ export class Doors {
         if (door.a < 0.35 && !door.lifted) {
             // the box of the closed door (in world space, axis-aligned around it)
             const c = Math.cos(door.ry), s = Math.sin(door.ry);
-            const hw = W / 2 * Math.abs(c) + T / 2 * Math.abs(s) + 0.05, hd = W / 2 * Math.abs(s) + T / 2 * Math.abs(c) + 0.05;
-            door.boxId = g.collision.addBox({ minX: door.x - hw, maxX: door.x + hw, minY: door.y, maxY: door.y + H, minZ: door.z - hd, maxZ: door.z + hd, kind: 'door' });
+            const dw = door.w || W;
+            const hw = dw / 2 * Math.abs(c) + T / 2 * Math.abs(s) + 0.05, hd = dw / 2 * Math.abs(s) + T / 2 * Math.abs(c) + 0.05;
+            door.boxId = g.collision.addBox({ minX: door.x - hw, maxX: door.x + hw, minY: door.y, maxY: door.y + (door.h || H), minZ: door.z - hd, maxZ: door.z + hd, kind: 'door' });
         }
     }
 
@@ -183,8 +198,10 @@ export class Doors {
         }
         // opening by the handle: the hand at a knob drags the leaf around the hinge
         if (g.currentPose) {
+            const me = ch.group.position;
             for (const door of this.list.values()) {
                 if (door.lifted) continue;
+                if (!door.holdSide && Math.abs(door.x - me.x) + Math.abs(door.z - me.z) > 9) continue; // (far: no hand can reach it)
                 const hinge = door.model.userData.hinge;
                 for (const side of ['right', 'left']) {
                     const hand = ch.getHandWorldPosition(side, _v);
@@ -198,7 +215,7 @@ export class Doors {
                         const local = hand.clone().sub(hp).applyAxisAngle(_v2.set(0, 1, 0), -door.ry);
                         const ang = Math.atan2(-local.z, local.x);
                         const want = Math.max(0, Math.min(1.75, ang));
-                        if (Math.abs(want - door.a) > 0.6 || local.length() > W + 1.2) { door.holdSide = null; continue; } // let go
+                        if (Math.abs(want - door.a) > 0.6 || local.length() > (door.w || W) + 1.2) { door.holdSide = null; continue; } // let go
                         this._setAngle(door, door.a + (want - door.a) * Math.min(1, dt * 10));
                         if (Math.abs(door.a - (door._sentA ?? 0)) > 0.05) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); }
                     } else if (!door.holdSide && near < 0.4) {
@@ -251,6 +268,7 @@ export class Doors {
         this.carried = null;
         const d = c.door;
         d.lifted = false;
+        d.moved = true;
         d.y = this.game.collision.groundY(d.x, d.z);
         d.model.position.y = d.y;
         this._setAngle(d, 0);
@@ -262,8 +280,22 @@ export class Doors {
     applyNet(d) { this._place(d); }
     applyAngle(id, a) { const d = this.list.get(id); if (d && !d.holdSide) this._setAngle(d, a); }
 
+    /** Swing a door to an angle (house doors opened by the people living there). */
+    swing(id, a) { const d = this.list.get(id); if (d && !d.holdSide && !d.lifted) this._setAngle(d, a); }
+
+    /** A house door away from everybody is taken out of the scene (it comes back with the house). */
+    remove(id) {
+        const d = this.list.get(id);
+        if (!d) return;
+        if (this.carried?.door === d) this.carried = null;
+        this.game.scene.remove(d.model);
+        if (d.boxId != null) this.game.collision.removeBox(d.boxId);
+        this.list.delete(id);
+    }
+
     snapshot() {
-        return [...this.list.values()].map((d) => ({ id: d.id, x: d.x, y: d.y, z: d.z, ry: d.ry, color: d.color, a: d.a || 0 }));
+        // (house doors are part of the generated world: not saved, unless carried away)
+        return [...this.list.values()].filter((d) => !d.gen || d.moved).map((d) => ({ id: d.id, x: d.x, y: d.y, z: d.z, ry: d.ry, color: d.color, a: d.a || 0, w: d.w, h: d.h }));
     }
 
     restore(list) { for (const d of list || []) this._place(d); }

@@ -112,3 +112,9 @@ test('building spells are recognised (and «Stand» is not a wall)', () => {
     assert.equal(matchSpell('стенд'), 'Stand');
     assert.equal(matchSpell('флайн'), 'Flight');
 });
+
+test('«To the Sun»: its words, and «Даст» keeps its own', async () => {
+    const { matchSpell } = await import('../../src/fx/SpellManager.js');
+    for (const w of ['to the sun', 'Ту зе сан', 'тузесан', 'к солнцу']) assert.equal(matchSpell(w), 'ToTheSun', w);
+    for (const w of ['даст', 'санд']) assert.equal(matchSpell(w), 'Sands', w);
+});

@@ -35,10 +35,10 @@ export const WAND_FAVOURITES = ['Inferno', 'Thunderwave', 'Sapira', 'Ice', 'Sand
 export const SPELL_RU = {
     Inferno: 'Инферно', Thunderwave: 'Тандервейв', Sapira: 'Сапира', Ice: 'Айс', Sands: 'Даст', Bombardo: 'Бомбардо', Earthquake: 'Earthquake',
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
-    LightningStrike: 'Lightning Strike', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот',
+    LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
-export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff };
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
@@ -119,6 +119,27 @@ export function rollWand(r = Math.random) {
     };
 }
 
+/**
+ * A chest in a village house: mostly food (bread, cheese, pies, steaks), wool,
+ * arrows — and rarely something precious (a scroll, a wand, a magic weapon).
+ */
+export function rollHouseLoot(r = Math.random, rich = false) {
+    const out = [];
+    const n = randInt(r, 2, rich ? 4 : 3);
+    for (let i = 0; i < n; i++) {
+        const x = r();
+        if (x < (rich ? 0.07 : 0.03)) { out.push(...rollLoot(r, { cave: false }).slice(0, 1)); continue; }
+        if (x < 0.30) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
+        else if (x < 0.48) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
+        else if (x < 0.62) out.push({ kind: 'pie', uid: newUid(), count: 1 });
+        else if (x < 0.74) out.push({ kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
+        else if (x < 0.84) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) });
+        else if (x < 0.92) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 3, 8) });
+        else out.push({ kind: 'apple', uid: newUid(), count: 1 });
+    }
+    return out;
+}
+
 export function rollLoot(r = Math.random, { cave = true } = {}) {
     const out = [];
     const n = randInt(r, 1, cave ? 3 : 2);
@@ -132,6 +153,7 @@ export function rollLoot(r = Math.random, { cave = true } = {}) {
             out.push(y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'flight' }
                 : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
                 : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
+                : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
                 : y < 0.70 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
                 : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
         }
@@ -245,20 +267,48 @@ function scrollModel(it) {
     return g;
 }
 
+function heaterShape(w, h) {
+    // a heater shield: a flat top, straight sides, then curving down to a point
+    const sh = new THREE.Shape();
+    const hw = w / 2, top = h * 0.45, mid = -h * 0.05, bot = -h * 0.55;
+    sh.moveTo(-hw, top);
+    sh.lineTo(hw, top);
+    sh.lineTo(hw, mid);
+    sh.quadraticCurveTo(hw * 0.95, bot * 0.75, 0, bot);
+    sh.quadraticCurveTo(-hw * 0.95, bot * 0.75, -hw, mid);
+    sh.lineTo(-hw, top);
+    return sh;
+}
+
 function shieldModel(it) {
     const g = new THREE.Group();
     const k = SHIELD_KINDS[it.type || 0];
-    const face = it.type === 0 ? cyl(0.42, 0.42, 0.06, mat(k.color), 0, 0, 0, 16) : box(0.7, 0.85, 0.06, mat(k.color));
-    if (it.type === 0) face.rotation.x = Math.PI / 2;
-    g.add(face);
-    const rim = it.type === 0 ? new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 6, 20), mat(k.rim)) : box(0.74, 0.06, 0.08, mat(k.rim), 0, 0.42);
-    g.add(rim);
-    if (it.type !== 0) { g.add(box(0.74, 0.06, 0.08, mat(k.rim), 0, -0.42)); g.add(box(0.06, 0.9, 0.08, mat(k.rim), 0.36, 0)); g.add(box(0.06, 0.9, 0.08, mat(k.rim), -0.36, 0)); }
-    if (it.type === 2) { g.add(box(0.08, 0.6, 0.07, mat(0xd4af37), 0, 0, 0.01)); g.add(box(0.45, 0.08, 0.07, mat(0xd4af37), 0, 0.1, 0.01)); }
-    if (it.type === 0) for (let i = -1; i <= 1; i++) g.add(box(0.02, 0.8, 0.07, mat(0x5a3a1e), i * 0.2, 0, 0));
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), mat(k.rim))).position.z = 0.04;
+    const t = it.type || 0;
+    const face = mat(k.color), rimM = mat(k.rim);
+    if (t === 0) {
+        // round wooden shield: planks, an iron rim, a boss in the middle
+        const disc = cyl(0.42, 0.42, 0.06, face, 0, 0, 0, 20);
+        disc.rotation.x = Math.PI / 2;
+        g.add(disc);
+        g.add(new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 6, 24), rimM));
+        for (let i = -1; i <= 1; i++) g.add(box(0.02, 0.8, 0.07, mat(0x5a3a1e), i * 0.2, 0, 0));
+        g.add(new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mat(0x9aa3ad, { standard: true, metal: 0.8, rough: 0.35 }))).position.z = 0.04;
+    } else if (t === 1) {
+        // iron heater shield: pointed bottom, a raised edge, a stripe
+        const geo = new THREE.ExtrudeGeometry(heaterShape(0.72, 0.95), { depth: 0.05, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02, bevelSegments: 1, curveSegments: 10 });
+        geo.translate(0, 0, -0.025);
+        g.add(new THREE.Mesh(geo, mat(0xb9c2cc, { standard: true, metal: 0.35, rough: 0.45 })));
+        g.add(box(0.08, 0.86, 0.08, rimM, 0, -0.04, 0.02));
+        g.add(box(0.66, 0.06, 0.08, rimM, 0, 0.4, 0.02));
+    } else {
+        // the knight's tower shield: tall and straight, a golden cross
+        g.add(box(0.62, 1.05, 0.06, face));
+        g.add(box(0.66, 0.06, 0.08, rimM, 0, 0.52)); g.add(box(0.66, 0.06, 0.08, rimM, 0, -0.52));
+        g.add(box(0.06, 1.08, 0.08, rimM, 0.32, 0)); g.add(box(0.06, 1.08, 0.08, rimM, -0.32, 0));
+        g.add(box(0.09, 0.7, 0.07, mat(0xd4af37), 0, 0, 0.01)); g.add(box(0.45, 0.09, 0.07, mat(0xd4af37), 0, 0.12, 0.01));
+    }
     if (it.magic) {
-        const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.02, 6, 24), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.7 }));
+        const halo = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.02, 6, 24), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.7 }));
         g.add(halo);
         g.userData.halo = halo;
     }
@@ -294,8 +344,11 @@ function bowModel(it) {
     return g;
 }
 
+export const ARROW_SCALE = 2.4;
+
 export function arrowModel() {
     const g = new THREE.Group();
+    g.scale.setScalar(ARROW_SCALE);
     g.add(cyl(0.012, 0.012, 0.8, mat(0x8b5a2b), 0, 0));
     const tip = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 6), mat(0x9aa3ad, { standard: true }));
     tip.position.y = 0.44;
@@ -365,7 +418,20 @@ function meatModel(cooked) {
     return g;
 }
 
+/**
+ * How big each kind of thing is next to the hero (~4.8 m tall: everything is
+ * about 2.5× a real person's things). The models are drawn smaller and scaled.
+ */
+export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 1.45, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8 };
+
 export function makeItemModel(it) {
+    const m = buildItemModel(it);
+    const s = ITEM_SCALE[it.kind];
+    if (s && s !== 1) m.scale.multiplyScalar(s);
+    return m;
+}
+
+function buildItemModel(it) {
     switch (it.kind) {
         case 'wand': return wandModel(it);
         case 'scroll': return scrollModel(it);
@@ -375,7 +441,7 @@ export function makeItemModel(it) {
         case 'hammer': return hammerModel(it);
         case 'apple': return appleModel(it);
         case 'meat': return meatModel(false);
-        case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.05, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
+        case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.12, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);
         case 'coins': return coinsModel();
         case 'bread': return breadModel();

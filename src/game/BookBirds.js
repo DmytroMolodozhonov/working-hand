@@ -163,17 +163,19 @@ export class BookBirds {
         const g = this.game;
         const r = Math.random;
         // a spawn tree crown, or a voxel tree's leaves; now and then the ground
-        const trees = (g.world.trees || []).filter((t) => t.alive && Math.hypot(t.x - from.x, t.z - from.z) > minD && Math.hypot(t.x - from.x, t.z - from.z) < maxD);
+        const trees = (g.world.trees || []).filter((t) => t.alive && !t.burning && !t.burnt && Math.hypot(t.x - from.x, t.z - from.z) > minD && Math.hypot(t.x - from.x, t.z - from.z) < maxD);
         if (trees.length && r() < 0.85) {
             const t = trees[Math.floor(r() * trees.length)];
-            return new THREE.Vector3(t.x + (r() - 0.5) * 2, 11.6, t.z + (r() - 0.5) * 2);
+            const v = new THREE.Vector3(t.x + (r() - 0.5) * 2, 11.6, t.z + (r() - 0.5) * 2);
+            v.support = { tree: t };
+            return v;
         }
         const data = g.terrain?.data;
         for (let i = 0; i < 24 && data; i++) {
             const a = r() * Math.PI * 2, d = minD + r() * (maxD - minD);
             const x = Math.round(from.x + Math.cos(a) * d), z = Math.round(from.z + Math.sin(a) * d);
             const top = data.topLayer(x, z);
-            if (isLeaves(data.get(x, top, z))) return new THREE.Vector3(x, top - 0.3, z);
+            if (isLeaves(data.get(x, top, z))) { const v = new THREE.Vector3(x, top - 0.3, z); v.support = { cell: [x, top, z] }; return v; }
         }
         const a = r() * Math.PI * 2, d = minD + r() * (maxD - minD);
         const x = from.x + Math.cos(a) * d, z = from.z + Math.sin(a) * d;
@@ -189,7 +191,7 @@ export class BookBirds {
         const me = g.character.group.position;
         const at = pos || this._perchNear(me, 25, 60);
         model.position.copy(at);
-        const b = { id, model, state: 'perch', t: Math.random() * 3, wait: 2 + Math.random() * 5, from: at.clone(), to: at.clone(), ctrl: at.clone(), hp: 2, vy: 0, flapT: Math.random() * 6 };
+        const b = { id, model, isBird: true, support: at.support || null, state: 'perch', t: Math.random() * 3, wait: 2 + Math.random() * 5, from: at.clone(), to: at.clone(), ctrl: at.clone(), hp: 2, vy: 0, flapT: Math.random() * 6 };
         this.birds.set(id, b);
         return b;
     }
@@ -220,10 +222,22 @@ export class BookBirds {
         }
     }
 
+    /** (host) A charge / an arrow hit a bird. */
+    hitBird(b, n = 2) { if (this.auth && b && b.state !== 'fall') this._damage(b, n); }
+
     _damage(b, n) {
         b.hp -= n;
         for (let i = 0; i < 12; i++) this.game.fx.spark(b.model.position, 0xf3ead2, 0.12, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.8);
         if (b.hp <= 0) { b.state = 'fall'; b.vy = 1; }
+    }
+
+    /** Is the branch the bird sits on still there (a tree burnt / blown away — no)? */
+    _supported(b) {
+        const s = b.support;
+        if (!s) return true;
+        if (s.tree) return !!s.tree.alive && !s.tree.burning && !s.tree.burnt;
+        if (s.cell) { const data = this.game.terrain?.data; return !data || isLeaves(data.get(s.cell[0], s.cell[1], s.cell[2])); }
+        return true;
     }
 
     _updateBird(b, dt) {
@@ -232,11 +246,14 @@ export class BookBirds {
         if (b.state === 'perch') {
             b.flapT += dt * 2;
             flap(m, b.flapT, 0.12);
+            b.checkT = (b.checkT || 0) - dt;
+            if (b.checkT <= 0) { b.checkT = 0.4; if (!this._supported(b)) b.t = b.wait; } // (the leaves are gone: off it flies)
             if (b.t > b.wait) {
                 b.state = 'fly';
                 b.t = 0;
                 b.from.copy(m.position);
                 b.to = this._perchNear(m.position, 12, 40);
+                b.toSupport = b.to.support || null;
                 b.ctrl.copy(b.from).lerp(b.to, 0.5);
                 b.ctrl.y = Math.max(b.from.y, b.to.y) + 5 + Math.random() * 5;
                 b.dur = b.from.distanceTo(b.to) / SPEED;
@@ -249,7 +266,7 @@ export class BookBirds {
             const dir = _v2.subVectors(p, m.position);
             if (dir.lengthSq() > 1e-6) m.rotation.y = Math.atan2(dir.x, dir.z);
             m.position.copy(p);
-            if (k >= 1) { b.state = 'perch'; b.t = 0; b.wait = 3 + Math.random() * 6; }
+            if (k >= 1) { b.state = 'perch'; b.t = 0; b.wait = 3 + Math.random() * 6; b.support = b.toSupport || null; b.checkT = 0; }
         } else if (b.state === 'fall') {
             b.vy -= 15 * dt;
             m.position.y += b.vy * dt;
@@ -277,6 +294,23 @@ export class BookBirds {
         m.add(glow);
         this.books.set(b.id, { id: b.id, model: m, glow, t: 0, spells: bookSpells(b.id) });
         this.game.hud.toast?.('📖 Книга упала на землю — возьмите её рукой');
+    }
+
+    /** A book lying somewhere (a creative pedestal): taken by hand like a fallen one. */
+    placeBook(pos, id) {
+        if (this.books.has(id)) return;
+        const m = makeBookModel(COVERS[id % COVERS.length]);
+        m.scale.setScalar(1.4);
+        m.position.copy(pos);
+        flap(m, 0, 0);
+        m.userData.left.rotation.z = 0.02;
+        m.userData.right.rotation.z = -0.02;
+        this.game.scene.add(m);
+        const glow = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 24), new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+        glow.rotation.x = -Math.PI / 2;
+        glow.position.y = -0.05;
+        m.add(glow);
+        this.books.set(id, { id, model: m, glow, t: 0, spells: bookSpells(id) });
     }
 
     // ------------------------------------------------------------ books

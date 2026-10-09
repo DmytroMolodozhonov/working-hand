@@ -131,6 +131,7 @@ export class NetSync {
             dayStart: g.dayStart,
             doors: g.doors?.snapshot() || [],
             campfires: g.campfires?.snapshot() || [],
+            houses: g.houses?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
@@ -148,6 +149,7 @@ export class NetSync {
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         if (msg.doors) g.doors?.restore(msg.doors);
         if (msg.campfires) g.campfires?.restore(msg.campfires);
+        if (msg.houses) g.houses?.restore(msg.houses);
         if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.castles) g.castleLife?.restore(msg.castles);
         for (const e of msg.explosions || []) {
@@ -369,6 +371,8 @@ export class NetSync {
     villagerAlarm(to, name) { if (this.net.isHost) this.net.send({ t: 'valarm', to, name }); }
     castleState(id, s) { if (this.net.isHost) this.net.send({ t: 'cst', id, s }); }
     villagerCrime(id, kind) { this.net.send({ t: 'vcrime', id, kind }); }
+    /** A window pane broke (Houses.js): everybody's glass breaks. */
+    glass(id) { this.net.send({ t: 'glass', id }, true); }
     villagerVandal(p, n, loud) { this.net.send({ t: 'vvand', p, n, l: loud }); }
     villagerTalk(id) { this.net.send({ t: 'vtalk', id }); }
     tradeSell(uid, wid, price, p) { this.net.send({ t: 'tsell', uid, wid, price, p }); }
@@ -567,6 +571,7 @@ export class NetSync {
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
+            case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
             case 'bed': g.beds?.onNet(m); break;
             case 'look': {
                 if (m.by === this.me || !m.look) break;

@@ -186,7 +186,7 @@ export class Animals {
         const a = {
             id, type, group: model, model, isAnimal: true, hp: opts.hp ?? S.hp, dead: false, get isDead() { return this.dead; },
             damageCooldown: 0, state: 'graze', t: Math.random() * 5, target: pos.clone(), herd: opts.herd || null,
-            attacker: null, stateT: 0, vy: 0, meat: S.meat, cooked: false, color,
+            attacker: null, stateT: 0, vy: 0, meat: S.meat, cooked: false, color, pen: opts.pen || null,
             bonus: opts.bonus ?? (type === 'horse' ? 1 + Math.floor(Math.random() * 40) : 0),
             stamina: 100, apples: 0, tamed: opts.tamed || null, rider: null, walkT: Math.random() * 6, bones: null,
         };
@@ -217,6 +217,7 @@ export class Animals {
 
     _remove(a) {
         const g = this.game;
+        if (a.pen && !a.dead) g.houses?.penReturn(a.pen.id); // (a pen animal far away: it comes back with the pen)
         g.scene.remove(a.model);
         // (shapes are shared by all animals: nothing to dispose)
         if (a.bones) g.scene.remove(a.bones);
@@ -546,8 +547,9 @@ export class Animals {
             // grazing: now and then a few steps somewhere near the herd
             if (a.t > 4 + Math.random() * 6) {
                 a.t = 0;
-                const h = a.herd || { x: p.x, z: p.z };
-                a.target.set(h.x + (Math.random() - 0.5) * 12, p.y, h.z + (Math.random() - 0.5) * 12);
+                const h = a.pen || a.herd || { x: p.x, z: p.z };
+                const spread = a.pen ? a.pen.r * 1.6 : 12;
+                a.target.set(h.x + (Math.random() - 0.5) * spread, p.y, h.z + (Math.random() - 0.5) * spread);
             }
             if (p.distanceTo(_v.set(a.target.x, p.y, a.target.z)) > 0.6) speed = S.speed;
         }
@@ -563,6 +565,15 @@ export class Animals {
                 a.group.rotation.y += dy * Math.min(1, dt * 5);
                 p.addScaledVector(to, Math.min(d, speed * dt));
                 a.walkT += dt * speed * 2.2;
+            }
+        }
+        // a pen animal stays inside its fence (unless it runs at / from someone)
+        if (a.pen && a.state === 'graze') {
+            const dx = p.x - a.pen.x, dz = p.z - a.pen.z, r = a.pen.r;
+            if (Math.abs(dx) > r + 2 || Math.abs(dz) > r + 2) a.target.set(a.pen.x, p.y, a.pen.z); // (out after a fright: it walks back in)
+            else {
+                if (Math.abs(dx) > r) p.x = a.pen.x + Math.sign(dx) * r;
+                if (Math.abs(dz) > r) p.z = a.pen.z + Math.sign(dz) * r;
             }
         }
         this._body(a, dt);

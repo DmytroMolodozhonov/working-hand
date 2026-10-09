@@ -167,6 +167,7 @@ export class WorldKeeper {
             animals: g.animals?.snapshot() || [],
             doors: g.doors?.snapshot() || [],
             campfires: g.campfires?.snapshot() || [],
+            houses: g.houses?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             players: this.players,
@@ -206,6 +207,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.animals) g.animals?.restore(save.animals);
     if (save.doors) g.doors?.restore(save.doors);
     if (save.campfires) g.campfires?.restore(save.campfires);
+    if (save.houses) g.houses?.restore(save.houses);
     if (save.beds) g.beds?.restore(save.beds);
     if (save.castles) g.castleLife?.restore(save.castles);
     if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);

@@ -101,3 +101,37 @@ test('castle blocks: colours and shader patterns for every new block', () => {
     assert.ok(a.raised.patterned, 'castle faces carry their pattern');
     assert.equal(a.raised.patterns.length * 3, a.raised.positions.length);
 });
+
+test('houses: rich and poor, each with a door, glass windows, a bed and a chest inside; gardens and pens', () => {
+    const t = world(12345);
+    let rich = 0, poor = 0, pens = 0;
+    for (const c of castlesOf(t, 3)) {
+        pens += c.pens.length;
+        const ids = new Set();
+        for (const h of c.houses) {
+            assert.ok(h.id && !ids.has(h.id), 'unique id');
+            ids.add(h.id);
+            if (h.kind === 'barn') { assert.ok(h.pen, 'a barn keeps animals'); continue; }
+            if (h.rich) rich++; else poor++;
+            // the door opening is clear (5 high) where the door stands
+            const d = h.doorRec;
+            assert.ok(d && d.w === 3 && d.h === 5);
+            for (let k = 0; k < 5; k++) assert.equal(t.get(Math.round(d.x), Math.round(d.y + 1.5) + k, Math.round(d.z)), BLOCK.AIR, 'door opening');
+            assert.ok(h.windows.length >= 2, 'windows');
+            for (const w of h.windows) assert.equal(t.get(Math.round(w.x), Math.round(w.y + 1), Math.round(w.z)), BLOCK.AIR, 'window hole');
+            assert.ok(h.chests.length >= (h.rich ? 2 : 1), 'a chest');
+            for (const ch of h.chests) assert.equal(t.get(Math.round(ch.x), Math.round(ch.y + 1.5), Math.round(ch.z)), BLOCK.AIR, 'chest place is free');
+            assert.ok(h.bedSpots.length >= 1, 'a bed');
+            for (const b of h.bedSpots) {
+                // the bed (2.5 × 5.5) lies on the floor inside the walls, nothing in the way
+                const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw), sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);
+                for (const l of [-2.6, 0, 2.6]) for (const s of [-1.1, 0, 1.1]) {
+                    const x = b.x + fx * l + sx * s, z = b.z + fz * l + sz * s;
+                    assert.equal(t.get(Math.round(x), Math.round(b.y + 1.5), Math.round(z)), BLOCK.AIR, `bed space of ${h.kind}`);
+                }
+            }
+        }
+    }
+    assert.ok(rich >= 5 && poor >= 10, `rich ${rich}, poor ${poor}`);
+    assert.ok(pens >= 1, 'pens with animals');
+});

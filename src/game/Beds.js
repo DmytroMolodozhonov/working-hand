@@ -534,7 +534,17 @@ export class Beds {
         }
     }
 
-    snapshot() { return [...this.list.values()].map((b) => this._data(b)); }
+    /** A house bed far from everybody leaves the scene (it comes back with the house). */
+    removeBed(id) {
+        const b = this.list.get(id);
+        if (!b || this.lying === id) return;
+        this.game.scene.remove(b.model);
+        if (b.boxId != null) this.game.collision.removeBox(b.boxId);
+        this.list.delete(id);
+    }
+
+    // (house beds are part of the generated world: saved only when repainted)
+    snapshot() { return [...this.list.values()].filter((b) => !b.gen || b.color !== b.genColor).map((b) => this._data(b)); }
 
     restore(list) { for (const d of list || []) if (d && d.id) this._place(d); }
 

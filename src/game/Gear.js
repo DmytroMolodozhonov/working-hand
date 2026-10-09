@@ -79,51 +79,67 @@ export class Gear {
     }
 
     // =================================================================== bow
+    /** Creative: the quiver never runs out. */
+    _endless() { return this.game.config.mode === 'creative'; }
+
     _updateBow(dt) {
         const g = this.game;
         const ch = g.character;
         const bow = g.items.heldOf('bow');
         if (!bow) { this._dropNock(); return; }
         const other = bow.side === 'right' ? 'left' : 'right';
-        if (g.items.held[other] || g.weapons.hands[other].held) { this._dropNock(); return; }
+        const held = g.items.held[bow.side];
+        if (g.items.held[other] || g.weapons.hands[other].held) { this._dropNock(); if (held) held.aim = null; return; }
         const it = bow.item;
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
         const hand = ch.getHandWorldPosition(other, new THREE.Vector3());
         const local = hand.clone().applyMatrix4(_inv);
-        // 1) take an arrow from the quiver: the hand over the shoulder, behind the back
+        const bowPos = bow.model.position;
+        const has = this._endless() || it.arrows > 0;
+        // 1) an arrow: from the quiver (the hand over the shoulder) or simply by
+        //    bringing the other hand to the bow — it is on the string at once
         if (!this.nock) {
-            if (local.y > 0.9 && local.z > 0.1) {
-                if (!(it.arrows > 0)) { g.hud.setVoice('🏹 Стрел больше нет', true); return; }
+            if (held) held.aim = null;
+            const quiver = local.y > 0.9 && local.z > 0.1;
+            const atBow = hand.distanceTo(bowPos) < 1.0;
+            if (quiver || atBow) {
+                if (!has) { if (!this._noArrowsSaid) { this._noArrowsSaid = true; g.hud.setVoice('🏹 Стрел больше нет — найдите стрелы', true); } return; }
+                this._noArrowsSaid = false;
                 const model = arrowModel();
                 g.scene.add(model);
-                this.nock = { side: other, model, state: 'hand', draw: 0, peak: 0 };
-                g.hud.setVoice('🏹 Стрела в руке — поднесите её к луку', true);
+                this.nock = { side: other, model, state: atBow ? 'nocked' : 'hand', draw: 0, peak: 0, open: 0, t: 0 };
+                g.hud.setVoice(atBow ? '🏹 Стрела на тетиве — отведите руку назад и отпустите' : '🏹 Стрела в руке — поднесите её к луку', true);
             }
             this._bowString(bow, 0);
             return;
         }
         const n = this.nock;
-        const bowPos = bow.model.position;
+        n.t += dt;
         if (n.state === 'hand') {
             n.model.position.copy(hand);
             n.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), _v2.subVectors(bowPos, hand).normalize());
-            if (hand.distanceTo(bowPos) < 0.45) { n.state = 'nocked'; g.hud.setVoice('🏹 Натяните тетиву — отведите руку назад, потом отпустите', true); }
+            if (hand.distanceTo(bowPos) < 1.0) { n.state = 'nocked'; n.t = 0; g.hud.setVoice('🏹 Натяните тетиву — отведите руку назад, потом отпустите', true); }
             return;
         }
-        // 2) drawn: the further the hand from the bow, the stronger
+        // 2) drawn: the further the hand from the bow, the stronger (an arm's length — full)
         const dist = hand.distanceTo(bowPos);
-        n.draw = Math.max(0, Math.min(1, (dist - 0.35) / 1.1));
-        n.peak = Math.max(n.peak * 0.97, n.draw);
+        n.draw = Math.max(0, Math.min(1, (dist - 0.6) / 1.3));
+        n.peak = Math.max(n.peak * 0.985, n.draw);
         const dir = _v3.subVectors(bowPos, hand).normalize();
-        n.model.position.copy(bowPos).addScaledVector(dir, 0.05 - 0.4 * (1 - n.draw) * 0);
-        n.model.position.copy(hand).addScaledVector(dir, Math.min(dist, 0.8) * 0.5);
+        // the bow turns to where the arrow goes; the arrow lies on it, its nock at the string
+        if (held) held.aim = dir.clone();
+        n.model.position.copy(bowPos).addScaledVector(dir, 1.0 - Math.min(dist, 2.2) * 0.5 + 0.2);
         n.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), dir);
         this._bowString(bow, n.draw);
-        // 3) let go: the drawing hand jumps forward (towards the bow) or the draw collapses fast
+        // 3) let go: the fingers open, or the hand jumps forward, or the draw collapses fast
+        const curl = ch.getGripCurl ? ch.getGripCurl(other) : 1;
+        if (curl > 0.55) n.closed = true; // (the fingers held the string)
+        n.open = n.closed && curl < 0.3 ? n.open + dt : 0;
         const v = ch.handVelocity[other];
-        if (n.peak > 0.25 && (v.dot(dir) > 3 || n.draw < n.peak - 0.35)) {
+        if (n.peak > 0.25 && n.t > 0.25 && (n.open > 0.1 || v.dot(dir) > 4 || n.draw < n.peak - 0.4)) {
             this._shoot(bow, n.peak, dir.clone());
+            if (held) held.aim = null;
             return;
         }
     }
@@ -143,14 +159,16 @@ export class Gear {
     _shoot(bow, draw, dir) {
         const g = this.game;
         const it = bow.item;
-        const from = this.nock.model.position.clone();
+        // from the bow, a little in front of it
+        const from = bow.model.position.clone().addScaledVector(dir, 0.8);
         this._dropNock();
-        it.arrows = Math.max(0, (it.arrows || 0) - 1);
-        const speed = 14 + draw * 46;
+        if (!this._endless()) it.arrows = Math.max(0, (it.arrows || 0) - 1);
+        const speed = 22 + draw * 58;
         const dmg = (2 + draw * 7) * (it.magic ? 1 + (it.bonus || 0) / 100 : 1);
         this.fire(from, dir.multiplyScalar(speed), dmg, g.localId);
         if (g.sync) g.sync.arrow?.(from, dir, dmg);
-        g.hud.setVoice(`🏹 Выстрел! (сила ${Math.round(draw * 100)}%, стрел: ${it.arrows})`, true);
+        g.sound?.playWhoosh?.();
+        g.hud.setVoice(`🏹 Выстрел! (сила ${Math.round(draw * 100)}%${this._endless() ? '' : `, стрел: ${it.arrows}`})`, true);
     }
 
     /** An arrow flies (on every machine; the host hurts zombies, everybody hurts only himself). */
@@ -189,6 +207,11 @@ export class Gear {
                     a.hit.add(sp);
                     g.spiders.hit(sp, a.dmg, 'arrow');
                     this._stick(a, sp.model);
+                }
+                if (g.authority) for (const bd of g.books?.birds?.values() || []) {
+                    if (bd.state === 'fall' || a.hit.has(bd) || bd.model.position.distanceTo(p) > 1.2) continue;
+                    a.hit.add(bd);
+                    g.books.hitBird(bd, 2);
                 }
                 for (const an of g.animals?.targets() || []) {
                     if (a.hit.has(an)) continue;

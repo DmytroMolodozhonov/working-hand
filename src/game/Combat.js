@@ -56,6 +56,7 @@ export const SPELL_COST = {
     Wind: 8,
     Brainrot: 15,
     LightningStrike: 25,
+    ToTheSun: 12,
     Earthquake: 10,
     EarthquakeMaxima: 25,
     WindMaxima: 20,

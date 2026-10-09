@@ -17,13 +17,19 @@
  */
 
 import * as THREE from 'three';
-import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
 
 const PICK_RADIUS = 0.9;
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
+
+const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _f = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
+const _m4 = new THREE.Matrix4();
+const _UPY = new THREE.Vector3(0, 1, 0);
 
 export class ItemSystem {
     constructor(game) {
@@ -65,8 +71,8 @@ export class ItemSystem {
     }
 
     /** A chest opens: its things float up above it. */
-    lootChest(pos, rng = Math.random) {
-        const items = rollLoot(rng);
+    lootChest(pos, rng = Math.random, house = null) {
+        const items = house ? rollHouseLoot(rng, house.rich) : rollLoot(rng);
         items.forEach((it, i) => {
             const p = pos.clone().add(_v.set((i - (items.length - 1) / 2) * 0.8, 2.2, 0));
             if (it.kind === 'weapon') {
@@ -85,7 +91,7 @@ export class ItemSystem {
         if (this.held[side]) return false;
         const model = makeItemModel(item);
         this.game.scene.add(model);
-        this.held[side] = { item, model };
+        this.held[side] = { item, model, since: performance.now() };
         if (this.game.sync) this.game.sync.itemHold?.(side, item);
         return true;
     }
@@ -99,6 +105,43 @@ export class ItemSystem {
         disposeModel(h.model);
         if (this.game.sync) this.game.sync.itemHold?.(side, null);
         return h.item;
+    }
+
+    /** Where a held bow / wand / hammer / shield points (world quaternion into `out`). */
+    _aimQuat(side, kind, h, out) {
+        const ch = this.game.character;
+        const anchor = side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor;
+        const shoulder = anchor.getWorldPosition(_a);
+        const hand = ch.getGripObject(side).getWorldPosition(_b);
+        const arm = _c.subVectors(hand, shoulder);
+        if (arm.lengthSq() < 1e-4) arm.set(0, -1, 0);
+        arm.normalize();
+        const yaw = ch.group.rotation.y;
+        _fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+        if (kind === 'bow') {
+            // X: where the arrow flies (the arm; a hanging arm carries it pointing ahead);
+            // when an arrow is drawn — from the drawing hand through the bow
+            const x = h.aim ? _d.copy(h.aim) : _d.copy(arm).lerp(_fwd, Math.max(0, Math.min(1, (-arm.y - 0.25) / 0.45)));
+            x.normalize();
+            const y = _e.set(0, 1, 0).addScaledVector(x, -x.y);
+            if (y.lengthSq() < 1e-3) y.copy(_fwd); else y.normalize();
+            const z = _f.crossVectors(x, y);
+            _m4.makeBasis(x, y, z);
+            return out.setFromRotationMatrix(_m4);
+        }
+        if (kind === 'shield') {
+            // the face looks ahead, a little to the shield arm's side, upright
+            const sx = side === 'left' ? -1 : 1;
+            const z = _d.copy(_fwd).addScaledVector(_e.set(-_fwd.z, 0, _fwd.x), sx * 0.25).normalize();
+            const y = _e.set(0, 1, 0);
+            const x = _f.crossVectors(y, z);
+            _m4.makeBasis(x, y, z);
+            return out.setFromRotationMatrix(_m4);
+        }
+        // wand / hammer: the tip along the arm and the pointing hand
+        const dir = ch.getHandDirection(side, _d);
+        const tip = _e.copy(arm).multiplyScalar(0.55).addScaledVector(dir, 0.45).normalize();
+        return out.setFromUnitVectors(_UPY, tip);
     }
 
     heldOf(kind) {
@@ -139,10 +182,18 @@ export class ItemSystem {
             if (!h) continue;
             const grip = ch.getGripObject(side);
             grip.getWorldPosition(h.model.position);
-            grip.getWorldQuaternion(_q);
-            h.model.quaternion.copy(_q);
-            if (h.item.kind === 'wand' || h.item.kind === 'hammer') h.model.quaternion.multiply(_q.setFromAxisAngle(_v.set(1, 0, 0), Math.PI / 2));
-            if (h.item.kind === 'shield') h.model.position.addScaledVector(_v.set(0, 0, 1).applyQuaternion(h.model.quaternion), 0.05);
+            const kind = h.item.kind;
+            if (AIMED.has(kind)) {
+                // a bow, a wand, a hammer, a shield: set by the arm (shoulder → hand,
+                // steady) rather than by the shaky palm, and smoothed
+                this._aimQuat(side, kind, h, _q);
+                if (!h.q) h.q = _q.clone(); else h.q.slerp(_q, Math.min(1, dt * 16));
+                h.model.quaternion.copy(h.q);
+                if (kind === 'shield') h.model.position.addScaledVector(_fwd, 0.35);
+            } else {
+                grip.getWorldQuaternion(_q);
+                h.model.quaternion.copy(_q);
+            }
         }
         if (this.worn.backpack) this._placeBackpack(this.worn.backpack.model, ch);
         if (!g.currentPose || g.combat.dead) { this._netSend(dt); return; }
@@ -165,10 +216,19 @@ export class ItemSystem {
             const v = ch.handVelocity[side];
             hist.push({ t: now, s: v.length(), v: v.clone() });
             while (hist.length && now - hist[0].t > 250) hist.shift();
-            if (!this.held[side]) continue;
+            const h = this.held[side];
+            if (!h) continue;
+            // (not just after taking it; never a bow with an arrow on the string)
+            if (now - (h.since || 0) < 1000 || (h.item.kind === 'bow' && g.gear?.nock)) continue;
             let peak = null;
             for (const e of hist) if (!peak || e.s > peak.s) peak = e;
-            if (peak && peak.s > 6.5 && v.length() < peak.s * 0.35 && now - peak.t < 200) {
+            // a real throw: a fast swing (several fast moments, one way) that suddenly stops —
+            // the jitter of the camera makes single fast jumps, not swings; heavy things need more
+            const need = 7 + Math.min(4, (ITEM_INFO[h.item.kind]?.weight ?? 1) * 1.2);
+            if (!peak || peak.s < need || v.length() > peak.s * 0.35 || now - peak.t > 200) continue;
+            let swing = 0;
+            for (const e of hist) if (e.s > need * 0.55 && e.v.dot(peak.v) > 0.7 * e.s * peak.s) swing++;
+            if (swing >= 3) {
                 hist.length = 0;
                 this._throw(side, peak.v);
             }
@@ -188,7 +248,7 @@ export class ItemSystem {
             if (Math.random() < dt * 3) this.game.fx.spark(m.position, 0xffe9a8, 0.06, _v.set(0, 0.6, 0), 0.7);
             return;
         }
-        if (L.rest) return;
+        if (L.rest || L.accio) return; // («Акцио» carries it)
         if (L.remote) { m.position.lerp(L.remote, Math.min(1, dt * 8)); return; }
         const w = ITEM_INFO[L.item.kind]?.weight ?? 1;
         L.vel.y -= 14 * dt;
@@ -201,7 +261,7 @@ export class ItemSystem {
         if (m.position.y < ground + 0.12) {
             m.position.y = ground + 0.12;
             if (L.vel.y < -3) { L.vel.y *= -0.25; L.vel.x *= 0.5; L.vel.z *= 0.5; L.spin.multiplyScalar(0.4); }
-            else { L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true; m.rotation.x = 0; m.rotation.z = Math.PI / 2 * (L.item.kind === 'shield' ? 1 : 0); }
+            else { L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true; m.rotation.x = L.item.kind === 'shield' || L.item.kind === 'bow' ? -Math.PI / 2 : 0; m.rotation.z = 0; } // (a shield / a bow lies flat)
         }
     }
 
