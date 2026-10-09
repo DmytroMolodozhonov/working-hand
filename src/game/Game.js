@@ -32,7 +32,7 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
-import { newUid } from './ItemTypes.js';
+import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, baseSpell } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Spiders, spiderModel } from './Spider.js';
@@ -610,6 +610,10 @@ export class Game {
         let name = matchSpell(text);
         if (!name) return null;
         if (this.combat.dead) return null;
+        if (!this.knowsSpell(name)) {
+            if (isFinal) this.hud.setVoice(`📜 «${SPELL_RU[baseSpell(name)] || name}» есть только в Творчестве. Здесь его нужно выучить: найдите <b>свиток</b> в сундуке и сожгите его «Инферно»`, true);
+            return null;
+        }
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
         // «Паузин» in the air: hover; «Флайн» while hovering: fly on (no new take-off)
         if (name === 'Pause') {
@@ -1089,77 +1093,100 @@ export class Game {
         this.spells.cast('Storm', p, _v1.set(0, 1, 0), null, this.localId);
         if (this.sync) this.sync.spell('Storm', p, _v1.set(0, 1, 0), null);
         this.lightning = { phase: 'gather', t: 0, aimT: 0, aim: null };
-        this.hud.setVoice('⛈️ Буря собирается... держитесь!', true);
+        this.hud.setVoice('⛈️ Небо темнеет...', true);
         return 'LightningStrike';
     }
 
-    /** Creatures the lightning can be aimed at. */
+    /** Creatures the lightning can be aimed at (everything alive). */
     _lightningTargets() {
         const out = [];
-        for (const z of this.zombies) if (!z.isDead && !z.isThrall) out.push({ pos: z.group.position, key: 'z' + z.id });
-        for (const [id, r] of this.remotes) if (!r.dead) out.push({ pos: r.position, key: 'p' + id });
-        for (const b of this.bosses || []) if (!b.dead) out.push({ pos: b.position, key: 'b' + b.id });
+        for (const z of this.zombies) if (!z.isDead && !z.isThrall) out.push({ pos: z.group.position, key: 'z' + z.id, up: 1.2 });
+        for (const [id, r] of this.remotes) if (!r.dead) out.push({ pos: r.position, key: 'p' + id, up: 0.5 });
+        for (const b of this.bosses || []) if (!b.dead) out.push({ pos: b.position, key: 'b' + b.id, up: 1.5 });
+        for (const a of this.animals?.targets() || []) out.push({ pos: a.group.position, key: 'a' + a.id, up: 0.8 * a.group.scale.y });
+        for (const v of this.castleLife?.targets() || []) out.push({ pos: v.group.position, key: 'v' + v.id, up: 0.5 });
         return out;
+    }
+
+    /** A hand stretched out forward, about level (where the lightning goes). */
+    _handLevel(side, outDir) {
+        const ch = this.character;
+        const anchor = side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor;
+        anchor.updateMatrixWorld(true);
+        const shoulder = anchor.getWorldPosition(_v1);
+        const v = ch.getHandWorldPosition(side, _v2).sub(shoulder);
+        const len = v.length();
+        if (len < 1.2 || Math.abs(v.y / len) > 0.5) return false;
+        ch.getHandDirection(side, outDir);
+        return true;
     }
 
     _updateLightning(dt) {
         const L = this.lightning;
         if (!L) { this.hud.setTimer?.(null); return; }
         L.t += dt;
+        const ch = this.character;
         if (L.phase === 'gather') {
-            this.hud.setTimer?.(1 - L.t / 5, '⛈️', Math.ceil(5 - L.t));
-            if (L.t >= 5) {
+            // a moment of gathering clouds — then the bolt comes down into the raised hands
+            if (L.t >= 0.6) {
                 L.phase = 'hold';
                 L.t = 0;
                 L.side = this.magicHand || this.lastMagicHand || 'right';
-                this.spells.cast('LightningHold', this.character.group.position, _v1.set(0, 1, 0), L.side, this.localId);
-                if (this.sync) this.sync.spell('LightningHold', this.character.group.position, _v1.set(0, 1, 0), L.side);
-                this.fx.lightFlash(this.character.getHandWorldPosition(L.side), 0xdde8ff, 6, 0.3, 40);
-                this.hud.setVoice('⚡ Молния в руках! Плавно наведите руку на цель — у вас 5 секунд', true);
+                const p = ch.group.position;
+                this.spells.cast('LightningCatch', p, _v1.set(0, 1, 0), L.side, this.localId);
+                if (this.sync) this.sync.spell('LightningCatch', p, _v1.set(0, 1, 0), L.side);
+                this.spells.cast('LightningHold', p, _v1.set(0, 1, 0), L.side, this.localId);
+                if (this.sync) this.sync.spell('LightningHold', p, _v1.set(0, 1, 0), L.side);
+                this.hud.setVoice('⚡ Молния в ваших руках! Опустите руки и направьте их на цель', true);
             }
             return;
         }
-        // Aiming: the hand that points best at a creature; hold it there ~0.5 s
-        const ch = this.character;
-        let best = null;
-        for (const side of ['right', 'left']) {
-            const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
-            const dir = ch.getHandDirection(side, new THREE.Vector3());
-            for (const t of this._lightningTargets()) {
-                const to = _v2.copy(t.pos).add(_v1.set(0, 1, 0)).sub(hand);
-                const d = to.length();
-                if (d > 45 || d < 1.5) continue;
-                const ang = dir.angleTo(to.normalize());
-                if (ang < 0.22 && (!best || ang < best.ang)) best = { key: t.key, pos: t.pos, ang, side };
-            }
-        }
-        if (best && L.aim === best.key) L.aimT += dt;
-        else { L.aim = best ? best.key : null; L.aimT = 0; }
-        this.hud.setTimer?.(1 - L.t / 5, best ? '🎯' : '⚡', Math.ceil(5 - L.t), best ? Math.min(1, L.aimT / 0.5) : 0);
-        if (best && L.aimT >= 0.5) {
+        const HOLD = 8;
+        // Lowered hands pointing forward release it: at the creature in that direction, or wherever they point
+        let side = null;
+        const dir = new THREE.Vector3();
+        for (const s of [L.side, L.side === 'right' ? 'left' : 'right']) if (this._handLevel(s, dir)) { side = s; break; }
+        L.levelT = side ? (L.levelT || 0) + dt : 0;
+        this.hud.setTimer?.(1 - L.t / HOLD, side ? '🎯' : '⚡', Math.ceil(HOLD - L.t), side ? Math.min(1, L.levelT / 0.25) : 0);
+        if (side && L.levelT >= 0.25) {
             this.lightning = null;
             if (L.hammer) this.gear.hammerResult(true);
-            const point = best.pos.clone();
-            this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
-            if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
+            const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
+            let best = null;
+            for (const t of this._lightningTargets()) {
+                const tp = _v1.copy(t.pos).add(_v2.set(0, t.up, 0));
+                const to = tp.clone().sub(hand);
+                const d = to.length();
+                if (d > 50 || d < 1.5) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang < 0.38 && (!best || ang + d * 0.004 < best.score)) best = { score: ang + d * 0.004, point: t.pos.clone() };
+            }
+            let point = best?.point;
+            if (!point) {
+                const hit = this.terrain?.raycast(hand, dir, 50);
+                point = hit ? new THREE.Vector3(hit.x, hit.y, hit.z) : hand.clone().addScaledVector(dir, 30);
+            }
+            const back = hand.clone().sub(point);
+            this.spells.cast('LightningBeam', point, back, null, this.localId);
+            if (this.sync) this.sync.spell('LightningBeam', point, back, null);
             this.hud.setVoice('⚡ <span style="color:#9fd8ff">LIGHTNING STRIKE!</span>', true);
             return;
         }
-        if (L.t >= 5 && L.hammer) {
+        if (L.t >= HOLD && L.hammer) {
             // the hammer's lightning is lost (it never hurts its holder)
             this.lightning = null;
             this.gear.hammerResult(false);
             return;
         }
-        if (L.t >= 5) {
-            // Too late: it strikes you
+        if (L.t >= HOLD) {
+            // Held too long: it strikes you
             this.lightning = null;
             const point = ch.group.position.clone();
             this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
             if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
             if (this.combat.enabled) this.combat.damage(10, null, 'Lightning');
             else this.damageLocalPlayer(6);
-            this.hud.setVoice('⚡ Не успели навести — молния ударила в вас!', true);
+            this.hud.setVoice('⚡ Вы слишком долго держали молнию — она ударила в вас!', true);
         }
     }
 
@@ -1815,6 +1842,14 @@ export class Game {
     /** «Флайн» is known: everywhere but «Свободный мир», where only a scroll of flight teaches it. */
     knowsFlight() {
         return this.config.mode !== 'freeworld' || !!this.bonus?.flight;
+    }
+
+    /** Outside Creative «Lightning Strike» and «Thunderwave» are learnt from a burnt scroll only. */
+    knowsSpell(name) {
+        const base = baseSpell(name);
+        if (!SCROLL_SPELL_COLOR[base]) return true;
+        const m = this.config.mode;
+        return m === 'creative' || m === 'test' || !!this.bonus?.spells?.[base];
     }
 
     startFlight(force = false) {

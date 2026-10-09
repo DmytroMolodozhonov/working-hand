@@ -17,7 +17,7 @@
  */
 
 import * as THREE from 'three';
-import { ITEM_INFO, makeItemModel, disposeModel, rollLoot } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
 
 const PICK_RADIUS = 0.9;
 const _v = new THREE.Vector3();
@@ -314,6 +314,18 @@ export class ItemSystem {
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 6;
                 g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), 0x9fd8ff, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);
+            }
+            return;
+        }
+        if (item.stat === 'spell') {
+            g.bonus.spells = { ...(g.bonus.spells || {}), [item.spell]: true };
+            const ru = SPELL_RU[item.spell] || item.spell;
+            g.hud.setVoice?.(`📜🔥 Свиток сгорел: теперь вы знаете заклинание «${ru}»!`, true);
+            const c = g.character.group.position;
+            const col = SCROLL_SPELL_COLOR[item.spell] || 0xffe9a8;
+            for (let i = 0; i < 60; i++) {
+                const a = (i / 60) * Math.PI * 6;
+                g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), col, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);
             }
             return;
         }

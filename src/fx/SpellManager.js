@@ -187,6 +187,9 @@ export class SpellManager {
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
+            case 'LightningCatch': this.castLightningCatch(o, casterId); break;
+            // (the beam: `direction` = from the target point back to the caster's hands)
+            case 'LightningBeam': this.castLightningHit(o, casterId, o.clone().add(direction)); break;
             case 'Earthquake': this.castEarthquake(o, d, casterId, 1); break;
             case 'EarthquakeMaxima': this.castEarthquake(o, d, casterId, 3); break;
             case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
@@ -330,14 +333,22 @@ export class SpellManager {
         if (prev) prev.life = 0;
         const sky = new THREE.Vector3();
         const spell = {
-            life: 5.5,
+            life: 8.5,
             onUpdate: () => {
-                const hp = this.hooks.handPose ? this.hooks.handPose(casterId, side || 'right') : null;
-                if (!hp) return;
-                const hand = hp.origin;
-                sky.set(hand.x + 6, hand.y + 45, hand.z - 4);
-                this._jagged(sky, hand, 10, 1.6, 0.05);
-                if (Math.random() < 0.7) this.fx.spark(hand, Math.random() < 0.5 ? 0xffffff : 0x9fd8ff, 0.18, _b.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4), 0.25);
+                // the power of the storm sits in both hands: strands from the sky, arcs between the hands
+                const hands = [];
+                for (const s of ['right', 'left']) {
+                    const hp = this.hooks.handPose ? this.hooks.handPose(casterId, s) : null;
+                    if (hp) hands.push(hp.origin.clone());
+                }
+                if (!hands.length) return;
+                for (const hand of hands) {
+                    sky.set(hand.x + 6, hand.y + 45, hand.z - 4);
+                    this._jagged(sky, hand, 12, 2.2, 0.05);
+                    if (Math.random() < 0.5) this._jagged(sky, hand, 10, 3.5, 0.05);
+                    for (let k = 0; k < 2; k++) this.fx.spark(hand, Math.random() < 0.5 ? 0xffffff : 0x9fd8ff, 0.22, _b.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6), 0.3);
+                }
+                if (hands.length === 2 && Math.random() < 0.6) this._jagged(hands[0], hands[1], 5, 0.4, 0.05);
             },
             onEnd: () => { if (this._holds.get(casterId) === spell) this._holds.delete(casterId); },
         };
@@ -357,12 +368,31 @@ export class SpellManager {
         }
     }
 
-    /** The lightning strikes `point` from the sky: everything right there is hit hard. */
-    castLightningHit(point, casterId) {
+    /** The storm's lightning comes down into the caster's raised hands: a huge flash, no harm. */
+    castLightningCatch(o, casterId) {
+        const hands = [];
+        for (const s of ['right', 'left']) { const hp = this.hooks.handPose ? this.hooks.handPose(casterId, s) : null; if (hp) hands.push(hp.origin.clone()); }
+        if (!hands.length) hands.push(o.clone().add(_b.set(0, 4, 0)));
+        for (const hand of hands) {
+            const sky = new THREE.Vector3(hand.x + 8, hand.y + 70, hand.z - 5);
+            for (let k = 0; k < 4; k++) this._jagged(sky, hand, 18, 4 - k, 0.4 + k * 0.05);
+            for (let i = 0; i < 30; i++) this.fx.spark(hand, i % 3 ? 0xffffff : 0x9fd8ff, 0.3, _b.set((Math.random() - 0.5) * 10, Math.random() * 8, (Math.random() - 0.5) * 10), 0.7);
+            this.fx.lightFlash(hand, 0xdde8ff, 16, 0.6, 140);
+        }
+        this.fx.shake = Math.max(this.fx.shake, 1.5);
+        this._sound('playThunder');
+    }
+
+    /**
+     * The lightning strikes `point` — from the sky, or (`from`) out of the caster's hands
+     * in a huge crackling beam: everything right there is hit hard.
+     */
+    castLightningHit(point, casterId, from = null) {
         const hold = this._holds && this._holds.get(casterId);
         if (hold) hold.life = 0;
-        const sky = new THREE.Vector3(point.x + 8, point.y + 70, point.z - 5);
-        for (let k = 0; k < 3; k++) this._jagged(sky, point, 16, 3 - k, 0.35 + k * 0.05);
+        const sky = from ? from.clone() : new THREE.Vector3(point.x + 8, point.y + 70, point.z - 5);
+        for (let k = 0; k < (from ? 5 : 3); k++) this._jagged(sky, point, from ? 14 : 16, from ? 2.4 - k * 0.4 : 3 - k, 0.45 + k * 0.05);
+        if (from) this.fx.lightFlash(from, 0xdde8ff, 10, 0.4, 80);
         for (let k = 0; k < 6; k++) { // branches
             const mid = sky.clone().lerp(point, 0.3 + Math.random() * 0.5);
             this._jagged(mid, mid.clone().add(_b.set((Math.random() - 0.5) * 14, -6 - Math.random() * 8, (Math.random() - 0.5) * 14)), 5, 1, 0.3);

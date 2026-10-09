@@ -536,7 +536,7 @@ test('gear: bows and shields on creative pedestals, an arrow hits a zombie, shie
         hm.model.position.copy(ch.head.getWorldPosition(new T.Vector3())).add(new T.Vector3(0, 0.8, 0));
         g.gear._updateHammer(0.016);
         const charged = !!(g.lightning && g.lightning.hammer);
-        g.lightning.t = 5.1;
+        g.lightning.t = 8.1;
         const hpH = g.playerHP;
         g._updateLightning(0.016);
         return { onPedestals, zHit, stuck, hit1, magicLeft, woodenBroke, hpBefore, hpAfter, charged, failed: g.gear.hammer.failed, hpH, hpH2: g.playerHP };
@@ -785,6 +785,62 @@ test('the giant spider: Avada only 20, ice and wind do nothing, poison −7, web
     assert.ok(r.held && r.bitten === 15, `seized and bitten −5 (${r.bitten})`);
     assert.ok(r.freed, 'Protection Maxima frees');
     assert.ok(r.dead && r.wands >= 1, 'it dies and leaves a wand');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('Lightning Strike: the bolt strikes into raised hands at once, a level hand fires it at a zombie; outside Creative only a burnt scroll teaches it', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const ch = g.character;
+        g.combat.fatigue = g.combat.maxFatigue ?? 30;
+        ch.areBothHandsUp = () => true;
+        const cast = g.castLocalSpell('lightning strike', true);
+        // (counted in game time: headless frames are slow)
+        let caughtIn = 0;
+        const t0 = performance.now();
+        while (g.lightning && g.lightning.phase === 'gather' && performance.now() - t0 < 8000) { caughtIn = g.lightning.t; await frames(1); }
+        caughtIn = Math.round(caughtIn * 1000);
+        const holding = g.lightning?.phase === 'hold';
+        // a zombie straight where the hand points
+        const hand = ch.getHandWorldPosition('right', new T.Vector3());
+        const dir = ch.getHandDirection('right', new T.Vector3()).setY(0).normalize();
+        const zp = hand.clone().addScaledVector(dir, 12);
+        const z = g._createZombie(new T.Vector3(zp.x, g.collision.groundY(zp.x, zp.z), zp.z));
+        z.setSleeping?.(true);
+        const hp0 = z.hp;
+        g._handLevel = (side, out) => { if (side !== 'right') return false; out.copy(z.group.position).add(new T.Vector3(0, 1.2, 0)).sub(ch.getHandWorldPosition('right', new T.Vector3())).normalize(); return true; };
+        for (let i = 0; i < 40 && g.lightning; i++) await frames(1);
+        await frames(3);
+        const fired = !g.lightning;
+        const zHit = z.isDead || z.hp < hp0;
+        delete g._handLevel;
+        // outside Creative it needs the scroll
+        g.config.mode = 'survival';
+        g.lastSpellCastTime = 0;
+        const locked = g.castLocalSpell('lightning strike', true);
+        const lockedTw = g.knowsSpell('Thunderwave');
+        g.items.applyScroll({ kind: 'scroll', stat: 'spell', spell: 'LightningStrike' });
+        g.combat.fatigue = g.combat.maxFatigue ?? 30;
+        g.lastSpellCastTime = 0;
+        const learnt = g.castLocalSpell('lightning strike', true);
+        g.lightning = null;
+        g.config.mode = 'creative';
+        return { cast, caughtIn, holding, fired, zHit, locked, lockedTw, learnt, knows: g.bonus?.spells?.LightningStrike };
+    });
+    assert.equal(r.cast, 'LightningStrike');
+    assert.ok(r.holding && r.caughtIn < 1500, `the bolt is in the hands quickly (${r.caughtIn} ms of game time)`);
+    assert.ok(r.fired, 'a level hand fires the bolt');
+    assert.ok(r.zHit, 'the bolt hit the zombie it was aimed at');
+    assert.equal(r.locked, null, 'outside Creative it is locked without a scroll');
+    assert.equal(r.lockedTw, false, 'Thunderwave is locked as well');
+    assert.equal(r.learnt, 'LightningStrike', 'after the scroll burns it works');
+    assert.ok(r.knows);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

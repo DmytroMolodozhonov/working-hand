@@ -36,6 +36,9 @@ export const SPELL_RU = {
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот',
 };
+/** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff };
+const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
 
@@ -68,7 +71,7 @@ export function itemValue(it) {
         case 'wand': return 150 + 2 * (it.power || 0);
         case 'weapon': return it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
-        case 'scroll': return it.stat === 'flight' ? 220 : 60;
+        case 'scroll': return it.stat === 'flight' || it.stat === 'spell' ? 220 : 60;
         case 'backpack': return 30 + 5 * (it.slots || 3);
         case 'bow': return it.magic ? 90 + (it.bonus || 0) : 25;
         case 'hammer': return 300;
@@ -121,7 +124,12 @@ export function rollLoot(r = Math.random, { cave = true } = {}) {
         else if (x < 0.42) {
             const y = r();
             // (a scroll of flight teaches «Флайн» — in «Свободный мир» only so)
-            out.push(y < 0.22 ? { kind: 'scroll', uid: newUid(), stat: 'flight' } : y < 0.61 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
+            // (spell scrolls teach «Lightning Strike» / «Thunderwave» outside Creative)
+            out.push(y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'flight' }
+                : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
+                : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
+                : y < 0.70 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
+                : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
         }
         else if (x < 0.55) out.push({ kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: r() < 0.6, bonus: randInt(r, 1, 60), uid: newUid() });
         else if (x < 0.67) {
@@ -158,6 +166,7 @@ export function describeItem(it) {
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
+            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SCROLL_SPELL_COLOR[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, 'Без свитка оно есть только в Творчестве'] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: сила (усталость) +<b>${it.amount}</b> навсегда`] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
@@ -224,7 +233,7 @@ function scrollModel(it) {
     const r = cyl(0.06, 0.06, 0.36, paper);
     r.rotation.z = Math.PI / 2;
     g.add(r);
-    const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : 0x8e2b2b)); // (flight: a sky-blue ribbon)
+    const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SCROLL_SPELL_COLOR[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
     for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }
