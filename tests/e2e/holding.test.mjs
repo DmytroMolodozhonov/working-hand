@@ -189,3 +189,54 @@ test('the wand: held like a pen along the arm, the spell leaves its tip the way 
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('a scroll: the other hand opens it, it unrolls between the hands and is read; «Раскрой свои секреты» with a bare hand', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await feed(page, { arms: 'forward', rightCurl: 0.8, leftCurl: 0.2 }, 15, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.items.takeIntoHand({ kind: 'scroll', uid: 'sc1', stat: 'spell', spell: 'LightningStrike' }, 'right');
+        await frames(3);
+        const scroll = g.items.held.right.model;
+        const orig = ch.getHandWorldPosition.bind(ch);
+        const camRight = new T.Vector3(1, 0, 0).applyQuaternion(g.camera.quaternion).setY(0).normalize();
+        let apart = 0;
+        // the left hand comes to the scroll, then moves away to the left
+        ch.getHandWorldPosition = (side, out = new T.Vector3()) => (side === 'left' ? out.copy(scroll.position).addScaledVector(camRight, -0.2 - apart).setY(scroll.position.y) : orig(side, out));
+        for (let i = 0; i < 40 && !g.scrolls.r; i++) await frames(1);
+        const began = !!g.scrolls.r;
+        for (let i = 1; i <= 15; i++) { apart = i * 0.13; await frames(1); }
+        await frames(20);
+        const R = g.scrolls.r;
+        const n = new T.Vector3(0, 0, 1).applyQuaternion(R.group.quaternion);
+        const read = {
+            open: R.open, width: R.parch.scale.x, hidden: !scroll.visible, map: !!R.mat.map,
+            facing: n.dot(g.camera.position.clone().sub(R.group.position).normalize()),
+            camDist: g.camera.position.distanceTo(R.group.position),
+            stillHeld: g.items.held.right?.item.uid,
+        };
+        // hands back together: rolled up in the right fist again
+        apart = -0.15;
+        for (let i = 0; i < 60 && g.scrolls.r; i++) await frames(1);
+        const closed = { r: !!g.scrolls.r, visible: scroll.visible, held: g.items.held.right?.item.uid };
+        ch.getHandWorldPosition = orig;
+        // «Раскрой свои секреты» with no wand: the scroll in the hand is revealed
+        g.lastSpellCastTime = 0;
+        const said = g.castLocalSpell('раскрой свои секреты', true);
+        await frames(2);
+        return { began, read, closed, said, holo: !!g.wandMagic.holo };
+    });
+    assert.ok(r.began, 'the other hand took the scroll');
+    assert.ok(r.read.open > 0.8 && r.read.width > 1.5 && r.read.hidden && r.read.map, 'it unrolled between the hands ' + JSON.stringify(r.read));
+    assert.ok(r.read.facing > 0.7 && r.read.camDist < 6, 'the text looks at the reader, the camera came ' + JSON.stringify(r.read));
+    assert.equal(r.read.stillHeld, 'sc1');
+    assert.ok(!r.closed.r && r.closed.visible && r.closed.held === 'sc1', 'rolled up again in the fist ' + JSON.stringify(r.closed));
+    assert.equal(r.said, 'Reveal');
+    assert.ok(r.holo, 'a hologram about the scroll, without a wand');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

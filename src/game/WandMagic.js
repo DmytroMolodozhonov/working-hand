@@ -68,6 +68,7 @@ export class WandMagic {
     /** Voice: «Люмос», «Люмос Максима», «Нокс», «Латин Вратин», «Раскрой свои секреты». Returns a hint or the name. */
     cast(name, isFinal) {
         const g = this.game;
+        if (name === 'Reveal') { this.reveal(); return name; } // (a wand, or a bare hand)
         if (!this.wand) { if (isFinal) g.hud.setVoice('🪄 Это заклинание работает только с волшебной палочкой в руке', true); return null; }
         if (name === 'Lumos' || name === 'LumosMaxima') {
             if (!isFinal && name === 'Lumos') return null; // (wait for «Максима»)
@@ -83,7 +84,6 @@ export class WandMagic {
             g.hud.setVoice('✨ Рисуйте палочкой в воздухе (12 секунд)', true);
             return name;
         }
-        if (name === 'Reveal') { this.reveal(); return name; }
         return null;
     }
 
@@ -133,10 +133,18 @@ export class WandMagic {
     }
 
     // ------------------------------------------------------------- Reveal
-    /** «Раскрой свои секреты»: a hologram about what the wand points at. */
+    /** «Раскрой свои секреты»: a hologram about what the wand (or the bare hand) points at. */
     reveal() {
         const g = this.game;
-        const tip = this.tip(new THREE.Vector3(), _v2);
+        let tip = this.tip(new THREE.Vector3(), _v2);
+        let side = this.wand ? g.items.heldOf('wand').side : null;
+        if (!tip) {
+            // no wand: the hand that points (the raised one, else the spell hand)
+            const ch = g.character;
+            side = ['right', 'left'].find((s) => ch.isArmRaised(s) && !g.items.held[s]) || g.magicHand || g.lastMagicHand || 'right';
+            tip = ch.getHandWorldPosition(side, new THREE.Vector3());
+            ch.getHandDirection(side, _v2);
+        }
         const dir = _v2.clone();
         let target = null, at = null;
         // a thing lying / hovering where the wand points
@@ -155,15 +163,16 @@ export class WandMagic {
             const ang = dir.angleTo(to.normalize());
             if (ang < best) { best = ang; target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); }
         }
-        // the thing in the other hand, else the wand itself
+        // the thing in the other hand (or in this bare hand), else the wand itself
         if (!target) {
-            const wSide = g.items.heldOf('wand').side;
-            const other = g.items.held[wSide === 'right' ? 'left' : 'right'];
-            const ow = g.weapons.hands[wSide === 'right' ? 'left' : 'right'].held;
-            if (other) { target = other.item; at = other.model.position.clone(); }
-            else if (ow) { target = { kind: 'weapon', type: ow.type, magic: ow.magic, bonus: ow.bonus }; at = ow.position.clone(); }
-            else { target = this.wand; at = tip.clone(); }
+            for (const s of [side === 'right' ? 'left' : 'right', side]) {
+                const it = g.items.held[s], w = g.weapons.hands[s].held;
+                if (it && it.item.kind !== 'wand') { target = it.item; at = it.model.position.clone(); break; }
+                if (w) { target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); break; }
+            }
+            if (!target && this.wand) { target = this.wand; at = tip.clone(); }
         }
+        if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return; }
         this._showHologram(describeItem(target), at);
     }
 

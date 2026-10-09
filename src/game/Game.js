@@ -23,6 +23,7 @@ import { Accio } from './Accio.js';
 import { Storm } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
+import { ScrollReading } from './ScrollReading.js';
 import { BookBirds, makeBookModel } from './BookBirds.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { Swimming } from './Swimming.js';
@@ -202,6 +203,7 @@ export class Game {
         this.inventory.show(config.mode !== 'test');
         this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
         this.books = isTest ? null : new BookBirds(this); // book-birds: building spells are learned from their books
+        this.scrolls = new ScrollReading(this); // a scroll opened with both hands and read
         this.swim = new Swimming(this); // deep water: swimming, air, «Air Bubble»
         this.items = new ItemSystem(this); // wands, scrolls, shields, backpacks, bows, food… in the world and the hands
         this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
@@ -1678,6 +1680,7 @@ export class Game {
         this.items.update(dt);
         this.items.updateRemote();
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
+        this.scrolls.update(dt);
         this.wandMagic.update(dt);
         this.gear.update(dt);
         this.bleeding.update(dt);
@@ -2176,7 +2179,7 @@ export class Game {
             this.camera.position.lerp(_v1, frameAlpha(0.1, dt));
             _v2.copy(ch.group.position).add(_v1.set(0, 2, 0));
             // reading the open book: over the shoulder, the pages filling the view
-            const rc = this.books?.readCam;
+            const rc = this.books?.readCam || this.scrolls?.readCam;
             this._readK = (this._readK || 0) + ((rc ? rc.k : 0) - (this._readK || 0)) * Math.min(1, dt * 6);
             if (rc) { this._readFrom = (this._readFrom || new THREE.Vector3()).copy(rc.from); this._readAt = (this._readAt || new THREE.Vector3()).copy(rc.at); }
             if (this._readK > 0.001 && this._readFrom) {
@@ -2199,6 +2202,7 @@ export class Game {
         this.stop();
         this.inventory?.dispose();
         this.books?.dispose();
+        this.scrolls?.dispose();
         this.swim?.dispose();
         this.items?.dispose();
         this.wandMagic?.dispose();

@@ -282,7 +282,7 @@ export class ItemSystem {
             const h = this.held[side];
             if (!h) continue;
             // (not just after taking it; never a bow with an arrow on the string)
-            if (now - (h.since || 0) < 1000 || (h.item.kind === 'bow' && g.gear?.nock) || (h.item.kind === 'book' && g.books?.readingSide)) continue;
+            if (now - (h.since || 0) < 1000 || (h.item.kind === 'bow' && g.gear?.nock) || (h.item.kind === 'book' && g.books?.readingSide) || (h.item.kind === 'scroll' && g.scrolls?.readingSide)) continue;
             let peak = null;
             for (const e of hist) if (!peak || e.s > peak.s) peak = e;
             // a real throw: a fast swing (several fast moments, one way) that suddenly stops —
