@@ -88,7 +88,10 @@ export class Network extends Emitter {
                 attempts++;
                 const code = slots ? slotCode(attempts) : fixedCode || randomCode();
                 const peer = new Peer(PREFIX + code, parseServer(server));
+                // (no answer from the connection server: say so instead of waiting for ever)
+                const timer = setTimeout(() => fail({ type: 'timeout' }), 20000);
                 const fail = (err) => {
+                    clearTimeout(timer);
                     peer.destroy();
                     if (err?.type === 'unavailable-id' && slots && attempts < SERVER_SLOTS) tryCode();
                     else if (err?.type === 'unavailable-id' && slots) reject(Object.assign(new Error('Все места для серверов заняты — попробуйте позже'), { type: 'full' }));
@@ -97,6 +100,7 @@ export class Network extends Emitter {
                 };
                 peer.once('error', fail);
                 peer.once('open', () => {
+                    clearTimeout(timer);
                     peer.off('error', fail);
                     this.peer = peer;
                     this.role = 'host';
@@ -373,7 +377,7 @@ function humanError(err) {
         case 'server-error': return 'Сервер соединения недоступен';
         case 'unavailable-id': return 'Код занят, попробуйте ещё раз';
         case 'browser-incompatible': return 'Браузер не поддерживает WebRTC';
-        case 'timeout': return 'Превышено время ожидания подключения';
+        case 'timeout': return 'Нет ответа от сервера связи — проверьте интернет (или попробуйте другой VPN / без VPN) и повторите';
         case 'socket-error': case 'socket-closed': return 'Соединение с сервером прервано';
         default: return err?.message || String(err || 'Ошибка сети');
     }

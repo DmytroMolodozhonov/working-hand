@@ -678,7 +678,8 @@ $('mp-host-btn').addEventListener('click', async () => {
     try {
         await net.host(playerName(), mpServer.value, null, { slots: true });
         net.info = { name: srvName, mode, playing: false };
-        setMpStatus('🟢 Сервер создан — он виден всем в списке. Запускаем...');
+        setMpStatus(`🟢 Сервер создан — он виден всем в списке. Код: <span class="mp-code-big">${net.code}</span> (если друг не видит сервер — пусть войдёт по коду). Запускаем...`);
+        showCodeInGame(net.code);
         selectedMode = mode;
         selectedMap = null;
         startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: srvName });
@@ -687,18 +688,36 @@ $('mp-host-btn').addEventListener('click', async () => {
     }
 });
 
-// Private game by code (old way)
+// A game by code: works even when the server list can't be seen (a bad line, a VPN)
 $('mp-private-btn').addEventListener('click', async () => {
-    setMpStatus('Создаём закрытую комнату...');
+    net.stopProbe();
+    const savedId = $('mp-world')?.value || '';
+    const saved = savedId ? await loadWorld(savedId) : null;
+    const mode = saved ? saved.mode : $('mp-mode').value;
+    setMpStatus('Создаём игру по коду...');
     try {
         const code = await net.host(playerName(), mpServer.value);
-        net.info = { name: 'Закрытая игра', mode: selectedMode, playing: false };
-        setMpStatus(`Код комнаты: <span class="mp-code-big">${code}</span><br>Отправьте его друзьям, выберите режим во вкладке «Одиночная игра» и нажмите «ИГРАТЬ».`);
+        net.info = { name: 'Игра по коду', mode, playing: false };
+        setMpStatus(`🔑 Код вашей игры: <span class="mp-code-big">${code}</span><br>Скажите его другу: «Мультиплеер» → «Войти по коду». Запускаем игру...`);
         renderPlayers();
+        selectedMode = mode;
+        selectedMap = null;
+        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: 'Игра ' + code });
+        showCodeInGame(code);
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
     }
 });
+
+/** The host sees the room code in the game for a while (to tell friends). */
+function showCodeInGame(code) {
+    let n = 0;
+    const t = setInterval(() => {
+        n++;
+        if (game?.active && game.hud?.notify) { game.hud.notify(`🔑 Код игры: ${code} — друг входит: «Мультиплеер» → «Войти по коду»`); clearInterval(t); }
+        else if (n > 60) clearInterval(t);
+    }, 1000);
+}
 
 $('mp-join-btn').addEventListener('click', async () => {
     const code = (mpCode.value || '').trim().toUpperCase();

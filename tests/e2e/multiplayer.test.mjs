@@ -47,7 +47,9 @@ const ev = (page, fn, arg) => page.evaluate(fn, arg);
 
 test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, late join', async () => {
     const host = await openPlayer('Хост');
-    await host.page.click('#mp-private-btn');
+    await host.page.selectOption('#mp-mode', 'creative');
+    await host.page.selectOption('#mp-mode', 'creative');
+    await host.page.click('#mp-private-btn'); // (the game by code starts at once; the code is shown) // (the game by code starts at once; the code is shown)
     await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
     const code = await host.page.textContent('.mp-code-big');
     assert.match(code, /^[A-Z2-9]{5}$/);
@@ -58,8 +60,7 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
     await wf(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
     await wf(host.page, () => document.getElementById('mp-players').textContent.includes('Гость'), null, 15000);
 
-    // Host starts creative → guest starts automatically with the same world
-    await host.page.click('[data-tab="tab-game"]'); await host.page.click('#start-btn');
+    // The host is already playing (creative) → the guest starts with the same world
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     const seeds = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.seed)));

@@ -212,7 +212,9 @@ async function openPlayer(name) {
 test('beds in multiplayer: a guest creates and repaints (the host decides), both lie down → the night passes for both', async () => {
     peerServer = PeerServer({ port: PEER_PORT, path: '/zns', host: '127.0.0.1' });
     const host = await openPlayer('Хост');
-    await host.page.click('#mp-private-btn');
+    await host.page.selectOption('#mp-mode', 'creative');
+    await host.page.selectOption('#mp-mode', 'creative');
+    await host.page.click('#mp-private-btn'); // (the game by code starts at once; the code is shown) // (the game by code starts at once; the code is shown)
     await waitFor(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
     const code = await host.page.textContent('.mp-code-big');
     const guest = await openPlayer('Гость');
@@ -220,8 +222,6 @@ test('beds in multiplayer: a guest creates and repaints (the host decides), both
     await guest.page.click('#mp-join-btn');
     await waitFor(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
     await waitFor(host.page, () => document.getElementById('mp-players').textContent.includes('Гость'), null, 15000);
-    await host.page.click('[data-tab="tab-game"]');
-    await host.page.click('#start-btn');
     await waitFor(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await waitFor(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await waitFor(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);

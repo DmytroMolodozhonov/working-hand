@@ -1423,3 +1423,8 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #boss-bar .boss-name { color: #ff6b6b; font-weight: bold; text-shadow: 0 0 4px #000, 0 1px 2px #000; margin-bottom: 4px; }
 #boss-bar .boss-track { height: 12px; background: rgba(0, 0, 0, 0.6); border: 2px solid rgba(255, 255, 255, 0.6); border-radius: 7px; overflow: hidden; }
 #boss-bar .boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #5cff3a, #1f8a1f); transition: width 0.2s; }
+
+#mp-bycode { margin-top: 10px; padding: 10px 14px; }
+#mp-bycode .mp-bycode-title { font-weight: bold; margin-bottom: 6px; }
+#mp-bycode .mp-hint { font-weight: normal; opacity: 0.75; font-size: 0.9em; }
+#mp-bycode #mp-code { text-transform: uppercase; letter-spacing: 3px; width: 9em; font-size: 1.1em; }
