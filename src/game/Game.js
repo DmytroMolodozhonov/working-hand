@@ -1586,7 +1586,9 @@ export class Game {
             // on a server: its name on the map and a mark at its start point
             const online = this.net && this.net.active;
             const server = online ? { name: (this.net.isHost ? this.net.info?.name : this.net.serverName) || 'Сервер', players: this.remotes.size + 1, home: this.world.mapResult?.playerSpawn || { x: 0, z: 0 } } : null;
-            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server);
+            const castleIdx = this.world.terrain?.data?.castles;
+            const castles = castleIdx ? castleIdx.nearestForMap(cp) : [];
+            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
         }
 

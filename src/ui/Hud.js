@@ -256,7 +256,7 @@ export class Hud {
         ti.version = d.version;
     }
 
-    drawMinimap(charPos, rotY, world, zombies, others = [], server = null) {
+    drawMinimap(charPos, rotY, world, zombies, others = [], server = null, castles = []) {
         const ctx = this.mmCtx;
         if (!ctx) return;
         const cvs = this.el.minimap;
@@ -306,6 +306,28 @@ export class Hud {
         ctx.font = 'bold 10px sans-serif';
         ctx.textAlign = 'center';
         const label = (text, x, y) => { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(text, x, y); ctx.fillText(text, x, y); };
+        // Castles: a little castle with the name; far ones — an arrow on the edge with the distance
+        const edgeArrow = (dx, dy, fill, stroke, text) => {
+            const a = Math.atan2(dy, dx);
+            const k = Math.min((hw - 9) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - 9) / Math.max(1e-6, Math.abs(Math.sin(a))));
+            ctx.save();
+            ctx.translate(Math.cos(a) * k, Math.sin(a) * k);
+            ctx.rotate(a);
+            ctx.fillStyle = fill; ctx.strokeStyle = stroke; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.restore();
+            const tx = Math.max(-hw + 36, Math.min(hw - 36, Math.cos(a) * (k - 16))), ty = Math.max(-hh + 10, Math.min(hh - 4, Math.sin(a) * (k - 16) + 3));
+            label(text, tx, ty);
+        };
+        this.minimapCastles = [];
+        for (const c of castles.slice(0, 2)) {
+            const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
+            this.minimapCastles.push(c.name);
+            if (inside(cx, cz, 10)) {
+                // (the walls are drawn by the terrain picture already: just the name)
+                label('🏰 ' + c.name.replace(/^(Замок|Крепость) /, ''), cx, Math.max(-hh + 12, cz - 10));
+            } else edgeArrow(cx, cz, '#c9c4b8', '#3b3b3b', `🏰 ${Math.round(Math.hypot(cx, cz) / scale)} м`);
+        }
         // The server: a flag at its start point (an arrow on the edge when far)
         this.minimapServer = server ? server.name : null;
         if (server && server.home) {

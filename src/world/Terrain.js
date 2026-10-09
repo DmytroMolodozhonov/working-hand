@@ -23,12 +23,21 @@
 import * as THREE from 'three';
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
 import { applyVoxelDetail } from './VoxelShading.js';
+import { CastleIndex } from './Castles.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
     // five kinds of trees (oak = WOOD / LEAVES)
     BIRCH: 12, BIRCH_LEAVES: 13, SPRUCE: 14, SPRUCE_LEAVES: 15, CHERRY: 16, CHERRY_LEAVES: 17, DARK: 18, DARK_LEAVES: 19,
+    // castles and villages (src/world/Castles.js): five kinds of castle stone and the rest
+    CS_GREY: 20, CS_SAND: 21, CS_DARK: 22, CS_WHITE: 23, CS_MOSSY: 24, COBBLE: 25, BRICK: 26,
+    PLANKS: 27, PLANKS_DARK: 28, ROOF_RED: 29, ROOF_BLUE: 30, ROOF_SLATE: 31, THATCH: 32,
+    CARPET_RED: 33, GOLD: 34, FARMLAND: 35, WHEAT: 36, PATH: 37, CARPET_BLUE: 38, CARPET_GREEN: 39,
+    LANTERN: 40, HAY: 41, CLOTH_WHITE: 42, BOOKS: 43, CLOTH_YELLOW: 44,
 };
+/** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11 };
+const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
     { name: 'Дуб', wood: BLOCK.WOOD, leaves: BLOCK.LEAVES },
@@ -37,10 +46,10 @@ export const TREE_KINDS = [
     { name: 'Вишня', wood: BLOCK.CHERRY, leaves: BLOCK.CHERRY_LEAVES },
     { name: 'Тёмный дуб', wood: BLOCK.DARK, leaves: BLOCK.DARK_LEAVES },
 ];
-export const isWood = (t) => t === BLOCK.WOOD || t === BLOCK.BIRCH || t === BLOCK.SPRUCE || t === BLOCK.CHERRY || t === BLOCK.DARK;
+export const isWood = (t) => t === BLOCK.WOOD || t === BLOCK.BIRCH || t === BLOCK.SPRUCE || t === BLOCK.CHERRY || t === BLOCK.DARK || t === BLOCK.PLANKS || t === BLOCK.PLANKS_DARK;
 export const isLeaves = (t) => t === BLOCK.LEAVES || t === BLOCK.BIRCH_LEAVES || t === BLOCK.SPRUCE_LEAVES || t === BLOCK.CHERRY_LEAVES || t === BLOCK.DARK_LEAVES;
 /** Burns (wood and leaves of every tree). */
-export const isFlammable = (t) => isWood(t) || isLeaves(t);
+export const isFlammable = (t) => isWood(t) || isLeaves(t) || t === BLOCK.THATCH || t === BLOCK.HAY || t === BLOCK.WHEAT || t === BLOCK.BOOKS;
 // ICE_SHAPE: solid space inside frozen water shapes (drawn by WaterMagic, not as cubes)
 
 /** Water is not solid: you can see, walk and shoot through it. */
@@ -69,7 +78,43 @@ export const BASE_COLORS = {
     [BLOCK.CHERRY_LEAVES]: 0xf2a7c3,
     [BLOCK.DARK]: 0x3e2716,
     [BLOCK.DARK_LEAVES]: 0x2d4f1e,
+    [BLOCK.CS_GREY]: 0x9a9893,
+    [BLOCK.CS_SAND]: 0xcdb27f,
+    [BLOCK.CS_DARK]: 0x575a60,
+    [BLOCK.CS_WHITE]: 0xe2ddd0,
+    [BLOCK.CS_MOSSY]: 0x7f8a72,
+    [BLOCK.COBBLE]: 0x828079,
+    [BLOCK.BRICK]: 0xa8553c,
+    [BLOCK.PLANKS]: 0xb07c45,
+    [BLOCK.PLANKS_DARK]: 0x6e4a2a,
+    [BLOCK.ROOF_RED]: 0xa63a2c,
+    [BLOCK.ROOF_BLUE]: 0x3b5b9a,
+    [BLOCK.ROOF_SLATE]: 0x4a505c,
+    [BLOCK.THATCH]: 0xc9a54e,
+    [BLOCK.CARPET_RED]: 0xb3202c,
+    [BLOCK.GOLD]: 0xe8b830,
+    [BLOCK.FARMLAND]: 0x5e3f22,
+    [BLOCK.WHEAT]: 0xd8b84a,
+    [BLOCK.PATH]: 0xa89068,
+    [BLOCK.CARPET_BLUE]: 0x2f4fa8,
+    [BLOCK.CARPET_GREEN]: 0x2f7a3e,
+    [BLOCK.LANTERN]: 0xffd36b,
+    [BLOCK.HAY]: 0xd9b444,
+    [BLOCK.CLOTH_WHITE]: 0xf0ece2,
+    [BLOCK.BOOKS]: 0x7a4a2a,
+    [BLOCK.CLOTH_YELLOW]: 0xe9c43a,
 };
+Object.assign(PATTERN_OF, {
+    [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
+    [BLOCK.CS_MOSSY]: PATTERN.COBBLE, [BLOCK.COBBLE]: PATTERN.COBBLE, [BLOCK.PATH]: PATTERN.COBBLE, [BLOCK.BRICK]: PATTERN.BRICK,
+    [BLOCK.PLANKS]: PATTERN.PLANKS, [BLOCK.PLANKS_DARK]: PATTERN.PLANKS,
+    [BLOCK.ROOF_RED]: PATTERN.TILES, [BLOCK.ROOF_BLUE]: PATTERN.TILES, [BLOCK.ROOF_SLATE]: PATTERN.TILES,
+    [BLOCK.THATCH]: PATTERN.STRAW, [BLOCK.HAY]: PATTERN.STRAW, [BLOCK.WHEAT]: PATTERN.STRAW,
+    [BLOCK.CARPET_RED]: PATTERN.CLOTH, [BLOCK.CARPET_BLUE]: PATTERN.CLOTH, [BLOCK.CARPET_GREEN]: PATTERN.CLOTH, [BLOCK.CLOTH_WHITE]: PATTERN.CLOTH, [BLOCK.CLOTH_YELLOW]: PATTERN.CLOTH,
+    [BLOCK.GOLD]: PATTERN.GOLD, [BLOCK.FARMLAND]: PATTERN.FURROWS, [BLOCK.BOOKS]: PATTERN.BOOKS, [BLOCK.LANTERN]: PATTERN.GLOW,
+});
+/** The shader pattern of a block type. */
+export const patternOf = (t) => PATTERN_OF[t] || 0;
 // a few shades per kind so crowns and trunks don't look like plastic boxes
 const SHADES = {
     [BLOCK.WOOD]: [0x8B4513, 0x7a3d12, 0x8f5020, 0x80461a, 0x8B4513],
@@ -196,7 +241,22 @@ export class TerrainData {
     generate({ seed = 1, mountains = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
-        this.heightAt = createHeightField(seed, mountains);
+        const raw = createHeightField(seed, mountains);
+        this.castles = null;
+        if (mountains) {
+            // castles and their villages stand on levelled land
+            const idx = this.castles = new CastleIndex(seed, raw);
+            const fn = (ix, iz) => {
+                const h = raw(ix, iz);
+                const land = idx.landAt(ix, iz);
+                if (!land || (land.w < 1 && raw.water)) { fn.water = raw.water; return h; } // (rivers keep their banks)
+                fn.water = 0;
+                const F = land.castle.F;
+                return land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w));
+            };
+            fn.water = 0;
+            this.heightAt = fn;
+        } else this.heightAt = raw;
         this._caves = new Map();
         this.chunks.clear();
         this._last = null;
@@ -255,8 +315,42 @@ export class TerrainData {
         let minOpen = MAX_LAYER;
         for (let i = 0; i < top.length; i++) if (top[i] + 1 < minOpen) minOpen = top[i] + 1;
         const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen };
-        if (this.mountains) { this._carveCaves(c); this._plantTrees(c); }
+        if (this.mountains) { this._carveCaves(c); this._buildCastles(c); this._plantTrees(c); }
         return c;
+    }
+
+    /** Castle, village and market blocks that fall into this chunk. */
+    _buildCastles(c) {
+        const lists = this.castles.partsForChunk(c.cx, c.cz, CHUNK);
+        if (!lists.length) return;
+        const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
+        const blocks = c.blocks;
+        let maxTop = c.maxTop, minOpen = c.minOpen;
+        for (const list of lists) {
+            for (const p of list) {
+                const ax = Math.max(p.x0, x0), bx = Math.min(p.x1, x0 + CHUNK - 1);
+                const az = Math.max(p.z0, z0), bz = Math.min(p.z1, z0 + CHUNK - 1);
+                const L0 = Math.max(p.L0, MIN_LAYER + 1), L1 = Math.min(p.L1, MAX_LAYER);
+                if (ax > bx || az > bz || L0 > L1) continue;
+                const t = p.t;
+                const cyl = p.k === 1;
+                const r2 = cyl ? p.r * p.r + p.r * 0.6 : 0, h2 = cyl && p.hr >= 0 ? p.hr * p.hr + p.hr * 0.6 : -1;
+                for (let z = az; z <= bz; z++) {
+                    for (let x = ax; x <= bx; x++) {
+                        if (cyl) {
+                            const d2 = (x - p.cx) * (x - p.cx) + (z - p.cz) * (z - p.cz);
+                            if (d2 > r2 || d2 <= h2) continue;
+                        }
+                        const col = (z - z0) * CHUNK + (x - x0);
+                        for (let L = L0; L <= L1; L++) blocks[(L - MIN_LAYER) * CHUNK * CHUNK + col] = t;
+                    }
+                }
+                if (t !== BLOCK.AIR) { if (L1 > maxTop) maxTop = L1; } else if (L0 < minOpen) minOpen = L0;
+            }
+        }
+        c.maxTop = maxTop;
+        c.minOpen = minOpen;
+        for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) this._refreshTop(c, lx, lz);
     }
 
     // ------------------------------------------------------------ caves
@@ -375,6 +469,7 @@ export class TerrainData {
                 const tx = gx * TREE_CELL + 2 + Math.floor(hash01(gz, gx, this.seed + 7) * (TREE_CELL - 6));
                 const tz = gz * TREE_CELL + 2 + Math.floor(hash01(gx + 911, gz - 37, this.seed) * (TREE_CELL - 6));
                 if (Math.hypot(tx, tz) < TREE_MIN_DIST) continue;
+                if (this.castles && (this.castles.landAt(tx, tz) || this.castles.landAt(tx + 1, tz + 1))) continue; // no trees in villages
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
                 // Only on level dry ground (the 2×2 trunk and its surroundings)
@@ -730,13 +825,13 @@ export class TerrainData {
                         let key = 0, kind = 0;
                         if (drawn(a) && !drawn(bRaw)) {
                             const L = ay + lowest;
-                            key = this.faceColor(a, x0 + ax, L, z0 + az, d === 1) + 1;
+                            key = this.faceColor(a, x0 + ax, L, z0 + az, d === 1) + 1 + (PATTERN_OF[a] || 0) * 0x1000000;
                             kind = L >= 1 ? 1 : 0;
                         } else if (drawn(b) && !drawn(aRaw)) {
                             const L = ay + qy + lowest;
                             // skip the bottom of the bedrock layer
                             if (!(d === 1 && L === MIN_LAYER)) {
-                                key = -(this.faceColor(b, x0 + ax + qx, L, z0 + az + qz, false) + 1);
+                                key = -(this.faceColor(b, x0 + ax + qx, L, z0 + az + qz, false) + 1 + (PATTERN_OF[b] || 0) * 0x1000000);
                                 kind = L >= 1 ? 1 : 0;
                             }
                         } else if (a === BLOCK.WATER && (bRaw === BLOCK.AIR || bRaw === BLOCK.ICE_SHAPE)) {
@@ -772,7 +867,8 @@ export class TerrainData {
                         const target = kindC === 2 ? out.water : kindC === 1 ? out.raised : out.ground;
                         // The water surface sits a little below the ground around it
                         const drop = kindC === 2 && d === 1 && col > 0 ? 0.12 : 0;
-                        pushQuad(target, origin, pos, du, dv, d, col > 0, Math.abs(col) - 1, drop);
+                        const code = Math.abs(col) - 1;
+                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24);
                         for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * su] = 0;
                         i += w; n += w;
                     }
@@ -784,11 +880,11 @@ export class TerrainData {
 }
 
 function newBuffers() {
-    return { positions: [], normals: [], colors: [], indices: [] };
+    return { positions: [], normals: [], colors: [], indices: [], patterns: [], patterned: false };
 }
 
 /** Convert grid-space quad to world space and append it. */
-function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0) {
+function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0) {
     // grid -> world: x_w = gx - 0.5, y_w = gy - 1.5, z_w = gz - 0.5 (gx = origin + local)
     const base = buf.positions.length / 3;
     const px = origin[0] + pos[0] - 0.5, py = origin[1] + pos[1] - 1.5 - drop, pz = origin[2] + pos[2] - 0.5;
@@ -803,7 +899,9 @@ function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0) {
     for (let k = 0; k < 4; k++) {
         buf.normals.push(nx, ny, nz);
         buf.colors.push(r, g, b);
+        buf.patterns.push(pattern);
     }
+    if (pattern) buf.patterned = true;
     // Winding: (u, v, d) is a right-handed cyclic triple, so u×v = +d.
     if (positive) buf.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     else buf.indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
@@ -966,6 +1064,8 @@ export class Terrain {
         geo.setAttribute('position', new THREE.Float32BufferAttribute(buf.positions, 3));
         geo.setAttribute('normal', new THREE.Float32BufferAttribute(buf.normals, 3));
         geo.setAttribute('color', new THREE.Float32BufferAttribute(buf.colors, 3));
+        // castle stone, planks, roof tiles... (always set: one shader for every chunk)
+        geo.setAttribute('voxPat', new THREE.Float32BufferAttribute(buf.patterns, 1));
         geo.setIndex(buf.indices);
         geo.computeBoundingSphere();
         geo.computeBoundingBox();
