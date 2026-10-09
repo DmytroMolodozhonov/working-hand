@@ -217,7 +217,10 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with open(PERF_LOG, "a", encoding="utf-8") as f:
                     f.write(time.strftime("%H:%M:%S ") + line + "\n")
                 if not line.startswith("==="):
-                    print("  [FPS] " + line[:150])
+                    # the short version: FPS, frame times and the camera network first
+                    parts = line.split(" | ")
+                    short = " | ".join([p for p in parts if p.startswith(("FPS", "кадр", "ИИ", "рывки"))])
+                    print("  [FPS] " + (short or line)[:200])
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/maps":

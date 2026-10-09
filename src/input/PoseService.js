@@ -70,9 +70,9 @@ export class PoseService {
         this._quality = quality;
         this._engine = engine;
         if (config.delegate !== undefined) this._delegate = delegate;
-        if (engine === 'classic') {
+        if (engine === 'classic' || engine === 'classic-main') {
             try {
-                await this._startHolistic(quality);
+                await this._startHolistic(quality, engine === 'classic-main');
             } catch (e) {
                 console.warn('[PoseService] Holistic failed, using the new networks:', e?.message || e);
                 this._engine = 'tasks';
@@ -97,14 +97,14 @@ export class PoseService {
      * smooth, steady feel the game was tuned with. Runs in its own thread
      * (holistic.worker.js); on the main thread only if a worker can't start.
      */
-    async _startHolistic(quality) {
+    async _startHolistic(quality, onGameThread = false) {
         this._closeModels();
         this._status('Загрузка нейросети...');
         const dir = this.baseUrl + 'vendor/mediapipe-holistic/';
         // Its own thread first: then the game never waits for the camera (the main reason
         // a strong computer still lost frames); the game's thread only as a fallback.
         let started = false;
-        if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !globalThis.__ZNS_HOLISTIC_MAIN__) {
+        if (!onGameThread && typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !globalThis.__ZNS_HOLISTIC_MAIN__) {
             try {
                 this.holisticWorker = await this._spawnHolisticWorker(dir, quality);
                 this.stats.mode = 'holistic';
@@ -141,13 +141,12 @@ export class PoseService {
     }
 
     _onHolisticWorker(msg) {
+        if (msg.type === 'result' || msg.type === 'dropped' || msg.type === 'error') this._hwOut = Math.max(0, (this._hwOut || 0) - 1);
         if (msg.type === 'result') {
-            this.inFlight = false;
             this.lastSendEnd = performance.now();
             if (msg.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + msg.cost * 0.1 : msg.cost;
             if (!msg.empty) this._onHolistic(msg);
         } else if (msg.type === 'error') {
-            this.inFlight = false;
             this._frameErrors = (this._frameErrors || 0) + 1;
             if (this._frameErrors < 5) console.warn('[PoseService] Holistic worker frame failed:', msg.message);
         }
@@ -309,6 +308,7 @@ export class PoseService {
     _closeModels() {
         if (this.holistic) { try { this.holistic.close(); } catch (e) { /* ignore */ } this.holistic = null; }
         if (this.holisticWorker) { this.holisticWorker.postMessage({ type: 'close' }); this.holisticWorker.terminate(); this.holisticWorker = null; }
+        this._hwOut = 0;
         if (this.handWorker) { this.handWorker.terminate(); this.handWorker = null; }
         this._helperHands = null;
         if (this.worker) { this.worker.postMessage({ type: 'close' }); this.worker.terminate(); this.worker = null; }
@@ -438,22 +438,22 @@ export class PoseService {
         this.stats.frames++;
         const ts = performance.now();
         if (this.holisticWorker) {
-            // its own thread: every camera frame it can take (one at a time), the game is not touched
-            if (ts - (this._holisticAt || 0) < 30) { this.stats.frames--; return; }
+            // its own thread: every camera frame; up to two on the way (one being recognised,
+            // the next one waiting there), so the network never waits for the next picture
+            if ((this._hwOut || 0) >= 2 || ts - (this._holisticAt || 0) < 25) { this.stats.frames--; return; }
             this._holisticAt = ts;
             this._sendHandHelper(v, ts);
-            this.inFlight = true;
+            this._hwOut = (this._hwOut || 0) + 1;
             this.lastSendStart = ts;
             try {
                 const bitmap = await createImageBitmap(v);
                 if (this.holisticWorker) this.holisticWorker.postMessage({ type: 'frame', bitmap, ts }, [bitmap]);
-                else { bitmap.close?.(); this.inFlight = false; }
+                else { bitmap.close?.(); this._hwOut = 0; }
             } catch (e) {
-                this.inFlight = false;
+                this._hwOut = Math.max(0, this._hwOut - 1);
             }
             // (a lost answer must not stop the camera for good)
-            const sent = ts;
-            setTimeout(() => { if (this.inFlight && this.lastSendStart === sent) this.inFlight = false; }, 1500);
+            if (!this._hwWatch) this._hwWatch = setInterval(() => { if (this._hwOut && performance.now() - (this.lastSendEnd || 0) > 1500 && performance.now() - this.lastSendStart > 1500) this._hwOut = 0; }, 1000);
         } else if (this.holistic) {
             // Holistic shares the game's thread: ~22 recognitions a second are plenty
             // (motion between them is blended), the rest of the time goes to the game.

@@ -42,6 +42,22 @@ self.document = {
 let holistic = null;
 let pending = null; // {ts, t0} of the frame being recognised
 
+let busy = false, next = null;
+async function run(msg) {
+    busy = true;
+    try {
+        pending = { ts: msg.ts, t0: performance.now() };
+        await holistic.send({ image: msg.bitmap });
+        if (pending) { pending = null; self.postMessage({ type: 'result', ts: msg.ts, cost: 0, empty: true }); } // (no answer for this frame)
+    } catch (e) {
+        self.postMessage({ type: 'error', message: String(e?.message || e), during: 'frame' });
+    } finally {
+        msg.bitmap?.close?.();
+        busy = false;
+    }
+    if (next && holistic) { const n = next; next = null; await run(n); }
+}
+
 /** Only the plain landmark numbers travel back (nothing else can be copied to the page). */
 const pts = (list) => (list ? list.map((p) => ({ x: p.x, y: p.y, z: p.z, visibility: p.visibility })) : null);
 
@@ -73,10 +89,14 @@ self.onmessage = async (event) => {
             self.postMessage({ type: 'ready' });
         } else if (msg.type === 'frame') {
             if (!holistic) { msg.bitmap?.close?.(); self.postMessage({ type: 'error', message: 'not ready', during: 'frame' }); return; }
-            pending = { ts: msg.ts, t0: performance.now() };
-            await holistic.send({ image: msg.bitmap });
-            msg.bitmap.close?.();
-            if (pending) { pending = null; self.postMessage({ type: 'result', ts: msg.ts, cost: 0, empty: true }); } // (no answer for this frame)
+            // the next camera frame waits here while one is being recognised (only the newest:
+            // an older waiting one is dropped) — the network never sits idle between frames
+            if (busy) {
+                if (next) { next.bitmap?.close?.(); self.postMessage({ type: 'dropped' }); }
+                next = msg;
+                return;
+            }
+            await run(msg);
         } else if (msg.type === 'close') {
             try { holistic?.close(); } catch (e) { /* ignore */ }
             holistic = null;
