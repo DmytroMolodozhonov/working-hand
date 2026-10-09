@@ -219,7 +219,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if not line.startswith("==="):
                     # the short version: FPS, frame times and the camera network first
                     parts = line.split(" | ")
-                    short = " | ".join([p for p in parts if p.startswith(("FPS", "кадр", "ИИ", "рывки"))])
+                    short = " | ".join([p for p in parts if p.startswith(("FPS", "кадр", "ИИ", "вызовов", "графика", "рывки"))])
                     print("  [FPS] " + (short or line)[:300])
                 return self._json(200, {"status": "ok"})
 
