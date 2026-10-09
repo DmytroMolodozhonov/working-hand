@@ -94,8 +94,9 @@ export class PoseService {
     /**
      * The original game's recognition: one MediaPipe Holistic network (pose,
      * hands, face together) with its built-in landmark smoothing — the
-     * smooth, steady feel the game was tuned with. Runs in its own thread
-     * (holistic.worker.js); on the main thread only if a worker can't start.
+     * smooth, steady feel the game was tuned with. Runs in its own thread on
+     * the graphics card (Holistic Landmarker, vision.worker.js); the old library
+     * on the game's thread if that can't start or turns out slow.
      */
     async _startHolistic(quality, onGameThread = false) {
         this._closeModels();
@@ -106,10 +107,10 @@ export class PoseService {
         let started = false;
         if (!onGameThread && typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !globalThis.__ZNS_HOLISTIC_MAIN__) {
             try {
-                this.holisticWorker = await this._spawnHolisticWorker(dir, quality);
+                this.holisticWorker = await this._spawnHolisticWorker(quality);
                 this.stats.mode = 'holistic';
                 this.stats.thread = 'worker';
-                this.stats.delegate = 'GPU';
+                this._holisticDir = dir;
                 started = true;
             } catch (e) {
                 console.warn('[PoseService] Holistic worker failed, running it on the game thread:', e?.message || e);
@@ -119,15 +120,25 @@ export class PoseService {
         this._startHandHelper(quality);
     }
 
-    _spawnHolisticWorker(dir, quality) {
+    /**
+     * Holistic in a worker: MediaPipe's Holistic Landmarker (the same network,
+     * made for workers) on the graphics card. (The old Holistic library can't use
+     * the graphics card from a worker — there it was 10× slower.)
+     */
+    _spawnHolisticWorker(quality) {
         return new Promise((resolve, reject) => {
-            const worker = new Worker(new URL('./holistic.worker.js', import.meta.url));
+            const worker = new Worker(new URL('./vision.worker.js', import.meta.url), { type: 'module' });
             const timeout = setTimeout(() => { worker.terminate(); reject(new Error('holistic worker init timeout')); }, 90000);
             worker.onmessage = (ev) => {
                 const msg = ev.data;
                 if (msg.type === 'ready') {
                     clearTimeout(timeout);
-                    worker.onmessage = (e) => { if (worker === this.holisticWorker) this._onHolisticWorker(e.data); };
+                    this.stats.delegate = msg.delegate;
+                    worker.onmessage = (e) => {
+                        if (worker !== this.holisticWorker) return;
+                        const m = e.data;
+                        this._onHolisticWorker(m.type === 'result' ? { type: 'result', ...m.result } : m);
+                    };
                     resolve(worker);
                 } else if (msg.type === 'error') {
                     clearTimeout(timeout);
@@ -136,7 +147,7 @@ export class PoseService {
                 }
             };
             worker.onerror = (e) => { clearTimeout(timeout); worker.terminate(); reject(new Error(e.message || 'holistic worker error')); };
-            worker.postMessage({ type: 'init', dir, quality });
+            worker.postMessage({ type: 'init', baseUrl: this.baseUrl, quality, delegate: 'GPU', holistic: true, allowCpuHolistic: !!globalThis.__ZNS_ALLOW_CPU_HOLISTIC__ });
         });
     }
 
@@ -146,6 +157,14 @@ export class PoseService {
             this.lastSendEnd = performance.now();
             if (msg.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + msg.cost * 0.1 : msg.cost;
             if (!msg.empty) this._onHolistic(msg);
+            // too slow in the worker on this computer (no graphics card for it): the game's thread
+            if (this.stats.results > 30 && this.stats.avgCost > 110 && !this._fellBack && !globalThis.__ZNS_ALLOW_CPU_HOLISTIC__) {
+                this._fellBack = true;
+                console.warn(`[PoseService] Holistic in the worker: ${this.stats.avgCost.toFixed(0)} ms a frame — back to the game thread`);
+                const q = this._quality;
+                this._closeModels();
+                this._startHolisticMain(this._holisticDir || this.baseUrl + 'vendor/mediapipe-holistic/', q).then(() => this._startHandHelper(q));
+            }
         } else if (msg.type === 'error') {
             this._frameErrors = (this._frameErrors || 0) + 1;
             if (this._frameErrors < 5) console.warn('[PoseService] Holistic worker frame failed:', msg.message);

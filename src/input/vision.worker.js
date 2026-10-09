@@ -17,7 +17,8 @@ self.onmessage = async (event) => {
         if (msg.type === 'init') {
             if (msg.delegate) self.__ZNS_DELEGATE__ = msg.delegate;
             runner = new VisionRunner(msg.baseUrl);
-            const info = await runner.init({ quality: msg.quality, useModule: true, handsOnly: !!msg.handsOnly });
+            if (msg.allowCpuHolistic) self.__ZNS_ALLOW_CPU_HOLISTIC__ = true;
+            const info = await runner.init({ quality: msg.quality, useModule: true, handsOnly: !!msg.handsOnly, holistic: !!msg.holistic });
             self.postMessage({ type: 'ready', ...info });
         } else if (msg.type === 'frame') {
             if (!runner) { msg.bitmap?.close?.(); return; }
