@@ -27,6 +27,14 @@ test('castles: people, knights at their posts, the king on his throne; seen viol
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
+    // «Свободный мир»: no flying until a scroll of flight is burnt
+    const fly = await page.evaluate(() => {
+        const g = window.__zns.game;
+        const before = g.knowsFlight(), started = g.startFlight();
+        g.items.applyScroll({ kind: 'scroll', stat: 'flight' });
+        return { before, started, after: g.knowsFlight() };
+    });
+    assert.deepEqual(fly, { before: false, started: false, after: true });
     const info = await page.evaluate(() => {
         const g = window.__zns.game;
         const idx = g.world.terrain.data.castles;

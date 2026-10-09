@@ -1803,8 +1803,17 @@ export class Game {
     }
 
     /** Start the flight spell (arms must be up). Returns true when it started. */
+    /** «Флайн» is known: everywhere but «Свободный мир», where only a scroll of flight teaches it. */
+    knowsFlight() {
+        return this.config.mode !== 'freeworld' || !!this.bonus?.flight;
+    }
+
     startFlight(force = false) {
         if (this.flight.active) return false;
+        if (!force && !this.knowsFlight()) {
+            this.hud.setVoice('📜 В «Свободном мире» летать нельзя, пока не найдёте в сундуке <b>Свиток полёта</b> (и не сожжёте его «Инферно»)', true);
+            return false;
+        }
         // Maps (labyrinths etc.) are meant to be walked: no flying over the walls
         if (this.world.isMap) {
             this.hud.setVoice('🚫 На картах «Флайн» не работает — только в Творчестве, Выживании и Свободном мире', true);

@@ -85,7 +85,11 @@ export function rollLoot(r = Math.random, { cave = true } = {}) {
     for (let i = 0; i < n; i++) {
         const x = r();
         if (x < 0.22) out.push(rollWand(r));
-        else if (x < 0.42) out.push(r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
+        else if (x < 0.42) {
+            const y = r();
+            // (a scroll of flight teaches «Флайн» — in «Свободный мир» only so)
+            out.push(y < 0.22 ? { kind: 'scroll', uid: newUid(), stat: 'flight' } : y < 0.61 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
+        }
         else if (x < 0.55) out.push({ kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: r() < 0.6, bonus: randInt(r, 1, 60), uid: newUid() });
         else if (x < 0.67) {
             const t = randInt(r, 0, 2);
@@ -120,6 +124,7 @@ export function describeItem(it) {
         case 'shield':
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
+            if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: сила (усталость) +<b>${it.amount}</b> навсегда`] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
@@ -178,13 +183,13 @@ function wandModel(it) {
     return g;
 }
 
-function scrollModel() {
+function scrollModel(it) {
     const g = new THREE.Group();
     const paper = mat(0xf3e2b3);
     const r = cyl(0.06, 0.06, 0.36, paper);
     r.rotation.z = Math.PI / 2;
     g.add(r);
-    const ribbon = cyl(0.064, 0.064, 0.05, mat(0x8e2b2b));
+    const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : 0x8e2b2b)); // (flight: a sky-blue ribbon)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
     for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }

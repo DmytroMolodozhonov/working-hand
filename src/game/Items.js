@@ -298,6 +298,16 @@ export class ItemSystem {
     applyScroll(item) {
         const g = this.game;
         g.bonus = g.bonus || { hp: 0, fatigue: 0 };
+        if (item.stat === 'flight') {
+            g.bonus.flight = true;
+            g.hud.setVoice?.('📜🔥 Свиток полёта сгорел: теперь вы умеете летать! Поднимите обе руки и скажите «Флайн»', true);
+            const c = g.character.group.position;
+            for (let i = 0; i < 60; i++) {
+                const a = (i / 60) * Math.PI * 6;
+                g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), 0x9fd8ff, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);
+            }
+            return;
+        }
         if (item.stat === 'hp') {
             g.bonus.hp += item.amount;
             g.maxHP += item.amount;
