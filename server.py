@@ -260,6 +260,89 @@ def open_server():
     raise last_error
 
 
+# ---------------------------------------------------------------- the GPU
+# On computers with two graphics chips (most laptops, some desktops) Windows
+# gives the browser the weak built-in one by default — and a 3D game runs at
+# 10–15 FPS on a strong computer. So on Windows the game:
+#   1) finds Chrome (or Edge),
+#   2) marks it «High performance» for Windows — the same registry value that
+#      Settings → System → Display → Graphics writes (no admin rights needed),
+#   3) opens the game in its own Chrome window. (If Chrome was already open,
+#      the strong card is taken after Chrome is closed and opened again —
+#      the game's menu says so when it still draws on the built-in chip.)
+# ZNS_NORMAL_BROWSER=1 opens the usual default browser instead.
+
+def _browser_candidates():
+    env = os.environ
+    roots = [env.get("PROGRAMFILES", r"C:\Program Files"), env.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"), env.get("LOCALAPPDATA", "")]
+    out = []
+    for root in roots:
+        if not root:
+            continue
+        out.append(os.path.join(root, "Google", "Chrome", "Application", "chrome.exe"))
+    for root in roots:
+        if not root:
+            continue
+        out.append(os.path.join(root, "Microsoft", "Edge", "Application", "msedge.exe"))
+    # App Paths in the registry (Chrome installed elsewhere)
+    try:
+        import winreg
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            for exe in ("chrome.exe", "msedge.exe"):
+                try:
+                    with winreg.OpenKey(hive, "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + exe) as k:
+                        out.append(winreg.QueryValue(k, None))
+                except OSError:
+                    pass
+    except ImportError:
+        pass
+    seen, found = set(), []
+    for p in out:
+        if p and p.lower() not in seen and os.path.isfile(p):
+            seen.add(p.lower())
+            found.append(p)
+    return found
+
+
+def _prefer_strong_gpu(exe):
+    """Windows: «High performance» graphics for this program (per user)."""
+    try:
+        import winreg
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\DirectX\UserGpuPreferences") as k:
+            try:
+                old = winreg.QueryValueEx(k, exe)[0]
+            except OSError:
+                old = ""
+            if "GpuPreference=2;" not in old:
+                winreg.SetValueEx(k, exe, 0, winreg.REG_SZ, "GpuPreference=2;")
+                print(f"  Видеокарта: для {os.path.basename(exe)} включена «Высокая производительность»")
+        return True
+    except Exception as e:  # noqa: BLE001 — never stop the game for this
+        print(f"  (не удалось выбрать мощную видеокарту автоматически: {e})")
+        return False
+
+
+def open_game_window(url):
+    """Open the game: on Windows in a Chrome window on the strong graphics card."""
+    if sys.platform == "win32" and not os.environ.get("ZNS_NORMAL_BROWSER"):
+        import subprocess
+        for exe in _browser_candidates():
+            _prefer_strong_gpu(exe)
+            # (the usual browser profile: saved worlds, the hero and the settings live there)
+            try:
+                subprocess.Popen([
+                    exe, f"--app={url}",
+                    "--force_high_performance_gpu", "--ignore-gpu-blocklist",
+                    "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+                    "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
+                ])
+                print(f"  Игра открыта в отдельном окне ({os.path.basename(exe)}, мощная видеокарта)")
+                return
+            except OSError as e:
+                print(f"  (не удалось открыть {exe}: {e})")
+    webbrowser.open(url)
+
+
 def main():
     no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
     update_desktop_launcher()
@@ -271,7 +354,7 @@ def main():
     print("  Чтобы остановить — закройте это окно (или Ctrl+C)")
     print("=" * 50)
     if not no_browser:
-        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.2, lambda: open_game_window(url)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

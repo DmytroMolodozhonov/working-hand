@@ -66,7 +66,9 @@ export class Hud {
         if (key === this._lastFps) return;
         this._lastFps = key;
         // "ИИ" = how many times per second the camera pose is recognised; then the graphics level
-        this.el.fps.innerText = `FPS: ${fps}` + (aiFps ? ` | ИИ: ${aiFps}` : '') + (quality ? ` | графика: ${quality}` : '') + (spike ? ` | ${spike}` : '');
+        const gpu = globalThis.__zns?.gpu;
+        this.el.fps.innerText = `FPS: ${fps}` + (aiFps ? ` | ИИ: ${aiFps}` : '') + (quality ? ` | графика: ${quality}` : '') + (spike ? ` | ${spike}` : '')
+            + (gpu?.short && !this.minimal ? ` | ${gpu.weak ? '⚠️ ' : ''}${gpu.short}` : '');
         this.el.fps.style.color = fps > 50 ? '#00ff00' : (fps > 25 ? '#ffff00' : '#ff0000');
     }
 

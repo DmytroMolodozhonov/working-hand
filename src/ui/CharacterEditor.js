@@ -181,8 +181,10 @@ export class CharacterEditor {
         if (this._raf) return;
         const loop = () => {
             this._raf = requestAnimationFrame(loop);
-            if (!this._dragging) this.yaw += 0.003;
+            // (turns only when the player drags it)
             this.hero.group.rotation.y = this.yaw;
+            // the preview stops by itself when its tab is not on screen (a second 3D view costs FPS)
+            if (!this.root.offsetParent) { this.hide(); return; }
             this.renderer.render(this.scene, this.camera);
         };
         loop();

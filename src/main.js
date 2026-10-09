@@ -40,6 +40,28 @@ renderer.shadowMap.enabled = true;
 // soft shadows sample the shadow map many times per pixel: only at the highest level
 // (the QualityManager switches the type with the level; starting right avoids a rebuild)
 renderer.shadowMap.type = graphicsLevel >= 3 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+// Which graphics chip draws the game? A weak built-in one (when the computer has a
+// strong one too) makes even a powerful PC slow — then the menu says how to fix it.
+const gpuName = (() => {
+    try {
+        const gl = renderer.getContext();
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER) || '');
+    } catch (e) { return ''; }
+})();
+const gpuShort = gpuName.replace(/^ANGLE \((?:[^,]*,\s*)?/, '').replace(/\s*\(0x[0-9a-f]+\).*$/i, '').replace(/ Direct3D.*$/, '').replace(/\)$/, '').slice(0, 48);
+const gpuWeak = /SwiftShader|llvmpipe|Software|Microsoft Basic|Intel|\bUHD\b|Iris|Radeon\(TM\) Graphics|Radeon Graphics|Vega \d+ Graphics|Mali|Adreno/i.test(gpuName)
+    && !/NVIDIA|GeForce|Quadro|RTX|GTX|Radeon RX|Radeon Pro|Arc A\d/i.test(gpuName);
+window.__zns = window.__zns || {};
+window.__zns.gpu = { name: gpuName, short: gpuShort, weak: gpuWeak };
+if (gpuWeak) {
+    const warn = document.createElement('div');
+    warn.id = 'gpu-warning';
+    warn.innerHTML = `⚠️ Игра рисует на слабой встроенной графике (<b>${gpuShort.replace(/[<>&]/g, '')}</b>) — поэтому мало FPS. `
+        + 'Запускайте игру через <b>«Запустить игру.bat»</b> — он сам включит мощную видеокарту (если Chrome уже был открыт — <b>закройте все окна Chrome</b> и запустите игру снова). '
+        + 'Или вручную: Параметры Windows → Система → Дисплей → Графика → Chrome → «Высокая производительность», потом перезапустите Chrome.';
+    document.getElementById('main-menu')?.prepend(warn);
+}
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -435,6 +457,7 @@ async function ensureSound() {
 
 let starting = false;
 async function startGame(config, welcome = null) {
+    window.__charEditor?.hide(); // (its preview must not keep drawing under the game)
     if (starting) return; // a second click / duplicate invitation while loading
     starting = true;
     try {
@@ -802,5 +825,5 @@ function escapeHtml(s) {
     for (const r of document.querySelectorAll('input[name="hand-version"]')) r.addEventListener('change', save);
 })();
 
-window.__zns = { THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } };
+window.__zns = Object.defineProperties(window.__zns || {}, Object.getOwnPropertyDescriptors({ THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } }));
 console.log('ЗОМБИ НЕ СПЯТ: готово.');
