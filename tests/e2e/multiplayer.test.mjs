@@ -47,9 +47,8 @@ const ev = (page, fn, arg) => page.evaluate(fn, arg);
 
 test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, late join', async () => {
     const host = await openPlayer('Хост');
-    await host.page.selectOption('#mp-mode', 'creative');
-    await host.page.selectOption('#mp-mode', 'creative');
-    await host.page.click('#mp-private-btn'); // (the game by code starts at once; the code is shown) // (the game by code starts at once; the code is shown)
+    await host.page.evaluate(() => { document.getElementById('mp-mode').value = 'creative'; }); // (the mode of «Создать сервер»)
+    await host.page.click('#mp-private-btn'); // (the game by code starts at once; the code is shown)
     await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
     const code = await host.page.textContent('.mp-code-big');
     assert.match(code, /^[A-Z2-9]{5}$/);
@@ -197,9 +196,7 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
     await guest.page.click('#mp-join-btn');
     await wf(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
 
-    // Host picks the free world
-    await host.page.click('[data-tab="tab-game"]'); await host.page.locator('.map-card.freeworld').click();
-    await host.page.click('[data-tab="tab-game"]'); await host.page.click('#start-btn');
+    // (the host is already playing: the free world is the default mode)
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
@@ -340,8 +337,6 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await guest.page.fill('#mp-code', code);
     await guest.page.click('#mp-join-btn');
     await wf(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
-    await host.page.click('[data-tab="tab-game"]'); await host.page.locator('.map-card.freeworld').click();
-    await host.page.click('[data-tab="tab-game"]'); await host.page.click('#start-btn');
     await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);

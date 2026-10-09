@@ -207,7 +207,7 @@ export class Duel {
     _handOf(by, side, outPos, outDir) {
         const g = this.game;
         if (by === this.me) {
-            g.character.getHandWorldPosition(side, outPos);
+            g.castOrigin(side, outPos);
             g.character.getHandDirection(side, outDir);
             return true;
         }
@@ -228,7 +228,7 @@ export class Duel {
     cast(spell, aim = null, handSide = null) {
         const g = this.game;
         const side = aim ? aim.side : (handSide || g.magicHand || g.lastMagicHand || 'right');
-        const origin = g.character.getHandWorldPosition(side, new THREE.Vector3());
+        const origin = g.castOrigin(side);
         const dir = g.character.getHandDirection(side, new THREE.Vector3());
         const b = this._addBolt({
             id: `${this.me}:${nextId++}`, by: this.me, spell, side,

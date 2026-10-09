@@ -625,9 +625,15 @@ export class Game {
         return best ? { pos: best, id: bestId, distSq: bestD } : null;
     }
 
+    /** Where my spell leaves `side`: the wand's tip when the wand is in that hand, else the hand. */
+    castOrigin(side, out = new THREE.Vector3()) {
+        const w = this.items?.heldOf('wand');
+        return w && w.side === side ? this.wandMagic.tip(out) : this.character.getHandWorldPosition(side, out);
+    }
+
     handPose(casterId, side) {
         if (casterId === 'local' || casterId === this.localId) {
-            return { origin: this.character.getHandWorldPosition(side), dir: this.character.getHandDirection(side) };
+            return { origin: this.castOrigin(side), dir: this.character.getHandDirection(side) };
         }
         const r = this.remotes.get(casterId);
         return r ? r.handPose(side) : null;
@@ -771,7 +777,7 @@ export class Game {
         this.lastSpellCastTime = now;
         if (name === 'Flight') return name;
         const side = this.magicHand || this.lastMagicHand || 'right';
-        const origin = this.character.getHandWorldPosition(side);
+        const origin = this.castOrigin(side);
         const dir = this.character.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
@@ -970,7 +976,7 @@ export class Game {
         if (this._wave) return null;
         const ch = this.character;
         const side = ['right', 'left'].find((s) => ch.isArmRaised(s)) || this.magicHand || 'right';
-        const o = ch.getHandWorldPosition(side);
+        const o = this.castOrigin(side);
         const d = ch.getHandDirection(side);
         // the hand must point at water nearby
         let src = null;
@@ -1030,7 +1036,7 @@ export class Game {
         if (!side) { if (isFinal) this.hud.setVoice('🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
-        const origin = ch.getHandWorldPosition(side);
+        const origin = this.castOrigin(side);
         const dir = ch.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
@@ -1169,7 +1175,7 @@ export class Game {
         const tired = this.combat.check('ToTheSun');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('ToTheSun');
-        const o = ch.getHandWorldPosition(side, new THREE.Vector3());
+        const o = this.castOrigin(side);
         this.spells.cast('ToTheSun', o, _v1.set(0, 1, 0), side, this.localId);
         if (this.sync) this.sync.spell('ToTheSun', o, _v1.set(0, 1, 0), side);
         this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Тучи расходятся, дождь стихает', true);

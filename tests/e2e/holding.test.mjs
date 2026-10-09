@@ -156,3 +156,36 @@ test('bow and shields: big enough, held through a shaky camera, shooting (creati
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('the wand: held like a pen along the arm, the spell leaves its tip the way it points', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.items.takeIntoHand({ kind: 'wand', uid: 'tw', type: 0 }, 'right');
+    });
+    await feed(page, { arms: 'forward', rightCurl: 0.8, leftCurl: 0.9 }, 30, 40);
+    const w = await page.evaluate(() => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const wandDir = new T.Vector3(), tip = g.wandMagic.tip(new T.Vector3(), wandDir);
+        const fore = ch.getForearmDirection('right', new T.Vector3());
+        const aim = ch.getHandDirection('right', new T.Vector3());
+        const pose = g.handPose('local', 'right');
+        const hand = ch.getHandWorldPosition('right', new T.Vector3());
+        return {
+            held: g.items.held.right?.item.kind,
+            alongArm: wandDir.angleTo(fore) * 180 / Math.PI,
+            aimIsWand: aim.angleTo(wandDir) * 180 / Math.PI,
+            fromTip: pose.origin.distanceTo(tip),
+            tipAway: tip.distanceTo(hand),
+        };
+    });
+    assert.equal(w.held, 'wand');
+    assert.ok(w.alongArm < 40, `the wand goes on along the forearm (${w.alongArm.toFixed(0)}°)`);
+    assert.ok(w.aimIsWand < 3, `spells fly the way the wand points (${w.aimIsWand.toFixed(1)}°)`);
+    assert.ok(w.fromTip < 0.01 && w.tipAway > 0.4, `out of the tip (${w.tipAway.toFixed(2)} m from the hand)`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

@@ -55,6 +55,7 @@ export class VoxelCharacter {
         this.BONE_LENGTH_LOWER = 0.9;
 
         this.handVersion = 'v3';
+        this.aim = { left: null, right: null }; // a held wand's direction (spells follow it)
         this.handsVisible = false;
         this.handVelocity = { left: new THREE.Vector3(), right: new THREE.Vector3() };
         this._lastHandPos = { left: null, right: null };
@@ -325,6 +326,14 @@ export class VoxelCharacter {
     }
 
     getHandDirection(side, out = new THREE.Vector3()) {
+        // a wand in this hand: spells go where the wand points (Items sets it every frame)
+        const a = this.aim?.[side];
+        if (a && performance.now() - a.at < 250) return out.copy(a.dir);
+        return this.getForearmDirection(side, out);
+    }
+
+    /** Elbow → hand (the forearm), whatever is held. */
+    getForearmDirection(side, out = new THREE.Vector3()) {
         const anchor = side === 'left' ? this.leftElbowAnchor : this.rightElbowAnchor;
         anchor.updateMatrixWorld(true);
         anchor.getWorldPosition(_v1);

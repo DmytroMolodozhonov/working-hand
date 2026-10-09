@@ -110,6 +110,7 @@ export class ItemSystem {
         if (!h) return null;
         this.held[side] = null;
         if (h.gripped) { const hand = this.game.character.getActiveHands?.()[side]; if (hand && hand.setGrip) hand.setGrip(null); }
+        if (this.game.character.aim) this.game.character.aim[side] = null; // (spells follow the arm again)
         this.game.scene.remove(h.model);
         disposeModel(h.model);
         if (this.game.sync) this.game.sync.itemHold?.(side, null);
@@ -129,13 +130,27 @@ export class ItemSystem {
         // the item's axis out of the thumb side; its "front" towards the knuckles
         const ax = _a.copy(f.X).multiplyScalar(s);
         let x, y, z;
-        if (spec.axis === 'y') { y = ax; x = _b.copy(f.Y); z = _c.crossVectors(x, y); } // wand, hammer, bow (limbs), shield (upright)
+        if (h.item.kind === 'wand') {
+            // a wand is the arm's continuation: along the forearm, bent a little by the wrist —
+            // and the spells of this hand fly exactly along it, out of its tip
+            const ch = g.character;
+            y = ch.getForearmDirection(side, _a).multiplyScalar(0.6).addScaledVector(f.Y, 0.4).normalize();
+            x = _b.copy(f.X).addScaledVector(y, -f.X.dot(y));
+            if (x.lengthSq() < 1e-4) x.set(1, 0, 0);
+            x.normalize();
+            z = _c.crossVectors(x, y);
+        } else if (spec.axis === 'y') { y = ax; x = _b.copy(f.Y); z = _c.crossVectors(x, y); } // hammer, bow (limbs), shield (upright)
         else { x = ax; y = _b.copy(f.Y).negate(); z = _c.crossVectors(x, y); } // scroll: rolled along X
         if (spec.face === 'back') { z = _c.copy(f.Z); x = _b.crossVectors(y, z); } // shield: the face where the back of the hand looks
         _m4.makeBasis(x, y, z);
         _q.setFromRotationMatrix(_m4);
         if (!h.q) h.q = _q.clone(); else h.q.slerp(_q, Math.min(1, dt * 28));
         h.model.quaternion.copy(h.q);
+        if (h.item.kind === 'wand') {
+            const a = g.character.aim[side] || (g.character.aim[side] = { dir: new THREE.Vector3(), at: 0 });
+            a.dir.set(0, 1, 0).applyQuaternion(h.q).normalize();
+            a.at = performance.now();
+        }
         // the handle point in the fingers
         const sc = h.model.scale.x;
         h.model.position.copy(f.G).sub(_d.set(0, spec.handle * sc, 0).applyQuaternion(h.q));

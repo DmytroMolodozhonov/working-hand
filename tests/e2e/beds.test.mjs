@@ -212,9 +212,8 @@ async function openPlayer(name) {
 test('beds in multiplayer: a guest creates and repaints (the host decides), both lie down → the night passes for both', async () => {
     peerServer = PeerServer({ port: PEER_PORT, path: '/zns', host: '127.0.0.1' });
     const host = await openPlayer('Хост');
-    await host.page.selectOption('#mp-mode', 'creative');
-    await host.page.selectOption('#mp-mode', 'creative');
-    await host.page.click('#mp-private-btn'); // (the game by code starts at once; the code is shown) // (the game by code starts at once; the code is shown)
+    await host.page.evaluate(() => { document.getElementById('mp-mode').value = 'creative'; }); // (the mode of «Создать сервер»)
+    await host.page.click('#mp-private-btn'); // (the game by code starts at once; the code is shown)
     await waitFor(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
     const code = await host.page.textContent('.mp-code-big');
     const guest = await openPlayer('Гость');
