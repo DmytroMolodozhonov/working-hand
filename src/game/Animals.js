@@ -30,10 +30,11 @@ import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
 
 export const SPECIES = {
-    cow: { name: 'Корова', hp: 10, speed: 1.4, run: 5.5, dmg: 2, meat: 4, size: 1.0 },
-    pig: { name: 'Свинья', hp: 6, speed: 1.3, run: 5, dmg: 1, meat: 3, size: 0.7 },
-    sheep: { name: 'Баран', hp: 6, speed: 1.3, run: 5.2, dmg: 1, meat: 2, size: 0.75 },
-    horse: { name: 'Конь', hp: 12, speed: 1.8, run: 7, dmg: 2, meat: 4, size: 1.15 },
+    // (sizes next to the ~4.6 m tall player: a cow reaches his chest)
+    cow: { name: 'Корова', hp: 10, speed: 1.6, run: 6, dmg: 2, meat: 4, size: 2.0 },
+    pig: { name: 'Свинья', hp: 6, speed: 1.5, run: 5.5, dmg: 1, meat: 3, size: 1.45 },
+    sheep: { name: 'Баран', hp: 6, speed: 1.5, run: 5.8, dmg: 1, meat: 2, size: 1.55 },
+    horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 2.3 },
 };
 const HORSE_COLORS = [0x6b3f1e, 0x2b2118, 0xe8e2d6, 0x9a5a2a, 0x8a8a8a, 0xc49a5a];
 const MAX_NEAR = 14;
@@ -49,8 +50,16 @@ function lam(c) {
     if (!_mats.has(c)) _mats.set(c, new THREE.MeshLambertMaterial({ color: c }));
     return _mats.get(c);
 }
+// Shared box shapes: a new herd costs no new geometry (no GPU uploads, no garbage)
+const _geos = new Map();
+function box(w, h, d) {
+    const k = w + ',' + h + ',' + d;
+    let g = _geos.get(k);
+    if (!g) { g = new THREE.BoxGeometry(w, h, d); g.userData.keep = true; _geos.set(k, g); }
+    return g;
+}
 function bx(g, w, h, d, c, x, y, z) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c));
+    const m = new THREE.Mesh(box(w, h, d), lam(c));
     m.position.set(x, y, z);
     m.castShadow = true;
     g.add(m);
@@ -64,7 +73,7 @@ export function animalModel(type, color) {
     const leg = (x, z, h, w, c) => {
         const pivot = new THREE.Group();
         pivot.position.set(x, h, z);
-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), lam(c));
+        const m = new THREE.Mesh(box(w, h, w), lam(c));
         m.position.y = -h / 2;
         m.castShadow = true;
         pivot.add(m);
@@ -114,8 +123,8 @@ export function animalModel(type, color) {
 export function bonesModel() {
     const g = new THREE.Group();
     const m = lam(0xefe9da);
-    for (let i = 0; i < 5; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.7), m); b.position.set((i - 2) * 0.14, 0.05, 0); b.rotation.y = (i - 2) * 0.2; g.add(b); }
-    const skull = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 0.35), m);
+    for (let i = 0; i < 5; i++) { const b = new THREE.Mesh(box(0.08, 0.08, 0.7), m); b.position.set((i - 2) * 0.14, 0.05, 0); b.rotation.y = (i - 2) * 0.2; g.add(b); }
+    const skull = new THREE.Mesh(box(0.3, 0.25, 0.35), m);
     skull.position.set(0, 0.12, -0.55);
     g.add(skull);
     return g;
@@ -209,8 +218,8 @@ export class Animals {
     _remove(a) {
         const g = this.game;
         g.scene.remove(a.model);
-        a.model.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
-        if (a.bones) { g.scene.remove(a.bones); a.bones.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); }
+        // (shapes are shared by all animals: nothing to dispose)
+        if (a.bones) g.scene.remove(a.bones);
         this.list.splice(this.list.indexOf(a), 1);
         this.byId.delete(a.id);
     }
@@ -223,7 +232,7 @@ export class Animals {
         a.hp -= dmg;
         a.damageCooldown = 0.35;
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.copy(a.group.position).add(_v2.set(0, 1, 0)), 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.6);
-        if (dir) a.group.position.addScaledVector(_v.copy(dir).setY(0).normalize(), 0.4);
+        if (dir) this.push(a, _v.copy(dir).setY(0).normalize().multiplyScalar(4).setY(1.5), 0.35); // a blow knocks it back
         if (a.hp <= 0) { this._die(a, fire); return; }
         // defend (65%) or run away; sheep stand up for each other
         const attacker = by;
@@ -262,17 +271,32 @@ export class Animals {
 
     /** Blasts (Bombardo, lightning). */
     hitAt(p, radius, dmg = 6, by = null) {
-        for (const a of this.list) if (!a.dead && a.group.position.distanceTo(p) < radius + 1) this.hit(a, dmg, _v.subVectors(a.group.position, p), by);
+        for (const a of this.list) {
+            const d = a.group.position.distanceTo(p);
+            if (d >= radius + 1 + SPECIES[a.type].size) continue;
+            const dir = _v.subVectors(a.group.position, p).setY(0);
+            if (dir.lengthSq() < 1e-4) dir.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+            dir.normalize();
+            const k = Math.max(0.2, 1 - d / (radius + 2));
+            if (!a.dead) this.hit(a, dmg, dir.clone(), by);
+            // the blast throws it (alive or dead) — it falls back, into the crater if there is one
+            if (this.auth) this.push(a, dir.multiplyScalar(14 * k).setY(9 * k + 3), 2.5);
+        }
     }
 
-    /** Ray spells. */
-    hitRay(o, d, len, width, dmg = 3, by = null) {
+    /** Ray spells (Тандервейв throws them back, they lie stunned for a moment). */
+    hitRay(o, d, len, width, dmg = 3, by = null, name = null) {
         for (const a of this.list) {
             if (a.dead) continue;
             const to = _v.subVectors(a.group.position, o).add(_v2.set(0, 0.8, 0));
             const along = to.dot(d);
             if (along < 0 || along > len) continue;
-            if (to.addScaledVector(d, -along).length() < width + 0.9) this.hit(a, dmg, d.clone(), by);
+            if (to.addScaledVector(d, -along).length() >= width + 0.9 * SPECIES[a.type].size) continue;
+            this.hit(a, dmg, d.clone(), by);
+            if (this.auth && name === 'Thunderwave') {
+                this.push(a, _v2.copy(d).setY(0).normalize().multiplyScalar(16).setY(6), 2.2);
+                for (let i = 0; i < 8; i++) this.game.fx.spark(a.group.position, 0x9fd8ff, 0.1, _v.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
+            }
         }
     }
 
@@ -317,6 +341,7 @@ export class Animals {
             a.bones = bonesModel();
             a.bones.position.copy(a.group.position).setY(g.collision.groundY(a.group.position.x, a.group.position.z));
             a.bones.rotation.y = a.group.rotation.y;
+            a.bones.scale.setScalar(SPECIES[a.type].size);
             g.scene.add(a.bones);
         }
         a.bonesAt = performance.now();
@@ -488,6 +513,13 @@ export class Animals {
         a.t += dt;
         if (a.damageCooldown > 0) a.damageCooldown -= dt;
         let speed = 0;
+        if (a.stunT > 0) {
+            // stunned / thrown by a spell or a blast: no walking until it comes to itself
+            a.stunT -= dt;
+            this._body(a, dt);
+            this._animate(a, 0);
+            return;
+        }
         if (a.state === 'attack' || a.state === 'flee') {
             a.stateT -= dt;
             const tp = this._playerPos(a.attacker);
@@ -497,9 +529,14 @@ export class Animals {
                 a.target.copy(p).addScaledVector(_v, 6);
                 speed = S.run;
             } else {
-                a.target.copy(tp);
+                // a fight: they come at you from different sides (each herd member its own angle)
+                const dd = p.distanceTo(_v.set(tp.x, p.y, tp.z));
+                if (dd > 2.2 * S.size + 3) {
+                    const ang = (a.id % 7) * 0.9;
+                    a.target.set(tp.x + Math.cos(ang) * 1.6 * S.size, p.y, tp.z + Math.sin(ang) * 1.6 * S.size);
+                } else a.target.copy(tp);
                 speed = S.run * 0.85;
-                if (p.distanceTo(_v.set(tp.x, p.y, tp.z)) < 1.6 * S.size + 0.6) {
+                if (dd < 1.6 * S.size + 0.6) {
                     speed = 0;
                     if (a.t > 1.2) { a.t = 0; this._butt(a, a.attacker); }
                 }
@@ -527,11 +564,59 @@ export class Animals {
                 a.walkT += dt * speed * 2.2;
             }
         }
-        // ground, water (they don't swim: back out of deep water)
-        const gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
-        p.y += (gy + 0.5 - p.y) * Math.min(1, dt * 8);
-        g.collision.resolveCylinder(p, 0.6 * S.size, p.y - 0.5, 2, 1.1);
+        this._body(a, dt);
         this._animate(a, speed > 0 ? Math.min(1, speed / 5) : 0);
+    }
+
+    /** A blow / a blast / a spell throws an animal (it is stunned for a moment). */
+    push(a, vel, stun = 1.2) {
+        if (!a) return;
+        a.vel = (a.vel || new THREE.Vector3()).add(vel);
+        a.stunT = Math.max(a.stunT || 0, stun);
+        a.airborne = a.vel.y > 0.5 || a.airborne;
+    }
+
+    /**
+     * The body: thrown velocity, gravity (it falls into a crater, off a cliff), ground,
+     * not into walls, and the others of the herd are pushed aside (no two in one place).
+     */
+    _body(a, dt) {
+        const g = this.game;
+        const S = SPECIES[a.type];
+        const p = a.group.position;
+        const v = a.vel || (a.vel = new THREE.Vector3());
+        const base = a.dead ? 0.35 * S.size : 0.5;
+        if (v.lengthSq() > 1e-4) {
+            p.x += v.x * dt; p.z += v.z * dt;
+            const k = Math.max(0, 1 - (a.airborne ? 0.6 : 5) * dt);
+            v.x *= k; v.z *= k;
+        }
+        const gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
+        if (a.airborne || p.y > gy + base + 0.8) {
+            // in the air: falls
+            v.y -= 22 * dt;
+            p.y += v.y * dt;
+            a.airborne = true;
+            if (p.y <= gy + base) { p.y = gy + base; if (v.y < -14 && !a.dead) this.hit(a, 2, null, a.attacker); v.y = 0; a.airborne = false; }
+        } else {
+            v.y = 0;
+            p.y += (gy + base - p.y) * Math.min(1, dt * 8); // walking up and down steps
+        }
+        if (!a.dead) {
+            g.collision.resolveCylinder(p, 0.6 * S.size, p.y - 0.5, 2, 1.1);
+            // the others are solid too
+            for (const o of this.list) {
+                if (o === a || o.dead) continue;
+                const op = o.group.position;
+                const dx = p.x - op.x, dz = p.z - op.z;
+                const min = 0.55 * (S.size + SPECIES[o.type].size);
+                const d2 = dx * dx + dz * dz;
+                if (d2 < min * min && d2 > 1e-6 && Math.abs(p.y - op.y) < 2) {
+                    const d = Math.sqrt(d2), push = (min - d) * 0.5;
+                    p.x += dx / d * push; p.z += dz / d * push;
+                }
+            }
+        }
     }
 
     _animate(a, k) {
@@ -580,6 +665,7 @@ export class Animals {
             for (const a of [...this.list]) {
                 if (a.group.position.distanceTo(me) > 150 && !a.tamed && !a.rider) { this._remove(a); continue; }
                 if (a.dead) {
+                    this._body(a, dt); // (carcasses fall into craters too)
                     if (a.bonesAt && performance.now() - a.bonesAt > 120000) this._remove(a);
                     else if (!a.bonesAt && performance.now() - a.deadAt > 600000) this._remove(a);
                     continue;

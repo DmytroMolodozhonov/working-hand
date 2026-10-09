@@ -38,7 +38,10 @@ export class QualityManager {
         this._goodFor = 0;
         this._sinceChange = 0;
         this._frame = 0;
+        this._bad = 0;
+        this._drops = 0;
         this.fps = 60;
+        this._shadowsFixed = null; // shadows on/off and their kind are decided once (a change recompiles every shader)
     }
 
     /** The level auto mode settled on last time (so a weak computer doesn't start with stutters). */
@@ -67,8 +70,14 @@ export class QualityManager {
         // The sun shadow is redrawn every frame only when there is time for it
         this.renderer.shadowMap.autoUpdate = q.shadowEvery === 1;
         this.renderer.shadowMap.needsUpdate = true;
-        if (sun) sun.castShadow = q.shadows; // (three.js rebuilds the shaders for the new light setup)
-        const type = q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+        // Shadows on/off and soft/hard change the shader of every material: switching them in
+        // the middle of the game freezes it (all shaders are rebuilt). Decide once, at the start;
+        // later only the cheap things change (pixels, shadow size and how often it is drawn).
+        const first = this._shadowsFixed === null;
+        if (first) this._shadowsFixed = { on: q.shadows, soft: q.soft };
+        const fixed = this._shadowsFixed;
+        if (sun) sun.castShadow = fixed.on;
+        const type = fixed.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
         if (this.renderer.shadowMap.type !== type) {
             this.renderer.shadowMap.type = type;
             world?.scene?.traverse((o) => {
@@ -94,16 +103,20 @@ export class QualityManager {
         this.fps = this._frames / this._acc;
         this._acc = 0;
         this._frames = 0;
-        if (this.fps < 40 && this.level > 0 && this._sinceChange > 2.5) {
-            // Stutters: step down right away (and don't climb back above this level soon)
+        // (two slow windows in a row — or one very slow — before stepping down: one hiccup is not a slow computer)
+        this._bad = this.fps < 40 ? this._bad + 1 : 0;
+        if ((this._bad >= 2 || this.fps < 25) && this.level > 0 && this._sinceChange > 4) {
+            // Stutters: step down (and after the second time, never climb back: no see-saw)
             this.level--;
-            this.maxLevel = Math.min(this.maxLevel, this.level + 1);
+            this._drops++;
+            this.maxLevel = Math.min(this.maxLevel, this._drops >= 2 ? this.level : this.level + 1);
             this._goodFor = 0;
+            this._bad = 0;
             this._sinceChange = 0;
             this.apply();
         } else if (this.fps > 57) {
             this._goodFor += 2;
-            if (this._goodFor >= 8 && this.level < this.maxLevel && this._sinceChange > 10) {
+            if (this._goodFor >= 20 && this.level < this.maxLevel && this._sinceChange > 30) {
                 this.level++;
                 this._goodFor = 0;
                 this._sinceChange = 0;

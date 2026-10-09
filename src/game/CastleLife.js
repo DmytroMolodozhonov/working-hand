@@ -225,6 +225,7 @@ export class CastleLife {
             x: at.x, y: at.y, z: at.z, yaw: at.yaw ?? 0, mode: 'idle', speed: 0,
             job, post: extra.post || null, path: null, pathI: 0, waitT: 0, trips: 0,
             foe: null, fleeFrom: null, fleeT: 0, sayT: 0, bowT: 0, barT: 0, hitT: 0,
+            walk: WALK * (0.72 + ((e.seed >>> 4) % 100) / 220), lane: (((e.seed >>> 11) % 100) / 100 - 0.5) * 2.6,
             bubble: null, bar: null, net: null,
         };
         v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
@@ -362,7 +363,7 @@ export class CastleLife {
         if (!players.length) return;
         // (a weaker computer — fewer people round you; fewer at night)
         const q = [0.45, 0.65, 0.85, 1][this.game.quality?.level ?? 3] ?? 1;
-        const want = Math.round(Math.min(26, 8 + def.population / 45) * (this.game.isNight ? 0.35 : 1) * q);
+        const want = Math.round(Math.min(22, 7 + def.population / 55) * (this.game.isNight ? 0.35 : 1) * q);
         let count = 0;
         for (const v of cs.active.values()) if (v.job === 'wander' && !v.dead) count++;
         // too far from everyone: goes home (disappears)
@@ -387,7 +388,11 @@ export class CastleLife {
         if (idx < 0) return;
         const n = cs.graph.nodes[node];
         const v = this._activate(cs, idx, { x: n.x, y: n.y, z: n.z }, 'wander');
-        if (v) { v.node = node; v.trips = 2 + Math.floor(Math.random() * 3); this._nextTrip(v); }
+        if (v) {
+            v.node = node; v.trips = 1 + Math.floor(Math.random() * 3);
+            // some come out and stand at the door a while first (not everybody marching at once)
+            if (Math.random() < 0.45) v.waitT = 4 + Math.random() * 14; else this._nextTrip(v);
+        }
     }
 
     // ------------------------------------------------------------ moving
@@ -409,6 +414,15 @@ export class CastleLife {
         const r = Math.random();
         const choose = (tag) => { const l = g.tagged(tag); return l.length ? l[Math.floor(Math.random() * l.length)] : -1; };
         let node = -1;
+        // people go to people: join somebody standing about (a chat)
+        if (r < 0.3) {
+            const idle = [...v.cs.active.values()].filter((o) => o !== v && !o.dead && o.job === 'wander' && o.waitT > 6 && Math.hypot(o.x - v.x, o.z - v.z) < 60);
+            if (idle.length) {
+                const o = idle[Math.floor(Math.random() * idle.length)];
+                const n = g.nearest(o.x, o.y, o.z);
+                if (n >= 0) { v.purpose = 'chat'; v.chatWith = o; this._goTo(v, n); return; }
+            }
+        }
         if (v.role === 'farmer' && r < 0.5) node = choose('field');
         else if (r < 0.32) node = choose('stall');
         else if (r < 0.42) node = choose('market');
@@ -431,14 +445,29 @@ export class CastleLife {
         const g = v.cs.graph;
         if (!v.path || v.pathI >= v.path.length) return true;
         const n = g.nodes[v.path[v.pathI]];
-        const dx = n.x - v.x, dz = n.z - v.z;
+        // outdoors everybody keeps to their own side of the road (no walking in single file);
+        // in the castle, doors and rooms — right along the path
+        let tx = n.x, tz = n.z;
+        const last = v.pathI >= v.path.length - 1;
+        if (v.lane && !last && v.pathI > 0 && !this._inWalls(v.cs.def, n)) {
+            const pn = g.nodes[v.path[v.pathI - 1]];
+            const sx = n.x - pn.x, sz = n.z - pn.z, sl = Math.hypot(sx, sz);
+            if (sl > 3 && Math.abs(n.y - pn.y) < 0.5) { tx += -sz / sl * v.lane; tz += sx / sl * v.lane; }
+        }
+        const dx = tx - v.x, dz = tz - v.z;
         const d = Math.hypot(dx, dz);
-        if (d < 0.35) { v.node = v.path[v.pathI]; v.pathI++; return v.pathI >= v.path.length; }
+        if (d < 0.6) { v.node = v.path[v.pathI]; v.pathI++; return v.pathI >= v.path.length; }
         const s = Math.min(d, speed * dt);
         v.x += dx / d * s; v.z += dz / d * s;
         v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 8);
         v.speed = speed;
         return false;
+    }
+
+    /** Inside the castle walls (where paths are narrow: doors, stairs, rooms). */
+    _inWalls(def, p) {
+        const w = def.walls;
+        return p.x >= w.x0 - 2 && p.x <= w.x1 + 2 && p.z >= w.z0 - 2 && p.z <= w.z1 + 2;
     }
 
     /** Straight towards a point (a fight); stops at walls. */
@@ -479,6 +508,17 @@ export class CastleLife {
         v.damageCooldown -= dt;
         v.sayT -= dt;
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.deadT > 50) this._deactivate(v); return; }
+        // stunned / frozen / thrown up by a spell
+        if (v.stunT > 0 || v.vy) {
+            v.stunT = (v.stunT || 0) - dt;
+            if (v.vy) {
+                v.y += v.vy * dt; v.vy -= 22 * dt;
+                const gy = g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z);
+                if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; }
+            }
+            v.mode = 'idle'; v.speed = 0;
+            return;
+        }
         // a hostile player in sight: knights go for them
         if ((v.role === 'knight' || v.role === 'king') && !v.foe) {
             v.lookT = (v.lookT || 0) - dt;
@@ -495,9 +535,26 @@ export class CastleLife {
         if (v.fleeT > 0) {
             v.fleeT -= dt;
             const fp = v.fleeFrom ? this._playerPos(v.fleeFrom) : null;
-            if (fp) this._steer(v, v.x + (v.x - fp.x), v.z + (v.z - fp.z), RUN, dt);
-            v.mode = 'flee';
-            if (v.fleeT <= 0) { v.fleeFrom = null; if (v.job === 'wander') this._nextTrip(v); else v.path = null; }
+            // run away along the paths: to a place far from the attacker (home, the gate, the market…)
+            if (!v.fleeing && fp) {
+                v.fleeing = true;
+                const g2 = cs.graph;
+                let best = -1, bs = -Infinity;
+                for (let k = 0; k < 16; k++) {
+                    const n = g2.nodes[Math.floor(Math.random() * g2.nodes.length)];
+                    if (Math.abs(n.y - v.y) > 6) continue;
+                    const away = Math.hypot(n.x - fp.x, n.z - fp.z), mine = Math.hypot(n.x - v.x, n.z - v.z);
+                    const s = away - 0.4 * mine + (n.tag === 'home' ? 15 : 0);
+                    if (away > 25 && s > bs) { bs = s; best = n.id; }
+                }
+                if (best >= 0) this._goTo(v, best);
+            }
+            if (v.path && v.pathI < (v.path?.length || 0)) this._followPath(v, dt, RUN);
+            else if (fp && Math.hypot(fp.x - v.x, fp.z - v.z) < 10) this._steer(v, v.x + (v.x - fp.x), v.z + (v.z - fp.z), RUN, dt);
+            else v.speed = 0;
+            v.mode = v.speed > 0 ? 'flee' : 'idle';
+            this._ground(v);
+            if (v.fleeT <= 0) { v.fleeFrom = null; v.fleeing = false; v.path = null; if (v.job === 'wander') this._nextTrip(v); }
             return;
         }
         // the new king comes by: bow
@@ -589,15 +646,25 @@ export class CastleLife {
                 if (v.waitT > 0) {
                     v.waitT -= dt;
                     v.speed = 0;
-                    v.mode = v.talking > 0 ? 'talk' : v.purpose === 'field' ? 'work' : (v.role === 'builder' && v.purpose === 'home' ? 'work' : 'idle');
+                    // somebody close by: they talk (turned to each other, hands going)
+                    v.chatT = (v.chatT || 0) - dt;
+                    if (v.chatT <= 0) {
+                        v.chatT = 1.5;
+                        v.mate = null;
+                        for (const o of v.cs.active.values()) if (o !== v && !o.dead && !o.foe && Math.hypot(o.x - v.x, o.z - v.z) < 4.5 && (o.waitT > 0 || o.job !== 'wander')) { v.mate = o; break; }
+                    }
+                    if (v.mate) v.yaw = turn(v.yaw, Math.atan2(-(v.mate.x - v.x), -(v.mate.z - v.z)), dt * 3);
+                    v.mode = v.talking > 0 || v.mate ? 'talk' : v.purpose === 'field' ? 'work' : (v.role === 'builder' && v.purpose === 'home' ? 'work' : 'idle');
                     if (v.waitT <= 0) this._nextTrip(v);
                     break;
                 }
                 if (!v.path) { this._nextTrip(v); if (!v.path) { v.waitT = 3; break; } }
-                if (this._followPath(v, dt, WALK)) {
+                if (this._followPath(v, dt, v.walk || WALK)) {
                     v.path = null;
                     if (v.goingHome) { this._deactivate(v); return; } // went into the house
-                    v.waitT = 5 + Math.random() * 14;
+                    // they stay a good while where they came (shopping, chatting, working)
+                    v.waitT = v.purpose === 'chat' ? 15 + Math.random() * 30 : 10 + Math.random() * 35;
+                    if (v.purpose === 'chat' && v.chatWith && !v.chatWith.dead) v.chatWith.waitT = Math.max(v.chatWith.waitT, 12);
                 }
                 v.mode = 'walk';
             }
@@ -663,7 +730,8 @@ export class CastleLife {
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
         // armour takes most of the blow: the hearts go down many times slower
-        if (v.armor > 0) {
+        if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
+        else if (v.armor > 0) {
             const a = Math.min(v.armor, dmg);
             v.armor -= a;
             v.hp -= a * 0.2 + (dmg - a);
@@ -715,7 +783,7 @@ export class CastleLife {
         const kingHit = victim && victim.role === 'king';
         for (const w of witnesses) {
             if (w.role === 'knight' || w.role === 'king') { w.foe = by; if (Math.random() < 0.6) this._say(w, pick(w.role === 'king' ? SHOUT.king : SHOUT.knight)); }
-            else { w.fleeFrom = by; w.fleeT = 8 + Math.random() * 4; w.path = null; if (Math.random() < 0.7) this._say(w, pick(SHOUT.help)); }
+            else { w.fleeFrom = by; w.fleeT = 14 + Math.random() * 6; w.fleeing = false; w.path = null; if (Math.random() < 0.7) this._say(w, pick(SHOUT.help)); }
         }
         // the alarm: knights near any witness come too; for the king — every knight
         for (const k of cs.active.values()) {

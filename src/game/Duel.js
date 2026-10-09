@@ -134,6 +134,9 @@ export class Duel {
         };
         for (const [id, r] of g.remotes) if (!r.dead) consider('p', id, r.position.clone().add(_v2.set(0, 0.6, 0)));
         for (const z of g.zombies) if (!z.isDead) consider('z', z.id, z.group.position.clone().add(_v2.set(0, 1.0, 0)));
+        // animals and castle people are creatures too (Авада, Остолбеней… work on them)
+        for (const a of g.animals?.targets() || []) consider('a', a.id, this._creaturePoint(a, new THREE.Vector3()));
+        for (const v of g.castleLife?.targets() || []) consider('v', v.id, this._creaturePoint(v, new THREE.Vector3()));
         return best;
     }
 
@@ -148,8 +151,22 @@ export class Duel {
         return best;
     }
 
+    /** The middle of an animal / a villager (where a charge flies). */
+    _creaturePoint(c, out) {
+        if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, 0.8 * c.group.scale.y, 0));
+        return out.set(c.x, c.y + 2.4, c.z);
+    }
+
+    _creature(kind, id) {
+        const g = this.game;
+        if (kind === 'a') { const a = g.animals?.byId.get(id); return a && !a.dead ? a : null; }
+        if (kind === 'v') { const v = g.castleLife?.byId.get(id); return v && !v.dead ? v : null; }
+        return null;
+    }
+
     _targetPos(b, out) {
         const g = this.game;
+        if (b.tk === 'a' || b.tk === 'v') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
             const r = g.remotes.get(b.tid);
@@ -264,6 +281,7 @@ export class Duel {
         // Arrived: who decides?
         if (b.tk === 'p' && b.tid === this.me) this._arriveAtMe(b);
         else if (b.tk === 'z' && this._referee()) this._arriveAtZombie(b);
+        else if ((b.tk === 'a' || b.tk === 'v') && this._referee()) this._arriveAtCreature(b);
         else if (b.state === 'flying') { b.state = 'waiting'; b.waitT = 0; }
         if (b.state === 'waiting') {
             b.waitT += dt;
@@ -291,6 +309,35 @@ export class Duel {
         const z = this.game.zombieById.get(b.tid);
         this._end(b, 'hit');
         if (z) this.applyToZombie(b.spell, z, b.by);
+    }
+
+    _arriveAtCreature(b) {
+        const c = this._creature(b.tk, b.tid);
+        this._end(b, 'hit');
+        if (c) this.applyToCreature(b.spell, c, b.by);
+    }
+
+    /** A duel spell landed on an animal or a castle villager (decided by the host). */
+    applyToCreature(spell, c, byId) {
+        const g = this.game;
+        const p = this._creaturePoint(c, _v1);
+        this._burst(p, DUEL_SPELLS[spell].color, 30);
+        const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
+        if (spell === 'AvadaKedavra') {
+            g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
+            hit(999, { pierce: true }); // (no armour stops it)
+        } else if (spell === 'Stupefy') {
+            c.stunT = DUEL.STUN_TIME;
+        } else if (spell === 'IceDuel') {
+            c.stunT = 8; c.frozenLook = 8;
+            for (let i = 0; i < 20; i++) g.fx.spark(p, 0xbfe9ff, 0.12, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.8);
+        } else if (spell === 'LevitateDuel') {
+            if (c.isAnimal) g.animals.push(c, _v2.set(0, 13, 0), 2.5);
+            else { c.stunT = 3; c.vy = 11; }
+        } else if (spell === 'SapiraDuel') {
+            g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
+            hit(10);
+        }
     }
 
     // ============================================================ effects

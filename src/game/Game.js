@@ -159,7 +159,7 @@ export class Game {
             lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning'); this.castleLife?.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 this.books?.hitRay(o, d, len, width);
-                this.animals?.hitRay(o, d, len, width, 3, this.localId);
+                this.animals?.hitRay(o, d, len, width, 3, this.localId, name);
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
             },
@@ -1455,7 +1455,7 @@ export class Game {
         this.renderer.compile(this.scene, this.camera);
         this.scene.remove(zoo);
         // (geometries only: many of these materials are shared caches used later — disposing them would recompile)
-        zoo.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+        zoo.traverse((o) => { if (o.isMesh && !o.geometry.userData?.keep) o.geometry.dispose(); });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.prewarmedPrograms = this.renderer.info.programs.length;

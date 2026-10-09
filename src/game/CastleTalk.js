@@ -155,7 +155,7 @@ export class CastleTalk {
         switch (res.action) {
             case 'trade_yes': this._tradeYes(v, res); break;
             case 'trade_no': if (this.offer?.v === v) this.offer.declined = true; break;
-            case 'flee': v.fleeFrom = g.localId; v.fleeT = 6; v.path = null; break;
+            case 'flee': v.fleeFrom = g.localId; v.fleeT = 10; v.fleeing = false; v.path = null; break;
             case 'bow': v.bowing = 1.6; break;
             case 'hostile':
                 if (v.role === 'knight' || v.role === 'king') this.life.reportCrime(v, g.localId, 'threat');
