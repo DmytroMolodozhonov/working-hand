@@ -25,6 +25,7 @@ import time
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(ROOT, "vendor", "mediapipe", "models")
+_STARTED = time.time()
 POSE_MODELS = ["pose_landmarker_lite.task", "pose_landmarker_full.task", "pose_landmarker_heavy.task"]
 
 
@@ -63,6 +64,9 @@ class NativePose:
         if self._mp is not None:
             return True
         if self.state == "installing":
+            return False
+        # (tests: "still being installed" for the first N seconds)
+        if os.environ.get("ZNS_FAKE_INSTALL") and time.time() - _STARTED < float(os.environ["ZNS_FAKE_INSTALL"]):
             return False
         try:
             import cv2  # noqa: F401

@@ -420,6 +420,37 @@ export class PoseService {
         else this._onHolistic(r);
     }
 
+    /**
+     * The program wasn't there when the game started (MediaPipe was being installed):
+     * keep asking the server, and the moment it can run — switch to it, in the game.
+     */
+    _watchForNative() {
+        if (this._nativeWatch || globalThis.__ZNS_NO_NATIVE__ || !(this._engine === 'classic' || this._engine === 'classic-main')) return;
+        this._nativeWatch = setInterval(async () => {
+            if (this.native || !this.isRunning || this._switching) return;
+            if (!(await this._nativeAvailable())) return;
+            this._switching = true;
+            clearInterval(this._nativeWatch);
+            this._nativeWatch = null;
+            const q = this._quality;
+            // let the browser's camera and network go: the program opens the camera itself
+            if (this.stream) { for (const t of this.stream.getTracks()) t.stop(); this.stream = null; }
+            this._closeModels();
+            this.native = { quality: q };
+            this.stats.mode = 'native';
+            this.stats.thread = 'program';
+            if (await this._startNative()) console.info('[PoseService] switched to the camera network program');
+            else {
+                // (it couldn't after all: the browser's network again)
+                this.native = null;
+                await this._startHolistic(q, false);
+                this.isRunning = false;
+                await this.start();
+            }
+            this._switching = false;
+        }, 5000);
+    }
+
     async start() {
         if (this.isRunning) return;
         if (this.native) {
@@ -441,6 +472,7 @@ export class PoseService {
         }
         this.isRunning = true;
         this._pump();
+        this._watchForNative();
     }
 
     /** All cameras of this computer (names appear once the camera is allowed). */
