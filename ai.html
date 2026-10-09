@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ЗНС — нейросеть камеры</title>
+<style>html, body { margin: 0; background: transparent; overflow: hidden; }</style>
+</head>
+<body>
+<!--
+    The camera network (MediaPipe Holistic) in a page of its own. The game opens
+    it from the other name of the same computer (localhost ↔ 127.0.0.1), so the
+    browser runs it in a separate process: recognising a camera picture (~45 ms)
+    no longer stops the game. The game sends camera pictures, this page answers
+    with the points of the body, hands and face.
+
+    game → here   {zns:'init', quality}        here → game  {zns:'ready'} | {zns:'error', message}
+    game → here   {zns:'frame', bitmap, ts}    here → game  {zns:'result', ts, cost, poseLandmarks, …}
+-->
+<script src="vendor/mediapipe-holistic/holistic.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+    const dir = new URL('vendor/mediapipe-holistic/', location.href).href;
+    let holistic = null, busy = false, next = null, parentOrigin = null, pending = null;
+    const pts = (l) => (l ? l.map((p) => ({ x: p.x, y: p.y, z: p.z, visibility: p.visibility })) : null);
+    const send = (m, transfer) => window.parent.postMessage(m, parentOrigin || '*', transfer);
+
+    async function run(m) {
+        busy = true;
+        try {
+            pending = { ts: m.ts, t0: performance.now() };
+            await holistic.send({ image: m.bitmap });
+            if (pending) { pending = null; send({ zns: 'result', ts: m.ts, cost: 0, empty: true }); }
+        } catch (e) {
+            send({ zns: 'error', message: String(e && e.message || e), during: 'frame' });
+        } finally {
+            m.bitmap && m.bitmap.close && m.bitmap.close();
+            busy = false;
+        }
+        // the newest waiting picture next (an older one was dropped)
+        if (next && holistic) { const n = next; next = null; run(n); }
+    }
+
+    window.addEventListener('message', async (ev) => {
+        const m = ev.data;
+        if (!m || !m.zns) return;
+        // only the game of this computer talks to this page
+        if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(ev.origin)) return;
+        parentOrigin = ev.origin;
+        if (m.zns === 'init') {
+            try {
+                holistic = new Holistic({ locateFile: (f) => dir + f });
+                holistic.setOptions({
+                    modelComplexity: Math.max(0, Math.min(2, m.quality | 0)),
+                    smoothLandmarks: true,
+                    enableSegmentation: false,
+                    smoothSegmentation: false,
+                    refineFaceLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5,
+                });
+                holistic.onResults((r) => {
+                    const p = pending || { ts: performance.now(), t0: performance.now() };
+                    pending = null;
+                    send({
+                        zns: 'result', ts: p.ts, cost: performance.now() - p.t0,
+                        poseLandmarks: pts(r.poseLandmarks), faceLandmarks: pts(r.faceLandmarks),
+                        leftHandLandmarks: pts(r.leftHandLandmarks), rightHandLandmarks: pts(r.rightHandLandmarks),
+                    });
+                });
+                await holistic.initialize();
+                send({ zns: 'ready' });
+            } catch (e) {
+                send({ zns: 'error', message: String(e && e.message || e), during: 'init' });
+            }
+        } else if (m.zns === 'frame') {
+            if (!holistic) { m.bitmap && m.bitmap.close && m.bitmap.close(); return; }
+            if (busy) {
+                if (next) { next.bitmap && next.bitmap.close && next.bitmap.close(); send({ zns: 'dropped' }); }
+                next = m;
+                return;
+            }
+            run(m);
+        } else if (m.zns === 'close') {
+            try { holistic && holistic.close(); } catch (e) { /* ignore */ }
+            holistic = null;
+        }
+    });
+})();
+</script>
+</body>
+</html>

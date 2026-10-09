@@ -49,6 +49,7 @@ export async function launch({ video = null } = {}) {
         '--autoplay-policy=no-user-gesture-required',
         '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
         '--ignore-gpu-blocklist',
+        '--site-per-process', // (as in a desktop Chrome: the camera network's page runs in its own process)
     ];
     if (video) args.push(`--use-file-for-fake-video-capture=${video}`);
     const executablePath = fs.existsSync('/opt/pw-browsers/chromium') ? undefined : undefined;

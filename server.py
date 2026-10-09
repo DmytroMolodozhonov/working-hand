@@ -353,6 +353,8 @@ def open_game_window(url):
                 subprocess.Popen([
                     exe, f"--app={url}",
                     "--force_high_performance_gpu", "--ignore-gpu-blocklist",
+                    # the camera network's page (ai.html) gets a process of its own — it never stops the game
+                    "--site-per-process",
                     "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
                     "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
                 ])
