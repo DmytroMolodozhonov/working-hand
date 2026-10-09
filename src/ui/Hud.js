@@ -61,14 +61,14 @@ export class Hud {
     }
 
     setFps(fps, aiFps = 0, quality = '', spike = '') {
-        if (this.minimal) { aiFps = 0; quality = ''; spike = ''; }
+        if (this.minimal) { aiFps = 0; quality = ''; if (fps >= 30) spike = ''; } // (when it's slow, say why — even here)
         const key = `${fps}|${aiFps}|${quality}|${spike}`;
         if (key === this._lastFps) return;
         this._lastFps = key;
         // "ИИ" = how many times per second the camera pose is recognised; then the graphics level
         const gpu = globalThis.__zns?.gpu;
         this.el.fps.innerText = `FPS: ${fps}` + (aiFps ? ` | ИИ: ${aiFps}` : '') + (quality ? ` | графика: ${quality}` : '') + (spike ? ` | ${spike}` : '')
-            + (gpu?.short && !this.minimal ? ` | ${gpu.weak ? '⚠️ ' : ''}${gpu.short}` : '');
+            + (gpu?.short && (!this.minimal || fps < 30 || gpu.weak) ? ` | ${gpu.weak ? '⚠️ ' : ''}${gpu.short}` : '');
         this.el.fps.style.color = fps > 50 ? '#00ff00' : (fps > 25 ? '#ffff00' : '#ff0000');
     }
 

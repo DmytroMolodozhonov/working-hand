@@ -26,6 +26,7 @@
  */
 
 import * as THREE from 'three';
+import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
 
@@ -693,6 +694,8 @@ export class Animals {
                 this._animate(a, a.netMoving ? 0.8 : 0);
             }
         }
+        // shadows only near (every caster is drawn twice)
+        for (const a of this.list) setNearShadow(a.group, Math.abs(a.group.position.x - me.x) + Math.abs(a.group.position.z - me.z) < SHADOW_NEAR * 1.3);
         if (this.riding) this._ride(dt);
         if (g.currentPose && !g.combat.dead) {
             if (this._detectJump(dt)) this.tryMount();

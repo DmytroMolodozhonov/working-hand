@@ -55,6 +55,7 @@ export const DUEL = {
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _vFrom = new THREE.Vector3();
 const _c2 = new THREE.Color();
 const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vector3(), _ds = new THREE.Vector3(), _du = new THREE.Vector3();
 
@@ -291,6 +292,7 @@ export class Duel {
         // The charge homes in on its target (or flies straight)
         if (tp) b.dir.copy(tp).sub(b.front).normalize();
         const step = (DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED) * dt;
+        const from = _vFrom.copy(b.front);
         b.front.addScaledVector(b.dir, step);
         this.game.books?.hitAt(b.front, 0.4);
         if (this.game.authority && this.game.spiders?.boltAt(b.front, b.spell)) { this._end(b, 'fizzle'); return; }
@@ -298,7 +300,10 @@ export class Duel {
         this._drawBolt(b.spell, origin, b.front, b.by);
         if (!tp) {
             // a charge flying free hits the first creature it passes through
-            const hit = this._bodyAt(b.front, b.by);
+            // (along the whole step: at a low FPS a charge moves a metre and more per frame)
+            let hit = null;
+            const n = Math.max(1, Math.ceil(step / 0.5));
+            for (let i = 1; i <= n && !hit; i++) hit = this._bodyAt(_v2.copy(from).lerp(b.front, i / n), b.by);
             if (hit) { b.tk = hit.kind; b.tid = hit.id; return; }
             const t = this.game.terrain;
             if (b.traveled > DUEL.RANGE || (t && t.data.isSolidAt(b.front.x, b.front.y, b.front.z))) this._end(b, 'fizzle');

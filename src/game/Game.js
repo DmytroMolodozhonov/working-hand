@@ -38,6 +38,7 @@ import { Doors, doorModel } from './Doors.js';
 import { Campfires } from './Campfires.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
+import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
@@ -509,8 +510,14 @@ export class Game {
         if (!this.chests.length) return;
         const players = this._playerPositions();
         const ids = [this.localId, ...this.remotes.keys()];
+        const me = this.character.group.position;
         for (const chest of this.chests) {
             chest.update(dt);
+            // (chests stand in rooms and houses: drawn only near, shadows only very near)
+            const cp0 = chest.mesh.position;
+            const dd = Math.abs(cp0.x - me.x) + Math.abs(cp0.z - me.z);
+            chest.mesh.visible = dd < 45;
+            if (chest.mesh.visible) setNearShadow(chest.mesh, dd < 20);
             if (chest.isOpen || chest.locked || !this.authority) continue; // (castle chests: locked while the king lives)
             const cp = chest.getPosition();
             for (let i = 0; i < players.length; i++) {
@@ -1635,8 +1642,17 @@ export class Game {
             const ps = this.poseSmoother;
             const aiFps = ps.lastPushAt && t0 - ps.lastPushAt < 1000 ? Math.round(1000 / ps.interval) : 0;
             const sp = this.stats.spike;
-            this.hud.setFps(Math.round(this.fpsFrames / this.fpsAccum), aiFps, this.quality.current.name,
-                sp && t0 - sp.at < 6000 ? `рывок ${Math.round(sp.ms)} мс: ${sp.reason}` : '');
+            const fps = Math.round(this.fpsFrames / this.fpsAccum);
+            // what takes the frame's time (shown when it is slow): the heaviest part, the network (camera AI), draw calls
+            let slow = '';
+            if (fps < 45) {
+                let worst = null;
+                for (const [k, v] of Object.entries(parts)) if (!worst || v > worst[1]) worst = [k, v];
+                const ai = this.poseService?.holistic ? this.poseService.stats.avgCost : 0;
+                slow = `тяжелее всего: ${worst ? `${worst[0]} ${worst[1].toFixed(0)} мс` : '—'}${ai > 4 ? `, нейросеть ${ai.toFixed(0)} мс` : ''}, вызовов ${this.renderer.info.render.calls}`;
+            }
+            this.hud.setFps(fps, aiFps, this.quality.current.name,
+                sp && t0 - sp.at < 6000 ? `рывок ${Math.round(sp.ms)} мс: ${sp.reason}` : slow);
             this.fpsAccum = 0;
             this.fpsFrames = 0;
         }

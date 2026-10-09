@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { Chest } from '../entities/Chest.js';
+import { setNearShadow } from '../core/Shadows.js';
 
 const NEAR = 75; // m: a house near a player comes to life
 const FAR = 100; // m: … and goes back to stone when nobody is this near
@@ -83,6 +84,14 @@ export class Houses {
             const rec = this.active.get(id);
             if (!rec) this._activate(s.def, s.i);
             else if (!rec.family && this.auth) rec.family = this.game.castleLife?.spawnFamily(s.def, s.i)?.length ? true : null;
+        }
+        // inside a house: the beds are seen only near (through a door or a window); doors cast shadows only near
+        const me = this.game.character.group.position;
+        for (const rec of this.active.values()) {
+            const d = Math.abs(rec.h.c.x - me.x) + Math.abs(rec.h.c.z - me.z);
+            for (const id of rec.bedIds) { const b = this.game.beds?.list.get(id); if (b) { b.model.visible = d < 40; if (b.model.visible) setNearShadow(b.model, d < 18); } }
+            const door = rec.doorId && this.game.doors?.list.get(rec.doorId);
+            if (door) setNearShadow(door.model, d < 25);
         }
         for (const [id, rec] of [...this.active]) {
             if (seen.has(id)) continue;

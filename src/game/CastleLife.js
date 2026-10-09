@@ -23,6 +23,7 @@
  */
 
 import * as THREE from 'three';
+import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
@@ -32,7 +33,7 @@ import { CastleTalk } from './CastleTalk.js';
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
 const SEE = 32; // m: villagers see violence this far (with a free line of sight)
-const VIEW = 92; // m: farther villagers are not drawn
+const VIEW = 80; // m: farther villagers are not drawn
 const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const LEASH = 20; // m: out of their land, knights chase on until the enemy is this far ahead
@@ -1284,7 +1285,13 @@ export class CastleLife {
             v.group.position.set(v.x, v.y + (v.seated ? VILLAGER_SIT_OFFSET : VILLAGER_FOOT_OFFSET), v.z);
             v.group.rotation.y = v.yaw;
             if (visible) {
-                v.model.update(dt, { mode: v.mode, speed: v.speed });
+                setNearShadow(v.group, d < SHADOW_NEAR);
+                // (far people move their arms and legs less often — nobody sees the difference)
+                v.animT = (v.animT || 0) + dt;
+                if (d < 35 || v.foe || v.animT > (d < 60 ? 0.066 : 0.12)) {
+                    v.model.update(v.animT, { mode: v.mode, speed: v.speed });
+                    v.animT = 0;
+                }
                 if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
             }
             if (v.bubble) v.bubble.update(dt, _v.set(v.x, v.y + 4.4, v.z), cam);
