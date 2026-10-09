@@ -301,9 +301,11 @@ export class PoseService {
                 const msg = ev.data;
                 if (msg.type === 'ready') {
                     clearTimeout(timeout);
-                    this.stats.delegate = msg.delegate;
-                    this.stats.avgCost = 0;
-                    this.stats.results = 0;
+                    if (!handsOnly) {
+                        this.stats.delegate = msg.delegate;
+                        this.stats.avgCost = 0;
+                        this.stats.results = 0;
+                    }
                     worker.onmessage = handsOnly
                         ? (e) => this._onHandHelper(e.data)
                         : (e) => { if (e.target === this.worker || this.worker === null) this._onWorkerMessage(e.data); };
