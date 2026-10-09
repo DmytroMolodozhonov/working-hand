@@ -172,9 +172,9 @@ export class SimplifiedHand {
                 for (const f in this.targetState.fingers) this.targetState.fingers[f] *= (1 - returnSpeed);
                 this.targetState.fingerSpread *= (1 - returnSpeed);
                 this.targetState.thumbSpread *= (1 - returnSpeed);
-                this.targetState.wristTwist = lerpAngle(this.targetState.wristTwist, 0, returnSpeed);
-                this.targetState.wristTilt = lerpAngle(this.targetState.wristTilt, 0, returnSpeed);
-                this.targetState.wristRoll = lerpAngle(this.targetState.wristRoll, 0, returnSpeed);
+                // (the wrist keeps its last turn — a lost hand must not roll over palm up)
+                this.targetState.wristTilt = lerpAngle(this.targetState.wristTilt, 0, returnSpeed * 0.3);
+                this.targetState.wristRoll = lerpAngle(this.targetState.wristRoll, 0, returnSpeed * 0.3);
                 if (this.landmarkHistory.length > 0) this._recycleHistory();
             }
         }
@@ -262,14 +262,26 @@ export class SimplifiedHand {
         // edge-on hand shows almost a dot and its angle is noise — then hold the turn
         const handLen = Math.hypot(middleB.x - wrist.x, middleB.y - wrist.y) + 1e-6;
         const conf = Math.max(0, Math.min(1, (Math.hypot(dx, dy) / handLen - 0.22) / 0.3));
+        // Which way the palm faces, from the depth of the points (3D): the cross product of
+        // wrist→index knuckle and wrist→pinky knuckle. Its sign flips only when the hand
+        // really turns over — the 2D knuckle line alone also «flips» when seen edge-on.
+        const ax = indexB.x - wrist.x, ay = indexB.y - wrist.y, az = (indexB.z || 0) - (wrist.z || 0);
+        const bx = pinkyB.x - wrist.x, by = pinkyB.y - wrist.y, bz = (pinkyB.z || 0) - (wrist.z || 0);
+        const nz = ax * by - ay * bx;
+        const nlen = Math.hypot(ay * bz - az * by, az * bx - ax * bz, nz) + 1e-9;
+        const facingNow = Math.abs(nz) / nlen > 0.35 ? Math.sign(nz) : 0; // (0: edge-on, unsure)
+        if (facingNow && facingNow !== this._facing) {
+            this._facingVotes = (this._facingVotes || 0) + 1;
+            if (this._facing === undefined || this._facingVotes >= 4) { this._facing = facingNow; this._facingVotes = 0; this._facingAt = performance.now(); }
+        } else this._facingVotes = 0;
         if (conf > 0 && dx * dx + dy * dy > 0.0008) {
             const twist = Math.atan2(dy, dx);
             const targetTwist = this.side === 'right' ? -twist + 0.25 : twist - Math.PI - 0.25;
             // SAFEGUARD: a sudden ~180° jump is almost always a tracking glitch
-            // (edge-on hand, atan2 wrap). Accept it only if it persists.
+            // (edge-on hand, atan2 wrap). Accept it only if it persists AND the palm's
+            // 3D facing turned over too.
             const jump = Math.abs(lerpAngle(0, targetTwist - ts.wristTwist, 1));
-            if (jump > 2.0) {
-                // A turn-over: real only if it stays (several frames AND 0.15 s) and is seen clearly
+            if (jump > 1.8) {
                 const t = performance.now();
                 if (this._pendingTwist !== null && Math.abs(lerpAngle(0, targetTwist - this._pendingTwist, 1)) < 0.6) {
                     this._pendingTwistFrames++;
@@ -278,7 +290,8 @@ export class SimplifiedHand {
                     this._pendingTwistFrames = 1;
                     this._pendingTwistAt = t;
                 }
-                if (this._pendingTwistFrames >= 5 && t - this._pendingTwistAt > 150 && conf > 0.5) {
+                const turnedOver = this._facingAt && t - this._facingAt < 1500;
+                if (this._pendingTwistFrames >= 8 && t - this._pendingTwistAt > 250 && conf > 0.55 && (turnedOver || this._pendingTwistFrames >= 30)) {
                     ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.6);
                     this._pendingTwist = null;
                     this._pendingTwistFrames = 0;
@@ -286,7 +299,9 @@ export class SimplifiedHand {
             } else {
                 this._pendingTwist = null;
                 this._pendingTwistFrames = 0;
-                ts.wristTwist = lerpAngle(ts.wristTwist, targetTwist, 0.6 * conf);
+                // (a hand turns at a human pace: at most ~0.35 rad per recognition)
+                const step = lerpAngle(0, targetTwist - ts.wristTwist, 1) * 0.6 * conf;
+                ts.wristTwist += Math.max(-0.35, Math.min(0.35, step));
             }
         }
 
