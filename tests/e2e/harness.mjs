@@ -11,10 +11,10 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-export async function startServer(port) {
-    const proc = spawn('python3', ['server.py', '--no-browser'], {
+export async function startServer(port, { python = 'python3', env = {} } = {}) {
+    const proc = spawn(python, ['server.py', '--no-browser'], {
         cwd: ROOT,
-        env: { ...process.env, ZNS_PORT: String(port), ZNS_NO_BROWSER: '1' },
+        env: { ...process.env, ZNS_PORT: String(port), ZNS_NO_BROWSER: '1', ZNS_NO_PIP: '1', ...env },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
     let log = '';

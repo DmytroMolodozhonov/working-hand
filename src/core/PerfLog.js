@@ -65,7 +65,7 @@ export class PerfLog {
             .join(', ');
         const ps = g.poseService;
         const st = ps?.stats || {};
-        const ai = ps ? `ИИ ${st.mode === 'holistic' ? (st.thread === 'process' ? 'Holistic, отдельный процесс' : 'Holistic, ПОТОК ИГРЫ') : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.thread === 'process' && st.latency ? ` (задержка ${st.latency} мс)` : ''}${st.handHelper ? ', помощник рук' : ''}${st.delegate ? ', ' + st.delegate : ''}${st.why && st.thread === 'main' ? ` (почему: ${st.why})` : ''}` : 'ИИ —';
+        const ai = ps ? `ИИ ${st.mode === 'native' ? `отдельная программа (${st.backend || '…'})` : st.mode === 'holistic' ? (st.thread === 'process' ? 'Holistic, отдельный процесс' : 'Holistic, ПОТОК ИГРЫ') : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.thread === 'process' && st.latency ? ` (задержка ${st.latency} мс)` : ''}${st.handHelper ? ', помощник рук' : ''}${st.delegate ? ', ' + st.delegate : ''}${st.thread === 'main' && st.nativeWhy ? ` (программа-нейросеть: ${st.nativeWhy})` : ''}` : 'ИИ —';
         this._aiPrev = st.results || 0;
         const info = g.renderer?.info;
         const mem = globalThis.performance?.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} МБ` : '';

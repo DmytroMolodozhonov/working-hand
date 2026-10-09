@@ -70,6 +70,18 @@ export class PoseService {
         this._quality = quality;
         this._engine = engine;
         if (config.delegate !== undefined) this._delegate = delegate;
+        // The network as a program of its own next to the game (pose_native.py, started by
+        // server.py): native MediaPipe looks at the camera itself, the game only gets the
+        // points — it never waits for the network. If it isn't installed: the browser's one.
+        if ((engine === 'classic' || engine === 'classic-main') && !globalThis.__ZNS_NO_NATIVE__ && await this._nativeAvailable()) {
+            this._closeModels();
+            this.native = { quality };
+            this.stats.mode = 'native';
+            this.stats.thread = 'program';
+            this.ready = true;
+            return;
+        }
+        this.native = null;
         if (engine === 'classic' || engine === 'classic-main') {
             try {
                 await this._startHolistic(quality, engine === 'classic-main');
@@ -242,7 +254,7 @@ export class PoseService {
         }
         this.lastResults = r;
         this._drawSkeleton(r);
-        if (this.onPoseUpdate) this.onPoseUpdate(this.interpreter.process(r, this.videoElement));
+        if (this.onPoseUpdate) this.onPoseUpdate(this.interpreter.process(r, this.native ? this._nativeVideo : this.videoElement));
     }
 
     async _startModels(quality) {
@@ -358,8 +370,66 @@ export class PoseService {
         this.inFlight = false;
     }
 
+    /** Is the camera network program there (mediapipe installed next to server.py)? */
+    async _nativeAvailable() {
+        try {
+            const ctl = new AbortController();
+            const t = setTimeout(() => ctl.abort(), 3000);
+            const r = await fetch(new URL('api/pose/status', this.baseUrl), { signal: ctl.signal });
+            clearTimeout(t);
+            const st = await r.json();
+            if (!st.available) this.stats.nativeWhy = st.error || 'нет программы';
+            return !!st.available;
+        } catch (e) {
+            this.stats.nativeWhy = 'сервер игры не отвечает';
+            return false;
+        }
+    }
+
+    /** The program looks at the camera; its points arrive as a stream. False if it can't. */
+    _startNative() {
+        return new Promise((resolve) => {
+            this._status('Нейросеть камеры (отдельная программа) запускается...');
+            const es = new EventSource(new URL(`api/pose/stream?q=${this.native.quality}`, this.baseUrl));
+            let first = true;
+            const timeout = setTimeout(() => { if (first) { es.close(); this.stats.nativeWhy = 'программа не ответила за 40 с'; resolve(false); } }, 40000);
+            es.onmessage = (ev) => {
+                let r;
+                try { r = JSON.parse(ev.data); } catch (e) { return; }
+                if (first) { first = false; clearTimeout(timeout); this._native = es; resolve(true); }
+                this._onNative(r);
+            };
+            es.addEventListener('fail', (ev) => {
+                let msg = '';
+                try { msg = JSON.parse(ev.data).error; } catch (e) { /* ignore */ }
+                this.stats.nativeWhy = msg || 'ошибка программы';
+                console.warn('[PoseService] camera network program:', this.stats.nativeWhy);
+                es.close();
+                if (first) { first = false; clearTimeout(timeout); resolve(false); }
+            });
+            es.onerror = () => { if (es.readyState === EventSource.CLOSED && first) { first = false; clearTimeout(timeout); resolve(false); } };
+        });
+    }
+
+    _onNative(r) {
+        this.stats.lastResultAt = performance.now();
+        if (r.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + r.cost * 0.1 : r.cost;
+        this.stats.backend = r.backend;
+        this._nativeVideo = { videoWidth: r.w || 640, videoHeight: r.h || 480 };
+        if (r.hands) this._handleResult({ ts: performance.now(), cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks });
+        else this._onHolistic(r);
+    }
+
     async start() {
         if (this.isRunning) return;
+        if (this.native) {
+            if (await this._startNative()) { this.isRunning = true; return; }
+            // the program couldn't (no camera for it, an error): the browser's network as before
+            console.warn('[PoseService] camera network program unavailable, using the browser:', this.stats.nativeWhy);
+            const q = this.native.quality;
+            this.native = null;
+            await this._startHolistic(q, false);
+        }
         if (!this.stream) {
             this._status('Включение камеры...');
             this.stream = await this._openCamera();
@@ -448,6 +518,7 @@ export class PoseService {
 
     stop() {
         this.isRunning = false;
+        if (this._native) { this._native.close(); this._native = null; }
     }
 
     close() {
@@ -575,7 +646,7 @@ export class PoseService {
         };
         this.lastResults = results;
         this._drawSkeleton(results);
-        if (this.onPoseUpdate) this.onPoseUpdate(this.interpreter.process(results, this.videoElement));
+        if (this.onPoseUpdate) this.onPoseUpdate(this.interpreter.process(results, this.native ? this._nativeVideo : this.videoElement));
     }
 
     /** Feed already-detected results (tests, replays) through the same guards. */

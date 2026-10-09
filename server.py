@@ -12,6 +12,8 @@ API:
   POST   /api/rig             — сохранить настройки рига рук
   GET    /api/version         — дата версии игры (видна в меню)
   POST   /api/perflog         — строка дневника производительности → zns-perf.log
+  GET    /api/pose/status     — нейросеть камеры вне браузера (pose_native.py): есть ли, работает ли
+  GET    /api/pose/stream     — её точки тела, рук и лица (Server-Sent Events)
 """
 
 import glob
@@ -142,7 +144,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
-        if "/api/perflog" in (self.path or ""):
+        if "/api/perflog" in (self.path or "") or "/api/pose/" in (self.path or ""):
             return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
@@ -169,9 +171,55 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             raise ValueError("Bad request body size")
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
+    # ---------- the camera network outside the browser ----------
+    def _pose_status(self):
+        try:
+            from pose_native import POSE
+        except Exception as e:  # noqa: BLE001
+            return self._json(200, {"available": False, "error": str(e)})
+        return self._json(200, POSE.status())
+
+    def _pose_stream(self, query):
+        """Server-Sent Events: every new result of the network as one 'data:' line."""
+        from pose_native import POSE
+        q = parse_qs(query)
+        cam = q.get("cam", [None])[0]
+        POSE.start(quality=q.get("q", ["1"])[0], camera=int(cam) if cam and cam.isdigit() else None)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        POSE.clients += 1
+        seen = POSE.seq
+        try:
+            while True:
+                with POSE.cond:
+                    POSE.cond.wait_for(lambda: POSE.seq != seen or POSE.state in ("error", "idle", "unavailable"), timeout=2)
+                    seq, data, state = POSE.seq, POSE.latest, POSE.state
+                if state in ("error", "unavailable"):
+                    self.wfile.write(("event: fail\ndata: " + json.dumps({"error": POSE.error}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                    self.wfile.flush()
+                    return
+                if seq != seen and data:
+                    seen = seq
+                    self.wfile.write(("data: " + data + "\n\n").encode("utf-8"))
+                else:
+                    self.wfile.write(b": keep-alive\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            return
+        finally:
+            POSE.clients -= 1
+            POSE.last_client = time.time()
+
     # ---------- GET ----------
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/pose/status":
+            return self._pose_status()
+        if path == "/api/pose/stream":
+            return self._pose_stream(urlparse(self.path).query)
         if path == "/api/version":
             return self._json(200, game_version())
         if path == "/api/maps":
@@ -365,8 +413,59 @@ def open_game_window(url):
     webbrowser.open(url)
 
 
+def ensure_pose_native():
+    """The camera network as a program of its own (pose_native.py) needs Google's MediaPipe
+    for Python. Not there yet: install it once, in the background (the game meanwhile uses
+    the browser's network; from the next game start it uses this one)."""
+    try:
+        import cv2  # noqa: F401
+        import mediapipe  # noqa: F401
+        print("  Нейросеть камеры: отдельная программа (MediaPipe для Python) готова")
+        return
+    except Exception:  # noqa: BLE001
+        pass
+    if os.environ.get("ZNS_NO_PIP"):
+        return
+    import subprocess
+    import importlib
+    import site
+    try:
+        from pose_native import POSE
+        POSE.state = "installing"
+    except Exception:  # noqa: BLE001
+        POSE = None
+    print("  Нейросеть камеры: устанавливаю MediaPipe для Python (один раз, около 150 МБ) —")
+    print("  игра уже работает; со следующего входа в игру камера станет быстрее.")
+    try:
+        r = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", "-q", "mediapipe"],
+            capture_output=True, text=True, timeout=1800,
+        )
+        ok = r.returncode == 0
+        tail = (r.stderr or r.stdout or "").strip().splitlines()[-1:] if not ok else []
+    except Exception as e:  # noqa: BLE001
+        ok, tail = False, [str(e)]
+    if ok:
+        # (a user folder for packages made just now is not on the path yet)
+        try:
+            site.addsitedir(site.getusersitepackages())
+        except Exception:  # noqa: BLE001
+            pass
+        importlib.invalidate_caches()
+        if POSE:
+            POSE.state = "idle"
+            POSE._mp = None
+        print("  Нейросеть камеры: MediaPipe установлен. Выйдите в меню (Escape) и снова начните игру.")
+    else:
+        if POSE:
+            POSE.state = "unavailable"
+            POSE.error = "не удалось установить MediaPipe: " + " ".join(tail)
+        print("  Нейросеть камеры: не удалось установить MediaPipe (игра работает как раньше): " + " ".join(tail))
+
+
 def main():
     no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
+    threading.Thread(target=ensure_pose_native, daemon=True).start()
     update_desktop_launcher()
     httpd, port = open_server()
     url = f"http://localhost:{port}"
