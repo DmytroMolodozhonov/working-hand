@@ -22,6 +22,7 @@
  */
 
 import * as THREE from 'three';
+import { woolModel, logsModel } from './BedModels.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation'] },
@@ -59,6 +60,9 @@ export const ITEM_INFO = {
     bread: { name: 'Хлеб', icon: '🍞', weight: 0.3, stack: 10, heal: 3 },
     cheese: { name: 'Сыр', icon: '🧀', weight: 0.3, stack: 10, heal: 3 },
     pie: { name: 'Пирог', icon: '🥧', weight: 0.4, stack: 10, heal: 5 },
+    // beds (Beds.js): wool from sheep, bundles of logs thrown out of the hand
+    wool: { name: 'Шерсть', icon: '🧶', weight: 0.3, stack: 20 },
+    logs: { name: 'Брёвна', icon: '🪵', weight: 1.2 },
 };
 
 /**
@@ -178,6 +182,7 @@ export function describeItem(it) {
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком'] };
         case 'meat': return { title: '🥩 Сырое мясо', color: 0xd9534f, lines: ['Поднесите ко рту: +2 HP', 'Пожарьте на костре («Fire») — будет +4'] };
         case 'steak': return { title: '🍖 Стейк', color: 0xb5651d, lines: ['Поднесите ко рту: +4 HP'] };
+        case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
         case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b> (до 500 в ячейке)`, 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
@@ -376,6 +381,8 @@ export function makeItemModel(it) {
         case 'bread': return breadModel();
         case 'cheese': return cheeseModel();
         case 'pie': return pieModel();
+        case 'wool': return woolModel();
+        case 'logs': return logsModel(it.color);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
 }

@@ -32,6 +32,9 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // Beds (first: colour words like «синий» / «red» must not turn into other spells)
+    if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
+    if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';
     // Wand spells
     if (has('раскрой', 'раскрои', 'секрет', 'тайны', 'reveal', 'secret')) return 'Reveal';
     if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';

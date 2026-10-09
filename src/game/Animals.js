@@ -255,6 +255,7 @@ export class Animals {
         a.deadAt = performance.now();
         if (a.rider === this.game.localId) this.dismount();
         this._layDown(a);
+        if (a.type === 'sheep') this.game.beds?.dropWool(a.group.position); // wool for beds
     }
 
     _layDown(a) {

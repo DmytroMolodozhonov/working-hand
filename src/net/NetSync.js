@@ -131,6 +131,7 @@ export class NetSync {
             dayStart: g.dayStart,
             doors: g.doors?.snapshot() || [],
             campfires: g.campfires?.snapshot() || [],
+            beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             edits: g.blockEdits || [],
@@ -147,6 +148,7 @@ export class NetSync {
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         if (msg.doors) g.doors?.restore(msg.doors);
         if (msg.campfires) g.campfires?.restore(msg.campfires);
+        if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.castles) g.castleLife?.restore(msg.castles);
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
@@ -391,6 +393,8 @@ export class NetSync {
     door(d) { this.net.send({ t: 'door', d }, true); }
     /** Campfires: {t:'cf'} host → all, {t:'cfask'|'cfwood'} guest → host. */
     campfire(msg) { this.net.send(msg); }
+    /** Beds (Beds.js): {a: set | create | color | msg | lie | sleep, …}; `to`: only that player (host). */
+    bed(m, to = null) { if (to) this.net.sendTo(to, { t: 'bed', ...m }); else this.net.send({ t: 'bed', ...m }, true); }
     doorAngle(id, a) { this.net.send({ t: 'dang', id, a: Math.round(a * 100) / 100 }, true); }
 
     /** My hero's look, for everybody (on start and whenever somebody joins). */
@@ -561,6 +565,7 @@ export class NetSync {
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
+            case 'bed': g.beds?.onNet(m); break;
             case 'look': {
                 if (m.by === this.me || !m.look) break;
                 this.looks = this.looks || new Map();
