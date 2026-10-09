@@ -4,10 +4,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { PeerServer } from 'peer';
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, realErrors } from './harness.mjs';
 
 const PORT = Number(process.env.ZNS_TEST_PORT) || 8163;
-let srv, browser;
+const PEER_PORT = PORT + 1013; // (its own signalling server: other test files may run at the same time)
+let srv, browser, peerServer;
 
 test.before(async () => {
     srv = await startServer(PORT);
@@ -16,6 +18,10 @@ test.before(async () => {
 test.after(async () => {
     await browser?.close();
     srv?.stop();
+    if (peerServer) {
+        peerServer.close?.();
+        setTimeout(() => process.exit(0), 500).unref(); // (PeerServer keeps an http server open)
+    }
 });
 
 const frames = (page, n) => page.evaluate((n) => new Promise((res) => {
@@ -184,4 +190,114 @@ test('beds: wool from a sheep, logs thrown from the hand, «Create a Bed», «Ch
 
     assert.deepEqual(realErrors(errors), []);
     await page.close();
+});
+
+// ------------------------------------------------------------------ multiplayer
+async function openPlayer(name) {
+    const context = await browser.newContext({ viewport: { width: 560, height: 320 } });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+    page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+    await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; });
+    await page.goto(srv.url);
+    await page.waitForFunction(() => !!window.__zns);
+    await page.click('[data-tab="tab-mp"]');
+    await page.fill('#mp-name', name);
+    await page.click('#mp-advanced > summary');
+    await page.fill('#mp-server', `127.0.0.1:${PEER_PORT}/zns`);
+    return { page, errors, context };
+}
+
+test('beds in multiplayer: a guest creates and repaints (the host decides), both lie down → the night passes for both', async () => {
+    peerServer = PeerServer({ port: PEER_PORT, path: '/zns', host: '127.0.0.1' });
+    const host = await openPlayer('Хост');
+    await host.page.click('#mp-private-btn');
+    await waitFor(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    const guest = await openPlayer('Гость');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await waitFor(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
+    await waitFor(host.page, () => document.getElementById('mp-players').textContent.includes('Гость'), null, 15000);
+    await host.page.click('[data-tab="tab-game"]');
+    await host.page.click('#start-btn');
+    await waitFor(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await waitFor(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await waitFor(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+    await waitFor(guest.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+
+    // the host's world: logs and wool on the ground (the guest sees them too)
+    const spot = await host.page.evaluate(() => {
+        const g = window.__zns.game, THREE = window.__zns.THREE;
+        const at = { x: 14, z: 6 };
+        at.y = g.collision.groundY(at.x, at.z);
+        g.items.spawnLoose({ kind: 'logs', uid: 'mp-logs', count: 4, block: 1, color: 0x8b5a2b }, new THREE.Vector3(at.x, at.y + 0.3, at.z));
+        for (let i = 0; i < 3; i++) g.items.spawnLoose({ kind: 'wool', uid: 'mp-wool' + i, count: 1 }, new THREE.Vector3(at.x + 0.7 * (i - 1), at.y + 0.3, at.z + 0.9));
+        return at;
+    });
+    await waitFor(guest.page, () => ['mp-logs', 'mp-wool0', 'mp-wool1', 'mp-wool2'].every((u) => window.__zns.game.items.loose.has(u)), null, 20000);
+    await frames(host.page, 30);
+    // the guest casts «Create a Bed» at them → the host makes the bed, everybody sees it
+    const cast = await guest.page.evaluate((at) => {
+        const g = window.__zns.game;
+        g.beds.testAim = at;
+        return g.castLocalSpell('Create a Bed', true);
+    }, spot);
+    assert.equal(cast, 'CreateBed');
+    await waitFor(host.page, () => window.__zns.game.beds.list.size === 1, null, 20000);
+    await waitFor(guest.page, () => window.__zns.game.beds.list.size === 1 && !window.__zns.game.items.loose.has('mp-logs') && !window.__zns.game.items.loose.has('mp-wool1'), null, 20000);
+    // the guest repaints it green
+    await guest.page.waitForTimeout(1300);
+    const id = await guest.page.evaluate(() => {
+        const g = window.__zns.game, b = [...g.beds.list.values()][0];
+        g.beds.testAim = { x: b.x, y: b.y, z: b.z };
+        g.castLocalSpell('поменяй цвет на зелёный', true);
+        return b.id;
+    });
+    await waitFor(host.page, (id) => window.__zns.game.beds.list.get(id)?.color === 'green', id, 20000);
+    await waitFor(guest.page, (id) => window.__zns.game.beds.list.get(id)?.color === 'green', id, 20000);
+
+    // a second bed from the castle API on the host → the guest gets it
+    const id2 = await host.page.evaluate((at) => {
+        const g = window.__zns.game, THREE = window.__zns.THREE;
+        const p = new THREE.Vector3(at.x + 9, 0, at.z);
+        p.y = g.collision.groundY(p.x, p.z);
+        return g.beds.spawnBed(p, 0, 'pink').id;
+    }, spot);
+    await waitFor(guest.page, (id) => window.__zns.game.beds.list.get(id)?.color === 'pink', id2, 20000);
+
+    // night for both (the same clock); the host lies down alone: the night goes on
+    const dayStart = await host.page.evaluate(() => {
+        const g = window.__zns.game;
+        g.dayStart = Date.now() - 24 * 60 * 1000 * 0.75;
+        g.world.setDayPhase(g.dayPhase());
+        return g.dayStart;
+    });
+    await guest.page.evaluate((d) => { const g = window.__zns.game; g.dayStart = d; g.world.setDayPhase(g.dayPhase()); }, dayStart);
+    const sitDown = (page, bedId) => page.evaluate((bedId) => {
+        const g = window.__zns.game, b = g.beds.list.get(bedId), ch = g.character;
+        const c = Math.cos(b.ry), s = Math.sin(b.ry), lx = 1.25 + 0.9;
+        ch.group.position.set(b.x + lx * c, g.collision.groundY(b.x + lx * c, b.z - lx * s) + 2, b.z - lx * s);
+        ch.setCrouching(true);
+    }, bedId);
+    await sitDown(host.page, id);
+    await waitFor(host.page, () => !!window.__zns.game.beds.lying, null, 15000);
+    await host.page.waitForTimeout(5000);
+    assert.equal(await host.page.evaluate(() => !!window.__zns.game.beds.sleeping), false, 'the guest is still awake');
+    // the guest lies down too → the host sees him lying → after 3 s of stillness the night passes for both
+    await sitDown(guest.page, id2);
+    await waitFor(guest.page, () => !!window.__zns.game.beds.lying, null, 15000);
+    await waitFor(host.page, () => { const r = [...window.__zns.game.remotes.values()][0]; return Math.abs(r.character.group.rotation.x - Math.PI / 2) < 0.1; }, null, 15000);
+    await waitFor(guest.page, () => !!window.__zns.game.beds.sleeping, null, 20000);
+    await waitFor(guest.page, () => !window.__zns.game.beds.sleeping, null, 20000);
+    await waitFor(host.page, () => !window.__zns.game.beds.sleeping, null, 20000);
+    const days = await Promise.all([host.page, guest.page].map((p) => p.evaluate(() => { const g = window.__zns.game; return { start: g.dayStart, phase: g.dayPhase(), night: g.world.nightAmount }; })));
+    assert.equal(days[0].start, days[1].start, 'the host decided the morning for both');
+    for (const d of days) assert.ok(d.phase < 0.15 && d.night < 0.05, JSON.stringify(d));
+
+    assert.deepEqual(realErrors(host.errors).filter((e) => !/peer|webrtc|ice/i.test(e)), []);
+    assert.deepEqual(realErrors(guest.errors).filter((e) => !/peer|webrtc|ice/i.test(e)), []);
+    await guest.context.close();
+    await host.context.close();
 });
