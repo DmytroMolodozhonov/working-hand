@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three';
+import { VoiceGate } from './VoiceGate.js';
 import { VoxelWorld, MAP_CELL } from '../world/World.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { Zombie } from '../entities/Zombie.js';
@@ -71,6 +72,7 @@ export class Game {
         Object.assign(this, deps);
         this.active = false;
         this.currentPose = null;
+        this.voiceGate = new VoiceGate(); // is it me who said the spell (my lips moved)?
         this.poseSmoother = new PoseSmoother();
         this.firstPoseReceived = false;
         this.zombies = [];
@@ -744,7 +746,8 @@ export class Game {
         // Levitation: point the hand at an object (or a creature: a duel spell)
         if (name === 'Levitation') {
             const aim = this.levitation.active ? null : this.duel.pickSide(false);
-            if (aim && (aim.t.kind === 'p' || this._creatureCloserThanObject(aim))) return this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
+            // (a book-bird is caught and held, not struck)
+            if (aim && aim.t.kind !== 'b' && (aim.t.kind === 'p' || this._creatureCloserThanObject(aim))) return this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
             return this._castLevitation(isFinal);
         }
         // Water bending: the hand is at the water / holding the ball, not raised to the face
@@ -1465,6 +1468,7 @@ export class Game {
         ch.verticalVelocity = 0;
         this.knockback.set(0, 0, 0);
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
+        this.inventory?.ensureStarterWand();
         if (this.sync) this.sync.respawned();
         for (let i = 0; i < 30; i++) this.fx.spark(_v1.copy(p).add(_v2.set(0, -1, 0)), i % 2 ? 0xffffff : 0x9fd8ff, 0.15, _v2.set((Math.random() - 0.5) * 4, Math.random() * 5, (Math.random() - 0.5) * 4), 0.7);
     }
@@ -1535,6 +1539,7 @@ export class Game {
 
     // =================================================================== loop
     setPose(poseData) {
+        this.voiceGate.noteFace(performance.now(), poseData?.mouth ?? null);
         this.poseSmoother.push(poseData);
         this.currentPose = this.poseSmoother.sample();
         this.firstPoseReceived = true;
@@ -1584,6 +1589,7 @@ export class Game {
     start() {
         this.active = true;
         this.lastTime = performance.now();
+        this.inventory?.ensureStarterWand(); // (every wizard has a wand — the plain wooden one at least)
         this.prewarm();
         // The microphone listens all game long: shield (arm forward), water
         // (hand towards a river) and flight (arms up) don't raise a hand to

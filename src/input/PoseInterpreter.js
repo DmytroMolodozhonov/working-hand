@@ -4,6 +4,8 @@
  * crouch (nose height with hysteresis), head yaw/pitch (Kalidokit face solver).
  */
 
+import { mouthOpenness } from '../game/VoiceGate.js';
+
 export class PoseInterpreter {
     /**
      * @param {object} [faceSolver] Kalidokit.Face (optional; head rotation)
@@ -145,6 +147,10 @@ export class PoseInterpreter {
         if (results.rightHandLandmarks) data.rightHandLandmarks = results.rightHandLandmarks;
         if (results.leftHandLandmarks) data.leftHandLandmarks = results.leftHandLandmarks;
 
+        // the picture's shape (a hand's turn is measured in it — HandPose.js)
+        if (video && video.videoWidth > 0 && video.videoHeight > 0) data.aspect = video.videoWidth / video.videoHeight;
+        // the mouth (is it me who speaks? — VoiceGate)
+        data.mouth = mouthOpenness(results.faceLandmarks);
         if (results.faceLandmarks && this.faceSolver) {
             try {
                 const faceRig = this.faceSolver.solve(results.faceLandmarks, { runtime: 'mediapipe', video, smooth: true });

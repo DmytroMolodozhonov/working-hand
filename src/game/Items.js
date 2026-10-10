@@ -331,7 +331,7 @@ export class ItemSystem {
             if (Math.random() < dt * 3) this.game.fx.spark(m.position, 0xffe9a8, 0.06, _v.set(0, 0.6, 0), 0.7);
             return;
         }
-        if (L.rest || L.accio) return; // («Акцио» carries it)
+        if (L.rest || L.accio || L.lev) return; // («Акцио» / «Левиоса» carries it)
         if (L.remote) { m.position.lerp(L.remote, Math.min(1, dt * 8)); return; }
         const w = ITEM_INFO[L.item.kind]?.weight ?? 1;
         L.vel.y -= 14 * dt;

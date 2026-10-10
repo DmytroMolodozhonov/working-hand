@@ -178,7 +178,7 @@ export class NetSync {
             this.net.players = new Map(msg.players.map((p) => [p.id, { name: p.name, color: p.color }]));
             this._syncPlayerList(msg.players);
         }
-        if (msg.you && !this._gotMine) { this._gotMine = true; applyPlayerSnapshot(g, msg.you); g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
+        if (msg.you && !this._gotMine) { this._gotMine = true; applyPlayerSnapshot(g, msg.you); g.inventory?.ensureStarterWand(); g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
     }
 
     /** Guests send their own things to the host now and then (the host keeps the world). */
@@ -206,6 +206,7 @@ export class NetSync {
                 t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP,
                 c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, dc: g.duel.myContact(), w: held,
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
+                lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
             }, true);
         }
         // Water ball in my hand
@@ -293,6 +294,15 @@ export class NetSync {
     bookTake(id) {
         this.net.send({ t: 'btake', id });
     }
+
+    /** My Lumos light thrown: everybody sees it fly and stay where it lands. */
+    lumosThrow(p, dir, level) {
+        this.net.send({ t: 'lum', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], l: level }, true);
+    }
+
+    /** A guest's «Левиоса» caught a book-bird (on) / let it go; where its hand holds it. */
+    birdHold(id, on) { if (!this.net.isHost) this.net.send({ t: 'bhold', id, on: on ? 1 : 0 }); }
+    birdAt(id, p) { if (!this.net.isHost) this.net.send({ t: 'bat', id, p: [r3(p.x), r3(p.y), r3(p.z)] }); }
 
     bookGone(id, to) {
         if (this.net.isHost) this.net.send({ t: 'bgone', id, to }, true);
@@ -549,10 +559,14 @@ export class NetSync {
             case 'pstate': if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.name || m.name, m.s); break;
             case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
+            case 'lum': if (m.by !== this.me && Array.isArray(m.p) && Array.isArray(m.d)) g.wandMagic?.addThrown(vec(m.p), vec(m.d).normalize().multiplyScalar(18), Math.max(1, Math.min(6, +m.l || 2)), false); break;
+            case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
+            case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;
             case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;
             case 'spell': {
                 if (m.by === this.me) break;
+                g.voiceGate?.noteRemote(m.name, performance.now()); // (my microphone may hear their voice)
                 g.noteCaster?.(m.name, m.by);
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
                 break;
@@ -688,7 +702,7 @@ export class NetSync {
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
-            case 'duel': if (m.by !== this.me) g.duel.remoteCast(m); break;
+            case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now()); g.duel.remoteCast(m); } break;
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;

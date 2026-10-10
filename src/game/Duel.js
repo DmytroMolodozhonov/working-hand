@@ -365,7 +365,8 @@ export class Duel {
         const p = this._creaturePoint(c, _v1);
         this._burst(p, DUEL_SPELLS[spell].color, 30);
         // a book-bird: any charge knocks it out of the air (it falls as a book)
-        if (c.isBird) { g.books.hitBird(c, 99); return; }
+        // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
+        if (c.isBird) { if (spell !== 'LevitateDuel') g.books.hitBird(c, 99); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);

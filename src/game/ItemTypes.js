@@ -73,7 +73,7 @@ export const ITEM_INFO = {
 export function itemValue(it) {
     if (!it) return 0;
     switch (it.kind) {
-        case 'wand': return 150 + 2 * (it.power || 0);
+        case 'wand': return it.plain ? 20 : 150 + 2 * (it.power || 0);
         case 'weapon': return it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
         case 'scroll': return it.stat === 'flight' || it.stat === 'spell' ? 220 : 60;
@@ -106,6 +106,15 @@ export const newUid = () => 'i' + (++_uid).toString(36) + Math.floor(Math.random
 
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const randInt = (r, a, b) => a + Math.floor(r() * (b - a + 1));
+
+/**
+ * Every wizard's own plain wooden wand (given at the start, in every mode):
+ * spells 15% stronger than with a bare hand — nothing else (no direction, no
+ * favourite spell, no power of its own, no saving of strength).
+ */
+export function starterWand() {
+    return { kind: 'wand', uid: newUid(), plain: true, model: 0, color: 0x8b5a2b, dir: null, fav: null, power: 0 };
+}
 
 /** A random wand (unique colour and powers). */
 export function rollWand(r = Math.random) {
@@ -177,6 +186,7 @@ export function describeItem(it) {
     if (!it) return null;
     switch (it.kind) {
         case 'wand': {
+            if (it.plain) return { title: '🪄 Обычная деревянная палочка', color: it.color, lines: ['Все заклинания на <b>15%</b> сильнее, чем голой рукой', 'Других свойств нет'] };
             const lines = ['Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше усталости'];
             if (it.dir) lines.push(`Направление: <b>${WAND_DIRS[it.dir].name}</b> (+25%${it.dir === 'build' ? ', ресурсов на 40% меньше' : ''})`);
             else lines.push('Направление: нет');
@@ -231,6 +241,15 @@ const cyl = (r1, r2, h, m, x = 0, y = 0, z = 0, seg = 8) => { const c = new THRE
  */
 function wandModel(it) {
     const g = new THREE.Group();
+    if (it.plain) {
+        // a plain wooden wand: a turned handle and a tapering shaft, no metal, no light
+        const wood = mat(0x6b4423), dark = mat(0x4a2e17);
+        g.add(cyl(0.034, 0.038, 0.2, dark, 0, 0.1));
+        g.add(cyl(0.039, 0.039, 0.02, wood, 0, 0.2));
+        g.add(cyl(0.012, 0.03, 0.42, wood, 0, 0.41));
+        g.userData.tipY = 0.62;
+        return g;
+    }
     const col = new THREE.Color(it.color ?? 0x8b5a2b);
     const wood = mat(col.clone().multiplyScalar(0.55).getHex());
     const light = mat(col.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex());

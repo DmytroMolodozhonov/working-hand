@@ -368,6 +368,17 @@ voice.onResult = (command, isFinal = true) => {
             hud.setVoice(`🔇 Тихо — похоже, это голос другого игрока: "${escapeHtml(command)}"`);
             return;
         }
+        // …and it must be ME who said it: my lips moved (the camera sees the mouth), and it isn't
+        // the echo of a spell a friend has just cast (their voice from my speakers / headphones)
+        const heard = matchSpell(command);
+        if (heard && game.remotes?.size > 0) {
+            const gate = game.voiceGate.check(heard, performance.now());
+            if (!gate.ok) {
+                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(command)}» — ваши губы не двигались: это сказали не вы` : `🔇 «${escapeHtml(command)}» — это голос друга (он только что сказал это заклинание)`);
+                if (isFinal) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
+                return;
+            }
+        }
         const name = game.castLocalSpell(command, isFinal);
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
         if (!name && isFinal && !matchSpell(command) && game.castleLife?.talk?.hear(command)) {

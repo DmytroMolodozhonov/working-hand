@@ -268,6 +268,13 @@ export class BookBirds {
             if (dir.lengthSq() > 1e-6) m.rotation.y = Math.atan2(dir.x, dir.z);
             m.position.copy(p);
             if (k >= 1) { b.state = 'perch'; b.t = 0; b.wait = 3 + Math.random() * 6; b.support = b.toSupport || null; b.checkT = 0; }
+        } else if (b.state === 'held') {
+            // caught by «Вингардиум Левиоса»: it hangs where the hand holds it, flapping to get free
+            b.flapT += dt * 16;
+            flap(m, b.flapT, 0.7);
+            // (held by another player's hand that went silent: it gets free)
+            if (b.heldBy && performance.now() - (b.heldSeen || 0) > 3000) this.holdBird(b, false, b.heldBy);
+            if (Math.random() < 0.25) this.game.fx.spark(m.position, Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.07, _v2.set(0, 0.5, 0), 0.5);
         } else if (b.state === 'fall') {
             b.vy -= 15 * dt;
             m.position.y += b.vy * dt;
@@ -280,6 +287,33 @@ export class BookBirds {
                 this._becomeBook(b);
             }
         }
+    }
+
+    /**
+     * «Вингардиум Левиоса» caught a bird (on) — it hangs and flaps where the hand holds it —
+     * or let it go: it flies off to a tree (it is not hurt).
+     */
+    holdBird(b, on, by = null) {
+        if (!b || b.state === 'fall') return;
+        if (!this.auth && !by) { this.game.sync?.birdHold(b.id, on); b.localHeld = on; } // (the host flies the birds)
+        if (on) { b.state = 'held'; b.t = 0; b.heldBy = by; b.heldSeen = performance.now(); return; }
+        if (b.state !== 'held') return;
+        b.heldBy = null;
+        b.state = 'perch';
+        b.t = b.wait = 0; // (off at once)
+        b.support = null;
+    }
+
+    /** (the levitating hand) Where the caught bird is now. */
+    heldAt(b, pos) {
+        if (this.auth) return;
+        this._heldNetT = (this._heldNetT || 0) - 1;
+        if (this._heldNetT <= 0) { this._heldNetT = 6; this.game.sync?.birdAt(b.id, pos); }
+    }
+
+    /** A book let go in the air (after «Левиоса»): it falls to the ground. */
+    dropBook(bk, vel) {
+        bk.fallV = vel ? vel.clone() : new THREE.Vector3();
     }
 
     _becomeBook(b) {
@@ -319,6 +353,13 @@ export class BookBirds {
         const g = this.game;
         for (const bk of this.books.values()) {
             bk.t += dt;
+            if (bk.fallV && !bk.lev && !bk.accio) {
+                // falling after being let go in the air
+                bk.fallV.y -= 14 * dt;
+                bk.model.position.addScaledVector(bk.fallV, dt);
+                const ground = g.collision.groundY(bk.model.position.x, bk.model.position.z) + 0.15;
+                if (bk.model.position.y <= ground) { bk.model.position.y = ground; bk.fallV = null; bk.model.rotation.set(0, bk.model.rotation.y, 0); }
+            }
             bk.glow.material.opacity = 0.35 + Math.sin(bk.t * 3) * 0.25;
             if (Math.random() < 0.08) g.fx.spark(bk.model.position, 0xffe9a8, 0.07, _v1.set(0, 0.8, 0), 0.8);
         }
@@ -388,6 +429,7 @@ export class BookBirds {
         }
         for (const b of [...this.birds.values()]) {
             if (this.auth || b.state === 'fall') this._updateBird(b, dt);
+            else if (b.localHeld) { b.flapT += dt * 16; flap(b.model, b.flapT, 0.7); } // (my «Левиоса» holds it here)
             else this._followNet(b, dt);
         }
         this._updateBooks(dt);
@@ -398,7 +440,7 @@ export class BookBirds {
             if (this._netT <= 0) {
                 this._netT = 0.2;
                 const r = (v) => Math.round(v * 100) / 100;
-                g.sync.birds?.([...this.birds.values()].map((b) => [b.id, r(b.model.position.x), r(b.model.position.y), r(b.model.position.z), r(b.model.rotation.y), b.state === 'fly' ? 1 : b.state === 'fall' ? 2 : 0]),
+                g.sync.birds?.([...this.birds.values()].map((b) => [b.id, r(b.model.position.x), r(b.model.position.y), r(b.model.position.z), r(b.model.rotation.y), b.state === 'fly' ? 1 : b.state === 'fall' ? 2 : b.state === 'held' ? 3 : 0]),
                     [...this.books.values()].map((k) => [k.id, r(k.model.position.x), r(k.model.position.y), r(k.model.position.z)]));
             }
         }
@@ -431,8 +473,8 @@ export class BookBirds {
         const k = Math.min(1, dt * 6);
         b.model.position.lerp(b.net.p, k);
         b.model.rotation.y = b.net.ry;
-        b.flapT += dt * (b.net.st === 1 ? 11 : 2);
-        flap(b.model, b.flapT, b.net.st === 1 ? 0.55 : 0.12);
+        b.flapT += dt * (b.net.st === 1 ? 11 : b.net.st === 3 ? 16 : 2);
+        flap(b.model, b.flapT, b.net.st === 1 ? 0.55 : b.net.st === 3 ? 0.7 : 0.12);
     }
 
     dispose() {

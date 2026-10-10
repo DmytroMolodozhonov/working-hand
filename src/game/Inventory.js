@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
-import { ITEM_INFO } from './ItemTypes.js';
+import { ITEM_INFO, starterWand } from './ItemTypes.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -164,6 +164,21 @@ export class Inventory {
             s.count -= k; left -= k;
             if (s.count <= 0) this.slots[i] = null;
         }
+        this._render();
+        return true;
+    }
+
+    /**
+     * Every wizard has a wand: the plain wooden one, if there is no wand in the
+     * slots or the hands (a new game, a guest, after death…).
+     */
+    ensureStarterWand() {
+        const g = this.game;
+        const has = this.slots.some((s) => s?.kind === 'wand') || ['left', 'right'].some((side) => g.items?.held[side]?.item.kind === 'wand');
+        if (has) return false;
+        const i = this.slots.findIndex((s) => !s);
+        if (i < 0) return false;
+        this.slots[i] = starterWand();
         this._render();
         return true;
     }

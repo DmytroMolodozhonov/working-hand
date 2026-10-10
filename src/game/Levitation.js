@@ -2,7 +2,7 @@
  * Levitation.js — «Вингардиум Левиоса».
  *
  * Point a hand at a loose object a few metres away (a sword, an axe, an ice
- * ball…) and say the words: the object rises and floats in front of the
+ * ball, a wand, a book, a book-bird in the air…) and say the words: the object rises and floats in front of the
  * hand, following it — slowly and heavily, like it is carried by magic.
  * A fast, far jerk of the hand breaks the spell: the object flies off with
  * the speed it had (you can throw things this way). Saying the words again
@@ -41,15 +41,29 @@ export class Levitation {
         return !!this.state;
     }
 
-    /** Objects that can be lifted: loose weapons and ice balls. */
+    /**
+     * Objects that can be lifted: loose weapons, ice balls, any thing lying about
+     * (a wand, a scroll, food…), a book on the ground — and a book-bird in the air:
+     * it is caught and hangs, flapping, where the hand holds it (not knocked down).
+     */
     _candidates() {
+        const g = this.game;
         const out = [];
-        for (const w of this.game.weapons.weapons) {
+        for (const w of g.weapons.weapons) {
             if (w.holder || w.remoteTarget) continue;
             out.push({ kind: 'weapon', obj: w, pos: w.position });
         }
-        for (const b of this.game.water?.resting || []) out.push({ kind: 'ice', obj: b, pos: b.pos });
+        for (const b of g.water?.resting || []) out.push({ kind: 'ice', obj: b, pos: b.pos });
+        // (things and books are the host's: a guest's hand can't carry them yet)
+        if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked) out.push({ kind: 'item', obj: L, pos: L.model.position });
+        if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
+        for (const b of g.books?.birds.values() || []) if (b.state !== 'fall') out.push({ kind: 'bird', obj: b, pos: b.model.position });
         return out;
+    }
+
+    /** The object's own model (for things, books and birds). */
+    _model(s) {
+        return s.kind === 'item' || s.kind === 'book' || s.kind === 'bird' ? s.obj.model : null;
     }
 
     /**
@@ -73,7 +87,7 @@ export class Levitation {
                 if (!best || score < best.score) best = { ...c, side, score, d };
             }
         }
-        if (!best) return '🪶 Направьте руку на предмет (меч, топор, ледяной шар) не дальше 10 м и скажите «Вингардиум Левиоса»';
+        if (!best) return '🪶 Направьте руку на предмет (меч, топор, палочку, книгу, книгу-птицу, ледяной шар) не дальше 10 м и скажите «Вингардиум Левиоса»';
         const s = {
             kind: best.kind,
             obj: best.obj,
@@ -85,8 +99,16 @@ export class Levitation {
         };
         // The wrist steers the object's rotation from now on
         s.handQ0 = this._handQuat(s.side, new THREE.Quaternion());
-        s.objQ0 = (best.kind === 'weapon' ? best.obj.quaternion : best.obj.mesh.quaternion).clone();
-        if (s.kind === 'weapon') {
+        s.objQ0 = (best.kind === 'weapon' ? best.obj.quaternion : this._model(best) ? this._model(best).quaternion : best.obj.mesh.quaternion).clone();
+        s.vel = new THREE.Vector3();
+        if (s.kind === 'item') {
+            const L = s.obj;
+            L.lev = true; L.hover = null; L.rest = false; L.sentRest = false; // (the others see it float)
+        } else if (s.kind === 'book') {
+            s.obj.lev = true;
+        } else if (s.kind === 'bird') {
+            this.game.books.holdBird(s.obj, true); // (caught: it hangs in the air, flapping)
+        } else if (s.kind === 'weapon') {
             const w = s.obj;
             w.hover = null;
             w.attach({ levitate: true, side: null });
@@ -110,6 +132,10 @@ export class Levitation {
         const ch = this.game.character;
         s.age += dt;
         if (s.kind === 'weapon' && (s.obj.holder?.levitate !== true || !this.game.weapons.byId.has(s.obj.id))) { this.state = null; return; }
+        // (taken by a hand, given away, burnt: gone)
+        if (s.kind === 'item' && !this.game.items.loose.has(s.obj.item.uid)) { this.state = null; return; }
+        if (s.kind === 'book' && !this.game.books.books.has(s.obj.id)) { this.state = null; return; }
+        if (s.kind === 'bird' && (s.obj.state !== 'held' || !this.game.books.birds.has(s.obj.id))) { this.state = null; return; }
         if (s.attack) { this._updateAttack(s, dt); return; }
 
         // Where the object should float: in front of the hand, following it slowly
@@ -124,10 +150,18 @@ export class Levitation {
         // Rotation follows the wrist: turn / tilt / twist the hand and the object does
         // the same (amplified) — a floating sword can be swung like this
         const turn = this._wristTurn(s, _q1);
+        const m = this._model(s);
         if (s.kind === 'weapon') {
             const w = s.obj;
             w.drive.position.copy(s.target);
             w.drive.quaternion.copy(turn).multiply(s.objQ0);
+        } else if (m) {
+            // carried by the magic: it lags a little behind the hand, turns with the wrist
+            _v1.subVectors(s.target, m.position);
+            s.vel.lerp(_v1.multiplyScalar(4), Math.min(1, dt * 6));
+            m.position.addScaledVector(s.vel, dt);
+            if (s.kind === 'bird') this.game.books.heldAt(s.obj, m.position);
+            else m.quaternion.slerp(_q2.copy(turn).multiply(s.objQ0), Math.min(1, dt * 10));
         } else {
             const b = s.obj;
             _v1.subVectors(s.target, b.pos);
@@ -138,7 +172,7 @@ export class Levitation {
         }
         // Magic sparkles around the floating object
         if (Math.random() < 0.6) {
-            const p = s.kind === 'weapon' ? s.obj.position : s.obj.pos;
+            const p = s.kind === 'weapon' ? s.obj.position : m ? m.position : s.obj.pos;
             this.game.fx.spark(_v1.set(p.x + (Math.random() - 0.5) * 0.8, p.y + (Math.random() - 0.5) * 0.8, p.z + (Math.random() - 0.5) * 0.8), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _v2.set(0, 0.6, 0), 0.6);
         }
     }
@@ -246,16 +280,28 @@ export class Levitation {
         const s = this.state;
         if (!s) return;
         this.state = null;
+        const vel = gentle ? new THREE.Vector3() : (s.vel || new THREE.Vector3()).clone().multiplyScalar(1.5);
         if (s.kind === 'weapon') {
             const w = s.obj;
             if (gentle) w.velocity.multiplyScalar(0.2);
             w.release();
             if (this.game.sync) this.game.sync._localRelease(w);
+        } else if (s.kind === 'item') {
+            // let go: it falls (or flies on with the swing) like any thing
+            const L = s.obj;
+            L.lev = false; L.rest = false;
+            L.vel = (L.vel || new THREE.Vector3()).copy(vel);
+            L.noPick = performance.now() + 400;
+        } else if (s.kind === 'book') {
+            s.obj.lev = false;
+            this.game.books.dropBook(s.obj, vel);
+        } else if (s.kind === 'bird') {
+            this.game.books.holdBird(s.obj, false); // free: it flies off
         } else {
             const b = s.obj;
-            const vel = gentle ? new THREE.Vector3() : b.vel.clone().multiplyScalar(1.5);
+            const iceVel = gentle ? new THREE.Vector3() : b.vel.clone().multiplyScalar(1.5);
             this.game.scene.remove(b.mesh);
-            this.game.water._spawnFalling({ pos: b.pos.clone(), vel, r: b.r, frozen: true, local: true, mat: b.mesh.material });
+            this.game.water._spawnFalling({ pos: b.pos.clone(), vel: iceVel, r: b.r, frozen: true, local: true, mat: b.mesh.material });
         }
     }
 

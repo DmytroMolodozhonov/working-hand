@@ -267,7 +267,8 @@ export class Combat {
     /** Fatigue a spell costs (a wand in the hand saves 15%). */
     costOf(name) {
         const base = SPELL_COST[name] ?? 5;
-        return this.game.items?.wand ? Math.round(base * 0.85 * 10) / 10 : base;
+        const w = this.game.items?.wand;
+        return w && !w.plain ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name) {

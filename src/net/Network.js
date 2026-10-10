@@ -200,9 +200,14 @@ export class Network extends Emitter {
     _checkRelay(conn, who) {
         const pc = conn.peerConnection;
         if (!pc?.getStats) return;
-        setTimeout(async () => {
+        // (the first link found may go through the go-between and switch to a direct one a moment
+        // later: look again a few times, and tell the player only about a link that stays slow)
+        const checks = [1500, 6000, 15000, 30000, 60000];
+        let i = 0, told = false, last = null;
+        const look = async () => {
+            if (!conn.open || !conn.peerConnection) return;
             try {
-                const stats = await pc.getStats();
+                const stats = await conn.peerConnection.getStats();
                 let pair = null;
                 stats.forEach((r) => { if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId); });
                 if (!pair) stats.forEach((r) => { if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair = r; });
@@ -210,10 +215,16 @@ export class Network extends Emitter {
                 const relay = local?.candidateType === 'relay' || remote?.candidateType === 'relay';
                 conn._relayed = relay;
                 this.relayed = this.isClient ? relay : [...this.conns.values()].some((c) => c._relayed);
-                netLog(`связь с ${who}: ${relay ? 'через посредника (медленнее)' : 'напрямую'} (${local?.candidateType || '?'} ↔ ${remote?.candidateType || '?'}${local?.protocol ? ', ' + local.protocol : ''})`);
-                if (relay) this.emit('relayed', { who });
+                if (relay !== last) {
+                    last = relay;
+                    const rtt = pair?.currentRoundTripTime != null ? `, отклик ${Math.round(pair.currentRoundTripTime * 1000)} мс` : '';
+                    netLog(`связь с ${who}: ${relay ? 'через посредника (медленнее)' : 'напрямую'} (${local?.candidateType || '?'} ↔ ${remote?.candidateType || '?'}${local?.protocol ? ', ' + local.protocol : ''}${rtt})`);
+                }
+                if (relay && !told && checks[i] >= 6000) { told = true; this.emit('relayed', { who }); }
             } catch (e) { /* ignore */ }
-        }, 1500);
+            if (++i < checks.length) setTimeout(look, checks[i] - checks[i - 1]);
+        };
+        setTimeout(look, checks[0]);
     }
 
     /** React to a dead WebRTC link quickly (closed tab, lost Wi-Fi). */

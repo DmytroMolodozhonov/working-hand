@@ -6,10 +6,12 @@
  *  - «Раскрой свои секреты» (Reveal your secrets): point the wand at a thing
  *    (or hold a thing in the other hand, or just look at the wand) — a
  *    glowing hologram tells what it is and its powers.
- *  - «Люмос»: a small steady light at the tip (costs a little strength over
- *    time). «Люмос Максима»: brighter — say it again for even more light.
- *    A sharp flick of the wand throws the light far ahead; it fades there.
- *    «Нокс» puts it out.
+ *  - «Люмос»: the wand's tip shines — a real light that lights up everything
+ *    around (no glass ball: a glow at the tip), costs a little strength over
+ *    time. «Люмос Максима»: brighter — say it again for even more light.
+ *    A sharp flick of the wand throws the light: it flies until it meets a wall
+ *    or the ground and stays there, lighting the place, then fades.
+ *    «Нокс» puts it out. Everybody sees (and is lit by) everybody's Lumos.
  *  - «Латин Вратин» (drawing): the tip leaves glowing lines in the air while
  *    you move the wand; they fade in about 10 seconds.
  *
@@ -25,6 +27,44 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
+export const LUMOS = {
+    THROW_SPEED: 18, // m/s
+    THROW_RANGE: 40, // m: then it stops in the air and hangs there
+    STAY: 20, // s it shines where it landed (the last 4 s fading)
+};
+
+let _glowTex = null;
+/** A soft glow (a light seen by the eye: bright in the middle, fading out — not a ball). */
+function glowTexture() {
+    if (_glowTex) return _glowTex;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d');
+    const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.12, 'rgba(255,252,235,0.95)');
+    gr.addColorStop(0.35, 'rgba(255,240,190,0.38)');
+    gr.addColorStop(0.7, 'rgba(255,225,150,0.08)');
+    gr.addColorStop(1, 'rgba(255,220,140,0)');
+    x.fillStyle = gr;
+    x.fillRect(0, 0, 64, 64);
+    _glowTex = new THREE.CanvasTexture(c);
+    return _glowTex;
+}
+
+export function makeGlow(size) {
+    const m = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff4d6, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    const s = new THREE.Sprite(m);
+    s.scale.setScalar(size);
+    s.renderOrder = 5;
+    return s;
+}
+
+/** How big the tip's glow is for a Lumos level (1 Люмос … 5 Максима again and again). */
+const glowSize = (level) => 0.22 + level * 0.1;
+/** The light's strength and reach for a level. */
+const lightOf = (level) => ({ intensity: 0.8 + level * 0.9, distance: 10 + level * 6 });
+
 /** How much stronger a spell is with this wand (1 = no wand). */
 export function wandPower(wand, spell) {
     if (!wand) return 1;
@@ -39,15 +79,17 @@ export function wandPower(wand, spell) {
 export class WandMagic {
     constructor(game) {
         this.game = game;
-        this.light = null; // {level, point, mesh}
-        this.thrown = []; // flying lights
+        this.light = null; // {level, glow}: my wand's tip shines
+        this.thrown = []; // thrown lights (mine and others'): {glow, pos, vel, flown, stuck, life, level, mine}
+        this.remote = new Map(); // playerId -> glow at their wand's tip
         this.drawing = null; // {until, lines: [], last}
         this.holo = null; // {mesh, until, target}
         // The lights exist from the start (intensity 0): adding a light later
         // would make every material recompile — a freeze in the middle of play
-        // (only one: every light costs on every pixel, even switched off)
-        this.lights = [new THREE.PointLight(0xfff6d8, 0, 14, 2)];
-        game.scene.add(this.lights[0]);
+        // (two only: every light costs on every pixel, even switched off — the two
+        // brightest / nearest Lumos lights of all players get them)
+        this.lights = [new THREE.PointLight(0xfff6d8, 0, 14, 2), new THREE.PointLight(0xfff6d8, 0, 14, 2)];
+        for (const l of this.lights) game.scene.add(l);
     }
 
     get wand() { return this.game.items?.wand || null; }
@@ -91,45 +133,101 @@ export class WandMagic {
     _lumos(max) {
         const g = this.game;
         if (!this.light) {
-            const point = this.lights[0];
-            const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-            const halo = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff6c2, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
-            mesh.add(halo);
-            g.scene.add(mesh);
-            this.light = { level: 0, point, mesh, halo };
+            const glow = makeGlow(glowSize(1));
+            g.scene.add(glow);
+            this.light = { level: 0, glow };
         }
         this.light.level = max ? Math.min(5, Math.max(2, this.light.level + 1)) : Math.max(1, this.light.level);
         const L = this.light.level;
-        this.light.point.intensity = 0.8 + L * 0.9;
-        this.light.point.distance = 10 + L * 6;
-        this.light.halo.scale.setScalar(1 + L * 0.4);
-        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — на кончике палочки свет («Нокс» — погасить)', true);
+        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — кончик палочки светится («Нокс» — погасить; резкий взмах палочкой — бросить свет)', true);
     }
 
     _nox() {
         const l = this.light;
         if (!l) return;
-        l.point.intensity = 0;
-        this.game.scene.remove(l.mesh);
-        l.mesh.geometry.dispose(); l.mesh.material.dispose(); l.halo.geometry.dispose(); l.halo.material.dispose();
+        this.game.scene.remove(l.glow);
+        l.glow.material.dispose();
         this.light = null;
         this.game.hud.setVoice('🌑 Нокс — свет погас', true);
     }
 
+    /** A flick of the wand: the light leaves the tip and flies (the others are told). */
     _throwLight(dir) {
         const g = this.game;
         const l = this.light;
-        const p = l.mesh.position.clone();
-        // the light itself flies away (the tip glows again when it fades)
-        if (this.thrown.length) return;
-        const point = this.lights[0];
-        point.intensity = l.point.intensity * 1.5;
-        point.distance = l.point.distance + 8;
-        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-        point.position.copy(p); mesh.position.copy(p);
-        g.scene.add(mesh);
-        this.thrown.push({ point, mesh, vel: dir.clone().multiplyScalar(22), life: 5, max: 5 });
-        g.hud.setVoice('💫 Свет брошен вперёд', true);
+        if (this.thrown.some((t) => t.mine)) return; // (one at a time; the tip shines again when it fades)
+        const p = this.tip(new THREE.Vector3());
+        if (!p) return;
+        this.addThrown(p, dir.clone().multiplyScalar(LUMOS.THROW_SPEED), Math.max(2, l.level + 1), true);
+        g.sync?.lumosThrow?.(p, dir, Math.max(2, l.level + 1));
+        g.hud.setVoice('💫 Свет брошен — он останется там, куда долетит', true);
+    }
+
+    /** A thrown light (mine or another player's). */
+    addThrown(pos, vel, level, mine = false) {
+        const glow = makeGlow(glowSize(level) * 1.3);
+        glow.position.copy(pos);
+        this.game.scene.add(glow);
+        this.thrown.push({ glow, pos: pos.clone(), vel: vel.clone(), flown: 0, stuck: false, life: LUMOS.STAY, level, mine });
+    }
+
+    /** It flies straight until a wall / the ground stops it, then stays and shines. */
+    _flyThrown(t, dt) {
+        const col = this.game.collision;
+        if (!t.stuck) {
+            const step = t.vel.length() * dt;
+            const n = Math.max(1, Math.ceil(step / 0.25));
+            for (let i = 0; i < n; i++) {
+                _v.copy(t.pos).addScaledVector(t.vel, dt / n);
+                if (col?.pointBlocked(_v.x, _v.y, _v.z)) { t.stuck = true; break; } // (stays just before the surface)
+                t.pos.copy(_v);
+                t.flown += step / n;
+                if (t.flown > LUMOS.THROW_RANGE) { t.stuck = true; break; }
+            }
+        } else t.life -= dt;
+        t.glow.position.copy(t.pos);
+        const k = Math.min(1, t.life / 4); // (fading in the last seconds)
+        t.glow.scale.setScalar(glowSize(t.level) * 1.3 * (0.4 + 0.6 * k) * (1 + Math.sin(this._flick * 1.7 + t.flown) * 0.05));
+        t.glow.material.opacity = k;
+        return t.life > 0;
+    }
+
+    /** Another player's Lumos (their pose message says how bright): a glow at their wand's tip. */
+    _updateRemote() {
+        const g = this.game;
+        const seen = new Set();
+        for (const [id, r] of g.remotes || []) {
+            const level = r.target?.lm || 0;
+            const wand = g.items?.remoteHeld.get(id);
+            const model = wand?.right?.item.kind === 'wand' ? wand.right.model : wand?.left?.item.kind === 'wand' ? wand.left.model : null;
+            if (!level || !model) continue;
+            seen.add(id);
+            let e = this.remote.get(id);
+            if (!e) { e = { glow: makeGlow(glowSize(level)), level }; g.scene.add(e.glow); this.remote.set(id, e); }
+            e.level = level;
+            model.updateMatrixWorld(true);
+            e.glow.position.set(0, model.userData?.tipY || 0.65, 0).applyMatrix4(model.matrixWorld);
+            e.glow.scale.setScalar(glowSize(level) * (1 + Math.sin(this._flick * 2.3 + id.length) * 0.05));
+        }
+        for (const [id, e] of this.remote) if (!seen.has(id)) { g.scene.remove(e.glow); e.glow.material.dispose(); this.remote.delete(id); }
+    }
+
+    /** The two lights go to the two nearest shining things (my tip, thrown lights, others' tips). */
+    _placeLights() {
+        const cam = this.game.camera?.position;
+        const src = [];
+        if (this.light && !this.thrown.some((t) => t.mine)) src.push({ p: this.light.glow.position, level: this.light.level });
+        for (const t of this.thrown) src.push({ p: t.pos, level: t.level * Math.min(1, t.life / 4) });
+        for (const e of this.remote.values()) src.push({ p: e.glow.position, level: e.level });
+        if (cam) src.sort((a, b) => a.p.distanceToSquared(cam) - b.p.distanceToSquared(cam));
+        this.lights.forEach((light, i) => {
+            const s = src[i];
+            if (!s || s.level <= 0) { light.intensity = 0; return; }
+            const lo = lightOf(s.level);
+            light.position.copy(s.p);
+            light.intensity = lo.intensity * (1 + Math.sin(this._flick * 3.1 + i) * 0.04);
+            light.distance = lo.distance;
+        });
     }
 
     // ------------------------------------------------------------- Reveal
@@ -232,15 +330,13 @@ export class WandMagic {
         const g = this.game;
         const hasWand = !!this.wand;
         if (this.light && !hasWand) this._nox();
+        this._flick = (this._flick || 0) + dt;
         // Lumos at the tip (a little strength over time); a flick throws it
         if (this.light) {
             const tip = this.tip(new THREE.Vector3(), _v2);
-            this.light.mesh.position.copy(tip);
-            if (!this.thrown.length) {
-                this.light.point.position.copy(tip);
-                this.light.point.intensity = 0.8 + this.light.level * 0.9;
-                this.light.point.distance = 10 + this.light.level * 6;
-            }
+            const away = this.thrown.some((t) => t.mine); // (the light is flying: the tip only glimmers)
+            this.light.glow.position.copy(tip);
+            this.light.glow.scale.setScalar(glowSize(this.light.level) * (away ? 0.35 : 1) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
             const side = g.items.heldOf('wand').side;
             const v = g.character.handVelocity[side];
@@ -248,15 +344,12 @@ export class WandMagic {
         }
         for (let i = this.thrown.length - 1; i >= 0; i--) {
             const t = this.thrown[i];
-            t.life -= dt;
-            t.vel.multiplyScalar(Math.max(0, 1 - 1.2 * dt));
-            t.mesh.position.addScaledVector(t.vel, dt);
-            t.point.position.copy(t.mesh.position);
-            const k = Math.max(0, t.life / t.max);
-            t.point.intensity *= Math.pow(0.6, dt);
-            t.mesh.scale.setScalar(0.4 + k * 0.6);
-            if (t.life <= 0) { if (!this.light) t.point.intensity = 0; g.scene.remove(t.mesh); t.mesh.geometry.dispose(); t.mesh.material.dispose(); this.thrown.splice(i, 1); }
+            if (this._flyThrown(t, dt)) continue;
+            g.scene.remove(t.glow); t.glow.material.dispose();
+            this.thrown.splice(i, 1);
         }
+        this._updateRemote();
+        this._placeLights();
         // drawing in the air
         const d = this.drawing;
         if (d) {
@@ -301,7 +394,8 @@ export class WandMagic {
     dispose() {
         this._nox?.();
         this._closeHolo();
-        for (const t of this.thrown) this.game.scene.remove(t.mesh);
+        for (const t of this.thrown) this.game.scene.remove(t.glow);
+        for (const e of this.remote.values()) this.game.scene.remove(e.glow);
         for (const l of this.lights) this.game.scene.remove(l);
         if (this.drawing) for (const s of this.drawing.lines) this.game.scene.remove(s.mesh);
     }

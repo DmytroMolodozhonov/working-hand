@@ -79,12 +79,13 @@ export class Accio {
         }
         if (best.L) return this._castItem(best.L, best.side);
         if (best.bk) {
-            // the book flies into the hand (the host gives it, as when a hand reaches it)
-            const from = best.bk.model.position.clone();
-            const hand = ch.getHandWorldPosition(best.side, new THREE.Vector3());
-            for (let i = 0; i < 24; i++) g.fx.spark(_v2.copy(from).lerp(hand, i / 24), i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v1.set(0, 0.5, 0), 0.5);
-            if (g.books.auth) g.books._take(best.bk.id, g.localId, best.side);
-            else g.sync?.bookTake?.(best.bk.id);
+            // the book rises and flies to the hand; it is caught when it gets there
+            // (the host gives it, as when a hand reaches it)
+            const bk = best.bk;
+            bk.accio = true;
+            bk.fallV = null;
+            this.state = { bk, side: best.side, t: 0 };
+            for (let i = 0; i < 16; i++) g.fx.spark(bk.model.position, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
             if (g.sound) g.sound.playWhoosh?.();
             return null;
         }
@@ -137,10 +138,34 @@ export class Accio {
         }
     }
 
+    /** A book flying to the hand. */
+    _updateBook(dt) {
+        const s = this.state;
+        const g = this.game;
+        const bk = s.bk;
+        s.t += dt;
+        if (!g.books?.books.has(bk.id)) { this.state = null; return; } // (somebody else got it)
+        const hand = g.character.getGripObject(s.side).getWorldPosition(_v1);
+        const p = bk.model.position;
+        const to = _v2.subVectors(hand, p);
+        const d = to.length();
+        if (d > 1e-3) p.addScaledVector(to, Math.min(1, (ACCIO.SPEED * dt) / d));
+        bk.model.rotation.y += dt * 5;
+        if (Math.random() < 0.5) g.fx.spark(p, 0xfff2a8, 0.07, _v2.set(0, 0.4, 0), 0.3);
+        if (d < ACCIO.CATCH || s.t > ACCIO.MAX_TIME) {
+            this.state = null;
+            bk.accio = false;
+            if (d >= ACCIO.CATCH) { g.books.dropBook(bk, null); return; } // (it couldn't get there: it falls)
+            if (g.books.auth) g.books._take(bk.id, g.localId, s.side);
+            else g.sync?.bookTake?.(bk.id);
+        }
+    }
+
     update(dt) {
         const s = this.state;
         if (!s) return;
         if (s.L) { this._updateItem(dt); return; }
+        if (s.bk) { this._updateBook(dt); return; }
         const g = this.game;
         const w = s.w;
         s.t += dt;
