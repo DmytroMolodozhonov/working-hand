@@ -44,6 +44,43 @@ export class PoseInterpreter {
     }
 
     /**
+     * How far each arm is lifted, from the camera picture itself: 0 = hanging,
+     * ~0.13 = lifted ~30°, 1 = at shoulder height, more = above (1 - cos of the
+     * angle from hanging). The wrist's drop below the shoulder is compared with the
+     * whole arm's length (shoulder → elbow → wrist), both in shoulder widths (the
+     * same at any distance from the camera). The arm's length is this person's own,
+     * learned as they play: the longest the arm has looked lately — and it looks
+     * whole both hanging and lifted sideways, so holding an arm up doesn't unlearn it.
+     * (The 3D arm can't tell: its tilt towards the camera is guessed from how short
+     * the arm looks, so a player standing further away seems to hold the arms forward.)
+     */
+    _armLift(lm) {
+        const sw = Math.hypot(lm[11].x - lm[12].x, lm[11].y - lm[12].y);
+        if (sw < 0.02) return null;
+        const t = performance.now() / 1000;
+        const dt = Math.min(1, Math.max(0, t - (this._liftT || t)));
+        this._liftT = t;
+        const L = this._armLen || (this._armLen = { left: 0, right: 0, full: 1.5 });
+        const seg = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y) / sw;
+        let longest = 0;
+        for (const [side, s, e, w] of [['left', 11, 13, 15], ['right', 12, 14, 16]]) {
+            if ((lm[w].visibility ?? 1) < 0.3 || (lm[e].visibility ?? 1) < 0.3) continue;
+            // smoothed (~0.3 s): one jumpy picture doesn't stretch the arm
+            const len = seg(s, e) + seg(e, w);
+            L[side] = L[side] ? L[side] + (len - L[side]) * Math.min(1, dt / 0.3) : len;
+            longest = Math.max(longest, L[side]);
+        }
+        // the whole arm: the longest seen lately (forgotten slowly — a new player, another camera)
+        L.full = Math.max(1.1, longest, L.full - 0.01 * dt);
+        const out = {};
+        for (const [side, s, w] of [['left', 11, 15], ['right', 12, 16]]) {
+            if ((lm[w].visibility ?? 1) < 0.3) { out[side] = 0; continue; } // (below the picture: hanging)
+            out[side] = 1 - (lm[w].y - lm[s].y) / sw / L.full;
+        }
+        return out;
+    }
+
+    /**
      * @param {object} results  {poseLandmarks, faceLandmarks, leftHandLandmarks, rightHandLandmarks}
      * @param {HTMLVideoElement|object} video  for face solver aspect ratio
      */
@@ -69,6 +106,7 @@ export class PoseInterpreter {
             data.leftShoulder = P(11); data.leftElbow = P(13); data.leftWrist = P(15);
             data.rightShoulder = P(12); data.rightElbow = P(14); data.rightWrist = P(16);
             data.nose = P(0);
+            data.armLift = this._armLift(lm);
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));

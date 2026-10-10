@@ -137,7 +137,7 @@ export class Duel {
         for (const [id, r] of g.remotes) if (!r.dead) consider('p', id, r.position.clone().add(_v2.set(0, 0.6, 0)));
         for (const z of g.zombies) if (!z.isDead) consider('z', z.id, z.group.position.clone().add(_v2.set(0, 1.0, 0)), 1.2);
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
-        for (const a of g.animals?.targets() || []) consider('a', a.id, this._creaturePoint(a, new THREE.Vector3()), 1.0 * a.group.scale.y);
+        for (const a of g.animals?.targets() || []) consider('a', a.id, this._creaturePoint(a, new THREE.Vector3()), this._animalBody(a).r);
         for (const v of g.castleLife?.targets() || []) consider('v', v.id, this._creaturePoint(v, new THREE.Vector3()), 1.6);
         for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall') consider('b', b.id, b.model.position.clone());
         return best;
@@ -157,7 +157,7 @@ export class Duel {
         }
         for (const a of g.animals?.targets() || []) {
             const c = this._creaturePoint(a, _v3);
-            if (c.distanceTo(p) < 1.1 * a.group.scale.y) return { kind: 'a', id: a.id };
+            if (c.distanceTo(p) < this._animalBody(a).r) return { kind: 'a', id: a.id };
         }
         for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall' && bd.model.position.distanceTo(p) < 1.0) return { kind: 'b', id: bd.id };
         return null;
@@ -177,8 +177,18 @@ export class Duel {
     /** The middle of an animal / a villager (where a charge flies). */
     _creaturePoint(c, out) {
         if (c.isBird) return out.copy(c.model.position);
-        if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, 0.8 * c.group.scale.y, 0));
+        if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
         return out.set(c.x, c.y + 2.4, c.z);
+    }
+
+    /** The middle of an animal's body above its feet and how big it is (measured once from the model). */
+    _animalBody(a) {
+        if (!a._body) {
+            const box = new THREE.Box3().setFromObject(a.model || a.group);
+            const size = box.getSize(new THREE.Vector3());
+            a._body = { y: (box.min.y + box.max.y) / 2 - a.group.position.y, r: Math.max(0.6, Math.max(size.x, size.y, size.z) * 0.45) };
+        }
+        return a._body;
     }
 
     _creature(kind, id) {

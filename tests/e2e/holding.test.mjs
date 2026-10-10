@@ -240,3 +240,28 @@ test('a scroll: the other hand opens it, it unrolls between the hands and is rea
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('magic gesture: hanging arms never wait for a spell; an arm lifted ~30° does (no need to hold it level)', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const check = async (deg) => {
+        await feed(page, { raise: deg }, 25, 40);
+        return page.evaluate(() => { const g = window.__zns.game; return { raised: !!g._raisedHand(), magic: !!g.isMagicActive, lift: g.currentPose?.armLift }; });
+    };
+    const down = await check(8);
+    await new Promise((r) => setTimeout(r, 1500)); // (the magic gesture lets go after ~1.2 s)
+    const down2 = await check(8);
+    const small = await check(18);
+    await new Promise((r) => setTimeout(r, 1500));
+    const small2 = await check(18);
+    const slight = await check(32);
+    const level = await check(85);
+    assert.ok(!small2.raised, 'lifted only ~18°: not yet ' + JSON.stringify(small2));
+    assert.ok(!down2.raised && !down2.magic, 'arms hanging: no magic ' + JSON.stringify(down2));
+    assert.ok(slight.raised && slight.magic, 'an arm lifted ~30°: the game waits for a spell ' + JSON.stringify(slight));
+    assert.ok(level.raised && level.magic, 'level arm: too');
+    assert.ok(!down.raised, 'hanging from the start: not raised');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

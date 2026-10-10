@@ -27,11 +27,12 @@ export function hand(wx, wy, { size = 0.09, curl = 0 } = {}) {
 /**
  * @param {object} o
  *   arms: 'forward' | 'down' | 'up'
+ *   raise: degrees — both arms lifted sideways this far from hanging (overrides `arms`)
  *   leftCurl / rightCurl: 0 open … 1 fist, null = hand not detected
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
  */
-export function frame({ arms = 'forward', leftCurl = 0, rightCurl = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
+export function frame({ arms = 'forward', raise = null, leftCurl = 0, rightCurl = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -40,7 +41,12 @@ export function frame({ arms = 'forward', leftCurl = 0, rightCurl = 0, noseY = 0
     p[11] = { x: 0.6 + lean, y: sh, z: sz, visibility: 0.99 };
     p[12] = { x: 0.4 + lean, y: sh, z: sz, visibility: 0.99 };
     let lElbow, lWrist, rElbow, rWrist;
-    if (arms === 'forward') {
+    if (raise != null) {
+        // straight arms lifted sideways by `raise` degrees from hanging (0.15 + 0.15 long)
+        const a = raise * Math.PI / 180, dx = Math.sin(a) * 0.15, dy = Math.cos(a) * 0.15;
+        lElbow = [0.6 + dx, sh + dy]; lWrist = [0.6 + 2 * dx, sh + 2 * dy];
+        rElbow = [0.4 - dx, sh + dy]; rWrist = [0.4 - 2 * dx, sh + 2 * dy];
+    } else if (arms === 'forward') {
         lElbow = [0.6, sh + 0.03]; lWrist = [0.6 + wristOffset[0], sh + 0.02 + wristOffset[1]];
         rElbow = [0.4, sh + 0.03]; rWrist = [0.4 - wristOffset[0], sh + 0.02 + wristOffset[1]];
     } else if (arms === 'up') {
@@ -51,10 +57,12 @@ export function frame({ arms = 'forward', leftCurl = 0, rightCurl = 0, noseY = 0
         rElbow = [0.36, sh + 0.15]; rWrist = [0.35, sh + 0.3];
     }
     if (lean) { lElbow[0] += lean; lWrist[0] += lean; rElbow[0] += lean; rWrist[0] += lean; }
-    p[13] = { x: lElbow[0], y: lElbow[1], z: -0.2, visibility: 0.99 };
-    p[14] = { x: rElbow[0], y: rElbow[1], z: -0.2, visibility: 0.99 };
-    p[15] = { x: lWrist[0], y: lWrist[1], z: -0.4, visibility: 0.99 };
-    p[16] = { x: rWrist[0], y: rWrist[1], z: -0.4, visibility: 0.99 };
+    // (raised sideways: the arm stays in the body's plane, no depth)
+    const ez = raise != null ? 0 : -0.2, wz = raise != null ? 0 : -0.4;
+    p[13] = { x: lElbow[0], y: lElbow[1], z: ez, visibility: 0.99 };
+    p[14] = { x: rElbow[0], y: rElbow[1], z: ez, visibility: 0.99 };
+    p[15] = { x: lWrist[0], y: lWrist[1], z: wz, visibility: 0.99 };
+    p[16] = { x: rWrist[0], y: rWrist[1], z: wz, visibility: 0.99 };
     p[23] = { x: 0.57, y: 0.8, z: 0, visibility: 0.9 };
     p[24] = { x: 0.43, y: 0.8, z: 0, visibility: 0.9 };
     const hands = [];

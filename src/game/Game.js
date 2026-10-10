@@ -2141,11 +2141,25 @@ export class Game {
         }
     }
 
+    /**
+     * The magic gesture: an arm lifted ~30° from hanging is enough (measured on the camera
+     * picture — PoseInterpreter.armLift); without it, the old rule (wrist near the face).
+     */
+    _raisedHand() {
+        const lift = this.currentPose?.armLift;
+        if (!lift) return this.character.isHandRaised();
+        const NEED = 0.12; // (~28°)
+        const l = lift.left > NEED, r = lift.right > NEED;
+        if (!l && !r) return null;
+        const side = l && r ? (lift.left >= lift.right ? 'left' : 'right') : l ? 'left' : 'right';
+        return { side, bothLevel: l && r && Math.abs(lift.left - lift.right) < 0.25 };
+    }
+
     _updateMagicGesture() {
         const loading = this.ui.isLoading && this.ui.isLoading();
         // Only when a person is actually tracked (no "raised hands" from the default pose)
         const tracked = this.currentPose && this.currentPose.hasPose;
-        const res = tracked && (this.config.mode !== 'test' || this.testState === 'fpv') ? this.character.isHandRaised() : null;
+        const res = tracked && (this.config.mode !== 'test' || this.testState === 'fpv') ? this._raisedHand() : null;
         if (res && !loading) {
             this.magicHand = res.side;
             this.lastMagicHand = res.side;
