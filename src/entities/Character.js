@@ -18,6 +18,30 @@ const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _qBody = new THREE.Quaternion();
 const _up = new THREE.Vector3();
+const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3();
+const _r5 = new THREE.Vector3(), _r6 = new THREE.Vector3(), _ru = new THREE.Vector3(), _rn = new THREE.Vector3();
+
+/**
+ * An arm of two bones (L1 from the shoulder to the elbow, L2 on to the hand)
+ * reaching for `target`, the elbow bent towards `pole` (a direction). Out of
+ * reach: the arm straight towards it; nearer than the bones can fold: as near
+ * as they allow. Writes the elbow and the hand.
+ */
+export function armReach(shoulder, target, L1, L2, pole, outElbow, outHand) {
+    const u = _ru.subVectors(target, shoulder);
+    let d = u.length();
+    if (d < 1e-6) u.copy(pole); // (the hand at the shoulder itself: any way out)
+    u.normalize();
+    d = Math.max(Math.abs(L1 - L2) + 1e-3, Math.min(L1 + L2 - 1e-4, d));
+    const n = _rn.copy(pole).addScaledVector(u, -pole.dot(u));
+    if (n.lengthSq() < 1e-8) n.set(0, -1, 0).addScaledVector(u, u.y);
+    if (n.lengthSq() < 1e-8) n.set(1, 0, 0);
+    n.normalize();
+    const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+    outElbow.copy(shoulder).addScaledVector(u, a).addScaledVector(n, h);
+    return outHand.copy(shoulder).addScaledVector(u, d);
+}
 
 // Ground at y=-0.5 corresponded to group.y = 1.5 (baseY) in the original.
 export const PLAYER_GROUND_OFFSET = 2.0;
@@ -198,6 +222,7 @@ export class VoxelCharacter {
         // 0.55 per frame at 60 FPS, frame-rate independent (the pose is already smoothed
         // upstream; more smoothing here only made the arms trail behind the player)
         const armK = 1 - Math.pow(0.45, Math.min(0.1, dt) * 60);
+        this.restoreArms(); // (from the tracked arms, not from a hand shown holding a bow's string)
         if (!poseData.leftShoulder || !poseData.leftElbow || !poseData.leftWrist ||
             !poseData.rightShoulder || !poseData.rightElbow || !poseData.rightWrist) {
             this._updateHands(poseData);
@@ -355,7 +380,64 @@ export class VoxelCharacter {
         return side === 'left' ? this.leftHandAnchor : this.rightHandAnchor;
     }
 
+    /**
+     * Show this hand holding something at `point` (the drawing fingers on a bow's
+     * string): the arm bends to it — the elbow forward, out to its side and a little
+     * down, in front of the chest. Only how the hero looks this frame (w: 0 the
+     * tracked arm … 1 at the point): the tracked arm comes back at the start of the
+     * next frame (restoreArms), so tracking, the hand's speed and every gesture keep
+     * seeing the player's own arm.
+     * @param {number} fingers  how far beyond the wrist the point is (it is in the fingers)
+     */
+    reachHand(side, point, w = 1, fingers = 0) {
+        if (!(w > 0)) return;
+        const arm = side === 'left' ? this.leftArmAnchor : this.rightArmAnchor;
+        const elbow = side === 'left' ? this.leftElbowAnchor : this.rightElbowAnchor;
+        const all = this._reachSaved || (this._reachSaved = {
+            left: { on: false, a: new THREE.Quaternion(), e: new THREE.Quaternion() },
+            right: { on: false, a: new THREE.Quaternion(), e: new THREE.Quaternion() },
+        });
+        const saved = all[side];
+        // (the tracked arm kept to come back to; bent twice in a frame — again from the tracked arm)
+        if (!saved.on) { saved.a.copy(arm.quaternion); saved.e.copy(elbow.quaternion); saved.on = true; }
+        else { arm.quaternion.copy(saved.a); elbow.quaternion.copy(saved.e); }
+        this._reach = true;
+        this.group.updateMatrixWorld(true);
+        this.group.getWorldQuaternion(_qBody);
+        _up.set(0, 1, 0).applyQuaternion(_qBody);
+        const S = arm.getWorldPosition(_r1);
+        const pole = _r2.set(side === 'left' ? -0.3 : 0.3, -0.5, -1).applyQuaternion(_qBody);
+        const L1 = this.BONE_LENGTH_UPPER, L2 = this.BONE_LENGTH_LOWER;
+        armReach(S, point, L1, L2, pole, _r3, _r4);
+        if (fingers > 0) {
+            // the wrist short of the point by the hand, along the forearm
+            const f = _r5.subVectors(point, _r3).normalize();
+            armReach(S, _r6.copy(point).addScaledVector(f, -fingers), L1, L2, pole, _r3, _r4);
+        }
+        arm.up.copy(_up);
+        arm.lookAt(_r3);
+        if (w < 1) { _q1.copy(arm.quaternion); arm.quaternion.copy(saved.a).slerp(_q1, w); }
+        arm.updateMatrixWorld(true);
+        elbow.up.copy(_up);
+        elbow.lookAt(_r4);
+        if (w < 1) { _q1.copy(elbow.quaternion); elbow.quaternion.copy(saved.e).slerp(_q1, w); }
+        elbow.updateMatrixWorld(true);
+    }
+
+    /** The tracked arms back (after reachHand): every frame starts from the player's own arms. */
+    restoreArms() {
+        if (!this._reach) return;
+        this._reach = false;
+        const s = this._reachSaved;
+        if (s.left.on) { this.leftArmAnchor.quaternion.copy(s.left.a); this.leftElbowAnchor.quaternion.copy(s.left.e); }
+        if (s.right.on) { this.rightArmAnchor.quaternion.copy(s.right.a); this.rightElbowAnchor.quaternion.copy(s.right.e); }
+        s.left.on = s.right.on = false;
+        this.group.updateMatrixWorld(true);
+    }
+
     setIdlePose() {
+        this._reach = false;
+        if (this._reachSaved) this._reachSaved.left.on = this._reachSaved.right.on = false;
         this.leftArmAnchor.rotation.set(0, 0, 0);
         this.leftArmAnchor.lookAt(_v1.copy(this.leftArmAnchor.position).add(_v2.set(-0.1, -1, 0)));
         this.leftElbowAnchor.rotation.set(0, 0, 0);
@@ -389,6 +471,7 @@ export class VoxelCharacter {
      * @param {boolean} move  false for remote avatars (position comes from network)
      */
     update(dt, collision = null, move = true) {
+        this.restoreArms(); // (a frame without a pose too: the hand's speed is the player's own)
         // Hand world velocity (for throwing / swing strength)
         for (const side of ['left', 'right']) {
             const grip = this.getGripObject(side);

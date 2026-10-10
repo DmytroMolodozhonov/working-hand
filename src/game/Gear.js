@@ -11,7 +11,7 @@
  * bow, pull the hand back (the further, the stronger), then let go — a quick
  * move of the hand forward. The arrow flies along the bow, where the bow arm
  * points (shoulder → bow hand); the bow turns to it. The arrow rests on top of
- * the bow fist.
+ * the bow fist and the drawing fingers hold the string at its nock.
  *
  * Thor's hammer: only in a thunderstorm. Raise it above the head — lightning
  * strikes it; then aim it at a creature for up to 5 s (like «Lightning
@@ -39,6 +39,8 @@ const STRONG = 15; // spells costing this much break a plain shield
 
 /** The arrow rests on top of the bow fist: this far above the grip's middle (bow-local units). */
 export const ARROW_REST = 0.1;
+/** The string is in the drawing fingers: this far beyond the wrist (world). */
+const HOLD_FINGERS = 0.35;
 
 /**
  * Where a drawn arrow lies: along `dir`, resting on top of the bow fist
@@ -225,6 +227,25 @@ export class Gear {
     _bowString(bow) { setBowString(bow.model, null); } // (at rest: straight)
 
     /**
+     * The drawing fingers hold the string: the hero's drawing hand is shown at the
+     * nock. (The camera hardly sees how far a hand is, so the tracked hand at the
+     * chin comes out far off the arrow's line; only the picture is bent to the
+     * string — the draw and the release still read the tracked hand.) Eased in as
+     * the arrow goes on the string, eased out after the shot.
+     */
+    _updateDrawHand(dt) {
+        const h = this._hold || (this._hold = { side: null, w: 0, at: new THREE.Vector3() });
+        const n = this.nock;
+        if (n && n.state === 'nocked' && n.at && !this.game.combat?.dead) {
+            if (h.side !== n.side) h.w = 0;
+            h.side = n.side;
+            h.at.copy(n.at);
+            h.w = Math.min(1, h.w + dt * 8);
+        } else h.w = Math.max(0, h.w - dt * 5);
+        if (h.w > 0 && h.side) this.game.character.reachHand?.(h.side, h.at, h.w * h.w * (3 - 2 * h.w), HOLD_FINGERS);
+    }
+
+    /**
      * The bow into the other hand: that hand's fist on the bow and the bow hand
      * opened for a moment (not while an arrow is drawn).
      */
@@ -399,6 +420,7 @@ export class Gear {
             this._updateBow(dt);
             this._updateHammer(dt);
         }
+        this._updateDrawHand(dt);
         this._updateArrows(dt);
         this._updateWeather(dt);
     }
