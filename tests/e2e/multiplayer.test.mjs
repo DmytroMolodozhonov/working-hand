@@ -490,3 +490,40 @@ test('server list: «Создать сервер» starts a game that the other 
     await a.context.close();
     await b.context.close();
 });
+
+test('no direct path between the computers: the server still shows in the list, joining says the direct link failed; another version is told to update', async () => {
+    const a = await openPlayer('Хост2');
+    await a.page.evaluate(() => { document.getElementById('mp-mode').value = 'creative'; });
+    await a.page.click('#mp-create-open');
+    await a.page.fill('#mp-srv-name', 'Без прямой');
+    await a.page.click('#mp-host-btn');
+    await wf(a.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    // a friend whose router lets no direct connection through (no addresses at all)
+    const b = await openPlayer('ДругЗаРоутером');
+    await b.page.evaluate(() => { window.__ZNS_ICE_POLICY__ = 'relay'; });
+    await b.page.click('#mp-refresh-btn');
+    await wf(b.page, () => /Сервер SRV/.test(document.getElementById('mp-server-list').textContent), null, 40000);
+    await b.page.click('.mp-server-row');
+    await b.page.click('#mp-enter-btn');
+    await wf(b.page, () => document.getElementById('mp-status').textContent.includes('❌'), null, 45000);
+    const said = await b.page.textContent('#mp-status');
+    assert.match(said, /напрямую/, 'it says the direct link failed, not «no internet»: ' + said);
+    // a friend with another version of the game: told to update
+    const c = await openPlayer('СтараяВерсия');
+    const code = await ev(a.page, () => window.__zns.net.code);
+    await c.page.evaluate(() => { window.__zns.net.version = 'f00dbad'; });
+    const hostVer = await ev(a.page, () => window.__zns.net.version);
+    await c.page.fill('#mp-code', code);
+    await c.page.click('#mp-join-btn');
+    if (hostVer) {
+        await wf(c.page, () => /верси/.test(document.getElementById('mp-status').textContent), null, 40000);
+        assert.match(await c.page.textContent('#mp-status'), /Обновить и запустить/);
+    }
+    // a hand-typed connection server is pointed out (only the same one sees each other)
+    assert.match(await b.page.textContent('#mp-custom-warn'), /свой сервер связи/);
+    // (a failed direct link is logged by the network module as an error — that is expected here)
+    assert.deepEqual(realErrors(a.errors).filter((e) => !/PeerJS|Negotiation|connection/i.test(e)), []);
+    await a.context.close();
+    await b.context.close();
+    await c.context.close();
+});

@@ -194,7 +194,8 @@ export class NetSync {
         this._mineT = (this._mineT || 0) + dt;
         if (this._mineT > 8) { this._mineT = 0; this._sendMine(); }
         this.pTimer += dt;
-        if (this.pTimer >= 0.05) {
+        // (through the slow go-between: ~8 times a second instead of 20)
+        if (this.pTimer >= (this.net.relayed ? 0.12 : 0.05)) {
             this.pTimer = 0;
             const held = [];
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());

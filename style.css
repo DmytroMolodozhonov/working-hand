@@ -1378,6 +1378,8 @@ body {
 .mp-srv-name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-full { color: #ff6b6b; font-weight: bold; }
 .mp-empty { color: #8395a7; padding: 18px 10px; text-align: center; font-size: 0.9rem; }
+.mp-warn { color: #ffcf6e; font-size: 0.85rem; margin: 4px 0; }
+.mp-warn:empty { display: none; }
 .mp-info-col h4 { color: #ffe066; margin: 4px 4px 2px; }
 .mp-info-mode { color: #9ff3ff; margin: 0 4px 10px; font-size: 0.9rem; }
 .mp-info-players { max-height: 180px; overflow-y: auto; margin: 0 4px 12px; color: #ecf0f1; line-height: 1.7; }

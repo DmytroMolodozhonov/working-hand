@@ -12,7 +12,7 @@ import { Hud } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
-import { Network, MAX_PLAYERS } from './net/Network.js';
+import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderSpellsTab, renderItemsTab } from './ui/Codex.js';
 import { listWorlds, loadWorld, deleteWorld } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
@@ -324,6 +324,7 @@ updateGameMapList();
 // ------------------------------------------------------------------ version
 // Shown in the menu so everyone can see at a glance that the game is up to date
 fetch('/api/version').then((r) => r.json()).then((v) => {
+    if (v?.sha) net.version = v.sha; // (players must play the same version together)
     if (!v || !v.date) return;
     const el = $('game-version-top');
     if (el) el.innerHTML = `Версия от <b>${v.date}</b>` + (v.sha ? ` <span class="ver-sha">(${v.sha})</span>` : '');
@@ -641,8 +642,16 @@ try {
     mpServer.value = localStorage.getItem('zns-server') || '';
     $('mp-srv-name').value = localStorage.getItem('zns-srv-name') || '';
 } catch (e) { /* ignore */ }
+setTimeout(() => customServerWarning(), 0);
 
 function setMpStatus(html) { mpStatus.innerHTML = html; }
+/** A connection server typed in by hand: only players with the very same one see each other. */
+function customServerWarning() {
+    const el = $('mp-custom-warn');
+    const v = (mpServer.value || '').trim();
+    if (el) el.innerHTML = v ? `⚠️ Указан свой сервер связи «${escapeHtml(v)}» — друзья увидят вас, только если у них указан такой же. Обычно поле пустое.` : '';
+}
+mpServer.addEventListener('input', customServerWarning);
 function renderPlayers() {
     if (!net.active) { mpPlayers.innerHTML = ''; return; }
     mpPlayers.innerHTML = 'Игроки: ' + net.playerList().map((p) => escapeHtml(p.name) + (p.id === net.localId ? ' (вы)' : '')).join(', ');
@@ -654,6 +663,7 @@ function playerName() {
 }
 
 let servers = null; // null: not checked yet / no connection
+let lastSeenServers = '';
 let pickedServer = null;
 let refreshing = false;
 async function refreshServers() {
@@ -661,6 +671,8 @@ async function refreshServers() {
     refreshing = true;
     try { servers = await net.listServers(mpServer.value); } catch (e) { servers = null; }
     refreshing = false;
+    const seen = servers ? servers.map((s) => s.code + (s.noInfo ? '(без прямой связи)' : '')).join(', ') || 'нет' : 'нет связи с сервером связи';
+    if (seen !== lastSeenServers) { lastSeenServers = seen; netLog('список серверов: ' + seen); }
     renderServers();
 }
 function renderServers() {
@@ -677,7 +689,10 @@ function renderServers() {
             row.className = 'mp-server-row' + (pickedServer?.code === sv.code ? ' sel' : '');
             row.dataset.code = sv.code;
             const full = sv.players.length >= (sv.max || MAX_PLAYERS);
-            row.innerHTML = `<span class="mp-srv-name">${escapeHtml(sv.name || 'Сервер')}</span><span>${MODE_NAME[sv.mode] || '—'}</span><span class="${full ? 'mp-full' : ''}">${sv.players.length}/${sv.max || MAX_PLAYERS}</span>`;
+            // (a server there, but no direct link to it yet: no name / players known)
+            row.innerHTML = sv.noInfo
+                ? `<span class="mp-srv-name">Сервер ${escapeHtml(sv.code)}</span><span>—</span><span title="нет прямой связи">?/${sv.max || MAX_PLAYERS}</span>`
+                : `<span class="mp-srv-name">${escapeHtml(sv.name || 'Сервер')}</span><span>${MODE_NAME[sv.mode] || '—'}</span><span class="${full ? 'mp-full' : ''}">${sv.players.length}/${sv.max || MAX_PLAYERS}</span>`;
             row.onclick = () => { pickedServer = sv; renderServers(); };
             list.appendChild(row);
         }
@@ -686,6 +701,12 @@ function renderServers() {
     const sv = pickedServer && servers?.find((x) => x.code === pickedServer.code);
     if (!sv) { info.innerHTML = '<div class="mp-empty">Нажмите на сервер — здесь появятся игроки и кнопка «Войти»</div>'; return; }
     const full = sv.players.length >= (sv.max || MAX_PLAYERS);
+    if (sv.noInfo) {
+        info.innerHTML = `<h4>Сервер ${escapeHtml(sv.code)}</h4><div class="mp-info-mode">Сервер есть, но прямой связи с ним пока нет — попробуйте войти: если не выйдет, игра скажет почему.</div>
+            <button id="mp-enter-btn" class="mp-btn">▶ Войти</button>`;
+        $('mp-enter-btn').onclick = () => joinRoom(sv.code);
+        return;
+    }
     info.innerHTML = `<h4>${escapeHtml(sv.name || 'Сервер')}</h4><div class="mp-info-mode">${MODE_NAME[sv.mode] || ''}${sv.playing ? ' · идёт игра' : ''}</div>
         <div class="mp-info-players">${sv.players.map((n) => `<div>🧙 ${escapeHtml(n)}</div>`).join('')}</div>
         <button id="mp-enter-btn" class="mp-btn" ${full ? 'disabled' : ''}>${full ? 'Заполнен' : '▶ Войти'}</button>`;
@@ -783,6 +804,10 @@ net.on('peer-join', ({ name }) => {
     setMpStatus(`К вам подключился: ${escapeHtml(name)}. Код: <span class="mp-code-big">${net.code}</span>`);
 });
 net.on('peer-leave', () => renderPlayers());
+net.on('relayed', ({ who }) => {
+    const text = `🐢 Связь с ${who} идёт через посредника (прямое соединение не вышло) — может подтормаживать`;
+    if (game?.active && game.hud?.notify) game.hud.notify(text); else setMpStatus(escapeHtml(text));
+});
 net.on('players', () => renderPlayers());
 net.on('status', (text) => setMpStatus('⚠️ ' + escapeHtml(text)));
 net.on('disconnected', ({ reason }) => {
