@@ -381,7 +381,8 @@ voice.onResult = (command, isFinal = true) => {
         }
         const name = game.castLocalSpell(command, isFinal);
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
-        if (!name && isFinal && !matchSpell(command) && game.castleLife?.talk?.hear(command)) {
+        // («стоп» with nothing to stop is still words to a villager: «стой» / «стоп» = stop following me)
+        if (!name && isFinal && (!heard || heard === 'Stand') && game.castleLife?.talk?.hear(command)) {
             hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
             return;
         }

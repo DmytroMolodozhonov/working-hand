@@ -14,6 +14,30 @@
 
 import * as THREE from 'three';
 import { lerpAngle } from '../core/math.js';
+import { handFrame, fingerJoints } from './HandPose.js';
+
+/** The fingers bend at most this far from the forearm at the wrist (a real wrist's range). */
+const MAX_WRIST_BEND = 1.4; // rad (~80°)
+const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4();
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion();
+const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _vc = new THREE.Vector3(), _vz = new THREE.Vector3(0, 0, 1);
+const JOINT_FINGERS = ['index', 'middle', 'ring', 'pinky'];
+
+/**
+ * A wand held like a pen (the palm's own joint angles): the thumb's pad and the
+ * index's pad on either side of the wand, the middle finger under it, the ring and
+ * little fingers tucked in; the wand's back rests in the web of the thumb.
+ * Fingers: [knuckle, middle, end, aside]; thumb: [base turn x, y, z, middle, end].
+ */
+export const PEN_GRIP = {
+    index: [0.2, 0.69, 0.6, -0.25],
+    middle: [0.34, 0.9, 0.56, -0.14],
+    ring: [0.95, 1.25, 0.8, 0],
+    pinky: [1.05, 1.25, 0.8, 0],
+    thumb: [0.14, -1.5, 0.51, -0.1, -0.2],
+};
+/** Where the pen grip touches the wand: the web (palm frame), the index's and the thumb's pads (on their end bones). */
+export const PEN_POINTS = { web: [-0.17, 0.17, -0.04], index: [0, 0.049, -0.038], thumb: [0, 0.104, -0.045] };
 
 const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 
@@ -58,6 +82,18 @@ export class SimplifiedHand {
         this._pendingTwist = null;
         this._pendingTwistFrames = 0;
         this.gripOverride = null; // {curl, thumb} when holding a handle
+
+        // The whole hand as the camera sees it (HandPose.js): the palm's full turn and every
+        // finger joint. `body` — the hero (its space), `aspect` — the picture's width/height.
+        this.body = null;
+        this.aspect = 4 / 3;
+        this.fullPose = true;
+        this._frame = null; // {X, Y, Z} the hand in the hero's space (from the points)
+        this._jointsT = null; // target joint angles; _jointsC: current (smoothed)
+        this._jointsC = null;
+        this._pend = null; // a sudden turn-over waiting to be confirmed
+        this._pendN = 0;
+        this.netPalm = null; // (remote avatars) the palm's turn sent over the network
 
         this.group.traverse((obj) => { if (obj.isMesh) obj.frustumCulled = false; });
     }
@@ -117,7 +153,7 @@ export class SimplifiedHand {
             pivot.add(mesh);
             if (i === 2) {
                 const nail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, segLen * 0.45, 0.012), this.nailMat);
-                nail.position.set(0, segLen * 0.7, -w * 0.48);
+                nail.position.set(0, segLen * 0.7, w * 0.48); // (on the back: the fingers bend towards −z, the palm)
                 pivot.add(nail);
             }
             if (i === 0) {
@@ -203,6 +239,12 @@ export class SimplifiedHand {
         cs.wristTwist = lerpAngle(cs.wristTwist, ts.wristTwist, this.ROT_LERP_SPEED);
         cs.wristTilt = lerpAngle(cs.wristTilt, ts.wristTilt, this.ROT_LERP_SPEED);
         cs.wristRoll = lerpAngle(cs.wristRoll, ts.wristRoll, this.ROT_LERP_SPEED);
+        if (this._jointsT) {
+            for (const n of JOINT_FINGERS) {
+                const t = this._jointsT[n], c = this._jointsC[n];
+                for (let i = 0; i < 4; i++) c[i] += (t[i] - c[i]) * this.LERP_SPEED;
+            }
+        }
     }
 
     getAverageLandmarks() {
@@ -311,17 +353,103 @@ export class SimplifiedHand {
         const rawRoll = ((pinkyB.z || 0) - (indexB.z || 0)) * 6;
         const targetRoll = Math.max(-0.8, Math.min(0.8, rawRoll));
         ts.wristRoll += (targetRoll - ts.wristRoll) * 0.45;
+
+        if (this.fullPose) this._fullPose(landmarks);
+    }
+
+    /** The palm's whole turn and the finger joints from the points (see HandPose.js). */
+    _fullPose(landmarks) {
+        const fr = handFrame(landmarks, this.aspect, this._frBuf || (this._frBuf = {}));
+        if (!fr) return;
+        const prev = this._frame;
+        if (!prev) this._frame = { X: fr.X.clone(), Y: fr.Y.clone(), Z: fr.Z.clone() };
+        const f = this._frame;
+        f.Y.copy(fr.Y);
+        if (fr.quality < 0.25 && prev) {
+            // an edge-on hand: its roll about the fingers is a guess — keep the last one
+            f.X.addScaledVector(f.Y, -f.X.dot(f.Y));
+            if (f.X.lengthSq() < 1e-6) f.X.copy(fr.X); else f.X.normalize();
+        } else f.X.copy(fr.X);
+        f.Z.crossVectors(f.X, f.Y);
+        const j = fingerJoints(landmarks, this.aspect, this.side, this._jBuf || (this._jBuf = {}));
+        if (!j) return;
+        if (!this._jointsT) { this._jointsT = {}; this._jointsC = {}; for (const n of JOINT_FINGERS) { this._jointsT[n] = [0, 0, 0, 0]; this._jointsC[n] = [0, 0, 0, 0]; } }
+        for (const n of JOINT_FINGERS) {
+            const t = this._jointsT[n];
+            t[0] = Math.max(-0.35, Math.min(1.75, j[n][0]));
+            t[1] = Math.max(0, Math.min(1.9, j[n][1]));
+            t[2] = Math.max(0, Math.min(1.6, j[n][2]));
+            t[3] = Math.max(-0.45, Math.min(0.45, j.spread[n] || 0));
+        }
+    }
+
+    /**
+     * The palm's turn (in the hand pivot's frame) that puts the model's hand where the
+     * camera sees the real one. The hero's space → the forearm's (the hand hangs on it),
+     * bent at the wrist at most MAX_WRIST_BEND (a wrong guess of the arm's depth must
+     * not break the wrist), then into the palm's own frame (a mirrored left model too).
+     */
+    _palmTarget(out) {
+        const f = this._frame;
+        const elbow = this.group.parent;
+        if (!f || !elbow || !this.body) return null;
+        elbow.updateWorldMatrix(true, false);
+        this.body.updateWorldMatrix(true, false);
+        // the forearm in the hero's space
+        const qE = _qa.copy(this.body.getWorldQuaternion(_qb).invert()).multiply(elbow.getWorldQuaternion(_qc));
+        // the hand's frame in the forearm's space
+        const A = _m1.makeBasis(f.X, f.Y, f.Z).premultiply(_m2.makeRotationFromQuaternion(qE.invert()));
+        // the wrist's range: the fingers within MAX_WRIST_BEND of the forearm (+Z)
+        const Y = _va.setFromMatrixColumn(A, 1);
+        const bend = Y.angleTo(_vz);
+        if (bend > MAX_WRIST_BEND) {
+            const axis = _vb.crossVectors(Y, _vz);
+            if (axis.lengthSq() > 1e-10) A.premultiply(_m2.makeRotationAxis(axis.normalize(), bend - MAX_WRIST_BEND));
+        }
+        // into the palm's own frame: (group·pivot)⁻¹ · A · S (S flips Z for the mirrored model)
+        const GP = _m2.makeScale(this.group.scale.x, 1, 1).multiply(_m3.makeRotationFromEuler(this.handPivot.rotation));
+        const R = GP.invert().multiply(A);
+        if (this.group.scale.x < 0) R.multiply(_m3.makeScale(1, 1, -1));
+        return out.setFromRotationMatrix(R);
     }
 
     animateModel() {
         const cs = this.currentState;
-        this.palm.rotation.y = cs.wristTwist;
-        this.palm.rotation.x = cs.wristTilt;
-        this.palm.rotation.z = cs.wristRoll;
+        const q = this.netPalm || (this.fullPose ? this._palmTarget(this._qT || (this._qT = new THREE.Quaternion())) : null);
+        if (q) {
+            // the whole turn of the real hand; a sudden turn-over (an edge-on glitch) must last to be believed
+            if (this._qShown && this._qShown.angleTo(q) > 1.6 && !this.netPalm) {
+                if (this._pend && this._pend.angleTo(q) < 0.5) this._pendN++;
+                else { this._pend = (this._pend || new THREE.Quaternion()).copy(q); this._pendN = 1; }
+                if (this._pendN < 6) q.copy(this._qShown);
+                else { this._pend = null; this._pendN = 0; }
+            } else this._pendN = 0;
+            (this._qShown || (this._qShown = new THREE.Quaternion())).copy(q);
+            this.palm.quaternion.slerp(q, this.ROT_LERP_SPEED);
+        } else {
+            this.palm.rotation.y = cs.wristTwist;
+            this.palm.rotation.x = cs.wristTilt;
+            this.palm.rotation.z = cs.wristRoll;
+        }
 
         const maxBend = Math.PI / 1.95;
         const spread = cs.fingerSpread;
         const thumbOut = cs.thumbSpread;
+        const pose = this.gripOverride?.pose;
+        if (pose) {
+            // the fingers settle into the grip the thing needs (a pen grip on a wand)
+            const k = this.LERP_SPEED;
+            const to = (o, key, v) => { o[key] += (v - o[key]) * k; };
+            for (const name of JOINT_FINGERS) {
+                const J = pose[name], seg = this.fingerMeshes[name];
+                to(seg[0].pivot.rotation, 'z', -J[3]);
+                for (let i = 0; i < seg.length; i++) to(seg[i].pivot.rotation, 'x', -J[i]);
+            }
+            const T = pose.thumb, th = this.fingerMeshes.thumb;
+            to(th[0].pivot.rotation, 'x', T[0]); to(th[0].pivot.rotation, 'y', T[1]); to(th[0].pivot.rotation, 'z', T[2]);
+            to(th[1].pivot.rotation, 'x', -T[3]); to(th[2].pivot.rotation, 'x', -T[4]);
+            return;
+        }
         for (const name of FINGERS) {
             const segments = this.fingerMeshes[name];
             const rotDelta = cs.fingers[name] * maxBend;
@@ -342,8 +470,15 @@ export class SimplifiedHand {
                 if (name === 'middle') spreadDir = 0.05;
                 if (name === 'ring') spreadDir = -0.1;
                 if (name === 'pinky') spreadDir = -0.25;
-                pivot.rotation.z = spreadDir * spread;
-                for (const seg of segments) seg.pivot.rotation.x = -rotDelta;
+                const J = !this.gripOverride && this._jointsC?.[name];
+                if (J) {
+                    // every joint as the camera sees it (the knuckle, the middle and the end joints)
+                    pivot.rotation.z = -J[3];
+                    for (let i = 0; i < segments.length; i++) segments[i].pivot.rotation.x = -J[i];
+                } else {
+                    pivot.rotation.z = spreadDir * spread;
+                    for (const seg of segments) seg.pivot.rotation.x = -rotDelta;
+                }
             }
         }
     }
@@ -351,16 +486,23 @@ export class SimplifiedHand {
     setShowHands(visible) { this.group.visible = visible; }
     setQuality() { }
 
-    /** Hold a handle: fingers wrap to `curl` (0..1). null releases. */
-    setGrip(curl) {
-        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15) };
+    /** Hold a handle: fingers wrap to `curl` (0..1); `pose` 'pen': a pen grip (PEN_GRIP). null releases. */
+    setGrip(curl, pose = null) {
+        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: pose === 'pen' ? PEN_GRIP : null };
     }
 
     // ------------------------------------------------------------- networking
     serializeState() {
         const c = this.currentState, f = c.fingers;
         const r = (v) => Math.round(v * 100) / 100;
-        return [r(f.thumb), r(f.index), r(f.middle), r(f.ring), r(f.pinky), r(c.fingerSpread), r(c.thumbSpread), r(c.wristTwist), r(c.wristTilt), r(c.wristRoll)];
+        const out = [r(f.thumb), r(f.index), r(f.middle), r(f.ring), r(f.pinky), r(c.fingerSpread), r(c.thumbSpread), r(c.wristTwist), r(c.wristTilt), r(c.wristRoll)];
+        // the palm's whole turn and the joints (others see the hand as it is)
+        if (this._qShown) {
+            const q = this.palm.quaternion;
+            out.push(r(q.x), r(q.y), r(q.z), r(q.w));
+            if (this._jointsC && !this.gripOverride) for (const n of JOINT_FINGERS) for (const v of this._jointsC[n]) out.push(r(v));
+        }
+        return out;
     }
 
     /** Remote avatar: drive the hand from a network snapshot (smoothed). */
@@ -369,6 +511,13 @@ export class SimplifiedHand {
         const t = this.targetState;
         t.fingers.thumb = arr[0]; t.fingers.index = arr[1]; t.fingers.middle = arr[2]; t.fingers.ring = arr[3]; t.fingers.pinky = arr[4];
         t.fingerSpread = arr[5]; t.thumbSpread = arr[6]; t.wristTwist = arr[7]; t.wristTilt = arr[8]; t.wristRoll = arr[9];
+        if (arr.length >= 14) {
+            this.netPalm = (this.netPalm || new THREE.Quaternion()).set(arr[10], arr[11], arr[12], arr[13]).normalize();
+            if (arr.length >= 30) {
+                if (!this._jointsT) { this._jointsT = {}; this._jointsC = {}; for (const n of JOINT_FINGERS) { this._jointsT[n] = [0, 0, 0, 0]; this._jointsC[n] = [0, 0, 0, 0]; } }
+                JOINT_FINGERS.forEach((n, k) => { for (let i = 0; i < 4; i++) this._jointsT[n][i] = arr[14 + k * 4 + i]; });
+            } else this._jointsT = this._jointsC = null;
+        } else { this.netPalm = null; this._jointsT = this._jointsC = null; }
         this._stepState();
         this.animateModel();
     }

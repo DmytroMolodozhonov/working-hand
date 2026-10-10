@@ -85,7 +85,7 @@ test('fatigue: 30 points, +1 per second, spells cost fatigue, not enough → the
     assert.equal(combat.fatigue, 30, 'full again, never above 30');
 });
 
-test('Protection: arm out → shield for 3 s; spells from the front bounce off, from behind they hit', () => {
+test('Protection: arm out → the shield holds; spells from the front bounce off, from behind they hit', () => {
     const { combat, events } = fakeGame({ armOut: 'none' });
     // No arm fully stretched: the shield still forms at the hand reaching furthest
     assert.equal(combat.castProtection(false), null);
@@ -105,11 +105,57 @@ test('Protection: arm out → shield for 3 s; spells from the front bounce off, 
     const { combat: c3 } = fakeGame();
     c3.explosion(new THREE.Vector3(0, 1.1, -2), 3.6, 1, 'enemy');
     assert.ok(halved > 0 && halved < 20 - c3.hp, `shielded ${halved} < unshielded ${20 - c3.hp}`);
-    // After 3 s the shield is gone
+    // It is still up after 3 s (no longer a 3-second shield)
     for (let i = 0; i < 200; i++) c2.update(1 / 60);
-    assert.equal(c2.shield, null);
-    assert.equal(c2.hitBySpell('Sapira', FRONT, 'enemy'), true);
+    assert.ok(c2.shield, 'still holding');
+    assert.equal(c2.hitBySpell('Sapira', FRONT, 'enemy'), false);
     assert.equal(events.deaths.length, 0);
+});
+
+test('Protection costs 5, then holds as many seconds as the strength left; the strength drains, not comes back', () => {
+    const { combat: c, events } = fakeGame({ armOut: 'right' });
+    c.fatigue = 18;
+    assert.equal(c.castProtection(false), null);
+    assert.equal(c.fatigue, 13, '5 taken at once');
+    assert.ok(Math.abs(c.shield.left - 13) < 1e-9, 'it will hold 13 s');
+    for (let i = 0; i < 5 * 60; i++) c.update(1 / 60); // 5 s
+    assert.ok(Math.abs(c.fatigue - 8) < 0.05, `1 a second spent while holding (${c.fatigue})`);
+    assert.ok(Math.abs(c.shield.left - 8) < 0.05, `${c.shield.left} s left`);
+    for (let i = 0; i < 7.9 * 60; i++) c.update(1 / 60);
+    assert.ok(c.shield, 'still up just before the strength ends');
+    for (let i = 0; i < 0.3 * 60; i++) c.update(1 / 60);
+    assert.equal(c.shield, null, 'out when the strength is gone');
+    assert.ok(events.voice.some((t) => /силы кончились/.test(t)));
+    // then the strength comes back as usual
+    const f0 = c.fatigue;
+    for (let i = 0; i < 60; i++) c.update(1 / 60);
+    assert.ok(c.fatigue > f0 + 0.9);
+});
+
+test('Protection: a sharp jerk of the shield arm puts it out; a small move does not; «стоп» does', () => {
+    const { g, combat: c } = fakeGame({ armOut: 'right' });
+    const jerk = { left: [], right: [] };
+    g.duel = { jerk };
+    c.castProtection(false);
+    const move = (dist, secs) => {
+        // the hand's last positions as the duel keeps them ({t, x, y, z})
+        for (let i = 0; i <= secs * 30; i++) {
+            jerk.right.push({ t: (jerk.right.length) / 30, x: Math.min(1, i / (secs * 30)) * dist, y: 0, z: 0 });
+            c.update(1 / 30);
+        }
+    };
+    move(0, 1); // held still for a second
+    move(0.6, 0.3); // a small move of the hand
+    assert.ok(c.shield, 'a small move does not drop it');
+    jerk.right.length = 0;
+    move(1.9, 0.2); // a sharp jerk
+    assert.equal(c.shield, null, 'a jerk drops it');
+    // «стоп» drops it too
+    const { combat: c2 } = fakeGame({ armOut: 'right' });
+    c2.castProtection(false);
+    assert.equal(c2.dropShield(), true);
+    assert.equal(c2.shield, null);
+    assert.equal(c2.dropShield(), false, 'nothing to drop');
 });
 
 test('Protection Maxima: needs a T-pose, dome for 5 s blocks every direction, costs 20', () => {
@@ -192,7 +238,11 @@ test('shields work and show in every mode (creative too), without fatigue', () =
     assert.ok(c.visuals.hand.visible, 'the blue shield is visible');
     assert.equal(c.fatigue, 30);
     for (let i = 0; i < 40; i++) c.update(0.1);
-    assert.equal(c.shield, null, 'gone after 3 s');
+    assert.ok(c.shield, 'no strength rules here: it holds until «стоп» or a jerk');
+    assert.equal(c.fatigue, 30, 'and costs nothing');
+    c.dropShield();
+    c.update(0.1);
+    assert.equal(c.shield, null);
     assert.equal(c.visuals.hand.visible, false);
 });
 
@@ -252,4 +302,29 @@ test('voice: «Атак» and «Rescue»; wand words', () => {
 test('voice: «Breakthrough» (+ Максима)', () => {
     for (const w of ['breakthrough', 'Брейкфру', 'брейк сру']) assert.equal(matchSpell(w), 'Breakthrough', w);
     assert.equal(matchSpell('breakthrough maxima'), 'BreakthroughMaxima');
+});
+
+test('Protection: saying it again while holding costs nothing more; a magic blade breaks it for good', () => {
+    const { combat: c } = fakeGame({ armOut: 'right' });
+    c.castProtection(false);
+    assert.equal(c.fatigue, 25);
+    assert.equal(c.castProtection(false), null);
+    assert.equal(c.fatigue, 25, 'not paid twice');
+    c.meleeHit(1, 'enemy', true);
+    c.update(1 / 60);
+    assert.equal(c.shield, null, 'broken, and it does not come back from the strength left');
+});
+
+test('«стоп» / stop are the stop word; spells held in the hands (flames, beams) of that caster end, others stay', async () => {
+    for (const w of ['стоп', 'Стоп!', 'stop', 'STOP']) assert.equal(matchSpell(w), 'Stand', w);
+    const { SpellManager } = await import('../../src/fx/SpellManager.js');
+    const sm = Object.create(SpellManager.prototype);
+    sm.spells = [];
+    let ended = 0;
+    sm.spells.push({ life: 3, held: true, by: 'a', onEnd: () => ended++ }, { life: 3, held: true, by: 'b' }, { life: 3, by: 'a' });
+    assert.equal(sm.stopBy('a'), true);
+    sm.update(0.01);
+    assert.equal(ended, 1, 'a\'s flames ended');
+    assert.equal(sm.spells.length, 2, 'b\'s and a one-shot spell remain');
+    assert.equal(sm.stopBy('a'), false, 'nothing more of a\'s');
 });

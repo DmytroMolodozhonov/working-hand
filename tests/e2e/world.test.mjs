@@ -223,7 +223,10 @@ test('Вингардиум Левиоса, Protection in creative, Флайн by
         out.shield = g.castLocalSpell('protection', true);
         await sleep(300);
         out.shieldVisible = g.combat.visuals.hand.visible;
-        for (let i = 0; i < 150 && g.combat.visuals.hand.visible; i++) await sleep(100);
+        await sleep(3500);
+        out.shieldHolds = g.combat.visuals.hand.visible; // (no longer a 3-second shield: it holds)
+        out.stop = g.castLocalSpell('стоп', true);
+        await sleep(300);
         out.shieldGone = !g.combat.visuals.hand.visible;
         g._lastShieldCast = 0;
         out.domeNoT = g.castLocalSpell('protection maxima', true);
@@ -250,7 +253,9 @@ test('Вингардиум Левиоса, Protection in creative, Флайн by
     assert.ok(r.released, 'a jerk lets it go');
     assert.equal(r.shield, 'Protection');
     assert.ok(r.shieldVisible, 'blue shield visible in creative');
-    assert.ok(r.shieldGone, 'gone after 3 s');
+    assert.ok(r.shieldHolds, 'it holds past 3 s');
+    assert.equal(r.stop, 'Stop');
+    assert.ok(r.shieldGone, '«стоп» put it out');
     assert.equal(r.domeNoT, null, 'Protection Maxima needs the T-pose');
     assert.equal(r.dome, 'ProtectionMaxima');
     assert.ok(r.domeVisible);

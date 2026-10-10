@@ -229,6 +229,7 @@ export class VoxelCharacter {
 
     _updateHands(poseData) {
         if (this.handVersion === 'v3') {
+            for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) { h.body = this.group; if (poseData.aspect) h.aspect = poseData.aspect; }
             if (this.leftSimplifiedHand.group.visible) this.leftSimplifiedHand.update(poseData.leftHandLandmarks || null, this.group.rotation.y);
             if (this.rightSimplifiedHand.group.visible) this.rightSimplifiedHand.update(poseData.rightHandLandmarks || null, this.group.rotation.y);
         } else {

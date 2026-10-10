@@ -166,7 +166,8 @@ test('the wand: held like a pen along the arm, the spell leaves its tip the way 
         for (const s of ['left', 'right']) g.items.releaseHand(s);
         g.items.takeIntoHand({ kind: 'wand', uid: 'tw', type: 0 }, 'right');
     });
-    await feed(page, { arms: 'forward', rightCurl: 0.8, leftCurl: 0.9 }, 30, 40);
+    // the hand along the arm pointing at the camera (as one points a wand)
+    await feed(page, { arms: 'forward', rightCurl: 0.8, leftCurl: 0.9, rightTilt: 1.3 }, 30, 40);
     const w = await page.evaluate(() => {
         const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
         const wandDir = new T.Vector3(), tip = g.wandMagic.tip(new T.Vector3(), wandDir);
@@ -268,6 +269,65 @@ test('magic gesture: hanging arms never wait for a spell; an arm lifted ~30° do
     assert.ok(slight.raised && slight.magic, 'an arm lifted ~30°: the game waits for a spell ' + JSON.stringify(slight));
     assert.ok(level.raised && level.magic, 'level arm: too');
     assert.ok(!down.raised, 'hanging from the start: not raised');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('the hand follows the camera\'s hand fully: bent left / right at the wrist, the model\'s hand bends as much; fingers bend joint by joint', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    for (const s of ['left', 'right']) await page.evaluate((side) => window.__zns.game.items.releaseHand(side), s);
+    const fingersDir = () => page.evaluate(() => {
+        const g = window.__zns.game, T = window.__zns.THREE, h = g.character.getActiveHands().right;
+        h.palm.updateWorldMatrix(true, false);
+        const y = new T.Vector3().setFromMatrixColumn(h.palm.matrixWorld, 1).normalize();
+        const fore = g.character.getForearmDirection('right', new T.Vector3());
+        return { y: y.toArray(), fore: fore.toArray(), joints: h._jointsC?.index?.slice(0, 3) || null };
+    });
+    await feed(page, { arms: 'up', rightCurl: 0, leftCurl: 0, rightRot: 0 }, 25, 40);
+    const straight = await fingersDir();
+    await feed(page, { arms: 'up', rightCurl: 0, leftCurl: 0, rightRot: 0.52 }, 25, 40); // 30° aside
+    const bent = await fingersDir();
+    await feed(page, { arms: 'up', rightCurl: 0, leftCurl: 0, rightRot: -0.52 }, 25, 40); // 30° the other way
+    const bentBack = await fingersDir();
+    await feed(page, { arms: 'up', rightCurl: 0.6, leftCurl: 0 }, 25, 40); // fingers curled
+    const curled = await fingersDir();
+    const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
+    const d1 = ang(straight.y, bent.y), d2 = ang(straight.y, bentBack.y), d12 = ang(bent.y, bentBack.y);
+    assert.ok(d1 > 20 && d1 < 40, `bent 30° one way: the model's hand turned ${d1.toFixed(1)}°`);
+    assert.ok(d2 > 20 && d2 < 40, `bent 30° the other way: ${d2.toFixed(1)}°`);
+    assert.ok(d12 > 45, `the two ways are opposite (${d12.toFixed(1)}° apart)`);
+    assert.ok(straight.joints && straight.joints.every((v) => Math.abs(v) < 0.25), 'open hand: straight fingers ' + JSON.stringify(straight.joints));
+    assert.ok(curled.joints && curled.joints[1] > 0.5, 'curled: the middle joints bend ' + JSON.stringify(curled.joints));
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('pockets: the left hand put into its pocket picks the next slot; arms hanging at the sides do nothing; the right hand with a thing puts it away', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.inventory.select(-1); });
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 60, 40); // 2.4 s just standing
+    const hanging = await page.evaluate(() => window.__zns.game.inventory.selected);
+    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 20, 40); // the left hand into the pocket
+    const afterLeft = await page.evaluate(() => window.__zns.game.inventory.selected);
+    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 30, 40); // kept there: no more
+    const kept = await page.evaluate(() => window.__zns.game.inventory.selected);
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40); // out
+    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 20, 40); // in again
+    const again = await page.evaluate(() => window.__zns.game.inventory.selected);
+    // the right hand holding an apple goes into the right pocket: the apple goes into a slot
+    await page.evaluate(() => { const g = window.__zns.game; g.inventory.select(-1); g.items.takeIntoHand({ kind: 'apple', uid: 'pa1', count: 1 }, 'right'); });
+    await feed(page, { arms: 'hang', rightCurl: 0.9, leftCurl: 0 }, 20, 40);
+    await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 20, 40);
+    const stored = await page.evaluate(() => { const g = window.__zns.game; return { held: !!g.items.held.right, slot: g.inventory.slots.some((s) => s && s.kind === 'apple') }; });
+    assert.equal(hanging, -1, 'hanging arms: nothing happens');
+    assert.equal(afterLeft, 0, 'the hand into the left pocket: the next slot');
+    assert.equal(kept, 0, 'keeping it there: once only');
+    assert.equal(again, 1, 'out and in again: the next one');
+    assert.ok(!stored.held && stored.slot, 'the apple went into the pocket ' + JSON.stringify(stored));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

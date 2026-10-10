@@ -83,6 +83,11 @@ export class RemoteAvatar {
             this.combat.shieldLeft = s.c[2];
             this.combat.frozen = s.c[3] > 0;
             if (!this.visuals) this.visuals = new CombatVisuals(this.scene);
+        } else if (this.combat.shield) {
+            // (no shield sent any more: it went out — «стоп», a jerk — long before its time)
+            this.combat.shield = 0;
+            this.combat.shieldLeft = 0;
+            this.combat.frozen = false;
         }
     }
 

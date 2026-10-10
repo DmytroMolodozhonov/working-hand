@@ -112,3 +112,66 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, the
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('the wand is held like a pen: its back in the web of the thumb, pinched by the thumb and index tips, pointing where the fingers point; spells fly along it', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0 }, 12, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.items.takeIntoHand({ kind: 'wand', uid: 'pw1', plain: true, model: 0, color: 0x8b5a2b, power: 0 }, 'right');
+        await frames(10);
+        const h = g.items.held.right, m = h.model;
+        m.updateMatrixWorld(true);
+        const axis = new T.Vector3(0, 1, 0).applyQuaternion(m.quaternion).normalize();
+        const pen = g.items._penGrip('right');
+        const back = new T.Vector3(0, 0.12, 0).applyMatrix4(m.matrixWorld);
+        const tip = g.wandMagic.tip(new T.Vector3());
+        const palm = ch.getActiveHands().right.palm;
+        palm.updateWorldMatrix(true, false);
+        const fingers = new T.Vector3().setFromMatrixColumn(palm.matrixWorld, 1).normalize();
+        const aim = ch.getHandDirection('right', new T.Vector3());
+        return { webGap: back.distanceTo(pen.web), pinchOff: pen.pinch.clone().sub(back).cross(axis).length(), withFingers: Math.acos(Math.min(1, axis.dot(fingers))) * 180 / Math.PI, tipBeyond: tip.clone().sub(pen.pinch).dot(axis), aimAlong: Math.acos(Math.min(1, aim.dot(axis))) * 180 / Math.PI };
+    });
+    assert.ok(r.webGap < 0.02, 'its back rests in the web of the thumb ' + JSON.stringify(r));
+    assert.ok(r.pinchOff < 0.02, 'it passes through the pinch of the thumb and index tips');
+    assert.ok(r.withFingers < 50, `it points about where the fingers point (${r.withFingers.toFixed(0)}°)`);
+    assert.ok(r.tipBeyond > 0.3, 'its tip sticks out past the fingers');
+    assert.ok(r.aimAlong < 1, 'spells fly along the wand');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('«стоп» ends every spell still going: the held shield goes out, Lumos too; with nothing going it is not a spell', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await feed(page, { arms: 'forward', rightCurl: 0.8, leftCurl: 0 }, 12, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.items.takeIntoHand({ kind: 'wand', uid: 'sw1', plain: true, model: 0, color: 0x8b5a2b, power: 0 }, 'right');
+        await frames(3);
+        const shield = g.castLocalSpell('Protection', true);
+        const lumos = g.castLocalSpell('Люмос', true);
+        await frames(100); // (more than the old 3 seconds' worth of frames is not needed: it holds)
+        const holding = { shield: !!g.combat.shield, light: !!g.wandMagic.light };
+        const stop = g.castLocalSpell('стоп', true);
+        await frames(2);
+        const after = { shield: !!g.combat.shield, light: !!g.wandMagic.light };
+        const again = g.castLocalSpell('стоп', true);
+        return { shield, lumos, holding, stop, after, again };
+    });
+    assert.equal(r.shield, 'Protection');
+    assert.equal(r.lumos, 'Lumos');
+    assert.deepEqual(r.holding, { shield: true, light: true }, 'both still going');
+    assert.equal(r.stop, 'Stop');
+    assert.deepEqual(r.after, { shield: false, light: false }, '«стоп» ended them');
+    assert.equal(r.again, null, 'nothing left to stop');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

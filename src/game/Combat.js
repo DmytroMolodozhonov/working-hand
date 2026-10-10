@@ -6,7 +6,10 @@
  *   Fatigue     30 points (white bar at the bottom), +1 per second. Every
  *               spell costs fatigue; without enough the spell fails.
  *   Protection  arm stretched out + «Protection»: a blue shield in front of
- *               the hand for 3 s. Spells cast straight at you bounce off it;
+ *               the hand. 5 fatigue at once, then it holds while there is
+ *               strength: 1 a second, none comes back meanwhile (as many seconds
+ *               as the fatigue left). A sharp jerk of the shield arm or «стоп»
+ *               puts it out sooner. Spells cast straight at you bounce off it;
  *               a Bombardo blast next to you still hurts, but half as much.
  *   Protection Maxima  arms out in a T + «Protection Maxima»: a dome around
  *               the whole body for 5 s (blast damage −75 %). Shields work and are
@@ -22,12 +25,13 @@
  */
 
 import * as THREE from 'three';
+import { sharpJerk } from './Jerk.js';
 
 export const PVP = {
     MAX_HP: 20,
     MAX_FATIGUE: 30,
     FATIGUE_REGEN: 1, // per second
-    SHIELD_TIME: 3,
+    SHIELD_HOLD_MAX: 60, // s a «Protection» holds where there is no strength to spend (no fatigue rules)
     DOME_TIME: 5,
     FREEZE_TIME: 20,
     CHILL_TIME: 5, // s in the ice beam to freeze
@@ -160,8 +164,10 @@ export class CombatVisuals {
         const fade = (left, total) => Math.min(1, left / 0.35, (total - left) / 0.25 + 0.2);
         const showHand = st.shield === 1 && st.shieldLeft > 0;
         this.hand.visible = showHand;
+        this._handAge = showHand ? (this._handAge || 0) + dt : 0;
         if (showHand) {
-            const k = Math.max(0.05, fade(st.shieldLeft, PVP.SHIELD_TIME));
+            // (grows in as it is cast; fades in the last third of a second)
+            const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._handAge / 0.25 + 0.2));
             this.hand.position.copy(body.hand).addScaledVector(body.dir, 0.45);
             this.hand.lookAt(_v1.copy(this.hand.position).add(body.dir));
             this.hand.scale.setScalar(1.15 * k);
@@ -307,13 +313,32 @@ export class Combat {
                 const reach = (sd) => ch.getHandWorldPosition(sd, _v1).distanceTo(ch.group.position);
                 side = reach('right') >= reach('left') ? 'right' : 'left';
             }
+            if (this.shield?.type === 1) return null; // (already holding one: nothing more to pay)
             const hint = this.spend('Protection');
             if (hint) return hint;
+            // it holds while there is strength: 1 a second (a wand favouring it: 1/1.4 a second);
+            // off sooner with a sharp jerk of the shield arm or «стоп»
             const fav = this.game.items?.wand?.fav === 'Protection' ? 1.4 : 1;
-            this.shield = { type: 1, side, left: PVP.SHIELD_TIME * fav };
+            this.shield = { type: 1, side, left: this.enabled ? this.fatigue * fav : PVP.SHIELD_HOLD_MAX, drain: 1 / fav, age: 0 };
         }
         if (this.game.sound) this.game.sound.playIce?.();
         return null;
+    }
+
+    /** A held «Protection»: a sharp jerk of the shield arm puts it out (not a small move). */
+    _shieldJerk(dt) {
+        const s = this.shield;
+        if (!s || s.drain == null) return;
+        s.age = (s.age || 0) + dt;
+        if (s.age > 0.6 && sharpJerk(this.game.duel?.jerk?.[s.side])) this.dropShield('🛡️ Вы сбросили щит');
+    }
+
+    /** The shield goes out now («стоп», a jerk). */
+    dropShield(text = '🛡️ Щит снят') {
+        if (!this.shield) return false;
+        this.shield = null;
+        this.game.hud.setVoice(text, true);
+        return true;
     }
 
     /** Does my shield stop something coming from `from`? 1 = fully, 0 = no. */
@@ -410,7 +435,7 @@ export class Combat {
         if (att && this.game.gear?.shieldFaces(att)) { this.game.gear.shieldTook('melee'); return; }
         // a magic weapon breaks an ordinary «Protection» it touches
         if (magic && this.shield && this.shield.type === 1) {
-            this.shield.left = 0;
+            this.shield = null; // (for good: a held shield would come back from the strength left)
             this.game.hud.setVoice?.('💥 Волшебное оружие разбило ваш щит!', true);
             const p = this.center(_v1);
             for (let i = 0; i < 25; i++) this.game.fx.spark(p, 0x7fd8ff, 0.12, _v2.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.6);
@@ -460,12 +485,19 @@ export class Combat {
         }
         if (!this.enabled) {
             // Other modes: only the shield (no HP / fatigue rules)
-            if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
+            if (this.shield) { this.shield.left -= dt; this._shieldJerk(dt); if (this.shield && this.shield.left <= 0) this.shield = null; }
             this._updateVisuals(dt);
             return;
         }
-        if (!this.dead) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
-        if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
+        const holding = this.shield?.drain != null;
+        // (a held «Protection» spends the strength instead of it coming back)
+        if (!this.dead && !holding) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
+        if (holding) {
+            this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
+            this.shield.left = this.fatigue / this.shield.drain;
+            this._shieldJerk(dt);
+            if (this.shield && this.fatigue <= 0) { this.shield = null; this.game.hud.setVoice('🛡️ Щит погас — силы кончились', true); }
+        } else if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
         if (this.frozenLeft > 0) {
             this.frozenLeft = Math.max(0, this.frozenLeft - dt);
             if (this.frozenLeft === 0) this.game.hud.setVoice('🧊 Вы разморозились', true);

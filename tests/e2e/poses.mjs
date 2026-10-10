@@ -5,9 +5,10 @@
  * so the person's LEFT side appears on the image RIGHT.
  */
 
-export function hand(wx, wy, { size = 0.09, curl = 0 } = {}) {
+export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror = false } = {}) {
     const lm = [{ x: wx, y: wy, z: 0 }];
-    const bases = [[-0.35, -0.25], [-0.2, -0.85], [0, -0.9], [0.18, -0.85], [0.33, -0.75]];
+    // (a left hand, its palm to the camera: the thumb on the picture's left; `mirror` — a right hand)
+    const bases = [[-0.35, -0.25], [-0.2, -0.85], [0, -0.9], [0.18, -0.85], [0.33, -0.75]].map(([x, y]) => [mirror ? -x : x, y]);
     const lens = [0.45, 0.75, 0.82, 0.75, 0.6];
     bases.forEach(([bx, by], f) => {
         const mx = wx + bx * size, my = wy + by * size;
@@ -21,6 +22,16 @@ export function hand(wx, wy, { size = 0.09, curl = 0 } = {}) {
             lm.push({ x: prev.x, y: prev.y - L * Math.cos(ang), z: -L * Math.sin(ang) });
         }
     });
+    // the fingers tipped towards the camera (tilt rad round the wrist: the hand along an arm pointing at it)
+    if (tilt) {
+        const c = Math.cos(tilt), s = Math.sin(tilt);
+        for (const p of lm) { const y = p.y - wy, z = p.z; p.y = wy + y * c - z * s; p.z = z * c + y * s; }
+    }
+    // the hand bent aside at the wrist (in the picture's plane): rot rad round the wrist
+    if (rot) {
+        const c = Math.cos(rot), s = Math.sin(rot);
+        for (const p of lm) { const x = p.x - wx, y = p.y - wy; p.x = wx + x * c - y * s; p.y = wy + x * s + y * c; }
+    }
     return lm;
 }
 
@@ -32,7 +43,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0 } = {}) {
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
  */
-export function frame({ arms = 'forward', raise = null, leftCurl = 0, rightCurl = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -49,6 +60,10 @@ export function frame({ arms = 'forward', raise = null, leftCurl = 0, rightCurl 
     } else if (arms === 'forward') {
         lElbow = [0.6, sh + 0.03]; lWrist = [0.6 + wristOffset[0], sh + 0.02 + wristOffset[1]];
         rElbow = [0.4, sh + 0.03]; rWrist = [0.4 - wristOffset[0], sh + 0.02 + wristOffset[1]];
+    } else if (arms === 'hang') {
+        // relaxed arms hanging at the sides (real proportions: the wrist at the hip, outside the thigh)
+        lElbow = [0.64, sh + 0.18]; lWrist = [0.66, sh + 0.4];
+        rElbow = [0.36, sh + 0.18]; rWrist = [0.34, sh + 0.4];
     } else if (arms === 'up') {
         lElbow = [0.64, sh - 0.12]; lWrist = [0.65, sh - 0.25];
         rElbow = [0.36, sh - 0.12]; rWrist = [0.35, sh - 0.25];
@@ -56,6 +71,9 @@ export function frame({ arms = 'forward', raise = null, leftCurl = 0, rightCurl 
         lElbow = [0.64, sh + 0.15]; lWrist = [0.65, sh + 0.3];
         rElbow = [0.36, sh + 0.15]; rWrist = [0.35, sh + 0.3];
     }
+    // a hand put into its front trouser pocket: the wrist at the hip, the elbow bent out (the hand not seen)
+    if (pocket === 'left' || pocket === 'both') { lElbow = [0.67, sh + 0.18]; lWrist = [0.58, sh + 0.37]; leftCurl = null; }
+    if (pocket === 'right' || pocket === 'both') { rElbow = [0.33, sh + 0.18]; rWrist = [0.42, sh + 0.37]; rightCurl = null; }
     if (lean) { lElbow[0] += lean; lWrist[0] += lean; rElbow[0] += lean; rWrist[0] += lean; }
     // (raised sideways: the arm stays in the body's plane, no depth)
     const ez = raise != null ? 0 : -0.2, wz = raise != null ? 0 : -0.4;
@@ -66,8 +84,8 @@ export function frame({ arms = 'forward', raise = null, leftCurl = 0, rightCurl 
     p[23] = { x: 0.57, y: 0.8, z: 0, visibility: 0.9 };
     p[24] = { x: 0.43, y: 0.8, z: 0, visibility: 0.9 };
     const hands = [];
-    if (leftCurl != null) hands.push({ landmarks: hand(p[15].x, p[15].y, { curl: leftCurl }), label: 'Right', score: 0.95 });
-    if (rightCurl != null) hands.push({ landmarks: hand(p[16].x, p[16].y, { curl: rightCurl }), label: 'Left', score: 0.95 });
+    if (leftCurl != null) hands.push({ landmarks: hand(p[15].x, p[15].y, { curl: leftCurl, rot: leftRot, tilt: leftTilt }), label: 'Right', score: 0.95 });
+    if (rightCurl != null) hands.push({ landmarks: hand(p[16].x, p[16].y, { curl: rightCurl, rot: rightRot, tilt: rightTilt, mirror: true }), label: 'Left', score: 0.95 });
     return { poseLandmarks: p, hands, faceLandmarks: undefined, cost: 5 };
 }
 

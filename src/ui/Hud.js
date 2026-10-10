@@ -137,6 +137,28 @@ export class Hud {
         this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
     }
 
+    /**
+     * The duel's balance at the top of the screen: my colour against theirs, my
+     * share of the beam (0…1; more than half — I am winning). null hides it.
+     */
+    setDuelBar(d) {
+        let el = this._duelEl;
+        if (!d) { if (el) el.style.display = 'none'; return; }
+        if (!el) {
+            el = this._duelEl = document.createElement('div');
+            el.id = 'hud-duel';
+            el.style.cssText = 'position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:61;pointer-events:none;width:min(420px,70vw);height:16px;border-radius:9px;overflow:hidden;border:2px solid rgba(255,255,255,.85);box-shadow:0 0 12px rgba(0,0,0,.6);background:#222;display:flex';
+            el.innerHTML = '<div class="me" style="height:100%"></div><div style="width:4px;height:100%;background:#fff;box-shadow:0 0 8px #fff"></div><div class="them" style="flex:1;height:100%"></div>';
+            document.body.appendChild(el);
+        }
+        const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0');
+        el.style.display = 'flex';
+        const me = el.querySelector('.me'), them = el.querySelector('.them');
+        me.style.width = `${Math.round(Math.max(0, Math.min(1, d.share)) * 100)}%`;
+        me.style.background = hex(d.me);
+        them.style.background = hex(d.them);
+    }
+
     setVoice(html, show = true) {
         const v = this.el.voice;
         if (!v) return;

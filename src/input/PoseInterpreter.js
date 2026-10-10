@@ -6,6 +6,39 @@
 
 import { mouthOpenness } from '../game/VoiceGate.js';
 
+/**
+ * Is this hand in its trouser pocket (as the camera sees it)? The wrist is at the
+ * hip (the pocket's opening is about at the hip joint), the elbow is bent (a hand
+ * hanging relaxed has a straight arm), and the hand is gone into the pocket (not
+ * seen) or its fingers point down into it. Hands on the waist point their fingers
+ * sideways; a hand reaching down to the ground goes far below the hip.
+ * Measured in torso heights (shoulder → hip), so the distance to the camera
+ * doesn't matter. true / false, or null when the hip or the shoulder isn't seen.
+ */
+export function pocketPose(lm, hand, side, aspect = 4 / 3) {
+    const [s, e, w, h] = side === 'left' ? [11, 13, 15, 23] : [12, 14, 16, 24];
+    const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], hip = lm?.[h];
+    if (!sh || !el || !wr || !hip) return null;
+    if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5) return null;
+    const T = hip.y - sh.y;
+    if (T < 0.05) return null;
+    const out = side === 'left' ? 1 : -1; // (the person's left is the picture's right)
+    const dy = (wr.y - hip.y) / T;
+    const dxOut = ((wr.x - hip.x) * out * aspect) / T;
+    if (dy < -0.3 || dy > 0.25 || dxOut < -0.25 || dxOut > 0.3) return false;
+    // the elbow bent (the upper arm and the forearm in the picture)
+    const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
+    const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
+    if (nu < 1e-4 || nf < 1e-4) return false;
+    const bend = Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf))));
+    if (bend < 0.35) return false; // (~20°: a straight, hanging arm)
+    // the hand: gone into the pocket, or its fingers pointing down
+    if (!hand || hand.length < 21) return true;
+    const dxh = (hand[9].x - hand[0].x) * aspect, dyh = hand[9].y - hand[0].y;
+    const len = Math.hypot(dxh, dyh);
+    return len > 1e-4 && dyh / len > 0.8; // (within ~35° of straight down)
+}
+
 export class PoseInterpreter {
     /**
      * @param {object} [faceSolver] Kalidokit.Face (optional; head rotation)
@@ -101,6 +134,8 @@ export class PoseInterpreter {
             punchingHand: null,
             hasPose: false,
         };
+        // the picture's shape (a hand's turn and a pocket are measured in it)
+        if (video && video.videoWidth > 0 && video.videoHeight > 0) data.aspect = video.videoWidth / video.videoHeight;
         const lm = results.poseLandmarks;
         if (lm && lm.length >= 33) {
             data.hasPose = true;
@@ -109,6 +144,7 @@ export class PoseInterpreter {
             data.rightShoulder = P(12); data.rightElbow = P(14); data.rightWrist = P(16);
             data.nose = P(0);
             data.armLift = this._armLift(lm);
+            data.pocket = { left: pocketPose(lm, results.leftHandLandmarks, 'left', data.aspect), right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect) };
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));
@@ -147,8 +183,6 @@ export class PoseInterpreter {
         if (results.rightHandLandmarks) data.rightHandLandmarks = results.rightHandLandmarks;
         if (results.leftHandLandmarks) data.leftHandLandmarks = results.leftHandLandmarks;
 
-        // the picture's shape (a hand's turn is measured in it — HandPose.js)
-        if (video && video.videoWidth > 0 && video.videoHeight > 0) data.aspect = video.videoWidth / video.videoHeight;
         // the mouth (is it me who speaks? — VoiceGate)
         data.mouth = mouthOpenness(results.faceLandmarks);
         if (results.faceLandmarks && this.faceSolver) {

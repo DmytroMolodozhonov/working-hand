@@ -12,6 +12,7 @@
  *   zsand    host→all     zombie turned to sand
  *   hit      client→host  my weapon/fist hit zombie X
  *   spell    caster→all   spell cast (visual everywhere, damage on host)
+ *   stop     caster→all   «стоп»: the flames / ice beams / storm the caster holds end
  *   boom     host→all     explosion (terrain + effects)
  *   chest    host→all     chest opened;  wspawn: reward weapon
  *   grab/rel client→host  weapon picked up / thrown;  wown: owner changed
@@ -324,6 +325,11 @@ export class NetSync {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
     }
 
+    /** «Стоп»: the flames / ice beams / storm I hold end everywhere. */
+    stopSpells() {
+        this.net.send({ t: 'stop', by: this.me }, true);
+    }
+
     waterDrop(b) {
         this.net.send({ t: 'wdrop', by: this.me, p: [r3(b.pos.x), r3(b.pos.y), r3(b.pos.z)], v: [r3(b.vel.x), r3(b.vel.y), r3(b.vel.z)], r: r3(b.r), f: b.frozen ? 1 : 0 }, true);
     }
@@ -340,8 +346,8 @@ export class NetSync {
         this.net.send({ t: 'dend', id, res }, true);
     }
 
-    duelClash(a, b, p) {
-        if (this.net.isHost) this.net.send({ t: 'clash', a, b, p: Math.round(p * 1000) / 1000 });
+    duelClash(a, b, p, v = 0, k = 3) {
+        if (this.net.isHost) this.net.send({ t: 'clash', a, b, p: Math.round(p * 1000) / 1000, v: Math.round(v * 1000) / 1000, k });
     }
 
     duelClashEnd(a, b, loser) {
@@ -564,6 +570,11 @@ export class NetSync {
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;
             case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;
+            case 'stop':
+                if (m.by === this.me) break;
+                g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)
+                g.spells.stopBy(m.by);
+                break;
             case 'spell': {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.name, performance.now()); // (my microphone may hear their voice)

@@ -18,6 +18,7 @@
 
 import * as THREE from 'three';
 import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
+import { PEN_POINTS } from '../entities/SimplifiedHand.js';
 
 const PICK_RADIUS = 0.9;
 const _v = new THREE.Vector3();
@@ -28,7 +29,7 @@ const _inv = new THREE.Matrix4();
 const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
 /** Held in the fist like the sword: handle (model y, before scaling) at the fingers, the axis across the palm. */
 const GRIPPED = {
-    wand: { axis: 'y', handle: 0.1 },
+    wand: { axis: 'y', handle: 0.12, curl: 0.38, pose: 'pen' }, // like a pen: see _penGrip
     hammer: { axis: 'y', handle: 0.12 },
     bow: { axis: 'y', handle: 0 },
     scroll: { axis: 'x', handle: 0, curl: 0.5 },
@@ -150,11 +151,13 @@ export class ItemSystem {
         // the item's axis out of the thumb side; its "front" towards the knuckles
         const ax = _a.copy(f.X).multiplyScalar(s);
         let x, y, z;
+        const pen = h.item.kind === 'wand' ? this._penGrip(side) : null;
         if (h.item.kind === 'wand') {
-            // a wand is the arm's continuation: along the forearm, bent a little by the wrist —
-            // and the spells of this hand fly exactly along it, out of its tip
+            // held like a pen: its back lies in the web between the thumb and the index finger,
+            // its front is pinched by their tips — it points where the fingers point, and the
+            // spells of this hand fly exactly along it, out of its tip
             const ch = g.character;
-            y = ch.getForearmDirection(side, _a).multiplyScalar(0.6).addScaledVector(f.Y, 0.4).normalize();
+            y = pen ? _a.copy(pen.dir) : ch.getForearmDirection(side, _a).multiplyScalar(0.6).addScaledVector(f.Y, 0.4).normalize();
             x = _b.copy(f.X).addScaledVector(y, -f.X.dot(y));
             if (x.lengthSq() < 1e-4) x.set(1, 0, 0);
             x.normalize();
@@ -174,15 +177,36 @@ export class ItemSystem {
             a.dir.set(0, 1, 0).applyQuaternion(h.q).normalize();
             a.at = performance.now();
         }
-        // the handle point in the fingers
+        // the handle point in the fingers (a pen: in the web of the thumb)
         const sc = h.model.scale.x;
-        h.model.position.copy(f.G).sub(_d.set(0, spec.handle * sc, 0).applyQuaternion(h.q));
+        h.model.position.copy(pen ? pen.web : f.G).sub(_d.set(0, spec.handle * sc, 0).applyQuaternion(h.q));
         if (spec.face === 'back') h.model.position.addScaledVector(f.Z, 0.25);
         if (!h.gripped) {
             h.gripped = true;
             const hand = g.character.getActiveHands()[side];
-            if (hand && hand.setGrip) hand.setGrip(spec.curl ?? 0.62);
+            if (hand && hand.setGrip) hand.setGrip(spec.curl ?? 0.62, spec.pose);
         }
+    }
+
+    /**
+     * A pen grip from the hand as drawn: the web between the thumb and the index
+     * finger (where a pen's back rests) and the pinch of their tips (where it is
+     * held) — the wand goes from the one through the other. null: no fingers drawn.
+     */
+    _penGrip(side) {
+        const hand = this.game.character.getActiveHands()[side];
+        const fm = hand?.fingerMeshes;
+        if (!fm?.thumb || !fm?.index || !hand.palm || !hand.gripOverride?.pose || !hand.group.visible) return null;
+        const pg = this._pg || (this._pg = { web: new THREE.Vector3(), pinch: new THREE.Vector3(), dir: new THREE.Vector3(), a: new THREE.Vector3(), b: new THREE.Vector3() });
+        hand.group.updateMatrixWorld(true);
+        hand.palm.localToWorld(pg.web.fromArray(PEN_POINTS.web));
+        fm.index[2].pivot.localToWorld(pg.a.fromArray(PEN_POINTS.index));
+        fm.thumb[2].pivot.localToWorld(pg.b.fromArray(PEN_POINTS.thumb));
+        pg.pinch.addVectors(pg.a, pg.b).multiplyScalar(0.5);
+        pg.dir.subVectors(pg.pinch, pg.web);
+        if (pg.dir.lengthSq() < 1e-4) return null;
+        pg.dir.normalize();
+        return pg;
     }
 
     /** Where a held bow / wand / hammer / shield points (world quaternion into `out`). */

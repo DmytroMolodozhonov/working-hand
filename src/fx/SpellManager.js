@@ -43,7 +43,7 @@ export function matchSpell(text) {
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)
-    if (has('stand', 'стэнд', 'стенд', 'стоп')) return 'Stand';
+    if (has('stand', 'стэнд', 'стенд', 'стоп', 'stop')) return 'Stand'; // («стоп» also stops every spell still going)
     if (has('gather', 'гезер', 'гэзер', 'гатер', 'газер', 'гаазер', 'собери', 'собрать')) return 'Gather';
     if (has('floor', 'флор', 'флоор', 'флур')) return 'CreateFloor';
     if (has('ceiling', 'силинг', 'сейлинг', 'силин', 'эсилин', 'потол')) return 'CreateCeiling';
@@ -226,6 +226,13 @@ export class SpellManager {
         }
     }
 
+    /** «Стоп»: the spells this caster holds (flames, ice beams, the storm in the hands) end now. */
+    stopBy(casterId) {
+        let n = 0;
+        for (const sp of this.spells) if (sp.held && sp.by === casterId && sp.life > 0) { sp.life = 0; n++; }
+        return n > 0;
+    }
+
     clear() {
         for (const s of this.spells) if (s.onEnd) s.onEnd(s);
         this.spells.length = 0;
@@ -252,6 +259,7 @@ export class SpellManager {
         let acc = 0;
         this.spells.push({
             life: 4.0,
+            held: true, by: casterId, // («стоп» ends it)
             onUpdate: (spell, dt) => {
                 // Original: 15 sparks per frame at 60 FPS → 900/s, now frame-rate independent
                 acc += dt * 900;
@@ -342,6 +350,7 @@ export class SpellManager {
         const sky = new THREE.Vector3();
         const spell = {
             life: 8.5,
+            held: true, by: casterId,
             onUpdate: () => {
                 // the power of the storm sits in both hands: strands from the sky, arcs between the hands
                 const hands = [];
@@ -778,6 +787,7 @@ export class SpellManager {
         const p0 = new THREE.Vector3(), p1 = new THREE.Vector3(), p2 = new THREE.Vector3(), dir = new THREE.Vector3();
         this.spells.push({
             life: 5.0,
+            held: true, by: casterId,
             onUpdate: (spell, dt) => {
                 if (target.isDead) { spell.life = 0; return; }
                 p2.copy(target.group.position); p2.y += 1.2;
@@ -805,6 +815,7 @@ export class SpellManager {
         const p0 = new THREE.Vector3(), p1 = new THREE.Vector3(), p2 = new THREE.Vector3(), dir = new THREE.Vector3();
         this.spells.push({
             life: 5.5,
+            held: true, by: casterId,
             onUpdate: (spell, dt) => {
                 p2.copy(player.center());
                 const live = this.hooks.handPose ? this.hooks.handPose(casterId, handSide) : null;

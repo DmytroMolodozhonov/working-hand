@@ -677,6 +677,13 @@ export class Game {
             return null;
         }
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
+        // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
+        // (before the duel's block: nothing may keep you from stopping your own spells)
+        if (name === 'Stand') {
+            const placed = !!this.doors?.stand?.() || (this.builder.build ? (this.builder.finish(), true) : false);
+            const stopped = (!placed || /стоп|stop/i.test(text)) && this.stopSpells();
+            return placed ? 'Stand' : stopped ? 'Stop' : null;
+        }
         // «Паузин» in the air: hover; «Флайн» while hovering: fly on (no new take-off)
         if (name === 'Pause') {
             if (this.flight.pause()) { this.hud.setVoice('🛑 Паузин — вы парите на месте. Скажите «Флайн», чтобы лететь дальше', true); return 'Pause'; }
@@ -736,11 +743,6 @@ export class Game {
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
-        if (name === 'Stand') {
-            if (this.doors?.stand?.()) return 'Stand';
-            if (this.builder.build) { this.builder.finish(); return 'Stand'; }
-            return null;
-        }
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // Levitation: point the hand at an object (or a creature: a duel spell)
@@ -837,6 +839,32 @@ export class Game {
         this._lastShieldCast = now;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
+    }
+
+    /**
+     * «Стоп»: what is still going stops — the shield, a lifted thing (it falls), a water
+     * ball, an air bubble, a wave, Lumos and drawing, a hologram, a summoning, the flight
+     * (it lands), flames / ice beams / the storm held in the hands. True if anything did.
+     */
+    stopSpells() {
+        const done = [];
+        const W = this.wandMagic;
+        if (this.combat.dropShield('🛑 Стоп — щит снят')) done.push('щит');
+        if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
+        if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
+        if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
+        if (this._wave) { this._wave = null; done.push('волна'); }
+        if (W?.light) { W._nox(); done.push('Люмос'); }
+        if (W?.drawing && W.drawing.until > performance.now()) { W.drawing.until = 0; done.push('рисование'); }
+        if (W?.holo) { W._closeHolo(); done.push('тайны'); }
+        if (this.accio?.stop()) done.push('Акцио');
+        if (this.flight?.busy && this.flight.state !== 'landing') { this.flight.land('stop'); done.push('полёт'); }
+        if (this.lightning) { if (this.lightning.hammer) this.gear?.hammerResult(false); this.lightning = null; this.hud.setTimer?.(null); done.push('молния'); }
+        if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
+        if (!done.length) return false;
+        this.sync?.stopSpells?.();
+        this.hud.setVoice(`🛑 Стоп: ${done.join(', ')}`, true);
+        return true;
     }
 
     /** Is the pointed-at creature closer than any loose object (so levitation lifts the creature)? */

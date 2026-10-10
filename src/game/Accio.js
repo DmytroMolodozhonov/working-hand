@@ -30,6 +30,17 @@ export class Accio {
         return !!this.state;
     }
 
+    /** «Стоп»: what was flying here stops (a thing falls where it is). True if anything flew. */
+    stop() {
+        const s = this.state, g = this.game;
+        if (!s) return false;
+        this.state = null;
+        if (s.w) { s.w.release(); g.sync?._localRelease?.(s.w); }
+        else if (s.L) { s.L.accio = false; s.L.vel?.set(0, 0, 0); }
+        else if (s.bk) { s.bk.accio = false; g.books?.dropBook(s.bk, null); }
+        return true;
+    }
+
     /** Cast: returns a hint (string) when nothing can be summoned, else null. */
     cast() {
         const g = this.game;

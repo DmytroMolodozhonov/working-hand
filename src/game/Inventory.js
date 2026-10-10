@@ -74,6 +74,9 @@ export function pocketStrike(hist, local, sx) {
     return top - local.y > 0.6 && fast > 3.2 && fastI < n - 1 && now < fast * 0.5;
 }
 
+/** s the hand must stay in the pocket (the camera: wrist at the hip, elbow bent, hand gone in). */
+export const POCKET_DWELL = 0.3;
+
 /** Things that go on the back (over the shoulder) rather than into a pocket. */
 export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield']);
 
@@ -89,7 +92,7 @@ export class Inventory {
         this.slots = new Array(SLOT_COUNT).fill(null);
         this.selected = -1; // -1: the «hand» cell (free right hand)
         this.inHand = null; // {slot, kind, weapon?}: what of the selected slot is in the right hand
-        this._pocket = { left: { out: 0, hist: [] }, right: { out: 0, hist: [] } };
+        this._pocket = { left: { out: 0, hist: [], armed: true }, right: { out: 0, hist: [], armed: true } };
         this._back = { left: { t: 0, at: 0 }, right: { t: 0, at: 0 } };
         this._backModels = []; // the weapons seen on the back
         this._handBlock = null;
@@ -329,8 +332,15 @@ export class Inventory {
             while (st.hist.length && now - st.hist[0].t > 600) st.hist.shift();
             if (ch.isRunning || ch.flying) { st.hist.length = 0; continue; }
             const atHip = pocketStrike(st.hist, local, sx);
-            if (atHip && !st.inZone && now - st.out > 700) {
+            // the hand put INTO the pocket (as the camera sees it): it stays there a moment
+            const inPocket = g.currentPose.pocket?.[side];
+            st.inT = inPocket ? (st.inT || 0) + dt : 0;
+            st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
+            if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
+            const putIn = st.armed && st.inT > POCKET_DWELL;
+            if ((atHip && !st.inZone || putIn) && now - st.out > 700) {
                 st.inZone = true;
+                st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
                 if (side === 'right') this.pocketRight();

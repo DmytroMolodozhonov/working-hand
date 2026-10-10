@@ -29,6 +29,8 @@
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
 import { PVP } from './Combat.js';
+import { sharpJerk } from './Jerk.js';
+export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
@@ -44,7 +46,7 @@ export const DUEL = {
     RANGE: 30, // m
     CONE: 0.4, // rad: what the hand is pointing at
     HIT_RADIUS: 0.8,
-    CONTACT_ANGLE: 0.75, // rad: hand still on the opponent
+    CONTACT_ANGLE: 0.9, // rad: hand still on the opponent (~50°: aiming roughly is enough)
     CONTACT_GRACE: 0.25, // s off the opponent before a flick counts as "shaking it off"
     PUSH: 0.16, // how fast the meeting point moves per unit of strength difference
     LUCK: 0.1, // ±10 % random
@@ -53,6 +55,7 @@ export const DUEL = {
 };
 
 const _v1 = new THREE.Vector3();
+const _qInv = new THREE.Quaternion();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _vFrom = new THREE.Vector3();
@@ -60,6 +63,17 @@ const _c2 = new THREE.Color();
 const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vector3(), _ds = new THREE.Vector3(), _du = new THREE.Vector3();
 
 let nextId = 1;
+
+/** Marker colours of wizards in a clash (blue, orange, magenta, green): who is who. */
+export const DUEL_MARK = [0x2f7dff, 0xff8a1a, 0xff2fd0, 0x3dff6e];
+/** The two wizards' marker slots: their own, never the same. */
+export function markSlots(sa, sb) { return [sa, sb === sa ? (sa + 1) % DUEL_MARK.length : sb]; }
+/** From A's side: lead −1…1 (+ = A is winning), push −1…1 (who pushes harder right now). */
+export function clashLead(p, v) {
+    return { lead: Math.max(-1, Math.min(1, (p - 0.5) * 2)), push: Math.max(-1, Math.min(1, (v || 0) / 0.12)) };
+}
+const _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1), _mA = new THREE.Vector3(), _mB = new THREE.Vector3();
+let _ringGeo = null;
 
 export class Duel {
     constructor(game) {
@@ -75,6 +89,7 @@ export class Duel {
         // Glowing "centre of force" where two charges meet
         this._orbs = [];
         this._orbsUsed = 0;
+        this.markPools = {}; // the thin core of each wizard's beam, in their marker colour
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
         this.log = []; // last duel events (for testing / debugging)
     }
@@ -496,7 +511,7 @@ export class Duel {
         if (this.clashes.some((c) => c.a === a || c.b === b || c.a === b || c.b === a)) return;
         a.state = 'clash';
         b.state = 'clash';
-        this.clashes.push({ a, b, p, t: 0, luckA: 0, luckB: 0, luckT: 0, lostA: 0, lostB: 0 });
+        this.clashes.push({ a, b, p, t: 0, luckA: 0, luckB: 0, luckT: 0, lostA: 0, lostB: 0, v: 0, k: 3, pNet: null, rings: [], ringT: 0, marks: this._marks(a.by, b.by) });
         if (this.game.sound) this.game.sound.playThunder?.();
         if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ ДУЭЛЬ! Держите руку на сопернике', true);
     }
@@ -507,7 +522,17 @@ export class Duel {
         if (!a || !b) return;
         let c = this.clashes.find((x) => x.a === a && x.b === b);
         if (!c) { this._startClash(a, b, m.p); c = this.clashes.find((x) => x.a === a && x.b === b); }
-        if (c) c.p = m.p;
+        // (glides to the host's value — it comes 10 times a second — instead of jumping)
+        if (c) { c.pNet = m.p; c.v = m.v ?? 0; c.k = m.k ?? 3; }
+    }
+
+    _marks(aBy, bBy) {
+        const [ma, mb] = markSlots(this._slot(aBy), this._slot(bBy));
+        return [DUEL_MARK[ma], DUEL_MARK[mb]];
+    }
+
+    _markPool(hex) {
+        return this.markPools[hex] || (this.markPools[hex] = new SegmentPool(this.game.scene, { capacity: 120, radius: 0.045, color: hex, transparent: true, opacity: 1, blending: THREE.AdditiveBlending }));
     }
 
     /** Strength in a duel: fatigue first, HP second, a little luck. */
@@ -540,19 +565,27 @@ export class Duel {
         const g = this.game;
         const { a, b } = c;
         c.t += dt;
+        if (!this._referee() && c.pNet != null) c.p += (c.pNet + c.v * 0.05 - c.p) * Math.min(1, dt * 10);
         // Draw both charges up to the meeting point
         const ha = new THREE.Vector3(), hb = new THREE.Vector3(), d = new THREE.Vector3();
         const okA = this._handOf(a.by, a.side, ha, d), okB = this._handOf(b.by, b.side, hb, d);
         if (okA && okB) {
             const m = ha.clone().lerp(hb, c.p);
-            this._drawBolt(a.spell, ha, m, a.by);
-            this._drawBolt(b.spell, hb, m, b.by);
-            const colA = this.colors(a.spell, a.by).glow, colB = this.colors(b.spell, b.by).glow;
-            if (Math.random() < 0.7) this._burst(m, Math.random() < 0.5 ? colA : colB, 3);
-            // The centre of force: pulses, and takes the colour of whoever is pushing harder
-            this._showOrb(m, colA, colB, c.p, c.t);
+            // each wizard's beam has a thin core of their own marker colour (the glow keeps the spell's)
+            this._drawBolt(a.spell, ha, m, a.by, this._markPool(c.marks[0]));
+            this._drawBolt(b.spell, hb, m, b.by, this._markPool(c.marks[1]));
+            if (Math.random() < 0.7) this._burst(m, c.marks[Math.random() < 0.5 ? 0 : 1], 3);
+            // each wand hand glows in its owner's colour: a colour is a person
+            if (Math.random() < 0.6) { g.fx.spark(ha, c.marks[0], 0.2, _v3.set(0, 0.6, 0), 0.25); g.fx.spark(hb, c.marks[1], 0.2, _v3.set(0, 0.6, 0), 0.25); }
+            // where they meet: who is winning, and who pushes now
+            this._showMarker(c, ha, hb, m, dt);
             a.front.copy(m);
             b.front.copy(m);
+        }
+        if (a.by === this.me || b.by === this.me) {
+            const mineA = a.by === this.me;
+            g.hud.setDuelBar?.({ me: c.marks[mineA ? 0 : 1], them: c.marks[mineA ? 1 : 0], share: mineA ? c.p : 1 - c.p });
+            this._barNow = true;
         }
         // Fatigue drains while pushing (free world)
         if ((a.by === this.me || b.by === this.me) && g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - DUEL.CLASH_FATIGUE * dt);
@@ -570,7 +603,9 @@ export class Duel {
         // A hand off the opponent doesn't push at all
         const sa = ca.ok ? this._strength(a.by, c.luckA) : 0;
         const sb = cb.ok ? this._strength(b.by, c.luckB) : 0;
-        c.p = Math.min(1, Math.max(0, c.p + (sa - sb) * DUEL.PUSH * dt + (Math.random() - 0.5) * 0.02));
+        c.v = (sa - sb) * DUEL.PUSH;
+        c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
+        c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));
 
         // Leaving: hand calmly off the opponent first, then a flick = the duel just ends;
         // a flick straight from aiming (no calm move away first) = giving up
@@ -581,7 +616,7 @@ export class Duel {
         else if (cb.jerk) { if (c.lostB > DUEL.CONTACT_GRACE) dissolve = true; else loser = b.by; }
 
         c.sendT = (c.sendT || 0) - dt;
-        if (c.sendT <= 0 && g.sync) { c.sendT = 0.1; g.sync.duelClash(a.id, b.id, c.p); }
+        if (c.sendT <= 0 && g.sync) { c.sendT = 0.1; g.sync.duelClash(a.id, b.id, c.p, c.v, c.k); }
         if (loser || dissolve) {
             this._note({ ev: 'clashEnd', loser, dissolve, p: Math.round(c.p * 100) / 100, lostA: c.lostA, lostB: c.lostB, jerkA: ca.jerk, jerkB: cb.jerk, a: a.by, b: b.by });
             this._finishClash(c, loser);
@@ -595,7 +630,7 @@ export class Duel {
         this.bolts.delete(a.id);
         this.bolts.delete(b.id);
         const winnerBolt = loser === a.by ? b : loser === b.by ? a : null;
-        this._burst(a.front, 0xffffff, 40);
+        this._burst(a.front, winnerBolt && c.marks ? c.marks[winnerBolt === a ? 0 : 1] : 0xffffff, 40);
         if (!winnerBolt) {
             if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ Дуэль прервана — никто не пострадал', true);
             return;
@@ -620,24 +655,20 @@ export class Duel {
     // ============================================================ hands
     _trackHands() {
         const ch = this.game.character;
+        // in the body's own turn: turning round with the arm out is no jerk of the hand
+        const inv = ch.group.quaternion ? _qInv.copy(ch.group.quaternion).invert() : null;
         for (const side of ['left', 'right']) {
             const h = ch.getHandWorldPosition(side, _v1).sub(ch.group.position);
+            if (inv) h.applyQuaternion(inv);
             const list = this.jerk[side];
             list.push({ t: this._t, x: h.x, y: h.y, z: h.z });
             while (list.length && this._t - list[0].t > 0.5) list.shift();
         }
     }
 
-    /** A fast, far movement of this hand in the last half second. */
+    /** A real sharp jerk of this hand just now (see sharpJerk). */
     _jerked(side) {
-        const list = this.jerk[side];
-        if (list.length < 2) return false;
-        const last = list[list.length - 1];
-        for (const o of list) {
-            if (last.t - o.t > 0.3) continue;
-            if (Math.hypot(last.x - o.x, last.y - o.y, last.z - o.z) > 0.75) return true;
-        }
-        return false;
+        return sharpJerk(this.jerk[side]);
     }
 
     /** For the pose message: am I holding my duels? [contact, jerk] */
@@ -654,7 +685,7 @@ export class Duel {
 
     // =========================================================== visuals
     /** A jagged, flickering electric charge from a to b. */
-    _drawBolt(spell, from, to, by) {
+    _drawBolt(spell, from, to, by, core = null) {
         if (!DUEL_SPELLS[spell]) return;
         const pool = this._pool(spell, by);
         const col = this.colors(spell, by).glow;
@@ -677,7 +708,7 @@ export class Duel {
                 const k = Math.sin(Math.PI * t);
                 p.addScaledVector(side, (Math.random() - 0.5) * 2 * amp * k).addScaledVector(up, (Math.random() - 0.5) * 2 * amp * k);
             }
-            pool.core.add(prev, p, this._segLife || 0.05);
+            (core || pool.core).add(prev, p, this._segLife || 0.05);
             pool.glow.add(prev, p, this._segLife || 0.05);
             prev = p;
         }
@@ -692,34 +723,72 @@ export class Duel {
     }
 
     /**
-     * A pulsing ball where two charges meet. p = meeting point between the two
-     * hands (0 = at A's hand): the ball leans to the colour of the one winning.
+     * Where two charges meet: a ball split in two — each half in its wizard's own
+     * colour, facing them; the winner's half swells, the loser's shrinks (a hand
+     * off the opponent: its half goes dim); a white core between; and rings in the
+     * colour of whoever pushes harder right now roll towards the one giving way.
      */
-    _showOrb(pos, colA, colB, p, t) {
-        let orb = this._orbs[this._orbsUsed];
-        if (!orb) {
-            const mk = (r, o) => new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false }));
-            orb = { inner: mk(0.22, 0.95), outer: mk(0.55, 0.45) };
-            orb.inner.renderOrder = orb.outer.renderOrder = 5;
-            this.game.scene.add(orb.inner, orb.outer);
-            this._orbs.push(orb);
+    _showMarker(c, ha, hb, m, dt) {
+        let mk = this._orbs[this._orbsUsed];
+        if (!mk) {
+            const mat = (o) => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+            const half = new THREE.SphereGeometry(0.3, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+            mk = { a: new THREE.Mesh(half, mat(0.9)), b: new THREE.Mesh(half, mat(0.9)), core: new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), mat(1)), rings: [] };
+            mk.a.renderOrder = mk.b.renderOrder = mk.core.renderOrder = 5;
+            this.game.scene.add(mk.a, mk.b, mk.core);
+            this._orbs.push(mk);
         }
         this._orbsUsed++;
-        const pulse = 1 + Math.sin(t * 18) * 0.18 + Math.sin(t * 7.3) * 0.08;
-        orb.inner.position.copy(pos);
-        orb.outer.position.copy(pos);
-        orb.inner.scale.setScalar(pulse);
-        orb.outer.scale.setScalar(pulse * (1.1 + Math.abs(p - 0.5)));
-        // p < 0.5: the point is near A's hand → B is pushing harder (B's colour)
-        orb.outer.material.color.setHex(colA).lerp(_c2.setHex(colB), 1 - p);
-        orb.inner.visible = orb.outer.visible = true;
+        const [colA, colB] = c.marks;
+        const { lead, push } = clashLead(c.p, c.v);
+        const toB = _mB.subVectors(hb, ha).normalize(), toA = _mA.copy(toB).negate();
+        const pulse = 1 + Math.sin(c.t * 18) * 0.12;
+        for (const o of [mk.a, mk.b, mk.core]) { o.position.copy(m); o.visible = true; }
+        mk.a.quaternion.setFromUnitVectors(_Y, toA);
+        mk.b.quaternion.setFromUnitVectors(_Y, toB);
+        mk.a.scale.setScalar(pulse * (1 + 0.45 * lead));
+        mk.b.scale.setScalar(pulse * (1 - 0.45 * lead));
+        mk.core.scale.setScalar(pulse);
+        mk.a.material.color.setHex(colA);
+        mk.b.material.color.setHex(colB);
+        mk.a.material.opacity = c.k & 1 ? 0.9 : 0.3;
+        mk.b.material.opacity = c.k & 2 ? 0.9 : 0.3;
+        c.ringT -= dt;
+        if (Math.abs(push) > 0.08 && c.ringT <= 0) {
+            c.ringT = 0.45 - 0.3 * Math.abs(push);
+            c.rings.push({ t: 0, to: push > 0 ? 'b' : 'a', col: push > 0 ? colA : colB });
+        }
+        c.rings = c.rings.filter((r) => (r.t += dt) < 0.6);
+        let i = 0;
+        for (const r of c.rings) {
+            let ring = mk.rings[i++];
+            if (!ring) {
+                ring = new THREE.Mesh(_ringGeo || (_ringGeo = new THREE.TorusGeometry(0.34, 0.035, 6, 28)), new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+                ring.renderOrder = 5;
+                this.game.scene.add(ring);
+                mk.rings.push(ring);
+            }
+            const k = r.t / 0.6, dir = r.to === 'a' ? toA : toB, hand = r.to === 'a' ? ha : hb;
+            ring.position.copy(m).addScaledVector(dir, k * Math.min(1.6, m.distanceTo(hand) * 0.4)); // (never up to the face)
+            ring.quaternion.setFromUnitVectors(_Z, dir);
+            ring.scale.setScalar(1 + k * 0.9);
+            ring.material.color.setHex(r.col);
+            ring.material.opacity = 0.9 * (1 - k);
+            ring.visible = true;
+        }
+        for (; i < mk.rings.length; i++) mk.rings[i].visible = false;
+        c.view = { colA, colB, lead, push, rings: c.rings.length };
     }
 
     /** Called by the effects' update (segment pools fade the flicker). */
     updateVisuals(dt) {
         for (const p of Object.values(this.pools)) { p.core.update(dt); p.glow.update(dt); }
-        // orbs of duels that ended this frame disappear
-        for (let i = this._orbsUsed; i < this._orbs.length; i++) this._orbs[i].inner.visible = this._orbs[i].outer.visible = false;
+        for (const p of Object.values(this.markPools)) p.update(dt);
+        // markers of duels that ended this frame disappear
+        for (let i = this._orbsUsed; i < this._orbs.length; i++) { const o = this._orbs[i]; o.a.visible = o.b.visible = o.core.visible = false; for (const r of o.rings) r.visible = false; }
         this._orbsUsed = 0;
+        if (this._barOn && !this._barNow) this.game.hud.setDuelBar?.(null);
+        this._barOn = this._barNow;
+        this._barNow = false;
     }
 }
