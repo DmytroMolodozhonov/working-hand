@@ -221,7 +221,8 @@ test('Вингардиум Левиоса, Protection in creative, Флайн by
         // Shields: visible in creative, dome needs a T-pose
         g._lastShieldCast = 0;
         out.shield = g.castLocalSpell('protection', true);
-        await sleep(300);
+        // (wait for drawn frames, not for a time: a busy machine draws slowly)
+        for (let i = 0; i < 60 && !g.combat.visuals.hand.visible; i++) await sleep(100);
         out.shieldVisible = g.combat.visuals.hand.visible;
         await sleep(3500);
         out.shieldHolds = g.combat.visuals.hand.visible; // (no longer a 3-second shield: it holds)
@@ -738,7 +739,7 @@ test('doors: «Create a Door» from wood in the hand, «Stand», a closed door b
     assert.ok(r.making, 'a small door in the hand');
     assert.equal(r.stood, 'Stand');
     assert.equal(r.doors, 1, 'a door stands');
-    assert.equal(r.woodLeft, 8, '12 wood used');
+    assert.equal(r.woodLeft, 20, 'creative: no wood used up (building is free there)');
     assert.ok(r.blocked, 'a closed door blocks the way');
     assert.ok(r.openFree, 'an open door lets you through');
     assert.ok(r.lifted && !r.carriedAfter, 'Levitation carries it and puts it down');

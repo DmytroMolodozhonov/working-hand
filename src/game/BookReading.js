@@ -409,11 +409,19 @@ export class BookReading {
         const pts = this._handPoints(hand);
         let best = 0;
         const push = _v5.set(0, 0, 0);
+        // which side of the book the hand came from: remembered while the whole hand was clear of it
+        // (a finger poking into the pages backs out the way it came — the pages' side unless it came from behind)
+        const mem = s.handFrom || (s.handFrom = {});
+        for (const half of [b.L, b.R]) {
+            half.updateWorldMatrix(true, false);
+            let front = 0, back = 0;
+            for (const p of pts) { const z = half.worldToLocal(_v3.copy(p)).z; if (z > T + 0.002) front++; else if (z < -B) back++; }
+            if (front === pts.length) mem[side] = 1;
+            else if (back === pts.length) mem[side] = -1;
+        }
+        const behind = mem[side] === -1;
         for (const half of [b.L, b.R]) {
             const sx = half === b.L ? -1 : 1;
-            half.updateWorldMatrix(true, false);
-            // back out the way the hand came: to the pages' side (a hand behind the book: behind the cover)
-            const behind = half.worldToLocal(_v3.copy(pts[0])).z < -B;
             for (const p of pts) {
                 const l = half.worldToLocal(_v3.copy(p));
                 const x = sx * l.x;
