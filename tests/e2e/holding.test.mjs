@@ -198,6 +198,10 @@ test('the bow with real archer poses (in the left hand and in the right): uprigh
         const other = side === 'left' ? 'right' : 'left';
         // the bow hand: a fist round the grip, the thumb up, the knuckles towards the camera
         const pose = (draw, curl) => ({ archer: side, draw, [side + 'Curl']: 0.9, [side + 'Tilt']: 1.3, [side + 'Rot']: side === 'left' ? 1.57 : -1.57, [other + 'Curl']: curl });
+        // (first both arms down, the hands apart: after the last shot the drawing hand is next to
+        // the hand that is to take the bow now, and would put an arrow on its string at once)
+        await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.gear._dropNock(); });
+        await feed(page, { arms: 'hang' }, 20, 40);
         await page.evaluate((side) => {
             const g = window.__zns.game;
             for (const s of ['left', 'right']) g.items.releaseHand(s);
