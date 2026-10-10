@@ -1924,11 +1924,15 @@ export class Game {
         if (!this.remotes.size) return list;
         let riders = null;
         for (const a of this.animals?.list || []) if (a.rider && !a.dead) (riders || (riders = new Map())).set(a.rider, a);
-        const lifter = this.levitation?.lifted?.by; // (Leviosa holds me near that wizard's hand)
+        // A wizard I hold up with Leviosa floats where my hand puts them, and it is their
+        // computer that keeps their body out of mine: mine is not shoved by the one I hold
+        // (or my hand, and they with it, would push me on and on).
+        const lev = this.levitation?.state;
+        const held = lev?.kind === 'player' ? lev.id : null;
         const pool = this._bodyPool || (this._bodyPool = []);
         let i = 0;
         for (const [id, r] of this.remotes) {
-            if (r.dead || !r.target || id === lifter) continue;
+            if (r.dead || !r.target || id === held) continue;
             const b = pool[i] || (pool[i] = {});
             list[i++] = b;
             const p = r.position;
