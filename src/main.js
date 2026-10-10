@@ -855,6 +855,9 @@ function escapeHtml(s) {
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
     if (saved['vision-engine'] === 'classic-main') saved['vision-engine'] = 'classic';
+    // every sound at 20% — once for everybody (later each one's own choice is kept)
+    const vol20 = !saved.vol20;
+    if (vol20) for (const id of ['zombie-vol', 'music-vol', 'spell-vol']) saved[id] = '20';
     const save = () => {
         const out = {};
         for (const id of IDS) {
@@ -863,6 +866,7 @@ function escapeHtml(s) {
         }
         const hv = document.querySelector('input[name="hand-version"]:checked');
         if (hv) out.handVersion = hv.value;
+        out.vol20 = true;
         try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* private mode: just not remembered */ }
     };
     // Restore, and let each control's own handler apply the value (labels, sound, camera…)
@@ -883,6 +887,7 @@ function escapeHtml(s) {
         if (el) { el.addEventListener('input', save); el.addEventListener('change', save); }
     }
     for (const r of document.querySelectorAll('input[name="hand-version"]')) r.addEventListener('change', save);
+    if (vol20) save(); // (remembered: done once)
 })();
 
 window.__zns = Object.defineProperties(window.__zns || {}, Object.getOwnPropertyDescriptors({ THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } }));

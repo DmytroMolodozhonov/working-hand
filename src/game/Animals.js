@@ -610,7 +610,7 @@ export class Animals {
             v.y -= 22 * dt;
             p.y += v.y * dt;
             a.airborne = true;
-            if (p.y <= gy + base) { p.y = gy + base; if (v.y < -14 && !a.dead) this.hit(a, 2, null, a.attacker); v.y = 0; a.airborne = false; }
+            if (p.y <= gy + base) { p.y = gy + base; if (v.y < -14 && !a.dead && !a.levFall) this.hit(a, 2, null, a.attacker); v.y = 0; a.airborne = false; } // (let go from Leviosa: Levitation counts the fall)
         } else {
             v.y = 0;
             p.y += (gy + base - p.y) * Math.min(1, dt * 8); // walking up and down steps
@@ -678,6 +678,7 @@ export class Animals {
             for (const a of [...this.list]) {
                 if (a.group.position.distanceTo(me) > 150 && !a.tamed && !a.rider) { this._remove(a); continue; }
                 if (a.dead) {
+                    if (a.lev) g.levitation?.letGo('a', a, false);
                     this._body(a, dt); // (carcasses fall into craters too)
                     if (a.bonesAt && performance.now() - a.bonesAt > 120000) this._remove(a);
                     else if (!a.bonesAt && performance.now() - a.deadAt > 600000) this._remove(a);
@@ -685,6 +686,7 @@ export class Animals {
                 }
                 if (a.rider && a.rider !== g.localId) continue; // a guest rides it: their computer moves it
                 if (a === this.riding) continue;
+                if (a.lev) continue; // (held up by «Вингардиум Левиоса»: Levitation carries it)
                 this._think(a, dt);
             }
         } else {

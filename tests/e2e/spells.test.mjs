@@ -175,3 +175,57 @@ test('«стоп» ends every spell still going: the held shield goes out, Lumos
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('Левиоса lifts a cow like a thing: it rises and hangs in front of the hand; let go up there it falls; «стоп» drops it too', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 12, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        // away from the pedestals, no other animals about
+        ch.group.position.set(0, ch.group.position.y, 30);
+        await frames(20);
+        for (const a of [...g.animals.list]) g.animals._remove(a);
+        const hand = ch.getHandWorldPosition('right', new T.Vector3());
+        const dir = ch.getHandDirection('right', new T.Vector3()).setY(0).normalize();
+        const p = hand.clone().addScaledVector(dir, 5);
+        p.y = g.collision.groundY(p.x, p.z) + 0.5;
+        const cow = g.animals._spawn('cow', p, {});
+        await frames(3);
+        const ground = () => g.collision.groundY(cow.group.position.x, cow.group.position.z) + 0.5;
+        g._lastLevitate = 0;
+        const said = g.castLocalSpell('вингардиум левиоса', true);
+        const kind = g.levitation.state?.kind;
+        await frames(90);
+        const up = cow.group.position.y - ground();
+        const held = !!cow.lev;
+        const handNow = ch.getHandWorldPosition('right', new T.Vector3());
+        const atHand = Math.hypot(cow.group.position.x - handNow.x, cow.group.position.z - handNow.z);
+        g.levitation.release(false); // (as a jerk of the hand does)
+        await frames(120);
+        const landed = cow.group.position.y - ground();
+        // (it grazes on, wandering off: point at it again)
+        cow.group.position.copy(p);
+        await frames(2);
+        g._lastLevitate = 0;
+        g.castLocalSpell('вингардиум левиоса', true);
+        await frames(20);
+        const again = !!cow.lev;
+        const stop = g.castLocalSpell('стоп', true);
+        await frames(3);
+        return { said, kind, up, held, atHand, landed, again, stop, after: !!cow.lev, alive: !cow.dead };
+    });
+    assert.equal(r.said, 'Levitation');
+    assert.equal(r.kind, 'creature', 'a living body, not a duel charge');
+    assert.ok(r.held && r.up > 0.8, `it rose (${r.up.toFixed(2)} m above its feet's ground)`);
+    assert.ok(r.atHand > 1.5 && r.atHand < 7, `in front of the hand (${r.atHand.toFixed(2)} m)`);
+    assert.ok(Math.abs(r.landed) < 0.3, `let go: it fell back down (${r.landed.toFixed(2)})`);
+    assert.ok(r.again, 'lifted again');
+    assert.equal(r.stop, 'Stop');
+    assert.equal(r.after, false, '«стоп» dropped it');
+    assert.ok(r.alive, 'a low fall does not kill');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

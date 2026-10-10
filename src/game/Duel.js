@@ -359,7 +359,7 @@ export class Duel {
             return;
         }
         this._end(b, 'hit');
-        this.applyToMe(b.spell, b.by);
+        this.applyToMe(b.spell, b.by, b.side);
     }
 
     _arriveAtZombie(b) {
@@ -407,7 +407,7 @@ export class Duel {
         if (this.log.length > 30) this.log.shift();
     }
 
-    applyToMe(spell, byId) {
+    applyToMe(spell, byId, side = 'right') {
         this._note({ ev: 'hitMe', spell, byId });
         const g = this.game;
         const c = g.combat;
@@ -424,14 +424,9 @@ export class Duel {
             if (c.enabled) c.freeze(byId);
             else c.stun(5, byId);
         } else if (spell === 'LevitateDuel') {
-            // Thrown ~3 m up, falls back down. (Lifted past the ground-snap margin so the
-            // ground-following doesn't pull the player straight back down; flying ends.)
-            const ch = g.character;
-            if (g.flight?.active) g.flight.land?.('levitate');
-            ch.group.position.y += 0.8;
-            ch.verticalVelocity = 11;
-            ch.onGround = false;
-            if (c.enabled) setTimeout(() => c.damage(1, byId, 'Levitation'), 1600);
+            // Lifted like a thing: my body hangs in front of the caster's hand and follows it
+            // (until they let go — a fall from up there hurts — or my «Protection» breaks it)
+            g.levitation.liftMe(byId, side || 'right');
         } else if (spell === 'SapiraDuel') {
             g.fx.lightFlash(p, 0x8e2de2, 4, 0.4, 20);
             g.hud.flashColor?.('rgba(142, 45, 226, 0.6)');
@@ -635,7 +630,7 @@ export class Duel {
             if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ Дуэль прервана — никто не пострадал', true);
             return;
         }
-        if (loser === this.me) this.applyToMe(winnerBolt.spell, winnerBolt.by);
+        if (loser === this.me) this.applyToMe(winnerBolt.spell, winnerBolt.by, winnerBolt.side);
         else if (winnerBolt.by === this.me) this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);
     }
 
@@ -648,7 +643,7 @@ export class Duel {
         this.bolts.delete(m.b);
         if (m.loser === this.me) {
             const w = a && a.by !== this.me ? a : b && b.by !== this.me ? b : null;
-            if (w) this.applyToMe(w.spell, w.by);
+            if (w) this.applyToMe(w.spell, w.by, w.side);
         }
     }
 

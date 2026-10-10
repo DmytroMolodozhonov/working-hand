@@ -102,7 +102,8 @@ export class CastleTalk {
         const volume = shout ? Math.max(0.3, Math.min(1, 1 - (d - 8) / (range - 8) * 0.7)) : Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
         this._lastSpoken = text;
         const extra = shout ? this.speech.voiceParams({ voiceKey: v.id, role: v.role, female: v.entry.female }) : null;
-        this.speech.say(text, { voiceKey: v.id, role: v.role, female: v.entry.female, volume, ...(extra ? { pitch: Math.min(2, extra.pitch + 0.12), rate: Math.min(2, extra.rate * 1.15) } : {}) });
+        const loud = volume * (this.game.sound?.globalVolume ?? 1); // (the sounds volume: voices too)
+        this.speech.say(text, { voiceKey: v.id, role: v.role, female: v.entry.female, volume: loud, ...(extra ? { pitch: Math.min(2, extra.pitch + 0.12), rate: Math.min(2, extra.rate * 1.15) } : {}) });
     }
 
     /** The microphone heard a sentence (not a spell). Returns true if a villager heard it. */

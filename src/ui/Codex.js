@@ -51,7 +51,7 @@ export const SPELLS = [
     { cat: 'guard', name: 'Rescue', say: 'пальцы к своей ране + «Rescue» (или рукой на раненого)', desc: 'Останавливает кровотечение. Если оружие ещё в ране — вынимает и его.', dmg: '—', icon: 'assets/icons/shield.svg' },
     { cat: 'move', name: 'Вингардиум Левиоса', say: 'направить руку на предмет + «Вингардиум Левиоса»', desc: 'Предмет до 10 м поднимается и следует за рукой. Резкое движение — летит дальше. На существо — подбрасывает его в воздух.', dmg: '—', cost: 6, icon: 'assets/icons/levitation.svg' },
     // ---- build
-    { cat: 'build', name: 'Gather', say: 'указать на дерево / камень / землю + «Gather»', desc: 'Магия разбирает то, на что указывает рука (до 10 м), и кладёт в ячейку: дерево целиком — 20 древесины своего вида.', dmg: '—', cost: 3, icon: 'assets/icons/gather.svg' },
+    { cat: 'build', name: 'Gather', say: 'указать на дерево / камень / землю + «Gather» или «Assemble»', desc: 'Магия разбирает то, на что указывает рука (до 10 м), и кладёт в ячейку: дерево целиком — 20 древесины своего вида.', dmg: '—', cost: 3, icon: 'assets/icons/gather.svg' },
     { cat: 'build', name: 'Create a Floor', say: 'выбрать ресурс + «Create a Floor», тянуть руку', desc: 'Пол растёт блок за блоком за рукой. С водяным шаром в руке — изо льда.', dmg: '—', cost: 4, icon: 'assets/icons/floor.svg' },
     { cat: 'build', name: 'Create a Wall', say: '«Create a Wall», вести руку вбок и вверх', desc: 'Стена растёт за рукой — в ширину и в высоту.', dmg: '—', cost: 4, icon: 'assets/icons/wall.svg' },
     { cat: 'build', name: 'Create a Ceiling', say: '«Create a Ceiling», тянуть руку', desc: 'Потолок на высоте 3 блоков растёт над вами.', dmg: '—', cost: 4, icon: 'assets/icons/ceiling.svg' },

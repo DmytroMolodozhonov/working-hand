@@ -558,21 +558,32 @@ export class CastleLife {
         v.y += (gy - v.y) * (gy > v.y ? 1 : 0.5);
     }
 
+    /** Thrown up / let go in the air: flies on with its swing and falls. */
+    _fallStep(v, dt) {
+        const g = this.game;
+        v.y += v.vy * dt; v.vy -= 22 * dt;
+        if (v.vx || v.vz) {
+            v.x += (v.vx || 0) * dt; v.z += (v.vz || 0) * dt;
+            const k = Math.max(0, 1 - 0.6 * dt);
+            v.vx = (v.vx || 0) * k; v.vz = (v.vz || 0) * k;
+        }
+        const gy = g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z);
+        if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; v.vx = 0; v.vz = 0; }
+    }
+
     // ------------------------------------------------------------- think
     _think(v, dt) {
         const g = this.game;
         const cs = v.cs;
         v.damageCooldown -= dt;
         v.sayT -= dt;
-        if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.deadT > 50) this._deactivate(v); return; }
+        if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.vy) this._fallStep(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
+        // held up by «Вингардиум Левиоса»: Levitation carries the body
+        if (v.lev) { v.mode = 'idle'; v.speed = 0; return; }
         // stunned / frozen / thrown up by a spell
         if (v.stunT > 0 || v.vy) {
             v.stunT = (v.stunT || 0) - dt;
-            if (v.vy) {
-                v.y += v.vy * dt; v.vy -= 22 * dt;
-                const gy = g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z);
-                if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; }
-            }
+            if (v.vy) this._fallStep(v, dt);
             v.mode = 'idle'; v.speed = 0;
             return;
         }

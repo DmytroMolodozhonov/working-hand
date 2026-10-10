@@ -46,3 +46,18 @@ test('pocket: reaching down to the ground is not; no hips in the picture — can
     const inP = person({ lEl: [0.67, 0.6], lWr: [0.58, 0.79], rEl: [0.33, 0.6], rWr: [0.42, 0.79], hipsVis: 0.2 });
     assert.equal(pocketPose(inP, null, 'left'), null);
 });
+
+import { lookPitch } from '../../src/input/PoseInterpreter.js';
+import { matchSpell } from '../../src/fx/SpellManager.js';
+
+test('the head tilted back looks straight up (a real head goes ~40° back before the camera loses the face)', () => {
+    assert.equal(lookPitch(0.1), 0.1, 'small nods as they are');
+    assert.equal(lookPitch(-0.6), -0.6, 'looking down as it is');
+    assert.ok(lookPitch(0.7) > 1.5, `40° back: almost straight up (${(lookPitch(0.7) * 57.3).toFixed(0)}°)`);
+    assert.ok(lookPitch(1.2) < Math.PI / 2, 'never over the top');
+    for (let p = 0; p < 1.2; p += 0.05) assert.ok(lookPitch(p + 0.05) >= lookPitch(p), 'smooth, one way');
+});
+
+test('«Assemble» is «Gather» too (Gather is not always heard right)', () => {
+    for (const w of ['assemble', 'Ассембл', 'эссембл', 'gather', 'гезер']) assert.equal(matchSpell(w), 'Gather', w);
+});

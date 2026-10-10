@@ -44,7 +44,8 @@ export function matchSpell(text) {
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)
     if (has('stand', 'стэнд', 'стенд', 'стоп', 'stop')) return 'Stand'; // («стоп» also stops every spell still going)
-    if (has('gather', 'гезер', 'гэзер', 'гатер', 'газер', 'гаазер', 'собери', 'собрать')) return 'Gather';
+    // («Assemble» too: «Gather» is not always heard right)
+    if (has('gather', 'гезер', 'гэзер', 'гатер', 'газер', 'гаазер', 'собери', 'собрать', 'assembl', 'ассембл', 'асембл', 'эссембл', 'эсембл', 'ассэмбл', 'асэмбл')) return 'Gather';
     if (has('floor', 'флор', 'флоор', 'флур')) return 'CreateFloor';
     if (has('ceiling', 'силинг', 'сейлинг', 'силин', 'эсилин', 'потол')) return 'CreateCeiling';
     if (has('roof', 'руф', 'крыш')) return 'BuildRoof';

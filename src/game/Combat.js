@@ -406,6 +406,7 @@ export class Combat {
         this.frozenLeft = PVP.FREEZE_TIME;
         this.frozenBy = byId;
         this.shield = null;
+        if (this.game.levitation?.active) this.game.levitation.release(false); // (a frozen hand holds nothing)
         if (this.game.flight?.busy) this.game.flight.land('frozen');
         if (this.game.water?.active) this.game.water.drop();
         if (this.game.sound) this.game.sound.playIce?.();
@@ -459,6 +460,7 @@ export class Combat {
     die(byId, how) {
         if (this.dead) return;
         this.dead = true;
+        this.game.levitation?.dropMe?.(false);
         this.hp = 0;
         const name = byId ? this.game.playerName(byId) : null;
         const text = how === 'avada'

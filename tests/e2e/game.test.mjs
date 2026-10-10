@@ -48,6 +48,26 @@ test('menu: maps, modes and the new spell are listed; no errors on load', async 
     await page.close();
 });
 
+test('every sound starts at 20%: new players, and once for those who had other volumes; later one\'s own choice is kept', async () => {
+    const vols = async (saved) => {
+        const page = await browser.newPage();
+        if (saved) await page.addInitScript((v) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('zns-settings', JSON.stringify(v)); sessionStorage.setItem('seeded', '1'); } }, saved);
+        await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; window.__ZNS_NO_WORLD_PROBE__ = true; window.__ZNS_FIXED_QUALITY__ = true; });
+        await page.goto(srv.url);
+        await page.waitForFunction(() => !!window.__zns, null, { timeout: 30000 });
+        const out = await page.evaluate(() => ({ s: +document.getElementById('zombie-vol').value, m: +document.getElementById('music-vol').value, sp: +document.getElementById('spell-vol').value, label: document.getElementById('vol-val').textContent, kept: JSON.parse(localStorage.getItem('zns-settings') || '{}') }));
+        await page.close();
+        return out;
+    };
+    const fresh = await vols(null);
+    assert.deepEqual([fresh.s, fresh.m, fresh.sp, fresh.label], [20, 20, 20, '20%'], 'new player');
+    const old = await vols({ 'zombie-vol': '90', 'music-vol': '70', 'spell-vol': '100' });
+    assert.deepEqual([old.s, old.m, old.sp], [20, 20, 20], 'everybody once to 20%');
+    assert.equal(old.kept.vol20, true, 'remembered as done');
+    const mine = await vols({ 'zombie-vol': '55', 'music-vol': '35', 'spell-vol': '45', vol20: true });
+    assert.deepEqual([mine.s, mine.m, mine.sp], [55, 35, 45], 'one\'s own choice afterwards is kept');
+});
+
 test('creative: world with mountains, weapons floating over pedestals, hands follow the body', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');

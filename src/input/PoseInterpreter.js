@@ -7,6 +7,17 @@
 import { mouthOpenness } from '../game/VoiceGate.js';
 
 /**
+ * The head tilted back: a real head goes back ~40–45° before the camera loses the
+ * face — by then the eyes look straight up. So upward the game turns the view
+ * further (up to ~88°: the sky right above), small nods stay as they are.
+ * Positive = up (rad).
+ */
+export function lookPitch(p) {
+    if (!(p > 0.3)) return p;
+    return Math.min(Math.PI / 2 - 0.03, p + (p - 0.3) * 2.2);
+}
+
+/**
  * Is this hand in its trouser pocket (as the camera sees it)? The wrist is at the
  * hip (the pocket's opening is about at the hip joint), the elbow is bent (a hand
  * hanging relaxed has a straight arm), and the hand is gone into the pocket (not

@@ -36,14 +36,14 @@ export class SoundManager {
         this.audioListener = new THREE.AudioListener();
         camera.add(this.audioListener);
         this.sounds = { death: null, thunder: null, inferno: null, sapira: null, hits: [], ice: null, sand: null, shatter: null };
-        this.music = { ambient: [], battle: null, current: null, currentIndex: 0, state: 'idle', volume: 0.5 };
+        this.music = { ambient: [], battle: null, current: null, currentIndex: 0, state: 'idle', volume: 0.2 };
         this.battleTimer = 0;
         this.isBattleMode = false;
         this.ambientPool = [];
         this.maxAmbient = 3;
         this.enabled = true;
         this.ambientEnabled = true; // "Звуки рычания" setting (zombie growls only)
-        this.globalVolume = 1.0;
+        this.globalVolume = 0.2; // (all sounds start at 20%: the settings sliders)
         this.audioLoader = new THREE.AudioLoader();
         this.voices = [];
         this.posVoices = [];
@@ -130,7 +130,7 @@ export class SoundManager {
     }
 
     _spell(buffer, volume = 1, rate = 1) {
-        this._play(buffer, volume * (this.spellVolume ?? 1), rate);
+        this._play(buffer, volume * (this.spellVolume ?? 1), rate, true);
     }
 
     async resume() {
@@ -213,13 +213,14 @@ export class SoundManager {
     }
 
     // ------------------------------------------------------------------- SFX
-    _play(buffer, volume = 1, rate = 1) {
+    /** A sound effect (`own`: its volume is already set by its own slider, e.g. spells). */
+    _play(buffer, volume = 1, rate = 1, own = false) {
         if (!this.enabled || !buffer || !this.voices.length) return;
         const v = this.voices[this._voiceIdx];
         this._voiceIdx = (this._voiceIdx + 1) % this.voices.length;
         if (v.isPlaying) v.stop();
         v.setBuffer(buffer);
-        v.setVolume(volume);
+        v.setVolume(volume * (own ? 1 : this.globalVolume));
         v.setPlaybackRate(rate);
         v.play();
     }
@@ -231,7 +232,7 @@ export class SoundManager {
         if (v.isPlaying) v.stop();
         v.setBuffer(buffer);
         v.setRefDistance(refDistance);
-        v.setVolume(volume);
+        v.setVolume(volume * this.globalVolume);
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();

@@ -13,6 +13,8 @@
  *   hit      client→host  my weapon/fist hit zombie X
  *   spell    caster→all   spell cast (visual everywhere, damage on host)
  *   stop     caster→all   «стоп»: the flames / ice beams / storm the caster holds end
+ *   lev      caster→all   Leviosa holds / lets go a body (host carries it) or a wizard;  levno: host→caster, taken
+ *   lift     wizard→all   I am held up by `by` (or let go / broke free)
  *   boom     host→all     explosion (terrain + effects)
  *   chest    host→all     chest opened;  wspawn: reward weapon
  *   grab/rel client→host  weapon picked up / thrown;  wown: owner changed
@@ -108,6 +110,7 @@ export class NetSync {
             this.game.remotes.delete(id);
         }
         this.game.water?.applyRemote(id, null);
+        this.game.levitation?.onLeave(id); // (what they held falls; if they held me, I fall)
         // Drop weapons they were holding
         for (const [wid, owner] of this.weaponOwners) {
             if (owner !== id) continue;
@@ -323,6 +326,21 @@ export class NetSync {
 
     spell(name, origin, dir, side) {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
+    }
+
+    /** «Вингардиум Левиоса» on a living body (k 'z' / 'a' / 'v') or on a wizard (k 'p'): held / let go. */
+    lev(k, id, side, hold, on, gentle = false) {
+        this.net.send({ t: 'lev', by: this.me, k, id, side, h: r3(hold), on: on ? 1 : 0, g: gentle ? 1 : 0 }, true);
+    }
+
+    /** My body is held up by `by` (or let go / I broke free). */
+    lift(by, side, hold, on, free = false) {
+        this.net.send({ t: 'lift', by, to: this.me, side, h: r3(hold), on: on ? 1 : 0, f: free ? 1 : 0 }, true);
+    }
+
+    /** (host) That body is held by someone else already. */
+    levNo(to, k, id) {
+        if (this.net.isHost) this.net.send({ t: 'levno', to, k, id }, true);
     }
 
     /** «Стоп»: the flames / ice beams / storm I hold end everywhere. */
@@ -570,6 +588,9 @@ export class NetSync {
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;
             case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;
+            case 'lev': if (m.by !== this.me) g.levitation?.onNetLev(m); break;
+            case 'lift': if (m.to !== this.me) g.levitation?.onNetLift(m); break;
+            case 'levno': if (m.to === this.me) g.levitation?.onNetRefused(m); break;
             case 'stop':
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)

@@ -51,6 +51,7 @@ import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK, isCastleBlock, BASE_COLORS } from '../world/Terrain.js';
+import { lookPitch } from '../input/PoseInterpreter.js';
 
 const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
@@ -745,11 +746,11 @@ export class Game {
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
-        // Levitation: point the hand at an object (or a creature: a duel spell)
+        // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
-            const aim = this.levitation.active ? null : this.duel.pickSide(false);
-            // (a book-bird is caught and held, not struck)
-            if (aim && aim.t.kind !== 'b' && (aim.t.kind === 'p' || this._creatureCloserThanObject(aim))) return this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
+            // (a wizard: a charge flies — the duel decides; an animal / zombie / villager is lifted like a thing)
+            const aim = this.levitation.active ? null : this.duel.pickSide(true);
+            if (aim && aim.t.kind === 'p') return this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
             return this._castLevitation(isFinal);
         }
         // Water bending: the hand is at the water / holding the ball, not raised to the face
@@ -864,14 +865,6 @@ export class Game {
         if (!done.length) return false;
         this.sync?.stopSpells?.();
         this.hud.setVoice(`🛑 Стоп: ${done.join(', ')}`, true);
-        return true;
-    }
-
-    /** Is the pointed-at creature closer than any loose object (so levitation lifts the creature)? */
-    _creatureCloserThanObject(aim) {
-        const hand = this.character.getHandWorldPosition(aim.side);
-        for (const w of this.weapons.weapons) if (!w.holder && w.position.distanceTo(hand) < aim.t.dist) return false;
-        for (const b of this.water.resting) if (b.pos.distanceTo(hand) < aim.t.dist) return false;
         return true;
     }
 
@@ -1812,7 +1805,7 @@ export class Game {
         if (pose) {
             if (pose.headRotation) {
                 const targetYaw = pose.headRotation.yaw * s.sensitivity;
-                const targetPitch = pose.headRotation.pitch * s.sensitivity;
+                const targetPitch = lookPitch(pose.headRotation.pitch * s.sensitivity); // (tilt the head back: straight up)
                 // Per-frame smoothing tuned at 60 FPS, scaled so 144 Hz screens behave the same
                 const alpha = frameAlpha(pose.isRunning && !flying ? Math.min(s.smoothness, 0.1) : s.smoothness, dt);
                 this.smoothHead.yaw += (targetYaw - this.smoothHead.yaw) * alpha;
@@ -1841,7 +1834,7 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying);
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted);
 
         // Explosion knockback (decays)
         if (this.knockback.lengthSq() > 0.0001) {
@@ -2014,6 +2007,7 @@ export class Game {
 
     startFlight(force = false) {
         if (this.flight.active) return false;
+        if (this.levitation.lifted) return false; // (held up by another wizard's Leviosa)
         if (!force && !this.knowsFlight()) {
             this.hud.setVoice('📜 В «Свободном мире» летать нельзя, пока не найдёте в сундуке <b>Свиток полёта</b> (и не сожжёте его «Инферно»)', true);
             return false;
@@ -2083,6 +2077,8 @@ export class Game {
                 }
                 continue;
             }
+            // held up by «Вингардиум Левиоса»: Levitation carries it (it can't walk or bite)
+            if (z.lev) { z._spinHalo?.(dt); continue; }
             const target = this._zombieTarget(z);
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
             if (z.removable) { this.removeZombie(z); continue; }
