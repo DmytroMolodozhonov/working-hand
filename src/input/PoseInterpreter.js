@@ -50,6 +50,30 @@ export function pocketPose(lm, hand, side, aspect = 4 / 3) {
     return len > 1e-4 && dyh / len > 0.8; // (within ~35° of straight down)
 }
 
+/**
+ * The hand brought to the mouth (eating): in the picture the hand covers the mouth —
+ * the palm's middle (or, unseen, the wrist just under it) close to the mouth, the
+ * elbow below. Sizes in shoulder widths, so near or far from the camera is the same.
+ */
+export function handAtMouth(lm, hand, side, aspect = 4 / 3) {
+    const [e, w] = side === 'left' ? [13, 15] : [14, 16];
+    const ls = lm?.[11], rs = lm?.[12], nose = lm?.[0], el = lm?.[e], wr = lm?.[w];
+    if (!ls || !rs || !nose || !el || !wr) return null;
+    if ((nose.visibility ?? 1) < 0.5) return null;
+    const W = Math.abs(ls.x - rs.x) * aspect;
+    if (W < 0.03) return null;
+    const m9 = lm[9], m10 = lm[10];
+    const mouth = m9 && m10 && (m9.visibility ?? 1) > 0.5 && (m10.visibility ?? 1) > 0.5
+        ? { x: (m9.x + m10.x) / 2, y: (m9.y + m10.y) / 2 } : { x: nose.x, y: nose.y + 0.12 * W };
+    if (el.y < wr.y) return false; // (the forearm goes up to the face)
+    if (hand && hand.length >= 21) {
+        const cx = (hand[0].x + hand[5].x + hand[9].x + hand[17].x) / 4, cy = (hand[0].y + hand[5].y + hand[9].y + hand[17].y) / 4;
+        return Math.hypot((cx - mouth.x) * aspect, cy - mouth.y) / W < 0.45;
+    }
+    const dx = (wr.x - mouth.x) * aspect / W, dy = (wr.y - mouth.y) / W;
+    return Math.abs(dx) < 0.35 && dy > -0.1 && dy < 0.7;
+}
+
 export class PoseInterpreter {
     /**
      * @param {object} [faceSolver] Kalidokit.Face (optional; head rotation)
@@ -156,6 +180,7 @@ export class PoseInterpreter {
             data.nose = P(0);
             data.armLift = this._armLift(lm);
             data.pocket = { left: pocketPose(lm, results.leftHandLandmarks, 'left', data.aspect), right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect) };
+            data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));

@@ -331,3 +331,25 @@ test('pockets: the left hand put into its pocket picks the next slot; arms hangi
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('eating with the camera hands: the apple brought to the mouth is eaten (+HP); held out in front it is not', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'survival');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.playerHP = 5;
+        g.items.takeIntoHand({ kind: 'apple', uid: 'eat1', count: 2 }, 'right');
+    });
+    await feed(page, { arms: 'forward', rightCurl: 0.8, leftCurl: 0 }, 40, 40);
+    const before = await page.evaluate(() => ({ hp: window.__zns.game.playerHP, n: window.__zns.game.items.held.right?.item.count }));
+    await feed(page, { toMouth: 'right', rightCurl: 0.8, leftCurl: 0 }, 40, 40);
+    const after = await page.evaluate(() => ({ hp: window.__zns.game.playerHP, n: window.__zns.game.items.held.right?.item.count ?? 0 }));
+    assert.equal(before.hp, 5, 'held out in front: not eaten');
+    assert.equal(before.n, 2);
+    assert.ok(after.hp > 5, `brought to the mouth: eaten (HP ${after.hp})`);
+    assert.ok(after.n < 2, 'one apple fewer');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

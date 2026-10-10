@@ -61,3 +61,17 @@ test('the head tilted back looks straight up (a real head goes ~40° back before
 test('«Assemble» is «Gather» too (Gather is not always heard right)', () => {
     for (const w of ['assemble', 'Ассембл', 'эссембл', 'gather', 'гезер']) assert.equal(matchSpell(w), 'Gather', w);
 });
+
+import { handAtMouth } from '../../src/input/PoseInterpreter.js';
+import { frame } from '../e2e/poses.mjs';
+
+test('eating: the hand brought to the mouth is seen in the picture; a hand in front of the chest or hanging is not', () => {
+    const at = frame({ toMouth: 'right', rightCurl: 0.8 });
+    const hands = (f, label) => f.hands.find((h) => h.label === label)?.landmarks;
+    assert.equal(handAtMouth(at.poseLandmarks, hands(at, 'Left'), 'right'), true, 'the right hand at the mouth');
+    assert.equal(handAtMouth(at.poseLandmarks, null, 'right'), true, 'the hand unseen: the wrist under the mouth');
+    const fwd = frame({ arms: 'forward', rightCurl: 0.8 });
+    assert.equal(handAtMouth(fwd.poseLandmarks, hands(fwd, 'Left'), 'right'), false, 'arm stretched forward');
+    const down = frame({ arms: 'hang', rightCurl: 0.8 });
+    assert.equal(handAtMouth(down.poseLandmarks, hands(down, 'Left'), 'right'), false, 'arm hanging');
+});

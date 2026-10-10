@@ -425,7 +425,10 @@ export class ItemSystem {
         for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
         if (!food) { this._eatT = 0; return; }
         const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
-        if (food.h.model.position.distanceTo(mouth) < 0.55) this._eatT += dt; else this._eatT = 0;
+        // the food at the mouth: the model's hand there, or the camera sees the hand cover the mouth
+        // (the arm's depth is the camera's guess: the picture is surer)
+        const atMouth = food.h.model.position.distanceTo(mouth) < 0.75 || !!g.currentPose?.mouthHand?.[food.side];
+        if (atMouth) this._eatT += dt; else this._eatT = 0;
         if (this._eatT < 0.6) return;
         this._eatT = 0;
         if (food.h.item.shop) { g.hud.setVoice?.('💰 Сначала заплатите торговцу (скажите «да»)', true); return; }

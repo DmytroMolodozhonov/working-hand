@@ -43,12 +43,15 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
     const sz = -forward;
     p[0] = { x: 0.5 + lean * 1.3, y: noseY, z: -0.4 + sz, visibility: 0.99 };
+    // the mouth (its corners)
+    p[9] = { x: 0.49 + lean * 1.3, y: noseY + 0.05, z: -0.4 + sz, visibility: 0.99 };
+    p[10] = { x: 0.51 + lean * 1.3, y: noseY + 0.05, z: -0.4 + sz, visibility: 0.99 };
     p[11] = { x: 0.6 + lean, y: sh, z: sz, visibility: 0.99 };
     p[12] = { x: 0.4 + lean, y: sh, z: sz, visibility: 0.99 };
     let lElbow, lWrist, rElbow, rWrist;
@@ -74,6 +77,9 @@ export function frame({ arms = 'forward', raise = null, pocket = null, leftCurl 
     // a hand put into its front trouser pocket: the wrist at the hip, the elbow bent out (the hand not seen)
     if (pocket === 'left' || pocket === 'both') { lElbow = [0.67, sh + 0.18]; lWrist = [0.58, sh + 0.37]; leftCurl = null; }
     if (pocket === 'right' || pocket === 'both') { rElbow = [0.33, sh + 0.18]; rWrist = [0.42, sh + 0.37]; rightCurl = null; }
+    // a hand brought to the mouth (eating): the elbow down in front, the hand at the mouth
+    if (toMouth === 'right') { rElbow = [0.42, sh + 0.12]; rWrist = [0.485, noseY + 0.1]; }
+    if (toMouth === 'left') { lElbow = [0.58, sh + 0.12]; lWrist = [0.515, noseY + 0.1]; }
     if (lean) { lElbow[0] += lean; lWrist[0] += lean; rElbow[0] += lean; rWrist[0] += lean; }
     // (raised sideways: the arm stays in the body's plane, no depth)
     const ez = raise != null ? 0 : -0.2, wz = raise != null ? 0 : -0.4;
