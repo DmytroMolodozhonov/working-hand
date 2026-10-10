@@ -132,7 +132,7 @@ test('beds: wool from a sheep, logs thrown from the hand, «Create a Bed», «Ch
     const lay = await page.evaluate(() => {
         const g = window.__zns.game;
         g.beds.testAim = null;
-        g.dayStart = Date.now() - 24 * 60 * 1000 * 0.75;
+        g.dayStart = Date.now() - 24 * 60 * 1000 * 0.87; // (deep night: the night is the last quarter of the day)
         g.world.setDayPhase(g.dayPhase());
         const b = [...g.beds.list.values()][0];
         const c = Math.cos(b.ry), s = Math.sin(b.ry), lx = 1.25 + 0.9;
@@ -269,7 +269,7 @@ test('beds in multiplayer: a guest creates and repaints (the host decides), both
     // night for both (the same clock); the host lies down alone: the night goes on
     const dayStart = await host.page.evaluate(() => {
         const g = window.__zns.game;
-        g.dayStart = Date.now() - 24 * 60 * 1000 * 0.75;
+        g.dayStart = Date.now() - 24 * 60 * 1000 * 0.87; // (deep night: the night is the last quarter of the day)
         g.world.setDayPhase(g.dayPhase());
         return g.dayStart;
     });

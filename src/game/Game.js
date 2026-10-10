@@ -1885,7 +1885,7 @@ export class Game {
         }
     }
 
-    /** Where we are in the day: 0–0.5 day, 0.5–1 night. */
+    /** Where we are in the day: 0–0.75 day (18 hours), 0.75–1 night (6 hours). */
     dayPhase() {
         return (((Date.now() - this.dayStart) / DAY_CYCLE_MS) % 1 + 1) % 1;
     }

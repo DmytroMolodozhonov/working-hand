@@ -14,6 +14,18 @@ const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
 const _moon = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
+
+/** The night is the last quarter of the day: 6 of the 24 hours (18 hours of daylight). */
+export const NIGHT_START = 0.75;
+const DUSK = 0.045; // (≈1 minute of sunset / sunrise either side)
+
+/** How dark it is at day phase `phase` (0 = dawn … 1): 0 by day, 1 by night, soft dusk and dawn. */
+export function nightAt(phase) {
+    const p = ((phase % 1) + 1) % 1, N = NIGHT_START, e = DUSK;
+    const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const k = p < N ? ss(N - e, N + e, p) + (1 - ss(-e, e, p)) : ss(N - e, N + e, p) * (1 - ss(1 - e, 1 + e, p));
+    return Math.max(0, Math.min(1, k));
+}
 // Spawn-area trees (instanced, vertex-coloured green / brown): tint multipliers per kind
 // (oak, birch, spruce, cherry, dark oak) — the same kinds as the voxel trees further out
 const SPAWN_TREE_TINTS = [
@@ -166,16 +178,13 @@ export class VoxelWorld {
      */
     setDayPhase(phase) {
         const p = ((phase % 1) + 1) % 1;
-        // night amount: 0 by day, 1 by night, ~1.5 min blends around sunset (0.5) and sunrise (0/1)
-        const edge = 0.045;
-        const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-        const night = p < 0.5 ? ss(0.5 - edge, 0.5 + edge, p) + (1 - ss(-edge, edge, p)) : ss(0.5 - edge, 0.5 + edge, p) * (1 - ss(1 - edge, 1 + edge, p));
-        const k = Math.max(0, Math.min(1, night));
+        // night amount: 0 by day, 1 by night (the last quarter: 6 of 24 hours), soft around sunset and sunrise
+        const k = nightAt(p);
         if (Math.abs(k - (this._night ?? -1)) < 0.002 && Math.abs(p - (this._phase ?? -1)) < 0.0005) return;
         this._night = k;
         this._phase = p;
         // Sun (by day) or moon (by night) moves across the sky
-        const arc = (p < 0.5 ? p / 0.5 : (p - 0.5) / 0.5) * Math.PI; // 0 → π
+        const arc = (p < NIGHT_START ? p / NIGHT_START : (p - NIGHT_START) / (1 - NIGHT_START)) * Math.PI; // 0 → π
         const elev = Math.max(0.12, Math.sin(arc));
         this.sunDir = (this.sunDir || new THREE.Vector3()).set(Math.cos(arc) * 0.9, elev, 0.35).normalize();
         this.sky?.setNightAmount(k);

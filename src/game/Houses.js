@@ -6,8 +6,9 @@
  * player comes near (and taken away again when everybody has gone):
  *  - a real door in the doorway (src/game/Doors.js — open it by the handle or
  *    push it with the hand; the people of the house open it themselves);
- *  - glass in the windows (one instanced mesh for all panes): a fist, a sword,
- *    an arrow, a thrown thing, a blast or a spell breaks it — for good;
+ *  - glass in the windows (one instanced mesh for all panes): a real blow of a
+ *    fist or a blade into it (not a touch, not walking past), an arrow, a thrown
+ *    thing, a blast or a strong spell breaks it — for good;
  *  - beds (src/game/Beds.js — you can lie in them) and chests: mostly food,
  *    seldom something precious. Taking from a chest while the family sees it
  *    makes them attack (src/game/CastleLife.js theft);
@@ -33,6 +34,19 @@ const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * A real blow on a window pane: the hand (or the blade) moves FAST relative to the
+ * body — not the whole body walking or running past with the hand near the glass —
+ * and INTO the pane (along its normal), and a bare hand is clenched into a fist.
+ * `rel` — the hand's speed relative to the body (world vector, m/s), `ry` — the pane's turn.
+ */
+export const GLASS = { BLOW: 6, INTO: 4, FIST: 0.55 };
+export function paneBlow(rel, ry, curl = 1) {
+    if (rel.length() < GLASS.BLOW || curl < GLASS.FIST) return false;
+    const into = Math.abs(rel.x * Math.sin(ry) + rel.z * Math.cos(ry)); // (across the pane: its normal)
+    return into >= GLASS.INTO;
+}
 
 export class Houses {
     constructor(game) {
@@ -260,18 +274,27 @@ export class Houses {
         const g = this.game;
         const me = g.character.group.position;
         const ch = g.character;
+        // (the body's own speed: walking past a window with the hands near it is no blow)
+        const now = performance.now();
+        const bodyV = this._bodyV || (this._bodyV = new THREE.Vector3());
+        if (this._lastMe && now > this._lastT) bodyV.subVectors(me, this._lastMe).divideScalar((now - this._lastT) / 1000);
+        (this._lastMe || (this._lastMe = new THREE.Vector3())).copy(me);
+        this._lastT = now;
         const near = this.panes.filter((p) => Math.abs(p.x - me.x) < 16 && Math.abs(p.z - me.z) < 16);
-        // my fists / my weapon: a fast hand through the pane
+        // my fist / my weapon: only a real blow into the pane breaks it (not a touch)
         if (near.length && g.currentPose) {
             for (const side of ['left', 'right']) {
                 const v = ch.handVelocity?.[side];
-                if (!v || v.length() < 3.2) continue;
-                const hp = ch.getHandWorldPosition(side, _v2);
-                for (const p of near) if (this._inPane(p, hp, 0.55)) { this.breakPane(p.id, g.localId); break; }
+                if (!v) continue;
+                const rel = _s.subVectors(v, bodyV);
+                if (rel.length() < GLASS.BLOW) continue;
                 const held = g.weapons?.heldBy?.(side);
+                const curl = held ? 1 : (ch.getGripCurl ? ch.getGripCurl(side) : 1);
+                const hp = ch.getHandWorldPosition(side, _v2);
+                for (const p of near) if (this._inPane(p, hp, 0.55) && paneBlow(rel, p.ry, curl)) { this.breakPane(p.id, g.localId); break; }
                 if (held) {
                     const tip = held.tipWorld?.(_v) || held.position;
-                    for (const p of near) if (this._inPane(p, tip, 0.5)) { this.breakPane(p.id, g.localId); break; }
+                    for (const p of near) if (this._inPane(p, tip, 0.5) && paneBlow(rel, p.ry, 1)) { this.breakPane(p.id, g.localId); break; }
                 }
             }
         }
