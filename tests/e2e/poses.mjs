@@ -37,13 +37,15 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
 
 /**
  * @param {object} o
- *   arms: 'forward' | 'down' | 'up'
+ *   arms: 'forward' | 'down' | 'up' | 'hang'
  *   raise: degrees — both arms lifted sideways this far from hanging (overrides `arms`)
+ *   archer: 'left' | 'right' — the bow arm stretched at the camera; draw: 0 (the other hand
+ *     at the bow) … 1 (drawn back to the chin), null (that arm hangs)
  *   leftCurl / rightCurl: 0 open … 1 fist, null = hand not detected
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -80,13 +82,29 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
     // a hand brought to the mouth (eating): the elbow down in front, the hand at the mouth
     if (toMouth === 'right') { rElbow = [0.42, sh + 0.12]; rWrist = [0.485, noseY + 0.1]; }
     if (toMouth === 'left') { lElbow = [0.58, sh + 0.12]; lWrist = [0.515, noseY + 0.1]; }
+    // an archer shooting at the camera: the bow arm (`archer`: its side) stretched straight at
+    // the camera (seen short, by the shoulder); the other hand draws the string from the bow
+    // (draw 0) back to the chin (draw 1), its elbow going out to the side at shoulder height
+    // (draw null: that arm just hangs)
+    let z = null;
+    if (archer === 'left' || archer === 'right') {
+        const m = (x) => (archer === 'left' ? x : 1 - x); // (the bow's side on the picture)
+        const lerp = (a, b) => a + (b - a) * Math.max(0, Math.min(1, draw ?? 0));
+        const bowE = [m(0.59), sh + 0.005], bowW = [m(0.575), sh + 0.01];
+        let drawE = [m(lerp(0.49, 0.31)), sh + lerp(0.02, -0.01)], drawW = [m(lerp(0.565, 0.48)), lerp(sh + 0.01, noseY + 0.09)];
+        let dz = [lerp(-0.25, 0.1), lerp(-0.45, -0.15)];
+        if (draw == null) { drawE = [m(0.36), sh + 0.18]; drawW = [m(0.34), sh + 0.4]; dz = [0, 0]; }
+        if (archer === 'left') { lElbow = bowE; lWrist = bowW; rElbow = drawE; rWrist = drawW; } else { rElbow = bowE; rWrist = bowW; lElbow = drawE; lWrist = drawW; }
+        const bz = [-0.25, -0.5];
+        z = archer === 'left' ? { le: bz[0], lw: bz[1], re: dz[0], rw: dz[1] } : { re: bz[0], rw: bz[1], le: dz[0], lw: dz[1] };
+    }
     if (lean) { lElbow[0] += lean; lWrist[0] += lean; rElbow[0] += lean; rWrist[0] += lean; }
     // (raised sideways: the arm stays in the body's plane, no depth)
     const ez = raise != null ? 0 : -0.2, wz = raise != null ? 0 : -0.4;
-    p[13] = { x: lElbow[0], y: lElbow[1], z: ez, visibility: 0.99 };
-    p[14] = { x: rElbow[0], y: rElbow[1], z: ez, visibility: 0.99 };
-    p[15] = { x: lWrist[0], y: lWrist[1], z: wz, visibility: 0.99 };
-    p[16] = { x: rWrist[0], y: rWrist[1], z: wz, visibility: 0.99 };
+    p[13] = { x: lElbow[0], y: lElbow[1], z: z ? z.le : ez, visibility: 0.99 };
+    p[14] = { x: rElbow[0], y: rElbow[1], z: z ? z.re : ez, visibility: 0.99 };
+    p[15] = { x: lWrist[0], y: lWrist[1], z: z ? z.lw : wz, visibility: 0.99 };
+    p[16] = { x: rWrist[0], y: rWrist[1], z: z ? z.rw : wz, visibility: 0.99 };
     p[23] = { x: 0.57, y: 0.8, z: 0, visibility: 0.9 };
     p[24] = { x: 0.43, y: 0.8, z: 0, visibility: 0.9 };
     const hands = [];

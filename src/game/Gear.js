@@ -9,7 +9,8 @@
  * Bow (in one hand): reach over the shoulder behind your back with the
  * other hand — an arrow appears in it (from the quiver); bring it to the
  * bow, pull the hand back (the further, the stronger), then let go — a quick
- * move of the hand forward. The arrow flies along the bow.
+ * move of the hand forward. The arrow flies along the bow, where the bow arm
+ * points (shoulder → bow hand); the bow turns to it.
  *
  * Thor's hammer: only in a thunderstorm. Raise it above the head — lightning
  * strikes it; then aim it at a creature for up to 5 s (like «Lightning
@@ -27,8 +28,43 @@ import { SPELL_COST } from './Combat.js';
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _ba = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const STRONG = 15; // spells costing this much break a plain shield
+
+/** How far (rad) the drawing hand may disagree with the bow arm and still refine the aim. */
+export const BOW_AGREE = (25 * Math.PI) / 180;
+
+/**
+ * Where an arrow on the string flies. In real archery the arrow lies from the
+ * anchor (the drawing hand at the face) through the bow grip — nearly the bow
+ * arm's own line from the shoulder. The camera hardly sees depth, so the two
+ * hands often come out side by side and the line between them would go
+ * sideways: the bow arm (shoulder → bow hand) is the aim, and the drawing hand
+ * only refines it a little when it agrees (within BOW_AGREE), fading out
+ * smoothly as it disagrees more.
+ * @param {THREE.Vector3} shoulder  the bow arm's shoulder
+ * @param {THREE.Vector3} bowHand   the bow hand (the end of the bow arm)
+ * @param {THREE.Vector3} grip      the bow's grip (where the arrow passes)
+ * @param {THREE.Vector3} drawHand  the drawing hand (on the string)
+ * @param {THREE.Vector3} out
+ * @param {THREE.Vector3|null} fallback  (a degenerate arm: e.g. the hero's facing)
+ */
+export function bowAim(shoulder, bowHand, grip, drawHand, out = new THREE.Vector3(), fallback = null) {
+    out.subVectors(bowHand, shoulder);
+    if (out.lengthSq() < 1e-6) { if (fallback) out.copy(fallback); else out.set(0, 0, -1); }
+    out.normalize();
+    const pull = _ba.subVectors(grip, drawHand);
+    const len = pull.length();
+    if (len > 0.05) {
+        pull.divideScalar(len);
+        const w = 0.5 * Math.max(0, 1 - out.angleTo(pull) / BOW_AGREE);
+        if (w > 0) out.lerp(pull, w).normalize();
+    }
+    return out;
+}
 
 export class Gear {
     constructor(game) {
@@ -128,8 +164,12 @@ export class Gear {
         const dist = hand.distanceTo(bowPos);
         n.draw = Math.max(0, Math.min(1, (dist - 0.6) / 1.3));
         n.peak = Math.max(n.peak * 0.985, n.draw);
-        const dir = _v3.subVectors(bowPos, hand).normalize();
-        // the bow turns to where the arrow goes; the string follows the drawing fingers
+        // the arrow goes along the bow arm (shoulder → bow hand), refined by the drawing hand
+        // only when it agrees — never along the hands' sideways line (see bowAim)
+        const shoulder = (bow.side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_v4);
+        const yaw = ch.group.rotation.y;
+        const dir = bowAim(shoulder, ch.getHandWorldPosition(bow.side, _v5), bowPos, hand, _v3, _v.set(-Math.sin(yaw), 0, -Math.cos(yaw)));
+        // the bow turns to where the arrow goes; the string follows the drawing fingers back
         // (a «V» from the tips), the arrow lies on the bow with its nock on the string
         if (held) held.aim = dir.clone();
         const S = bow.model.userData.bowString;

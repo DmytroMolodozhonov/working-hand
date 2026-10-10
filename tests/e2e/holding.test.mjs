@@ -157,6 +157,84 @@ test('bow and shields: big enough, held through a shaky camera, shooting (creati
     await page.close();
 });
 
+test('the bow with real archer poses (in the left hand and in the right): upright, the string to the archer, the arrow flies where the bow arm points — not sideways', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    // (only watching: every arrow fired, with the bow arm and the hero's facing at that moment)
+    await page.evaluate(() => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        g.__shots = [];
+        const fire = g.gear.fire.bind(g.gear);
+        g.gear.fire = (from, vel, dmg, by) => {
+            const side = g.items.held.left?.item.kind === 'bow' ? 'left' : 'right';
+            const shoulder = (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(new T.Vector3());
+            const arm = ch.getHandWorldPosition(side, new T.Vector3()).sub(shoulder).normalize();
+            const yaw = ch.group.rotation.y;
+            g.__shots.push({ vel: vel.toArray(), arm: arm.toArray(), fwd: [-Math.sin(yaw), 0, -Math.cos(yaw)] });
+            return fire(from, vel, dmg, by);
+        };
+    });
+    const look = (side) => page.evaluate((side) => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const bow = g.items.held[side];
+        if (!bow) return null;
+        const yaw = ch.group.rotation.y;
+        const fwd = new T.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+        const shoulder = (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(new T.Vector3());
+        const arm = ch.getHandWorldPosition(side, new T.Vector3()).sub(shoulder).normalize();
+        const q = bow.model.quaternion;
+        const limbs = new T.Vector3(0, 1, 0).applyQuaternion(q), ahead = new T.Vector3(1, 0, 0).applyQuaternion(q);
+        const deg = (a, b) => a.angleTo(b) * 180 / Math.PI;
+        const S = bow.model.userData.bowString;
+        return {
+            upright: Math.min(deg(limbs, new T.Vector3(0, 1, 0)), deg(limbs, new T.Vector3(0, -1, 0))),
+            aheadVsFwd: deg(ahead, fwd), aheadVsArm: deg(ahead, arm), armVsFwd: deg(arm, fwd),
+            nock: g.gear.nock ? { state: g.gear.nock.state, draw: g.gear.nock.draw } : null,
+            pulled: S ? S.tipX - S.nockX : 0,
+        };
+    }, side);
+    for (const side of ['left', 'right']) {
+        const other = side === 'left' ? 'right' : 'left';
+        // the bow hand: a fist round the grip, the thumb up, the knuckles towards the camera
+        const pose = (draw, curl) => ({ archer: side, draw, [side + 'Curl']: 0.9, [side + 'Tilt']: 1.3, [side + 'Rot']: side === 'left' ? 1.57 : -1.57, [other + 'Curl']: curl });
+        await page.evaluate((side) => {
+            const g = window.__zns.game;
+            for (const s of ['left', 'right']) g.items.releaseHand(s);
+            g.gear._dropNock();
+            g.__shots.length = 0;
+            g.items.takeIntoHand({ kind: 'bow', uid: 'archer-' + side, type: 0, arrows: 0 }, side);
+        }, side);
+        // the bow held out at the camera, the other arm hanging: upright, the string towards the archer
+        await feed(page, pose(null, 0), 30, 40);
+        const held = await look(side);
+        assert.ok(held && !held.nock, `${side}: the bow is held, no arrow yet ` + JSON.stringify(held));
+        assert.ok(held.upright < 30, `${side}: the held bow stands upright-ish (${held.upright.toFixed(0)}° from upright)`);
+        assert.ok(held.aheadVsFwd < 45, `${side}: its string towards the archer, its back ahead (${held.aheadVsFwd.toFixed(0)}°)`);
+        // the other hand to the bow (an arrow on the string), then drawn back to the chin
+        await feed(page, pose(0, 0.8), 20, 40);
+        assert.equal((await look(side)).nock?.state, 'nocked', `${side}: the hand at the bow puts an arrow on the string`);
+        for (let i = 1; i <= 15; i++) await feed(page, pose(i / 15, 0.8), 1, 40);
+        await feed(page, pose(1, 0.8), 15, 40);
+        const drawn = await look(side);
+        assert.ok(drawn.nock && drawn.nock.draw > 0.35, `${side}: drawn ` + JSON.stringify(drawn));
+        assert.ok(drawn.armVsFwd < 15, `${side}: the bow arm points ahead (${drawn.armVsFwd.toFixed(1)}°)`);
+        assert.ok(drawn.upright < 15, `${side}: aiming, the bow stands upright (${drawn.upright.toFixed(1)}°)`);
+        assert.ok(drawn.aheadVsArm < 15, `${side}: the bow turned along the bow arm (${drawn.aheadVsArm.toFixed(1)}°)`);
+        assert.ok(drawn.pulled > 0.2, `${side}: the string is pulled back by the fingers (${drawn.pulled.toFixed(2)})`);
+        // the fingers open: the arrow flies where the bow arm points and the hero looks
+        await feed(page, pose(1, 0), 15, 40);
+        const shots = await page.evaluate(() => window.__zns.game.__shots);
+        assert.equal(shots.length, 1, `${side}: one arrow flew when the fingers opened`);
+        const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / Math.hypot(...a) / Math.hypot(...b)))) * 180 / Math.PI;
+        const s = shots[0];
+        assert.ok(ang(s.vel, s.arm) < 15, `${side}: the arrow flies along the bow arm (${ang(s.vel, s.arm).toFixed(1)}°), not sideways`);
+        assert.ok(ang(s.vel, s.fwd) < 15, `${side}: the arrow flies where the hero faces (${ang(s.vel, s.fwd).toFixed(1)}°)`);
+    }
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
 test('the wand: held like a pen along the arm, the spell leaves its tip the way it points', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
