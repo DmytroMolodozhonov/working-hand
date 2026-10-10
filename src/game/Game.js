@@ -1764,7 +1764,7 @@ export class Game {
         if (!isTest) this._spawnWaves();
 
         for (const r of this.remotes.values()) r.update(dt);
-        this._keepBodiesApart(); // (after everything that moved me, before my place is sent)
+        this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
         if (this.sync) this.sync.update(dt);
         mark('мультиплеер');
 
@@ -1857,20 +1857,23 @@ export class Game {
             this.knockback.multiplyScalar(Math.max(0, 1 - 4 * dt));
         }
 
-        // (other players are solid: _keepBodiesApart, once everything has moved me)
-
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
         if (!flight.active && !this.beds?.lying) {
             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
         }
         this._keepInsideMap(ch.group.position);
+        // Other players are solid: stopped here already, before the things in my hands are put
+        // into them (a sword, an apple, a book follow the hand as it is now); once more after
+        // the horse, Leviosa and the other players have moved this frame (see update).
+        this._keepBodiesApart();
     }
 
     /**
-     * Other players are solid. Once everything has moved me this frame (walking, running,
-     * a blast, the horse, Leviosa, flight), my body goes from where it stood to where it
-     * wants to be in short steps and never into anybody's body as drawn on this screen:
+     * Other players are solid. After whatever has moved me (walking, running, a blast,
+     * flight, the horse, Leviosa — it runs after each of them; once more changes nothing),
+     * my body goes from where it stood to where it wants to be in short steps and never
+     * into anybody's body as drawn on this screen:
      * it stops against them and slides along (BodyContact.js). Every computer does this
      * for its own hero, so it holds both ways. Riding, it is the horse that is stopped.
      */

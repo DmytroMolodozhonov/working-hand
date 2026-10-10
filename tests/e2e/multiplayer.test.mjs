@@ -230,17 +230,20 @@ test('players are solid: running straight at another player stops against the bo
     // Every drawn frame on this screen: how close the two bodies came. Both stand upright
     // facing along z, so the drawn hero is 1.2 m deep (the head) and 1.8 m wide (the arms
     // hang 0.9 m out from the middle): `gap` < 0 means one body is inside the other.
+    // `hand`: how far a thing held in the right hand was drawn from that hand.
     const watch = (page) => ev(page, () => {
         const g = window.__zns.game;
         const me = g.character.group.position, r = [...g.remotes.values()][0].position;
         const side = Math.sign(me.z - r.z) || 1;
-        const w = window.__solidWatch = { mid: Infinity, gap: Infinity, ahead: Infinity, frames: 0, on: true };
+        const held = g.items.held.right, grip = g.character.getGripObject('right'), v = new window.__zns.THREE.Vector3();
+        const w = window.__solidWatch = { mid: Infinity, gap: Infinity, ahead: Infinity, hand: 0, frames: 0, on: true };
         const tick = () => {
             if (!w.on) return;
             const dx = me.x - r.x, dz = me.z - r.z;
             w.mid = Math.min(w.mid, Math.hypot(dx, dz));
             w.gap = Math.min(w.gap, Math.hypot(Math.max(0, Math.abs(dx) - 0.6), dz) - 1.2);
             w.ahead = Math.min(w.ahead, side * dz); // (still on the side it came from)
+            if (held && g.items.held.right === held) w.hand = Math.max(w.hand, held.model.position.distanceTo(grip.getWorldPosition(v)));
             w.frames++;
             requestAnimationFrame(tick);
         };
@@ -260,6 +263,8 @@ test('players are solid: running straight at another player stops against the bo
     // 1) The guest runs straight at the host's back: stops against the body and stays outside
     await place(host.page, lane.x, STAND, 0, false);
     await place(guest.page, lane.x, STAND + 10, 0, false);
+    // (the runner holds an apple: it must stay in the hand while the body presses on)
+    assert.ok(await ev(guest.page, () => { const g = window.__zns.game; g.inventory.select(-1); return g.items.takeIntoHand({ kind: 'apple', uid: 'solid-apple', count: 1 }, 'right'); }), 'an apple in the hand');
     await seen(guest.page, lane.x, STAND);
     await seen(host.page, lane.x, STAND + 10);
     await Promise.all([watch(host.page), watch(guest.page)]);
@@ -277,7 +282,8 @@ test('players are solid: running straight at another player stops against the bo
     assert.ok(hw.gap >= -0.1 && hw.ahead >= 1.1, `nor on the other player's screen (gap ${f2(hw.gap)})`);
     assert.ok(g1.z > STAND + 1.15 && g1.z < STAND + 1.6, `stopped in front, touching (z ${f2(g1.z)})`);
     assert.ok(Math.abs(g1.x - lane.x) < 0.3, 'straight on, no sliding round');
-    assert.ok(Math.hypot(h1.x - lane.x, h1.z - STAND) < 0.3, 'the standing player was not shoved');
+    assert.ok(Math.hypot(h1.x - lane.x, h1.z - STAND) < 0.05, 'the standing player was not shoved');
+    assert.ok(gw.hand < 0.05, `the apple stayed in the runner's hand, not pushed on into the other body (${f2(gw.hand)} m from the hand)`);
 
     // 2) A bit to the side (1 m): the runner goes round the body, shoulder past shoulder
     await place(guest.page, lane.x + 1, STAND + 10, 0, false);
@@ -294,6 +300,7 @@ test('players are solid: running straight at another player stops against the bo
     assert.ok(gw.gap >= -0.02, `the shoulders never went into each other (gap ${f2(gw.gap)}, middles ${f2(gw.mid)} m apart)`);
     assert.ok(hw.gap >= -0.15, `nor on the other player's screen (gap ${f2(hw.gap)})`);
     assert.ok(Math.hypot(h2.x - lane.x, h2.z - STAND) < 0.3, 'the standing player was not shoved');
+    assert.ok(gw.hand < 0.05, `sliding round, the apple stayed in the hand (${f2(gw.hand)} m from it)`);
 
     // 3) The other way round: the host turns and runs at the standing guest
     // (the host leaves the spot first: a body can't be put into another one)
@@ -314,7 +321,7 @@ test('players are solid: running straight at another player stops against the bo
     assert.ok(hw.gap >= -0.02 && hw.ahead >= 1.15, `the host never went into the guest (gap ${f2(hw.gap)})`);
     assert.ok(gw.gap >= -0.1 && gw.ahead >= 1.1, `nor on the guest's screen (gap ${f2(gw.gap)})`);
     assert.ok(h3.z < STAND - 1.15 && h3.z > STAND - 1.6, `stopped in front (z ${f2(h3.z)})`);
-    assert.ok(Math.hypot(g3.x - lane.x, g3.z - STAND) < 0.3, 'the guest was not shoved');
+    assert.ok(Math.hypot(g3.x - lane.x, g3.z - STAND) < 0.05, 'the guest was not shoved');
 
     // 4) On a horse at a gallop: the horse stops at the guest (its head 2.8 m in front of the rider)
     await place(host.page, lane.x + 1.5, STAND - 14, Math.PI, false);
