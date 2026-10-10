@@ -204,6 +204,7 @@ export class NetSync {
             this.net.send({
                 t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP,
                 c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, dc: g.duel.myContact(), w: held,
+                bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
             }, true);
         }
         // Water ball in my hand

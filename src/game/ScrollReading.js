@@ -77,7 +77,7 @@ export class ScrollReading {
         if (!s) return;
         const other = s.side === 'right' ? 'left' : 'right';
         const free = !items.held[other] && !g.weapons.hands[other].held;
-        const ho = ch.getHandWorldPosition(other, _v1);
+        const ho = this._grip(other);
         if (!this.r) {
             // the free hand comes to the scroll: it takes the other roller
             if (!free || !g.currentPose) { this._touchT = 0; return; }
@@ -89,14 +89,16 @@ export class ScrollReading {
         }
         if (!free) { this._close(); return; }
         const R = this.r;
-        const hs = ch.getHandWorldPosition(s.side, _v2);
-        const dist = hs.distanceTo(ho);
+        // the rollers are in the fists: where the closed fingers are
+        const hs = this._grip(s.side);
+        const hoG = ho;
+        const dist = hs.distanceTo(hoG);
         // hands back together (or one dropped to the side): it rolls up again
-        R.closeT = dist < 0.4 || !this._up(hs) || !this._up(ho) ? R.closeT + dt : 0;
+        R.closeT = dist < 0.4 || !this._up(hs) || !this._up(hoG) ? R.closeT + dt : 0;
         if (R.closeT > 0.4) { this._close(); return; }
         const want = Math.max(0, Math.min(1, (dist - 0.35) / 1.4));
         R.open += (want - R.open) * Math.min(1, dt * 8);
-        this._place(R, hs, ho, dt);
+        this._place(R, hs, hoG, dt);
     }
 
     _begin(s, other) {
@@ -129,19 +131,20 @@ export class ScrollReading {
     _place(R, hs, ho, dt) {
         const g = this.game;
         const k = R.open;
-        // (the fists hold the rollers low; the parchment a little beyond them, so the arms don't hide it)
+        // the parchment between the fists, the rollers in them (the arms come from outside its edges)
         const eye = this._eye(_v4);
         const mid = _v3.addVectors(hs, ho).multiplyScalar(0.5);
-        mid.addScaledVector(_v5.subVectors(mid, eye).setY(0).normalize(), 0.3);
-        mid.y += 0.4;
-        if (!R.c) R.c = mid.clone(); else R.c.lerp(mid, Math.min(1, dt * 12));
-        const n = _v5.subVectors(eye, R.c).normalize();
-        // across: from hand to hand, as the reader sees it left → right
-        const across = _v6.subVectors(ho, hs).addScaledVector(n, -_v6.dot(n));
+        R.c = (R.c || new THREE.Vector3()).copy(mid);
+        // across: from fist to fist (as the reader sees it left → right); the face: to the reader
+        const across = _v6.subVectors(ho, hs);
         const camRight = _v7.set(1, 0, 0).applyQuaternion(g.camera.quaternion);
         if (across.dot(camRight) < 0) across.negate();
         if (across.lengthSq() < 1e-4) across.copy(camRight);
         across.normalize();
+        const n = _v5.subVectors(eye, R.c);
+        n.addScaledVector(across, -n.dot(across));
+        if (n.lengthSq() < 1e-6) n.set(0, 1, 0).cross(across);
+        n.normalize();
         const up = _v7.crossVectors(n, across).normalize();
         _m4.makeBasis(across, up, n);
         _q.setFromRotationMatrix(_m4);
@@ -170,6 +173,12 @@ export class ScrollReading {
             R.told = true;
             g.hud.setVoice?.('📜 Свиток раскрыт. Чтобы выучить — сожгите его («Инферно»); сведите руки — свернётся', true);
         }
+    }
+
+    /** Where a hand's closed fingers are (a roller in the fist). */
+    _grip(side) {
+        const pf = this._pf || (this._pf = { left: {}, right: {} });
+        return this.game.weapons.palmFrame(side, pf[side]).G;
     }
 
     /** A hand held up (not hanging at the side). */

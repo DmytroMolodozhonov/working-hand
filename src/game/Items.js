@@ -120,6 +120,24 @@ export class ItemSystem {
     }
 
     /**
+     * A thing goes over from one hand to the other without leaving the hands
+     * (the book: the hand that held it lets go of its cover, the other still holds it).
+     */
+    moveHeld(from, to) {
+        const h = this.held[from];
+        if (!h || this.held[to]) return false;
+        this.held[from] = null;
+        if (h.gripped) { const hand = this.game.character.getActiveHands?.()[from]; if (hand && hand.setGrip) hand.setGrip(null); }
+        h.gripped = false;
+        h.thumb = undefined;
+        h.q = null;
+        h.since = performance.now();
+        this.held[to] = h;
+        if (this.game.sync) { this.game.sync.itemHold?.(from, null); this.game.sync.itemHold?.(to, h.item); }
+        return true;
+    }
+
+    /**
      * A thing in the fist, like the sword: its handle lies across the palm in the
      * closed fingers (out past the thumb), and it turns with the wrist. The hand's
      * fingers close round it.
@@ -263,7 +281,7 @@ export class ItemSystem {
         const now = performance.now();
         // pick up: an empty hand touching a thing
         for (const side of ['right', 'left']) {
-            if (this.held[side] || g.weapons.hands[side].held) continue;
+            if (this.held[side] || g.weapons.hands[side].held || g.books?.reading?.handBusy(side)) continue;
             const hand = ch.getHandWorldPosition(side, _v);
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
@@ -535,7 +553,7 @@ export class ItemSystem {
         const r = g.remotes.get(id);
         if (!r) return;
         const cur = this.remoteHeld.get(id) || {};
-        if (cur[side]) { g.scene.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
+        if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); g.scene.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
         if (item) { const model = makeItemModel(item); g.scene.add(model); cur[side] = { item, model }; }
         this.remoteHeld.set(id, cur);
     }
@@ -548,6 +566,8 @@ export class ItemSystem {
             for (const side of ['right', 'left']) {
                 const h = cur[side];
                 if (!h) continue;
+                // a book open in their hands: as they hold it, at the page they read
+                if (h.item.kind === 'book' && this.game.books?.reading?.placeRemote(ch, h.model, h.item, r.target?.bk || null)) continue;
                 const grip = ch.getGripObject(side);
                 grip.getWorldPosition(h.model.position);
                 grip.getWorldQuaternion(h.model.quaternion);
