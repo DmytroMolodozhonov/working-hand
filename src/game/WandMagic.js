@@ -25,6 +25,7 @@ import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
 export const LUMOS = {
@@ -94,10 +95,26 @@ export class WandMagic {
 
     get wand() { return this.game.items?.wand || null; }
 
-    /** The wand's tip in the world (and the direction it points). */
+    /** Creative: the wand spells work with a bare hand too (at the fingertips). */
+    _bare() {
+        return !this.wand && this.game.config?.mode === 'creative';
+    }
+
+    /** The bare hand casting (creative, no wand): the one the spell was cast with. */
+    _bareSide() {
+        const g = this.game, ch = g.character;
+        return this._bareHand || ['right', 'left'].find((s) => ch.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || 'right';
+    }
+
+    /** The wand's tip in the world (and the direction it points); creative without a wand: the fingertips. */
     tip(out = new THREE.Vector3(), dir = null) {
         const w = this.game.items?.heldOf('wand');
-        if (!w) return null;
+        if (!w) {
+            if (!this._bare()) return null;
+            const ch = this.game.character, side = this._bareSide();
+            const d = ch.getHandDirection(side, dir || _v3);
+            return ch.getHandWorldPosition(side, out).addScaledVector(d, 0.35);
+        }
         const m = w.model;
         m.updateMatrixWorld(true);
         out.set(0, m.userData?.tipY || 0.65, 0).applyMatrix4(m.matrixWorld);
@@ -111,7 +128,8 @@ export class WandMagic {
     cast(name, isFinal) {
         const g = this.game;
         if (name === 'Reveal') { this.reveal(); return name; } // (a wand, or a bare hand)
-        if (!this.wand) { if (isFinal) g.hud.setVoice('🪄 Это заклинание работает только с волшебной палочкой в руке', true); return null; }
+        if (!this.wand && !this._bare()) { if (isFinal) g.hud.setVoice('🪄 Это заклинание работает только с волшебной палочкой в руке', true); return null; }
+        if (!this.wand) this._bareHand = ['right', 'left'].find((s) => g.character.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || 'right';
         if (name === 'Lumos' || name === 'LumosMaxima') {
             if (!isFinal && name === 'Lumos') return null; // (wait for «Максима»)
             const tired = g.combat.check(name);
@@ -122,7 +140,7 @@ export class WandMagic {
         }
         if (name === 'Nox') { this._nox(); return name; }
         if (name === 'Draw') {
-            this.drawing = { until: performance.now() + 12000, lines: [], last: null, color: new THREE.Color(this.wand.color ?? 0xffffff).lerp(new THREE.Color(0xffffff), 0.3) };
+            this.drawing = { until: performance.now() + 12000, lines: [], last: null, color: new THREE.Color(this.wand?.color ?? 0xffffff).lerp(new THREE.Color(0xffffff), 0.3) };
             g.hud.setVoice('✨ Рисуйте палочкой в воздухе (12 секунд)', true);
             return name;
         }
@@ -234,7 +252,7 @@ export class WandMagic {
     /** «Раскрой свои секреты»: a hologram about what the wand (or the bare hand) points at. */
     reveal() {
         const g = this.game;
-        let tip = this.tip(new THREE.Vector3(), _v2);
+        let tip = this.wand ? this.tip(new THREE.Vector3(), _v2) : null;
         let side = this.wand ? g.items.heldOf('wand').side : null;
         if (!tip) {
             // no wand: the hand that points (the raised one, else the spell hand)
@@ -328,7 +346,7 @@ export class WandMagic {
     // -------------------------------------------------------------- frame
     update(dt) {
         const g = this.game;
-        const hasWand = !!this.wand;
+        const hasWand = !!this.wand || this._bare();
         if (this.light && !hasWand) this._nox();
         this._flick = (this._flick || 0) + dt;
         // Lumos at the tip (a little strength over time); a flick throws it
@@ -338,7 +356,7 @@ export class WandMagic {
             this.light.glow.position.copy(tip);
             this.light.glow.scale.setScalar(glowSize(this.light.level) * (away ? 0.35 : 1) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
-            const side = g.items.heldOf('wand').side;
+            const side = g.items.heldOf('wand')?.side || this._bareSide();
             const v = g.character.handVelocity[side];
             if (v.length() > 7 && performance.now() - (this._flickAt || 0) > 900) { this._flickAt = performance.now(); this._throwLight(v.clone().normalize()); }
         }

@@ -340,6 +340,13 @@ export class Game {
                 const bx = -12.5 + magic.length * 5, bz = -18;
                 const btop = this.world.createPedestal(bx, bz);
                 this.books?.placeBook(new THREE.Vector3(bx, btop + 1.0, bz), 777001);
+                // a chest to try things with: it opens as you come, and fills up again once you walk away
+                const cx = 12, cz = -6;
+                const chest = new Chest(this.scene, new THREE.Vector3(cx, this.collision.groundY(cx, cz), cz), 'loot', -Math.PI / 2, 'creative-test');
+                chest.mesh.updateMatrixWorld(true);
+                chest.boxId = this.collision.addBox(chest.getCollisionBox());
+                chest.refill = true;
+                this.chests.push(chest);
             }
         }
     }
@@ -526,6 +533,12 @@ export class Game {
             const dd = Math.abs(cp0.x - me.x) + Math.abs(cp0.z - me.z);
             chest.mesh.visible = dd < 45;
             if (chest.mesh.visible) setNearShadow(chest.mesh, dd < 20);
+            // the creative test chest: shut and full again a while after everybody walked away
+            if (chest.refill && chest.isOpen && !chest.animating && this.authority) {
+                const far = players.every((p) => Math.hypot(p.x - chest.mesh.position.x, p.z - chest.mesh.position.z) > 10);
+                chest.awayT = far ? (chest.awayT || 0) + dt : 0;
+                if (chest.awayT > 4) { chest.awayT = 0; chest.close(); }
+            }
             if (chest.isOpen || chest.locked || !this.authority) continue; // (castle chests: locked while the king lives)
             const cp = chest.getPosition();
             for (let i = 0; i < players.length; i++) {

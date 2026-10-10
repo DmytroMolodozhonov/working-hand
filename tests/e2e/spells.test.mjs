@@ -229,3 +229,66 @@ test('Левиоса lifts a cow like a thing: it rises and hangs in front of th
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('creative: wand spells with a bare hand, building out of nothing (no wood or stone in the slots), a bed out of nothing, a test chest that fills up again', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 12, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        // nothing in the slots
+        g.inventory.slots = g.inventory.slots.map(() => null);
+        g.inventory._render?.();
+        await frames(2);
+        const lumos = g.castLocalSpell('Люмос', true);
+        await frames(3);
+        const light = !!g.wandMagic.light;
+        const lightAt = g.wandMagic.light ? g.wandMagic.light.glow.position.distanceTo(ch.getHandWorldPosition('right', new T.Vector3())) : -1;
+        g.castLocalSpell('нокс', true);
+        // a floor out of nothing
+        g._lastBuild = 0;
+        const floor = g.castLocalSpell('create a floor', true);
+        await frames(20);
+        g.castLocalSpell('stand', true);
+        const built = g.builder.lastCount;
+        // a door out of nothing
+        g._lastBuild = 0;
+        const door = g.castLocalSpell('create a door', true);
+        // a bed out of nothing
+        const p = ch.group.position;
+        g.beds.testAim = { x: p.x + 4, z: p.z - 4 };
+        const bedsBefore = g.beds.list.size;
+        g.beds._lastCast = 0;
+        const bed = g.castLocalSpell('create a bed', true);
+        const beds = g.beds.list.size - bedsBefore;
+        g.beds.testAim = null;
+        // the test chest: opens as I come, fills up again once I walked away
+        const chest = g.chests.find((c) => c.id === 'creative-test');
+        const at = chest ? chest.getPosition().clone() : null;
+        let opened = false, reshut = false;
+        if (chest) {
+            p.set(at.x + 2, p.y, at.z);
+            for (let i = 0; i < 100 && !chest.isOpen; i++) await frames(1);
+            opened = chest.isOpen;
+            for (let i = 0; i < 100 && chest.animating; i++) await frames(1);
+            p.set(at.x + 25, p.y, at.z);
+            for (let i = 0; i < 400 && chest.isOpen; i++) await frames(1);
+            reshut = !chest.isOpen;
+        }
+        return { lumos, light, lightAt, floor, built, door, bed, beds, chest: !!chest, opened, reshut };
+    });
+    assert.equal(r.lumos, 'Lumos', 'Lumos without a wand in creative');
+    assert.ok(r.light && r.lightAt < 0.6, `the light at the fingertips (${r.lightAt.toFixed(2)} m from the hand)`);
+    assert.equal(r.floor, 'CreateFloor', 'a floor with empty slots');
+    assert.ok(r.built >= 1, `blocks were placed (${r.built})`);
+    assert.equal(r.door, 'CreateDoor', 'a door without wood');
+    assert.equal(r.bed, 'CreateBed', 'a bed without logs and wool');
+    assert.equal(r.beds, 1);
+    assert.ok(r.chest && r.opened, 'a chest near the start opens');
+    assert.ok(r.reshut, 'and is shut and full again after walking away');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

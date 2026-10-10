@@ -131,6 +131,14 @@ export class Chest {
         return true;
     }
 
+    /** Shut it again (the creative test chest refills): the lid comes down. */
+    close() {
+        this.isOpen = false;
+        this.animating = false;
+        this.openProgress = 0;
+        this.lidGroup.rotation.x = 0;
+    }
+
     /** Apply an already-open state instantly (late multiplayer join). */
     setOpenInstant() {
         this.isOpen = true;

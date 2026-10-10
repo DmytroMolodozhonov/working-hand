@@ -90,7 +90,8 @@ export class Doors {
     /** «Create a Door» (hint string when it can't be done). */
     create() {
         const g = this.game;
-        const s = g.inventory.inHand?.kind === 'res' ? g.inventory.inHand.stack : null;
+        let s = g.inventory.inHand?.kind === 'res' ? g.inventory.inHand.stack : null;
+        if ((!s || !isWood(s.block)) && g.inventory.free) s = g.inventory.endlessWood(); // (creative: no wood needed)
         if (!s || !isWood(s.block)) return '🚪 Возьмите в руку дерево (выберите ячейку с древесиной — левый карман)';
         if (s.count < WOOD_NEEDED) return `🚪 Нужно ${WOOD_NEEDED} дерева, а у вас ${s.count}`;
         if (this.making) return null;

@@ -122,15 +122,25 @@ export class Inventory {
         return left;
     }
 
-    /** The resource the building spells use: the chosen slot (or any resource slot). */
+    /** Creative: building needs nothing in the slots — an endless stack of wood (oak). */
+    get free() {
+        return this.game.config?.mode === 'creative';
+    }
+
+    endlessWood() {
+        return this._endless || (this._endless = { kind: 'res', block: BLOCK.WOOD, count: STACK, endless: true });
+    }
+
+    /** The resource the building spells use: the chosen slot (or any resource slot); creative: endless wood. */
     buildResource() {
         const s = this.slots[this.selected];
         if (s && s.kind === 'res' && s.count > 0) return s;
-        return null;
+        return this.free ? this.endlessWood() : null;
     }
 
-    /** Take one block from a stack (building). */
+    /** Take one block from a stack (building). Creative: nothing is used up. */
     take(stack, n = 1) {
+        if (stack && (stack.endless || (this.free && stack.kind === 'res'))) return true;
         if (!stack || stack.count < n) return false;
         stack.count -= n;
         if (stack.count <= 0) {

@@ -207,7 +207,7 @@ export class Beds {
         const at = this._aimPoint();
         if (!at) return '🛏️ Покажите рукой (или палочкой) на брёвна и шерсть, лежащие на земле';
         const chk = checkRecipe(this._materialsAt(at));
-        if (!chk.ok) return chk.message;
+        if (!chk.ok && g.config?.mode !== 'creative') return chk.message; // (creative: no materials needed)
         const yaw = g.character.group.rotation.y;
         if (!this.auth) {
             g.sync?.bed?.({ a: 'create', p: [r2(at.x), r2(at.y), r2(at.z)], ry: r3(yaw) });
@@ -224,9 +224,14 @@ export class Beds {
         const g = this.game;
         const near = this._materialsAt(at);
         const chk = checkRecipe(near);
-        if (!chk.ok) return chk.message;
-        const plan = planConsumption(near);
-        if (!plan) return chk.message || '🛏️ Не хватает материалов';
+        const plan = chk.ok ? planConsumption(near) : null;
+        if (!plan) {
+            // creative: a bed out of nothing, where the hand points
+            if (g.config?.mode !== 'creative') return chk.ok ? '🛏️ Не хватает материалов' : chk.message;
+            const y0 = g.collision.groundAt ? g.collision.groundAt(at.x, at.z, at.y + 0.5) : g.collision.groundY(at.x, at.z);
+            this.spawnBed(new THREE.Vector3(at.x, y0, at.z), yaw, DEFAULT_BED_COLOR, { poof: true });
+            return true;
+        }
         // the bed stands in the middle of the pile
         let cx = 0, cz = 0, n = 0;
         for (const step of plan) {
