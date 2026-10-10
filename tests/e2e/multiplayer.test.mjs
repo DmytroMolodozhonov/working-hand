@@ -176,6 +176,178 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
     await late.context.close();
 });
 
+test('players are solid: running straight at another player stops against the body, to the side goes round, both ways, on a horse too', async () => {
+    const host = await openPlayer('Стена');
+    await host.page.evaluate(() => { document.getElementById('mp-mode').value = 'creative'; });
+    await host.page.click('#mp-private-btn');
+    await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    const guest = await openPlayer('Бегун');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+
+    // A straight lane along −Z with flat ground and nothing in the way of a body
+    const lane = await ev(host.page, () => {
+        const g = window.__zns.game, col = g.collision, T = window.__zns.THREE;
+        for (const x of [2, -3, 12, -12, 20, -20, 30, -30, 40]) {
+            const g0 = col.groundY(x, 30);
+            let ok = true;
+            for (let z = 30; z >= 2 && ok; z -= 0.25) {
+                const gy = col.groundY(x, z);
+                if (Math.abs(gy - g0) > 0.4) ok = false;
+                for (const dx of [-1, 0, 1]) {
+                    const p = new T.Vector3(x + dx, gy + 2, z);
+                    if (col.resolveCylinder(p, 0.48, gy, 3.5)) ok = false;
+                }
+            }
+            if (ok) return { x, y: g0 + 2 };
+        }
+        return null;
+    });
+    assert.ok(lane, 'a free lane');
+    const STAND = 14; // (the standing player's place on the lane)
+
+    // Put a hero somewhere (a teleport: no path checked), facing `yaw`, running or not
+    const place = (page, x, z, yaw, running) => ev(page, ([x, y, z, yaw, running]) => {
+        const g = window.__zns.game, ch = g.character;
+        g.currentPose = null; // (no camera: nothing else turns or stops the body)
+        ch.group.position.set(x, y, z);
+        ch.group.rotation.y = g.smoothBody = g.cameraBaseRotation = yaw;
+        ch.verticalVelocity = 0;
+        g.knockback.set(0, 0, 0);
+        if (g._solid) g._solid.has = false;
+        ch.setRunning(running, 1);
+    }, [x, lane.y, z, yaw, running]);
+    const stop = (page) => ev(page, () => window.__zns.game.character.setRunning(false));
+    const seen = (page, x, z) => wf(page, ([x, z]) => {
+        const r = [...window.__zns.game.remotes.values()][0];
+        return Math.hypot(r.position.x - x, r.position.z - z) < 0.3;
+    }, [x, z], 20000);
+    // Every drawn frame on this screen: how close the two bodies came. Both stand upright
+    // facing along z, so the drawn hero is 1.2 m deep (the head) and 1.8 m wide (the arms
+    // hang 0.9 m out from the middle): `gap` < 0 means one body is inside the other.
+    const watch = (page) => ev(page, () => {
+        const g = window.__zns.game;
+        const me = g.character.group.position, r = [...g.remotes.values()][0].position;
+        const side = Math.sign(me.z - r.z) || 1;
+        const w = window.__solidWatch = { mid: Infinity, gap: Infinity, ahead: Infinity, frames: 0, on: true };
+        const tick = () => {
+            if (!w.on) return;
+            const dx = me.x - r.x, dz = me.z - r.z;
+            w.mid = Math.min(w.mid, Math.hypot(dx, dz));
+            w.gap = Math.min(w.gap, Math.hypot(Math.max(0, Math.abs(dx) - 0.6), dz) - 1.2);
+            w.ahead = Math.min(w.ahead, side * dz); // (still on the side it came from)
+            w.frames++;
+            requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+    });
+    const unwatch = (page) => ev(page, () => { window.__solidWatch.on = false; return window.__solidWatch; });
+    const pos = (page) => ev(page, () => { const p = window.__zns.game.character.group.position; return { x: p.x, z: p.z }; });
+    const zPast = (page, z, sign) => wf(page, ([z, sign]) => sign * (window.__zns.game.character.group.position.z - z) > 0, [z, sign], 60000);
+    const f2 = (v) => v.toFixed(2);
+
+    // 0) The lane is free: with nobody on it the runner gets all the way through
+    await place(host.page, lane.x + 25, STAND, 0, false);
+    await place(guest.page, lane.x, STAND + 10, 0, true);
+    await zPast(guest.page, STAND - 6, -1);
+    await stop(guest.page);
+
+    // 1) The guest runs straight at the host's back: stops against the body and stays outside
+    await place(host.page, lane.x, STAND, 0, false);
+    await place(guest.page, lane.x, STAND + 10, 0, false);
+    await seen(guest.page, lane.x, STAND);
+    await seen(host.page, lane.x, STAND + 10);
+    await Promise.all([watch(host.page), watch(guest.page)]);
+    await ev(guest.page, () => window.__zns.game.character.setRunning(true, 1));
+    await zPast(guest.page, STAND + 1.8, -1);
+    await sleep(2500); // (keeps running into the body for a while)
+    const g1 = await pos(guest.page);
+    await stop(guest.page);
+    await sleep(800);
+    let [hw, gw] = await Promise.all([unwatch(host.page), unwatch(guest.page)]);
+    const h1 = await pos(host.page);
+    console.log('straight', JSON.stringify({ g1, h1, hostScreen: hw, guestScreen: gw }));
+    assert.ok(gw.frames > 10 && hw.frames > 10, 'frames were drawn');
+    assert.ok(gw.gap >= -0.02 && gw.ahead >= 1.15, `the runner never went into the body on its own screen (gap ${f2(gw.gap)}, ${f2(gw.ahead)} m in front)`);
+    assert.ok(hw.gap >= -0.1 && hw.ahead >= 1.1, `nor on the other player's screen (gap ${f2(hw.gap)})`);
+    assert.ok(g1.z > STAND + 1.15 && g1.z < STAND + 1.6, `stopped in front, touching (z ${f2(g1.z)})`);
+    assert.ok(Math.abs(g1.x - lane.x) < 0.3, 'straight on, no sliding round');
+    assert.ok(Math.hypot(h1.x - lane.x, h1.z - STAND) < 0.3, 'the standing player was not shoved');
+
+    // 2) A bit to the side (1 m): the runner goes round the body, shoulder past shoulder
+    await place(guest.page, lane.x + 1, STAND + 10, 0, false);
+    await seen(host.page, lane.x + 1, STAND + 10);
+    await seen(guest.page, lane.x, STAND);
+    await Promise.all([watch(host.page), watch(guest.page)]);
+    await ev(guest.page, () => window.__zns.game.character.setRunning(true, 1));
+    await zPast(guest.page, STAND - 4, -1);
+    await stop(guest.page);
+    await sleep(800);
+    [hw, gw] = await Promise.all([unwatch(host.page), unwatch(guest.page)]);
+    const h2 = await pos(host.page);
+    console.log('to the side', JSON.stringify({ h2, hostScreen: hw, guestScreen: gw }));
+    assert.ok(gw.gap >= -0.02, `the shoulders never went into each other (gap ${f2(gw.gap)}, middles ${f2(gw.mid)} m apart)`);
+    assert.ok(hw.gap >= -0.15, `nor on the other player's screen (gap ${f2(hw.gap)})`);
+    assert.ok(Math.hypot(h2.x - lane.x, h2.z - STAND) < 0.3, 'the standing player was not shoved');
+
+    // 3) The other way round: the host turns and runs at the standing guest
+    // (the host leaves the spot first: a body can't be put into another one)
+    await place(host.page, lane.x, STAND - 10, Math.PI, false);
+    await seen(guest.page, lane.x, STAND - 10);
+    await place(guest.page, lane.x, STAND, 0, false);
+    await seen(host.page, lane.x, STAND);
+    await Promise.all([watch(host.page), watch(guest.page)]);
+    await ev(host.page, () => window.__zns.game.character.setRunning(true, 1));
+    await zPast(host.page, STAND - 1.8, 1);
+    await sleep(2500);
+    const h3 = await pos(host.page);
+    await stop(host.page);
+    await sleep(800);
+    [hw, gw] = await Promise.all([unwatch(host.page), unwatch(guest.page)]);
+    const g3 = await pos(guest.page);
+    console.log('back', JSON.stringify({ h3, g3, hostScreen: hw, guestScreen: gw }));
+    assert.ok(hw.gap >= -0.02 && hw.ahead >= 1.15, `the host never went into the guest (gap ${f2(hw.gap)})`);
+    assert.ok(gw.gap >= -0.1 && gw.ahead >= 1.1, `nor on the guest's screen (gap ${f2(gw.gap)})`);
+    assert.ok(h3.z < STAND - 1.15 && h3.z > STAND - 1.6, `stopped in front (z ${f2(h3.z)})`);
+    assert.ok(Math.hypot(g3.x - lane.x, g3.z - STAND) < 0.3, 'the guest was not shoved');
+
+    // 4) On a horse at a gallop: the horse stops at the guest (its head 2.8 m in front of the rider)
+    await place(host.page, lane.x + 1.5, STAND - 14, Math.PI, false);
+    const mounted = await ev(host.page, ([x, z]) => {
+        const g = window.__zns.game, A = g.animals, T = window.__zns.THREE;
+        const horse = A._spawn('horse', new T.Vector3(x, g.collision.groundY(x, z) + 0.5, z), { bonus: 20 });
+        horse.tamed = g.localId; // (tamed: it lets its owner on)
+        A.tryMount();
+        if (g._solid) g._solid.has = false;
+        return A.riding === horse;
+    }, [lane.x, STAND - 14]);
+    assert.ok(mounted, 'on the horse');
+    await seen(guest.page, lane.x, STAND - 14);
+    await watch(host.page);
+    await ev(host.page, () => window.__zns.game.character.setRunning(true, 1));
+    await zPast(host.page, STAND - 6, 1);
+    await sleep(2500);
+    const h4 = await pos(host.page);
+    await stop(host.page);
+    await sleep(800);
+    hw = await unwatch(host.page);
+    const g4 = await pos(guest.page);
+    console.log('horse', JSON.stringify({ h4, g4, hostScreen: hw }));
+    assert.ok(hw.ahead > 4.1, `the horse never went into the guest (the rider ${f2(hw.ahead)} m from the guest)`);
+    assert.ok(h4.z < STAND - 4.1 && h4.z > STAND - 4.8, `stopped in front (z ${f2(h4.z)})`);
+    assert.ok(Math.hypot(g4.x - lane.x, g4.z - STAND) < 0.3, 'the guest was not trampled aside');
+    await ev(host.page, () => window.__zns.game.animals.dismount());
+
+    for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
+    await host.context.close();
+    await guest.context.close();
+});
+
 test('joining a wrong code shows a clear message', async () => {
     const p = await openPlayer('Кто-то');
     await p.page.fill('#mp-code', 'ZZZZZ');

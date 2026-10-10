@@ -698,7 +698,10 @@ export class Animals {
         }
         // shadows only near (every caster is drawn twice)
         for (const a of this.list) setNearShadow(a.group, Math.abs(a.group.position.x - me.x) + Math.abs(a.group.position.z - me.z) < SHADOW_NEAR * 1.3);
-        if (this.riding) this._ride(dt);
+        if (this.riding) {
+            this._ride(dt);
+            g._keepBodiesApart?.(); // (the horse stops at other players before its place is sent)
+        }
         if (g.currentPose && !g.combat.dead) {
             if (this._detectJump(dt)) this.tryMount();
             this._feed(dt);

@@ -52,6 +52,7 @@ import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK, isCastleBlock, BASE_COLORS } from '../world/Terrain.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
+import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 
 const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
@@ -1763,6 +1764,7 @@ export class Game {
         if (!isTest) this._spawnWaves();
 
         for (const r of this.remotes.values()) r.update(dt);
+        this._keepBodiesApart(); // (after everything that moved me, before my place is sent)
         if (this.sync) this.sync.update(dt);
         mark('мультиплеер');
 
@@ -1855,34 +1857,95 @@ export class Game {
             this.knockback.multiplyScalar(Math.max(0, 1 - 4 * dt));
         }
 
-        // Other players are solid: you can't walk through them
-        if (!flight.active) this._pushOutOfPlayers(ch.group.position);
+        // (other players are solid: _keepBodiesApart, once everything has moved me)
 
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
         if (!flight.active && !this.beds?.lying) {
             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
         }
-        // Maps have an edge; the open world is endless
-        if (this.world.isMap) {
-            ch.group.position.x = Math.max(-119, Math.min(119, ch.group.position.x));
-            ch.group.position.z = Math.max(-119, Math.min(119, ch.group.position.z));
-        }
+        this._keepInsideMap(ch.group.position);
     }
 
-    _pushOutOfPlayers(me) {
-        const MIN = 1.2; // two bodies (1.2 m wide) side by side
-        for (const r of this.remotes.values()) {
-            if (r.dead) continue;
-            const p = r.position;
-            if (Math.abs(p.y - me.y) > 2.5) continue; // one above the other (jumping, flying)
-            let dx = me.x - p.x, dz = me.z - p.z;
-            const d = Math.hypot(dx, dz);
-            if (d >= MIN) continue;
-            if (d < 1e-4) { dx = 1; dz = 0; } else { dx /= d; dz /= d; }
-            me.x = p.x + dx * MIN;
-            me.z = p.z + dz * MIN;
+    /**
+     * Other players are solid. Once everything has moved me this frame (walking, running,
+     * a blast, the horse, Leviosa, flight), my body goes from where it stood to where it
+     * wants to be in short steps and never into anybody's body as drawn on this screen:
+     * it stops against them and slides along (BodyContact.js). Every computer does this
+     * for its own hero, so it holds both ways. Riding, it is the horse that is stopped.
+     */
+    _keepBodiesApart() {
+        const ch = this.character;
+        const me = ch.group.position;
+        const horse = this.animals?.riding || null;
+        const mover = horse ? horse.group.position : me;
+        const S = this._solid || (this._solid = { from: { x: 0, z: 0 }, has: false, mover: null, others: [], at: {}, to: {} });
+        // (dead, lying in a bed, in a spider's legs: the body is not mine to move)
+        const free = !(this.combat.dead || this.isDeadLocal || this.beds?.lying || this.spiders?.held);
+        const others = free ? this._otherBodies(S.others) : null;
+        if (others && others.length) {
+            const up = _v1.set(0, 1, 0).applyQuaternion(ch.group.quaternion);
+            const yaw = ch.group.rotation.y;
+            const crouch = ch.isCrouching;
+            const size = horse ? horse.model?.scale?.x || 2.3 : 0;
+            const ground = horse ? horse.group.position.y - 0.5 : 0, top = me.y + 2.85;
+            const bodyAt = horse
+                ? (x, z, out) => mountBody(x, ground, z, horse.group.rotation.y, size, top, out)
+                : (x, z, out) => heroBody(x, me.y, z, yaw, up, crouch, out);
+            S.to.x = mover.x; S.to.z = mover.z;
+            const res = moveSolid(S.has && S.mover === mover ? S.from : null, S.to, bodyAt, others, S.at);
+            if (res.x !== mover.x || res.z !== mover.z) {
+                const bx = mover.x, bz = mover.z;
+                mover.x = res.x; mover.z = res.z;
+                // walls and terrain still win (the other player's own computer moves them out)
+                const col = this.collision;
+                if (horse) {
+                    col.resolveCylinder(mover, 0.7, mover.y - 0.5, 2.5, 1.2);
+                    me.x = mover.x; me.z = mover.z;
+                } else if (this.flight.active) {
+                    if (col.pointBlocked(me.x, me.y, me.z) || col.pointBlocked(me.x, me.y + 1.2, me.z)) { me.x = bx; me.z = bz; }
+                } else {
+                    col.resolveCylinder(me, PLAYER_RADIUS, me.y - PLAYER_GROUND_OFFSET + (crouch ? 1.0 : 0), 3.5);
+                }
+                this._keepInsideMap(me);
+            }
         }
+        S.from.x = mover.x; S.from.z = mover.z;
+        S.has = free;
+        S.mover = mover;
+    }
+
+    /** The other players' bodies where this screen draws them (reused objects). */
+    _otherBodies(list) {
+        list.length = 0;
+        if (!this.remotes.size) return list;
+        let riders = null;
+        for (const a of this.animals?.list || []) if (a.rider && !a.dead) (riders || (riders = new Map())).set(a.rider, a);
+        const lifter = this.levitation?.lifted?.by; // (Leviosa holds me near that wizard's hand)
+        const pool = this._bodyPool || (this._bodyPool = []);
+        let i = 0;
+        for (const [id, r] of this.remotes) {
+            if (r.dead || !r.target || id === lifter) continue;
+            const b = pool[i] || (pool[i] = {});
+            list[i++] = b;
+            const p = r.position;
+            const horse = riders?.get(id);
+            if (horse) mountBody(horse.group.position.x, horse.group.position.y - 0.5, horse.group.position.z, horse.group.rotation.y, horse.model?.scale?.x || 2.3, p.y + 2.85, b);
+            else heroBody(p.x, p.y, p.z, r.character.group.rotation.y, _v2.set(0, 1, 0).applyQuaternion(r.character.group.quaternion), r.character.isCrouching, b);
+            // (on the very same spot the two computers part opposite ways)
+            const f = b.fallback || (b.fallback = { x: 0, z: 0 });
+            f.x = String(this.localId) < String(id) ? 1 : -1;
+            f.z = 0;
+        }
+        list.length = i;
+        return list;
+    }
+
+    _keepInsideMap(p) {
+        // Maps have an edge; the open world is endless
+        if (!this.world.isMap) return;
+        p.x = Math.max(-119, Math.min(119, p.x));
+        p.z = Math.max(-119, Math.min(119, p.z));
     }
 
     /** Where we are in the day: 0–0.75 day (18 hours), 0.75–1 night (6 hours). */
