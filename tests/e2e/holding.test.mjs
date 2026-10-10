@@ -187,11 +187,27 @@ test('the bow with real archer poses (in the left hand and in the right): uprigh
         const limbs = new T.Vector3(0, 1, 0).applyQuaternion(q), ahead = new T.Vector3(1, 0, 0).applyQuaternion(q);
         const deg = (a, b) => a.angleTo(b) * 180 / Math.PI;
         const S = bow.model.userData.bowString;
+        // the drawn arrow: its shaft (nock → tip) against the bow arm's bones
+        const n = g.gear.nock;
+        let hold = null;
+        if (n?.at) {
+            const segDist = (a0, a1, b0, b1) => { const l = new T.Line3(b0, b1), q = new T.Vector3(); let m = Infinity; for (let i = 0; i <= 100; i++) { const p = a0.clone().lerp(a1, i / 100); l.closestPointToPoint(p, true, q); m = Math.min(m, p.distanceTo(q)); } return m; };
+            const ax = new T.Vector3(0, 1, 0).applyQuaternion(n.model.quaternion);
+            const back = n.model.position.clone().addScaledVector(ax, -0.4 * 2.4), tip = n.model.position.clone().addScaledVector(ax, 0.44 * 2.4);
+            const elbow = (side === 'left' ? ch.leftElbowAnchor : ch.rightElbowAnchor).getWorldPosition(new T.Vector3());
+            const wrist = ch.getHandWorldPosition(side, new T.Vector3());
+            hold = {
+                backAtNock: back.distanceTo(n.at),
+                clearFore: segDist(back, tip, elbow, wrist), clearUpper: segDist(back, tip, shoulder, elbow),
+                nockY: S?.nockY,
+            };
+        }
         return {
             upright: Math.min(deg(limbs, new T.Vector3(0, 1, 0)), deg(limbs, new T.Vector3(0, -1, 0))),
             aheadVsFwd: deg(ahead, fwd), aheadVsArm: deg(ahead, arm), armVsFwd: deg(arm, fwd),
-            nock: g.gear.nock ? { state: g.gear.nock.state, draw: g.gear.nock.draw } : null,
+            nock: n ? { state: n.state, draw: n.draw } : null,
             pulled: S ? S.tipX - S.nockX : 0,
+            hold,
         };
     }, side);
     for (const side of ['left', 'right']) {
@@ -226,6 +242,10 @@ test('the bow with real archer poses (in the left hand and in the right): uprigh
         assert.ok(drawn.upright < 15, `${side}: aiming, the bow stands upright (${drawn.upright.toFixed(1)}°)`);
         assert.ok(drawn.aheadVsArm < 15, `${side}: the bow turned along the bow arm (${drawn.aheadVsArm.toFixed(1)}°)`);
         assert.ok(drawn.pulled > 0.2, `${side}: the string is pulled back by the fingers (${drawn.pulled.toFixed(2)})`);
+        // as in real archery: the arrow rests on top of the bow fist, never through the bow hand or arm
+        const hold = drawn.hold;
+        assert.ok(hold && hold.backAtNock < 1e-3 && Math.abs(hold.nockY - 0.1) < 1e-9, `${side}: the arrow's nock is on the string ` + JSON.stringify(hold));
+        assert.ok(hold.clearFore > 0.175 && hold.clearUpper > 0.2, `${side}: the arrow lies beside the bow arm, not inside it (${hold.clearFore.toFixed(2)}, ${hold.clearUpper.toFixed(2)})`);
         // the fingers open: the arrow flies where the bow arm points and the hero looks
         await feed(page, pose(1, 0), 15, 40);
         const shots = await page.evaluate(() => window.__zns.game.__shots);

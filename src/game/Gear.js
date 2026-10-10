@@ -10,7 +10,8 @@
  * other hand — an arrow appears in it (from the quiver); bring it to the
  * bow, pull the hand back (the further, the stronger), then let go — a quick
  * move of the hand forward. The arrow flies along the bow, where the bow arm
- * points (shoulder → bow hand); the bow turns to it.
+ * points (shoulder → bow hand); the bow turns to it. The arrow rests on top of
+ * the bow fist.
  *
  * Thor's hammer: only in a thunderstorm. Raise it above the head — lightning
  * strikes it; then aim it at a creature for up to 5 s (like «Lightning
@@ -31,8 +32,36 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _ba = new THREE.Vector3();
+const _bu = new THREE.Vector3();
+const _fw = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const STRONG = 15; // spells costing this much break a plain shield
+
+/** The arrow rests on top of the bow fist: this far above the grip's middle (bow-local units). */
+export const ARROW_REST = 0.1;
+
+/**
+ * Where a drawn arrow lies: along `dir`, resting on top of the bow fist
+ * (ARROW_REST above the grip, the bow standing upright as Items turns it) — so
+ * the shaft runs beside the bow hand and along the top of the bow arm, never
+ * through them; its nock on the string, `pull` behind the string's rest line.
+ * @param {THREE.Vector3} grip   the bow's grip (the bow hand)
+ * @param {THREE.Vector3} dir    the aim (unit)
+ * @param {number} scale         the bow model's scale
+ * @param {number} tipX          the string's rest line (bow-local x)
+ * @param {number} pull          how far the string is drawn (world)
+ * @param {THREE.Vector3} fwd    the hero's facing (the bow's up when aiming straight up or down)
+ * @param {THREE.Vector3} outRest  where the shaft passes the bow
+ * @param {THREE.Vector3} outNock  the nock (on the string, in the drawing fingers)
+ */
+export function arrowOnBow(grip, dir, scale, tipX, pull, fwd, outRest, outNock) {
+    const up = _bu.set(0, 1, 0).addScaledVector(dir, -dir.y);
+    if (up.lengthSq() < 1e-3) up.copy(fwd).addScaledVector(dir, -fwd.dot(dir));
+    up.normalize();
+    outRest.copy(grip).addScaledVector(up, ARROW_REST * scale);
+    outNock.copy(outRest).addScaledVector(dir, tipX * scale - pull);
+    return outNock;
+}
 
 /** How far (rad) the drawing hand may disagree with the bow arm and still refine the aim. */
 export const BOW_AGREE = (25 * Math.PI) / 180;
@@ -168,15 +197,16 @@ export class Gear {
         // only when it agrees — never along the hands' sideways line (see bowAim)
         const shoulder = (bow.side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_v4);
         const yaw = ch.group.rotation.y;
-        const dir = bowAim(shoulder, ch.getHandWorldPosition(bow.side, _v5), bowPos, hand, _v3, _v.set(-Math.sin(yaw), 0, -Math.cos(yaw)));
+        const fwd = _fw.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+        const dir = bowAim(shoulder, ch.getHandWorldPosition(bow.side, _v5), bowPos, hand, _v3, fwd);
         // the bow turns to where the arrow goes; the string follows the drawing fingers back
-        // (a «V» from the tips), the arrow lies on the bow with its nock on the string
+        // (a «V» from the tips), the arrow lies on top of the bow fist with its nock on the string
         if (held) held.aim = dir.clone();
         const S = bow.model.userData.bowString;
         const sc = bow.model.scale.x;
         const pull = Math.min(dist, S ? S.R * 1.1 * sc : 1.5);
-        if (S) setBowString(bow.model, S.tipX - pull / sc);
-        const nock = _v2.copy(bowPos).addScaledVector(dir, (S ? S.tipX * sc : 0) - pull);
+        if (S) setBowString(bow.model, S.tipX - pull / sc, ARROW_REST);
+        const nock = arrowOnBow(bowPos, dir, sc, S ? S.tipX : 0, pull, fwd, n.rest || (n.rest = new THREE.Vector3()), n.at || (n.at = new THREE.Vector3()));
         const half = 0.4 * ARROW_SCALE;
         n.model.position.copy(nock).addScaledVector(dir, half);
         n.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), dir);
@@ -224,8 +254,8 @@ export class Gear {
     _shoot(bow, draw, dir) {
         const g = this.game;
         const it = bow.item;
-        // from the bow, a little in front of it
-        const from = bow.model.position.clone().addScaledVector(dir, 0.8);
+        // from where it lay on the bow (on top of the fist), a little in front of it
+        const from = (this.nock?.rest || bow.model.position).clone().addScaledVector(dir, 0.8);
         this._dropNock();
         setBowString(bow.model, null); // (the string snaps back)
         if (!this._endless()) it.arrows = Math.max(0, (it.arrows || 0) - 1);

@@ -378,14 +378,19 @@ function strandBetween(m, ax, ay, bx, by) {
     m.quaternion.setFromUnitVectors(_sy, _sb.copy(_sa).normalize());
 }
 
-/** Pull a bow's string to a nock point (bow-local x, or null: at rest, straight). */
-export function setBowString(bow, nockX) {
+/**
+ * Pull a bow's string to a nock point (bow-local x, or null: at rest, straight);
+ * nockY: how high on the string the arrow is nocked (bow-local, 0 = the middle).
+ */
+export function setBowString(bow, nockX, nockY = 0) {
     const S = bow.userData.bowString;
     if (!S) return;
     const nx = nockX == null ? S.tipX : Math.min(S.tipX, nockX);
-    strandBetween(S.up, S.tipX, S.tipY, nx, 0);
-    strandBetween(S.down, S.tipX, -S.tipY, nx, 0);
+    const ny = nockX == null ? 0 : nockY;
+    strandBetween(S.up, S.tipX, S.tipY, nx, ny);
+    strandBetween(S.down, S.tipX, -S.tipY, nx, ny);
     S.nockX = nx;
+    S.nockY = ny;
 }
 
 export const ARROW_SCALE = 2.4;
