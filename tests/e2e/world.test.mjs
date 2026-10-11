@@ -570,13 +570,16 @@ test('«Даст»: a sandy duel charge flies at the zombie the raised hand poin
         };
         const z = g._createZombie(ahead());
         z.setSleeping(true);
+        await frames(30);
+        z.group.position.copy(ahead());
         g.lastSpellCastTime = 0; g._lastDuelCast = 0;
+        const aim = g.duel.pickSide(false);
         const cast = g.castLocalSpell('даст', true);
         const bolts = [...g.duel.bolts.values()].map((b) => b.spell);
         const t0 = performance.now();
         while (!(z.slowT > 0) && performance.now() - t0 < 10000) await frames(1);
         const slowT = z.slowT || 0;
-        return { cast, bolts, slowT, factor: z.slowT > 0 ? z.speed * 0.4 / z.baseSpeed : 1, alive: !z.isDead };
+        return { cast, bolts, aimed: aim?.t.kind === 'z' && aim.t.id === z.id, slowT, factor: z.slowT > 0 ? z.speed * 0.4 / z.baseSpeed : 1, alive: !z.isDead, log: g.duel.log.slice(-4) };
     });
     await page.evaluate(() => clearInterval(window.__dustPose));
     assert.equal(r.cast, 'Sands');
@@ -897,7 +900,7 @@ test('«Breakthrough»: arms low, then up — a wall of earth and stone rises in
     await page.close();
 });
 
-test('the giant spider (twice as big): Avada only 20, ice and wind do nothing, poison −7, web, grab + bite, Protection Maxima frees, a wand when it dies', async () => {
+test('the giant spider (twice as big): Avada only 25, ice and wind do nothing, poison −7, web, grab + bite, Protection Maxima frees, a wand when it dies', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -955,8 +958,8 @@ test('the giant spider (twice as big): Avada only 20, ice and wind do nothing, p
     assert.ok(r.tall > 7.5, `about 8 m high (${r.tall})`);
     assert.ok(r.standY > -0.5, `not sunk into the ground (${r.standY})`);
     assert.ok(r.flankAvada, 'a charge touching its big flank hits it');
-    assert.equal(r.afterAvada, 180, 'Avada Kedavra takes only 20');
-    assert.equal(r.afterIce, 180, 'ice and wind do nothing');
+    assert.equal(r.afterAvada, 175, 'Avada Kedavra takes only 25');
+    assert.equal(r.afterIce, 175, 'ice and wind do nothing');
     assert.equal(r.afterPoison, 13, 'poison −7');
     assert.ok(r.webbed, 'the web holds you');
     assert.ok(r.held && r.bitten === 15, `seized and bitten −5 (${r.bitten})`);
