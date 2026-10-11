@@ -44,9 +44,10 @@ export class WandBelt {
         this.model = null;
         this.item = null;
         this._tuck = { left: 0, right: 0 };
-        this._open = { left: 1, right: 1 }; // (the fingers opened near the handle before closing on it)
+        this._open = { left: false, right: false }; // (the fingers opened at the handle before closing on it)
         this._at = 0;
         this._left = { left: true, right: true };
+        this.log = []; // (what it did: tests / the hand recording)
     }
 
     /** The wand on the belt (the first wand of the slots), or null. */
@@ -82,11 +83,12 @@ export class WandBelt {
             this._tuck[side] = 0;
             // taking it: looking down at it, the empty hand at the handle, the fingers closing on it
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 0;
-            if (!near) { this._open[side] = 0; continue; }
-            if (curl < 0.4) this._open[side] = now;
+            // (the hand came to it open and closes on it — however long that takes)
+            if (!near) { this._open[side] = false; continue; }
+            if (curl < 0.4) this._open[side] = true;
             const free = !h && !g.weapons?.hands?.[side]?.held;
             const rightFirst = side === 'left' && !items.held.right && !g.weapons?.hands?.right?.held; // (the right hand takes it when it can)
-            if (free && !rightFirst && this.beltWand() && this.lookingDown() && curl > 0.45 && now - this._open[side] < 2500) {
+            if (free && !rightFirst && this.beltWand() && this.lookingDown() && curl > 0.45 && this._open[side]) {
                 this._take(side);
                 return;
             }
@@ -109,6 +111,7 @@ export class WandBelt {
         const free = inv.slots.findIndex((x) => !x);
         // the belt wand first in the slots (the one on the body)
         this._left[side] = false;
+        this.log.push('away:' + side);
         if (free >= 0) {
             inv.slots[free] = it;
             const first = inv.slots.findIndex((s) => s && s.kind === 'wand');
@@ -122,7 +125,9 @@ export class WandBelt {
     _take(side) {
         const g = this.game, inv = g.inventory;
         const i = inv.slots.findIndex((s) => s && s.kind === 'wand');
-        if (i < 0 || !inv._fromSlot(i, side)) return;
+        if (i < 0 || !inv._fromSlot(i, side)) { this.log.push('take-failed:' + side); return; }
+        this.log.push('take:' + side);
+        this._open[side] = false;
         this._left[side] = false;
         this._at = performance.now();
         inv._render?.();
