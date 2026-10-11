@@ -30,6 +30,7 @@ import { Chest } from '../entities/Chest.js';
 import { createRng } from '../core/math.js';
 import { CastleTalk } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS } from './WizardLife.js';
+import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster } from './WizardAI.js';
 import { VillagerOrders } from './VillagerOrders.js';
 
@@ -352,7 +353,8 @@ export class CastleLife {
         const st = this.state(cs.def.id);
         for (const c of cs.def.chests) {
             if (g.chests.some((x) => x.id === c.id)) continue;
-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y + 0.5, c.z), 'loot', c.yaw, c.id);
+            const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y); // (its floor blown away: lower)
+            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy + 0.5, c.z), 'loot', c.yaw, c.id);
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
             chest.locked = !st.kingDead;

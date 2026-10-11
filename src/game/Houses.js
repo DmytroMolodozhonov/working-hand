@@ -22,6 +22,7 @@
 
 import * as THREE from 'three';
 import { Chest } from '../entities/Chest.js';
+import { doorHeld, floorUnder } from './Wreck.js';
 import { setNearShadow } from '../core/Shadows.js';
 
 const NEAR = 75; // m: a house near a player comes to life
@@ -126,13 +127,16 @@ export class Houses {
         // the door
         if (h.doorRec && g.doors) {
             const id = h.id + 'd';
-            if (!g.doors.list.has(id)) g.doors._place({ id, ...h.doorRec, color: DOOR_COLOR, a: 0, gen: true });
-            rec.doorId = id;
+            // (a blown-up wall leaves no door: it has nothing to hang on — src/game/Wreck.js)
+            if (!g.doors.list.has(id) && doorHeld(g.world?.terrain?.data, h.doorRec)) g.doors._place({ id, ...h.doorRec, color: DOOR_COLOR, a: 0, gen: true });
+            rec.doorId = g.doors.list.has(id) ? id : null;
         }
         // the beds
         if (g.beds) h.bedSpots.forEach((b, k) => {
             const id = h.id + 'b' + k;
-            const bed = g.beds.spawnBed(b, b.yaw, this.bedColors.get(id) || h.bedColour || 'white', { id, broadcast: false });
+            const fy = floorUnder(g.world?.terrain?.data, b.x, b.y, b.z); // (its floor blown away: it lies lower)
+            if (fy == null) return;
+            const bed = g.beds.spawnBed({ x: b.x, y: Math.min(b.y, fy), z: b.z }, b.yaw, this.bedColors.get(id) || h.bedColour || 'white', { id, broadcast: false });
             bed.gen = true;
             bed.genColor = h.bedColour || 'white';
             rec.bedIds.push(id);
@@ -141,7 +145,8 @@ export class Houses {
         h.chests.forEach((c, k) => {
             const id = h.id + 'c' + k;
             if (g.chests.some((x) => x.id === id)) return;
-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y + 0.5, c.z), 'loot', c.yaw + Math.PI, id);
+            const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y);
+            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy + 0.5, c.z), 'loot', c.yaw + Math.PI, id);
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
             chest.house = { def, i, rich: h.rich };

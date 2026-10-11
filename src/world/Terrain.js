@@ -641,6 +641,23 @@ export class TerrainData {
         this._markDirty(ix, iz);
     }
 
+    /** Blocks of a falling piece (src/fx/FallingBlocks.js): in the data already, drawn when it lands. */
+    hideCells(keys, show = false) {
+        this._hidden = this._hidden || new Map();
+        for (const k of keys) {
+            const [x, L, z] = k.split(',').map(Number);
+            if (L < MIN_LAYER || L > MAX_LAYER) continue;
+            const ck = chunkKey(x >> SHIFT, z >> SHIFT);
+            let s = this._hidden.get(ck);
+            const i = ((L - MIN_LAYER) * CHUNK + (z & MASK)) * CHUNK + (x & MASK);
+            if (show) { if (s) { s.delete(i); if (!s.size) this._hidden.delete(ck); } }
+            else { if (!s) this._hidden.set(ck, s = new Set()); s.add(i); }
+            this._markDirty(x, z);
+        }
+    }
+
+    showCells(keys) { this.hideCells(keys, true); }
+
     _refreshTop(c, lx, lz) {
         let top = MIN_LAYER - 1;
         for (let L = Math.min(MAX_LAYER, c.maxTop); L >= MIN_LAYER; L--) {
@@ -883,11 +900,15 @@ export class TerrainData {
         const blocks = c.blocks;
         const skipSea = !!(this.skipSeaTop && c.sea);
         const below = lowest > MIN_LAYER ? BLOCK.STONE : BLOCK.AIR; // (all rock under `lowest`)
+        const hid = this._hidden?.get(chunkKey(cx, cz)) || null; // (a falling piece not landed yet: not drawn there)
         // Fast access inside this chunk; neighbours only for border occlusion
         const at = (gx, gy, gz) => {
             if (gy < 0) return below;
             if (gy + G0 >= HEIGHT) return BLOCK.AIR;
-            if (gx >= 0 && gx < CHUNK && gz >= 0 && gz < CHUNK) return blocks[((gy + G0) * CHUNK + gz) * CHUNK + gx];
+            if (gx >= 0 && gx < CHUNK && gz >= 0 && gz < CHUNK) {
+                const i = ((gy + G0) * CHUNK + gz) * CHUNK + gx;
+                return hid && hid.has(i) ? BLOCK.AIR : blocks[i];
+            }
             return this.get(x0 + gx, lowest + gy, z0 + gz);
         };
 

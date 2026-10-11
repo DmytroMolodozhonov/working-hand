@@ -45,6 +45,8 @@ import { Doors, doorModel } from './Doors.js';
 import { Campfires } from './Campfires.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
+import { Wreck } from './Wreck.js';
+import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
@@ -258,6 +260,10 @@ export class Game {
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
+        // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
+        this.wreck = new Wreck(this);
+        this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
+        if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
         this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
@@ -481,11 +487,41 @@ export class Game {
         if (this.sync) this.sync.explosion(pos, radius, power, casterId);
     }
 
+    /** A falling piece of a building hit the ground: dust, the broken blocks fly, who was under it is hurt. */
+    _fallLanded(f) {
+        if (!f.landed.length && !f.broken.length) return;
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, y0 = Infinity, sx = 0, sy = 0, sz = 0;
+        const all = f.landed.length ? f.landed : f.broken.map(([x, L, z, t]) => [x, L - f.d, z, t]);
+        for (const [x, L, z] of all) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); y0 = Math.min(y0, L - 1.5); sx += x; sy += L - 1; sz += z; }
+        const c = new THREE.Vector3(sx / all.length, sy / all.length, sz / all.length);
+        const debris = f.broken.map(([x, L, z, t]) => ({ x, y: L - f.d - 1, z, color: BASE_COLORS[t] ?? 0x888888 }));
+        for (let i = 0; i < Math.min(40, all.length); i++) { const [x, L, z] = all[Math.floor(Math.random() * all.length)]; debris.push({ x, y: y0 + 0.2, z, color: 0x9a8f80, size: 0.6 }); }
+        this.fx.debrisFrom(debris, new THREE.Vector3(c.x, y0 + 0.5, c.z), 160);
+        this.sound?.playExplosion?.(c, this.character.group.position, Math.min(0.6, 0.1 + f.d * 0.04));
+        // whoever stood under it (a body is ~4.6 m tall)
+        const dmg = Math.min(14, Math.round(2 + f.d * 1.2));
+        const r = Math.max(x1 - x0, z1 - z0) / 2 + 0.6;
+        const me = this.character.group.position;
+        const under = (p, h = 4.6) => p.x > x0 - 0.6 && p.x < x1 + 0.6 && p.z > z0 - 0.6 && p.z < z1 + 0.6 && p.y > y0 - h - 1 && p.y < y0 + 1.5;
+        if (under({ x: me.x, y: me.y - 1.95, z: me.z }) && !this.isDeadLocal) {
+            if (this.combat?.enabled) this.combat.damage(dmg, null, 'collapse'); else this.damageLocalPlayer?.(dmg);
+            this.hud?.setVoice?.(`🧱 На вас обрушилось: −${dmg}`, true);
+        }
+        if (this.authority) {
+            const at = new THREE.Vector3(c.x, y0 - 1, c.z);
+            this.castleLife?.hitAt(at, r, dmg, null);
+            this.animals?.hitAt?.(at, r, dmg, null);
+        }
+        this.wreck?.afterBlast(c, r);
+    }
+
     /** Visual + world part of an explosion (runs on every machine). */
     applyExplosion(pos, radius, authoritative, power = 1, casterId = null) {
         // `power` times the energy: damage × power, thrown objects × √power speed
         const push = Math.sqrt(power);
         const out = this.world.explode(pos, radius);
+        for (const f of out.falls || []) this.falling?.add(f); // (a roof without walls comes down)
+        this.wreck?.afterBlast(pos, radius);
         // a blast in a castle or a village: the guards hear it (and want to know who)
         if (authoritative) {
             let wrecked = 0;
@@ -1904,6 +1940,7 @@ export class Game {
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
         this.world.update(this.character.group.position, this._viewBoost);
+        this.falling?.update(Math.min(0.05, dt));
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(this.character.group.position);
         this.seaSurface?.update(dt, this.character.group.position);

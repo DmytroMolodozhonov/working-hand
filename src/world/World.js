@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { createRng } from '../core/math.js';
 import { Terrain, BLOCK } from './Terrain.js';
+import { collapseAfter } from './Collapse.js';
 
 const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
@@ -532,9 +533,13 @@ export class VoxelWorld {
      * Returns {blocks, props} for debris effects; also reports destroyed tables.
      */
     explode(center, radius) {
-        const out = { blocks: [], props: [], tables: [] };
+        const out = { blocks: [], props: [], tables: [], falls: [] };
         if (!this.destructible) return out;
-        if (this.terrain) out.blocks = this.terrain.removeSphere(center.x, center.y, center.z, radius);
+        if (this.terrain) {
+            out.blocks = this.terrain.removeSphere(center.x, center.y, center.z, radius);
+            // what is left hanging in the air falls down (a roof without walls, a piece of floor)
+            out.falls = collapseAfter(this.terrain.data, center.x, center.y, center.z, radius);
+        }
 
         // Grass cubes
         if (this.grass) {
