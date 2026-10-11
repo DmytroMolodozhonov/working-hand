@@ -28,6 +28,7 @@
  *   dbody    any→all      a body stays where somebody died (Death.js; the host keeps the list)
  *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
  *   clash    host→all     two charges are pushing (meeting point p); clashend: result
+ *   dmcut / dmlimb / dmst / dmresc   a blade cut off a limb / the head (see Dismember.js)
  */
 
 import * as THREE from 'three';
@@ -772,6 +773,7 @@ export class NetSync {
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
+            case 'dmcut': case 'dmlimb': case 'dmst': case 'dmresc': g.dismember?.onNet(m); break; // (cut-off limbs: Dismember.js)
             case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg, Array.isArray(m.h) ? m.h.slice(0, 3).map(Number) : null); break;
             case 'hgrip': case 'hfree': case 'vhand': case 'vfree': g.handHold?.onNet(m); break;
             case 'cut': {

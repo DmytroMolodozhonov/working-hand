@@ -480,6 +480,8 @@ export class Combat {
         const name = byId ? this.game.playerName(byId) : null;
         const text = how === 'avada'
             ? `💚 Авада Кедавра. ${name ? `Вас победил ${name}` : 'Вы погибли'}`
+            : how === 'decap'
+            ? `🗡️ ${name ? `${name} отрубил вам голову` : 'Вам отрубили голову'}`
             : how === 'shatter'
             ? `🧊💥 ${name ? `${name} разбил вас` : 'Вас разбили'}, пока вы были заморожены`
             : `💀 ${name ? `Вас победил ${name}` : 'Вы погибли'}`;
@@ -496,9 +498,9 @@ export class Combat {
             this.stunLeft = Math.max(0, this.stunLeft - dt);
             const left = `<b>${Math.ceil(this.stunLeft)}</b> с`;
             this.game.hud.setStatus(this.stunLeft > 0
-                ? (this.stunKind === 'quake' ? `🌋 Вас сбило землетрясением — встанете через ${left}` : this.stunKind === 'water' ? `🌊 Вас сбило водой — встанете через ${left}` : `💫 Остолбеней! Вы не можете двигаться ещё ${left}`)
+                ? (this.stunKind === 'quake' ? `🌋 Вас сбило землетрясением — встанете через ${left}` : this.stunKind === 'water' ? `🌊 Вас сбило водой — встанете через ${left}` : this.stunKind === 'fall' ? `🦵 Вы упали — встанете через ${left}` : `💫 Остолбеней! Вы не можете двигаться ещё ${left}`)
                 : '');
-            if (this.stunLeft <= 0 && (this.stunKind === 'quake' || this.stunKind === 'water')) this.game.character.knockedDown = false;
+            if (this.stunLeft <= 0 && (this.stunKind === 'quake' || this.stunKind === 'water' || this.stunKind === 'fall')) this.game.character.knockedDown = false;
         }
         if (!this.enabled) {
             // Other modes: only the shield (no HP / fatigue rules)

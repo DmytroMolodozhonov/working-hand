@@ -251,6 +251,8 @@ export class WeaponSystem {
 
     _updateHand(side, dt, now, ch, allowGrab) {
         const hs = this.hands[side];
+        // a cut-off hand holds nothing and grabs nothing
+        if (ch.handLost?.(side)) { if (hs.held) this.release(side); return; }
         const hand = ch.getActiveHands()[side];
         const visible = hand && hand.group.visible;
         const curl = visible ? ch.getGripCurl(side) : (hs.held ? 1 : 0);
@@ -505,6 +507,8 @@ export class WeaponSystem {
             const w = hs.held;
             if (!w) continue;
             const [base, tip] = w.getBladeSegment(_a, _b);
+            // the edge this frame and the last (Dismember: a real cut where the edge went through)
+            const swing = this.game.dismember?.slot(hs, w, dt, this.frame) || null;
             if (!hs.hasPrev) {
                 hs.basePrev.copy(base); hs.tipPrev.copy(tip); hs.hasPrev = true;
                 continue;
@@ -522,16 +526,27 @@ export class WeaponSystem {
                 const moved = Math.max(hs.tipPrev.distanceTo(tip), hs.basePrev.distanceTo(base));
                 const steps = Math.min(8, Math.max(1, Math.ceil(moved / 0.4)));
                 for (const z of zombies) {
-                    if (z.isDead || z.damageCooldown > 0) continue;
+                    if (z.isDead) continue;
                     const zp = z.group.position;
                     // (a big body — the giant spider — gives its own capsule)
                     const cap = z.bodyCapsule ? z.bodyCapsule(this._cap || (this._cap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 })) : null;
                     const reach = cap ? 8 + cap.a.distanceTo(cap.b) + cap.r : 8;
                     if (Math.abs(zp.x - tip.x) > reach || Math.abs(zp.z - tip.z) > reach) continue;
+                    // the edge through an arm / a leg / the neck: cut off right there (any creature)
+                    const cut = swing && this.game.dismember.tryCut(z, swing);
+                    if (cut?.kind === 'cut') {
+                        if (!(z.severCooldown > now(this))) { z.severCooldown = now(this) + 300; this.game.dismember.commit(z, cut); }
+                        w.velocity.multiplyScalar(0.7);
+                    } else if (cut?.kind === 'armour' && now(this) - (w.armourClangAt || 0) >= 300) {
+                        w.armourClangAt = now(this);
+                        this._clang(cut.point, speed); // steel stops the blade
+                        w.velocity.multiplyScalar(0.2); w.angularVelocity.multiplyScalar(0.3);
+                    }
+                    if (z.damageCooldown > 0) continue;
                     if (now(this) - (w.lastHitTime || 0) < 120) continue;
                     const zb = cap ? [cap.a.x, cap.a.y, cap.a.z] : [zp.x, zp.y - 0.6, zp.z], zt = cap ? [cap.b.x, cap.b.y, cap.b.z] : [zp.x, zp.y + 2.9, zp.z];
                     const r = (cap ? cap.r : 0.8) + 0.12;
-                    let hit = false;
+                    let hit = cut?.kind === 'cut' || cut?.kind === 'armour';
                     for (let k = 1; k <= steps && !hit; k++) {
                         const t = k / steps;
                         const bx = hs.basePrev.x + (base.x - hs.basePrev.x) * t, by = hs.basePrev.y + (base.y - hs.basePrev.y) * t, bz = hs.basePrev.z + (base.z - hs.basePrev.z) * t;
@@ -553,7 +568,7 @@ export class WeaponSystem {
                     // A thrust (the blade moving along itself, point first) sticks it into the body
                     _e.subVectors(tip, base).normalize();
                     const along = tipVel.dot(_e);
-                    const stab = !z.isPlayer && along > 6 && along > 0.8 * speed && hs !== this._levSlot && hy > 0.4 && hy < 2.2;
+                    const stab = !cut && !z.isPlayer && along > 6 && along > 0.8 * speed && hs !== this._levSlot && hy > 0.4 && hy < 2.2;
                     const factor = clamp(speed / 9, 0.7, 1.6);
                     const damage = Math.max(1, Math.round(w.spec.damage * factor));
                     const dir = tipVel.clone().setY(0);

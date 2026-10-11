@@ -33,7 +33,6 @@ function shared() {
 const SKIN = 0x6DA36D, SHIRT = 0x5D4037, PANTS = 0x212121;
 const ICE = new THREE.Color(0xaaddff);
 const _v = new THREE.Vector3();
-const _partVel = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _c = new THREE.Color();
 
@@ -369,28 +368,8 @@ export class Zombie {
         this.hitFlashTimer = 0.15;
         this._setColor(0xff0000);
 
-        if (isWeapon && hit) {
-            // The part the blade went through; a faster swing cuts more surely
-            const vel = _partVel.set(0, 0, 0);
-            if (hitDir) vel.set(hitDir.x, 0, hitDir.z).normalize().multiplyScalar(4 + hit.speed * 0.9);
-            vel.y = 5 + hit.speed * 0.4;
-            const chance = Math.min(1, Math.max(0.15, (hit.speed - 4) / 8));
-            if (hit.y > 1.8) {
-                if (rand() < chance || this.health <= 0) { this.decapitate(vel); result.decap = true; this.health = Math.min(this.health, 0); }
-            } else if (rand() < chance) {
-                const right = hit.side > 0;
-                const bit = hit.y > 0.95 ? (right ? 4 : 2) : (right ? 16 : 8);
-                result.severed = this.severLimb(rand, (this.limbMask & bit) ? -1 : bit, vel);
-            }
-            if (this.health <= 0 && !result.decap) { this.decapitate(vel); result.decap = true; }
-        } else if (isWeapon) {
-            if (this.health <= 0) {
-                this.decapitate();
-                result.decap = true;
-            } else if (rand() > 0.5) {
-                result.severed = this.severLimb(rand);
-            }
-        }
+        // (arms, legs and the head come off only where a blade's edge really went through them:
+        // Dismember.js cuts them — no more random cuts by the height of the blow)
 
         // Knockback: backwards from facing (original), or along the physical blow.
         if (hitDir) _v.set(hitDir.x, 0, hitDir.z).normalize();

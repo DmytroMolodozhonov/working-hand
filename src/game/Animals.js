@@ -742,7 +742,7 @@ export class Animals {
             const k = (r - dd) / r;
             sx += dx / dd * k; sz += dz / dd * k;
         }
-        want *= brake;
+        want *= brake * (a.legK ?? 1); // (legs cut off: limping / dragging itself — Dismember.js)
         const sl = Math.hypot(sx, sz);
         if (sl > 0.05) {
             if (want < S.speed * 0.5) {

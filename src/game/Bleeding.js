@@ -72,10 +72,10 @@ export class Bleeding {
     }
 
     /** I am wounded (a blade is in me: 1 HP/s). */
-    start(rate = 1) {
+    start(rate = 1, text = null) {
         if (this.game.config.mode === 'creative') return;
         this.rate = Math.max(this.rate, rate);
-        this.game.hud.setVoice('🩸 В вас вонзилось оружие! Вытащите его и скажите «Rescue», указав на рану', true);
+        this.game.hud.setVoice(text || '🩸 В вас вонзилось оружие! Вытащите его и скажите «Rescue», указав на рану', true);
         this.game.sync?.bleed?.(this.rate);
     }
 
@@ -89,7 +89,8 @@ export class Bleeding {
         this.rate = 0;
         this._acc = 0;
         this.game.sync?.bleed?.(0);
-        this.game.hud.setVoice('✚ Кровотечение остановлено', true);
+        const lost = this.game.character.limbs && Object.keys(this.game.character.limbs).length;
+        this.game.hud.setVoice(lost ? '✚ Кровотечение остановлено — отрубленное не вернётся, пока вы живы' : '✚ Кровотечение остановлено', true);
         const c = this.game.character.group.position;
         for (let i = 0; i < 25; i++) this.game.fx.spark(_v.set(c.x, c.y + 0.6, c.z), 0x9fffb0, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.8);
     }
@@ -171,6 +172,13 @@ export class Bleeding {
         if (nearBody && (this.rate > 0 || this._bladesInMe().length)) {
             for (const wid of this._bladesInMe()) this.pullOut(wid);
             this.stop();
+            return 'Rescue';
+        }
+        // a bleeding villager / animal the hand points at (a cut-off limb)
+        const aimC = g.duel.pickSide(false);
+        const crt = aimC && (aimC.t.kind === 'v' || aimC.t.kind === 'a') ? g.duel._creature?.(aimC.t.kind, aimC.t.id) : null;
+        if (crt && g.dismember?.rescueCreature(crt)) {
+            g.hud.setVoice('✚ Rescue — кровотечение остановлено', true);
             return 'Rescue';
         }
         const aim = g.duel.pickSide(true);

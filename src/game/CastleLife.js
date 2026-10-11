@@ -252,6 +252,7 @@ export class CastleLife {
 
     _deactivate(v) {
         const cs = v.cs;
+        if (!v.dead && v.bleed > 0) this.state(cs.def.id).killed.add(v.idx); // (a cut-off limb: bled to death out of sight)
         cs.active.delete(v.idx);
         this.byId.delete(v.id);
         v.removable = true;
@@ -461,6 +462,7 @@ export class CastleLife {
 
     /** One step along the path; true when the end is reached. */
     _followPath(v, dt, speed) {
+        speed *= v.legK ?? 1; // (a leg cut off: hopping / crawling — Dismember.js)
         const g = v.cs.graph;
         if (!v.path || v.pathI >= v.path.length) return true;
         const n = g.nodes[v.path[v.pathI]];
@@ -491,6 +493,7 @@ export class CastleLife {
 
     /** Straight towards a point (a fight); stops at walls. */
     _steer(v, tx, tz, speed, dt, stopAt = 0) {
+        speed *= v.legK ?? 1; // (a leg cut off)
         const dx = tx - v.x, dz = tz - v.z;
         const d = Math.hypot(dx, dz);
         v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 10);
@@ -889,6 +892,7 @@ export class CastleLife {
 
     /** (host) the swing of a knight / the king hits its target. */
     _strike(v) {
+        if (v.model.limbs?.rightArm != null) return; // (no sword arm any more)
         const fp = this._playerPos(v.foe);
         if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4) return;
         const dmg = STATS[v.role].dmg;

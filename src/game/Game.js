@@ -35,6 +35,7 @@ import { ItemSystem } from './Items.js';
 import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
+import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
 import { DeathSystem } from './Death.js';
@@ -239,6 +240,7 @@ export class Game {
         this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
         this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
+        this.dismember = new Dismemberment(this); // a blade's edge cuts off arms, legs, heads (any creature)
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
         this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
@@ -733,6 +735,8 @@ export class Game {
         const vx = this.vortex.voice(name, text, isFinal);
         if (vx !== undefined) return vx;
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
+        // both hands cut off: no spell (the stump still stops the blood with «Rescue»)
+        if (this.character.handLost?.('left') && this.character.handLost?.('right') && name !== 'Rescue' && name !== 'Stand') { if (isFinal) this.hud.setVoice('🩸 Без рук колдовать нельзя', true); return null; }
         // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
         // (before the duel's block: nothing may keep you from stopping your own spells)
         if (name === 'Stand') {
@@ -1540,6 +1544,7 @@ export class Game {
     respawn() {
         const ch = this.character;
         this.bleeding?.clearCuts(ch);
+        this.dismember?.resetLocal(); // (cut-off arms / legs / the head: whole again)
         this.combat.revive();
         this.playerHP = this.maxHP;
         this.isDeadLocal = false;
@@ -1811,6 +1816,7 @@ export class Game {
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
         this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets()), dt);
+        this.dismember.update(dt);
         mark('зомби');
 
         this.spells.update(dt);

@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { applyLook } from './Appearance.js';
 import { SimplifiedHand } from './SimplifiedHand.js';
 import { DetailedHand } from './DetailedHand.js';
+import { stumpEnd } from './LimbSurgery.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -285,6 +286,8 @@ export class VoxelCharacter {
         };
         const l = stats(this.leftElbowAnchor);
         const r = stats(this.rightElbowAnchor);
+        if (this.handLost('left')) l.valid = false; // (a cut-off hand casts nothing)
+        if (this.handLost('right')) r.valid = false;
         if (!l.valid && !r.valid) return null;
         let side = 'right';
         if (l.valid && r.valid) side = l.height >= r.height ? 'left' : 'right';
@@ -295,6 +298,7 @@ export class VoxelCharacter {
 
     /** Both wrists above the top of the head ("руки вверх") — the flight gesture. */
     areBothHandsUp() {
+        if (this.handLost('left') || this.handLost('right')) return false;
         this.group.updateMatrixWorld(true);
         this.group.getWorldQuaternion(_qBody);
         _up.set(0, 1, 0).applyQuaternion(_qBody);
@@ -307,6 +311,7 @@ export class VoxelCharacter {
 
     /** Arm stretched out (hand far from the shoulder) — the shield gesture. */
     isArmExtended(side) {
+        if (this.handLost(side)) return false;
         const shoulder = (side === 'left' ? this.leftArmAnchor : this.rightArmAnchor).getWorldPosition(_v3);
         const hand = this.getHandWorldPosition(side, _v1);
         return hand.distanceTo(shoulder) > 0.82 * (this.BONE_LENGTH_UPPER + this.BONE_LENGTH_LOWER);
@@ -317,6 +322,7 @@ export class VoxelCharacter {
      * The hand is more than ~60° up from straight down.
      */
     isArmRaised(side) {
+        if (this.handLost(side)) return false;
         const anchor = side === 'left' ? this.leftArmAnchor : this.rightArmAnchor;
         anchor.updateMatrixWorld(true);
         const shoulder = anchor.getWorldPosition(_v2);
@@ -398,6 +404,8 @@ export class VoxelCharacter {
     }
 
     getHandWorldPosition(side, out = new THREE.Vector3()) {
+        // a cut-off hand: the end of the stump (pressed to the wound for «Rescue»)
+        if (this.limbs && this.limbs[side + 'Arm'] != null && stumpEnd(this, side + 'Arm', out)) return out;
         const anchor = side === 'left' ? this.leftElbowAnchor : this.rightElbowAnchor;
         anchor.updateMatrixWorld(true);
         return out.set(0, 0, this.BONE_LENGTH_LOWER).applyMatrix4(anchor.matrixWorld);
@@ -526,17 +534,18 @@ export class VoxelCharacter {
             // Movement (original speeds)
             if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 7.5;
-                const speed = (walkSpeed + (runSpeed - walkSpeed) * this.runIntensity) * (this.speedScale ?? 1) * (this.runBonus ?? 1); // (runBonus: a caught running book)
+                // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book)
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.limbSpeed ?? 1);
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
             }
             // Ground following + gravity (flat ground keeps the original baseY exactly)
             // the floor under the feet (not a ceiling / roof / cave rock above)
-            const feetNow = this.group.position.y - PLAYER_GROUND_OFFSET + (this.isCrouching ? 1.0 : 0);
+            const feetNow = this.group.position.y - PLAYER_GROUND_OFFSET + this.bodyDrop();
             const ground = collision ? (collision.groundAt ? collision.groundAt(this.group.position.x, this.group.position.z, feetNow + 1.1) : collision.groundY(this.group.position.x, this.group.position.z)) : -0.5;
             this.groundY = ground;
-            const crouchDrop = this.knockedDown ? 1.45 : this.isCrouching ? 1.0 : 0;
+            const crouchDrop = this.knockedDown ? 1.45 : this.bodyDrop();
             const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;
             const y = this.group.position.y;
             if (this.swimY != null) {
@@ -625,11 +634,23 @@ export class VoxelCharacter {
 
     setShowHands(visible) {
         const v3 = this.handVersion === 'v3';
-        this.leftSimplifiedHand.group.visible = v3 && visible;
-        this.rightSimplifiedHand.group.visible = v3 && visible;
-        this.leftDetailedHand.group.visible = !v3 && visible;
-        this.rightDetailedHand.group.visible = !v3 && visible;
+        // (a cut-off hand stays gone)
+        const l = visible && !this.handLost('left'), r = visible && !this.handLost('right');
+        this.leftSimplifiedHand.group.visible = v3 && l;
+        this.rightSimplifiedHand.group.visible = v3 && r;
+        this.leftDetailedHand.group.visible = !v3 && l;
+        this.rightDetailedHand.group.visible = !v3 && r;
         this.handsVisible = visible;
+    }
+
+    /** Is this hand cut off (Dismember: any cut on that arm takes the hand)? */
+    handLost(side) {
+        return !!this.limbs && this.limbs[side + 'Arm'] != null;
+    }
+
+    /** How much lower the body is: crouching, or on the stumps with both legs cut off. */
+    bodyDrop() {
+        return Math.max(this.isCrouching ? 1.0 : 0, this.legDrop || 0);
     }
 
     setHandVersion(version) {
@@ -655,6 +676,7 @@ export class VoxelCharacter {
      * so the visual state must not be used here.)
      */
     getGripCurl(side) {
+        if (this.handLost(side)) return 0;
         const hand = this.getActiveHands()[side];
         if (!hand) return 0;
         const f = (hand.targetState || hand.currentState).fingers;

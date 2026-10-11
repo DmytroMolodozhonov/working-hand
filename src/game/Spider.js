@@ -348,7 +348,7 @@ export class Spiders {
             if (!hp) s.holding = null;
         } else if (tp && near.d > STOP * SIZE) {
             const to = _v.set(tp.x - p.x, 0, tp.z - p.z).normalize();
-            p.addScaledVector(to, SPEED * dt);
+            p.addScaledVector(to, SPEED * (s.legK ?? 1) * dt); // (legs cut off: slower)
             s.model.rotation.y = Math.atan2(-to.x, -to.z);
             moving = true;
         } else if (tp) s.model.rotation.y = Math.atan2(-(tp.x - p.x), -(tp.z - p.z));
