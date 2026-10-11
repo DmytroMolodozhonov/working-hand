@@ -41,13 +41,14 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
         g.levitation.release(true);
         await frames(5);
         const freed = { state: b.state, alive: B.birds.has(b.id) };
-        // a thing lying in front: lifted and carried
+        // a thing lying in front: lifted and carried (other loose things — an apple fallen from a tree — cleared: they may lie nearer the hand's line)
+        for (const o of [...g.items.loose.values()]) g.items.removeLoose(o.item.uid);
         const L = g.items.spawnLoose({ kind: 'apple', uid: 'ap1', count: 1 }, hand.clone().addScaledVector(dir, 7).setY(hand.y - 1)); // (on the ground ahead: within the pointing cone)
         await frames(30);
         const y0 = L.model.position.y;
         g.levitation.cast();
         await frames(40);
-        const lifted = { kind: g.levitation.state?.kind, rose: L.model.position.y - y0 };
+        const lifted = { kind: g.levitation.state?.kind, it: g.levitation.state?.obj === L, rose: L.model.position.y - y0 };
         g.levitation.release(true);
         g.items.removeLoose('ap1');
         // a book on the ground: «Акцио» — it flies (not at once in the hand)
@@ -68,7 +69,7 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
     assert.equal(r.cost, r.bare, 'no saving of strength');
     assert.ok(!r.held.hint && r.held.kind === 'bird' && r.held.state === 'held' && r.held.alive && r.held.books === 0, 'the bird is caught, not knocked down ' + JSON.stringify(r.held));
     assert.ok(r.freed.alive && r.freed.state !== 'held', 'let go: it flies on ' + JSON.stringify(r.freed));
-    assert.ok(r.lifted.kind === 'item' && r.lifted.rose > 0.3, 'a thing is lifted ' + JSON.stringify(r.lifted));
+    assert.ok(r.lifted.kind === 'item' && r.lifted.it && r.lifted.rose > 0.3, 'a thing is lifted ' + JSON.stringify(r.lifted));
     assert.ok(r.stillFlying && r.midway > 0.3, 'the book flies (not teleported) ' + JSON.stringify({ midway: r.midway, stillFlying: r.stillFlying }));
     assert.ok(r.caught, 'and is caught in the hand');
     assert.deepEqual(realErrors(errors), []);

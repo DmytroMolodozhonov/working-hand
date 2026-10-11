@@ -25,12 +25,37 @@ export const LEVITATE = {
     MAX_HOLD: 30, // (it is lifted where it is — not pulled to the hand first: that looked like a teleport)
     TWIST: 1.6, // the object turns this much more than the wrist (a small turn of the hand swings it)
     FOLLOW: 3.5, // how fast the float point follows the hand (1/s)
+    RISE: 2.5, // 1/s: a thing taken low rises up onto the hand's line this fast (sideways it stays put)
     DROP_DISTANCE: 0.75, // m of hand movement within DROP_WINDOW = a jerk
     DROP_WINDOW: 0.25,
     GRACE: 0.8,
     WIZARD_T: 10, // s a wizard can be held where there are no strength rules
     STALE: 3, // s without the caster's pose: what it held falls
 };
+
+/** A direction as yaw (around Y) and pitch (up +). */
+function yawPitch(v) {
+    return [Math.atan2(v.x, v.z), Math.asin(Math.max(-1, Math.min(1, v.y / (v.length() || 1))))];
+}
+
+/**
+ * Where the thing was against the line of the hand when it was taken (yaw and pitch apart):
+ * it is held there and moves as the hand turns — not snapped onto the hand's line (with a hand
+ * or a wand pointing a little aside, that made it fly off for a moment).
+ */
+export function aimOffset(dir, to) {
+    const [y0, p0] = yawPitch(dir), [y1, p1] = yawPitch(to);
+    const dy = y1 - y0;
+    return { dy: Math.atan2(Math.sin(dy), Math.cos(dy)), dp: p1 - p0 };
+}
+
+/** The hand's direction turned by such an offset (out may be dir). */
+export function applyAimOffset(dir, off, out) {
+    if (!off) return out.copy(dir);
+    const [y, p] = yawPitch(dir);
+    const yy = y + off.dy, pp = Math.max(-1.45, Math.min(1.45, p + off.dp)), c = Math.cos(pp);
+    return out.set(Math.sin(yy) * c, Math.sin(pp), Math.cos(yy) * c);
+}
 
 /** Strength a second it costs to hold a living body (free world): light, heavy (a cow, a knight), a wizard. */
 export const HOLD_FATIGUE = { light: 2, heavy: 3, wizard: 4 };
@@ -143,6 +168,8 @@ export class Levitation {
             if (g.sound) g.sound.playBombardoCast?.();
             return null;
         }
+        // (held where it is against the hand's line, moving as the hand moves)
+        s.off = aimOffset(this.game.character.getHandDirection(s.side, _v2), _v1.subVectors(best.pos, this.game.character.getHandWorldPosition(s.side, _v3)));
         // The wrist steers the object's rotation from now on
         s.handQ0 = this._handQuat(s.side, new THREE.Quaternion());
         s.objQ0 = (best.kind === 'weapon' ? best.obj.quaternion : this._model(best) ? this._model(best).quaternion : best.obj.mesh.quaternion).clone();
@@ -191,7 +218,9 @@ export class Levitation {
 
         // Where the object should float: in front of the hand, following it slowly
         const hand = ch.getHandWorldPosition(s.side, _v1);
-        const dir = ch.getHandDirection(s.side, _v2);
+        // (sideways it stays where it was against the hand's line; up — it rises onto it, smoothly)
+        if (s.off) s.off.dp *= Math.exp(-dt * LEVITATE.RISE);
+        const dir = applyAimOffset(ch.getHandDirection(s.side, _v2), s.off, _v2);
         const want = _v3.copy(hand).addScaledVector(dir, s.hold);
         want.y = Math.max(want.y + 0.3, this.game.collision.surfaceY(want.x, want.z) + 0.6);
         s.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW));
@@ -402,13 +431,14 @@ export class Levitation {
      * Where a caster's hand holds a body now (on any computer): `hold` m in front of
      * the hand, its feet above the ground. null: the caster is gone / not seen for a while.
      */
-    holdPoint(by, side, hold, up, out) {
+    holdPoint(by, side, hold, up, out, off = null) {
         const g = this.game;
         if (by !== g.localId) {
             const r = g.remotes?.get(by);
             if (!r || r.dead || performance.now() - (r.lastUpdate || 0) > LEVITATE.STALE * 1000) return null;
         }
         if (!g.duel?._handOf(by, side, out, _h4)) return null;
+        if (off) applyAimOffset(_h4, off, _h4);
         out.addScaledVector(_h4, hold);
         out.y = Math.max(out.y + 0.3, g.collision.surfaceY(out.x, out.z) + up + 0.2);
         return out;
@@ -422,6 +452,11 @@ export class Levitation {
         this._centre(ck, c, p);
         const feet = ck === 'v' ? c.y : p.y - this._centre(ck, c, _h1);
         c.lev = { by, side, hold, target: p.clone(), vel: new THREE.Vector3(), top: feet, age: 0, lower: false, body: !!(c.dead || c.isDead) };
+        // (taken where it is: it stays there against the caster's hand line, no jump onto it)
+        if (g.duel?._handOf(by, side, _h1, _h4)) {
+            c.lev.off = aimOffset(_h4, _h2.subVectors(p, _h1));
+            c.lev.hold = Math.min(LEVITATE.MAX_HOLD, Math.max(LEVITATE.MIN_HOLD, _h2.length())); // (and as far as it is)
+        }
         if (ck === 'a') { c.vel?.set(0, 0, 0); c.airborne = false; }
         if (ck === 'z') { c.vy = 0; c.windVel = null; }
         if (ck === 'v') { c.vy = 0; c.mode = 'idle'; c.speed = 0; g.castleLife?.reportCrime?.(c, by, 'magic'); }
@@ -445,7 +480,8 @@ export class Levitation {
             L.target.set(centre.x, Math.max(ground + up, L.target.y - 2.5 * dt), centre.z);
             if (centre.y - up <= ground + 0.12) { this._endCarry(ck, c); return; }
         } else {
-            const want = this.holdPoint(L.by, L.side, L.hold, up, _h2);
+            if (L.off) L.off.dp *= Math.exp(-dt * LEVITATE.RISE); // (it rises onto the hand's line, smoothly)
+            const want = this.holdPoint(L.by, L.side, L.hold, up, _h2, L.off);
             if (!want) { this.letGo(ck, c, false); return; }
             L.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW));
         }
@@ -457,7 +493,7 @@ export class Levitation {
         this._centre(ck, c, _h3);
         L.top = Math.max(L.top, _h3.y - up);
         // kicking in the air
-        if (ck === 'a') { c.walkT = (c.walkT || 0) + dt * 14; g.animals?._animate?.(c, 1); c.stunT = Math.max(c.stunT || 0, 0.5); }
+        if (ck === 'a' && !L.body) { c.walkT = (c.walkT || 0) + dt * 14; g.animals?._animate?.(c, 1); c.stunT = Math.max(c.stunT || 0, 0.5); } // (a dead body hangs limp)
         if (ck === 'z') { const k = Math.sin(performance.now() * 0.012) * 0.6; if (c.leftLeg) c.leftLeg.rotation.x = k; if (c.rightLeg) c.rightLeg.rotation.x = -k; }
         if (ck === 'v') { c.mode = 'idle'; c.speed = 0; }
         if (Math.random() < 0.5) this.game.fx?.spark(_h3.set(centre.x + (Math.random() - 0.5) * 1.4, centre.y + (Math.random() - 0.5) * 1.4, centre.z + (Math.random() - 0.5) * 1.4), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _h4.set(0, 0.6, 0), 0.6);

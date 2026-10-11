@@ -128,12 +128,18 @@ test('a guest\'s Leviosa: the host carries the body by the guest\'s hand; a take
     guest.lev.cast();
     assert.equal(guest.cow.lev, undefined, 'not moved on the guest');
     assert.deepEqual(guest.sent[0].slice(0, 3), ['lev', 'a', 7]);
-    // the host gets the message: the cow follows the friend's hand
+    // the host gets the message (the friend points at the cow): taken where it is, no jump
     const host = world();
+    const cowAt = host.cow.group.position.clone().add(new THREE.Vector3(0, 0.8, 0));
+    host.remoteHand.dir.copy(cowAt).sub(host.remoteHand.origin).normalize();
     host.lev.onNetLev({ by: 'friend', k: 'a', id: 7, side: 'right', h: 4, on: 1 });
     assert.equal(host.cow.lev.by, 'friend');
+    host.run(1);
+    assert.ok(Math.abs(host.cow.group.position.x - 0.6) < 0.4, `stays where it was taken (${host.cow.group.position.x.toFixed(2)})`);
+    // the friend's hand turns: the cow comes along
+    host.remoteHand.dir.set(0, 0, -1);
     host.run(3);
-    assert.ok(Math.abs(host.cow.group.position.x - 5) < 0.6, `at the friend's hand (${host.cow.group.position.x.toFixed(2)})`);
+    assert.ok(Math.abs(host.cow.group.position.x - 5) < 0.6, `follows the friend's hand (${host.cow.group.position.x.toFixed(2)})`);
     // a second wizard: refused
     host.lev.onNetLev({ by: 'other', k: 'a', id: 7, side: 'right', h: 4, on: 1 });
     assert.deepEqual(host.sent.at(-1).slice(0, 2), ['levno', 'other']);
