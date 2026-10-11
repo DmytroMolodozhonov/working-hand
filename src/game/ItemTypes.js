@@ -80,6 +80,9 @@ export const ITEM_INFO = {
     crystal: { name: 'Кристалл маны', icon: '💎', weight: 0.3, stack: 10 },
     // ships (Cannons.js): a ball from the shot rack, put into a gun's muzzle by hand
     cannonball: { name: 'Пушечное ядро', icon: '⚫', weight: 3 },
+    // the herds' guardians (HerdGuards.js): what they leave when killed
+    bronzeHorn: { name: 'Бронзовый рог', icon: '📯', weight: 1.5 },
+    minotaurHorn: { name: 'Рог Минотавра', icon: '🌀', weight: 1.5 }, // (an ingredient of the invisibility potion)
 };
 
 /**
@@ -104,6 +107,8 @@ export function itemValue(it) {
         case 'bread': case 'cheese': return 1 * (it.count || 1);
         case 'pie': return 2 * (it.count || 1);
         case 'crystal': return 40 * (it.count || 1);
+        case 'bronzeHorn': return 160;
+        case 'minotaurHorn': return 200;
         default: return 0;
     }
 }
@@ -592,7 +597,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8 };
+export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -622,9 +627,37 @@ function buildItemModel(it) {
         case 'cannonball': { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 9), mat(0x2b2b2e))); return g; }
         case 'blocks': return blocksModel(it.color);
         case 'crystal': return crystalItemModel();
+        case 'bronzeHorn': return hornModel(0xb87333, true);
+        case 'minotaurHorn': return hornModel(0x3a3028, false);
         case 'book': return it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
+}
+
+/** A big horn: the bronze bull's (long, curved, metal) or the minotaur's (a dark spiral with a faint glow). */
+function hornModel(color, bronze) {
+    const g = new THREE.Group();
+    const pts = [];
+    if (bronze) for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector3(t * 0.5, Math.sin(t * 1.6) * 0.18, 0)); }
+    else for (let i = 0; i <= 24; i++) { const a = i / 24 * Math.PI * 2.2, r = 0.17 * (1 - i / 36); pts.push(new THREE.Vector3(Math.sin(a) * r, i * 0.012, -Math.cos(a) * r)); }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const geo = new THREE.TubeGeometry(curve, bronze ? 14 : 40, bronze ? 0.045 : 0.05, 8, false);
+    // (tapering to the tip)
+    const P = geo.getAttribute('position'), v = new THREE.Vector3(), c = new THREE.Vector3();
+    const n = (bronze ? 14 : 40) + 1;
+    for (let i = 0; i < P.count; i++) {
+        const ring = Math.floor(i / 9), t = Math.min(1, ring / (n - 1));
+        curve.getPointAt(t, c);
+        v.fromBufferAttribute(P, i).sub(c).multiplyScalar(1 - 0.85 * t).add(c);
+        P.setXYZ(i, v.x, v.y, v.z);
+    }
+    geo.computeVertexNormals();
+    const m = bronze ? new THREE.MeshStandardMaterial({ color, metalness: 0.85, roughness: 0.3, emissive: 0x2a0e00 })
+        : new THREE.MeshStandardMaterial({ color, roughness: 0.6, emissive: 0x2a1450, emissiveIntensity: 0.6 });
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.castShadow = true;
+    g.add(mesh);
+    return g;
 }
 
 /** A little heap of gathered blocks (their colour). */

@@ -60,6 +60,8 @@ const GRIPPED = {
     pie: { axis: 'body', pose: 'block', at: [0.17, -0.2] },
     meat: { axis: 'body', pose: 'block', at: [0.17, -0.23], turn: true },
     steak: { axis: 'body', pose: 'block', at: [0.17, -0.23], turn: true },
+    bronzeHorn: { axis: 'body', pose: 'thick', at: [0.13, -0.155], turn: true },
+    minotaurHorn: { axis: 'body', pose: 'ball', at: [0.2, -0.272] },
     arrows: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true },
     coins: { axis: 'hang', pose: 'neck', at: [0.13, -0.17], top: 0.02, off: 0.25 },
     backpack: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.032 }, // (by its loop)

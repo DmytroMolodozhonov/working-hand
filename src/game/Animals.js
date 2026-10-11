@@ -36,6 +36,7 @@ import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
 import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS } from './AnimalModels.js';
 import { FLY, takeOff, stepFlight, wingTick, pickMigration, flockSlot } from './PigFlight.js';
+import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
 import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs } from './AnimalHerd.js';
 import { slowFactor, tickSlow } from './Slow.js';
@@ -150,6 +151,7 @@ export class Animals {
         this._feedT = 0;
         this._jumpAt = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test';
+        this.guards = new HerdGuards(this); // (a herd's hidden bull / leader ram)
     }
 
     get auth() { return this.game.authority; }
@@ -161,7 +163,7 @@ export class Animals {
         if (this.byId.has(id)) return this.byId.get(id);
         const S = SPECIES[type];
         const color = type === 'horse' ? (opts.color ?? HORSE_COLORS[Math.floor(Math.random() * HORSE_COLORS.length)]) : type === 'runbook' ? (opts.color || runBookColor(id))
-            : type === 'pig' ? (opts.color || 1 + Math.floor(Math.random() * PIG_LOOKS.length)) : null; // (a pig's look 1…4)
+            : type === 'pig' || type === 'cow' ? (opts.color || 1 + Math.floor(Math.random() * 4)) : null; // (a pig's / a cow's look 1…4)
         const model = animalModel(type, color);
         model.scale.setScalar(S.size * (type === 'pig' ? pigSize(id) : 1));
         if (type === 'pig') model.rotation.order = 'YXZ'; // (in flight: rolls into a turn, pitches, then faces its way)
@@ -181,6 +183,7 @@ export class Animals {
             dims, room: (ROOM[type] ?? 1) * dims.len, idle: 'stand', idleT: Math.random() * 4, spd: 0, pose: POSE.stand,
             home: { x: pos.x, z: pos.z }, lie: 0, headP: 0, headY: 0,
             fly: null, flyCode: 0, wingOpen: 0, bank: 0, pitch: 0, // (pigs: their flight — PigFlight.js)
+            baseHp: S.hp, guard: null, form: 0, formK: 0, act: 0, // (a herd's guardian: HerdGuards.js)
         };
         this.list.push(a);
         this.byId.set(id, a);
@@ -238,6 +241,9 @@ export class Animals {
             placed.push(a);
         }
         herd.leader = placed[0]?.id ?? null;
+        // a hidden guardian: the bull of a cow herd (45%), the leader ram of a flock (29%)
+        const gi = rollGuard(type, placed.length);
+        if (gi >= 0) { placed[gi].guard = type === 'cow' ? 'bull' : 'ram'; herd.guard = placed[gi].id; herd.leader = placed[gi].id; }
         return placed;
     }
 
@@ -259,16 +265,19 @@ export class Animals {
         a.hp -= dmg;
         a.damageCooldown = 0.35;
         if (a.fly) this._dropFromSky(a, 1.4); // (hit in the air: the wings fold, it falls)
+        this.guards.attacked(a, by); // (the herd's hidden bull / ram wakes)
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.copy(a.group.position).add(_v2.set(0, 1, 0)), 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.6);
         if (dir) this.push(a, _v.copy(dir).setY(0).normalize().multiplyScalar(4).setY(1.5), 0.35); // a blow knocks it back
         if (a.hp <= 0) { this._die(a, fire); return; }
+        if (a.form) return; // (the bull / the minotaur doesn't run: HerdGuards decides)
         // defend (65%) or run away; sheep stand up for each other
         const attacker = by;
-        const fight = a.type !== 'runbook' && Math.random() < (a.type === 'pig' ? 0.15 : 0.65); // (a running book only runs; a pig mostly flies off)
+        const guarded = a.herd?.guard != null && this.byId.get(a.herd.guard)?.form; // (their bull / minotaur fights for them: they run)
+        const fight = a.type !== 'runbook' && !guarded && Math.random() < (a.type === 'pig' ? 0.15 : 0.65); // (a running book only runs; a pig mostly flies off)
         a.state = fight ? 'attack' : 'flee';
         a.attacker = attacker;
         a.stateT = fight ? 15 : 8;
-        if (a.type === 'sheep') {
+        if (a.type === 'sheep' && !guarded) {
             for (const o of this.list) {
                 if (o === a || o.dead || o.type !== 'sheep' || o.group.position.distanceTo(a.group.position) > 14) continue;
                 if (Math.random() < 0.65) { o.state = 'attack'; o.attacker = attacker; o.stateT = 15; }
@@ -289,6 +298,7 @@ export class Animals {
         a.state = 'dead';
         a.fly = null; a.flyCode = 0;
         a.cooked = a.cooked || cooked;
+        if (this.auth) this.guards.died(a); // (the bronze bull's horn, the minotaur's horn)
         a.deadAt = performance.now();
         if (a.rider === this.game.localId) this.dismount();
         this._layDown(a);
@@ -302,7 +312,7 @@ export class Animals {
         const gy = this.game.collision.groundY(a.group.position.x, a.group.position.z);
         // (killed in the air: it falls — the body physics brings it down)
         if (a.group.position.y > gy + 2.5) a.airborne = true;
-        else a.group.position.y = gy + 0.35 * SPECIES[a.type].size;
+        else a.group.position.y = gy + (a.model.userData.minotaur?.visible ? 0.9 : 0.35 * a.group.scale.y); // (its own size: a big bull, the minotaur on its side)
         if (a.cooked) this._tintCooked(a);
     }
 
@@ -564,7 +574,8 @@ export class Animals {
         if (a.fly && a.stunT > 0) this._dropFromSky(a, a.stunT); // (stunned, frozen… in the air: it falls)
         if (a.stunT > 0) {
             // stunned / thrown by a spell or a blast: no walking until it comes to itself
-            a.stunT -= dt;
+            // (the bronze bull and the minotaur come to themselves sooner)
+            a.stunT -= a.form === 2 ? dt / (a.guard === 'bull' ? GUARD.BULL.STUN_K : GUARD.RAM.STUN_K) : dt;
             a.spd = 0;
             if (a.type === 'pig') a.flyCode = a.airborne ? 4 : 0; // (falling: the wings folded)
             this._body(a, dt);
@@ -572,6 +583,7 @@ export class Animals {
             return;
         }
         if (a.type === 'pig' && this._pigAir(a, dt)) return; // (in flight: PigFlight.js)
+        if (a.form && this.guards.think(a, dt)) return; // (the bronze bull / the minotaur: HerdGuards.js)
         if (a.type === 'runbook' && g.runner) { g.runner.think(a, dt); return; } // (runs, dodges, hides: RunningBook.js)
         let speed = 0, bunch = false;
         // «Брейнрот»: a servant follows its master and fights for them
@@ -1183,7 +1195,7 @@ export class Animals {
             p.y += (gy + base - p.y) * Math.min(1, dt * 8); // walking up and down steps
         }
         if (!a.dead) {
-            g.collision.resolveCylinder(p, 0.6 * S.size, p.y - 0.5, 2, 1.1);
+            g.collision.resolveCylinder(p, a.bodyR ?? 0.6 * S.size, p.y - 0.5, a.bodyH ?? 2, 1.1);
             // the others are solid too (their real bodies: long along, narrow across)
             for (const o of this.list) {
                 if (o === a || o.dead) continue;
@@ -1212,6 +1224,7 @@ export class Animals {
         animateLegs(a.model, a.walkT, k * (1 - (a.lie || 0)));
         if (a.lie > 0.01) foldLegs(a.model, a.lie); // (lying: the legs folded under the body)
         if (a.model.userData.wings && !a.dead) this._pigBody(a, dt || 1 / 60); // (a pig's wings; Leviosa calls this without dt)
+        if (a.form || a.formK || a.model.userData.minotaur || a.model.userData.bronze) this.guards.look(a, dt || 1 / 60); // (the bull / the minotaur)
     }
 
     _playerPos(id) {
@@ -1221,18 +1234,20 @@ export class Animals {
         return r && !r.dead ? r.position : null;
     }
 
-    _butt(a, id) {
+    /** A butt / a blow at a player. o: {dmg, k — how hard it throws (m/s), down — knocked down for s} (the bull, the minotaur). */
+    _butt(a, id, o = {}) {
         const g = this.game;
-        const dmg = SPECIES[a.type].dmg;
+        const dmg = o.dmg ?? SPECIES[a.type].dmg, k = o.k ?? 6;
         if (id === g.localId || id === 'local') {
+            if (g.isDeadLocal || g.combat.dead) return;
             if (g.combat.enabled) g.combat.damage(dmg, null, 'animal');
             else g.damageLocalPlayer(dmg);
-            // butted: shoved back, reeling (BodyImpact; a big bull-like cow throws harder)
-            const push = _v.subVectors(g.character.group.position, a.group.position).setY(0).normalize().multiplyScalar(6).setY(2);
-            if (g.impact) g.impact.apply({ v: push.clone(), from: a.group.position.clone(), by: null, kind: 'butt', noShield: true });
+            // butted: shoved back, reeling (BodyImpact; the bronze bull's rush knocks down and throws)
+            const push = _v.subVectors(g.character.group.position, a.group.position).setY(0).normalize().multiplyScalar(k).setY(2 + k * 0.2);
+            if (g.impact) g.impact.apply({ v: push.clone(), from: a.group.position.clone(), by: null, kind: 'butt', noShield: true, always: o.down ? { down: o.down } : null });
             else g.knockback.add(push);
-            g.hud.setVoice?.(`🐾 ${SPECIES[a.type].name} бодается!`, true);
-        } else g.sync?.animalButt?.(id, dmg, a.group.position);
+            g.hud.setVoice?.(a.form ? (a.guard === 'bull' ? '🔥 Медный бык поддел вас рогами!' : '🐏 Минотавр бьёт!') : `🐾 ${SPECIES[a.type].name} бодается!`, true);
+        } else g.sync?.animalButt?.(id, dmg, a.group.position, k, o.down || 0);
     }
 
     // ------------------------------------------------------------- frame
@@ -1344,7 +1359,7 @@ export class Animals {
         this._netT = 0.2;
         const r = (v) => Math.round(v * 100) / 100;
         if (this.auth) {
-            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0, a.flyCode || 0, r(a.bank || 0), r(a.pitch || 0)]));
+            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0, a.flyCode || 0, r(a.bank || 0), r(a.pitch || 0), a.form || 0, r(a.formK || 0), a.act || 0]));
         } else if (this.riding) {
             const a = this.riding;
             g.sync.animalPos?.(a.id, [r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y)]);
@@ -1354,7 +1369,7 @@ export class Animals {
     /** (guests) the host's animals. */
     applyNet(list) {
         const seen = new Set();
-        for (const [id, type, x, y, z, ry, dead, meat, cooked, color, tamed, rider, bonus, moving, pose, fly, bank, pitch] of list || []) {
+        for (const [id, type, x, y, z, ry, dead, meat, cooked, color, tamed, rider, bonus, moving, pose, fly, bank, pitch, form, formK, act] of list || []) {
             seen.add(id);
             let a = this.byId.get(id);
             if (!a) a = this._spawn(type, new THREE.Vector3(x, y, z), { id, color: color || null, bonus });
@@ -1363,6 +1378,7 @@ export class Animals {
             a.netMoving = !!moving;
             a.pose = pose || 0;
             a.flyCode = fly || 0; a.bank = bank || 0; a.pitch = pitch || 0; // (a pig in flight: its wings, its roll and pitch)
+            a.form = form || 0; a.formK = formK || 0; a.act = act || 0; // (the bull / the minotaur: how far it has changed, what it does)
             a.group.rotation.y = ry;
             a.meat = meat;
             a.tamed = tamed || null;

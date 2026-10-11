@@ -528,7 +528,7 @@ export class NetSync {
     animalFeed(id) { this.net.send({ t: 'afeed', id }); }
     animalRide(id, on) { this.net.send({ t: 'aride', id, on: on ? 1 : 0, by: this.me }, true); }
     animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
-    animalButt(to, dmg, p) { this.net.send({ t: 'abutt', to, dmg, p: [r3(p.x), r3(p.y), r3(p.z)] }, true); }
+    animalButt(to, dmg, p, k = 6, down = 0) { this.net.send({ t: 'abutt', to, dmg, p: [r3(p.x), r3(p.y), r3(p.z)], k, down }, true); }
 
     // ---- the spider (host)
     bosses(list) { if (this.net.isHost) this.net.send({ t: 'boss', l: list }); }
@@ -794,7 +794,7 @@ export class NetSync {
             case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; } } break;
             case 'abutt': if (m.to === this.me) {
                 if (g.combat.enabled) g.combat.damage(m.dmg || 1, null, 'animal'); else g.damageLocalPlayer(m.dmg || 1);
-                if (Array.isArray(m.p) && g.impact) { const from = vec(m.p); g.impact.apply({ v: g.character.group.position.clone().sub(from).setY(0).normalize().multiplyScalar(6), from, kind: 'butt', noShield: true }); }
+                if (Array.isArray(m.p) && g.impact) { const from = vec(m.p); const k = Math.min(20, m.k || 6); g.impact.apply({ v: g.character.group.position.clone().sub(from).setY(0).normalize().multiplyScalar(k).setY(2 + k * 0.2), from, kind: 'butt', noShield: true, always: m.down ? { down: Math.min(4, m.down) } : null }); }
             } break;
             case 'impale': g.bleeding?.noteImpale(m.w, m.to, m.r); break;
             case 'unimpale': g.bleeding?.noteUnimpale(m.w); break;

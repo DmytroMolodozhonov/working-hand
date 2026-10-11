@@ -406,11 +406,15 @@ const _skins = new Map();
  * mottling, warmer and paler patches, spots, pores and short bristles lying along the body.
  * Values are a multiplier around 0.92 (the material's colour gives the pink).
  */
-function pigSkin(look) {
-    if (_skins.has(look)) return _skins.get(look);
-    const L = PIG_LOOKS[look];
+function pigSkin(look) { return hideTexture('pig' + look, PIG_LOOKS[look], 9001 + look * 7919); }
+/**
+ * A hide picture (cached by key): L = {mottle, warm, spots, spotR: [min, max], spotC,
+ * hairs, hairLen: [min, max], pale (share of pale hairs)}.
+ */
+function hideTexture(key, L, seed) {
+    if (_skins.has(key)) return _skins.get(key);
     const W = 128, H = 256;
-    const r = rng(9001 + look * 7919);
+    const r = rng(seed);
     // value noise on a wrapping grid (so the picture closes round the body)
     const grid = (n) => { const a = new Float32Array(n * n * 2); for (let i = 0; i < a.length; i++) a[i] = r(); return a; };
     const g1 = grid(8), g2 = grid(16), g3 = grid(32);
@@ -422,7 +426,8 @@ function pigSkin(look) {
     };
     const R = new Float32Array(W * H), G = new Float32Array(W * H), B = new Float32Array(W * H);
     const spots = [];
-    for (let i = 0; i < L.spots; i++) spots.push({ u: 0.1 + r() * 0.8, v: r(), ru: 0.06 + r() * 0.1, rv: 0.04 + r() * 0.07 });
+    const [s0, s1] = L.spotR || [0.06, 0.16];
+    for (let i = 0; i < L.spots; i++) { const ru = s0 + r() * (s1 - s0); spots.push({ u: 0.06 + r() * 0.88, v: r(), ru, rv: ru * (0.6 + r() * 0.5) }); }
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const u = x / W, v = y / H;
         const n = vn(g1, 8, u, v) * 0.55 + vn(g2, 16, u, v) * 0.3 + vn(g3, 32, u, v) * 0.15;
@@ -441,9 +446,10 @@ function pigSkin(look) {
     }
     // pores (tiny darker dots) and bristles: short hairs along the body, pale ones catch the light
     for (let i = 0; i < 2600; i++) { const p = Math.floor(r() * W * H); R[p] *= 0.9; G[p] *= 0.88; B[p] *= 0.88; }
-    for (let i = 0; i < 1500; i++) {
-        const x0 = Math.floor(r() * W), y0 = Math.floor(r() * H), len = 2 + Math.floor(r() * 4);
-        const pale = r() < 0.6, k = pale ? 1.07 + r() * 0.05 : 0.86;
+    const [h0, h1] = L.hairLen || [2, 5];
+    for (let i = 0; i < (L.hairs ?? 1500); i++) {
+        const x0 = Math.floor(r() * W), y0 = Math.floor(r() * H), len = h0 + Math.floor(r() * (h1 - h0 + 1));
+        const pale = r() < (L.pale ?? 0.6), k = pale ? 1.07 + r() * 0.05 : 0.86;
         for (let j = 0; j < len; j++) {
             const p = y0 * W + ((x0 + j) % W), f = 1 + (k - 1) * (1 - j / (len + 1));
             R[p] *= f; G[p] *= f; B[p] *= pale ? f * 0.99 : f;
@@ -460,7 +466,7 @@ function pigSkin(look) {
     tex.generateMipmaps = true;
     tex.needsUpdate = true;
     tex.userData = { keep: true };
-    _skins.set(look, tex);
+    _skins.set(key, tex);
     return tex;
 }
 /** The pig's skin material of a look: the picture × vertex shading × the look's pink (shared). */
@@ -713,19 +719,36 @@ export function animateWings(model, open, flap = 0, flex = 0) {
 }
 
 // ================================================================== cow
-function cow() {
+/**
+ * Cows: a matte hide, not plastic — a picture per look (the coat's hair, mottling, the
+ * patches) times soft vertex shading (a darker back, mud low on the belly and the legs).
+ * Looks 1…4 (sent as the animal's `color`): black-and-white, brown-and-white, all brown, red.
+ */
+export const COW_LOOKS = [
+    { tint: 0xf3f0ea, face: [0.14, 0.13, 0.13], mottle: 0.08, warm: 0.03, spots: 10, spotR: [0.08, 0.17], spotC: [0.13, 0.12, 0.12], hairs: 2200, hairLen: [3, 7], pale: 0.45 },
+    { tint: 0xf2ece2, face: [0.5, 0.3, 0.18], mottle: 0.09, warm: 0.05, spots: 9, spotR: [0.08, 0.16], spotC: [0.52, 0.31, 0.18], hairs: 2200, hairLen: [3, 7], pale: 0.45 },
+    { tint: 0xb4804f, face: [0.62, 0.52, 0.47], mottle: 0.16, warm: 0.08, spots: 0, spotC: [1, 1, 1], hairs: 2600, hairLen: [3, 7], pale: 0.5 },
+    { tint: 0xf0e8de, face: [0.62, 0.3, 0.2], mottle: 0.1, warm: 0.06, spots: 16, spotR: [0.12, 0.22], spotC: [0.6, 0.3, 0.19], hairs: 2400, hairLen: [3, 7], pale: 0.45 },
+];
+export const cowLook = (c) => ((Math.abs(Math.round(c || 1)) - 1) % COW_LOOKS.length + COW_LOOKS.length) % COW_LOOKS.length;
+function cowMat(look) {
+    const k = 'cow' + look;
+    if (!_mats.has(k)) _mats.set(k, new THREE.MeshLambertMaterial({ color: COW_LOOKS[look].tint, vertexColors: true, map: hideTexture('cow' + look, COW_LOOKS[look], 5003 + look * 104729) }));
+    return _mats.get(k);
+}
+
+function cow(lookC) {
+    const look = cowLook(lookC);
+    const L = COW_LOOKS[look];
     const g = new THREE.Group();
     g.name = 'cow';
     const legs = [];
-    const white = 0xf4f2ec;
-    const skin = lamV(white);
-    // black patches: a smooth pattern on the body (no randomness: every cow of the herd alike in shape)
-    const patch = (p) => {
-        const n = Math.sin(p.x * 6.1 + p.z * 4.3) + Math.sin(p.z * 6.9 - p.y * 5.1 + 1.7) + 0.8 * Math.sin(p.y * 7.2 + p.x * 3.1 - p.z * 5.7 + 0.4);
-        return smooth(0.55, 0.68, n);
-    };
-    const coat = (t, ang, p) => mix([1, 1, 1], [0.12, 0.11, 0.11], patch(p));
-    const body = mesh(g, cached('cowBody', () => {
+    const skin = cowMat(look);
+    const faceHex = new THREE.Color(L.tint).multiply(new THREE.Color(...L.face)).getHex();
+    const shade = bellyShade([0.92, 0.9, 0.9], [1.03, 1.03, 1.03]);
+    // (the hide: shading, a little mud low on the belly and the hind legs' tops)
+    const coat = (t, ang, p) => mix(shade(t, ang), MUD, Math.min(0.6, (smooth(0.95, 0.8, p.y) * 0.55 + smooth(0.15, 0.0, t) * smooth(1.2, 0.95, p.y) * 0.3) * mudAt(p)));
+    const body = mesh(g, cached('cowBody2', () => {
         const k = keys([
             [0.00, 1.42, 1.15, 0.14],
             [0.06, 1.55, 0.95, 0.36],
@@ -736,47 +759,96 @@ function cow() {
             [0.95, 1.48, 0.98, 0.3],
             [1.00, 1.35, 1.12, 0.14],
         ]);
-        return sweep([v3(0, 0, 0.82), v3(0, 0, -0.8)], (t) => { const [top, bot, w] = k(t); return [w, (top - bot) / 2, (top + bot) / 2]; },
-            { rings: 34, sides: 22, color: coat });
+        return sweep([v3(0, 0, 0.82), v3(0, 0, -0.8)], (t) => { const [top, bot, w] = k(t); return [w, (top - bot) / 2, (top + bot) / 2]; }, {
+            rings: 34, sides: 22, uv: [1, 1], color: coat,
+            // (hip bones and shoulder blades under the hide, a slight sag of the belly — not a smooth balloon)
+            bump: (t, ang) => 1 + 0.03 * Math.exp(-(((t - 0.12) / 0.06) ** 2)) * Math.max(0, Math.sin(ang)) + 0.02 * Math.exp(-(((t - 0.8) / 0.07) ** 2)) * Math.max(0, Math.sin(ang)) + 0.01 * Math.sin(t * 29 + ang * 3) * Math.sin(ang * 4 + t * 9),
+        });
     }), skin);
     // udder with four teats
-    const pinkM = lam(0xf0b4b4);
+    const pinkM = lam(0xe0a8a6);
     blob(g, pinkM, 0.17, 0.12, 0.17, 0, 0.82, 0.4);
     for (const [x, z] of [[0.07, 0.34], [-0.07, 0.34], [0.07, 0.46], [-0.07, 0.46]]) mesh(g, cone(0.02, 0.025, 0.08, 5), pinkM, x, 0.7, z, false);
 
     const neck = group(g, 'neck', 0, 1.28, -0.62); // (turns at its root, on the shoulders)
     const neckPath = [v3(0, 0, 0), v3(0, 0.08, -0.3), v3(0, 0.14, -0.42)];
-    mesh(neck, cached('cowNeck', () => sweep(neckPath, keys([[0, 0.3, 0.3, -0.04], [0.5, 0.21, 0.24, -0.04], [1, 0.16, 0.18, 0]]), { rings: 8, sides: 10, color: coat })), skin);
-    blob(neck, lam(white), 0.06, 0.12, 0.2, 0, -0.16, -0.22); // dewlap
+    mesh(neck, cached('cowNeck2', () => sweep(neckPath, keys([[0, 0.3, 0.3, -0.04], [0.5, 0.21, 0.24, -0.04], [1, 0.16, 0.18, 0]]), { rings: 8, sides: 10, uv: [0.35, 0.5], color: shade })), skin);
+    blob(neck, lam(L.tint), 0.06, 0.12, 0.2, 0, -0.16, -0.22); // dewlap
 
     const head = group(neck, 'head', 0, 0.22, -0.42);
     head.rotation.x = -0.7;
-    mesh(head, cached('cowHead', () => sweep([v3(0, 0, 0.06), v3(0, 0, -0.5)], keys([
+    mesh(head, cached('cowHead' + look, () => sweep([v3(0, 0, 0.06), v3(0, 0, -0.5)], keys([
         [0, 0.15, 0.13, 0], [0.2, 0.17, 0.15, 0], [0.55, 0.13, 0.12, 0], [0.85, 0.14, 0.12, -0.01], [1, 0.1, 0.08, -0.01],
-    ]), { rings: 12, sides: 10, color: (t) => mix([0.15, 0.13, 0.13], [0.98, 0.72, 0.72], smooth(0.72, 0.84, t)) })), skin);
+    ]), { rings: 12, sides: 10, color: (t, ang, p) => mix(mix(L.face, [0.92, 0.66, 0.66], smooth(0.72, 0.84, t)), MUD, 0.3 * smooth(0.85, 1, t) * smooth(0, -0.1, p.y)) })), lamV(L.tint));
     for (const s of [1, -1]) {
         blob(head, lam(0x111111), 0.03, 0.035, 0.035, 0.155 * s, 0.05, -0.1, false); // eyes
         blob(head, lam(0x111111), 0.022, 0.025, 0.012, 0.055 * s, -0.02, -0.54, false); // nostrils
-        const ear = blob(head, lam(0x2a2626), 0.12, 0.035, 0.06, 0.22 * s, 0.06, 0.02);
+        const ear = blob(head, lam(faceHex), 0.12, 0.035, 0.06, 0.22 * s, 0.06, 0.02);
         ear.rotation.z = -0.35 * s;
         // short horns curving up and forward
-        const horn = mesh(head, cached('cowHorn', () => new THREE.TubeGeometry(new THREE.CatmullRomCurve3([v3(0, 0, 0), v3(0.08, 0.04, 0), v3(0.13, 0.12, -0.04)]), 6, 0.025, 6, false)), lam(0xe8dcc0), 0.1 * s, 0.13, 0.04);
+        const horn = mesh(head, cached('cowHorn', () => new THREE.TubeGeometry(new THREE.CatmullRomCurve3([v3(0, 0, 0), v3(0.08, 0.04, 0), v3(0.13, 0.12, -0.04)]), 6, 0.025, 6, false)), lam(0xd9ccb0), 0.1 * s, 0.13, 0.04);
         horn.scale.x = s;
+        horn.name = 'horn';
     }
 
     const tail = group(g, 'tail', 0, 1.46, 0.8);
-    mesh(tail, cached('cowTail', () => sweep([v3(0, 0, 0), v3(0, -0.05, 0.1), v3(0, -0.4, 0.14), v3(0, -0.85, 0.1)], () => [0.03, 0.03, 0], { rings: 10, sides: 6 })), lam(white));
-    blob(tail, lam(0x1c1a1a), 0.06, 0.13, 0.06, 0, -0.9, 0.1); // the tuft
+    mesh(tail, cached('cowTail', () => sweep([v3(0, 0, 0), v3(0, -0.05, 0.1), v3(0, -0.4, 0.14), v3(0, -0.85, 0.1)], () => [0.03, 0.03, 0], { rings: 10, sides: 6 })), lam(L.tint));
+    blob(tail, lam(new THREE.Color(faceHex).multiplyScalar(0.8).getHex()), 0.06, 0.13, 0.06, 0, -0.9, 0.1); // the tuft
 
     const fUp = [[0, 0.13, 0.15], [0.45, 0.095, 0.11], [1, 0.072, 0.082]];
     const hUp = [[0, 0.15, 0.2], [0.45, 0.1, 0.14], [1, 0.072, 0.09]];
     const low = [[0, 0.08, 0.085], [0.5, 0.065, 0.07], [0.8, 0.075, 0.08], [1, 0.07, 0.075]];
+    const paint = {
+        uv: [0.3, 0.3],
+        up: (t, ang, p) => shade(t, ang),
+        lo: (t, ang, p) => mix([1, 1, 1], MUD, Math.min(0.8, smooth(-0.2, -0.42, p.y) * (0.5 + 0.5 * mudAt(p)))),
+    };
     for (const [x, z, front] of [[0.27, -0.55, true], [-0.27, -0.55, true], [0.27, 0.56, false], [-0.27, 0.56, false]]) {
         const name = (front ? 'front' : 'hind') + (x > 0 ? 'Right' : 'Left') + 'Leg';
-        if (front) leg(g, legs, name, x, 0.95, z, true, 'cowF', [0, 0.47, fUp], [0, 0.48, low], [0.085, 0.09, 0x2a2420], skin);
-        else leg(g, legs, name, x, 0.95, z, false, 'cowH', [0.1, 0.47, hUp], [-0.08, 0.48, low], [0.085, 0.09, 0x2a2420], skin);
+        if (front) leg(g, legs, name, x, 0.95, z, true, 'cow2F', [0, 0.47, fUp], [0, 0.48, low], [0.085, 0.09, 0x2a2420], skin, skin, paint);
+        else leg(g, legs, name, x, 0.95, z, false, 'cow2H', [0.1, 0.47, hUp], [-0.08, 0.48, low], [0.085, 0.09, 0x2a2420], skin, skin, paint);
     }
-    return finish(g, { body, neck, head, tail, legs });
+    return finish(g, { body, neck, head, tail, legs, look });
+}
+
+// ----- the bronze bull (Khalkotauroi: Hephaestus's fire-breathing bulls with bronze hooves and mouths)
+const _bronze = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.85, roughness: 0.32, emissive: 0x3a1200 });
+const _eyeFire = new THREE.MeshBasicMaterial({ color: 0xffb030 });
+/**
+ * The bronze parts of a guardian bull (made once per bull, hidden until it changes):
+ * long bronze horns, a bronze mouth plate, burning eyes, bronze hoof caps.
+ */
+export function bronzeBull(model) {
+    const ud = model.userData;
+    if (ud.bronze) return ud.bronze;
+    const parts = [];
+    const add = (parent, m) => { parent.add(m); m.castShadow = true; m.visible = false; parts.push(m); return m; };
+    for (const s of [1, -1]) {
+        // horns: long, swept out and forward like a fighting bull's
+        const horn = add(ud.head, new THREE.Mesh(cached('bronzeHorn', () => sweep([v3(0, 0, 0), v3(0.17, 0.05, 0), v3(0.3, 0.17, -0.07), v3(0.33, 0.33, -0.17)], (t) => [0.05 * (1 - t * 0.85), 0.05 * (1 - t * 0.85), 0], { rings: 12, sides: 7 })), _bronze));
+        horn.position.set(0.1 * s, 0.13, 0.04);
+        horn.scale.x = s;
+        const eye = add(ud.head, new THREE.Mesh(ball(8, 6), _eyeFire));
+        eye.position.set(0.158 * s, 0.05, -0.1); eye.scale.set(0.034, 0.04, 0.04);
+    }
+    const mouth = add(ud.head, new THREE.Mesh(cached('bronzeMouth', () => new THREE.CylinderGeometry(0.115, 0.13, 0.16, 12, 1, true)), _bronze));
+    mouth.position.set(0, -0.01, -0.46); mouth.rotation.x = Math.PI / 2;
+    _bronze.side = THREE.DoubleSide;
+    for (const l of ud.legs) {
+        const knee = l.userData.lower;
+        const cap = add(knee, new THREE.Mesh(cone(0.098, 0.112, 0.16, 10), _bronze));
+        cap.position.set(0, -0.48 + 0.08, l.userData.front ? 0 : -0.08);
+    }
+    ud.bronze = parts;
+    return parts;
+}
+/** Show (k > 0) / hide the bronze; heat: 0…1 (the bronze and the eyes glow). */
+export function setBronze(model, k, heat = 0) {
+    const parts = model.userData.bronze;
+    if (!parts) return;
+    for (const m of parts) m.visible = k > 0.02;
+    for (const m of model.userData.head.children) if (m.name === 'horn') m.visible = k <= 0.5; // (the bronze horns grow over the old ones)
+    _bronze.emissive.setRGB(0.1 + 0.3 * heat, 0.03 + 0.07 * heat, 0);
 }
 
 // ================================================================ sheep (a ram)
@@ -844,7 +916,7 @@ function sheep() {
 /** A new model of an animal: 'cow' | 'pig' | 'sheep' | 'horse' (horse colour optional). */
 export function animalModel(type, color) {
     if (type === 'runbook') return runningBookModel(color ?? undefined); // (the rare running book)
-    if (type === 'cow') return cow();
+    if (type === 'cow') return cow(color); // (color: the look, 1…4)
     if (type === 'pig') return pig(color); // (color: the look, 1…4)
     if (type === 'sheep') return sheep();
     return horse(color);
@@ -867,4 +939,107 @@ export function animateLegs(model, walkT, k) {
         const bend = Math.max(0, sign * c) * k;
         lower.rotation.x = l.userData.front ? -bend * 1.1 : bend * 0.8;
     }
+}
+
+// ============================================================ the ram-minotaur
+/**
+ * A ram-headed minotaur (a flock's leader ram changed by magic): taller than a man (~5.8 m
+ * next to the 4.6 m hero), standing on goat-like hind legs with hooves, a heavy muscular
+ * body with a shaggy fleece mane over the shoulders and chest, long arms with big fists,
+ * a ram's head with great spiral horns and burning eyes. Feet at y=0, facing −Z, in metres.
+ *   userData.legs  [right, left] hip pivots (rotation.x swings), each with userData.knee
+ *   userData.arms  [right, left] shoulder pivots (rotation.x / z), each with userData.elbow
+ *   userData.torso the waist pivot (it leans), userData.head the head pivot
+ */
+export function minotaurModel() {
+    const g = new THREE.Group();
+    g.name = 'minotaur';
+    const skin = lamV(0x6e5c50);
+    const fur = lamV(0xe6dfcf);
+    const hoofM = lam(0x1e1a18);
+    const muscle = (t, ang) => { const v = 0.92 + 0.08 * Math.sin(ang * 2 + t * 6) * Math.sin(t * 9); return [v, v * 0.97, v * 0.95]; };
+    const curls = (t, ang) => Math.sin(t * 29 + Math.sin(ang * 3) * 1.5) * Math.sin(ang * 7 + t * 9);
+    const legs = [], arms = [];
+    // hind legs: thigh down and forward to the knee, shin back to the hock, a short pastern, the hoof
+    for (const s of [1, -1]) {
+        const hip = group(g, s > 0 ? 'mRightLeg' : 'mLeftLeg', 0.42 * s, 2.75, 0.05);
+        mesh(hip, cached('mThigh', () => sweep([v3(0, 0.15, 0), v3(0, -0.6, -0.2), v3(0, -1.2, -0.25)], keys([[0, 0.36, 0.42], [0.5, 0.3, 0.34], [1, 0.18, 0.2]]), { rings: 10, sides: 10, color: muscle })), skin);
+        const knee = group(hip, 'knee', 0, -1.2, -0.25);
+        blob(knee, skin, 0.19, 0.2, 0.2, 0, 0, 0);
+        mesh(knee, cached('mShin', () => sweep([v3(0, 0, 0), v3(0, -0.55, 0.32), v3(0, -1.0, 0.42)], keys([[0, 0.18, 0.2], [0.6, 0.12, 0.13], [1, 0.1, 0.11]]), { rings: 8, sides: 8, color: muscle })), skin);
+        mesh(knee, cached('mPastern', () => sweep([v3(0, -1.0, 0.42), v3(0, -1.45, 0.25)], keys([[0, 0.1, 0.11], [1, 0.12, 0.13]]), { rings: 4, sides: 8 })), skin);
+        mesh(knee, cone(0.15, 0.2, 0.22, 9), hoofM, 0, -1.43, 0.22);
+        hip.userData.knee = knee;
+        legs.push(hip);
+    }
+    // the body: hips → waist → a deep chest and broad shoulders (leans at the waist)
+    const torso = group(g, 'mTorso', 0, 2.65, 0.05);
+    mesh(torso, cached('mBody', () => sweep([v3(0, -0.1, 0), v3(0, 0.7, -0.05), v3(0, 1.75, 0.02)], keys([
+        [0, 0.6, 0.42, 0], [0.25, 0.52, 0.36, 0], [0.55, 0.72, 0.46, 0], [0.85, 0.9, 0.5, 0], [1, 0.62, 0.36, 0],
+    ]), { rings: 14, sides: 14, color: muscle, side: v3(1, 0, 0) })), skin);
+    // a fur loincloth of fleece round the hips, and the fleece mane over the shoulders and chest
+    mesh(torso, cached('mLoin', () => sweep([v3(0, 0.1, 0), v3(0, -0.45, 0)], (t) => [0.64 + t * 0.06, 0.46 + t * 0.06, 0], { rings: 5, sides: 16, bump: (t, a) => 1 + 0.07 * curls(t, a), color: (t, a) => { const v = 0.86 + 0.12 * curls(t, a); return [v, v * 0.98, v * 0.94]; } })), fur);
+    mesh(torso, cached('mMane', () => sweep([v3(0, 1.05, 0.05), v3(0, 1.45, 0.02), v3(0, 1.9, 0.0)], keys([[0, 0.7, 0.45, 0], [0.5, 0.98, 0.56, 0], [1, 0.5, 0.42, 0]]), { rings: 10, sides: 18, bump: (t, a) => 1 + 0.08 * curls(t, a), color: (t, a) => { const v = 0.86 + 0.12 * curls(t, a); return [v, v * 0.98, v * 0.94]; } })), fur);
+    // arms: shoulder → elbow → a big fist
+    for (const s of [1, -1]) {
+        const sh = group(torso, s > 0 ? 'mRightArm' : 'mLeftArm', 0.98 * s, 1.55, 0.02);
+        sh.rotation.z = 0.12 * s;
+        mesh(sh, cached('mUpperArm', () => sweep([v3(0, 0.1, 0), v3(0, -0.5, 0.02), v3(0, -1.0, 0)], keys([[0, 0.3, 0.3], [0.45, 0.26, 0.24], [1, 0.17, 0.17]]), { rings: 8, sides: 10, color: muscle })), skin);
+        const el = group(sh, 'elbow', 0, -1.0, 0);
+        mesh(el, cached('mForearm', () => sweep([v3(0, 0, 0), v3(0, -0.5, -0.04), v3(0, -0.92, -0.02)], keys([[0, 0.19, 0.19], [0.35, 0.21, 0.19], [1, 0.13, 0.13]]), { rings: 8, sides: 10, color: muscle })), skin);
+        blob(el, skin, 0.2, 0.22, 0.2, 0, -1.08, -0.02); // the fist
+        sh.userData.elbow = el;
+        arms.push(sh);
+    }
+    // the ram's head on a thick neck: a long woolly face, curled spiral horns, burning eyes
+    const head = group(torso, 'mHead', 0, 1.85, -0.05);
+    mesh(head, cached('mNeck', () => sweep([v3(0, -0.3, 0.05), v3(0, 0.2, -0.05)], keys([[0, 0.38, 0.36], [1, 0.27, 0.27]]), { rings: 4, sides: 10, color: muscle })), skin);
+    const face = group(head, 'mFace', 0, 0.35, -0.1);
+    face.rotation.x = -0.35;
+    mesh(face, cached('mSkull', () => sweep([v3(0, 0.05, 0.25), v3(0, 0, -0.3), v3(0, -0.1, -0.9)], keys([
+        [0, 0.36, 0.38, 0], [0.3, 0.38, 0.4, 0], [0.75, 0.24, 0.27, 0], [1, 0.18, 0.17, -0.02],
+    ]), { rings: 12, sides: 12, color: (t) => { const v = 0.85 - 0.25 * t; return [v * 0.55, v * 0.5, v * 0.48]; } })), lamV(0x8a7a6e));
+    blob(face, fur, 0.42, 0.24, 0.4, 0, 0.3, 0.05); // the woolly crown
+    for (const s of [1, -1]) {
+        blob(face, new THREE.MeshBasicMaterial({ color: 0xffb040 }), 0.07, 0.06, 0.06, 0.3 * s, 0.12, -0.25, false); // burning eyes
+        blob(face, lam(0x1a1212), 0.05, 0.06, 0.03, 0.09 * s, -0.12, -0.92, false); // nostrils
+        // the spiral horns: round and round beside the head, ridged
+        const horn = mesh(face, cached('mHorn', () => {
+            const pts = [];
+            for (let i = 0; i <= 26; i++) {
+                const a = i / 26 * Math.PI * 2.4, r = 0.62 * (1 - i / 40);
+                pts.push(v3(0.06 + i * 0.022, Math.sin(a) * r, -Math.cos(a) * r + 0.62));
+            }
+            return sweep(pts, (t) => [0.2 * (1 - t * 0.78), 0.2 * (1 - t * 0.78), 0], { rings: 30, sides: 9, bump: (t, a) => 1 + 0.06 * Math.sin(t * 90), color: (t) => { const v = 0.75 + 0.2 * Math.sin(t * 90); return [v, v * 0.93, v * 0.8]; } });
+        }), lamV(0x8c7a5c), 0.3 * s, 0.25, 0.05);
+        horn.scale.x = s;
+        horn.rotation.x = 0.25;
+        const ear = blob(face, skin, 0.22, 0.07, 0.1, 0.42 * s, 0.05, 0.08);
+        ear.rotation.z = 0.4 * s;
+    }
+    g.userData.legs = legs; g.userData.arms = arms; g.userData.torso = torso; g.userData.head = head;
+    return g;
+}
+
+/**
+ * Moves the minotaur: walking (o.walkT, o.moving 0…1), o.act — 4 a fist blow, 5 a butt,
+ * 6 a roar; o.t: the time (s).
+ */
+export function animateMinotaur(m, o) {
+    const ud = m.userData, s = Math.sin(o.walkT), k = o.moving;
+    ud.legs.forEach((l, i) => {
+        const sg = i ? -1 : 1;
+        l.rotation.x = sg * s * 0.55 * k;
+        l.userData.knee.rotation.x = Math.max(0, -sg * Math.cos(o.walkT)) * 0.6 * k;
+    });
+    let lean = 0.08 * k, headP = 0, rArm = -s * 0.45 * k, lArm = s * 0.45 * k, rEl = -0.35, lEl = -0.35;
+    const beat = (o.t * 2.2) % 1;
+    if (o.act === 4) { rArm = beat < 0.4 ? -2.4 * (beat / 0.4) : -2.4 + 3.4 * Math.min(1, (beat - 0.4) / 0.25); rEl = -0.9 * (1 - Math.min(1, (beat - 0.4) / 0.25)); }
+    if (o.act === 5) { lean = 0.55; headP = 0.6; rArm = -0.6; lArm = -0.6; }
+    if (o.act === 6 || o.roar) { headP = -0.5; rArm = -1.4; lArm = -1.4; rEl = -0.8; lEl = -0.8; lean = -0.15; }
+    const L = (a, b) => a + (b - a) * 0.25;
+    ud.torso.rotation.x = L(ud.torso.rotation.x, -lean);
+    ud.head.rotation.x = L(ud.head.rotation.x, -headP);
+    ud.arms[0].rotation.x = L(ud.arms[0].rotation.x, rArm); ud.arms[0].userData.elbow.rotation.x = L(ud.arms[0].userData.elbow.rotation.x, rEl);
+    ud.arms[1].rotation.x = L(ud.arms[1].rotation.x, lArm); ud.arms[1].userData.elbow.rotation.x = L(ud.arms[1].userData.elbow.rotation.x, lEl);
 }
