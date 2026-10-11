@@ -623,7 +623,7 @@ export class Duel {
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
-            hit(999, { pierce: true }); // (no armour stops it)
+            hit(25, { pierce: true }); // (not a killing curse: −25 HP at once, no armour stops it)
         } else if (spell === 'Stupefy') {
             c.stunT = DUEL.STUN_TIME;
         } else if (spell === 'IceDuel') {
@@ -654,8 +654,9 @@ export class Duel {
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 6, 0.6, 30);
             g.hud.flashColor?.('rgba(40, 255, 90, 0.75)');
-            if (c.enabled) c.die(byId, 'avada');
-            else g.hud.setVoice('💚 Авада Кедавра попала в вас (вне «Выживания» не смертельно)', true);
+            // (not a killing curse: −25 HP at once)
+            if (c.enabled) c.damage(25, byId, 'AvadaKedavra');
+            else g.hud.setVoice('💚 Авада Кедавра попала в вас: −25 HP (здесь не ранит)', true);
         } else if (spell === 'Stupefy') {
             c.stun(DUEL.STUN_TIME, byId);
         } else if (spell === 'IceDuel') {
@@ -679,7 +680,7 @@ export class Duel {
         this._burst(p, DUEL_SPELLS[spell].color, 30);
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
-            g.damageZombie(z, 999, false, _v2.set(0, 0, 1), byId);
+            g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
         } else if (spell === 'Stupefy') {
             z.stunTimer = DUEL.STUN_TIME;
         } else if (spell === 'IceDuel') {

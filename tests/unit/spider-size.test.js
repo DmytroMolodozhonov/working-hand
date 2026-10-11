@@ -71,7 +71,7 @@ test('weapons and spells touch the big body: Bombardo at its flank, a beam throu
     assert.equal(s.hp, 180, 'a beam above it misses');
     // a duel charge touching its side
     assert.ok(S.boltAt(V(3.3, 5.2, 1), 'AvadaKedavra'));
-    assert.equal(s.hp, 160, 'Avada only 20');
+    assert.equal(s.hp, 155, 'Avada only 25');
     assert.equal(S.boltAt(V(8, 5.2, 1), 'AvadaKedavra'), false);
 });
 

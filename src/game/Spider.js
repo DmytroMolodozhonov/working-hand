@@ -167,7 +167,7 @@ export class Spiders {
     hit(s, dmg, kind = null, by = undefined) {
         if (!s || s.dead) return;
         if (kind === 'Ice' || kind === 'Frozen' || kind === 'Wind') return; // it doesn't care
-        if (kind === 'AvadaKedavra') dmg = 20;
+        if (kind === 'AvadaKedavra') dmg = 25;
         if (!this.auth) { this.game.sync?.bossHit?.(s.id, dmg, kind); return; }
         s.lastBy = by === undefined ? this.game.localId : by; // (who struck: the killer gets +20 mana)
         s.hp = Math.max(0, s.hp - dmg);
@@ -208,7 +208,7 @@ export class Spiders {
     }
 
     /** A duel charge touched this spider's body. */
-    boltHit(s, spell, by = undefined) { this.hit(s, spell === 'AvadaKedavra' ? 20 : spell === 'SapiraDuel' ? 10 : 4, spell, by); }
+    boltHit(s, spell, by = undefined) { this.hit(s, spell === 'AvadaKedavra' ? 25 : spell === 'SapiraDuel' ? 10 : 4, spell, by); }
 
     byId(id) { return this.list.find((s) => s.id === id && !s.dead) || null; }
 
