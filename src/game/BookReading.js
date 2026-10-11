@@ -60,6 +60,9 @@ function distToSegment(p, a, b) {
     return Math.hypot(a.x + ab.x * t - p.x, a.y + ab.y * t - p.y, a.z + ab.z * t - p.z);
 }
 
+/** A spell's name for a book's pages («Флайн» is in the swift book-bird's book only). */
+export const bookSpellName = (sp) => (sp === 'Flight' ? 'Флайн' : BUILD_SPELLS[sp]?.name || sp);
+
 // ------------------------------------------------------------ page art
 function canvasPage(draw) {
     const c = document.createElement('canvas');
@@ -88,7 +91,7 @@ export function drawTitlePage(side, spells) {
             x.fillStyle = '#5a1a1a'; x.font = 'bold 22px serif';
             x.fillText('Содержание', 128, 60);
             x.fillStyle = '#3a2a1a'; x.font = '18px serif'; x.textAlign = 'left';
-            spells.forEach((s, i) => x.fillText(`${i + 1}. ${BUILD_SPELLS[s]?.name || s}`, 26, 110 + i * 34));
+            spells.forEach((s, i) => x.fillText(`${i + 1}. ${bookSpellName(s)}`, 26, 110 + i * 34));
         }
     });
 }
@@ -621,7 +624,10 @@ export class BookReading {
         const learned = this.books.learned;
         if (spell && s.readT > HOLD.LEARN_T && !learned.has(spell)) {
             learned.add(spell);
-            this.game.hud.toast?.(`📖 Изучено заклинание: «${BUILD_SPELLS[spell]?.name || spell}»`, 2500);
+            if (spell === 'Flight') {
+                this.books.learnFlight?.(); // (the swift book: now you can fly)
+                this.game.hud.setVoice?.('📘 Изучено заклинание «Флайн»: теперь вы умеете летать! Поднимите обе руки и скажите «Флайн»', true);
+            } else this.game.hud.toast?.(`📖 Изучено заклинание: «${bookSpellName(spell)}»`, 2500);
             this.game.fx?.lightFlash?.(s.pos, 0xffe9a8, 2, 0.3, 10);
         }
         if (!s.toldPages && s.mode === 'one' && s.phi > 2) {

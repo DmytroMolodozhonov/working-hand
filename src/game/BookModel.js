@@ -13,11 +13,14 @@ import * as THREE from 'three';
 export const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];
 export const BOOK = { W: 0.42, H: 0.6, T: 0.06, B: 0.025 }; // half width, height, pages' thickness, board
 
-export function makeSpellBookModel(color = COVERS[0]) {
+/** The swift book-bird's book («Флайн»): sky blue with silver trim. */
+export const SWIFT_COVER = 0x7fc8f0, SWIFT_TRIM = 0xd8e4ec;
+
+export function makeSpellBookModel(color = COVERS[0], trimColor = 0xd4af37) {
     const { W, H, T, B } = BOOK;
     const g = new THREE.Group();
     const cover = new THREE.MeshLambertMaterial({ color });
-    const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.35, metalness: 0.8 });
+    const gold = new THREE.MeshStandardMaterial({ color: trimColor, roughness: 0.35, metalness: 0.8 });
     const block = new THREE.MeshLambertMaterial({ color: 0xe9dcb8 });
     const paper = new THREE.MeshLambertMaterial({ color: 0xf3ead2 });
     const spine = new THREE.Mesh(new THREE.BoxGeometry(2 * (T + B), H, B), cover);

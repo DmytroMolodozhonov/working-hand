@@ -12,19 +12,44 @@
  * building magic is learned only so.
  * Every book holds up to three spells, picked at random (they repeat).
  *
+ * The swift book-bird: a sky-blue book with silver trim and a light-blue trail.
+ * It flies the same way, only twice as fast (and its wings beat faster); it is
+ * met four times more rarely than an ordinary one. Its book holds one spell
+ * only — «Флайн»: reading it is the one way to learn to fly (in «Выживание»).
+ * Its id tells it apart (≥ SWIFT_ID), so every computer knows it is the swift one.
+ *
  * Multiplayer: the host flies the birds and decides hits; everybody sees
  * them; a book is taken by whoever reaches it first (the host decides).
  */
 
 import * as THREE from 'three';
 import { isLeaves } from '../world/Terrain.js';
-import { BUILD_SPELLS } from './Builder.js';
-import { BookReading } from './BookReading.js';
+import { BookReading, bookSpellName } from './BookReading.js';
+import { SWIFT_COVER, SWIFT_TRIM } from './BookModel.js';
+
+export { bookSpellName };
 
 export const BOOK_POOL = ['Gather', 'CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'CreateBoard'];
 const BIRDS = 4;
 const SPEED = 7;
 const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];
+
+/** The swift book-bird (it teaches «Флайн»): twice as fast, four times rarer than an ordinary one. */
+export const SWIFT = {
+    SPEED: SPEED * 2,
+    CHANCE: 1 / 5, // of the birds that appear: one swift for four ordinary ones
+    COVER: SWIFT_COVER, // sky blue
+    TRIM: SWIFT_TRIM, // silver
+};
+export const SWIFT_ID = 900000000;
+/** Is this book-bird (or its book) the swift one? */
+export const isSwiftId = (id) => +id >= SWIFT_ID;
+/** The Creative pedestal's swift book (the same id on every computer). */
+export const SWIFT_PEDESTAL_ID = SWIFT_ID + 777002;
+/** A bird's speed along its path (m/s). */
+export const birdSpeed = (id) => (isSwiftId(id) ? SWIFT.SPEED : SPEED);
+/** A new bird: the swift one now and then (SWIFT.CHANCE). */
+export const rollSwift = (r = Math.random) => r() < SWIFT.CHANCE;
 
 /** How each spell is done — for the book's pages. */
 const HOW = {
@@ -34,6 +59,7 @@ const HOW = {
     CreateCeiling: { words: 'Create a Ceiling', hand: 'reach', text: 'Укажите рукой место — потолок появится на высоте трёх блоков. Тяните руку — он растёт над вами.' },
     BuildRoof: { words: 'Build a Roof', hand: 'reach', text: 'Укажите место и тяните руку: двускатная крыша растёт ступенями от краёв к коньку.' },
     CreateBoard: { words: 'Create a Board', hand: 'board', text: 'Поднимите руку, покажите на дерево и скажите заклинание — ствол станет доской для волн. Несите её двумя руками за края или под мышкой. Положите на воду и разожмите руки. Поднимите колено над доской и опустите ногу — вы на доске; другой ногой гребите. Волна подхватила — встаньте обеими ногами; наклон влево-вправо поворачивает.' },
+    Flight: { words: 'Флайн', hand: 'up', text: 'Поднимите обе руки вверх и скажите «Флайн» — вы взлетите. Рулите корпусом: наклон вперёд — вниз, назад — вверх, повороты плечами. «Паузин» — парить на месте. Приземление — направьте себя в землю. Полёт тратит ману.' },
     CreateDoor: { words: 'Create a Door', hand: 'door', text: 'Держите в руке дерево (не меньше 12). Скажите заклинание — кубик станет маленькой дверью. Отводите руку — дверь растёт; покажите, куда её поставить, и скажите «Stand».' },
 };
 
@@ -47,6 +73,7 @@ function rngFrom(seed) {
 
 /** Up to three spells, random but the same on every computer for this id. */
 export function bookSpells(id) {
+    if (isSwiftId(id)) return ['Flight']; // (the swift book: only «Флайн»)
     const r = rngFrom(id * 7919 + 17);
     const n = 1 + Math.floor(r() * 3);
     const out = [];
@@ -55,10 +82,10 @@ export function bookSpells(id) {
 }
 
 // ---------------------------------------------------------------- models
-export function makeBookModel(color) {
+export function makeBookModel(color, trimColor = 0xd4af37) {
     const g = new THREE.Group();
     const cover = new THREE.MeshLambertMaterial({ color });
-    const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 });
+    const gold = new THREE.MeshStandardMaterial({ color: trimColor, roughness: 0.3, metalness: 0.8 });
     const paper = new THREE.MeshLambertMaterial({ color: 0xf3ead2, side: THREE.DoubleSide });
     const spine = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.62), cover);
     g.add(spine);
@@ -87,6 +114,11 @@ export function makeBookModel(color) {
     return g;
 }
 
+/** The book-bird's model for this id (the swift one: sky blue with silver trim). */
+export function bookModelFor(id) {
+    return isSwiftId(id) ? makeBookModel(SWIFT.COVER, SWIFT.TRIM) : makeBookModel(COVERS[id % COVERS.length]);
+}
+
 function flap(model, t, amp) {
     const { left, right, pages } = model.userData;
     const a = 0.25 + Math.sin(t) * amp;
@@ -108,9 +140,11 @@ function drawPage(spell, side) {
         x.strokeStyle = '#3a2a1a'; x.lineWidth = 4; x.lineCap = 'round';
         x.beginPath(); x.arc(90, 110, 18, 0, Math.PI * 2); x.stroke(); // head
         x.beginPath(); x.moveTo(90, 128); x.lineTo(90, 210); x.lineTo(70, 270); x.moveTo(90, 210); x.lineTo(110, 270); x.stroke();
-        x.beginPath(); x.moveTo(90, 150); x.lineTo(60, 190); x.stroke(); // other arm down
+        if (how.hand === 'up') { x.beginPath(); x.moveTo(90, 150); x.lineTo(65, 95); x.stroke(); } // (both arms up)
+        else { x.beginPath(); x.moveTo(90, 150); x.lineTo(60, 190); x.stroke(); } // other arm down
         x.beginPath(); x.moveTo(90, 150);
-        if (how.hand === 'wall') x.lineTo(150, 115);
+        if (how.hand === 'up') x.lineTo(115, 95);
+        else if (how.hand === 'wall') x.lineTo(150, 115);
         else if (how.hand === 'door') x.lineTo(140, 160);
         else x.lineTo(150, 150);
         x.stroke();
@@ -124,6 +158,11 @@ function drawPage(spell, side) {
             x.strokeStyle = '#9b5bff'; x.beginPath(); x.moveTo(185, 196); x.lineTo(200, 214); x.stroke();
             x.fillStyle = '#b07c45'; x.beginPath(); x.ellipse(205, 250, 14, 44, 0.2, 0, Math.PI * 2); x.fill();
             x.fillStyle = '#5a3a1a'; x.fillRect(208, 288, 4, 10);
+        } else if (how.hand === 'up') {
+            // the wizard rising: little wind lines under the feet, a cloud aside
+            x.strokeStyle = '#7fc8f0'; x.lineWidth = 3;
+            for (let i = 0; i < 3; i++) { x.beginPath(); x.moveTo(72 + i * 18, 290); x.lineTo(72 + i * 18, 305); x.stroke(); }
+            x.fillStyle = '#cfe8f7'; x.beginPath(); x.arc(185, 120, 18, 0, 7); x.arc(208, 125, 14, 0, 7); x.arc(165, 128, 12, 0, 7); x.fill();
         } else if (how.hand === 'one') { x.fillStyle = '#2f8a2f'; x.fillRect(170, 150, 50, 40); x.fillStyle = '#6b3f1e'; x.fillRect(188, 190, 14, 60); }
         else { for (let i = 0; i < 4; i++) x.fillRect(140 + i * 24, 250, 22, 14); }
         // magic dots
@@ -143,7 +182,7 @@ function drawPage(spell, side) {
         }
         if (line) x.fillText(line, 20, y);
         x.fillStyle = '#7a6a4a'; x.font = 'italic 14px serif'; x.textAlign = 'center';
-        x.fillText(BUILD_SPELLS[spell]?.name || spell, 128, 336);
+        x.fillText(bookSpellName(spell), 128, 336);
     }
     const tex = new THREE.CanvasTexture(c);
     return tex;
@@ -192,14 +231,14 @@ export class BookBirds {
 
     _spawnBird(id = null, pos = null) {
         const g = this.game;
-        id = id ?? this._nextId++;
-        const model = makeBookModel(COVERS[id % COVERS.length]);
+        id = id ?? (rollSwift() ? SWIFT_ID + this._nextId++ : this._nextId++);
+        const model = bookModelFor(id);
         model.scale.setScalar(1.4);
         g.scene.add(model);
         const me = g.character.group.position;
         const at = pos || this._perchNear(me, 25, 60);
         model.position.copy(at);
-        const b = { id, model, isBird: true, support: at.support || null, state: 'perch', t: Math.random() * 3, wait: 2 + Math.random() * 5, from: at.clone(), to: at.clone(), ctrl: at.clone(), hp: 2, vy: 0, flapT: Math.random() * 6 };
+        const b = { id, model, isBird: true, swift: isSwiftId(id), support: at.support || null, state: 'perch', t: Math.random() * 3, wait: 2 + Math.random() * 5, from: at.clone(), to: at.clone(), ctrl: at.clone(), hp: 2, vy: 0, flapT: Math.random() * 6 };
         this.birds.set(id, b);
         return b;
     }
@@ -264,10 +303,11 @@ export class BookBirds {
                 b.toSupport = b.to.support || null;
                 b.ctrl.copy(b.from).lerp(b.to, 0.5);
                 b.ctrl.y = Math.max(b.from.y, b.to.y) + 5 + Math.random() * 5;
-                b.dur = b.from.distanceTo(b.to) / SPEED;
+                b.dur = b.from.distanceTo(b.to) / birdSpeed(b.id);
             }
         } else if (b.state === 'fly') {
-            b.flapT += dt * 11;
+            b.flapT += dt * (b.swift ? 22 : 11);
+            if (b.swift) this._trail(b);
             flap(m, b.flapT, 0.55);
             const k = Math.min(1, b.t / b.dur);
             const p = _v1.copy(b.from).multiplyScalar((1 - k) * (1 - k)).addScaledVector(b.ctrl, 2 * (1 - k) * k).addScaledVector(b.to, k * k);
@@ -294,6 +334,11 @@ export class BookBirds {
                 this._becomeBook(b);
             }
         }
+    }
+
+    /** The swift bird's light-blue trail behind it. */
+    _trail(b) {
+        if (Math.random() < 0.6) this.game.fx?.spark?.(b.model.position, Math.random() < 0.5 ? 0x9fd8ff : 0xe8f6ff, 0.08, _v2.set(0, 0.2, 0), 0.6);
     }
 
     /**
@@ -335,13 +380,13 @@ export class BookBirds {
         glow.position.y = -0.05;
         m.add(glow);
         this.books.set(b.id, { id: b.id, model: m, glow, t: 0, spells: bookSpells(b.id) });
-        this.game.hud.toast?.('📖 Книга упала на землю — возьмите её рукой');
+        this.game.hud.toast?.(isSwiftId(b.id) ? '📘 Быстрая книга упала на землю — возьмите её рукой: в ней «Флайн»!' : '📖 Книга упала на землю — возьмите её рукой');
     }
 
     /** A book lying somewhere (a creative pedestal): taken by hand like a fallen one. */
     placeBook(pos, id) {
         if (this.books.has(id)) return;
-        const m = makeBookModel(COVERS[id % COVERS.length]);
+        const m = bookModelFor(id);
         m.scale.setScalar(1.4);
         m.position.copy(pos);
         flap(m, 0, 0);
@@ -353,6 +398,12 @@ export class BookBirds {
         glow.position.y = -0.05;
         m.add(glow);
         this.books.set(id, { id, model: m, glow, t: 0, spells: bookSpells(id) });
+    }
+
+    /** «Флайн» read in the swift book: flying is known for good (kept with the player's bonuses). */
+    learnFlight() {
+        const g = this.game;
+        g.bonus = { ...(g.bonus || {}), flight: true };
     }
 
     // ------------------------------------------------------------ books
@@ -404,7 +455,7 @@ export class BookBirds {
     /** The book is a thing like any other now: in the fist, thrown, put into a slot, given away. */
     _toHand(id, spells, side) {
         const g = this.game;
-        g.items?._gotItem({ kind: 'book', uid: 'book' + id, id, spells }, side);
+        g.items?._gotItem({ kind: 'book', uid: 'book' + id, id, spells, ...(isSwiftId(id) ? { swift: true } : {}) }, side);
         g.hud.toast?.('📖 Книга в руке: возьмите её второй рукой за край обложки и разведите руки — она раскроется', 3000);
     }
 
@@ -480,7 +531,8 @@ export class BookBirds {
         const k = Math.min(1, dt * 6);
         b.model.position.lerp(b.net.p, k);
         b.model.rotation.y = b.net.ry;
-        b.flapT += dt * (b.net.st === 1 ? 11 : b.net.st === 3 ? 16 : 2);
+        b.flapT += dt * (b.net.st === 1 ? (b.swift ? 22 : 11) : b.net.st === 3 ? 16 : 2);
+        if (b.swift && b.net.st === 1) this._trail(b);
         flap(b.model, b.flapT, b.net.st === 1 ? 0.55 : b.net.st === 3 ? 0.7 : 0.12);
     }
 

@@ -16,7 +16,7 @@
  *   shield  — wooden / iron / magic; a magic one has its own strength 20–50
  *             that comes back by itself; strong spells break weak shields.
  *   scroll  — burn it: +1–5 max health or +1–10 max strength, for good;
- *             or it teaches «Флайн» / a scroll-only spell (Lightning Strike,
+ *             or it teaches a scroll-only spell (Lightning Strike,
  *             Thunderwave, To the Sun, Авада Кедавра — a rare one, Total Destruction —
  *             the rarest).
  *   backpack— put it on (hands behind the back): +3–5 slots.
@@ -26,7 +26,7 @@
 
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
-import { makeSpellBookModel, COVERS } from './BookModel.js';
+import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM } from './BookModel.js';
 import { crystalItemModel } from './CrystalModel.js';
 
 export const WAND_DIRS = {
@@ -223,10 +223,10 @@ export function rollKeyItem(r = Math.random) {
     if (x < 0.26) return rollWand(r);
     if (x < 0.52) {
         const y = r();
-        // (a scroll of flight teaches «Флайн» — in «Свободный мир» only so)
+        // (no scroll of flight any more: «Флайн» is learned only from the swift book-bird's book)
         // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
         //  «Авада Кедавра» too — its scroll is the rarest)
-        return y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'flight' }
+        return y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
             : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
             : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
             : y < 0.45 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
@@ -295,6 +295,10 @@ export function describeItem(it) {
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), it.spell === 'CreateBoard' ? 'Его можно выучить и из книги птицы-книги' : 'Без свитка оно есть только в Творческом режиме'] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: мана +<b>${it.amount}</b> навсегда`] };
+        case 'book':
+            if (it.runbook) return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Раскройте её двумя руками и прочитайте единственную страницу:', 'бег на <b>30%</b> быстрее, пока вы живы', 'Это не заклинание — только быстрота'] };
+            if (it.swift || it.spells?.includes('Flight')) return { title: '📘 Быстрая книга', color: SWIFT_COVER, lines: ['Раскройте и прочитайте: вы научитесь заклинанию <b>«Флайн»</b> (полёт) навсегда'] };
+            return { title: '📖 Книга заклинаний', color: 0xffe9a8, lines: ['Раскройте и прочитайте: в ней заклинания для стройки'] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
         case 'bow':
@@ -618,7 +622,7 @@ function buildItemModel(it) {
         case 'cannonball': { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 9), mat(0x2b2b2e))); return g; }
         case 'blocks': return blocksModel(it.color);
         case 'crystal': return crystalItemModel();
-        case 'book': return makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
+        case 'book': return it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
 }

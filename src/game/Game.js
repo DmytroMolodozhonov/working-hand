@@ -28,7 +28,7 @@ import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
 import { PerfLog } from '../core/PerfLog.js';
-import { BookBirds, makeBookModel } from './BookBirds.js';
+import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID } from './BookBirds.js';
 import { RunningBook } from './RunningBook.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { Quake } from './Quake.js';
@@ -422,10 +422,9 @@ export class Game {
                     const top = this.world.createPedestal(x, z);
                     this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false }); // (at the shoulder of one standing at its foot)
                 });
-                // …and a wand, scrolls (flight, the spell scrolls, health) and a book of building spells
+                // …and a wand, scrolls (the spell scrolls, health), the swift book of «Флайн» and a book of building spells
                 const magic = [
                     { kind: 'wand', uid: 'cw0', color: 0x8e5bd8, model: 4, fav: 'Inferno', power: 30, dir: 'destroy' },
-                    { kind: 'scroll', uid: 'cr0', stat: 'flight' },
                     { kind: 'scroll', uid: 'cr1', stat: 'spell', spell: 'LightningStrike' },
                     { kind: 'scroll', uid: 'cr2', stat: 'spell', spell: 'Thunderwave' },
                     { kind: 'scroll', uid: 'cr3', stat: 'hp', amount: 3 },
@@ -439,6 +438,8 @@ export class Game {
                 const bx = -12.5 + magic.length * 5, bz = -18;
                 const btop = this.world.createPedestal(bx, bz);
                 this.books?.placeBook(new THREE.Vector3(bx, btop + 1.0, bz), 777001);
+                const sx = bx + 5, stop = this.world.createPedestal(sx, bz);
+                this.books?.placeBook(new THREE.Vector3(sx, stop + 1.0, bz), SWIFT_PEDESTAL_ID); // (the swift book: «Флайн»)
                 // a chest to try things with: it opens as you come, and fills up again once you walk away
                 const cx = 12, cz = -6;
                 const chest = new Chest(this.scene, new THREE.Vector3(cx, this.collision.groundY(cx, cz), cz), 'loot', -Math.PI / 2, 'creative-test');
@@ -2482,9 +2483,9 @@ export class Game {
     }
 
     /** Start the flight spell (arms must be up). Returns true when it started. */
-    /** «Флайн» is known: everywhere but «Свободный мир», where only a scroll of flight teaches it. */
+    /** «Флайн» is known: everywhere but «Выживание», where only the swift book-bird's book teaches it (an old scroll of flight too). */
     knowsFlight() {
-        return this.config.mode !== 'freeworld' || !!this.bonus?.flight;
+        return this.config.mode !== 'freeworld' || !!this.bonus?.flight || !!this.books?.learned?.has('Flight');
     }
 
     /** Who last cast a fire / blast spell (a castle that catches fire blames them). */
@@ -2515,7 +2516,7 @@ export class Game {
         if (this.knock?.down) return false; // (get up first)
         if (this.levitation.lifted) return false; // (held up by another wizard's Leviosa)
         if (!force && !this.knowsFlight()) {
-            this.hud.setVoice('📜 В «Выживании» летать нельзя, пока не найдёте в сундуке <b>Свиток полёта</b> (и не сожжёте его «Инферно»)', true);
+            this.hud.setVoice('📘 В «Выживании» летать нельзя, пока не прочтёте <b>быструю летающую книгу</b> (голубую, с серебром): собьёте её — в ней «Флайн»', true);
             return false;
         }
         this.boards?.dropAll('fly'); // (off the board first; the board stays where it is)

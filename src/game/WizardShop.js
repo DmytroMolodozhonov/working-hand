@@ -2,7 +2,7 @@
  * WizardShop.js — what wizards keep and sell (pure, node-testable).
  *
  *  - A chest in a wizard's house: scrolls (health, strength), now and then a spell
- *    scroll, a scroll of flight, a spell book, a plain wand; else food.
+ *    scroll, a spell book, a plain wand; else food.
  *  - The scroll shop of a tower: 3 scrolls on the counter (common ones mostly);
  *    the price depends on the scroll's strength — always more than a merchant
  *    pays for it (so nobody gets rich buying here and selling at the market).
@@ -24,8 +24,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false) {
         else if (x < 0.64) {
             const y = r();
             out.push({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.45 ? 'ToTheSun' : y < 0.8 ? 'Thunderwave' : 'LightningStrike' });
-        } else if (x < 0.67) out.push({ kind: 'scroll', uid: newUid(), stat: 'flight' });
-        else if (x < 0.77) { const id = 100000 + Math.floor(r() * 1e6); out.push({ kind: 'book', uid: newUid(), id, spells: bookSpells(id) }); }
+        } else if (x < 0.77) { const id = 100000 + Math.floor(r() * 1e6); out.push({ kind: 'book', uid: newUid(), id, spells: bookSpells(id) }); }
         else if (x < 0.82) out.push({ kind: 'wand', uid: newUid(), plain: true, model: 0, color: 0x6b4426, dir: null, fav: null, power: 0 });
         else out.push({ ...pick(r, [{ kind: 'bread', count: 1 }, { kind: 'cheese', count: 1 }, { kind: 'apple', count: 1 }, { kind: 'pie', count: 1 }]), uid: newUid() });
     }
@@ -45,12 +44,12 @@ export function scrollShopPrice(it) {
     }
 }
 
-/** One scroll for the shop's counter: common 70 % (health / strength), spells 25 %, flight 5 %. */
+/** One scroll for the shop's counter: common 75 % (health / strength), spells 25 % (no flight: only the swift book-bird teaches it). */
 export function rollShopScroll(r = Math.random) {
     const x = r();
-    if (x < 0.7) return r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
-    if (x < 0.95) { const y = r(); return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.4 ? 'ToTheSun' : y < 0.75 ? 'Thunderwave' : 'LightningStrike' }; }
-    return { kind: 'scroll', uid: newUid(), stat: 'flight' };
+    if (x < 0.75) return r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+    const y = r();
+    return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.4 ? 'ToTheSun' : y < 0.75 ? 'Thunderwave' : 'LightningStrike' };
 }
 
 /** «свиток здоровья +3», «свиток «Lightning Strike»», «свиток полёта». */
