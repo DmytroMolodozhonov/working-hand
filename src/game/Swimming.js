@@ -49,7 +49,10 @@ export class Swimming {
         while (n < 24 && data.get(ix, L, iz) === BLOCK.WATER) { L++; n++; }
         if (!n) return null;
         // a layer L spans y from L-1.5 to L-0.5
-        return { surface: L - 1.5, bottom: top - 0.5, depth: n };
+        const sea = L === 1 && !!data.isSeaColumn?.(ix, iz);
+        // the sea moves: its surface rises and falls with the waves (src/world/Sea.js)
+        const wave = sea && this.game.sea ? this.game.sea.height(x, z) : 0;
+        return { surface: L - 1.5 + wave, bottom: top - 0.5, depth: n, sea, wave };
     }
 
     update(dt) {
@@ -77,7 +80,10 @@ export class Swimming {
             const bottomY = w.bottom + 0.5 + FEET - 0.05;
             const k = this.kick;
             const vy = k > 0.15 ? 2.2 * k : -1.1;
-            const y = Math.max(bottomY, Math.min(floatY, p.y + vy * dt));
+            let y = Math.max(bottomY, Math.min(floatY, p.y + vy * dt));
+            // afloat at the top of the sea: the body rises and falls with the waves
+            if (w.sea && k > 0.15 && p.y > floatY - 2) { y = Math.max(bottomY, floatY); p.y = y; }
+            this.floatY = floatY;
             ch.swimY = y;
             ch.speedScale = 0.5;
             ch.swimming = true;

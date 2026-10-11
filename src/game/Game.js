@@ -54,6 +54,7 @@ import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
+import { SeaSurface } from '../fx/SeaSurface.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
@@ -166,6 +167,7 @@ export class Game {
         // the sea (generation-2 worlds): its waves, the same on every computer (src/world/Sea.js)
         const seas = this.terrain?.data?.seas;
         this.sea = seas ? new SeaWaves(seas, () => this.seaTime(), (ix, iz) => { const h = this.terrain.data.heightAt; h(ix, iz); return !!h.sea; }) : null;
+        this.seaSurface = this.sea && !isTest ? new SeaSurface(this) : null; // the moving sea surface (drawn)
         this.hud.setTerrain(this.terrain);
 
         this.fx = new Effects(this.scene, this.collision);
@@ -1814,6 +1816,7 @@ export class Game {
         this.world.update(this.character.group.position, this._viewBoost);
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(this.character.group.position);
+        this.seaSurface?.update(dt, this.character.group.position);
         mark('мир');
         this._updateCamera(dt);
 
@@ -2383,6 +2386,7 @@ export class Game {
         this.books?.dispose();
         this.scrolls?.dispose();
         this.swim?.dispose();
+        this.seaSurface?.dispose();
         this.items?.dispose();
         this.wandMagic?.dispose();
         this.vortex?.dispose();
