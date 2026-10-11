@@ -10,7 +10,7 @@ import { CollisionWorld } from '../../src/world/Collision.js';
 import { WeaponSystem } from '../../src/game/Weapons.js';
 import { Combat } from '../../src/game/Combat.js';
 import { cutLimb, restoreAll, cutGeometry, applyState } from '../../src/entities/LimbSurgery.js';
-import { characterBody, villagerBody, zombieBody, animalBody, spiderBody, boneLines, blockerBoxes, tissueAt } from '../../src/game/CutBodies.js';
+import { characterBody, villagerBody, zombieBody, animalBody, spiderCutBody, boneLines, blockerBoxes, tissueAt } from '../../src/game/CutBodies.js';
 import {
     sweepCut, firstBlock, judgeCut, armourCovers, villagerArmoured, packSever, parseSever, stateToNet, stateFromNet,
     limbMotion, Dismemberment, EDGES, FALL_TIME,
@@ -274,22 +274,27 @@ test('a zombie, an animal and the spider have their own limbs to cut', () => {
     h.updateMatrixWorld(true);
     const hb = animalBody(h);
     assert.equal(hb.limbs.filter((l) => l.kind === 'leg').length, 4);
-    const head = hb.limbs.find((l) => l.kind === 'head');
-    assert.ok(head && head.parts.length >= 2, 'the head with its ears and eyes');
-    assert.ok(cutLimb(h, hb, 'head', 0).changed);
-    assert.ok(head.parts.every((p) => !p.visible));
+    const neck = hb.limbs.find((l) => l.name === 'neck');
+    assert.ok(neck && neck.segs[0].len > 0.5, 'the horse\'s long neck');
+    const r = cutLimb(h, hb, 'neck', neck.segs[0].len * 0.5);
+    assert.ok(r.changed && r.piece);
+    assert.equal(h.userData.head.visible, false, 'the head is off');
+    let pieceHead = false;
+    r.piece.traverse((o) => { if (o.name === 'head') pieceHead = true; });
+    assert.ok(pieceHead, 'the head lies there with half the neck');
     assert.ok(cutLimb(h, hb, 'leg2', 0.5).changed);
+    assert.ok(cutLimb(h, hb, 'leg0', 1.0).changed, 'below the knee');
     // the pig and the cow
     for (const type of ['pig', 'cow', 'sheep']) {
         const a = animalModel(type);
         const ab = animalBody(a);
-        assert.ok(ab.limbs.find((l) => l.kind === 'head'), type + ' head');
+        assert.ok(ab.limbs.find((l) => l.name === 'neck'), type + ' head');
         assert.equal(ab.limbs.filter((l) => l.kind === 'leg').length, 4, type + ' legs');
     }
     // the spider: 8 legs of two bones
     const s = spiderModel();
     s.updateMatrixWorld(true);
-    const sb = spiderBody(s);
+    const sb = spiderCutBody(s);
     assert.equal(sb.limbs.length, 8);
     assert.ok(sb.limbs.every((l) => l.segs.length === 2 && l.segs[0].len > 2));
     assert.ok(cutLimb(s, sb, 'leg1', 3.5).changed);

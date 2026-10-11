@@ -38,12 +38,31 @@ const _u = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
 // ============================================================ geometry
+/** Which vertices share an edge (cached per geometry; shapes are shared, so is this). */
+const _adj = new WeakMap();
+function adjacency(geo) {
+    let A = _adj.get(geo);
+    if (A) return A;
+    const n = geo.attributes.position.count;
+    const sets = Array.from({ length: n }, () => new Set());
+    const idx = geo.index ? geo.index.array : null;
+    const tri = idx ? idx.length : n;
+    for (let t = 0; t + 2 < tri; t += 3) {
+        const a = idx ? idx[t] : t, b = idx ? idx[t + 1] : t + 1, c = idx ? idx[t + 2] : t + 2;
+        sets[a].add(b); sets[a].add(c); sets[b].add(a); sets[b].add(c); sets[c].add(a); sets[c].add(b);
+    }
+    A = sets.map((x) => Int32Array.from(x));
+    _adj.set(geo, A);
+    return A;
+}
+
 /**
  * The part of a geometry on one side of a plane (P, N: N points to the far end of the limb).
  * keepFar=false keeps the near part (the stump), true the far part (the piece).
- * Box faces come in fours: a corner beyond the plane slides along its edge to the plane (its uv
- * and colour with it), so a trimmed box keeps its texture unstretched.
- * @returns {THREE.BufferGeometry|null|false}  the same geometry when it is all kept, null when all is cut away
+ * A corner beyond the plane slides along its edge to the kept corner it is joined to (the one
+ * straight along the limb), its uv and colour with it — a trimmed box keeps its texture
+ * unstretched, a round shape keeps its outline; corners with no kept neighbour lie flat on the plane.
+ * @returns {THREE.BufferGeometry|null}  the same geometry when it is all kept, null when all is cut away
  */
 export function cutGeometry(geo, P, N, keepFar = false) {
     const pos = geo.attributes.position;
@@ -58,35 +77,32 @@ export function cutGeometry(geo, P, N, keepFar = false) {
     }
     if (!any) return geo;
     if (all) return null;
+    const adj = adjacency(geo);
     const g = geo.clone();
     g.userData = { cut: true };
     const O = g.attributes.position.array;
     const uvA = geo.attributes.uv?.array, uvO = g.attributes.uv?.array;
     const cA = geo.attributes.color?.array, cO = g.attributes.color?.array;
-    const quads = n % 4 === 0;
-    const F = quads ? 4 : 1;
-    for (let f = 0; f < n; f += F) {
-        for (let i = f; i < f + F; i++) {
-            if (s[i] <= 1e-5) continue;
-            // its partner: the kept corner of the same face nearest across the bone
-            let best = -1, bd = Infinity;
-            for (let j = f; j < f + F; j++) {
-                if (s[j] > 1e-5) continue;
-                const dx = A[i * 3] - A[j * 3], dy = A[i * 3 + 1] - A[j * 3 + 1], dz = A[i * 3 + 2] - A[j * 3 + 2];
-                const along = dx * N.x + dy * N.y + dz * N.z;
-                const d2 = dx * dx + dy * dy + dz * dz - along * along;
-                if (d2 < bd) { bd = d2; best = j; }
-            }
-            if (best >= 0) {
-                const t = -s[best] / (s[i] - s[best]);
-                for (let k = 0; k < 3; k++) O[i * 3 + k] = A[best * 3 + k] + (A[i * 3 + k] - A[best * 3 + k]) * t;
-                if (uvO) for (let k = 0; k < 2; k++) uvO[i * 2 + k] = uvA[best * 2 + k] + (uvA[i * 2 + k] - uvA[best * 2 + k]) * t;
-                if (cO) for (let k = 0; k < 3; k++) cO[i * 3 + k] = cA[best * 3 + k] + (cA[i * 3 + k] - cA[best * 3 + k]) * t;
-            } else {
-                // the whole face is beyond: flat on the plane
-                const k = s[i] * sg;
-                O[i * 3] = A[i * 3] - N.x * k; O[i * 3 + 1] = A[i * 3 + 1] - N.y * k; O[i * 3 + 2] = A[i * 3 + 2] - N.z * k;
-            }
+    for (let i = 0; i < n; i++) {
+        if (s[i] <= 1e-5) continue;
+        // its partner: the kept corner joined to it, nearest across the limb
+        let best = -1, bd = Infinity;
+        for (const j of adj[i]) {
+            if (s[j] > 1e-5) continue;
+            const dx = A[i * 3] - A[j * 3], dy = A[i * 3 + 1] - A[j * 3 + 1], dz = A[i * 3 + 2] - A[j * 3 + 2];
+            const along = dx * N.x + dy * N.y + dz * N.z;
+            const d2 = dx * dx + dy * dy + dz * dz - along * along;
+            if (d2 < bd) { bd = d2; best = j; }
+        }
+        if (best >= 0) {
+            const t = -s[best] / (s[i] - s[best]);
+            for (let k = 0; k < 3; k++) O[i * 3 + k] = A[best * 3 + k] + (A[i * 3 + k] - A[best * 3 + k]) * t;
+            if (uvO) for (let k = 0; k < 2; k++) uvO[i * 2 + k] = uvA[best * 2 + k] + (uvA[i * 2 + k] - uvA[best * 2 + k]) * t;
+            if (cO) for (let k = 0; k < 3; k++) cO[i * 3 + k] = cA[best * 3 + k] + (cA[i * 3 + k] - cA[best * 3 + k]) * t;
+        } else {
+            // nothing kept next to it: flat on the plane
+            const k = s[i] * sg;
+            O[i * 3] = A[i * 3] - N.x * k; O[i * 3 + 1] = A[i * 3 + 1] - N.y * k; O[i * 3 + 2] = A[i * 3 + 2] - N.z * k;
         }
     }
     g.attributes.position.needsUpdate = true;

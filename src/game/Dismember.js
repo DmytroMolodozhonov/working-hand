@@ -30,7 +30,7 @@
 
 import * as THREE from 'three';
 import { cutLimb, restoreAll, applyState, anyLost, stumpEnd, segmentAt, limbLength, segObjs } from '../entities/LimbSurgery.js';
-import { characterBody, villagerBody, zombieBody, animalBody, spiderBody, boneLines, blockerBoxes, tissueAt } from './CutBodies.js';
+import { characterBody, villagerBody, zombieBody, animalBody, spiderCutBody, boneLines, blockerBoxes, tissueAt } from './CutBodies.js';
 import { SeveredPart } from './SeveredPart.js';
 
 // ============================================================ numbers
@@ -50,7 +50,9 @@ export const MOVE = { oneLeg: 0.4, noLegs: 0.2 };
 export const MAX_PROPS = 24;
 export const MAX_REACH = 9; // m: the attacker must be this near the victim
 export const SEVER_COOLDOWN = 0.3;
-export const LIMB_RU = { leftArm: 'левую руку', rightArm: 'правую руку', leftLeg: 'левую ногу', rightLeg: 'правую ногу', head: 'голову' };
+export const LIMB_RU = { leftArm: 'левую руку', rightArm: 'правую руку', leftLeg: 'левую ногу', rightLeg: 'правую ногу', head: 'голову', neck: 'голову' };
+/** The head (a person's neck cut) or an animal's neck: either way the head is off. */
+export const isHead = (limb) => limb === 'head' || limb === 'neck';
 
 // ============================================================ vectors (arrays)
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -171,9 +173,9 @@ export function armourCovers(look, limb, d) {
 export function villagerArmoured(v) { return (v.role === 'knight' || v.role === 'king') && v.armor > 0; }
 
 // ------------------------------------------------------------ network packing
-const CODES = ['head', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'];
+const CODES = ['head', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg', 'neck'];
 export function limbCode(name) { const i = CODES.indexOf(name); if (i >= 0) return i; const m = /^(leg|branch)(\d+)$/.exec(name); return m ? (m[1] === 'leg' ? 10 : 30) + (+m[2]) : -1; }
-export function limbName(code) { if (code >= 0 && code < 5) return CODES[code]; if (code >= 10 && code < 30) return 'leg' + (code - 10); if (code >= 30 && code < 50) return 'branch' + (code - 30); return null; }
+export function limbName(code) { if (code >= 0 && code < CODES.length) return CODES[code]; if (code >= 10 && code < 30) return 'leg' + (code - 10); if (code >= 30 && code < 50) return 'branch' + (code - 30); return null; }
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
 
@@ -225,7 +227,7 @@ export function limbMotion(st, legNames = ['leftLeg', 'rightLeg'], full = 1.95) 
 }
 
 export function bleedRate(limb, tissue) {
-    if (limb === 'head') return 0;
+    if (isHead(limb)) return 0;
     if (tissue === 'hand') return BLEED.hand;
     if (/Arm$|^branch/.test(limb)) return BLEED.arm;
     return BLEED.leg;
@@ -270,7 +272,7 @@ export class Dismemberment {
         if (t.isPlayer) { const r = this.game.remotes?.get(t.id); return r ? { k: 'p', id: t.id, t, body: characterBody(r.character), r } : null; }
         if (t.isVillager) return t.model ? { k: 'v', id: t.id, t, body: villagerBody(t.model) } : null;
         if (t.isAnimal) return { k: 'a', id: t.id, t, body: animalBody(t.model) };
-        if (t.isBoss) return { k: 's', id: t.id, t, body: spiderBody(t.model) };
+        if (t.isBoss) return { k: 's', id: t.id, t, body: spiderCutBody(t.model) };
         if (t.head && t.leftArm && t.leftLeg && t.limbMask != null) return { k: 'z', id: t.id, t, body: zombieBody(t) };
         return null;
     }
@@ -281,7 +283,7 @@ export class Dismemberment {
         if (k === 'p') { const r = g.remotes?.get(id); return r ? { k, id, t: r, body: characterBody(r.character), r } : null; }
         if (k === 'v') { const v = g.castleLife?.byId.get(id); return v ? { k, id, t: v, body: villagerBody(v.model) } : null; }
         if (k === 'a') { const a = g.animals?.byId.get(id); return a ? { k, id, t: a, body: animalBody(a.model) } : null; }
-        if (k === 's') { const s = g.spiders?.list.find((x) => x.id === id); return s ? { k, id, t: s, body: spiderBody(s.model) } : null; }
+        if (k === 's') { const s = g.spiders?.list.find((x) => x.id === id); return s ? { k, id, t: s, body: spiderCutBody(s.model) } : null; }
         if (k === 'z') { const z = g.zombieById?.get(id); return z ? { k, id, t: z, body: zombieBody(z) } : null; }
         const def = this.kinds.get(k);
         if (def) { const t = def.find(id); return t ? { k, id, t, body: def.body(t) } : null; }
@@ -387,7 +389,7 @@ export class Dismemberment {
     /** What a cut does to a creature (host). */
     _consequences(who, sv, by) {
         const g = this.game, t = who.t;
-        const head = sv.limb === 'head';
+        const head = isHead(sv.limb);
         const rate = bleedRate(sv.limb, sv.tissue);
         if (who.k === 'v') {
             const m = t.model;
@@ -591,7 +593,7 @@ export class Dismemberment {
             if (!r.changed) return;
             if (r.piece) this._spawnPiece(r.piece, sv);
             this._mirror(who, sv);
-            if (m.att === g.localId) g.hud?.setVoice?.(`🗡️ Вы отрубили ${LIMB_RU[sv.limb] || (sv.limb === 'head' ? 'голову' : 'часть тела')}${who.r ? ' — ' + who.r.name : ''}`, true);
+            if (m.att === g.localId) g.hud?.setVoice?.(`🗡️ Вы отрубили ${LIMB_RU[sv.limb] || (/^leg/.test(sv.limb) ? 'ногу' : 'часть тела')}${who.r ? ' — ' + who.r.name : ''}`, true);
             return;
         }
         if (m.t === 'dmst') {
@@ -713,7 +715,7 @@ export class Dismemberment {
         vel.y += 2.5;
         if (this.props.length >= MAX_PROPS) this.props.shift().dispose();
         const spin = new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
-        this.props.push(new SeveredPart(this.game, piece, { vel, spin, blood: sv.limb === 'head' ? 40 : 25 }));
+        this.props.push(new SeveredPart(this.game, piece, { vel, spin, blood: isHead(sv.limb) ? 40 : 25 }));
     }
 
     dispose() {

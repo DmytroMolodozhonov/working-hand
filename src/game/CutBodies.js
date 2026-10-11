@@ -119,53 +119,80 @@ export function zombieBody(z) {
 }
 
 /**
- * An animal (Animals.animalModel). Uses named parts when the model has them
- * (userData.legs, userData.head, userData.body, userData.neck) — otherwise the head
- * is everything in front of the body.
+ * An animal (AnimalModels.js): legs of two bones (hip/shoulder → knee/hock → hoof), the neck
+ * to the head (cut anywhere along the neck: the head falls with what is beyond) — from the
+ * model's named parts (userData.legs / neck / head / body).
  */
 export function animalBody(model) {
     if (model._cutBody) return model._cutBody;
     const ud = model.userData || {};
-    const meshes = model.children.filter((o) => o.isMesh);
-    const body = ud.body || meshes[0];
-    if (body && !body.geometry.boundingBox) body.geometry.computeBoundingBox();
-    const bb = body ? body.geometry.boundingBox.clone().translate(body.position) : new THREE.Box3(new THREE.Vector3(-0.4, 0.6, -0.6), new THREE.Vector3(0.4, 1.4, 0.6));
+    const body = ud.body || model.children.find((o) => o.isMesh);
+    model.updateMatrixWorld(true);
     const limbs = [];
-    // legs: a pivot at the hip, the leg hanging down along −Y
+    const deepest = (obj) => {
+        // the lowest point of a pivot's subtree, in its own frame (the hoof)
+        const inv = new THREE.Matrix4().copy(obj.matrixWorld).invert();
+        const box = new THREE.Box3();
+        obj.traverse((o) => {
+            if (!o.isMesh) return;
+            if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+            box.union(o.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)));
+        });
+        return box.isEmpty() ? new THREE.Vector3(0, -0.5, 0) : new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
+    };
     (ud.legs || []).forEach((pivot, i) => {
-        const leg = pivot.children.find((o) => o.isMesh);
-        let len = 0.6;
-        if (leg) {
-            if (!leg.geometry.boundingBox) leg.geometry.computeBoundingBox();
-            len = Math.max(0.1, -(leg.position.y + leg.geometry.boundingBox.min.y));
-        }
-        const front = pivot.position.z < (bb.min.z + bb.max.z) / 2;
-        const left = pivot.position.x < 0;
-        limbs.push({ name: 'leg' + i, kind: 'leg', side: left ? 'left' : 'right', front, segs: [{ obj: pivot, o: [0, 0, 0], ax: [0, -1, 0], len, part: 'leg' }] });
-    });
-    // the head: named, or every part in front of the body
-    let parts = ud.head ? (Array.isArray(ud.head) ? ud.head : [ud.head]) : meshes.filter((o) => o !== body && o !== ud.saddle && o.position.z < bb.min.z - 0.02);
-    if (parts.length) {
-        const c = new THREE.Vector3();
-        if (ud.neck) {
-            limbs.unshift({ name: 'head', kind: 'head', line: { obj: model, a: ud.neck.a, b: ud.neck.b, w: ud.neck.w || 0.4, h: ud.neck.h || 0.4 }, parts });
+        const knee = pivot.userData.lower;
+        const front = pivot.userData.front ?? (i < 2);
+        const side = pivot.position.x < 0 ? 'left' : 'right';
+        if (knee) {
+            const kp = knee.position.clone();
+            const end = deepest(knee);
+            limbs.push({
+                name: 'leg' + i, kind: 'leg', side, front, segs: [
+                    { obj: pivot, o: [0, 0, 0], ax: kp.clone().normalize().toArray(), len: kp.length(), part: 'leg' },
+                    { obj: knee, o: [0, 0, 0], ax: end.clone().normalize().toArray(), len: end.length(), part: 'leg' },
+                ],
+            });
         } else {
-            for (const p of parts) c.add(p.position);
-            c.multiplyScalar(1 / parts.length);
-            const a = [0, Math.min(c.y, bb.max.y - 0.05), bb.min.z + 0.12];
-            const b = [0, c.y, c.z];
-            const bv = new THREE.Vector3().fromArray(a).lerp(new THREE.Vector3().fromArray(b), 0.7);
-            limbs.unshift({ name: 'head', kind: 'head', line: { obj: model, a, b: bv.toArray(), w: 0.45, h: 0.45 }, parts });
+            const end = deepest(pivot);
+            limbs.push({ name: 'leg' + i, kind: 'leg', side, front, segs: [{ obj: pivot, o: [0, 0, 0], ax: end.clone().normalize().toArray(), len: end.length(), part: 'leg' }] });
         }
+    });
+    // the neck: from where it leaves the body to the head; the head goes whole
+    const head = ud.head, neck = ud.neck;
+    if (head && neck && head.parent === neck && body) {
+        if (!body.geometry.boundingBox) body.geometry.computeBoundingBox();
+        const toNeck = new THREE.Matrix4().copy(neck.matrixWorld).invert().multiply(body.matrixWorld);
+        const bb = body.geometry.boundingBox.clone().applyMatrix4(toNeck);
+        const H = head.position.clone();
+        const C = bb.getCenter(new THREE.Vector3());
+        const dir = C.clone().sub(H).normalize();
+        // where the line head → body centre enters the body box
+        const ray = new THREE.Ray(H, dir);
+        const enter = ray.intersectBox(bb, new THREE.Vector3());
+        let o = enter && enter.distanceTo(H) > 0.15 ? enter : H.clone().addScaledVector(dir, 0.18);
+        o = o.clone().addScaledVector(dir, 0.05); // (a little inside the body: a chop right at the shoulders counts)
+        const ax = H.clone().sub(o);
+        const L = ax.length();
+        limbs.unshift({
+            name: 'neck', kind: 'neck', segs: [
+                { obj: neck, o: o.toArray(), ax: ax.normalize().toArray(), len: L, part: 'neck' },
+                { obj: head, o: [0, 0, 0], ax: ax.toArray(), len: 0.01, whole: true, part: 'neck', capW: 0.25 },
+            ],
+        });
     }
     const blockers = [];
-    if (body) blockers.push({ obj: body, c: [0, 0, 0], half: new THREE.Vector3().subVectors(body.geometry.boundingBox.max, body.geometry.boundingBox.min).multiplyScalar(0.46).toArray() });
+    if (body) {
+        if (!body.geometry.boundingBox) body.geometry.computeBoundingBox();
+        const bb = body.geometry.boundingBox;
+        blockers.push({ obj: body, c: bb.getCenter(new THREE.Vector3()).toArray(), half: new THREE.Vector3().subVectors(bb.max, bb.min).multiplyScalar(0.42).toArray() });
+    }
     model._cutBody = { root: model, kind: 'animal', limbs, blockers };
     return model._cutBody;
 }
 
 /** The giant spider: eight legs (hip → knee → foot). */
-export function spiderBody(model) {
+export function spiderCutBody(model) {
     if (model._cutBody) return model._cutBody;
     const limbs = [];
     (model.userData.legs || []).forEach((hip, i) => {
@@ -244,7 +271,7 @@ export function blockerBoxes(body, st = body.root.limbs || {}) {
 
 /** Which tissue a cut at d goes through (how hard it is to cut, how fast it bleeds). */
 export function tissueAt(body, limbName, d) {
-    if (limbName === 'head') return 'neck';
+    if (limbName === 'head' || limbName === 'neck') return 'neck';
     const limb = body.limbs.find((l) => l.name === limbName);
     if (!limb) return 'arm';
     let cum = 0;
