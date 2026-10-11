@@ -39,11 +39,18 @@ test('the swift book-bird: twice as fast, four times rarer, its book holds only 
     for (let id = 1; id < 3000; id++) assert.ok(!bookSpells(id).includes('Flight'), 'ordinary books never teach flight');
 });
 
-test('reading the swift book teaches flight for good (kept in the bonus the save keeps)', () => {
-    const g = { bonus: { hp: 2 } };
-    BookBirds.prototype.learnFlight.call({ game: g });
-    assert.deepEqual(g.bonus, { hp: 2, flight: true });
-    assert.match(describeItem({ kind: 'book', id: SWIFT_PEDESTAL_ID, spells: ['Flight'], swift: true }).lines.join(' '), /Флайн/);
+test('burning the swift book teaches flight for good; burning an ordinary book teaches its spells', () => {
+    const voices = [];
+    const g = { bonus: { hp: 2 }, hud: { setVoice: (t) => voices.push(t), toast: () => {} } };
+    const B = { game: g, learned: new Set(), learnFlight: BookBirds.prototype.learnFlight };
+    const swiftBook = { kind: 'book', id: SWIFT_PEDESTAL_ID, spells: ['Flight'], swift: true };
+    assert.deepEqual(BookBirds.prototype.learnBurnt.call(B, swiftBook), ['Flight']);
+    assert.deepEqual(g.bonus, { hp: 2, flight: true }, 'kept in the bonus the save keeps');
+    assert.ok(B.learned.has('Flight'));
+    assert.match(voices.at(-1), /летать/);
+    assert.deepEqual(BookBirds.prototype.learnBurnt.call(B, { kind: 'book', id: 5, spells: ['CreateWall', 'Gather'] }), ['CreateWall', 'Gather']);
+    assert.deepEqual(BookBirds.prototype.learnBurnt.call(B, { kind: 'book', id: 2, spells: [], runbook: true }), [], 'the running book teaches nothing');
+    assert.match(describeItem(swiftBook).lines.join(' '), /Флайн/);
 });
 
 test('the running book gives only +30% run speed: no flight, no spells', () => {

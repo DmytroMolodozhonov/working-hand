@@ -15,7 +15,7 @@
  * The swift book-bird: a sky-blue book with silver trim and a light-blue trail.
  * It flies the same way, only twice as fast (and its wings beat faster); it is
  * met four times more rarely than an ordinary one. Its book holds one spell
- * only — «Флайн»: reading it is the one way to learn to fly (in «Выживание»).
+ * only — «Флайн»: burning it (not reading) is the one way to learn to fly (in «Выживание»).
  * Its id tells it apart (≥ SWIFT_ID), so every computer knows it is the swift one.
  *
  * Multiplayer: the host flies the birds and decides hits; everybody sees
@@ -400,10 +400,42 @@ export class BookBirds {
         this.books.set(id, { id, model: m, glow, t: 0, spells: bookSpells(id) });
     }
 
-    /** «Флайн» read in the swift book: flying is known for good (kept with the player's bonuses). */
+    /** «Флайн» from the burnt swift book: flying is known for good (kept with the player's bonuses). */
     learnFlight() {
         const g = this.game;
         g.bonus = { ...(g.bonus || {}), flight: true };
+        this.learned.add('Flight');
+    }
+
+    /**
+     * A spell book I burnt (my «Инферно», my hand in a fire): its spells are mine — like a burnt
+     * scroll. The swift book's «Флайн» is learned only so (reading it only shows the spell).
+     * @returns {string[]} the spells newly learned
+     */
+    learnBurnt(item) {
+        const g = this.game;
+        if (!item || item.kind !== 'book' || item.runbook) return [];
+        const spells = Array.isArray(item.spells) ? item.spells : bookSpells(item.id);
+        const fresh = spells.filter((sp) => (sp === 'Flight' ? !g.bonus?.flight : !this.learned.has(sp)));
+        for (const sp of fresh) { if (sp === 'Flight') this.learnFlight(); else this.learned.add(sp); }
+        if (spells.includes('Flight')) g.hud?.setVoice?.('📘🔥 Быстрая книга сгорела: теперь вы умеете летать! Поднимите обе руки и скажите «Флайн»', true);
+        else if (fresh.length) g.hud?.setVoice?.(`📖🔥 Книга сгорела: теперь вы знаете ${fresh.map((sp) => '«' + bookSpellName(sp) + '»').join(', ')}`, true);
+        else g.hud?.toast?.('📕🔥 Книга сгорела', 2000);
+        return fresh;
+    }
+
+    /** (host) Lying books (fallen from a bird, on a pedestal) the flame reaches: they burn. → [{at, item}] */
+    burnAlong(inStream) {
+        const out = [];
+        if (!this.auth) return out;
+        for (const bk of [...this.books.values()]) {
+            if (bk.lev || bk.accio || !inStream(bk.model.position)) continue;
+            const at = bk.model.position.clone();
+            this._removeBook(bk);
+            this.game.sync?.bookGone?.(bk.id, null);
+            out.push({ at, item: { kind: 'book', uid: 'book' + bk.id, id: bk.id, spells: bk.spells, ...(isSwiftId(bk.id) ? { swift: true } : {}) } });
+        }
+        return out;
     }
 
     // ------------------------------------------------------------ books

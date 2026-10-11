@@ -622,12 +622,14 @@ export class BookReading {
             return;
         }
         const learned = this.books.learned;
-        if (spell && s.readT > HOLD.LEARN_T && !learned.has(spell)) {
+        // (the swift book's «Флайн» is not learned by reading: only by burning the book)
+        if (spell === 'Flight' && s.readT > HOLD.LEARN_T && !s.toldBurn) {
+            s.toldBurn = true;
+            if (!this.game.bonus?.flight) this.game.hud.setVoice?.('📘 «Флайн» выучит тот, кто сожжёт эту книгу: держите её в одной руке и скажите «Инферно» (или поднесите к огню)', true);
+        }
+        if (spell && spell !== 'Flight' && s.readT > HOLD.LEARN_T && !learned.has(spell)) {
             learned.add(spell);
-            if (spell === 'Flight') {
-                this.books.learnFlight?.(); // (the swift book: now you can fly)
-                this.game.hud.setVoice?.('📘 Изучено заклинание «Флайн»: теперь вы умеете летать! Поднимите обе руки и скажите «Флайн»', true);
-            } else this.game.hud.toast?.(`📖 Изучено заклинание: «${bookSpellName(spell)}»`, 2500);
+            this.game.hud.toast?.(`📖 Изучено заклинание: «${bookSpellName(spell)}»`, 2500);
             this.game.fx?.lightFlash?.(s.pos, 0xffe9a8, 2, 0.3, 10);
         }
         if (!s.toldPages && s.mode === 'one' && s.phi > 2) {

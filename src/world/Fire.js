@@ -88,6 +88,17 @@ export class FireSystem {
         return hit;
     }
 
+    /** Is there fire at this point (a burning block, a burning tree's crown or trunk)? */
+    burningAt(p, r = 1) {
+        for (const b of this.burningBlocks.values()) {
+            if (Math.abs(b.x - p.x) < 0.5 + r && Math.abs(b.z - p.z) < 0.5 + r && Math.abs(b.L - 1 - p.y) < 0.5 + r) return true;
+        }
+        for (const { tree: t } of this.burningTrees) {
+            if (t.alive && Math.hypot(t.x - p.x, t.z - p.z) < 0.8 + r) return true;
+        }
+        return false;
+    }
+
     _igniteTree(t) {
         t.burning = true;
         this.burningTrees.push({ tree: t, t: 0, spread: false });

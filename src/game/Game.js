@@ -930,8 +930,9 @@ export class Game {
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
         this.perf?.note('заклинание ' + name);
         this.noteCaster(name, this.localId);
-        // Inferno with a scroll in the hand burns it: its power is yours
+        // Inferno with a scroll (or a spell book) in the hand burns it: its power is yours
         if (name === 'Inferno' && this.items.heldOf('scroll')) { this.items.burnHeldScroll(); return 'Inferno'; }
+        if (name === 'Inferno' && this.burnHeldBook()) return 'Inferno';
         // Duel magic: a charge flies at the creature the hand points at
         // Duel spells need a raised, pointing hand: the word alone (e.g. a friend's voice
         // reaching this microphone) never fires them while the arms hang down
@@ -1745,14 +1746,7 @@ export class Game {
         const mine = casterId === this.localId || casterId === 'local';
         const paper = (it) => it && (it.kind === 'scroll' || it.kind === 'book');
         let hit = false;
-        const burnt = (p, it, mineToo) => {
-            hit = true;
-            for (let i = 0; i < 30; i++) this.fx.spark(p, i % 3 ? 0xff8a1a : 0xffe066, 0.12, _v2.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3), 0.9);
-            for (let i = 0; i < 10; i++) this.fx.spark(p, 0x3a3330, 0.1, _v2.set((Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5)), 1.4); // (ash)
-            if (it.kind === 'scroll' && mineToo) items.applyScroll(it);
-            else if (it.kind === 'book') this.hud.toast?.('📕🔥 Книга сгорела', 2000);
-            else this.hud.toast?.('📜🔥 Свиток сгорел', 2000);
-        };
+        const burnt = (p, it, mineToo) => { hit = true; this._paperBurnt(p, it, mineToo); };
         for (const side of ['left', 'right']) {
             const h = items.held[side];
             if (!h || !paper(h.item) || !h.model) continue;
@@ -1771,11 +1765,74 @@ export class Game {
                 this.sync?.itemGone?.(L.item.uid, null, null);
                 if (!it) continue;
                 burnt(at, it, mine);
-                // (another player's flame burnt a scroll lying here: its power is theirs)
-                if (it.kind === 'scroll' && !mine) this.sync?.net?.send({ t: 'sburn', to: casterId, item: it }, true);
+                // (another player's flame burnt a scroll / a book lying here: its power is theirs)
+                if (!mine) this._sendBurnt(casterId, it);
+            }
+            // the book-birds' books lying on the ground or on a pedestal
+            for (const { at, item } of this.books?.burnAlong((p) => inStream(o, d, len, p, 0.6)) || []) {
+                burnt(at, item, mine);
+                if (!mine) this._sendBurnt(casterId, item);
             }
         }
         return hit;
+    }
+
+    /** (host) Another player's flame burnt a scroll or a book here: its power is theirs. */
+    _sendBurnt(to, it) {
+        if (it.kind === 'scroll' || (it.kind === 'book' && !it.runbook)) this.sync?.net?.send({ t: 'sburn', to, item: it }, true);
+    }
+
+    /**
+     * A scroll or a book burnt at `p`: fire, ash; burnt by me (`mine`) — its power is mine
+     * (a scroll's bonus, a book's spells: the swift book's «Флайн» is learned only so).
+     */
+    _paperBurnt(p, it, mine) {
+        for (let i = 0; i < 30; i++) this.fx.spark(p, i % 3 ? 0xff8a1a : 0xffe066, 0.12, _v2.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3), 0.9);
+        for (let i = 0; i < 10; i++) this.fx.spark(p, 0x3a3330, 0.1, _v2.set((Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5)), 1.4); // (ash)
+        this.fx.lightFlash?.(p, 0xff8a1a, 1.5, 0.3, 8);
+        if (it.kind === 'scroll' && mine) this.items.applyScroll(it);
+        else if (it.kind === 'book' && mine && this.books) this.books.learnBurnt(it);
+        else if (it.kind === 'book') this.hud.toast?.('📕🔥 Книга сгорела', 2000);
+        else this.hud.toast?.('📜🔥 Свиток сгорел', 2000);
+    }
+
+    /** «Инферно» said with a spell book in the hand: it burns there, its spells are mine. */
+    burnHeldBook() {
+        const h = this.items?.heldOf('book');
+        if (!h || h.item.runbook) return false;
+        const p = (this.items.held[h.side]?.model || this.character.group).getWorldPosition(new THREE.Vector3());
+        const reading = !!this.books?.readingSide;
+        const it = this.items.releaseHand(h.side);
+        if (reading) this.books.reading._end?.(true); // (open in the hands: it burns there)
+        if (!it) return false;
+        this._paperBurnt(p, it, true);
+        return true;
+    }
+
+    /**
+     * A scroll or a spell book held in a fire (a campfire's flames, a burning tree or block)
+     * catches fire after a moment: it burns, and its power is mine (I put it there).
+     */
+    _heldPaperInFire(dt) {
+        const items = this.items;
+        if (!items) return;
+        this._paperFireT = this._paperFireT || { left: 0, right: 0 };
+        for (const side of ['left', 'right']) {
+            const h = items.held[side];
+            const it = h?.item;
+            const p = h?.model && (it?.kind === 'scroll' || (it?.kind === 'book' && !it.runbook)) ? h.model.getWorldPosition(_v1) : null;
+            const hot = p && (this.campfires?._fireAt?.(p, 1.4, 2.6, true) || this.fire?.burningAt?.(p, 1.2));
+            if (!hot) { this._paperFireT[side] = 0; continue; }
+            this._paperFireT[side] += dt;
+            if (Math.random() < dt * 10) this.fx.spark(p, 0xff8a1a, 0.06, _v2.set((Math.random() - 0.5), 1.5, (Math.random() - 0.5)), 0.4);
+            if (this._paperFireT[side] < 0.8) continue;
+            this._paperFireT[side] = 0;
+            const at = p.clone();
+            const reading = it.kind === 'book' && !!this.books?.readingSide;
+            const gone = items.releaseHand(side);
+            if (reading) this.books.reading._end?.(true);
+            if (gone) this._paperBurnt(at, gone, true);
+        }
     }
 
     /** Water that stops a flame: water balls (held, flying, lying, other players'), the vortex's water. */
@@ -2123,6 +2180,7 @@ export class Game {
         this.castleLife.update(dt);
         this.doors.update(dt);
         this.campfires.update(dt);
+        this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         this.crystals?.update(dt);
         this.beds.update(dt);
         this.houses.update(dt);
@@ -2523,7 +2581,7 @@ export class Game {
         if (this.knock?.down) return false; // (get up first)
         if (this.levitation.lifted) return false; // (held up by another wizard's Leviosa)
         if (!force && !this.knowsFlight()) {
-            this.hud.setVoice('📘 В «Выживании» летать нельзя, пока не прочтёте <b>быструю летающую книгу</b> (голубую, с серебром): собьёте её — в ней «Флайн»', true);
+            this.hud.setVoice('📘 В «Выживании» летать нельзя, пока не сожжёте <b>быструю летающую книгу</b> (голубую, с серебром): собьёте её, возьмите и скажите «Инферно»', true);
             return false;
         }
         this.boards?.dropAll('fly'); // (off the board first; the board stays where it is)
