@@ -233,3 +233,60 @@ test('«Create a Board» outside Creative: learned from a scroll, a tree becomes
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('a board is let go for real: both hands opened drop it anywhere; a real throw makes it fly', async () => {
+    const { frame } = await import('./poses.mjs');
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const takeBoth = async () => {
+        await page.evaluate(() => { const g = window.__zns.game; g.cameraBaseRotation = 0; g.smoothBody = 0; g.character.setBodyRotation(0); g.character.group.position.set(0, 1.5, 12); });
+        await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0 }, 12);
+        await page.evaluate(() => {
+            const g = window.__zns.game, B = g.boards, THREE = window.__zns.THREE;
+            const L = g.weapons.palmFrame('left', {}).G.clone(), R = g.weapons.palmFrame('right', {}).G.clone();
+            const b = B.reg.map.get('cboard0'), m = B.models.get('cboard0');
+            const across = R.clone().sub(L).setY(0).normalize();
+            m.model.position.copy(L).add(R).multiplyScalar(0.5);
+            m.model.quaternion.setFromEuler(new THREE.Euler(0, Math.atan2(-across.z, across.x), 0, 'YXZ'));
+            b.st = 'rest'; b.owner = null; B._setBox(b, m);
+        });
+        await feed(page, { arms: 'forward', leftCurl: 0.9, rightCurl: 0.9 }, 15);
+        const h = (await surf(page)).hold;
+        assert.ok(h && h.left && h.right, 'both hands on it');
+    };
+    // 1) held close (arms down in front, not stretched out), both hands open: it is let go and falls
+    await takeBoth();
+    await feed(page, { arms: 'down', leftCurl: 0.9, rightCurl: 0.9 }, 8);
+    assert.ok((await surf(page)).hold, 'still held with the arms down');
+    await feed(page, { arms: 'down', leftCurl: 0, rightCurl: 0 }, 20);
+    let s = await surf(page);
+    assert.equal(s.hold, null, 'both hands open: let go');
+    for (let i = 0; i < 20 && (await surf(page)).boards.find((b) => b.id === 'cboard0').st !== 'rest'; i++) await frames(page, 4);
+    assert.equal((await surf(page)).boards.find((b) => b.id === 'cboard0').st, 'rest', 'it fell to the ground');
+    // 2) one hand opening alone only takes that hand off
+    await takeBoth();
+    await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0.9 }, 20);
+    s = await surf(page);
+    assert.ok(s.hold && !s.hold.left && s.hold.right, `one hand off, the other holds ${JSON.stringify(s.hold)}`);
+    // 3) a real overhand throw with the right hand: it flies
+    const p0 = await page.evaluate(() => window.__zns.game.boards.models.get('cboard0').model.position.toArray());
+    for (let i = 0; i < 10; i++) await feed(page, { windup: 'right', rightCurl: 0.9, leftCurl: 0 }, 1, 33);
+    const a = frame({ windup: 'right', rightCurl: 0.9, leftCurl: 0 }), b = frame({ arms: 'forward', rightCurl: 0.9, leftCurl: 0 });
+    for (let i = 1; i <= 4; i++) {
+        const t = i / 4, f = frame({ arms: 'forward', rightCurl: 0.9, leftCurl: 0 });
+        f.poseLandmarks = a.poseLandmarks.map((p, k) => ({ ...p, x: p.x + (b.poseLandmarks[k].x - p.x) * t, y: p.y + (b.poseLandmarks[k].y - p.y) * t, z: p.z + (b.poseLandmarks[k].z - p.z) * t }));
+        f.hands = b.hands.map((h, j) => ({ ...h, landmarks: h.landmarks.map((q2, k) => { const q = a.hands[j].landmarks[k]; return { x: q.x + (q2.x - q.x) * t, y: q.y + (q2.y - q.y) * t, z: q.z + (q2.z - q.z) * t }; }) }));
+        await page.evaluate((raw) => { raw.ts = performance.now(); window.__zns.poseService.injectRaw(raw); }, f);
+        await new Promise((r) => setTimeout(r, 33));
+    }
+    await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 10, 33);
+    for (let i = 0; i < 10 && (await surf(page)).hold; i++) await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 5, 33);
+    s = await surf(page);
+    assert.equal(s.hold, null, `thrown (or let go) ${JSON.stringify(s.log)}`);
+    await frames(page, 10);
+    const p1 = await page.evaluate(() => window.__zns.game.boards.models.get('cboard0').model.position.toArray());
+    if (s.log.includes('throw')) assert.ok(Math.hypot(p1[0] - p0[0], p1[2] - p0[2]) > 1, `it flew ${p1} from ${p0}`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

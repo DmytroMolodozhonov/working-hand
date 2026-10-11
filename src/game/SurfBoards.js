@@ -27,7 +27,7 @@ import { BoardBody, SURF, riderInput } from './BoardPhysics.js';
 import { nearestRail, solveTwoHands, solveOneHand } from './BoardHold.js';
 import { BoardRegistry } from './BoardRegistry.js';
 import { boardModel, disposeBoard } from '../entities/BoardModel.js';
-import { DropGate } from './HandRelease.js';
+import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 import { TREE_KINDS, isWood, BLOCK, isCastleBlock } from '../world/Terrain.js';
 
 const CLOSE_CURL = 0.55, OPEN_CURL = 0.35, LET_GO_CURL = 0.3;
@@ -239,7 +239,7 @@ export class SurfBoards {
             const curl = visible ? ch.getGripCurl(side) : (this.hold?.grips[side] ? 1 : 0);
             const tracked = ch.isHandTracked ? ch.isHandTracked(side) : visible;
             if (curl < OPEN_CURL && visible) { this._open[side] = now; this._openF[side] = this._frame; }
-            if (this.hold?.grips[side]) { this._letGo(side, curl, tracked, now); continue; }
+            if (this.hold?.grips[side]) { this._letGo(side, curl, tracked, now); if (!this.hold) break; continue; }
             if (!visible) continue;
             // (recently open in time OR in frames: slow computers draw few frames a second)
             const closing = curl > CLOSE_CURL && (now - this._open[side] < 900 || this._frame - this._openF[side] <= 12);
@@ -276,36 +276,64 @@ export class SurfBoards {
             else { b.owner = this.me; b.st = 'held'; this.game.sync?.net?.send({ t: 'bdtake', id: b.id, mode: 1 }); }
             this._setBox(b, m);
             if (m.body) m.body = null;
-            this.hold = { id: b.id, grips: { left: null, right: null }, theta: 0, gate: { left: new DropGate(), right: new DropGate() }, openSince: { left: 0, right: 0 }, prevHand: null };
+            this.hold = { id: b.id, grips: { left: null, right: null }, theta: 0, gate: { left: new DropGate(), right: new DropGate() }, thr: { left: new ThrowDetector(), right: new ThrowDetector() }, openSince: { left: 0, right: 0 }, prevHand: null };
             if (b.st !== 'held') b.st = 'held';
         }
         this.hold.grips[side] = best.grip;
         this.hold.gate[side].reset(true);
+        this.hold.thr[side].reset();
         const hand = this.game.character.getActiveHands?.()[side];
         if (hand?.setGrip) hand.setGrip(0.62);
         const both = this.hold.grips.left && this.hold.grips.right;
         this._say(both ? '🏄 Доска в руках. Положите её на воду и разожмите руки' : '🏄 Держите доску: вторую руку на другой край, или несите под мышкой (рука опущена у бока)', 'grab', 4000);
     }
 
-    /** The hand opens: a grip goes. The last one only when the board is really let go. */
+    /**
+     * The hand opens: a grip goes. The board itself leaves the hands only when they really let go:
+     *  - both hands opened together (a two-handed board put down / dropped on purpose),
+     *  - a real throw (a wind-up, a swing, the fingers opening at its end) — it flies,
+     *  - the last hand: the outstretched hand clearly opened, or the board lies on the water / ground.
+     * One hand opening while the other still holds only takes that hand off.
+     */
     _letGo(side, curl, tracked, now) {
         const H = this.hold, ch = this.game.character;
         const other = side === 'left' ? 'right' : 'left';
         if (!tracked) { H.openSince[side] = 0; return; } // (a hand the camera lost never lets go)
+        const gt = (this.simT || 0) * 1000; // (the game's clock: a stalled frame never cuts a swing in two)
+        const arm = ch.armState ? ch.armState(side, side === 'left' ? (this._armL || (this._armL = {})) : (this._armR || (this._armR = {}))) : null;
+        // a real throw with this hand (the other hand open or not on the board): it flies
+        if (arm) {
+            const thr = H.thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(this.game.currentPose, side), weight: 4 });
+            const otherFree = !H.grips[other] || ch.getGripCurl(other) < 0.5;
+            if (thr && otherFree) {
+                // the same throw as any thing in the hand (where the person looks, the swing's speed, the board's weight)
+                const v = this.game.items?._throwVelocity ? this.game.items._throwVelocity(side, thr, new THREE.Vector3(), 4).toArray() : thr.vWorld;
+                this._throwBoard(v);
+                return;
+            }
+        }
+        if (curl < LET_GO_CURL) { if (!H.openSince[side]) H.openSince[side] = gt; } else H.openSince[side] = 0;
+        const openFor = (s) => (H.openSince[s] ? gt - H.openSince[s] : 0);
         if (H.grips[other]) {
-            // two hands: this one opening leaves the board in the other
-            if (curl < LET_GO_CURL) { if (!H.openSince[side]) H.openSince[side] = now; if (now - H.openSince[side] > 250) this._release(side); }
-            else H.openSince[side] = 0;
+            // both hands opened (together): the board is let go
+            if (openFor(side) > 250 && openFor(other) > 150) { this._dropHold(true); return; }
+            // only this one: it comes off, the other hand keeps the board (a little later: the other may be opening too)
+            if (openFor(side) > 450 && !H.openSince[other]) this._release(side);
             return;
         }
-        // the last hand: it lets go if the outstretched hand clearly opens, or the board is lying
-        // on something that holds it (the water, the ground) and the hand opens
-        const arm = ch.armState ? ch.armState(side, this._arm || (this._arm = {})) : null;
-        const open = arm && H.gate[side].update({ now, curl, tracked, ...arm });
-        const supported = this._supported();
-        if (curl < LET_GO_CURL && supported) { if (!H.openSince[side]) H.openSince[side] = now; }
-        else H.openSince[side] = 0;
-        if (open || (H.openSince[side] && now - H.openSince[side] > 250)) this._release(side);
+        // the last hand: the outstretched hand clearly opened, or the board lies on something that holds it
+        const open = arm && H.gate[side].update({ now: gt, curl, tracked, ...arm });
+        if (open || (openFor(side) > 250 && this._supported())) this._release(side);
+        // (held under the arm or hanging at the side, a hand opening does not drop it: swing and throw it, or stretch the arm out)
+        else if (openFor(side) > 1500) this._say('🏄 Чтобы отпустить доску: вытяните руку и разожмите, бросьте её (замах и бросок) или положите на воду', 'letgo', 6000);
+    }
+
+    /** A real throw: the board flies with the hand's speed (heavier than a sword: less of it). */
+    _throwBoard(vWorld) {
+        const v = _v3.fromArray(vWorld);
+        if (v.length() > 16) v.setLength(16);
+        this._dropHold(false, v.toArray());
+        this._note('throw');
     }
 
     /** The held board lies on the water or the ground (its weight is not on the hands). */
@@ -328,7 +356,7 @@ export class SurfBoards {
     }
 
     /** Both hands are off: the board is free where it is (falling, or floating if on the water). */
-    _dropHold(throwIt = false) {
+    _dropHold(throwIt = false, vOverride = null) {
         const H = this.hold;
         if (!H) return;
         this.hold = null;
@@ -341,6 +369,7 @@ export class SurfBoards {
         const s = this.water.sample(p.x, p.z);
         const onWater = s.kind !== 'land' && (s.depth || 0) > SURF.GROUND_DEPTH && p.y - (s.surface + s.h) < SURF.T + 0.4;
         const st = onWater ? 'float' : 'fall';
+        if (vOverride) { m.spin = (Math.random() - 0.5) * 3; this._free(b, onWater && vOverride[1] <= 0 ? 'float' : 'fall', vOverride); return; }
         this._free(b, st, throwIt ? vel.toArray() : [0, 0, 0]);
     }
 
