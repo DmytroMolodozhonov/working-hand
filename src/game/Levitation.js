@@ -475,7 +475,7 @@ export class Levitation {
         if (gentle && !c.dead && !c.isDead) { L.lower = true; return; }
         this._endCarry(ck, c);
         const v = L.vel.clone().multiplyScalar(1.5);
-        this.falls.push({ ck, c, top: L.top, by: L.by, t: 0 });
+        this.falls.push({ ck, c, top: L.top, by: L.by, t: 0, v: v.clone() });
         if (ck === 'a') { c.attacker = L.by; c.levFall = true; c.vel = new THREE.Vector3(); this.game.animals?.push(c, v, 1.5); c.airborne = true; }
         else if (ck === 'z') { c.vy = v.y || -0.1; c.windVel = new THREE.Vector3(v.x, 0, v.z); c.stunTimer = Math.max(c.stunTimer || 0, 0.6); }
         else { c.vy = v.y || -0.1; c.vx = v.x; c.vz = v.z; c.stunT = Math.max(c.stunT || 0, 1); }
@@ -502,7 +502,14 @@ export class Levitation {
             this.falls.splice(i, 1);
             if (ck === 'a') c.levFall = false;
             if (ck === 'v') { c.vx = 0; c.vz = 0; }
-            const d = this.wet(_h1.x, _h1.z) ? 0 : fallDamage(f.top - feet);
+            const wet = this.wet(_h1.x, _h1.z);
+            const d = wet ? 0 : fallDamage(f.top - feet);
+            // dropped from up high: it falls over as it hits the ground (and gets up by itself)
+            if (!wet && f.top - feet >= 5 && g.creatureImpact) {
+                const fv = f.v ? new THREE.Vector3(f.v.x, 0, f.v.z) : new THREE.Vector3();
+                if (fv.lengthSq() < 0.25) fv.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+                g.creatureImpact.apply(c, { v: fv.setLength(1), by: f.by, kind: 'fall', always: { down: 1.5 } });
+            }
             if (!d) continue;
             if (ck === 'z') g.damageZombie(c, d, false, _h2.set(0, -1, 0), f.by);
             else if (ck === 'a') g.animals?.hit(c, d, null, f.by);
@@ -577,6 +584,7 @@ export class Levitation {
         const g = this.game;
         const ch = g.character;
         ch.verticalVelocity = gentle ? 0 : Math.max(-20, L.vel.y * 1.5);
+        if (gentle && g.impact) g.impact.gentleUntil = performance.now() + 3000; // (set down: no falling over)
         if (!gentle) g.knockback.copy(L.vel).setY(0).multiplyScalar(1.5);
         this.fallTop = gentle ? null : L.top;
         this.fallBy = L.by;

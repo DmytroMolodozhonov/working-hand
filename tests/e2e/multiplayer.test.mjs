@@ -104,14 +104,29 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
         return z.id;
     });
     await wf(guest.page, (id) => window.__zns.game.zombieById.has(id), zid2, 20000);
-    await ev(guest.page, () => {
+    // (a real blow: the fist's path reaches the zombie's face fast — BodyStrikes — not just a fast wrist somewhere near)
+    await ev(guest.page, (id) => {
         const g = window.__zns.game;
-        g.character.group.position.set(12, 1.5, 8);
-        g.playerAttackCooldown = 0;
-        g.currentPose = { ...(g.currentPose || {}), isPunching: true, headRotation: { yaw: 0, pitch: 0 } };
-    });
+        const THREE = window.__zns.THREE;
+        const z = g.zombieById.get(id);
+        g.character.group.position.set(z.group.position.x - 2.5, 1.5, z.group.position.z);
+        g.currentPose = { ...(g.currentPose || {}), hasPose: true, headRotation: { yaw: 0, pitch: 0 } };
+        const S = g.strikes;
+        const st = { x: -1.6 };
+        window.__punch = { orig: S.update, knuckles: S._knuckles, curl: g.character.getGripCurl };
+        g.character.getGripCurl = () => 0.95;
+        S._knuckles = (side, out) => {
+            if (side !== 'right') return out.set(0, -80, 0);
+            const head = z.head.getWorldPosition(new THREE.Vector3());
+            return out.copy(head).add(new THREE.Vector3(st.x, 0, 0));
+        };
+        S.update = (dt) => { st.x = Math.min(0.2, st.x + 8 * dt); window.__punch.orig.call(S, dt); };
+    }, zid2);
     await wf(host.page, (id) => window.__zns.game.zombieById.get(id).health < 5, zid2, 20000);
-    await ev(guest.page, () => { window.__zns.game.currentPose.isPunching = false; });
+    await ev(guest.page, () => {
+        const g = window.__zns.game, P = window.__punch;
+        g.strikes.update = P.orig; g.strikes._knuckles = P.knuckles; g.character.getGripCurl = P.curl;
+    });
 
     // Guest casts Бомбардо → host explodes it → craters identical on both machines
     await ev(guest.page, () => {
@@ -460,6 +475,7 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
             const g = window.__zns.game;
             g.character.group.position.set(t[0], t[1] - 0.6, t[2]);
             g.knockback.set(0, 0, 0);
+            g.knock?.reset(); // (a spell before may have thrown it off its feet)
         }, target.t);
         await wf(host.page, (t) => {
             const r = [...window.__zns.game.remotes.values()][0];
@@ -591,7 +607,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
             const d = g.character.getHandDirection('right');
             return o.clone().addScaledVector(d, dist).toArray();
         }, dist);
-        await ev(guest.page, (t) => { const g = window.__zns.game; g.character.group.position.set(t[0], t[1] - 0.6, t[2]); g.knockback.set(0, 0, 0); }, t);
+        await ev(guest.page, (t) => { const g = window.__zns.game; g.character.group.position.set(t[0], t[1] - 0.6, t[2]); g.knockback.set(0, 0, 0); g.knock?.reset(); }, t);
         await wf(host.page, (t) => { const r = [...window.__zns.game.remotes.values()][0]; return Math.hypot(r.position.x - t[0], r.position.z - t[2]) < 0.6; }, t, 20000);
     };
     const hostCast = (spell) => ev(host.page, (spell) => {
@@ -636,7 +652,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await wf(guest.page, () => window.__zns.game.combat.stunned, null, 40000);
     const st = await ev(guest.page, () => document.getElementById('pvp-status').innerText);
     assert.match(st, /Остолбеней/);
-    await ev(guest.page, () => { window.__zns.game.combat.stunLeft = 0; });
+    await ev(guest.page, () => { window.__zns.game.combat.stunLeft = 0; window.__zns.game.knock?.reset(); });
 
     // 2) Duel: the guest answers — charges meet and push; the rested wizard wins
     await setContact(host.page, true, false);
@@ -650,7 +666,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await wf(guest.page, () => window.__zns.game.duel.clashes.length === 1, null, 20000);
     await wf(guest.page, () => window.__zns.game.combat.stunned, null, 90000);
     assert.equal(await ev(host.page, () => window.__zns.game.combat.stunned), false, 'the stronger one wins');
-    await ev(guest.page, () => { window.__zns.game.combat.stunLeft = 0; });
+    await ev(guest.page, () => { window.__zns.game.combat.stunLeft = 0; window.__zns.game.knock?.reset(); });
 
     // 3) Calm exit: hand off the opponent, then a flick → the duel just ends
     await ev(host.page, () => { window.__zns.game.combat.fatigue = 30; });

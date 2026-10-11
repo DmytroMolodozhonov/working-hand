@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
+import { thunderPush } from '../game/Impact.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -219,6 +220,7 @@ export class SpellManager {
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
             case 'Bombardo': this.castBombardo(o, d, casterId); break;
             case 'BombardoMaxima': this.castBombardo(o, d, casterId, MAXIMA_POWER); break;
+            case 'WallRise': case 'WallRiseMaxima': this.castWallRise(o, d, casterId, name === 'WallRiseMaxima'); break; // (Breakthrough's wall)
             case 'Flight': return false; // handled by the game (it moves the caster)
             default: return false;
         }
@@ -352,18 +354,23 @@ export class SpellManager {
                 if (this.auth) {
                     z.damageCooldown = 0;
                     this._damage(z, 5, true, dirTo);
-                    z.group.position.addScaledVector(dirTo, 8);
+                    if (!this.hooks.creatures) z.group.position.addScaledVector(dirTo, 8);
                 }
             }
         }
+        // every creature in the wave is shoved by its strength there (near: off its feet; far: a stagger)
+        const wave = (pos) => {
+            const to = new THREE.Vector3().subVectors(pos, origin);
+            const dist = to.length();
+            const dirTo = to.clone().normalize();
+            if (!((dist < 4.0 && direction.dot(dirTo) > -0.2) || (dist < range && direction.angleTo(dirTo) < 1.2))) return null;
+            return dirTo.setY(0).normalize().multiplyScalar(thunderPush(dist)).setY(1);
+        };
+        if (this.auth) this.hooks.creatures?.('Thunderwave', casterId, wave, { from: origin, noSlide: (c) => c.isAnimal /* (Animals throws its own) */ });
         for (const p of this._players(casterId)) {
             if (!p.local) continue;
-            const to = _a.subVectors(p.center(), origin);
-            const dist = to.length();
-            const dirTo = _b.copy(to).normalize();
-            if ((dist < 4.0 && direction.dot(dirTo) > -0.2) || (dist < range && direction.angleTo(dirTo) < 1.2)) {
-                p.hit('Thunderwave', origin, dirTo.clone().setY(0.2).multiplyScalar(26));
-            }
+            const v = wave(p.center());
+            if (v) p.hit('Thunderwave', origin, v);
         }
     }
 
@@ -451,6 +458,13 @@ export class SpellManager {
                 if (z.isDead) continue;
                 if (z.group.position.distanceTo(point) < R + 0.5) { z.damageCooldown = 0; this._damage(z, 20, false, _b.set(0, 0, 1)); }
             }
+            // whoever lives through it is thrown off its feet, away from the strike
+            this.hooks.creatures?.('Lightning', casterId, (pos) => {
+                if (pos.distanceTo(point) > R + 1.5) return null;
+                const v = new THREE.Vector3(pos.x - point.x, 0, pos.z - point.z);
+                if (v.lengthSq() < 1e-4) v.set(1, 0, 0);
+                return v.normalize().multiplyScalar(8);
+            }, { from: point });
         }
         for (const p of this._players(casterId)) {
             if (!p.local) continue;
@@ -498,7 +512,7 @@ export class SpellManager {
             segs.push({ m, d });
             prev = p;
         }
-        const hit = new Set();
+        const hit = new Set(), fell = new Set(); // (hurt once; thrown off the feet once)
         let t = 0;
         this.spells.push({
             life: length / SPEED + 8,
@@ -530,14 +544,20 @@ export class SpellManager {
                             if (z.isDead || hit.has(z)) continue;
                             if (!reached(z.group.position)) continue;
                             hit.add(z);
-                            z.stunTimer = Math.max(z.stunTimer || 0, power > 1 ? 4 : 2.5);
-                            z.vy = Math.max(z.vy || 0, 4 + power * 2);
+                            if (!this.hooks.creatures) {
+                                z.stunTimer = Math.max(z.stunTimer || 0, power > 1 ? 4 : 2.5);
+                                z.vy = Math.max(z.vy || 0, 4 + power * 2);
+                            }
                             z.damageCooldown = 0;
                             this._damage(z, power > 1 ? 12 : 4, false, dir);
                         }
+                        // the ground runs away under their feet: everything it runs under falls back against it
+                        this.hooks.creatures?.(power > 1 ? 'EarthquakeMaxima' : 'Earthquake', casterId,
+                            (pos) => (reached(pos) ? dir.clone().multiplyScalar(power > 1 ? -5 : -3) : null),
+                            { skip: (c) => fell.has(c), each: (c) => fell.add(c) });
                     }
                     if (this.hooks.quakeMe && !hit.has('me')) {
-                        if (this.hooks.quakeMe(casterId, origin, reached, power)) hit.add('me');
+                        if (this.hooks.quakeMe(casterId, origin, reached, power, dir)) hit.add('me');
                     }
                 }
                 // the crack fades away after a while
@@ -629,8 +649,9 @@ export class SpellManager {
             const k = strength * (1 - 0.6 * dist / range);
             return _b.copy(direction).lerp(dirTo, 0.5).setY(0).normalize().multiplyScalar(k).setY(k * 0.35);
         };
-        // Zombies (moved where they are simulated)
-        if (this.auth) {
+        // Creatures (moved where they are simulated): a stagger across the cone, off the feet point-blank
+        if (this.auth && this.hooks.creatures) this.hooks.creatures(power > 1 ? 'WindMaxima' : 'Wind', casterId, (pos) => { const v = push(pos); return v && v.clone(); }, { from: origin });
+        else if (this.auth) {
             for (const z of this.zombies) {
                 if (z.isDead) continue;
                 const v = push(_c.copy(z.group.position).add(UP));
@@ -650,7 +671,7 @@ export class SpellManager {
             w.angularVelocity.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
         }
         // Me, if another wizard blew at me (every machine moves its own player)
-        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos));
+        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos), power > 1 ? 'WindMaxima' : 'Wind');
     }
 
     // ----------------------------------------------------------- Wave Attack
@@ -681,7 +702,7 @@ export class SpellManager {
             const to = _a.subVectors(p, pos);
             const along = to.dot(dir), across = Math.abs(to.dot(side));
             if (along < -1.2 || along > 1.6 || across > width / 2 + 0.6 || Math.abs(to.y) > height + 2.5) return null;
-            const k = (9 + 6 * power);
+            const k = 4 + 6 * power; // (carried and staggered; the Maxima throws off the feet)
             return _b.copy(dir).multiplyScalar(k).setY(2.5 + power);
         };
         this.spells.push({
@@ -704,7 +725,10 @@ export class SpellManager {
                     this.fx.spark(_c, Math.random() < 0.5 ? 0xffffff : 0x9fd8ff, 0.12 + Math.random() * 0.15, _b.copy(dir).multiplyScalar(3 + Math.random() * 3).setY(1 + Math.random() * 2), 0.6);
                 }
                 // zombies (where they are simulated), things, and me
-                if (this.auth) {
+                if (this.auth && this.hooks.creatures) {
+                    this.hooks.creatures(power > 1 ? 'WaveAttackMaxima' : 'WaveAttack', casterId, (p) => { const v = push(p); return v && v.clone(); },
+                        { skip: (c) => hit.has(c), each: (c) => hit.add(c) });
+                } else if (this.auth) {
                     for (const z of this.zombies) {
                         if (z.isDead || hit.has(z)) continue;
                         const v = push(_c.copy(z.group.position));
@@ -725,7 +749,7 @@ export class SpellManager {
                 }
                 if (this.hooks.blowMe && !hit.has('me')) {
                     let got = false;
-                    this.hooks.blowMe(casterId, pos, (p) => { const v = push(p); if (v) got = true; return v; });
+                    this.hooks.blowMe(casterId, pos, (p) => { const v = push(p); if (v) got = true; return v; }, power > 1 ? 'WaveAttackMaxima' : 'WaveAttack');
                     if (got) hit.add('me');
                 }
             },
@@ -740,6 +764,7 @@ export class SpellManager {
         const ball = this._takeBall(this.sandBalls);
         ball.position.copy(origin);
         const velocity = direction.clone().multiplyScalar(25.0);
+        const sanded = new Set();
         this.spells.push({
             life: 3.0,
             onUpdate: (spell, dt) => {
@@ -757,6 +782,16 @@ export class SpellManager {
                         for (let k = 0; k < 20; k++) {
                             this.fx.spark(ball.position, 0xd2b48c, 0.4, _b.set((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10), 0.8);
                         }
+                        spell.life = 0;
+                        return;
+                    }
+                }
+                // people and animals: sand in the face — they reel back
+                if (this.auth && this.hooks.creatures) {
+                    const n = this.hooks.creatures('Sands', casterId, (pos) => (ball.position.distanceTo(pos) < 1.8 ? velocity.clone().setY(0).normalize().multiplyScalar(5) : null),
+                        { kinds: ['v', 'a'], from: origin, skip: (c) => sanded.has(c), each: (c) => sanded.add(c) });
+                    if (n) {
+                        for (let k = 0; k < 20; k++) this.fx.spark(ball.position, 0xd2b48c, 0.4, _b.set((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10), 0.8);
                         spell.life = 0;
                         return;
                     }
@@ -861,6 +896,30 @@ export class SpellManager {
         });
     }
 
+    // ---------------------------------------------------- Breakthrough's wall
+    /** The wall shoots up out of the ground at `center` (across `dir`): whoever stands on it is thrown back. */
+    castWallRise(center, dir, casterId, max) {
+        dir = dir.clone().setY(0);
+        if (dir.lengthSq() < 1e-6) return;
+        dir.normalize();
+        const side = new THREE.Vector3(-dir.z, 0, dir.x), width = max ? 9 : 5;
+        const push = (p) => {
+            const to = new THREE.Vector3(p.x - center.x, 0, p.z - center.z);
+            if (Math.abs(to.dot(side)) > width / 2 + 1 || Math.abs(to.dot(dir)) > 1.6) return null;
+            return dir.clone().multiplyScalar(max ? 12 : 8).setY(max ? 8 : 6);
+        };
+        const name = max ? 'WallRiseMaxima' : 'WallRise';
+        if (this.auth && this.hooks.creatures) this.hooks.creatures(name, casterId, push);
+        else if (this.auth) {
+            for (const z of this.zombies) {
+                if (z.isDead) continue;
+                const v = push(z.group.position);
+                if (v) { z.windVel = (z.windVel || new THREE.Vector3()).add(v.clone().setY(0)); z.vy = Math.max(z.vy || 0, v.y); }
+            }
+        }
+        if (this.hooks.blowMe) this.hooks.blowMe(casterId, center, push, name);
+    }
+
     // -------------------------------------------------------------- Sapira
     castSapira(origin, direction, casterId) {
         this._sound('playSapira');
@@ -881,6 +940,12 @@ export class SpellManager {
             _c.copy(origin).addScaledVector(direction, proj);
             if (_c.distanceTo(_b) < 1.5) this._damage(z, 10, true, direction);
         }
+        // the beam's charge throws whoever it goes through off their feet
+        if (this.auth) this.hooks.creatures?.('Sapira', casterId, (pos) => {
+            const to = new THREE.Vector3().subVectors(pos, origin), proj = to.dot(direction);
+            if (proj < 0 || proj > len || origin.clone().addScaledVector(direction, proj).distanceTo(pos) > 1.8) return null;
+            return direction.clone().setY(0).normalize().multiplyScalar(12);
+        }, { from: origin });
         for (const p of this._players(casterId)) {
             if (!p.local) continue;
             _b.copy(p.center());

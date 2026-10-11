@@ -23,7 +23,10 @@
  *   wb       player→all   water ball in hand (10×/s);  wdrop: ball dropped
  *   vx       player→all   «Water Vortex» (its state 10×/s, launch, hit, bubble, freeze, burst) and «Fire Maxima»
  *   ice      player→all   ice blocks built with water forming
- *   phit     player→all   my fist/weapon hit player `to` (Свободный мир)
+ *   phit     player→all   my fist/weapon hit player `to` (Свободный мир); with k/pt/i/lp: the blow's push
+ *   ppush    player→all   my hands pushed / slapped / shoved player `to` (no harm: their body moves)
+ *   cimp     host→all     creatures' bodies: fell (k), reeled (s), rose (r), head jolted (j) — CreatureImpact
+ *   cstrike  client→host  my hands hit a creature: the host applies the push
  *   pdead    player→all   I was killed (by `killer`)
  *   dbody    any→all      a body stays where somebody died (Death.js; the host keeps the list)
  *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
@@ -385,10 +388,26 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'clashend', a, b, loser });
     }
 
-    playerHit(to, dmg, magic = false, hit = null) {
+    playerHit(to, dmg, magic = false, hit = null, x = null) {
         const r = (v) => Math.round(v * 100) / 100;
         const h = hit && Number.isFinite(hit.lx) ? [r(hit.lx), r(hit.y), r(hit.lz)] : undefined;
-        this.net.send({ t: 'phit', by: this.me, to, dmg, mg: magic ? 1 : 0, h }, true);
+        // (x: the blow itself — what struck, where, the push: BodyImpact.onStrike on their computer)
+        this.net.send({ t: 'phit', by: this.me, to, dmg, mg: magic ? 1 : 0, h, ...(x ? { k: x.k, pt: x.pt, i: x.i, lp: x.lp, s: x.s, sp: x.sp } : {}) }, true);
+    }
+
+    /** My hands pushed / slapped / shoved player `to` (never harm: only their body is moved). */
+    playerPush(to, x) {
+        this.net.send({ t: 'ppush', by: this.me, to, k: x.k, n: x.n || 1, pt: x.pt, i: x.i, lp: x.lp, s: x.s, sp: x.sp, c: x.c ? 1 : 0 }, true);
+    }
+
+    /** (host) what happened to the creatures' bodies: falls, staggers, rises, head jolts (CreatureImpact). */
+    creatureImpacts(list) {
+        if (this.net.isHost && list.length) this.net.send({ t: 'cimp', l: list });
+    }
+
+    /** (guest) my hands hit a creature: the host applies the blow to its body. */
+    creatureStrike(m) {
+        if (!this.net.isHost) this.net.send({ t: 'cstrike', ck: m.ck, id: m.id, k: m.k, i: m.i, h: m.h || 0 });
     }
 
     /** A light cut on me (everybody draws it on my body). */
@@ -696,7 +715,10 @@ export class NetSync {
             case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(3, a.apples + 1); } break;
             case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
             case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; } } break;
-            case 'abutt': if (m.to === this.me) { if (g.combat.enabled) g.combat.damage(m.dmg || 1, null, 'animal'); else g.damageLocalPlayer(m.dmg || 1); } break;
+            case 'abutt': if (m.to === this.me) {
+                if (g.combat.enabled) g.combat.damage(m.dmg || 1, null, 'animal'); else g.damageLocalPlayer(m.dmg || 1);
+                if (Array.isArray(m.p) && g.impact) { const from = vec(m.p); g.impact.apply({ v: g.character.group.position.clone().sub(from).setY(0).normalize().multiplyScalar(6), from, kind: 'butt', noShield: true }); }
+            } break;
             case 'impale': g.bleeding?.noteImpale(m.w, m.to); break;
             case 'unimpale': g.bleeding?.noteUnimpale(m.w); break;
             case 'pullout': { const w = g.weapons.byId.get(m.w); if (w && w.stuckIn) g.weapons._unstick(w, true); break; }
@@ -788,7 +810,13 @@ export class NetSync {
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
             case 'dmcut': case 'dmlimb': case 'dmst': case 'dmresc': g.dismember?.onNet(m); break; // (cut-off limbs: Dismember.js)
-            case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg, Array.isArray(m.h) ? m.h.slice(0, 3).map(Number) : null); break;
+            case 'phit': if (m.to === this.me) {
+                const landed = g.combat.enabled ? g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg, Array.isArray(m.h) ? m.h.slice(0, 3).map(Number) : null) : true;
+                if (m.k) g.impact?.onStrike(m, landed === false); // (the blow moves my body too)
+            } break;
+            case 'ppush': if (m.to === this.me) g.impact?.onStrike(m, false); break;
+            case 'cimp': if (!this.net.isHost) g.creatureImpact?.onNet(m.l); break;
+            case 'cstrike': if (this.net.isHost) g.creatureImpact?.onStrike(m, m.from); break;
             case 'hgrip': case 'hfree': case 'vhand': case 'vfree': g.handHold?.onNet(m); break;
             case 'cut': {
                 const r = m.by !== this.me && g.remotes.get(m.by);

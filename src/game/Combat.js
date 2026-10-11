@@ -27,6 +27,7 @@
 
 import * as THREE from 'three';
 import { sharpJerk } from './Jerk.js';
+import { spellPush } from './Impact.js';
 
 export const PVP = {
     MAX_HP: 20,
@@ -230,7 +231,7 @@ export class Combat {
         this.stunLeft = 0;
         this.encased = false;
         this.dead = false;
-        this.game.character.knockedDown = false;
+        if (this.game.knock) this.game.knock.reset(); else this.game.character.knockedDown = false;
         this.game.hud.setStatus?.('');
         this.game.hud.setFrozenOverlay?.(0);
         this._hudKey = '';
@@ -406,14 +407,29 @@ export class Combat {
      */
     hitBySpell(kind, from, byId, push = null) {
         if (!this.enabled || this.dead) return false;
-        if (this.shieldFactor(from) >= 1) { this._blocked(from, kind); return false; }
+        if (this.shieldFactor(from) >= 1) {
+            this._blocked(from, kind);
+            // (still felt: the shield arm is pushed back, the body slides a little — never a fall)
+            if (this.game.impact && kind !== 'Bounce') this.game.impact.apply({ v: push ? push.clone() : this._pushOf(kind, from), from, by: byId, spell: kind });
+            return false;
+        }
         if (kind === 'Inferno') {
             if (this.infernoCooldown > 0) return true;
             this.infernoCooldown = PVP.INFERNO_TICK;
         }
-        if (push) this.game.knockback.add(push);
         this.damage(PLAYER_DAMAGE[kind] ?? 2, byId, kind);
+        // its physical effect: a push, a stagger, off the feet (BodyImpact; SPELL_PHYSICS when no push is given)
+        if (this.game.impact) this.game.impact.spellHit(kind, from, byId, push);
+        else if (push) this.game.knockback.add(push);
         return true;
+    }
+
+    /** The push a spell gives me from `from` (Impact.SPELL_PHYSICS). */
+    _pushOf(kind, from) {
+        const me = this.center(new THREE.Vector3());
+        const v = me.clone().sub(from).setY(0);
+        if (v.lengthSq() < 1e-6) v.set(0, 0, 1);
+        return v.normalize().multiplyScalar(spellPush(kind, me.distanceTo(from)));
     }
 
     /**
@@ -462,7 +478,7 @@ export class Combat {
         if (!this.enabled || this.dead) return;
         // a shield in the hand turned to the attacker takes the blow
         const att = this.game.remotes?.get(byId)?.position;
-        if (att && this.game.gear?.shieldFaces(att)) { this.game.gear.shieldTook('melee'); return; }
+        if (att && this.game.gear?.shieldFaces(att)) { this.game.gear.shieldTook('melee'); return false; }
         // a magic weapon breaks an ordinary «Protection» it touches
         if (magic && this.shield && this.shield.type === 1) {
             this.shield = null; // (for good: a held shield would come back from the strength left)
@@ -474,6 +490,7 @@ export class Combat {
         this.damage(dmg, byId, 'melee');
         // a slash with a blade leaves a light cut (heals by itself)
         if (cut && !this.dead) this.game.bleeding?.cut(cut);
+        return true;
     }
 
     damage(amount, byId, kind) {
@@ -541,6 +558,7 @@ export class Combat {
         if (this.chillTimer <= 0 && this.chill > 0) this.chill = Math.max(0, this.chill - dt * 0.3);
         this.infernoCooldown -= dt;
         for (const t of this.targets.values()) t.damageCooldown -= dt;
+        this.game.character.slowScale = this.frozen ? 0 : 1 - 0.6 * this.chill; // (the ice beam's cold slows the legs)
 
         this._updateVisuals(dt);
         this._hud();
@@ -606,41 +624,23 @@ export class Combat {
         return out;
     }
 
-    /** My fist or weapon hit another player. */
-    hitRemote(target, dmg, magic = false, hit = null) {
-        if (target.damageCooldown > 0) return;
+    /** The weapons' / fists' target object of a remote player (made on first use). */
+    meleeTarget(id) {
+        let t = this.targets.get(id);
+        const r = this.game.remotes.get(id);
+        if (!t) { t = { isPlayer: true, id, isDead: false, damageCooldown: 0, group: r?.character.group }; this.targets.set(id, t); }
+        if (r) t.group = r.character.group;
+        return t;
+    }
+
+    /** My fist or weapon hit another player (extra: the blow itself — BodyStrikes). */
+    hitRemote(target, dmg, magic = false, hit = null, extra = null) {
+        if (target.damageCooldown > 0) { if (extra && this.game.sync?.playerPush) this.game.sync.playerPush(target.id, extra); return; }
         target.damageCooldown = 0.45;
-        if (this.game.sync) this.game.sync.playerHit(target.id, dmg, magic, hit);
+        if (this.game.sync) this.game.sync.playerHit(target.id, dmg, magic, hit, extra);
         const p = _v1.copy(target.group.position).add(_v2.set(0, 1.2, 0));
         for (let i = 0; i < 8; i++) this.game.fx.spark(p, 0xff3030, 0.15, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
         if (this.game.sound) this.game.sound.playHit();
-    }
-
-    /**
-     * Fists against other players (no weapon in hand). Only a real punch counts:
-     * the fist itself reaches the other player's body AND flies towards it fast.
-     * Walking past, or swinging the arms while running, hurts nobody.
-     */
-    updatePunches() {
-        if (!this.enabled || this.game.weapons.hasWeapon() || this.frozen || this.dead) return;
-        const ch = this.game.character;
-        if (ch.isRunning) return;
-        const targets = this.meleeTargets();
-        if (!targets.length) return;
-        for (const side of ['left', 'right']) {
-            if (this.game.handHold?.busy(side)) continue; // (a hand holding / held by another: no punch)
-            const fist = ch.getHandWorldPosition(side, _v1);
-            const vel = ch.handVelocity[side];
-            for (const t of targets) {
-                const p = t.group.position;
-                // body: a column from the feet to the head
-                const dx = fist.x - p.x, dz = fist.z - p.z;
-                const flat = Math.hypot(dx, dz);
-                if (flat > 1.15 || fist.y < p.y - 2 || fist.y > p.y + 2.3) continue;
-                const towards = -(vel.x * dx + vel.z * dz) / (flat || 1);
-                if (towards > 4) this.hitRemote(t, PLAYER_DAMAGE.Punch);
-            }
-        }
     }
 
     dispose() {

@@ -601,18 +601,19 @@ export class Duel {
     _arriveAtZombie(b) {
         const z = this.game.zombieById.get(b.tid);
         this._end(b, 'hit');
-        if (z) this.applyToZombie(b.spell, z, b.by);
+        if (z) this.applyToZombie(b.spell, z, b.by, b.o);
     }
 
     _arriveAtCreature(b) {
         const c = this._creature(b.tk, b.tid);
         this._end(b, 'hit');
-        if (c) this.applyToCreature(b.spell, c, b.by);
+        if (c) this.applyToCreature(b.spell, c, b.by, b.o);
     }
 
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
-    applyToCreature(spell, c, byId) {
+    applyToCreature(spell, c, byId, from = null) {
         const g = this.game;
+        const src = from || this._casterAt(byId, c);
         const p = this._creaturePoint(c, _v1);
         this._burst(p, DUEL_SPELLS[spell].color, 30);
         // a book-bird: any charge knocks it out of the air (it falls as a book)
@@ -624,8 +625,11 @@ export class Duel {
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
             hit(25, { pierce: true }); // (not a killing curse: −25 HP at once, no armour stops it)
+            if (!c.dead) g.creatureImpact?.spellHit(c, 'AvadaKedavra', src, byId); // (thrown on its back)
         } else if (spell === 'Stupefy') {
             c.stunT = DUEL.STUN_TIME;
+            // falls stiff on its back and lies while the spell holds it (then gets up by itself)
+            g.creatureImpact?.spellHit(c, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
         } else if (spell === 'IceDuel') {
             c.stunT = 8; c.frozenLook = 8;
             for (let i = 0; i < 20; i++) g.fx.spark(p, 0xbfe9ff, 0.12, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.8);
@@ -635,7 +639,15 @@ export class Duel {
         } else if (spell === 'SapiraDuel') {
             g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
             hit(10);
+            if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
         }
+    }
+
+    /** Where the caster's hand is (for the way a spell pushes): their hand, or a step before the target. */
+    _casterAt(byId, target) {
+        const out = new THREE.Vector3();
+        if (this._handOf(byId, 'right', out, new THREE.Vector3())) return out;
+        return out.copy(target.group?.position || new THREE.Vector3()).add(new THREE.Vector3(0, 0, -3));
     }
 
     // ============================================================ effects
@@ -651,14 +663,22 @@ export class Duel {
         const c = g.combat;
         const p = c.center(_v1);
         this._burst(p, DUEL_SPELLS[spell].color, 40);
+        // the way the charge pushes: from the caster's hand to me
+        const hand = new THREE.Vector3();
+        const from = this._handOf(byId, side || 'right', hand, new THREE.Vector3()) ? hand : null;
+        const push = (k) => { const d = p.clone().sub(from || p.clone().add(_v2.set(0, 0, -1).applyAxisAngle(_v3.set(0, 1, 0), g.character.group.rotation.y))).setY(0); if (d.lengthSq() < 1e-6) d.set(0, 0, 1); return d.normalize().multiplyScalar(k); };
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 6, 0.6, 30);
             g.hud.flashColor?.('rgba(40, 255, 90, 0.75)');
+            // the body crumples back (off the feet; up again by a squat)
+            g.knock?.knock({ dir: 'back', down: 1.5, by: byId, kind: 'avada' });
             // (not a killing curse: −25 HP at once)
             if (c.enabled) c.damage(25, byId, 'AvadaKedavra');
             else g.hud.setVoice('💚 Авада Кедавра попала в вас: −25 HP (здесь не ранит)', true);
         } else if (spell === 'Stupefy') {
             c.stun(DUEL.STUN_TIME, byId);
+            // falls stiff on the back (the shield was checked on arrival); once the stun ends — the get-up squat
+            g.impact?.apply({ v: push(4), from, by: byId, spell: 'Stupefy', always: { down: 1.5 }, noShield: true });
         } else if (spell === 'IceDuel') {
             if (c.enabled) c.freeze(byId);
             else c.stun(5, byId);
@@ -671,18 +691,22 @@ export class Duel {
             g.hud.flashColor?.('rgba(142, 45, 226, 0.6)');
             if (c.enabled) c.damage(4, byId, 'Sapira');
             else g.hud.setVoice('💜 Сапира попала в вас', true);
+            g.impact?.apply({ v: push(12), from, by: byId, spell: 'SapiraDuel', jolt: 3, noShield: true });
         }
     }
 
-    applyToZombie(spell, z, byId) {
+    applyToZombie(spell, z, byId, from = null) {
         const g = this.game;
+        const src = from || this._casterAt(byId, z);
         const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
         this._burst(p, DUEL_SPELLS[spell].color, 30);
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
             g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
+            if (!z.isDead) g.creatureImpact?.spellHit(z, 'AvadaKedavra', src, byId);
         } else if (spell === 'Stupefy') {
             z.stunTimer = DUEL.STUN_TIME;
+            g.creatureImpact?.spellHit(z, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
         } else if (spell === 'IceDuel') {
             z.freezeProgress = 1;
             z.freeze();
@@ -691,6 +715,7 @@ export class Duel {
         } else if (spell === 'SapiraDuel') {
             g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
             g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
+            if (!z.isDead) g.creatureImpact?.spellHit(z, 'SapiraDuel', src, byId);
         }
     }
 

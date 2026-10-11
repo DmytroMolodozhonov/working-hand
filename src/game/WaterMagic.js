@@ -590,12 +590,15 @@ export class WaterMagic {
         mesh.position.copy(b.pos);
         mesh.renderOrder = 2;
         this.scene.add(mesh);
-        this.falling.push({ ...b, mesh });
+        const f = { ...b, mesh };
+        this.falling.push(f);
+        return f;
     }
 
     /** A remote player dropped their ball (visual + same physics here). */
     remoteDrop(m) {
-        this._spawnFalling({ pos: new THREE.Vector3(m.p[0], m.p[1], m.p[2]), vel: new THREE.Vector3(m.v[0], m.v[1], m.v[2]), r: m.r, frozen: !!m.f, local: false });
+        const b = this._spawnFalling({ pos: new THREE.Vector3(m.p[0], m.p[1], m.p[2]), vel: new THREE.Vector3(m.v[0], m.v[1], m.v[2]), r: m.r, frozen: !!m.f, local: false });
+        if (b) b.by = m.by;
     }
 
     _updateFalling(dt) {
@@ -620,6 +623,7 @@ export class WaterMagic {
                 }
             }
 
+            this._ballHitsBodies(b);
             const inWater = t && t.isWaterAt(b.pos.x, b.pos.y - b.r * 0.5, b.pos.z);
             const ground = col.surfaceY(b.pos.x, b.pos.z);
             if (inWater) {
@@ -647,6 +651,28 @@ export class WaterMagic {
                 this.falling.splice(i, 1);
                 this._remove(b.mesh);
             }
+        }
+    }
+
+    /**
+     * A thrown / dropped ball hits a body on its way: water shoves (a stagger, never harm), ice hits
+     * hard (a big ball throws off the feet). My body: from another player's ball; creatures: on the host.
+     */
+    _ballHitsBodies(b) {
+        const g = this.game;
+        if (b.vel.length() <= 3) return;
+        if (b.local && !b.by) b.by = g.localId;
+        const push = () => b.vel.clone().setY(0).setLength(b.frozen ? (b.r >= 1.2 ? 12 : 6) : 4);
+        const name = b.frozen ? (b.r >= 1.2 ? 'IceBallBig' : 'IceBall') : 'WaterHit';
+        if (!b.local && !b._hitMe && g.impact && g.combat && !g.combat.dead && g.combat.center(_v1).distanceTo(b.pos) < b.r + 0.8) {
+            b._hitMe = true;
+            const res = g.impact.apply({ v: push(), from: b.pos.clone(), by: b.by || null, spell: name, jolt: b.frozen ? 1.5 : 0.5, noShield: false });
+            if (b.frozen && res !== 'blocked' && g.combat.enabled) g.combat.damage(Math.round(3 + 3 * b.r), b.by || null, 'IceBall');
+        }
+        if (g.authority && g.creatureImpact) {
+            b._hitC = b._hitC || new Set();
+            g.creatureImpact.spellArea(name, b.by || g.localId, (p) => (p.distanceTo(b.pos) < b.r + 1.1 ? push() : null),
+                { from: b.pos.clone(), skip: (c) => b._hitC.has(c), each: (c) => b._hitC.add(c) });
         }
     }
 

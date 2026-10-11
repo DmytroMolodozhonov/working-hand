@@ -66,6 +66,11 @@ import { headTurnStep } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { HandHold } from './HandHold.js';
 import { Mana } from './Mana.js';
+import { BodyImpact } from './BodyImpact.js';
+import { Knockdown } from './Knockdown.js';
+import { CreatureImpact } from './CreatureImpact.js';
+import { BodyStrikes } from './BodyStrikes.js';
+import { SPELL_PHYSICS, blastPush } from './Impact.js';
 
 const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
@@ -194,8 +199,9 @@ export class Game {
             handPose: (casterId, side) => this.handPose(casterId, side),
             players: (casterId) => this._spellPlayers(casterId),
             weapons: () => this.weapons.weapons,
-            blowMe: (casterId, origin, pushAt) => this._blowMe(casterId, origin, pushAt),
-            quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
+            blowMe: (casterId, origin, pushAt, name) => this._blowMe(casterId, origin, pushAt, name),
+            creatures: (name, casterId, pushAt, opts) => this.creatureImpact.spellArea(name, casterId, pushAt, opts),
+            quakeMe: (casterId, origin, reached, power, dir) => this._quakeMe(casterId, origin, reached, power, dir),
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); } },
@@ -235,6 +241,12 @@ export class Game {
         this.vortex = new WaterVortex(this); // «Water Vortex» (+ «Bubble», «Frozen») and «Fire Maxima»
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
+        // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
+        this.impact = new BodyImpact(this);
+        this.knock = new Knockdown(this);
+        this.creatureImpact = new CreatureImpact(this);
+        this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
+        this._headBase = { yaw: 0, pitch: 0 };
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
@@ -561,16 +573,14 @@ export class Game {
         const dPlayer = _v2.set(pp.x - pos.x, (pp.y - 1.5) - pos.y, pp.z - pos.z).length();
         this.fx.shake = Math.max(this.fx.shake, Math.max(0, (power > 1 ? 2 : 1.2) - dPlayer / (power > 1 ? 45 : 30)));
         if (dPlayer < radius + 3) {
-            _v1.set(pp.x - pos.x, 0, pp.z - pos.z).normalize().multiplyScalar((radius + 3 - dPlayer) * 4 * push);
-            this.knockback.add(_v1);
-            // Close to the centre: also thrown up into the air
+            // thrown by the blast: near it off the feet (and up into the air), further a stagger
             const k = 1 - dPlayer / (radius + 3);
-            if (k > 0.35 && !this.flight.active) {
-                const ch = this.character;
-                ch.group.position.y += 0.7;
-                ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, 10 * k * push);
-                ch.onGround = false;
-            }
+            const name = power > 1 ? 'BombardoMaxima' : 'Bombardo';
+            _v1.set(pp.x - pos.x, 0, pp.z - pos.z);
+            if (_v1.lengthSq() < 1e-6) _v1.set(0, 0, 1);
+            _v1.normalize().multiplyScalar(blastPush(dPlayer, radius, power));
+            this.impact.apply({ v: _v1.clone(), from: pos.clone(), by: casterId === 'local' ? this.localId : casterId, spell: name, blast: true,
+                toss: k > 0.35 && !this.flight.active ? 10 * k * push : 0, jolt: SPELL_PHYSICS[name].jolt * k, down: SPELL_PHYSICS[name].down });
         }
         // My own Bombardo too close to me hurts me too — the closer, the worse
         // (point-blank can kill). Not in creative. Other players' blasts: Combat.explosion.
@@ -596,6 +606,15 @@ export class Game {
                 z.velocity.addScaledVector(dir, 12 * push * (1 - d / blast));
                 z.vy = Math.max(z.vy || 0, (4 + 10 * (1 - d / blast)) * push);
             }
+            // every creature near it: off its feet or reeling (zombies and animals are already thrown above / by Animals)
+            const name = power > 1 ? 'BombardoMaxima' : 'Bombardo';
+            this.creatureImpact.spellArea(name, casterId, (p) => {
+                const d = p.distanceTo(pos);
+                if (d > radius + 3) return null;
+                const v = new THREE.Vector3(p.x - pos.x, 0, p.z - pos.z);
+                if (v.lengthSq() < 1e-6) v.set(1, 0, 0);
+                return v.normalize().multiplyScalar(blastPush(d, radius, power));
+            }, { from: pos.clone(), noSlide: (c) => !c.isVillager });
         }
     }
 
@@ -786,6 +805,8 @@ export class Game {
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
         // both hands cut off: no spell (the stump still stops the blood with «Rescue»)
         if (this.character.handLost?.('left') && this.character.handLost?.('right') && name !== 'Rescue' && name !== 'Stand') { if (isFinal) this.hud.setVoice('🩸 Без рук колдовать нельзя', true); return null; }
+        // lying on the ground: look, aim, shield and cast — but no flying off or stamping the ground
+        if (this.knock.down && /^(Flight|Earthquake|Breakthrough)/.test(name)) { if (isFinal) this.hud.setVoice('🧍 Сначала встаньте', true); return null; }
         // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
         // (before the duel's block: nothing may keep you from stopping your own spells)
         if (name === 'Stand') {
@@ -1096,12 +1117,10 @@ export class Game {
         this._bt.rising = { cols, height, done: 0, t: 0 };
         this.fx.explosion?.(new THREE.Vector3(cx, ch.group.position.y - 1.5, cz), 1.5, 0.4);
         if (this.sound) this.sound.playExplosion?.(new THREE.Vector3(cx, ch.group.position.y, cz), ch.group.position, 0.3);
-        // creatures standing there are thrown back
-        for (const z of this.zombies) {
-            if (z.isDead) continue;
-            const d = Math.hypot(z.group.position.x - cx, z.group.position.z - cz);
-            if (d < width / 2 + 1) { z.windVel = (z.windVel || new THREE.Vector3()).add(new THREE.Vector3(fx * 8, 0, fz * 8)); z.vy = Math.max(z.vy || 0, 6); }
-        }
+        // whoever stands there (creatures, players) is thrown back — on every computer (WallRise)
+        const o = new THREE.Vector3(cx, ch.group.position.y - 1.5, cz), wd = new THREE.Vector3(fx, 0, fz), wn = max ? 'WallRiseMaxima' : 'WallRise';
+        this.spells.cast(wn, o, wd, null, this.localId);
+        if (this.sync) this.sync.spell(wn, o, wd, null);
         this.hud.setVoice(max ? '🪨 BREAKTHROUGH МАКСИМА!' : '🪨 Breakthrough!', true);
     }
 
@@ -1283,16 +1302,20 @@ export class Game {
     }
 
     /** Another wizard's quake ran under me: I fall for a few seconds and get hurt. */
-    _quakeMe(casterId, origin, reached, power) {
+    _quakeMe(casterId, origin, reached, power, dir = null) {
         if (casterId === 'local' || casterId === this.localId) return false;
         const c = this.combat;
         if (!c.enabled || c.dead || this.flight.active) return false;
         if (!reached(this.character.group.position)) return false;
         if (c.shield && c.shield.type === 2 && c.shield.left > 0) { c._blocked(origin); return true; } // the dome holds
-        c.stun(power > 1 ? 4 : 2.5, casterId, 'quake');
-        this.character.knockedDown = true;
+        // the ground runs away under the feet along the wave: the body falls back against it (hands stay free)
+        const max = power > 1;
+        const d = (dir || _v1.subVectors(this.character.group.position, origin)).clone().setY(0);
+        if (d.lengthSq() < 1e-6) d.set(0, 0, -1);
+        this.impact.apply({ v: d.normalize().multiplyScalar(max ? -5 : -3), from: null, by: casterId,
+            spell: max ? 'EarthquakeMaxima' : 'Earthquake', always: { down: max ? 2.5 : 1.5 }, toss: max ? 6 : 4 });
         this.fx.shake = Math.max(this.fx.shake, 1.2);
-        c.damage(power > 1 ? 9 : 3, casterId, 'Earthquake');
+        c.damage(max ? 9 : 3, casterId, 'Earthquake');
         return true;
     }
 
@@ -1507,15 +1530,14 @@ export class Game {
     }
 
     /** Another wizard's «Вайнд» reached me: blown away (no harm; a shield stops it). */
-    _blowMe(casterId, origin, pushAt) {
+    _blowMe(casterId, origin, pushAt, name = 'Wind') {
         if (casterId === 'local' || casterId === this.localId || this.combat.dead) return;
         const v = pushAt(this.combat.center(new THREE.Vector3()));
         if (!v) return;
-        if (this.combat.shieldFactor(origin) >= 1) { this.combat._blocked(origin); return; }
-        if (this.flight.active) { this.knockback.add(v); return; }
-        this.knockback.add(_v1.copy(v).setY(0));
-        const ch = this.character;
-        if (v.y > 2) { ch.group.position.y += 0.7; ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, v.y); ch.onGround = false; }
+        // (a shield turned to it holds most of it: felt, the shield arm pushed back, never a fall)
+        if (this.combat.shieldFactor(origin) >= 1) this.combat._blocked(origin);
+        const P = SPELL_PHYSICS[name] || {};
+        this.impact.apply({ v: v.clone(), from: origin, by: casterId, spell: name, jolt: P.jolt || 0 });
     }
 
     _castAccio(isFinal) {
@@ -1662,6 +1684,8 @@ export class Game {
         p.y = this.collision.groundY(p.x, p.z) + 2.5;
         ch.verticalVelocity = 0;
         this.knockback.set(0, 0, 0);
+        this.knock.reset();
+        this.impact.reset();
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.inventory?.ensureStarterWand();
         this.death?.respawned(); // game.onRespawn hooks
@@ -1917,10 +1941,11 @@ export class Game {
         this.water.update(dt);
         this.combat.update(dt);
         this.vortex.update(dt);
-        this.combat.updatePunches();
+        this.strikes.update(dt); // fists, slaps, pushes, shoves: real contact only
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
+        this.creatureImpact.update(dt); // (after every creature moved: their falls and staggers are drawn on top)
         this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets(), this.livingTrees.targets()), dt);
         this.dismember.update(dt);
         mark('зомби');
@@ -2007,22 +2032,31 @@ export class Game {
                     this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
                     ch.setBodyRotation(this.smoothBody);
                 }
-                ch.updateHeadRotation(this.smoothHead.yaw - (s.drifting ? this.yawNeutral : 0), this.smoothHead.pitch);
+                this._headBase.yaw = this.smoothHead.yaw - (s.drifting ? this.yawNeutral : 0);
+                this._headBase.pitch = this.smoothHead.pitch;
             }
             ch.updateArmsLookAt(pose, dt);
-            ch.setCrouching(flying ? false : pose.isCrouching);
-            ch.setRunning(flying ? false : pose.isRunning, pose.runIntensity);
+            const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
+            ch.setCrouching(flying || down ? false : pose.isCrouching);
+            ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
         }
+        // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
+        const J = this._jolt = this.impact.step(dt);
+        if (!flying) {
+            ch.updateHeadRotation(this._headBase.yaw + J.yaw + (this.knock.down && this.knock.dir === 'front' ? 1.1 : 0), this._headBase.pitch + J.pitch);
+            ch.head.rotation.z = J.roll;
+        }
+        this.knock.update(dt); // (before ch.update: knockedDown / fallDir this frame)
         if (this.config.mode === 'test' && this.testState === 'setup') ch.setRunning(false);
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted);
 
-        // Explosion knockback (decays)
+        // Explosion knockback (decays; a body lying on the ground slides less far)
         if (this.knockback.lengthSq() > 0.0001) {
             ch.group.position.addScaledVector(this.knockback, dt);
-            this.knockback.multiplyScalar(Math.max(0, 1 - 4 * dt));
+            this.knockback.multiplyScalar(Math.max(0, 1 - (this.knock.down ? 8 : 4) * dt));
         }
 
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
@@ -2265,6 +2299,7 @@ export class Game {
 
     startFlight(force = false) {
         if (this.flight.active) return false;
+        if (this.knock?.down) return false; // (get up first)
         if (this.levitation.lifted) return false; // (held up by another wizard's Leviosa)
         if (!force && !this.knowsFlight()) {
             this.hud.setVoice('📜 В «Выживании» летать нельзя, пока не найдёте в сундуке <b>Свиток полёта</b> (и не сожжёте его «Инферно»)', true);
@@ -2314,9 +2349,6 @@ export class Game {
     _updateZombies(dt) {
         const ch = this.character;
         const charPos = ch.group.position;
-        const pose = this.currentPose;
-        const isPunching = !!(pose && pose.isPunching);
-        const hasWeapon = this.weapons.hasWeapon();
         const survival = this.config.mode === 'survival' || !!this.config.map;
 
         for (let i = this.zombies.length - 1; i >= 0; i--) {
@@ -2326,14 +2358,7 @@ export class Game {
                 // and report our own punches.
                 z.updateRemote(dt, this.camera);
                 if (z.isDead && z.removable) { this.removeZombie(z); continue; }
-                if (z.isDead) continue;
-                const gdx = charPos.x - z.group.position.x, gdz = charPos.z - z.group.position.z;
-                const gdist = Math.sqrt(gdx * gdx + gdz * gdz);
-                if (isPunching && !hasWeapon && this.playerAttackCooldown <= 0 && gdist < 3.0) {
-                    this.playerAttackCooldown = 0.5;
-                    this.onLocalHit(z, 1, _v1.set(-gdx, 0, -gdz).normalize().clone(), false);
-                }
-                continue;
+                continue; // (my fists: BodyStrikes — only a real blow that reaches the body)
             }
             // held up by «Вингардиум Левиоса»: Levitation carries it (it can't walk or bite)
             if (z.lev) { z._spinHalo?.(dt); continue; }
@@ -2355,13 +2380,6 @@ export class Game {
                 z.group.position.z -= (dz / dist) * overlap * 0.4;
             }
 
-            // Fists (original rule: fast wrist + zombie within 3 m, no weapon in hand)
-            if (isPunching && !hasWeapon && z.damageCooldown <= 0 && this.playerAttackCooldown <= 0 && dist < 3.0) {
-                this.playerAttackCooldown = 0.5;
-                const dir = _v1.set(-dx, 0, -dz).normalize().clone();
-                this.onLocalHit(z, 1, dir, false);
-                if (!z.isDead) z.group.position.addScaledVector(dir, 0.3);
-            }
 
             // Zombie against zombie («Брейнрот»: the servant and the others fight)
             if (target && target.zombie && target.distSq < 5.3) {
@@ -2506,6 +2524,7 @@ export class Game {
                 _v2.lerp(this._readAt, this._readK);
             }
             this.camera.lookAt(_v2);
+            if (this._jolt) { this.camera.rotateY(this._jolt.yaw * 0.5); this.camera.rotateX(this._jolt.pitch * 0.5); }
         }
         if (this.fx.shake > 0) {
             const s = this.fx.shake * 0.25;

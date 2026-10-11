@@ -893,7 +893,10 @@ export class Animals {
         if (id === g.localId || id === 'local') {
             if (g.combat.enabled) g.combat.damage(dmg, null, 'animal');
             else g.damageLocalPlayer(dmg);
-            g.knockback.add(_v.subVectors(g.character.group.position, a.group.position).setY(0).normalize().multiplyScalar(6).setY(2));
+            // butted: shoved back, reeling (BodyImpact; a big bull-like cow throws harder)
+            const push = _v.subVectors(g.character.group.position, a.group.position).setY(0).normalize().multiplyScalar(6).setY(2);
+            if (g.impact) g.impact.apply({ v: push.clone(), from: a.group.position.clone(), by: null, kind: 'butt', noShield: true });
+            else g.knockback.add(push);
             g.hud.setVoice?.(`🐾 ${SPECIES[a.type].name} бодается!`, true);
         } else g.sync?.animalButt?.(id, dmg, a.group.position);
     }

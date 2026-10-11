@@ -951,7 +951,10 @@ export class CastleLife {
         if (g.gear?.shieldFaces?.(from)) { g.gear.shieldTook?.('melee'); return; }
         if (g.combat.enabled) g.combat.damage(dmg, null, 'knight');
         else g.damageLocalPlayer(dmg);
-        g.knockback?.add(_v2.subVectors(g.character.group.position, from).setY(0).normalize().multiplyScalar(5).setY(2));
+        // the blow shoves me back (a stagger) and jerks my head
+        const push = _v2.subVectors(g.character.group.position, from).setY(0).normalize().multiplyScalar(5).setY(2);
+        if (g.impact) g.impact.apply({ v: push.clone(), from: from.clone().setY(g.character.group.position.y + 1), by: null, kind: 'knight', jolt: 1.5, toss: 2, noShield: true });
+        else g.knockback?.add(push);
         g.hud.setVoice(`⚔️ ${who} ударил вас: −${dmg}`, true);
     }
 
@@ -1350,8 +1353,6 @@ export class CastleLife {
         // models, bubbles, bars; fists of the local player; push me out of the people
         const me = g.character.group.position;
         const cam = g.camera;
-        const pose = g.currentPose;
-        const punching = !!(pose && pose.isPunching) && !g.weapons.hasWeapon() && (g.playerAttackCooldown || 0) <= 0 && !g.handHold?.anyBusy();
         for (const v of [...this.byId.values()]) {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             const visible = d < VIEW && !(v.wizard && d < 20 && Math.abs(v.y - (me.y - 1.95)) > 9); // (a wizard on another floor of the tower: not drawn)
@@ -1375,10 +1376,6 @@ export class CastleLife {
             if (d < 1.4 && d > 1e-3 && Math.abs(v.y - (me.y - 1.95)) < 2) {
                 const o = 1.4 - d;
                 me.x += (me.x - v.x) / d * o * 0.7; me.z += (me.z - v.z) / d * o * 0.7;
-            }
-            if (punching && d < 3.0) {
-                g.playerAttackCooldown = 0.5;
-                g.onLocalHit(v, 1, _v.set(v.x - me.x, 0, v.z - me.z).normalize().clone(), false);
             }
         }
         this.wizards.update(dt);

@@ -41,6 +41,7 @@
 import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
 import { createWaterMaterial } from '../fx/WaterMaterial.js';
+import { fallDir } from './Impact.js';
 
 export const VORTEX = {
     COST: 25, // mana (see Combat.SPELL_COST)
@@ -659,8 +660,9 @@ export class WaterVortex {
             const ch = g.character;
             ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, knock ? 5 : 3);
             if (knock && !g.flight?.active) {
-                c.stun(1.4 + Math.min(2, f.volume / 24), by, 'water');
-                ch.knockedDown = true;
+                // off the feet the way the water pushed (Knockdown: up by a squat once it has passed)
+                if (g.knock) g.knock.knock({ dir: fallDir(dir.x, dir.z, ch.group.rotation.y), down: 1.4 + Math.min(2, f.volume / 24), by, kind: 'vortex' });
+                else { c.stun(1.4 + Math.min(2, f.volume / 24), by, 'water'); ch.knockedDown = true; }
             }
             g.fx && (g.fx.shake = Math.max(g.fx.shake || 0, knock ? 0.8 : 0.4));
             g.hud?.setVoice?.(knock ? '🌊 Вас сбило с ног водоворотом!' : '🌊 Вас окатило водоворотом', true);
@@ -672,6 +674,7 @@ export class WaterVortex {
             z.windVel = (z.windVel || new THREE.Vector3()).add(_b.copy(dir).multiplyScalar(speed));
             z.vy = Math.max(z.vy || 0, knock ? 6 : 3.5);
             z.stunTimer = Math.max(z.stunTimer || 0, knock ? 2.5 : 0.6);
+            g.creatureImpact?.apply(z, { v: dir.clone().multiplyScalar(speed), by, kind: 'WaterVortex', noSlide: true, always: knock ? { down: 1.5 } : null });
             return;
         }
         const cr = g.duel?._creature?.(tk, tid);
@@ -683,6 +686,8 @@ export class WaterVortex {
             cr.vy = Math.max(cr.vy || 0, knock ? 6 : 3.5);
             cr.stunT = Math.max(cr.stunT || 0, knock ? 2.5 : 0.8);
         }
+        // reeling or off its feet, drawn the same for every creature (CreatureImpact)
+        g.creatureImpact?.apply(cr, { v: dir.clone().multiplyScalar(speed), by, kind: 'WaterVortex', noSlide: true, always: knock ? { down: 1.5 } : null });
     }
 
     /** After the hit the stream keeps pouring onto the target until the rings are empty (time to say «Bubble»). */

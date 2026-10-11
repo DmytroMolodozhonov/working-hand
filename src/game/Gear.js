@@ -341,6 +341,8 @@ export class Gear {
                     if (this.shieldFaces(from)) { this.shieldTook('melee'); a.stuck = true; continue; }
                     if (g.combat.enabled) g.combat.damage(Math.round(a.dmg), a.by, 'arrow');
                     else g.damageLocalPlayer(Math.round(a.dmg));
+                    // the arrow's blow: a small shove (in the head: the head jerks)
+                    g.impact?.apply({ v: a.vel.clone().setY(0).setLength(2), from: from.clone(), by: a.by, kind: 'arrow', noShield: true, jolt: p.y > g.character.group.position.y + 1.2 ? 1.5 : 0 });
                     this._stick(a, g.character.group);
                 }
                 // the ground / walls

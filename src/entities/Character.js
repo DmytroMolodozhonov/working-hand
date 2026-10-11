@@ -11,6 +11,7 @@ import { applyLook } from './Appearance.js';
 import { SimplifiedHand } from './SimplifiedHand.js';
 import { DetailedHand } from './DetailedHand.js';
 import { stumpEnd } from './LimbSurgery.js';
+import { KD } from '../game/Impact.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -45,6 +46,9 @@ export function armReach(shoulder, target, L1, L2, pole, outElbow, outHand) {
     outElbow.copy(shoulder).addScaledVector(u, a).addScaledVector(n, h);
     return outHand.copy(shoulder).addScaledVector(u, d);
 }
+
+/** The body lying the way it fell: [rotation.x, rotation.z] (the hero faces −Z: +x is on the back). */
+const FALL = { left: [0, 1.4], back: [1.45, 0], front: [-1.45, 0], right: [0, -1.4] };
 
 // Ground at y=-0.5 corresponded to group.y = 1.5 (baseY) in the original.
 export const PLAYER_GROUND_OFFSET = 2.0;
@@ -100,8 +104,17 @@ export class VoxelCharacter {
         this.group.rotation.order = 'YXZ';
         this.flightTilt = 0;
         this.flightView = 0; // flight: how far the view is pitched along the flight path (rad, + up)
-        this.knockedDown = false; // «Earthquake»: lying on the ground for a few seconds
+        this.knockedDown = false; // off the feet (Knockdown.js): lying the way `fallDir` says
+        this.fallDir = 'left';
         this._fallRoll = 0;
+        this._fallPitch = 0;
+        this._pitchOwned = false;
+        this.staggerLean = 0; // reeling: the body leans back (+) / forward (−)…
+        this.staggerRoll = 0; // …or aside
+        this.stepping = 0; // s of steps left (reeling: the legs step though nobody walks)
+        this.slowScale = 1; // walking speed (the ice beam's chill slows it)
+        this.airTop = null; // the highest point of this fall (landing → Knockdown)
+        this.landing = null; // {drop, speed, at} of the last landing
         this.flying = false;
     }
 
@@ -588,16 +601,26 @@ export class VoxelCharacter {
 
         // Crouching lowers the body by 1 m: the legs fold back (kneeling) so they stay above the ground
         const crouchAngle = this.isCrouching ? -1.1 : 0;
-        // Knocked down: falls on its side (and gets up again)
-        this._fallRoll += ((this.knockedDown ? 1.4 : 0) - this._fallRoll) * Math.min(1, dt * 6);
+        // Knocked down: tips over the way it was pushed (and gets up again); reeling: leans
+        const [px, rz] = this.knockedDown ? FALL[this.fallDir] || FALL.left : [this.staggerLean || 0, this.staggerRoll || 0];
+        const kf = Math.min(1, dt * (this.knockedDown ? 6 : 4));
+        this._fallPitch += (px - this._fallPitch) * kf;
+        this._fallRoll += (rz - this._fallRoll) * kf;
+        if (Math.abs(this._fallRoll) < 0.002 && rz === 0) this._fallRoll = 0;
         if (Math.abs(this._fallRoll) > 0.002 || this.group.rotation.z !== 0) this.group.rotation.z = this._fallRoll;
+        // (x is shared with flight and the bed: owned only while falling, lying, rising or reeling — those exclude flight and bed)
+        const own = this.knockedDown || Math.abs(this._fallPitch) > 0.002;
+        if (own) this.group.rotation.x = this._fallPitch;
+        else if (this._pitchOwned) { this.group.rotation.x = 0; this._fallPitch = 0; }
+        this._pitchOwned = own;
+        this.stepping = Math.max(0, (this.stepping || 0) - dt);
 
         if (move) {
             // Movement (original speeds)
             if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 7.5;
                 // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book)
-                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.limbSpeed ?? 1);
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1);
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
@@ -614,15 +637,25 @@ export class VoxelCharacter {
                 // Swimming: the water holds the body (Swimming.js decides how high)
                 this.verticalVelocity = 0;
                 this.onGround = false;
+                this.airTop = null;
                 this.group.position.y += (Math.max(this.swimY, targetY) - y) * Math.min(1, 6 * dt);
             } else if (y > targetY + 0.6 && !this.isCrouching) {
                 // Falling into a crater / off a ledge
+                this.airTop = Math.max(this.airTop ?? y, y);
                 this.verticalVelocity -= 20 * dt;
                 this.group.position.y = Math.max(targetY, y + this.verticalVelocity * dt);
                 this.onGround = this.group.position.y <= targetY + 1e-3;
-                if (this.onGround) this.verticalVelocity = 0;
+                if (this.onGround) {
+                    // (how far it fell and how fast it hit the ground: a high fall knocks over — Knockdown.js)
+                    this.landing = { drop: this.airTop - this.group.position.y, speed: -this.verticalVelocity, at: performance.now() };
+                    this.airTop = null;
+                    this.verticalVelocity = 0;
+                }
             } else {
+                // (the last bit of a fall is eased onto the ground here: it lands now)
+                if (this.airTop != null) this.landing = { drop: this.airTop - targetY, speed: -this.verticalVelocity, at: performance.now() };
                 this.verticalVelocity = 0;
+                this.airTop = null;
                 this.onGround = true;
                 this.group.position.y += (targetY - y) * Math.min(1, 10 * dt);
             }
@@ -635,10 +668,11 @@ export class VoxelCharacter {
             const flutter = Math.sin(this.runCycle) * 0.05;
             this.leftLegPivot.rotation.x += (flutter - this.leftLegPivot.rotation.x) * k;
             this.rightLegPivot.rotation.x += (-flutter - this.rightLegPivot.rotation.x) * k;
-        } else if (this.isRunning) {
-            const animSpeed = 8 + (this.runIntensity * 12);
+        } else if (this.isRunning || this.stepping > 0) {
+            const intensity = this.isRunning ? this.runIntensity : 0.6;
+            const animSpeed = 8 + (intensity * 12);
             this.runCycle += dt * animSpeed;
-            const swingAmplitude = 0.5 + (this.runIntensity * 0.3);
+            const swingAmplitude = 0.5 + (intensity * 0.3);
             const legSwing = Math.sin(this.runCycle) * swingAmplitude;
             this.leftLegPivot.rotation.x = legSwing + crouchAngle;
             this.rightLegPivot.rotation.x = -legSwing + crouchAngle;
@@ -656,6 +690,20 @@ export class VoxelCharacter {
             h.group.position.y += ((rest ? rest.y : 0) - h.group.position.y) * spring;
             h.group.position.z += (this.BONE_LENGTH_LOWER + (rest ? rest.z : 0) - h.group.position.z) * spring;
         }
+    }
+
+    /**
+     * Show this hand held `worldDelta` away from where it is tracked (it rests on something —
+     * a body it pushes, a shield taking a spell); springs back by itself next frames.
+     */
+    setHandOffset(side, worldDelta, max = 0.6) {
+        const hand = this.getActiveHands()[side];
+        if (!hand || !hand.group.parent) return;
+        _v1.copy(worldDelta).clampLength(0, max);
+        hand.group.parent.getWorldQuaternion(_q1).invert();
+        _v1.applyQuaternion(_q1);
+        const rest = hand.group.userData.restOffset;
+        hand.group.position.set((rest?.x || 0) + _v1.x, (rest?.y || 0) + _v1.y, this.BONE_LENGTH_LOWER + (rest?.z || 0) + _v1.z);
     }
 
     getPosition(out = new THREE.Vector3()) { return out.copy(this.group.position); }
@@ -759,9 +807,10 @@ export class VoxelCharacter {
             hp: r3(this.head.rotation.x),
             la: q(this.leftArmAnchor), le: q(this.leftElbowAnchor),
             ra: q(this.rightArmAnchor), re: q(this.rightElbowAnchor),
-            run: this.isRunning ? r2(this.runIntensity) : -1,
+            run: this.isRunning || this.stepping > 0 ? r2(this.isRunning ? this.runIntensity : 0.6) : -1,
             cr: this.isCrouching ? 1 : 0,
-            kd: this.knockedDown ? 1 : 0,
+            kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
+            sg: this.stepping > 0 ? [r2(this.staggerLean || 0), r2(this.staggerRoll || 0)] : undefined,
             lh: this.leftSimplifiedHand.serializeState(),
             rh: this.rightSimplifiedHand.serializeState(),
         };

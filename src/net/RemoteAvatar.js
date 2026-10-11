@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
 import { CombatVisuals } from '../game/Combat.js';
+import { KD_NAME } from '../game/Impact.js';
 
 const COLORS = [0xe67e22, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0xf1c40f, 0x2ecc71, 0xecf0f1, 0x34495e];
 const _q = new THREE.Quaternion();
@@ -33,6 +34,9 @@ export class RemoteAvatar {
         this.combat = { shield: 0, side: 'right', shieldLeft: 0, frozen: false }; // Свободный мир
         this.visuals = null;
         this.dead = false;
+        this.vel = new THREE.Vector3();
+        this._pp = new THREE.Vector3();
+        this._ppOk = false;
     }
 
     /** The other player's own hero (face, clothes…). */
@@ -45,7 +49,10 @@ export class RemoteAvatar {
 
     setDead(dead) {
         this.dead = dead;
-        this.character.group.visible = !dead;
+        clearTimeout(this._hideT);
+        // (knocked down as they died — Avada, a blast: the body is seen falling first)
+        if (dead && this.character.knockedDown && typeof setTimeout === 'function') this._hideT = setTimeout(() => { if (this.dead) this.character.group.visible = false; }, 1200);
+        else this.character.group.visible = !dead;
     }
 
     /** Would this player's shield stop something coming from `from`? */
@@ -101,12 +108,22 @@ export class RemoteAvatar {
         const g = ch.group.position;
         if (Math.hypot(p[0] - g.x, p[2] - g.z) > 10) g.set(p[0], p[1], p[2]);
         else { g.x += (p[0] - g.x) * k; g.y += (p[1] - g.y) * k; g.z += (p[2] - g.z) * k; }
+        // how fast the body moves (my hands striking it measure their speed against it)
+        if (this._ppOk && dt > 0) { _d.subVectors(g, this._pp).divideScalar(dt); if (_d.lengthSq() < 900) this.vel.lerp(_d, 0.3); else this.vel.set(0, 0, 0); }
+        this._pp.copy(g); this._ppOk = true;
         let d = s.s.ry - ch.group.rotation.y;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
         ch.group.rotation.y += d * k;
-        ch.group.rotation.x += ((s.s.rx || 0) - ch.group.rotation.x) * k; // flight tilt
-        ch.flying = Math.abs(s.s.rx || 0) > 0.05;
+        // off the feet / reeling (Knockdown.js): the body tips over (or leans) the way it was pushed
+        const kd = s.s.kd | 0, sg = Array.isArray(s.s.sg) ? s.s.sg : null;
+        ch.knockedDown = kd > 0;
+        ch.fallDir = KD_NAME[kd] || ch.fallDir;
+        ch.staggerLean = sg ? +sg[0] || 0 : 0;
+        ch.staggerRoll = sg ? +sg[1] || 0 : 0;
+        if (sg) ch.stepping = Math.max(ch.stepping || 0, 0.15);
+        if (!kd && !sg && !ch._pitchOwned) ch.group.rotation.x += ((s.s.rx || 0) - ch.group.rotation.x) * k; // flight tilt
+        ch.flying = !kd && !sg && Math.abs(s.s.rx || 0) > 0.05;
         ch.head.rotation.y += (s.s.hy - ch.head.rotation.y) * k;
         ch.head.rotation.x += (s.s.hp - ch.head.rotation.x) * k;
         const slerp = (obj, arr) => { if (arr) obj.quaternion.slerp(_q.set(arr[0], arr[1], arr[2], arr[3]), k); };
@@ -116,7 +133,6 @@ export class RemoteAvatar {
         slerp(ch.rightElbowAnchor, s.s.re);
         ch.setRunning(s.s.run >= 0, Math.max(0, s.s.run));
         ch.setCrouching(!!s.s.cr);
-        ch.knockedDown = !!s.s.kd;
         ch.leftSimplifiedHand.applyState(s.s.lh);
         ch.rightSimplifiedHand.applyState(s.s.rh);
         ch.update(dt, null, false);
