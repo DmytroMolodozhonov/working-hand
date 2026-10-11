@@ -85,3 +85,18 @@ test('look: a map from «Карты» starts a map game (internally \'survival\'
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('look: if the game code fails to start, the screen says so (not a dead menu)', async () => {
+    // a normal start: no warning
+    const ok = await openPage(browser, srv.url, { noCamera: true });
+    await ok.page.waitForSelector('.mode-row .mode-card');
+    assert.equal(await ok.page.$('#start-error'), null);
+    await ok.page.close();
+    // a broken main.js: the warning appears with the reason
+    const page = await browser.newPage();
+    await page.route('**/src/main.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'import { nope } from "./ui/Branding.js";' }));
+    await page.goto(srv.url);
+    await page.waitForSelector('#start-error', { timeout: 15000 });
+    assert.match(await page.textContent('#start-error'), /Игра не запустилась/);
+    await page.close();
+});

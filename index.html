@@ -585,6 +585,27 @@
             style="width: 100%; height: 100%; background: #000;"></canvas>
     </div>
 
+    <!-- If the game's code fails to start, say so on screen (instead of a menu that does nothing) -->
+    <script>
+        (function () {
+            function show(text) {
+                if (window.__zns && window.__zns.startGame) return; // started: in-game errors are not shown here
+                var el = document.getElementById('start-error');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'start-error';
+                    el.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:99999;max-width:min(760px,calc(100% - 24px));background:#5a1222;color:#fff;border:2px solid #ff5d7a;border-radius:12px;padding:10px 14px;font:15px/1.4 sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.6)';
+                    document.body.appendChild(el);
+                }
+                el.innerHTML = '⚠️ Игра не запустилась. Нажмите <b>Ctrl+F5</b>. Если не помогло — сделайте снимок этого окна.<br><small style="opacity:.8"></small>';
+                el.querySelector('small').textContent = String(text).slice(0, 300);
+            }
+            window.addEventListener('error', function (e) { show((e.message || 'ошибка') + (e.filename ? ' — ' + e.filename.split('/').pop() + ':' + e.lineno : '')); });
+            window.addEventListener('unhandledrejection', function (e) { show(e.reason && e.reason.message || e.reason || 'ошибка'); });
+            // (a script that could not even load fires no error event)
+            setTimeout(function () { if (!(window.__zns && window.__zns.startGame)) show('Код игры не загрузился за 20 секунд (файлы игры неполные или устарели — запустите «Обновить и запустить игру»).'); }, 20000);
+        })();
+    </script>
     <!-- Libraries are bundled locally in vendor/ (works offline, no CDN outages) -->
     <script src="vendor/peerjs/peerjs.min.js"></script>
     <script type="importmap">
