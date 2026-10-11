@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseColor, bedColorHex, BED_COLORS, checkRecipe, planConsumption, countMaterials, everyoneAsleep } from '../../src/game/BedRules.js';
+import { parseColor, bedColorHex, BED_COLORS, checkRecipe, planConsumption, countMaterials, everyoneAsleep, bedSpawnSpot, bedSpawnCandidates, homeBed } from '../../src/game/BedRules.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 
 test('beds: colour words in Russian and English', () => {
@@ -75,4 +75,32 @@ test('beds: the night passes only when every living player sleeps', () => {
     assert.equal(everyoneAsleep([{ lying: true, still: 5 }, { dead: true, lying: false }]), true);
     assert.equal(everyoneAsleep([{ dead: true }]), false);
     assert.equal(everyoneAsleep([]), false);
+});
+
+test('beds: the respawn point — my bed, a free place beside it facing away, a destroyed bed → the usual place', () => {
+    const dims = { W: 2.5, L: 5.5 };
+    const bed = { id: 'b1', x: 10, y: 0, z: -4, ry: 0.7 };
+    const beds = new Map([['b1', bed]]);
+    // the bed chosen
+    assert.deepEqual(homeBed({ id: 'b1' }, beds), { bed });
+    assert.equal(homeBed(null, beds), null);
+    // the bed is gone → the usual place; a house bed far away (unloaded) still stands while its floor does
+    assert.deepEqual(homeBed({ id: 'gone' }, beds), { gone: true });
+    const far = { id: 'h3b0', x: 300, y: 5, z: 20, ry: 0, gen: 1 };
+    assert.deepEqual(homeBed(far, beds, () => true), { bed: far });
+    assert.deepEqual(homeBed(far, beds, () => false), { gone: true });
+    // open ground: beside the long side, outside the bed, looking away from it
+    const flat = () => 0;
+    const s = bedSpawnSpot(bed, dims, flat);
+    const dx = s.x - bed.x, dz = s.z - bed.z;
+    const lx = dx * Math.cos(bed.ry) - dz * Math.sin(bed.ry), lz = dx * Math.sin(bed.ry) + dz * Math.cos(bed.ry);
+    assert.ok(Math.abs(lx) > dims.W / 2 + 0.5 && Math.abs(lz) < dims.L / 2, 'beside the long side, not in the bed');
+    const look = { x: -Math.sin(s.ry), z: -Math.cos(s.ry) };
+    assert.ok((look.x * dx + look.z * dz) / Math.hypot(dx, dz) > 0.99, 'facing away from the bed');
+    assert.equal(s.y, 0);
+    // a wall on that side (and no floor anywhere near) → the other side; nowhere → null
+    const first = bedSpawnCandidates(bed, dims)[0];
+    const s2 = bedSpawnSpot(bed, dims, (x, z) => (Math.hypot(x - first.x, z - first.z) < 0.5 ? null : 0));
+    assert.ok(Math.hypot(s2.x - first.x, s2.z - first.z) > 2, 'not into the wall');
+    assert.equal(bedSpawnSpot(bed, dims, () => null), null);
 });

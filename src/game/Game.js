@@ -1853,13 +1853,22 @@ export class Game {
         this.playerHP = this.maxHP;
         this.isDeadLocal = false;
         const p = ch.group.position;
-        if (this.config.map && this.world.mapResult?.playerSpawn) p.copy(this.world.mapResult.playerSpawn);
-        else {
-            const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 14;
-            p.x = Math.cos(a) * d;
-            p.z = Math.sin(a) * d;
+        // at my bed (the last one I lay in), standing beside it, looking away from it
+        const home = this.beds?.respawnSpot();
+        if (home?.spot) {
+            p.set(home.spot.x, home.spot.y + PLAYER_GROUND_OFFSET + 0.1, home.spot.z);
+            ch.group.rotation.set(0, home.spot.ry, 0);
+        } else {
+            if (this.config.map && this.world.mapResult?.playerSpawn) p.copy(this.world.mapResult.playerSpawn);
+            else {
+                const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 14;
+                p.x = Math.cos(a) * d;
+                p.z = Math.sin(a) * d;
+            }
+            p.y = this.collision.groundY(p.x, p.z) + 2.5;
+            if (home?.gone) this.hud.setVoice('🛏️ Ваша кровать разрушена — вы возродились в обычном месте', true);
+            else if (home?.blocked) this.hud.setVoice('🛏️ У вашей кровати нет свободного места — вы возродились в обычном месте', true);
         }
-        p.y = this.collision.groundY(p.x, p.z) + 2.5;
         ch.verticalVelocity = 0;
         this.knockback.set(0, 0, 0);
         this.knock.reset();

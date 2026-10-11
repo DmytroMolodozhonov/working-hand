@@ -29,6 +29,8 @@
  *       creates it and tells the others.
  *   game.beds.list — Map id → {id, x, y, z, ry, color, model}.
  *   game.beds.lying — the id of the bed I lie in (or null).
+ *   game.beds.home — the bed I come back to life at (the last one I lay in):
+ *       {id, x, y, z, ry, gen} or null; kept with the player's things (WorldSave).
  *
  * Multiplayer: the host owns the beds (creating consumes its loose things,
  * recolouring, the night skip); guests ask. Beds are in the world snapshot.
@@ -42,7 +44,8 @@ import { newUid } from './ItemTypes.js';
 import { PVP } from './Combat.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
-import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS } from './BedRules.js';
+import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS, bedSpawnSpot, homeBed } from './BedRules.js';
+import { floorUnder } from './Wreck.js';
 import { ThrowDetector, poseBehind } from './HandRelease.js';
 
 const DAY_MS = 24 * 60 * 1000; // (Game.DAY_CYCLE_MS)
@@ -60,6 +63,7 @@ export class Beds {
         this.game = game;
         this.list = new Map(); // id -> bed
         this.lying = null; // the bed I lie in
+        this.home = null; // the bed I respawn at: {id, x, y, z, ry, gen}
         this.others = new Map(); // playerId -> {bed, ready}: the others' beds
         this.sleeping = null; // the night is passing: {t, dayStart, switched}
         this.testAim = null; // (tests) a point to aim the spells at instead of the hand
@@ -384,7 +388,39 @@ export class Beds {
         this.lying = b.id;
         this._upT = 0; this._walkT = 0; this._stillT = 0; this._healT = 0; this._waitSaid = false;
         this._holdLying(b);
-        this.game.hud.setVoice(this._isNight() ? '🛏️ Вы легли спать. Не двигайтесь — и ночь пройдёт' : '🛏️ Вы прилегли отдохнуть: здоровье понемногу восстанавливается. Встаньте, чтобы подняться', true);
+        const fresh = this.home?.id !== b.id;
+        this.setHome(b);
+        this.game.hud.setVoice((this._isNight() ? '🛏️ Вы легли спать. Не двигайтесь — и ночь пройдёт' : '🛏️ Вы прилегли отдохнуть: здоровье понемногу восстанавливается. Встаньте, чтобы подняться')
+            + (fresh ? '. Теперь вы будете возрождаться у этой кровати' : ''), true);
+        if (fresh) this.game.hud.toast?.('🛏️ Теперь вы будете возрождаться у этой кровати', 3500);
+    }
+
+    /** This bed becomes the place I come back to life at (a bed or its saved record). */
+    setHome(b) {
+        if (!b || !b.id || ![b.x, b.y, b.z].every(Number.isFinite)) { this.home = null; return; }
+        this.home = { id: String(b.id), x: r2(b.x), y: r2(b.y), z: r2(b.z), ry: r3(b.ry || 0), gen: b.gen ? 1 : 0 };
+    }
+
+    /**
+     * Where I come back to life: {spot: {x, y, z, ry}} beside my bed (the floor
+     * point and the way to look), {gone: true} — my bed was destroyed (it is
+     * forgotten), {blocked: true} — no free place beside it, or null — no bed.
+     */
+    respawnSpot() {
+        const g = this.game, col = g.collision;
+        // a house bed far away is not loaded: it stands while the floor under it does (as Houses._activate)
+        const t = g.world?.terrain?.data;
+        const res = homeBed(this.home, this.list, (h) => !t || floorUnder(t, h.x, h.y, h.z) != null);
+        if (!res) return null;
+        if (res.gone) { this.home = null; return { gone: true }; }
+        const b = res.bed;
+        const spot = bedSpawnSpot(b, BED, (x, z) => {
+            const y = col.groundAt ? col.groundAt(x, z, b.y + 1) : col.groundY(x, z);
+            if (!Number.isFinite(y) || Math.abs(y - b.y) > 1.2) return null; // a drop, a wall, a step too high
+            for (const h of [0.4, 1.2, 2.0]) if (col.pointBlocked?.(x, y + h, z)) return null; // (a wall, a chest, another bed)
+            return y;
+        });
+        return spot ? { spot } : { blocked: true };
     }
 
     /** On the back, the head on the pillow (the body origin is 2 m from the feet). */

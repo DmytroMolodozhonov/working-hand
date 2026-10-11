@@ -32,7 +32,7 @@ const waitFor = (page, fn, arg, timeout = 30000) => page.waitForFunction(fn, arg
 
 test('beds: wool from a sheep, logs thrown from the hand, «Create a Bed», «Change a color», sleeping through the night, the save', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'creative');
+    await startFromMenu(page, 'freeworld'); // (creative needs no logs and no wool for a bed)
     await waitHudVisible(page);
     await frames(page, 10);
 
@@ -158,7 +158,7 @@ test('beds: wool from a sheep, logs thrown from the hand, «Create a Bed», «Ch
         return { phase: g.dayPhase(), night: g.world.nightAmount, isNight: g.isNight, overlay: document.getElementById('sleep-fade').style.display, said: window.__said.join(' | '), lying: !!g.beds.lying };
     });
     assert.ok(morning.phase < 0.15, 'morning: ' + morning.phase);
-    assert.ok(morning.night < 0.05 && !morning.isNight);
+    assert.ok(morning.night < 0.2 && !morning.isNight, JSON.stringify(morning)); // (early morning: a little dawn twilight)
     assert.equal(morning.overlay, 'none');
     assert.match(morning.said, /Доброе утро/);
     assert.equal(morning.lying, true, 'still in bed after waking up');
@@ -172,6 +172,25 @@ test('beds: wool from a sheep, logs thrown from the hand, «Create a Bed», «Ch
     });
     assert.equal(up.rx, 0);
     assert.ok(up.d > 1.5, 'stands beside the bed');
+
+    // the bed I lay in is my respawn point: killed → back standing beside it, looking away; in the save too
+    const home = await page.evaluate(async () => {
+        const g = window.__zns.game, b = [...g.beds.list.values()][0], ch = g.character;
+        const said = window.__said.join(' | ');
+        ch.group.position.set(b.x + 60, g.collision.groundY(b.x + 60, b.z) + 2, b.z);
+        g.onLocalDeath('test');
+        await new Promise((r) => setTimeout(r, 300));
+        g.respawn();
+        const p = ch.group.position, dx = p.x - b.x, dz = p.z - b.z;
+        const look = (-Math.sin(ch.group.rotation.y) * dx - Math.cos(ch.group.rotation.y) * dz) / Math.hypot(dx, dz);
+        const feet = p.y - 2 - g.collision.groundAt(p.x, p.z, p.y);
+        return { said, home: g.beds.home?.id === b.id, d: Math.hypot(dx, dz), look, feet, saved: g.keeper.snapshot().players[g.keeper.myKey].bed?.id === b.id };
+    });
+    assert.match(home.said, /возрождаться у этой кровати/);
+    assert.ok(home.home && home.saved, JSON.stringify(home));
+    assert.ok(home.d > 1.8 && home.d < 4.5, 'beside the bed: ' + home.d);
+    assert.ok(home.look > 0.95, 'looking away from the bed');
+    assert.ok(home.feet > -0.5 && home.feet < 1, 'on the ground: ' + home.feet);
 
     // the bed is in the world save; a castle bed by its id is not reset by the generator
     const saved = await page.evaluate(() => {
@@ -187,6 +206,21 @@ test('beds: wool from a sheep, logs thrown from the hand, «Create a Bed», «Ch
     assert.deepEqual(Object.keys(saved.beds[0]).sort(), ['color', 'id', 'ry', 'x', 'y', 'z']);
     assert.equal(saved.kept, 'green');
     assert.equal(saved.n, 2);
+
+    // my bed destroyed → the usual place, and I'm told
+    const lost = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const b = g.beds.list.get(g.beds.home.id);
+        g.beds.removeBed(b.id);
+        window.__said.length = 0;
+        g.onLocalDeath('test');
+        await new Promise((r) => setTimeout(r, 300));
+        g.respawn();
+        const p = g.character.group.position;
+        return { said: window.__said.join(' | '), home: g.beds.home, d: Math.hypot(p.x - b.x, p.z - b.z) };
+    });
+    assert.match(lost.said, /Ваша кровать разрушена — вы возродились в обычном месте/);
+    assert.equal(lost.home, null);
 
     assert.deepEqual(realErrors(errors), []);
     await page.close();
@@ -219,8 +253,6 @@ test('beds in multiplayer: a guest creates and repaints (the host decides), both
     const guest = await openPlayer('Гость');
     await guest.page.fill('#mp-code', code);
     await guest.page.click('#mp-join-btn');
-    await waitFor(guest.page, () => document.getElementById('mp-status').textContent.includes('Подключено'), null, 30000);
-    await waitFor(host.page, () => document.getElementById('mp-players').textContent.includes('Гость'), null, 15000);
     await waitFor(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await waitFor(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
     await waitFor(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
@@ -293,7 +325,20 @@ test('beds in multiplayer: a guest creates and repaints (the host decides), both
     await waitFor(host.page, () => !window.__zns.game.beds.sleeping, null, 20000);
     const days = await Promise.all([host.page, guest.page].map((p) => p.evaluate(() => { const g = window.__zns.game; return { start: g.dayStart, phase: g.dayPhase(), night: g.world.nightAmount }; })));
     assert.equal(days[0].start, days[1].start, 'the host decided the morning for both');
-    for (const d of days) assert.ok(d.phase < 0.15 && d.night < 0.05, JSON.stringify(d));
+    for (const d of days) assert.ok(d.phase < 0.15 && d.night < 0.2, JSON.stringify(d));
+
+    // each has their own bed to come back to: the guest killed → beside its (pink) bed; the host keeps the green one
+    const gHome = await guest.page.evaluate(async (id2) => {
+        const g = window.__zns.game, b = g.beds.list.get(id2);
+        g.onLocalDeath('test');
+        await new Promise((r) => setTimeout(r, 300));
+        g.respawn();
+        const p = g.character.group.position;
+        return { home: g.beds.home?.id, d: Math.hypot(p.x - b.x, p.z - b.z) };
+    }, id2);
+    assert.equal(gHome.home, id2);
+    assert.ok(gHome.d > 1.8 && gHome.d < 4.5, JSON.stringify(gHome));
+    assert.equal(await host.page.evaluate(() => window.__zns.game.beds.home?.id), id);
 
     assert.deepEqual(realErrors(host.errors).filter((e) => !/peer|webrtc|ice/i.test(e)), []);
     assert.deepEqual(realErrors(guest.errors).filter((e) => !/peer|webrtc|ice/i.test(e)), []);

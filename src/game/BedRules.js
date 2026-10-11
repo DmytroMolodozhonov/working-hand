@@ -124,3 +124,52 @@ export function everyoneAsleep(players, stillNeeded = 3) {
     if (!alive.length) return false;
     return alive.every((p) => p.lying && (p.still || 0) >= stillNeeded);
 }
+
+// ------------------------------------------------------------- respawning
+/**
+ * Places beside a bed to stand at, in the order they are tried: the long
+ * sides first, then the foot and the head, a step further out each round.
+ * bed {x, z, ry}; dims {W, L}. → [{x, z}]
+ */
+export function bedSpawnCandidates(bed, dims, gaps = [1.0, 1.8, 2.8]) {
+    const c = Math.cos(bed.ry || 0), s = Math.sin(bed.ry || 0);
+    // the bed's own axes (as in Beds._nearBed / standUp): across (c, −s), along (s, c)
+    const at = (lx, lz) => ({ x: bed.x + lx * c + lz * s, z: bed.z - lx * s + lz * c });
+    const out = [];
+    for (const g of gaps) {
+        const side = dims.W / 2 + g, end = dims.L / 2 + g;
+        out.push(at(side, 0), at(-side, 0), at(side, dims.L / 4), at(-side, dims.L / 4), at(side, -dims.L / 4), at(-side, -dims.L / 4), at(0, end), at(0, -end));
+    }
+    return out;
+}
+
+/**
+ * Where a player comes back to life at their bed: the first free place beside
+ * it with solid ground, facing away from the bed. floorAt(x, z) → the floor
+ * height there, or null (no floor, a wall, a drop, something in the way).
+ * → {x, y, z, ry} (ry: the hero's rotation.y; the hero looks along (−sin ry, −cos ry)) or null.
+ */
+export function bedSpawnSpot(bed, dims, floorAt) {
+    if (!bed) return null;
+    for (const p of bedSpawnCandidates(bed, dims)) {
+        const y = floorAt(p.x, p.z);
+        if (y == null || !Number.isFinite(y)) continue;
+        const dx = p.x - bed.x, dz = p.z - bed.z;
+        return { x: p.x, y, z: p.z, ry: Math.atan2(-dx, -dz) };
+    }
+    return null;
+}
+
+/**
+ * The bed a player respawns at: home {id, x, y, z, ry, gen} (the bed they lay
+ * in). beds: Map id → bed (the beds in the world now). A house bed may be
+ * unloaded because it is far away — genStands(home) says whether it still
+ * stands. → {bed} | {gone: true} (it was destroyed) | null (no bed chosen).
+ */
+export function homeBed(home, beds, genStands = () => true) {
+    if (!home || !home.id) return null;
+    const b = beds?.get(home.id);
+    if (b) return { bed: b };
+    if (home.gen && genStands(home)) return { bed: home };
+    return { gone: true };
+}

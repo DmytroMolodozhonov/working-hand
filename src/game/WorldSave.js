@@ -109,6 +109,7 @@ export function playerSnapshot(game) {
         limbs: game.dismember?.snapshot() || null, // cut off (until death): no healing by leaving
         bleed: game.bleeding?.rate || 0,
         ship: game.ships?.playerSnap() || null, // standing on a ship: [ship id, place on its deck]
+        bed: game.beds?.home || null, // the bed they come back to life at
     };
 }
 
@@ -138,6 +139,7 @@ export function applyPlayerSnapshot(game, s) {
     if (s.gear) game.items?.restore(s.gear);
     if (s.mana) game.mana?.restore(s.mana);
     if (s.limbs && Number.isFinite(s.hp) && s.hp > 0) game.dismember?.restoreMine(s.limbs, s.bleed || 0);
+    if (s.bed) game.beds?.setHome(s.bed);
     if (s.ship) game.ships?.applyPlayerSnap(s.ship); // (back on the ship's deck, wherever it sailed)
 }
 
