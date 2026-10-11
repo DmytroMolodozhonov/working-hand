@@ -263,10 +263,12 @@ export class WandMagic {
         this.lights.forEach((light, i) => {
             const s = src[i];
             if (!s || s.level <= 0) { light.intensity = 0; return; }
-            const lo = lightOf(s.level);
+            const lo = lightOf(s.level), cave = this.game.world?.cave || 0;
             light.position.copy(s.p);
-            light.intensity = lo.intensity * (1 + Math.sin(this._flick * 3.1 + i) * 0.04);
+            // (in a cave's dark the light is all there is: it reaches further along the rock)
+            light.intensity = lo.intensity * (1 + 0.35 * cave) * (1 + Math.sin(this._flick * 3.1 + i) * 0.04);
             light.distance = lo.distance;
+            light.decay = 2 - 0.75 * cave;
         });
     }
 

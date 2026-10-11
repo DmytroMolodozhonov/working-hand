@@ -27,7 +27,7 @@ import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
-import { CAVES, growCaveSystem, caveMouth, carveColumn } from './CaveSystems.js';
+import { CAVES, growCaveSystem, caveMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -43,9 +43,11 @@ export const BLOCK = {
     // the wizards' tower and houses (src/world/WizardTowers.js): blue-grey arcane stone, a violet roof,
     // glowing crystal lamps, a violet carpet, potion shelves, runes in the floor
     ARCANE: 49, ARCANE_DARK: 50, ROOF_PURPLE: 51, ARCANE_LAMP: 52, ARCANE_LAMP_VIOLET: 53, CARPET_PURPLE: 54, POTION: 55, RUNE: 56,
+    // underground (generation 4 caves): gravel and dark deep stone in the rock round the caves
+    GRAVEL: 57, DEEPSTONE: 58,
 };
 /** Built by people (castles, villages): wrecking it is a crime there. */
-export const isCastleBlock = (t) => t >= BLOCK.CS_GREY;
+export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
 export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13 };
 const PATTERN_OF = {};
@@ -126,6 +128,8 @@ export const BASE_COLORS = {
     [BLOCK.CARPET_PURPLE]: 0x6a2c91,
     [BLOCK.POTION]: 0x5dff8a,
     [BLOCK.RUNE]: 0x2e3150,
+    [BLOCK.GRAVEL]: 0x8b8580,
+    [BLOCK.DEEPSTONE]: 0x56575e,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -137,7 +141,7 @@ Object.assign(PATTERN_OF, {
     [BLOCK.GOLD]: PATTERN.GOLD, [BLOCK.FARMLAND]: PATTERN.FURROWS, [BLOCK.BOOKS]: PATTERN.BOOKS, [BLOCK.LANTERN]: PATTERN.GLOW,
     [BLOCK.ARCANE]: PATTERN.ASHLAR, [BLOCK.ARCANE_DARK]: PATTERN.ASHLAR, [BLOCK.ROOF_PURPLE]: PATTERN.TILES,
     [BLOCK.ARCANE_LAMP]: PATTERN.CRYSTAL, [BLOCK.ARCANE_LAMP_VIOLET]: PATTERN.CRYSTAL, [BLOCK.CARPET_PURPLE]: PATTERN.CLOTH,
-    [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES,
+    [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES, [BLOCK.GRAVEL]: PATTERN.COBBLE,
 });
 /** The shader pattern of a block type. */
 export const patternOf = (t) => PATTERN_OF[t] || 0;
@@ -171,8 +175,62 @@ export const WORLD_GEN = 4;
 
 /** The creative test ground's river (generation 3): it winds east–west just past the pedestals. */
 export const TEST_RIVER = { Z: -34, HALF: 3.5, WIND: 4 };
-/** …and a round hill to the left of the pedestals with a cave in it (its mouth towards them). */
-export const TEST_CAVE = { X: -62, Z: 6, R: 36, H: 20, r: 8 };
+/**
+ * …and a rocky mountain to the left of the pedestals with a cave in it: a stone cliff towards
+ * them with the cave's mouth at its foot, crags, gullies and a few peaks of different height behind.
+ */
+export const TEST_CAVE = { X: -88, Z: 22, R: 44, H: 34, r: 8 };
+
+/** The rim of the test mountain in direction `a` (radians from +x). */
+const testRim = (a) => TEST_CAVE.R * (1 + 0.1 * Math.sin(3 * a + 1.3) + 0.07 * Math.sin(5 * a + 0.4) + 0.04 * Math.sin(11 * a + 2.1));
+const hillNoise = createNoise2D(0x7e57);
+// (its peaks: x, z from the centre, radius, height share)
+const TEST_PEAKS = [[-6, -4, 30, 1], [42, 0, 22, 0.75], [10, 16, 20, 0.72], [-20, 18, 18, 0.6], [6, -20, 16, 0.55], [-26, -12, 16, 0.5]];
+
+/** The mountain itself (no scree): its edge ragged in plan — spurs, bays — not a drawn circle; low foothills round it. */
+function testMountain(ix, iz) {
+    const T = TEST_CAVE, dx = ix - T.X, dz = iz - T.Z, d = Math.hypot(dx, dz);
+    if (d > T.R * 1.65) return -1;
+    const n = (s, o = 0) => hillNoise(dx / s + o, dz / s - o);
+    const a = Math.atan2(dz, dx), front = smoothstep(0.45, 0.85, Math.cos(a));
+    const rr = testRim(a) + 3.5 * n(5.5, 3) + 1.5 * n(2.3, 9);
+    // foothills: rolling ground that fades into the meadow (none in front of the cliff: the way in)
+    const out = d - rr;
+    const foot = out < 16 ? Math.round((1 - front) * (2.8 * (1 - Math.max(0, out) / 16) ** 1.5 + 1.3 * n(6.5, 21))) : -1;
+    const w = 22 - 19 * front; // (a 3 m cliff towards the pedestals, slopes elsewhere)
+    const k = Math.min(1, (rr - d) / w);
+    if (k <= 0) return foot > 0 ? foot : -1;
+    let peak = 0.32;
+    for (const [px, pz, pr, ph] of TEST_PEAKS) peak = Math.max(peak, ph * (1 - Math.hypot(dx - px, dz - pz) / pr));
+    const ridges = 1 - Math.abs(n(11)); // (sharp ridges where it crosses 0, gullies between)
+    const crags = 0.6 * n(5.3, 7) + 0.3 * n(2.6, 13); // (rough rock)
+    const s = peak * (0.78 + 0.3 * ridges) + 0.12 * crags;
+    return Math.max(foot, Math.round(T.H * Math.pow(k, 0.6) * s));
+}
+
+/** The test cave's mouth: at the cliff's foot (where the rock rises), facing the pedestals. */
+let _testMouth = null;
+export const testCaveMouth = () => {
+    if (_testMouth) return _testMouth;
+    let x = Math.round(TEST_CAVE.X + TEST_CAVE.R * 1.65);
+    while (x > TEST_CAVE.X && testMountain(x, TEST_CAVE.Z) < 6) x--;
+    return (_testMouth = { x: x + 1.5, z: TEST_CAVE.Z });
+};
+
+/** Rubble fallen from the cliff, piled either side of the cave's mouth (0: none here). */
+export function testScree(ix, iz) {
+    const m = testCaveMouth(), ex = ix - m.x, ez = iz - m.z;
+    if (ex < -3 || ex > 9 || Math.abs(ez) < 2.6 || Math.abs(ez) > 10) return 0; // (the way in stays clear)
+    const r = Math.hypot(ex * 0.9, (Math.abs(ez) - 2.6) * 1.1);
+    return Math.max(0, Math.round(2.6 * (1 - r / 8) + 0.9 * hillNoise(ix / 1.7 + 40, iz / 1.7)));
+}
+
+/** The test mountain's height at a column (−1 outside it). */
+export function testHillHeight(ix, iz) {
+    const h = testMountain(ix, iz), sc = testScree(ix, iz);
+    return sc > h ? sc : h;
+}
+
 // (56 = room for the wizards' tower with its pointed roof; mountains stay as they always were,
 // capped at MOUNTAIN_TOP, so old worlds and saves are unchanged)
 export const MAX_LAYER = 56;
@@ -286,8 +344,8 @@ export function createHeightField(seed, mountains, seas = null, test = false) {
     const hill = (ix, iz) => {
         let h = fn(ix, iz);
         hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach;
-        const d = Math.hypot(ix - TEST_CAVE.X, iz - TEST_CAVE.Z);
-        if (d < TEST_CAVE.R && !fn.water) h = Math.max(h, Math.round(TEST_CAVE.H * (1 - (d / TEST_CAVE.R) ** 2)));
+        const m = fn.water ? -1 : testHillHeight(ix, iz);
+        if (m > h) h = m;
         return h;
     };
     hill.water = 0; hill.sea = false; hill.beach = false;
@@ -402,6 +460,7 @@ export class TerrainData {
                 const h = this.heightAt(x0 + lx, z0 + lz);
                 const water = this.heightAt.water;
                 const sea = this.heightAt.sea, beach = this.heightAt.beach;
+                const rock = this.test && h > 0 ? this._testRock(x0 + lx, z0 + lz, h) : 0; // (the test mountain: bare stone, rubble)
                 const col = lz * CHUNK + lx;
                 if (sea) (seaMask ||= new Uint8Array(CHUNK * CHUNK))[col] = 1;
                 for (let L = MIN_LAYER; L <= h; L++) {
@@ -410,6 +469,7 @@ export class TerrainData {
                     else if (water && L === h) type = BLOCK.SAND;
                     else if (sea && L >= h - 3) type = BLOCK.SAND; // the seabed
                     else if (L === h && beach) type = BLOCK.SAND; // the beach
+                    else if (rock && L >= 0) type = L < h ? BLOCK.STONE : rock === 2 ? BLOCK.GRAVEL : h >= 28 ? BLOCK.SNOW : h < 14 && rng() < 0.25 ? BLOCK.GRAVEL : BLOCK.STONE;
                     else if (L === h) {
                         // snow only on the peaks (a few patches on the tips, solid higher up)
                         if (h >= 24 || (h >= 21 && rng() < smoothstep(21, 24, h))) type = BLOCK.SNOW;
@@ -472,6 +532,20 @@ export class TerrainData {
         for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) this._refreshTop(c, lx, lz);
     }
 
+    /**
+     * On the test mountain: 1 — a column of bare rock (a cliff, a steep or high slope, an outcrop),
+     * 2 — rubble, 0 — grass (its lower slopes and foothills, as the meadow round it).
+     */
+    _testRock(x, z, h) {
+        if (testHillHeight(x, z) !== h) return 0; // (not the mountain: the land round it)
+        if (testScree(x, z) === h) return 2;
+        const H = this.heightAt;
+        const steep = Math.max(Math.abs(H(x + 1, z) - h), Math.abs(H(x - 1, z) - h), Math.abs(H(x, z + 1) - h), Math.abs(H(x, z - 1) - h));
+        H(x, z); // (put its flags back)
+        if (steep >= 2 || h >= 17) return 1;
+        return hillNoise(x / 7 + 31, z / 7) > (h >= 10 ? -0.35 : 0.3) ? 1 : 0;
+    }
+
     // ------------------------------------------------------------ caves
     /**
      * A cave (or none) for a CAVE_CELL×CAVE_CELL cell: a chamber inside a
@@ -527,7 +601,8 @@ export class TerrainData {
         const T = TEST_CAVE;
         let s = null;
         if (this.test && gx === Math.floor(T.X / CAVE_CELL) && gz === Math.floor(T.Z / CAVE_CELL)) {
-            s = growCaveSystem({ id: 'cvtest', test: true, rng: createRng((this.seed * 31 + 777) >>> 0), start: { x: T.X + T.R - 1, y: 2, z: T.Z, yaw: Math.PI, pitch: -0.04 }, H: top, blocked: wet });
+            const m = testCaveMouth();
+            s = growCaveSystem({ id: 'cvtest', test: true, rng: createRng((this.seed * 31 + 777) >>> 0), start: { x: m.x, ground: top(m.x, m.z), z: m.z, yaw: Math.PI, pitch: -0.04, open: 2 }, H: top, blocked: wet });
         } else if (hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101) < CAVES.CHANCE) {
             const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0xca7e) >>> 0);
             const m = caveMouth(rng, gx, gz, CAVE_CELL, top, blocked);
@@ -535,6 +610,25 @@ export class TerrainData {
         }
         this._caves.set(key, s);
         return s;
+    }
+
+    /**
+     * Where a cave chest really stands (generation 4): a floor under it and nothing in the chest
+     * (3.6 × 2.4 m, 2.1 m high, turned as it stands) — at its layer or a step from it; null: no room
+     * (where two cave systems cross, one's floor may be the other's roof).
+     */
+    chestSpot(c) {
+        const cos = Math.cos(c.a), sin = Math.sin(c.a);
+        const fits = (y) => {
+            if (this.get(Math.floor(c.x), y, Math.floor(c.z)) === BLOCK.AIR) return false;
+            for (let lx = -1.8; lx <= 1.81; lx += 0.6) for (let lz = -1.2; lz <= 1.21; lz += 0.6) {
+                const x = Math.round(c.x + lx * cos + lz * sin), z = Math.round(c.z - lx * sin + lz * cos);
+                for (let L = y + 1; L <= y + 3; L++) if (this.get(x, L, z) !== BLOCK.AIR) return false;
+            }
+            return true;
+        };
+        for (const y of [c.y, c.y + 1, c.y - 1, c.y + 2, c.y - 2]) if (fits(y)) return y === c.y ? c : { ...c, y };
+        return null;
     }
 
     /** Caves whose chamber (generation 4: any part of the system) is within `r` of a point. */
@@ -566,7 +660,7 @@ export class TerrainData {
         for (let gz = Math.floor((z0 - R) / CAVE_CELL); gz <= Math.floor((z0 + CHUNK + R) / CAVE_CELL); gz++) {
             for (let gx = Math.floor((x0 - R) / CAVE_CELL); gx <= Math.floor((x0 + CHUNK + R) / CAVE_CELL); gx++) {
                 const s = this.caveOf(gx, gz);
-                if (s && s.x1 >= x0 - 1 && s.x0 <= x0 + CHUNK && s.z1 >= z0 - 1 && s.z0 <= z0 + CHUNK) sys.push(s);
+                if (s && s.x1 >= x0 - 1 && s.x0 <= x0 + CHUNK && s.z1 >= z0 - 1 && s.z0 <= z0 + CHUNK) sys.push(systemIn(s, x0, z0, x0 + CHUNK - 1, z0 + CHUNK - 1));
             }
         }
         if (!sys.length) return;
@@ -587,7 +681,11 @@ export class TerrainData {
                         if (b !== BLOCK.WATER && b !== BLOCK.BEDROCK && b !== BLOCK.AIR) { c.blocks[i] = BLOCK.AIR; carved = true; if (L < c.minOpen) c.minOpen = L; }
                     }
                 };
-                for (const s of sys) carveColumn(s, x, z, cut);
+                // (where systems cross, a chamber's floor stays whole under the other's tunnels too)
+                let keep = -Infinity;
+                if (sys.length > 1) for (const s of sys) keep = Math.max(keep, chamberFloor(s, x, z));
+                for (const s of sys) carveColumn(s, x, z, cut, keep);
+                if (carved) (this._walls || (this._walls = [])).push(col);
                 if (carved) {
                     let top = MIN_LAYER - 1;
                     for (let L = c.top[col]; L >= MIN_LAYER; L--) {
@@ -600,8 +698,38 @@ export class TerrainData {
         }
     }
 
+    /** The rock faces of a chunk's caves: patches of earth and gravel, dark deep stone low down. */
+    _caveRock(c) {
+        const cols = this._walls;
+        this._walls = null;
+        if (!cols) return;
+        const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK, B = c.blocks;
+        const at = (lx, L, lz) => (lx < 0 || lz < 0 || lx >= CHUNK || lz >= CHUNK || L < MIN_LAYER || L > MAX_LAYER ? -1 : B[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx]);
+        const done = new Set();
+        for (const col of cols) {
+            const cx = col % CHUNK, cz = (col - cx) / CHUNK;
+            // the carved column and its neighbours: every stone touching the cave's air
+            for (const [ox, oz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const lx = cx + ox, lz = cz + oz;
+                if (lx < 0 || lz < 0 || lx >= CHUNK || lz >= CHUNK || done.has(lz * CHUNK + lx)) continue;
+                done.add(lz * CHUNK + lx);
+                const top = c.top[lz * CHUNK + lx];
+                for (let L = MIN_LAYER + 1; L < top - 2; L++) {
+                    const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+                    if (B[i] !== BLOCK.STONE) continue;
+                    if (at(lx, L + 1, lz) !== BLOCK.AIR && at(lx, L - 1, lz) !== BLOCK.AIR && at(lx + 1, L, lz) !== BLOCK.AIR && at(lx - 1, L, lz) !== BLOCK.AIR && at(lx, L, lz + 1) !== BLOCK.AIR && at(lx, L, lz - 1) !== BLOCK.AIR) continue;
+                    const x = x0 + lx, z = z0 + lz;
+                    const n = noise3(x / 5, L / 4, z / 5, this.seed + 31);
+                    if (n > 0.5) B[i] = BLOCK.DIRT;
+                    else if (n < -0.52) B[i] = BLOCK.GRAVEL;
+                    else if (L <= -8 + Math.round(2 * noise3(x / 9, 0, z / 9, this.seed + 32))) B[i] = BLOCK.DEEPSTONE;
+                }
+            }
+        }
+    }
+
     _carveCaves(c) {
-        if (this.deepCaves) return this._carveSystems(c);
+        if (this.deepCaves) { this._carveSystems(c); this._caveRock(c); return; }
         const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
         const reach = 60;
         const caves = [];

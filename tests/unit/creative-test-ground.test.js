@@ -42,12 +42,15 @@ test('creative test ground: a sea castle close by — its village starts ~60 m o
     }
 });
 
-test('creative test ground: a hill with a cave system — its mouth towards the pedestals, winding deep down, branching, chests in its chambers', () => {
+test('creative test ground: a rocky mountain with a cave system — its mouth towards the pedestals, winding deep down, branching, chests in its chambers', () => {
     const d = make(true), H = d.heightAt;
     const cv = d.cavesNear(TEST_CAVE.X, TEST_CAVE.Z, 5).find((c) => c.id === 'cvtest');
     assert.ok(cv, 'the test cave');
-    assert.ok(H(TEST_CAVE.X, TEST_CAVE.Z) >= 18, 'a hill over its mouth');
-    assert.ok(Math.hypot(cv.start.x, cv.start.z) < 40 && Math.cos(cv.start.yaw) < -0.9, 'the mouth by the pedestals, going into the hill');
+    let top = 0;
+    for (let x = TEST_CAVE.X - 30; x <= TEST_CAVE.X + 50; x += 2) for (let z = TEST_CAVE.Z - 30; z <= TEST_CAVE.Z + 30; z += 2) top = Math.max(top, H(x, z));
+    assert.ok(top >= 28, `a mountain (${top} m)`);
+    assert.ok(H(Math.round(cv.start.x) - 6, cv.start.z) >= 12, 'a cliff over its mouth');
+    assert.ok(Math.hypot(cv.start.x, cv.start.z) < 50 && Math.cos(cv.start.yaw) < -0.9, 'the mouth by the pedestals, going into the hill');
     assert.ok(cv.segs.length > 60, `long tunnels (${cv.segs.length} × 3 m)`);
     assert.ok(Math.min(...cv.segs.map((g) => g.by)) < -6, 'deep down');
     assert.ok(cv.chambers.length >= 3 && cv.chests.length >= 2, `chambers ${cv.chambers.length}, chests ${cv.chests.length}`);
@@ -70,7 +73,7 @@ test('creative test ground: a hill with a cave system — its mouth towards the 
 test('creative test ground: worlds without it keep their ground (no river, no hill, no castle near)', () => {
     const d = make(false), H = d.heightAt;
     for (let z = -26; z >= -42; z--) { assert.equal(H(0, z), 0); assert.equal(H.water, 0); }
-    assert.ok(H(TEST_CAVE.X + TEST_CAVE.R - 6, TEST_CAVE.Z) < 6, 'no hill by the spawn');
+    assert.ok(H(TEST_CAVE.X, TEST_CAVE.Z) < 20, 'no mountain by the spawn');
     assert.equal(d.castles.near(0, 0, 300).filter((c) => Math.hypot(c.x, c.z) < 420).length, 0);
     assert.equal(d.seas.test, null);
 });

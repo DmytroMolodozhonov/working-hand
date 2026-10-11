@@ -15,6 +15,7 @@ const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
 const _moon = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
+const _caveFog = new THREE.Color(0x020203); // (deep in a cave: black beyond the light)
 
 /** The night is the last quarter of the day: 6 of the 24 hours (18 hours of daylight). */
 export const NIGHT_START = 0.75;
@@ -158,7 +159,7 @@ export class VoxelWorld {
         this.storm = k;
         const b = this._base;
         if (!b) return;
-        const cave = 1 - 0.78 * (this.cave || 0);
+        const cave = 1 - 0.95 * (this.cave || 0); // (a cave is dark: «Люмос» shows the way)
         const ind = this.indoor || 0;
         // indoors: the sun is outside, the rooms are lit (brighter at night than the dark outside)
         const lamp = 1 + ind * (b.night > 0.5 ? 2.6 : 1.1);
@@ -166,7 +167,7 @@ export class VoxelWorld {
         this.dirLight.intensity = b.dir * (1 - 0.8 * k) * (1 - 0.95 * (this.cave || 0)) * (1 - 0.6 * ind);
         this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * cave * (1 + ind * 0.8);
         if (this.scene.fog) {
-            this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
+            this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k).lerp(_caveFog, this.cave || 0); // (the dark beyond the light)
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
         }
         this.sky?.setNightAmount(Math.max(b.night, 0.72 * k));
@@ -631,8 +632,10 @@ export class VoxelWorld {
         if (this.scene.fog && this.fogFar) {
             // In flight the view opens up so the land below is visible
             const far = this.fogFar * (this.viewScale ?? 1) * (1 + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0));
-            this.scene.fog.far = far;
-            this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5);
+            // (in a cave the dark closes in: a few steps on, and black)
+            const cave = this.cave || 0;
+            this.scene.fog.far = far + (26 - far) * cave;
+            this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5) * (1 - cave) + 1.5 * cave;
             if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
         }
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);

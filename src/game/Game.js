@@ -725,7 +725,9 @@ export class Game {
                 this._caveChests.add(cv.id);
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
                 const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
-                spots.forEach((sp, k) => {
+                spots.forEach((sp0, k) => {
+                    const sp = cv.segs && t.chestSpot ? t.chestSpot(sp0) : sp0; // (never stuck in the rock)
+                    if (!sp) return;
                     const id = k ? cv.id + ':' + k : cv.id;
                     const chest = new Chest(this.scene, new THREE.Vector3(sp.x, sp.y, sp.z), 'loot', sp.a, id);
                     chest.mesh.updateMatrixWorld(true);

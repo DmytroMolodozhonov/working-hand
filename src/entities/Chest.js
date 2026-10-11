@@ -21,10 +21,12 @@ let SHARED = null;
 function shared() {
     if (SHARED) return SHARED;
     SHARED = {
-        wood: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
-        lidWood: new THREE.MeshLambertMaterial({ color: 0x6D3410 }),
-        gold: new THREE.MeshLambertMaterial({ color: 0xFFD700 }),
-        inside: new THREE.MeshLambertMaterial({ color: 0x2a1408 }),
+        // (lit per pixel, each light with its own shadow: a Lambert chest lit by «Люмос» in a cave
+        // caught the sun's shadow map — black blots — and lit its big faces only at their corners)
+        wood: new THREE.MeshPhongMaterial({ color: 0x8B4513, shininess: 6, specular: 0x111111 }),
+        lidWood: new THREE.MeshPhongMaterial({ color: 0x6D3410, shininess: 6, specular: 0x111111 }),
+        gold: new THREE.MeshPhongMaterial({ color: 0xFFD700, shininess: 60, specular: 0x886622 }),
+        inside: new THREE.MeshPhongMaterial({ color: 0x2a1408, shininess: 0, specular: 0x000000 }),
         bottom: new THREE.BoxGeometry(1.2, 0.5, 0.8),
         lid: new THREE.BoxGeometry(1.25, 0.2, 0.85),
         band: new THREE.BoxGeometry(1.3, 0.08, 0.9),

@@ -44,7 +44,7 @@ TREE_KINDS.forEach((k, i) => {
     RESOURCE[k.leaves] = { name: 'Листва (' + k.name.toLowerCase() + ')', color: LEAF_COL[i] };
 });
 /** What a gathered block turns into (grass → earth). */
-export const resourceOf = (block) => (block === BLOCK.GRASS ? BLOCK.DIRT : block);
+export const resourceOf = (block) => (block === BLOCK.GRASS ? BLOCK.DIRT : block === BLOCK.GRAVEL || block === BLOCK.DEEPSTONE ? BLOCK.STONE : block);
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
