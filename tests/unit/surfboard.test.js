@@ -177,11 +177,11 @@ test('«Create a Board»: heard right, not mixed up with other spells, learned f
     let n = 0;
     for (let i = 0; i < 2000; i++) if (bookSpells(i).includes('CreateBoard')) n++;
     assert.ok(n >= 50, `in ${n} books`);
-    const { rollLoot, SCROLL_SPELL_COLOR, SPELL_RIBBON } = await import('../../src/game/ItemTypes.js');
+    const { rollKeyItem, SCROLL_SPELL_COLOR, SPELL_RIBBON } = await import('../../src/game/ItemTypes.js');
     const { createRng } = await import('../../src/core/math.js');
     const r = createRng(99);
     let all = 0, boards = 0;
-    for (let i = 0; i < 5000; i++) for (const it of rollLoot(r)) { all++; if (it.spell === 'CreateBoard') boards++; }
+    for (let i = 0; i < 5000; i++) { const it = rollKeyItem(r); all++; if (it.spell === 'CreateBoard') boards++; } // (a chest's one precious thing)
     assert.ok(boards / all > 0.005 && boards / all < 0.04, `${boards} of ${all}`);
     assert.equal(SCROLL_SPELL_COLOR.CreateBoard, undefined);
     assert.ok(SPELL_RIBBON.CreateBoard);

@@ -155,7 +155,7 @@ export function rollHouseLoot(r = Math.random, rich = false) {
     const n = randInt(r, 2, rich ? 4 : 3);
     for (let i = 0; i < n; i++) {
         const x = r();
-        if (x < (rich ? 0.07 : 0.03)) { out.push(...rollLoot(r, { cave: false }).slice(0, 1)); continue; }
+        if (x < (rich ? 0.07 : 0.03)) { out.push(rollKeyItem(r)); continue; }
         if (x < 0.30) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
         else if (x < 0.48) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
         else if (x < 0.62) out.push({ kind: 'pie', uid: newUid(), count: 1 });
@@ -180,7 +180,7 @@ export function rollPortLoot(r = Math.random) {
     const n = randInt(r, 2, 3);
     for (let i = 0; i < n; i++) {
         const x = r();
-        if (x < 0.08) { out.push(...rollLoot(r, { cave: false }).slice(0, 1)); continue; }
+        if (x < 0.08) { out.push(rollKeyItem(r)); continue; }
         if (x < 0.32) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
         else if (x < 0.46) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
         else if (x < 0.60) out.push({ kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
@@ -208,45 +208,65 @@ export function rollShipLoot(r = Math.random, captain = false) {
         else if (x < 0.62) out.push({ kind: 'weapon', type: r() < 0.6 ? 'sword' : 'axe', magic: r() < (captain ? 0.5 : 0.2), bonus: randInt(r, 1, 60), uid: newUid() });
         else if (x < 0.7) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 12) });
         else if (x < 0.78) out.push({ kind: 'apple', uid: newUid(), count: 1 });
-        else if (x < (captain ? 0.92 : 0.86)) out.push(...rollLoot(r, { cave: false }).slice(0, 1)); // a wand, a scroll, a shield…
+        else if (x < (captain ? 0.92 : 0.86)) out.push(rollKeyItem(r)); // a wand, a scroll, a shield…
         else out.push({ kind: 'cannonball', uid: newUid() });
     }
     return out;
 }
 
-export function rollLoot(r = Math.random, { cave = true } = {}) {
-    const out = [];
-    const n = randInt(r, 1, cave ? 3 : 2);
-    for (let i = 0; i < n; i++) {
-        const x = r();
-        if (x < 0.22) out.push(rollWand(r));
-        else if (x < 0.42) {
-            const y = r();
-            // (a scroll of flight teaches «Флайн» — in «Свободный мир» only so)
-            // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
-            //  «Авада Кедавра» too — its scroll is the rarest)
-            out.push(y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'flight' }
-                : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
-                : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
-                : y < 0.45 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
-                : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Alive' }
-                : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
-                : y < 0.535 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'TotalDestruction' }
-                : y < 0.58 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateBoard' }
-                : y < 0.76 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
-                : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
-        }
-        else if (x < 0.55) out.push({ kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: r() < 0.6, bonus: randInt(r, 1, 60), uid: newUid() });
-        else if (x < 0.67) {
-            const t = randInt(r, 0, 2);
-            const magic = r() < 0.45;
-            out.push({ kind: 'shield', uid: newUid(), type: t, magic, max: magic ? randInt(r, 20, 50) : 0 });
-        } else if (x < 0.77) out.push({ kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) });
-        else if (x < 0.88) out.push({ kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: r() < 0.4, bonus: randInt(r, 1, 60), arrows: 10 });
-        else if (x < 0.91) out.push({ kind: 'hammer', uid: newUid(), charges: 0 });
-        else if (x < 0.96) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) });
-        else out.push({ kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) });
+/** A chest holds something precious only now and then (one thing at most). */
+export const KEY_CHANCE = 0.25;
+
+/** The precious thing of a chest: a wand, a scroll, a magic weapon, shield or bow, a backpack, Thor's hammer. */
+export function rollKeyItem(r = Math.random) {
+    const x = r();
+    if (x < 0.26) return rollWand(r);
+    if (x < 0.52) {
+        const y = r();
+        // (a scroll of flight teaches «Флайн» — in «Свободный мир» only so)
+        // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
+        //  «Авада Кедавра» too — its scroll is the rarest)
+        return y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'flight' }
+            : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
+            : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
+            : y < 0.45 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
+            : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Alive' }
+            : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
+            : y < 0.535 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'TotalDestruction' }
+            : y < 0.58 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateBoard' }
+            : y < 0.76 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
+            : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
     }
+    if (x < 0.66) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: true, bonus: randInt(r, 1, 60), uid: newUid() };
+    if (x < 0.76) { const t = randInt(r, 0, 2); return { kind: 'shield', uid: newUid(), type: t, magic: true, max: randInt(r, 20, 50) }; }
+    if (x < 0.86) return { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) };
+    if (x < 0.96) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: true, bonus: randInt(r, 1, 60), arrows: 10 };
+    return { kind: 'hammer', uid: newUid(), charges: 0 };
+}
+
+/** The plain things of a chest: food, a plain bow, arrows, a plain shield or blade, now and then a golden apple. */
+export function rollPlainItem(r = Math.random) {
+    const x = r();
+    if (x < 0.22) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
+    if (x < 0.36) return { kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) };
+    if (x < 0.48) return { kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) };
+    if (x < 0.58) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: false, bonus: 0, arrows: randInt(r, 5, 12) };
+    if (x < 0.74) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
+    if (x < 0.83) return { kind: 'shield', uid: newUid(), type: randInt(r, 0, 1), magic: false, max: 0 };
+    if (x < 0.92) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: false, bonus: 0, uid: newUid() };
+    return { kind: 'apple', uid: newUid(), count: 1 };
+}
+
+/**
+ * A chest in a cave or a castle: one or two plain things (food, a plain bow, arrows…) — and only
+ * now and then (`key`: 25%) ONE precious thing (a wand, a scroll, a magic weapon…), never more.
+ * (Coins come apart, in their pouch: Game.openChest.)
+ */
+export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE } = {}) {
+    const out = [];
+    if (r() < key) out.push(rollKeyItem(r));
+    const n = randInt(r, 1, cave ? 2 : 1);
+    for (let i = 0; i < n; i++) out.push(rollPlainItem(r));
     return out;
 }
 

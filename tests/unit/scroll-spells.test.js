@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../../src/game/Game.js';
-import { rollLoot, describeItem, makeItemModel, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU } from '../../src/game/ItemTypes.js';
+import { rollKeyItem, describeItem, makeItemModel, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU } from '../../src/game/ItemTypes.js';
 
 /** A small seeded random (the same rolls every run). */
 function seeded(seed) {
@@ -58,7 +58,7 @@ test('the Авада Кедавра scroll: rare chest loot with its own green r
     const count = {};
     let all = 0;
     for (let i = 0; i < 20000; i++) {
-        for (const it of rollLoot(r)) {
+        for (const it of [rollKeyItem(r)]) { // (a chest's one precious thing)
             all++;
             if (it.kind === 'scroll' && it.stat === 'spell') count[it.spell] = (count[it.spell] || 0) + 1;
         }

@@ -35,8 +35,28 @@ export const LUMOS = {
     LIFE: 10, // s from the throw: then it is gone
     FADE: 3, // s of fading out at the end
     AGAIN: 1500, // ms: the same word heard again (the speech's final result) is not a second cast
-    FLICK: 7, // m/s of the hand against the body: a flick of the wand throws the light
+    FLICK: 0.6, // m the wand's tip goes in 0.15 s against the body, steadily one way: a flick throws the light
+    STILL: 1200, // ms standing still before a flick counts (walking swings the arms: never a throw)
 };
+
+/**
+ * A flick of the wand (or null): its tip — against the body — went fast and steadily one way in
+ * the last 0.15 s (two halves of the move both long and in one direction: one jumpy frame of the
+ * camera is not a flick, nor an arm swinging as you walk), roughly where the wand points, not down.
+ * `trail`: [{t (ms), p (Vector3, the tip in the body's frame)}], oldest first. Returns the move's
+ * direction in the body's frame.
+ */
+export function lumosFlick(trail, now, wandDir) {
+    const at = (ms) => { for (let i = trail.length - 1; i >= 0; i--) if (now - trail[i].t >= ms) return trail[i].p; return null; };
+    const a = at(150), b = at(75), c = trail[trail.length - 1]?.p;
+    if (!a || !b || !c || now - trail[0].t > 600) return null;
+    const d1 = new THREE.Vector3().subVectors(b, a), d2 = new THREE.Vector3().subVectors(c, b);
+    const l1 = d1.length(), l2 = d2.length();
+    if (l1 < LUMOS.FLICK * 0.35 || l2 < LUMOS.FLICK * 0.35 || l1 + l2 < LUMOS.FLICK || d1.dot(d2) < 0.6 * l1 * l2) return null;
+    const dir = d1.add(d2).normalize();
+    if (dir.y < -0.6 || (wandDir && dir.dot(wandDir) < 0.3)) return null;
+    return dir;
+}
 
 let _glowTex = null;
 /** A soft glow (a light seen by the eye: bright in the middle, fading out — not a ball). */
@@ -192,6 +212,8 @@ export class WandMagic {
         const l = this.light;
         const p = this.tip(new THREE.Vector3());
         if (!l || !p) return;
+        // (no throw into the rock right at the hand: it would only stick there, a star left behind)
+        if (g.collision?.pointBlocked(p.x + dir.x * 0.6, p.y + dir.y * 0.6, p.z + dir.z * 0.6)) return;
         this.addThrown(p, dir.clone().multiplyScalar(LUMOS.THROW_SPEED), Math.max(2, l.level + 1), true);
         g.sync?.lumosThrow?.(p, dir, Math.max(2, l.level + 1));
         // the light has left the wand: its tip is dark (say «Люмос» to light it again)
@@ -379,15 +401,21 @@ export class WandMagic {
             this.light.glow.position.copy(tip);
             this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
-            // a flick: the hand fast against the BODY (running adds the body's speed to the hand's —
-            // that threw the light by itself), the arm raised, not running or flying
-            const ch = g.character;
+            // a flick: the tip fast against the BODY, steadily one way, where the wand points; standing
+            // still a moment, the arm raised (walking swings the arms: that threw the light by itself)
+            const ch = g.character, now = performance.now();
             const side = g.items.heldOf('wand')?.side || this._bareSide();
-            const vr = ch.handRelVelocity?.[side];
-            const fast = vr ? vr.length() > LUMOS.FLICK : ch.handVelocity[side].length() > LUMOS.FLICK;
-            if (fast && !ch.isRunning && !ch.flying && (ch.isArmRaised?.(side) ?? true) && performance.now() - (this._flickAt || 0) > 900) {
-                this._flickAt = performance.now();
-                this._throwLight(vr ? vr.clone().applyQuaternion(ch.group.getWorldQuaternion(_q)).normalize() : ch.handVelocity[side].clone().normalize());
+            if (ch.isRunning || ch.stepping > 0 || ch.flying) this._movedAt = now;
+            const trail = this._trail || (this._trail = []);
+            trail.push({ t: now, p: ch.group.worldToLocal(tip.clone()) });
+            while (trail.length > 2 && now - trail[1].t > 400) trail.shift();
+            ch.group.getWorldQuaternion(_q);
+            const wandDir = _v2.clone().applyQuaternion(_q.clone().invert());
+            const flick = now - (this._movedAt || 0) > LUMOS.STILL && now - (this._flickAt || 0) > 900 && (ch.isArmRaised?.(side) ?? true) ? lumosFlick(trail, now, wandDir) : null;
+            if (flick) {
+                this._flickAt = now;
+                trail.length = 0;
+                this._throwLight(flick.applyQuaternion(_q));
             }
         }
         for (let i = this.thrown.length - 1; i >= 0; i--) {

@@ -694,7 +694,11 @@ export class Game {
                 if (chest.ship) {
                     chest._openedBy = by; this.ships.lootChest(chest, rp); // (a ship's chest: often a fishing rod)
                     for (const it of pouch) this.items.spawnLoose(it, rp.clone().add(new THREE.Vector3(0, 1.1, 0)), { hover: true, rise: true }); // (within the hand's reach)
-                } else this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null, { chest, extra: pouch }); // (a port chest: the sailors' stores; all in one row along the chest, within reach)
+                } else {
+                    // (Creative: the test cave's chests and the test chest by the pedestals always hold a precious thing — to try things out)
+                    const testing = this.config.mode === 'creative' && /^(cvtest|creative-test)/.test(String(chest.id));
+                    this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null, { chest, extra: pouch, key: testing ? 1 : undefined });
+                } // (a port chest: the sailors' stores; all in one row along the chest, within reach)
                 // a house chest: the family may be watching
                 if (chest.house) this.houses?.chestOpened(chest, by);
                 if (this.sync) this.sync.chestOpenedLoot?.(chest);

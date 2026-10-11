@@ -130,11 +130,11 @@ export class ItemSystem {
     /**
      * A chest opens: its things rise out of it and float in a row along the chest, a little
      * towards its front, just under a standing hero's shoulder — where a hand reaches them.
-     * extra: more things for the row (the coin pouch).
+     * extra: more things for the row (the coin pouch); key: the chance of its one precious thing.
      */
-    lootChest(pos, rng = Math.random, house = null, kind = null, { chest = null, extra = [] } = {}) {
+    lootChest(pos, rng = Math.random, house = null, kind = null, { chest = null, extra = [], key = undefined } = {}) {
         // (a wizards' house: scrolls, sometimes a spell book — src/game/WizardShop.js)
-        const items = (house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng)).concat(extra);
+        const items = (house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng, { key })).concat(extra);
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
         const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();

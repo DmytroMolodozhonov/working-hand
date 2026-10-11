@@ -602,7 +602,7 @@ test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «
         const ch = g.character;
         // the nearest cave
         let cave = null;
-        for (let rad = 200; rad <= 1600 && !cave; rad += 200) cave = g.terrain.data.cavesNear(0, 0, rad).sort((a, b) => Math.hypot(a.kx, a.kz) - Math.hypot(b.kx, b.kz))[0];
+        for (let rad = 200; rad <= 1600 && !cave; rad += 200) cave = g.terrain.data.cavesNear(0, 0, rad).filter((c) => !c.chests || c.chests[0]?.main).sort((a, b) => Math.hypot(a.kx, a.kz) - Math.hypot(b.kx, b.kz))[0]; // (the nearest with a chest in its main chamber)
         if (!cave) return { noCave: true };
         // walk in: stand at the entrance, then inside the chamber (under the rock)
         ch.group.position.set(cave.kx + 0.5, cave.F + 1.6, cave.kz + 1.5); // (in the middle of the chamber, under the rock)

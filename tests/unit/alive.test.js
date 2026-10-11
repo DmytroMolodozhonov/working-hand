@@ -6,7 +6,7 @@ import { Game } from '../../src/game/Game.js';
 import { LivingTrees, ALIVE, aliveDamage, aliveDrain, livingTreeModel } from '../../src/game/LivingTrees.js';
 import { Servants, servantPlan, SERVANT } from '../../src/game/Servants.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
-import { SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, rollLoot } from '../../src/game/ItemTypes.js';
+import { SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, rollKeyItem } from '../../src/game/ItemTypes.js';
 
 test('«Alive» is heard in its many sounds, and the other spells still are', () => {
     for (const w of ['alive', 'Alive!', 'алайв', 'Элайв', 'алив', 'алаив', 'элайф', 'оживи', 'a live']) assert.equal(matchSpell(w), 'Alive', w);
@@ -38,7 +38,7 @@ test('«Alive» outside Creative only after burning its scroll; the scroll is in
     let a = 1;
     const r = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
     let n = 0;
-    for (let i = 0; i < 20000; i++) for (const it of rollLoot(r)) if (it.kind === 'scroll' && it.spell === 'Alive') n++;
+    for (let i = 0; i < 20000; i++) { const it = rollKeyItem(r); if (it.kind === 'scroll' && it.spell === 'Alive') n++; } // (a chest's one precious thing)
     assert.ok(n > 50, `Alive scrolls drop (${n})`);
 });
 

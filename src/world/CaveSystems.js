@@ -22,6 +22,7 @@ export const CAVES = {
     JAG: 0.3, // how ragged the rock is (a part of the radius, by 3D noise)
     ROOF: 2, // layers of ground always left over a tunnel (but at the mouth)
     REACH: 150, // m a system may reach from its cell
+    MAIN_CHEST: 0.45, CHAMBER_CHEST: 0.06, // chances of a chest (4 times fewer than there were)
 };
 
 const TAU = Math.PI * 2;
@@ -152,11 +153,12 @@ export function growCaveSystem({ id, rng, start, H, blocked, test = false }) {
     const clear = (c, x, z) => s.chambers.every((o) => o === c || o.F <= c.F || Math.hypot(o.x - x, o.z - z) > chamberReach(o) + 3.5);
     s.kx = Math.round(main.x); s.kz = Math.round(main.z); s.F = main.F; s.r = Math.floor(main.r);
     s.ex = Math.round(main.from ? main.from.x : main.x + 1); s.ez = Math.round(main.from ? main.from.z : main.z);
-    // chests: the main chamber's, and in other chambers away from the mouth now and then
-    s.chests.push({ x: s.kx + 0.5, y: main.F, z: s.kz + 0.5, a: Math.atan2(s.ex - s.kx, s.ez - s.kz) });
+    // chests are rare: the main chamber holds one about every other cave, another chamber now and
+    // then (the creative test cave: always, and more — to try things out)
+    if (test || rng() < CAVES.MAIN_CHEST) s.chests.push({ x: s.kx + 0.5, y: main.F, z: s.kz + 0.5, a: Math.atan2(s.ex - s.kx, s.ez - s.kz), main: true });
     for (const c of s.chambers) {
-        if (c === main || s.chests.length >= 4) continue;
-        if (Math.hypot(c.x - start.x, c.z - start.z) < 25 || rng() > (test ? 0.8 : 0.5)) continue;
+        if (c === main || s.chests.length >= (test ? 4 : 2)) continue;
+        if (Math.hypot(c.x - start.x, c.z - start.z) < 25 || rng() > (test ? 0.8 : CAVES.CHAMBER_CHEST)) continue;
         // (a chest is 3.6 × 2.4 m: well clear of the ragged wall, its front towards the hall)
         const a = rng() * TAU, d = rng() * Math.max(0, c.r * (1 - c.w1 - c.w2 - 0.08) - 3.4);
         const x = Math.round(c.x + Math.cos(a) * d), z = Math.round(c.z + Math.sin(a) * d);
