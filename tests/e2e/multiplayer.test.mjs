@@ -716,6 +716,99 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await guest.context.close();
 });
 
+test('«Левиоса» on a wizard holds him up (the same phrase heard again lets nothing go), any two charges against each other meet, a friend\'s wand points as in his own hand', async () => {
+    const host = await openPlayer('Гарри');
+    await host.page.click('#mp-private-btn');
+    await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    const guest = await openPlayer('Драко');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await wf(host.page, () => window.__zns.game && window.__zns.game.active && window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game && window.__zns.game.active && window.__zns.game.remotes.size === 1, null, 120000);
+    const hostId = await ev(host.page, () => window.__zns.game.localId);
+    const aim = async (dist) => {
+        const t = await ev(host.page, (dist) => {
+            const g = window.__zns.game;
+            return g.character.getHandWorldPosition('right').addScaledVector(g.character.getHandDirection('right'), dist).toArray();
+        }, dist);
+        await ev(guest.page, (t) => { const g = window.__zns.game; g.character.group.position.set(t[0], t[1] - 0.6, t[2]); g.knockback.set(0, 0, 0); g.knock?.reset(); }, t);
+        await wf(host.page, (t) => { const r = [...window.__zns.game.remotes.values()][0]; return Math.hypot(r.position.x - t[0], r.position.z - t[2]) < 0.6; }, t, 20000);
+    };
+    const say = (page, text, fin) => ev(page, ([text, fin]) => window.__zns.game.castLocalSpell(text, fin), [text, fin]);
+
+    // 1) «Левиоса» at the guest: he rises — and the microphone repeating the phrase (unfinished,
+    //    then final) does not set him down again: he stays up, following the host's hand
+    await aim(14);
+    const height = () => ev(guest.page, () => { const g = window.__zns.game, p = g.character.group.position; return p.y - g.collision.surfaceY(p.x, p.z); });
+    await wf(guest.page, () => window.__zns.game.character.onGround, null, 20000);
+    const h0 = await height();
+    assert.equal(await say(host.page, 'вингардиум левиоса', false), 'Levitation');
+    await wf(guest.page, () => !!window.__zns.game.levitation.lifted, null, 20000);
+    await wf(host.page, () => window.__zns.game.levitation.state?.kind === 'player', null, 20000);
+    await sleep(700);
+    assert.equal(await say(host.page, 'вингардиум левиоса', false), null, 'the same phrase again: nothing');
+    await sleep(500);
+    assert.equal(await say(host.page, 'вингардиум левиоса', true), null, 'its final version: nothing');
+    await sleep(1500);
+    const up = await ev(guest.page, () => { const g = window.__zns.game, p = g.character.group.position; return { lifted: !!g.levitation.lifted, h: p.y - g.collision.surfaceY(p.x, p.z) }; });
+    assert.ok(up.lifted, 'still held up');
+    assert.ok(up.h > h0 + 0.5, `up in the air: ${up.h.toFixed(2)} (standing ${h0.toFixed(2)})`);
+    // the host turns: the guest is carried with the hand
+    const before = await ev(guest.page, () => window.__zns.game.character.group.position.toArray());
+    await ev(host.page, () => { const g = window.__zns.game; g.character.group.rotation.y = g.smoothBody = g.cameraBaseRotation = g.character.group.rotation.y + 0.6; });
+    await wf(guest.page, (b) => { const p = window.__zns.game.character.group.position; return Math.hypot(p.x - b[0], p.z - b[2]) > 3; }, before, 15000);
+    assert.ok(await ev(guest.page, () => !!window.__zns.game.levitation.lifted), 'carried, not dropped');
+    // a new phrase later lets him down
+    await wf(host.page, () => window.__zns.game.levitation.state?.age > 2.6, null, 20000); // (game time: the test browser is slow)
+    assert.equal(await say(host.page, 'вингардиум левиоса', true), 'Levitation');
+    await wf(guest.page, () => !window.__zns.game.levitation.lifted, null, 15000);
+    await ev(host.page, () => { const g = window.__zns.game; g.character.group.rotation.y = g.smoothBody = g.cameraBaseRotation = g.character.group.rotation.y - 0.6; });
+    await wf(guest.page, () => window.__zns.game.character.onGround, null, 20000);
+
+    // 2) A duel from two DIFFERENT spells, the guest's hand a little beside the host (not his
+    //    target): the charges fly against each other and meet all the same
+    await ev(host.page, () => { window.__zns.game.combat.fatigue = 30; });
+    await ev(guest.page, () => { window.__zns.game.combat.fatigue = 30; });
+    await aim(25);
+    await sleep(500);
+    await ev(host.page, () => { const g = window.__zns.game; g._lastDuelCast = 0; return g._castDuel('Stupefy', 'Stupefy', true); });
+    const guestTk = await ev(guest.page, () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const target = [...g.remotes.values()][0].position.clone().add(new T.Vector3(0, 0.6, 0));
+        for (let i = 0; i < 6; i++) {
+            ch.group.updateMatrixWorld(true);
+            const o = g.castOrigin('right', new T.Vector3()), d = ch.getPointingDirection('right', new T.Vector3());
+            const want = target.clone().sub(o);
+            const err = Math.atan2(-want.x, -want.z) - Math.atan2(-d.x, -d.z);
+            ch.group.rotation.y = g.smoothBody = g.cameraBaseRotation = ch.group.rotation.y + Math.atan2(Math.sin(err), Math.cos(err));
+        }
+        // (6° beside him: too far off to be aimed at him)
+        ch.group.rotation.y = g.smoothBody = g.cameraBaseRotation = ch.group.rotation.y + 0.11;
+        ch.group.updateMatrixWorld(true);
+        return g.duel.cast('SapiraDuel', null, 'right').tk;
+    });
+    assert.equal(guestTk, 'n', 'the guest\'s charge is aimed at nobody');
+    await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 20000);
+    await wf(guest.page, () => window.__zns.game.duel.clashes.length === 1, null, 20000);
+    // (the guest lets go calmly: hand off, then a flick)
+    await ev(guest.page, () => { const d = window.__zns.game.duel; const t0 = performance.now(); const real = d._contact.bind(d); d._contact = (id, ...r) => (id === d.me ? { ok: false, jerk: performance.now() - t0 > 450 } : real(id, ...r)); });
+    await wf(host.page, () => window.__zns.game.duel.clashes.length === 0, null, 30000);
+
+    // 3) The host takes a wand: on the guest's screen it points the way it points in his hand
+    await ev(host.page, () => window.__zns.game.items.takeIntoHand({ kind: 'wand', uid: 'mpw1', plain: true, model: 0, color: 0x8b5a2b, power: 0 }, 'right'));
+    await wf(guest.page, (id) => !!window.__zns.game.items.remoteHeld.get(id)?.right, hostId, 20000);
+    await sleep(1500);
+    const own = await ev(host.page, () => { const T = window.__zns.THREE, m = window.__zns.game.items.held.right.model; return new T.Vector3(0, 1, 0).applyQuaternion(m.getWorldQuaternion(new T.Quaternion())).toArray(); });
+    const seen = await ev(guest.page, (id) => { const T = window.__zns.THREE, m = window.__zns.game.items.remoteHeld.get(id).right.model; return new T.Vector3(0, 1, 0).applyQuaternion(m.quaternion).toArray(); }, hostId);
+    const ang = Math.acos(Math.max(-1, Math.min(1, own[0] * seen[0] + own[1] * seen[1] + own[2] * seen[2]))) * 180 / Math.PI;
+    assert.ok(ang < 15, `the friend's wand points as in his own hand (off by ${ang.toFixed(1)}°)`);
+
+    for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
+    await host.context.close();
+    await guest.context.close();
+});
+
 test('server list: «Создать сервер» starts a game that the other player sees in the list and joins without a code', async () => {
     const a = await openPlayer('Дима');
     const b = await openPlayer('Друг');

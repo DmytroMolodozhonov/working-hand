@@ -891,13 +891,38 @@ export class ItemSystem {
                 if (!h) continue;
                 // a book open in their hands: as they hold it, at the page they read
                 if (h.item.kind === 'book' && this.game.books?.reading?.placeRemote(ch, h.model, h.item, r.target?.bk || null)) continue;
+                if (h.item.kind === 'wand' || h.item.kind === 'hammer') { this._remoteGrip(ch, side, h); continue; }
                 const grip = ch.getGripObject(side);
                 grip.getWorldPosition(h.model.position);
                 grip.getWorldQuaternion(h.model.quaternion);
-                if (h.item.kind === 'wand' || h.item.kind === 'hammer') h.model.quaternion.multiply(_q.setFromAxisAngle(_v.set(1, 0, 0), Math.PI / 2));
             }
             if (cur.back) this._placeBackpack(cur.back.model, ch);
         }
+    }
+
+    /**
+     * A wand / a hammer in another player's hand, set exactly as their own computer sets it
+     * (_gripHold): the wand the arm's continuation bent by the wrist, the hammer's handle across
+     * the closed fingers — not the palm's turn plus a fixed quarter turn (that pointed the wand
+     * out of the back of the hand: sideways on everybody else's screen).
+     */
+    _remoteGrip(ch, side, h) {
+        const f = this.game.weapons.palmFrame(side, this._rpf || (this._rpf = {}), ch);
+        const wand = h.item.kind === 'wand';
+        const spec = wand ? WAND_V3 : GRIPPED[h.item.kind];
+        let x, y, z;
+        if (wand) {
+            const wrist = ch.handVersion === 'v4' ? 0.7 : 0.4;
+            y = ch.getForearmDirection(side, _a).multiplyScalar(1 - wrist).addScaledVector(f.Y, wrist).normalize();
+            x = _b.copy(f.X).addScaledVector(y, -f.X.dot(y));
+            if (x.lengthSq() < 1e-4) x.set(1, 0, 0);
+            x.normalize();
+            z = _c.crossVectors(x, y);
+        } else { y = _a.copy(f.X).multiplyScalar(h.thumb ?? (h.thumb = f.thumb)); x = _b.copy(f.Y); z = _c.crossVectors(x, y); }
+        _m4.makeBasis(x, y, z);
+        h.model.quaternion.setFromRotationMatrix(_m4);
+        const at = spec.at ? _e.copy(f.P).addScaledVector(f.Y, spec.at[0]).addScaledVector(f.Z, spec.at[1]) : f.G;
+        h.model.position.copy(at).sub(_d.set(0, spec.handle * h.model.scale.x, 0).applyQuaternion(h.model.quaternion));
     }
 
     /** One model of each kind, for compiling the shaders while loading. */

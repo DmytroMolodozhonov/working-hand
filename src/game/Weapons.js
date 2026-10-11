@@ -394,9 +394,9 @@ export class WeaponSystem {
      * The palm of a hand (for things held like the sword): P palm, X across the palm,
      * Y towards the fingers, Z the back of the hand, G the grip point in the closed
      * fingers, q the palm's rotation, thumb: which way along X the thumb is (±1).
+     * `ch`: whose hand (another player's hero too — their things are drawn as they hold them).
      */
-    palmFrame(side, out = {}) {
-        const ch = this.game.character;
+    palmFrame(side, out = {}, ch = this.game.character) {
         this._palmFrame(ch, side);
         out.P = (out.P || new THREE.Vector3()).copy(_P);
         out.X = (out.X || new THREE.Vector3()).copy(_X);

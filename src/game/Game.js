@@ -79,6 +79,8 @@ import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
 
 const SPELL_COOLDOWN = 1000;
+/** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
+const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
@@ -945,9 +947,21 @@ export class Game {
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
+            // The same phrase heard again — the microphone repeats an unfinished phrase many times
+            // while it is still being said, and gives the final one later — is not a new
+            // «Левиоса»: it must not let go of what that phrase has just lifted (a wizard lifted
+            // by the charge was set down again at once: he only "jumped"), nor send a second
+            // charge after the first. Letting go takes a new phrase.
+            const L = this.levitation;
+            if (performance.now() - (this._levDuelAt || -1e9) < LEV_SAME_PHRASE * 1000) return null;
+            if (L.active && L.state.age < LEV_SAME_PHRASE) return null;
             // (a wizard: a charge flies — the duel decides; an animal / zombie / villager is lifted like a thing)
-            const aim = this.levitation.active ? null : this.duel.pickSide(true);
-            if (aim && aim.t.kind === 'p') return this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
+            const aim = L.active ? null : this.duel.pickSide(true);
+            if (aim && aim.t.kind === 'p') {
+                const r = this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
+                if (r) this._levDuelAt = performance.now();
+                return r;
+            }
             return this._castLevitation(isFinal);
         }
         // Water bending: the hand is at the water / holding the ball, not raised to the face

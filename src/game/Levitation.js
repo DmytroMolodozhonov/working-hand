@@ -362,9 +362,10 @@ export class Levitation {
         return out.setFromAxisAngle(_v3, Math.min(Math.PI, angle * LEVITATE.TWIST));
     }
 
-    /** A fast, far movement of the hand relative to the body. */
+    /** A fast, far movement of the hand relative to the body (in the body's own turn: turning round with the arm out — carrying what it holds round — is no jerk). */
     _jerked(s, ch) {
         const hand = ch.getHandWorldPosition(s.side, _v1).sub(ch.group.position);
+        if (ch.group.quaternion) hand.applyQuaternion(_q1.copy(ch.group.quaternion).invert());
         const now = this._t;
         s.history.push({ t: now, x: hand.x, y: hand.y, z: hand.z });
         while (s.history.length && now - s.history[0].t > LEVITATE.DROP_WINDOW) s.history.shift();

@@ -73,6 +73,13 @@ export function maximaPush(boostA = 0, boostB = 0) {
     return DUEL.MAXIMA_BOOST * (Math.max(0, boostA | 0) - Math.max(0, boostB | 0));
 }
 
+/** Two charges meet (a duel starts): flying against each other, passing this close. */
+export const CLASH = {
+    MEET: 1.6, // m between their heads (or a head and the other's beam): the heroes are big, the hands never quite on the line
+    FACING: 0.2, // their ways more against each other than this (cos; −0.2 ≈ 100° apart)
+    WAIT: 1.5, // s a charge that reached me waits while my own answer flies against it (the host may see them meet a moment later)
+};
+
 /** Where a charge goes: along the hand; a target only right on that line, and only a small correction towards it. */
 export const AIM = {
     CONE: 0.07, // rad (4°): how far beside a body the hand may point and still mean it
@@ -525,6 +532,7 @@ export class Duel {
     // ============================================================= update
     update(dt) {
         this._t += dt;
+        this._dt = dt;
         // segments live exactly one frame, whatever the frame rate
         this._segLife = dt + 1e-4;
         this._trackHands();
@@ -566,6 +574,7 @@ export class Duel {
         }
         const step = (DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED) * dt;
         const from = _vFrom.copy(b.front);
+        (b.prev || (b.prev = new THREE.Vector3())).copy(from);
         b.front.addScaledVector(b.dir, step);
         b.traveled += step;
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
@@ -575,6 +584,7 @@ export class Duel {
         const hit = firstTouched(from, b.front, this._bodies(b.by));
         if (hit) {
             b.front.lerpVectors(from, b.front, hit.s);
+            b.prev.copy(b.front);
             b.state = 'arrived';
             b.tk = hit.body.kind;
             b.tid = hit.body.id;
@@ -601,8 +611,14 @@ export class Duel {
     _arriveAtMe(b) {
         if (!b.noted) { b.noted = true; this._note({ ev: 'arrive', id: b.id, by: b.by }); }
         const g = this.game;
-        // Answered with a charge aimed back? Then the referee will start a duel — wait.
-        for (const o of this.bolts.values()) if (o.by === this.me && o.tk === 'p' && o.tid === b.by && o.state === 'flying') return;
+        // Answered with a charge flying against it? Then the referee may start a duel — wait
+        // (a little: over the network it sees the two meet a moment later)
+        b.meWait = (b.meWait || 0) + (this._dt || 0);
+        for (const o of this.bolts.values()) {
+            if (o.by !== this.me || (o.state !== 'flying' && o.state !== 'arrived')) continue;
+            if (o.state === 'flying' && o.tk === 'p' && o.tid === b.by) return;
+            if (b.meWait < CLASH.WAIT && o.dir.dot(b.dir) <= -CLASH.FACING) return;
+        }
         const caster = this._handOf(b.by, b.side, _v1, _v2) ? _v1.clone() : b.o;
         if (g.combat.shieldFactor(caster) >= 1) {
             g.combat._blocked(caster);
@@ -774,21 +790,53 @@ export class Duel {
     }
 
     // ============================================================= duels
+    /**
+     * Two duel charges of two wizards meet: any two spells (not only aimed at each other —
+     * the hand a little beside the body still counts) flying against each other whose heads
+     * pass close, or one's head is already on the other's beam (over the network a friend's
+     * charge is seen a little late: by then they may have crossed). They push from there.
+     */
     _detectClashes() {
-        for (const a of this.bolts.values()) {
-            if (a.state === 'clash' || a.tk !== 'p') continue;
-            for (const b of this.bolts.values()) {
-                if (b === a || b.state === 'clash' || b.tk !== 'p') continue;
-                if (a.tid !== b.by || b.tid !== a.by || a.id > b.id) continue;
-                // Charges aimed at each other: do their fronts meet?
-                const L = this._casterDistance(a.by, b.by);
-                if (L == null) continue;
-                if (a.traveled + b.traveled < L - 0.6 && a.front.distanceTo(b.front) > 0.8) continue;
-                const p = Math.min(0.9, Math.max(0.1, a.traveled / Math.max(0.1, a.traveled + b.traveled)));
+        const list = this._clashable || (this._clashable = []);
+        list.length = 0;
+        for (const b of this.bolts.values()) if (b.state === 'flying' || (b.state === 'arrived' && b.tk === 'p')) list.push(b);
+        for (let i = 0; i < list.length; i++) {
+            for (let j = i + 1; j < list.length; j++) {
+                let a = list[i], b = list[j];
+                if (a.by === b.by || a.state === 'clash' || b.state === 'clash') continue;
+                if (a.id > b.id) [a, b] = [b, a]; // (the same order on every computer)
+                const m = this._meeting(a, b, _v1);
+                if (!m) continue;
+                const ha = this._handOf(a.by, a.side, _v2, _v3) ? _v2 : a.o;
+                const hb = this._handOf(b.by, b.side, _sb, _v3) ? _sb : b.o;
+                const ab = _cd.subVectors(hb, ha);
+                const len2 = ab.lengthSq();
+                const p = Math.min(0.9, Math.max(0.1, len2 > 1e-6 ? _co.subVectors(m, ha).dot(ab) / len2 : 0.5));
                 this._startClash(a, b, p);
                 if (this.game.sync) this.game.sync.duelClash(a.id, b.id, p);
             }
         }
+    }
+
+    /** Where two charges meet (into `out`), or null: they fly against each other and pass close. */
+    _meeting(a, b, out) {
+        if (a.dir.dot(b.dir) > -CLASH.FACING) return null; // (not against each other: crossing on their ways elsewhere)
+        const c = {};
+        // the heads' moves this frame pass each other (fast charges at a low FPS jump past)
+        segmentToSegment(a.prev || a.front, a.front, b.prev || b.front, b.front, c);
+        if (c.dist < CLASH.MEET) return out.copy(a.prev || a.front).lerp(a.front, c.s);
+        // one head is already on the other's beam (hand → head): they crossed a moment ago
+        for (const [x, y] of [[a, b], [b, a]]) {
+            const h = y._origin && y._origin.lengthSq() > 0 ? y._origin : y.o;
+            segmentToSegment(x.front, x.front, h, y.front, c);
+            if (c.dist < CLASH.MEET) return out.copy(x.front);
+        }
+        // charges aimed at each other: their ways together already span the gap
+        if (a.tk === 'p' && b.tk === 'p' && a.tid === b.by && b.tid === a.by) {
+            const L = this._casterDistance(a.by, b.by);
+            if (L != null && a.traveled + b.traveled >= L - 0.6) return out.copy(a.front).lerp(b.front, 0.5);
+        }
+        return null;
     }
 
     _casterDistance(x, y) {
