@@ -7,6 +7,7 @@
  *                             (a wizard 20 s — any hit shatters him —, 5 s in Creative; a creature 8 s)
  *   Вингардиум Левиоса        on a creature: throws it up into the air
  *   Сапира                    a slow, heavy violet charge: 4 HP to a wizard, 10 to a zombie
+ *   Экспеллиармус             a crimson charge: the wand (or the sword) flies out of the hand (Expelliarmus.js)
  *
  * A duel spell is not an instant beam: a crackling, jagged charge flies from
  * the hand (fast, ~0.7 s over 10 m) and acts only when it touches. It flies
@@ -40,6 +41,8 @@ import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { IceLook, ICE } from '../fx/IceLook.js';
+import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
+import { starterWand, rollWand } from './ItemTypes.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -52,6 +55,8 @@ export const DUEL_SPELLS = {
     SapiraDuel: { color: 0x8e2de2, name: 'Сапира', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
     // «Даст»: a sandy charge — whoever it hits is slowed for 5 s
     SandsDuel: { color: 0xd2b48c, name: 'Даст', speed: 13, coreColor: 0xfff1cf },
+    // «Экспеллиармус»: a deep crimson bolt with a white-hot core (Остолбеней is a lighter red)
+    Expelliarmus: { color: 0xc8102e, name: 'Экспеллиармус', speed: 16, core: 0.045, glow: 0.2, coreColor: 0xffffff },
 };
 
 export const DUEL = {
@@ -213,6 +218,9 @@ const _v3 = new THREE.Vector3();
 const _vFrom = new THREE.Vector3();
 const _c2 = new THREE.Color();
 const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vector3(), _ds = new THREE.Vector3(), _du = new THREE.Vector3();
+
+/** The wand a castle wizard holds: a student's plain wooden one, the others' a real (random) one. */
+const wizardWandOf = (v) => (v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand());
 
 let nextId = 1;
 
@@ -659,7 +667,8 @@ export class Duel {
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         if (c.isBird) { if (spell !== 'LevitateDuel') g.books.hitBird(c, 99); return; }
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
-        if (c.isLivingTree) { g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }
+        // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
+        if (c.isLivingTree) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
@@ -684,6 +693,12 @@ export class Duel {
             c.slowT = Math.max(c.slowT || 0, SLOW.TIME);
             this._sand(p);
             if (!c.dead) g.creatureImpact?.spellHit(c, 'SandsDuel', src, byId);
+        } else if (spell === 'Expelliarmus') {
+            // a wizard's wand / a knight's sword flies off; everybody else (animals, sailors,
+            // villagers with tools, an unarmed one) is only jolted back a little
+            const out = !c.isAnimal && !c.isSailor ? disarmVillager(g, c, wizardWandOf) : null;
+            if (out === 'wand') this.game.castleLife?._say?.(c, 'Моя палочка!', 3);
+            g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
         }
     }
 
@@ -745,6 +760,15 @@ export class Duel {
             if (c.enabled) c.damage(PLAYER_DAMAGE.Sands ?? 3, byId, 'Sands');
             else g.hud.setVoice('🏜️ Даст попал в вас: песок в глазах — 5 секунд вы медленнее', true);
             g.impact?.apply({ v: push(5), from, by: byId, spell: 'SandsDuel', jolt: 2.5, noShield: true });
+        } else if (spell === 'Expelliarmus') {
+            g.hud.flashColor?.('rgba(200, 16, 46, 0.45)');
+            // the wand (else the sword) flies out of my hand: a real throw, it lands somewhere about
+            const out = knockOutOfMyHand(g);
+            this._note({ ev: 'disarmed', out });
+            g.hud.setVoice(out === 'wand' ? '🪄 Экспеллиармус! Ваша палочка отлетела — подберите её'
+                : out === 'weapon' ? '🪄 Экспеллиармус! Оружие вылетело из руки — подберите его'
+                    : '🪄 Экспеллиармус! В руке ничего не было — вас только толкнуло', true);
+            g.impact?.apply({ v: push(3), from, by: byId, spell: 'Expelliarmus', jolt: 2, noShield: true });
         }
     }
 
@@ -778,6 +802,8 @@ export class Duel {
             z.slowT = Math.max(z.slowT || 0, SLOW.TIME);
             this._sand(p);
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'SandsDuel', src, byId);
+        } else if (spell === 'Expelliarmus') {
+            g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon: a small push)
         }
     }
 

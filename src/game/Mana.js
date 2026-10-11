@@ -38,7 +38,7 @@ export function isStrongSpell(name) {
 }
 
 /** A duel charge's name → the spell it came from. */
-export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra' };
+export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus' };
 
 /** Not spells (or nothing worked): never grow the maximum. */
 const NOT_SPELLS = new Set(['Stand', 'Stop', 'Pause', 'Nox', 'Attack', 'Reveal']);

@@ -17,6 +17,7 @@
  */
 
 import { WIZ, WIZ_ROLE_RU, wizardRoster } from './WizardAI.js';
+import { EXPELLIARMUS } from './Expelliarmus.js';
 import { WizardFx, FX } from '../fx/WizardFx.js';
 
 export { FX };
@@ -192,7 +193,33 @@ export class WizardLife {
             v.practice.t -= dt;
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;
         }
+        if (v.lostWand) return this._fetchWand(v, dt);
         return false;
+    }
+
+    /**
+     * (host) «Экспеллиармус» knocked the wand out: once it lies still, the wizard runs to it and
+     * takes it back. Somebody was quicker (a player took it): it is theirs, the wizard stays
+     * without a wand. Can't get there for long (a wall, water): he calls it back — «Акцио!».
+     */
+    _fetchWand(v, dt) {
+        const L = this.life, g = this.game, lw = v.lostWand;
+        const it = g.items?.loose.get(lw.uid);
+        if (!it) { v.lostWand = null; L._say(v, 'Мою палочку забрали!', 3); return false; }
+        lw.t += dt;
+        const p = it.model.position;
+        const back = () => {
+            g.items.pickUp(lw.uid, '#' + v.id, 'right'); // (gone from the world for everybody)
+            v.noWand = false; v.lostWand = null;
+            v.model?.setHeldTool('wand');
+        };
+        if (lw.t > EXPELLIARMUS.FETCH_GIVE_UP) { L._say(v, 'Акцио!', 3); back(); return true; }
+        if (!it.rest) { v.mode = 'idle'; v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(p.x - v.x), -(p.z - v.z)), dt * 6); return true; }
+        const d = L._steer(v, p.x, p.z, WALK * 1.8, dt, 0.8);
+        v.mode = v.speed > 0 ? 'walk' : 'idle';
+        L._ground(v);
+        if (d <= 1.0 && Math.abs(p.y - v.y) < 2.5) back();
+        return true;
     }
 
     /** (host) A wizard at its place: the Master's chair, the lectern, a cauldron, a desk, the watch, the telescope. */
@@ -238,6 +265,7 @@ export class WizardLife {
                 if (v.practice) f |= v.practice.bits;
                 if (v.job === 'brew' && v.mode === 'work') f |= FX.BREW;
                 if (v.job === 'teach' && v.sparkT > 0) { v.sparkT -= dt; f |= FX.SPARK; }
+                if (v.noWand) f = FX.NOWAND; // (no wand in the hand: no Lumos, no magic of the hand — seen by all)
                 v.fx = (v.fx & (FX.SHIELD | FX.DOME)) | f;
             }
         }
@@ -248,6 +276,8 @@ export class WizardLife {
         if (hats) this._hatT = 0.25;
         for (const v of wizards) {
             v.model.setAim(v.aimPitch || 0);
+            // the wand in the hand, or knocked out by «Экспеллиармус» (FX.NOWAND)
+            if (!v.dead && v.model.look?.tool === 'wand' && v.model.limbs?.rightArm == null) { const want = (v.fx & FX.NOWAND) ? 'none' : 'wand'; if (v.model.toolKind !== want) v.model.setHeldTool(want); }
             if (hats && t && v.group.visible && !v.dead) {
                 // (the hat's tip reaches into the 6th layer over the feet: a 5-high doorway folds it)
                 const L0 = Math.round(v.y + 1.5);
@@ -275,7 +305,7 @@ export class WizardLife {
         const busy = new Map();
         for (const v of wizards) if (v.practice) busy.set(v.cs, (busy.get(v.cs) || 0) + 1);
         for (const v of wizards) {
-            if (v.practice || v.dead || v.foe || v.fleeT > 0 || v.talking > 0 || v.speed > 0.3 || v.seated) continue;
+            if (v.practice || v.dead || v.noWand || v.foe || v.fleeT > 0 || v.talking > 0 || v.speed > 0.3 || v.seated) continue;
             if (v.cs.hostile?.size) continue;
             if (!players.some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < PRACTICE_NEAR)) continue;
             if ((busy.get(v.cs) || 0) >= PRACTICE_MAX) continue;

@@ -133,6 +133,7 @@ export const SPELL_PHYSICS = {
     WaveAttack: { push: 10, toss: 3.5, wet: true }, WaveAttackMaxima: { push: 17.2, toss: 4.7, wet: true },
     Thunderwave: { push: 20, thunder: true, jolt: 3 },
     Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 },
+    Expelliarmus: { push: 3, jolt: 2 }, // (a jolt; what it really does is knock the wand out: Expelliarmus.js)
     Stupefy: { push: 4, always: true, down: 1.5 }, AvadaKedavra: { push: 3, always: true, down: 1.5 },
     Bombardo: { blast: true, jolt: 3, down: 1.5 }, BombardoMaxima: { blast: true, jolt: 4, down: 2.5 },
     Earthquake: { push: 3, always: true, down: 1.5, toss: 4 }, EarthquakeMaxima: { push: 5, always: true, down: 2.5, toss: 6 },

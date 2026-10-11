@@ -10,6 +10,7 @@
  * peers render the same spell for the eyes only.
  */
 
+import { isExpelliarmus } from '../game/Expelliarmus.js';
 import * as THREE from 'three';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 import { thunderPush } from '../game/Impact.js';
@@ -40,6 +41,8 @@ export function matchSpell(text) {
     const hell = hellfireWords(s);
     if (hell === 2) return 'Hellfire';
     if (hell === 1) return null; // («hellfire» alone: wait for «come» — never a campfire)
+    // «Экспеллиармус»: the whole word only (before every short token that might sit inside it)
+    if (isExpelliarmus(s)) return 'Expelliarmus';
     // «Up» («Ап»): a short word — only the whole phrase (UpSpell.js)
     if (isUpWord(s)) return 'Up';
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)

@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import { makeBookModel } from '../game/BookBirds.js';
 import { makeItemModel } from '../game/ItemTypes.js';
 
-export const FX = { LUMOS: 1, SHIELD: 2, DOME: 4, LEV: 8, SPARK: 16, DRAW: 32, CAST: 64, BLINK: 128, OFFER: 256, BREW: 512, LEVFAIL: 1024 };
+export const FX = { LUMOS: 1, SHIELD: 2, DOME: 4, LEV: 8, SPARK: 16, DRAW: 32, CAST: 64, BLINK: 128, OFFER: 256, BREW: 512, LEVFAIL: 1024, NOWAND: 2048 };
 const NEAR = 40; // m: farther wizards' small magic is not drawn
 const PROPS = 6;
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();

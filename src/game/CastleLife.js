@@ -33,6 +33,7 @@ import { CastleTalk } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS } from './WizardLife.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster } from './WizardAI.js';
+import { EXPELLIARMUS } from './Expelliarmus.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { slowFactor, tickSlow } from './Slow.js';
 
@@ -996,7 +997,8 @@ export class CastleLife {
         if (v.model.limbs?.rightArm != null) return; // (no sword arm any more)
         const fp = this._playerPos(v.foe);
         if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4) return;
-        const dmg = STATS[v.role].dmg;
+        // (its sword knocked out by «Экспеллиармус»: fists)
+        const dmg = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : STATS[v.role].dmg;
         if (v.foe === this.game.localId) this.struck(dmg, v.x, v.z, v.title);
         else this.game.sync?.villagerStrike?.(v.foe, dmg, v.x, v.z, v.title);
     }
@@ -1580,7 +1582,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0)]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), v.disarmed ? 1 : 0]);
         g.sync.villagers?.(list);
     }
 
@@ -1589,7 +1591,7 @@ export class CastleLife {
         const idx = this.index;
         if (!idx) return;
         const seen = new Set();
-        for (const [id, x, y, z, yaw, mode, hp, armor, seated, speed, fx, pitch] of list || []) {
+        for (const [id, x, y, z, yaw, mode, hp, armor, seated, speed, fx, pitch, disarmed] of list || []) {
             seen.add(id);
             let v = this.byId.get(id);
             if (!v) {
@@ -1608,6 +1610,8 @@ export class CastleLife {
                 if ((fx & 128) && !(v.fx & 128)) { this.wizards.fx.smoke(v); v.x = x; v.y = y; v.z = z; this.wizards.fx.smoke(v); }
                 v.fx = fx ?? 0; v.aimPitch = pitch ?? 0;
             }
+            // («Экспеллиармус» knocked its sword out: the sword flies / lies about as a weapon of its own)
+            if (disarmed && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead') v.dead = true;
         }

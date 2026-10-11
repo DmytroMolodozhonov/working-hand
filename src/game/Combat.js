@@ -75,6 +75,7 @@ export const SPELL_COST = {
     Overgrown: 10, // creatures thrown apart (Overgrown.js)
     OvergrownMaxima: 20,
     Stupefy: 12,
+    Expelliarmus: 12, // the wand flies out of the target's hand (Expelliarmus.js)
     AvadaKedavra: 25,
     WaveAttack: 8,
     WaveAttackMaxima: 18,

@@ -210,7 +210,10 @@ export class Spiders {
     }
 
     /** A duel charge touched this spider's body. */
-    boltHit(s, spell, by = undefined) { this.hit(s, spell === 'AvadaKedavra' ? 25 : spell === 'SapiraDuel' ? 10 : 4, spell, by); }
+    boltHit(s, spell, by = undefined) {
+        if (spell === 'Expelliarmus') return; // (no wand, no weapon in its legs: nothing to knock out — no effect)
+        this.hit(s, spell === 'AvadaKedavra' ? 25 : spell === 'SapiraDuel' ? 10 : 4, spell, by);
+    }
 
     byId(id) { return this.list.find((s) => s.id === id && !s.dead) || null; }
 

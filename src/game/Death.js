@@ -231,7 +231,8 @@ export class DeathSystem {
     villagerDied(v) {
         const g = this.game;
         const y = this._ground(v.x, v.z, v.y + 1.5);
-        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield });
+        // (a sword knocked out by «Экспеллиармус» already lies somewhere: not a second one)
+        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield }).filter((d) => !(v.disarmed && d.kind === 'weapon'));
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
         const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0 };
