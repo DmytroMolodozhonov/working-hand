@@ -1,0 +1,210 @@
+diff --git a/tests/unit/castles.test.js b/tests/unit/castles.test.js
+index 6a61256..ade17e8 100644
+--- a/tests/unit/castles.test.js
++++ b/tests/unit/castles.test.js
+@@ -119,7 +119,7 @@ test('houses: rich and poor, each with a door, glass windows, a bed and a chest
+             for (let k = 0; k < 5; k++) assert.equal(t.get(Math.round(d.x), Math.round(d.y + 1.5) + k, Math.round(d.z)), BLOCK.AIR, 'door opening');
+             assert.ok(h.windows.length >= 2, 'windows');
+             for (const w of h.windows) assert.equal(t.get(Math.round(w.x), Math.round(w.y + 1), Math.round(w.z)), BLOCK.AIR, 'window hole');
+-            assert.ok(h.chests.length >= (h.rich ? 2 : 1), 'a chest');
++            assert.ok(h.chests.length >= (h.rich && h.kind !== 'towerhouse' ? 2 : 1), 'a chest'); // (a towerhouse: 1 until it has its loft)
+             for (const ch of h.chests) assert.equal(t.get(Math.round(ch.x), Math.round(ch.y + 1.5), Math.round(ch.z)), BLOCK.AIR, 'chest place is free');
+             assert.ok(h.bedSpots.length >= 1, 'a bed');
+             for (const b of h.bedSpots) {
+diff --git a/tests/unit/houses.test.js b/tests/unit/houses.test.js
+new file mode 100644
+index 0000000..5b464dc
+--- /dev/null
++++ b/tests/unit/houses.test.js
+@@ -0,0 +1,191 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import * as THREE from 'three';
++import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
++import { CollisionWorld } from '../../src/world/Collision.js';
++import { Chest } from '../../src/entities/Chest.js';
++import { bedModel, BED } from '../../src/game/BedModels.js';
++import { doorModel } from '../../src/game/Doors.js';
++import { PoseInterpreter } from '../../src/input/PoseInterpreter.js';
++
++const R = 0.48; // the player's radius (Game.js PLAYER_RADIUS)
++
++function world(seed) { const t = new TerrainData(); t.generate({ seed, mountains: true }); return t; }
++function castlesOf(t, n) {
++    const out = [];
++    for (let gz = -3; gz <= 3 && out.length < n; gz++) for (let gx = -3; gx <= 3 && out.length < n; gx++) { const c = t.castles.cellOf(gx, gz); if (c) out.push(c); }
++    return out;
++}
++/** The world box of a house chest as the game makes it (Houses.js: Chest(c.y, yaw + PI, scale c.s)). */
++function chestBox(ch) {
++    const scene = new THREE.Scene();
++    const c = new Chest(scene, new THREE.Vector3(ch.x, ch.y, ch.z), 'loot', ch.yaw + Math.PI, 'x', { scale: ch.s, maxOpen: ch.maxOpen });
++    c.mesh.updateMatrixWorld(true);
++    return { box: c.getCollisionBox(), model: new THREE.Box3().setFromObject(c.mesh) };
++}
++function bedBox(b) {
++    const c = Math.abs(Math.cos(b.yaw)), s = Math.abs(Math.sin(b.yaw));
++    const hw = (BED.W / 2) * c + (BED.L / 2) * s, hd = (BED.W / 2) * s + (BED.L / 2) * c;
++    return { minX: b.x - hw, maxX: b.x + hw, minY: b.y, maxY: b.y + BED.top, minZ: b.z - hd, maxZ: b.z + hd };
++}
++const solidAt = (t, x, L, z) => { const b = t.get(Math.round(x), L, Math.round(z)); return b !== BLOCK.AIR && b !== BLOCK.WATER; };
++
++test('house chests: the whole chest stands on the floor inside the walls — no block, bed or wall in it, room to kneel in front', () => {
++    for (const seed of [12345, 777]) {
++        const t = world(seed);
++        for (const c of castlesOf(t, 3)) for (const h of c.houses) {
++            if (h.kind === 'barn') continue;
++            assert.ok(h.chests.length >= (h.rich && h.kind !== 'towerhouse' ? 2 : 1), `${h.id} ${h.kind}: its chests`);
++            const L0 = Math.round(h.c.y + 1.5); // the first layer over the floor
++            for (const ch of h.chests) {
++                assert.ok(ch.s >= 1.4 && ch.s <= 2, 'a chest of a real size for the hero');
++                const { box, model } = chestBox(ch);
++                assert.ok(Math.abs(model.min.y - ch.y) < 0.01, `${h.id}: on the floor, not floating (${(model.min.y - ch.y).toFixed(2)})`);
++                assert.ok(solidAt(t, ch.x, L0 - 1, ch.z), 'the floor under it');
++                for (let x = model.min.x + 0.05; x < model.max.x; x += 0.2) for (let z = model.min.z + 0.05; z < model.max.z; z += 0.2) {
++                    assert.ok(!solidAt(t, x, L0, z) && !solidAt(t, x, L0 + 1, z), `${h.id} ${h.kind}: nothing built through the chest at ${x.toFixed(1)},${z.toFixed(1)}`);
++                }
++                for (const b of h.bedSpots) {
++                    const q = bedBox(b);
++                    assert.ok(box.maxX <= q.minX || box.minX >= q.maxX || box.maxZ <= q.minZ || box.minZ >= q.maxZ, `${h.id}: the chest is not in the bed`);
++                }
++                // a free spot 0.9 m before its front (where a player kneels to lift the lid)
++                const fx = Math.sin(ch.yaw + Math.PI), fz = Math.cos(ch.yaw + Math.PI);
++                const k = { x: ch.x + fx * (0.455 * ch.s + R + 0.1), z: ch.z + fz * (0.455 * ch.s + R + 0.1) };
++                assert.ok(!t.solidIn(Math.round(k.x), Math.round(k.z), L0, L0 + 3), `${h.id}: room before the chest`);
++            }
++        }
++    }
++});
++
++test('house collision: a body pushed into a chest or a bed comes out into the room — never into a wall, never outside', () => {
++    const t = world(12345);
++    let pushed = 0, trapped = 0, outside = 0;
++    for (const c of castlesOf(t, 3)) for (const h of c.houses) {
++        if (h.kind === 'barn') continue;
++        const col = new CollisionWorld(); col.setTerrain(t);
++        const boxes = [...h.chests.map((ch) => chestBox(ch).box), ...h.bedSpots.map(bedBox)];
++        for (const b of boxes) col.addBox(b);
++        const L0 = Math.round(h.c.y + 1.5);
++        const wall = (x, z) => t.solidIn(Math.round(x), Math.round(z), L0 + 1, L0 + 3);
++        for (const b of boxes) for (let fx = 0.1; fx < 1; fx += 0.2) for (let fz = 0.1; fz < 1; fz += 0.2) {
++            const p = { x: b.minX + (b.maxX - b.minX) * fx, y: 0, z: b.minZ + (b.maxZ - b.minZ) * fz };
++            if (wall(p.x, p.z)) continue;
++            pushed++;
++            for (let f = 0; f < 10; f++) col.resolveCylinder(p, R, h.c.y, 3.5);
++            if (wall(p.x, p.z) || boxes.some((q) => Math.hypot(Math.max(q.minX - p.x, 0, p.x - q.maxX), Math.max(q.minZ - p.z, 0, p.z - q.maxZ)) < R - 0.02)) trapped++;
++            if (Math.max(Math.abs(p.x - h.c.x), Math.abs(p.z - h.c.z)) > h.r) outside++;
++        }
++    }
++    assert.ok(pushed > 1000);
++    assert.equal(trapped, 0, 'nobody is left stuck in a chest, a bed or a wall');
++    assert.equal(outside, 0, 'nobody is pushed out through a wall');
++});
++
++test('a house bed can be reached from the door and lain on (a free spot at its side)', () => {
++    const t = world(12345);
++    for (const c of castlesOf(t, 3)) for (const h of c.houses) {
++        if (h.kind === 'barn') continue;
++        const L0 = Math.round(h.c.y + 1.5);
++        const boxes = [...h.chests.map((ch) => chestBox(ch).box), ...h.bedSpots.map(bedBox)];
++        const wall = (x, z) => t.solidIn(Math.round(x), Math.round(z), L0 + 1, L0 + 3);
++        const free = (x, z) => [[0, 0], [R, 0], [-R, 0], [0, R], [0, -R]].every(([a, b]) => !wall(x + a, z + b))
++            && !boxes.some((q) => Math.hypot(Math.max(q.minX - x, 0, x - q.maxX), Math.max(q.minZ - z, 0, z - q.maxZ)) < R);
++        const bed = h.bedSpots[0], c0 = Math.cos(bed.yaw), s0 = Math.sin(bed.yaw);
++        const st = 0.25, seen = new Set(), q = [[h.door.x, h.door.z]];
++        let ok = false;
++        while (q.length && !ok) {
++            const [x, z] = q.pop();
++            const dx = x - bed.x, dz = z - bed.z;
++            if (Math.abs(dx * c0 - dz * s0) < BED.W / 2 + 1.3 && Math.abs(dx * s0 + dz * c0) < BED.L / 2 + 0.91) ok = true; // (Beds._nearBed)
++            for (const [a, b] of [[st, 0], [-st, 0], [0, st], [0, -st]]) {
++                const nx = x + a, nz = z + b, k = Math.round(nx / st) + ':' + Math.round(nz / st);
++                if (seen.has(k) || Math.hypot(nx - h.c.x, nz - h.c.z) > h.r + 6) continue;
++                seen.add(k);
++                if (free(nx, nz)) q.push([nx, nz]);
++            }
++        }
++        assert.ok(ok, `${h.id} ${h.kind}: the bed can be reached`);
++    }
++});
++
++test('models: no two faces of different parts in one plane (no flickering): bed, chest, a house door in its opening', () => {
++    const faces = (root) => {
++        root.updateMatrixWorld(true);
++        const out = [];
++        root.traverse((o) => {
++            if (!o.isMesh || o.geometry.type !== 'BoxGeometry') return;
++            const b = new THREE.Box3().setFromObject(o), id = out.length;
++            for (const [ax, u, v] of [['x', 'y', 'z'], ['y', 'x', 'z'], ['z', 'x', 'y']]) for (const s of [-1, 1]) {
++                out.push({ id, mat: o.material, ax, s, c: s < 0 ? b.min[ax] : b.max[ax], u0: b.min[u], u1: b.max[u], v0: b.min[v], v1: b.max[v] });
++            }
++        });
++        return out;
++    };
++    const clashes = (root) => {
++        const f = faces(root), hits = [];
++        for (let i = 0; i < f.length; i++) for (let j = i + 1; j < f.length; j++) {
++            const A = f[i], B = f[j];
++            if (Math.floor(i / 6) === Math.floor(j / 6) || A.ax !== B.ax || A.s !== B.s || Math.abs(A.c - B.c) > 1e-4) continue;
++            if (A.ax === 'y' && A.s < 0 && Math.abs(A.c) < 1e-3) continue; // (resting on the floor: never seen)
++            const area = Math.max(0, Math.min(A.u1, B.u1) - Math.max(A.u0, B.u0)) * Math.max(0, Math.min(A.v1, B.v1) - Math.max(A.v0, B.v0));
++            if (area > 1e-4) hits.push(`${A.ax}${A.s > 0 ? '+' : '-'}@${A.c.toFixed(3)}`);
++        }
++        return hits;
++    };
++    assert.deepEqual(clashes(bedModel('red')), [], 'bed');
++    for (const scale of [1.6, 2, 3]) assert.deepEqual(clashes(new Chest(new THREE.Scene(), new THREE.Vector3(), 'loot', 0, 'c', { scale }).mesh), [], `chest ×${scale}`);
++    const door = doorModel(0x7a4f2a, { w: 3, h: 5, inOpening: true });
++    assert.deepEqual(clashes(door), [], 'house door');
++    // and none of its faces lies on the opening's sides / underside facing the same way as the stone there
++    for (const f of faces(door)) {
++        assert.ok(!(f.ax === 'x' && Math.abs(Math.abs(f.c) - 1.5) < 1e-3 && Math.sign(f.c) !== f.s), 'jamb vs the side of the opening');
++        assert.ok(!(f.ax === 'y' && Math.abs(f.c - 5) < 1e-3 && f.s < 0), 'frame vs the lintel');
++    }
++});
++
++test('castle bedrooms: a real bed (one you can lie in), free of the walking paths, on the floor', () => {
++    const t = world(12345);
++    for (const c of castlesOf(t, 3)) {
++        const rooms = c.rooms.filter((r) => r.kind === 'bedroom' || r.kind === 'king');
++        assert.equal(c.bedSpots.length, rooms.length, `${c.id}: a bed in every bedroom`);
++        for (const b of c.bedSpots) {
++            assert.ok(/_bed\d+$/.test(b.id));
++            const L = Math.round(b.y + 1.5);
++            const fx = -Math.sin(b.yaw), fz = -Math.cos(b.yaw), sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);
++            for (const l of [-2.6, 0, 2.6]) for (const s of [-1.1, 0, 1.1]) {
++                const x = b.x + fx * l + sx * s, z = b.z + fz * l + sz * s;
++                assert.ok(!solidAt(t, x, L, z) && !solidAt(t, x, L + 1, z), `${b.id}: bed space`);
++                assert.ok(solidAt(t, x, L - 1, z), `${b.id}: floor under the bed`);
++            }
++        }
++    }
++});
++
++test('sitting down is not running; sitting on a chair counts as a crouch wherever the camera is', () => {
++    const pose = (nose, sh) => {
++        const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
++        p[0] = { x: 0.5, y: nose, z: -0.4, visibility: 0.99 };
++        p[11] = { x: 0.6, y: sh, z: 0, visibility: 0.99 }; p[12] = { x: 0.4, y: sh, z: 0, visibility: 0.99 };
++        p[13] = { x: 0.64, y: sh + 0.15 }; p[14] = { x: 0.36, y: sh + 0.15 }; p[15] = { x: 0.65, y: sh + 0.3 }; p[16] = { x: 0.35, y: sh + 0.3 };
++        return p;
++    };
++    const sitDown = (n0, n1, s0, s1) => {
++        const it = new PoseInterpreter(null), seen = { ran: 0, crouched: false };
++        for (let i = 0; i < 15; i++) it.process({ poseLandmarks: pose(n0, s0) }, null);
++        for (let i = 0; i <= 24; i++) { const k = i / 24, d = it.process({ poseLandmarks: pose(n0 + (n1 - n0) * k, s0 + (s1 - s0) * k) }, null); if (d.isRunning) seen.ran++; }
++        for (let i = 0; i < 10; i++) seen.crouched = it.process({ poseLandmarks: pose(n1, s1) }, null).isCrouching;
++        return seen;
++    };
++    assert.deepEqual(sitDown(0.25, 0.6, 0.42, 0.72), { ran: 0, crouched: true }, 'a deep crouch: no running on the way down');
++    assert.deepEqual(sitDown(0.15, 0.38, 0.30, 0.53), { ran: 0, crouched: true }, 'on a chair, the camera high: the nose stays above the middle — still a crouch');
++    // bobbing shoulders are still running; a nod is not a crouch
++    const it = new PoseInterpreter(null);
++    let d;
++    for (let i = 0; i < 12; i++) d = it.process({ poseLandmarks: pose(0.25 + (i % 2 ? 0.03 : -0.03), 0.42 + (i % 2 ? 0.03 : -0.03)) }, null);
++    assert.ok(d.isRunning && d.runIntensity > 0.5);
++    const it2 = new PoseInterpreter(null);
++    for (let i = 0; i < 15; i++) it2.process({ poseLandmarks: pose(0.25, 0.42) }, null);
++    for (let i = 0; i < 15; i++) d = it2.process({ poseLandmarks: pose(0.33, 0.45) }, null);
++    assert.equal(d.isCrouching, false, 'a nod is no crouch');
++});

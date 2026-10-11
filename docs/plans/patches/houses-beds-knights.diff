@@ -1,0 +1,975 @@
+diff --git a/src/world/Castles.js b/src/world/Castles.js
+index fd0e437..9705196 100644
+--- a/src/world/Castles.js
++++ b/src/world/Castles.js
+@@ -218,7 +218,7 @@ function stairsU(p, u0, dir, v0, v1, n, t, l0 = 0) {
+ }
+ 
+ // ------------------------------------------------------------ furniture
+-function furnish(p0, room, s, chests, aisles = []) {
++function furnish(p0, room, s, chests, aisles = [], beds = null) {
+     const { u0, u1, v0, v1, kind } = room;
+     // furniture never stands in the way of the walking paths (aisles) through the room
+     const hits = (a0, a1, b0, b1) => aisles.some((r) => a1 >= r.u0 && a0 <= r.u1 && b1 >= r.v0 && b0 <= r.v1);
+@@ -301,11 +301,24 @@ function furnish(p0, room, s, chests, aisles = []) {
+         case 'bedroom':
+         case 'king': {
+             const big = kind === 'king';
+-            const bw = big ? 2 : 1;
+-            p.box(fu - bw, fu + bw, l, l, v1 - 5, v1, BLOCK.PLANKS_DARK);
+-            p.box(fu - bw, fu + bw, l + 1, l + 1, v1 - 5, v1 - 1, big ? s.carpet : BLOCK.CLOTH_WHITE);
+-            p.box(fu - bw, fu + bw, l + 1, l + 1, v1, v1, BLOCK.CLOTH_WHITE);
+-            if (big) { p.box(fu - bw, fu + bw, l + 2, l + 4, v1, v1, BLOCK.GOLD); chest(fu + bw + 2, v1 - 1, p.yaw(0)); }
++            // a real bed (src/game/Beds.js — lie down in it): head to a wall, off the walking paths through the room
++            // (a 2.5 × 5.5 m bed in local u/v; tried along the far wall first, then the side walls)
++            let bed = null;
++            const fits = (a0, a1, b0, b1) => a0 >= u0 - 0.4 && a1 <= u1 + 0.4 && b0 >= v0 - 0.4 && b1 <= v1 + 0.4
++                && !aisles.some((r) => a1 > r.u0 - 0.5 && a0 < r.u1 + 0.5 && b1 > r.v0 - 0.5 && b0 < r.v1 + 0.5);
++            for (let k = 0; k <= 2 * W && !bed; k++) { // head to the far wall (v1), sliding from the middle out
++                const u = cu + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.5, v = v1 + 0.4 - 2.75;
++                if (fits(u - 1.25, u + 1.25, v - 2.75, v + 2.75)) bed = { u, v, yaw: p0.yaw(Math.PI), head: 'v1' };
++            }
++            for (const side of [1, -1]) for (let k = 0; k <= 2 * D && !bed; k++) { // or to a side wall
++                const v = cv + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.5, u = side > 0 ? u1 + 0.4 - 2.75 : u0 - 0.4 + 2.75;
++                if (fits(u - 2.75, u + 2.75, v - 1.25, v + 1.25)) bed = { u, v, yaw: p0.yaw(side > 0 ? -Math.PI / 2 : Math.PI / 2), head: side > 0 ? 'u1' : 'u0' };
++            }
++            if (bed && beds) beds.push({ ...p0.pt(bed.u, bed.v, l), yaw: bed.yaw, color: big ? s.bedRoyal : 'white', room: kind });
++            if (big) {
++                if (bed?.head === 'v1') { const gu = Math.round(bed.u); p.box(gu - 1, gu + 1, l + 3, l + 5, v1, v1, BLOCK.GOLD); } // (a gold headboard over the king's bed)
++                chest(fu + 4, v1 - 1, p.yaw(0));
++            }
+             p.box(cu - 2, cu + 2, l - 1, l - 1, v0 + 1, v1 - 7, s.carpet);
+             lantern(cu, v0);
+             break;
+@@ -470,7 +483,7 @@ function buildKeep(p, s, rng, out) {
+             } else {
+                 const door = [wallU, dv], mid = [cu, cvv];
+                 const c1 = corner(door, true, mid);
+-                furnish(p, room, s, out.chests, [leg(door, c1), leg(c1, mid)]);
++                furnish(p, room, s, out.chests, [leg(door, c1), leg(c1, mid)], out.bedSpots);
+                 const ids = nodes([[wallU - su * 3, dv], [wallU + su * 2, dv], c1, mid], 0, 'room:' + kind);
+                 p.link(hallMid, ids[0]);
+             }
+@@ -525,7 +538,7 @@ function buildKeep(p, s, rng, out) {
+         const aisles = [];
+         for (let k = 1; k < pts.length; k++) aisles.push(leg(pts[k - 1], pts[k]));
+         if (!isStairRoom) {
+-            furnish(p, { kind, u0: r.ru0, u1: r.ru1, v0: r.r0, v1: r.rv1, l: upl, doorSide: 'v0' }, s, out.chests, aisles);
++            furnish(p, { kind, u0: r.ru0, u1: r.ru1, v0: r.r0, v1: r.rv1, l: upl, doorSide: 'v0' }, s, out.chests, aisles, out.bedSpots);
+             out.rooms.push({ kind, name: ROOM_NAMES[kind], ...p.rect(r.ru0, r.ru1, r.r0, r.rv1), y: p.L(upl) - 1.5, l: upl });
+         }
+         // windows over the throne room from the side rooms (a gallery)
+@@ -834,17 +847,49 @@ function buildHouse(p, kind, cu, cv, face, rng, s, out) {
+     }
+     // ---- inside
+     const L0 = 0;
++    // the floor plan (lot rectangles, metres): what stands on the floor, the doorway, the way in — the chests keep off it
++    const taken = [{ a0: da - dw - 0.5, a1: da + dw + 0.5, b0: -d + 0.5, b1: -d + 3 }];
++    const F = (a0, a1, l0, l1, b0, b1, t) => {
++        P.box(a0, a1, l0, l1, b0, b1, t);
++        if (l0 <= 1) taken.push({ a0: Math.min(a0, a1) - 0.5, a1: Math.max(a0, a1) + 0.5, b0: Math.min(b0, b1) - 0.5, b1: Math.max(b0, b1) + 0.5 });
++    };
+     const lantern = (a, b, l) => P.box(a, a, l, l, b, b, BLOCK.LANTERN);
+-    const chest = (a, b, fa, fb) => { const q = P.pt(a, b, L0); house.chests.push({ ...q, yaw: P.yaw(fa, fb) }); };
+-    // a bed against the back wall, pillow to the wall (Beds: 2.5 × 5.5 m)
++    // a chest (Chest at scale CHEST_S: 2.0 × 1.4 m) against a wall, 0.3 m from it (the lid opens up to it),
++    // its front to the room and room before it to kneel; the first free place from the middle of the wall outwards
++    const CHEST_S = 1.6, CHW = 0.625 * CHEST_S, CFRONT = 0.455 * CHEST_S, CBACK = 0.425 * CHEST_S, CGAP = 0.3, CCLEAR = 1.1;
++    const inRoom = (r) => r.a0 >= -w + 0.5 - 1e-6 && r.a1 <= w - 0.5 + 1e-6 && r.b0 >= -d + 0.5 - 1e-6 && r.b1 <= d - 0.5 + 1e-6;
++    const hits = (r) => taken.some((o) => r.a0 < o.a1 - 1e-6 && r.a1 > o.a0 + 1e-6 && r.b0 < o.b1 - 1e-6 && r.b1 > o.b0 + 1e-6);
++    const chest = (walls = ['back', 'left', 'right', 'front']) => {
++        for (const wall of walls) {
++            const [fa, fb] = { back: [0, -1], front: [0, 1], left: [1, 0], right: [-1, 0] }[wall];
++            for (let k = 0; k <= 4 * Math.max(w, d); k++) {
++                const u = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.5;
++                const a = fa ? (fa > 0 ? -w + 0.5 + CGAP + CBACK : w - 0.5 - CGAP - CBACK) : u;
++                const b = fb ? (fb > 0 ? -d + 0.5 + CGAP + CBACK : d - 0.5 - CGAP - CBACK) : u;
++                const body = fa ? { a0: a - (fa > 0 ? CBACK : CFRONT), a1: a + (fa > 0 ? CFRONT : CBACK), b0: b - CHW, b1: b + CHW }
++                    : { a0: a - CHW, a1: a + CHW, b0: b - (fb > 0 ? CBACK : CFRONT), b1: b + (fb > 0 ? CFRONT : CBACK) };
++                const front = fa ? { a0: fa > 0 ? body.a1 : body.a0 - CCLEAR, a1: fa > 0 ? body.a1 + CCLEAR : body.a0, b0: body.b0, b1: body.b1 }
++                    : { a0: body.a0, a1: body.a1, b0: fb > 0 ? body.b1 : body.b0 - CCLEAR, b1: fb > 0 ? body.b1 + CCLEAR : body.b0 };
++                if (!inRoom(body) || !inRoom(front) || hits(body) || hits(front)) continue;
++                taken.push(body);
++                house.chests.push({ ...P.pt(a, b, L0), yaw: P.yaw(fa, fb), s: CHEST_S, maxOpen: Math.PI / 2, wall });
++                return true;
++            }
++        }
++        return false;
++    };
++    // a bed against the back wall, pillow to the wall (Beds: 2.5 × 5.5 m; the headboard's cap is 2.8 wide)
+     const bed = (a) => {
+         const q = P.pt(a, d - 0.5 - 2.85, L0);
+         house.bedSpots.push({ ...q, yaw: P.yaw(0, 1) });
++        taken.push({ a0: a - 1.25, a1: a + 1.25, b0: d - 0.5 - 5.6, b1: d - 0.5 });
++        // (the side to lie down from: kept free)
++        taken.push({ a0: a - 1.25 - 1.0, a1: a - 1.25, b0: d - 0.5 - 4.5, b1: d - 0.5 - 2.0 });
+     };
+     const hearth = (a, b) => {
+         // a stone hearth on the side wall with a glowing fire, the chimney above the roof
+         const sx = a < 0 ? -1 : 1;
+-        P.box(a, a, 0, 3, b - 1, b + 1, BLOCK.COBBLE);
++        F(a, a, 0, 3, b - 1, b + 1, BLOCK.COBBLE);
+         P.box(a, a, 0, 0, b, b, BLOCK.LANTERN);
+         P.box(a + sx, a + sx, 0, top + 2, b, b, BLOCK.COBBLE);
+     };
+@@ -861,25 +906,27 @@ function buildHouse(p, kind, cu, cv, face, rng, s, out) {
+         P.box(1, 1, 0, 4, -2, 0, 0);
+         P.box(-4, 0, -1, -1, -3, 1, s.carpet); // a rug
+         hearth(-w + 1, 1);
+-        P.box(-3, -2, 0, 1, 2, 3, BLOCK.PLANKS); // the table, benches
+-        P.box(-4, -4, 0, 0, 2, 3, timber); P.box(-1, -1, 0, 0, 2, 3, timber);
+-        P.box(-2, 0, 0, 3, d - 1, d - 1, BLOCK.BOOKS); // shelves
++        F(-3, -2, 0, 1, 2, 3, BLOCK.PLANKS); // the table, benches
++        F(-4, -4, 0, 0, 2, 3, timber); F(-1, -1, 0, 0, 2, 3, timber);
++        F(-2, 0, 0, 3, d - 1, d - 1, BLOCK.BOOKS); // shelves
+         lantern(-2, 0, h - 1); lantern(3, -1, h - 1);
+-        bed(w - 1.85);
+-        chest(2, d - 1, 0, -1);
+-        chest(-w + 1, -d + 1, 1, 0);
+-        P.box(w - 1, w - 1, 0, 3, -d + 1, -d + 2, BLOCK.PLANKS_DARK); // a wardrobe
+-        if (rng() < 0.5) P.box(w - 1, w - 1, 0, 0, -2, -2, BLOCK.GOLD); // something precious
++        taken.push({ a0: 0.5, a1: 1.5, b0: -d + 0.5, b1: d - 0.5 }); // (the inner wall)
++        taken.push({ a0: -0.5, a1: 2.5, b0: -2.5, b1: 0.5 }); // (its doorway and the way through)
++        bed(w - 1.95);
++        F(w - 1, w - 1, 0, 3, -d + 1, -d + 2, BLOCK.PLANKS_DARK); // a wardrobe
++        if (rng() < 0.5) F(w - 1, w - 1, 0, 0, -2, -2, BLOCK.GOLD); // something precious
++        chest(['back', 'front', 'left', 'right']); chest(['front', 'left', 'back', 'right']);
+         house.beds = 2;
+     } else {
+         hearth(-w + 1, 0);
+-        const ta = -w + 3;
+-        P.box(ta, ta + 1, 0, 1, 1, 2, BLOCK.PLANKS); // a table and a bench
+-        P.box(ta - 1, ta - 1, 0, 0, 1, 2, timber);
++        const ta = -w + 1, tb = -d + 1;
++        F(ta, ta + 1, 0, 1, tb, tb + 1, BLOCK.PLANKS); // a table by the front window
++        F(ta + 1, ta + 1, 0, 0, tb + 2, tb + 2, timber); // a stool by the fire
+         lantern(0, -1, h - 1);
+-        bed(w - 1.85);
+-        chest(-w + 1, d - 1, 0, -1);
+-        if (rich) chest(w - 1, -d + 1, -1, 0); // (a towerhouse: the rich have more)
++        taken.push({ a0: -1.5, a1: 1.5, b0: -d + 0.5, b1: 0.5 }); // (the way in)
++        bed(w - 1.95);
++        chest(['back', 'left', 'right']);
++        if (rich) chest(['back', 'left', 'right', 'front']); // (a towerhouse: the rich have more)
+         house.beds = kind === 'longhouse' ? 4 : 2;
+     }
+     // a woodpile by a poor house
+@@ -1083,6 +1130,7 @@ function pickStyle(rng) {
+     s.poorRoof = rng() < 0.55 ? BLOCK.THATCH : s.villageRoof;
+     s.bedRich = ['red', 'blue', 'green', 'purple', 'yellow'][Math.floor(rng() * 5)];
+     s.carpet = col.carpet;
++    s.bedRoyal = { [BLOCK.CARPET_RED]: 'red', [BLOCK.CARPET_BLUE]: 'blue', [BLOCK.CARPET_GREEN]: 'green', [BLOCK.CLOTH_YELLOW]: 'yellow' }[col.carpet] || 'red';
+     s.color = col.hex;
+     s.colorName = col.name;
+     s.floor = s.stone === BLOCK.CS_DARK ? BLOCK.CS_GREY : BLOCK.COBBLE;
+@@ -1159,7 +1207,7 @@ export class CastleIndex {
+     _buildCastle(gx, gz, X, Z, F, s, rng, zone) {
+         const rot = Math.floor(rng() * 4);
+         const p = new Plan(X, Z, F, rot);
+-        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [] };
++        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [], bedSpots: [] };
+         buildVillage(p, s, rng, out);
+         buildCastle(p, s, rng, out);
+         p.joinRoads();
+@@ -1177,6 +1225,7 @@ export class CastleIndex {
+             keep: p.rect(-s.KW, s.KW, s.kv - s.KD, s.kv + s.KD),
+             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
+             throne: out.throne, throneFront: out.throneFront, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
++            bedSpots: out.bedSpots.map((b, i) => ({ ...b, id: 'cs' + gx + '_' + gz + '_bed' + i })),
+             houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),
+             stalls: out.stalls, fields: out.fields, market: out.market, posts: out.posts,
+             nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk,
+diff --git a/src/world/Collision.js b/src/world/Collision.js
+index 2b66edc..3d222b5 100644
+--- a/src/world/Collision.js
++++ b/src/world/Collision.js
+@@ -10,6 +10,8 @@
+  */
+ 
+ const HASH_CELL = 8;
++const _exits = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]; // (no allocation in the hot path)
++const byDist = (p, q) => p[2] - q[2];
+ 
+ export class CollisionWorld {
+     constructor() {
+@@ -145,6 +147,12 @@ export class CollisionWorld {
+             for (let i = 0; i < boxes.length; i++) {
+                 const b = boxes[i];
+                 if (b.maxY <= feetY + 0.05 || b.minY >= feetY + height) continue;
++                // pushed right into it (by someone, a blow): out on the room's side — never into a wall behind it
++                if (this.terrain && pos.x > b.minX && pos.x < b.maxX && pos.z > b.minZ && pos.z < b.maxZ) {
++                    this._exitBox(pos, radius, b, feetY, height, stepHeight);
++                    moved = true;
++                    continue;
++                }
+                 if (pushOutOfRect(pos, radius, b.minX, b.maxX, b.minZ, b.maxZ)) moved = true;
+             }
+ 
+@@ -169,6 +177,26 @@ export class CollisionWorld {
+         return hit;
+     }
+ 
++    /** A terrain column too high to step on that stands in a body's way at (x, z)? */
++    _wallAt(x, z, feetY, height, stepHeight) {
++        const ix = Math.round(x), iz = Math.round(z);
++        if (this.terrain.topLayer(ix, iz) - 0.5 <= feetY + stepHeight) return false;
++        return !this.terrain.solidIn || this.terrain.solidIn(ix, iz, Math.ceil(feetY + stepHeight + 0.5 + 1e-3), Math.floor(feetY + height + 1.5 - 1e-3));
++    }
++
++    /** The centre inside a box: out through the nearest side whose outside is not a wall (else the nearest). */
++    _exitBox(pos, r, b, feetY, height, stepHeight) {
++        const ex = _exits;
++        ex[0][0] = b.minX - r; ex[0][1] = pos.z; ex[0][2] = pos.x - b.minX;
++        ex[1][0] = b.maxX + r; ex[1][1] = pos.z; ex[1][2] = b.maxX - pos.x;
++        ex[2][0] = pos.x; ex[2][1] = b.minZ - r; ex[2][2] = pos.z - b.minZ;
++        ex[3][0] = pos.x; ex[3][1] = b.maxZ + r; ex[3][2] = b.maxZ - pos.z;
++        ex.sort(byDist);
++        let e = ex[0];
++        for (let k = 0; k < 4; k++) if (!this._wallAt(ex[k][0], ex[k][1], feetY, height, stepHeight)) { e = ex[k]; break; }
++        pos.x = e[0]; pos.z = e[1];
++    }
++
+     /** Is a world point inside any solid obstacle? (projectiles, line of sight) */
+     pointBlocked(x, y, z) {
+         if (this.walls && y < this.walls.height) {
+diff --git a/src/entities/Chest.js b/src/entities/Chest.js
+index 0efea07..3edab5a 100644
+--- a/src/entities/Chest.js
++++ b/src/entities/Chest.js
+@@ -18,6 +18,7 @@ const OPEN_ANGLE = Math.PI * 0.62; // ~110°
+ const OPEN_TIME = 0.9; // seconds
+ 
+ let SHARED = null;
++const _h = new THREE.Vector3();
+ function shared() {
+     if (SHARED) return SHARED;
+     SHARED = {
+@@ -29,7 +30,7 @@ function shared() {
+         lid: new THREE.BoxGeometry(1.25, 0.2, 0.85),
+         band: new THREE.BoxGeometry(1.3, 0.08, 0.9),
+         lock: new THREE.BoxGeometry(0.15, 0.2, 0.05),
+-        corner: new THREE.BoxGeometry(0.1, 0.6, 0.1),
++        corner: new THREE.BoxGeometry(0.12, 0.6, 0.12),
+         hollow: new THREE.BoxGeometry(1.08, 0.02, 0.68),
+     };
+     return SHARED;
+@@ -48,7 +49,7 @@ export class Chest {
+      * @param {number} facing  rotation.y so the front (+Z) faces open space
+      * @param {string|number} id
+      */
+-    constructor(scene, position, itemType, facing = 0, id = 0) {
++    constructor(scene, position, itemType, facing = 0, id = 0, { scale = SCALE, maxOpen = OPEN_ANGLE } = {}) {
+         this.scene = scene;
+         this.id = id;
+         this.itemType = itemType || 'sword';
+@@ -59,7 +60,9 @@ export class Chest {
+         this.mesh = new THREE.Group();
+         this.mesh.position.copy(position);
+         this.mesh.rotation.y = facing;
+-        this.mesh.scale.setScalar(SCALE);
++        this.scale = scale;
++        this.maxOpen = maxOpen; // (against a wall the lid opens till it leans on it)
++        this.mesh.scale.setScalar(scale);
+         this.createModel();
+         scene.add(this.mesh);
+     }
+@@ -94,8 +97,9 @@ export class Chest {
+         lock.position.set(0, 0.35, 0.43);
+         this.mesh.add(lock);
+ 
+-        for (const x of [-0.55, 0.55]) {
+-            for (const z of [-0.35, 0.35]) {
++        // (the iron corners stand 1 cm proud of the wood: no two faces in one plane — no flicker)
++        for (const x of [-0.56, 0.56]) {
++            for (const z of [-0.36, 0.36]) {
+                 const corner = new THREE.Mesh(s.corner, s.gold);
+                 corner.position.set(x, 0.3, z);
+                 this.mesh.add(corner);
+@@ -103,14 +107,40 @@ export class Chest {
+         }
+     }
+ 
++    /** The lid's angle now (0 shut … maxOpen). */
++    lidAngle() { return -this.lidGroup.rotation.x; }
++
++    /** Set the lid's angle (a hand holds it). */
++    setLid(a) { this.lidGroup.rotation.x = -Math.max(0, Math.min(this.maxOpen, a)); }
++
++    /** Let go: the lid falls shut by its weight. */
++    dropLid(dt) { const a = this.lidAngle(); if (a > 0) this.setLid(a - dt * (2 + a * 6)); }
++
++    /** Are the fingers under the lid's front edge (a hand world point)? */
++    handUnderLid(hand) {
++        this.mesh.updateMatrixWorld(true);
++        const p = this.mesh.worldToLocal(_h.copy(hand)); // (chest units)
++        const a = this.lidAngle();
++        const ey = 0.5 + Math.sin(a) * 0.85, ez = -0.4 + Math.cos(a) * 0.85; // the front edge now
++        return Math.abs(p.x) < 0.6 && Math.hypot(p.y - ey, p.z - ez) < 0.2;
++    }
++
++    /** The lid's angle that puts its front edge at the hand (−1: the hand is off the lid). */
++    lidAngleFor(hand) {
++        const p = this.mesh.worldToLocal(_h.copy(hand));
++        const dy = p.y - 0.5, dz = p.z + 0.4; // from the hinge
++        if (Math.abs(p.x) > 0.75 || Math.hypot(dy, dz) > 1.25 || Math.hypot(dy, dz) < 0.45) return -1;
++        return Math.max(0, Math.min(this.maxOpen, Math.atan2(dy, dz)));
++    }
++
+     /** Axis-aligned collision box (rotates with the chest). */
+     getCollisionBox() {
+-        const w = 1.25 * SCALE / 2, d = 0.85 * SCALE / 2;
++        const w = 1.25 * this.scale / 2, d = 0.91 * this.scale / 2;
+         const quarter = Math.round(this.mesh.rotation.y / (Math.PI / 2));
+         const swap = Math.abs(quarter) % 2 === 1;
+         const hx = swap ? d : w, hz = swap ? w : d;
+         const p = this.mesh.position;
+-        return { minX: p.x - hx, maxX: p.x + hx, minY: p.y - 0.5, maxY: p.y + 0.75 * SCALE, minZ: p.z - hz, maxZ: p.z + hz, kind: 'chest' };
++        return { minX: p.x - hx, maxX: p.x + hx, minY: p.y, maxY: p.y + 0.72 * this.scale, minZ: p.z - hz, maxZ: p.z + hz, kind: 'chest' };
+     }
+ 
+     /** World position where the reward appears (just above the opening). */
+@@ -144,7 +174,7 @@ export class Chest {
+         this.isOpen = true;
+         this.animating = false;
+         this.openProgress = 1;
+-        this.lidGroup.rotation.x = -OPEN_ANGLE;
++        this.lidGroup.rotation.x = -this.maxOpen;
+     }
+ 
+     update(dt) {
+@@ -156,10 +186,10 @@ export class Chest {
+             this.lidGroup.rotation.x = -0.04 * Math.sin(t * 120);
+         } else {
+             const k = (t - 0.15) / 0.85;
+-            this.lidGroup.rotation.x = -OPEN_ANGLE * easeOutBack(k);
++            this.lidGroup.rotation.x = -this.maxOpen * easeOutBack(k);
+         }
+         if (t >= 1) {
+-            this.lidGroup.rotation.x = -OPEN_ANGLE;
++            this.lidGroup.rotation.x = -this.maxOpen;
+             this.animating = false;
+         }
+     }
+diff --git a/src/game/BedModels.js b/src/game/BedModels.js
+index 4f9abb6..4251ee6 100644
+--- a/src/game/BedModels.js
++++ b/src/game/BedModels.js
+@@ -47,9 +47,9 @@ export function bedModel(color = 'white') {
+     const blanket = blanketMaterial(color);
+     const stripe = mat(new THREE.Color(bedColorHex(color)).multiplyScalar(0.72).getHex());
+     // legs and the frame
+-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.26, 0.5, 0.26, dark, sx * (W / 2 - 0.13), 0.25, sz * (L / 2 - 0.13)));
+-    g.add(box(W, 0.3, L, wood, 0, 0.55, 0));
+-    for (const sx of [-1, 1]) g.add(box(0.14, 0.2, L, dark, sx * (W / 2 - 0.07), 0.78, 0, false));
++    for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.26, 0.5, 0.26, dark, sx * (W / 2 - 0.15), 0.25, sz * (L / 2 - 0.16)));
++    g.add(box(W, 0.3, L - 0.04, wood, 0, 0.55, 0));
++    for (const sx of [-1, 1]) g.add(box(0.14, 0.2, L - 0.08, dark, sx * (W / 2 - 0.06), 0.78, 0, false));
+     // headboard (with a carved top) and footboard
+     g.add(box(W + 0.1, head, 0.22, wood, 0, head / 2, -L / 2 + 0.11));
+     g.add(box(W + 0.3, 0.22, 0.3, dark, 0, head + 0.06, -L / 2 + 0.11));
+@@ -59,11 +59,11 @@ export function bedModel(color = 'white') {
+     // mattress, pillow, blanket (turned down at the top)
+     g.add(box(W - 0.16, 0.3, L - 0.44, sheet, 0, 0.85, 0));
+     g.add(box(W * 0.7, 0.26, 0.85, pillow, 0, top + 0.12, -L / 2 + 0.75));
+-    const b1 = box(W - 0.06, 0.12, L * 0.62, blanket, 0, top + 0.04, L / 2 - 0.22 - L * 0.31);
++    const b1 = box(W - 0.06, 0.12, L * 0.62, blanket, 0, top + 0.04, L / 2 - 0.25 - L * 0.31);
+     const b2 = box(W - 0.04, 0.14, 0.32, mat(0xfbf8f0), 0, top + 0.07, L / 2 - 0.22 - L * 0.62 + 0.14);
+     const b3 = box(0.06, 0.62, L * 0.62, blanket, -(W / 2 - 0.0), top - 0.25, b1.position.z, false);
+     const b4 = box(0.06, 0.62, L * 0.62, blanket, W / 2 - 0.0, top - 0.25, b1.position.z, false);
+-    const s1 = box(W - 0.02, 0.13, 0.18, stripe, 0, top + 0.045, b1.position.z + L * 0.18);
++    const s1 = box(W - 0.02, 0.13, 0.18, stripe, 0, top + 0.05, b1.position.z + L * 0.18);
+     g.add(b1, b2, b3, b4, s1);
+     g.userData.blanket = [b1, b3, b4];
+     g.userData.stripe = s1;
+diff --git a/src/game/Doors.js b/src/game/Doors.js
+index 6e6880d..46069bd 100644
+--- a/src/game/Doors.js
++++ b/src/game/Doors.js
+@@ -43,34 +43,40 @@ function doorMats(color) {
+     return m;
+ }
+ 
+-export function doorModel(color) {
++export function doorModel(color, { w = W, h = H, inOpening = false } = {}) {
+     const g = new THREE.Group();
+     const { wood, dark, gold } = doorMats(color);
+-    // frame
+-    for (const [w, h, x, y] of [[0.16, H + 0.16, -W / 2 - 0.08, H / 2], [0.16, H + 0.16, W / 2 + 0.08, H / 2], [W + 0.32, 0.16, 0, H + 0.08]]) {
+-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, T + 0.08), dark);
++    // the frame: a free-standing door — posts outside the leaf; a door in a wall's opening — the jambs line
++    // the opening from inside (their outer faces on the opening's sides, facing the stone: never one plane with it)
++    const J = 0.14, FD = T + 0.12; // jamb thickness, frame depth
++    const lw = inOpening ? w - 2 * J - 0.04 : w, lh = inOpening ? h - J - 0.02 : h; // the leaf
++    const posts = inOpening
++        ? [[J, h, -w / 2 + J / 2, h / 2], [J, h, w / 2 - J / 2, h / 2], [w - 2 * J, J, 0, h - J / 2]]
++        : [[0.16, H + 0.16, -W / 2 - 0.08, H / 2], [0.16, H + 0.16, W / 2 + 0.08, H / 2], [W + 0.32, 0.16, 0, H + 0.08]];
++    for (const [bw, bh, x, y] of posts) {
++        const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, inOpening ? FD : T + 0.08), dark);
+         m.position.set(x, y, 0);
+         m.castShadow = true;
+         g.add(m);
+     }
+     // the leaf turns around its hinge (left edge)
+     const hinge = new THREE.Group();
+-    hinge.position.set(-W / 2, 0, 0);
++    hinge.position.set(-lw / 2, 0, 0);
+     g.add(hinge);
+-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(W, H, T), wood);
+-    leaf.position.set(W / 2, H / 2, 0);
++    const leaf = new THREE.Mesh(new THREE.BoxGeometry(lw, lh, T), wood);
++    leaf.position.set(lw / 2, lh / 2, 0);
+     leaf.castShadow = true;
+     hinge.add(leaf);
+-    for (const [y, h] of [[H * 0.72, H * 0.38], [H * 0.27, H * 0.38]]) {
+-        const panel = new THREE.Mesh(new THREE.BoxGeometry(W * 0.7, h, 0.04), dark);
+-        panel.position.set(W / 2, y, -T / 2 - 0.01);
++    for (const [y, ph] of [[lh * 0.72, lh * 0.38], [lh * 0.27, lh * 0.38]]) {
++        const panel = new THREE.Mesh(new THREE.BoxGeometry(lw * 0.7, ph, 0.04), dark);
++        panel.position.set(lw / 2, y, -T / 2 - 0.01);
+         hinge.add(panel);
+         const p2 = panel.clone();
+         p2.position.z = T / 2 + 0.01;
+         hinge.add(p2);
+     }
+     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), gold);
+-    knob.position.set(W - 0.22, H * 0.48, -T / 2 - 0.08);
++    knob.position.set(lw - 0.22, Math.min(lh * 0.48, 1.75), -T / 2 - 0.08);
+     hinge.add(knob);
+     const knob2 = knob.clone();
+     knob2.position.z = T / 2 + 0.08;
+@@ -129,11 +135,10 @@ export class Doors {
+     _place(d) {
+         const g = this.game;
+         if (this.list.has(d.id)) { this._move(this.list.get(d.id), d); return; }
+-        const model = doorModel(d.color);
++        // (a house door fills its opening: built at the opening's size, its frame inside the opening)
++        const model = d.w || d.h ? doorModel(d.color, { w: d.w || W, h: d.h || H, inOpening: true }) : doorModel(d.color);
+         model.position.set(d.x, d.y, d.z);
+         model.rotation.y = d.ry;
+-        // (a house door fills its opening: wider and taller than a made one)
+-        if (d.w || d.h) model.scale.set((d.w || W) / W, (d.h || H) / H, 1);
+         g.scene.add(model);
+         const door = { ...d, model, boxId: null, holdSide: null };
+         this.list.set(d.id, door);
+diff --git a/src/game/Houses.js b/src/game/Houses.js
+index 5a3f8d3..16b410d 100644
+--- a/src/game/Houses.js
++++ b/src/game/Houses.js
+@@ -141,11 +141,13 @@ export class Houses {
+         h.chests.forEach((c, k) => {
+             const id = h.id + 'c' + k;
+             if (g.chests.some((x) => x.id === id)) return;
+-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y + 0.5, c.z), 'loot', c.yaw + Math.PI, id);
++            // (on the floor — c.y is the floor's top; its own size; the lid opens till it leans on the wall behind)
++            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y, c.z), 'loot', c.yaw + Math.PI, id, { scale: c.s || 1.6, maxOpen: c.maxOpen ?? Math.PI / 2 });
+             chest.mesh.updateMatrixWorld(true);
+             chest.boxId = g.collision.addBox(chest.getCollisionBox());
+             chest.house = { def, i, rich: h.rich };
+             chest.locked = false;
++            chest.byHand = true; // (a family's chest: nobody's lid flies open as you walk by — a hand lifts it)
+             if (g._openedChests?.has(id)) chest.setOpenInstant();
+             g.chests.push(chest);
+             rec.chests.push(chest);
+diff --git a/src/game/Game.js b/src/game/Game.js
+index 1720334..faffa0d 100644
+--- a/src/game/Game.js
++++ b/src/game/Game.js
+@@ -52,12 +52,12 @@ import { NetSync } from '../net/NetSync.js';
+ import { hashString } from '../core/math.js';
+ import { BLOCK, isCastleBlock, BASE_COLORS } from '../world/Terrain.js';
+ import { lookPitch } from '../input/PoseInterpreter.js';
+-import { heroBody, mountBody, moveSolid } from './BodyContact.js';
+ 
+ const SPELL_COOLDOWN = 1000;
+ const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
+ const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
+ const PLAYER_RADIUS = 0.48;
++const _vLid = new THREE.Vector3();
+ export const DAY_CYCLE_MS = 24 * 60 * 1000;
+ const ZOMBIE_RADIUS = 0.88;
+ const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.STONE]: 0x8a8a8a, [BLOCK.SNOW]: 0xf2f6f8 };
+@@ -540,6 +540,7 @@ export class Game {
+                 chest.awayT = far ? (chest.awayT || 0) + dt : 0;
+                 if (chest.awayT > 4) { chest.awayT = 0; chest.close(); }
+             }
++            if (chest.byHand) { this._liftLid(chest, dt); continue; } // (a family's chest: only a hand opens it)
+             if (chest.isOpen || chest.locked || !this.authority) continue; // (castle chests: locked while the king lives)
+             const cp = chest.getPosition();
+             for (let i = 0; i < players.length; i++) {
+@@ -553,6 +554,34 @@ export class Game {
+         }
+     }
+ 
++    /**
++     * The lid of a chest follows my hand: the fingers under its front edge, the hand goes up — the lid turns
++     * round its hinge with it (and falls shut if let go early). Lifted past ~60°: it is open (the host fills it).
++     */
++    _liftLid(chest, dt) {
++        if (chest.isOpen || chest.animating) return;
++        const ch = this.character;
++        if (!this.currentPose) { chest.dropLid(dt); return; }
++        let lifted = false;
++        for (const side of ['right', 'left']) {
++            const hand = ch.getHandWorldPosition(side, _vLid);
++            if (chest.liftSide && chest.liftSide !== side) continue;
++            if (!chest.liftSide && !chest.handUnderLid(hand)) continue;
++            const a = chest.lidAngleFor(hand);
++            if (a < 0) { chest.liftSide = null; continue; } // (the hand went away from the lid: let go)
++            chest.liftSide = side;
++            chest.setLid(Math.max(chest.lidAngle(), a));
++            lifted = true;
++            if (chest.lidAngle() > 1.05) {
++                chest.liftSide = null;
++                if (this.authority) this.openChest(chest, null, this.localId);
++                else { chest.open(); this.sync?.chestLift?.(chest.id); }
++            }
++            break;
++        }
++        if (!lifted) { chest.liftSide = null; chest.dropLid(dt); }
++    }
++
+     openChest(chest, rewardId = null, by = null) {
+         if (!chest.open()) return;
+         if (this.sound) this.sound.playChestOpen(chest.getPosition());
+@@ -1764,7 +1793,6 @@ export class Game {
+         if (!isTest) this._spawnWaves();
+ 
+         for (const r of this.remotes.values()) r.update(dt);
+-        this._keepBodiesApart(); // (after everything that moved me, before my place is sent)
+         if (this.sync) this.sync.update(dt);
+         mark('мультиплеер');
+ 
+@@ -1857,95 +1885,34 @@ export class Game {
+             this.knockback.multiplyScalar(Math.max(0, 1 - 4 * dt));
+         }
+ 
+-        // (other players are solid: _keepBodiesApart, once everything has moved me)
++        // Other players are solid: you can't walk through them
++        if (!flight.active) this._pushOutOfPlayers(ch.group.position);
+ 
+         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
+         if (!flight.active && !this.beds?.lying) {
+             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
+             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
+         }
+-        this._keepInsideMap(ch.group.position);
+-    }
+-
+-    /**
+-     * Other players are solid. Once everything has moved me this frame (walking, running,
+-     * a blast, the horse, Leviosa, flight), my body goes from where it stood to where it
+-     * wants to be in short steps and never into anybody's body as drawn on this screen:
+-     * it stops against them and slides along (BodyContact.js). Every computer does this
+-     * for its own hero, so it holds both ways. Riding, it is the horse that is stopped.
+-     */
+-    _keepBodiesApart() {
+-        const ch = this.character;
+-        const me = ch.group.position;
+-        const horse = this.animals?.riding || null;
+-        const mover = horse ? horse.group.position : me;
+-        const S = this._solid || (this._solid = { from: { x: 0, z: 0 }, has: false, mover: null, others: [], at: {}, to: {} });
+-        // (dead, lying in a bed, in a spider's legs: the body is not mine to move)
+-        const free = !(this.combat.dead || this.isDeadLocal || this.beds?.lying || this.spiders?.held);
+-        const others = free ? this._otherBodies(S.others) : null;
+-        if (others && others.length) {
+-            const up = _v1.set(0, 1, 0).applyQuaternion(ch.group.quaternion);
+-            const yaw = ch.group.rotation.y;
+-            const crouch = ch.isCrouching;
+-            const size = horse ? horse.model?.scale?.x || 2.3 : 0;
+-            const ground = horse ? horse.group.position.y - 0.5 : 0, top = me.y + 2.85;
+-            const bodyAt = horse
+-                ? (x, z, out) => mountBody(x, ground, z, horse.group.rotation.y, size, top, out)
+-                : (x, z, out) => heroBody(x, me.y, z, yaw, up, crouch, out);
+-            S.to.x = mover.x; S.to.z = mover.z;
+-            const res = moveSolid(S.has && S.mover === mover ? S.from : null, S.to, bodyAt, others, S.at);
+-            if (res.x !== mover.x || res.z !== mover.z) {
+-                const bx = mover.x, bz = mover.z;
+-                mover.x = res.x; mover.z = res.z;
+-                // walls and terrain still win (the other player's own computer moves them out)
+-                const col = this.collision;
+-                if (horse) {
+-                    col.resolveCylinder(mover, 0.7, mover.y - 0.5, 2.5, 1.2);
+-                    me.x = mover.x; me.z = mover.z;
+-                } else if (this.flight.active) {
+-                    if (col.pointBlocked(me.x, me.y, me.z) || col.pointBlocked(me.x, me.y + 1.2, me.z)) { me.x = bx; me.z = bz; }
+-                } else {
+-                    col.resolveCylinder(me, PLAYER_RADIUS, me.y - PLAYER_GROUND_OFFSET + (crouch ? 1.0 : 0), 3.5);
+-                }
+-                this._keepInsideMap(me);
+-            }
++        // Maps have an edge; the open world is endless
++        if (this.world.isMap) {
++            ch.group.position.x = Math.max(-119, Math.min(119, ch.group.position.x));
++            ch.group.position.z = Math.max(-119, Math.min(119, ch.group.position.z));
+         }
+-        S.from.x = mover.x; S.from.z = mover.z;
+-        S.has = free;
+-        S.mover = mover;
+     }
+ 
+-    /** The other players' bodies where this screen draws them (reused objects). */
+-    _otherBodies(list) {
+-        list.length = 0;
+-        if (!this.remotes.size) return list;
+-        let riders = null;
+-        for (const a of this.animals?.list || []) if (a.rider && !a.dead) (riders || (riders = new Map())).set(a.rider, a);
+-        const lifter = this.levitation?.lifted?.by; // (Leviosa holds me near that wizard's hand)
+-        const pool = this._bodyPool || (this._bodyPool = []);
+-        let i = 0;
+-        for (const [id, r] of this.remotes) {
+-            if (r.dead || !r.target || id === lifter) continue;
+-            const b = pool[i] || (pool[i] = {});
+-            list[i++] = b;
++    _pushOutOfPlayers(me) {
++        const MIN = 1.2; // two bodies (1.2 m wide) side by side
++        for (const r of this.remotes.values()) {
++            if (r.dead) continue;
+             const p = r.position;
+-            const horse = riders?.get(id);
+-            if (horse) mountBody(horse.group.position.x, horse.group.position.y - 0.5, horse.group.position.z, horse.group.rotation.y, horse.model?.scale?.x || 2.3, p.y + 2.85, b);
+-            else heroBody(p.x, p.y, p.z, r.character.group.rotation.y, _v2.set(0, 1, 0).applyQuaternion(r.character.group.quaternion), r.character.isCrouching, b);
+-            // (on the very same spot the two computers part opposite ways)
+-            const f = b.fallback || (b.fallback = { x: 0, z: 0 });
+-            f.x = String(this.localId) < String(id) ? 1 : -1;
+-            f.z = 0;
+-        }
+-        list.length = i;
+-        return list;
+-    }
+-
+-    _keepInsideMap(p) {
+-        // Maps have an edge; the open world is endless
+-        if (!this.world.isMap) return;
+-        p.x = Math.max(-119, Math.min(119, p.x));
+-        p.z = Math.max(-119, Math.min(119, p.z));
++            if (Math.abs(p.y - me.y) > 2.5) continue; // one above the other (jumping, flying)
++            let dx = me.x - p.x, dz = me.z - p.z;
++            const d = Math.hypot(dx, dz);
++            if (d >= MIN) continue;
++            if (d < 1e-4) { dx = 1; dz = 0; } else { dx /= d; dz /= d; }
++            me.x = p.x + dx * MIN;
++            me.z = p.z + dz * MIN;
++        }
+     }
+ 
+     /** Where we are in the day: 0–0.75 day (18 hours), 0.75–1 night (6 hours). */
+diff --git a/src/game/CastleLife.js b/src/game/CastleLife.js
+index f49972e..75c15a2 100644
+--- a/src/game/CastleLife.js
++++ b/src/game/CastleLife.js
+@@ -38,6 +38,9 @@ const WALK = 2.3, RUN = 5.6;
+ const HOSTILE_MS = 180000;
+ const LEASH = 20; // m: out of their land, knights chase on until the enemy is this far ahead
+ const HEAR_BOOM = 110; // m: a blast is heard this far (the guards come to look)
++const CRY_GAP = 2.5; // s: one battle cry at a time in a castle (the others fight on without a word)
++const OWN_GAP = 7; // s: and nobody cries again sooner than this
++const REINFORCE = 8; // knights that run out to save the king (once, not on every blow)
+ export const STATS = {
+     builder: { hp: 8, armor: 0, dmg: 1 },
+     farmer: { hp: 8, armor: 0, dmg: 1 },
+@@ -332,10 +335,15 @@ export class CastleLife {
+         const g = this.game;
+         if (cs.chestsMade) return;
+         cs.chestsMade = true;
++        // the beds of the castle's bedrooms (the same on every computer; saved only when repainted)
++        for (const b of cs.def.bedSpots || []) {
++            const bed = g.beds?.spawnBed(b, b.yaw, b.color || 'white', { id: b.id, broadcast: false });
++            if (bed) { bed.gen = true; bed.genColor = b.color || 'white'; }
++        }
+         const st = this.state(cs.def.id);
+         for (const c of cs.def.chests) {
+             if (g.chests.some((x) => x.id === c.id)) continue;
+-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y + 0.5, c.z), 'loot', c.yaw, c.id);
++            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y, c.z), 'loot', c.yaw, c.id, { scale: c.s || 3 });
+             chest.mesh.updateMatrixWorld(true);
+             chest.boxId = g.collision.addBox(chest.getCollisionBox());
+             chest.locked = !st.kingDead;
+@@ -598,7 +606,7 @@ export class CastleLife {
+                     const p = this._playerPos(pid);
+                     // (just given up on them out there: only if they come back near)
+                     if (p && v.gaveUp?.id === pid && v.gaveUp.until > Date.now() && (Math.hypot(p.x - v.x, p.z - v.z) > 12 || !this._inLand(cs.def, p, 30))) continue;
+-                    if (p && Math.hypot(p.x - v.x, p.z - v.z) < 26 && this._sees(v, p)) { v.foe = pid; this._say(v, pick(SHOUT.knight)); break; }
++                    if (p && Math.hypot(p.x - v.x, p.z - v.z) < 26 && this._sees(v, p)) { v.foe = pid; this._cry(v, SHOUT.knight); break; }
+                 }
+             }
+         }
+@@ -711,6 +719,13 @@ export class CastleLife {
+                 break;
+             }
+             case 'yard': {
++                if (v.called != null && !v.cs.hostile.size) {
++                    // the fight is over: back to the barracks / the gate they came from
++                    if (!v.path || v.goal !== v.called) this._goTo(v, v.called);
++                    if (this._followPath(v, dt, WALK)) { this._deactivate(v); return; }
++                    v.mode = 'walk';
++                    break;
++                }
+                 if (v.waitT > 0) { v.waitT -= dt; v.mode = 'idle'; v.speed = 0; break; }
+                 if (!v.path || this._followPath(v, dt, WALK * 0.8)) {
+                     if (v.path) { v.waitT = 4 + Math.random() * 8; v.path = null; break; }
+@@ -790,14 +805,23 @@ export class CastleLife {
+         // at once from different sides (one gets behind), the others wait a little
+         // farther with shields up and take turns
+         const n = v.slotN || 1;
+-        const turn8 = Math.floor(Date.now() / 8000);
+-        const i = ((v.slotI || 0) + turn8) % n;
+         const front = Math.min(n, 3);
+-        const engaged = i < front;
++        // every 8 s the next three step in; the others keep their own place on the ring (nobody shuffles round)
++        const first = (Math.floor(Date.now() / 8000) * front) % n;
++        const i = v.slotI || 0, ei = (i - first + n) % n;
++        const engaged = ei < front;
+         const base = v.slotBase ?? Math.atan2(v.z - fp.z, v.x - fp.x);
+-        const a = engaged ? base + (i - (front - 1) / 2) * (front === 2 ? Math.PI * 0.8 : Math.PI * 2 / 3) : base + Math.PI + (i - front) * (Math.PI * 2 / Math.max(1, n - front));
+-        const R = engaged ? 2.3 : 6.5;
++        const a = engaged ? base + (ei - (front - 1) / 2) * (front === 2 ? Math.PI * 0.8 : Math.PI * 2 / 3) : base + Math.PI + i * (Math.PI * 2 / n);
++        // (a ring big enough for everybody waiting: 2.4 m between neighbours)
++        const R = engaged ? 2.3 : Math.max(6.5, (n * 2.4) / (Math.PI * 2));
+         let tx = fp.x + Math.cos(a) * R, tz = fp.z + Math.sin(a) * R;
++        if (!engaged && !this._walkable(tx, tz, v.y)) {
++            // (that place is in a wall: the nearest free one along the ring, or nearer in)
++            for (const [da, rr] of [[0.3, R], [-0.3, R], [0.6, R], [-0.6, R], [0, R * 0.7], [0.4, R * 0.7], [-0.4, R * 0.7]]) {
++                const x2 = fp.x + Math.cos(a + da) * rr, z2 = fp.z + Math.sin(a + da) * rr;
++                if (this._walkable(x2, z2, v.y)) { tx = x2; tz = z2; break; }
++            }
++        }
+         const toSlot = Math.hypot(tx - v.x, tz - v.z);
+         // the place is on the other side: go round the enemy (along the circle), not through them
+         const cur = Math.atan2(v.z - fp.z, v.x - fp.x);
+@@ -823,7 +847,7 @@ export class CastleLife {
+         if (v.mode === 'attack') {
+             // now and then a curse in the heat of the fight
+             v.swearT = (v.swearT ?? 2 + Math.random() * 4) - dt;
+-            if (v.swearT <= 0) { v.swearT = 7 + Math.random() * 10; if (Math.random() < 0.45) this._say(v, pick(SHOUT.swear), 2.5); }
++            if (v.swearT <= 0) { v.swearT = 7 + Math.random() * 10; if (Math.random() < 0.45) this._cry(v, SHOUT.swear, 2.5); }
+         }
+         this._ground(v);
+     }
+@@ -895,7 +919,11 @@ export class CastleLife {
+         if (g.combat.enabled) g.combat.damage(dmg, null, 'knight');
+         else g.damageLocalPlayer(dmg);
+         g.knockback?.add(_v2.subVectors(g.character.group.position, from).setY(0).normalize().multiplyScalar(5).setY(2));
+-        g.hud.setVoice(`⚔️ ${who} ударил вас: −${dmg}`, true);
++        // (each blow already flashes and sounds; the words come at most every 3 s, with what it all cost)
++        const H = this._hurt || (this._hurt = { at: -1e9, sum: 0 });
++        H.sum += dmg;
++        const now = performance.now();
++        if (now - H.at > 3000) { g.hud.setVoice(`⚔️ ${who} бьёт вас: −${H.sum}`, true); H.at = now; H.sum = 0; }
+     }
+ 
+     _sees(v, p) {
+@@ -924,7 +952,7 @@ export class CastleLife {
+         const killed = v.hp <= 0;
+         const pos = { x: v.x, y: v.y, z: v.z };
+         if (killed) this._die(v, by);
+-        else if (v.role !== 'knight' && v.role !== 'king') this._say(v, pick(SHOUT.hurt));
++        else if (v.role !== 'knight' && v.role !== 'king') this._cry(v, SHOUT.hurt);
+         if (by) this._offence(v.cs, by, v, killed, pos);
+     }
+ 
+@@ -963,15 +991,15 @@ export class CastleLife {
+         cs.hostile.set(by, Date.now() + HOSTILE_MS);
+         const kingHit = victim && victim.role === 'king';
+         for (const w of witnesses) {
+-            if (w.role === 'knight' || w.role === 'king') { w.foe = by; if (Math.random() < 0.6) this._say(w, pick(w.role === 'king' ? SHOUT.king : SHOUT.knight)); }
+-            else { w.fleeFrom = by; w.fleeT = 14 + Math.random() * 6; w.fleeing = false; w.path = null; if (Math.random() < 0.7) this._say(w, pick(SHOUT.help)); }
++            if (w.role === 'knight' || w.role === 'king') { if (w.foe !== by) { w.foe = by; this._cry(w, w.role === 'king' ? SHOUT.king : SHOUT.knight); } }
++            else if (!(w.fleeT > 0)) { w.fleeFrom = by; w.fleeT = 14 + Math.random() * 6; w.fleeing = false; w.path = null; this._cry(w, SHOUT.help); }
+         }
+         // the alarm: knights near any witness come too; for the king — every knight
+         for (const k of cs.active.values()) {
+             if (k.dead || k.foe || (k.role !== 'knight' && k.role !== 'king')) continue;
+             if (kingHit || witnesses.some((w) => Math.hypot(w.x - k.x, w.z - k.z) < 45)) k.foe = by;
+         }
+-        if (kingHit) this._reinforce(cs, by);
++        if (kingHit && !(cs.reinforcedFor || (cs.reinforcedFor = new Set())).has(by)) { cs.reinforcedFor.add(by); this._reinforce(cs, by); }
+         if (!was && by === g.localId) g.hud.setVoice('⚔️ Вас заметили! Стража замка идёт за вами', true);
+         else if (!was) g.sync?.villagerAlarm?.(by, cs.def.name);
+     }
+@@ -980,18 +1008,37 @@ export class CastleLife {
+     _reinforce(cs, by) {
+         const def = cs.def;
+         const st = this.state(def.id);
+-        if (cs.reinforced >= def.knights) return;
+         const from = cs.graph.tagged('barracksDoor').concat(cs.graph.tagged('keepDoor'), cs.graph.tagged('gateIn'));
++        if (!from.length) return;
++        const now = performance.now() / 1000;
++        const queue = cs.coming || (cs.coming = []);
+         let n = 0;
+-        for (let k = 1; k <= def.knights && n < 10; k++) {
+-            if (cs.active.has(k) || st.killed.has(k)) continue;
+-            const node = cs.graph.nodes[from[n % from.length]];
+-            const v = this._activate(cs, k, { x: node.x + (Math.random() - 0.5) * 2, y: node.y, z: node.z + (Math.random() - 0.5) * 2 }, 'yard');
+-            if (v) { v.foe = by; n++; }
++        for (let k = 1; k <= def.knights && n < REINFORCE; k++) {
++            if (cs.active.has(k) || st.killed.has(k) || queue.some((q) => q.k === k)) continue;
++            // (each door lets one out every 0.8 s: they come in a line, not in a heap)
++            queue.push({ k, door: from[n % from.length], at: now + Math.floor(n / from.length) * 0.8, by });
++            n++;
+         }
+         cs.reinforced += n;
+     }
+ 
++    /** (host) The knights called out come through their doors, one at a time. */
++    _letOut(cs) {
++        const q = cs.coming;
++        if (!q?.length) return;
++        const now = performance.now() / 1000;
++        for (let i = q.length - 1; i >= 0; i--) {
++            const c = q[i];
++            if (c.at > now) continue;
++            const node = cs.graph.nodes[c.door];
++            // (the doorway is taken: a moment later)
++            if ([...cs.active.values()].some((o) => !o.dead && Math.hypot(o.x - node.x, o.z - node.z) < 1.8)) { c.at = now + 0.3; continue; }
++            q.splice(i, 1);
++            const v = this._activate(cs, c.k, { x: node.x, y: node.y, z: node.z }, 'yard');
++            if (v) { v.foe = cs.hostile.get(c.by) > Date.now() ? c.by : null; v.called = c.door; }
++        }
++    }
++
+     /** The king is dead: the castle belongs to `by`. */
+     _capture(cs, by) {
+         const g = this.game;
+@@ -1048,7 +1095,7 @@ export class CastleLife {
+                     if (!v.foe) { v.investigate = { x: pos.x, y: pos.y, z: pos.z, by: isPlayer ? by : null, t: 45 }; v.path = null; v.lookT = 0; comers++; }
+                 } else if (v.role !== 'king' && isPlayer && d < 45 && !(v.fleeT > 0)) {
+                     v.fleeFrom = by; v.fleeT = 10 + Math.random() * 8; v.fleeing = false; v.path = null;
+-                    if (Math.random() < 0.6) this._say(v, pick(loud ? SHOUT.boom : SHOUT.help));
++                    this._cry(v, loud ? SHOUT.boom : SHOUT.help);
+                 }
+             }
+             if (!isPlayer || blocks <= 0) continue;
+@@ -1074,7 +1121,8 @@ export class CastleLife {
+             const v = this._activate(cs, k, { x: node.x + (Math.random() - 0.5) * 2, y: node.y, z: node.z + (Math.random() - 0.5) * 2 }, 'yard');
+             if (!v) continue;
+             v.investigate = { x: pos.x, y: pos.y, z: pos.z, by, t: 50 };
+-            if (sent === 0) this._say(v, pick(SHOUT.investigate));
++            v.called = from[sent % Math.min(2, from.length)]; // (when all is quiet again they go back in)
++            if (sent === 0) this._cry(v, SHOUT.investigate);
+             sent++;
+         }
+     }
+@@ -1090,7 +1138,7 @@ export class CastleLife {
+             if (k.role === 'king' && Math.hypot(k.x - pos.x, k.z - pos.z) > 30) continue;
+             if (Math.hypot(k.x - pos.x, k.z - pos.z) < 110) {
+                 k.foe = by; k.investigate = null;
+-                if (!shouted) { shouted = true; this._say(k, pick(SHOUT.wrecker)); }
++                if (!shouted) shouted = this._cry(k, SHOUT.wrecker);
+             }
+         }
+         if (!was && by === g.localId) g.hud.setVoice('⚔️ Стража видела, кто ломает замок! Рыцари идут за вами', true);
+@@ -1197,8 +1245,8 @@ export class CastleLife {
+         if (!seers.length) return false;
+         cs.hostile.set(by, Date.now() + HOSTILE_MS);
+         for (const { v, fam } of seers) {
+-            if (fam || v.role === 'knight') { v.foe = by; v.fleeT = 0; v.path = null; this._say(v, pick(fam ? SHOUT.thief : SHOUT.knight)); }
+-            else { v.fleeFrom = by; v.fleeT = 8 + Math.random() * 6; v.fleeing = false; v.path = null; if (Math.random() < 0.6) this._say(v, pick(SHOUT.thiefSeen)); }
++            if (fam || v.role === 'knight') { v.foe = by; v.fleeT = 0; v.path = null; this._cry(v, fam ? SHOUT.thief : SHOUT.knight); }
++            else { v.fleeFrom = by; v.fleeT = 8 + Math.random() * 6; v.fleeing = false; v.path = null; this._cry(v, SHOUT.thiefSeen); }
+         }
+         for (const k of cs.active.values()) if (!k.dead && !k.foe && k.role === 'knight' && Math.hypot(k.x - bp.x, k.z - bp.z) < 45) k.foe = by;
+         if (by === g.localId) g.hud.setVoice('😡 Хозяева увидели, что вы берёте их вещи! Они идут на вас', true);
+@@ -1236,6 +1284,16 @@ export class CastleLife {
+     }
+ 
+     // ------------------------------------------------------------ speech
++    /** A cry in a fight / an alarm: one voice at a time in a castle; true if it was said. */
++    _cry(v, list, seconds = 4) {
++        const now = performance.now() / 1000, cs = v.cs;
++        if (now < (cs.cryUntil || 0) || now < (v.cryUntil || 0)) return false;
++        cs.cryUntil = now + CRY_GAP;
++        v.cryUntil = now + OWN_GAP;
++        this._say(v, pick(list), seconds);
++        return true;
++    }
++
+     _say(v, text, seconds = 4, broadcast = true) {
+         if (!text || v.sayT > 0 && !broadcast) return;
+         v.sayT = 1.5;
+@@ -1272,7 +1330,7 @@ export class CastleLife {
+         this._scanT -= dt;
+         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
+         if (this.auth) {
+-            for (const cs of this.castles.values()) if (cs.awake) this._crowd(cs, dt);
++            for (const cs of this.castles.values()) if (cs.awake) { this._crowd(cs, dt); this._letOut(cs); }
+             this._assignSlots();
+             for (const v of [...this.byId.values()]) this._think(v, dt);
+             this._separate(dt);
+diff --git a/src/net/NetSync.js b/src/net/NetSync.js
+index d97bd4c..7efa4fb 100644
+--- a/src/net/NetSync.js
++++ b/src/net/NetSync.js
+@@ -474,6 +474,11 @@ export class NetSync {
+         if (this.net.isHost) this.net.send({ t: 'weather', s: Math.round(seconds) }, true);
+     }
+ 
++    /** (guest) my hand lifted the lid of a chest: the host opens it (and fills it) for everybody. */
++    chestLift(id) {
++        if (!this.net.isHost) this.net.send({ t: 'clift', id });
++    }
++
+     chestOpenedLoot(chest) {
+         if (this.net.isHost) this.net.send({ t: 'chest', id: chest.id });
+     }
+@@ -604,6 +609,12 @@ export class NetSync {
+                 break;
+             }
+             case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;
++            case 'clift': {
++                if (!this.net.isHost) break;
++                const c = g.chests.find((x) => x.id === m.id);
++                if (c && !c.isOpen && !c.locked) g.openChest(c, null, m.from);
++                break;
++            }
+             case 'chest': {
+                 (g._openedChests = g._openedChests || new Set()).add(m.id);
+                 const c = g.chests.find((x) => x.id === m.id);
+diff --git a/src/input/PoseInterpreter.js b/src/input/PoseInterpreter.js
+index 5d83bc4..65a09bf 100644
+--- a/src/input/PoseInterpreter.js
++++ b/src/input/PoseInterpreter.js
+@@ -186,13 +186,16 @@ export class PoseInterpreter {
+             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));
+             data.torso = torsoMetrics(lm);
+ 
+-            // Run intensity from shoulder bobbing (8-frame window)
+-            this.shoulderHistory.push((lm[11].y + lm[12].y) / 2);
+-            if (this.shoulderHistory.length > 8) this.shoulderHistory.shift();
+-            if (this.shoulderHistory.length >= 3) {
++            // Run intensity from shoulder bobbing (8-frame window): only the up-and-down counts —
++            // sitting down / standing up moves the shoulders a long way ONE way, that is no running
++            const H = this.shoulderHistory;
++            H.push((lm[11].y + lm[12].y) / 2);
++            if (H.length > 8) H.shift();
++            if (H.length >= 3) {
+                 let total = 0;
+-                for (let i = 1; i < this.shoulderHistory.length; i++) total += Math.abs(this.shoulderHistory[i] - this.shoulderHistory[i - 1]);
+-                data.runIntensity = Math.max(0, Math.min(1, (total - 0.02) / 0.13));
++                for (let i = 1; i < H.length; i++) total += Math.abs(H[i] - H[i - 1]);
++                const bob = total - Math.abs(H[H.length - 1] - H[0]);
++                data.runIntensity = Math.max(0, Math.min(1, (bob - 0.02) / 0.13));
+                 data.isRunning = data.runIntensity > 0.1;
+             }
+ 
+@@ -207,10 +210,18 @@ export class PoseInterpreter {
+ 
+             this._legs(lm, data);
+ 
+-            // Crouch with hysteresis
++            // Crouch / sit down, with hysteresis: the nose low in the picture, or well below where this
++            // player's nose is when standing (in shoulder widths: any camera height, any distance)
+             const noseY = data.nose.y;
+-            if (!this.wasCrouching) { if (noseY > 0.5) this.wasCrouching = true; }
+-            else if (noseY < 0.45) this.wasCrouching = false;
++            const sw = Math.max(0.05, Math.hypot((lm[11].x - lm[12].x) * (data.aspect || 4 / 3), lm[11].y - lm[12].y));
++            const t = performance.now() / 1000, dt = Math.min(1, Math.max(0, t - (this._standT ?? t)));
++            this._standT = t;
++            // the standing height: the highest the nose has been lately (forgotten slowly, not while crouched)
++            if (this.standNose == null || noseY < this.standNose) this.standNose = noseY;
++            else if (!this.wasCrouching) this.standNose += (noseY - this.standNose) * Math.min(1, dt / 20);
++            const drop = (noseY - this.standNose) / sw;
++            if (!this.wasCrouching) { if (noseY > 0.5 || drop > 0.75) this.wasCrouching = true; }
++            else if (noseY < 0.45 && drop < 0.6) this.wasCrouching = false;
+             data.isCrouching = this.wasCrouching;
+         }
+ 
