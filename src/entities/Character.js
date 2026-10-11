@@ -442,7 +442,11 @@ export class VoxelCharacter {
         // a wand in this hand: spells go where the wand points (Items sets it every frame)
         const a = this.aim?.[side];
         if (a && performance.now() - a.at < 250) return out.copy(a.dir);
-        return this.getForearmDirection(side, out);
+        this.getForearmDirection(side, out);
+        // the fingers not seen for a moment: the wand keeps its bend against the forearm
+        // (not a jump to the forearm's line — a held thing flew off and came back)
+        if (a?.rel) out.applyQuaternion(a.rel).normalize();
+        return out;
     }
 
     /**

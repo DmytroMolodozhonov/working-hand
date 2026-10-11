@@ -187,3 +187,21 @@ test('the caster: «I am held» from the wizard makes my hold a wizard\'s (it co
     assert.deepEqual(sent.at(-1).slice(0, 3), ['lev', 'p', 'friend']);
     assert.equal(sent.at(-1)[6], true, 'gently');
 });
+
+test('steadyDir: a one-moment jump of the hand\'s line (camera glitch) is not followed; a lasting turn is; a smooth turn goes through', async () => {
+    const { steadyDir, LEVITATE } = await import('../../src/game/Levitation.js');
+    const st = {}, dt = 1 / 60;
+    const d = (a) => new THREE.Vector3(Math.sin(a), 0, -Math.cos(a));
+    steadyDir(st, d(0), dt);
+    // the fingers lost for a moment: the line jumps 60° aside and back
+    assert.ok(steadyDir(st, d(1.05), dt).angleTo(d(0)) < 1e-6, 'the jump is held back');
+    assert.ok(steadyDir(st, d(1.05), dt).angleTo(d(0)) < 1e-6);
+    assert.ok(steadyDir(st, d(0), dt).angleTo(d(0)) < 1e-6);
+    // a real turn of the hand, a little each frame: followed at once
+    let a = 0;
+    for (let i = 0; i < 20; i++) { a += 0.05; assert.ok(steadyDir(st, d(a), dt).angleTo(d(a)) < 1e-6); }
+    // a jump that lasts longer than GLITCH_T: believed
+    let got;
+    for (let t = 0; t < LEVITATE.GLITCH_T + 0.1; t += dt) got = steadyDir(st, d(a + 1.5), dt);
+    assert.ok(got.angleTo(d(a + 1.5)) < 1e-6);
+});

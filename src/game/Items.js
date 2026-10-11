@@ -153,6 +153,7 @@ export class ItemSystem {
         const h = this.held[from];
         if (!h || this.held[to]) return false;
         this.held[from] = null;
+        if (this.game.character.aim) this.game.character.aim[from] = null; // (that hand has no wand now)
         if (h.gripped) { const hand = this.game.character.getActiveHands?.()[from]; if (hand && hand.setGrip) hand.setGrip(null); }
         h.gripped = false;
         h.thumb = undefined;
@@ -209,6 +210,8 @@ export class ItemSystem {
             const a = g.character.aim[side] || (g.character.aim[side] = { dir: new THREE.Vector3(), at: 0 });
             a.dir.set(0, 1, 0).applyQuaternion(h.q).normalize();
             a.at = performance.now();
+            // (how the wand is bent against the forearm: kept while the fingers are not seen)
+            (a.rel || (a.rel = new THREE.Quaternion())).setFromUnitVectors(g.character.getForearmDirection(side, _d), a.dir);
         }
         // the handle point in the fingers (a pen: in the web of the thumb)
         const sc = h.model.scale.x;

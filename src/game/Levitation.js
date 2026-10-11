@@ -26,6 +26,8 @@ export const LEVITATE = {
     TWIST: 1.6, // the object turns this much more than the wrist (a small turn of the hand swings it)
     FOLLOW: 3.5, // how fast the float point follows the hand (1/s)
     RISE: 2.5, // 1/s: a thing taken low rises up onto the hand's line this fast (sideways it stays put)
+    GLITCH: 0.35, // rad in one frame: no real hand turns so fast — the camera lost the hand / the fingers for a moment
+    GLITCH_T: 0.4, // s: such a jump is believed only if it lasts this long
     DROP_DISTANCE: 0.75, // m of hand movement within DROP_WINDOW = a jerk
     DROP_WINDOW: 0.25,
     GRACE: 0.8,
@@ -47,6 +49,22 @@ export function aimOffset(dir, to) {
     const [y0, p0] = yawPitch(dir), [y1, p1] = yawPitch(to);
     const dy = y1 - y0;
     return { dy: Math.atan2(Math.sin(dy), Math.cos(dy)), dp: p1 - p0 };
+}
+
+/**
+ * The hand's direction without the camera's glitches (`st` keeps the state): a sudden jump —
+ * the hand or the fingers lost for a moment — is not followed unless it lasts; a real turn
+ * of the hand is smooth and goes through at once. Changes `dir` in place.
+ */
+export function steadyDir(st, dir, dt) {
+    if (!st.dir) { st.dir = dir.clone(); st.held = 0; return dir; }
+    if (st.dir.angleTo(dir) > LEVITATE.GLITCH && st.held < LEVITATE.GLITCH_T) {
+        st.held += dt; // (a jump: wait and see if it lasts)
+        return dir.copy(st.dir);
+    }
+    st.held = 0;
+    st.dir.copy(dir);
+    return dir;
 }
 
 /** The hand's direction turned by such an offset (out may be dir). */
@@ -220,7 +238,7 @@ export class Levitation {
         const hand = ch.getHandWorldPosition(s.side, _v1);
         // (sideways it stays where it was against the hand's line; up — it rises onto it, smoothly)
         if (s.off) s.off.dp *= Math.exp(-dt * LEVITATE.RISE);
-        const dir = applyAimOffset(ch.getHandDirection(s.side, _v2), s.off, _v2);
+        const dir = applyAimOffset(steadyDir(s.steady || (s.steady = {}), ch.getHandDirection(s.side, _v2), dt), s.off, _v2);
         const want = _v3.copy(hand).addScaledVector(dir, s.hold);
         want.y = Math.max(want.y + 0.3, this.game.collision.surfaceY(want.x, want.z) + 0.6);
         s.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW));
@@ -431,13 +449,14 @@ export class Levitation {
      * Where a caster's hand holds a body now (on any computer): `hold` m in front of
      * the hand, its feet above the ground. null: the caster is gone / not seen for a while.
      */
-    holdPoint(by, side, hold, up, out, off = null) {
+    holdPoint(by, side, hold, up, out, off = null, steady = null, dt = 0) {
         const g = this.game;
         if (by !== g.localId) {
             const r = g.remotes?.get(by);
             if (!r || r.dead || performance.now() - (r.lastUpdate || 0) > LEVITATE.STALE * 1000) return null;
         }
         if (!g.duel?._handOf(by, side, out, _h4)) return null;
+        if (steady) steadyDir(steady, _h4, dt);
         if (off) applyAimOffset(_h4, off, _h4);
         out.addScaledVector(_h4, hold);
         out.y = Math.max(out.y + 0.3, g.collision.surfaceY(out.x, out.z) + up + 0.2);
@@ -481,7 +500,7 @@ export class Levitation {
             if (centre.y - up <= ground + 0.12) { this._endCarry(ck, c); return; }
         } else {
             if (L.off) L.off.dp *= Math.exp(-dt * LEVITATE.RISE); // (it rises onto the hand's line, smoothly)
-            const want = this.holdPoint(L.by, L.side, L.hold, up, _h2, L.off);
+            const want = this.holdPoint(L.by, L.side, L.hold, up, _h2, L.off, L.steady || (L.steady = {}), dt);
             if (!want) { this.letGo(ck, c, false); return; }
             L.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW));
         }
