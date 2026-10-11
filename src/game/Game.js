@@ -784,9 +784,16 @@ export class Game {
         const paid = this.combat.paidCount || 0;
         this._manaLater = false;
         const name = this._castLocalSpell(text, isFinal);
+        if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
         return name;
+    }
+
+    /** A spell of mine is going (or was just cast): the wand stays in the hand whatever the hand does. */
+    spellBusy() {
+        if (performance.now() - (this._castAt || -1e9) < 4000) return true;
+        return !!(this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this._wave || this.lightning || this.wandMagic?.drawing);
     }
 
     _castLocalSpell(text, isFinal = true) {

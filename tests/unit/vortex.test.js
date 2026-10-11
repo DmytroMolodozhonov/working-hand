@@ -320,3 +320,26 @@ test('the throw is a fast stream unwinding out of the rings; «Атака» thro
     run(V, 3);
     assert.ok(b.r > r0 && V.flights.size === 0, 'the bubble grew as the whole vortex poured in');
 });
+
+test('«Bubble» said but the stream touched nobody: the water still gathers into a ball where it stopped; «Frozen» freezes it', () => {
+    const { g, ch, zombie, V } = world();
+    g.combat.fatigue = 500;
+    zombie.isDead = true; // (nobody to hit)
+    g.collision.pointBlocked = (x, y, z) => z < -15; // (a wall 15 m ahead)
+    ch.dir.set(0, -0.2, -1).normalize();
+    assert.equal(V.cast(true), 'WaterVortex');
+    let t = 0;
+    run(V, 2, () => { t += 1 / 60; const a = t * Math.PI * 2 * 1.5; ch.hand.set(Math.cos(a) * 0.45, 0.4, Math.sin(a) * 0.45); });
+    ch.dir.set(0, 0, -1);
+    assert.equal(V.voice('Attack', 'атака', true), 'Attack');
+    assert.equal(V.voice('AirBubble', 'бабл', true), 'VortexBubble');
+    run(V, 3);
+    const b = [...V.bubbles.values()][0];
+    assert.ok(b && !b.tk, 'a water ball with nobody inside');
+    assert.ok(b.pos.z > -15.5 && b.pos.z < -12, `where the stream stopped (z ${b.pos.z.toFixed(1)})`);
+    assert.ok(b.r > 1.3, 'all the water is in it');
+    assert.equal(V.voice('Frozen', 'frozen', true), 'Frozen');
+    assert.equal(b.phase, 'ice');
+    run(V, 2);
+    assert.ok(V.bubbles.has(b.id), 'an ice ball hanging there');
+});

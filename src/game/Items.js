@@ -421,7 +421,8 @@ export class ItemSystem {
             if (!h) continue;
             const kind = h.item.kind;
             // (never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
-            if ((kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            // (nor a wand while a spell is going — swinging it to cast never throws it)
+            if ((kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
             const arm = ch.armState(side, this._arm[side]);

@@ -230,6 +230,13 @@ export class WaterVortex {
         this.scene.add(this.blobs);
     }
 
+    /** My vortex is gathering or my stream is still flying / pouring. */
+    get busy() {
+        if (this.state) return true;
+        for (const f of this.flights.values()) if (f.by === this.me) return true;
+        return false;
+    }
+
     get me() {
         return this.game.localId;
     }
@@ -477,6 +484,16 @@ export class WaterVortex {
         let tk = null, tid = null;
         const t = g.duel?.findTarget?.(s.side);
         if (t && t.kind !== 'b') { tk = t.kind; tid = t.id; }
+        // the stream goes from the vortex to exactly what the hand points at (not parallel to the arm,
+        // which would put it into the ground short of a target the hand points down at)
+        let aim = tk ? g.duel?._targetPos?.({ tk, tid }, new THREE.Vector3()) : null;
+        if (!aim) {
+            const ho = g.castOrigin ? g.castOrigin(s.side) : g.character.getHandWorldPosition(s.side);
+            let k = 1;
+            for (; k < VORTEX.RANGE * 0.6; k += 0.5) if (this._blockedAt(_b.copy(ho).addScaledVector(dir, k))) break;
+            aim = ho.clone().addScaledVector(dir, k);
+        }
+        if (aim.distanceTo(o) > 1) dir = aim.sub(o).normalize();
         const id = `${this.me}:${++this._seq}`;
         const m = { ev: 'launch', id, o: [o.x, o.y, o.z].map(r3), d: [dir.x, dir.y, dir.z].map(r3), v: r3(s.volume), a: r3(s.angle), pw: r3(s.power), tk, tid };
         this.state = null;
@@ -720,6 +737,16 @@ export class WaterVortex {
 
     _endFlight(f, why, broadcast = true) {
         if (!this.flights.has(f.id)) return;
+        // «Bubble» was said but it touched nobody: the water still gathers into a ball where it stopped
+        if (f.by === this.me && f.bubbleAt && !f.bubbled && why !== 'block') {
+            f.phase = 'fly'; f.tk = null; f.tid = null;
+            f.pos.addScaledVector(f.dir, -0.6);
+            const gy = this.game.collision?.surfaceY?.(f.pos.x, f.pos.z);
+            if (Number.isFinite(gy)) f.pos.y = Math.max(f.pos.y, gy + bubbleRadius(f.volume));
+            this._note({ ev: 'end', id: f.id, why, ball: true });
+            this._startBubble(f);
+            return;
+        }
         this.flights.delete(f.id);
         this._note({ ev: 'end', id: f.id, why });
         this._splash(f.pos, 1 + f.volume * 0.03, Math.min(60, 25 + f.volume));
@@ -821,8 +848,9 @@ export class WaterVortex {
         const g = this.game;
         for (const b of [...this.bubbles.values()]) {
             b.t += dt;
-            const tp = g.duel?._targetPos?.({ tk: b.tk, tid: b.tid }, _a);
-            const mine = b.tk === 'p' ? b.tid === this.me : !!g.authority;
+            // (a ball with nobody inside: it just hangs where the stream stopped)
+            const tp = b.tk ? g.duel?._targetPos?.({ tk: b.tk, tid: b.tid }, _a) : _a.copy(b.pos);
+            const mine = !b.tk ? false : b.tk === 'p' ? b.tid === this.me : !!g.authority;
             const dead = !tp || (b.tk === 'p' && b.tid === this.me && (g.combat.dead || g.isDeadLocal));
             if (dead && b.phase !== 'melt') {
                 if (mine || !tp) this._burst(b, 'gone', mine);
@@ -865,6 +893,7 @@ export class WaterVortex {
     /** The one inside floats in the bubble and can't get out. */
     _hold(b, dt) {
         const g = this.game;
+        if (!b.tk) return;
         if (b.tk === 'p') {
             const ch = g.character;
             if (!b.anchor) b.anchor = ch.group.position.clone().add(_b.set(0, 0.5, 0));
@@ -896,6 +925,7 @@ export class WaterVortex {
     /** One second in the ice: −1 HP from the cold, −1 HP without air. */
     _iceHurt(b) {
         const g = this.game;
+        if (!b.tk) return;
         const dmg = iceDamagePerSecond();
         this._note({ ev: 'iceHurt', id: b.id, dmg });
         if (b.tk === 'p') {
@@ -1214,20 +1244,22 @@ export class WaterVortex {
             ring(this._srcOf(f), f.res, f.angle, 1);
             const L = f.tail.distanceTo(f.pos);
             if (L < 0.05) continue;
-            const thick = Math.min(0.6, 0.22 + 0.035 * Math.sqrt(f.volume));
+            const thick = Math.min(0.85, 0.3 + 0.05 * Math.sqrt(f.volume));
             const ax = _a.subVectors(f.pos, f.tail).divideScalar(L);
             const u = _b.crossVectors(ax, UP);
             if (u.lengthSq() < 1e-4) u.set(1, 0, 0);
             u.normalize();
             const w = _c.crossVectors(ax, u);
-            const n = Math.ceil(L / 0.26);
+            const n = Math.ceil(L / 0.3);
             for (let j = 0; j <= n; j++) {
-                const k = j / n, a = j * 0.9 - this._t * 14;
-                const tw = thick * 0.45;
-                put(f.tail.x + ax.x * L * k + (u.x * Math.cos(a) + w.x * Math.sin(a)) * tw,
-                    f.tail.y + ax.y * L * k + (u.y * Math.cos(a) + w.y * Math.sin(a)) * tw,
-                    f.tail.z + ax.z * L * k + (u.z * Math.cos(a) + w.z * Math.sin(a)) * tw,
-                    thick * (0.85 + 0.15 * Math.sin(j * 1.7 + this._t * 9)) * (j === n ? 1.3 : 1));
+                const k = j / n;
+                const cx = f.tail.x + ax.x * L * k, cy = f.tail.y + ax.y * L * k, cz = f.tail.z + ax.z * L * k;
+                put(cx, cy, cz, thick * 0.7 * (j === n ? 1.6 : 1)); // the core
+                for (let sI = 0; sI < 3; sI++) { // three strands twisting round it
+                    const a = j * 0.8 - this._t * 16 + sI * (TAU / 3), tw = thick * 0.6;
+                    put(cx + (u.x * Math.cos(a) + w.x * Math.sin(a)) * tw, cy + (u.y * Math.cos(a) + w.y * Math.sin(a)) * tw, cz + (u.z * Math.cos(a) + w.z * Math.sin(a)) * tw,
+                        thick * (0.4 + 0.08 * Math.sin(j * 1.7 + this._t * 9 + sI)));
+                }
             }
         }
         mesh.count = n;
