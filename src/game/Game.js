@@ -49,6 +49,8 @@ import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
+import { LivingTrees } from './LivingTrees.js';
+import { Servants } from './Servants.js';
 import { Duel } from './Duel.js';
 import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
@@ -200,7 +202,7 @@ export class Game {
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
             },
-            ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); },
+            ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); if (this.authority) this.livingTrees?.burnAlong(o, d, len); },
             collision: this.collision,
             terrain: () => this.terrain,
         });
@@ -249,6 +251,8 @@ export class Game {
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
         this.spiders = new Spiders(this); // the night boss: a giant spider
+        this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
+        this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.handHold = new HandHold(this); // handshakes, holding and leading by the hand
@@ -441,6 +445,7 @@ export class Game {
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic }); return; }
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
+        if (z.isLivingTree) { this.livingTrees.hit(z, dmg, 'melee'); return; } // (only fire hurts it)
         this.punchCount++;
         if (this.authority) {
             this.damageZombie(z, dmg, isWeapon, dir, this.localId, hit);
@@ -768,6 +773,8 @@ export class Game {
         if (name === 'Rescue') return this.bleeding.rescue(isFinal);
         if (name === 'Breakthrough' || name === 'BreakthroughMaxima') return this._castBreakthrough(name, isFinal);
         if (name === 'Attack') {
+            // my servants (a living tree, «Брейнрот») go for the one the hand points at
+            if (this.levitation.state?.kind !== 'weapon' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal);
             const hint = this.levitation.attack();
             if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
             return 'Attack';
@@ -801,6 +808,7 @@ export class Game {
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
+        if (name === 'Alive') return this.livingTrees.cast(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
@@ -922,6 +930,7 @@ export class Game {
         if (this.flight?.busy && this.flight.state !== 'landing') { this.flight.land('stop'); done.push('полёт'); }
         if (this.lightning) { if (this.lightning.hammer) this.gear?.hammerResult(false); this.lightning = null; this.hud.setTimer?.(null); done.push('молния'); }
         if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
+        if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (!done.length) return false;
         this.sync?.stopSpells?.();
         this.hud.setVoice(`🛑 Стоп: ${done.join(', ')}`, true);
@@ -1139,8 +1148,9 @@ export class Game {
     }
 
     /**
-     * «Брейнрот»: no hand needed — the zombie you look at (or the nearest one)
-     * becomes your servant for a while: it fights the other zombies, and they fight it.
+     * «Брейнрот»: no hand needed — the creature you look at (or the nearest one): a zombie,
+     * an animal, a villager / a knight, somebody else's living tree — becomes your servant
+     * for a while: it follows you, fights your enemies and goes for whom «Атак» points at.
      */
     _castBrainrot(isFinal) {
         const now = Date.now();
@@ -1150,34 +1160,49 @@ export class Game {
         const head = this.character.head.getWorldPosition(new THREE.Vector3());
         const look = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         let best = null;
-        for (const z of this.zombies) {
-            if (z.isDead || z.isDying || z.isThrall) continue;
-            const to = _v1.copy(z.group.position).add(_v2.set(0, 1.4, 0)).sub(head);
+        const consider = (k, id, pos, up) => {
+            const to = _v1.copy(pos).add(_v2.set(0, up, 0)).sub(head);
             const d = to.length();
-            if (d > 30) continue;
+            if (d > 30) return;
             const ang = look.angleTo(to.normalize());
             const score = (ang < 0.5 ? ang * 4 : 10 + d * 0.2 + ang) + d * 0.04;
-            if (ang > 0.5 && d > 10) continue;
-            if (!best || score < best.score) best = { z, score, d };
-        }
-        if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на зомби (не дальше 30 м) и скажите «Брейнрот»', true); return null; }
+            if (ang > 0.5 && d > 10) return;
+            if (!best || score < best.score) best = { k, id, pos, up, score, d };
+        };
+        for (const z of this.zombies) if (!z.isDead && !z.isDying && !z.isThrall) consider('z', z.id, z.group.position, 1.4);
+        for (const a of this.animals?.targets() || []) if (a.servantOf !== this.localId) consider('a', a.id, a.group.position, 1);
+        for (const v of this.castleLife?.targets() || []) if (v.servantOf !== this.localId) consider('v', v.id, new THREE.Vector3(v.x, v.y, v.z), 2.4);
+        for (const t of this.livingTrees?.targets() || []) if (t.master !== this.localId) consider('t', t.id, t.model.position, 5);
+        if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на существо (зомби, животное, жителя, рыцаря, живое дерево — не дальше 30 м) и скажите «Брейнрот»', true); return null; }
         const tired = this.combat.check('Brainrot');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('Brainrot');
         this._lastBrainrot = now;
         this._interimCast = isFinal ? null : { name: 'Brainrot', at: now };
-        // Rings from above the head to the zombie (the vector's length = the distance)
+        // Rings from above the head to the creature (the vector's length = the distance)
         const origin = head.add(_v1.set(0, 1.3, 0));
-        const vec = _v2.copy(best.z.group.position).add(_v1.set(0, 1.4, 0)).sub(origin);
+        const vec = _v2.copy(best.pos).add(_v1.set(0, best.up, 0)).sub(origin);
         this.spells.cast('Brainrot', origin, vec.clone(), null, this.localId);
         if (this.sync) this.sync.spell('Brainrot', origin, vec, null);
-        const zid = best.z.id;
+        const { k, id } = best;
         const arrive = Math.round(Math.min(2500, (vec.length() / 11) * 1000 + 300));
         setTimeout(() => {
-            if (this.authority) this.applyBrainrot(zid, this.localId);
-            else if (this.sync) this.sync.brainrot(zid);
+            if (this.authority) this.servants.make(k, id, this.localId);
+            else if (this.sync) this.sync.brainrot(id, k);
         }, arrive);
         return 'Brainrot';
+    }
+
+    /** «Атак» with servants: the hand points at someone — all my servants go for them. */
+    _commandAttack(isFinal) {
+        const aim = this.duel.pickSide(false);
+        const t = aim?.t;
+        if (!t || t.kind === 'b') { if (isFinal) this.hud.setVoice('✋ Направьте руку на того, кого атаковать, и скажите «Атак»', true); return null; }
+        const target = { k: t.kind, id: t.id };
+        if (this.authority) this.servants.command(this.localId, target);
+        else this.sync?.servantAttack?.(target.k, target.id);
+        this.hud.setVoice('⚔️ Атак! Ваши слуги идут в бой', true);
+        return 'Attack';
     }
 
     /**
@@ -1416,13 +1441,11 @@ export class Game {
         const zp = z.group.position;
         if (z.isThrall) {
             if (performance.now() > z.thrallUntil) { z.setThrall(false); return this._zombieTarget(z); }
-            let best = null, bd = 40 * 40;
-            for (const o of this.zombies) {
-                if (o === z || o.isDead || o.isDying || o.isThrall) continue;
-                const d = zp.distanceToSquared(o.group.position);
-                if (d < bd) { bd = d; best = o; }
-            }
-            if (best) return { pos: best.group.position, zombie: best, distSq: bd };
+            // its master's «Атак» target, else another zombie, else whoever attacks the master
+            const e = this.servants.enemyFor({ k: 'z', id: z.id }, z.thrallOwner, zp, 40);
+            const ep = e ? this.servants.find(e.k, e.id) : null;
+            if (ep && e.k === 'z') return { pos: ep.group.position, zombie: ep, distSq: zp.distanceToSquared(ep.group.position) };
+            if (ep) { const pos = this.servants.pos(e.k, e.id).clone(); return { pos, foe: e, distSq: zp.distanceToSquared(pos) }; }
             // nobody to fight: stays near its master (not too close)
             const owner = z.thrallOwner === this.localId ? this.character.group.position : this.remotes.get(z.thrallOwner)?.position;
             if (owner && zp.distanceToSquared(owner) > 16) return { pos: owner, follow: true, distSq: zp.distanceToSquared(owner) };
@@ -1797,6 +1820,8 @@ export class Game {
         this.beds.update(dt);
         this.houses.update(dt);
         this.spiders.update(dt);
+        this.livingTrees.update(dt);
+        this.servants.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
@@ -1815,7 +1840,7 @@ export class Game {
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
-        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets()), dt);
+        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets(), this.livingTrees.targets()), dt);
         this.dismember.update(dt);
         mark('зомби');
 
@@ -2268,7 +2293,17 @@ export class Game {
                 }
                 continue;
             }
-            if (target && (target.zombie || target.follow)) continue;
+            // a servant zombie's blow at another creature (an animal, a villager, a living tree, a wizard)
+            if (target && target.foe && target.distSq < 5.3) {
+                const now = Date.now();
+                if (now - (z.lastAttackTime || 0) > 900) {
+                    z.lastAttackTime = now;
+                    z.triggerAttack();
+                    this.servants.damage(target.foe, 2, _v1.subVectors(target.pos, z.group.position).setY(0).normalize().clone(), z.thrallOwner);
+                }
+                continue;
+            }
+            if (target && (target.zombie || target.follow || target.foe)) continue;
 
             // Zombie bites (survival / maps)
             if (survival && target && target.distSq < 4.0) {
@@ -2420,6 +2455,8 @@ export class Game {
         this.houses?.dispose();
         this.beds?.dispose();
         this.spiders?.dispose();
+        this.livingTrees?.dispose();
+        this.servants?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

@@ -320,8 +320,8 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'bgone', id, to }, true);
     }
 
-    brainrot(zid) {
-        this.net.send({ t: 'brainrot', id: zid, by: this.me });
+    brainrot(id, k = 'z') {
+        this.net.send({ t: 'brainrot', id, k, by: this.me });
     }
 
     zombieSand(z) {
@@ -459,6 +459,15 @@ export class NetSync {
     bossGrab(id, to) { if (this.net.isHost) this.net.send({ t: 'bgrab', id, to }, true); }
     bossFree(id) { this.net.send({ t: 'bfree', id }, true); }
     bossNotice() { if (this.net.isHost) this.net.send({ t: 'bnote' }, true); }
+
+    // ---- «Alive»: living trees (the host moves them), servants of «Брейнрот»
+    livingTrees(list, servants) { if (this.net.isHost) this.net.send({ t: 'ltree', l: list, sv: servants }); }
+    /** (guest) my «Alive» took this tree: the host makes it a monster. */
+    aliveCast(d) { this.net.send({ t: 'alive', d: { x: r3(d.x), y: r3(d.y), z: r3(d.z), ry: r3(d.ry || 0), kind: d.kind | 0, trunk: d.trunk | 0, leaf: d.leaf | 0, h: d.h | 0 } }, true); }
+    /** (guest) my living tree ends (my mana is gone / «стоп»). */
+    aliveEnd(id, why) { this.net.send({ t: 'aliveend', id, why }, true); }
+    /** (guest) «Атак»: my servants go for this one. */
+    servantAttack(k, id) { this.net.send({ t: 'svatk', k, id }, true); }
 
     door(d) { this.net.send({ t: 'door', d }, true); }
     /** Campfires: {t:'cf'} host → all, {t:'cfask'|'cfwood'} guest → host. */
@@ -618,7 +627,11 @@ export class NetSync {
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;
-            case 'brainrot': if (this.net.isHost) g.applyBrainrot(m.id, m.from || m.by); break;
+            case 'brainrot': if (this.net.isHost) { if (m.k && m.k !== 'z') g.servants?.make(m.k, m.id, m.from || m.by); else g.applyBrainrot(m.id, m.from || m.by); } break;
+            case 'ltree': if (!this.net.isHost) { g.livingTrees?.applyNet(m.l); g.servants?.applyNet(m.sv); } break;
+            case 'alive': if (this.net.isHost && m.d && Number.isFinite(+m.d.x) && Number.isFinite(+m.d.z)) g.livingTrees?.spawn({ x: +m.d.x, y: +m.d.y || 0, z: +m.d.z, ry: +m.d.ry || 0, kind: m.d.kind | 0, trunk: m.d.trunk | 0, leaf: m.d.leaf | 0, h: Math.min(20, Math.max(5, m.d.h | 0)) }, m.from); break;
+            case 'aliveend': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t && t.owner === m.from) g.livingTrees.end(t, m.why === 'mana' || m.why === 'far' ? m.why : 'stop'); } break;
+            case 'svatk': if (this.net.isHost && m.k) g.servants?.command(m.from, { k: m.k, id: m.id }); break;
             case 'lev': if (m.by !== this.me) g.levitation?.onNetLev(m); break;
             case 'lift': if (m.to !== this.me) g.levitation?.onNetLift(m); break;
             case 'levno': if (m.to === this.me) g.levitation?.onNetRefused(m); break;

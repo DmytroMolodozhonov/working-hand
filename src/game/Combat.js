@@ -81,6 +81,7 @@ export const SPELL_COST = {
     WaterVortex: 25, // very strong: a whole vortex of water (see WaterVortex.js)
     VortexBubble: 5, // «Bubble» on the one the vortex hit
     FireMaxima: 20, // the only way out of the vortex's ice
+    Alive: 25, // a living tree (then it drains the mana while it lives)
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */
@@ -508,9 +509,11 @@ export class Combat {
             this._updateVisuals(dt);
             return;
         }
+        // (a held «Protection» or a living tree spends the strength instead of it coming back)
         const holding = this.shield?.drain != null;
+        const tree = !!this.game.livingTrees?.draining;
         // (a held «Protection» spends the strength instead of it coming back)
-        if (!this.dead && !holding) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
+        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
         if (holding) {
             this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
             this.shield.left = this.fatigue / this.shield.drain;

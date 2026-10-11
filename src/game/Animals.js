@@ -507,7 +507,18 @@ export class Animals {
         }
         if (a.type === 'runbook' && g.runner) { g.runner.think(a, dt); return; } // (runs, dodges, hides: RunningBook.js)
         let speed = 0, bunch = false;
-        if (a.state === 'attack' || a.state === 'flee') {
+        // «Брейнрот»: a servant follows its master and fights for them
+        const sv = a.servantOf != null ? g.servants?.plan('a', a, p, 1.6 * S.size + 0.8) : null;
+        if (sv) {
+            if (sv.mode === 'strike') {
+                const e = sv.enemy;
+                a.group.rotation.y = Math.atan2(-(e.x - p.x), -(e.z - p.z));
+                if (a.t > 1.2) { a.t = 0; g.servants.damage(e, S.dmg, _v.set(e.x - p.x, 0, e.z - p.z).normalize(), a.servantOf); }
+            } else if (sv.mode !== 'stay') {
+                a.target.set(sv.x, p.y, sv.z);
+                speed = sv.mode === 'chase' ? S.run * 0.9 : Math.max(S.speed * 1.5, 2);
+            }
+        } else if (a.state === 'attack' || a.state === 'flee') {
             a.stateT -= dt;
             a.pose = POSE.stand;
             const tp = this._playerPos(a.attacker);

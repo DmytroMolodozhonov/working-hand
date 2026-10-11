@@ -303,6 +303,7 @@ export class Duel {
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
         for (const v of g.castleLife?.targets() || []) this._villagerBody(v, put('v', v.id));
+        for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));
         for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall') this._roundBody('b', bd, put('b', bd.id));
         // the giant spider: its whole (big) body, nose to tail
         for (const sp of g.spiders?.targets() || []) spiderBody(sp, put('s', sp.id));
@@ -325,7 +326,7 @@ export class Duel {
         if (kind === 's') { const sp = g.spiders?.byId(id); return sp ? spiderBody(sp, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
-        return kind === 'v' ? this._villagerBody(c, e) : this._roundBody(kind, c, e);
+        return kind === 'v' ? this._villagerBody(c, e) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
     }
 
     /** A wizard's hero: along the body (upright, or lying flat flying like Superman). */
@@ -351,6 +352,15 @@ export class Duel {
         e.a.set(p.x, p.y - BODY.VILLAGER.DOWN, p.z);
         e.b.set(p.x, p.y + BODY.VILLAGER.UP, p.z);
         e.r = BODY.VILLAGER.R;
+        return e;
+    }
+
+    /** A living tree: from its root feet up into its crown. */
+    _treeBody(t, e) {
+        const p = t.model.position, s = t.model.userData.s || 1;
+        e.a.set(p.x, p.y + 0.5, p.z);
+        e.b.set(p.x, p.y + 8.5 * s, p.z);
+        e.r = 1.1 * s;
         return e;
     }
 
@@ -384,6 +394,7 @@ export class Duel {
     /** The middle of an animal / a villager (where a charge flies). */
     _creaturePoint(c, out) {
         if (c.isBird) return out.copy(c.model.position);
+        if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, 4.5 * (c.model.userData.s || 1), 0));
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
         return out.set(c.x, c.y + 2.4, c.z);
     }
@@ -403,12 +414,13 @@ export class Duel {
         if (kind === 'a') { const a = g.animals?.byId.get(id); return a && !a.dead ? a : null; }
         if (kind === 'v') { const v = g.castleLife?.byId.get(id); return v && !v.dead ? v : null; }
         if (kind === 'b') { const b = g.books?.birds?.get(id); return b && b.state !== 'fall' ? b : null; }
+        if (kind === 't') { const t = g.livingTrees?.byId.get(id); return t && !t.isDead ? t : null; }
         return null;
     }
 
     _targetPos(b, out) {
         const g = this.game;
-        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
@@ -564,7 +576,7 @@ export class Duel {
     _arrive(b, dt) {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
-        if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b') && this._referee()) { this._arriveAtCreature(b); return; }
+        if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't') && this._referee()) { this._arriveAtCreature(b); return; }
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
@@ -606,6 +618,8 @@ export class Duel {
         // a book-bird: any charge knocks it out of the air (it falls as a book)
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         if (c.isBird) { if (spell !== 'LevitateDuel') g.books.hitBird(c, 99); return; }
+        // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
+        if (c.isLivingTree) { g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);

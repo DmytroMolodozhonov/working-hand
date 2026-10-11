@@ -600,6 +600,8 @@ export class CastleLife {
             return;
         }
         if (v.climb) { this._climbStep(v, dt); return; }
+        // «Брейнрот»: a servant follows its master and fights for them
+        if (v.servantOf != null && this._serve(v, dt)) return;
         // a hostile player in sight: knights go for them
         if ((v.role === 'knight' || v.role === 'king') && !v.foe) {
             v.lookT = (v.lookT || 0) - dt;
@@ -772,6 +774,34 @@ export class CastleLife {
             }
         }
         this._ground(v);
+    }
+
+    /** A servant of «Брейнрот»: after its master, at the master's enemies. */
+    _serve(v, dt) {
+        const g = this.game;
+        const sv = g.servants?.plan('v', v, _v.set(v.x, v.y, v.z), 2.6);
+        if (!sv) return false;
+        v.foe = null; v.fleeT = 0; v.seated = false; v.investigate = null;
+        v.serveT = (v.serveT || 0) - dt;
+        if (sv.mode === 'strike') {
+            const e = sv.enemy;
+            this._steer(v, e.x, e.z, 0, dt, 9); // (turned to the enemy)
+            v.speed = 0;
+            v.mode = 'attack';
+            if (v.serveT <= 0) {
+                v.serveT = 1.1;
+                g.servants.damage(e, STATS[v.role]?.dmg || 1, _v2.set(e.x - v.x, 0, e.z - v.z).normalize(), v.servantOf);
+            }
+        } else if (sv.mode === 'stay') {
+            v.speed = 0;
+            v.mode = 'idle';
+        } else {
+            v.path = null;
+            this._steer(v, sv.x, sv.z, sv.mode === 'chase' ? RUN : WALK * 1.3, dt, 0.3);
+            v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : 'idle';
+        }
+        this._ground(v);
+        return true;
     }
 
     _fight(v, dt) {

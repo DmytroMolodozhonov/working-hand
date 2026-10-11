@@ -1002,6 +1002,7 @@ export class WaterVortex {
                     if (!cr) continue;
                     if (b.kind === 'a') g.animals?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, true);
                     else if (b.kind === 'v') g.castleLife?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, { spell: true, magic: true });
+                    else if (b.kind === 't') g.livingTrees?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, 'FireMaxima'); // (a living tree: fire is the only thing that hurts it)
                 }
             }
         }
