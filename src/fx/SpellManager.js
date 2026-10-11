@@ -58,7 +58,7 @@ export function matchSpell(text) {
     // «Lightning Writing»: drawing in the air (before «Lightning Strike»: the same first word)
     if (has('райтинг', 'райтин', 'врайтин', 'райдинг', 'writing', 'writin', 'righting', 'латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
     // «Water Vortex» («вотер вортекс»): before everything that shares its sounds (water ball, Maxima…)
-    if (has('vortex', 'vortec', 'vortx', 'вортекс', 'вортэкс', 'вортикс', 'вортекз', 'вортес', 'вотекс', 'вортакс', 'водоворот', 'ворт экс')) return 'WaterVortex';
+    if (has('vortex', 'vortec', 'vortx', 'вортекс', 'вортэкс', 'вортикс', 'вортекз', 'вортес', 'вотекс', 'вортакс', 'водоворот', 'ворт экс')) return has('супер', 'super', 'сюпер', 'суппер', 'супр') ? 'WaterVortexSuperMaxima' : 'WaterVortex'; // («Super Maxima»: the great water storm, WaterStorm.js)
     // «Total Destruction» («Тотал Дестракшн»): before Stand («st…») and every short token
     if (has('total destr', 'totaldestr', 'тотал', 'тоталь', 'тоутал', 'тотл', 'totl', 'total') && has('destr', 'дестр', 'дистр', 'дэстр', 'destruct', 'дестракш', 'дестрак', 'дистрак', 'разруш', 'струкш', 'стракш')) return has('макс', 'max', 'мах', 'maks') ? 'TotalDestructionMaxima' : 'TotalDestruction';
     if (has('дестракшн', 'дестракшен', 'дестрекшн', 'дистракшн', 'destruction', 'тотальное разрушение')) return has('макс', 'max', 'мах', 'maks') ? 'TotalDestructionMaxima' : 'TotalDestruction';

@@ -352,9 +352,10 @@ export class Hellfire {
         // the hands spread apart: a bigger fire
         const spread = this._spread();
         const want = blazeRadius(s.t, spread);
-        // water drowns it: it hisses and shrinks there
-        s.wet = this._wet(s.c, s.R);
-        if (s.wet > 0) s.R = Math.max(0, s.R - HELLFIRE.QUENCH * s.wet * dt);
+        // water drowns it: it hisses and shrinks there (the blaze, and the ring round the caster)
+        s.wet = this._wet(s.c, s.R) * (1 - s.k);
+        const rw = s.k > 0.2 ? this._ringWet(ch.group.position, s.rr) * s.k : 0;
+        if (s.wet > 0 || rw > 0) s.R = Math.max(0, s.R - HELLFIRE.QUENCH * (s.wet + rw) * dt);
         else s.R += (want - s.R) * Math.min(1, dt * (s.t < 0.4 ? 6 : 1.6));
         if (s.R < HELLFIRE.R_MIN && s.t > 0.6) { this.stop('water'); return; }
         // the blaze flows after the wand (a heavy mass: it lags a little, never jumps)
@@ -443,6 +444,16 @@ export class Hellfire {
         if (g._flameBlock) {
             if (g._flameBlock(c.x, c.y - R * 0.5, c.z) === 'water') w = Math.max(w, 1.2);
             if (g._flameBlock(c.x, c.y, c.z) === 'water') w = Math.max(w, 3);
+        }
+        return w;
+    }
+
+    /** How much water is on the ring round `body` (radius rr). */
+    _ringWet(body, rr) {
+        let w = 0;
+        for (const s of this.game._flameWaters?.() || []) {
+            const d = Math.hypot(s.x - body.x, s.z - body.z);
+            if (Math.abs(d - rr) < s.r + HELLFIRE.RING_W / 2 && s.y > body.y - 3 && s.y < body.y + HELLFIRE.RING_H + s.r) w = Math.max(w, 1.5);
         }
         return w;
     }

@@ -51,6 +51,7 @@ import { Houses } from './Houses.js';
 import { Wreck } from './Wreck.js';
 import { TotalDestruction } from './TotalDestruction.js';
 import { Hellfire } from './Hellfire.js';
+import { WaterStorm } from './WaterStorm.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
@@ -86,7 +87,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Hellfire', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
+const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -260,6 +261,7 @@ export class Game {
         this.weapons = new WeaponSystem(this);
         this.water = new WaterMagic(this);
         this.vortex = new WaterVortex(this); // «Water Vortex» (+ «Bubble», «Frozen») and «Fire Maxima»
+        this.waterStorm = new WaterStorm(this); // «Water Vortex Super Maxima»: a great storm of water held and steered by the wand
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
@@ -860,7 +862,7 @@ export class Game {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
         // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
         if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
-        return !!(this.hellfire?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this._wave || this.lightning || this.wandMagic?.drawing);
+        return !!(this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this._wave || this.lightning || this.wandMagic?.drawing);
     }
 
     _castLocalSpell(text, isFinal = true) {
@@ -962,6 +964,7 @@ export class Game {
         if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'TotalDestruction' || name === 'TotalDestructionMaxima') return this.destruction.cast(isFinal, name);
         if (name === 'Hellfire') return this.hellfire.cast(isFinal);
+        if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (name === 'LetItRain') return this._castRain(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
@@ -1085,6 +1088,8 @@ export class Game {
         if (this.vortex?.stop()) done.push('водоворот');
         const hf = this.hellfire?.sayStop(); // («стоп» costs 50 mana for it)
         if (hf === true) done.push('адский огонь');
+        const ws = this.waterStorm?.sayStop(); // (and 50 for the water storm)
+        if (ws === true) done.push('водяная буря');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
         if (this._wave) { this._wave = null; done.push('волна'); }
         if (W?._nox(false)) done.push('Люмос'); // (the tip and the thrown light)
@@ -1097,7 +1102,7 @@ export class Game {
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (!done.length) return false;
         this.sync?.stopSpells?.();
-        if (hf === true) return true; // (its own words: the fire left on the ground)
+        if ((hf === true || ws === true) && done.length === 1) return true; // (its own words: the fire left / the water fallen)
         this.hud.setVoice(`🛑 Стоп: ${done.join(', ')}`, true);
         return true;
     }
@@ -1840,6 +1845,7 @@ export class Game {
         const out = [];
         this.water?.spheres?.(out);
         this.vortex?.spheres?.(out);
+        this.waterStorm?.spheres?.(out); // (the great water storm puts out fire, the Hellfire too)
         return out;
     }
 
@@ -2202,6 +2208,7 @@ export class Game {
         this.combat.update(dt);
         this.vortex.update(dt);
         this.hellfire?.update(dt);
+        this.waterStorm?.update(dt);
         this.strikes.update(dt); // fists, slaps, pushes, shoves: real contact only
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
@@ -2857,6 +2864,7 @@ export class Game {
         this.wandMagic?.dispose();
         this.vortex?.dispose();
         this.hellfire?.dispose();
+        this.waterStorm?.dispose();
         this.gear?.dispose();
         this.bleeding?.dispose();
         this.animals?.dispose();

@@ -99,6 +99,25 @@ export class FireSystem {
         return false;
     }
 
+    /** Water over a place («Water Vortex Super Maxima»): burning trees and blocks there go out. @returns how many */
+    douse(p, radius) {
+        let n = 0;
+        for (let i = this.burningTrees.length - 1; i >= 0; i--) {
+            const t = this.burningTrees[i].tree;
+            if (Math.hypot(t.x - p.x, t.z - p.z) > radius + 2.5 || p.y > 14 || p.y < -3) continue;
+            t.burning = false; // (still standing: what burnt off is gone, the rest is wet)
+            this.burningTrees.splice(i, 1);
+            n++;
+        }
+        for (const [key, b] of this.burningBlocks) {
+            const dx = b.x - p.x, dz = b.z - p.z, dy = b.L - 1 - p.y;
+            if (dx * dx + dz * dz + dy * dy > (radius + 1) * (radius + 1)) continue;
+            this.burningBlocks.delete(key);
+            n++;
+        }
+        return n;
+    }
+
     _igniteTree(t) {
         t.burning = true;
         this.burningTrees.push({ tree: t, t: 0, spread: false });
