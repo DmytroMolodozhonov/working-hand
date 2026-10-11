@@ -69,7 +69,7 @@ export class VoxelWorld {
         if (opts.map) {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves);
             this.createSkybox();
         }
     }
@@ -217,9 +217,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves });
         this.collision.setTerrain(this.terrain);
 
         // Decorative grass cubes (1000, instanced) — same look as before.

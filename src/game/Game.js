@@ -177,6 +177,7 @@ export class Game {
             map: config.map || null,
             seas: this.gen >= 2, // (generation 2: seas, sea castles, deeper bedrock)
             testGround: this.gen >= 3 && config.mode === 'creative' && !config.map, // (a river by the pedestals, a castle close by)
+            deepCaves: this.gen >= 4, // (caves as in Minecraft: winding, branching, deep)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
         // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
@@ -720,21 +721,24 @@ export class Game {
             for (const cv of t.cavesNear(p.x, p.z, 90)) {
                 if (this._caveChests.has(cv.id)) continue;
                 this._caveChests.add(cv.id);
-                const pos = new THREE.Vector3(cv.kx + 0.5, cv.F, cv.kz + 0.5);
-                const chest = new Chest(this.scene, pos, 'loot', Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz), cv.id);
-                chest.mesh.updateMatrixWorld(true);
-                chest.boxId = this.collision.addBox(chest.getCollisionBox());
-                this.chests.push(chest);
-                if (this._openedChests?.has(cv.id)) chest.setOpenInstant();
-                if (this.authority && this.config.mode === 'freeworld') {
-                    const n = 2 + (cv.r % 3);
-                    for (let i = 0; i < n; i++) {
-                        const a = (i / n) * Math.PI * 2;
-                        const zp = new THREE.Vector3(cv.kx + Math.cos(a) * 3.5, cv.F - 0.5, cv.kz + Math.sin(a) * 3.5);
-                        const z = this._createZombie(zp);
-                        z.setSleeping?.(true);
+                // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
+                const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
+                spots.forEach((sp, k) => {
+                    const id = k ? cv.id + ':' + k : cv.id;
+                    const chest = new Chest(this.scene, new THREE.Vector3(sp.x, sp.y, sp.z), 'loot', sp.a, id);
+                    chest.mesh.updateMatrixWorld(true);
+                    chest.boxId = this.collision.addBox(chest.getCollisionBox());
+                    this.chests.push(chest);
+                    if (this._openedChests?.has(id)) chest.setOpenInstant();
+                    if (this.authority && this.config.mode === 'freeworld') {
+                        const n = 2 + ((cv.r + k) % 3);
+                        for (let i = 0; i < n; i++) {
+                            const a = (i / n) * Math.PI * 2;
+                            const z = this._createZombie(new THREE.Vector3(sp.x + Math.cos(a) * 3, sp.y - 0.5, sp.z + Math.sin(a) * 3));
+                            z.setSleeping?.(true);
+                        }
                     }
-                }
+                });
             }
         }
         // darkness: rock above the head

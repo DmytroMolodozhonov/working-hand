@@ -27,6 +27,7 @@ import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
+import { CAVES, growCaveSystem, caveMouth, carveColumn } from './CaveSystems.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -164,7 +165,8 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 3;
+export const WORLD_GEN = 4;
+// 4: caves as in Minecraft (src/world/CaveSystems.js): winding, branching, deep, chests in their chambers.
 // 3: a creative world has a test ground — a river right past the pedestals and a castle close by.
 
 /** The creative test ground's river (generation 3): it winds east–west just past the pedestals. */
@@ -326,9 +328,10 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
+        this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
         // (the creative test ground: a sea right by its castle's quay — the castle is placed first)
@@ -479,6 +482,7 @@ export class TerrainData {
         const key = gx + ',' + gz;
         this._caves = this._caves || new Map();
         if (this._caves.has(key)) return this._caves.get(key);
+        if (this.deepCaves) return this._systemOf(gx, gz, key);
         let cave = null;
         const H = this.heightAt;
         const T = TEST_CAVE;
@@ -511,9 +515,41 @@ export class TerrainData {
         return cave;
     }
 
-    /** Caves whose chamber is within `r` of a point. */
+    /**
+     * Generation 4: the cave system starting in a cave cell (or null) — see CaveSystems.js.
+     * The creative test ground's cave starts at its hill's foot, facing the pedestals.
+     */
+    _systemOf(gx, gz, key) {
+        const H = this.heightAt;
+        const top = (x, z) => H(Math.round(x), Math.round(z));
+        const wet = (x, z) => { const ix = Math.round(x), iz = Math.round(z); H(ix, iz); return !!(H.water || H.sea || this.sites?.landAt(ix, iz)); };
+        const blocked = (x, z) => wet(x, z) || Math.hypot(x, z) < CAVES.KEEP_SPAWN;
+        const T = TEST_CAVE;
+        let s = null;
+        if (this.test && gx === Math.floor(T.X / CAVE_CELL) && gz === Math.floor(T.Z / CAVE_CELL)) {
+            s = growCaveSystem({ id: 'cvtest', test: true, rng: createRng((this.seed * 31 + 777) >>> 0), start: { x: T.X + T.R - 1, y: 2, z: T.Z, yaw: Math.PI, pitch: -0.04 }, H: top, blocked: wet });
+        } else if (hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101) < CAVES.CHANCE) {
+            const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0xca7e) >>> 0);
+            const m = caveMouth(rng, gx, gz, CAVE_CELL, top, blocked);
+            if (m) s = growCaveSystem({ id: 'cv' + gx + '_' + gz, rng, start: m, H: top, blocked });
+        }
+        this._caves.set(key, s);
+        return s;
+    }
+
+    /** Caves whose chamber (generation 4: any part of the system) is within `r` of a point. */
     cavesNear(x, z, r) {
         const out = [];
+        if (this.deepCaves) {
+            const R = r + CAVES.REACH;
+            for (let gz = Math.floor((z - R) / CAVE_CELL); gz <= Math.floor((z + R) / CAVE_CELL); gz++) {
+                for (let gx = Math.floor((x - R) / CAVE_CELL); gx <= Math.floor((x + R) / CAVE_CELL); gx++) {
+                    const s = this.caveOf(gx, gz);
+                    if (s && Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1)) <= r) out.push(s);
+                }
+            }
+            return out;
+        }
         const g0x = Math.floor((x - r) / CAVE_CELL), g1x = Math.floor((x + r) / CAVE_CELL);
         const g0z = Math.floor((z - r) / CAVE_CELL), g1z = Math.floor((z + r) / CAVE_CELL);
         for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {
@@ -523,7 +559,49 @@ export class TerrainData {
         return out;
     }
 
+    /** Generation 4: carve the cave systems reaching into a chunk (never under water, nor in a village). */
+    _carveSystems(c) {
+        const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK, R = CAVES.REACH;
+        const sys = [];
+        for (let gz = Math.floor((z0 - R) / CAVE_CELL); gz <= Math.floor((z0 + CHUNK + R) / CAVE_CELL); gz++) {
+            for (let gx = Math.floor((x0 - R) / CAVE_CELL); gx <= Math.floor((x0 + CHUNK + R) / CAVE_CELL); gx++) {
+                const s = this.caveOf(gx, gz);
+                if (s && s.x1 >= x0 - 1 && s.x0 <= x0 + CHUNK && s.z1 >= z0 - 1 && s.z0 <= z0 + CHUNK) sys.push(s);
+            }
+        }
+        if (!sys.length) return;
+        const H = this.heightAt;
+        for (let lz = 0; lz < CHUNK; lz++) {
+            for (let lx = 0; lx < CHUNK; lx++) {
+                const x = x0 + lx, z = z0 + lz;
+                const col = lz * CHUNK + lx;
+                H(x, z);
+                if (H.water || H.sea || this.sites?.landAt(x, z)) continue;
+                const top0 = c.top[col];
+                let carved = false;
+                const cut = (L0, L1, open) => {
+                    const hi = Math.min(L1, open ? top0 : top0 - CAVES.ROOF);
+                    for (let L = Math.max(L0, MIN_LAYER + 1); L <= hi; L++) {
+                        const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+                        const b = c.blocks[i];
+                        if (b !== BLOCK.WATER && b !== BLOCK.BEDROCK && b !== BLOCK.AIR) { c.blocks[i] = BLOCK.AIR; carved = true; if (L < c.minOpen) c.minOpen = L; }
+                    }
+                };
+                for (const s of sys) carveColumn(s, x, z, cut);
+                if (carved) {
+                    let top = MIN_LAYER - 1;
+                    for (let L = c.top[col]; L >= MIN_LAYER; L--) {
+                        const b = c.blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx];
+                        if (b !== BLOCK.AIR && b !== BLOCK.WATER) { top = L; break; }
+                    }
+                    c.top[col] = top;
+                }
+            }
+        }
+    }
+
     _carveCaves(c) {
+        if (this.deepCaves) return this._carveSystems(c);
         const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
         const reach = 60;
         const caves = [];
@@ -1068,10 +1146,10 @@ export function mountainHeight(ix, iz, seed = 1) {
  * touched chunks, a couple per frame, so nothing ever causes a hitch.
  */
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains, seas, test });
+        this.data.generate({ seed, mountains, seas, test, deepCaves });
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));

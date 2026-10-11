@@ -7,7 +7,7 @@ import { TerrainData, TEST_RIVER, TEST_CAVE } from '../../src/world/Terrain.js';
  * a hill with a cave to the left, and a sea castle (village, port, the sea) close by.
  * The pedestals stay on dry flat ground; other worlds are unchanged.
  */
-const make = (test, seed = 12345) => { const d = new TerrainData(); d.generate({ seed, mountains: true, seas: true, test }); return d; };
+const make = (test, seed = 12345, deepCaves = true) => { const d = new TerrainData(); d.generate({ seed, mountains: true, seas: true, test, deepCaves }); return d; };
 
 test('creative test ground: a river right past the pedestals, which stay dry and flat, clear of any village', () => {
     const d = make(true), H = d.heightAt;
@@ -42,17 +42,29 @@ test('creative test ground: a sea castle close by — its village starts ~60 m o
     }
 });
 
-test('creative test ground: a hill with a cave, its mouth towards the pedestals; rock over the chamber', () => {
+test('creative test ground: a hill with a cave system — its mouth towards the pedestals, winding deep down, branching, chests in its chambers', () => {
     const d = make(true), H = d.heightAt;
-    const cv = d.cavesNear(TEST_CAVE.X, TEST_CAVE.Z, 5)[0];
-    assert.ok(cv && cv.id === 'cvtest');
-    assert.ok(H(TEST_CAVE.X, TEST_CAVE.Z) >= 18, 'a hill over it');
-    assert.ok(Math.hypot(cv.kx, cv.kz) < 80 && cv.ex > cv.kx, 'close, the mouth towards spawn');
-    // carved: walk in along the tunnel, air at head height all the way to the chamber
-    for (let x = cv.ex; x >= cv.kx; x -= 2) {
-        assert.ok(!d.solidIn(x, cv.kz, cv.F + 1, cv.F + 2), `open at x=${x}`);
+    const cv = d.cavesNear(TEST_CAVE.X, TEST_CAVE.Z, 5).find((c) => c.id === 'cvtest');
+    assert.ok(cv, 'the test cave');
+    assert.ok(H(TEST_CAVE.X, TEST_CAVE.Z) >= 18, 'a hill over its mouth');
+    assert.ok(Math.hypot(cv.start.x, cv.start.z) < 40 && Math.cos(cv.start.yaw) < -0.9, 'the mouth by the pedestals, going into the hill');
+    assert.ok(cv.segs.length > 60, `long tunnels (${cv.segs.length} × 3 m)`);
+    assert.ok(Math.min(...cv.segs.map((g) => g.by)) < -6, 'deep down');
+    assert.ok(cv.chambers.length >= 3 && cv.chests.length >= 2, `chambers ${cv.chambers.length}, chests ${cv.chests.length}`);
+    // branching: tunnels that do not go on from the one before
+    let forks = 0;
+    for (let i = 1; i < cv.segs.length; i++) { const a = cv.segs[i - 1], b = cv.segs[i]; if (Math.hypot(a.bx - b.ax, a.by - b.ay, a.bz - b.az) > 0.01) forks++; }
+    assert.ok(forks >= 2, `it branches (${forks})`);
+    // carved: air all along its tunnels, a floor under each chest
+    let air = 0;
+    for (const g of cv.segs) if (d.get(Math.round((g.ax + g.bx) / 2), Math.round((g.ay + g.by) / 2), Math.round((g.az + g.bz) / 2)) === 0) air++;
+    assert.ok(air >= cv.segs.length * 0.95, `walkable all along (${air}/${cv.segs.length})`);
+    for (const c of cv.chests) {
+        assert.equal(d.get(Math.floor(c.x), c.y + 1, Math.floor(c.z)), 0, 'room for the chest');
+        assert.notEqual(d.get(Math.floor(c.x), c.y, Math.floor(c.z)), 0, 'a floor under it');
     }
-    assert.ok(d.solidIn(cv.kx, cv.kz, cv.F + 8, cv.F + 14), 'rock above the chamber');
+    // the pedestals' ground is untouched
+    for (let x = -16; x <= 25; x += 3) for (let z = -21; z <= 3; z += 3) assert.notEqual(d.get(x, 0, z), 0, `ground at ${x},${z}`);
 });
 
 test('creative test ground: worlds without it keep their ground (no river, no hill, no castle near)', () => {
