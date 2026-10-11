@@ -47,12 +47,16 @@ export class Accio {
         const g = this.game;
         const ch = g.character;
         let best = null;
+        // the thing comes into a free hand: the pointing one, or the other (a wand in the
+        // pointing hand: the other hand catches — before, things lying about were not even looked at)
+        const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd];
         for (const side of ['right', 'left']) {
             if (!ch.isArmRaised(side)) continue;
-            if (g.weapons.hands[side].held) continue;
+            const other = side === 'right' ? 'left' : 'right';
+            const catcher = free(side) ? side : free(other) ? other : null;
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
-            for (const w of g.weapons.weapons) {
+            for (const w of catcher ? g.weapons.weapons : []) {
                 if (w.holder || w.remoteTarget) continue;
                 const to = _v1.subVectors(w.position, hand);
                 const d = to.length();
@@ -60,7 +64,7 @@ export class Accio {
                 const ang = dir.angleTo(to.normalize());
                 if (ang > ACCIO.CONE) continue;
                 const score = ang * 5 + d * 0.05;
-                if (!best || score < best.score) best = { w, side, score };
+                if (!best || score < best.score) best = { w, side: catcher, score };
             }
             // a running book (it is pulled to the feet, dazed — catch it by hand)
             for (const { a, pos } of g.runner?.accioTargets() || []) {
@@ -85,16 +89,16 @@ export class Accio {
                 if (!best || score < best.score) best = { body: a, side, score, hand };
             }
             // any other thing lying about (a bow, a shield, a wand, a scroll, food, coins…)
-            if (g.items?.held[side]) continue;
+            if (!catcher) continue;
             for (const L of g.items?.loose.values() || []) {
                 if (L.asked || L.accio) continue;
                 const to = _v1.subVectors(L.model.position, hand);
                 const d = to.length();
                 if (d > ACCIO.RANGE || d < 0.3) continue;
                 const ang = dir.angleTo(to.normalize());
-                if (ang > ACCIO.CONE) continue;
+                if (ang > ACCIO.CONE + Math.atan2(0.3, d)) continue;
                 const score = ang * 5 + d * 0.05;
-                if (!best || score < best.score) best = { L, side, score };
+                if (!best || score < best.score) best = { L, side: catcher, score };
             }
             // a fallen book-bird's book
             for (const bk of g.books?.books?.values() || []) {
@@ -104,7 +108,7 @@ export class Accio {
                 const ang = dir.angleTo(to.normalize());
                 if (ang > ACCIO.CONE) continue;
                 const score = ang * 5 + d * 0.05;
-                if (!best || score < best.score) best = { bk, side, score };
+                if (!best || score < best.score) best = { bk, side: catcher, score };
             }
             // a mana crystal growing in a cave (one by one)
             for (const c of g.crystals?.growing() || []) {
@@ -114,11 +118,11 @@ export class Accio {
                 const ang = dir.angleTo(to.normalize());
                 if (ang > ACCIO.CONE) continue;
                 const score = ang * 5 + d * 0.05;
-                if (!best || score < best.score) best = { mc: c, side, score };
+                if (!best || score < best.score) best = { mc: c, side: catcher, score };
             }
         }
         if (!best) {
-            const busy = g.weapons.hands.left.held && g.weapons.hands.right.held;
+            const busy = !free('left') && !free('right');
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку…) не дальше 30 м — и скажите «Акцио»';
         }
         if (best.rb) { g.runner.accio(best.rb, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }

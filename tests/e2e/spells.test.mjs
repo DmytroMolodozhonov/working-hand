@@ -51,9 +51,11 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
         const lifted = { kind: g.levitation.state?.kind, it: g.levitation.state?.obj === L, rose: L.model.position.y - y0 };
         g.levitation.release(true);
         g.items.removeLoose('ap1');
-        // a book on the ground: «Акцио» — it flies (not at once in the hand)
+        // a book on the ground: «Акцио» — it flies (not at once in the hand); the wand in the
+        // right hand: the book comes into the free left one (things lying about were not even looked at)
         const p0 = hand.clone().addScaledVector(dir, 10);
         B.placeBook(p0, 777123);
+        g.items.takeIntoHand({ ...wand }, 'right');
         await frames(2);
         g.accio.cast();
         await frames(3);
@@ -61,7 +63,8 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
         const midway = bk ? bk.model.position.distanceTo(p0) : -1;
         const stillFlying = !!bk && !g.items.heldOf('book');
         for (let i = 0; i < 120 && B.books.has(777123); i++) await frames(1);
-        const caught = !!g.items.heldOf('book');
+        const caught = g.items.heldOf('book')?.side === 'left' && g.items.heldOf('wand')?.side === 'right';
+        g.items.releaseHand('right');
         return { starter, power, cost, bare, held, freed, lifted, midway, stillFlying, caught };
     });
     assert.ok(r.starter && r.starter.plain && !r.starter.dir && !r.starter.fav && !r.starter.power, 'a plain wooden wand in a slot from the start ' + JSON.stringify(r.starter));
@@ -71,7 +74,7 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
     assert.ok(r.freed.alive && r.freed.state !== 'held', 'let go: it flies on ' + JSON.stringify(r.freed));
     assert.ok(r.lifted.kind === 'item' && r.lifted.it && r.lifted.rose > 0.3, 'a thing is lifted ' + JSON.stringify(r.lifted));
     assert.ok(r.stillFlying && r.midway > 0.3, 'the book flies (not teleported) ' + JSON.stringify({ midway: r.midway, stillFlying: r.stillFlying }));
-    assert.ok(r.caught, 'and is caught in the hand');
+    assert.ok(r.caught, 'and is caught in the free hand (the wand stays in the other)');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
