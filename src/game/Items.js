@@ -201,7 +201,7 @@ export class ItemSystem {
         const pg = this._pg || (this._pg = { web: new THREE.Vector3(), pinch: new THREE.Vector3(), dir: new THREE.Vector3(), a: new THREE.Vector3(), b: new THREE.Vector3() });
         hand.group.updateMatrixWorld(true);
         hand.palm.localToWorld(pg.web.fromArray(PEN_POINTS.web));
-        fm.index[2].pivot.localToWorld(pg.a.fromArray(PEN_POINTS.index));
+        if (hand.penIndexPoint) hand.penIndexPoint(pg.a); else fm.index[2].pivot.localToWorld(pg.a.fromArray(PEN_POINTS.index));
         fm.thumb[2].pivot.localToWorld(pg.b.fromArray(PEN_POINTS.thumb));
         pg.pinch.addVectors(pg.a, pg.b).multiplyScalar(0.5);
         pg.dir.subVectors(pg.pinch, pg.web);

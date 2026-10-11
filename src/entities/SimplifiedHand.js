@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import { lerpAngle } from '../core/math.js';
-import { handFrame, fingerJoints } from './HandPose.js';
+import { handFrame, fingerJoints, heroPoints } from './HandPose.js';
 
 /** The fingers bend at most this far from the forearm at the wrist (a real wrist's range). */
 const MAX_WRIST_BEND = 1.4; // rad (~80°)
@@ -47,8 +47,24 @@ export const SHAKE_GRIP = {
     pinky: [1.0, 0.95, 0.45, -0.1],
     thumb: [0.05, -0.55, 0.95, 0.15, 0.1],
 };
-/** Where the pen grip touches the wand: the web (palm frame), the index's and the thumb's pads (on their end bones). */
-export const PEN_POINTS = { web: [-0.17, 0.17, -0.04], index: [0, 0.049, -0.038], thumb: [0, 0.104, -0.045] };
+/**
+ * The same grip pointing (as one points a wand or a brush): the index finger nearly
+ * straight along the wand, the thumb's pad pressing it against the index's middle
+ * bone. The hand shows whatever lies between the two, as the real index finger is
+ * bent (`penT`: 0 pointing … 1 writing) — the wand goes 5° … 30° off the palm's line
+ * towards the palm, as the real one does.
+ */
+export const PEN_POINT_GRIP = {
+    index: [0, 0.7, 0.24, -0.3],
+    middle: PEN_GRIP.middle,
+    ring: PEN_GRIP.ring,
+    pinky: PEN_GRIP.pinky,
+    thumb: [-0.05, -1.43, 0.17, -0.03, -0.39],
+};
+/** Where the pen grip touches the wand: the web (palm frame), the index's and the thumb's pads (on their end bones); indexMid: the index's middle bone (pointing). */
+export const PEN_POINTS = { web: [-0.17, 0.17, -0.04], index: [0, 0.049, -0.038], indexMid: [0, 0.06, -0.04], thumb: [0, 0.104, -0.045] };
+/** The real index finger's line (knuckle → tip) off the palm's line towards the palm (rad): pointing, writing. */
+export const PEN_TILT = [0.09, 0.52];
 
 const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 
@@ -111,6 +127,12 @@ export class SimplifiedHand {
         this._pend = null; // a sudden turn-over waiting to be confirmed
         this._pendN = 0;
         this.netPalm = null; // (remote avatars) the palm's turn sent over the network
+        // a pen grip as the real index finger is bent (0 pointing … 1 writing); indexTilt:
+        // the real index's line off the palm's line (rad); stickTilt: a real stick's (set by the game)
+        this.penT = 1;
+        this.indexTilt = null;
+        this.stickTilt = null;
+        this._penPose = { index: [0, 0, 0, 0], middle: PEN_GRIP.middle, ring: PEN_GRIP.ring, pinky: PEN_GRIP.pinky, thumb: [0, 0, 0, 0, 0] };
 
         this.group.traverse((obj) => { if (obj.isMesh) obj.frustumCulled = false; });
     }
@@ -391,6 +413,11 @@ export class SimplifiedHand {
             if (f.X.lengthSq() < 1e-6) f.X.copy(fr.X); else f.X.normalize();
         } else f.X.copy(fr.X);
         f.Z.crossVectors(f.X, f.Y);
+        // the real index finger's line (knuckle → tip) off the palm's line, towards the palm
+        const P = heroPoints(landmarks, this.aspect);
+        const v = _vc.subVectors(P[8], P[5]);
+        const towardPalm = v.dot(f.Z) * (this.side === 'right' ? -1 : 1);
+        if (v.lengthSq() > 1e-8) this.indexTilt = Math.atan2(towardPalm, v.dot(f.Y));
         const j = fingerJoints(landmarks, this.aspect, this.side, this._jBuf || (this._jBuf = {}));
         if (!j) return;
         if (!this._jointsT) { this._jointsT = {}; this._jointsC = {}; for (const n of JOINT_FINGERS) { this._jointsT[n] = [0, 0, 0, 0]; this._jointsC[n] = [0, 0, 0, 0]; } }
@@ -455,7 +482,8 @@ export class SimplifiedHand {
         const maxBend = Math.PI / 1.95;
         const spread = cs.fingerSpread;
         const thumbOut = cs.thumbSpread;
-        const pose = this.gripOverride?.pose;
+        let pose = this.gripOverride?.pose;
+        if (pose === PEN_GRIP) pose = this._penBlend();
         if (pose) {
             // the fingers settle into the grip the thing needs (a pen grip on a wand)
             const k = this.LERP_SPEED;
@@ -501,6 +529,24 @@ export class SimplifiedHand {
                 }
             }
         }
+    }
+
+    /** The pen grip between pointing and writing, as the real index finger (or a real stick) shows it. */
+    _penBlend() {
+        const tilt = this.stickTilt ?? this.indexTilt;
+        if (tilt != null) this.penT = Math.max(0, Math.min(1, (tilt - PEN_TILT[0]) / (PEN_TILT[1] - PEN_TILT[0])));
+        const t = this.penT, o = this._penPose;
+        for (let i = 0; i < 4; i++) o.index[i] = PEN_POINT_GRIP.index[i] + (PEN_GRIP.index[i] - PEN_POINT_GRIP.index[i]) * t;
+        for (let i = 0; i < 5; i++) o.thumb[i] = PEN_POINT_GRIP.thumb[i] + (PEN_GRIP.thumb[i] - PEN_POINT_GRIP.thumb[i]) * t;
+        return o;
+    }
+
+    /** Where the index finger touches a wand held like a pen (world): its middle bone pointing, its pad writing. */
+    penIndexPoint(out) {
+        const fm = this.fingerMeshes.index, t = this.penT;
+        const a = fm[1].pivot.localToWorld(_va.fromArray(PEN_POINTS.indexMid));
+        fm[2].pivot.localToWorld(out.fromArray(PEN_POINTS.index));
+        return out.lerp(a, 1 - t);
     }
 
     setShowHands(visible) { this.group.visible = visible; }
