@@ -25,6 +25,7 @@
  *   ice      player→all   ice blocks built with water forming
  *   phit     player→all   my fist/weapon hit player `to` (Свободный мир)
  *   pdead    player→all   I was killed (by `killer`)
+ *   dbody    any→all      a body stays where somebody died (Death.js; the host keeps the list)
  *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
  *   clash    host→all     two charges are pushing (meeting point p); clashend: result
  */
@@ -139,6 +140,7 @@ export class NetSync {
             houses: g.houses?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
+            bodies: g.death?.snapshot() || [],
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
@@ -157,6 +159,7 @@ export class NetSync {
         if (msg.houses) g.houses?.restore(msg.houses);
         if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.castles) g.castleLife?.restore(msg.castles);
+        if (msg.bodies) g.death?.restore(msg.bodies);
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);
@@ -391,6 +394,11 @@ export class NetSync {
 
     died(killer) {
         this.net.send({ t: 'pdead', by: this.me, killer: killer || null }, true);
+    }
+
+    /** A body stays where somebody died (Death.js). */
+    deathBody(b) {
+        this.net.send({ t: 'dbody', b }, true);
     }
 
     /** I'm back in the game. */
@@ -666,11 +674,11 @@ export class NetSync {
             // ---- things (wands, scrolls, shields…)
             case 'inew': if (!this.net.isHost && m.item) g.items?.spawnLoose(m.item, vec(m.p), { vel: m.v ? vec(m.v) : null, hover: !!m.h, broadcast: false }); break;
             case 'ipos': if (!this.net.isHost) g.items?.applyPositions(m.l); break;
-            case 'itake': if (this.net.isHost) g.items?.pickUp(m.uid, m.from, m.side === 'left' ? 'left' : 'right'); break;
+            case 'itake': if (this.net.isHost) g.items?.pickUp(m.uid, m.from, m.side === 'left' ? 'left' : m.side === 'slot' ? 'slot' : 'right'); break;
             case 'igone': {
                 if (this.net.isHost) break;
                 const it = g.items?.removeLoose(m.uid);
-                if (m.to === this.me && it) g.items._gotItem(it, m.side === 'left' ? 'left' : 'right');
+                if (m.to === this.me && it) g.items._gotItem(it, m.side === 'left' ? 'left' : m.side === 'slot' ? 'slot' : 'right');
                 break;
             }
             case 'ithrow': if (this.net.isHost && m.item) { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v) }); if (L) L.thrower = m.from; } break;
@@ -752,6 +760,7 @@ export class NetSync {
                 if (r && Array.isArray(m.h)) g.bleeding?.addCut(r.character, m.h.slice(0, 3).map((v) => Math.max(-3, Math.min(3, Number(v)))));
                 break;
             }
+            case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
             case 'pdead': {
                 if (m.by === this.me) break;
                 g.castleLife?.playerDied(m.by);

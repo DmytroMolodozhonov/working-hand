@@ -37,6 +37,7 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
+import { DeathSystem } from './Death.js';
 import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
@@ -100,6 +101,9 @@ export class Game {
         this.magicHand = null;
         this.lastMagicTime = 0;
         this.lastSpellCastTime = 0;
+        // death hooks (Death.js): push (info) => … to run when my player dies / comes back
+        this.onDeath = [];
+        this.onRespawn = [];
         this.cameraBaseRotation = 0;
         this.smoothHead = { yaw: 0, pitch: 0 };
         this.yawNeutral = 0; // head yaw that counts as "straight ahead" (drifting camera)
@@ -236,6 +240,7 @@ export class Game {
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
+        this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
@@ -1372,6 +1377,9 @@ export class Game {
         // «Gather» at a carcass (meat) or a golden tree (apples)
         if (name === 'Gather') {
             const side = ['right', 'left'].find((sd) => this.character.isArmRaised(sd)) || 'right';
+            // things lying about (at a body): all of them into the slots (Death.js)
+            const loot = this.death?.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
+            if (loot && loot.startsWith('✨')) { this.hud.setVoice(loot, true); this._lastBuild = now; if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost); return 'Gather'; }
             const got = this.animals.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
             if (got && !got.startsWith('🍏')) { this.hud.setVoice(got, true); this._lastBuild = now; return 'Gather'; }
             if (got) { if (isFinal) this.hud.setVoice(got, true); return null; }
@@ -1517,6 +1525,7 @@ export class Game {
     onLocalDeath(text, byId) {
         this.mana?.onDeath(); // all the mana grown with practice is lost
         this.runner?.onDeath(); // (the running book's quickness is lost)
+        this.death?.playerDied(byId, text); // the body stays, everything drops (Death.js); game.onDeath hooks
         if (this.sync) this.sync.died(byId);
         this.castleLife?.playerDied(this.localId);
         this.hud.setStatus('');
@@ -1544,6 +1553,7 @@ export class Game {
         this.knockback.set(0, 0, 0);
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.inventory?.ensureStarterWand();
+        this.death?.respawned(); // game.onRespawn hooks
         if (this.sync) this.sync.respawned();
         for (let i = 0; i < 30; i++) this.fx.spark(_v1.copy(p).add(_v2.set(0, -1, 0)), i % 2 ? 0xffffff : 0x9fd8ff, 0.15, _v2.set((Math.random() - 0.5) * 4, Math.random() * 5, (Math.random() - 0.5) * 4), 0.7);
     }
@@ -1766,6 +1776,7 @@ export class Game {
         this.swim.update(dt);
         this.items.update(dt);
         this.items.updateRemote();
+        this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
         this.scrolls.update(dt);
         this.wandMagic.update(dt);
@@ -1789,7 +1800,7 @@ export class Game {
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);
-        this.weapons.update(dt);
+        this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal) }); // (the dead don't take things)
         this.water.update(dt);
         this.combat.update(dt);
         this.vortex.update(dt);
@@ -2394,6 +2405,7 @@ export class Game {
         this.bleeding?.dispose();
         this.animals?.dispose();
         this.castleLife?.dispose();
+        this.death?.dispose();
         this.doors?.dispose();
         this.campfires?.dispose();
         this.houses?.dispose();

@@ -482,6 +482,8 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
     await wf(guest.page, () => window.__zns.game.combat.hp < 20, null, 20000);
     assert.equal(await ev(host.page, () => window.__zns.game.combat.hp), hostHp0);
 
+    // (the guest carries coins and a sword: they drop at the body — Death.js)
+    await ev(guest.page, () => { const inv = window.__zns.game.inventory; inv.slots[3] = { kind: 'coins', uid: 'mpc1', count: 33 }; inv.slots[4] = { kind: 'weapon', type: 'sword', id: 'mpsw1', magic: false, bonus: 0 }; });
     // Frozen guest: everyone sees the ice; any punch shatters them → death screen, back to menu
     await ev(guest.page, (by) => window.__zns.game.combat.freeze(by), ids[0]);
     await wf(host.page, () => [...window.__zns.game.remotes.values()][0].combat.frozen, null, 20000);
@@ -493,17 +495,30 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
     assert.match(death, /Маг1/);
     assert.match(death, /заморож/);
     await wf(host.page, () => [...window.__zns.game.remotes.values()][0]?.dead || window.__zns.game.remotes.size === 0, null, 20000);
+    // the body stays and the things lie at it: the host owns them, everybody sees them
+    const near = (id) => {
+        const g = window.__zns.game;
+        const b = [...g.death.bodies.values()].find((x) => x.k === 'p' && x.who === id);
+        if (!b) return null;
+        const d = (p) => Math.hypot(p.x - b.x, p.z - b.z);
+        return { model: !!b.model?.parent, coins: [...g.items.loose.values()].some((L) => L.item.kind === 'coins' && L.item.count === 33 && d(L.model.position) < 4), sword: g.weapons.weapons.some((w) => w.id === 'mpsw1' && d(w.position) < 4) };
+    };
+    await wf(host.page, ([src, id]) => { const r = eval(src)(id); return r && r.model && r.coins && r.sword; }, [near.toString(), ids[1]], 20000);
+    await wf(guest.page, ([src, id]) => { const r = eval(src)(id); return r && r.model && r.coins && r.sword; }, [near.toString(), ids[1]], 20000);
+    assert.equal(await ev(guest.page, () => window.__zns.game.inventory.slots.filter(Boolean).length), 0, 'the guest has nothing left');
     // No kick to the menu: «Возродиться» brings the player back, the others see it
     await wf(guest.page, () => !document.getElementById('death-respawn-btn').disabled, null, 20000);
     await guest.page.click('#death-respawn-btn');
     await wf(guest.page, () => { const c = window.__zns.game.combat; return !c.dead && c.hp === 20; }, null, 20000);
     await wf(host.page, () => [...window.__zns.game.remotes.values()][0]?.dead === false, null, 20000);
+    assert.deepEqual(await ev(guest.page, () => window.__zns.game.inventory.slots.filter(Boolean).map((s) => s.kind + (s.plain ? ':plain' : ''))), ['wand:plain'], 'back with only the wooden wand');
     // The HOST dies: its room stays open, the guest stays in the game
     await ev(host.page, () => window.__zns.game.combat.die(null, 'test'));
     await wf(host.page, () => !document.getElementById('death-screen').classList.contains('hidden'), null, 20000);
     await new Promise((r) => setTimeout(r, 4000));
     assert.ok(await ev(guest.page, () => window.__zns.net.active && window.__zns.game.active), 'the guest is still in the game');
     assert.ok(await ev(host.page, () => window.__zns.net.active && window.__zns.game.active), 'the host is still hosting');
+    assert.ok(await ev(guest.page, (id) => [...window.__zns.game.death.bodies.values()].some((b) => b.who === id && b.model?.parent), ids[0]), 'the guest sees the host\'s body');
 
     for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
     await host.context.close();

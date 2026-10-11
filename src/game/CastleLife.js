@@ -940,6 +940,7 @@ export class CastleLife {
         v.path = null;
         const st = this.state(v.cs.def.id);
         st.killed.add(v.idx);
+        this.game.death?.villagerDied(v); // the body stays; a knight's sword, shield and coins drop
         if (v.role === 'king') this._capture(v.cs, by);
         this._sendState(v.cs);
     }
@@ -1403,6 +1404,7 @@ export class CastleLife {
             v.mode = mode;
             if (hp < v.hp || armor < v.armor) v.barT = 8;
             v.hp = hp; v.armor = armor; v.seated = !!seated; v.speed = speed;
+            if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead') v.dead = true;
         }
         for (const v of [...this.byId.values()]) if (!seen.has(v.id)) this._deactivate(v);

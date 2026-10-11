@@ -69,6 +69,8 @@ export const ITEM_INFO = {
     // beds (Beds.js): wool from sheep, bundles of logs thrown out of the hand
     wool: { name: 'Шерсть', icon: '🧶', weight: 0.3, stack: 20 },
     logs: { name: 'Брёвна', icon: '🪵', weight: 1.2 },
+    // blocks dropped at a body (Death.js): picked up, they go back into a resource stack
+    blocks: { name: 'Блоки', icon: '🧱', weight: 1 },
 };
 
 /**
@@ -505,9 +507,18 @@ function buildItemModel(it) {
         case 'pie': return pieModel();
         case 'wool': return woolModel();
         case 'logs': return logsModel(it.color);
+        case 'blocks': return blocksModel(it.color);
         case 'book': return makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
+}
+
+/** A little heap of gathered blocks (their colour). */
+function blocksModel(color = 0x999999) {
+    const g = new THREE.Group();
+    const m = mat(color);
+    g.add(box(0.3, 0.3, 0.3, m, -0.17, 0.15, 0), box(0.3, 0.3, 0.3, m, 0.17, 0.15, 0.04), box(0.3, 0.3, 0.3, m, 0, 0.45, 0.02));
+    return g;
 }
 
 export function disposeModel(m) {

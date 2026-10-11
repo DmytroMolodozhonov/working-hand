@@ -385,6 +385,13 @@ export class ItemSystem {
     _gotItem(item, side) {
         // a bundle of logs goes back into the wood stack (Beds.js)
         if (this.game.beds?.gotItem(item)) return;
+        // blocks (dropped at a body, Death.js) go back into the resource stacks
+        if (item.kind === 'blocks') {
+            const left = this.game.inventory.addResource(item.block, item.count || 0);
+            this.game.hud.setVoice?.(`🧱 +${(item.count || 0) - left} блоков`, true);
+            if (left > 0) { item.count = left; this._noRoom(item); }
+            return;
+        }
         // money goes into the purse (a slot, up to 500 coins)
         if (item.kind === 'coins') {
             const g = this.game;
@@ -406,6 +413,11 @@ export class ItemSystem {
                 if (item.count <= 0) return;
             }
         }
+        // «Gather» (Death.js): straight into a slot, not into a hand
+        if (side === 'slot') {
+            if (!this.game.inventory.storeItem(item)) this._noRoom(item);
+            return;
+        }
         // a bow goes into the spell hand (the hand that casts; the other one draws)
         if (item.kind === 'bow') {
             const g = this.game;
@@ -420,6 +432,15 @@ export class ItemSystem {
     }
 
     // --------------------------------------------------------- eat / wear
+    /** No room in the slots: the thing falls at my feet again. */
+    _noRoom(item) {
+        const g = this.game;
+        const p = g.character.group.position.clone().add(_v.set(0, 1, 0));
+        if (this.auth || !g.sync) this.spawnLoose(item, p, { vel: _v2.set(0, 1, 0) });
+        else g.sync.itemThrow?.(item, p, _v2.set(0, 1, 0));
+        g.hud.toast?.('🎒 Все ячейки заняты');
+    }
+
     _eat(dt, ch) {
         const g = this.game;
         let food = null;

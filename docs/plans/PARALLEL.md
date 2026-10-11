@@ -72,6 +72,19 @@ is strong). `Game.castLocalSpell` already calls it for a spell that was paid for
 returned its name, unless the name is in `MANA_LATER` (Game.js) or the code set `this._manaLater = true`
 during the cast: then report it yourself when it works. Player-facing text: say «мана», not «усталость».
 
+## Death hooks (from the «death» session)
+
+`src/game/Death.js` (`game.death`). When my player dies, `game.onDeath` runs; after respawn,
+`game.onRespawn` runs. Both are plain arrays made in the `Game` constructor before any system, so
+register from your own system's constructor:
+`game.onDeath.push(({ byId, text, pos }) => { … })` (e.g. «mana»: max back to 30; «runner»: the
++30% run speed is gone), `game.onRespawn.push(() => { … })`. A throwing hook never stops the others.
+On death everything the player carries is already dropped at the body (slots, hands, backpack) and
+the respawn gives only the plain wooden wand. Other armed creatures (sailors, wizards…): call
+`game.death.creatureDied({ kind, who, x, y, z, yaw, drops })` on the authority (drops: world items or
+`{ kind: 'weapon', type }`), and register a body model `game.death.makers[kind] = (b) => ({ pivot, len })`
+(see `layDown()`); the body turns into bones by itself.
+
 ## When done
 
 Make sure everything is pushed, then end with a short report in simple Russian: what the player can

@@ -170,6 +170,7 @@ export class WorldKeeper {
             houses: g.houses?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
+            bodies: g.death?.snapshot() || [],
             players: this.players,
         };
     }
@@ -210,6 +211,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.houses) g.houses?.restore(save.houses);
     if (save.beds) g.beds?.restore(save.beds);
     if (save.castles) g.castleLife?.restore(save.castles);
+    if (save.bodies) g.death?.restore(save.bodies);
     if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());
     // things lying around: exactly what was there (a sword taken into a slot is not on its pedestal any more)
