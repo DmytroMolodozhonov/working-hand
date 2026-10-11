@@ -459,6 +459,8 @@ test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked 
     await page.waitForFunction(() => window.__zns.game.inventory.belt.lookingDown(), null, { timeout: 30000 }); // (the view eases down)
     await feed(page, { arms: 'hang', belt: 'right', rightCurl: 0, leftCurl: 0 }, 5, 40);
     await feed(page, { arms: 'hang', belt: 'right', rightCurl: 0.9, leftCurl: 0 }, 15, 40);
+    // (the hand still at the waistband, the wand just taken pointing down: it stays in the hand)
+    await feed(page, { arms: 'hang', belt: 'right', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 30, 40);
     const drawn = await state();
     await look(0);
     // lowering the arm, the hands into the pockets: the wand stays in the hand

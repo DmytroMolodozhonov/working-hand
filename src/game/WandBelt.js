@@ -46,6 +46,7 @@ export class WandBelt {
         this._tuck = { left: 0, right: 0 };
         this._open = { left: 1, right: 1 }; // (the fingers opened near the handle before closing on it)
         this._at = 0;
+        this._left = { left: true, right: true };
     }
 
     /** The wand on the belt (the first wand of the slots), or null. */
@@ -66,6 +67,10 @@ export class WandBelt {
         for (const side of ['right', 'left']) {
             const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
             const near = atBelt(local) < Infinity;
+            // (after taking it or tucking it in, the hand must leave the belt first: a wand just
+            // taken, still at the waistband pointing down, went straight back)
+            if (!near) this._left[side] = true;
+            if (!this._left[side]) continue;
             const h = items.held[side];
             if (h && h.item.kind === 'wand') {
                 // tucking it in: at the waistband, the tip down
@@ -103,6 +108,7 @@ export class WandBelt {
         if (inv.inHand?.item === it) inv.inHand = null;
         const free = inv.slots.findIndex((x) => !x);
         // the belt wand first in the slots (the one on the body)
+        this._left[side] = false;
         if (free >= 0) {
             inv.slots[free] = it;
             const first = inv.slots.findIndex((s) => s && s.kind === 'wand');
@@ -117,6 +123,7 @@ export class WandBelt {
         const g = this.game, inv = g.inventory;
         const i = inv.slots.findIndex((s) => s && s.kind === 'wand');
         if (i < 0 || !inv._fromSlot(i, side)) return;
+        this._left[side] = false;
         this._at = performance.now();
         inv._render?.();
         inv._fx?.('🪄 Палочка в руке', side);
