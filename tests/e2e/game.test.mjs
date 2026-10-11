@@ -79,7 +79,7 @@ test('creative: world with mountains, weapons floating over pedestals, hands fol
     assert.equal(await page.evaluate(() => document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.id), 'game-canvas', 'the game canvas is visible');
     const s = await state(page);
     assert.equal(s.mode, 'creative');
-    assert.deepEqual(s.weapons.map((w) => w.type).sort(), ['axe', 'sword']);
+    assert.deepEqual(s.weapons.map((w) => w.type).sort(), ['axe', 'sword', 'sword'], 'an axe and two swords');
     for (const w of s.weapons) assert.ok(w.pos[1] > 1.9, `${w.type} floats over its pedestal (${w.pos[1]})`);
     const terrain = await page.evaluate(() => {
         const t = window.__zns.game.terrain;

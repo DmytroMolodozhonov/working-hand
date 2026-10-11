@@ -396,6 +396,13 @@ export class Game {
             this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 0.9, pz), 'tA', { byHandle: true });
             const s2 = this.world.createPedestal(7, pz);
             this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 0.9, pz), 'tS', { byHandle: true });
+            this.fixedWeapons = ['tA', 'tS'];
+            // Creative: one more sword just like it, on its own pedestal (the end of the bows' row)
+            if (config.mode === 'creative') {
+                const s3 = this.world.createPedestal(17.5, -12);
+                this.weapons.spawnHovering('sword', new THREE.Vector3(17.5, s3 + 0.9, -12), 'tS2', { byHandle: true });
+                this.fixedWeapons.push('tS2');
+            }
             // Creative: a surfboard to try, standing in the ground by the pedestals (the same id on every computer)
             if (config.mode === 'creative') this.boards.spawn({ id: 'cboard0', wood: 0, st: 'stand', p: [-12, this.collision.groundY(-12, -9) + 4.4 * 0.38, -9], yaw: 0 });
             // Creative: bows and shields of every kind on pedestals too

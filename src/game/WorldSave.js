@@ -215,6 +215,7 @@ export class WorldKeeper {
             chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
             items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
+            fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
             doors: g.doors?.snapshot() || [],
             boards: g.boards?.snapshot() || null,
@@ -279,7 +280,9 @@ export function restoreWorld(game, save, THREE) {
         const keep = new Set(save.weapons.map((s) => s[0]));
         const inSlots = new Set();
         for (const p of Object.values(save.players || {})) for (const s of p.slots || []) if (s && s.kind === 'weapon') inSlots.add(s.id);
-        for (const w of [...g.weapons.weapons]) if (!keep.has(w.id) || inSlots.has(w.id)) g.weapons.remove(w);
+        // (a start weapon the save never knew — added by a newer game — stays on its pedestal)
+        const known = new Set(save.fixedWeapons || ['tA', 'tS']), fresh = (id) => (g.fixedWeapons || []).includes(id) && !known.has(id);
+        for (const w of [...g.weapons.weapons]) if ((!keep.has(w.id) && !fresh(w.id)) || inSlots.has(w.id)) g.weapons.remove(w);
         for (const s of save.weapons) {
             if (inSlots.has(s[0])) continue;
             let w = g.weapons.byId.get(s[0]);
