@@ -193,7 +193,7 @@ export function describeItem(it) {
     switch (it.kind) {
         case 'wand': {
             if (it.plain) return { title: '🪄 Обычная деревянная палочка', color: it.color, lines: ['Все заклинания на <b>15%</b> сильнее, чем голой рукой', 'Других свойств нет'] };
-            const lines = ['Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше усталости'];
+            const lines = ['Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше маны'];
             if (it.dir) lines.push(`Направление: <b>${WAND_DIRS[it.dir].name}</b> (+25%${it.dir === 'build' ? ', ресурсов на 40% меньше' : ''})`);
             else lines.push('Направление: нет');
             const fav = SPELL_RU[it.fav] || it.fav;
@@ -210,7 +210,7 @@ export function describeItem(it) {
         case 'scroll':
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SCROLL_SPELL_COLOR[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, 'Без свитка оно есть только в Творчестве'] };
-            return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: сила (усталость) +<b>${it.amount}</b> навсегда`] };
+            return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: мана +<b>${it.amount}</b> навсегда`] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
         case 'bow':

@@ -164,11 +164,12 @@ export class Spiders {
     targets() { return this.list.filter((s) => !s.dead); }
 
     // -------------------------------------------------------------- damage
-    hit(s, dmg, kind = null) {
+    hit(s, dmg, kind = null, by = undefined) {
         if (!s || s.dead) return;
         if (kind === 'Ice' || kind === 'Frozen' || kind === 'Wind') return; // it doesn't care
         if (kind === 'AvadaKedavra') dmg = 20;
         if (!this.auth) { this.game.sync?.bossHit?.(s.id, dmg, kind); return; }
+        s.lastBy = by === undefined ? this.game.localId : by; // (who struck: the killer gets +20 mana)
         s.hp = Math.max(0, s.hp - dmg);
         const c = spiderCenter(s, new THREE.Vector3());
         for (let i = 0; i < 10; i++) this.game.fx.spark(c, 0x6bff6b, 0.15 * SIZE, _v2.set((Math.random() - 0.5) * 5 * SIZE, Math.random() * 4 * SIZE, (Math.random() - 0.5) * 5 * SIZE), 0.6);
@@ -176,7 +177,7 @@ export class Spiders {
     }
 
     /** A blast at p (Bombardo, lightning…): it hurts if it reaches the body, not only the middle. */
-    hitAt(p, radius, dmg, kind) { for (const s of this.list) if (!s.dead && spiderDist(s, p) < radius) this.hit(s, dmg, kind); }
+    hitAt(p, radius, dmg, kind, by = undefined) { for (const s of this.list) if (!s.dead && spiderDist(s, p) < radius) this.hit(s, dmg, kind, by); }
 
     /** A beam / a cone (fire, thunder…) along o + d·t: it hurts when it touches the body. */
     hitRay(o, d, len, width, dmg, kind) {
@@ -197,23 +198,25 @@ export class Spiders {
     }
 
     /** A duel charge reached it (Авада Кедавра = 20): it touched the body. */
-    boltAt(p, spell) {
+    boltAt(p, spell, by = undefined) {
         for (const s of this.list) {
             if (s.dead || spiderDist(s, p) > 0.3) continue;
-            this.boltHit(s, spell);
+            this.boltHit(s, spell, by);
             return true;
         }
         return false;
     }
 
     /** A duel charge touched this spider's body. */
-    boltHit(s, spell) { this.hit(s, spell === 'AvadaKedavra' ? 20 : spell === 'SapiraDuel' ? 10 : 4, spell); }
+    boltHit(s, spell, by = undefined) { this.hit(s, spell === 'AvadaKedavra' ? 20 : spell === 'SapiraDuel' ? 10 : 4, spell, by); }
 
     byId(id) { return this.list.find((s) => s.id === id && !s.dead) || null; }
 
-    _die(s) {
+    _die(s, killer = s.lastBy) {
         s.dead = true;
         const g = this.game;
+        s.killer = killer || null;
+        if (killer && (killer === g.localId || killer === 'local')) g.mana?.spiderKilled(); // +20 to the mana maximum
         if (this.held?.spider === s) this._free();
         const c = spiderCenter(s, new THREE.Vector3());
         for (let i = 0; i < 80; i++) g.fx.spark(c, i % 2 ? 0x6bff6b : 0x222222, 0.25 * SIZE, _v2.set((Math.random() - 0.5) * 12 * SIZE, Math.random() * 8 * SIZE, (Math.random() - 0.5) * 12 * SIZE), 1.4);
@@ -431,13 +434,13 @@ export class Spiders {
         if (this._netT > 0) return;
         this._netT = 0.1;
         const r = (v) => Math.round(v * 100) / 100;
-        g.sync.bosses?.(this.list.map((s) => [s.id, r(s.model.position.x), r(s.model.position.y), r(s.model.position.z), r(s.model.rotation.y), Math.round(s.hp), s.dead ? 1 : 0, s.holding || 0]));
+        g.sync.bosses?.(this.list.map((s) => [s.id, r(s.model.position.x), r(s.model.position.y), r(s.model.position.z), r(s.model.rotation.y), Math.round(s.hp), s.dead ? 1 : 0, s.holding || 0, s.killer || 0]));
     }
 
     /** (guests) the host's spiders. */
     applyNet(list) {
         const seen = new Set();
-        for (const [id, x, y, z, ry, hp, dead, holding] of list || []) {
+        for (const [id, x, y, z, ry, hp, dead, holding, killer] of list || []) {
             seen.add(id);
             let s = this.list.find((q) => q.id === id);
             if (!s) s = this.spawn(new THREE.Vector3(x, y, z), id, hp);
@@ -447,7 +450,7 @@ export class Spiders {
             s.model.rotation.y = ry;
             s.hp = hp;
             s.holding = holding || null;
-            if (dead && !s.dead) this._die(s);
+            if (dead && !s.dead) this._die(s, killer || null);
         }
         for (const s of [...this.list]) if (!seen.has(s.id) && !s.dead) this._remove(s);
     }

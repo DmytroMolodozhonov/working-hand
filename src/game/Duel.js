@@ -36,6 +36,7 @@ import { SegmentPool } from '../fx/Particles.js';
 import { PVP } from './Combat.js';
 import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
+import { DUEL_SPELL_NAME } from './Mana.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -541,7 +542,7 @@ export class Duel {
         b.front.addScaledVector(b.dir, step);
         b.traveled += step;
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
-        if (g.authority && g.spiders?.boltAt(b.front, b.spell)) { this._end(b, 'fizzle'); return false; }
+        if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
         // it hits the first body it really touches on its way (along the whole step: at a
         // low FPS a charge moves a metre and more per frame) — its target or anybody else
         const hit = firstTouched(from, b.front, this._bodies(b.by));
@@ -564,7 +565,7 @@ export class Duel {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b') && this._referee()) { this._arriveAtCreature(b); return; }
-        if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell); return; }
+        if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
         if (b.waitT > 2) this._end(b, 'fizzle', false);
@@ -681,6 +682,7 @@ export class Duel {
     _end(b, res, broadcast = true) {
         if (!this.bolts.has(b.id)) return;
         this.bolts.delete(b.id);
+        if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
         if (res === 'blocked' || res === 'fizzle') this._burst(b.front, DUEL_SPELLS[b.spell].color, 15);
         if (broadcast && this.game.sync && (b.by === this.me || res === 'hit' || res === 'blocked')) this.game.sync.duelEnd(b.id, res);
     }
@@ -690,6 +692,7 @@ export class Duel {
         const b = this.bolts.get(id);
         if (!b) return;
         this.bolts.delete(id);
+        if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
         this._burst(b.front, DUEL_SPELLS[b.spell].color, res === 'hit' ? 30 : 15);
         this.clashes = this.clashes.filter((c) => c.a !== b && c.b !== b);
     }
@@ -854,7 +857,25 @@ export class Duel {
             return;
         }
         if (loser === this.me) this.applyToMe(winnerBolt.spell, winnerBolt.by, winnerBolt.side);
-        else if (winnerBolt.by === this.me) this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);
+        else if (winnerBolt.by === this.me) {
+            this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);
+            this._manaHit(winnerBolt.spell); // (my charge reached them)
+            this._won = { id: loser, at: performance.now() }; // +5 mana if it kills them
+        }
+    }
+
+    /** Mana: my duel charge hit (+1 to the maximum, Mana.js). */
+    _manaHit(spell) {
+        this.game.mana?.success(DUEL_SPELL_NAME[spell] || spell);
+    }
+
+    /** Someone I killed died: a clash I just won against them = a real duel won (+5 mana). */
+    opponentDied(id) {
+        const w = this._won;
+        if (!w || w.id !== id || performance.now() - w.at > 8000) return false;
+        this._won = null;
+        this.game.mana?.duelWon();
+        return true;
     }
 
     remoteClashEnd(m) {

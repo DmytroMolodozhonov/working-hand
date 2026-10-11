@@ -611,7 +611,7 @@ export class NetSync {
                 break;
             }
             case 'boss': if (!this.net.isHost) g.spiders?.applyNet(m.l); break;
-            case 'bhit': if (this.net.isHost) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) g.spiders.hit(sp, Math.min(40, m.dmg || 1), m.kind); } break;
+            case 'bhit': if (this.net.isHost) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) g.spiders.hit(sp, Math.min(40, m.dmg || 1), m.kind, m.from); } break;
             case 'bshot': if (!this.net.isHost) g.spiders?._fire(m.kind, vec(m.o), m.to); break;
             case 'bgrab': if (m.to === this.me) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) { sp.holding = this.me; g.spiders._seized(sp); } } break;
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
@@ -752,6 +752,7 @@ export class NetSync {
                 const who = r ? r.name : 'Игрок';
                 const killer = m.killer === this.me ? 'вы' : (g.remotes.get(m.killer)?.name || null);
                 if (m.killer === this.me) g.killCount++;
+                if (m.killer === this.me) g.duel?.opponentDied?.(m.by); // (mana: a duel won for real)
                 g.hud.setVoice(killer ? `💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})` : `💀 ${escapeHtml(who)} погиб`, true);
                 break;
             }

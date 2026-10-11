@@ -79,7 +79,8 @@ export class Hud {
         el.fatigue.classList.remove('hidden');
         el.fatigueFill.style.width = `${Math.max(0, (value / max) * 100)}%`;
         el.fatigueFill.classList.toggle('low', value < max * 0.3);
-        el.fatigueText.textContent = `⚡ Усталость: ${Math.floor(value)}/${max}`;
+        el.fatigue.style.setProperty?.('--mana-marks', String(Math.max(1, max / 5))); // (a mark every 5 mana, whatever the maximum)
+        el.fatigueText.textContent = `🔷 Мана: ${Math.floor(value)}/${Math.floor(max)}`;
     }
 
     hidePvp() {

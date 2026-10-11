@@ -889,6 +889,7 @@ export class SpellManager {
         const explodeAt = (p) => {
             if (exploded) return;
             exploded = true;
+            this.hooks.success?.(casterId, maxima ? 'BombardoMaxima' : 'Bombardo'); // (mana: it went off)
             if (this.auth && this.hooks.explode) this.hooks.explode(p.clone(), radius, casterId, power);
             else this.fx.lightFlash(p, 0xffaa55, 2 * size, 0.15, 20 * size); // client: real blast arrives from the host
         };

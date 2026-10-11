@@ -63,6 +63,15 @@ Player-facing text is simple Russian. When behaviour or spells change, update `R
 and the in-game book `src/ui/Codex.js`. The fatigue bar is being renamed to «мана» (internally still
 `Combat.fatigue` until the mana session lands) — in new player-facing texts say «мана».
 
+## Mana hook (for every new spell)
+
+`game.mana.success('<SpellName>')` — call it ONCE where your code knows the spell really worked
+(it lifted / hit / exploded / appeared…). It gives +1 to the mana maximum, and +3 more the first time a
+strong spell works (every `…Maxima`, plus `STRONG_SPELLS` in `src/game/Mana.js` — add yours there if it
+is strong). `Game.castLocalSpell` already calls it for a spell that was paid for (`combat.pay`) and
+returned its name, unless the name is in `MANA_LATER` (Game.js) or the code set `this._manaLater = true`
+during the cast: then report it yourself when it works. Player-facing text: say «мана», not «усталость».
+
 ## When done
 
 Make sure everything is pushed, then end with a short report in simple Russian: what the player can

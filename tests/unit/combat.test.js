@@ -77,7 +77,7 @@ test('fatigue: 30 points, +1 per second, spells cost fatigue, not enough → the
     assert.equal(combat.check('BombardoMaxima'), null);
     combat.pay('BombardoMaxima');
     assert.equal(combat.fatigue, 5);
-    assert.match(combat.check("Bombardo"), /Не хватает сил/);
+    assert.match(combat.check("Bombardo"), /Не хватает маны/);
     assert.equal(combat.check('Protection'), null);
     for (let i = 0; i < 10 * 60; i++) combat.update(1 / 60); // 10 s
     assert.ok(Math.abs(combat.fatigue - 15) < 0.01, `${combat.fatigue}`);
@@ -125,7 +125,7 @@ test('Protection costs 5, then holds as many seconds as the strength left; the s
     assert.ok(c.shield, 'still up just before the strength ends');
     for (let i = 0; i < 0.3 * 60; i++) c.update(1 / 60);
     assert.equal(c.shield, null, 'out when the strength is gone');
-    assert.ok(events.voice.some((t) => /силы кончились/.test(t)));
+    assert.ok(events.voice.some((t) => /мана кончилась/.test(t)));
     // then the strength comes back as usual
     const f0 = c.fatigue;
     for (let i = 0; i < 60; i++) c.update(1 / 60);

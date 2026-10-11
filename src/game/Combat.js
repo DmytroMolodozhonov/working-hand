@@ -3,8 +3,9 @@
  *
  *   Health      20 HP (red bar at the top), like on the maps. Every spell hurts players too.
  *               At 0 HP you are out: back to the menu.
- *   Fatigue     30 points (white bar at the bottom), +1 per second. Every
- *               spell costs fatigue; without enough the spell fails.
+ *   Mana        30 points (the bar at the bottom, «Мана»; in the code still
+ *               `fatigue`), +1 per second. Every spell costs mana; without
+ *               enough the spell fails. The maximum grows: see Mana.js.
  *   Protection  arm stretched out + «Protection»: a blue shield in front of
  *               the hand. 5 fatigue at once, then it holds while there is
  *               strength: 1 a second, none comes back meanwhile (as many seconds
@@ -262,7 +263,7 @@ export class Combat {
         if (!this.enabled) return null;
         const cost = this.costOf(name);
         if (this.fatigue < cost) {
-            const msg = `😮‍💨 Не хватает сил: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
+            const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
             this.game.hud?.toast?.(msg); // a short note that fades by itself
             return msg;
         }
@@ -278,6 +279,7 @@ export class Combat {
     }
 
     pay(name) {
+        this.paidCount = (this.paidCount || 0) + 1; // (mana: a spell that was paid for may count as a success)
         if (this.enabled) this.fatigue = Math.max(0, this.fatigue - this.costOf(name));
     }
 
@@ -304,6 +306,7 @@ export class Combat {
             if (!ch.isTPose()) return '🛡️ Для «Protection Maxima» разведите руки <b>в стороны, как буква T</b>';
             const hint = this.spend('ProtectionMaxima');
             if (hint) return hint;
+            this.game.mana?.success('ProtectionMaxima'); // (the dome is up)
             this.shield = { type: 2, side: 'right', left: PVP.DOME_TIME };
             this.game.spiders?.onDome(); // the only way out of the spider's fangs
         } else {
@@ -316,6 +319,7 @@ export class Combat {
             if (this.shield?.type === 1) return null; // (already holding one: nothing more to pay)
             const hint = this.spend('Protection');
             if (hint) return hint;
+            this.game.mana?.success('Protection'); // (the shield is up)
             // it holds while there is strength: 1 a second (a wand favouring it: 1/1.4 a second);
             // off sooner with a sharp jerk of the shield arm or «стоп»
             const fav = this.game.items?.wand?.fav === 'Protection' ? 1.4 : 1;
@@ -498,7 +502,7 @@ export class Combat {
             this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
             this.shield.left = this.fatigue / this.shield.drain;
             this._shieldJerk(dt);
-            if (this.shield && this.fatigue <= 0) { this.shield = null; this.game.hud.setVoice('🛡️ Щит погас — силы кончились', true); }
+            if (this.shield && this.fatigue <= 0) { this.shield = null; this.game.hud.setVoice('🛡️ Щит погас — мана кончилась', true); }
         } else if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
         if (this.frozenLeft > 0) {
             this.frozenLeft = Math.max(0, this.frozenLeft - dt);

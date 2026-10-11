@@ -118,6 +118,7 @@ export class Accio {
         if (!g.items.auth) {
             L.asked = true;
             g.sync?.itemTake?.(L.item.uid, side);
+            g.mana?.success('Accio'); // (a guest: the host hands it over at once)
             setTimeout(() => { L.asked = false; }, 1500);
             return null;
         }
@@ -144,7 +145,7 @@ export class Accio {
         if (d < ACCIO.CATCH || s.t > ACCIO.MAX_TIME) {
             this.state = null;
             L.accio = false;
-            if (d < ACCIO.CATCH && !g.items.held[s.side]) g.items.pickUp(L.item.uid, g.localId, s.side);
+            if (d < ACCIO.CATCH && !g.items.held[s.side]) { g.items.pickUp(L.item.uid, g.localId, s.side); g.mana?.success('Accio'); }
             else { L.vel = L.vel || new THREE.Vector3(); L.vel.set(0, 0, 0); }
         }
     }
@@ -167,6 +168,7 @@ export class Accio {
             this.state = null;
             bk.accio = false;
             if (d >= ACCIO.CATCH) { g.books.dropBook(bk, null); return; } // (it couldn't get there: it falls)
+            g.mana?.success('Accio'); // (mana: it came to the hand)
             if (g.books.auth) g.books._take(bk.id, g.localId, s.side);
             else g.sync?.bookTake?.(bk.id);
         }
@@ -194,6 +196,7 @@ export class Accio {
             w.drive = null;
             if (!g.weapons.grab(w, s.side, 0.5)) { w.release(); if (g.sync) g.sync._localRelease(w); return; }
             g.weapons.hands[s.side].waitClose = true; // stays in the open hand until it closes once
+            g.mana?.success('Accio'); // (mana: it came to the hand)
             return;
         }
         if (s.t > ACCIO.MAX_TIME) {

@@ -53,10 +53,13 @@ import { hashString } from '../core/math.js';
 import { BLOCK, isCastleBlock, BASE_COLORS } from '../world/Terrain.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
+import { Mana } from './Mana.js';
 
 const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
+// Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
+const MANA_LATER = new Set(['Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'Sapira', 'Stupefy', 'AvadaKedavra']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -162,6 +165,7 @@ export class Game {
             sand: (z) => this.sandZombie(z),
             chill: (z, amt) => z.applyChill(amt),
             explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
+            success: (casterId, name) => { if (casterId === this.localId || casterId === 'local') this.mana?.success(name); }, // (mana: my spell worked)
             handPose: (casterId, side) => this.handPose(casterId, side),
             players: (casterId) => this._spellPlayers(casterId),
             weapons: () => this.weapons.weapons,
@@ -169,7 +173,7 @@ export class Game {
             quakeMe: (casterId, origin, reached, power) => this._quakeMe(casterId, origin, reached, power),
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
-            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning'); this.castleLife?.hitAt(point, 3, 12, casterId); } },
+            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 this.books?.hitRay(o, d, len, width);
                 this.houses?.hitRay(o, d, len, width);
@@ -198,6 +202,7 @@ export class Game {
         this.weapons = new WeaponSystem(this);
         this.water = new WaterMagic(this);
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
+        this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
@@ -459,7 +464,7 @@ export class Game {
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
-        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo'); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); }
+        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); }
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -683,6 +688,15 @@ export class Game {
      * @param {boolean} [isFinal]  false for an unfinished (interim) phrase
      */
     castLocalSpell(text, isFinal = true) {
+        const paid = this.combat.paidCount || 0;
+        this._manaLater = false;
+        const name = this._castLocalSpell(text, isFinal);
+        // mana: a spell paid for that always works counts at once; the others report it themselves when they work
+        if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
+        return name;
+    }
+
+    _castLocalSpell(text, isFinal = true) {
         if (!this.active) return null;
         let name = matchSpell(text);
         if (!name) return null;
@@ -892,6 +906,7 @@ export class Game {
         const tired = this.combat.check(costName);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         const target = aim === undefined ? this.duel.pickSide(false) : aim;
+        this._manaLater = true; // (mana: counted when the charge hits — Duel.js)
         this.duel.cast(spell, target, side);
         this.combat.pay(costName);
         this._lastDuelCast = now;
@@ -949,6 +964,7 @@ export class Game {
                 const p = B.pending;
                 B.pending = null;
                 this.combat.pay(p.name);
+                this.mana?.success(p.name);
                 this._raiseWall(p.name === 'BreakthroughMaxima');
             } else if (now > B.pending.until) { B.pending = null; this.hud.setVoice('🪨 Не успели поднять руки', true); }
         }
@@ -1300,6 +1316,7 @@ export class Game {
             this.spells.cast('LightningBeam', point, back, null, this.localId);
             if (this.sync) this.sync.spell('LightningBeam', point, back, null);
             this.hud.setVoice('⚡ <span style="color:#9fd8ff">LIGHTNING STRIKE!</span>', true);
+            if (!L.hammer) this.mana?.success('LightningStrike'); // (mana: the lightning went where it was aimed)
             return;
         }
         if (L.t >= HOLD && L.hammer) {
@@ -1330,7 +1347,7 @@ export class Game {
             if (isFinal) this.hud.setVoice(`📖 «${BUILD_SPELLS[name].name}» ещё не изучено — найдите его в книге птицы`, true);
             return null;
         }
-        if (this.combat.enabled && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает сил'); return null; }
+        if (this.combat.enabled && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает маны'); return null; }
         let hint;
         // «Gather» at a carcass (meat) or a golden tree (apples)
         if (name === 'Gather') {
@@ -1478,6 +1495,7 @@ export class Game {
      * game goes on (a host's death never closes the room for the others).
      */
     onLocalDeath(text, byId) {
+        this.mana?.onDeath(); // all the mana grown with practice is lost
         if (this.sync) this.sync.died(byId);
         this.castleLife?.playerDied(this.localId);
         this.hud.setStatus('');

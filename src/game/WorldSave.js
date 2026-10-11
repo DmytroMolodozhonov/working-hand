@@ -88,6 +88,7 @@ export function playerSnapshot(game) {
         hp: game.playerHP,
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
+        mana: game.mana?.snapshot() || null, // the mana maximum grown with practice, strong spells already counted
     };
 }
 
@@ -110,6 +111,7 @@ export function applyPlayerSnapshot(game, s) {
         if (s.bonus.fatigue) game.combat.addMaxFatigue?.(s.bonus.fatigue);
     }
     if (s.gear) game.items?.restore(s.gear);
+    if (s.mana) game.mana?.restore(s.mana);
 }
 
 /**
