@@ -639,43 +639,76 @@
                         }, function (e) {
                             say('Не загрузился файл игры: ' + (e && e.message || e) + ' — ищу, какой именно…');
                             // the browser names only the first file: walk the imports and find the one that fails
-                            findBroken(new URL('src/main.js', location.href).href).then(function (bad) {
-                                say(bad ? 'Не загрузился файл игры ' + bad + '. Запустите «Обновить и запустить игру». Если не поможет — пришлите этот снимок.'
-                                    : 'Все файлы игры на месте, но браузер не смог их загрузить (сервер игры не успевал отвечать). Закройте окно игры и откройте снова. Если не поможет — пришлите этот снимок. (' + (e && e.message || e) + ')');
+                            findBroken(new URL('src/main.js', location.href).href).then(function (res) {
+                                if (res.bad) return say('Не загрузился файл игры ' + res.bad + '. Запустите «Обновить и запустить игру». Если не поможет — пришлите этот снимок.');
+                                say('Все файлы игры скачиваются, ищу, какой браузер не принял как код…');
+                                return findUnloadable(res.urls, res.deps).then(function (u) {
+                                    say(u ? 'Не загрузился файл игры ' + u + '. Пришлите этот снимок.'
+                                        : 'Все файлы игры на месте, но браузер не смог их загрузить. Закройте окно игры и откройте снова. Если не поможет — пришлите этот снимок. (' + (e && e.message || e) + ')');
+                                });
                             });
                         });
                     });
                 }).catch(function (e) { say('Нет связи с сервером игры: ' + (e && e.message || e) + '. Запускайте через «Запустить игру.bat».'); });
             }
             // Every file the game's code imports (static imports only), fetched one by one:
-            // the first one that is missing, not JavaScript, or can't be fetched → «path (why)».
+            // → {bad: 'path (why)' for the first one that is missing, not JavaScript or can't be
+            // fetched at all, else null; urls: every module file, in the order found}.
             function findBroken(start) {
-                var seen = {}, queue = [start], n = 0;
+                var seen = {}, queue = [start], urls = [], deps = {}, importMap = {};
+                // (the import map is further down the page: read it now, not when this script ran)
+                try { importMap = JSON.parse((document.querySelector('script[type="importmap"]') || {}).textContent || '{}').imports || {}; } catch (_) { /* ignore */ }
                 var re = /(?:^|[;\s}])(?:import|export)\s*(?:[^'"`;]*?\sfrom\s*)?['"]([^'"]+)['"]/g;
-                function short(u) { return u.replace(location.origin + '/', ''); }
                 function next() {
                     var u = queue.shift();
-                    if (!u || n > 600) return Promise.resolve(null);
+                    if (!u || urls.length > 600) return Promise.resolve(null);
                     if (seen[u]) return next();
-                    seen[u] = 1; n++;
+                    seen[u] = 1; urls.push(u);
                     return fetch(u, { cache: 'no-store' }).then(function (r) {
                         var ct = (r.headers.get('content-type') || '').toLowerCase();
-                        if (!r.ok) return short(u) + ' (ответ ' + r.status + ')';
-                        if (/\.m?js$/.test(u) && ct.indexOf('javascript') < 0) return short(u) + ' (тип «' + ct + '», а не JavaScript)';
+                        if (!r.ok) return shortUrl(u) + ' (ответ ' + r.status + ')';
+                        if (/\.m?js$/.test(u) && ct.indexOf('javascript') < 0) return shortUrl(u) + ' (тип «' + ct + '», а не JavaScript)';
                         return r.text().then(function (t) {
                             var m;
                             // (imports mentioned in comments are not imports)
                             t = t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"\\])\/\/.*$/gm, '$1');
                             re.lastIndex = 0;
+                            deps[u] = [];
                             while ((m = re.exec(t))) {
-                                var spec = m[1];
-                                if (spec[0] === '.' || spec[0] === '/') { try { queue.push(new URL(spec, u).href.split('#')[0]); } catch (_) { /* ignore */ } }
+                                var spec = m[1], to = null;
+                                if (spec[0] === '.' || spec[0] === '/') to = new URL(spec, u).href;
+                                else if (importMap[spec]) to = new URL(importMap[spec], location.href).href;
+                                if (to) { to = to.split('#')[0]; queue.push(to); deps[u].push(to); }
                             }
                             return next();
                         });
-                    }, function (err) { return short(u) + ' (нет связи: ' + (err && err.message || err) + ')'; });
+                    }, function (err) { return shortUrl(u) + ' (нет связи: ' + (err && err.message || err) + ')'; });
                 }
-                return next().catch(function () { return null; });
+                return next().then(function (bad) { return { bad: bad, urls: urls, deps: deps }; }, function () { return { bad: null, urls: urls, deps: deps }; });
+            }
+            function shortUrl(u) { return String(u).replace(location.origin + '/', ''); }
+            // Every file fetches on its own, yet the code didn't load: ask the browser itself, file by
+            // file (the deepest first), which one it could not load as code — and why.
+            function findUnloadable(urls, deps) {
+                var list = urls.slice(1).reverse(), i = 0, failed = {}, order = [];
+                function next() {
+                    if (i >= list.length) return Promise.resolve();
+                    var u = list[i++];
+                    return import(u).then(next, function (e) {
+                        var msg = String(e && e.message || e);
+                        // (a file whose code runs into an error on its own is not a loading problem)
+                        if (/fetch|load|MIME|module script/i.test(msg)) { failed[u] = msg; order.push(u); }
+                        return next();
+                    });
+                }
+                return next().then(function () {
+                    if (!order.length) return null;
+                    // the one at fault: it fails while none of the files it imports does
+                    var u = order.filter(function (x) { return !(deps[x] || []).some(function (d) { return failed[d]; }); })[0] || order[0];
+                    return fetch(u, { cache: 'no-store' }).then(function (r) {
+                        return shortUrl(u) + ' — браузер не принял его как код (' + failed[u].slice(0, 120) + '; отдельно он скачивается: ответ ' + r.status + ', тип «' + (r.headers.get('content-type') || '—') + '», ' + (r.headers.get('content-length') || '?') + ' байт)';
+                    }, function (fe) { return shortUrl(u) + ' (нет связи: ' + (fe && fe.message || fe) + ')'; });
+                }).catch(function () { return null; });
             }
             // A game file couldn't be fetched while ~150 of them were asked for at once (a busy
             // server on Windows refuses some connections): the browser remembers that failure

@@ -137,4 +137,10 @@ test('look: code served as plain text or a missing game file — the note says w
     await page.goto(srv.url);
     await page.waitForFunction(() => /файл игры src\/game\/Duel\.js \(нет связи/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 30000 });
     await page.close();
+    // the 3D library (imported by its short name 'three') downloads on its own, but never loads as code: named too
+    page = await browser.newPage();
+    await page.route('**/vendor/three/three.module.js', (r) => (r.request().resourceType() === 'script' ? r.abort() : r.continue()));
+    await page.goto(srv.url);
+    await page.waitForFunction(() => /файл игры vendor\/three\/three\.module\.js — браузер не принял его как код/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 40000 });
+    await page.close();
 });
