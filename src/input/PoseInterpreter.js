@@ -10,10 +10,14 @@ import { LegReader } from './LegReader.js';
 /**
  * The head tilted back: a real head goes back ~40–45° before the camera loses the
  * face — by then the eyes look straight up. So upward the game turns the view
- * further (up to ~88°: the sky right above), small nods stay as they are.
+ * further (up to ~88°: the sky right above), small nods stay as they are; down, a
+ * little further too (to see one's own body).
  * Positive = up (rad).
  */
 export function lookPitch(p) {
+    // looking down: past a small nod a little further than the head (~12–16% more), so one
+    // sees one's own body (the belt, the wand on it) without bending the neck too far
+    if (p < -0.25) return Math.max(-1.45, p + (p + 0.25) * 0.25);
     if (!(p > 0.3)) return p;
     return Math.min(Math.PI / 2 - 0.03, p + (p - 0.3) * 2.2);
 }

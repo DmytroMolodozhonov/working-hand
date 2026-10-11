@@ -52,7 +52,10 @@ import { matchSpell } from '../../src/fx/SpellManager.js';
 
 test('the head tilted back looks straight up (a real head goes ~40° back before the camera loses the face)', () => {
     assert.equal(lookPitch(0.1), 0.1, 'small nods as they are');
-    assert.equal(lookPitch(-0.6), -0.6, 'looking down as it is');
+    assert.equal(lookPitch(-0.2), -0.2, 'a small nod down as it is');
+    const d = lookPitch(-0.6);
+    assert.ok(d < -0.6 * 1.1 && d > -0.6 * 1.2, `looking down: ~10–20% further (${(d / -0.6 * 100 - 100).toFixed(0)}%)`);
+    for (let p = 0; p > -1.4; p -= 0.05) assert.ok(lookPitch(p - 0.05) <= lookPitch(p), 'down: smooth, one way');
     assert.ok(lookPitch(0.7) > 1.5, `40° back: almost straight up (${(lookPitch(0.7) * 57.3).toFixed(0)}°)`);
     assert.ok(lookPitch(1.2) < Math.PI / 2, 'never over the top');
     for (let p = 0; p < 1.2; p += 0.05) assert.ok(lookPitch(p + 0.05) >= lookPitch(p), 'smooth, one way');
