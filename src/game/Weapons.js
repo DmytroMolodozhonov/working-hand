@@ -27,6 +27,7 @@ const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
 const CLOSE_CURL = 0.55; // fingers closed
 const OPEN_CURL = 0.35; // fingers open
 const CLOSE_WINDOW_MS = 900; // hand must have been open this recently to count as "closing on" the handle
+const GRIP_DIAGONAL = 0.75; // rad: the handle across the palm slants this much towards the fingers (~43°)
 const SETTLE_TIME = 0.18; // seconds for the handle to settle into the grip
 const MIN_SWING_SPEED = 3.2; // m/s at the tip to count as a strike
 const STAB_SPEED = 4.5; // m/s of the point along the blade: a thrust that goes into the body
@@ -481,19 +482,20 @@ export class WeaponSystem {
         const qRel0 = _qPalm.clone().invert().multiply(w.quaternion);
         const wY = _a.set(0, 1, 0).applyQuaternion(w.quaternion);
         const wX = _b.set(1, 0, 0).applyQuaternion(w.quaternion);
-        // Blade direction across the palm: keep how it was grabbed; default out of the thumb side.
-        let s = Math.sign(wY.dot(_X));
-        if (Math.abs(wY.dot(_X)) < 0.3) {
-            const thumb = ch.getActiveHands()[side].fingerMeshes?.thumb?.[0]?.pivot;
-            if (thumb) {
-                thumb.getWorldPosition(_c);
-                s = Math.sign(_c.sub(_P).dot(_X)) || 1;
-            } else s = 1;
-        }
-        let e = Math.sign(wX.dot(_Y)) || 1;
-        // Canonical grip: blade axis = s*X (across the palm), edge = e*Y (towards the knuckles)
-        const axY = _X.clone().multiplyScalar(s);
-        const axX = _Y.clone().multiplyScalar(e);
+        // The handle lies DIAGONALLY in the closed hand (a real sword grip: from the index
+        // finger's base knuckle to the heel of the hand), so the blade leaves the fist
+        // tilted towards where the fingers point — with the arm stretched out it goes
+        // forward and can be thrust point first, not only stand across the forearm.
+        // Out of the thumb side or the little finger's: as it was grabbed (default: thumb).
+        let thumbS = side === 'left' ? -1 : 1;
+        const thumb = ch.getActiveHands()[side]?.fingerMeshes?.thumb?.[0]?.pivot;
+        if (thumb) { thumb.getWorldPosition(_c); thumbS = Math.sign(_c.sub(_P).dot(_X)) || thumbS; }
+        const diag = new THREE.Vector3().copy(_X).multiplyScalar(thumbS * Math.cos(GRIP_DIAGONAL)).addScaledVector(_Y, Math.sin(GRIP_DIAGONAL));
+        const s = wY.dot(diag) < -0.3 ? -1 : 1;
+        // Canonical grip: blade axis = s*diag, edge towards the knuckles (e*Y, square to the blade)
+        const axY = diag.multiplyScalar(s).normalize();
+        const e = Math.sign(wX.dot(_Y)) || 1;
+        const axX = _Y.clone().multiplyScalar(e).addScaledVector(axY, -e * _Y.dot(axY)).normalize();
         const axZ = new THREE.Vector3().crossVectors(axX, axY);
         const qWorldC = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(axX, axY, axZ));
         const qRelC = _qPalm.clone().invert().multiply(qWorldC);
@@ -722,7 +724,7 @@ export class WeaponSystem {
                     // A thrust (the blade moving along itself, point first) sticks it into the body
                     _e.subVectors(tip, base).normalize();
                     const along = tipVel.dot(_e);
-                    const stab = !cut && z.group && !z.isBird && along > STAB_SPEED && along > 0.7 * speed && hs !== this._levSlot && hy > -0.6 && hy < 2.6;
+                    const stab = !cut && z.group && !z.isBird && along > STAB_SPEED && along > 0.6 * speed && hs !== this._levSlot && hy > -0.6 && hy < 2.6;
                     const factor = clamp(speed / 9, 0.7, 1.6);
                     const damage = Math.max(1, Math.round(w.spec.damage * factor));
                     const dir = tipVel.clone().setY(0);

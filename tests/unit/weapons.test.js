@@ -147,13 +147,14 @@ test('open hand at the handle + closing fingers = grab; grip point and direction
     for (let i = 0; i < 60; i++) { game.advance(16); game.weapons.update(1 / 60); }
     assert.ok(w.position.x - before.x > 0.9, `followed the hand: ${w.position.x - before.x}`);
 
-    // Handle sits across the palm: blade axis ⟂ finger direction
+    // Handle sits diagonally across the palm (a real sword grip): the blade slants towards the fingers
     game.weapons._palmFrame(game.character, 'right');
     const grip = game.character.getGripObject('right');
     const e = grip.matrixWorld.elements;
     const fingers = new THREE.Vector3(e[4], e[5], e[6]).normalize();
     const blade = new THREE.Vector3(0, 1, 0).applyQuaternion(w.quaternion);
-    assert.ok(Math.abs(blade.dot(fingers)) < 0.2, `handle across the palm (dot ${blade.dot(fingers).toFixed(2)})`);
+    const d = blade.dot(fingers);
+    assert.ok(d > 0.5 && d < 0.85, `handle diagonally across the palm, the blade towards the fingers (dot ${d.toFixed(2)})`);
 
     // A short tracking glitch (fingers "open" for 1 frame) must not drop it
     setCurl(hand, 0.1);
