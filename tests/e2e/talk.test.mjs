@@ -203,8 +203,12 @@ test('market: a brush of the open hand takes nothing from the counter — only c
         // the merchant's line comes back through the microphone: nobody answers it
         const T2 = g.castleLife.talk;
         const m = T2.offer?.v;
-        const said = m?.bubble?.text || '';
+        const said = (T2._spoken || []).slice(-1)[0]?.text || m?.bubble?.text || '';
         const echo = said ? T2.hear(said) : null;
+        // my own answer that repeats some of his words is not an echo; words a villager understands are talk, not a spell
+        T2._spoken = [{ text: 'Меня зовут Мария. А тебя?', at: performance.now() }];
+        const notEcho = !T2._echo('меня зовут дима') && T2._echo('меня зовут мария');
+        const claims = { order: T2.claims('собери войско'), thanks: T2.claims('спасибо'), spell: T2.claims('бомбардо') };
         // a villager who gives me a hand turns his face to me — not his back (the face of the model is at −z)
         const me = ch.group.position;
         let face = null;
@@ -223,11 +227,13 @@ test('market: a brush of the open hand takes nothing from the counter — only c
             m.damageCooldown = 0; g.onLocalHit(m, 1, null, false);
             bump = { first, second: m.cs.hostile.has(g.localId) };
         }
-        return { brushed, took, unpaid, offered: T2.offer?.kind === 'buy', said, echo, face, bump };
+        return { brushed, took, unpaid, offered: T2.offer?.kind === 'buy', said, echo, face, bump, notEcho, claims };
     }, uid);
     assert.ok(r.brushed, 'an open hand on the good takes nothing');
     assert.ok(r.took && r.unpaid && r.offered, `closed fingers take it, the merchant names the price: ${JSON.stringify(r)}`);
     assert.equal(r.echo, false, 'the merchant\'s own words from the speakers are not an answer');
+    assert.ok(r.notEcho, 'my answer repeating his words is heard; his own line is not');
+    assert.deepEqual(r.claims, { order: true, thanks: true, spell: false }, '«собери войско» / «спасибо» go to the villager, «бомбардо» stays a spell');
     assert.deepEqual(r.bump, { first: false, second: true }, 'one accidental knock is forgiven, the second is not');
     assert.ok(r.face > 0.9, `the merchant faces me when giving a hand (${r.face})`);
     assert.deepEqual(realErrors(errors), []);

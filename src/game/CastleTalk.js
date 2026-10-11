@@ -27,10 +27,11 @@
  */
 
 import * as THREE from 'three';
-import { VillagerBrain } from './VillagerBrain.js';
+import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { TalkMind, thinkingLine } from '../ai/TalkMind.js';
+import { detectOrder } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -120,7 +121,10 @@ export class CastleTalk {
         if (d > range) return;
         // a shout carries far and stays loud; a word is quiet beyond a few metres
         const volume = shout ? Math.max(0.3, Math.min(1, 1 - (d - 8) / (range - 8) * 0.7)) : Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
-        if (this._mute) return; // («Хм…» is only seen, not said)
+        if (this._mute) return;
+        // in a talk with me only my partner is heard: others' chatter never cuts the answer
+        const P = this._partner;
+        if (P && P !== v && !shout && !this._urgent && performance.now() - (P.talkedAt || -1e9) < 15000) return;
         this._lastSpoken = text;
         // a spell's word said aloud (a wizard practising, a cry in a duel): my microphone may hear it
         // from the speakers — it must not cast that spell from my hand (VoiceGate echo, until it is said)
@@ -139,6 +143,7 @@ export class CastleTalk {
     _sayReply(v, text, seconds = 5) {
         if (!text) return;
         v.talkedAt = performance.now();
+        this._partner = v;
         this._urgent = true;
         try { this.life._say(v, text, seconds); } finally { this._urgent = false; }
     }
@@ -146,8 +151,30 @@ export class CastleTalk {
     /** «Хм…» while the net thinks: over the head only. */
     _sayThinking(v) {
         v.talkedAt = performance.now();
-        this._mute = true;
-        try { this.life._say(v, thinkingLine(v.role), 3); } finally { this._mute = false; }
+        this._partner = v;
+        this._urgent = true; // (a short «Хм…» aloud; the answer cuts it)
+        try { this.life._say(v, thinkingLine(v.role), 3); } finally { this._urgent = false; }
+    }
+
+    /** Am I in a talk with somebody right now (the last 15 s)? */
+    inTalk() {
+        const P = this._partner;
+        return !!P && !P.dead && performance.now() - (P.talkedAt || -1e9) < 15000;
+    }
+
+    /**
+     * Will this line be heard aloud by me? Then no words over the head (the author: the talk is by voice);
+     * the words show only when no voice says them (voices off / still loading / too far to hear a word).
+     */
+    voiceCarries(v, shout = false) {
+        if (this.game.config.villagerText === 'always' || !this.voiceOn || !this.speech.supported) return false;
+        const sp = this.speech;
+        const neural = sp.engine === 'neural' && sp.neural && sp.neural.state !== 'failed';
+        if (neural && !sp.neural.ready) return false;
+        // (the computer's voices: only if one of this villager's gender exists — else the words must show)
+        if (!neural && !sp.pickVoice?.(v.id, !!v.entry?.female)) return false;
+        const me = this.game.character.group.position;
+        return Math.hypot(v.x - me.x, v.z - me.z) <= (shout ? SHOUT_RANGE : VOICE);
     }
 
     /** The neural voices download once: show its progress, then that they are ready. */
@@ -253,17 +280,35 @@ export class CastleTalk {
         if (res.action === 'trade_yes' || res.action === 'trade_no') this._apply(v, { reply: '', action: res.action, offer: res.offer || null });
     }
 
+    /** A villager hears me and these are words of a talk (an order, a greeting, a question…), not a spell. */
+    claims(text) {
+        if (!this.life.enabled || !this._listener()) return false;
+        const spell = matchSpell(text);
+        if (spell === 'Stand') return false; // («стоп» stops my spells first; with nothing to stop the villager hears it)
+        if (detectOrder(text, this._players())) return true;
+        const intent = detectIntent(text).intent;
+        // («Бомбардо», «Инферно» said alone are spells, even if villagers like to talk about magic)
+        if (spell && (intent === 'magic' || intent === 'unknown')) return false;
+        return intent !== 'unknown';
+    }
+
     /** Is what the microphone heard just the villager's own words from the speakers? */
     _echo(text) {
-        const words = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 1);
-        const heard = words(text);
-        if (!heard.length) return false;
+        const norm = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+        const heard = norm(text);
+        if (!heard) return false;
+        const hw = heard.split(' ');
         // (the lines said in the last seconds: the neural voice speaks a little after the bubble, the microphone hears it later still)
+        // Only a real echo: the heard words are a piece of what the villager said, in the same order —
+        // never my own answer that repeats some of his words («Меня зовут Мария» → «меня зовут Дима»)
         const now = performance.now();
         for (const l of this._spoken || []) {
             if (now - l.at > 12000) continue;
-            const said = new Set(words(l.text));
-            if (said.size && heard.filter((w) => said.has(w)).length >= Math.max(1, heard.length * 0.6)) return true;
+            const said = norm(l.text);
+            if (!said) continue;
+            if (` ${said} `.includes(` ${heard} `) && (hw.length >= 2 || said === heard)) return true;
+            const sw = new Set(said.split(' '));
+            if (hw.length >= 4 && hw.filter((w) => sw.has(w)).length >= hw.length * 0.9) return true;
         }
         return false;
     }
@@ -513,7 +558,7 @@ export class CastleTalk {
         const g = this.game;
         const me = g.character.group.position;
         for (const v of this.life.byId.values()) {
-            if (v.dead || v.foe || v.talking > 0 || now - (v.talkedAt || -1e9) < 60000) continue; // (not in the middle of a talk)
+            if (v.dead || v.foe || v.talking > 0 || now - (v.talkedAt || -1e9) < 600000 || this.inTalk()) continue; // (no new «привет» from one I talked with lately, nor in the middle of a talk)
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             if (d > 5) continue;
             if (now - (this._greetT.get(v.id) || 0) < 90000) continue;
@@ -547,6 +592,14 @@ export class CastleTalk {
             if (this.offer) {
                 const me = g.character.group.position;
                 if (this.offer.v.dead || Math.hypot(this.offer.v.x - me.x, this.offer.v.z - me.z) > 16) this.offer = null;
+            }
+            // the net crashed in the middle of the game (the graphics card lost it…): start it again, at most 3 times
+            const L = this.llm;
+            if (L && this._llmWasReady && !L.ready && !L.loading && (this._llmRestarts || 0) < 3) {
+                this._llmRestarts = (this._llmRestarts || 0) + 1;
+                this.llmState = { state: 'loading', text: 'перезапускается' };
+                g.hud.notify?.('🧠 Нейросеть жителей сбилась — перезапускаю (из памяти браузера, без скачивания)');
+                L.load().then(() => { this.llmState = { state: 'ready', text: 'готова' }; g.hud.notify?.('🧠 Нейросеть жителей снова готова'); }, (e) => { console.warn('[CastleTalk] LLM restart failed:', e?.message || e); this.llmState = { state: 'failed', text: 'не перезапустилась' }; });
             }
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
             if (this.voiceOn && this.life.castles.size) this.speech.preload?.();
@@ -588,6 +641,7 @@ export class CastleTalk {
                 });
                 if (this.llm !== llm) return; // (disposed meanwhile)
                 this.llmState = { state: 'ready', text: `готова (${m.label}, ${llm.device === 'webgpu' ? 'видеокарта' : 'процессор'})` };
+                this._llmWasReady = true;
                 g.hud.notify?.('🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
                 g.sync?.villagerAI?.(true);
                 return;

@@ -83,6 +83,7 @@ export class TalkMind {
             king ? 'Собеседник — КОРОЛЬ этого замка. Обращайся «Ваше Величество». Его приказы ты выполняешь сразу и без споров.'
                 : `Собеседник — ${m.playerName ? `путник по имени ${m.playerName}` : 'незнакомый путник'}. Он не король: приказы войску от него не выполняй, вежливо откажи. Просьбу пойти с ним выполняй, только если сам хочешь.`,
             ctx.hostile ? 'Этот человек недавно напал на кого-то в замке — ты его боишься и не доверяешь.' : '',
+            m.talks > 1 ? 'Вы уже поздоровались и сейчас разговариваете: НЕ здоровайся снова, продолжай разговор по смыслу.' : '',
             m.talks ? `Вы уже говорили ${m.talks} раз.${m.insults ? ' Он тебя оскорблял.' : ''}${m.trades ? ' Вы торговали.' : ''}${m.lastOrder ? ` Последний приказ: ${m.lastOrder}.` : ''}` : '',
             ctx.following ? 'Сейчас ты идёшь следом за собеседником.' : '',
             ctx.lastOffer ? `Ты сейчас предлагаешь сделку: ${ctx.lastOffer.item?.name || 'вещь'} за ${ctx.lastOffer.price} монет.` : '',
@@ -95,7 +96,7 @@ export class TalkMind {
     _history(brain) {
         const log = brain.memory?.log || [];
         // (the last line pair is the one being answered: the rules logged it already)
-        return log.slice(-8, -2).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text }));
+        return log.slice(-14, -2).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text }));
     }
 
     _permCtx(brain, ctx) {
@@ -159,7 +160,12 @@ export class TalkMind {
         } catch (e) { this.lastTimedOut = false; return res; }
         this.lastTimedOut = !raw; // (the net said nothing in time: the rules answered)
         const { text: said, calls } = parseToolCalls(raw);
-        const clean = sanitizeReply(said, brain.villager?.name);
+        let clean = sanitizeReply(said, brain.villager?.name);
+        // (in the middle of a talk no new «Привет!» at the start of the answer, unless I greeted)
+        if ((brain.memory?.talks || 0) > 1 && !/(прив|здрав|добр(ый|ое) (день|утро|вечер))/.test(normalize(text))) {
+            const cut = clean.replace(/^(привет(ствую)?|здравствуй(те)?|здорово|добрый (день|вечер)|доброе утро)[,!. ]*/i, '').trim();
+            if (cut.length >= 2) clean = cut[0].toUpperCase() + cut.slice(1);
+        }
         const good = this._acceptText(clean, text);
         const call = calls.find((c) => validateCall(c, perm).reason !== 'unknown');
         if (call) {

@@ -666,7 +666,7 @@ export class CastleLife {
                 v.bowT = 40;
                 v.bowing = 1.6;
                 v.yaw = Math.atan2(-(op.x - v.x), -(op.z - v.z));
-                this._say(v, pick(SHOUT.bow));
+                if (!this.talk.inTalk?.()) this._say(v, pick(SHOUT.bow)); // (a bow, but no cry in the middle of my talk)
             }
         }
         v.bowT -= dt;
@@ -1319,7 +1319,9 @@ export class CastleLife {
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         // a cry in a fight, a call for help, an alarm: shouted (seen and heard far)
         const shout = /!$/.test(text) && (!!v.foe || !!v.investigate || v.fleeT > 0 || v.role === 'knight' || v.role === 'king');
-        v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.wizard ? '#5b2d8e' : v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
+        // (heard aloud → no words over the head: the talk is by voice; the words only when there is no voice)
+        if (this.talk.voiceCarries?.(v, shout)) v.bubble.hide?.();
+        else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.wizard ? '#5b2d8e' : v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
         this.talk.voice(v, text, shout);
         if (broadcast) this.game.sync?.villagerSay?.(v.id, text); // (everybody near sees the bubble)
     }
@@ -1334,6 +1336,7 @@ export class CastleLife {
         this._chatT -= dt;
         if (this._chatT > 0 || !this.auth) return;
         this._chatT = 5 + Math.random() * 6;
+        if (this.talk.inTalk?.()) return; // (nobody chatters over my talk with someone)
         const me = this.game.character.group.position;
         const now = performance.now();
         // (not one talking with somebody: no line of their own over the answer)

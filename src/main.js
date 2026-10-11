@@ -224,6 +224,7 @@ function readConfig() {
         look: activeLook(), // the hero from the «Персонаж» tab
         villagerVoice: ($('villager-voice')?.value ?? '1') !== '0',
         villagerVoiceEngine: $('villager-voice')?.value === 'system' ? 'system' : 'neural', // (neural: Supertonic 3 in the browser)
+        villagerText: $('villager-text')?.value === 'always' ? 'always' : 'auto', // (the words over the head: only when no voice says them)
         villagerAI: $('villager-ai')?.value || 'auto',
     };
 }
@@ -395,6 +396,12 @@ voice.onResult = (command, isFinal = true) => {
                 if (isFinal) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
                 return;
             }
+        }
+        // talking to a villager near me, the hand not raised to cast: words they understand are words,
+        // not a spell («собери войско» is not «Gather», «спасибо» is not «Rescue», «в атаку» is an order)
+        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
+            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
+            return;
         }
         const name = game.castLocalSpell(command, isFinal);
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
@@ -892,7 +899,7 @@ function escapeHtml(s) {
 // Volumes, graphics, camera… are kept in this browser between launches.
 (function rememberSettings() {
     const KEY = 'zns-settings';
-    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count'];
     let saved = {};
