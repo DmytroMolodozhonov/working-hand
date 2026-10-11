@@ -715,6 +715,10 @@ export class SurfBoards {
             seen.add(key);
             // a rack every ~50 m of beach
             if (((ix * 7 + iz * 13) % 3 + 3) % 3 !== 0) continue;
+            // only on real sand (not on a castle's quay or land)
+            const d = g.terrain?.data, sx = Math.round(spot.x), sz = Math.round(spot.z);
+            if (d && (d.sites || d.castles)?.landAt?.(sx, sz)) continue;
+            if (d && d.get(sx, d.topLayer(sx, sz), sz) !== BLOCK.SAND) continue;
             for (let i = 0; i < 3; i++) {
                 const id = `cb_${ix}_${iz}_${i}`;
                 if (this.reg.map.has(id) || this.reg.beachTaken.has(id)) continue;

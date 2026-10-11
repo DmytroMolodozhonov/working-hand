@@ -345,6 +345,7 @@ export class ShipModel {
             for (let k = -2; k <= 2; k++) glow.box((k * w) / 2.6 - w / 6.4, (k * w) / 2.6 + w / 6.4, row - 0.8, row + 0.8, L.L / 2, L.L / 2 + 0.06, 0xffffff);
         }
         hull.box(-hw(L.L / 2 - 0.2, D) * 0.9, hw(L.L / 2 - 0.2, D) * 0.9, D + R - 0.3, D + R + 0.25, L.L / 2 - 0.3, L.L / 2 + 0.15, GOLD);
+        this._sternDetail(hull, glow, L, D, R, hw, top);
         // the beakhead and the bowsprit
         const bz = -L.L / 2;
         hull.boxAt(0, D - 0.6, bz - 2.2, 0.8, 1.2, 5, DARK, 0.25);
@@ -699,6 +700,92 @@ export class ShipModel {
             this.balls.setMatrixAt(r.from + k, _m);
         }
         this.balls.instanceMatrix.needsUpdate = true;
+    }
+
+    /**
+     * A 17th-century stern, carved and gilded: galleries (balconies) with balustrades
+     * at every row of windows, gilt window frames with mullions, carved pilasters,
+     * quarter galleries on both sides, the castle's arms under a gilt crown on the
+     * taffrail, a name board in the castle's colour, and the rudder with its iron straps.
+     */
+    _sternDetail(hull, glow, L, D, R, hw, top) {
+        const zt = L.L / 2; // the transom's face
+        const quarter = L.floors.find((f) => f.id === 'quarter');
+        const rows = [D + 1.6, ...(top > D + 5 && quarter ? [quarter.y + 1.4] : [])];
+        const crownY = top + R;
+        // the rudder: a thick dark blade on the sternpost, iron straps (pintles)
+        const keel = -L.draft;
+        hull.box(-0.35, 0.35, keel + 0.2, D - 0.4, zt + 0.05, zt + 1.3, DARK);
+        for (let y = keel + 0.8; y < D - 0.8; y += 1.4) hull.box(-0.42, 0.42, y, y + 0.22, zt + 0.02, zt + 1.0, IRON);
+        hull.box(-0.2, 0.2, D - 0.6, D + 0.4, zt - 0.4, zt + 1.6, DARK); // the tiller head
+        // a name board in the castle's colour, framed in gold, under the lower windows
+        const wb = hw(zt - 0.1, D - 0.4) * 0.62;
+        hull.box(-wb, wb, D - 0.9, D + 0.1, zt, zt + 0.12, this.color);
+        hull.box(-wb - 0.15, wb + 0.15, D + 0.1, D + 0.25, zt, zt + 0.18, GOLD);
+        hull.box(-wb - 0.15, wb + 0.15, D - 1.05, D - 0.9, zt, zt + 0.18, GOLD);
+        // galleries: a balcony with a gilt balustrade under each row of windows
+        for (const row of rows) {
+            const w = hw(zt - 0.1, row) * 0.92;
+            const y0 = row - 1.2, depth = 1.1;
+            hull.box(-w, w, y0 - 0.2, y0, zt, zt + depth, DARK); // the floor
+            hull.box(-w, w, y0 - 0.45, y0 - 0.2, zt + depth - 0.15, zt + depth + 0.05, GOLD); // carved edge
+            for (let x = -w; x <= w + 1e-6; x += 0.45) hull.box(x - 0.06, x + 0.06, y0, y0 + 0.9, zt + depth - 0.12, zt + depth, GOLD); // balusters
+            hull.box(-w, w, y0 + 0.9, y0 + 1.05, zt + depth - 0.18, zt + depth + 0.02, GOLD); // the hand rail
+            for (const sx of [-1, 1]) hull.box(sx * w - 0.08, sx * w + 0.08, y0, y0 + 0.9, zt, zt + depth, GOLD);
+            // the window frames and the mullions (the glass itself glows from the batch above)
+            const ww = hw(zt - 0.1, row) * 0.75;
+            for (let k = -2; k <= 2; k++) {
+                const c = (k * ww) / 2.6, hwin = ww / 6.4 + 0.12;
+                hull.box(c - hwin, c + hwin, row + 0.8, row + 1.0, zt, zt + 0.16, GOLD);
+                hull.box(c - hwin, c + hwin, row - 1.0, row - 0.8, zt, zt + 0.16, GOLD);
+                hull.box(c - 0.04, c + 0.04, row - 0.8, row + 0.8, zt + 0.06, zt + 0.12, DARK);
+                hull.box(c - hwin + 0.1, c + hwin - 0.1, row - 0.04, row + 0.04, zt + 0.06, zt + 0.12, DARK);
+            }
+            // carved pilasters between the windows
+            for (let k = -2; k <= 3; k++) {
+                const c = ((k - 0.5) * ww) / 2.6;
+                hull.box(c - 0.1, c + 0.1, row - 1.1, row + 1.15, zt, zt + 0.22, GOLD);
+                hull.box(c - 0.18, c + 0.18, row + 1.0, row + 1.25, zt, zt + 0.28, GOLD); // the capital
+            }
+        }
+        // quarter galleries: closed bays with windows on both sides near the stern
+        const qz0 = zt - Math.min(9, L.L * 0.12), qz1 = zt - 0.6;
+        for (const sx of [-1, 1]) {
+            for (const row of rows) {
+                const x = sx * hw((qz0 + qz1) / 2, row);
+                const out = sx * 1.0;
+                hull.box(Math.min(x, x + out), Math.max(x, x + out), row - 1.3, row + 1.2, qz0, qz1, DARK);
+                hull.box(Math.min(x, x + out) - 0.05, Math.max(x, x + out) + 0.05, row + 1.2, row + 1.45, qz0 - 0.1, qz1 + 0.1, GOLD);
+                hull.box(Math.min(x, x + out) - 0.05, Math.max(x, x + out) + 0.05, row - 1.5, row - 1.3, qz0 - 0.1, qz1 + 0.1, GOLD);
+                for (let k = 0; k < 3; k++) {
+                    const zc = qz0 + (qz1 - qz0) * (k + 0.5) / 3;
+                    glow.box(x + out - 0.03 * sx - 0.03, x + out + 0.03 * sx + 0.03, row - 0.6, row + 0.6, zc - 0.5, zc + 0.5, 0xffffff);
+                    hull.box(x + out - 0.08, x + out + 0.08, row - 0.75, row + 0.75, zc - 0.62, zc - 0.5, GOLD);
+                    hull.box(x + out - 0.08, x + out + 0.08, row - 0.75, row + 0.75, zc + 0.5, zc + 0.62, GOLD);
+                }
+            }
+            // a little domed roof on the top bay
+            const xr = sx * hw((qz0 + qz1) / 2, rows[rows.length - 1]) + sx * 0.5;
+            hull.cyl(0.9, 0.2, 1.0, xr, rows[rows.length - 1] + 1.95, (qz0 + qz1) / 2, GOLD);
+        }
+        // the taffrail: the castle's arms (a shield in its colour) under a gilt crown, scrolls either side
+        const tw = hw(zt - 0.1, crownY) * 0.85;
+        hull.box(-tw, tw, crownY - 0.35, crownY, zt - 0.2, zt + 0.2, GOLD);
+        hull.box(-1.3, 1.3, crownY, crownY + 2.0, zt - 0.05, zt + 0.15, this.color); // the shield
+        hull.box(-1.45, 1.45, crownY, crownY + 0.15, zt - 0.1, zt + 0.25, GOLD);
+        hull.box(-1.45, -1.3, crownY, crownY + 2.0, zt - 0.1, zt + 0.25, GOLD);
+        hull.box(1.3, 1.45, crownY, crownY + 2.0, zt - 0.1, zt + 0.25, GOLD);
+        hull.box(-0.2, 0.2, crownY + 0.3, crownY + 1.7, zt + 0.15, zt + 0.25, GOLD); // a cross on the arms
+        hull.box(-0.8, 0.8, crownY + 0.9, crownY + 1.2, zt + 0.15, zt + 0.25, GOLD);
+        hull.box(-1.1, 1.1, crownY + 2.0, crownY + 2.4, zt - 0.1, zt + 0.25, GOLD); // the crown's band
+        for (const x of [-0.9, 0, 0.9]) hull.box(x - 0.15, x + 0.15, crownY + 2.4, crownY + 2.9 + (x === 0 ? 0.3 : 0), zt - 0.05, zt + 0.2, GOLD);
+        for (const sx of [-1, 1]) {
+            // carved scrolls running down from the crown to the corners
+            for (let i = 0; i < 5; i++) {
+                const t = i / 4, x = sx * (1.6 + (tw - 1.6) * t), y = crownY + 1.2 * (1 - t);
+                hull.boxAt(x, y, zt + 0.05, 0.6, 0.35, 0.3, GOLD, 0, 0, sx * 0.5);
+            }
+        }
     }
 
     dispose() {
