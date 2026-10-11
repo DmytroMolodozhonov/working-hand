@@ -10,6 +10,7 @@
  *   const llm = new LocalLLM({ model: 'light' });
  *   await llm.load((fraction, text) => hud.show(text));   // rejects on failure
  *   const reply = await llm.generate({ system, history, user, maxTokens: 60 }); // '' on timeout
+ *   const raw = await llm.chat({ system, history, user, tools });   // the text with <tool_call>s (TalkMind parses them)
  *
  * Safe to import in node (nothing runs at import time; no DOM access).
  */
@@ -21,6 +22,16 @@ export class LocalLLM {
      * Sizes are the approximate one-time download (ONNX graph + weights).
      */
     static MODELS = {
+        // the villagers' conversation net (tool calling, 201 languages, Russian too): Qwen3.5 0.8B, text only
+        qwen35: {
+            id: 'onnx-community/Qwen3.5-0.8B-Text-ONNX',
+            label: 'Qwen3.5 0.8B',
+            dtype: { webgpu: 'q4f16', webgpuNoF16: 'q4', wasm: 'q4' },
+            sizeMB: { webgpu: 700, wasm: 900 },
+            noThink: true,
+            tools: true,
+            fallback: 'smart', // (if it does not load here: the older Qwen3 0.6B)
+        },
         light: {
             id: 'onnx-community/gemma-3-270m-it-ONNX',
             label: 'Лёгкая (Gemma 3 270M)',
@@ -36,8 +47,16 @@ export class LocalLLM {
             dtype: { webgpu: 'q4f16', webgpuNoF16: 'q4', wasm: 'q4' },
             sizeMB: { webgpu: 570, wasm: 900 },
             noThink: true, // chat template flag enable_thinking=false → no <think> block
+            tools: true,
         },
     };
+
+    /** The setting value → the model key ('auto': the conversation net when the computer has a GPU for the browser). */
+    static pick(setting, hasGPU = LocalLLM.hasWebGPU) {
+        if (!setting || setting === 'off') return null;
+        if (setting === 'auto') return hasGPU ? 'qwen35' : null;
+        return LocalLLM.MODELS[setting] ? setting : 'qwen35';
+    }
 
     /** A worker + WebAssembly are available (a browser). */
     static get supported() {
@@ -156,6 +175,31 @@ export class LocalLLM {
             }, limit);
             this._jobs.set(id, { resolve, reject, timer });
             this._worker.postMessage({ type: 'generate', id, messages, maxTokens, temperature, noThink: this.model.noThink });
+        });
+    }
+
+    /**
+     * A conversation turn with game actions: the raw answer, tool calls included.
+     * @param {{system?:string, history?:Array, user:string, tools?:Array, maxTokens?:number, temperature?:number, timeoutMs?:number}} p
+     * @returns {Promise<string>} '' on timeout
+     */
+    chat({ system = '', history = [], user = '', tools = [], maxTokens = 90, temperature = 0.4, timeoutMs } = {}) {
+        if (!this._ready || !this._worker) return Promise.reject(new Error('LocalLLM is not ready'));
+        const messages = [];
+        if (system) messages.push({ role: 'system', content: system });
+        for (const h of history || []) if (h?.content) messages.push({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.content) });
+        messages.push({ role: 'user', content: String(user || '...') });
+        const id = this._nextId++;
+        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'webgpu' ? 7000 : 12000);
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                if (!this._jobs.has(id)) return;
+                this._jobs.delete(id);
+                try { this._worker?.postMessage({ type: 'interrupt', id }); } catch (_) { /* ignore */ }
+                resolve('');
+            }, limit);
+            this._jobs.set(id, { resolve, reject, timer });
+            this._worker.postMessage({ type: 'generate', id, messages, maxTokens, temperature, noThink: this.model.noThink, tools: this.model.tools ? tools : null, raw: true });
         });
     }
 

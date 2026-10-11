@@ -14,3 +14,4 @@ Paths under `/tmp/...` mentioned inside were scratch experiments on another mach
 | `hands-items.md` | Nothing drops by accident, real throws, reliable grabs, realistic holds, bow string |
 | `houses-beds-knights.md` | Lying in a villager's bed, houses without getting stuck or flicker, knights not crowding (patches in `patches/`, made against an older commit) |
 | `book-scrolls-menu-misc.md` | The book in the hands, scrolls, saved worlds menu, small fixes |
+| `talk.md` | Villagers really talk: a small neural net with game actions (tool calling), the king's orders, the advisor |

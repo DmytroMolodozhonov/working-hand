@@ -141,6 +141,7 @@ export class NetSync {
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             bodies: g.death?.snapshot() || [],
+            vai: !!g.castleLife?.talk?.llm?.ready, // (the host's villager net answers the guests too)
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
@@ -160,6 +161,7 @@ export class NetSync {
         if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.castles) g.castleLife?.restore(msg.castles);
         if (msg.bodies) g.death?.restore(msg.bodies);
+        if (msg.vai && g.castleLife) g.castleLife.talk.hostSmart = true;
         for (const e of msg.explosions || []) {
             g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);
@@ -425,6 +427,11 @@ export class NetSync {
     glass(id) { this.net.send({ t: 'glass', id }, true); }
     villagerVandal(p, n, loud) { this.net.send({ t: 'vvand', p, n, l: loud }); }
     villagerTalk(id) { this.net.send({ t: 'vtalk', id }); }
+    // villagers really talk (TalkMind): a guest's orders and questions go to the host
+    villagerOrder(id, name, args) { this.net.send({ t: 'vord', id, name: String(name).slice(0, 30), args: args || {} }); }
+    villagerAsk(id, text, ctx) { this.net.send({ t: 'vask', id, text: String(text).slice(0, 300), ctx: ctx || {} }); }
+    villagerAnswer(to, id, res) { if (this.net.isHost) this.net.send({ t: 'vans', to, id, res }); }
+    villagerAI(on) { if (this.net.isHost) this.net.send({ t: 'vai', on: !!on }); }
     tradeSell(uid, wid, price, p) { this.net.send({ t: 'tsell', uid, wid, price, p }); }
     animalHit(id, dmg, dir, fire) { this.net.send({ t: 'ahit', id, dmg, d: dir ? [r3(dir.x), r3(dir.y), r3(dir.z)] : null, f: fire ? 1 : 0, by: this.me }); }
     animalMeat(id, side) { this.net.send({ t: 'ameat', id, side }); }
@@ -653,6 +660,10 @@ export class NetSync {
             case 'vtalk': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v && !v.foe) { v.talking = 5; v.talkTo = m.from; } } break;
             case 'vvand': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.damaged({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, m.from, Math.min(500, +m.n || 0), !!m.l); break;
             case 'vcrime': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.reportCrime(v, m.from, String(m.kind || '')); } break;
+            case 'vord': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.orders.run(v, String(m.name || ''), m.args && typeof m.args === 'object' ? m.args : {}, m.from); } break;
+            case 'vask': if (this.net.isHost) g.castleLife?.talk.answerGuest(m.from, m.id, String(m.text || '').slice(0, 300), m.ctx && typeof m.ctx === 'object' ? m.ctx : {}); break;
+            case 'vans': if (m.to === this.me) g.castleLife?.talk.answered(m.id, m.res || {}); break;
+            case 'vai': if (!this.net.isHost && g.castleLife) g.castleLife.talk.hostSmart = !!m.on; break;
             case 'tsell': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.talk.sellNow(m.uid || null, m.wid || null, Math.min(2000, +m.price || 1), vec(m.p)); break;
             case 'ahit': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals.hit(a, Math.min(30, m.dmg || 1), m.d ? vec(m.d) : null, m.from || m.by, !!m.f); } break;
             case 'ameat': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals._takeMeat(a, m.from, m.side); } break;

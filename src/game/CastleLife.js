@@ -29,6 +29,7 @@ import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 import { createRng } from '../core/math.js';
 import { CastleTalk } from './CastleTalk.js';
+import { VillagerOrders } from './VillagerOrders.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -44,9 +45,12 @@ export const STATS = {
     merchant: { hp: 8, armor: 0, dmg: 1 },
     knight: { hp: 20, armor: 50, dmg: 3 },
     king: { hp: 30, armor: 100, dmg: 5 },
+    advisor: { hp: 8, armor: 0, dmg: 1 },
 };
-export const ROLE_NAMES = { builder: 'Строитель', farmer: 'Фермер', merchant: 'Торговец', knight: 'Рыцарь', king: 'Король' };
-const ROLE_NAMES_F = { builder: 'Строительница', farmer: 'Фермерша', merchant: 'Торговка', knight: 'Рыцарь', king: 'Король' };
+/** The king's advisor stands by the throne: roster number -1 (not one of the people counted by `population`). */
+export const ADVISOR_IDX = -1;
+export const ROLE_NAMES = { builder: 'Строитель', farmer: 'Фермер', merchant: 'Торговец', knight: 'Рыцарь', king: 'Король', advisor: 'Советник' };
+const ROLE_NAMES_F = { builder: 'Строительница', farmer: 'Фермерша', merchant: 'Торговка', knight: 'Рыцарь', king: 'Король', advisor: 'Советница' };
 const MALE = ['Иван', 'Пётр', 'Фёдор', 'Михаил', 'Григорий', 'Степан', 'Яков', 'Тимофей', 'Матвей', 'Савелий', 'Никита', 'Еремей', 'Захар', 'Остап', 'Богдан', 'Мирон', 'Лука', 'Демьян', 'Филипп', 'Аким', 'Гордей', 'Игнат', 'Кузьма', 'Прохор', 'Тарас', 'Ефим', 'Арсений', 'Любомир', 'Ратибор', 'Всеслав'];
 const FEMALE = ['Мария', 'Анна', 'Дарья', 'Агафья', 'Василиса', 'Марфа', 'Ульяна', 'Евдокия', 'Аксинья', 'Пелагея', 'Олеся', 'Любава', 'Злата', 'Милана', 'Забава', 'Настасья', 'Варвара', 'Фёкла', 'Ярослава', 'Дуняша'];
 
@@ -89,7 +93,8 @@ export function rosterEntry(def, idx) {
     const rng = createRng(seed);
     let role;
     const merchants0 = def.knights + 1;
-    if (idx === 0) role = 'king';
+    if (idx === ADVISOR_IDX) role = 'advisor';
+    else if (idx === 0) role = 'king';
     else if (idx <= def.knights) role = 'knight';
     else if (idx < merchants0 + def.stalls.length) role = 'merchant';
     else { const r = rng(); role = r < 0.45 ? 'farmer' : r < 0.85 ? 'builder' : 'merchant'; }
@@ -176,6 +181,7 @@ export class CastleLife {
         this._lockMsgT = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test';
         this.talk = new CastleTalk(game, this); // conversations and the market
+        this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.brainLine = (v) => this.talk.ambientLine(v);
     }
 
@@ -222,7 +228,7 @@ export class CastleLife {
         const def = cs.def;
         if (cs.active.has(idx) || this.state(def.id).killed.has(idx)) return null;
         const e = rosterEntry(def, idx);
-        const look = villagerLook(e.seed, e.role, e.female, { castleColor: def.color });
+        const look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
         const model = new VillagerModel(look, { castleColor: def.color });
         this.game.scene.add(model.group);
         const S = STATS[e.role];
@@ -299,6 +305,8 @@ export class CastleLife {
             const sx = Math.cos(def.throne.yaw) * 4 * side, sz = -Math.sin(def.throne.yaw) * 4 * side;
             const at = { x: (g ? g.x : tf.x) + sx, y: tf.y, z: (g ? g.z : tf.z) + sz, yaw: def.throne.yaw };
             knight(at, 'guard', at);
+            // the king's advisor: by the throne, a little to the side (serves whoever is king)
+            if (side === 1) { const a = { ...at, x: at.x - sx / 2, z: at.z - sz / 2 }; this._activate(cs, ADVISOR_IDX, a, 'guard', { post: a }); }
         }
         for (const post of def.posts) knight(post, 'guard', post);
         const loop = def.wallWalk || [];
@@ -603,6 +611,7 @@ export class CastleLife {
             }
         }
         if (v.foe) { this._fight(v, dt); return; }
+        if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)
         if (v.investigate && this._investigate(v, dt)) return;
         if (v.fleeT > 0) {
             v.fleeT -= dt;
@@ -654,7 +663,7 @@ export class CastleLife {
         if (v.follow) {
             v.followT -= dt;
             const fp = this._playerPos(v.follow);
-            if (!fp || v.followT <= 0 || !this._inLand(cs.def, fp, 20)) { v.follow = null; v.path = null; }
+            if (!fp || v.followT <= 0 || (!v.followFar && !this._inLand(cs.def, fp, 20))) { v.follow = null; v.followFar = false; v.path = null; }
             else {
                 const d = this._steer(v, fp.x, fp.z, Math.hypot(fp.x - v.x, fp.z - v.z) > 8 ? RUN : WALK, dt, 3);
                 v.mode = d > 3.2 ? (v.speed > WALK ? 'run' : 'walk') : 'idle';
@@ -1305,6 +1314,7 @@ export class CastleLife {
                     v.animT = 0;
                 }
                 if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
+                else if (this.auth && v.model.strikeNow && v.order) this.orders.strike(v);
             }
             if (v.bubble) v.bubble.update(dt, _v.set(v.x, v.y + 4.4, v.z), cam);
             this._updateBar(v, dt, cam);

@@ -9,6 +9,13 @@
  * villager, the quieter (nothing beyond VOICE m) — so do the shouts and the
  * chatter of the crowd.
  *
+ * With «Умные жители» on, a small neural net (src/ai/TalkMind.js) understands
+ * any words and calls game actions (follow, stay, show the way, gather the
+ * army, attack, defend the castle…); the villager says «Хм…» while it
+ * thinks. The king's orders are obeyed, a stranger's orders to the army are
+ * refused; VillagerOrders carries them out (on the host). In multiplayer a
+ * guest without the net of their own asks the host's net (NetSync 'vask').
+ *
  * The market (every castle has one, before the gate): food lies on the stall
  * counters (sometimes arrows or a plain shield / bow; never magic).
  *  - Buy: take a thing from the counter — the merchant names the price;
@@ -23,6 +30,7 @@ import * as THREE from 'three';
 import { VillagerBrain } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
+import { TalkMind, thinkingLine } from '../ai/TalkMind.js';
 
 export const HEAR = 7; // m: a villager hears you this far
 const VOICE = 18; // m: a villager's voice carries this far
@@ -47,6 +55,9 @@ export class CastleTalk {
         this._scanT = 0;
         this._greetT = new Map();
         this.llm = null;
+        this.mind = new TalkMind();
+        this.hostSmart = false; // (a guest) the host's net answers for me
+        this._asks = new Map(); // villager id -> time I asked the host (a guest)
         this.prepaid = new Set(); // goods paid by word, on their way to my hand
     }
 
@@ -83,6 +94,10 @@ export class CastleTalk {
             coins: g.inventory?.coins?.() ?? 0,
             nearbyGoods: v.role === 'merchant' ? this._goodsOf(v) : [],
             heldItem: null,
+            players: this._players(),
+            selfId: g.localId,
+            following: v.follow === g.localId,
+            danger: v.cs.hostile.size > 0 || !!g.isNight,
         };
         const held = g.items?.held.right || g.items?.held.left;
         if (held) ctx.heldItem = { name: nameOf(held.item), magic: isMagicItem(held.item), value: itemValue(held.item) };
@@ -119,9 +134,69 @@ export class CastleTalk {
         v.talkTo = g.localId;
         if (!g.authority) g.sync?.villagerTalk?.(v.id); // (the host stops them for the talk)
         const done = (res) => this._apply(v, res);
-        if (this.llm?.ready) b.hearSmart(text, ctx, this.llm).then(done, () => done(b.hear(text, ctx)));
-        else done(b.hear(text, ctx));
+        // a guest without a net of their own: the host's net answers (not the market — that is mine)
+        if (!g.authority && this.hostSmart && !this.llm?.ready && g.sync?.villagerAsk && this.offer?.v !== v) {
+            this._asks.set(v.id, performance.now());
+            this.life._say(v, thinkingLine(v.role), 3);
+            g.sync.villagerAsk(v.id, text, { coins: ctx.coins, heldItem: ctx.heldItem, hostile: ctx.hostile });
+            // (no answer in time: my own rules answer)
+            setTimeout(() => { if (this._asks.delete(v.id)) done(b.hear(text, ctx)); }, 12000);
+            return true;
+        }
+        this.mind.llm = this.llm?.ready ? this.llm : null;
+        const first = this.mind.first(b, text, ctx);
+        if (first.done) { done(first.res); return true; } // (the rules: at once)
+        const thinking = () => this.life._say(v, thinkingLine(v.role), 3);
+        this.mind.ask(b, text, ctx, first, { onThinking: thinking }).then(done, () => done(first.res));
         return true;
+    }
+
+    /** Players in the game (for orders by name: «атакуйте Олега»). */
+    _players() {
+        const g = this.game;
+        const out = [{ id: g.localId, name: g.playerName?.(g.localId) || 'Вы' }];
+        for (const [id, r] of g.remotes || []) out.push({ id, name: r.name || '' });
+        return out.filter((p) => p.name);
+    }
+
+    /** (host) a guest talks to a villager: my net (or rules) answers, the orders are carried out here. */
+    answerGuest(from, id, text, gctx = {}) {
+        const g = this.game;
+        const v = this.life.byId.get(id);
+        if (!v || v.dead || !text) return;
+        const b = this.brain(v);
+        const st = this.life.state(v.cs.def.id);
+        const ctx = {
+            playerName: g.playerName?.(from) || null,
+            playerIsKing: st.owner === from,
+            hostile: v.cs.hostile.get(from) > Date.now(),
+            coins: +gctx.coins || 0,
+            nearbyGoods: v.role === 'merchant' ? this._goodsOf(v) : [],
+            heldItem: gctx.heldItem && typeof gctx.heldItem === 'object' ? { name: String(gctx.heldItem.name || '').slice(0, 30), magic: !!gctx.heldItem.magic, value: +gctx.heldItem.value || 0 } : null,
+            players: this._players(),
+            selfId: from,
+            following: v.follow === from,
+            danger: v.cs.hostile.size > 0 || !!g.isNight,
+        };
+        v.talking = 5; v.talkTo = from;
+        this.mind.llm = this.llm?.ready ? this.llm : null;
+        const send = (res) => {
+            if (!res || v.dead) return;
+            if (res.reply) this.life._say(v, res.reply, 5);
+            if (res.action) this._act(v, res, from);
+            g.sync?.villagerAnswer?.(from, id, { action: res.action || null, offer: res.offer || null });
+        };
+        const first = this.mind.first(b, text, ctx);
+        if (first.done) send(first.res);
+        else this.mind.ask(b, text, ctx, first).then(send, () => send(first.res));
+    }
+
+    /** (a guest) the host's net answered: the line is already said; the market part is mine. */
+    answered(id, res = {}) {
+        if (!this._asks.delete(id)) return;
+        const v = this.life.byId.get(id);
+        if (!v || v.dead) return;
+        if (res.action === 'trade_yes' || res.action === 'trade_no') this._apply(v, { reply: '', action: res.action, offer: res.offer || null });
     }
 
     /** Is what the microphone heard just the villager's own words from the speakers? */
@@ -160,22 +235,18 @@ export class CastleTalk {
         switch (res.action) {
             case 'trade_yes': this._tradeYes(v, res); break;
             case 'trade_no': if (this.offer?.v === v) this.offer.declined = true; break;
-            case 'flee': v.fleeFrom = g.localId; v.fleeT = 10; v.fleeing = false; v.path = null; break;
-            case 'bow': v.bowing = 1.6; break;
-            case 'hostile':
-                if (v.role === 'knight' || v.role === 'king') this.life.reportCrime(v, g.localId, 'threat');
-                break;
-            case 'call_guards': this.life.reportCrime(v, g.localId, 'threat'); break;
-            case 'follow': if (v.job === 'wander') { v.follow = g.localId; v.followT = 90; v.path = null; } break;
-            case 'stop_follow': v.follow = null; break;
-            default:
-                if (res.action?.startsWith('guide:') && v.job === 'wander') {
-                    const tag = { 'guide:market': 'market', 'guide:throne': 'throneFront', 'guide:gate': 'gateOut' }[res.action];
-                    const list = v.cs.graph.tagged(tag);
-                    if (list.length) { v.waitT = 0; v.purpose = tag; this.life._goTo(v, list[0]); v.guiding = 30; }
-                }
+            default: if (res.action) this._act(v, res, g.localId);
         }
         v.yaw = Math.atan2(-(me.x - v.x), -(me.z - v.z));
+    }
+
+    /** What the villager agreed to do: movement and orders go to VillagerOrders (the host carries them out). */
+    _act(v, res, by) {
+        const a = res.action;
+        if (a === 'hostile') { if (v.role === 'knight' || v.role === 'king') this.life.reportCrime(v, by, 'threat'); return; }
+        if (a === 'call_guards') { this.life.reportCrime(v, by, 'threat'); return; }
+        if (a === 'ignore' || a === 'offer_goods' || a.startsWith('trade_')) return;
+        this.life.orders?.run(v, a, res.args || {}, by);
     }
 
     /** (from CastleLife) a line to say by itself, now and then. */
@@ -411,31 +482,52 @@ export class CastleTalk {
                 const me = g.character.group.position;
                 if (this.offer.v.dead || Math.hypot(this.offer.v.x - me.x, this.offer.v.z - me.z) > 16) this.offer = null;
             }
-            if (g.config.villagerAI && g.config.villagerAI !== 'off' && !this.llm && this.life.castles.size) this._loadLLM(g.config.villagerAI);
+            if (g.config.villagerAI && g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.castles.size) { this._llmTried = true; this._loadLLM(g.config.villagerAI); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;
         for (const [id] of this.brains) if (!this.life.byId.has(id)) this.forget({ id });
     }
 
-    async _loadLLM(model) {
+    /**
+     * Loads the villagers' net once (downloaded the first time — with progress —
+     * then from the browser cache). 'auto' = only when the computer has a GPU
+     * for the browser (on the processor it is too slow for a game).
+     */
+    async _loadLLM(setting) {
         const g = this.game;
-        try {
-            const { LocalLLM } = await import('../ai/LocalLLM.js');
-            if (!LocalLLM.supported) return;
-            this.llm = new LocalLLM({ model });
-            g.hud.notify?.('🧠 Загружаю нейросеть жителей (один раз)...');
+        let LocalLLM;
+        try { ({ LocalLLM } = await import('../ai/LocalLLM.js')); } catch (e) { return; }
+        if (!LocalLLM.supported) return;
+        let gpu = false;
+        // ('auto': a real graphics adapter, not only the word WebGPU in the browser)
+        if (setting === 'auto') { try { gpu = !!(await navigator.gpu?.requestAdapter?.()); } catch (e) { gpu = false; } }
+        let key = LocalLLM.pick(setting, gpu);
+        if (!key) return;
+        while (key) {
+            const llm = new LocalLLM({ model: key });
+            this.llm = llm;
+            const m = LocalLLM.MODELS[key];
+            g.hud.notify?.(`🧠 Загружаю нейросеть жителей (${m.label}, один раз)...`);
             let last = 0;
-            await this.llm.load((f, text) => {
-                const now = performance.now();
-                if (now - last < 4000) return;
-                last = now;
-                g.hud.setVoice?.(`🧠 ${text || 'Нейросеть жителей'}${f != null ? ` ${Math.round(f * 100)}%` : ''}`, true);
-            });
-            g.hud.notify?.('🧠 Нейросеть жителей готова — они отвечают своими словами');
-        } catch (e) {
-            console.warn('[CastleTalk] no villager LLM:', e?.message || e);
-            g.hud.notify?.('🧠 Нейросеть не загрузилась — жители говорят готовыми фразами');
+            try {
+                await llm.load((f, text) => {
+                    const now = performance.now();
+                    if (now - last < 1500 && f !== 1) return;
+                    last = now;
+                    g.hud.setVoice?.(`🧠 ${text || 'Нейросеть жителей'}${f != null ? ` ${Math.round(f * 100)}%` : ''}`, true);
+                });
+                if (this.llm !== llm) return; // (disposed meanwhile)
+                g.hud.notify?.('🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
+                g.sync?.villagerAI?.(true);
+                return;
+            } catch (e) {
+                console.warn('[CastleTalk] no villager LLM:', key, e?.message || e);
+                llm.dispose?.();
+                if (this.llm === llm) this.llm = null;
+                key = m.fallback || null;
+            }
         }
+        g.hud.notify?.('🧠 Нейросеть не загрузилась — жители говорят готовыми фразами (приказы всё равно понимают)');
     }
 
     dispose() {

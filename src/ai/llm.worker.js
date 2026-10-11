@@ -8,7 +8,8 @@
  *
  * Protocol (main → worker):
  *   { type: 'load', model: { id, dtype: { webgpu, webgpuNoF16, wasm }, noThink }, device: 'auto'|'webgpu'|'wasm' }
- *   { type: 'generate', id, messages: [{role, content}], maxTokens, temperature, noThink }
+ *   { type: 'generate', id, messages: [{role, content}], maxTokens, temperature, noThink, tools?: [json schema], raw?: bool }
+ *     (tools → the chat template lists the game actions; the answer keeps its <tool_call>s)
  *   { type: 'interrupt', id }
  *   { type: 'dispose' }
  * (worker → main):
@@ -101,6 +102,23 @@ async function warmup(noThink) {
     });
 }
 
+/** Loads with this dtype, or (no such file in the model) with the other quantisations. */
+async function createAny(model, device, dtype) {
+    const tries = [...new Set([dtype, 'q4', 'q4f16'])];
+    let err = null;
+    for (const d of tries) {
+        try {
+            if (d !== dtype) post({ type: 'progress', fraction: 0, text: `Пробую другой вариант модели (${d})…` });
+            const gen = await createPipeline(model, device, d);
+            return { gen, dtype: d };
+        } catch (e) {
+            err = e;
+            if (!/(404|not found|could not locate|no such file|does not exist|unsupported)/i.test(String(e?.message || e))) throw e;
+        }
+    }
+    throw err;
+}
+
 async function load({ model, device: pref = 'auto' }) {
     try {
         await setupLibrary();
@@ -110,7 +128,7 @@ async function load({ model, device: pref = 'auto' }) {
         let dtype = dtypeFor(model, device, f16);
         post({ type: 'progress', fraction: 0, text: `Нейросеть: ${device === 'webgpu' ? 'видеокарта (WebGPU)' : 'процессор (WASM)'}, ${dtype}` });
         try {
-            generator = await createPipeline(model, device, dtype);
+            ({ gen: generator, dtype } = await createAny(model, device, dtype));
             await warmup(model.noThink);
         } catch (e) {
             if (device !== 'webgpu') throw e;
@@ -120,7 +138,7 @@ async function load({ model, device: pref = 'auto' }) {
             device = 'wasm';
             dtype = dtypeFor(model, 'wasm', false);
             post({ type: 'progress', fraction: 0, text: `WebGPU не сработал, пробую процессор (${dtype})…` });
-            generator = await createPipeline(model, device, dtype);
+            ({ gen: generator, dtype } = await createAny(model, device, dtype));
             await warmup(model.noThink);
         }
         post({ type: 'progress', fraction: 1, text: 'Нейросеть готова' });
@@ -138,7 +156,7 @@ function stripThink(s) {
         .trim();
 }
 
-async function generate({ id, messages, maxTokens = 60, temperature = 0.7, noThink }) {
+async function generate({ id, messages, maxTokens = 60, temperature = 0.7, noThink, tools = null, raw = false }) {
     if (cancelled.has(id)) { cancelled.delete(id); return; }
     if (!generator) { post({ type: 'gen_error', id, message: 'model not loaded' }); return; }
     currentId = id;
@@ -151,12 +169,18 @@ async function generate({ id, messages, maxTokens = 60, temperature = 0.7, noThi
             temperature: Math.max(0.05, temperature),
             top_k: 40,
             top_p: 0.9,
-            repetition_penalty: 1.15,
+            repetition_penalty: raw ? 1.05 : 1.15, // (a tool call repeats quotes and braces)
             stopping_criteria: [criteria],
             ...(useThink ? { tokenizer_encode_kwargs: { enable_thinking: false } } : {}),
+            ...(Array.isArray(tools) && tools.length ? { tools } : {}),
         });
         const g = out && out[0] && out[0].generated_text;
-        const text = Array.isArray(g) ? (g[g.length - 1]?.content ?? '') : String(g ?? '');
+        const last = Array.isArray(g) ? g[g.length - 1] : null;
+        let text = last ? (last.content ?? '') : String(g ?? '');
+        // (a template that parses the calls itself puts them aside: give them back as <tool_call>s)
+        if (raw && last && Array.isArray(last.tool_calls)) {
+            for (const c of last.tool_calls) text += `<tool_call>${JSON.stringify({ name: c.function?.name ?? c.name, arguments: c.function?.arguments ?? c.arguments ?? {} })}</tool_call>`;
+        }
         post({ type: 'result', id, text: stripThink(text) });
     } catch (e) {
         post({ type: 'gen_error', id, message: String(e && (e.message || e)) });

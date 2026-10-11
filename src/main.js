@@ -217,7 +217,7 @@ function readConfig() {
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
         look: activeLook(), // the hero from the «Персонаж» tab
         villagerVoice: ($('villager-voice')?.value ?? '1') !== '0',
-        villagerAI: $('villager-ai')?.value || 'off',
+        villagerAI: $('villager-ai')?.value || 'auto',
     };
 }
 

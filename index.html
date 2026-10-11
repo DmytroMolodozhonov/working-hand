@@ -347,11 +347,13 @@
                     <div class="settings-group">
                         <label>Умные жители (нейросеть в браузере):</label>
                         <select id="villager-ai">
-                            <option value="off" selected>Выключено — готовые фразы</option>
-                            <option value="smart">Включено (Qwen3, ~570 МБ один раз)</option>
-                            <option value="light">Включено (Gemma 3, ~430–800 МБ один раз)</option>
+                            <option value="auto" selected>Сами решат — включено, если есть видеокарта</option>
+                            <option value="qwen35">Включено (Qwen3.5, до 1 ГБ один раз)</option>
+                            <option value="smart">Включено, старая (Qwen3, ~570 МБ один раз)</option>
+                            <option value="light">Включено, лёгкая (Gemma 3, только разговор)</option>
+                            <option value="off">Выключено — готовые фразы</option>
                         </select>
-                        <p class="info-text" style="font-size:0.85rem;color:#a4b0be;margin-top:6px">Нейросеть скачивается один раз и работает прямо на вашем компьютере (лучше с видеокартой). Без неё жители тоже разговаривают — готовыми фразами.</p>
+                        <p class="info-text" style="font-size:0.85rem;color:#a4b0be;margin-top:6px">Нейросеть скачивается один раз (видно, сколько скачалось) и работает прямо на вашем компьютере. С ней жители понимают любые слова и выполняют просьбы, а если вы король — приказы. Без неё жители тоже разговаривают готовыми фразами и понимают простые приказы.</p>
                     </div>
                     </div>
                     <div id="set-voice" class="sub-pane">
