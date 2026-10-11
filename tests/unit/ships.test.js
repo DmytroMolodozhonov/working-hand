@@ -147,7 +147,7 @@ test('the wheel by hand: angles, unwrap, steering speed, the lock, rim distance'
 test('damage: blasts, holes, leaks, fire, sinking to a wreck', () => {
     assert.equal(blastDamage(0, 3.6, 1), 35);
     assert.equal(blastDamage(10, 3.6, 1), 0);
-    assert.ok(Math.abs(holeRadius(3.6) - 1.26) < 1e-9);
+    assert.ok(Math.abs(holeRadius(3.6) - 2.16) < 1e-9);
     assert.ok(Math.abs(leakRate([{ wy: -1, r: 1.26 }], -0.62, 1) - 0.0095) < 0.0005);
     assert.equal(leakRate([{ wy: 2, r: 1.26 }], -0.62, 1), 0);
     let seed = 1;

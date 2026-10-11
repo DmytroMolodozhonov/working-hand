@@ -116,7 +116,7 @@ export class Rigging {
             }
             // a rung held
             const hold = this.climb?.holds[side];
-            if (hold) { if (opening) this._release(side); continue; }
+            if (hold) { if (h.curl < 0.2 && this._relT[side] > 400) this._release(side); continue; }
             if (!closed || now - this._open[side] > HELM.CLOSE_WINDOW_MS || !this._free(side)) continue;
             // closing on a loop or a rung
             if (this._grabEye(side, h.G, now)) { this._open[side] = 0; continue; }
@@ -276,6 +276,7 @@ export class Rigging {
         ch.group.position.set(_o.x, _o.y, _o.z);
         ch.verticalVelocity = 0;
         ch.swimY = null;
+        s.collider._side.set(ch.group.position, 'out'); // (outside the bulwark: never pulled in through the hull)
         // the drawn hands on their rungs
         if (this.input) return;
         const hands = ch.getActiveHands?.();

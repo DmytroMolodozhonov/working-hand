@@ -147,7 +147,7 @@ export class Ships {
         if (!s.model) {
             s.model = new ShipModel(s.layout, { color: s.color, name: s.name });
             g.scene.add(s.model.group);
-            for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r);
+            for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
         }
         s.model.group.visible = true;
         g.collision.addMover(s.collider);
@@ -214,6 +214,29 @@ export class Ships {
         return { x: side * (hullHalfWidth(L, L.gangZ, L.deck) - 1.0), y: L.deck, z: L.gangZ }; // (the plank's end rests on the deck)
     }
 
+    /** The plank's pier end: on the pier's edge straight abreast of the gangway (a plank goes straight across). */
+    _plankPier(s) {
+        if (s._plankA) return s._plankA;
+        const b = s.berth, A = b.plankA;
+        const c = Math.cos(b.yaw ?? 0), sn = Math.sin(b.yaw ?? 0);
+        // the pier edge point in the berth's frame, moved along the ship to the gangway
+        const dx = A.x - b.x, dz = A.z - b.z;
+        const lx = dx * c - dz * sn;
+        // (not onto a bollard or a post: a little along the pier where it is clear)
+        const data = this.game.terrain?.data;
+        const deckL = Math.round(A.y + 0.5);
+        const clear = (x, z) => !data || data.topLayer(Math.round(x), Math.round(z)) <= deckL;
+        let best = null;
+        for (const dz of [0, 1, -1]) {
+            const lz = s.layout.gangZ + dz;
+            const at = (k) => ({ x: b.x + (lx + k * Math.sign(lx || 1)) * c + lz * sn, z: b.z - (lx + k * Math.sign(lx || 1)) * sn + lz * c });
+            const p0 = at(0), p1 = at(1.2), p2 = at(2.4);
+            if (clear(p0.x, p0.z) && clear(p1.x, p1.z) && clear(p2.x, p2.z)) { best = { x: p0.x, y: A.y, z: p0.z }; break; }
+        }
+        s._plankA = best || { x: b.x + lx * c + s.layout.gangZ * sn, y: A.y, z: b.z - lx * sn + s.layout.gangZ * c };
+        return s._plankA;
+    }
+
     _makeLines(s) {
         const b = s.berth;
         const L = s.layout;
@@ -248,7 +271,7 @@ export class Ships {
     _updatePlank(s, dt) {
         const p = s.plank;
         if (!p || p.state !== 'laid' || !s.berth?.plankA) return;
-        const A = s.berth.plankA;
+        const A = this._plankPier(s);
         const gw = this._gangwayLocal(s, p.side);
         s.pose.toWorld(gw.x, gw.y, gw.z, _o);
         p.collider.set(A, _o);
@@ -792,17 +815,43 @@ export class Ships {
         }
     }
 
+    /**
+     * (host) A blast at the hull breaks it: where it hits the side — a hole there; on the deck — a hole in
+     * the deck and the hull torn open below it, down towards the water (and deeper with every blast
+     * at the same place), so the sea comes in and that end of the ship goes down first.
+     */
+    _breach(s, l, radius, half, by) {
+        const L = s.layout;
+        const lz = Math.max(-L.L / 2 + 1, Math.min(L.L / 2 - 1, l.z));
+        const r = holeRadius(radius);
+        const side = l.x >= 0 ? 1 : -1;
+        // earlier blasts here weakened the wood: this one goes deeper
+        const before = s.holes.filter((h) => Math.abs(h.lz - lz) < r + 2).length;
+        const reach = radius * 1.3 + before * radius * 0.8;
+        if (l.y < L.deck - 0.3 && Math.abs(l.x) > half - 1.5) {
+            // the side: a hole where it hit, torn further down
+            this.hole(s, l.x, l.y - radius * 0.3, lz, r, by);
+            if (l.y - reach < 0.3 && l.y > 0.6) this.hole(s, l.x, Math.max(keelY(L, lz) + 0.4, l.y - reach), lz, r * 0.8, by);
+            return;
+        }
+        // on (or over) a deck: the deck is broken through, and the hull below the blast down to `reach`
+        const fy = layoutFloorAt(L, Math.max(-half + 0.5, Math.min(half - 0.5, l.x)), lz, l.y + 1) ?? L.deck;
+        this.hole(s, Math.max(-half + 1, Math.min(half - 1, l.x)), fy, lz, r * 1.1, by, true);
+        const bottom = fy - reach;
+        if (bottom < L.deck - 0.5) this.hole(s, side, Math.max(keelY(L, lz) + 0.4, bottom), lz, r * (bottom < 0.3 ? 1 : 0.7), by);
+    }
+
     /** (host) A hole in the hull at a ship-local point. */
-    hole(s, lx, ly, lz, r, by = null) {
+    hole(s, lx, ly, lz, r, by = null, deck = false) {
         if (s.holes.length > 40) return null;
         const L = s.layout;
         const side = lx >= 0 ? 1 : -1;
-        const hy = Math.max(keelY(L, lz) + 0.3, Math.min(L.deck - 0.4, ly));
-        const h = { lx: side * hullHalfWidth(L, lz, hy), ly: hy, lz, r, wy: 0 };
+        const hy = deck ? ly : Math.max(keelY(L, lz) + 0.3, Math.min(L.deck - 0.4, ly));
+        const h = deck ? { lx, ly: hy, lz, r, wy: 0, deck: true } : { lx: side * hullHalfWidth(L, lz, hy), ly: hy, lz, r, wy: 0 };
         s.holes.push(h);
-        if (s.model) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r);
+        if (s.model) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
         s.changed = true;
-        this._event(s, { k: 'hole', h: [r2(h.lx), r2(h.ly), r2(h.lz), r2(h.r)] });
+        this._event(s, { k: 'hole', h: [r2(h.lx), r2(h.ly), r2(h.lz), r2(h.r), h.deck ? 1 : 0] });
         void by;
         return h;
     }
@@ -839,11 +888,7 @@ export class Ships {
             const dmg = blastDamage(dHull, radius, power);
             if (dmg <= 0) continue;
             this.damage(s, dmg, by);
-            if (dHull < 2) {
-                const lzc = Math.max(-L.L / 2 + 1, Math.min(L.L / 2 - 1, _l.z));
-                if (_l.y < L.deck + 0.5 && Math.abs(_l.x) > half - 1.5) this.hole(s, _l.x, _l.y, lzc, holeRadius(radius), by);
-                else this.hole(s, _l.x >= 0 ? 1 : -1, Math.min(L.deck - 0.8, Math.max(0.5, _l.y)), lzc, holeRadius(radius) * 0.7, by);
-            }
+            if (dHull < 2) this._breach(s, _l, radius, half, by);
             if (Math.random() < (power > 1 ? 1 : 0.6)) this.ignite(s, Math.max(-half + 0.5, Math.min(half - 0.5, _l.x)), layoutFloorAt(L, 0, _l.z, _l.y + 2) ?? L.deck, Math.max(-L.L / 2 + 2, Math.min(L.L / 2 - 2, _l.z)), null, by);
             // the blast tears burning sails
             for (const sl of s.sails) {
@@ -940,14 +985,17 @@ export class Ships {
             if (rate > 0 && s.state !== 'sinking' && s.state !== 'wreck') {
                 s.flood = Math.min(1, s.flood + rate * dt);
                 s.changed = true;
-                // the ship settles as it fills
+                // the ship settles as it fills, and leans down towards the holes (that end goes under first)
                 s.sinkY = s.flood * L.draft * 0.25;
+                this._leanSides(s);
+                s.sinkRoll = s.listSide * DMG.LIST_MAX * s.flood * 0.5;
+                s.sinkPitch = s.pitchSide * DMG.PITCH_MAX * s.flood * 0.5;
                 if (s.flood >= 1) this._startSinking(s);
             }
         }
         if (s.state === 'sinking') {
             const seabed = this._seabedUnder(s);
-            const st = { sinkT: s.sinkT || 0, sinkY: s.sinkY, listSide: s.listSide, sinkRoll: s.sinkRoll, sinkPitch: s.sinkPitch, flooded: s.flooded, wreck: false };
+            const st = { sinkT: s.sinkT || 0, sinkY: s.sinkY, listSide: s.listSide, pitchSide: s.pitchSide, sinkRoll: s.sinkRoll, sinkPitch: s.sinkPitch, flooded: s.flooded, wreck: false };
             stepSinking(st, s.cls, dt, seabed, WATER_LEVEL_Y);
             s.sinkT = st.sinkT; s.sinkY = st.sinkY; s.sinkRoll = st.sinkRoll; s.sinkPitch = st.sinkPitch;
             if (st.flooded && !s.flooded) { s.flooded = true; s.fires = []; this._event(s, { k: 'flooded' }); }
@@ -956,10 +1004,19 @@ export class Ships {
         }
     }
 
+    /** Which way the flooding ship leans: towards the side and the end its holes are in (roll > 0: starboard up). */
+    _leanSides(s) {
+        let x = 0, z = 0;
+        for (const h of s.holes) { if (h.deck) continue; const w = h.r * h.r; x += h.lx * w; z += h.lz * w; }
+        s.listSide = x > 0 ? -1 : 1;
+        s.pitchSide = z > 0 ? 1 : -1;
+    }
+
     _startSinking(s) {
         if (s.state === 'sinking' || s.state === 'wreck') return;
         s.state = 'sinking';
-        s.listSide = s.holes.length ? Math.sign(s.holes.reduce((a, h) => a + h.lx, 0)) || 1 : 1;
+        this._leanSides(s);
+        s.sinkT = Math.max(s.sinkT || 0, 12.5); // (already half-way leaning from the flooding)
         s.lines.forEach((l) => { if (l.state === 'tied') l.state = 'snapped'; });
         if (s.plank?.state === 'laid') this._plankFalls(s);
         this._event(s, { k: 'sink', side: s.listSide });
@@ -1095,7 +1152,7 @@ export class Ships {
                 return;
             }
             case 'shipev': if (!isHost) this._applyEvent(m); return;
-            case 'screw': if (!isHost) this.crew.applyNet(m); return;
+            case 'screw': if (m.talk) { if (isHost) this.crew.remoteTalk(m); } else if (!isHost) this.crew.applyNet(m); return;
             case 'shelm': if (isHost) this.helm.applyRemote(m); return;
             case 'smoor': if (isHost) this.rigging.applyRemote(m); return;
             case 'sunf': {
@@ -1130,10 +1187,10 @@ export class Ships {
         switch (m.k) {
             case 'sails': for (const sl of s.sails) if (m.s.includes(sl.id)) sl.target = m.o ? 1 : 0; break;
             case 'hole': {
-                const [lx, ly, lz, r] = m.h;
-                const h = { lx, ly, lz, r, wy: 0 };
+                const [lx, ly, lz, r, dk] = m.h;
+                const h = { lx, ly, lz, r, wy: 0, deck: !!dk };
                 s.holes.push(h);
-                if (s.model) h.mesh = s.model.addHole(lx, ly, lz, r);
+                if (s.model) h.mesh = s.model.addHole(lx, ly, lz, r, h.deck);
                 break;
             }
             case 'fire': s.fires.push({ lx: m.f[0], ly: m.f[1], lz: m.f[2], sail: m.f[3] || null, k: 0.3, age: 0 }); break;
@@ -1187,7 +1244,7 @@ export class Ships {
         const st = s.st;
         return {
             id: s.id, cls: s.cls.id, x: r2(st.x), z: r2(st.z), yaw: r3(st.yaw), u: r2(st.u), wheel: r2(st.wheel),
-            hp: Math.round(s.hp), flood: r3(s.flood), holes: s.holes.map((h) => [r2(h.lx), r2(h.ly), r2(h.lz), r2(h.r)]),
+            hp: Math.round(s.hp), flood: r3(s.flood), holes: s.holes.map((h) => [r2(h.lx), r2(h.ly), r2(h.lz), r2(h.r), h.deck ? 1 : 0]),
             burnt: s.sails.filter((x) => x.burnt >= 1).map((x) => x.id), open: s.sails.filter((x) => x.target > 0).map((x) => x.id),
             owner: s.owner, ownerName: s.ownerName, crewKilled: [...s.crewKilled], lines: s.lines.map((l) => l.state),
             plank: s.plank?.state || null, state: s.state, sink: s.state === 'sinking' || s.state === 'wreck' ? { y: r2(s.sinkY), roll: r3(s.sinkRoll), pitch: r3(s.sinkPitch), t: r2(s.sinkT || 0), side: s.listSide || 1 } : null,
@@ -1213,8 +1270,8 @@ export class Ships {
         st.x = sv.x ?? st.x; st.z = sv.z ?? st.z; st.yaw = sv.yaw ?? st.yaw; st.u = sv.u || 0; st.wheel = sv.wheel || 0;
         s.hp = sv.hp ?? s.hp; s.flood = sv.flood || 0;
         for (const h of s.holes) if (h.mesh) h.mesh.parent?.remove(h.mesh);
-        s.holes = (sv.holes || []).map(([lx, ly, lz, r]) => ({ lx, ly, lz, r, wy: 0 }));
-        if (s.model) for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r);
+        s.holes = (sv.holes || []).map(([lx, ly, lz, r, dk]) => ({ lx, ly, lz, r, wy: 0, deck: !!dk }));
+        if (s.model) for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
         for (const x of s.sails) {
             x.burnt = (sv.burnt || []).includes(x.id) ? 1 : 0;
             x.target = x.open = (sv.open || []).includes(x.id) && x.burnt < 1 ? 1 : 0;

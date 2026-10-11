@@ -40,13 +40,26 @@ export class Swimming {
     }
 
     /** The water surface (y) and the bottom under (x, z), or null on dry land. */
-    waterAt(x, z) {
+    waterAt(x, z, y = null) {
         const data = this.game.terrain?.data;
         if (!data) return null;
         const ix = Math.round(x), iz = Math.round(z);
-        const top = data.topLayer(ix, iz); // highest solid block
+        let top = data.topLayer(ix, iz); // highest solid block
         let L = top + 1, n = 0;
         while (n < 24 && data.get(ix, L, iz) === BLOCK.WATER) { L++; n++; }
+        // under a roof over the water (a pier's deck, a bridge): the water the body is in
+        if (!n && y != null) {
+            let l = Math.floor(y + 1.5);
+            if (data.get(ix, l, iz) !== BLOCK.WATER) l--;
+            if (data.get(ix, l, iz) === BLOCK.WATER) {
+                let b = l;
+                while (b > l - 24 && data.get(ix, b - 1, iz) === BLOCK.WATER) b--;
+                top = b - 1;
+                L = l;
+                while (L < l + 24 && data.get(ix, L, iz) === BLOCK.WATER) L++;
+                n = L - b;
+            }
+        }
         if (!n) return null;
         // a layer L spans y from L-1.5 to L-0.5
         const sea = L === 1 && !!data.isSeaColumn?.(ix, iz);
@@ -59,7 +72,7 @@ export class Swimming {
         const g = this.game;
         const ch = g.character;
         const p = ch.group.position;
-        const w0 = g.flight?.active ? null : this.waterAt(p.x, p.z);
+        const w0 = g.flight?.active ? null : this.waterAt(p.x, p.z, p.y - FEET + 0.3);
         const w = w0 && g.ships?.dryAt(p.x, p.y - FEET + 0.2, p.z) ? null : w0; // (inside a floating hull it is dry)
         const pose = g.currentPose;
 
@@ -126,7 +139,7 @@ export class Swimming {
         const g = this.game;
         const ch = g.character;
         const p = ch.group.position;
-        const w = this.waterAt(p.x, p.z);
+        const w = this.waterAt(p.x, p.z, p.y - FEET + 0.3);
         if (!w || p.y - FEET > w.surface) return '🫧 «Air Bubble» работает только в воде';
         if (maxima) {
             if (!ch.isTPose()) return '🫧 Для «Air Bubble Максима» разведите руки в стороны, как буква T';

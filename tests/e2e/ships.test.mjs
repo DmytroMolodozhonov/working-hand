@@ -435,9 +435,38 @@ test('ships: a sea castle\'s port has its ships moored at the piers, guns on the
         assert.ok(s.crew > 0, 'a crew aboard');
     }
     assert.ok(await page.evaluate(() => window.__zns.game.ships.cannons.port.size > 0), 'the port has its guns');
+    // the gangplank goes straight across from the pier to the gangway (not slanting along the ship)
+    const plank = await page.evaluate((sid) => {
+        const s = window.__zns.game.ships.list.get(sid), c = s.plank.collider;
+        const la = s.pose.toLocal(c.a.x, c.a.y, c.a.z, {}), lb = s.pose.toLocal(c.b.x, c.b.y, c.b.z, {});
+        return { dz: Math.abs(la.z - lb.z), len: Math.hypot(c.b.x - c.a.x, c.b.z - c.a.z) };
+    }, ships[0].id);
+    assert.ok(plank.dz < 0.3, `a straight plank (askew by ${plank.dz.toFixed(2)} m over ${plank.len.toFixed(1)} m)`);
+    // sailors talk like the people of the castles, and never stand inside each other
+    const talk = await page.evaluate((sid) => {
+        const g = window.__zns.game, s = g.ships.list.get(sid);
+        const v = [...g.ships.crew.byId.values()].find((x) => x.ship === s && !x.dead);
+        const w = s.pose.toWorld(v.l.x + 2, v.l.y + 2, v.l.z, { x: 0, y: 0, z: 0 });
+        g.character.group.position.set(w.x, w.y, w.z);
+        s.collider.forget(g.character.group.position);
+        const claims = g.ships.crew.claims('привет, как тебя зовут?');
+        const heard = g.ships.crew.hear('привет, как тебя зовут?');
+        return { claims, heard, bubble: !!v.bubble, talking: v.talking > 0 };
+    }, ships[0].id);
+    assert.ok(talk.claims && talk.heard && talk.bubble && talk.talking, `a sailor answers ${JSON.stringify(talk)}`);
+    await frames(page, 60);
+    const apart = await page.evaluate(() => {
+        const g = window.__zns.game;
+        let min = Infinity;
+        const l = [...g.ships.crew.byId.values()].filter((v) => !v.dead && !v.overboard);
+        for (const a of l) for (const b of l) if (a !== b && a.ship === b.ship && Math.abs(a.l.y - b.l.y) < 2) min = Math.min(min, Math.hypot(a.l.x - b.l.x, a.l.z - b.l.z));
+        return min;
+    });
+    assert.ok(apart > 0.85, `sailors keep apart (closest ${apart.toFixed(2)} m)`);
+
     // the gangplank: from the pier, 5 m before it, walk along it aboard
     await page.evaluate((sid) => {
-        const g = window.__zns.game, s = g.ships.list.get(sid), A = s.berth.plankA;
+        const g = window.__zns.game, s = g.ships.list.get(sid), A = s.plank.collider.a;
         window.__ship = s;
         const gw = s.plank.collider.b;
         const dx = gw.x - A.x, dz = gw.z - A.z, d = Math.hypot(dx, dz);
@@ -524,6 +553,36 @@ test('ships: hand over hand up the rope ladder out of the sea onto the deck; a m
     await page.evaluate(() => { window.__eye.dy = 0.9; });
     await frames(page, 3);
     assert.equal(await page.evaluate(() => window.__ship.lines[0].state), 'free', 'the loop came off the bollard');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('ships: a Bombardo cast at the deck breaks through it, the sea pours in, that end goes down first and the ship sinks', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await shipAtSea(page, 'pinnace', 'boom-ship', 0);
+    // the spell itself: the orb flies down onto the foredeck and bursts there
+    await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship, T = window.__zns.THREE;
+        const o = window.__w(0, s.layout.deck + 14, -12), t = window.__w(0, s.layout.deck, -12);
+        const d = new T.Vector3(t.x - o.x, t.y - o.y, t.z - o.z).normalize();
+        g.character.group.position.set(o.x + 30, o.y, o.z);
+        g.spells.cast('Bombardo', new T.Vector3(o.x, o.y, o.z), d, 'right', g.localId);
+    });
+    const hit = await until(page, () => { const s = window.__ship; return s.holes.length ? { holes: s.holes.map((h) => ({ deck: !!h.deck, ly: h.ly, r: h.r })), hp: s.hp } : null; }, null, 200);
+    assert.ok(hit, 'the orb hit the ship');
+    assert.ok(hit.holes.some((h) => h.deck), 'the deck is broken through');
+    assert.ok(hit.holes.some((h) => !h.deck && h.ly < 0.3), `the hull is torn open down to the water ${JSON.stringify(hit.holes)}`);
+    const sink = await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship;
+        let t = 0, pitchAt = null;
+        while (s.state !== 'wreck' && t < 300) { g.ships._simulate(s, 0.1); g.ships._place(s); t += 0.1; if (pitchAt === null && s.flood > 0.5) pitchAt = s.sinkPitch; }
+        return { t, state: s.state, pitchAt };
+    });
+    assert.equal(sink.state, 'wreck', 'one Bombardo sinks a pinnace');
+    assert.ok(sink.t < 120, `in ${sink.t.toFixed(0)} s`);
+    assert.ok(sink.pitchAt < 0, 'the holed bow goes down first');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

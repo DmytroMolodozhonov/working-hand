@@ -670,14 +670,33 @@ export class ShipModel {
     }
 
     /** A hole in the hull (ship-local) with a dark patch and splinters. */
-    addHole(lx, ly, lz, r) {
-        const side = lx >= 0 ? 1 : -1;
-        const w = hullHalfWidth(this.L, lz, Math.max(-this.L.draft + 0.2, ly));
-        const m = new THREE.Mesh(new THREE.CircleGeometry(Math.max(0.3, r), 9), shared().glass);
-        m.position.set(side * (w + 0.05), ly, lz);
-        m.rotation.y = side * Math.PI / 2;
-        this.holes.add(m);
-        return m;
+    addHole(lx, ly, lz, r, deck = false) {
+        // a torn, jagged opening (dark inside) with broken planks sticking out round it
+        const R = Math.max(0.35, r);
+        const n = 11, pts = [];
+        let seed = Math.abs(Math.round(lx * 31 + ly * 17 + lz * 13)) + 7;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        for (let i = 0; i < n; i++) pts.push(new THREE.Vector2(Math.cos((i / n) * Math.PI * 2), Math.sin((i / n) * Math.PI * 2)).multiplyScalar(R * (0.65 + rnd() * 0.5)));
+        const hole = new THREE.Group();
+        hole.add(new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts)), shared().glass));
+        const b = new Batch();
+        for (let i = 0; i < n; i++) {
+            if (rnd() < 0.35) continue;
+            const p = pts[i], a = Math.atan2(p.y, p.x), len = 0.4 + rnd() * R * 0.6;
+            b.boxAt(p.x + Math.cos(a) * len * 0.3, p.y + Math.sin(a) * len * 0.3, 0.06 + rnd() * 0.15, len, 0.12, 0.08, rnd() < 0.5 ? 0x6b4526 : 0x3a2414, 0, 0, a);
+        }
+        if (b.pos.length) hole.add(new THREE.Mesh(b.build(), shared().solid));
+        if (deck) {
+            hole.position.set(lx, ly + 0.03, lz);
+            hole.rotation.x = -Math.PI / 2;
+        } else {
+            const side = lx >= 0 ? 1 : -1;
+            const w = hullHalfWidth(this.L, lz, Math.max(-this.L.draft + 0.2, ly));
+            hole.position.set(side * (w + 0.04), ly, lz);
+            hole.rotation.y = side * Math.PI / 2;
+        }
+        this.holes.add(hole);
+        return hole;
     }
 
     /** The cannon's recoil and the fuse glow; loaded: the ball in the barrel. */

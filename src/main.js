@@ -418,10 +418,15 @@ voice.onResult = (command, isFinal = true) => {
             hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
             return;
         }
+        // (the same with a ship's sailor near me)
+        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
+            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
+            return;
+        }
         const name = game.castLocalSpell(command, isFinal);
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
         // («стоп» with nothing to stop is still words to a villager: «стой» / «стоп» = stop following me)
-        if (!name && isFinal && (!heard || heard === 'Stand') && game.castleLife?.talk?.hear(command)) {
+        if (!name && isFinal && (!heard || heard === 'Stand') && (game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command))) {
             hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
             return;
         }

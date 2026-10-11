@@ -20,6 +20,18 @@ import { floorAt, hullHalfWidth } from './ShipLayout.js';
 import { strHash } from './ShipTypes.js';
 import { createRng } from '../core/math.js';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
+import { SpeechBubble } from '../ui/SpeechBubble.js';
+import { VillagerBrain, detectIntent } from './VillagerBrain.js';
+import { matchSpell } from '../fx/SpellManager.js';
+
+const HEAR = 7; // m: a sailor hears you this far (like a villager)
+/** What sailors say by themselves now and then, and to each other. */
+const CHAT = {
+    alone: ['Эх, ветра бы попутного...', 'Палубу драить — не переплыть.', 'Чую, к ночи шторм будет.', 'Канаты проверить надо.', 'Скорей бы в море!', 'Рыбки бы наловить...'],
+    ask: ['Слыхал, что у берега видели морского змея?', 'Как думаешь, капитан даст нам отдых?', 'Где ты был, когда паруса ставили?', 'Помнишь тот шторм у мыса?', 'Ром весь вышел, что ли?'],
+    answer: ['Брешут, как всегда.', 'Да уж держи карман шире.', 'На вахте стоял, где ж ещё.', 'Как забыть... Еле выбрались.', 'Тише, боцман услышит!', 'А то ж!'],
+    captain: ['Свистать всех наверх!', 'Всем по местам!', 'Шевелись, братва!', 'Держать курс!'],
+};
 
 export const SAILOR_STATS = {
     captain: { hp: 20, armor: 30, dmg: 3 },
@@ -116,6 +128,7 @@ export class Sailors {
                 l: { x: home.x, y: home.y, z: home.z }, lyaw: Math.PI, home: home.id, node: home.id, path: null, pathI: 0,
                 mode: 'idle', speed: 0, waitT: 2 + Math.random() * 6, foe: null, strikeT: 0, sayT: 0, vy: 0,
                 overboard: null, x: 0, y: 0, z: 0, net: null, deadT: 0,
+                entry: { female: false, seed: e.seed }, talking: 0, chatT: 8 + Math.random() * 20,
             };
             list.push(v);
             this.byId.set(v.id, v);
@@ -127,7 +140,7 @@ export class Sailors {
     sleep(s) {
         const list = this.crews.get(s.id);
         if (!list) return;
-        for (const v of list) { v.model.dispose(); this.byId.delete(v.id); v.removable = true; }
+        for (const v of list) { v.model.dispose(); v.bubble?.dispose(); this.byId.delete(v.id); v.removable = true; this.brains?.delete(v.id); }
         this.crews.delete(s.id);
     }
 
@@ -307,10 +320,12 @@ export class Sailors {
                 if (this.auth) this._think(v, s, dt);
                 else this._follow(v, dt);
             }
+            if (this.auth) { this._separate(s, list); this._chatter(s, list, dt); }
             this._place(s);
             for (const v of list) {
                 v.model.update(dt, { mode: v.mode === 'swim' ? 'walk' : v.mode, speed: v.speed });
-                if (v.bubbleT > 0 && (v.bubbleT -= dt) <= 0 && v.bubble) { g.scene.remove(v.bubble); v.bubble.material.map?.dispose(); v.bubble.material.dispose(); v.bubble = null; }
+                if (v.sayT > 0) v.sayT -= dt;
+                if (v.bubble) v.bubble.update(dt, _w.set(v.x, v.y + 4.4, v.z), g.camera);
             }
         }
     }
@@ -328,7 +343,6 @@ export class Sailors {
             }
             v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
             v.group.rotation.set(0, s.st.yaw + v.lyaw, 0);
-            if (v.bubble) v.bubble.position.set(v.x, v.y + 6.2, v.z);
         }
     }
 
@@ -338,7 +352,6 @@ export class Sailors {
         if (v.dead) { v.mode = 'dead'; v.speed = 0; return; }
         if (v.overboard) { this._swim(v, s, dt); return; }
         if (s.flooded) { this._overboard(v, Math.random() < 0.5 ? -1 : 1); return; }
-        if (v.sayT > 0) v.sayT -= dt;
         // the foe: a hostile player aboard (or on the pier near the gangway)
         const now = performance.now();
         let foe = null, fd = Infinity, onPier = false;
@@ -370,6 +383,14 @@ export class Sailors {
             if (Math.hypot(gw.x - v.l.x, gw.z - v.l.z) > 2 + v.idx * 0.4) { this._steer(v, s, gw.x - Math.sign(gw.x) * 1.5, gw.z + (v.idx % 4 - 1.5) * 1.6, RUN, dt); v.mode = 'run'; }
             else { v.mode = 'idle'; v.speed = 0; v.lyaw = gw.x > 0 ? -Math.PI / 2 : Math.PI / 2; }
             if (v.sayT <= 0 && Math.random() < dt * 0.2) this._say(v, pick(SHOUT.gang));
+            return;
+        }
+        // talking to somebody: stand and face them
+        if (v.talking > 0) {
+            v.talking -= dt;
+            v.mode = 'idle'; v.speed = 0;
+            const p = v.talkTo && this._playerLocal(s, v.talkTo, _l);
+            if (p) v.lyaw = Math.atan2(-(p.x - v.l.x), -(p.z - v.l.z));
             return;
         }
         // jobs: walk the ship between stations, work at them
@@ -431,7 +452,20 @@ export class Sailors {
         const d = Math.hypot(dx, dz);
         if (d < 1e-3) { v.speed = 0; return; }
         const step = Math.min(d, speed * dt);
-        const nx = v.l.x + (dx / d) * step, nz = v.l.z + (dz / d) * step;
+        let ux = dx / d, uz = dz / d;
+        // somebody in the way (a mate, a player): step round them, to the right
+        for (const o of this.crews.get(s.id) || []) {
+            if (o === v || o.dead || o.overboard || Math.abs(o.l.y - v.l.y) > 2.5) continue;
+            const ox = o.l.x - v.l.x, oz = o.l.z - v.l.z, od = Math.hypot(ox, oz);
+            if (od > 2.2 || od < 1e-3 || (ox * ux + oz * uz) / od < 0.7) continue;
+            const side = (v.idx > o.idx) ? 1 : -1;
+            const rx = -uz * side, rz = ux * side;
+            const k = (2.2 - od) / 2.2;
+            ux += rx * k * 1.2; uz += rz * k * 1.2;
+            const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+            if (o.speed > 0.1 && v.idx > o.idx && od < 1.4) { v.speed = 0; return; } // (the younger one waits a moment)
+        }
+        const nx = v.l.x + ux * step, nz = v.l.z + uz * step;
         const L = s.layout;
         const reach = (ty != null ? Math.max(ty, v.l.y) : v.l.y) + 1.1;
         const f = floorAt(L, nx, nz, reach);
@@ -497,24 +531,130 @@ export class Sailors {
         return !!r && r.ship === s.id;
     }
 
-    _say(v, text) {
+    /** A sailor says a line: over the head, and aloud (the villagers' voices) for those close enough. */
+    _say(v, text, seconds = 4, broadcast = true) {
         const g = this.game;
-        if (v.sayT > 0) return;
-        v.sayT = 5;
-        // a simple speech bubble
+        if (!text || (v.sayT > 0 && !broadcast)) return;
+        v.sayT = 1.5;
         if (!g.scene || typeof document === 'undefined') return;
-        const cv = document.createElement('canvas');
-        cv.width = 512; cv.height = 96;
-        const x = cv.getContext('2d');
-        x.fillStyle = 'rgba(255,255,255,0.92)'; x.fillRect(0, 0, 512, 96);
-        x.fillStyle = '#222'; x.font = 'bold 34px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-        x.fillText(`${v.title}: ${text}`.slice(0, 32), 256, 48);
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
-        sp.scale.set(6, 1.1, 1);
-        if (v.bubble) { g.scene.remove(v.bubble); v.bubble.material.map?.dispose(); v.bubble.material.dispose(); }
-        v.bubble = sp;
-        v.bubbleT = 3.5;
-        g.scene.add(sp);
+        if (!v.bubble) { v.bubble = new SpeechBubble(); g.scene.add(v.bubble.sprite); }
+        const shout = /!$/.test(text) && (!!v.foe || v.role === 'captain');
+        const talk = g.castleLife?.talk;
+        if (talk?.voiceCarries?.(v, shout)) v.bubble.hide?.();
+        else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.role === 'captain' ? '#1f3a6b' : '#2a4a5a' });
+        talk?.voice?.(v, text, shout);
+        if (broadcast && this.auth) g.sync?.net.send({ t: 'screw', say: 1, id: v.id, text: String(text).slice(0, 200) });
+    }
+
+    // ---------------------------------------------------------- talking
+    /** The sailor nearest to me within earshot (the one in front first). */
+    _listener() {
+        const g = this.game;
+        const me = g.character.group.position;
+        const yaw = g.character.group.rotation.y;
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        let best = null, bs = Infinity;
+        for (const v of this.byId.values()) {
+            if (v.dead || v.overboard) continue;
+            const dx = v.x - me.x, dz = v.z - me.z, d = Math.hypot(dx, dz);
+            if (d > HEAR || Math.abs(v.y - (me.y - 1.95)) > 3) continue;
+            const sc = d - 2.5 * (d > 0.01 ? (dx * fx + dz * fz) / d : 1);
+            if (sc < bs) { bs = sc; best = v; }
+        }
+        return best;
+    }
+
+    /** A sailor hears me and these are words of a talk (a greeting, a question…), not a spell. */
+    claims(text) {
+        if (!this._listener()) return false;
+        const spell = matchSpell(text);
+        if (spell === 'Stand') return false;
+        const intent = detectIntent(text).intent;
+        if (spell && (intent === 'magic' || intent === 'unknown')) return false;
+        return intent !== 'unknown';
+    }
+
+    _brain(v) {
+        this.brains = this.brains || new Map();
+        let b = this.brains.get(v.id);
+        if (!b) {
+            const s = v.ship;
+            const capt = (this.crews.get(s.id) || []).find((x) => x.role === 'captain');
+            // (a captain talks like a commander, a sailor like a working man)
+            b = new VillagerBrain(
+                { id: v.id, name: v.name, role: v.role === 'sailor' ? 'builder' : 'knight', female: false, castleName: `корабль «${s.name}»`, kingName: capt ? capt.name : 'капитан', seed: v.entry.seed },
+                () => ({ castleName: `корабль «${s.name}»`, kingName: capt ? capt.name : 'капитан', playerIsKing: s.owner === this.game.localId, timeOfDay: this.game.isNight ? 'night' : 'day', danger: s.hostile.size > 0 }),
+            );
+            this.brains.set(v.id, b);
+        }
+        return b;
+    }
+
+    /** Words said near a sailor: he stops, turns to you and answers (like the people of the castles). */
+    hear(text, by = null) {
+        const g = this.game;
+        const v = by ? null : this._listener();
+        if (!v) return false;
+        const s = v.ship;
+        const ctx = {
+            playerName: g.net?.active ? g.net.name : null, playerIsKing: s.owner === g.localId,
+            hostile: (s.hostile.get(g.localId) || 0) > performance.now(), coins: g.inventory?.coins?.() ?? 0,
+            nearbyGoods: [], heldItem: null, players: [], selfId: g.localId, following: false, danger: s.hostile.size > 0,
+        };
+        let res;
+        try { res = this._brain(v).hear(text, ctx); } catch (e) { res = { reply: 'А? Чего?' }; }
+        v.talking = 6; v.talkTo = g.localId;
+        if (!this.auth) g.sync?.net.send({ t: 'screw', talk: 1, id: v.id });
+        this._say(v, res?.reply || 'Некогда мне, работать надо.', 6);
+        if (res?.action === 'hostile' || res?.action === 'call_guards') this.provoke(s, g.localId, '🏴 Вы разозлили матросов!');
+        return true;
+    }
+
+    /** Now and then a sailor says something, or two sailors near each other talk. */
+    _chatter(s, list, dt) {
+        const me = this.game.character.group.position;
+        for (const v of list) {
+            if (v.dead || v.overboard || v.foe || v.talking > 0) continue;
+            if ((v.chatT -= dt) > 0) continue;
+            v.chatT = 20 + Math.random() * 30;
+            if (Math.hypot(v.x - me.x, v.z - me.z) > 40) continue;
+            if (v.role === 'captain') { if (Math.random() < 0.5) this._say(v, pick(CHAT.captain)); continue; }
+            const mate = list.find((o) => o !== v && !o.dead && !o.overboard && !o.foe && Math.hypot(o.l.x - v.l.x, o.l.z - v.l.z) < 6);
+            if (!mate) { if (Math.random() < 0.4) this._say(v, pick(CHAT.alone)); continue; }
+            // a little talk: they turn to each other, one asks, the other answers
+            for (const [a, b] of [[v, mate], [mate, v]]) { a.talking = 5; a.talkTo = null; a.lyaw = Math.atan2(-(b.l.x - a.l.x), -(b.l.z - a.l.z)); a.path = null; }
+            this._say(v, pick(CHAT.ask));
+            mate.chatT = 20 + Math.random() * 30;
+            setTimeout(() => { if (!mate.dead) this._say(mate, pick(CHAT.answer)); }, 2200);
+        }
+    }
+
+    /**
+     * Bodies are solid: sailors never walk through each other (or through a player on the deck);
+     * the one in the way is stepped round.
+     */
+    _separate(s, list) {
+        const R = 1.0;
+        const bodies = [];
+        const me = this.ships.me?.ship === s ? this.ships.me.l : null;
+        if (me) bodies.push({ l: { x: me.x, y: me.y - 2, z: me.z }, fixed: true });
+        for (const [id, r] of this.game.remotes) if (r.ship === s.id) { const q = s.pose.toLocal(r.position.x, r.position.y - 2, r.position.z, {}); bodies.push({ l: q, fixed: true, id }); }
+        for (const v of list) if (!v.dead && !v.overboard) bodies.push({ l: v.l, v });
+        for (let i = 0; i < bodies.length; i++) {
+            for (let j = i + 1; j < bodies.length; j++) {
+                const A = bodies[i], B = bodies[j];
+                if (A.fixed && B.fixed) continue;
+                if (Math.abs(A.l.y - B.l.y) > 2.5) continue;
+                let dx = B.l.x - A.l.x, dz = B.l.z - A.l.z;
+                let d = Math.hypot(dx, dz);
+                if (d >= R) continue;
+                if (d < 1e-4) { dx = (B.v?.idx || 1) % 2 ? 1 : -1; dz = 0; d = 1; }
+                const push = R - d;
+                const ka = A.fixed ? 0 : B.fixed ? 1 : 0.5, kb = 1 - ka;
+                if (!A.fixed) { A.l.x -= (dx / d) * push * ka; A.l.z -= (dz / d) * push * ka; }
+                if (!B.fixed) { B.l.x += (dx / d) * push * kb; B.l.z += (dz / d) * push * kb; }
+            }
+        }
     }
 
     // ---------------------------------------------------------- network
@@ -530,6 +670,7 @@ export class Sailors {
     }
 
     applyNet(m) {
+        if (m.say) { const v = this.byId.get(m.id); if (v) this._say(v, m.text, 4, false); return; }
         const list = this.crews.get(m.id);
         if (!list) return;
         const s = this.ships.list.get(m.id);
@@ -542,6 +683,12 @@ export class Sailors {
             if (a[8] && !v.dead) { v.dead = true; s?.crewKilled.add(v.idx); }
             v.overboard = Array.isArray(a[9]) ? { x: a[9][0], y: a[9][1], z: a[9][2], vy: 0, t: 0 } : null;
         }
+    }
+
+    /** (host) a guest talks to a sailor: he stops and faces them. */
+    remoteTalk(m) {
+        const v = this.byId.get(m.id);
+        if (v && !v.dead) { v.talking = 6; v.talkTo = m.from; v.path = null; }
     }
 
     _follow(v, dt) {

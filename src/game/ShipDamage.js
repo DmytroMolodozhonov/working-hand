@@ -9,7 +9,7 @@
  */
 
 export const DMG = {
-    HOLE_K: 0.35, HOLE_MAX: 3, LEAK_K: 0.006,
+    HOLE_K: 0.6, HOLE_MAX: 3.6, LEAK_K: 0.006,
     FIRE_GROW: 0.1, SPREAD_R: 7, SPREAD_P: 0.3, SPREAD_T: 4, FIRE_DPS: 0.5, SAIL_BURN: 0.12, MAX_FIRES: 24,
     SINK_V0: 0.15, SINK_V1: 0.8, LIST_MAX: 0.38, PITCH_MAX: 0.1,
     BALL_DMG: 18, BALL_HOLE: 0.9, // a cannonball
@@ -90,7 +90,7 @@ export function stepSinking(st, cls, dt, seabedY, waterY) {
     st.sinkY = (st.sinkY || 0) + v * dt;
     const k = Math.min(1, st.sinkT / 25);
     st.sinkRoll = (st.listSide || 1) * DMG.LIST_MAX * k;
-    st.sinkPitch = -DMG.PITCH_MAX * k;
+    st.sinkPitch = (st.pitchSide || -1) * DMG.PITCH_MAX * k; // (down by the end that is holed; the bow if unsure)
     const dip = Math.abs(Math.sin(st.sinkPitch)) * cls.L * 0.5; // (bow down)
     const deckY = waterY + cls.deck - st.sinkY - dip;
     if (deckY < waterY - 0.3) st.flooded = true;
