@@ -1324,8 +1324,8 @@ export class CastleLife {
     }
 
     // ------------------------------------------------------------ speech
-    _say(v, text, seconds = 4, broadcast = true) {
-        if (!text || v.sayT > 0 && !broadcast) return;
+    _say(v, text, seconds = 4, broadcast = true, force = false) {
+        if (!text || v.sayT > 0 && !broadcast && !force) return;
         v.sayT = 1.5;
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         // a cry in a fight, a call for help, an alarm: shouted (seen and heard far)
@@ -1340,7 +1340,10 @@ export class CastleLife {
     /** (network) a villager said something. */
     heard(id, text) {
         const v = this.byId.get(id);
-        if (v) this._say(v, text, 4, false);
+        if (!v) return;
+        // (the answer to my own words, thought on the host: said at once, never lost)
+        if (this.talk.hostAnswer?.(v, text)) return;
+        this._say(v, text, 4, false);
     }
 
     _chatter(dt) {
@@ -1371,6 +1374,7 @@ export class CastleLife {
             this._separate(dt);
         } else {
             for (const v of this.byId.values()) {
+                v.sayT -= dt; // (here too: else after a guest's first line every line of the host's villagers was dropped)
                 if (!v.net) continue;
                 const k = Math.min(1, dt * 8);
                 v.x += (v.net.x - v.x) * k; v.y += (v.net.y - v.y) * k; v.z += (v.net.z - v.z) * k;

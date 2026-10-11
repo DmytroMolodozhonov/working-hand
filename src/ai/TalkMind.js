@@ -98,8 +98,9 @@ export class TalkMind {
 
     _history(brain) {
         const log = brain.memory?.log || [];
-        // (the last line pair is the one being answered: the rules logged it already)
-        return log.slice(-14, -2).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text }));
+        // (the last line pair is the one being answered: the rules logged it already;
+        // the 3 exchanges before it are enough — a shorter prompt is read sooner, the answer comes sooner)
+        return log.slice(-8, -2).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text }));
     }
 
     _permCtx(brain, ctx) {

@@ -273,6 +273,11 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path.endswith((".js", ".mjs", ".html", ".css", ".json")) or path == "/":
             self.send_header("Cache-Control", "no-cache")
+        # A cross-origin-isolated page: the villagers' voices and neural net may use several
+        # processor cores (threads need SharedArrayBuffer) — their answers come several times sooner.
+        # ("credentialless": the model downloads from other sites still work, no CORP needed)
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "credentialless")
         super().end_headers()
 
     # ---------- helpers ----------

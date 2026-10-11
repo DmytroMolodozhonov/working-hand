@@ -140,19 +140,38 @@ export class CastleTalk {
     }
 
     /** A line of the conversation with me: said at once (cutting what was being said), no chatter over it. */
-    _sayReply(v, text, seconds = 5) {
+    _sayReply(v, text, seconds = 5, broadcast = true) {
         if (!text) return;
         v.talkedAt = performance.now();
         this._partner = v;
         this._urgent = true;
-        try { this.life._say(v, text, seconds); } finally { this._urgent = false; }
+        try { this.life._say(v, text, seconds, broadcast, true); } finally { this._urgent = false; }
     }
 
     /** The rest of an answer: after what the villager is saying now (not cutting it). */
-    _sayMore(v, text) {
+    _sayMore(v, text, broadcast = true) {
         v.talkedAt = performance.now();
         this._partner = v;
-        this.life._say(v, text, 5);
+        this.life._say(v, text, 5, broadcast, true);
+    }
+
+    /** (host) a line of the answer to a guest: everybody near hears it; my own talk is not touched. */
+    _sayForGuest(v, text) {
+        if (!text) return;
+        v.talkedAt = performance.now();
+        this.life._say(v, text, 5, true, true);
+    }
+
+    /**
+     * (a guest) a villager I asked says a line of the host's answer: it is my talk — said at once,
+     * cutting the «Хм…», the next lines after it. Returns false for any other line.
+     */
+    hostAnswer(v, text) {
+        const a = this._asks.get(v.id);
+        if (!a || !text) return false;
+        if (!a.got) { a.got = true; this._sayReply(v, text, 5, false); } else this._sayMore(v, text, false);
+        if (a.t0 && !a.logged) { a.logged = true; console.info(`[CastleTalk] host answered in ${Math.round(performance.now() - a.t0)} ms: «${text}»`); }
+        return true;
     }
 
     /** «Хм…» while the net thinks: over the head only. */
@@ -214,11 +233,12 @@ export class CastleTalk {
         const done = (res) => this._apply(v, res);
         // a guest without a net of their own: the host's net answers (not the market — that is mine)
         if (!g.authority && this.hostSmart && !this.llm?.ready && g.sync?.villagerAsk && this.offer?.v !== v) {
-            this._asks.set(v.id, performance.now());
+            const ask = { t0: performance.now(), got: false };
+            this._asks.set(v.id, ask);
             this._sayThinking(v);
             g.sync.villagerAsk(v.id, text, { coins: ctx.coins, heldItem: ctx.heldItem, hostile: ctx.hostile });
-            // (no answer in time: my own rules answer)
-            setTimeout(() => { if (this._asks.delete(v.id)) done(b.hear(text, ctx)); }, 12000);
+            // (no answer in time: my own rules answer; the host already speaking: just stop waiting)
+            setTimeout(() => { if (this._asks.get(v.id) !== ask) return; this._asks.delete(v.id); if (!ask.got) done(b.hear(text, ctx)); }, 12000);
             return true;
         }
         this.mind.llm = this.llm?.ready ? this.llm : null;
@@ -272,18 +292,26 @@ export class CastleTalk {
         this.mind.llm = this.llm?.ready ? this.llm : null;
         const send = (res) => {
             if (!res || v.dead) return;
-            if (res.reply) this._sayReply(v, res.reply);
+            if (res.reply) {
+                // (the start went to the guest already while the net wrote: only the rest now)
+                const head = res.spoken;
+                if (head && res.reply.startsWith(head)) this._sayForGuest(v, res.reply.slice(head.length).trim());
+                else this._sayForGuest(v, res.reply);
+            }
             if (res.action) this._act(v, res, from);
             g.sync?.villagerAnswer?.(from, id, { action: res.action || null, offer: res.offer || null });
         };
         const first = this.mind.first(b, text, ctx);
         if (first.done) send(first.res);
-        else this.mind.ask(b, text, ctx, first).then(send, () => send(first.res));
+        // (the first sentence goes to the guest as soon as the net has written it — not after the whole answer)
+        else this.mind.ask(b, text, ctx, first, { onSentence: (line) => this._sayForGuest(v, line) }).then(send, () => send(first.res));
     }
 
     /** (a guest) the host's net answered: the line is already said; the market part is mine. */
     answered(id, res = {}) {
-        if (!this._asks.delete(id)) return;
+        const a = this._asks.get(id);
+        if (!a) return;
+        this._asks.delete(id);
         const v = this.life.byId.get(id);
         if (!v || v.dead) return;
         if (res.action === 'trade_yes' || res.action === 'trade_no') this._apply(v, { reply: '', action: res.action, offer: res.offer || null });

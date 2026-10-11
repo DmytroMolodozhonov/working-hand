@@ -128,18 +128,28 @@ async function synth(msg) {
     if (!style) throw new Error(`no voice ${msg.voice}`);
     const sampleRate = model.cfg.ae.sample_rate;
     let sent = 0;
-    await synthesize(ort, model.s, model.cfg, model.indexer, style, msg.text, {
-        speed: msg.speed,
-        steps: msg.steps,
-        onChunk: (pcm, i, n) => {
-            const copy = pcm.slice();
-            sent++;
-            post({ type: 'audio', id: msg.id, pcm: copy, sampleRate, part: i, last: i === n - 1 }, [copy.buffer]);
-        },
-    });
+    try {
+        await synthesize(ort, model.s, model.cfg, model.indexer, style, msg.text, {
+            speed: msg.speed,
+            steps: msg.steps,
+            onChunk: (pcm, i, n) => {
+                const copy = pcm.slice();
+                sent++;
+                post({ type: 'audio', id: msg.id, pcm: copy, sampleRate, part: i, last: i === n - 1 }, [copy.buffer]);
+                // (a newer line cut this one: its next sentences are not made — the answer is heard sooner)
+                if (i < n - 1 && cancelled.has(msg.id)) throw CUT;
+            },
+        });
+    } catch (e) {
+        if (e !== CUT) throw e;
+        cancelled.delete(msg.id);
+        post({ type: 'audio', id: msg.id, pcm: new Float32Array(0), sampleRate, part: 0, last: true });
+        return;
+    }
     if (!sent) post({ type: 'audio', id: msg.id, pcm: new Float32Array(0), sampleRate, part: 0, last: true });
 }
 
+const CUT = new Error('cut');
 const cancelled = new Set(); // (lines nobody waits for any more: not synthesized — the next line comes sooner)
 
 self.onmessage = (ev) => {

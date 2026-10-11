@@ -405,6 +405,14 @@ voice.onResult = (command, isFinal = true, held = false) => {
     }
     if (game && game.active) {
         if (game.isMagicActive || Date.now() - game.lastMagicTime < 1500) hud.setVoice(`🎤 СЛЫШУ: "${escapeHtml(command)}"`);
+        // talking to a villager near me, the hand not raised to cast: words they understand are words,
+        // not a spell («собери войско» is not «Gather», «спасибо» is not «Rescue», «в атаку» is an order)
+        // (first: they cast nothing, so the checks below that a spell is really mine — loudness, lips,
+        // a friend's echo — must not eat a guest's words to a villager)
+        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
+            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
+            return;
+        }
         // Multiplayer: a friend's voice heard by this microphone must not cast here
         const margin = parseInt($('voice-filter')?.value ?? '9', 10);
         if (margin > 0 && game.remotes?.size > 0 && matchSpell(command) && !voice.isOwnVoice(margin)) {
@@ -430,12 +438,6 @@ voice.onResult = (command, isFinal = true, held = false) => {
                 else game.sync?.say?.(heard);
                 if (isFinal || held) netLog(`заклинание «${command}» моё: ${gate.sure ? 'рот двигался вместе с голосом' : 'лица не видно — друг этого заклинания не говорил'}`);
             }
-        }
-        // talking to a villager near me, the hand not raised to cast: words they understand are words,
-        // not a spell («собери войско» is not «Gather», «спасибо» is not «Rescue», «в атаку» is an order)
-        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
-            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
-            return;
         }
         // (the same with a ship's sailor near me)
         if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
