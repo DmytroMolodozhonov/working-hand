@@ -62,7 +62,7 @@ export function lyingMessage(kind) {
 
 /**
  * Why a recognized spell did not work (the cases the spell itself does not explain).
- * code: 'handDown' | 'cooldown' | 'maximaAlone' | 'busy' | 'dead'
+ * code: 'handDown' | 'cooldown' | 'maximaAlone' | 'busy' | 'dead' | 'ward…' (the house's protection)
  */
 export function refusal(code, d = {}) {
     const name = d.name ? `«${d.name}»` : 'заклинание';
@@ -71,6 +71,18 @@ export function refusal(code, d = {}) {
         case 'cooldown': return '⏳ Слишком быстро — подождите секунду и скажите ещё раз';
         case 'maximaAlone': return '✨ «Максима» говорится вместе с заклинанием, например «Бомбардо Максима»';
         case 'busy': return `⏳ Уже действует ${name} — сначала скажите «Стоп»`;
+        // «Защита дома» (HouseWards.js)
+        case 'wardUnknown': return `📘 ${name} — из книги защиты. Сбейте тёмно-синюю книгу-птицу с серебряным щитом огнём («Инферно») или ледяным шаром и прочитайте её`;
+        case 'wardNoHand': return `✋ Не сработало ${name}: поднимите руку (или палочку) и направьте её на дом`;
+        case 'wardNoHouse': return '🏠 «Protection House»: направьте руку на дом — на его стену, крышу или пол (не дальше 40 м)';
+        case 'wardNotYours': return `🛡️ Это не ваш дом — его защита принадлежит игроку ${d.owner || 'другому'}`;
+        case 'wardMax': return `🛡️ Сфера уже самая большая (${d.r} м) — скажите «стоп»`;
+        case 'wardNoMana': return `😮‍💨 Мана кончилась — сфера осталась ${d.r} м`;
+        case 'wardInvNone': return '🛡️ «Protection Invisible» работает только на доме с защитой: сначала «Protection House»';
+        case 'wardInvDone': return '🫥 Этот дом уже невидим издалека';
+        case 'wardGrantFar': return '🛡️ «Protection House Grant»: встаньте у своего защищённого дома (или внутри него)';
+        case 'wardGrantAim': return '🛡️ «Protection House Grant»: направьте руку на игрока, которого пускаете в дом';
+        case 'wardGrantDone': return `🛡️ ${d.who || 'Этот игрок'} уже может входить в ваш дом`;
         default: return '';
     }
 }

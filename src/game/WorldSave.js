@@ -16,6 +16,8 @@
  * things or learned spells. (Old saves keyed by name still work once.)
  */
 
+import { keepIn } from './HouseWards.js';
+
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
 const SAVE_EVERY = 8; // seconds
@@ -226,6 +228,7 @@ export class WorldKeeper {
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             houses: g.houses?.snapshot() || null,
+            wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             bodies: g.death?.snapshot() || [],
@@ -260,8 +263,9 @@ export function restoreWorld(game, save, THREE) {
     if (Array.isArray(save.edits) && save.edits.length) { g.builder?.applyEdits(save.edits); }
     for (const i of save.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
     for (const e of save.explosions || []) {
-        if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r); // («Total Destruction»)
-        else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r);
+        // (k: the houses' spheres of protection it could not eat into — HouseWards.js)
+        if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k)); // («Total Destruction»)
+        else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k));
         g.explosions.push(e);
     }
     if (save.ice && save.ice.length) g.applyIce(save.ice);
@@ -272,6 +276,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.boards) g.boards?.restore(save.boards);
     if (save.campfires) g.campfires?.restore(save.campfires);
     if (save.houses) g.houses?.restore(save.houses);
+    if (save.wards) g.wards?.restore(save.wards); // houses' spheres of protection
     if (save.beds) g.beds?.restore(save.beds);
     if (save.castles) g.castleLife?.restore(save.castles);
     if (save.bodies) g.death?.restore(save.bodies);

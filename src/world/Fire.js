@@ -124,6 +124,7 @@ export class FireSystem {
     }
 
     _igniteBlock(x, L, z) {
+        if (this.game.wards?.protects(x, L - 1, z)) return false; // (a house's sphere of protection: nothing inside catches fire)
         const key = x + ',' + L + ',' + z;
         if (this.burningBlocks.has(key) || this.burningBlocks.size >= FIRE.MAX_BLOCKS) return false;
         this.burningBlocks.set(key, { x, L, z, t: 0, spread: false });

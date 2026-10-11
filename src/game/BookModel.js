@@ -15,6 +15,8 @@ export const BOOK = { W: 0.42, H: 0.6, T: 0.06, B: 0.025 }; // half width, heigh
 
 /** The swift book-bird's book («Флайн»): sky blue with silver trim. */
 export const SWIFT_COVER = 0x7fc8f0, SWIFT_TRIM = 0xd8e4ec;
+/** The book of protection («Защита дома», HouseWards.js): deep blue with silver trim and a silver shield. */
+export const WARD_COVER = 0x1b2f7a, WARD_TRIM = 0xd8e4ec;
 
 export function makeSpellBookModel(color = COVERS[0], trimColor = 0xd4af37) {
     const { W, H, T, B } = BOOK;

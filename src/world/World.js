@@ -627,21 +627,22 @@ export class VoxelWorld {
      * «Total Destruction»: everything built around `center` falls apart (Ruin.js) —
      * no crater; the start area's trees, grass and tables just break.
      */
-    ruin(center, radius) {
+    ruin(center, radius, keep = null) {
         const out = { blocks: [], props: [], tables: [], falls: [], removed: [], rubble: [] };
         if (!this.destructible) return out;
         const terrain = this.terrain;
-        if (terrain) Object.assign(out, ruinArea(terrain.data, center.x, center.y, center.z, radius));
+        if (terrain) Object.assign(out, ruinArea(terrain.data, center.x, center.y, center.z, radius, keep));
         this.terrain = null; // (the props only: the ground is not blown away)
         try { const p = this.explode(center, radius); out.props = p.props; out.tables = p.tables; } finally { this.terrain = terrain; }
         return out;
     }
 
-    explode(center, radius) {
+    /** keep(x, y, z): blocks it may not break (a house's sphere of protection, HouseWards.js). */
+    explode(center, radius, keep = null) {
         const out = { blocks: [], props: [], tables: [], falls: [] };
         if (!this.destructible) return out;
         if (this.terrain) {
-            out.blocks = this.terrain.removeSphere(center.x, center.y, center.z, radius);
+            out.blocks = this.terrain.removeSphere(center.x, center.y, center.z, radius, keep);
             // what is left hanging in the air falls down (a roof without walls, a piece of floor)
             out.falls = collapseAfter(this.terrain.data, center.x, center.y, center.z, radius);
         }

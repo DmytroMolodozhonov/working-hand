@@ -18,6 +18,14 @@
  * only — «Флайн»: burning it (not reading) is the one way to learn to fly (in «Выживание»).
  * Its id tells it apart (≥ SWIFT_ID), so every computer knows it is the swift one.
  *
+ * The book of protection: a deep-blue book with silver trim, a silver shield on each cover and a
+ * faint blue aura round it; it is met as often as an ordinary one. It is protected by magic:
+ * «Авада Кедавра», every duel charge, rays, blasts, arrows, wind, «Левиоса» — all bounce off its
+ * aura with a spark. Only a direct hit of FIRE (the «Инферно» flame, «Let the Hellfire Come») or of
+ * an ICE ball (a «Waterbollow» ball frozen with «Frozen», thrown or swung into it) brings it down —
+ * singed, still readable. Its three spells are a group, «Защита дома» (HouseWards.js): reading any of
+ * their pages teaches all three. Its id tells it apart (WARD_ID ≤ id < SWIFT_ID).
+ *
  * Multiplayer: the host flies the birds and decides hits; everybody sees
  * them; a book is taken by whoever reaches it first (the host decides).
  */
@@ -25,7 +33,9 @@
 import * as THREE from 'three';
 import { isLeaves } from '../world/Terrain.js';
 import { BookReading, bookSpellName } from './BookReading.js';
-import { SWIFT_COVER, SWIFT_TRIM } from './BookModel.js';
+import { SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
+import { WARD_SPELLS } from './HouseWards.js';
+import { radiusOf } from './WaterMagic.js';
 
 export { bookSpellName };
 
@@ -51,6 +61,21 @@ export const birdSpeed = (id) => (isSwiftId(id) ? SWIFT.SPEED : SPEED);
 /** A new bird: the swift one now and then (SWIFT.CHANCE). */
 export const rollSwift = (r = Math.random) => r() < SWIFT.CHANCE;
 
+/** The book of protection: as common as an ordinary book-bird (half of the birds that are not swift). */
+export const WARD_BOOK = { CHANCE: 0.5, COVER: WARD_COVER, TRIM: WARD_TRIM, AURA: 0x6fa8ff };
+export const WARD_ID = 800000000;
+/** Is this book-bird (or its book) the book of protection? */
+export const isWardId = (id) => +id >= WARD_ID && +id < SWIFT_ID;
+/** The Creative pedestal's book of protection. */
+export const WARD_PEDESTAL_ID = WARD_ID + 777003;
+/** What brings the book of protection down: a direct hit of fire or of an ice ball — nothing else. */
+export const wardBookFalls = (kind) => kind === 'fire' || kind === 'ice';
+/** The id of a new bird: swift now and then, else the book of protection or an ordinary one, half and half. */
+export function rollBirdId(n, r = Math.random) {
+    if (r() < SWIFT.CHANCE) return SWIFT_ID + n;
+    return r() < WARD_BOOK.CHANCE ? WARD_ID + n : n;
+}
+
 /** How each spell is done — for the book's pages. */
 const HOW = {
     Gather: { words: 'Gather', hand: 'one', text: 'Поднимите руку и укажите на дерево, камень, землю или листву (до 10 м). Скажите «Gather» — магия разберёт это и принесёт в ячейку. Дерево целиком — 20 древесины.' },
@@ -59,6 +84,9 @@ const HOW = {
     CreateCeiling: { words: 'Create a Ceiling', hand: 'reach', text: 'Укажите рукой место — потолок появится на высоте трёх блоков. Тяните руку — он растёт над вами.' },
     BuildRoof: { words: 'Build a Roof', hand: 'reach', text: 'Укажите место и тяните руку: двускатная крыша растёт ступенями от краёв к коньку.' },
     CreateBoard: { words: 'Create a Board', hand: 'board', text: 'Поднимите руку, покажите на дерево и скажите заклинание — ствол станет доской для волн. Несите её двумя руками за края или под мышкой. Положите на воду и разожмите руки. Поднимите колено над доской и опустите ногу — вы на доске; другой ногой гребите. Волна подхватила — встаньте обеими ногами; наклон влево-вправо поворачивает.' },
+    ProtectionHouse: { words: 'Protection House', hand: 'house', text: 'Направьте руку на дом и скажите заклинание (20 маны): вокруг дома встанет сфера защиты. Кричите «Максима» (5 маны), и она растёт, пока не накроет весь дом. Тогда скажите «стоп». Войти может только хозяин и те, кого он пустит; заклинания снаружи разбиваются о неё.' },
+    ProtectionInvisible: { words: 'Protection Invisible', hand: 'invisible', text: 'Направьте руку на дом под защитой (15 маны). Издалека его больше не видно — только земля и трава, как вокруг. Ближе 3–4 м он медленно проступает.' },
+    ProtectionHouseGrant: { words: 'Protection House Grant', hand: 'grant', text: 'Встаньте у своего защищённого дома, направьте руку на друга и скажите заклинание (5 маны): теперь и он свободно входит в дом и выходит из него.' },
     Flight: { words: 'Флайн', hand: 'up', text: 'Поднимите обе руки вверх и скажите «Флайн» — вы взлетите. Рулите корпусом: наклон вперёд — вниз, назад — вверх, повороты плечами. «Паузин» — парить на месте. Приземление — направьте себя в землю. Полёт тратит ману.' },
     CreateDoor: { words: 'Create a Door', hand: 'door', text: 'Держите в руке дерево (не меньше 12). Скажите заклинание — кубик станет маленькой дверью. Отводите руку — дверь растёт; покажите, куда её поставить, и скажите «Stand».' },
 };
@@ -74,6 +102,7 @@ function rngFrom(seed) {
 /** Up to three spells, random but the same on every computer for this id. */
 export function bookSpells(id) {
     if (isSwiftId(id)) return ['Flight']; // (the swift book: only «Флайн»)
+    if (isWardId(id)) return WARD_SPELLS.slice(); // (the book of protection: its group of three)
     const r = rngFrom(id * 7919 + 17);
     const n = 1 + Math.floor(r() * 3);
     const out = [];
@@ -114,9 +143,38 @@ export function makeBookModel(color, trimColor = 0xd4af37) {
     return g;
 }
 
-/** The book-bird's model for this id (the swift one: sky blue with silver trim). */
+/** The book-bird's model for this id (the swift one: sky blue with silver trim; the book of protection: deep blue, silver shields, an aura). */
 export function bookModelFor(id) {
+    if (isWardId(id)) return makeWardBookModel();
     return isSwiftId(id) ? makeBookModel(SWIFT.COVER, SWIFT.TRIM) : makeBookModel(COVERS[id % COVERS.length]);
+}
+
+/** A silver shield (flat, pointed below) — the emblem on the covers of the book of protection. */
+export function shieldShape(w = 0.2, h = 0.24) {
+    const s = new THREE.Shape();
+    s.moveTo(-w / 2, h / 2);
+    s.lineTo(w / 2, h / 2);
+    s.lineTo(w / 2, 0);
+    s.quadraticCurveTo(w / 2, -h * 0.3, 0, -h / 2);
+    s.quadraticCurveTo(-w / 2, -h * 0.3, -w / 2, 0);
+    s.closePath();
+    return s;
+}
+
+export function makeWardBookModel() {
+    const g = makeBookModel(WARD_BOOK.COVER, WARD_BOOK.TRIM);
+    const silver = new THREE.MeshStandardMaterial({ color: 0xe6eef5, roughness: 0.25, metalness: 0.9, side: THREE.DoubleSide });
+    const geo = new THREE.ShapeGeometry(shieldShape());
+    geo.rotateX(-Math.PI / 2);
+    for (const [wing, sx] of [[g.userData.left, -1], [g.userData.right, 1]]) {
+        const e = new THREE.Mesh(geo, silver);
+        e.position.set(sx * 0.21, 0.017, 0);
+        wing.add(e);
+    }
+    const aura = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 12), new THREE.MeshBasicMaterial({ color: WARD_BOOK.AURA, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+    g.add(aura);
+    g.userData.aura = aura;
+    return g;
 }
 
 function flap(model, t, amp) {
@@ -146,12 +204,33 @@ function drawPage(spell, side) {
         if (how.hand === 'up') x.lineTo(115, 95);
         else if (how.hand === 'wall') x.lineTo(150, 115);
         else if (how.hand === 'door') x.lineTo(140, 160);
+        else if (how.hand === 'grant') x.lineTo(150, 140);
         else x.lineTo(150, 150);
         x.stroke();
         // what appears
         x.fillStyle = '#8b6b3e';
         if (how.hand === 'wall') { for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) x.fillRect(165 + i * 22, 140 + j * 22, 20, 20); }
         else if (how.hand === 'door') { x.fillRect(170, 150, 40, 80); x.fillStyle = '#d4af37'; x.beginPath(); x.arc(202, 192, 4, 0, 7); x.fill(); }
+        else if (how.hand === 'house' || how.hand === 'invisible') {
+            // a little house under a dome (the invisible one: only its dotted outline)
+            x.globalAlpha = how.hand === 'invisible' ? 0.35 : 1;
+            x.fillStyle = '#8b6b3e'; x.fillRect(168, 200, 56, 44);
+            x.fillStyle = '#7a2e2e'; x.beginPath(); x.moveTo(162, 202); x.lineTo(196, 172); x.lineTo(230, 202); x.fill();
+            x.globalAlpha = 1;
+            x.strokeStyle = '#3a6fd8'; x.lineWidth = 3;
+            if (how.hand === 'invisible') x.setLineDash([6, 6]);
+            x.beginPath(); x.arc(196, 244, 52, Math.PI, 0); x.stroke();
+            x.setLineDash([]);
+            x.fillStyle = '#4caf50'; x.fillRect(136, 244, 120, 8);
+        } else if (how.hand === 'grant') {
+            // a friend, and an arrow from the dome to him
+            x.strokeStyle = '#3a6fd8'; x.lineWidth = 3;
+            x.beginPath(); x.arc(200, 250, 34, Math.PI, 0); x.stroke();
+            x.strokeStyle = '#3a2a1a'; x.lineWidth = 4;
+            x.beginPath(); x.arc(205, 120, 12, 0, Math.PI * 2); x.stroke();
+            x.beginPath(); x.moveTo(205, 132); x.lineTo(205, 180); x.lineTo(195, 210); x.moveTo(205, 180); x.lineTo(215, 210); x.stroke();
+            x.strokeStyle = '#d4af37'; x.beginPath(); x.moveTo(200, 236); x.lineTo(205, 200); x.stroke();
+        }
         else if (how.hand === 'board') {
             // a tree, an arrow, a surfboard with its fins
             x.fillStyle = '#2f8a2f'; x.fillRect(160, 120, 30, 26); x.fillStyle = '#6b3f1e'; x.fillRect(170, 146, 10, 40);
@@ -231,14 +310,14 @@ export class BookBirds {
 
     _spawnBird(id = null, pos = null) {
         const g = this.game;
-        id = id ?? (rollSwift() ? SWIFT_ID + this._nextId++ : this._nextId++);
+        id = id ?? rollBirdId(this._nextId++);
         const model = bookModelFor(id);
         model.scale.setScalar(1.4);
         g.scene.add(model);
         const me = g.character.group.position;
         const at = pos || this._perchNear(me, 25, 60);
         model.position.copy(at);
-        const b = { id, model, isBird: true, swift: isSwiftId(id), support: at.support || null, state: 'perch', t: Math.random() * 3, wait: 2 + Math.random() * 5, from: at.clone(), to: at.clone(), ctrl: at.clone(), hp: 2, vy: 0, flapT: Math.random() * 6 };
+        const b = { id, model, isBird: true, swift: isSwiftId(id), ward: isWardId(id), support: at.support || null, state: 'perch', t: Math.random() * 3, wait: 2 + Math.random() * 5, from: at.clone(), to: at.clone(), ctrl: at.clone(), hp: 2, vy: 0, flapT: Math.random() * 6 };
         this.birds.set(id, b);
         return b;
     }
@@ -249,30 +328,58 @@ export class BookBirds {
         this.birds.delete(b.id);
     }
 
-    /** Spells / blasts: is a bird hit? (authority only) */
-    hitAt(p, radius, by) {
+    /**
+     * Spells / blasts: is a bird hit? (authority only)
+     * kind: 'fire' (Инферно, Hellfire), 'ice' (an ice ball) — the only ones that bring down the book
+     * of protection; anything else (null) bounces off its aura.
+     */
+    hitAt(p, radius, by, kind = null) {
         if (!this.auth) return;
         for (const b of this.birds.values()) {
             if (b.state === 'fall') continue;
-            if (b.model.position.distanceTo(p) < radius + 0.6) this._damage(b, 2);
+            if (b.model.position.distanceTo(p) < radius + 0.6) this._damage(b, 2, kind);
         }
     }
 
-    hitRay(o, d, length, width) {
+    hitRay(o, d, length, width, kind = null) {
         if (!this.auth) return;
         for (const b of this.birds.values()) {
             if (b.state === 'fall') continue;
             const to = _v1.subVectors(b.model.position, o);
             const along = to.dot(d);
             if (along < 0 || along > length) continue;
-            if (to.addScaledVector(d, -along).length() < width + 0.6) this._damage(b, 2);
+            if (to.addScaledVector(d, -along).length() < width + 0.6) this._damage(b, 2, kind);
         }
     }
 
     /** (host) A charge / an arrow hit a bird. */
-    hitBird(b, n = 2) { if (this.auth && b && b.state !== 'fall') this._damage(b, n); }
+    hitBird(b, n = 2, kind = null) { if (this.auth && b && b.state !== 'fall') this._damage(b, n, kind); }
 
-    _damage(b, n) {
+    /** (host) An ice ball (thrown, falling or swung in the hand) at `p`, radius `r`: it hits the birds it touches. */
+    iceAt(p, r) {
+        if (!this.auth) return false;
+        let hit = false;
+        for (const b of this.birds.values()) {
+            if (b.state === 'fall' || b.model.position.distanceTo(p) > r + 0.7) continue;
+            this._damage(b, 99, 'ice');
+            hit = true;
+        }
+        return hit;
+    }
+
+    /** The book of protection: the magic bounces off its aura (a blue spark, the aura flares). */
+    _bounce(b) {
+        const now = performance.now();
+        if (now - (b.bounceAt || -1e9) < 120) return;
+        b.bounceAt = now;
+        b.flare = 1;
+        for (let i = 0; i < 10; i++) this.game.fx?.spark?.(b.model.position, i % 2 ? WARD_BOOK.AURA : 0xe8f6ff, 0.1, _v2.set((Math.random() - 0.5) * 5, Math.random() * 3, (Math.random() - 0.5) * 5), 0.5);
+        this.game.sound?.playShieldHit?.(b.model.position);
+    }
+
+    _damage(b, n, kind = null) {
+        if (b.ward && !wardBookFalls(kind)) { this._bounce(b); return; }
+        if (b.ward) { n = 99; b.singed = kind === 'fire'; }
         b.hp -= n;
         for (let i = 0; i < 12; i++) this.game.fx.spark(b.model.position, 0xf3ead2, 0.12, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.8);
         if (b.hp <= 0) { b.state = 'fall'; b.vy = 1; }
@@ -290,6 +397,7 @@ export class BookBirds {
     _updateBird(b, dt) {
         const m = b.model;
         b.t += dt;
+        this._aura(b, dt);
         if (b.state === 'perch') {
             b.flapT += dt * 2;
             flap(m, b.flapT, 0.12);
@@ -336,6 +444,16 @@ export class BookBirds {
         }
     }
 
+    /** The book of protection's aura: faint, breathing, flaring when magic bounces off it. */
+    _aura(b, dt) {
+        const a = b.model.userData.aura;
+        if (!a) return;
+        b.flare = Math.max(0, (b.flare || 0) - dt * 3);
+        b.auraT = (b.auraT || 0) + dt;
+        a.material.opacity = 0.12 + 0.05 * Math.sin(b.auraT * 2.5) + 0.4 * b.flare;
+        a.scale.setScalar(1 + 0.25 * b.flare);
+    }
+
     /** The swift bird's light-blue trail behind it. */
     _trail(b) {
         if (Math.random() < 0.6) this.game.fx?.spark?.(b.model.position, Math.random() < 0.5 ? 0x9fd8ff : 0xe8f6ff, 0.08, _v2.set(0, 0.2, 0), 0.6);
@@ -379,8 +497,12 @@ export class BookBirds {
         glow.rotation.x = -Math.PI / 2;
         glow.position.y = -0.05;
         m.add(glow);
+        // the book of protection: its magic is broken (the aura is gone); fire leaves it singed
+        if (m.userData.aura) { m.remove(m.userData.aura); m.userData.aura = null; }
+        if (b.singed) m.traverse((o) => { if (o.isMesh && o.material?.color && o !== glow) o.material.color.multiplyScalar(0.7); });
         this.books.set(b.id, { id: b.id, model: m, glow, t: 0, spells: bookSpells(b.id) });
-        this.game.hud.toast?.(isSwiftId(b.id) ? '📘 Быстрая книга упала на землю — возьмите её рукой: в ней «Флайн»!' : '📖 Книга упала на землю — возьмите её рукой');
+        this.game.hud.toast?.(isSwiftId(b.id) ? '📘 Быстрая книга упала на землю — возьмите её рукой: в ней «Флайн»!'
+            : isWardId(b.id) ? '📘🛡️ Книга защиты упала на землю — возьмите и прочитайте её: в ней «Защита дома»' : '📖 Книга упала на землю — возьмите её рукой');
     }
 
     /** A book lying somewhere (a creative pedestal): taken by hand like a fallen one. */
@@ -389,6 +511,7 @@ export class BookBirds {
         const m = bookModelFor(id);
         m.scale.setScalar(1.4);
         m.position.copy(pos);
+        if (m.userData.aura) { m.remove(m.userData.aura); m.userData.aura = null; } // (lying: a book like any other)
         flap(m, 0, 0);
         m.userData.left.rotation.z = 0.02;
         m.userData.right.rotation.z = -0.02;
@@ -433,7 +556,7 @@ export class BookBirds {
             const at = bk.model.position.clone();
             this._removeBook(bk);
             this.game.sync?.bookGone?.(bk.id, null);
-            out.push({ at, item: { kind: 'book', uid: 'book' + bk.id, id: bk.id, spells: bk.spells, ...(isSwiftId(bk.id) ? { swift: true } : {}) } });
+            out.push({ at, item: { kind: 'book', uid: 'book' + bk.id, id: bk.id, spells: bk.spells, ...(isSwiftId(bk.id) ? { swift: true } : {}), ...(isWardId(bk.id) ? { ward: true } : {}) } });
         }
         return out;
     }
@@ -487,7 +610,7 @@ export class BookBirds {
     /** The book is a thing like any other now: in the fist, thrown, put into a slot, given away. */
     _toHand(id, spells, side) {
         const g = this.game;
-        g.items?._gotItem({ kind: 'book', uid: 'book' + id, id, spells, ...(isSwiftId(id) ? { swift: true } : {}) }, side);
+        g.items?._gotItem({ kind: 'book', uid: 'book' + id, id, spells, ...(isSwiftId(id) ? { swift: true } : {}), ...(isWardId(id) ? { ward: true } : {}) }, side);
         g.hud.toast?.('📖 Книга в руке: возьмите её второй рукой за край обложки и разведите руки — она раскроется', 3000);
     }
 
@@ -522,6 +645,7 @@ export class BookBirds {
             else if (b.localHeld) { b.flapT += dt * 16; flap(b.model, b.flapT, 0.7); } // (my «Левиоса» holds it here)
             else this._followNet(b, dt);
         }
+        this._iceInHand(dt);
         this._updateBooks(dt);
         this.reading.update(dt);
         // the host tells everybody where the birds are
@@ -533,6 +657,22 @@ export class BookBirds {
                 g.sync.birds?.([...this.birds.values()].map((b) => [b.id, r(b.model.position.x), r(b.model.position.y), r(b.model.position.z), r(b.model.rotation.y), b.state === 'fly' ? 1 : b.state === 'fall' ? 2 : b.state === 'held' ? 3 : 0]),
                     [...this.books.values()].map((k) => [k.id, r(k.model.position.x), r(k.model.position.y), r(k.model.position.z)]));
             }
+        }
+    }
+
+    /** My frozen water ball swung fast into a bird hits it (the book of protection falls to ice). */
+    _iceInHand(dt) {
+        const w = this.game.water, s = w?.active ? w.state : null;
+        if (!s || !s.frozen || s.phase !== 'held' || dt <= 0) { this._iceAt = null; return; }
+        const prev = this._iceAt || (this._iceAt = s.pos.clone());
+        const speed = prev.distanceTo(s.pos) / dt;
+        prev.copy(s.pos);
+        if (speed < 3) return;
+        const r = radiusOf(s.shown ?? s.volume ?? 0.5);
+        for (const b of this.birds.values()) {
+            if (b.state === 'fall' || b.model.position.distanceTo(s.pos) > r + 0.8) continue;
+            if (this.auth) this._damage(b, 99, 'ice');
+            else if (!b.iceAsked) { b.iceAsked = true; this.game.sync?.birdIce?.(b.id); setTimeout(() => { b.iceAsked = false; }, 1000); }
         }
     }
 
@@ -564,6 +704,7 @@ export class BookBirds {
         b.model.position.lerp(b.net.p, k);
         b.model.rotation.y = b.net.ry;
         b.flapT += dt * (b.net.st === 1 ? (b.swift ? 22 : 11) : b.net.st === 3 ? 16 : 2);
+        this._aura(b, dt);
         if (b.swift && b.net.st === 1) this._trail(b);
         flap(b.model, b.flapT, b.net.st === 1 ? 0.55 : b.net.st === 3 ? 0.7 : 0.12);
     }

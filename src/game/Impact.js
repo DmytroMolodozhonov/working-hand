@@ -122,7 +122,8 @@ export const SPELL_PHYSICS = {
     Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, CreateBoard: null, Stand: null,
     Brainrot: null, ToTheSun: null, LetItRain: null, Storm: null, LightningCatch: null, LightningHold: null, Rescue: null, Pause: null, Flight: null, Up: null,
     AirBubble: null, AirBubbleMaxima: null, Waterball: null, Maxima: null, WaterForming: null, Frozen: null,
-    Protection: null, ProtectionMaxima: null, Levitation: null, LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,
+    Protection: null, ProtectionMaxima: null, ProtectionHouse: null, ProtectionInvisible: null, ProtectionHouseGrant: null, WardGrow: null, // (a house's sphere pushes only who walks into it: HouseWards.js)
+    Levitation: null, LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,
     Fire: { push: 0, jolt: 0.6 },
     Inferno: { push: 1.5, jolt: 0.6 },
     Hellfire: { push: 0, jolt: 0.8 }, // (it burns, it does not push: Hellfire.js)

@@ -443,7 +443,11 @@ export class Gear {
             a.vel.y -= 9.8 * dt;
             const steps = Math.max(1, Math.ceil(a.vel.length() * dt / 0.4));
             for (let s = 0; s < steps && !a.stuck; s++) {
+                const was = _v3.copy(p);
                 p.addScaledVector(a.vel, dt / steps);
+                // a house's sphere of protection: the arrow stops on it and falls (HouseWards.js)
+                const ward = g.wards?.segmentHit(was, p);
+                if (ward) { p.copy(ward); a.vel.set(0, -2, 0); a.stuck = true; a.life = Math.min(a.life, 4); break; }
                 // creatures
                 if (g.authority) {
                     for (const z of g.zombies) {

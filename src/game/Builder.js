@@ -102,6 +102,8 @@ export class Builder {
             return '🪄 Направьте руку на дерево, камень, землю или листву (не дальше 10 м)';
         }
         const data = this.data;
+        // (a house's sphere of protection: only its owner and the ones let in take its blocks — HouseWards.js)
+        if (g.wards?.forbids(h.o, _v1.set(cell.x, cell.L - 1, cell.z))) return '🛡️ Этот дом под защитой — разобрать его нельзя';
         let cells, res, amount;
         const treeKind = TREE_KINDS.find((k) => k.wood === cell.type);
         if (treeKind) {
@@ -276,6 +278,8 @@ export class Builder {
         if (b.placed.has(key)) return true;
         const cur = data.get(x, L, z);
         if (cur !== BLOCK.AIR && cur !== BLOCK.WATER) { b.placed.add(key); return true; }
+        // (never inside somebody else's protected house: HouseWards.js)
+        if (this.game.wards?.list.size && this.game.wards.forbids(this.game.character.group.position, _v1.set(x, L - 1, z))) { b.placed.add(key); return true; }
         // (never inside a ship: its decks move)
         if (this.game.ships?.footprintAt(x, L - 1, z)) { b.placed.add(key); if (!b.shipHint) { b.shipHint = true; this.game.hud.setVoice('⚓ На корабле строить нельзя', true); } return true; }
         // pay: one block of the resource, or a little of the water ball

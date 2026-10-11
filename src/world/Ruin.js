@@ -112,12 +112,13 @@ export function ruinSample(data, cx, cz, radius = RUIN.RADIUS, max = 400, cy = n
  *   removed [x, L, z, type] — the blocks that came down (from where they stood),
  *   rubble [x, L, z, type] — the heaps where they lie now, falls — Collapse.js pieces
  */
-export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS) {
+export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null) {
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
     const cols = ruinColumns(cx, cz, radius);
     const removed = [], rubble = [], heavy = [];
     const dips = [], caveRubble = [];
     for (const [x, z, e] of cols) {
+        if (hold && hold(x, null, z)) continue; // (a house's sphere of protection holds: HouseWards.js)
         const top = data.topLayer(x, z);
         const g = groundTop(data, x, z, top, floor);
         const base = g ?? floor - 1;
@@ -157,6 +158,7 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS) {
     // the heaps (after everything came down and sank: they lie on what is left)
     const out = [];
     for (const [x, z, t] of rubble) {
+        if (hold && hold(x, null, z)) continue;
         const L = data.topLayer(x, z) + 1;
         if (L <= floor || data.get(x, L, z) !== BLOCK.AIR) continue;
         data.set(x, L, z, t);

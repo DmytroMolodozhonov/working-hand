@@ -494,8 +494,10 @@ export class Hellfire {
                 if (g.fire?.ignite?.(_a, 1.2)) hit = true;
             }
         }
-        // book-birds fall, glass breaks
-        if (blaze) { g.books?.hitAt?.(f.c, f.R); g.houses?.hitAt?.(f.c, f.R * 0.5); }
+        // book-birds fall (the book of protection too: it is fire), glass breaks
+        if (blaze) { g.books?.hitAt?.(f.c, f.R, by, 'fire'); g.houses?.hitAt?.(f.c, f.R * 0.5); }
+        // a house's sphere of protection holds the fire out — and wears down (HouseWards.js)
+        if (blaze) g.wards?.struck?.(f.c, f.R, HELLFIRE.NAME);
         // creatures of every kind (players: every computer burns its own — _burnMe)
         const bodies = g.duel?._bodies?.(null) || [];
         const auth = !!g.authority;
@@ -507,6 +509,7 @@ export class Hellfire {
             if (blaze && (segDist(f.c, b.a, b.b) < f.R * 0.95 + b.r || inBlaze(f.c, f.R, mid, b.r))) inside = true;
             if (!inside && ring && inRing(body, f.rr, mid, b.r)) inside = true;
             if (!inside) continue;
+            if (g.wards?.shields(blaze ? f.c : body, mid)) continue; // (in a protected house)
             hit = true;
             if (!auth) continue; // (the host decides)
             const from = blaze && inBlaze(f.c, f.R, mid, b.r) ? f.c : body;
@@ -541,6 +544,7 @@ export class Hellfire {
         f.meT = (f.meT || 0) - dt;
         if (f.meT > 0 || !c || c.dead || g.isDeadLocal) return;
         const me = c.center ? c.center(_a) : _a.copy(g.character.group.position);
+        if (g.wards?.shields(f.c, me) && g.wards.shields(body, me)) return; // (in a protected house)
         const blaze = 1 - f.k > 0.2 && inBlaze(f.c, f.R, me, 0.45);
         // (the ring of another wizard; my own ring goes round me)
         const ring = f.k > 0.2 && f !== this.state && inRing(body, f.rr, me, 0.45);

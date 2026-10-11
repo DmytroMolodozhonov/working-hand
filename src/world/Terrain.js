@@ -1026,7 +1026,7 @@ export class TerrainData {
      * Remove every destructible block whose centre lies inside the sphere.
      * Returns removed blocks (for debris / network sync).
      */
-    removeSphere(cx, cy, cz, radius) {
+    removeSphere(cx, cy, cz, radius, keep = null) {
         const removed = [];
         const r2 = radius * radius;
         const x0 = Math.floor(cx - radius), x1 = Math.ceil(cx + radius);
@@ -1045,6 +1045,7 @@ export class TerrainData {
                     const idx = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
                     const type = c.blocks[idx];
                     if (type === BLOCK.AIR || type === BLOCK.BEDROCK || type === BLOCK.WATER) continue;
+                    if (keep && keep(ix, by, iz)) continue; // (inside a house's sphere of protection)
                     c.blocks[idx] = BLOCK.AIR;
                     if (L < c.minOpen) c.minOpen = L;
                     removed.push({ x: ix, y: by, z: iz, type });
@@ -1554,7 +1555,7 @@ export class Terrain {
     ceilingAbove(ix, iz, L) { return this.data.ceilingAbove(ix, iz, L); }
     blockAt(ix, L, iz) { return this.data.get(ix, L, iz); }
     raycast(origin, dir, maxDist) { return this.data.raycast(origin, dir, maxDist); }
-    removeSphere(x, y, z, r) { return this.data.removeSphere(x, y, z, r); }
+    removeSphere(x, y, z, r, keep = null) { return this.data.removeSphere(x, y, z, r, keep); }
 
     dispose() {
         for (const e of [...this.meshes.values(), ...this.pool]) {

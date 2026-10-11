@@ -26,7 +26,7 @@
 
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
-import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM } from './BookModel.js';
+import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
 import { crystalItemModel } from './CrystalModel.js';
 
 export const WAND_DIRS = {
@@ -43,6 +43,7 @@ export const SPELL_RU = {
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
     WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', LetItRain: 'Let it rain', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
     Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус',
+    ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
 export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc };
@@ -302,6 +303,7 @@ export function describeItem(it) {
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: мана +<b>${it.amount}</b> навсегда`] };
         case 'book':
             if (it.runbook) return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Раскройте её двумя руками и прочитайте единственную страницу:', 'бег на <b>30%</b> быстрее, пока вы живы', 'Это не заклинание — только быстрота'] };
+            if (it.ward || it.spells?.includes('ProtectionHouse')) return { title: '📘🛡️ Книга защиты', color: WARD_COVER, lines: ['Раскройте и прочитайте: в ней группа заклинаний <b>«Защита дома»</b> — Protection House, Protection Invisible, Protection House Grant', 'Прочитали одну страницу — выучили все три'] };
             if (it.swift || it.spells?.includes('Flight')) return { title: '📘 Быстрая книга', color: SWIFT_COVER, lines: ['Сожгите её («Инферно» с книгой в руке или в огне): вы научитесь заклинанию <b>«Флайн»</b> (полёт) навсегда', 'Раскрыть и прочитать можно, но выучит «Флайн» только тот, кто её сожжёт'] };
             return { title: '📖 Книга заклинаний', color: 0xffe9a8, lines: ['Раскройте и прочитайте (или сожгите «Инферно»): в ней заклинания для стройки'] };
         case 'backpack':
@@ -629,7 +631,7 @@ function buildItemModel(it) {
         case 'crystal': return crystalItemModel();
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);
-        case 'book': return it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
+        case 'book': return it.ward || it.spells?.includes('ProtectionHouse') ? makeSpellBookModel(WARD_COVER, WARD_TRIM) : it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
 }

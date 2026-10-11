@@ -193,6 +193,9 @@ export class CreatureImpact {
         if (!K || !c.group || !K.alive(c)) return 'none';
         if (!this.auth) return 'none';
         if (c.lev) return 'none'; // (held up by Leviosa: the magic holds the body)
+        // in a house's sphere of protection: a push / a spell from outside doesn't reach it (HouseWards.js)
+        const src = o.from || (o.by != null ? this.game.wards?.casterAt?.(o.by) : null);
+        if (src && this.game.wards?.shields(src, K.centre(c, _v))) return 'none';
         const B = bodyOf(K.body(c));
         const v = Math.hypot(o.v.x, o.v.z);
         let res = classify(v, { mass: B.mass, quad: B.quad, frozen: K.frozen(c) });

@@ -28,7 +28,7 @@ import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
 import { PerfLog } from '../core/PerfLog.js';
-import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID } from './BookBirds.js';
+import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID, WARD_PEDESTAL_ID } from './BookBirds.js';
 import { RunningBook } from './RunningBook.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { Quake } from './Quake.js';
@@ -81,6 +81,7 @@ import { CreatureImpact } from './CreatureImpact.js';
 import { BodyStrikes } from './BodyStrikes.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
+import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
 
 const SPELL_COOLDOWN = 1000;
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
@@ -96,6 +97,7 @@ const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.S
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
 export class Game {
@@ -224,8 +226,9 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
+            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
+                len = this.wards?.clipRay(o, d, len) ?? len; // (a house's sphere stops it from outside)
                 this.books?.hitRay(o, d, len, width);
                 this.houses?.hitRay(o, d, len, width);
                 this.animals?.hitRay(o, d, len, width, 3, this.localId, name);
@@ -238,6 +241,10 @@ export class Game {
             burn: (o, d, len, casterId) => this._burnRay(o, d, len, casterId),
             waters: () => this._flameWaters(),
             blockAt: (x, y, z) => this._flameBlock(x, y, z),
+            // a house's sphere of protection (HouseWards.js): spells from outside stop at it
+            wardClip: (o, d, len) => this.wards?.clipRay(o, d, len) ?? len,
+            wardHit: (a, b) => this.wards?.segmentHit(a, b) || null,
+            shielded: (from, to) => !!this.wards?.shields(from, to),
             drain: (casterId, mana, dt) => (casterId === this.localId || casterId === 'local' ? this.combat.drain(mana, dt) : true),
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
@@ -303,6 +310,7 @@ export class Game {
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
+        this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
@@ -445,6 +453,8 @@ export class Game {
                 this.books?.placeBook(new THREE.Vector3(bx, btop + 1.0, bz), 777001);
                 const sx = bx + 5, stop = this.world.createPedestal(sx, bz);
                 this.books?.placeBook(new THREE.Vector3(sx, stop + 1.0, bz), SWIFT_PEDESTAL_ID); // (the swift book: «Флайн»)
+                const wx = sx + 5, wtop = this.world.createPedestal(wx, bz);
+                this.books?.placeBook(new THREE.Vector3(wx, wtop + 1.0, bz), WARD_PEDESTAL_ID); // (the book of protection: «Защита дома»)
                 // a chest to try things with: it opens as you come, and fills up again once you walk away
                 const cx = 12, cz = -6;
                 const chest = new Chest(this.scene, new THREE.Vector3(cx, this.collision.groundY(cx, cz), cz), 'loot', -Math.PI / 2, 'creative-test');
@@ -540,8 +550,10 @@ export class Game {
         this.perf?.note(`взрыв r${radius.toFixed(0)}${power > 1 ? ' максима' : ''}`);
         // a wand makes my Bombardo destroy more
         if ((casterId === 'local' || casterId === this.localId) && this._lastSpell && performance.now() - this._lastSpell.at < 6000) radius *= 1 + (this._lastSpell.pw - 1) * 0.5;
-        this.applyExplosion(pos, radius, true, power, casterId);
-        this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius });
+        const keep = this.wards?.keepFor(pos, radius) || [];
+        this.applyExplosion(pos, radius, true, power, casterId, keep);
+        this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius, ...(keep.length ? { k: keep } : {}) }); // (k: the houses' spheres it could not eat into)
+        if (power > 1) this.wards?.struck(pos, radius, 'BombardoMaxima'); // (only very strong magic wears a sphere down)
         if (this.sync) this.sync.explosion(pos, radius, power, casterId);
     }
 
@@ -574,10 +586,12 @@ export class Game {
     }
 
     /** Visual + world part of an explosion (runs on every machine). */
-    applyExplosion(pos, radius, authoritative, power = 1, casterId = null) {
+    applyExplosion(pos, radius, authoritative, power = 1, casterId = null, keep = undefined) {
         // `power` times the energy: damage × power, thrown objects × √power speed
         const push = Math.sqrt(power);
-        const out = this.world.explode(pos, radius);
+        // (a house's sphere of protection: the blast doesn't eat into it from outside)
+        const out = this.world.explode(pos, radius, keepIn(keep ?? this.wards?.keepFor(pos, radius)));
+        const meSafe = !!this.wards?.shields(pos, this.combat.center(_v3));
         for (const f of out.falls || []) this.falling?.add(f); // (a roof without walls comes down)
         this.wreck?.afterBlast(pos, radius);
         // a blast in a castle or a village: the guards hear it (and want to know who)
@@ -596,7 +610,7 @@ export class Game {
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
         if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId); }
-        this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
+        if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
 
@@ -619,7 +633,7 @@ export class Game {
         const dPlayer = _v2.set(pp.x - pos.x, (pp.y - 1.5) - pos.y, pp.z - pos.z).length();
         this.fx.shake = Math.max(this.fx.shake, Math.max(0, (power > 1 ? 2 : 1.2) - dPlayer / (power > 1 ? 45 : 30)));
         this.boards?.blast(pos, radius, power);
-        if (dPlayer < radius + 3) {
+        if (dPlayer < radius + 3 && !meSafe) {
             // thrown by the blast: near it off the feet (and up into the air), further a stagger
             const k = 1 - dPlayer / (radius + 3);
             const name = power > 1 ? 'BombardoMaxima' : 'Bombardo';
@@ -631,7 +645,7 @@ export class Game {
         }
         // My own Bombardo too close to me hurts me too — the closer, the worse
         // (point-blank can kill). Not in creative. Other players' blasts: Combat.explosion.
-        if (casterId === 'local' || casterId === this.localId) {
+        if ((casterId === 'local' || casterId === this.localId) && !meSafe) {
             const self = Math.round(bombardoDamage(this.combat.center(_v2).distanceTo(pos), radius, power));
             if (self > 0 && this.config.mode !== 'creative') {
                 if (this.combat.enabled) this.combat.damage(self, null, 'Bombardo');
@@ -875,6 +889,7 @@ export class Game {
         if (!name) return null;
         if (this.combat.dead) return null;
         if (!this.knowsSpell(name)) {
+            if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
             const base = baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
             if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творческом режиме. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
@@ -892,6 +907,7 @@ export class Game {
         // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
         // (before the duel's block: nothing may keep you from stopping your own spells)
         if (name === 'Stand') {
+            if (this.wards?.setting) { this.wards.fix(); return 'Stand'; } // («стоп»: my house's sphere stays as big as it is)
             const placed = !!this.doors?.stand?.() || (this.builder.build ? (this.builder.finish(), true) : false);
             const stopped = (!placed || /стоп|stop/i.test(text)) && this.stopSpells();
             return placed ? 'Stand' : stopped ? 'Stop' : null;
@@ -905,6 +921,8 @@ export class Game {
         if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
+        // «Максима» while my house's sphere is being set: −5 mana, 1.5 m wider (before the water's / the duel's)
+        if (name === 'Maxima' && this.wards?.setting && !this._inDuel()) return this._castWard('WardGrow', isFinal);
         // «Максима» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
         if (name === 'Maxima' && this._inDuel() && !this.water?.active) return this.duel.maxima(isFinal);
         // In a duel nothing else can be cast (only the shield, with the other hand)
@@ -929,6 +947,7 @@ export class Game {
             return 'Attack';
         }
         if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
+        if (isWardSpell(name)) return this._castWard(name, isFinal); // «Защита дома» (HouseWards.js)
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
         this.perf?.note('заклинание ' + name);
@@ -1072,6 +1091,22 @@ export class Game {
         this.combat.pay(name);
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
+    }
+
+    /**
+     * «Protection House», its «Максима», «Protection Invisible», «Protection House Grant»: once per
+     * phrase (the recognizer repeats an unfinished phrase; each «Максима» shout costs mana).
+     */
+    _castWard(name, isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (now - (this._lastWardCast?.[name] || 0) < (name === 'WardGrow' ? 600 : 1500)) return null;
+        const r = name === 'WardGrow' ? this.wards.maxima() : this.wards.cast(name, isFinal);
+        if (!r) return null;
+        (this._lastWardCast || (this._lastWardCast = {}))[name] = now;
+        this._interimCast = isFinal ? null : { name, at: now };
+        return r;
     }
 
     _castProtection(name, isFinal) {
@@ -1688,6 +1723,7 @@ export class Game {
     /** Another wizard's «Вайнд» reached me: blown away (no harm; a shield stops it). */
     _blowMe(casterId, origin, pushAt, name = 'Wind') {
         if (casterId === 'local' || casterId === this.localId || this.combat.dead) return;
+        if (this.wards?.shields(origin, this.combat.center(_v3))) return; // (in a protected house)
         const v = pushAt(this.combat.center(new THREE.Vector3()));
         if (!v) return;
         // (a shield turned to it holds most of it: felt, the shield arm pushed back, never a fall)
@@ -1742,7 +1778,7 @@ export class Game {
         let hit = false;
         if (this.fire?.igniteAlong(o, d, len)) hit = true; // trees, dry blocks
         if (this.animals?.burnAlong(o, d, len)) hit = true;
-        this.books?.hitRay(o, d, len, 0.8); // (book-birds fall)
+        this.books?.hitRay(o, d, len, 0.8, 'fire'); // (book-birds fall — the book of protection too: fire)
         this.houses?.hitRay(o, d, len, 0.6); // (glass breaks)
         if (this.authority) {
             if (this.spiders?.hitRay(o, d, len, 0.6, 2, 'Inferno')) hit = true;
@@ -1879,7 +1915,10 @@ export class Game {
         if (!c.enabled) return [];
         const out = [];
         const me = this.localId;
-        if (!c.dead && casterId !== 'local' && casterId !== me) {
+        // (in a protected house: a spell from outside doesn't reach me — nor the others inside)
+        const from = this.wards?.list.size ? this.wards.casterAt(casterId) : null;
+        const safe = (p) => !!from && this.wards.shields(from, p);
+        if (!c.dead && casterId !== 'local' && casterId !== me && !safe(c.center())) {
             out.push({
                 local: true,
                 id: me,
@@ -1890,7 +1929,7 @@ export class Game {
             });
         }
         for (const [id, r] of this.remotes) {
-            if (id === casterId || r.dead) continue;
+            if (id === casterId || r.dead || safe(r.position)) continue;
             out.push({
                 local: false,
                 id,
@@ -2187,6 +2226,7 @@ export class Game {
         this.items.updateRemote();
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
+        this.wards?.update(dt);
         this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
         this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
         this.scrolls.update(dt);
@@ -2368,6 +2408,8 @@ export class Game {
             } else (this._lastFree || (this._lastFree = new THREE.Vector3())).copy(ch.group.position);
         }
         this._keepInsideMap(ch.group.position);
+        // a house's sphere of protection: only its owner and the ones let in come through (HouseWards.js)
+        if (this.wards?.list.size && !this.isDeadLocal) this.wards.keepOut(ch.group.position, ch.group.position.y - PLAYER_GROUND_OFFSET, 3.5, dt);
         // Other players are solid: stopped here already, before the things in my hands are put
         // into them (a sword, an apple, a book follow the hand as it is now); once more after
         // the horse, Leviosa and the other players have moved this frame (see update).
@@ -2592,11 +2634,29 @@ export class Game {
         this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false);
     }
 
+    /** Lightning at a protected house from outside: it strikes the top of its sphere (and wears it down). */
+    _wardLightning(point, casterId) {
+        const W = this.wards;
+        if (!W?.list.size) return point;
+        for (const w of W.list.values()) {
+            const from = W.casterAt(casterId);
+            if (Math.hypot(point.x - w.c.x, point.z - w.c.z) > w.r + 1 || (from && Math.hypot(from.x - w.c.x, from.y - w.c.y, from.z - w.c.z) < w.r)) continue;
+            const top = new THREE.Vector3(point.x, 0, point.z);
+            const h = w.r * w.r - (point.x - w.c.x) ** 2 - (point.z - w.c.z) ** 2;
+            top.y = w.c.y + Math.sqrt(Math.max(0, h)) + 0.6;
+            W.struck(top, 1, 'LightningStrike');
+            return top;
+        }
+        return point;
+    }
+
     /** Outside Creative «Lightning Strike», «Thunderwave», «To the Sun», «Let it rain» and «Авада Кедавра» are learnt from a burnt scroll only. */
     knowsSpell(name) {
         const base = baseSpell(name);
-        if (!SCROLL_SPELL_COLOR[base]) return true;
         const m = this.config.mode;
+        // «Защита дома»: only from the book of protection (the dark-blue book-bird) — everybody knows it in Creative
+        if (isWardSpell(base)) return m === 'creative' || m === 'test' || !!this.books?.learned?.has(base);
+        if (!SCROLL_SPELL_COLOR[base]) return true;
         return m === 'creative' || m === 'test' || !!this.bonus?.spells?.[base];
     }
 

@@ -60,3 +60,24 @@ test('pushes, knockdowns and gusts («Вайнд», blasts, blows) know every cr
     const names = Object.values(K).map((k) => k.name);
     for (const n of ['zombie', 'villager', 'animal', 'tree', 'sailor']) assert.ok(names.includes(n), `CreatureImpact has no «${n}» kind (spells would not push it)`);
 });
+
+test('a house\'s sphere of protection («Protection House») keeps every creature out and stops spells everywhere they look for targets', () => {
+    const w = src('src/game/HouseWards.js');
+    // creatures: every CreatureImpact kind (zombies, villagers, animals, living trees, sailors…) and the spider
+    check('HouseWards._creatures (who is pushed back out)', body(w, '    _creatures(dt) {'), ['the giant spider']);
+    assert.match(body(w, '    _creatures(dt) {'), /Object\.keys\(KINDS\)/, 'every CreatureImpact kind is pushed out');
+    // the places spells look for their targets know the sphere
+    const g = src('src/game/Game.js');
+    assert.match(body(g, 'birdRay: (o, d, len, width, name) =>'), /wards\?\.clipRay/, 'rays stop at it');
+    assert.match(body(g, 'lightningAt: (point, casterId) =>'), /_wardLightning/, 'lightning strikes its top');
+    assert.match(g.slice(g.indexOf('    applyExplosion('), g.indexOf('this.combat.explosion(', g.indexOf('    applyExplosion('))), /keepFor/, 'blasts keep what is inside');
+    assert.match(body(src('src/game/Duel.js'), '    _fly(b, dt) {'), /wards\?\.segmentHit/, 'duel charges burst on it');
+    assert.match(body(src('src/game/CreatureImpact.js'), '    apply(c, o) {'), /wards\?\.shields/, 'pushes (wind, blasts, waves) don\'t reach inside');
+    assert.match(src('src/game/Levitation.js'), /!b\.ward/, '«Левиоса» does not catch the book of protection');
+    // the book of protection: only fire and ice bring it down
+    const bb = src('src/game/BookBirds.js');
+    assert.match(body(bb, '    _damage(b, n, kind = null) {'), /wardBookFalls\(kind\)/);
+    assert.match(body(g, '    _burnRay(o, d, len, casterId) {'), /hitRay\(o, d, len, 0\.8, 'fire'\)/, '«Инферно» is fire');
+    assert.match(src('src/game/Hellfire.js'), /hitAt\?\.\(f\.c, f\.R, by, 'fire'\)/, '«Let the Hellfire Come» is fire');
+    assert.match(src('src/game/WaterMagic.js'), /books\?\.iceAt/, 'an ice ball');
+});

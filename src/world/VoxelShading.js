@@ -24,6 +24,32 @@ import * as THREE from 'three';
  */
 export const SKY_LIGHT = { comp: { value: 1 } };
 
+/**
+ * Invisible houses («Protection Invisible», HouseWards.js): inside each sphere [x, y, z, r] the blocks
+ * above its ground (g) are drawn only for the share k of the pixels (0: not at all — the land drawn
+ * over it is seen instead; 1: all of it). The nearest 8, filled in every frame.
+ */
+export const WARD_HIDE = {
+    s: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
+    g: { value: new Array(8).fill(0) },
+    k: { value: new Array(8).fill(1) },
+    n: { value: 0 },
+};
+const WARD_HIDE_PARS = `#include <clipping_planes_pars_fragment>
+uniform vec4 uWardS[8];
+uniform float uWardG[8];
+uniform float uWardK[8];
+uniform int uWardN;`;
+const WARD_HIDE_FRAG = `#include <clipping_planes_fragment>
+for (int i = 0; i < 8; i++) {
+    if (i >= uWardN) break;
+    vec3 wd = vVoxPos - uWardS[i].xyz;
+    if (vVoxPos.y > uWardG[i] && dot(wd, wd) < uWardS[i].w * uWardS[i].w) {
+        float wh = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
+        if (wh >= uWardK[i]) discard;
+    }
+}`;
+
 /** A material of the open world (trees, grass, water): lit by the sky as it is, wherever the player stands. */
 export function applySkyComp(material) {
     const before = material.onBeforeCompile;
@@ -42,6 +68,10 @@ export function applySkyComp(material) {
 export function applyVoxelDetail(material) {
     material.onBeforeCompile = (shader) => {
         shader.uniforms.uSkyComp = SKY_LIGHT.comp;
+        shader.uniforms.uWardS = WARD_HIDE.s;
+        shader.uniforms.uWardG = WARD_HIDE.g;
+        shader.uniforms.uWardK = WARD_HIDE.k;
+        shader.uniforms.uWardN = WARD_HIDE.n;
         shader.vertexShader = shader.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;')
             .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
@@ -51,6 +81,8 @@ export function applyVoxelDetail(material) {
             'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );',
             'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );\n\t\tdirectLight.color *= vVoxSky * uSkyComp;');
         shader.fragmentShader = shader.fragmentShader
+            .replace('#include <clipping_planes_pars_fragment>', WARD_HIDE_PARS)
+            .replace('#include <clipping_planes_fragment>', WARD_HIDE_FRAG)
             .replace('#include <lights_fragment_begin>', lightsBegin)
             .replace('#include <lights_fragment_maps>', '#if defined( RE_IndirectDiffuse )\n\tirradiance *= vVoxSky * uSkyComp;\n#endif\n#include <lights_fragment_maps>')
             .replace('#include <common>', `#include <common>

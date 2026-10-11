@@ -593,6 +593,9 @@ export class Duel {
         (b.prev || (b.prev = new THREE.Vector3())).copy(from);
         b.front.addScaledVector(b.dir, step);
         b.traveled += step;
+        // a house's sphere of protection: the charge bursts on it from outside (HouseWards.js)
+        const ward = g.wards?.segmentHit(from, b.front);
+        if (ward) { b.front.copy(ward); this._end(b, 'blocked'); return false; }
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
         if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
         // it hits the first body it really touches on its way (along the whole step: at a
@@ -665,7 +668,8 @@ export class Duel {
         this._hitBurst(spell, p, 30);
         // a book-bird: any charge knocks it out of the air (it falls as a book)
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
-        if (c.isBird) { if (spell !== 'LevitateDuel') g.books.hitBird(c, 99); return; }
+        // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
+        if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
         // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
         if (c.isLivingTree) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }

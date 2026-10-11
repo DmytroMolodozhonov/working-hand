@@ -1417,7 +1417,7 @@ export class CastleLife {
     }
 
     hitAt(p, radius, dmg, by) {
-        for (const v of [...this.byId.values()]) if (!v.dead && Math.hypot(v.x - p.x, v.z - p.z) < radius + 1 && Math.abs(v.y + 2 - p.y) < radius + 3) this.hit(v, dmg, _v.set(v.x - p.x, 0, v.z - p.z).normalize().clone(), by, { spell: true });
+        for (const v of [...this.byId.values()]) if (!v.dead && Math.hypot(v.x - p.x, v.z - p.z) < radius + 1 && Math.abs(v.y + 2 - p.y) < radius + 3 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 2, z: v.z })) this.hit(v, dmg, _v.set(v.x - p.x, 0, v.z - p.z).normalize().clone(), by, { spell: true });
     }
 
     hitRay(o, d, len, width, dmg, by) {

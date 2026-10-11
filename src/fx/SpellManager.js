@@ -68,6 +68,9 @@ export function matchSpell(text) {
     // «Overgrown» («Овергроун», «Оверграун»): before the shield / Ice / Sands short tokens
     const flat = s.replace(/[\s-]+/g, '');
     if (/(овер|оувер|овир|авер|обер|офер|over|ower|ouer)(гро|гра|groun|grow|gron|gran)/.test(flat)) return has('макс', 'max', 'мах', 'maks') ? 'OvergrownMaxima' : 'Overgrown';
+    // The shield magic of a house (HouseWards.js), whole phrases — before the plain «Protection»
+    const ward = wardWords(s);
+    if (ward) return ward;
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)
@@ -133,6 +136,20 @@ export function matchSpell(text) {
     return null;
 }
 const ICE_WORD = /^(?:(?:айс|айз|аис)(?:а|у|е|ом)?|ice|ais|лёд|лед)$/;
+
+// «Protection House» («протекшн хаус», «протекшен хаус», «протекшн хауз»…), «Protection House Grant»
+// («… грант»), «Protection Invisible» («протекшн инвизибл», «… невидимый»): the word «protection» AND
+// «house» / «invisible» — never one of them alone (a «дом» in talk, a plain «Protection» shield).
+const PROTECT_W = /(протек|протэк|протект|protect|протекц)/;
+const HOUSE_W = /(хаус|хауз|хаос|хаусе|хауc|house|haus|хоус|хаўс|хаус)/;
+const INVIS_W = /(инвиз|инвис|энвиз|invis|невидим|инвизиб)/;
+const GRANT_W = /(грант|гранд|grant|грэнт|грант)/;
+export function wardWords(s) {
+    if (!PROTECT_W.test(s)) return null;
+    if (INVIS_W.test(s)) return 'ProtectionInvisible';
+    if (HOUSE_W.test(s)) return GRANT_W.test(s) ? 'ProtectionHouseGrant' : 'ProtectionHouse';
+    return null;
+}
 
 // «Let the Hellfire Come» as the Russian recognizer writes it: «лет зе хеллфаер кам», «хелфайр кам»,
 // «come hellfire», «хелл фаер»… The word «hellfire» (whole, or «hell» + «fire» side by side) AND «come»
@@ -251,6 +268,7 @@ export class SpellManager {
     cast(name, origin, direction, handSide, casterId = 'local') {
         const o = origin.clone();
         const d = direction.clone().normalize();
+        this._from = o; // (where the spell comes from: a house's sphere stops it from outside)
         // book-birds are knocked down by the spells that fly
         if (RAY_SPELLS.has(name) && this.hooks.birdRay) this.hooks.birdRay(o, d, 30, name.endsWith('Maxima') ? 2 : 1, name);
         switch (name) {
@@ -314,6 +332,7 @@ export class SpellManager {
     }
 
     _damage(z, amount, isWeapon, dir) {
+        if (this._from && this.hooks.shielded?.(this._from, z.group.position)) return; // (in a protected house)
         if (this.auth && this.hooks.damage) this.hooks.damage(z, amount, isWeapon, dir);
     }
 
@@ -346,6 +365,10 @@ export class SpellManager {
                     blockAt: this.hooks.blockAt || null,
                 });
                 flame.len = stop.t; flame.end = stop.by;
+                // a house's sphere stops the flame from outside
+                const wt = this.hooks.wardClip ? this.hooks.wardClip(o, d, flame.len) : flame.len;
+                if (wt < flame.len) { flame.len = wt; flame.end = 'shield'; }
+                this._from = o;
                 right.crossVectors(d, UP);
                 if (right.lengthSq() < 1e-4) right.set(1, 0, 0);
                 right.normalize();
@@ -1164,6 +1187,9 @@ export class SpellManager {
                     const hit = terrain.raycast(prev, step.clone().divideScalar(stepLen), stepLen);
                     if (hit) { explodeAt(_b.set(hit.x, hit.y, hit.z)); spell.life = 0; return; }
                 }
+                // a house's sphere: the orb bursts on it, outside
+                const wh = this.hooks.wardHit?.(prev, orb.position);
+                if (wh) { explodeAt(wh); spell.life = 0; return; }
                 // Walls / tables / trees / floor
                 if (collision && collision.pointBlocked(orb.position.x, orb.position.y, orb.position.z)) {
                     explodeAt(prev); spell.life = 0; return;

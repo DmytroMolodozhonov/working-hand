@@ -76,6 +76,10 @@ export const SPELL_COST = {
     OvergrownMaxima: 20,
     Stupefy: 12,
     Expelliarmus: 12, // the wand flies out of the target's hand (Expelliarmus.js)
+    ProtectionHouse: 20, // a house's sphere of protection (HouseWards.js)
+    WardGrow: 5, // … each «Максима» while it is being set: 1.5 m wider
+    ProtectionInvisible: 15, // the protected house is not seen from far
+    ProtectionHouseGrant: 5, // a friend may come into the house
     AvadaKedavra: 25,
     WaveAttack: 8,
     WaveAttackMaxima: 18,
@@ -322,7 +326,7 @@ export class Combat {
     costOf(name) {
         const base = SPELL_COST[name] ?? 5;
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|Hellfire|WaterVortexSuperMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|Hellfire|WaterVortexSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name) {

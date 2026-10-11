@@ -624,6 +624,16 @@ export class WaterMagic {
             }
 
             this._ballHitsBodies(b);
+            // a house's sphere of protection: the ball bounces off it (HouseWards.js)
+            const prevPos = _v2.copy(b.pos).addScaledVector(b.vel, -dt);
+            const ward = this.game.wards?.segmentHit(prevPos, b.pos);
+            if (ward) {
+                const n = _v1.set(ward.x - prevPos.x, ward.y - prevPos.y, ward.z - prevPos.z);
+                const w = this.game.wards.hitSegment(prevPos, b.pos)?.w;
+                if (w) n.set(ward.x - w.c.x, ward.y - w.c.y, ward.z - w.c.z).normalize();
+                b.pos.copy(ward);
+                b.vel.reflect(n).multiplyScalar(0.5);
+            }
             const inWater = t && t.isWaterAt(b.pos.x, b.pos.y - b.r * 0.5, b.pos.z);
             const ground = col.surfaceY(b.pos.x, b.pos.z);
             if (inWater) {
@@ -664,6 +674,7 @@ export class WaterMagic {
         if (b.local && !b.by) b.by = g.localId;
         const push = () => b.vel.clone().setY(0).setLength(b.frozen ? (b.r >= 1.2 ? 12 : 6) : 4);
         const name = b.frozen ? (b.r >= 1.2 ? 'IceBallBig' : 'IceBall') : 'WaterHit';
+        if (b.frozen && g.authority) g.books?.iceAt?.(b.pos, b.r); // (an ice ball brings down even the book of protection)
         if (!b.local && !b._hitMe && g.impact && g.combat && !g.combat.dead && g.combat.center(_v1).distanceTo(b.pos) < b.r + 0.8) {
             b._hitMe = true;
             const res = g.impact.apply({ v: push(), from: b.pos.clone(), by: b.by || null, spell: name, jolt: b.frozen ? 1.5 : 0.5, noShield: false });

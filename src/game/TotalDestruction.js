@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { RUIN, ruinSample, hash01 } from '../world/Ruin.js';
+import { keepIn } from './HouseWards.js';
 import { BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
 import { bombardoDamage } from './Combat.js';
 import { MAXIMA_POWER } from '../fx/SpellManager.js';
@@ -165,8 +166,11 @@ export class TotalDestruction {
         d.collapsed = true;
         d.t = 0;
         const authoritative = !!g.authority;
-        const out = g.world.ruin(p, R);
-        g.explosions?.push({ p: [p.x, p.y, p.z], r: R, ruin: 1 }); // (saves and late joiners: the same ruins)
+        // (a house's sphere of protection holds: what is inside stays — the sphere wears down instead)
+        const keep = g.wards?.keepFor(p, R) || [];
+        const out = g.world.ruin(p, R, keepIn(keep));
+        g.explosions?.push({ p: [p.x, p.y, p.z], r: R, ruin: 1, ...(keep.length ? { k: keep } : {}) }); // (saves and late joiners: the same ruins)
+        g.wards?.struck(p, R, d.max ? 'TotalDestructionMaxima' : 'TotalDestruction');
         for (const f of out.falls || []) g.falling?.add(f);
         g.wreck?.afterBlast(p, R);
         if (authoritative) {

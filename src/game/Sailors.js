@@ -281,7 +281,7 @@ export class Sailors {
         for (const v of this.byId.values()) {
             if (v.dead) continue;
             const d = Math.hypot(v.x - p.x, v.y + 1.5 - p.y, v.z - p.z);
-            if (d < radius + 1) this.hit(v, dmg * (1 - d / (radius + 2)), _v.set(v.x - p.x, 0, v.z - p.z).normalize(), by, { spell: true });
+            if (d < radius + 1 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 1.5, z: v.z })) this.hit(v, dmg * (1 - d / (radius + 2)), _v.set(v.x - p.x, 0, v.z - p.z).normalize(), by, { spell: true });
         }
     }
 

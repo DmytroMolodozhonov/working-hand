@@ -327,6 +327,7 @@ export class Animals {
         for (const a of this.list) {
             const d = a.group.position.distanceTo(p);
             if (d >= radius + 1 + SPECIES[a.type].size) continue;
+            if (this.game.wards?.shields(p, a.group.position)) continue; // (in a house's sphere of protection)
             const dir = _v.subVectors(a.group.position, p).setY(0);
             if (dir.lengthSq() < 1e-4) dir.set(Math.random() - 0.5, 0, Math.random() - 0.5);
             dir.normalize();

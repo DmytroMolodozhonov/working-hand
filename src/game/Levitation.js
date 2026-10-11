@@ -126,7 +126,7 @@ export class Levitation {
         // (things and books are the host's: a guest's hand can't carry them yet)
         if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked) out.push({ kind: 'item', obj: L, pos: L.model.position });
         if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
-        for (const b of g.books?.birds.values() || []) if (b.state !== 'fall') out.push({ kind: 'bird', obj: b, pos: b.model.position });
+        for (const b of g.books?.birds.values() || []) if (b.state !== 'fall' && !b.ward) out.push({ kind: 'bird', obj: b, pos: b.model.position }); // (the book of protection: Leviosa bounces off it)
         // living bodies (not wizards: a charge flies at them — see Game)
         for (const z of g.zombies || []) if (!z.isDead && !z.isDying && !z.isFrozen && !z.lev) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 });
         for (const a of g.animals?.targets() || []) if (!a.rider && !a.lev && g.animals.riding !== a) out.push({ kind: 'creature', ck: 'a', obj: a, pos: this._centreOf('a', a), r: g.duel?._animalBody(a).r || 1 });

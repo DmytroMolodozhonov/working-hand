@@ -25,6 +25,7 @@
 
 import * as THREE from 'three';
 import { BUILD_SPELLS } from './Builder.js';
+import { WARD_SPELLS, WARD_NAMES, isWardSpell } from './HouseWards.js';
 import { BOOK, setBookAngle, pageHinge, makePageSheet, setPageSheet, disposePageSheet } from './BookModel.js';
 import { frameFromHands, frameFromOneHand, viewRight, pageLimits, PageSheet, sheetLag, edgeInBook, halfQuat, bookFromHinge, frameOnPalm } from './BookPhysics.js';
 import { BOOK_POINTS } from '../entities/SimplifiedHand.js';
@@ -61,7 +62,7 @@ function distToSegment(p, a, b) {
 }
 
 /** A spell's name for a book's pages («Флайн» is in the swift book-bird's book only). */
-export const bookSpellName = (sp) => (sp === 'Flight' ? 'Флайн' : BUILD_SPELLS[sp]?.name || sp);
+export const bookSpellName = (sp) => (sp === 'Flight' ? 'Флайн' : BUILD_SPELLS[sp]?.name || WARD_NAMES[sp] || sp);
 
 // ------------------------------------------------------------ page art
 function canvasPage(draw) {
@@ -78,7 +79,16 @@ function canvasPage(draw) {
 export function drawTitlePage(side, spells) {
     return canvasPage((x) => {
         x.textAlign = 'center';
-        if (side === 'left') {
+        const ward = spells.some(isWardSpell); // (the book of protection: its group «Защита дома»)
+        if (side === 'left' && ward) {
+            x.fillStyle = '#1b2f7a'; x.font = 'bold 26px serif';
+            x.fillText('Защита', 128, 110); x.fillText('дома', 128, 142);
+            // a silver shield
+            x.fillStyle = '#c9d6e2'; x.strokeStyle = '#1b2f7a'; x.lineWidth = 3;
+            x.beginPath(); x.moveTo(98, 180); x.lineTo(158, 180); x.lineTo(158, 214); x.quadraticCurveTo(158, 248, 128, 266); x.quadraticCurveTo(98, 248, 98, 214); x.closePath(); x.fill(); x.stroke();
+            x.fillStyle = '#7a6a4a'; x.font = 'italic 15px serif';
+            x.fillText('три заклинания — одна группа', 128, 318);
+        } else if (side === 'left') {
             x.fillStyle = '#5a1a1a'; x.font = 'bold 26px serif';
             x.fillText('Книга', 128, 120); x.fillText('заклинаний', 128, 152);
             x.strokeStyle = '#8b6b3e'; x.lineWidth = 2;
@@ -628,9 +638,16 @@ export class BookReading {
             if (!this.game.bonus?.flight) this.game.hud.setVoice?.('📘 «Флайн» выучит тот, кто сожжёт эту книгу: держите её в одной руке и скажите «Инферно» (или поднесите к огню)', true);
         }
         if (spell && spell !== 'Flight' && s.readT > HOLD.LEARN_T && !learned.has(spell)) {
-            learned.add(spell);
-            this.game.hud.toast?.(`📖 Изучено заклинание: «${bookSpellName(spell)}»`, 2500);
-            this.game.fx?.lightFlash?.(s.pos, 0xffe9a8, 2, 0.3, 10);
+            if (isWardSpell(spell)) {
+                // «Защита дома» is one group: a page of it read — all three are known
+                for (const sp of WARD_SPELLS) learned.add(sp);
+                this.game.hud.setVoice?.(`📘🛡️ Изучена группа «Защита дома»: ${WARD_SPELLS.map((sp) => '«' + bookSpellName(sp) + '»').join(', ')}`, true);
+                this.game.fx?.lightFlash?.(s.pos, 0x8fc8ff, 2, 0.4, 10);
+            } else {
+                learned.add(spell);
+                this.game.hud.toast?.(`📖 Изучено заклинание: «${bookSpellName(spell)}»`, 2500);
+                this.game.fx?.lightFlash?.(s.pos, 0xffe9a8, 2, 0.3, 10);
+            }
         }
         if (!s.toldPages && s.mode === 'one' && s.phi > 2) {
             s.toldPages = true;

@@ -36,6 +36,7 @@ export class Quake {
         const L = data.topLayer(ix, iz);
         const t = data.get(ix, L, iz);
         if (!CRACKS.has(t)) return edits; // (bedrock, water, built stone and trees stay)
+        if (this.game?.wards?.protects(ix, L - 1, iz)) return edits; // (the crack stops at a house's sphere of protection)
         edits.push([ix, L, iz, BLOCK.AIR]);
         if (power > 1 && side) {
             // the slab beside the crack is pushed up out of the ground
