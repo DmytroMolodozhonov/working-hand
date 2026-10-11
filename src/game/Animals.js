@@ -1,7 +1,8 @@
 /**
  * Animals.js — cows, pigs, sheep and horses; golden apple trees.
  *
- * Herds of 3–8 graze on the grass and wander. Hit one and it defends
+ * Herds of 3–8 graze loosely, each animal keeping its personal space (see
+ * AnimalHerd.js) and living its own calm life. Hit one and it defends
  * itself (65%) — it charges and butts you — or runs away. Sheep stand up
  * for each other: when one is attacked, 65% of the flock around attack you
  * together.
@@ -31,6 +32,7 @@ import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
 import { animalModel, animateLegs, HORSE_COLORS } from './AnimalModels.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
+import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs } from './AnimalHerd.js';
 
 export { animalModel };
 
@@ -132,7 +134,11 @@ export class Animals {
         const color = type === 'horse' ? (opts.color ?? HORSE_COLORS[Math.floor(Math.random() * HORSE_COLORS.length)]) : type === 'runbook' ? (opts.color || runBookColor(id)) : null;
         const model = animalModel(type, color);
         model.scale.setScalar(S.size);
+        // the real body (from the model's bounding box) gives its personal space; a pivot for the head
+        const dims = measureBody(model);
+        if (ROOM[type]) rigHead(model, dims); // (herd animals only: the running book has its own parts)
         model.position.copy(pos);
+        if (opts.yaw != null) model.rotation.y = opts.yaw;
         g.scene.add(model);
         const a = {
             id, type, group: model, model, isAnimal: true, hp: opts.hp ?? S.hp, dead: false, get isDead() { return this.dead; },
@@ -140,6 +146,9 @@ export class Animals {
             attacker: null, stateT: 0, vy: 0, meat: S.meat, cooked: false, color, pen: opts.pen || null,
             bonus: opts.bonus ?? (type === 'horse' ? 1 + Math.floor(Math.random() * 40) : 0),
             stamina: 100, apples: 0, tamed: opts.tamed || null, rider: null, walkT: Math.random() * 6, bones: null,
+            // herd life: its own calm state, a real speed (it speeds up / slows down and turns smoothly)
+            dims, room: (ROOM[type] ?? 1) * dims.len, idle: 'stand', idleT: Math.random() * 4, spd: 0, pose: POSE.stand,
+            home: { x: pos.x, z: pos.z }, lie: 0, headP: 0, headY: 0,
         };
         this.list.push(a);
         this.byId.set(id, a);
@@ -159,11 +168,24 @@ export class Animals {
         const top = t.topLayer(Math.round(cx), Math.round(cz));
         if (t.get(Math.round(cx), top, Math.round(cz)) !== BLOCK.GRASS || t.get(Math.round(cx), top + 1, Math.round(cz)) === BLOCK.WATER) return; // only on grass
         if (t.castles?.landAt(Math.round(cx), Math.round(cz))) return; // (not in castles and villages)
-        const herd = { x: cx, z: cz, id: ++_nextId };
+        this.spawnHerdAt(type, n, cx, cz);
+    }
+
+    /** (host) A herd of n spread loosely around (cx, cz): nobody on top of another. */
+    spawnHerdAt(type, n, cx, cz) {
+        const g = this.game;
+        const herd = { x: cx, z: cz, hx: cx, hz: cz, id: ++_nextId, leader: null };
+        const yaw = Math.random() * Math.PI * 2;
+        const placed = [];
         for (let i = 0; i < n; i++) {
-            const x = cx + (Math.random() - 0.5) * 8, z = cz + (Math.random() - 0.5) * 8;
-            this._spawn(type, new THREE.Vector3(x, g.collision.groundY(x, z) + 0.5, z), { herd });
+            // (the first one measures the body: the rest are placed by its personal space)
+            const room = placed[0]?.room ?? 0;
+            const s = i ? pickSpot(cx, cz, room * LOOSE * (0.6 + Math.sqrt(n) * 0.55), room, placed.map((o) => ({ x: o.group.position.x, z: o.group.position.z, room: o.room }))) : { x: cx, z: cz };
+            const a = this._spawn(type, new THREE.Vector3(s.x, g.collision.groundY(s.x, s.z) + 0.5, s.z), { herd, yaw: yaw + (Math.random() - 0.5) * 1.2 });
+            placed.push(a);
         }
+        herd.leader = placed[0]?.id ?? null;
+        return placed;
     }
 
     _remove(a) {
@@ -196,6 +218,14 @@ export class Animals {
             for (const o of this.list) {
                 if (o === a || o.dead || o.type !== 'sheep' || o.group.position.distanceTo(a.group.position) > 14) continue;
                 if (Math.random() < 0.65) { o.state = 'attack'; o.attacker = attacker; o.stateT = 15; }
+            }
+        }
+        // a fright spreads: the herd runs away together (still not touching)
+        if (!fight && a.herd) {
+            for (const o of this.list) {
+                if (o === a || o.dead || o.herd !== a.herd || o.rider || o.lev || o.state !== 'graze') continue;
+                if (o.group.position.distanceTo(a.group.position) > 22) continue;
+                o.state = 'flee'; o.attacker = attacker; o.stateT = 5 + Math.random() * 3;
             }
         }
     }
@@ -413,6 +443,7 @@ export class Animals {
         a.rider = null;
         a.state = 'graze';
         a.target.copy(a.group.position);
+        a.spd = 0; a.idle = 'stand'; a.idleT = 3;
         const ch = this.game.character;
         ch.group.position.x += Math.cos(a.group.rotation.y) * 1.5;
         ch.group.position.z -= Math.sin(a.group.rotation.y) * 1.5;
@@ -453,7 +484,8 @@ export class Animals {
         const gy = g.collision.groundY(a.group.position.x, a.group.position.z);
         a.group.position.y += (gy + 0.5 - a.group.position.y) * Math.min(1, dt * 8);
         g.collision.resolveCylinder(a.group.position, 0.7, a.group.position.y - 0.5, 2.5, 1.2);
-        this._animate(a, moving ? Math.min(1, base / 10) : 0);
+        a.pose = POSE.stand; a.spd = 0;
+        this._animate(a, moving ? Math.min(1, base / 10) : 0, dt);
         ch.group.position.set(a.group.position.x, a.group.position.y + 1.95 * S.size + 0.6, a.group.position.z);
         if (tired && moving && Math.random() < dt) g.hud.setVoice('🐴 Конь устал — дайте ему отдохнуть', true);
     }
@@ -465,23 +497,39 @@ export class Animals {
         const p = a.group.position;
         a.t += dt;
         if (a.damageCooldown > 0) a.damageCooldown -= dt;
-        let speed = 0;
         if (a.stunT > 0) {
             // stunned / thrown by a spell or a blast: no walking until it comes to itself
             a.stunT -= dt;
+            a.spd = 0;
             this._body(a, dt);
             this._animate(a, 0);
             return;
         }
         if (a.type === 'runbook' && g.runner) { g.runner.think(a, dt); return; } // (runs, dodges, hides: RunningBook.js)
+        let speed = 0, bunch = false;
         if (a.state === 'attack' || a.state === 'flee') {
             a.stateT -= dt;
+            a.pose = POSE.stand;
             const tp = this._playerPos(a.attacker);
-            if (!tp || a.stateT <= 0) { a.state = 'graze'; a.target.copy(p); }
+            if (!tp || a.stateT <= 0) { a.state = 'graze'; a.target.copy(p); this._setIdle(a, 'look'); }
             else if (a.state === 'flee') {
-                _v.subVectors(p, tp).setY(0).normalize();
-                a.target.copy(p).addScaledVector(_v, 6);
+                // away from the one who frightened it, together with the herd mates that run too
+                _v.subVectors(p, tp).setY(0);
+                if (_v.lengthSq() < 1e-4) _v.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+                _v.normalize();
+                let n = 0; const c = _v2.set(0, 0, 0);
+                if (a.herd) for (const o of this.list) {
+                    if (o === a || o.dead || o.herd !== a.herd || o.state !== 'flee') continue;
+                    c.x += o.group.position.x; c.z += o.group.position.z; n++;
+                }
+                if (n) {
+                    c.multiplyScalar(1 / n).sub(p).setY(0);
+                    const cl = c.length();
+                    if (cl > a.room * 1.5) _v.addScaledVector(c, 0.45 / cl).normalize();
+                }
+                a.target.copy(p).addScaledVector(_v, 8);
                 speed = S.run;
+                bunch = true;
             } else {
                 // a fight: they come at you from different sides (each herd member its own angle)
                 const dd = p.distanceTo(_v.set(tp.x, p.y, tp.z));
@@ -490,46 +538,268 @@ export class Animals {
                     a.target.set(tp.x + Math.cos(ang) * 1.6 * S.size, p.y, tp.z + Math.sin(ang) * 1.6 * S.size);
                 } else a.target.copy(tp);
                 speed = S.run * 0.85;
+                bunch = true;
                 if (dd < 1.6 * S.size + 0.6) {
                     speed = 0;
                     if (a.t > 1.2) { a.t = 0; this._butt(a, a.attacker); }
                 }
             }
-        } else {
-            // grazing: now and then a few steps somewhere near the herd
-            if (a.t > 4 + Math.random() * 6) {
-                a.t = 0;
-                const h = a.pen || a.herd || { x: p.x, z: p.z };
-                const spread = a.pen ? a.pen.r * 1.6 : 12;
-                a.target.set(h.x + (Math.random() - 0.5) * spread, p.y, h.z + (Math.random() - 0.5) * spread);
-            }
-            if (p.distanceTo(_v.set(a.target.x, p.y, a.target.z)) > 0.6) speed = S.speed;
-        }
-        if (speed > 0) {
-            const to = _v.set(a.target.x - p.x, 0, a.target.z - p.z);
-            const d = to.length();
-            if (d > 0.3) {
-                to.normalize();
-                const want = Math.atan2(-to.x, -to.z);
-                let dy = want - a.group.rotation.y;
-                while (dy > Math.PI) dy -= Math.PI * 2;
-                while (dy < -Math.PI) dy += Math.PI * 2;
-                a.group.rotation.y += dy * Math.min(1, dt * 5);
-                p.addScaledVector(to, Math.min(d, speed * dt));
-                a.walkT += dt * speed * 2.2;
-            }
-        }
+        } else speed = this._calm(a, dt);
+        this._steer(a, dt, speed, bunch);
         // a pen animal stays inside its fence (unless it runs at / from someone)
         if (a.pen && a.state === 'graze') {
             const dx = p.x - a.pen.x, dz = p.z - a.pen.z, r = a.pen.r;
-            if (Math.abs(dx) > r + 2 || Math.abs(dz) > r + 2) a.target.set(a.pen.x, p.y, a.pen.z); // (out after a fright: it walks back in)
+            if (Math.abs(dx) > r + 2 || Math.abs(dz) > r + 2) { a.target.set(a.pen.x, p.y, a.pen.z); this._setIdle(a, 'walk'); } // (out after a fright: it walks back in)
             else {
                 if (Math.abs(dx) > r) p.x = a.pen.x + Math.sign(dx) * r;
                 if (Math.abs(dz) > r) p.z = a.pen.z + Math.sign(dz) * r;
             }
         }
         this._body(a, dt);
-        this._animate(a, speed > 0 ? Math.min(1, speed / 5) : 0);
+        this._animate(a, Math.min(1, a.spd / 5), dt);
+    }
+
+    _setIdle(a, state, time) {
+        a.idle = state;
+        a.idleT = time ?? idleTime(state);
+        const p = a.group.position;
+        if (state === 'graze') {
+            // a step or two forward, nibbling, the head down
+            const yaw = a.group.rotation.y + (Math.random() - 0.5) * 1.4, d = Math.random() * 0.25 * a.dims.len;
+            a.target.set(p.x - Math.sin(yaw) * d, p.y, p.z - Math.cos(yaw) * d);
+        } else if (state === 'walk') {
+            const s = this._freeSpot(a);
+            a.target.set(s.x, p.y, s.z);
+        } else if (state !== 'follow' && state !== 'avoid' && state !== 'come') a.target.copy(p);
+    }
+
+    /** Where the herd lives: the pen, the herd (around its leader), or its own home spot. */
+    _freeSpot(a) {
+        const room = this._room(a);
+        const others = [];
+        for (const o of this.list) {
+            if (o === a || o.dead) continue;
+            const op = o.group.position;
+            if (Math.abs(op.x - a.group.position.x) > 40 || Math.abs(op.z - a.group.position.z) > 40) continue;
+            others.push({ x: op.x, z: op.z, room: this._room(o) });
+            if (o.idle === 'walk' || o.idle === 'follow') others.push({ x: o.target.x, z: o.target.z, room: this._room(o) });
+        }
+        if (a.pen) return pickSpot(a.pen.x, a.pen.z, a.pen.r * 0.85, room, others);
+        const h = a.herd;
+        const n = h ? this._herdSize(h) : 1;
+        const R = room * LOOSE * (0.6 + Math.sqrt(n) * 0.55);
+        if (h && h.leader === a.id) {
+            // the leader roams on: a new patch of grass not far from where the herd lives
+            const ang = Math.random() * Math.PI * 2, d = 6 + Math.random() * 12;
+            let x = a.group.position.x + Math.cos(ang) * d, z = a.group.position.z + Math.sin(ang) * d;
+            const far = Math.hypot(x - h.hx, z - h.hz), max = 30;
+            if (far > max) { x = h.hx + (x - h.hx) * max / far; z = h.hz + (z - h.hz) * max / far; }
+            return pickSpot(x, z, room, room, others);
+        }
+        if (h) return pickSpot(h.x, h.z, R, room, others);
+        return pickSpot(a.home.x, a.home.z, Math.max(R, room * 3), room, others);
+    }
+
+    _room(a) {
+        return a.pen ? Math.min(a.room, a.pen.r * 0.9) : a.room;
+    }
+
+    _herdSize(h) {
+        if (h._nT === this._tick) return h._n;
+        let n = 0, x = 0, z = 0, leader = null;
+        for (const o of this.list) if (o.herd === h && !o.dead) {
+            n++; x += o.group.position.x; z += o.group.position.z;
+            if (o.id === h.leader) leader = o;
+        }
+        h._n = n; h._nT = this._tick;
+        if (n) { h.x = x / n; h.z = z / n; } // (the herd is where its animals are)
+        if (!leader || leader.rider || leader.tamed) {
+            // a new leader: the one nearest the middle
+            const nl = this.list.filter((o) => o.herd === h && !o.dead && !o.rider && !o.tamed).sort((p, q) => Math.hypot(p.group.position.x - h.x, p.group.position.z - h.z) - Math.hypot(q.group.position.x - h.x, q.group.position.z - h.z))[0];
+            h.leader = nl ? nl.id : null;
+        }
+        return n;
+    }
+
+    /** A calm animal: lives its own life near the herd, keeps away from people walking at it. Returns the wanted speed. */
+    _calm(a, dt) {
+        const S = SPECIES[a.type];
+        const p = a.group.position;
+        a.idleT -= dt;
+        // people: someone coming right at it — it steps aside; a tamed horse comes to its owner
+        const react = this._people(a);
+        if (react) return react;
+        if (a.idle === 'avoid' || a.idle === 'come') this._setIdle(a, 'look');
+        // the herd: too far from the leader → it follows (at a distance)
+        const h = a.herd;
+        if (h && !a.pen) {
+            const n = this._herdSize(h);
+            const L = h.leader !== a.id ? this.byId.get(h.leader) : null;
+            if (L && !L.dead) {
+                const R = a.room * LOOSE * (0.6 + Math.sqrt(n) * 0.55);
+                const d = Math.hypot(L.group.position.x - p.x, L.group.position.z - p.z);
+                if (d > R * 1.6 && (a.idle !== 'rest' || d > R * 2.6) && a.idle !== 'follow') this._setIdle(a, 'follow', 20);
+                if (a.idle === 'follow') {
+                    if (d < R * 0.9 || a.idleT <= 0) this._setIdle(a, Math.random() < 0.6 ? 'graze' : 'look');
+                    else {
+                        // a place beside / behind the leader, its own side (not in its tracks)
+                        const ang = Math.atan2(p.z - L.group.position.z, p.x - L.group.position.x);
+                        a.target.set(L.group.position.x + Math.cos(ang) * R * 0.75, p.y, L.group.position.z + Math.sin(ang) * R * 0.75);
+                        return d > R * 3 ? S.speed * 2.2 : S.speed * 1.2;
+                    }
+                }
+            }
+        }
+        if (a.idleT <= 0 || a.idle === 'follow') this._setIdle(a, pickIdle(a.type));
+        a.pose = a.idle === 'graze' ? POSE.graze : a.idle === 'rest' ? POSE.rest : a.idle === 'look' ? POSE.look : POSE.stand;
+        const d = Math.hypot(a.target.x - p.x, a.target.z - p.z);
+        if (a.idle === 'walk') {
+            if (d < 0.6) this._setIdle(a, Math.random() < 0.7 ? 'graze' : 'stand');
+            else return S.speed;
+        }
+        if (a.idle === 'graze' && d > 0.3) return S.speed * 0.25;
+        return 0;
+    }
+
+    /** People near: one walking right at it makes it step aside; a tamed horse goes to its calm owner. */
+    _people(a) {
+        const S = SPECIES[a.type];
+        const p = a.group.position;
+        if (a.idle === 'rest' && a.lie > 0.5 && a.idleT > 0) {
+            // (lying: it gets up only if someone comes really close)
+            let near = false;
+            for (const m of this._crowd || []) if (Math.hypot(m.x - p.x, m.z - p.z) < a.room * 0.8 + 2) near = true;
+            if (!near) return 0;
+            this._setIdle(a, 'look');
+        }
+        let best = null;
+        for (const m of this._crowd || []) {
+            const dx = p.x - m.x, dz = p.z - m.z, d = Math.hypot(dx, dz);
+            if (a.type === 'horse' && a.tamed === m.id) {
+                // a tamed horse: its owner calm (not running) and not too far → it walks up, stops a few steps off
+                const ownerCalm = Math.hypot(m.vx, m.vz) < 3.5;
+                const stop = a.dims.len * 0.5 + 2.5; // (its nose a couple of steps from the owner)
+                if (ownerCalm && d > stop + (a.idle === 'come' ? 0.8 : 5) && d < 40 && !a.pen) {
+                    a.idle = 'come'; a.idleT = 2; a.pose = POSE.stand;
+                    a.target.set(m.x + dx / d * stop, p.y, m.z + dz / d * stop);
+                    return d > 15 ? S.speed * 2 : S.speed;
+                }
+                continue;
+            }
+            const zone = a.room * 0.8 + 3;
+            if (d > zone || d < 1e-3) continue;
+            const app = (m.vx * dx + m.vz * dz) / d; // how fast they come at it
+            if (app > 0.6 || d < a.room * 0.45 + 1.5) if (!best || d < best.d) best = { m, d, dx: dx / d, dz: dz / d, app };
+        }
+        if (!best) return 0;
+        // aside: away from them, to the side of their way
+        const { m } = best;
+        const ms = Math.hypot(m.vx, m.vz);
+        let ax = best.dx, az = best.dz;
+        if (ms > 0.3) {
+            const sx = -m.vz / ms, sz = m.vx / ms; // their right
+            const side = sx * best.dx + sz * best.dz >= 0 ? 1 : -1;
+            ax = best.dx * 0.5 + sx * side; az = best.dz * 0.5 + sz * side;
+            const l = Math.hypot(ax, az); ax /= l; az /= l;
+        }
+        const go = a.room * 0.8 + 3.5 - best.d + 2;
+        a.idle = 'avoid'; a.idleT = 1.5; a.pose = POSE.look;
+        a.target.set(p.x + ax * go, p.y, p.z + az * go);
+        return S.speed * (best.app > 3 ? 2.2 : 1.4);
+    }
+
+    /**
+     * Walking like an animal: it turns and speeds up / slows down smoothly, goes where it
+     * faces, and keeps its personal space from the others (only a fright bunches them).
+     */
+    _steer(a, dt, speed, bunch) {
+        const S = SPECIES[a.type];
+        const p = a.group.position;
+        let wx = a.target.x - p.x, wz = a.target.z - p.z;
+        const d = Math.hypot(wx, wz);
+        let want = 0;
+        if (speed > 0 && d > 0.3) {
+            wx /= d; wz /= d;
+            want = speed * Math.min(1, d / Math.max(1, speed * 0.6)); // (slows down to stop at the spot)
+        } else { wx = 0; wz = 0; }
+        // personal space: the others too near push it away (when frightened: only enough not to touch)
+        let sx = 0, sz = 0, brake = 1;
+        const room = this._room(a);
+        const fx = -Math.sin(a.group.rotation.y), fz = -Math.cos(a.group.rotation.y);
+        for (const o of this.list) {
+            if (o === a || o.dead) continue;
+            const op = o.group.position;
+            const dx = p.x - op.x, dz = p.z - op.z;
+            if (Math.abs(dx) > 30 || Math.abs(dz) > 30 || Math.abs(p.y - op.y) > 3) continue;
+            const r = bunch ? solidGap(a, o, dx, dz) * 1.25 : 0.5 * (room + this._room(o)) * 1.15;
+            const dd = Math.hypot(dx, dz);
+            if (!bunch && dd < r * 1.2 && dd > 1e-4 && -(dx * fx + dz * fz) > dd * 0.5) {
+                // another right ahead: it slows down rather than walk into its space
+                const pr = 0.5 * (room + this._room(o));
+                brake = Math.min(brake, Math.max(0, (dd - pr * 0.95) / (pr * 0.35)));
+            }
+            if (dd >= r || dd < 1e-4) continue;
+            const k = (r - dd) / r;
+            sx += dx / dd * k; sz += dz / dd * k;
+        }
+        want *= brake;
+        const sl = Math.hypot(sx, sz);
+        if (sl > 0.05) {
+            if (want < S.speed * 0.5) {
+                // standing / grazing and someone is in its space: a few steps away
+                if (a.idle === 'rest' && a.lie > 0.5 && sl < 0.5) { /* (lying: stays unless pressed) */ }
+                else {
+                    if (a.idle === 'rest') this._setIdle(a, 'stand');
+                    wx = wx * want + sx / sl * S.speed; wz = wz * want + sz / sl * S.speed;
+                    want = S.speed * Math.min(1, 0.4 + sl);
+                    const l = Math.hypot(wx, wz); wx /= l; wz /= l;
+                }
+            } else {
+                wx += sx * 1.6; wz += sz * 1.6;
+                const l = Math.hypot(wx, wz) || 1; wx /= l; wz /= l;
+            }
+        }
+        // turn smoothly towards where it wants to go (faster when running)
+        if (want > 0) {
+            const yaw = Math.atan2(-wx, -wz);
+            const dy = wrapAngle(yaw - a.group.rotation.y);
+            const rate = (want > S.speed * 1.5 ? 3.2 : 1.8) * dt;
+            a.group.rotation.y += Math.max(-rate, Math.min(rate, dy));
+            want *= Math.max(0.15, Math.cos(Math.min(Math.PI / 2, Math.abs(dy)))); // (slows down to turn round)
+        }
+        // speed up / slow down
+        const acc = want > a.spd ? (want > S.speed * 1.5 ? 7 : 2.5) : 5;
+        a.spd += Math.max(-acc * dt, Math.min(acc * dt, want - a.spd));
+        if (a.spd < 0.02) a.spd = 0;
+        if (a.spd > 0) {
+            const yaw = a.group.rotation.y;
+            const step = a.spd * dt;
+            p.x -= Math.sin(yaw) * step; p.z -= Math.cos(yaw) * step;
+            a.walkT += dt * a.spd * 2.2;
+        }
+    }
+
+    /** People near the animals (positions and how fast they walk), once a frame. */
+    _seePeople(dt) {
+        const g = this.game;
+        const out = [];
+        const last = this._lastPeople || (this._lastPeople = new Map());
+        const add = (id, pos) => {
+            if (!pos) return;
+            const l = last.get(id);
+            let vx = 0, vz = 0;
+            if (l && dt > 0) {
+                vx = (pos.x - l.x) / dt; vz = (pos.z - l.z) / dt;
+                if (Math.hypot(vx, vz) > 30) { vx = 0; vz = 0; } // (a teleport, not a walk)
+                vx = l.vx + (vx - l.vx) * Math.min(1, dt * 6); vz = l.vz + (vz - l.vz) * Math.min(1, dt * 6);
+            }
+            last.set(id, { x: pos.x, z: pos.z, vx, vz });
+            out.push({ id, x: pos.x, z: pos.z, vx, vz });
+        };
+        const riding = (id) => this.list.some((h) => h.rider === id && !h.dead);
+        if (!g.isDeadLocal && !riding(g.localId)) add(g.localId, g.character.group.position);
+        for (const [id, r] of g.remotes || []) if (!r.dead && !riding(id)) add(id, r.position);
+        this._crowd = out;
     }
 
     /** A blow / a blast / a spell throws an animal (it is stunned for a moment). */
@@ -549,7 +819,7 @@ export class Animals {
         const S = SPECIES[a.type];
         const p = a.group.position;
         const v = a.vel || (a.vel = new THREE.Vector3());
-        const base = a.dead ? 0.35 * S.size : 0.5;
+        const base = a.dead ? 0.35 * S.size : 0.5 - (a.lie || 0) * a.dims.legH * 0.9; // (lying: the body down on the grass)
         if (v.lengthSq() > 1e-4) {
             p.x += v.x * dt; p.z += v.z * dt;
             const k = Math.max(0, 1 - (a.airborne ? 0.6 : 5) * dt);
@@ -568,23 +838,33 @@ export class Animals {
         }
         if (!a.dead) {
             g.collision.resolveCylinder(p, 0.6 * S.size, p.y - 0.5, 2, 1.1);
-            // the others are solid too
+            // the others are solid too (their real bodies: long along, narrow across)
             for (const o of this.list) {
                 if (o === a || o.dead) continue;
                 const op = o.group.position;
                 const dx = p.x - op.x, dz = p.z - op.z;
-                const min = 0.55 * (S.size + SPECIES[o.type].size);
+                if (Math.abs(dx) > 12 || Math.abs(dz) > 12) continue;
+                const min = solidGap(a, o, dx, dz);
                 const d2 = dx * dx + dz * dz;
                 if (d2 < min * min && d2 > 1e-6 && Math.abs(p.y - op.y) < 2) {
                     const d = Math.sqrt(d2), push = (min - d) * 0.5;
                     p.x += dx / d * push; p.z += dz / d * push;
+                } else if (a.state === 'graze' && !(a.lie > 0.5) && d2 > 1e-6) {
+                    // calm: a slow shuffle out of the other's personal space (never a jump)
+                    const pr = 0.5 * (this._room(a) + this._room(o)) * 0.97;
+                    if (d2 < pr * pr) {
+                        const d = Math.sqrt(d2), push = Math.min(pr - d, dt * 0.9);
+                        p.x += dx / d * push; p.z += dz / d * push;
+                    }
                 }
             }
         }
     }
 
-    _animate(a, k) {
-        animateLegs(a.model, a.walkT, k);
+    _animate(a, k, dt = 0) {
+        if (dt) animatePose(a, dt, a.pose ?? POSE.stand); // (the head down to the grass / looking about)
+        animateLegs(a.model, a.walkT, k * (1 - (a.lie || 0)));
+        if (a.lie > 0.01) foldLegs(a.model, a.lie); // (lying: the legs folded under the body)
     }
 
     _playerPos(id) {
@@ -618,6 +898,8 @@ export class Animals {
             tr.apples.forEach((ap, i) => { tr.model.userData.apples[i].visible = ap.until <= Date.now(); });
         }
         if (this.auth) {
+            this._tick = (this._tick || 0) + 1;
+            this._seePeople(dt);
             this._spawnT -= dt;
             if (this._spawnT <= 0) {
                 this._spawnT = 20;
@@ -643,7 +925,7 @@ export class Animals {
                 a.group.position.lerp(a.net, Math.min(1, dt * 8));
                 if (a.type === 'runbook') continue; // (RunningBook moves its little legs)
                 a.walkT += dt * (a.netMoving ? 6 : 0);
-                this._animate(a, a.netMoving ? 0.8 : 0);
+                if (!a.dead) this._animate(a, a.netMoving ? 0.8 : 0, dt); // (the head down / lying as on the host)
             }
         }
         // shadows only near (every caster is drawn twice)
@@ -700,7 +982,7 @@ export class Animals {
         this._netT = 0.2;
         const r = (v) => Math.round(v * 100) / 100;
         if (this.auth) {
-            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state === 'graze' ? 0 : 1]));
+            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0]));
         } else if (this.riding) {
             const a = this.riding;
             g.sync.animalPos?.(a.id, [r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y)]);
@@ -710,13 +992,14 @@ export class Animals {
     /** (guests) the host's animals. */
     applyNet(list) {
         const seen = new Set();
-        for (const [id, type, x, y, z, ry, dead, meat, cooked, color, tamed, rider, bonus, moving] of list || []) {
+        for (const [id, type, x, y, z, ry, dead, meat, cooked, color, tamed, rider, bonus, moving, pose] of list || []) {
             seen.add(id);
             let a = this.byId.get(id);
             if (!a) a = this._spawn(type, new THREE.Vector3(x, y, z), { id, color: color || null, bonus });
             if (a === this.riding) continue;
             a.net = (a.net || new THREE.Vector3()).set(x, y, z);
             a.netMoving = !!moving;
+            a.pose = pose || 0;
             a.group.rotation.y = ry;
             a.meat = meat;
             a.tamed = tamed || null;
