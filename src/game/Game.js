@@ -59,6 +59,7 @@ import { SeaSurface } from '../fx/SeaSurface.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
+import { HandHold } from './HandHold.js';
 import { Mana } from './Mana.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -248,6 +249,7 @@ export class Game {
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
+        this.handHold = new HandHold(this); // handshakes, holding and leading by the hand
         this.fire = new FireSystem(this); // burning trees
         this.fire.onCastleBurn = (x, L, z) => this._castleBurnt(x, L, z);
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
@@ -1817,6 +1819,7 @@ export class Game {
         if (!isTest) this._spawnWaves();
 
         for (const r of this.remotes.values()) r.update(dt);
+        this.handHold.update(dt); // (hands holding hands: after the others' arms are set)
         this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
         if (this.sync) this.sync.update(dt);
         mark('мультиплеер');

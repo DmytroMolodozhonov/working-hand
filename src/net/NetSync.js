@@ -113,6 +113,7 @@ export class NetSync {
         }
         this.game.water?.applyRemote(id, null);
         this.game.levitation?.onLeave(id); // (what they held falls; if they held me, I fall)
+        this.game.handHold?.onLeave(id); // (hands they held or that held mine: let go)
         // Drop weapons they were holding
         for (const [wid, owner] of this.weaponOwners) {
             if (owner !== id) continue;
@@ -390,6 +391,12 @@ export class NetSync {
     }
 
     /** A light cut on me (everybody draws it on my body). */
+    // hands holding hands (HandHold.js)
+    handGrip(to, s, ts, on, facing) { this.net.send({ t: 'hgrip', by: this.me, to, s, ts, on: on ? 1 : 0, f: facing ? 1 : 0 }, true); }
+    handFree(holder, s, ts, broke) { this.net.send({ t: 'hfree', by: this.me, holder, s, ts, f: broke ? 1 : 0 }, true); }
+    villagerHand(id, on, p) { this.net.send({ t: 'vhand', by: this.me, id, on: on ? 1 : 0, p: p ? [r3(p.x), r3(p.y), r3(p.z)] : null }); }
+    villagerFree(id, to) { if (this.net.isHost) this.net.send({ t: 'vfree', id, to }, true); }
+
     cut(h) {
         this.net.send({ t: 'cut', by: this.me, h }, true);
     }
@@ -766,6 +773,7 @@ export class NetSync {
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
             case 'phit': if (m.to === this.me) g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg, Array.isArray(m.h) ? m.h.slice(0, 3).map(Number) : null); break;
+            case 'hgrip': case 'hfree': case 'vhand': case 'vfree': g.handHold?.onNet(m); break;
             case 'cut': {
                 const r = m.by !== this.me && g.remotes.get(m.by);
                 if (r && Array.isArray(m.h)) g.bleeding?.addCut(r.character, m.h.slice(0, 3).map((v) => Math.max(-3, Math.min(3, Number(v)))));

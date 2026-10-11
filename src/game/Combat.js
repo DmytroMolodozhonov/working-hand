@@ -610,6 +610,7 @@ export class Combat {
         const targets = this.meleeTargets();
         if (!targets.length) return;
         for (const side of ['left', 'right']) {
+            if (this.game.handHold?.busy(side)) continue; // (a hand holding / held by another: no punch)
             const fist = ch.getHandWorldPosition(side, _v1);
             const vel = ch.handVelocity[side];
             for (const t of targets) {

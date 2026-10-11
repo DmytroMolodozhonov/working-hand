@@ -1284,7 +1284,7 @@ export class CastleLife {
         if (this.auth) {
             for (const cs of this.castles.values()) if (cs.awake) this._crowd(cs, dt);
             this._assignSlots();
-            for (const v of [...this.byId.values()]) this._think(v, dt);
+            for (const v of [...this.byId.values()]) if (!v.handLink) this._think(v, dt); // (held by the hand: HandHold leads them)
             this._separate(dt);
         } else {
             for (const v of this.byId.values()) {
@@ -1298,7 +1298,7 @@ export class CastleLife {
         const me = g.character.group.position;
         const cam = g.camera;
         const pose = g.currentPose;
-        const punching = !!(pose && pose.isPunching) && !g.weapons.hasWeapon() && (g.playerAttackCooldown || 0) <= 0;
+        const punching = !!(pose && pose.isPunching) && !g.weapons.hasWeapon() && (g.playerAttackCooldown || 0) <= 0 && !g.handHold?.anyBusy();
         for (const v of [...this.byId.values()]) {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             const visible = d < VIEW;

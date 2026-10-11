@@ -95,6 +95,7 @@ export class RemoteAvatar {
         const s = this.target;
         if (!s) return;
         const ch = this.character;
+        ch.restoreArms(); // (an arm drawn reaching last frame — a hand held — back to the tracked one first)
         const k = Math.min(1, dt * 12);
         const p = s.s.p;
         const g = ch.group.position;

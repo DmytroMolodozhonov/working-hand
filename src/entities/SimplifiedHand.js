@@ -36,6 +36,17 @@ export const PEN_GRIP = {
     pinky: [1.05, 1.25, 0.8, 0],
     thumb: [0.14, -1.5, 0.51, -0.1, -0.2],
 };
+/**
+ * A handshake: the fingers wrapped round the other hand's palm (knuckles bent, the
+ * middle joints round its edge), the thumb lying across the back of it.
+ */
+export const SHAKE_GRIP = {
+    index: [0.85, 0.95, 0.45, 0.06],
+    middle: [0.9, 1.0, 0.45, 0],
+    ring: [0.95, 1.0, 0.45, -0.05],
+    pinky: [1.0, 0.95, 0.45, -0.1],
+    thumb: [0.05, -0.55, 0.95, 0.15, 0.1],
+};
 /** Where the pen grip touches the wand: the web (palm frame), the index's and the thumb's pads (on their end bones). */
 export const PEN_POINTS = { web: [-0.17, 0.17, -0.04], index: [0, 0.049, -0.038], thumb: [0, 0.104, -0.045] };
 
@@ -495,9 +506,9 @@ export class SimplifiedHand {
     setShowHands(visible) { this.group.visible = visible; }
     setQuality() { }
 
-    /** Hold a handle: fingers wrap to `curl` (0..1); `pose` 'pen': a pen grip (PEN_GRIP). null releases. */
+    /** Hold a handle: fingers wrap to `curl` (0..1); `pose` 'pen': a pen grip (PEN_GRIP), 'shake': a handshake (SHAKE_GRIP). null releases. */
     setGrip(curl, pose = null) {
-        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: pose === 'pen' ? PEN_GRIP : null };
+        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: pose === 'pen' ? PEN_GRIP : pose === 'shake' ? SHAKE_GRIP : null };
     }
 
     // ------------------------------------------------------------- networking
