@@ -29,9 +29,9 @@ function run(A, secs, each, dt = 1 / 30) {
 }
 /** A herd with its guardian for sure (the roll is tested on its own). */
 function herdWithGuard(A, type, n = 4) {
-    const rnd = Math.random;
-    Math.random = () => 0.01;
-    try { return A.spawnHerdAt(type, n, 0, 0); } finally { Math.random = rnd; }
+    const herd = A.spawnHerdAt(type, n, 0, 0);
+    if (!herd.some((a) => a.guard)) { herd[0].guard = type === 'cow' ? 'bull' : 'ram'; herd[0].herd.guard = herd[0].id; herd[0].herd.leader = herd[0].id; }
+    return herd;
 }
 
 test('the roll: 45% of cow herds have a bull, 29% of sheep flocks a leader ram, others none', () => {

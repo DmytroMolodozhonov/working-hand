@@ -269,15 +269,20 @@ function finish(g, parts) {
 }
 
 // ================================================================ horse
-export const HORSE_COLORS = [0x4a3022, 0x33241a, 0x5e3a26, 0x1d1916, 0x7d7a75, 0xb3aea4, 0x8c7756];
+// (no black: the only black horse in the world is the Pegasus)
+export const HORSE_COLORS = [0x4a3022, 0x33241a, 0x5e3a26, 0x7d7a75, 0xb3aea4, 0x8c7756];
+/** The Pegasus: jet-black, glossy, with great black feathered wings (one in some herds — Animals.js). */
+export const PEGASUS_COLOR = 0x0b0a0c;
 
 function horse(color) {
     const c = color ?? HORSE_COLORS[0];
     const base = new THREE.Color(c);
-    const hair = base.clone().multiplyScalar(base.getHSL({}).l > 0.6 ? 0.72 : 0.42).getHex(); // mane, tail, forelock
-    const skin = lamV(c);
+    const pegasus = c === PEGASUS_COLOR;
+    const hair = pegasus ? 0x08080c : base.clone().multiplyScalar(base.getHSL({}).l > 0.6 ? 0.72 : 0.42).getHex(); // mane, tail, forelock
+    // (the Pegasus: a glossy coat that shines blue-black in the light)
+    const skin = pegasus ? (_mats.get('pegasus') || _mats.set('pegasus', new THREE.MeshPhongMaterial({ color: 0x17161c, specular: 0x5a6a8a, shininess: 38, vertexColors: true })).get('pegasus')) : lamV(c);
     const g = new THREE.Group();
-    g.name = 'horse';
+    g.name = pegasus ? 'pegasus' : 'horse';
     const legs = [];
 
     // trunk: rump (+Z) → chest (−Z); top / bottom line and half-width keyed along it
@@ -374,7 +379,21 @@ function horse(color) {
     saddle.visible = false;
 
     g.userData.grazePitch = -1.8; // (the long neck right down: the muzzle at the grass)
-    return finish(g, { body, neck, head, tail, legs, saddle });
+    let wings;
+    if (pegasus) {
+        // great black wings on the withers, folded along the sides (the pig's wing shape, much bigger)
+        wings = [];
+        for (const s of [1, -1]) {
+            const w = group(g, s > 0 ? 'wingRight' : 'wingLeft', 0.3 * s, 1.92, -0.5);
+            w.scale.set(1.75 * s, 1.75, 1.75);
+            w.userData.side = s;
+            const m = mesh(w, pigWingGeo(), wingMat(0x1a1a22));
+            m.name = 'wing';
+            w.userData.mesh = m;
+            wings.push(w);
+        }
+    }
+    return finish(g, { body, neck, head, tail, legs, saddle, wings, pegasus });
 }
 
 // ================================================================== pig

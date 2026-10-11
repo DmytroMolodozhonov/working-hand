@@ -802,8 +802,8 @@ export class NetSync {
             case 'apick': if (this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr) g.animals._pickApple(tr, m.i, m.from, m.side); } break;
             case 'agone': if (!this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr && tr.apples[m.i]) tr.apples[m.i].until = Date.now() + Math.max(0, (m.until || 0) - Date.now()); } break;
             case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(3, a.apples + 1); } break;
-            case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
-            case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; } } break;
+            case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on && !a.pegasus) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
+            case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; a.flyCode = m.p[4] || 0; } } break; // (a Pegasus in flight: its wings)
             case 'abutt': if (m.to === this.me) {
                 if (g.combat.enabled) g.combat.damage(m.dmg || 1, null, 'animal'); else g.damageLocalPlayer(m.dmg || 1);
                 if (Array.isArray(m.p) && g.impact) { const from = vec(m.p); const k = Math.min(20, m.k || 6); g.impact.apply({ v: g.character.group.position.clone().sub(from).setY(0).normalize().multiplyScalar(k).setY(2 + k * 0.2), from, kind: 'butt', noShield: true, always: m.down ? { down: Math.min(4, m.down) } : null }); }

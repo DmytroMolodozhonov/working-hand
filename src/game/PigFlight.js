@@ -137,7 +137,7 @@ export function stepFlight(a, dt, W, leader = null, rnd = Math.random) {
         wantY = Math.max(ahead + FLY.CLEAR + FLY.BASE, floorHere + FLY.BASE + f.alt);
         // near the spot: down in a long glide (from higher up it starts farther off)
         const glideDist = Math.max(4, (p.y - floorT - FLY.BASE) * 1.7 + 3);
-        if (!chase && dist < glideDist) {
+        if (!chase && !f.hold && dist < glideDist) { // (hold: it keeps flying — the Pegasus round an attacker)
             if (W.landOk(f.tx, f.tz)) f.mode = 'down';
             else { const s = W.pickLanding(f.tx, f.tz, 25); if (s) { f.tx = s.x; f.tz = s.z; } else if (f.home) { f.tx = f.home.x; f.tz = f.home.z; } }
         }

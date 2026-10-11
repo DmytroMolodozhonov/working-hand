@@ -30,8 +30,8 @@ test('the bronze bull wakes and charges; the leader ram becomes a minotaur', asy
         for (const a of [...A.list]) A._remove(a);
         const fw = g.camera.getWorldDirection(new T.Vector3()).setY(0).normalize();
         const at = ch.group.position.clone().addScaledVector(fw, 22);
-        const rnd = Math.random; Math.random = () => 0.01;
-        let herd; try { herd = A.spawnHerdAt(type, 3, at.x, at.z); } finally { Math.random = rnd; }
+        const herd = A.spawnHerdAt(type, 3, at.x, at.z);
+        if (!herd.some((a) => a.guard)) { herd[0].guard = type === 'cow' ? 'bull' : 'ram'; herd[0].herd.guard = herd[0].id; } // (this herd has one for sure)
         const gd = herd.find((a) => a.guard);
         for (let i = 0; i < 10; i++) await frame();
         const d0 = gd.group.position.distanceTo(ch.group.position);

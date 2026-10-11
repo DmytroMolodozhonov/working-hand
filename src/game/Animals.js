@@ -34,7 +34,7 @@ import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
-import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS } from './AnimalModels.js';
+import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS, PEGASUS_COLOR } from './AnimalModels.js';
 import { FLY, takeOff, stepFlight, wingTick, pickMigration, flockSlot } from './PigFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
@@ -50,6 +50,18 @@ export const SPECIES = {
     sheep: { name: 'Баран', hp: 6, speed: 1.5, run: 5.8, dmg: 1, meat: 2, size: 1.55 },
     horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 2.3 },
     runbook: { name: 'Бегущая книга', hp: 4, speed: 2.2, run: 9.5, dmg: 0, meat: 0, size: RUNNER.SIZE }, // (rare; its mind is RunningBook.js)
+};
+/**
+ * The Pegasus (one in 21% of horse herds, the only black horse): he defends his herd in the air;
+ * a golden apple fed by hand makes him let that player on (9% per apple) — he is never anybody's;
+ * ridden, a slap on his head and he takes off with the rider.
+ */
+export const PEGASUS = {
+    CHANCE: 0.21, TRUST: 0.09, TRUST_T: 10 * 60 * 1000, // ms: how long he stays friendly
+    RIDE_MAX: 4 * 60, // s: then he has had enough and goes back to his herd
+    CIRCLE_R: 9, CIRCLE_ALT: 7, DIVE_EVERY: 5, DMG: 3, DEFEND_T: 30,
+    SLAP_V: 2.5, // m/s: the hand's speed into his head for a slap
+    FLY_SPEED: 1.7, // × his riding speed in the air
 };
 /** New herds: rare, small, far away and never in sight (they must not pop up next to the player). */
 export const HERDS = {
@@ -166,7 +178,7 @@ export class Animals {
             : type === 'pig' || type === 'cow' ? (opts.color || 1 + Math.floor(Math.random() * 4)) : null; // (a pig's / a cow's look 1…4)
         const model = animalModel(type, color);
         model.scale.setScalar(S.size * (type === 'pig' ? pigSize(id) : 1));
-        if (type === 'pig') model.rotation.order = 'YXZ'; // (in flight: rolls into a turn, pitches, then faces its way)
+        if (type === 'pig' || color === PEGASUS_COLOR) model.rotation.order = 'YXZ'; // (in flight: rolls into a turn, pitches, then faces its way)
         // the real body (from the model's bounding box) gives its personal space; a pivot for the head
         const dims = measureBody(model);
         if (ROOM[type]) rigHead(model, dims); // (herd animals only: the running book has its own parts)
@@ -184,6 +196,7 @@ export class Animals {
             home: { x: pos.x, z: pos.z }, lie: 0, headP: 0, headY: 0,
             fly: null, flyCode: 0, wingOpen: 0, bank: 0, pitch: 0, // (pigs: their flight — PigFlight.js)
             baseHp: S.hp, guard: null, form: 0, formK: 0, act: 0, // (a herd's guardian: HerdGuards.js)
+            pegasus: type === 'horse' && color === PEGASUS_COLOR, // (the winged black horse)
         };
         this.list.push(a);
         this.byId.set(id, a);
@@ -233,11 +246,12 @@ export class Animals {
         const herd = { x: cx, z: cz, hx: cx, hz: cz, id: ++_nextId, leader: null };
         const yaw = Math.random() * Math.PI * 2;
         const placed = [];
+        const peg = type === 'horse' && Math.random() < PEGASUS.CHANCE ? n - 1 : -1; // (a herd with the Pegasus)
         for (let i = 0; i < n; i++) {
             // (the first one measures the body: the rest are placed by its personal space)
             const room = placed[0]?.room ?? 0;
             const s = i ? pickSpot(cx, cz, room * LOOSE * (0.6 + Math.sqrt(n) * 0.55), room, placed.map((o) => ({ x: o.group.position.x, z: o.group.position.z, room: o.room }))) : { x: cx, z: cz };
-            const a = this._spawn(type, new THREE.Vector3(s.x, g.collision.groundY(s.x, s.z) + 0.5, s.z), { herd, yaw: yaw + (Math.random() - 0.5) * 1.2 });
+            const a = this._spawn(type, new THREE.Vector3(s.x, g.collision.groundY(s.x, s.z) + 0.5, s.z), { herd, yaw: yaw + (Math.random() - 0.5) * 1.2, color: i === peg ? PEGASUS_COLOR : undefined });
             placed.push(a);
         }
         herd.leader = placed[0]?.id ?? null;
@@ -266,10 +280,11 @@ export class Animals {
         a.damageCooldown = 0.35;
         if (a.fly) this._dropFromSky(a, 1.4); // (hit in the air: the wings fold, it falls)
         this.guards.attacked(a, by); // (the herd's hidden bull / ram wakes)
+        if (a.type === 'horse') this._pegasusDefends(a, by); // (the herd's Pegasus flies at the attacker)
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.copy(a.group.position).add(_v2.set(0, 1, 0)), 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.6);
         if (dir) this.push(a, _v.copy(dir).setY(0).normalize().multiplyScalar(4).setY(1.5), 0.35); // a blow knocks it back
         if (a.hp <= 0) { this._die(a, fire); return; }
-        if (a.form) return; // (the bull / the minotaur doesn't run: HerdGuards decides)
+        if (a.form || a.defend) return; // (the bull / the minotaur / the Pegasus doesn't run: they fight)
         // defend (65%) or run away; sheep stand up for each other
         const attacker = by;
         const guarded = a.herd?.guard != null && this.byId.get(a.herd.guard)?.form; // (their bull / minotaur fights for them: they run)
@@ -296,7 +311,7 @@ export class Animals {
     _die(a, cooked) {
         a.dead = true;
         a.state = 'dead';
-        a.fly = null; a.flyCode = 0;
+        a.fly = null; a.flyCode = 0; a.riderFly = false; a.defend = null;
         a.cooked = a.cooked || cooked;
         if (this.auth) this.guards.died(a); // (the bronze bull's horn, the minotaur's horn)
         a.deadAt = performance.now();
@@ -481,9 +496,145 @@ export class Animals {
         this._feedT = 0;
         ap.item.count = (ap.item.count || 1) - 1;
         if (ap.item.count <= 0) g.items.releaseHand(ap.side);
+        if (horse.pegasus) {
+            // the Pegasus is nobody's: an apple only makes him kind to you — 9% that he lets you on
+            if (Math.random() < PEGASUS.TRUST) {
+                horse.trustBy = g.localId; horse.trustUntil = Date.now() + PEGASUS.TRUST_T;
+                g.hud.setVoice('🐴 Пегас съел яблоко и подпускает вас — прыгните рядом, чтобы сесть на него', true);
+                g.fx?.lightFlash?.(horse.group.position.clone().setY(horse.group.position.y + 3), 0xfff2b0, 2, 0.5, 15);
+            } else g.hud.setVoice('🐴 Пегас съел яблоко, но пока не подпускает вас', true);
+            return;
+        }
         horse.apples = Math.min(3, horse.apples + 1);
         if (!this.auth) g.sync?.animalFeed?.(horse.id);
         g.hud.setVoice(`🐴 Конь съел яблоко (${horse.apples}) — шанс, что даст запрыгнуть: ${Math.min(90, horse.apples * 30)}%. Прыгните рядом с ним`, true);
+    }
+
+    // ------------------------------------------------------------ the Pegasus
+    /** (host) A horse of his herd (or he himself) attacked by `by`: the Pegasus flies at them. */
+    _pegasusDefends(a, by) {
+        if (by == null || !this._playerPos(by)) return;
+        const p = a.pegasus ? a : a.herd ? this.list.find((o) => o.pegasus && o.herd === a.herd && !o.dead) : null;
+        if (!p || p.rider || p.lev || p.servantOf != null) return;
+        if (!p.defend) this.game.hud?.setVoice?.('🐴 Чёрный Пегас взлетает защищать табун!', true);
+        p.defend = { foe: by, t: 0, ang: Math.random() * Math.PI * 2, dive: PEGASUS.DIVE_EVERY * 0.6, hit: false };
+        p.state = 'guard';
+    }
+
+    /** (host) The Pegasus' own mind when he defends, or is in the air. Returns true when handled. */
+    _pegasusThink(a, dt) {
+        const d = a.defend, p = a.group.position;
+        if (!d && !a.fly) return false;
+        if (d) {
+            d.t += dt;
+            const tp = this._playerPos(d.foe);
+            const far = !tp || Math.hypot(tp.x - p.x, tp.z - p.z) > 60;
+            if (far || d.t > PEGASUS.DEFEND_T) {
+                // (enough: down to his herd)
+                a.defend = null; a.state = 'graze';
+                if (a.fly) { a.fly.hold = false; a.fly.kind = 'flee'; const h = a.herd; const s = this._pickLanding(h ? h.x : p.x, h ? h.z : p.z, 12); if (s) { a.fly.tx = s.x; a.fly.tz = s.z; } }
+            } else {
+                if (!a.fly) {
+                    if (!this._canWing(a)) return false;
+                    takeOff(a, 'guard', { x: tp.x, z: tp.z }, { alt: PEGASUS.CIRCLE_ALT, air: a.airborne });
+                    a.fly.speed = 12; a.fly.hold = true;
+                }
+                // round the attacker; every few seconds a dive at them — hooves and wings
+                d.ang += dt * 0.7;
+                d.dive -= dt;
+                const f = a.fly;
+                if (d.dive > 0) {
+                    f.tx = tp.x + Math.cos(d.ang) * PEGASUS.CIRCLE_R; f.tz = tp.z + Math.sin(d.ang) * PEGASUS.CIRCLE_R; f.alt = PEGASUS.CIRCLE_ALT; d.hit = false;
+                } else {
+                    f.tx = tp.x; f.tz = tp.z; f.alt = 0.5;
+                    const close = Math.hypot(tp.x - p.x, tp.z - p.z) < 3.2 && p.y - tp.y < 5;
+                    if (close && !d.hit) {
+                        d.hit = true;
+                        this._butt(a, d.foe, { dmg: PEGASUS.DMG, k: 10, down: 1.2 });
+                    }
+                    if (d.hit || d.dive < -4) { d.dive = PEGASUS.DIVE_EVERY; d.ang += Math.PI * 0.8; }
+                }
+            }
+        }
+        if (!a.fly) return false;
+        a.slowK = slowFactor(a);
+        if (stepFlight(a, dt, this._world(), null) === 'landed') { this._land(a); a.defend = null; }
+        a.spd = 0;
+        this._animate(a, 0, dt);
+        return true;
+    }
+
+    /** Can this winged one take off now? */
+    _canWing(a) {
+        if (a.dead || a.lev || a.stunT > 0 || a.rider || a.fly) return false;
+        const p = a.group.position;
+        return this._floor(p.x, p.z) < p.y + 1.5;
+    }
+
+    /**
+     * A slap on the Pegasus' head by the rider's hand: a hand that comes into his head (or the top
+     * of his neck) fast. `hands` (tests): [{x, y, z}] — else the hero's hands.
+     */
+    _slap(a, dt, hands = null) {
+        const g = this.game;
+        const head = a.model.userData.head;
+        if (!head || !dt) return false;
+        const hp = head.getWorldPosition(_v2);
+        const size = a.group.scale.y;
+        const now = performance.now();
+        const list = hands || ['right', 'left'].map((s) => g.character.getHandWorldPosition?.(s, new THREE.Vector3())).filter(Boolean);
+        const last = this._slapLast || (this._slapLast = []);
+        let hit = false;
+        list.forEach((h, i) => {
+            const l = last[i];
+            if (l) {
+                const v = h.distanceTo(l) / dt;
+                if (h.distanceTo(hp) < 0.3 * size && v > PEGASUS.SLAP_V && now - (this._slapAt || 0) > 900) hit = true;
+            }
+            last[i] = h.clone();
+        });
+        if (hit) this._slapAt = now;
+        return hit;
+    }
+
+    /** The slap: on the ground — he spreads his wings and takes off; in the air — he comes down. */
+    _pegasusToggle(a) {
+        if (!a.riderFly) {
+            a.riderFly = true; a.landing = false; a.vy = 4;
+            this.game.hud.setVoice('🪽 Пегас расправил крылья и взлетел! Смотрите вверх — набор высоты, вниз — снижение; присесть или хлопнуть — сесть', true);
+        } else a.landing = true;
+    }
+
+    /** Flying the Pegasus: forward as you walk in place, up / down as you look; he lands at the ground. */
+    _rideAir(a, dt) {
+        const g = this.game, ch = g.character, p = a.group.position;
+        a.group.rotation.y = ch.group.rotation.y;
+        const run = ch.isRunning ? (2.5 + 5 * (ch.runIntensity || 0)) * 2 * (1 + a.bonus / 100) * PEGASUS.FLY_SPEED : 4; // (gliding on slowly)
+        const tired = a.stamina <= 0;
+        a.stamina = Math.max(0, a.stamina - dt * (tired ? 0 : 4 + 4 * (ch.runIntensity || 0)));
+        const look = g.camera?.getWorldDirection ? g.camera.getWorldDirection(_v) : _v.set(0, 0, -1);
+        let vyWant = Math.max(-1, Math.min(1, look.y * 2.2)) * 7;
+        if (a.landing || tired) vyWant = Math.min(vyWant, -3);
+        a.vy = (a.vy || 0) + (vyWant - (a.vy || 0)) * Math.min(1, dt * 3);
+        const floorHere = this._floor(p.x, p.z);
+        let ny = Math.min(p.y + a.vy * dt, floorHere + 60);
+        // forward — never into a hill, a tree or a wall (it climbs over instead)
+        const step = run * (tired ? 0.5 : 1) * dt;
+        const nx = p.x - Math.sin(a.group.rotation.y) * step, nz = p.z - Math.cos(a.group.rotation.y) * step;
+        if (this._floor(nx, nz) + FLY.BASE > ny - 0.05) { a.vy = Math.max(a.vy, 4); ny = Math.max(ny, p.y + 4 * dt); }
+        else { p.x = nx; p.z = nz; }
+        const under = this._floor(p.x, p.z) + FLY.BASE;
+        p.y = Math.max(ny, under);
+        a.flyCode = a.vy < -1 ? 2 : 1;
+        a.bank = 0; a.pitch = Math.max(-0.3, Math.min(0.3, a.vy * 0.05));
+        a.walkT += dt * 3;
+        if (p.y - under < 0.1 && a.vy < 0) {
+            // down: on his hooves again
+            a.riderFly = false; a.flyCode = 0;
+            if (a.landing) { a.landing = false; this.game.hud.setVoice('🐴 Пегас сел на землю', true); }
+        }
+        this._animate(a, 0, dt);
+        ch.group.position.set(p.x, p.y + 1.95 * SPECIES.horse.size + 0.6, p.z);
     }
 
     /** A jump next to a horse: try to get on (or get off). */
@@ -499,6 +650,17 @@ export class Animals {
         }
         if (!best) return;
         const a = best.a;
+        if (a.pegasus) {
+            // (only who fed him and whom he trusts; he is never tamed)
+            const ok = a.trustBy === g.localId && Date.now() < (a.trustUntil || 0) && !a.defend && !a.fly;
+            if (!ok) { g.hud.setVoice('🐴 Пегас не подпускает вас — угостите его золотым яблоком', true); return; }
+            a.rider = g.localId; a.state = 'ridden'; a.rideT = 0; a.riderFly = false;
+            this.riding = a;
+            a.model.userData.saddle.visible = true;
+            g.sync?.animalRide?.(a.id, true);
+            g.hud.setVoice('🐴 Вы на Пегасе! Шагайте на месте — он идёт. Хлопните его рукой по голове — взлетит', true);
+            return;
+        }
         const ok = a.tamed === g.localId || Math.random() < Math.min(0.9, a.apples * 0.3);
         if (!ok) { g.hud.setVoice(a.apples ? '🐴 Конь не дал запрыгнуть — дайте ещё золотое яблоко' : '🐴 Конь не даётся — сначала угостите его золотым яблоком', true); return; }
         a.tamed = g.localId;
@@ -513,6 +675,7 @@ export class Animals {
     dismount() {
         const a = this.riding;
         if (!a) return;
+        if (a.riderFly) { a.landing = true; return; } // (in the air: the Pegasus comes down first)
         this.riding = null;
         a.rider = null;
         a.state = 'graze';
@@ -522,7 +685,8 @@ export class Animals {
         ch.group.position.x += Math.cos(a.group.rotation.y) * 1.5;
         ch.group.position.z -= Math.sin(a.group.rotation.y) * 1.5;
         this.game.sync?.animalRide?.(a.id, false);
-        this.game.hud.setVoice('🐴 Вы слезли с коня', true);
+        this.game.hud.setVoice(a.pegasus ? '🐴 Вы слезли с Пегаса — он уходит к своему табуну' : '🐴 Вы слезли с коня', true);
+        if (a.pegasus) { a.flyCode = 0; a.landing = false; a.riderFly = false; }
     }
 
     _detectJump(dt) {
@@ -542,7 +706,15 @@ export class Animals {
         const g = this.game;
         const ch = g.character;
         if (!a || a.dead) { this.riding = null; return; }
-        if (ch.isCrouching) { this.dismount(); return; }
+        if (ch.isCrouching && !a.riderFly) { this.dismount(); return; }
+        if (a.pegasus) {
+            a.rideT = (a.rideT || 0) + dt;
+            if (this._slap(a, dt)) this._pegasusToggle(a);
+            if (a.riderFly && ch.isCrouching) a.landing = true;
+            if (a.rideT > PEGASUS.RIDE_MAX && !a.riderFly) { this.dismount(); this.game.hud.setVoice('🐴 Пегасу надоело — он сбросил вас и уходит к табуну', true); return; }
+            if (a.riderFly) { this._rideAir(a, dt); return; }
+            a.flyCode = 0;
+        }
         const S = SPECIES.horse;
         a.group.rotation.y = ch.group.rotation.y;
         const moving = ch.isRunning;
@@ -584,6 +756,7 @@ export class Animals {
             return;
         }
         if (a.type === 'pig' && this._pigAir(a, dt)) return; // (in flight: PigFlight.js)
+        if (a.pegasus && this._pegasusThink(a, dt)) return; // (the Pegasus defends his herd in the air)
         if (a.form && this.guards.think(a, dt)) return; // (the bronze bull / the minotaur: HerdGuards.js)
         if (a.type === 'runbook' && g.runner) { g.runner.think(a, dt); return; } // (runs, dodges, hides: RunningBook.js)
         let speed = 0, bunch = false;
@@ -1288,7 +1461,7 @@ export class Animals {
                     else if (!a.bonesAt && performance.now() - a.deadAt > 600000) this._remove(a);
                     continue;
                 }
-                if (a.rider && a.rider !== g.localId) continue; // a guest rides it: their computer moves it
+                if (a.rider && a.rider !== g.localId) { if (a.model.userData.wings) this._pigBody(a, dt); continue; } // a guest rides it: their computer moves it (a Pegasus' wings beat here too)
                 if (a === this.riding) continue;
                 if (a.lev) {
                     // (held up by «Вингардиум Левиоса»: Levitation carries it — a pig beats its wings in vain)
@@ -1363,7 +1536,7 @@ export class Animals {
             g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0, a.flyCode || 0, r(a.bank || 0), r(a.pitch || 0), a.form || 0, r(a.formK || 0), a.act || 0]));
         } else if (this.riding) {
             const a = this.riding;
-            g.sync.animalPos?.(a.id, [r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y)]);
+            g.sync.animalPos?.(a.id, [r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.flyCode || 0]);
         }
     }
 
