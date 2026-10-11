@@ -252,15 +252,23 @@ test('Speech: neural voice by gender, pitch by playback rate, volume × the game
     assert.equal(s.say('Тишина', { voiceKey: 'q' }), false);
 });
 
-test('Speech: before the neural voices are ready the system voices speak — by gender — and the download starts', async () => {
+test('Speech: before the neural voices are ready only the words show (never the computer\'s voice first and then another), the download starts; if they fail the system voices speak — by gender', async () => {
     const { spoken, window } = fakeSystem([...WINDOWS, ...MAC]);
     await withWindow(window, async () => {
         const nv = fakeNeural({ ready: false });
         const statuses = [];
         const s = new Speech({ neural: nv, onStatus: (st) => statuses.push(st.state) });
-        assert.equal(s.say('Добрый день', { voiceKey: 'w', role: 'farmer', female: true }), true);
+        let ended = null;
+        assert.equal(s.say('Добрый день', { voiceKey: 'w', role: 'farmer', female: true, onEnd: (ok) => { ended = ok; } }), false);
+        assert.equal(spoken.length, 0, 'no computer voice while the neural voices load');
+        assert.equal(ended, false);
         assert.equal(nv.loads, 1);
         assert.deepEqual(statuses, ['loading']);
+        s.say('Здравствуй', { voiceKey: 'm', role: 'builder', female: false });
+        assert.equal(nv.loads, 1); // only once
+        // the neural voices failed: the system voices, by gender
+        nv.state = 'failed';
+        assert.equal(s.say('Добрый день', { voiceKey: 'w', role: 'farmer', female: true }), true);
         assert.equal(systemVoiceGender(spoken[0].voice), 'female');
         assert.ok(spoken[0].pitch >= 1);
         spoken[0].onend();
@@ -268,7 +276,6 @@ test('Speech: before the neural voices are ready the system voices speak — by 
         assert.equal(systemVoiceGender(spoken[1].voice), 'male');
         assert.ok(spoken[1].pitch <= 1.05);
         spoken[1].onend();
-        assert.equal(nv.loads, 1); // only once
         // engine 'system': no download at all
         const nv2 = fakeNeural({ ready: false });
         const s2 = new Speech({ neural: nv2, engine: 'system' });

@@ -140,13 +140,21 @@ async function synth(msg) {
     if (!sent) post({ type: 'audio', id: msg.id, pcm: new Float32Array(0), sampleRate, part: 0, last: true });
 }
 
+const cancelled = new Set(); // (lines nobody waits for any more: not synthesized — the next line comes sooner)
+
 self.onmessage = (ev) => {
     const msg = ev.data || {};
+    if (msg.type === 'cancel') {
+        for (const id of msg.ids || []) cancelled.add(id);
+        if (cancelled.size > 200) cancelled.clear();
+        return;
+    }
     if (msg.type === 'load') {
         load(msg).catch((e) => post({ type: 'load_error', message: String(e?.message || e) }));
     } else if (msg.type === 'synth') {
         queue = queue.then(() => {
             if (!model) throw new Error('voices are not loaded');
+            if (cancelled.delete(msg.id)) { post({ type: 'audio', id: msg.id, pcm: new Float32Array(0), sampleRate: model.cfg.ae.sample_rate, part: 0, last: true }); return null; }
             return synth(msg);
         }).catch((e) => post({ type: 'synth_error', id: msg.id, message: String(e?.message || e) }));
     }

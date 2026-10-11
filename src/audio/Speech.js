@@ -141,7 +141,11 @@ export class Speech {
     _speak(text, opts) {
         if (this.neuralUsable) {
             if (this.neural.ready) return this._speakNeural(text, opts);
+            // (the neural voices are still loading: only the words over the head — never the computer's
+            // own voice first and then another one; the computer's voice only if the neural ones fail)
             this.preload();
+            this._safeCall(opts.onEnd, false);
+            return false;
         }
         return this._speakSystem(text, opts);
     }
@@ -262,6 +266,7 @@ export class Speech {
         this._current = null;
         this._pending = null;
         if (cur?.stop) cur.stop();
+        this.neural?.cancelAll?.(); // (not made any more: the new line is heard sooner)
         if (this.systemSupported) {
             try { this.synth.cancel(); } catch (e) { /* ignore */ }
         }

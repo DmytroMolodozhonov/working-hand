@@ -215,11 +215,20 @@ test('market: a brush of the open hand takes nothing from the counter — only c
             const d = Math.hypot(me.x - m.x, me.z - m.z) || 1;
             face = (fx * (me.x - m.x) + fz * (me.z - m.z)) / d;
         }
-        return { brushed, took, unpaid, offered: T2.offer?.kind === 'buy', said, echo, face };
+        // one accidental knock of the hand: told off, no alarm; a second one soon after: the castle turns on me
+        let bump = null;
+        if (m) {
+            m.damageCooldown = 0; g.onLocalHit(m, 1, null, false);
+            const first = m.cs.hostile.has(g.localId);
+            m.damageCooldown = 0; g.onLocalHit(m, 1, null, false);
+            bump = { first, second: m.cs.hostile.has(g.localId) };
+        }
+        return { brushed, took, unpaid, offered: T2.offer?.kind === 'buy', said, echo, face, bump };
     }, uid);
     assert.ok(r.brushed, 'an open hand on the good takes nothing');
     assert.ok(r.took && r.unpaid && r.offered, `closed fingers take it, the merchant names the price: ${JSON.stringify(r)}`);
     assert.equal(r.echo, false, 'the merchant\'s own words from the speakers are not an answer');
+    assert.deepEqual(r.bump, { first: false, second: true }, 'one accidental knock is forgiven, the second is not');
     assert.ok(r.face > 0.9, `the merchant faces me when giving a hand (${r.face})`);
     assert.deepEqual(realErrors(errors), []);
     await page.close();

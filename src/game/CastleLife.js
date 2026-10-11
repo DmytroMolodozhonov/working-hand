@@ -63,6 +63,8 @@ const SHOUT = {
     knight: ['Стой, негодяй!', 'Именем короля!', 'К оружию!', 'Ты за это ответишь!', 'Взять его!'],
     king: ['Стража! Ко мне!', 'Как ты смеешь?!', 'Рыцари! Защитите своего короля!'],
     hurt: ['Ай!', 'За что?!', 'Ох...', 'Больно же!'],
+    bump: ['Эй! Ты чего?!', 'Ай! Осторожнее!', 'Руки-то не распускай!', 'Смотри, куда машешь!'],
+    bumpKnight: ['Ещё раз — и пожалеешь.', 'Полегче, странник.', 'Осторожнее с руками.'],
     bow: ['Ваше Величество!', 'Да здравствует король!', 'Слава новому королю!', 'Добро пожаловать, повелитель!'],
     boom: ['Что это было?!', 'Взрыв! Бегите!', 'Стену ломают!', 'Спасайтесь!', 'Стража! Тут колдун!'],
     swear: ['Получай, сволочь!', 'Ах ты ж гад!', 'Чтоб тебя!', 'Вот тебе, зараза!', 'Чёрт тебя дери!', 'Да чтоб ты провалился!', 'На, получи, мерзавец!'],
@@ -984,7 +986,18 @@ export class CastleLife {
         const killed = v.hp <= 0;
         const pos = { x: v.x, y: v.y, z: v.z };
         if (killed) this._die(v, by);
-        else if (v.role !== 'knight' && v.role !== 'king') this._say(v, pick(SHOUT.hurt));
+        // one light knock with a bare hand (a hand reaching for a handshake, a bump in a crowd): they
+        // tell you off and nobody raises the alarm; a second one within half a minute is a real fight
+        if (!killed && by && dmg <= 1 && !opts.weapon && !opts.spell && !opts.pierce && !opts.magic) {
+            const bumps = v.cs.bumps || (v.cs.bumps = new Map());
+            const now = Date.now();
+            if (!(now - (bumps.get(by) || 0) < 30000)) {
+                bumps.set(by, now);
+                this._say(v, pick(v.role === 'knight' || v.role === 'king' ? SHOUT.bumpKnight : SHOUT.bump), 3);
+                return;
+            }
+        }
+        if (!killed && v.role !== 'knight' && v.role !== 'king') this._say(v, pick(SHOUT.hurt));
         if (by) this._offence(v.cs, by, v, killed, pos);
     }
 

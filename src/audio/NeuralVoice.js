@@ -160,6 +160,12 @@ export class NeuralVoice {
         });
     }
 
+    /** Lines queued or being made are not wanted any more (a newer line cuts them): skip them. */
+    cancelAll() {
+        if (!this._worker || !this._jobs.size) return;
+        try { this._worker.postMessage({ type: 'cancel', ids: [...this._jobs.keys()] }); } catch (e) { /* ignore */ }
+    }
+
     dispose() {
         this._fail(new Error('disposed'));
         this.state = 'idle';

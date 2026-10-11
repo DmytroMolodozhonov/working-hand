@@ -364,6 +364,9 @@ export class HandHold {
                 // (held out to them: the hand in front of me, towards them)
                 const me = ch.group.position;
                 if ((v.x - me.x) * (p.x - me.x) + (v.z - me.z) * (p.z - me.z) <= 0) continue;
+                // (only someone standing in front of me, whom I face — never one behind or at my side)
+                const yaw = ch.group.rotation.y, dv = Math.hypot(v.x - me.x, v.z - me.z) || 1;
+                if ((-Math.sin(yaw) * (v.x - me.x) - Math.cos(yaw) * (v.z - me.z)) / dv < 0.5) continue;
                 if (!found || d < found.d) found = { v, side, d };
             }
         }

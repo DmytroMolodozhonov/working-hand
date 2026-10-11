@@ -548,6 +548,8 @@ export class CastleTalk {
                 const me = g.character.group.position;
                 if (this.offer.v.dead || Math.hypot(this.offer.v.x - me.x, this.offer.v.z - me.z) > 16) this.offer = null;
             }
+            // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
+            if (this.voiceOn && this.life.castles.size) this.speech.preload?.();
             if (g.config.villagerAI && g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.castles.size) { this._llmTried = true; this._loadLLM(g.config.villagerAI); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;

@@ -469,7 +469,7 @@ export class Game {
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
-        if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic }); return; }
+        if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon }); return; }
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         if (z.isLivingTree) { this.livingTrees.hit(z, dmg, 'melee'); return; } // (only fire hurts it)
         this.punchCount++;
