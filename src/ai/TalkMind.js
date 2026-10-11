@@ -52,6 +52,9 @@ export function orderLine(kind, role, rng = Math.random) {
     return pickFrom(pool[key] || pool.common || pool.knight, rng);
 }
 
+/** What the net answers (the rules know these only roughly); everything else the rules answer at once. */
+export const OPEN_TOPICS = new Set(['unknown', 'news', 'about_castle', 'about_king', 'zombies', 'magic', 'weather', 'money', 'family', 'flirt', 'quest', 'joke']);
+
 export class TalkMind {
     /**
      * @param {{llm?:{ready:boolean, chat:Function}|null, timeoutMs?:number, rng?:Function}} [opts]
@@ -135,14 +138,30 @@ export class TalkMind {
         // 1) clear army orders: the rules carry them out at once
         const order = res.action === 'ignore' ? null : detectOrder(text, ctx.players || []);
         if (order) return { res: this._finishOrder(brain, res, validateCall(order, perm), null, perm.playerIsKing), perm, done: true };
-        // 2) the net (if any) understands everything else (not the market: prices are the game's)
-        const done = !this.smart || !res.reply || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
+        // 2) what the rules clearly understood is answered at once (a talk by voice must be quick);
+        //    the net takes what they did not (and the open topics, where its own words are better)
+        //    — never the market: prices are the game's
+        const quick = !OPEN_TOPICS.has(res.intent);
+        const done = !this.smart || !res.reply || quick || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
         return { res, perm, done };
     }
 
     /** The net's part: «Хм…», then its answer and its game action (checked). */
     async ask(brain, text, ctx, { res, perm }, opts = {}) {
         let raw = '';
+        // the first sentence is said as soon as it is written (opts.onSentence), the rest comes after
+        let partial = '', spoken = '';
+        const onPartial = typeof opts.onSentence === 'function' ? (piece) => {
+            if (spoken) return;
+            partial += piece;
+            if (/[<{]/.test(partial)) { spoken = '\u0000'; return; } // (a game action is coming: wait for the whole answer)
+            const m = /^[\s\S]*?[.!?…](?=\s|$)/.exec(partial);
+            if (!m || m[0].trim().length < 4) return;
+            const first = this._clean(m[0], text, brain);
+            if (!first) { spoken = '\u0000'; return; }
+            spoken = first;
+            try { opts.onSentence(first); } catch (_) { /* ignore */ }
+        } : null;
         try {
             opts.onThinking?.();
             let timer;
@@ -152,21 +171,19 @@ export class TalkMind {
                     history: this._history(brain),
                     user: normalize(text) || '...',
                     tools: toolsFor(brain.role, ctx),
-                    maxTokens: 90,
+                    maxTokens: 60,
+                    ...(onPartial ? { onPartial } : {}),
                 }),
                 new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs); }),
             ]);
             clearTimeout(timer);
         } catch (e) { this.lastTimedOut = false; return res; }
         this.lastTimedOut = !raw; // (the net said nothing in time: the rules answered)
+        if (spoken && spoken !== '\u0000') res.spoken = spoken; // (already said: CastleTalk says only the rest)
+        if (!raw && res.spoken) { this._setReply(brain, res, res.spoken); res.smart = true; return res; }
         const { text: said, calls } = parseToolCalls(raw);
-        let clean = sanitizeReply(said, brain.villager?.name);
-        // (in the middle of a talk no new «Привет!» at the start of the answer, unless I greeted)
-        if ((brain.memory?.talks || 0) > 1 && !/(прив|здрав|добр(ый|ое) (день|утро|вечер))/.test(normalize(text))) {
-            const cut = clean.replace(/^(привет(ствую)?|здравствуй(те)?|здорово|добрый (день|вечер)|доброе утро)[,!. ]*/i, '').trim();
-            if (cut.length >= 2) clean = cut[0].toUpperCase() + cut.slice(1);
-        }
-        const good = this._acceptText(clean, text);
+        const clean = this._clean(said, text, brain) || '';
+        const good = !!clean;
         const call = calls.find((c) => validateCall(c, perm).reason !== 'unknown');
         if (call) {
             const check = validateCall(call, perm);
@@ -218,6 +235,16 @@ export class TalkMind {
             case 'go_to': return { market: 'guide:market', throne: 'guide:throne', gate: 'guide:gate' }[check.args.place] || 'guide:' + check.args.place;
             default: return check.name;
         }
+    }
+
+    /** The net's words, tidied (no «Привет» in the middle of a talk) — or null if they are not fit to say. */
+    _clean(said, userText, brain) {
+        let clean = sanitizeReply(said, brain.villager?.name);
+        if ((brain.memory?.talks || 0) > 1 && !/(прив|здрав|добр(ый|ое) (день|утро|вечер))/.test(normalize(userText))) {
+            const cut = clean.replace(/^(привет(ствую)?|здравствуй(те)?|здорово|добрый (день|вечер)|доброе утро)[,!. ]*/i, '').trim();
+            if (cut.length >= 2) clean = cut[0].toUpperCase() + cut.slice(1);
+        }
+        return this._acceptText(clean, userText) ? clean : null;
     }
 
     _acceptText(s, userText) {

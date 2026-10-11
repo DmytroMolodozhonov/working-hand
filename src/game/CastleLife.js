@@ -676,6 +676,12 @@ export class CastleLife {
             const tp = this._playerPos(v.talkTo || g.localId);
             if (tp) v.yaw = turn(v.yaw, Math.atan2(-(tp.x - v.x), -(tp.z - v.z)), dt * 6);
             v.mode = 'talk'; v.speed = 0;
+            // (a comfortable distance for a talk: too close — a small step back, still facing me)
+            const dd = tp ? Math.hypot(tp.x - v.x, tp.z - v.z) : 9;
+            if (dd < 1.9 && dd > 1e-3 && v.job !== 'stall') {
+                const s = Math.min(1.9 - dd, 0.9 * dt), nx = v.x + (v.x - tp.x) / dd * s, nz = v.z + (v.z - tp.z) / dd * s;
+                if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; }
+            }
             this._ground(v);
             return;
         }
@@ -929,9 +935,12 @@ export class CastleLife {
                 const d = Math.hypot(dx, dz);
                 if (d >= R) continue;
                 const ux = d > 1e-3 ? dx / d : Math.random() - 0.5, uz = d > 1e-3 ? dz / d : Math.random() - 0.5;
+                // (one talking with a player stands his ground: the others step round him, they don't shove him)
+                const pa = p.talking > 0, qa = q.talking > 0;
                 const push = (R - d) * 0.5 * k;
-                if (this._walkable(p.x - ux * push, p.z - uz * push, p.y)) { p.x -= ux * push; p.z -= uz * push; }
-                if (this._walkable(q.x + ux * push, q.z + uz * push, q.y)) { q.x += ux * push; q.z += uz * push; }
+                const pp = pa && !qa ? 0 : qa && !pa ? push * 2 : push, qp = qa && !pa ? 0 : pa && !qa ? push * 2 : push;
+                if (pp && this._walkable(p.x - ux * pp, p.z - uz * pp, p.y)) { p.x -= ux * pp; p.z -= uz * pp; }
+                if (qp && this._walkable(q.x + ux * qp, q.z + uz * qp, q.y)) { q.x += ux * qp; q.z += uz * qp; }
             }
         }
     }

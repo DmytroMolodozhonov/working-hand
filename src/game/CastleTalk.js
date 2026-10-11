@@ -148,6 +148,13 @@ export class CastleTalk {
         try { this.life._say(v, text, seconds); } finally { this._urgent = false; }
     }
 
+    /** The rest of an answer: after what the villager is saying now (not cutting it). */
+    _sayMore(v, text) {
+        v.talkedAt = performance.now();
+        this._partner = v;
+        this.life._say(v, text, 5);
+    }
+
     /** «Хм…» while the net thinks: over the head only. */
     _sayThinking(v) {
         v.talkedAt = performance.now();
@@ -220,7 +227,9 @@ export class CastleTalk {
         if (first.done) { done(first.res); return true; } // (the rules: at once)
         const thinking = () => this._sayThinking(v);
         const t0 = performance.now();
-        this.mind.ask(b, text, ctx, first, { onThinking: thinking }).then((res) => {
+        // (the first sentence of the net's answer is said as soon as it is written)
+        const onSentence = (line) => this._sayReply(v, line);
+        this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence }).then((res) => {
             // (too slow on this computer: say so now and then — the answer came from the rules)
             if (this.mind.lastTimedOut) {
                 this._slow = (this._slow || 0) + 1;
@@ -336,7 +345,12 @@ export class CastleTalk {
     _apply(v, res) {
         if (!res || v.dead) return;
         const g = this.game;
-        if (res.reply) this._sayReply(v, res.reply);
+        if (res.reply) {
+            // (the start was said already while the net wrote: only the rest now, after it)
+            const head = res.spoken;
+            if (head && res.reply.startsWith(head)) { const rest = res.reply.slice(head.length).trim(); if (rest) this._sayMore(v, rest); }
+            else this._sayReply(v, res.reply);
+        }
         if ((res.offer && res.action !== 'trade_yes') || res.action === 'offer_goods') this._pitch = { v, at: performance.now() };
         const me = g.character.group.position;
         switch (res.action) {
@@ -606,6 +620,8 @@ export class CastleTalk {
             if (g.config.villagerAI && g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.castles.size) { this._llmTried = true; this._loadLLM(g.config.villagerAI); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;
+        // (my partner stays with me for the whole talk — also while the net thinks — not only 4 s)
+        if (this.inTalk() && this._partner.talking < 1 && !this._partner.foe) { this._partner.talking = 1; this._partner.talkTo = g.localId; }
         for (const [id] of this.brains) if (!this.life.byId.has(id)) this.forget({ id });
     }
 

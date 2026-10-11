@@ -156,14 +156,17 @@ function stripThink(s) {
         .trim();
 }
 
-async function generate({ id, messages, maxTokens = 60, temperature = 0.7, noThink, tools = null, raw = false }) {
+async function generate({ id, messages, maxTokens = 60, temperature = 0.7, noThink, tools = null, raw = false, stream = false }) {
     if (cancelled.has(id)) { cancelled.delete(id); return; }
     if (!generator) { post({ type: 'gen_error', id, message: 'model not loaded' }); return; }
     currentId = id;
     criteria.reset();
     try {
         const useThink = noThink ?? modelInfo?.noThink;
+        // (stream: the words go out as they come — the villager starts speaking before the answer is finished)
+        const streamer = stream && tf.TextStreamer ? new tf.TextStreamer(generator.tokenizer, { skip_prompt: true, skip_special_tokens: false, callback_function: (t) => { if (t) post({ type: 'partial', id, text: t }); } }) : null;
         const out = await generator(messages, {
+            ...(streamer ? { streamer } : {}),
             max_new_tokens: Math.max(4, Math.min(200, maxTokens | 0)),
             do_sample: temperature > 0,
             temperature: Math.max(0.05, temperature),

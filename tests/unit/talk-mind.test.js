@@ -241,3 +241,21 @@ test('a wizard of the towers gets the wizard prompt, not a farmer\'s', () => {
     assert.ok(p.includes(ROLE_PROMPTS.wizard));
     assert.doesNotMatch(p, /фермер/);
 });
+
+test('a quick talk: what the rules clearly understood is answered at once (the net is not even asked); the net\'s first sentence is said while it still writes', async () => {
+    const llm = fakeLLM((req) => {
+        if (req.onPartial) for (const p of ['Ох, ', 'по ночам мертвецы лезут. ', 'А днём ', 'тихо.']) req.onPartial(p);
+        return 'Ох, по ночам мертвецы лезут. А днём тихо.';
+    });
+    const mind = new TalkMind({ llm, rng: createRng(8) });
+    const b = brain('farmer', { seed: 8 });
+    const quick = await mind.hear(b, 'как тебя зовут', {});
+    assert.equal(llm.asked.length, 0, 'a name question needs no net');
+    assert.ok(quick.reply);
+    const said = [];
+    const r = await mind.hear(b, 'а что у вас тут творится вообще', {}, { onSentence: (s) => said.push(s) });
+    assert.equal(llm.asked.length, 1);
+    assert.deepEqual(said, ['Ох, по ночам мертвецы лезут.']);
+    assert.equal(r.spoken, 'Ох, по ночам мертвецы лезут.');
+    assert.equal(r.reply, 'Ох, по ночам мертвецы лезут. А днём тихо.');
+});

@@ -353,6 +353,9 @@ export class HandHold {
             return;
         }
         if (!vs || !vs.size || !g.currentPose || !this._free()) { this._offerT = 0; return; }
+        // (the author: villagers do not hold out their hand by themselves — handshakes are between players;
+        // a villager's hand can still be taken by really closing the fingers on it)
+        if (!g.config?.villagerHandOffer) { this._offerT = 0; return; }
         let found = null;
         for (const side of SIDES) {
             if (this.mine[side] || this.onMe[side] || !this._handFree(side) || ch.getGripCurl(side) > HAND.OPEN || !ch.isArmExtended(side)) continue;

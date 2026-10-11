@@ -138,6 +138,7 @@ export class LocalLLM {
                     case 'load_error':
                         fail(new Error(m.message || 'model load failed'));
                         break;
+                    case 'partial': { const job = this._jobs.get(m.id); if (job?.onPartial) { try { job.onPartial(String(m.text || '')); } catch (_) { /* ignore */ } } break; }
                     case 'result': this._finish(m.id, m.text ?? ''); break;
                     case 'gen_error': this._finish(m.id, null, new Error(m.message)); break;
                 }
@@ -183,7 +184,7 @@ export class LocalLLM {
      * @param {{system?:string, history?:Array, user:string, tools?:Array, maxTokens?:number, temperature?:number, timeoutMs?:number}} p
      * @returns {Promise<string>} '' on timeout
      */
-    chat({ system = '', history = [], user = '', tools = [], maxTokens = 90, temperature = 0.4, timeoutMs } = {}) {
+    chat({ system = '', history = [], user = '', tools = [], maxTokens = 90, temperature = 0.4, timeoutMs, onPartial = null } = {}) {
         if (!this._ready || !this._worker) return Promise.reject(new Error('LocalLLM is not ready'));
         const messages = [];
         if (system) messages.push({ role: 'system', content: system });
@@ -198,8 +199,8 @@ export class LocalLLM {
                 try { this._worker?.postMessage({ type: 'interrupt', id }); } catch (_) { /* ignore */ }
                 resolve('');
             }, limit);
-            this._jobs.set(id, { resolve, reject, timer });
-            this._worker.postMessage({ type: 'generate', id, messages, maxTokens, temperature, noThink: this.model.noThink, tools: this.model.tools ? tools : null, raw: true });
+            this._jobs.set(id, { resolve, reject, timer, onPartial });
+            this._worker.postMessage({ type: 'generate', id, messages, maxTokens, temperature, noThink: this.model.noThink, tools: this.model.tools ? tools : null, raw: true, stream: typeof onPartial === 'function' });
         });
     }
 
