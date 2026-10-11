@@ -29,6 +29,9 @@ import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
+import { animalModel, animateLegs, HORSE_COLORS } from './AnimalModels.js';
+
+export { animalModel };
 
 export const SPECIES = {
     // (sizes next to the ~4.6 m tall player: a cow reaches his chest)
@@ -37,7 +40,6 @@ export const SPECIES = {
     sheep: { name: 'Баран', hp: 6, speed: 1.5, run: 5.8, dmg: 1, meat: 2, size: 1.55 },
     horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 2.3 },
 };
-const HORSE_COLORS = [0x6b3f1e, 0x2b2118, 0xe8e2d6, 0x9a5a2a, 0x8a8a8a, 0xc49a5a];
 const MAX_NEAR = 14;
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -65,60 +67,6 @@ function bx(g, w, h, d, c, x, y, z) {
     m.castShadow = true;
     g.add(m);
     return m;
-}
-
-/** A voxel animal; body along −Z (the head looks forward), feet at y=0. */
-export function animalModel(type, color) {
-    const g = new THREE.Group();
-    const legs = [];
-    const leg = (x, z, h, w, c) => {
-        const pivot = new THREE.Group();
-        pivot.position.set(x, h, z);
-        const m = new THREE.Mesh(box(w, h, w), lam(c));
-        m.position.y = -h / 2;
-        m.castShadow = true;
-        pivot.add(m);
-        g.add(pivot);
-        legs.push(pivot);
-    };
-    if (type === 'cow') {
-        bx(g, 0.9, 0.75, 1.5, 0xf2f2ee, 0, 1.15, 0);
-        bx(g, 0.5, 0.4, 0.45, 0x222222, 0.2, 1.25, 0.2); // patches
-        bx(g, 0.4, 0.35, 0.5, 0x222222, -0.26, 1.05, -0.35);
-        bx(g, 0.55, 0.55, 0.5, 0xf2f2ee, 0, 1.4, -0.95); // head
-        bx(g, 0.4, 0.22, 0.12, 0xe8a0a0, 0, 1.25, -1.22); // nose
-        bx(g, 0.1, 0.15, 0.1, 0xddd8c8, 0.25, 1.75, -0.9); bx(g, 0.1, 0.15, 0.1, 0xddd8c8, -0.25, 1.75, -0.9);
-        bx(g, 0.08, 0.08, 0.02, 0x000000, 0.15, 1.5, -1.21); bx(g, 0.08, 0.08, 0.02, 0x000000, -0.15, 1.5, -1.21);
-        for (const [x, z] of [[0.3, -0.55], [-0.3, -0.55], [0.3, 0.55], [-0.3, 0.55]]) leg(x, z, 0.8, 0.22, 0xf2f2ee);
-    } else if (type === 'pig') {
-        bx(g, 0.75, 0.6, 1.1, 0xf0a0a8, 0, 0.75, 0);
-        bx(g, 0.55, 0.5, 0.45, 0xf0a0a8, 0, 0.85, -0.72);
-        bx(g, 0.3, 0.2, 0.08, 0xd97f8a, 0, 0.78, -0.97);
-        bx(g, 0.07, 0.07, 0.02, 0x000000, 0.13, 0.95, -0.96); bx(g, 0.07, 0.07, 0.02, 0x000000, -0.13, 0.95, -0.96);
-        for (const [x, z] of [[0.24, -0.38], [-0.24, -0.38], [0.24, 0.38], [-0.24, 0.38]]) leg(x, z, 0.45, 0.18, 0xe98f99);
-    } else if (type === 'sheep') {
-        bx(g, 0.85, 0.75, 1.15, 0xf4f4f0, 0, 0.95, 0); // wool
-        bx(g, 0.95, 0.3, 1.0, 0xffffff, 0, 1.25, 0.05);
-        bx(g, 0.4, 0.45, 0.42, 0x3a3030, 0, 1.05, -0.75);
-        bx(g, 0.08, 0.08, 0.02, 0xffffff, 0.12, 1.12, -0.97); bx(g, 0.08, 0.08, 0.02, 0xffffff, -0.12, 1.12, -0.97);
-        bx(g, 0.18, 0.25, 0.18, 0x6b5a4a, 0.25, 1.25, -0.65); bx(g, 0.18, 0.25, 0.18, 0x6b5a4a, -0.25, 1.25, -0.65); // horns
-        for (const [x, z] of [[0.25, -0.4], [-0.25, -0.4], [0.25, 0.4], [-0.25, 0.4]]) leg(x, z, 0.6, 0.16, 0x3a3030);
-    } else {
-        const c = color ?? HORSE_COLORS[0];
-        const dark = new THREE.Color(c).multiplyScalar(0.55).getHex();
-        bx(g, 0.75, 0.75, 1.7, c, 0, 1.5, 0);
-        const neck = bx(g, 0.4, 0.9, 0.45, c, 0, 2.05, -0.8); neck.rotation.x = -0.45;
-        bx(g, 0.4, 0.42, 0.8, c, 0, 2.45, -1.2); // head
-        bx(g, 0.12, 0.85, 0.15, dark, 0, 2.15, -0.62).rotation.x = -0.45; // mane
-        bx(g, 0.12, 0.2, 0.1, c, 0.13, 2.75, -0.95); bx(g, 0.12, 0.2, 0.1, c, -0.13, 2.75, -0.95);
-        bx(g, 0.08, 0.08, 0.02, 0x000000, 0.2, 2.55, -1.3); bx(g, 0.08, 0.08, 0.02, 0x000000, -0.2, 2.55, -1.3);
-        bx(g, 0.15, 0.7, 0.15, dark, 0, 1.4, 0.92).rotation.x = 0.3; // tail
-        g.userData.saddle = bx(g, 0.8, 0.12, 0.6, 0x5a2d0c, 0, 1.92, 0.05);
-        g.userData.saddle.visible = false;
-        for (const [x, z] of [[0.26, -0.65], [-0.26, -0.65], [0.26, 0.65], [-0.26, 0.65]]) leg(x, z, 1.15, 0.2, c);
-    }
-    g.userData.legs = legs;
-    return g;
 }
 
 export function bonesModel() {
@@ -633,9 +581,7 @@ export class Animals {
     }
 
     _animate(a, k) {
-        const legs = a.model.userData.legs;
-        const sw = Math.sin(a.walkT) * 0.6 * k;
-        legs.forEach((l, i) => { l.rotation.x = (i === 0 || i === 3 ? sw : -sw); });
+        animateLegs(a.model, a.walkT, k);
     }
 
     _playerPos(id) {
