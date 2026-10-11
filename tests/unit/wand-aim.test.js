@@ -59,3 +59,36 @@ test('the wand goes along the real index finger: pointing and writing grips, man
     // (before: the wand was always held as in writing, ~25° under a pointing index finger)
     t.diagnostic(`pointing / between: mean ${(sum / n).toFixed(1)}°, worst ${worst.toFixed(1)}°`);
 });
+
+test('a real pinch (a brush held like a pen): the wand goes along the line the real thumb and index finger hold, any wrist turn, both hands; no pinch — the grip as before', () => {
+    const turns = [rot(0, 0, 0), rot(-1.2, 0, 0), rot(-1.4, 0.5, 0), rot(-1.3, -0.5, 0), rot(-1.2, 0, 0.8), rot(-0.6, 1.2, 0)];
+    for (const side of ['right', 'left']) {
+        for (const R of turns) {
+            const ch = new VoxelCharacter(new THREE.Scene());
+            ch.setShowHands(true);
+            const hand = side === 'right' ? ch.rightSimplifiedHand : ch.leftSimplifiedHand;
+            hand.setGrip(0.38, 'pen');
+            const f = frame({ arms: 'forward', leftCurl: null, rightCurl: null });
+            const P = (i) => ({ x: f.poseLandmarks[i].x, y: f.poseLandmarks[i].y, z: f.poseLandmarks[i].z });
+            const wr = side === 'right' ? P(16) : P(15);
+            // a writing-like grip; the thumb's tip pressed onto the index's end joint (the pinch)
+            const lm = synthHand(R, { side, at: [wr.x, wr.y], size: 0.1, bends: { index: [0.45, 0.8, 0.6], middle: [0.5, 1, 0.6], ring: [1, 1.2, 0.8], pinky: [1, 1.2, 0.8] } });
+            lm[4] = { ...lm[7] };
+            const pose = { leftShoulder: P(11), leftElbow: P(13), leftWrist: P(15), rightShoulder: P(12), rightElbow: P(14), rightWrist: P(16), aspect: ASPECT };
+            pose[side === 'right' ? 'rightHandLandmarks' : 'leftHandLandmarks'] = lm;
+            for (let i = 0; i < 10; i++) ch.updateArmsLookAt(pose, 1 / 60);
+            const hp = heroPoints(lm, ASPECT);
+            const web = hp[2].clone().add(hp[5]).multiplyScalar(0.5);
+            const truth = hp[7].clone().sub(web).normalize();
+            assert.ok(hand.pinchDir, `${side}: the pinch is seen`);
+            assert.ok(hand.pinchDir.angleTo(truth) < 0.02, `${side}: along the pinch`);
+            // the drawn fingers hold it as it lies (between pointing and writing)
+            assert.ok(hand.pinchTilt != null && hand.penT >= 0 && hand.penT <= 1);
+            // the thumb off the index finger: no pinch
+            const open = synthHand(R, { side, at: [wr.x, wr.y], size: 0.1 });
+            pose[side === 'right' ? 'rightHandLandmarks' : 'leftHandLandmarks'] = open;
+            ch.updateArmsLookAt(pose, 1 / 60);
+            assert.equal(hand.pinchDir, null, `${side}: an open hand pinches nothing`);
+        }
+    }
+});

@@ -52,6 +52,55 @@ def _sticks(frame, out):
         return []
 
 
+class _LatestFrame:
+    """Reads the camera in its own thread and keeps only the newest picture."""
+
+    def __init__(self, cap, stop):
+        self.cap = cap
+        self.stop = threading.Event()
+        self.outer = stop
+        self.cond = threading.Condition()
+        self.frame = None
+        self.seq = 0
+        self.taken = 0
+        self.fails = 0
+        self.dead = False
+        self.thread = threading.Thread(target=self._run, name="camera-read", daemon=True)
+        self.thread.start()
+
+    def close(self):
+        """Stop reading (before the camera is let go)."""
+        self.stop.set()
+        self.thread.join(timeout=2)
+
+    def _run(self):
+        while not self.stop.is_set() and not self.outer.is_set():
+            ok, frame = self.cap.read()
+            with self.cond:
+                if ok and frame is not None:
+                    self.frame = frame
+                    self.seq += 1
+                    self.fails = 0
+                else:
+                    self.fails += 1
+                    self.dead = self.fails > 100
+                self.cond.notify_all()
+            if not ok:
+                time.sleep(0.01)
+                if self.dead:
+                    return
+
+    def next(self, timeout=1.0):
+        """The newest picture not given out yet (waits for one): (ok, frame)."""
+        with self.cond:
+            if self.seq == self.taken:
+                self.cond.wait(timeout)
+            if self.seq == self.taken or self.frame is None:
+                return False, None
+            self.taken = self.seq
+            return True, self.frame
+
+
 class NativePose:
     def __init__(self):
         self.state = "idle"  # idle | loading | running | error | unavailable
@@ -154,6 +203,7 @@ class NativePose:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             cap.set(cv2.CAP_PROP_FPS, 30)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # (no queue of old pictures)
             ok = False
             for _ in range(20):  # (a camera that opens but shows nothing is skipped)
                 ok, frame = cap.read()
@@ -180,7 +230,7 @@ class NativePose:
         h = sol.holistic.Holistic(
             static_image_mode=False,
             model_complexity=max(0, min(2, self.quality)),
-            smooth_landmarks=True,
+            smooth_landmarks=False,  # (the game steadies the points itself: smoothing twice only made the hands trail)
             refine_face_landmarks=True,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,
@@ -253,6 +303,7 @@ class NativePose:
         cv2 = self._cv2
         cap = None
         close = None
+        grab = None
         try:
             made = None
             try:
@@ -273,11 +324,21 @@ class NativePose:
             t_start = time.time()
             frames = 0
             t_rate = time.time()
+            # The camera is read all the time in its own thread and the network always takes
+            # the NEWEST picture: a camera keeps a queue of pictures, and while the network
+            # works on one, the next ones wait there — the hands were shown as they were
+            # several pictures ago. (A test video is read picture by picture.)
+            grab = None if os.environ.get("ZNS_CAMERA_FILE") else _LatestFrame(cap, self._stop)
             while not self._stop.is_set():
-                ok, frame = cap.read()
+                if grab:
+                    ok, frame = grab.next(timeout=1.0)
+                else:
+                    ok, frame = cap.read()
                 if not ok or frame is None:
                     if os.environ.get("ZNS_CAMERA_FILE"):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # (the test video: round again)
+                    if grab and grab.dead:
+                        raise RuntimeError("камера перестала отдавать картинку")
                     time.sleep(0.01)
                     continue
                 t0 = time.perf_counter()
@@ -309,6 +370,8 @@ class NativePose:
             self.error = str(e)
             print(f"  [Камера] нейросеть не запустилась: {e}")
         finally:
+            if grab is not None:
+                grab.close()
             if cap is not None:
                 cap.release()
             if close:

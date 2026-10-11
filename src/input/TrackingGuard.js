@@ -36,6 +36,9 @@ const BONES = [
     [13, 17], [0, 17], [17, 18], [18, 19], [19, 20],
 ];
 
+/** Which of BONES are the palm's own (rigid): the wrist and the knuckles. */
+const PALM_BONE = BONES.map(([a, b]) => [0, 1, 5, 9, 13, 17].includes(a) && [0, 1, 5, 9, 13, 17].includes(b));
+
 const dist2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /** Palm size: wrist→middle-knuckle plus index→pinky knuckles (robust scale). */
@@ -126,6 +129,7 @@ export class HandStabilizer {
 
     reset() {
         this.signature = null;
+        this.longest = null;
         this.lastGood = null;
         this.lastGoodTime = -Infinity;
         this.pendingJump = null;
@@ -145,10 +149,15 @@ export class HandStabilizer {
         // Anatomy check against recent hands
         const sig = boneSignature(lm);
         if (this.signature && recent) {
+            // A finger bone seen SHORTER is a finger bending or turning to the camera (a grab:
+            // rejecting it froze the hand open for ~¼ s while it closed on a thing) — only a
+            // bone grown much longer, or the palm itself out of shape, is a mangled hand
             let bad = 0;
             for (let i = 0; i < sig.length; i++) {
-                const ref = this.signature[i];
-                if (Math.abs(sig[i] - ref) > Math.max(0.35 * ref, 0.12)) bad++;
+                // (a finger: against the longest it was seen lately — opening a fist is no glitch either)
+                const ref = PALM_BONE[i] ? this.signature[i] : Math.max(this.signature[i], this.longest?.[i] || 0);
+                const d = sig[i] - ref;
+                if ((PALM_BONE[i] ? Math.abs(d) : d) > Math.max(0.35 * ref, 0.12)) bad++;
             }
             if (bad > 6) { this.rejected++; return null; }
         }
@@ -175,6 +184,9 @@ export class HandStabilizer {
         // Update anatomy reference (slow running average)
         if (!this.signature || !recent) this.signature = sig.slice();
         else for (let i = 0; i < sig.length; i++) this.signature[i] += (sig[i] - this.signature[i]) * 0.1;
+        // the longest each bone was seen (slowly forgotten: ~1% a picture)
+        if (!this.longest || !recent) this.longest = sig.slice();
+        else for (let i = 0; i < sig.length; i++) this.longest[i] = Math.max(sig[i], this.longest[i] * 0.99);
 
         this.lastGood = lm;
         this.lastGoodTime = tMs;

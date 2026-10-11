@@ -127,3 +127,19 @@ test('interpreter: punch, crouch and running from landmarks (original rules)', (
     assert.equal(d.isRunning, true);
     assert.ok(d.runIntensity > 0.5);
 });
+
+test('a hand closing fast on a thing (a grab) and opening fast (letting go) is never thrown away as «mangled» — it froze the hand for ~¼ s', async () => {
+    const THREE = await import('three');
+    const { synthHand } = await import('./synth-hand.mjs');
+    const R = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-0.5, 0, 0));
+    const H = (b) => synthHand(R, { at: [0.5, 0.5], size: 0.1, bends: { index: [b, b, b], middle: [b, b, b], ring: [b, b, b], pinky: [b, b, b], thumb: [b / 2, b / 2, b / 2] } });
+    for (const ms of [100, 150, 300]) {
+        const s = new HandStabilizer();
+        let t = 0;
+        for (let i = 0; i < 20; i++) s.process(H(0), (t += 33));
+        for (let tt = 0; tt <= ms + 100; tt += 33) assert.ok(s.process(H(1.4 * Math.min(1, tt / ms)), (t += 33)), `closing in ${ms} ms: a picture thrown away`);
+        for (let i = 0; i < 60; i++) s.process(H(1.4), (t += 33)); // (the fist held 2 s)
+        for (let tt = 0; tt <= ms + 100; tt += 33) assert.ok(s.process(H(1.4 * Math.max(0, 1 - tt / ms)), (t += 33)), `opening in ${ms} ms: a picture thrown away`);
+        assert.equal(s.rejected, 0);
+    }
+});

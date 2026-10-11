@@ -418,6 +418,10 @@ export class SimplifiedHand {
         const v = _vc.subVectors(P[8], P[5]);
         const towardPalm = v.dot(f.Z) * (this.side === 'right' ? -1 : 1);
         if (v.lengthSq() > 1e-8) this.indexTilt = Math.atan2(towardPalm, v.dot(f.Y));
+        // a real pinch (a pen, a brush held like a pen): the line it lies along — from the web
+        // between the thumb and the index finger through where the thumb's tip presses the
+        // index finger. null when the thumb's tip is not on the index finger (no pinch).
+        this.pinchDir = this._pinch(P, f, this.pinchDir || new THREE.Vector3());
         const j = fingerJoints(landmarks, this.aspect, this.side, this._jBuf || (this._jBuf = {}));
         if (!j) return;
         if (!this._jointsT) { this._jointsT = {}; this._jointsC = {}; for (const n of JOINT_FINGERS) { this._jointsT[n] = [0, 0, 0, 0]; this._jointsC[n] = [0, 0, 0, 0]; } }
@@ -428,6 +432,25 @@ export class SimplifiedHand {
             t[2] = Math.max(0, Math.min(1.6, j[n][2]));
             t[3] = Math.max(-0.45, Math.min(0.45, j.spread[n] || 0));
         }
+    }
+
+    /**
+     * The line a held pen / brush lies along, from the real points (hero's space): the web
+     * (between the thumb's and the index's knuckles) → the pinch (the thumb's tip and the
+     * nearest point of the index finger). Also sets `pinchTilt` (off the palm's line towards
+     * the palm, rad). null when the thumb's tip is not on the index finger.
+     */
+    _pinch(P, f, out) {
+        const palm = P[0].distanceTo(P[9]) + 0.5 * P[5].distanceTo(P[17]);
+        let near = null, nd = Infinity;
+        for (const i of [6, 7, 8]) { const d = P[4].distanceTo(P[i]); if (d < nd) { nd = d; near = P[i]; } }
+        if (!(palm > 1e-6) || nd > 0.45 * palm) { this.pinchTilt = null; return null; }
+        const web = _va.addVectors(P[2], P[5]).multiplyScalar(0.5);
+        out.addVectors(P[4], near).multiplyScalar(0.5).sub(web);
+        if (out.length() < 0.25 * palm) { this.pinchTilt = null; return null; }
+        out.normalize();
+        this.pinchTilt = Math.atan2(out.dot(f.Z) * (this.side === 'right' ? -1 : 1), out.dot(f.Y));
+        return out;
     }
 
     /**
@@ -533,7 +556,7 @@ export class SimplifiedHand {
 
     /** The pen grip between pointing and writing, as the real index finger (or a real stick) shows it. */
     _penBlend() {
-        const tilt = this.stickTilt ?? this.indexTilt;
+        const tilt = this.stickTilt ?? this.pinchTilt ?? this.indexTilt;
         if (tilt != null) this.penT = Math.max(0, Math.min(1, (tilt - PEN_TILT[0]) / (PEN_TILT[1] - PEN_TILT[0])));
         const t = this.penT, o = this._penPose;
         for (let i = 0; i < 4; i++) o.index[i] = PEN_POINT_GRIP.index[i] + (PEN_GRIP.index[i] - PEN_POINT_GRIP.index[i]) * t;

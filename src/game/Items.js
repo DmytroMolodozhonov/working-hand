@@ -183,10 +183,11 @@ export class ItemSystem {
             // spells of this hand fly exactly along it, out of its tip
             const ch = g.character;
             y = pen ? _a.copy(pen.dir) : ch.getForearmDirection(side, _a).multiplyScalar(0.6).addScaledVector(f.Y, 0.4).normalize();
-            // a real stick in the real hand (a pen, a brush): the wand goes the way it goes
-            const real = this._stickDir(side, y);
-            if (real) y.copy(real);
+            // a real stick in the real hand (a pen, a brush): the wand goes the way it goes;
+            // else, a real pinch: the way the real thumb and index finger hold it
             const hand = ch.getActiveHands()[side];
+            const real = this._stickDir(side, y) || this._pinchDir(hand);
+            if (real) y.copy(real);
             // (the fingers hold it as the stick lies: pointing … writing)
             if (hand) hand.stickTilt = real ? Math.atan2(-y.dot(f.Z), y.dot(f.Y)) : null;
             x = _b.copy(f.X).addScaledVector(y, -f.X.dot(y));
@@ -236,7 +237,17 @@ export class ItemSystem {
         if (g.poseService) g.poseService.wantSticks = { left: this.held.left?.item.kind === 'wand', right: this.held.right?.item.kind === 'wand' };
         for (const side of ['left', 'right']) {
             ch.realStick[side] = pose ? st[side].update(pose[side + 'HandStick'] || null, now, fresh) : null;
+            // (said once when it appears: the player knows the camera sees it)
+            if (ch.realStick[side] && !st[side].told && this.held[side]?.item.kind === 'wand') { st[side].told = true; g.hud?.setVoice?.('🪄 Камера видит палочку в руке — волшебная палочка повторяет её', true); }
+            if (!ch.realStick[side]) st[side].told = false;
         }
+    }
+
+    /** The line the real thumb and index finger pinch along (world), or null (SimplifiedHand._pinch). */
+    _pinchDir(hand) {
+        if (!hand?.pinchDir || !hand.group?.visible) return null;
+        const qb = this.game.character.group.getWorldQuaternion(this._qp || (this._qp = new THREE.Quaternion()));
+        return (this._pd || (this._pd = new THREE.Vector3())).copy(hand.pinchDir).applyQuaternion(qb);
     }
 
     /** The world direction of the real stick in this hand (or null); `finger`: the pen grip's direction (world). */
