@@ -383,7 +383,10 @@ export class VoxelWorld {
         g.add(ring);
         this.scene.add(g);
         const surfaceY = 1.97;
-        this.collision.addBox({ minX: x - 1.4, maxX: x + 1.4, minY: -0.5, maxY: surfaceY, minZ: z - 1.4, maxZ: z + 1.4, kind: 'table' });
+        // the wide stone foot is a low step one can stand on; the column and its top are as wide as they look
+        // (a hand can reach what floats over it)
+        this.collision.addBox({ minX: x - 1.4, maxX: x + 1.4, minY: -0.5, maxY: -0.03, minZ: z - 1.4, maxZ: z + 1.4, kind: 'table' });
+        this.collision.addBox({ minX: x - 1.0, maxX: x + 1.0, minY: -0.5, maxY: surfaceY, minZ: z - 1.0, maxZ: z + 1.0, kind: 'table' });
         this.pedestals = this.pedestals || [];
         this.pedestals.push({ ring, disc, t: Math.random() * 6 });
         return surfaceY;

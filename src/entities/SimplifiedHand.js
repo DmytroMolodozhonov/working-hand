@@ -60,6 +60,40 @@ export const PEN_POINT_GRIP = {
     pinky: PEN_GRIP.pinky,
     thumb: [-0.05, -1.43, 0.17, -0.03, -0.39],
 };
+/**
+ * How the fingers lie round each kind of thing held (the palm's own joint angles, fitted so the
+ * middle and end bones of every finger touch the thing and none goes into it — the shapes they
+ * were fitted to: GRIP_SHAPES).
+ */
+export const GRIP_POSES = {
+    pen: PEN_GRIP,
+    shake: SHAKE_GRIP,
+    power: { index: [1.1, 1.3, 0, -0.05], middle: [1.2, 1.45, 0, 0], ring: [1.15, 1.2, 0, 0.05], pinky: [0.6, 1.35, 0, 0.12], thumb: [-0.6, -0.8, 0.6, 0, -0.6] },
+    thick: { index: [0.9, 1.3, 0, -0.05], middle: [1.05, 1.4, 0, 0], ring: [1.1, 1, 0, 0.05], pinky: [0.6, 1.15, 0, 0.12], thumb: [-0.6, 0, 0.4, -0.6, 0.8] },
+    thin: { index: [0.95, 1.75, 0, -0.05], middle: [1.35, 1.55, 0.1, 0], ring: [1.05, 1.6, 0, 0.05], pinky: [0.6, 1.6, 0, 0.12], thumb: [-0.6, -0.6, -0.2, 1, -0.6] },
+    neck: { index: [0.8, 1.3, 0, -0.05], middle: [1.15, 1.1, 0, 0], ring: [0.85, 1.2, 0, 0.05], pinky: [0.6, 1, 0, 0.12], thumb: [-0.6, -1.8, 0.6, 0, 1] },
+    roll: { index: [0.6, 1.25, 0, -0.05], middle: [0.75, 1.35, 0, 0], ring: [0.85, 0.85, 0, 0.05], pinky: [0.6, 0.65, 0, 0.12], thumb: [-0.6, -1.8, -0.2, 1, -0.6] },
+    ball: { index: [0.3, 1.05, 0, -0.12], middle: [0.55, 0.8, 0, -0.02], ring: [0.4, 0.85, 0, 0.08], pinky: [0.55, 0.5, 0, 0.18], thumb: [-0.6, -1.8, -0.2, 0, -0.6] },
+    wool: { index: [0.25, 0.7, 0, -0.15], middle: [0.2, 0.9, 0, -0.03], ring: [0.4, 0.4, 0, 0.1], pinky: [0.4, 0.35, 0, 0.22], thumb: [-0.6, -1.4, 0.8, 0, -0.6] },
+    block: { index: [0.25, 1.4, 0, -0.05], middle: [0.6, 1.15, 0.1, 0], ring: [0.45, 1.15, 0, 0.05], pinky: [-0.2, 1.25, 0.2, 0.12], thumb: [-0.6, -1.2, 0.6, 0.6, 0.4] },
+    hook: { index: [-0.15, 1.3, 0, -0.05], middle: [-0.1, 1.6, 0.1, 0], ring: [0.05, 1, 0.2, 0.05], pinky: [0.3, 0.1, 0.1, 0.12], thumb: [-0.4, -1, -0.2, -0.2, 0.4] },
+};
+/**
+ * What each grip closes round, in the palm's frame (y towards the fingers, z out of the back of
+ * the hand; the palm's face at z −0.07): a cylinder across the palm (along x) at (y, z) of radius
+ * r, or a ball. Where the held thing's handle / body goes.
+ */
+export const GRIP_SHAPES = {
+    power: { y: 0.13, z: -0.135, r: 0.065 },
+    thick: { y: 0.13, z: -0.155, r: 0.085 },
+    thin: { y: 0.13, z: -0.115, r: 0.045 },
+    neck: { y: 0.13, z: -0.17, r: 0.1 },
+    roll: { y: 0.15, z: -0.19, r: 0.12 },
+    ball: { y: 0.2, z: -0.268, r: 0.198, ball: true },
+    wool: { y: 0.22, z: -0.37, r: 0.3, ball: true },
+    block: { y: 0.17, z: -0.214, r: 0.14 },
+    hook: { y: 0.34, z: -0.145, r: 0.035 }, // (a strap / a loop hanging in the bent fingers)
+};
 /** Where the pen grip touches the wand: the web (palm frame), the index's and the thumb's pads (on their end bones); indexMid: the index's middle bone (pointing). */
 export const PEN_POINTS = { web: [-0.17, 0.17, -0.04], index: [0, 0.049, -0.038], indexMid: [0, 0.06, -0.04], thumb: [0, 0.104, -0.045] };
 /** The wand's line off the palm's line towards the palm (rad): pointing, writing. */
@@ -586,10 +620,13 @@ export class SimplifiedHand {
     setShowHands(visible) { this.group.visible = visible; }
     setQuality() { }
 
-    /** Hold a handle: fingers wrap to `curl` (0..1); `pose` 'pen': a pen grip (PEN_GRIP), 'shake': a handshake (SHAKE_GRIP). null releases. */
+    /**
+     * Hold a thing: fingers wrap to `curl` (0..1); `pose`: how they lie round it — a GRIP_POSES name
+     * ('pen', 'shake' a handshake, 'power' a handle, 'ball' an apple…) or the joint angles themselves. null releases.
+     */
     setGrip(curl, pose = null) {
         // (the pen grip is V4's; V3 holds a wand in the fist)
-        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: pose === 'pen' ? (this.fullPose ? PEN_GRIP : null) : pose === 'shake' ? SHAKE_GRIP : null };
+        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: typeof pose === 'string' ? (pose === 'pen' && !this.fullPose ? null : GRIP_POSES[pose] ?? null) : pose };
     }
 
     // ------------------------------------------------------------- networking

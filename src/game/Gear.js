@@ -159,7 +159,19 @@ export class Gear {
         const held = g.items.held[bow.side];
         // into the other hand: grab the bow with that fist and open the bow hand (not while drawing)
         if (this._switchBow(bow, other, dt)) return;
-        if (g.items.held[other] || g.weapons.hands[other].held) { this._dropNock(); if (held) held.aim = null; return; }
+        if (g.items.held[other] || g.weapons.hands[other].held) {
+            this._dropNock(); if (held) held.aim = null;
+            // (the drawing hand is busy: say so once when it comes to the bow — not just nothing happening)
+            const pic = this._picApart(bow.side, other);
+            const atBow = ch.getHandWorldPosition(other, _v).distanceTo(bow.model.position) < 1.0 || (pic != null && pic < 0.6);
+            if (atBow && !this._busySaid) {
+                this._busySaid = true;
+                const what = g.items.held[other] ? (g.items.held[other].item.kind === 'wand' ? 'палочка' : 'вещь') : 'оружие';
+                g.hud.setVoice(`🏹 В другой руке ${what} — уберите её (в карман), чтобы натянуть тетиву`, true);
+            }
+            return;
+        }
+        this._busySaid = false;
         const it = bow.item;
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
@@ -172,7 +184,9 @@ export class Gear {
         if (!this.nock) {
             if (held) held.aim = null;
             const quiver = local.y > 0.9 && local.z > 0.1;
-            const atBow = hand.distanceTo(bowPos) < 1.0;
+            // (at the bow: in 3D, or — the camera hardly sees depth — the wrists together in the picture)
+            const pic = this._picApart(bow.side, other);
+            const atBow = hand.distanceTo(bowPos) < 1.0 || (pic != null && pic < 0.6);
             if (quiver || atBow) {
                 if (!has) { if (!this._noArrowsSaid) { this._noArrowsSaid = true; g.hud.setVoice('🏹 Стрел больше нет — найдите стрелы', true); } return; }
                 this._noArrowsSaid = false;
@@ -189,12 +203,15 @@ export class Gear {
         if (n.state === 'hand') {
             n.model.position.copy(hand);
             n.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), _v2.subVectors(bowPos, hand).normalize());
-            if (hand.distanceTo(bowPos) < 1.0) { n.state = 'nocked'; n.t = 0; g.hud.setVoice('🏹 Натяните тетиву — отведите руку назад, потом отпустите', true); }
+            const pic = this._picApart(bow.side, other);
+            if (hand.distanceTo(bowPos) < 1.0 || (pic != null && pic < 0.6)) { n.state = 'nocked'; n.t = 0; g.hud.setVoice('🏹 Натяните тетиву — отведите руку назад, потом отпустите', true); }
             return;
         }
         // 2) drawn: the further the hand from the bow, the stronger (an arm's length — full)
+        // (the picture too: the hands apart by shoulder widths, whatever the camera guesses of depth)
         const dist = hand.distanceTo(bowPos);
-        n.draw = Math.max(0, Math.min(1, (dist - 0.6) / 1.3));
+        const pic = this._picApart(bow.side, other);
+        n.draw = Math.max(0, Math.min(1, Math.max((dist - 0.6) / 1.3, pic == null ? 0 : (pic - 0.25) / 0.75)));
         n.peak = Math.max(n.peak * 0.985, n.draw);
         // the arrow goes along the bow arm (shoulder → bow hand), refined by the drawing hand
         // only when it agrees — never along the hands' sideways line (see bowAim)
@@ -208,7 +225,7 @@ export class Gear {
         const S = bow.model.userData.bowString;
         const sc = bow.model.scale.x;
         const pull = Math.min(dist, S ? S.R * 1.1 * sc : 1.5);
-        if (S) setBowString(bow.model, S.tipX - pull / sc, ARROW_REST);
+        if (S) setBowString(bow.model, S.tipX - pull / sc, ARROW_REST, n.draw);
         const nock = arrowOnBow(bowPos, dir, sc, S ? S.tipX : 0, pull, fwd, n.rest || (n.rest = new THREE.Vector3()), n.at || (n.at = new THREE.Vector3()));
         const half = 0.4 * ARROW_SCALE;
         n.model.position.copy(nock).addScaledVector(dir, half);
@@ -253,17 +270,32 @@ export class Gear {
     _switchBow(bow, other, dt) {
         const g = this.game;
         const ch = g.character;
-        if (this.nock && this.nock.draw > 0.15) { this._swT = 0; return false; }
-        const near = ch.getHandWorldPosition(other, _v).distanceTo(bow.model.position) < 1.0;
-        const fist = (ch.getGripCurl?.(other) ?? 0) > 0.6, open = (ch.getGripCurl?.(bow.side) ?? 1) < 0.3;
+        // (never with an arrow on the string or in the hand: a bow fist the camera sees edge-on often
+        // reads "open" — the drawing hand at the string must not take the bow away from it)
+        if (this.nock) { this._swT = 0; return false; }
+        const near = ch.getGripObject(other).getWorldPosition(_v).distanceTo(bow.model.position) < 0.6;
+        const fist = (ch.getGripCurl?.(other) ?? 0) > 0.6, open = (ch.getGripCurl?.(bow.side) ?? 1) < 0.25;
         this._swT = near && fist && open ? (this._swT || 0) + dt : 0;
-        if (this._swT < 0.45) return false;
+        if (this._swT < 0.6) return false;
         this._swT = 0;
         this._dropNock();
         const item = g.items.releaseHand(bow.side);
         g.items.takeIntoHand(item, other);
         g.hud.setVoice('🏹 Лук в другой руке', true);
         return true;
+    }
+
+    /**
+     * How far apart the two wrists are in the camera's picture, in shoulder widths (null: not seen).
+     * The picture is sure of it, unlike the arm's depth.
+     */
+    _picApart(a, b) {
+        const p = this.game.currentPose;
+        const wa = p?.[a + 'Wrist'], wb = p?.[b + 'Wrist'], sl = p?.leftShoulder, sr = p?.rightShoulder;
+        if (!wa || !wb || !sl || !sr) return null;
+        const sw = Math.hypot(sl.x - sr.x, sl.y - sr.y);
+        if (sw < 0.02) return null;
+        return Math.hypot(wa.x - wb.x, wa.y - wb.y) / sw;
     }
 
     _dropNock() {

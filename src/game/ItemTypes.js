@@ -411,6 +411,10 @@ function backpackModel(it) {
     g.add(box(0.72, 0.25, 0.37, dark, 0, 0.32, 0.01));
     g.add(box(0.5, 0.3, 0.12, dark, 0, -0.15, 0.22));
     g.add(box(0.08, 0.08, 0.05, mat(0xd4af37), 0, 0.22, 0.2));
+    // the carrying loop on top (the hand hooks its fingers into it)
+    g.add(box(0.24, 0.04, 0.04, dark, 0, 0.52, 0));
+    g.add(box(0.03, 0.09, 0.03, dark, -0.105, 0.47, 0));
+    g.add(box(0.03, 0.09, 0.03, dark, 0.105, 0.47, 0));
     return g;
 }
 
@@ -418,23 +422,44 @@ function bowModel(it) {
     const g = new THREE.Group();
     const wood = mat(it.magic ? 0x6b3f8e : [0x8b5a2b, 0x5a3a1e, 0x7a4a24][it.type || 0]);
     const n = 9, R = it.type === 2 ? 0.75 : 0.6;
+    const limbs = [];
     for (let i = 0; i < n; i++) {
         const a = -0.9 + (1.8 * i) / (n - 1);
-        const seg = box(0.05, (R * 1.9) / n + 0.02, 0.05, wood, Math.cos(a) * R * 0.35 - R * 0.35, Math.sin(a) * R, 0);
-        seg.rotation.z = a;
+        const seg = box(0.05, (R * 1.9) / n + 0.02, 0.05, wood, 0, 0, 0);
+        limbs.push({ seg, a });
         g.add(seg);
     }
     // the string: two halves from the tips to the nock point (pulled back into a «V» when drawn)
-    const tipX = Math.cos(0.9) * R * 0.35 - R * 0.35, tipY = Math.sin(0.9) * R;
+    // (braced well behind the grip: the string clears the bow fist's thumb and knuckles)
+    const tipX = Math.cos(0.9) * R * BOW_CURVE - R * BOW_CURVE, tipY = Math.sin(0.9) * R;
     const strMat = new THREE.MeshBasicMaterial({ color: 0xf2efe6 });
     const strGeo = new THREE.CylinderGeometry(0.007, 0.007, 1, 4);
     const up = new THREE.Mesh(strGeo, strMat), down = new THREE.Mesh(strGeo, strMat);
     g.add(up, down);
     g.add(box(0.07, 0.16, 0.07, mat(0x3b2414), 0, 0, 0)); // the leather grip
-    g.userData.bowString = { up, down, tipX, tipY, R };
+    g.userData.bowString = { up, down, tipX, tipY, R, limbs, tipXf: tipX, tipYf: tipY };
     setBowString(g, null);
     if (it.magic) g.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: 0xc39bff }))).position.set(-0.02, 0, 0);
     return g;
+}
+
+/** How deep the bow's limbs curve back (× R): its brace height — the string's distance behind the grip. */
+export const BOW_CURVE = 0.5;
+/** Drawn fully, the limbs curve this much more (the tips come back and in). */
+const BOW_FLEX = 0.6;
+
+/** The limbs bent by the draw (flex 0 at rest … 1 fully drawn): each segment along the deeper curve. */
+function flexLimbs(S, flex) {
+    if (S.flex === flex) return;
+    S.flex = flex;
+    const k = BOW_CURVE * (1 + BOW_FLEX * flex), sy = 1 - 0.06 * flex;
+    for (const { seg, a } of S.limbs) {
+        seg.position.set(Math.cos(a) * S.R * k - S.R * k, Math.sin(a) * S.R * sy, 0);
+        // (turned as at rest, plus how much more the deeper curve turns it there)
+        seg.rotation.z = a + Math.atan2(k * Math.sin(a), sy * Math.cos(a)) - Math.atan2(BOW_CURVE * Math.sin(a), Math.cos(a));
+    }
+    S.tipXf = Math.cos(0.9) * S.R * k - S.R * k;
+    S.tipYf = Math.sin(0.9) * S.R * sy;
 }
 
 const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _sy = new THREE.Vector3(0, 1, 0);
@@ -448,15 +473,18 @@ function strandBetween(m, ax, ay, bx, by) {
 
 /**
  * Pull a bow's string to a nock point (bow-local x, or null: at rest, straight);
- * nockY: how high on the string the arrow is nocked (bow-local, 0 = the middle).
+ * nockY: how high on the string the arrow is nocked (bow-local, 0 = the middle);
+ * flex: how far it is drawn (0 … 1) — the limbs bend with it.
  */
-export function setBowString(bow, nockX, nockY = 0) {
+export function setBowString(bow, nockX, nockY = 0, flex = 0) {
     const S = bow.userData.bowString;
     if (!S) return;
-    const nx = nockX == null ? S.tipX : Math.min(S.tipX, nockX);
+    if (S.limbs) flexLimbs(S, nockX == null ? 0 : Math.max(0, Math.min(1, flex)));
+    const tx = S.tipXf ?? S.tipX, ty = S.tipYf ?? S.tipY;
+    const nx = nockX == null ? tx : Math.min(tx, nockX);
     const ny = nockX == null ? 0 : nockY;
-    strandBetween(S.up, S.tipX, S.tipY, nx, ny);
-    strandBetween(S.down, S.tipX, -S.tipY, nx, ny);
+    strandBetween(S.up, tx, ty, nx, ny);
+    strandBetween(S.down, tx, -ty, nx, ny);
     S.nockX = nx;
     S.nockY = ny;
 }

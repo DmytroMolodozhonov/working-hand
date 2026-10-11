@@ -93,9 +93,15 @@ export class WeaponSystem {
         return w;
     }
 
-    spawnHovering(type, pos, id) {
+    /** byHandle: `pos` is where the middle of its handle floats (at the reaching hand's height). */
+    spawnHovering(type, pos, id, { byHandle = false } = {}) {
         const q = new THREE.Quaternion();
         const w = this.spawn(type, pos.clone(), q, id);
+        if (byHandle) {
+            const sp = w.spec;
+            w.position.y += (sp.com[1] - (sp.handle[0] + sp.handle[1]) / 2) * w.S;
+            pos = w.position.clone();
+        }
         w.sleeping = true;
         w.hover = { base: pos.clone(), t: 0, rise: 1.6 };
         w.position.y -= w.hover.rise;
@@ -120,7 +126,8 @@ export class WeaponSystem {
         for (const w of this.weapons) {
             if (!w.hover || w.holder || w.remoteTarget) continue;
             const h = w.hover;
-            h.t += dt;
+            // a hand reaching for it: the magic holds it still (no turning, no bobbing) to be taken
+            if (!(ch && h.t > 1 && this._handNearHover(w, ch))) h.t += dt;
             const rise = Math.min(1, h.t / 1.0);
             const ease = 1 - Math.pow(1 - rise, 3);
             w.position.set(h.base.x, h.base.y - h.rise * (1 - ease) + Math.sin(h.t * 2) * 0.08 * ease, h.base.z);
@@ -130,6 +137,7 @@ export class WeaponSystem {
 
         if (ch) {
             for (const side of ['left', 'right']) this._updateHand(side, dt, now, ch, allowGrab);
+            this._handsStopAtHovering(ch);
         }
 
         this._updateStuck();
@@ -142,6 +150,8 @@ export class WeaponSystem {
             // on the ground must not push it away)
             const fresh = w.onHand || now - (w.releasedAt || -1e9) < 3000;
             w.handMeshes = fresh && handMeshes && !w.holder && !w.remoteTarget && this._nearHands(w, ch) ? handMeshes : null;
+            // (the hand that has just let go opens out of its way: for a moment it doesn't hold it up)
+            if (w.handMeshes && w.releasedSide && now - (w.releasedAt || -1e9) < 600) w.handMeshes = this._handMeshes(ch, w.releasedSide === 'left' ? 'right' : 'left');
             if (!w.handMeshes) w.onHand = false;
             w.step(dt, collision);
         }
@@ -291,7 +301,7 @@ export class WeaponSystem {
         if (!closing) return;
 
         this._palmFrame(ch, side);
-        let best = null, bestD = GRAB_RADIUS, bestT = 0.5;
+        let best = null, bestD = GRAB_RADIUS + 0.15, bestT = 0.5;
         const owners = this.game.sync ? this.game.sync.weaponOwners : null;
         const me = this.game.localId;
         for (const w of this.weapons) {
@@ -306,9 +316,51 @@ export class WeaponSystem {
             t = clamp(t, 0, 1);
             _d.copy(_a).addScaledVector(_c, t);
             const dist = _d.distanceTo(_G);
-            if (dist < bestD) { bestD = dist; best = w; bestT = t; }
+            // (a floating one holds still for the hand and lets the closing fingers find it a bit further)
+            if (dist < bestD && (dist < GRAB_RADIUS || w.hover)) { bestD = dist; best = w; bestT = t; }
         }
         if (best) this.grab(best, side, bestT);
+    }
+
+    /** Is one of the player's hands within reach of this floating weapon (its handle)? */
+    _handNearHover(w, ch) {
+        w.getHandleSegment(_a, _b);
+        _c.addVectors(_a, _b).multiplyScalar(0.5);
+        for (const side of ['left', 'right']) if (ch.getGripObject(side).getWorldPosition(_d).distanceToSquared(_c) < 1.44) return true;
+        return false;
+    }
+
+    /**
+     * The hands don't go through a weapon floating over a pedestal / a chest: a palm that would
+     * go into its handle or blade stops against it (the hand is shown pushed back), so the handle
+     * ends up in the fingers and they can close on it.
+     */
+    _handsStopAtHovering(ch) {
+        const hands = ch.getActiveHands();
+        for (const side of ['left', 'right']) {
+            const hand = hands[side];
+            if (!hand || !hand.group.visible || !hand.group.parent || this.hands[side].held || !hand.palm) continue;
+            hand.palm.getWorldPosition(_e);
+            for (const w of this.weapons) {
+                if (!w.hover || w.holder || w.position.distanceToSquared(_e) > 16) continue;
+                const sp = w.spec;
+                w.modelToWorld(0, sp.handle[0], 0, _a);
+                w.modelToWorld(0, sp.length, 0, _b);
+                _c.subVectors(_b, _a);
+                const t = clamp(_d.subVectors(_e, _a).dot(_c) / Math.max(1e-6, _c.lengthSq()), 0, 1);
+                _d.copy(_a).addScaledVector(_c, t);
+                const r = (t * _c.length() < (sp.handle[1] - sp.handle[0]) * w.S ? sp.handleRadius * w.S : 0.09) + 0.07; // (the palm's half thickness)
+                _f.subVectors(_e, _d);
+                const d = _f.length();
+                if (d >= r) continue;
+                if (d < 1e-4) _f.set(0, 0, 1); else _f.divideScalar(d);
+                _f.multiplyScalar(r - d);
+                hand.group.parent.getWorldQuaternion(_q).invert();
+                hand.group.position.add(_f.applyQuaternion(_q));
+                hand.group.updateMatrixWorld(true);
+                hand.palm.getWorldPosition(_e);
+            }
+        }
     }
 
     /** Orthonormal palm frame (X across the palm, Y towards the fingers, Z back of hand). Writes _P,_X,_Y,_Z,_G,_qPalm. */
@@ -441,11 +493,11 @@ export class WeaponSystem {
     }
 
     /** Palm and finger meshes of the player's visible hands (cached per hand model). */
-    _handMeshes(ch) {
-        const out = this._handMeshList || (this._handMeshList = []);
+    _handMeshes(ch, only = null) {
+        const out = only ? (this._handMeshOne || (this._handMeshOne = {}))[only] || (this._handMeshOne[only] = []) : this._handMeshList || (this._handMeshList = []);
         out.length = 0;
         const hands = ch.getActiveHands();
-        for (const side of ['left', 'right']) {
+        for (const side of only ? [only] : ['left', 'right']) {
             const hand = hands[side];
             if (!hand || !hand.group.visible) continue;
             if (!hand._solidMeshes) {
@@ -474,6 +526,7 @@ export class WeaponSystem {
         this._forget(side, hand);
         w.release();
         w.releasedAt = this.game.now();
+        w.releasedSide = side;
         if (this.onRelease) this.onRelease(w, side);
     }
 

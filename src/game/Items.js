@@ -27,8 +27,11 @@ import { PEN_POINTS } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
 
-const PICK_RADIUS = 0.9;
 const SHOP_GRIP = 0.5; // fingers this closed (tracked curl) to take a good from a market counter
+/** The fingers close on a thing this near (from the grip point in the fingers to its surface / handle). */
+const PICK_REACH = 0.35;
+/** Long things are taken by their handle (wand, hammer, bow): the rest by their body. */
+const BY_HANDLE = new Set(['wand', 'hammer', 'bow']);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -36,12 +39,29 @@ const _inv = new THREE.Matrix4();
 
 const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
 /** Held in the fist like the sword: handle (model y, before scaling) at the fingers, the axis across the palm. */
+/**
+ * pose: how the fingers lie round it (SimplifiedHand GRIP_POSES); at: [y, z] where its handle /
+ * body is in the palm's frame (y towards the fingers, z the back of the hand; the palm's face at
+ * z −0.07) — where that grip's fingers close (GRIP_SHAPES).
+ *   axis 'body': the thing's own middle there, turned with the palm (turn: its long y across the palm);
+ *   axis 'hang': hanging from the fist by its top (a pouch by its neck, a bag by its loop).
+ */
 const GRIPPED = {
     wand: { axis: 'y', handle: 0.12, curl: 0.38, pose: 'pen' }, // like a pen (V4 hands): see _penGrip
-    hammer: { axis: 'y', handle: 0.12 },
-    bow: { axis: 'y', handle: 0 },
-    scroll: { axis: 'x', handle: 0, curl: 0.5 },
-    shield: { axis: 'y', handle: 0, face: 'back' },
+    hammer: { axis: 'y', handle: 0.12, pose: 'power', at: [0.13, -0.148] },
+    bow: { axis: 'y', handle: 0, pose: 'thick', at: [0.13, -0.155] },
+    scroll: { axis: 'x', handle: 0, curl: 0.5, pose: 'roll', at: [0.15, -0.194] },
+    shield: { axis: 'y', handle: 0, face: 'back', pose: 'thin', at: [0.13, -0.115] },
+    apple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (cupped, its stem out of the hand)
+    wool: { axis: 'body', pose: 'wool', at: [0.22, -0.374] },
+    bread: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
+    cheese: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
+    pie: { axis: 'body', pose: 'block', at: [0.17, -0.2] },
+    meat: { axis: 'body', pose: 'block', at: [0.17, -0.23], turn: true },
+    steak: { axis: 'body', pose: 'block', at: [0.17, -0.23], turn: true },
+    arrows: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true },
+    coins: { axis: 'hang', pose: 'neck', at: [0.13, -0.17], top: 0.02, off: 0.25 },
+    backpack: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.032 }, // (by its loop)
     book: { axis: 'book', handle: 0, curl: 0.55 }, // by the spine: the covers between the thumb and the fingers
 };
 /** The wand with V3 hands (stable): in the fist, as it was before the pen grip. */
@@ -79,7 +99,7 @@ export class ItemSystem {
 
     // ----------------------------------------------------------- the world
     /** A thing appears lying / hovering (authority; the others are told). */
-    spawnLoose(item, pos, { vel = null, hover = false, broadcast = true, quat = null, spin = null } = {}) {
+    spawnLoose(item, pos, { vel = null, hover = false, broadcast = true, quat = null, spin = null, rise = false } = {}) {
         if (this.loose.has(item.uid)) return this.loose.get(item.uid);
         const model = makeItemModel(item);
         model.position.copy(pos);
@@ -89,6 +109,8 @@ export class ItemSystem {
         // spin: an angular velocity (world axis × rad/s) — a throw keeps the wrist's snap; a spill tumbles
         if (spin) L.spin.copy(spin);
         else if (vel) L.spin.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+        if (rise && hover) L.rise = 0; // (comes up out of a chest)
+        L.shape = this._shapeOf(model);
         this.loose.set(item.uid, L);
         if (broadcast && this.game.sync) this.game.sync.itemNew?.(item, pos, vel, hover, quat, spin);
         return L;
@@ -103,20 +125,56 @@ export class ItemSystem {
         return L.item;
     }
 
-    /** A chest opens: its things float up above it. */
-    lootChest(pos, rng = Math.random, house = null, kind = null) {
+    /**
+     * A chest opens: its things rise out of it and float in a row along the chest, a little
+     * towards its front, just under a standing hero's shoulder — where a hand reaches them.
+     * extra: more things for the row (the coin pouch).
+     */
+    lootChest(pos, rng = Math.random, house = null, kind = null, { chest = null, extra = [] } = {}) {
         // (a wizards' house: scrolls, sometimes a spell book — src/game/WizardShop.js)
-        const items = house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng);
+        const items = (house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng)).concat(extra);
+        const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
+        const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
+        const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();
+        const gap = Math.min(0.9, 3.2 / Math.max(1, items.length));
         items.forEach((it, i) => {
-            const p = pos.clone().add(_v.set((i - (items.length - 1) / 2) * 0.8, 2.2, 0));
+            const p = pos.clone().addScaledVector(across, (i - (items.length - 1) / 2) * gap).addScaledVector(front, 0.3);
+            p.y += 1.1;
             if (it.kind === 'weapon') {
-                const w = this.game.weapons.spawnHovering(it.type, p, it.uid);
+                const w = this.game.weapons.spawnHovering(it.type, p.clone().setY(p.y + 0.2), it.uid, { byHandle: true }); // (its handle at the hand)
                 w.magic = !!it.magic; w.bonus = it.magic ? it.bonus : 0;
                 w.applyMagicLook?.();
                 if (this.game.sync) this.game.sync.weaponAppeared?.(w);
-            } else this.spawnLoose(it, p, { hover: true });
+            } else this.spawnLoose(it, p, { hover: true, rise: true });
         });
         return items;
+    }
+
+    /** Where a thing is to be held (its model's own space): a handle segment, or a ball round its body. */
+    _shapeOf(model) {
+        const pos = model.position.clone(), quat = model.quaternion.clone();
+        model.position.set(0, 0, 0); model.quaternion.identity();
+        model.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(model);
+        model.position.copy(pos); model.quaternion.copy(quat);
+        model.updateMatrixWorld(true);
+        if (box.isEmpty()) return { c: new THREE.Vector3(), r: 0.2, rh: 0.05, y0: 0, y1: 0 };
+        // (c, y0, y1 in the model's own units — localToWorld scales them; r, rh in metres)
+        const k = 1 / (model.scale.x || 1);
+        const c = box.getCenter(new THREE.Vector3()), h = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+        return { c: c.multiplyScalar(k), r: Math.max(h.x, h.y, h.z) * 0.75, rh: Math.max(0.03, Math.min(h.x, h.z) * 0.6), y0: box.min.y * k, y1: box.max.y * k };
+    }
+
+    /** How far the grip point G (in the fingers) is from the thing: its handle for long things, else its body. */
+    _reachTo(L, G) {
+        const S = L.shape, m = L.model;
+        if (!S) return m.position.distanceTo(G);
+        if (BY_HANDLE.has(L.item.kind)) {
+            const a = m.localToWorld(_a.set(S.c.x, S.y0, S.c.z)), b = m.localToWorld(_b.set(S.c.x, S.y1, S.c.z));
+            const ab = _c.subVectors(b, a), t = Math.max(0, Math.min(1, _d.subVectors(G, a).dot(ab) / Math.max(1e-6, ab.lengthSq())));
+            return Math.max(0, a.addScaledVector(ab, t).distanceTo(G) - S.rh);
+        }
+        return Math.max(0, m.localToWorld(_a.copy(S.c)).distanceTo(G) - S.r);
     }
 
     // ------------------------------------------------------------ the hands
@@ -129,7 +187,7 @@ export class ItemSystem {
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
         const model = makeItemModel(item);
         this.game.scene.add(model);
-        this.held[side] = { item, model, since: performance.now() };
+        this.held[side] = { item, model, since: performance.now(), shape: this._shapeOf(model) };
         if (this.game.sync) this.game.sync.itemHold?.(side, item);
         return true;
     }
@@ -183,6 +241,7 @@ export class ItemSystem {
         const ax = _a.copy(f.X).multiplyScalar(s);
         let x, y, z;
         const pen = h.item.kind === 'wand' && v4 ? this._penGrip(side) : null;
+        if (spec.axis === 'body' || spec.axis === 'hang') { this._bodyHold(side, h, spec, f); return; }
         if (h.item.kind === 'wand') {
             // held like a pen: its back lies in the web between the thumb and the index finger,
             // its front is pinched by their tips — it points where the fingers point, and the
@@ -224,7 +283,8 @@ export class ItemSystem {
         }
         // the handle point in the fingers (a pen: in the web of the thumb)
         const sc = h.model.scale.x;
-        h.model.position.copy(pen ? pen.web : f.G).sub(_d.set(0, spec.handle * sc, 0).applyQuaternion(h.q));
+        const at = spec.at ? _e.copy(f.P).addScaledVector(f.Y, spec.at[0]).addScaledVector(f.Z, spec.at[1]) : f.G;
+        h.model.position.copy(pen ? pen.web : at).sub(_d.set(0, spec.handle * sc, 0).applyQuaternion(h.q));
         if (spec.face === 'back') h.model.position.addScaledVector(f.Z, 0.25);
         if (!h.gripped) {
             h.gripped = true;
@@ -266,6 +326,40 @@ export class ItemSystem {
         const d = stickDirection(s, fh, this._sd || (this._sd = new THREE.Vector3())).applyQuaternion(qb);
         // (a line the camera took for a stick but going off where the hand can't hold it: not it)
         return d.angleTo(finger) < 0.87 ? d : null;
+    }
+
+    /**
+     * A thing held by its body (an apple cupped, bread in the fingers) or hanging from the fist
+     * (a coin pouch by its neck, a bag by its loop): never floating, never inside the palm.
+     */
+    _bodyHold(side, h, spec, f) {
+        const g = this.game, sc = h.model.scale.x, S = h.shape;
+        const at = _e.copy(f.P).addScaledVector(f.Y, spec.at[0]).addScaledVector(f.Z, spec.at[1]);
+        if (spec.axis === 'hang') {
+            // it hangs: upright, turned with the body, its top in the fist
+            g.character.group.getWorldQuaternion(_q);
+            h.model.quaternion.copy(_q);
+            h.model.position.copy(at).addScaledVector(_UPY, -((S?.y1 ?? 0.3) * sc - spec.top));
+            // (the body hangs in front of the palm, not through it)
+            const out = _b.copy(f.Z).negate().setY(0);
+            const len = out.length();
+            if (spec.off && len > 1e-2) h.model.position.addScaledVector(out.divideScalar(len), spec.off * Math.min(1, len * 4));
+        } else {
+            // turned with the palm (a long thing across it), its own middle where the fingers close
+            if (spec.out) _m4.makeBasis(f.X, _a.copy(f.Z).negate(), f.Y); // (its top out of the palm)
+            else _m4.makeBasis(spec.turn ? f.Y : f.X, spec.turn ? _a.copy(f.X).negate() : f.Y, f.Z);
+            _q.setFromRotationMatrix(_m4);
+            h.model.quaternion.copy(_q);
+            // (a ball by its own centre — its stem doesn't count; the rest by the middle of its shape)
+            h.model.position.copy(at);
+            if (!spec.out && S) h.model.position.sub(_d.copy(S.c).multiplyScalar(sc).applyQuaternion(_q));
+        }
+        h.q = h.model.quaternion.clone();
+        if (!h.gripped) {
+            h.gripped = true;
+            const hand = g.character.getActiveHands()[side];
+            if (hand && hand.setGrip) hand.setGrip(spec.curl ?? 0.62, spec.pose);
+        }
     }
 
     /**
@@ -418,19 +512,26 @@ export class ItemSystem {
         if (this.worn.backpack) this._placeBackpack(this.worn.backpack.model, ch);
         if (!g.currentPose || g.combat.dead) { this._netSend(dt); return; }
         const now = performance.now();
-        // pick up: an empty hand touching a thing
+        // pick up: an empty hand at a thing whose fingers CLOSE on it (a fist bumping into it takes nothing)
         for (const side of ['right', 'left']) {
             if (this.held[side] || g.weapons.hands[side].held || g.books?.reading?.handBusy(side) || g.boards?.handBusy(side)) continue;
-            const hand = ch.getHandWorldPosition(side, _v);
+            const ws = g.weapons.hands[side], G = g.weapons.palmFrame(side, this._pfs || (this._pfs = {})).G;
+            let best = null, bestD = 0.8;
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
-                if (L.model.position.distanceTo(hand) > PICK_RADIUS) continue;
+                if (L.model.position.distanceToSquared(G) > 9) continue;
                 // a good on a market counter: only taken by really closing the fingers on it (a brush of the hand takes nothing)
                 if (L.item.shop && !((ch.isHandTracked ? ch.isHandTracked(side) : false) && (ch.getGripCurl ? ch.getGripCurl(side) : 0) > SHOP_GRIP)) continue;
-                if (this.auth) this.pickUp(L.item.uid, g.localId, side);
-                else { L.asked = true; g.sync?.itemTake?.(L.item.uid, side); setTimeout(() => { L.asked = false; }, 1500); }
-                break;
+                const d = this._reachTo(L, G);
+                if (d < bestD) { bestD = d; best = L; }
             }
+            if (!best) continue;
+            best.offered = now; // (a floating thing holds still for the reaching hand)
+            const closing = ch.getGripCurl(side) > 0.55 && (g.now() - ws.lastOpen < 900 || g.weapons.frame - ws.lastOpenFrame <= 12);
+            if (bestD > PICK_REACH || !closing) continue;
+            const L = best;
+            if (this.auth) this.pickUp(L.item.uid, g.localId, side);
+            else { L.asked = true; g.sync?.itemTake?.(L.item.uid, side); setTimeout(() => { L.asked = false; }, 1500); }
         }
         // letting go: only a real throw (wind-up, swing, the fingers open) or the outstretched hand opened
         // (timed by the game's clock: a stalled frame must not cut a swing in two)
@@ -462,8 +563,14 @@ export class ItemSystem {
         const m = L.model;
         L.t += dt;
         if (L.hover) {
-            m.position.set(L.hover.x, L.hover.y + Math.sin(L.t * 2) * 0.12, L.hover.z);
-            m.rotation.y += dt * 1.2;
+            // a hand reaching for it: it holds still (no bobbing, no turning) to be taken
+            const still = performance.now() - (L.offered || -1e9) < 300;
+            if (still) L.t -= dt;
+            // (out of a chest: it comes up out of it over a second)
+            let sink = 0;
+            if (L.rise != null && L.rise < 1) { L.rise = Math.min(1, L.rise + dt); sink = 1.2 * Math.pow(1 - L.rise, 3); }
+            m.position.set(L.hover.x, L.hover.y + Math.sin(L.t * 2) * 0.12 - sink, L.hover.z);
+            if (!still) m.rotation.y += dt * 1.2;
             if (Math.random() < dt * 3) this.game.fx.spark(m.position, 0xffe9a8, 0.06, _v.set(0, 0.6, 0), 0.7);
             return;
         }
@@ -579,7 +686,8 @@ export class ItemSystem {
             return;
         }
         // (a bow stays in the hand that closed on it: the other hand takes it across by itself — Gear)
-        if (!this.takeIntoHand(item, side, { closed: true }) && !this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
+        // («Акцио» brings it into an open hand: kept until the fingers close on it; a hand that closed on it re-arms at once)
+        if (!this.takeIntoHand(item, side) && !this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
             this.game.inventory.storeItem?.(item);
             return;
         }

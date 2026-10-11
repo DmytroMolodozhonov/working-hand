@@ -381,10 +381,11 @@ export class Game {
             }
             // An axe and a sword floating by magic over two pedestals (same places as the old tables)
             const pz = -5.0;
+            // (their handles float at the shoulder of a hero standing at the pedestal's foot: where the hand reaches)
             const s1 = this.world.createPedestal(-7, pz);
-            this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 1.3, pz), 'tA');
+            this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 0.9, pz), 'tA', { byHandle: true });
             const s2 = this.world.createPedestal(7, pz);
-            this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 1.3, pz), 'tS');
+            this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 0.9, pz), 'tS', { byHandle: true });
             // Creative: a surfboard to try, standing in the ground by the pedestals (the same id on every computer)
             if (config.mode === 'creative') this.boards.spawn({ id: 'cboard0', wood: 0, st: 'stand', p: [-12, this.collision.groundY(-12, -9) + 4.4 * 0.38, -9], yaw: 0 });
             // Creative: bows and shields of every kind on pedestals too
@@ -400,7 +401,7 @@ export class Game {
                 gear.forEach((it, i) => {
                     const x = -12.5 + i * 5, z = -12;
                     const top = this.world.createPedestal(x, z);
-                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 1.3, z), { hover: true, broadcast: false });
+                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false }); // (at the shoulder of one standing at its foot)
                 });
                 // …and a wand, scrolls (flight, the spell scrolls, health) and a book of building spells
                 const magic = [
@@ -414,7 +415,7 @@ export class Game {
                 magic.forEach((it, i) => {
                     const x = -12.5 + i * 5, z = -18;
                     const top = this.world.createPedestal(x, z);
-                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 1.3, z), { hover: true, broadcast: false });
+                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false }); // (at the shoulder of one standing at its foot)
                 });
                 const bx = -12.5 + magic.length * 5, bz = -18;
                 const btop = this.world.createPedestal(bx, bz);
@@ -680,13 +681,15 @@ export class Game {
             if (this.authority) {
                 chest.mesh.updateMatrixWorld(true);
                 const rp = chest.getRewardPosition(new THREE.Vector3());
-                if (chest.ship) { chest._openedBy = by; this.ships.lootChest(chest, rp); } // (a ship's chest: often a fishing rod)
-                else this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null); // (a port chest: the sailors' stores)
                 // a pouch of coins too (a castle's treasury holds much more; a poor house — little or nothing)
                 const coins = chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
                     : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
                     : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
-                if (coins > 0) this.items.spawnLoose({ kind: 'coins', uid: newUid(), count: coins }, rp.clone().add(new THREE.Vector3(0, 3.2, 0)), { hover: true });
+                const pouch = coins > 0 ? [{ kind: 'coins', uid: newUid(), count: coins }] : [];
+                if (chest.ship) {
+                    chest._openedBy = by; this.ships.lootChest(chest, rp); // (a ship's chest: often a fishing rod)
+                    for (const it of pouch) this.items.spawnLoose(it, rp.clone().add(new THREE.Vector3(0, 1.1, 0)), { hover: true, rise: true }); // (within the hand's reach)
+                } else this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null, { chest, extra: pouch }); // (a port chest: the sailors' stores; all in one row along the chest, within reach)
                 // a house chest: the family may be watching
                 if (chest.house) this.houses?.chestOpened(chest, by);
                 if (this.sync) this.sync.chestOpenedLoot?.(chest);
