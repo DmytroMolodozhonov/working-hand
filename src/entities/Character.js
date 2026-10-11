@@ -276,7 +276,7 @@ export class VoxelCharacter {
     }
 
     _updateHands(poseData) {
-        if (this.handVersion === 'v3') {
+        if (this._simplified()) {
             for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) { h.body = this.group; if (poseData.aspect) h.aspect = poseData.aspect; }
             const now = this.handNow ? this.handNow() : Date.now(); // (tests give their own clock)
             if (this.leftSimplifiedHand.group.visible) this.leftSimplifiedHand.update(poseData.leftHandLandmarks || null, this.group.rotation.y, now);
@@ -748,7 +748,7 @@ export class VoxelCharacter {
     }
 
     setShowHands(visible) {
-        const v3 = this.handVersion === 'v3';
+        const v3 = this._simplified();
         // (a cut-off hand stays gone)
         const l = visible && !this.handLost('left'), r = visible && !this.handLost('right');
         this.leftSimplifiedHand.group.visible = v3 && l;
@@ -768,9 +768,13 @@ export class VoxelCharacter {
         return Math.max(this.isCrouching ? 1.0 : 0, this.legDrop || 0);
     }
 
+    /** V3 (stable) and V4 (the full hand, being finished) are both the voxel SimplifiedHand. */
+    _simplified() { return this.handVersion === 'v3' || this.handVersion === 'v4'; }
+
     setHandVersion(version) {
-        if (version !== 'v2' && version !== 'v3') return;
+        if (version !== 'v2' && version !== 'v3' && version !== 'v4') return;
         this.handVersion = version;
+        for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) h.setMode(version === 'v4' ? 'full' : 'stable');
         if (this.handsVisible) this.setShowHands(true);
     }
 
@@ -780,7 +784,7 @@ export class VoxelCharacter {
     }
 
     getActiveHands() {
-        return this.handVersion === 'v3'
+        return this._simplified()
             ? { left: this.leftSimplifiedHand, right: this.rightSimplifiedHand }
             : { left: this.leftDetailedHand, right: this.rightDetailedHand };
     }

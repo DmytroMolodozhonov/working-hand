@@ -121,6 +121,7 @@ class NativePose:
         self._stop = threading.Event()
         self._mp = None
         self._cv2 = None
+        self.last_frame = None
 
     # ------------------------------------------------------------ availability
     def available(self):
@@ -154,6 +155,17 @@ class NativePose:
             "cost": round(self.cost, 1),
             "size": [self.width, self.height],
         }
+
+    def snapshot(self, width=480, quality=70):
+        """The newest camera picture as a small JPEG (bytes), or None (the hand recording)."""
+        frame, cv2 = self.last_frame, self._cv2
+        if frame is None or cv2 is None:
+            return None
+        h, w = frame.shape[:2]
+        if w > width:
+            frame = cv2.resize(frame, (width, int(h * width / w)))
+        ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+        return buf.tobytes() if ok else None
 
     # ------------------------------------------------------------ start / stop
     def start(self, quality=1, camera=None):
@@ -361,6 +373,7 @@ class NativePose:
                 with self.cond:
                     self.seq += 1
                     self.latest = json.dumps(out, separators=(",", ":"))
+                    self.last_frame = frame  # (a snapshot for the hand recording: snapshot())
                     self.cond.notify_all()
                 # nobody is watching for a while: let the camera go
                 if self.clients <= 0 and now - self.last_client > 8:

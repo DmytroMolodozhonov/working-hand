@@ -84,7 +84,7 @@ export class SimplifiedHand {
         // The landmarks come 1€-filtered (TrackingGuard, the whole hand at once) and
         // blended between camera pictures (PoseSmoother): any average or easing on top
         // only made the hand lag (it took ~10 drawn frames to follow a turn of the wrist)
-        this.HISTORY_LENGTH = 1;
+        this.HISTORY_LENGTH = 2; // (V4: 1)
         this.landmarkHistory = [];
         this._historyPool = [];
         this._avg = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
@@ -128,7 +128,8 @@ export class SimplifiedHand {
         // finger joint. `body` — the hero (its space), `aspect` — the picture's width/height.
         this.body = null;
         this.aspect = 4 / 3;
-        this.fullPose = true;
+        this.fullPose = false; // (V3 by default; setMode('full') — V4)
+        this.mode = 'stable';
         this._frame = null; // {X, Y, Z} the hand in the hero's space (from the points)
         this._jointsT = null; // target joint angles; _jointsC: current (smoothed)
         this._jointsC = null;
@@ -266,6 +267,7 @@ export class SimplifiedHand {
         }
 
         this._k = this._kr = this.FOLLOW;
+        if (!this.fullPose) { this._k = this.LERP_SPEED; this._kr = this.ROT_LERP_SPEED; } // (V3: eased as it always was)
         if (this._reacq != null && now - this._reacq < this.REACQUIRE_MS) this._k = this._kr = this.REACQUIRE_K;
         this._stepState();
         this.animateModel();
@@ -564,12 +566,30 @@ export class SimplifiedHand {
         return out.lerp(a, 1 - t);
     }
 
+    /**
+     * 'stable' (V3, the default): the hand as it was before the full hand — its turn from
+     * the knuckles (left / right, up / down, a little roll), whole fingers bending, eased
+     * per frame; a wand in the fist. 'full' (V4, being finished): the palm's whole turn
+     * from the 21 points, every finger joint, a wand held like a pen.
+     */
+    setMode(mode) {
+        const full = mode === 'full';
+        if (full === this.fullPose && this.mode) return;
+        this.mode = full ? 'full' : 'stable';
+        this.fullPose = full;
+        this.HISTORY_LENGTH = full ? 1 : 2;
+        this._frame = null; this._qShown = null; this._pend = null; this._pendN = 0;
+        this._jointsT = this._jointsC = null;
+        if (this.gripOverride?.pose === PEN_GRIP && !full) this.gripOverride.pose = null;
+    }
+
     setShowHands(visible) { this.group.visible = visible; }
     setQuality() { }
 
     /** Hold a handle: fingers wrap to `curl` (0..1); `pose` 'pen': a pen grip (PEN_GRIP), 'shake': a handshake (SHAKE_GRIP). null releases. */
     setGrip(curl, pose = null) {
-        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: pose === 'pen' ? PEN_GRIP : pose === 'shake' ? SHAKE_GRIP : null };
+        // (the pen grip is V4's; V3 holds a wand in the fist)
+        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: pose === 'pen' ? (this.fullPose ? PEN_GRIP : null) : pose === 'shake' ? SHAKE_GRIP : null };
     }
 
     // ------------------------------------------------------------- networking

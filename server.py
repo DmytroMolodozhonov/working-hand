@@ -17,6 +17,8 @@ API:
   POST   /api/perflog         — строка дневника производительности → zns-perf.log
   GET    /api/pose/status     — нейросеть камеры вне браузера (pose_native.py): есть ли, работает ли
   GET    /api/pose/stream     — её точки тела, рук и лица (Server-Sent Events)
+  GET    /api/pose/snap       — её последний кадр камеры (JPEG; для записи руки)
+  POST   /api/record          — запись руки (F9 в игре) → папка recordings/
 """
 
 import glob
@@ -39,6 +41,8 @@ os.chdir(ROOT)
 PORT = int(os.environ.get("ZNS_PORT", "8000"))
 MAPS_DIR = "maps"
 RIG_FILE = "hand_rig.json"
+RECORD_DIR = "recordings"  # hand recordings (F9 in the game): sent to the developer
+RECORD_MAX = 30 * 1024 * 1024
 PERF_LOG = "zns-perf.log"  # the game's performance diary (send it to the developer)
 LOG_DIR = "logs"  # what the game prints (settings → «Журнал»)
 LOG_TITLES = {
@@ -287,6 +291,23 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
     # ---------- the camera network outside the browser ----------
+    def _pose_snap(self):
+        try:
+            from pose_native import POSE
+            jpg = POSE.snapshot()
+        except Exception:  # noqa: BLE001
+            jpg = None
+        if not jpg:
+            self.send_response(204)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(jpg)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(jpg)
+
     def _pose_status(self):
         try:
             from pose_native import POSE
@@ -350,6 +371,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_status()
         if path == "/api/pose/stream":
             return self._pose_stream(urlparse(self.path).query)
+        if path == "/api/pose/snap":
+            return self._pose_snap()
         if path == "/api/version":
             return self._json(200, game_version())
         if path == "/api/update":
@@ -390,6 +413,20 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with open(RIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 return self._json(200, {"status": "success", "message": "Rig saved"})
+
+            if path == "/api/record":
+                length = int(self.headers.get("Content-Length") or 0)
+                if length <= 0 or length > RECORD_MAX:
+                    raise ValueError("Bad request body size")
+                body = self.rfile.read(length)
+                json.loads(body.decode("utf-8"))  # (only a real recording is written)
+                os.makedirs(RECORD_DIR, exist_ok=True)
+                name = time.strftime("zns-hands-%Y%m%d-%H%M%S.json")
+                with open(os.path.join(RECORD_DIR, name), "wb") as f:
+                    f.write(body)
+                full = os.path.join(ROOT, RECORD_DIR, name)
+                print("  [Запись руки] сохранена: " + full)
+                return self._json(200, {"status": "ok", "file": full})
 
             if path == "/api/perflog":
                 line = str(self._read_json().get("line", ""))[:4000].replace("\r", " ").replace("\n", " ")

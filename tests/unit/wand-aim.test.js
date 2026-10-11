@@ -31,6 +31,7 @@ test('the wand grip is steady: the same on the hand whatever the network\'s fing
     for (const side of ['right', 'left']) {
         const ch = new VoxelCharacter(new THREE.Scene());
         ch.setShowHands(true);
+        ch.setHandVersion('v4'); // (the full hand)
         let t = 0;
         ch.handNow = () => t;
         const hand = side === 'right' ? ch.rightSimplifiedHand : ch.leftSimplifiedHand;
@@ -60,6 +61,7 @@ test('the wand grip is steady: the same on the hand whatever the network\'s fing
 test('a real stick seen in the hand sets the grip (pointing … writing) — smoothly, not in one jump', () => {
     const ch = new VoxelCharacter(new THREE.Scene());
     ch.setShowHands(true);
+    ch.setHandVersion('v4'); // (the full hand)
     const hand = ch.rightSimplifiedHand;
     hand.setGrip(0.38, 'pen');
     hand.stickTilt = 0.09; // (pointing)

@@ -63,7 +63,7 @@ export function setupTestMode(game, { renderer, camera, poseService, onExit }) {
         ['hp-val-s', 'hp-val-x', 'hp-val-y', 'hp-val-z', 'hr-val-x', 'hr-val-y', 'hr-val-z'].forEach((id, i) => { $(id).textContent = hs[i].value; });
         for (const side of ['left', 'right']) {
             const g = ch.getActiveHands()[side].group;
-            const mirror = side === 'left' && ch.handVersion === 'v3' ? -1 : (ch.handVersion === 'v2' ? -1 : 1);
+            const mirror = side === 'left' && (ch.handVersion === 'v3' || ch.handVersion === 'v4') ? -1 : (ch.handVersion === 'v2' ? -1 : 1);
             g.scale.set(v[0] * mirror, v[0], v[0]);
             g.userData.restOffset = new THREE.Vector3(v[1], v[2], v[3]);
             g.position.set(v[1], v[2], ch.BONE_LENGTH_LOWER + v[3]);

@@ -22,6 +22,7 @@ function poseOf(arms, lm) {
 test('hand lost for a second: it moves with the arm as it was, then glides into the new pose (no jump)', () => {
     const ch = new VoxelCharacter(new THREE.Scene());
     ch.setShowHands(true);
+    ch.setHandVersion('v4'); // (the full hand)
     let t = 0;
     ch.handNow = () => t;
     const hand = ch.rightSimplifiedHand;
@@ -55,6 +56,7 @@ test('hand lost for a second: it moves with the arm as it was, then glides into 
     // (re-run the same frames' end state: after 15 frames it must be within 10%)
     const ch2 = new VoxelCharacter(new THREE.Scene());
     ch2.setShowHands(true);
+    ch2.setHandVersion('v4'); // (the full hand)
     let t2 = 0;
     ch2.handNow = () => t2;
     const s2 = (pose) => { t2 += 1000 / 60; ch2.updateArmsLookAt(pose, 1 / 60); ch2.group.updateMatrixWorld(true); };
@@ -68,6 +70,7 @@ test('hand lost for a second: it moves with the arm as it was, then glides into 
 test('a short drop-out (two pictures) changes nothing: no glide, the hand follows at once', () => {
     const ch = new VoxelCharacter(new THREE.Scene());
     ch.setShowHands(true);
+    ch.setHandVersion('v4'); // (the full hand)
     let t = 0;
     ch.handNow = () => t;
     const hand = ch.rightSimplifiedHand;

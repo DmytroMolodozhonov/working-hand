@@ -51,6 +51,7 @@ export class PoseService {
         // a real stick in a hand, looked for in the browser's own camera picture while the
         // game wants it ({left, right}: a wand in that hand) — the native program sends its own
         this.wantSticks = null;
+        this.recordSink = null; // (the hand recording, F9: every raw camera result)
         this.browserSticks = (l, r) => this._browserSticks(l, r);
     }
 
@@ -241,6 +242,7 @@ export class PoseService {
     }
 
     _onHolistic(results) {
+        if (this.recordSink) this.recordSink(results);
         this.stats.results++;
         this.stats.lastResultAt = performance.now();
         const r = {
@@ -720,6 +722,7 @@ export class PoseService {
 
     /** Raw model output → guarded holistic-style results → poseData. */
     _handleResult(r) {
+        if (this.recordSink) this.recordSink(r);
         this.stats.results++;
         this.stats.lastResultAt = performance.now();
         this.stats.avgCost = this.stats.avgCost * 0.9 + (r.cost || 0) * 0.1;

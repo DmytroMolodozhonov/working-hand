@@ -49,8 +49,8 @@ test('hand latency: fingers closing fast (100 ms) — the drawn finger joints fo
 test('hand steadiness: a still hand with the camera\'s jitter stays as steady as before (no shaking)', (t) => {
     const j = jitter(N), j5 = jitter(0.005);
     t.diagnostic(`palm ${j.step.toFixed(4)} rad/frame (strong jitter ${j5.step.toFixed(4)}), finger ${j.finger.toFixed(4)}`);
-    // (the old chain: 0.0083 and 0.0176 rad a drawn frame)
-    assert.ok(j.step < 0.009, `the palm shakes ${j.step.toFixed(4)} rad a frame`);
+    // (the old chain: 0.0083 and 0.0176 rad a drawn frame; now ~0.0064 and ~0.016)
+    assert.ok(j.step < 0.007, `the palm shakes ${j.step.toFixed(4)} rad a frame`);
     assert.ok(j5.step < 0.025, `the palm shakes ${j5.step.toFixed(4)} rad a frame with a strong jitter`);
     assert.ok(j.finger < 0.02, `the fingers shake ${j.finger.toFixed(4)} rad a frame`);
 });

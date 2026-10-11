@@ -34,6 +34,7 @@ export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 
     const smoother = new PoseSmoother();
     const ch = new VoxelCharacter(new THREE.Scene());
     ch.setShowHands(true);
+    ch.setHandVersion('v4'); // (the full hand)
     const hand = side === 'right' ? ch.rightSimplifiedHand : ch.leftSimplifiedHand;
     const pose = frame({ arms: 'up', leftCurl: null, rightCurl: null }).poseLandmarks;
     const wr = pose[side === 'right' ? 16 : 15];

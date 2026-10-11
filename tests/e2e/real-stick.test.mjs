@@ -39,6 +39,7 @@ test('a real stick in the hand: the wand and the spells go along it (any way it 
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
+    await page.evaluate(() => window.__zns.game.character.setHandVersion('v4')); // (the full hand: V4)
     await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0 }, 10, 40);
     await page.evaluate(() => {
         const g = window.__zns.game;
@@ -95,6 +96,7 @@ test('a real stick in the left hand: the left hand\'s wand follows it; a stick b
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
+    await page.evaluate(() => window.__zns.game.character.setHandVersion('v4')); // (the full hand: V4)
     await page.evaluate(() => {
         const g = window.__zns.game;
         for (const s of ['left', 'right']) g.items.releaseHand(s);
@@ -116,6 +118,7 @@ test('in the browser (no camera program): a stick drawn in the camera picture ro
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
+    await page.evaluate(() => window.__zns.game.character.setHandVersion('v4')); // (the full hand: V4)
     const r = await page.evaluate(() => {
         const ps = window.__zns.poseService;
         // a camera picture: a hand (palm, fingers half closed) with a dark brush through its grip

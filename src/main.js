@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { Face as KalidoFace } from '../vendor/kalidokit/kalidokit.es.js';
+import { HandRecorder } from './game/HandRecorder.js';
 import { PoseService } from './input/PoseService.js';
 import { VoiceService } from './input/VoiceService.js';
 import { SoundManager } from './audio/SoundManager.js';
@@ -423,12 +424,27 @@ voice.onResult = (command, isFinal = true) => {
     }
 };
 
+// ------------------------------------------------------------------ hand recording (F9)
+let handRecorder = null;
+function startHandRecording() {
+    if (!game) return;
+    if (!handRecorder || handRecorder.game !== game) handRecorder = new HandRecorder(game, poseService);
+    if (handRecorder.active) return;
+    let left = 10;
+    const say = (t) => hud.setVoice?.(t, true);
+    if (!handRecorder.start(10, (text) => { clearInterval(tick); say(text); })) return;
+    say(`🔴 Запись руки: ${left} с — двигайте палочкой / рукой как обычно`);
+    const tick = setInterval(() => { left--; if (left > 0) say(`🔴 Запись руки: ${left} с`); }, 1000);
+}
+
 // ------------------------------------------------------------------ keyboard
 window.addEventListener('keydown', (e) => {
     // Escape: the pause menu (continue / back to the main menu)
     if (e.key === 'Escape' && game && game.active) { e.preventDefault(); togglePauseMenu(); return; }
     if (!game || !game.active || e.target.tagName === 'INPUT') return;
     if (!$('pause-menu').classList.contains('hidden')) return; // (the menu is open)
+    // F9: a 10-second recording of the hands for the developer (HandRecorder.js)
+    if (e.key === 'F9') { e.preventDefault(); startHandRecording(); return; }
     const k = e.key.toLowerCase();
     if (k >= '1' && k <= '9' && game.inventory) game.inventory.select(Math.min(parseInt(k, 10), game.inventory.slots.length) - 1);
     if ((k === '0' || k === '`' || k === 'ё') && game.inventory) game.inventory.select(-1);

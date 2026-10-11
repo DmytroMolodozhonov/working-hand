@@ -118,6 +118,7 @@ test('the wand is held like a pen: its back in the web of the thumb, pinched by 
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
+    await page.evaluate(() => window.__zns.game.character.setHandVersion('v4')); // (the full hand: V4)
     await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0 }, 12, 40);
     const r = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;

@@ -111,7 +111,7 @@ export function assignHands(hands, pose) {
 /** Per-hand validator + filter. */
 export class HandStabilizer {
     /** The hand filter's strength (see HandFilter; tuned in tests/unit/hand-latency.test.js). */
-    static params = { minCutoff: 0.8, beta: 8, dCutoff: 4, floorK: 1.5, floorT: 3 };
+    static params = { minCutoff: 0.6, beta: 8, dCutoff: 4, floorK: 1.5, floorT: 3 };
 
     constructor() {
         this.signature = null; // running average of bone signature

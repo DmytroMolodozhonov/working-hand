@@ -400,6 +400,7 @@ test('the hand follows the camera\'s hand fully: bent left / right at the wrist,
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
+    await page.evaluate(() => window.__zns.game.character.setHandVersion('v4')); // (the full hand: V4)
     for (const s of ['left', 'right']) await page.evaluate((side) => window.__zns.game.items.releaseHand(side), s);
     const fingersDir = () => page.evaluate(() => {
         const g = window.__zns.game, T = window.__zns.THREE, h = g.character.getActiveHands().right;

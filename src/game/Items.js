@@ -37,13 +37,15 @@ const _inv = new THREE.Matrix4();
 const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
 /** Held in the fist like the sword: handle (model y, before scaling) at the fingers, the axis across the palm. */
 const GRIPPED = {
-    wand: { axis: 'y', handle: 0.12, curl: 0.38, pose: 'pen' }, // like a pen: see _penGrip
+    wand: { axis: 'y', handle: 0.12, curl: 0.38, pose: 'pen' }, // like a pen (V4 hands): see _penGrip
     hammer: { axis: 'y', handle: 0.12 },
     bow: { axis: 'y', handle: 0 },
     scroll: { axis: 'x', handle: 0, curl: 0.5 },
     shield: { axis: 'y', handle: 0, face: 'back' },
     book: { axis: 'book', handle: 0, curl: 0.55 }, // by the spine: the covers between the thumb and the fingers
 };
+/** The wand with V3 hands (stable): in the fist, as it was before the pen grip. */
+const WAND_V3 = { axis: 'y', handle: 0.1 };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _f = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
@@ -172,12 +174,15 @@ export class ItemSystem {
     _gripHold(side, h, dt) {
         const g = this.game;
         const f = g.weapons.palmFrame(side, this._pf || (this._pf = {}));
-        const spec = GRIPPED[h.item.kind];
+        // V4 hands (the full hand): a wand held like a pen; V3 (stable): as it always was —
+        // in the fist, the arm's continuation
+        const v4 = g.character.handVersion === 'v4';
+        const spec = h.item.kind === 'wand' && !v4 ? WAND_V3 : GRIPPED[h.item.kind];
         const s = h.thumb ?? (h.thumb = f.thumb); // (the side the thumb was on when taken)
         // the item's axis out of the thumb side; its "front" towards the knuckles
         const ax = _a.copy(f.X).multiplyScalar(s);
         let x, y, z;
-        const pen = h.item.kind === 'wand' ? this._penGrip(side) : null;
+        const pen = h.item.kind === 'wand' && v4 ? this._penGrip(side) : null;
         if (h.item.kind === 'wand') {
             // held like a pen: its back lies in the web between the thumb and the index finger,
             // its front is pinched by their tips — it points where the fingers point, and the
@@ -186,7 +191,7 @@ export class ItemSystem {
             y = pen ? _a.copy(pen.dir) : ch.getForearmDirection(side, _a).multiplyScalar(0.6).addScaledVector(f.Y, 0.4).normalize();
             // a real stick in the real hand (a pen, a brush): the wand goes the way it goes
             const hand = ch.getActiveHands()[side];
-            const real = this._stickDir(side, y);
+            const real = v4 ? this._stickDir(side, y) : null;
             if (real) y.copy(real);
             // (the fingers hold it as the stick lies: pointing … writing)
             if (hand) hand.stickTilt = real ? Math.atan2(-y.dot(f.Z), y.dot(f.Y)) : null;
@@ -206,6 +211,7 @@ export class ItemSystem {
         // trail the hand). A wand's tip is far from the hand and shows every tremble: it is
         // steadied by its own speed — a still wand stays still, a quick turn passes at once
         if (!h.q) h.q = _q.clone();
+        else if (!v4) h.q.slerp(_q, Math.min(1, dt * 28)); // (V3: as it was)
         else if (h.item.kind === 'wand') h.q.slerp(_q, Math.min(1, dt * 14 + h.q.angleTo(_q) * 4));
         else h.q.copy(_q);
         h.model.quaternion.copy(h.q);
@@ -240,9 +246,10 @@ export class ItemSystem {
         const now = performance.now();
         ch.realStick = ch.realStick || { left: null, right: null };
         // (the browser looks for one only round a hand holding a wand)
-        if (g.poseService) g.poseService.wantSticks = { left: this.held.left?.item.kind === 'wand', right: this.held.right?.item.kind === 'wand' };
+        const v4 = ch.handVersion === 'v4'; // (a real stick in the hand: V4 hands only)
+        if (g.poseService) g.poseService.wantSticks = v4 ? { left: this.held.left?.item.kind === 'wand', right: this.held.right?.item.kind === 'wand' } : null;
         for (const side of ['left', 'right']) {
-            ch.realStick[side] = pose ? st[side].update(pose[side + 'HandStick'] || null, now, fresh) : null;
+            ch.realStick[side] = pose && v4 ? st[side].update(pose[side + 'HandStick'] || null, now, fresh) : null;
             // (said once when it appears: the player knows the camera sees it)
             if (ch.realStick[side] && !st[side].told && this.held[side]?.item.kind === 'wand') { st[side].told = true; g.hud?.setVoice?.('🪄 Камера видит палочку в руке — волшебная палочка повторяет её', true); }
             if (!ch.realStick[side]) st[side].told = false;
