@@ -64,3 +64,44 @@ test('voice gate: a jumpy picture of a shut mouth (one odd frame) is not speakin
     for (let i = 0; i < 50; i++) g.noteFace((t += 50), mouthOpenness(face(i === 30 ? 0.4 : 0.03)));
     assert.deepEqual(g.check('Bombardo', t), { ok: false, why: 'lips' });
 });
+
+/** The microphone's level every 50 ms: loud (a voice) where `loudAt(t)`. */
+function levels(t0, t1, loudAt) {
+    const out = [];
+    for (let t = t0; t <= t1; t += 50) out.push([t, loudAt(t) ? -30 : -58]);
+    return out;
+}
+
+test('voice gate: my mouth moved WITH the voice the microphone heard — mine; a friend\'s voice while my mouth rests — not mine', () => {
+    const floor = -60;
+    // a friend says «Бомбардо» from my speakers (loud 1.0–1.8 s); my mouth shut, the picture a little jumpy
+    {
+        const g = new VoiceGate();
+        for (let t = 0; t <= 2500; t += 50) g.noteFace(t, mouthOpenness(face(0.03 + ((t / 50) % 3) * 0.01)));
+        const mic = { levels: levels(0, 2500, (t) => t > 1000 && t < 1800), floor };
+        assert.deepEqual(g.check('Bombardo', 2500, mic), { ok: false, why: 'lips' });
+    }
+    // the same, but I had been chatting just before (the mouth moved at 0–0.8 s, quietly) — still not mine
+    {
+        const g = new VoiceGate();
+        for (let t = 0; t <= 2500; t += 50) g.noteFace(t, mouthOpenness(face(t < 800 ? ((t / 50) % 4 < 2 ? 0.3 : 0.05) : 0.03)));
+        const mic = { levels: levels(0, 2500, (t) => t > 1000 && t < 1800), floor };
+        assert.deepEqual(g.check('Bombardo', 2500, mic), { ok: false, why: 'lips' });
+    }
+    // I say it: the mouth opens while the voice is loud (the picture ~0.1 s behind)
+    {
+        const g = new VoiceGate();
+        for (let t = 0; t <= 2500; t += 50) { const real = t - 100; g.noteFace(t, mouthOpenness(face(real > 1000 && real < 1800 ? ((t / 50) % 3 ? 0.3 : 0.12) : 0.03))); }
+        const mic = { levels: levels(0, 2500, (t) => t > 1000 && t < 1800), floor };
+        assert.deepEqual(g.check('Bombardo', 2500, mic), { ok: true, sure: true });
+        g.noteRemote('Bombardo', 2400); // (even if a friend said the same just now)
+        assert.equal(g.check('Bombardo', 2500, mic).ok, true);
+    }
+    // the face not seen: the old checks decide
+    {
+        const g = new VoiceGate();
+        for (let t = 0; t <= 2500; t += 50) g.noteFace(t, null);
+        const mic = { levels: levels(0, 2500, (t) => t > 1000 && t < 1800), floor };
+        assert.deepEqual(g.check('Bombardo', 2500, mic), { ok: true, sure: false });
+    }
+});

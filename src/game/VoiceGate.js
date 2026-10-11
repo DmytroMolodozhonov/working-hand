@@ -18,6 +18,9 @@ export const GATE = {
     SEEN: 0.35, // the face seen in this share of the pictures: the lips can decide
     ECHO: 3500, // ms: the same spell said / cast by somebody else just now: an echo of their voice
     HOLD: 700, // ms a spell waits (multiplayer, the lips unseen) for a friend's word to come over the network
+    LOUD: 12, QUIET: 6, // dB over the microphone's background: a voice heard / silence
+    SYNC: 0.06, // the mouth this much more open (of its width) while the voice was loud than when quiet: it was me
+    CAM_LAG: 100, // ms a camera picture comes after the moment it shows
 };
 
 /** How open the mouth is (inner lips apart / mouth width), from the face network's points. */
@@ -43,7 +46,7 @@ export class VoiceGate {
     /** Every camera picture: the mouth's openness (null: the face isn't seen). */
     noteFace(t, open) {
         this.samples.push({ t, open });
-        while (this.samples.length && t - this.samples[0].t > GATE.WINDOW + 1000) this.samples.shift();
+        while (this.samples.length && t - this.samples[0].t > GATE.WINDOW + 2000) this.samples.shift();
     }
 
     /** Somebody else cast a spell (the network says so). */
@@ -77,11 +80,45 @@ export class VoiceGate {
     }
 
     /**
+     * Did my mouth move WITH the sound my microphone heard just now? My own words open my mouth just
+     * when they are loud; a friend's voice from the speakers (or across the room) is loud while my
+     * mouth stays as it was — whatever it did a few seconds before. true / false / null (the mouth
+     * unseen, nothing loud heard, no microphone level).
+     * @param {Array<[number, number]>} levels the microphone's level, [time ms, dB], oldest first
+     * @param {number} floor the microphone's background, dB
+     */
+    lipsSync(t, levels, floor, win = GATE.WINDOW) {
+        if (!levels?.length || !Number.isFinite(floor)) return null;
+        const loud = [], quiet = [], seen = [];
+        let j = 0;
+        for (const s of this.samples) {
+            if (s.open == null || t - s.t > win + 1000 || s.t > t) continue;
+            seen.push(s.open);
+            if (t - s.t > win) continue;
+            const at = s.t - GATE.CAM_LAG; // (the moment the picture shows)
+            while (j < levels.length - 1 && levels[j + 1][0] <= at) j++;
+            if (Math.abs(levels[j][0] - at) > 120) continue;
+            const db = levels[j][1];
+            if (db > floor + GATE.LOUD) loud.push(s.open);
+            else if (db < floor + GATE.QUIET) quiet.push(s.open);
+        }
+        if (loud.length < 3) return null;
+        const q = (a, k) => { const b = a.slice().sort((x, y) => x - y); return b[Math.min(b.length - 1, Math.floor(k * b.length))]; };
+        const base = quiet.length >= 3 ? q(quiet, 0.5) : q(seen, 0.3); // (the mouth at rest)
+        return q(loud, 0.75) - base >= GATE.SYNC;
+    }
+
+    /**
      * May the spell `name`, just heard by my microphone, be cast?
      * sure: my lips moved right then — it is mine (and the others may be told at once).
+     * mic: {levels, floor} — the microphone's level, to see whether the mouth moved with the voice.
      * @returns {{ok: boolean, why?: 'lips'|'echo', sure?: boolean}}
      */
-    check(name, t) {
+    check(name, t, mic = null) {
+        // the strongest: did my mouth move with the voice the microphone heard?
+        const sync = mic ? this.lipsSync(t, mic.levels, mic.floor) : null;
+        if (sync === false) return { ok: false, why: 'lips' };
+        if (sync === true) return { ok: true, sure: true };
         const lips = this.lipsMoved(t);
         if (lips === false) return { ok: false, why: 'lips' };
         const recent = lips && this.lipsMoved(t, GATE.RECENT) === true;

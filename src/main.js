@@ -416,9 +416,9 @@ voice.onResult = (command, isFinal = true, held = false) => {
         const heard = matchSpell(command);
         // (alone too: a wizard of the game may have just said that spell's word aloud from the speakers)
         if (heard && (game.remotes?.size > 0 || game.voiceGate.echoes(heard, performance.now()))) {
-            const gate = game.voiceGate.check(heard, performance.now());
+            const gate = game.voiceGate.check(heard, performance.now(), { levels: voice._levels, floor: voice.noiseFloor });
             if (!gate.ok) {
-                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(command)}» — ваши губы не двигались: это сказали не вы` : `🔇 «${escapeHtml(command)}» — это чужой голос (это заклинание только что сказал кто-то другой)`);
+                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(command)}» — ваш рот не двигался вместе с этим голосом: это сказали не вы` : `🔇 «${escapeHtml(command)}» — это чужой голос (это заклинание только что сказал кто-то другой)`);
                 if (isFinal || held) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
                 return;
             }
@@ -428,6 +428,7 @@ voice.onResult = (command, isFinal = true, held = false) => {
                 if (gate.sure) game.sync?.say?.(heard);
                 else if (!held) { holdSpell(command, isFinal); return; }
                 else game.sync?.say?.(heard);
+                if (isFinal || held) netLog(`заклинание «${command}» моё: ${gate.sure ? 'рот двигался вместе с голосом' : 'лица не видно — друг этого заклинания не говорил'}`);
             }
         }
         // talking to a villager near me, the hand not raised to cast: words they understand are words,
