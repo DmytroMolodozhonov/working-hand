@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, realErrors } from './harness.mjs';
+import { frame } from './poses.mjs';
 
 const PORT = Number(process.env.ZNS_TEST_PORT) || 8155;
 let srv, browser;
@@ -883,6 +884,83 @@ test('Lightning Strike: the bolt strikes into raised hands at once, a level hand
     assert.equal(r.lockedTw, false, 'Thunderwave is locked as well');
     assert.equal(r.learnt, 'LightningStrike', 'after the scroll burns it works');
     assert.ok(r.knows);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('Авада Кедавра in Survival: refused with the hint about its scroll; burn the scroll in the hand («Инферно») — then it kills the zombie the raised hand points at', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'survival');
+    await waitHudVisible(page);
+    // both arms lifted in front, pointing a little down ahead (a synthetic pose), kept coming like a camera would
+    const raw = frame({ arms: 'forward', wristOffset: [0, 0.05] });
+    await page.evaluate((raw) => {
+        window.__avadaPose = setInterval(() => window.__zns.poseService.injectRaw({ ...JSON.parse(JSON.stringify(raw)), ts: performance.now() }), 33);
+    }, raw);
+    await page.waitForFunction(() => window.__zns.game.character.isArmRaised('right'), null, { timeout: 20000 });
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const voice = () => document.getElementById('voice-debug').innerText;
+        // (the night's zombies stay out of it)
+        for (const z of [...g.zombies]) z.setSleeping?.(true);
+        g.playerHP = 999;
+        // a zombie ahead, right where the raised right hand points (its line comes down to the zombie's chest)
+        const ahead = () => {
+            const o = g.castOrigin('right', new T.Vector3());
+            const d = ch.getPointingDirection('right', new T.Vector3());
+            const p = new T.Vector3();
+            for (let t = 3; t < 25; t += 0.1) { p.copy(o).addScaledVector(d, t); if (p.y < g.collision.groundY(p.x, p.z) + 1) break; }
+            return new T.Vector3(p.x, g.collision.groundY(p.x, p.z), p.z);
+        };
+        // 1) without the scroll: nothing flies, the hint says which scroll
+        const z1 = g._createZombie(ahead());
+        z1.setSleeping(true);
+        g.combat.fatigue = g.combat.maxFatigue ?? 30;
+        g.lastSpellCastTime = 0; g._lastDuelCast = 0;
+        const knewBefore = g.knowsSpell('AvadaKedavra');
+        const locked = g.castLocalSpell('авада кедавра', true);
+        const hint = voice();
+        const boltsLocked = g.duel.bolts.size;
+        await frames(20);
+        const z1Alive = !z1.isDead;
+        // 2) the scroll in the left hand, «Инферно» — it burns and teaches
+        g.items.releaseHand('left');
+        g.items.takeIntoHand({ kind: 'scroll', uid: 'avada1', stat: 'spell', spell: 'AvadaKedavra' }, 'left');
+        await frames(3);
+        g.lastSpellCastTime = 0;
+        const burnt = g.castLocalSpell('инферно', true);
+        const scrollGone = !g.items.held.left;
+        const learntMsg = voice();
+        const knows = g.knowsSpell('AvadaKedavra');
+        // 3) now it works: the green charge flies at the zombie and kills it
+        await frames(30);
+        g.combat.fatigue = g.combat.maxFatigue ?? 30;
+        g.lastSpellCastTime = 0; g._lastDuelCast = 0;
+        z1.group.position.copy(ahead());
+        const aim = g.duel.pickSide(false);
+        const cast = g.castLocalSpell('авада кедавра', true);
+        const bolts = [...g.duel.bolts.values()].map((b) => b.spell);
+        const t0 = performance.now();
+        while (!z1.isDead && performance.now() - t0 < 15000) await frames(2);
+        return { knewBefore, locked, hint, boltsLocked, z1Alive, burnt, scrollGone, learntMsg, knows, cast, bolts, aimedAt: aim?.t.kind === 'z' && aim.t.id === z1.id, killed: z1.isDead, saved: !!g.bonus?.spells?.AvadaKedavra };
+    });
+    await page.evaluate(() => clearInterval(window.__avadaPose));
+    assert.equal(r.knewBefore, false, 'in Survival it is not known at first');
+    assert.equal(r.locked, null, 'without the scroll it is refused');
+    assert.match(r.hint, /только в Творчестве/);
+    assert.match(r.hint, /свиток «Авада Кедавра»/, 'the hint names the scroll: ' + r.hint);
+    assert.match(r.hint, /зелёная лента/);
+    assert.equal(r.boltsLocked, 0, 'no charge flew');
+    assert.ok(r.z1Alive, 'the zombie is still alive');
+    assert.equal(r.burnt, 'Inferno');
+    assert.ok(r.scrollGone, 'the scroll burnt away');
+    assert.match(r.learntMsg, /знаете заклинание «Авада Кедавра»/);
+    assert.ok(r.knows && r.saved, 'learnt for good');
+    assert.equal(r.cast, 'AvadaKedavra', 'after the scroll it works');
+    assert.deepEqual(r.bolts, ['AvadaKedavra'], 'the green charge flies');
+    assert.ok(r.aimedAt, 'the raised hand points at the zombie');
+    assert.ok(r.killed, 'the green charge killed the zombie');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

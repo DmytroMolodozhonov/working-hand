@@ -35,7 +35,7 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
-import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, baseSpell, makeItemModel } from './ItemTypes.js';
+import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Campfires } from './Campfires.js';
@@ -688,7 +688,8 @@ export class Game {
         if (!name) return null;
         if (this.combat.dead) return null;
         if (!this.knowsSpell(name)) {
-            if (isFinal) this.hud.setVoice(`📜 «${SPELL_RU[baseSpell(name)] || name}» есть только в Творчестве. Здесь его нужно выучить: найдите <b>свиток</b> в сундуке и сожгите его «Инферно»`, true);
+            const base = baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
+            if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творчестве. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
@@ -2081,7 +2082,7 @@ export class Game {
         this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false);
     }
 
-    /** Outside Creative «Lightning Strike» and «Thunderwave» are learnt from a burnt scroll only. */
+    /** Outside Creative «Lightning Strike», «Thunderwave», «To the Sun» and «Авада Кедавра» are learnt from a burnt scroll only. */
     knowsSpell(name) {
         const base = baseSpell(name);
         if (!SCROLL_SPELL_COLOR[base]) return true;

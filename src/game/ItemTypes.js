@@ -15,7 +15,9 @@
  *             breaks an ordinary «Protection» it touches.
  *   shield  — wooden / iron / magic; a magic one has its own strength 20–50
  *             that comes back by itself; strong spells break weak shields.
- *   scroll  — burn it: +1–5 max health or +1–10 max strength, for good.
+ *   scroll  — burn it: +1–5 max health or +1–10 max strength, for good;
+ *             or it teaches «Флайн» / a scroll-only spell (Lightning Strike,
+ *             Thunderwave, To the Sun, Авада Кедавра — a rare one).
  *   backpack— put it on (hands behind the back): +3–5 slots.
  *   bow     — plain / fine / magic (1–60% stronger), comes with 10 arrows.
  *   hammer  — Thor's hammer: catches lightning in a storm (3 strikes).
@@ -39,7 +41,9 @@ export const SPELL_RU = {
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
-export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b };
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a };
+/** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
+export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
@@ -159,12 +163,14 @@ export function rollLoot(r = Math.random, { cave = true } = {}) {
         else if (x < 0.42) {
             const y = r();
             // (a scroll of flight teaches «Флайн» — in «Свободный мир» only so)
-            // (spell scrolls teach «Lightning Strike» / «Thunderwave» outside Creative)
+            // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
+            //  «Авада Кедавра» too — its scroll is the rarest)
             out.push(y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'flight' }
                 : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
                 : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
                 : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
-                : y < 0.70 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
+                : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
+                : y < 0.72 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
                 : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
         }
         else if (x < 0.55) out.push({ kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: r() < 0.6, bonus: randInt(r, 1, 60), uid: newUid() });
