@@ -153,5 +153,31 @@ class ServerLogs(unittest.TestCase):
         self.assertNotIn("missing.log", [x["name"] for x in logs])
 
 
+class AdoptFromOldBat(unittest.TestCase):
+    def test_any_old_bat_install_gets_the_new_icon(self):
+        """«Обновить и запустить игру.bat» keeps the game in its own folder (no
+        %LOCALAPPDATA%\\ZombieNeSpyat\\start.bat): the new icon must still be made."""
+        sys.path.insert(0, ROOT)
+        import server
+        calls = []
+        old_adopt, old_name = L.adopt_existing_install, server.os.name
+        old_env, old_lad = os.environ.pop("ZNS_LAUNCHER", None), os.environ.get("LOCALAPPDATA")
+        os.environ["LOCALAPPDATA"] = tempfile.mkdtemp()  # (nothing of the old installer there)
+        L.adopt_existing_install = lambda game, home=None: calls.append(game)
+        server.os.name = "nt"
+        try:
+            server.adopt_app_launcher()
+        finally:
+            server.os.name = old_name
+            L.adopt_existing_install = old_adopt
+            if old_env is not None:
+                os.environ["ZNS_LAUNCHER"] = old_env
+            if old_lad is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_lad
+        self.assertEqual(calls, [server.ROOT])
+
+
 if __name__ == "__main__":
     unittest.main()

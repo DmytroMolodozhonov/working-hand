@@ -206,16 +206,16 @@ def start_server_log():
 
 
 def adopt_app_launcher():
-    """Windows, started by the old desktop «Зомби не спят.bat»: put the new app icon
-    (no black window, a loading screen) on the desktop instead — once."""
+    """Windows, started by any old .bat (the desktop «Зомби не спят.bat» or «Обновить и
+    запустить игру.bat» in whatever folder): put the new app icon (no black window, a
+    loading screen) on the desktop — once (an icon deleted on purpose isn't forced back)."""
     if os.name != "nt" or os.environ.get("ZNS_LAUNCHER"):
-        return
-    if not os.path.isfile(os.path.join(os.environ.get("LOCALAPPDATA", ""), "ZombieNeSpyat", "start.bat")):
         return
     try:
         sys.path.insert(0, os.path.join(ROOT, "launcher"))
         import zns_launcher
         zns_launcher.adopt_existing_install(ROOT)
+        print("  Значок «Волшебство только начинается» на рабочем столе готов.")
     except Exception as e:  # noqa: BLE001 — never stop the game for this
         print(f"  (новый значок игры не создан: {e})")
 
