@@ -550,3 +550,45 @@ test('a severed part falls, comes to rest on the ground and is gone after a whil
     for (let i = 0; i < 130; i++) d.update(1);
     assert.equal(d.props.length, 0);
 });
+
+test('WeaponSystem with real swings (the blade follows the hand): a strong blow takes the head, a leg, an arm; a slow one stops on the bone; the trunk is never passed', () => {
+    const run = (yLocal, speed, sideArm = false) => {
+        const game = fakeGame();
+        game.character.group.position.set(-5, 1.5, 0);
+        const chB = new VoxelCharacter(game.scene);
+        chB.setIdlePose(); chB.group.position.set(0, 1.5, 0); chB.group.updateMatrixWorld(true);
+        game.remotes.set('B', { character: chB, position: chB.group.position, name: 'B' });
+        const target = { isPlayer: true, id: 'B', group: chB.group, damageCooldown: 0, isDead: false };
+        const w = game.weapons.spawn('sword', new THREE.Vector3(), new THREE.Quaternion());
+        w.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)));
+        w.mesh.updateMatrixWorld(true);
+        const [b, t] = w.getBladeSegment();
+        w.position.set(-(b.x + t.x) / 2 - 0.1 - (sideArm ? 1.75 : 0), 1.5 + yLocal, -1.6); // the blade across the body (or only its tip past the arm)
+        w.mesh.updateMatrixWorld(true);
+        w.attach({ playerId: 'A', side: 'right' });
+        game.weapons.hands.right.held = w;
+        w.drive.position.copy(w.position); w.drive.quaternion.copy(w.quaternion);
+        const ws = game.weapons; ws.frame = 1;
+        const step = speed / 60;
+        for (let i = 0; i < Math.round(3.2 / step) + 20; i++) {
+            ws.frame++; game.advance(1000 / 60);
+            w.drive.position.z = Math.min(1.6, -1.6 + step * (i + 1));
+            w.step(1 / 60, null);
+            ws.checkHits([target], 1 / 60);
+            target.damageCooldown = 0;
+        }
+        const cut = game.sent.find((m) => m.t === 'dmcut');
+        return { limb: cut ? parseSever(cut.sv).limb : null, z: w.position.z };
+    };
+    for (const speed of [8, 12, 18]) {
+        assert.equal(run(1.55, speed).limb, 'head', `the neck at ${speed} m/s`);
+        assert.match(run(-1.0, speed).limb || '', /Leg$/, `the legs at ${speed} m/s`);
+        assert.equal(run(0.6, speed, true).limb, 'leftArm', `the arm at ${speed} m/s`);
+        const trunk = run(0.8, speed);
+        assert.equal(trunk.limb, null, 'the trunk is not cut through');
+        assert.ok(trunk.z < 0, `the blade stopped on the trunk (${trunk.z.toFixed(2)})`);
+    }
+    const slow = run(1.55, 3);
+    assert.equal(slow.limb, null, 'a slow blade cuts nothing');
+    assert.ok(slow.z < 0.1, `it stops on the neck's bone (${slow.z.toFixed(2)})`);
+});

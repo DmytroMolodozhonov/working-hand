@@ -22,6 +22,7 @@ import { Weapon } from '../entities/Weapon.js';
 import { segmentSegmentDistSq, clamp } from '../core/math.js';
 import { bladePower, overpowers, sweptBladeContact } from './BladeClash.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
+import { boneLines } from './CutBodies.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
 const CLOSE_CURL = 0.55; // fingers closed
@@ -35,6 +36,7 @@ const STAB_DEPTH = 0.4; // m: how far the point goes in at most
 const PULL_OUT = 0.28; // m the hand draws back along the blade to pull it out of the body
 const SLIP_OFF = 0.95; // m the hand gets away from a stuck handle: the fingers slip off it
 const BODY_R = 0.5; // a person's body round its axis (feet at -1.95, head top 2.7 in its frame)
+const BONE_R = 0.06; // a limb's bone: the edge sinks into the flesh down to it
 
 const _P = new THREE.Vector3();
 const _X = new THREE.Vector3();
@@ -762,39 +764,82 @@ export class WeaponSystem {
     }
 
     /**
-     * A held blade doesn't go through a body: it stops on it (and the hand with it),
-     * checked along the way the blade went since the last frame. Only a cut-off part
-     * lets the edge on through; a thrust goes in (_stab).
+     * What of a body stops a blade (world segments + radius): the trunk and the skull of
+     * a person (they are not cut through), and every limb's bone line — the edge sinks
+     * into an arm, a leg or the neck down to the bone and stops there unless the blow is
+     * strong enough to cut it off (Dismember: then it goes on through).
+     */
+    _solidsOf(z, out) {
+        out.length = 0;
+        const slot = () => out[out.length] || (out[out.length] = { a: [0, 0, 0], b: [0, 0, 0], r: 0, bone: false });
+        const who = this.game.dismember?.which?.(z);
+        const body = who?.body;
+        if (!body) {
+            if (!z.bodyCapsule) return out;
+            const cap = z.bodyCapsule(this._bodyCap || (this._bodyCap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }));
+            const s = slot(); cap.a.toArray(s.a); cap.b.toArray(s.b); s.r = cap.r; s.bone = false;
+            return out;
+        }
+        const st = body.root.limbs || {};
+        // the trunk, the skull: each box as a capsule along its longest side
+        for (const B of body.blockers) {
+            if ((B.limb && st[B.limb] != null) || !B.obj.visible) continue;
+            B.obj.updateWorldMatrix(true, false);
+            const h = B.half, k = h[0] >= h[1] && h[0] >= h[2] ? 0 : h[1] >= h[2] ? 1 : 2;
+            const r = Math.min(...h.filter((_, i) => i !== k)), L = Math.max(0, h[k] - r);
+            _e.fromArray(B.c); _f.fromArray(B.c);
+            _e.setComponent(k, B.c[k] - L); _f.setComponent(k, B.c[k] + L);
+            _e.applyMatrix4(B.obj.matrixWorld); _f.applyMatrix4(B.obj.matrixWorld);
+            const sc = B.obj.matrixWorld.getMaxScaleOnAxis();
+            const s = slot(); _e.toArray(s.a); _f.toArray(s.b); s.r = r * sc; s.bone = false;
+        }
+        // the limbs' bones (the neck too)
+        for (const L of boneLines(body, st)) {
+            const s = slot();
+            for (let k = 0; k < 3; k++) { s.a[k] = L.a[k]; s.b[k] = L.b[k]; }
+            s.r = BONE_R; s.bone = true;
+        }
+        return out;
+    }
+
+    /**
+     * A held blade doesn't go through a body: it stops on the trunk / the skull, and on
+     * a limb's bone (the hand stops too), checked along the way the blade went since the
+     * last frame. Only a cut lets the edge on through; a thrust goes in (_stab).
      */
     _bodyStop(w, targets) {
         const t = now(this);
         if (t < (w.cutPassUntil || 0)) return;
         const sw = this._segNow(w);
-        const cap = this._bodyCap || (this._bodyCap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 });
+        const solids = this._solids || (this._solids = []);
         const st = w._bodyN || (w._bodyN = new Map());
         for (const z of targets) {
             if (z.isDead) continue;
             const zp = z.group?.position;
             if (!zp || zp.distanceToSquared(w.position) > 36) continue;
-            if (!this._bodyOf(z, cap)) continue;
+            this._solidsOf(z, solids);
+            if (!solids.length) continue;
             let pr = st.get(z);
-            if (!pr) { pr = { n: null, frame: 0 }; st.set(z, pr); }
-            if (pr.frame !== this.frame - 1) pr.n = null;
+            if (!pr) { pr = { ns: [], frame: 0 }; st.set(z, pr); }
+            if (pr.frame !== this.frame - 1) pr.ns.length = 0;
             pr.frame = this.frame;
-            cap.a.toArray(B0); cap.b.toArray(B1);
-            const c = sweptBladeContact(sw.hasPrev ? sw.pa : null, sw.pb, sw.a, sw.b, B0, B1, B0, B1, pr.n, cap.r);
-            if (!c.touch) { pr.n = c.n && c.d < cap.r + 0.6 ? c.n : null; continue; }
-            pr.n = c.n;
-            _e.fromArray(c.n);
-            const depth = Math.min(c.depth, 1.0);
-            w.position.addScaledVector(_e, depth);
-            const vn = w.velocity.dot(_e);
-            if (vn < 0) w.velocity.addScaledVector(_e, -vn);
-            w.angularVelocity.multiplyScalar(0.5);
-            w.contactHard = Math.max(w.contactHard || 0, depth + 0.02);
-            w.mesh.updateMatrixWorld(true);
-            w.bodyStops = (w.bodyStops || 0) + 1;
-            this._segStore(w);
+            for (let i = 0; i < solids.length; i++) {
+                const S = solids[i];
+                const c = sweptBladeContact(sw.hasPrev ? sw.pa : null, sw.pb, sw.a, sw.b, S.a, S.b, S.a, S.b, pr.ns[i] || null, S.r);
+                if (!c.touch) { pr.ns[i] = c.n && c.d < S.r + 0.6 ? c.n : null; continue; }
+                pr.ns[i] = c.n;
+                if (S.bone && c.depth <= S.r) continue; // (in the flesh, not past the bone yet: it goes on in)
+                _e.fromArray(c.n);
+                const depth = Math.min(c.depth, 1.0);
+                w.position.addScaledVector(_e, depth);
+                const vn = w.velocity.dot(_e);
+                if (vn < 0) w.velocity.addScaledVector(_e, -vn);
+                w.angularVelocity.multiplyScalar(0.5);
+                w.contactHard = Math.max(w.contactHard || 0, depth + 0.02);
+                w.mesh.updateMatrixWorld(true);
+                w.bodyStops = (w.bodyStops || 0) + 1;
+                this._segStore(w);
+            }
         }
         if (this.frame % 120 === 0) for (const [k, pr] of st) if (pr.frame < this.frame - 60) st.delete(k);
     }

@@ -123,7 +123,8 @@ function bodySetup() {
     s.ws.byId.delete('o1');
     const group = new THREE.Group();
     s.ws.game.scene.add(group);
-    const z = { group, isDead: false, damageCooldown: 0 };
+    // (a body as a capsule round its axis; real people's trunk, skull and bones: dismember.test.js)
+    const z = { group, isDead: false, damageCooldown: 0, bodyCapsule: (out) => { out.a.set(group.position.x, group.position.y - 1.5, group.position.z); out.b.set(group.position.x, group.position.y + 2.2, group.position.z); out.r = 0.5; return out; } };
     const hits = [];
     s.ws.onHit = (t, dmg) => hits.push(dmg);
     s.ws.game.character.group.position.set(-3, 0, 0);
