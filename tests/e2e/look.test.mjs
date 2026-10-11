@@ -122,6 +122,15 @@ test('look: code served as plain text or a missing game file — the note says w
     await page.goto(srv.url);
     await page.waitForFunction(() => /Не загрузился файл игры/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 20000 });
     await page.close();
+    // a file that fails only on the first load (a busy server refusing a connection): the page reloads by itself and the game starts
+    page = await browser.newPage();
+    let refused = 0;
+    await page.route('**/src/game/Duel.js', (r) => (refused++ === 0 ? r.abort() : r.continue()));
+    await page.goto(srv.url);
+    await page.waitForSelector('.mode-row .mode-card', { timeout: 30000 });
+    await page.waitForFunction(() => window.__zns && window.__zns.startGame && !document.getElementById('start-error'), null, { timeout: 15000 });
+    assert.equal(refused, 2, 'loaded again after the failure');
+    await page.close();
     // a file deep in the imports that can't be fetched at all: the note names it (the browser itself names only main.js)
     page = await browser.newPage();
     await page.route('**/src/game/Duel.js', (r) => r.abort());

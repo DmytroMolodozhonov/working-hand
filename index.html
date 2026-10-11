@@ -641,7 +641,7 @@
                             // the browser names only the first file: walk the imports and find the one that fails
                             findBroken(new URL('src/main.js', location.href).href).then(function (bad) {
                                 say(bad ? 'Не загрузился файл игры ' + bad + '. Запустите «Обновить и запустить игру». Если не поможет — пришлите этот снимок.'
-                                    : 'Не загрузился файл игры: ' + (e && e.message || e) + ' — запустите «Обновить и запустить игру».');
+                                    : 'Все файлы игры на месте, но браузер не смог их загрузить (сервер игры не успевал отвечать). Закройте окно игры и откройте снова. Если не поможет — пришлите этот снимок. (' + (e && e.message || e) + ')');
                             });
                         });
                     });
@@ -677,10 +677,27 @@
                 }
                 return next().catch(function () { return null; });
             }
+            // A game file couldn't be fetched while ~150 of them were asked for at once (a busy
+            // server on Windows refuses some connections): the browser remembers that failure
+            // until the page reloads — so reload by itself, a few times at most.
+            window.__znsLoadFailed = function () {
+                var n;
+                try { n = +sessionStorage.getItem('zns-reload') || 0; } catch (_) { n = 99; }
+                if (n < 3) {
+                    try { sessionStorage.setItem('zns-reload', String(n + 1)); } catch (_) { /* ignore */ }
+                    show('Часть файлов игры не успела загрузиться — загружаю ещё раз (' + (n + 1) + ')…');
+                    setTimeout(function () { location.reload(); }, 300 + 700 * n);
+                    return;
+                }
+                diagnose();
+            };
             setTimeout(diagnose, 10000);
             // (a slow computer may still finish: then the note goes away)
             var gone = setInterval(function () {
-                if (window.__zns && window.__zns.startGame) { var el = document.getElementById('start-error'); if (el) el.remove(); clearInterval(gone); }
+                if (window.__zns && window.__zns.startGame) {
+                    var el = document.getElementById('start-error'); if (el) el.remove(); clearInterval(gone);
+                    try { sessionStorage.removeItem('zns-reload'); } catch (_) { /* ignore */ }
+                }
             }, 1000);
         })();
     </script>
@@ -689,7 +706,7 @@
     <script type="importmap">
         { "imports": { "three": "./vendor/three/three.module.js" } }
     </script>
-    <script type="module" src="src/main.js"></script>
+    <script type="module" src="src/main.js" onerror="window.__znsLoadFailed && window.__znsLoadFailed()"></script>
 </body>
 
 </html>
