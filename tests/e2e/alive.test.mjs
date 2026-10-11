@@ -109,8 +109,10 @@ test('survival: «Alive» is learnt from its scroll; the tree lives on the mana 
         g.bonus = g.bonus || {};
         g.bonus.spells = { ...(g.bonus.spells || {}), Alive: true }; // (its scroll burnt)
         g.combat.fatigue = 30;
+        const max0 = g.combat.maxFatigue || 30;
         const said = g.castLocalSpell('alive', true);
-        const paid = g.combat.fatigue;
+        // (a spell that worked grows the mana: the first time of a strong one +1 +3, added to the bar too)
+        const paid = g.combat.fatigue - ((g.combat.maxFatigue || 30) - max0);
         const lt = g.livingTrees.list[0];
         if (!lt) return { refused, said, none: true, alive: tree.alive };
         await frames(30);
