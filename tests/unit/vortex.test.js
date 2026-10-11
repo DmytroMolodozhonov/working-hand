@@ -116,6 +116,7 @@ function world({ mode = 'freeworld' } = {}) {
         terrain: { data: { get: (x, L, z) => (z <= -3 && z >= -6 && L <= 1 ? 8 : 0), isSolidAt: () => false, findWaterSurface: () => null } },
         collision: { pointBlocked: () => false, surfaceY: () => -1 },
         sync: { vortex: (m) => sent.push(m) },
+        mana: { got: [], success(n) { this.got.push(n); } },
         damageZombie(z, amount) { z.hp -= amount; z.dmg.push(amount); if (z.hp <= 0) z.isDead = true; },
         damageLocalPlayer() {},
         duel: {
@@ -189,6 +190,7 @@ test('Water Vortex: swinging gathers rings of water, pointing sends all of it, i
     assert.equal(V.voice('AirBubble', 'bubble', true), 'VortexBubble');
     run(V, 1.0);
     assert.ok(V.log.some((e) => e.ev === 'hit' && e.tk === 'z'), 'it hit the zombie');
+    assert.ok(g.mana.got.includes('WaterVortex'), 'mana: the strong spell really worked');
     assert.ok(V.log.some((e) => e.ev === 'push' && e.tk === 'z' && e.speed > 6 && e.knock), 'pushed hard by the water (and knocked down)');
     assert.equal(zombie.dmg.length, 0, 'the water does not hurt');
     const b = [...V.bubbles.values()][0];

@@ -240,11 +240,6 @@ export class WaterVortex {
         return null;
     }
 
-    /** Spent mana for a strong spell: tell the mana system it worked (when it has the hook). */
-    _success(name) {
-        const c = this.game.combat;
-        try { (c.spellSucceeded || c.onSpellSuccess || c.success)?.call(c, name); } catch (e) { /* (optional hook) */ }
-    }
 
     // ================================================================ voice
     /**
@@ -329,7 +324,7 @@ export class WaterVortex {
         const tired = g.combat.check('WaterVortex');
         if (tired) return this._hint(tired, true);
         g.combat.pay('WaterVortex');
-        this._success('WaterVortex');
+        g._manaLater = true; // (mana: it counts as working when the vortex hits — see _hit)
         this.meter.reset();
         this.state = { phase: 'call', side, t: 0, idle: 0, still: 0, volume: 0, shown: 0, src, angle: 0, spin: 0.6, lastDir: null, power: g.wandMagic?.power?.('WaterVortex') || 1 };
         this._note({ ev: 'cast', side });
@@ -561,6 +556,7 @@ export class WaterVortex {
         f.tk = tk; f.tid = tid;
         f.hitAt = this._t;
         this._note({ ev: 'hit', id: f.id, tk, tid });
+        if (f.by === this.me) g.mana?.success('WaterVortex'); // (mana: my strong spell really worked)
         this._splash(f.pos, 1 + f.volume * 0.03, 30);
         if (g.sound) g.sound.playSplash?.();
         if (decided) {
@@ -889,8 +885,7 @@ export class WaterVortex {
             p = this._fireTarget(o, dir, side);
         }
         this._fireAt = now;
-        g.combat.pay('FireMaxima');
-        this._success('FireMaxima');
+        g.combat.pay('FireMaxima'); // (mana: castLocalSpell counts it — it always works once paid)
         g.noteCaster?.('FireMaxima', this.me);
         const m = { ev: 'fire', id: `${this.me}:f${++this._seq}`, o: [o.x, o.y, o.z].map(r3), p: [p.x, p.y, p.z].map(r3), d: [dir.x, dir.y, dir.z].map(r3) };
         this._fire(this.me, m);

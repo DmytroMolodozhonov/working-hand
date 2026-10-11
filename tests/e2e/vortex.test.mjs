@@ -123,9 +123,9 @@ test('Water Vortex: a wand at the river, the hand going round gathers water, poi
             const g = window.__zns.game, V = g.vortex;
             const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
             const name = g.castLocalSpell('fire maxima', true);
-            await sleep(700);
+            for (let i = 0; i < 60 && !V.log.some((e) => e.ev === 'melt'); i++) await sleep(100);
             const melting = V.log.some((e) => e.ev === 'melt' && e.ice);
-            await sleep(1600);
+            for (let i = 0; i < 80 && V.bubbles.size; i++) await sleep(100);
             return { name, melting, left: V.bubbles.size };
         });
         assert.equal(melt.name, 'FireMaxima');
