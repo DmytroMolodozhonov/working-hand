@@ -41,6 +41,7 @@
 import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
 import { createWaterMaterial } from '../fx/WaterMaterial.js';
+import { sharpJerk } from './Jerk.js';
 import { fallDir } from './Impact.js';
 
 export const VORTEX = {
@@ -66,6 +67,7 @@ export const VORTEX = {
     RANGE: 50, // m
     TURN: 1.4, // rad/s while correcting towards the target
     BEND: 0.2, // rad: the most it turns in all
+    STEER: 2.5, // rad/s: the stream turns after the caster's hand while it flies
     CLING: 2, // s after the last water reached the one it hit (still time to say «Bubble»)
     BUBBLE_GROW: 2.2, // s: the whole vortex flows into the bubble (when no stream feeds it: from the puddle)
     BUBBLE_FORM: 2.5, // s at least: the water swirls round the creature into a ball (never all at once)
@@ -98,6 +100,7 @@ const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _srcInner = new THREE.Vector3();
+const _qI = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
 /** A zombie kicks its legs in the water. */
 function z_kick(z) {
@@ -513,18 +516,17 @@ export class WaterVortex {
         let tk = null, tid = null;
         const t = g.duel?.findTarget?.(s.side);
         if (t && t.kind !== 'b') { tk = t.kind; tid = t.id; }
-        // the stream goes from the vortex to exactly what the hand points at (not parallel to the arm,
-        // which would put it into the ground short of a target the hand points down at)
-        let aim = tk ? g.duel?._targetPos?.({ tk, tid }, new THREE.Vector3()) : null;
-        if (!aim) {
+        // the stream goes along the very line of the hand (as a duel spell does: the wand's line): its head
+        // starts on that line just outside the rings, the water peels off the rings into it
+        let h = null;
+        if (!asIs) {
             const ho = g.castOrigin ? g.castOrigin(s.side) : g.character.getHandWorldPosition(s.side);
-            let k = 1;
-            for (; k < VORTEX.RANGE * 0.6; k += 0.5) if (this._blockedAt(_b.copy(ho).addScaledVector(dir, k))) break;
-            aim = ho.clone().addScaledVector(dir, k);
+            const n = Math.max(1, layersOf(s.volume).length);
+            h = ho.addScaledVector(dir, Math.max(1, layerRadius(n - 1) - 0.5));
         }
-        if (!asIs && aim.distanceTo(o) > 1) dir = aim.sub(o).normalize();
         const id = `${this.me}:${++this._seq}`;
-        const m = { ev: 'launch', id, o: [o.x, o.y, o.z].map(r3), d: [dir.x, dir.y, dir.z].map(r3), v: r3(s.volume), a: r3(s.angle), pw: r3(s.power), tk, tid };
+        const m = { ev: 'launch', id, o: [o.x, o.y, o.z].map(r3), d: [dir.x, dir.y, dir.z].map(r3), v: r3(s.volume), a: r3(s.angle), pw: r3(s.power), tk, tid, s: asIs ? null : s.side };
+        if (h) m.h = [h.x, h.y, h.z].map(r3);
         this.state = null;
         this._addFlight(this.me, m);
         if (s.bubbleAt) this.flights.get(id).bubbleAt = s.bubbleAt; // («Bubble» already said)
@@ -544,9 +546,10 @@ export class WaterVortex {
             power: +m.pw || 1, tk: m.tk || null, tid: m.tid ?? null, flown: 0, bent: 0, tailK: 0, dryT: 0,
             src: o.clone(), // (the caster: the rings stay round them and unwind)
         };
-        // the stream leaves the vortex from its outer ring, on the side the hand points to
-        f.pos = this._peel(f, new THREE.Vector3());
-        f.tail = f.pos.clone();
+        // the stream leaves the vortex from its outer ring; its head flies along the hand's line
+        f.side = m.s === 'left' || m.s === 'right' ? m.s : null;
+        f.tail = this._peel(f, new THREE.Vector3());
+        f.pos = Array.isArray(m.h) ? new THREE.Vector3(+m.h[0] || 0, +m.h[1] || 0, +m.h[2] || 0) : f.tail.clone();
         this.flights.set(m.id, f);
     }
 
@@ -600,6 +603,14 @@ export class WaterVortex {
         const g = this.game;
         this._unwind(f, dt, f.pos);
         const v = flightSpeed(f.t);
+        // the caster steers the water with the hand while it flies (it turns after the hand's line)
+        if (f.side && g.duel?._handOf?.(f.by, f.side, _a, _b)) {
+            const ang = f.dir.angleTo(_b);
+            if (ang > 1e-3 && ang < 1.2) {
+                const axis = _c.crossVectors(f.dir, _b).normalize();
+                if (axis.lengthSq() > 0.5) f.dir.applyAxisAngle(axis, Math.min(ang, VORTEX.STEER * dt)).normalize();
+            }
+        }
         // a small correction towards the creature the hand pointed at (never a hard turn)
         if (f.tk && f.bent < VORTEX.BEND) {
             const tp = g.duel?._targetPos?.({ tk: f.tk, tid: f.tid }, _a);
@@ -944,20 +955,40 @@ export class WaterVortex {
         let want = null;
         const side = this._castSide() || g.magicHand || g.lastMagicHand || 'right';
         const ch = g.character;
-        const raised = ch.isArmRaised ? ch.isArmRaised(side) : true;
         if (b.grow >= 1 && !this.state) {
             const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
-            const d = ch.getPointingDirection ? ch.getPointingDirection(side) : ch.getHandDirection(side);
+            const d = ch.getPointingDirection ? ch.getPointingDirection(side, _a) : ch.getHandDirection(side, _a);
             const to = _b.subVectors(b.pos, o);
             const dist = to.length();
-            if (!b.held && raised && dist > 0.5 && dist < 40 && to.angleTo(d) < VORTEX.BUBBLE_GRAB + Math.atan(b.r / dist) * 0.5) {
-                b.held = { dist: Math.max(dist, b.r + 1.5) };
+            // held like «Левиоса» as soon as it has formed (thrown off: point at it again to take it back)
+            const pointed = dist > 0.5 && dist < 40 && to.angleTo(d) < VORTEX.BUBBLE_GRAB + Math.atan(b.r / dist) * 0.5;
+            if (!b.held && (!b.wasHeld || pointed) && !b.thrown && dist < 45) {
+                // (it is taken where it is — no jump to the hand's line; it drifts onto it as the hand moves)
+                b.held = { dist: Math.max(dist, b.r + 1.5), q: new THREE.Quaternion().setFromUnitVectors(d, to.clone().normalize()), age: 0, side };
+                b.wasHeld = true;
                 this._note({ ev: 'grab', id: b.id });
             }
-            if (b.held && !raised) { b.held = null; b.rest = b.pos.clone(); this._note({ ev: 'letgo', id: b.id }); }
-            if (b.held) want = _c.copy(o).addScaledVector(d, b.held.dist);
+            if (b.held) {
+                b.held.age += dt;
+                // a sharp flick of the hand throws it off: it flies on with the swing, then hangs there
+                if (b.held.age > 0.6 && sharpJerk(g.duel?.jerk?.[side])) {
+                    const v = ch.handVelocity?.[side];
+                    b.thrown = (v ? v.clone() : new THREE.Vector3()).multiplyScalar(1.5).clampLength(0, 18);
+                    b.held = null; b.rest = null;
+                    this._note({ ev: 'letgo', id: b.id });
+                } else {
+                    b.held.q.slerp(_qI, Math.min(1, dt * 0.6));
+                    want = _c.copy(o).addScaledVector(_d.copy(d).applyQuaternion(b.held.q), b.held.dist);
+                }
+            }
         }
-        this._liftStep(b, dt, want);
+        if (b.thrown) {
+            b.pos.addScaledVector(b.thrown, dt);
+            b.thrown.multiplyScalar(Math.exp(-dt * 1.5));
+            if (b.thrown.length() < 0.3) { b.thrown = null; b.rest = b.pos.clone(); }
+            want = b.thrown ? b.pos : null;
+        }
+        this._liftStep(b, dt, want, !!b.held);
         // tell the others where it is
         b.sendT -= dt;
         if (b.sendT <= 0 && (!b.sentP || b.sentP.distanceToSquared(b.pos) > 0.0025)) {
@@ -967,7 +998,7 @@ export class WaterVortex {
         }
     }
 
-    _liftStep(b, dt, want) {
+    _liftStep(b, dt, want, smooth = false) {
         const g = this.game;
         if (!want) {
             want = _c.copy(b.rest || b.home);
@@ -981,6 +1012,7 @@ export class WaterVortex {
         const gy = g.collision?.surfaceY?.(want.x, want.z);
         if (Number.isFinite(gy)) want.y = Math.max(want.y, gy + b.r * 0.9);
         const step = _d.subVectors(want, b.pos);
+        if (smooth) step.multiplyScalar(1 - Math.exp(-dt * 3.5)); // (follows the hand smoothly, heavy, like «Левиоса»)
         const L = step.length(), max = VORTEX.BUBBLE_SPEED * dt;
         if (L > max) step.multiplyScalar(max / L);
         b.pos.add(step);

@@ -129,6 +129,7 @@ function world({ mode = 'freeworld' } = {}) {
             },
             _targetPos(b, out) { if (b.tk === 'z' && !zombie.isDead) return out.copy(zombie.group.position).add(new THREE.Vector3(0, 1, 0)); if (b.tk === 'p' && b.tid === 'me') return out.copy(ch.group.position).add(new THREE.Vector3(0, 0.6, 0)); return null; },
             _creature() { return null; },
+            _handOf(by, side, o, d) { if (by !== 'me') return false; ch.getHandWorldPosition(side, o); ch.getPointingDirection(side, d); return true; },
             findTarget() { return zombie.isDead ? null : { kind: 'z', id: 7, dist: 8, miss: 0 }; },
         },
     };
@@ -371,20 +372,51 @@ test('the ball forms slowly round the creature and lifts it; the caster carries 
     assert.equal(b.grow, 1);
     assert.ok(zombie.group.position.y > y0 + 0.4, `the zombie is lifted off the ground inside (${(zombie.group.position.y - y0).toFixed(2)} m)`);
     assert.ok(zombie.lev && zombie.lev.vortex === b.id, 'held up in the water');
-    // the caster points at the ball and raises the hand: the ball goes up
-    const o = ch.getHandWorldPosition('right');
-    ch.dir.copy(b.pos).sub(o).normalize();
+    // held like «Левиоса» as soon as it formed: it follows the hand (taken where it is, no jump)
     V.update(1 / 60);
-    assert.ok(b.held, 'pointing at the ball takes hold of it');
+    assert.ok(b.held, 'the caster holds the ball');
     const yb = b.pos.y;
-    ch.dir.y += 0.4; ch.dir.normalize();
-    run(V, 2);
+    run(V, 0.3);
+    assert.ok(Math.abs(b.pos.y - yb) < 0.5, 'no jump to the hand\'s line');
+    ch.dir.y += 0.5; ch.dir.normalize(); // (the hand goes up)
+    run(V, 2.5);
     assert.ok(b.pos.y > yb + 2, `raised with the hand (${(b.pos.y - yb).toFixed(1)} m)`);
     assert.ok(zombie.group.position.y > y0 + 2, 'the zombie goes up with it');
-    // the hand let down: it hangs there
-    ch.isArmRaised = () => false;
-    run(V, 0.2);
-    const yh = b.pos.y;
+    ch.dir.x += 0.6; ch.dir.normalize(); // (the hand turns aside: the ball goes after it)
+    const x0 = b.pos.x;
+    run(V, 2);
+    assert.ok(b.pos.x > x0 + 2, 'it follows the hand sideways too');
+    // a sharp flick throws it off: it flies on a little and hangs there
+    g.duel.jerk = { right: [{ t: 0, x: 0, y: 0, z: 0 }, { t: 0.1, x: 0.8, y: 0, z: 0 }, { t: 0.2, x: 1.7, y: 0, z: 0 }] };
+    ch.handVelocity = { right: new THREE.Vector3(6, 0, 0) };
+    V.update(1 / 60);
+    g.duel.jerk = { right: [] };
+    assert.ok(!b.held && b.thrown, 'thrown off');
+    run(V, 3);
+    const yh = b.pos.clone();
     run(V, 1);
-    assert.ok(!b.held && Math.abs(b.pos.y - yh) < 0.05, 'a hand let down leaves it hanging');
+    assert.ok(!b.held && b.pos.distanceTo(yh) < 0.05, 'then it hangs where it stopped');
+});
+
+test('the stream flies along the very line of the hand (like a duel spell) and turns after the hand while it flies', () => {
+    const { g, ch, zombie, V } = world();
+    g.combat.fatigue = 500;
+    zombie.isDead = true;
+    ch.dir.set(0, -0.2, -1).normalize();
+    assert.equal(V.cast(true), 'WaterVortex');
+    let t = 0;
+    run(V, 2, () => { t += 1 / 60; const a = t * Math.PI * 2 * 1.5; ch.hand.set(Math.cos(a) * 0.45, 0.4, Math.sin(a) * 0.45); });
+    ch.hand.set(0.4, 1.2, -0.3);
+    ch.dir.set(0.3, 0.05, -1).normalize();
+    assert.equal(V.voice('Attack', 'атака', true), 'Attack');
+    const f = [...V.flights.values()][0];
+    run(V, 0.25);
+    const o = ch.getHandWorldPosition('right');
+    const along = f.pos.clone().sub(o).dot(ch.dir);
+    const miss = o.clone().addScaledVector(ch.dir, along).distanceTo(f.pos);
+    assert.ok(along > 3 && miss < 0.2, `on the hand's line (${miss.toFixed(2)} m off, ${along.toFixed(1)} m out)`);
+    // the hand turns left: the stream turns after it
+    ch.dir.set(-0.4, 0.05, -1).normalize();
+    run(V, 0.4);
+    assert.ok(f.dir.angleTo(ch.dir) < 0.15, 'the stream turned after the hand');
 });
