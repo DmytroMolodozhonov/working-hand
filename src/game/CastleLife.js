@@ -23,6 +23,8 @@
  */
 
 import { shareFoes } from './CrewTactics.js';
+import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
+import { BLOCK } from '../world/Terrain.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
@@ -49,6 +51,9 @@ const RAMPAGE = 3; // different people of a castle hurt by one player within 2 m
 const PETTY = 12; // blocks of quiet damage (a pane, a few blocks) per player in 5 min: the people grumble, no guards
 const LEASH = 20; // m: out of their land, knights chase on until the enemy is this far ahead
 const HEAR_BOOM = 110; // m: a blast is heard this far (the guards come to look)
+const ARROW_SPEED = 42, ARROW_DMG = 3; // a knight's bow (KnightTactics: the archers)
+const URGENT = new Set(['rush', 'fallback', 'kingguard']); // (these cut a plan short)
+const MELEE = new Set(['sword', 'shield']);
 export const STATS = {
     builder: { hp: 8, armor: 0, dmg: 1 },
     farmer: { hp: 8, armor: 0, dmg: 1 },
@@ -852,15 +857,20 @@ export class CastleLife {
             return;
         }
         v.seated = false;
+        // the squad's plan gives some of them other work than the sword: bows, holding the ways
+        // down, climbing up, an ambush, a runner, the king's guard (KnightTactics)
+        if (v.tac && !MELEE.has(v.tac.role) && this._tacStep(v, fp, d, dt)) return;
+        const style = v.tac?.style || null;
+        const RUSH = style?.speed === 'walk' && d < 20 ? WALK * 1.3 : RUN; // (a shield wall, drivers: at a steady walk)
         if (d > 11 || (d > 6 && !this._sees(v, fp))) {
             // far or behind walls: along the paths
             v.chaseT = (v.chaseT || 0) - dt;
             // (out in the open beyond their land there are no paths: straight at them)
             if (d > 10 && !this._sees(v, fp) && this._inLand(cs.def, fp, 0)) {
                 if (v.chaseT <= 0 || !v.path) { v.chaseT = 1.5; this._goTo(v, cs.graph.nearest(fp.x, fp.y - 1.95, fp.z, 6)); }
-                this._followPath(v, dt, RUN);
-            } else this._steer(v, fp.x, fp.z, RUN, dt, 2.2);
-            v.mode = 'run';
+                this._followPath(v, dt, RUSH);
+            } else this._steer(v, fp.x, fp.z, RUSH, dt, 2.2);
+            v.mode = v.tac?.role === 'shield' ? 'block' : RUSH < RUN ? 'walk' : 'run';
             this._ground(v);
             return;
         }
@@ -870,11 +880,22 @@ export class CastleLife {
         const n = v.slotN || 1;
         const turn8 = Math.floor(Date.now() / 8000);
         const i = ((v.slotI || 0) + turn8) % n;
-        const front = Math.min(n, 3);
-        const engaged = i < front;
+        const front = Math.min(n, style?.front ?? 3);
+        let engaged = i < front;
         const base = v.slotBase ?? Math.atan2(v.z - fp.z, v.x - fp.x);
-        const a = engaged ? base + (i - (front - 1) / 2) * (front === 2 ? Math.PI * 0.8 : Math.PI * 2 / 3) : base + Math.PI + (i - front) * (Math.PI * 2 / Math.max(1, n - front));
-        const R = engaged ? 2.3 : 6.5;
+        let a = engaged ? base + (i - (front - 1) / 2) * (front === 2 ? Math.PI * 0.8 : Math.PI * 2 / 3) : base + Math.PI + (i - front) * (Math.PI * 2 / Math.max(1, n - front));
+        let R = engaged ? 2.3 : 6.5;
+        if (style?.wall) {
+            // the shield wall: the shields side by side in front, the swords at its ends
+            const k = v.slotI || 0;
+            if (v.tac.role === 'shield') { engaged = true; a = base + (k - (n - 1) / 2) * 0.45; R = 2.5; }
+            else { engaged = k < 2; a = base + (k % 2 ? 1 : -1) * (1.1 + 0.45 * Math.floor(k / 2)); R = engaged ? 2.3 : 4.6; }
+        } else if (style?.spread && n >= 3) {
+            // all round him at once: each his own side, the free ones close between
+            const k = v.slotI || 0;
+            a = base + (k / n) * Math.PI * 2;
+            R = engaged ? (style.close ? 2.1 : 2.3) : 4.6;
+        }
         let tx = fp.x + Math.cos(a) * R, tz = fp.z + Math.sin(a) * R;
         const toSlot = Math.hypot(tx - v.x, tz - v.z);
         // the place is on the other side: go round the enemy (along the circle), not through them
@@ -889,8 +910,8 @@ export class CastleLife {
         // (never right on top of them)
         if (d < 1.6 && d > 1e-3) { const k = (1.6 - d) * 0.5; const nx = v.x + (v.x - fp.x) / d * k, nz = v.z + (v.z - fp.z) / d * k; if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; } }
         if (toSlot > 0.8) {
-            this._steer(v, tx, tz, toSlot > 3 ? RUN : WALK * 1.3, dt, 0.3);
-            v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : (engaged ? 'attack' : 'block');
+            this._steer(v, tx, tz, toSlot > 3 ? RUSH : WALK * 1.3, dt, 0.3);
+            v.mode = v.tac?.role === 'shield' ? 'block' : v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : (engaged ? 'attack' : 'block');
             // already within reach on the way round: strike anyway
             if (engaged && d < 3.2) { v.yaw = turn(v.yaw, Math.atan2(-(fp.x - v.x), -(fp.z - v.z)), dt * 9); v.mode = 'attack'; }
         } else {
@@ -909,30 +930,49 @@ export class CastleLife {
     /** Who fights whom: places round each enemy (each attacker its own), once a frame. */
     _assignSlots() {
         this._shareFoes();
+        // (the swords and the shields of a shield wall each have their own places; other roles none)
         const groups = new Map();
         for (const v of this.byId.values()) {
             if (v.dead || !v.foe) continue;
-            (groups.get(v.foe) || groups.set(v.foe, []).get(v.foe)).push(v);
+            if (v.tac && !MELEE.has(v.tac.role)) continue;
+            const key = v.tac?.role === 'shield' ? 's' : 'm';
+            const gr = groups.get(v.foe) || groups.set(v.foe, { m: [], s: [] }).get(v.foe);
+            gr[key].push(v);
         }
         const now = Date.now();
         this._slotBase = this._slotBase || new Map();
-        for (const [foe, all] of groups) {
+        for (const [foe, gr] of groups) {
             const fp = this._playerPos(foe);
             if (!fp) continue;
-            // (one stuck deep down in a pit can't take a place round the enemy)
-            const list = all.filter((v) => v.y > fp.y - 2 - 3);
-            for (const v of all) if (!list.includes(v)) { v.slotI = 0; v.slotN = 1; v.slotBase = null; }
-            // (the order by id is stable; the circle is set where most of them came from and kept a while)
-            list.sort((a, b) => (a.id < b.id ? -1 : 1));
+            const both = gr.m.concat(gr.s);
             let b = this._slotBase.get(foe);
             if (!b || now > b.until) {
                 let sx = 0, sz = 0;
-                for (const v of list) { sx += v.x - fp.x; sz += v.z - fp.z; }
+                for (const v of both) { sx += v.x - fp.x; sz += v.z - fp.z; }
                 b = { a: Math.atan2(sz, sx), until: now + 10000 };
                 this._slotBase.set(foe, b);
             }
-            list.forEach((v, k) => { v.slotI = k; v.slotN = list.length; v.slotBase = b.a; });
+            // (he holds a shield up: they come at him from behind)
+            const sq = both.find((v) => v.tac?.sq)?.tac.sq;
+            const base = sq?.plan === 'encircle' && sq.sit?.shield ? this._backOf(foe) ?? b.a : b.a;
+            for (const all of [gr.m, gr.s]) {
+                // (one stuck deep down in a pit can't take a place round the enemy)
+                const list = all.filter((v) => v.y > fp.y - 2 - 3);
+                for (const v of all) if (!list.includes(v)) { v.slotI = 0; v.slotN = 1; v.slotBase = null; }
+                // (the order by id is stable; the circle is set where most of them came from and kept a while)
+                list.sort((p, q) => (p.id < q.id ? -1 : 1));
+                list.forEach((v, k) => { v.slotI = k; v.slotN = list.length; v.slotBase = base; });
+            }
         }
+    }
+
+    /** The bearing (from him) of a player's back. */
+    _backOf(id) {
+        const g = this.game;
+        const ch = id === g.localId ? g.character : g.remotes.get(id)?.character;
+        if (!ch) return null;
+        const y = ch.group.rotation.y;
+        return Math.atan2(Math.cos(y), Math.sin(y));
     }
 
     /**
@@ -967,6 +1007,537 @@ export class CastleLife {
         }
     }
 
+    // ------------------------------------------------------------ the squad's mind (KnightTactics.js)
+    /**
+     * (host) The knights of a castle after one foe are a squad: the captain picks a plan, weighs it
+     * every few seconds, changes it when it fails (and remembers what failed against this foe);
+     * every knight gets a role (sword, shield, archer, watch, climber, hide, runner, retreat, guard).
+     * A few times a second.
+     */
+    _squads(dt) {
+        this.clock = (this.clock || 0) + dt; // (the squads' time is the game's: a slow frame slows their plans too)
+        this._sqT = (this._sqT || 0) - dt;
+        if (this._sqT > 0) return;
+        this._sqT = 0.25;
+        const now = this.clock;
+        for (const cs of this.castles.values()) {
+            if (!cs.awake || isWizSite(cs.def)) continue;
+            const groups = new Map();
+            for (const v of cs.active.values()) {
+                if (v.role !== 'knight' || v.dead || !v.foe || v.servantOf != null) { if (v.tac) this._untac(v); continue; }
+                (groups.get(v.foe) || groups.set(v.foe, []).get(v.foe)).push(v);
+            }
+            const squads = cs.squads || (cs.squads = new Map());
+            for (const foe of [...squads.keys()]) if (!groups.has(foe)) squads.delete(foe);
+            for (const [foe, men] of groups) {
+                let sq = squads.get(foe);
+                if (!sq) squads.set(foe, (sq = this._newSquad(cs, foe, men, now)));
+                this._runSquad(sq, men, now);
+            }
+        }
+    }
+
+    _untac(v) { v.tac = null; v.fx = (v.fx | 0) & ~1; }
+
+    _newSquad(cs, foe, men, now) {
+        const mems = cs.tacMem || (cs.tacMem = new Map());
+        let mem = mems.get(foe);
+        if (!mem) mems.set(foe, (mem = newMemory())); // (what failed against this one is remembered after the fight too)
+        mem.plan = null;
+        const fp = this._playerPos(foe);
+        // (the captain sizes him up a moment before the first order)
+        return {
+            cs, foe, mem, t0: now, ids: new Set(men.map((v) => v.id)), start: men.length, lost: 0, lostAt: [], plan: null, planT0: now, reviewT: now + 0.5,
+            captain: null, sayT: 0, seen: {}, sit: null, base: 0, vel: { x: 0, y: 0, z: 0 }, last: fp ? { x: fp.x, y: fp.y, z: fp.z, t: now } : null,
+            d0: 0, hp0: 0, blows: 0, shots: 0, lost0: 0, up: false, steps: null, upNode: -1, callT: now + 6,
+        };
+    }
+
+    _runSquad(sq, men, now) {
+        const ids = new Set(men.map((v) => v.id));
+        let changed = false;
+        for (const id of sq.ids) if (!ids.has(id)) { changed = true; const v = this.byId.get(id); if (!v || v.dead) { sq.lost++; sq.lostAt.push(now); } }
+        for (const id of ids) if (!sq.ids.has(id)) changed = true;
+        sq.ids = ids;
+        sq.start = Math.max(sq.start, men.length);
+        const fp = this._playerPos(sq.foe);
+        if (!fp) return;
+        // how he moves (the archers lead him; is he running away from them?)
+        if (sq.last) {
+            const dt = now - sq.last.t;
+            if (dt > 0.05 && dt < 2) {
+                const k = Math.min(1, dt * 3);
+                sq.vel.x += ((fp.x - sq.last.x) / dt - sq.vel.x) * k; sq.vel.y += ((fp.y - sq.last.y) / dt - sq.vel.y) * k; sq.vel.z += ((fp.z - sq.last.z) / dt - sq.vel.z) * k;
+            }
+        }
+        sq.last = { x: fp.x, y: fp.y, z: fp.z, t: now };
+        if (now >= sq.reviewT) {
+            sq.reviewT = now + KT.REVIEW;
+            const sit = this._situation(sq, men, fp, now);
+            if (this._review(sq, men, sit, now)) changed = true;
+        }
+        if (changed && sq.plan) this._cast(sq, men, fp, now);
+        // a siege: now and then they shout up at him
+        if (sq.plan === 'siege' && now > sq.callT) {
+            sq.callT = now + 7 + Math.random() * 5;
+            const w = men.find((v) => v.tac?.role === 'watch');
+            if (w) this._say(w, pick(LINES.callDown), 3);
+        }
+    }
+
+    /** What the squad sees: their foe, the place, themselves (KnightTactics' `sit`). */
+    _situation(sq, men, fp, now) {
+        const g = this.game, cs = sq.cs;
+        const t = g.world?.terrain?.data;
+        const able = men.filter((v) => !(v.stunT > 0) && !v.vy && !v.lev);
+        const ds = men.map((v) => Math.hypot(fp.x - v.x, fp.z - v.z)).sort((a, b) => a - b);
+        const ys = men.map((v) => v.y).sort((a, b) => a - b);
+        const dist = ds[Math.floor(ds.length / 2)] ?? 0, baseY = ys[Math.floor(ys.length / 2)] ?? fp.y - 1.95;
+        let cx = 0, cz = 0;
+        for (const v of men) { cx += v.x; cz += v.z; }
+        sq.base = Math.atan2(cz / men.length - fp.z, cx / men.length - fp.x); // (from him towards them)
+        const st = this._foeState(sq.foe);
+        const feet = fp.y - 1.95;
+        const gy = g.collision.groundAt ? g.collision.groundAt(fp.x, fp.z, feet + 0.6) : g.collision.groundY(fp.x, fp.z);
+        const air = st.air || feet - gy > 2.2;
+        const w = g.swim?.waterAt?.(fp.x, fp.z, feet + 0.3);
+        const water = !air && (st.swim || (!!w && w.depth >= 3 && feet < w.surface + 0.5));
+        const high = !air && !water && feet > baseY + 3.2;
+        // how to get up to him: the castle's stairs (a path to a place by him), or steps to build
+        let reach = 'ground';
+        if (high) {
+            reach = null;
+            const cap = men.reduce((a, b) => (b.idx < a.idx ? b : a));
+            const node = cs.graph.nearest(fp.x, feet, fp.z, 2.5);
+            const n = cs.graph.nodes[node];
+            sq.upNode = -1;
+            if (n && Math.hypot(n.x - fp.x, n.z - fp.z) < 6 && cs.graph.path(cs.graph.nearest(cap.x, cap.y, cap.z), node)) { reach = 'path'; sq.upNode = node; }
+            else if (t) {
+                if (!sq.steps || Math.hypot(sq.steps.at.x - fp.x, sq.steps.at.z - fp.z) > 4) {
+                    const s = planSteps(t, { x: fp.x, y: feet, z: fp.z }, { x: cap.x, y: baseY, z: cap.z });
+                    sq.steps = s ? { ...s, done: 0, at: { x: fp.x, z: fp.z } } : null;
+                }
+                if (sq.steps) reach = 'steps';
+            }
+        }
+        const Lf = Math.round(feet + 1.5);
+        const inside = !!t && !air && !high && t.solidIn(Math.round(fp.x), Math.round(fp.z), Lf + 3, Lf + 12);
+        const king = cs.active.get(0);
+        const kingAlive = !!king && !king.dead;
+        const fled = Math.hypot(sq.vel.x, sq.vel.z) > 2.5 && sq.sit && dist > sq.sit.dist + 1;
+        const hpK = men.reduce((a, v) => a + v.hp / v.maxHp, 0) / men.length;
+        const servants = !!g.servants?.of?.(sq.foe)?.length || !!(g.livingTrees?.list || []).some((tr) => tr.owner === sq.foe && (tr.phase === 'rise' || tr.phase === 'alive'));
+        return {
+            n: able.length, start: sq.start, lost: sq.lost, lostRecent: sq.lostAt.filter((x) => now - x < 20).length, hpK,
+            shields: able.filter((v) => v.model.shield).length, dist, air, high, water, reach,
+            lying: st.lying, busy: st.busy, noMana: st.noMana, shield: st.shield, servants, inside, fled: !!fled,
+            kingAlive, kingThreat: kingAlive && Math.hypot(fp.x - king.x, fp.z - king.z) < 14 && Math.abs(feet - king.y) < 4,
+            t: now - sq.t0, foeHp: st.hp,
+        };
+    }
+
+    /** What can be seen of a player: flying, lying, swimming, a held spell, no mana, a shield, health. */
+    _foeState(id) {
+        const g = this.game;
+        if (id === g.localId) {
+            const c = g.combat;
+            const manaK = c?.enabled && g.mana ? g.mana.value / Math.max(1, g.mana.max) : 1;
+            return {
+                air: !!g.flight?.active, swim: !!g.swim?.swimming,
+                lying: !!g.knock?.down || !!c?.immobile || !!g.beds?.lying,
+                busy: !!(g.hellfire?.busy || g.waterStorm?.busy || g.vortex?.busy || g.levitation?.active || g.builder?.build || g.duel?.myContact?.()),
+                noMana: manaK < 0.12, shield: !!c?.shield, hp: c?.enabled ? c.hp : g.playerHP ?? 20,
+            };
+        }
+        const r = g.remotes.get(id);
+        const ch = r?.character;
+        return {
+            air: !!ch?.flying, swim: !!ch?.swimming, lying: !!ch?.knockedDown || !!r?.combat?.frozen,
+            busy: !!r?.target?.dc, noMana: r?.fatigue != null && r.fatigue < 4, shield: (r?.combat?.shield || 0) > 0, hp: r?.hp ?? 20,
+        };
+    }
+
+    /** The captain weighs the plan; true when it changed. */
+    _review(sq, men, sit, now) {
+        sq.sit = sit;
+        this._observe(sq, men, sit, now);
+        const P = sq.plan;
+        const first = choosePlan(sit, sq.mem, now);
+        let res = null;
+        if (P) {
+            const p = { t: now - sq.planT0, closer: sq.d0 - sit.dist, hurt: Math.max(0, sq.hp0 - sit.foeHp), blows: sq.blows, shots: sq.shots, lost: sq.lost - sq.lost0, up: sq.up };
+            res = reviewPlan(P, sit, p);
+            if (!res) {
+                if (first.id === P) return false;
+                // (a plan is given its time — only a big chance or a big danger cuts it short)
+                if (p.t < KT.MIN_PLAN && !URGENT.has(first.id)) return false;
+                res = { done: true, why: 'better' };
+            }
+            remember(sq.mem, P, res, now);
+        }
+        const id = res ? choosePlan(sit, sq.mem, now).id : first.id;
+        begin(sq.mem, id, now);
+        sq.plan = id; sq.planT0 = now; sq.d0 = sit.dist; sq.hp0 = sit.foeHp; sq.blows = 0; sq.shots = 0; sq.lost0 = sq.lost; sq.up = false;
+        // the captain gives the order (the reason it changed first, when the old plan failed)
+        const cap = men.reduce((a, b) => (b.idx < a.idx ? b : a));
+        let line = id === 'rush' ? pick(LINES.rushWhy[sit.lying ? 'lying' : sit.noMana ? 'noMana' : 'busy'])
+            : id === 'climb' && sit.reach === 'steps' && sq.steps?.cells.length ? pick(LINES.plan.climbBuild) : pick(LINES.plan[id]);
+        if (res?.fail && LINES.fail[res.why] && id !== P) line = pick(LINES.fail[res.why]) + ' ' + line;
+        if (id !== P || res?.fail) this._say(cap, line, 4);
+        sq.sayT = now + 2;
+        return true;
+    }
+
+    /** One of them sees something new and calls it out (the captain answers with an order). */
+    _observe(sq, men, sit, now) {
+        const flags = { air: sit.air, high: sit.high, water: sit.water, shield: sit.shield, servants: sit.servants, inside: sit.inside };
+        const was = sq.seen;
+        sq.seen = flags;
+        if (now < sq.sayT) return;
+        let key = null;
+        for (const k of Object.keys(flags)) if (flags[k] && !was[k]) { key = k; break; }
+        if (!key && (was.high || was.air || was.water) && !sit.high && !sit.air && !sit.water) key = 'down';
+        if (!key) return;
+        const cap = men.reduce((a, b) => (b.idx < a.idx ? b : a));
+        const fp = sq.last;
+        const who = men.filter((v) => v !== cap).sort((a, b) => Math.hypot(a.x - fp.x, a.z - fp.z) - Math.hypot(b.x - fp.x, b.z - fp.z))[0] || cap;
+        this._say(who, pick(LINES.seen[key]), 3);
+        sq.sayT = now + 1.2;
+    }
+
+    /** Roles for the plan; the places of the watchers, guards and hiders. */
+    _cast(sq, men, fp, now) {
+        const king = sq.cs.active.get(0);
+        const kingAlive = !!king && !king.dead;
+        const cap = {};
+        const roles = castRoles(sq.plan, men.map((v) => ({
+            id: v.id, idx: v.idx, d: Math.hypot(fp.x - v.x, fp.z - v.z), dk: kingAlive ? Math.hypot(king.x - v.x, king.z - v.z) : Infinity, shield: !!v.model.shield,
+        })), { kingAlive, help: now - sq.mem.helpAt > KT.HELP_AGAIN && sq.cs.reinforced < sq.cs.def.knights, captain: cap });
+        sq.captain = cap.id;
+        const style = meleeStyle(sq.plan);
+        for (const v of men) {
+            const role = roles.get(v.id) || 'sword';
+            if (v.tac && v.tac.role === role && v.tac.plan === sq.plan) { v.tac.style = style; continue; }
+            v.tac = { role, plan: sq.plan, style, sq, since: now, k: 0, of: 1 };
+            v.path = null; v.chaseT = 0;
+            if (role !== 'archer') v.fx = (v.fx | 0) & ~1;
+            if (role === 'runner') this._say(v, pick(LINES.runner), 3);
+        }
+        // the ones standing round (in order round him: nobody crosses another's way)
+        for (const role of ['watch', 'guard', 'hide']) {
+            const list = men.filter((v) => v.tac.role === role).sort((a, b) => Math.atan2(a.z - fp.z, a.x - fp.x) - Math.atan2(b.z - fp.z, b.x - fp.x));
+            list.forEach((v, k) => { v.tac.k = k; v.tac.of = list.length; v.tac.spot = null; });
+        }
+    }
+
+    /** A knight with a role other than the sword: true when the role moved him this frame. */
+    _tacStep(v, fp, d, dt) {
+        const tac = v.tac, sq = tac.sq;
+        switch (tac.role) {
+            case 'archer': return this._archer(v, sq, fp, d, dt);
+            case 'watch': return this._watch(v, sq, fp, d, dt);
+            case 'climber': return this._climber(v, sq, fp, d, dt);
+            case 'hide': return this._hide(v, sq, fp, d, dt);
+            case 'runner': return this._runner(v, sq, fp, d, dt);
+            case 'retreat': return this._retreat(v, sq, fp, d, dt);
+            case 'guard': return this._guardKing(v, sq, fp, d, dt);
+            default: return false;
+        }
+    }
+
+    /** He is right here, on my level: the sword, whatever my role. */
+    _closeTo(v, fp, d) { return d < 3.8 && Math.abs(fp.y - 1.95 - v.y) < 2.2; }
+
+    _face(v, fp, dt) { v.yaw = turn(v.yaw, Math.atan2(-(fp.x - v.x), -(fp.z - v.z)), dt * 8); }
+
+    /** Water there (knights don't swim in armour). */
+    _wet(x, z, y) { const w = this.game.swim?.waterAt?.(x, z, y + 0.3); return !!w && w.depth > 1 && y < w.surface; }
+
+    /** To a place: straight, or along the castle's paths when walls are between. True when there. */
+    _goSpot(v, x, z, speed, dt, stop = 0.5) {
+        const d = Math.hypot(x - v.x, z - v.z);
+        if (d <= stop) { v.speed = 0; v.path = null; return true; }
+        const cs = v.cs, c = this.game.collision;
+        v.chaseT = (v.chaseT || 0) - dt;
+        // (the paths only lead in and out of the walls; out in the open — straight)
+        if (d > 9 && cs.graph.nodes.length && (this._inWalls(cs.def, { x, z }) || this._inWalls(cs.def, v)) && c.lineOfSight && !c.lineOfSight(v.x, v.y + 2.5, v.z, x, v.y + 2.5, z, 1.5)) {
+            if (!v.path || v.chaseT <= 0) { v.chaseT = 2.5; this._goTo(v, cs.graph.nearest(x, v.y, z, 6)); }
+            if (v.path && !this._followPath(v, dt, speed)) return false;
+        }
+        this._steer(v, x, z, speed, dt, stop);
+        return false;
+    }
+
+    /** A dry place on the ground at bearing `a`, about `R` from him (out along the bearing if wet). */
+    _groundSpot(v, fp, a, R) {
+        const t = this.game.world?.terrain?.data;
+        for (let r = R; r < R + 14; r += 1.5) {
+            const x = fp.x + Math.cos(a) * r, z = fp.z + Math.sin(a) * r;
+            const y = t ? t.floorBelow(Math.round(x), Math.round(z), Math.round(v.y + 1.5) + 2) - 0.5 : v.y;
+            if (!this._wet(x, z, y)) return { x, z, y };
+        }
+        return { x: fp.x + Math.cos(a) * R, z: fp.z + Math.sin(a) * R, y: v.y };
+    }
+
+    /** Bow: a place with a clear shot (each archer his own side), then draw, aim, loose. */
+    _archer(v, sq, fp, d, dt) {
+        const tac = v.tac;
+        // he came down to me: the sword again (and the bow knocked out of the hands: fists)
+        if ((this._closeTo(v, fp, d) && !sq.sit?.air) || v.disarmed) { v.fx &= ~1; return false; }
+        v.fx = (v.fx | 0) | 1;
+        tac.spotT = (tac.spotT || 0) - dt;
+        if (!tac.spot || tac.spotT <= 0) { tac.spotT = 2.5; tac.spot = this._archerSpot(v, sq, fp) || tac.spot; }
+        const sp = tac.spot;
+        const sees = d > 3 && d < 32 && this._sees(v, fp);
+        const far = sp ? Math.hypot(sp.x - v.x, sp.z - v.z) : 0;
+        tac.draw = tac.draw ?? -Math.random();
+        if (sp && far > 1.2 && !(sees && far < 5 && d > 8)) {
+            this._goSpot(v, sp.x, sp.z, RUN, dt, 1);
+            v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : 'idle';
+            tac.draw = Math.min(tac.draw, 0);
+        } else {
+            v.speed = 0; v.path = null;
+            this._face(v, fp, dt);
+            if (!sees) { v.mode = 'idle'; tac.spotT = Math.min(tac.spotT, 0.6); tac.draw = Math.min(tac.draw, 0); }
+            else {
+                v.mode = 'shoot';
+                const D = Math.hypot(fp.x - v.x, fp.z - v.z);
+                v.aimPitch = Math.max(-1, Math.min(1, Math.atan2(fp.y + 0.6 - (v.y + 3.2), D)));
+                tac.draw += dt;
+                if (tac.draw >= 1.3) { tac.draw = -(0.8 + Math.random() * 1.2); this._loose(v, sq, fp); }
+            }
+        }
+        this._ground(v);
+        return true;
+    }
+
+    _archerSpot(v, sq, fp) {
+        const t = this.game.world?.terrain?.data, c = this.game.collision;
+        const others = [];
+        for (const id of sq.ids) { const o = this.byId.get(id); if (o && o !== v && o.tac?.role === 'archer' && o.tac.spot) others.push(o.tac.spot.a); }
+        const mine = Math.atan2(v.z - fp.z, v.x - fp.x);
+        let best = null, bs = Infinity, checks = 0;
+        for (const R of [14, 19, 10, 24]) {
+            for (let i = 0; i < 12 && checks < 30; i++) {
+                const a = mine + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 6);
+                if (others.some((o) => angDiff(o, a) < 0.4)) continue; // (each archer his own side)
+                const x = fp.x + Math.cos(a) * R, z = fp.z + Math.sin(a) * R;
+                const y = t ? t.floorBelow(Math.round(x), Math.round(z), Math.round(v.y + 1.5) + 2) - 0.5 : v.y;
+                if (Math.abs(y - v.y) > 3.5 || !this._walkable(x, z, y) || this._wet(x, z, y)) continue;
+                const sc = Math.hypot(x - v.x, z - v.z) + Math.abs(R - 15) * 0.4;
+                if (sc >= bs) continue;
+                checks++;
+                if (c.lineOfSight && !c.lineOfSight(x, y + 3.4, z, fp.x, fp.y + 0.4, fp.z, 1.2)) continue;
+                best = { x, z, a }; bs = sc;
+            }
+        }
+        return best;
+    }
+
+    /** (host) An arrow off a knight's bow: aimed (and led) at him, a little off — they are no marksmen. */
+    _loose(v, sq, fp) {
+        const g = this.game;
+        if (!g.gear?.fire) return;
+        const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+        const from = new THREE.Vector3(v.x + fx * 0.9, v.y + 3.2, v.z + fz * 0.9);
+        const to = { x: fp.x, y: fp.y + 0.6, z: fp.z };
+        const a = aimArrow(from, to, sq.vel, ARROW_SPEED);
+        if (!a) return;
+        const D = Math.hypot(to.x - from.x, to.z - from.z);
+        const err = 0.012 + D * 0.0016;
+        const vel = new THREE.Vector3(a.x, a.y, a.z);
+        vel.applyAxisAngle(_v2.set(0, 1, 0), (Math.random() - 0.5) * 2 * err);
+        vel.y += (Math.random() - 0.5) * 2 * err * ARROW_SPEED;
+        g.gear.fire(from, vel, ARROW_DMG, v.id);
+        g.sync?.arrow?.(from, vel, ARROW_DMG, v.id);
+        sq.shots++;
+        const me = g.character.group.position;
+        if (Math.hypot(me.x - v.x, me.z - v.z) < 35) g.sound?.playBowRelease?.(0.7);
+    }
+
+    /** Hold a way down / stand round the place he holds: shield up, facing him. */
+    _watch(v, sq, fp, d, dt) {
+        if (this._closeTo(v, fp, d)) return false;
+        const tac = v.tac;
+        const R = sq.plan === 'siege' ? 7.5 : 9.5;
+        let a = sq.base + (tac.k / Math.max(1, tac.of)) * Math.PI * 2;
+        // (not on the steps being built)
+        if (sq.steps?.dir) { const s = Math.atan2(sq.steps.dir.z, sq.steps.dir.x), dd = Math.atan2(Math.sin(a - s), Math.cos(a - s)); if (Math.abs(dd) < 0.6) a = s + (dd >= 0 ? 0.6 : -0.6); }
+        if (!tac.spot || Math.hypot(tac.spot.fx - fp.x, tac.spot.fz - fp.z) > 3) tac.spot = { ...this._groundSpot(v, fp, a, R), fx: fp.x, fz: fp.z };
+        if (this._goSpot(v, tac.spot.x, tac.spot.z, RUN, dt, 0.8) || v.speed === 0) { v.speed = 0; this._face(v, fp, dt); v.mode = 'block'; }
+        else v.mode = v.speed > WALK * 1.2 ? 'run' : 'walk';
+        this._ground(v);
+        return true;
+    }
+
+    /** Up to him: the castle's stairs — or steps of planks, built at the foot of the wall. */
+    _climber(v, sq, fp, d, dt) {
+        const feet = fp.y - 1.95;
+        if (v.y > feet - 1.2) { // (up there with him: the sword)
+            if (!sq.up) { sq.up = true; this._say(v, pick(LINES.up), 3); }
+            return false;
+        }
+        if (sq.sit?.reach === 'path' && sq.upNode >= 0) {
+            v.chaseT = (v.chaseT || 0) - dt;
+            if (!v.path || v.chaseT <= 0) { v.chaseT = 3; this._goTo(v, sq.upNode); }
+            if (!v.path || this._followPath(v, dt, RUN)) { v.path = null; this._steer(v, fp.x, fp.z, RUN, dt, 2.2); }
+            v.mode = v.speed > 0 ? 'run' : 'idle';
+            this._ground(v);
+            return true;
+        }
+        const S = sq.steps;
+        if (!S) return false;
+        const left = S.cells.length - S.done;
+        if (left > 0) {
+            // one builds (standing a little out from the last step); the other waits behind him, out of the way
+            const builder = [...sq.ids].map((id) => this.byId.get(id)).filter((o) => o && !o.dead && o.tac?.role === 'climber').sort((a, b) => a.idx - b.idx)[0] === v;
+            const off = builder ? 0.3 : 3;
+            const bx = S.base.x + S.dir.x * off, bz = S.base.z + S.dir.z * off;
+            if (!builder) {
+                if (!this._goSpot(v, bx, bz, RUN, dt, 0.6)) v.mode = v.speed > 0 ? 'run' : 'idle';
+                else { v.speed = 0; this._face(v, fp, dt); v.mode = 'block'; }
+            } else if (Math.hypot(bx - v.x, bz - v.z) > 0.6) {
+                this._goSpot(v, bx, bz, RUN, dt, 0.3);
+                v.mode = v.speed > 0 ? 'run' : 'idle';
+            } else {
+                // at the foot of the wall: a plank, another, a step on a step
+                v.speed = 0;
+                const c = S.cells[S.done];
+                v.yaw = turn(v.yaw, Math.atan2(-(c[0] - v.x), -(c[2] - v.z)), dt * 8);
+                v.mode = 'work';
+                v.buildT = (v.buildT ?? 0.4) - dt;
+                if (v.buildT <= 0) { v.buildT = 0.35 + Math.random() * 0.2; this._buildStep(v, S); }
+            }
+        } else {
+            this._steer(v, fp.x, fp.z, RUN, dt, 1.2); // (up the steps: a ledge at a time)
+            v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : 'idle';
+        }
+        this._ground(v);
+        return true;
+    }
+
+    /** One plank of the steps (the world changes for everybody: like a builder's block). */
+    _buildStep(v, S) {
+        const g = this.game, t = g.world?.terrain?.data;
+        if (!t) { S.done = S.cells.length; return; }
+        while (S.done < S.cells.length) {
+            const [x, L, z] = S.cells[S.done];
+            const cur = t.get(x, L, z);
+            if (cur !== BLOCK.AIR && cur !== BLOCK.WATER) { S.done++; continue; }
+            // (somebody standing in that place: «step aside!» — out towards where the builder stands)
+            for (const o of v.cs.active.values()) {
+                if (o.dead || Math.abs(o.x - x) > 0.9 || Math.abs(o.z - z) > 0.9) continue;
+                const Lo = Math.round(o.y + 1.5);
+                if (L < Lo - 1 || L > Lo + 4) continue;
+                const dx = S.base.x - x, dz = S.base.z - z, dl = Math.hypot(dx, dz) || 1;
+                if (this._walkable(o.x + dx / dl * 1.2, o.z + dz / dl * 1.2, o.y)) { o.x += dx / dl * 1.2; o.z += dz / dl * 1.2; }
+                return;
+            }
+            t.set(x, L, z, BLOCK.PLANKS);
+            g.builder?._sendEdits?.([[x, L, z, BLOCK.PLANKS]]);
+            g.fx?.spark?.(_v.set(x, L - 1, z), 0xb08050, 0.12, _v2.set(0, 2, 0), 0.4);
+            S.done++;
+            if (Math.random() < 0.2) this._say(v, pick(LINES.build), 2);
+            return;
+        }
+    }
+
+    /** Ambush: round him wide to the far side, wait there still; he comes near — out with the sword. */
+    _hide(v, sq, fp, d, dt) {
+        const tac = v.tac;
+        const now = this.clock || 0;
+        if (this._closeTo(v, fp, d) || (d < 7 && tac.hidden) || now - tac.since > 18) {
+            tac.role = 'sword';
+            this._say(v, pick(LINES.ambushNow), 3);
+            return false;
+        }
+        const a = sq.base + Math.PI + (tac.k - (tac.of - 1) / 2) * 0.8; // (the far side of him from the others)
+        let tx = fp.x + Math.cos(a) * 9, tz = fp.z + Math.sin(a) * 9;
+        const cur = Math.atan2(v.z - fp.z, v.x - fp.x);
+        let da = a - cur;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) > 0.9) { const s = cur + Math.sign(da) * 0.8; tx = fp.x + Math.cos(s) * 15; tz = fp.z + Math.sin(s) * 15; } // (wide round him, never past his nose)
+        if (Math.hypot(tx - v.x, tz - v.z) < 1.5) { tac.hidden = true; v.speed = 0; this._face(v, fp, dt); v.mode = 'idle'; }
+        else { this._goSpot(v, tx, tz, RUN, dt, 0.5); v.mode = v.speed > 0 ? 'run' : 'idle'; }
+        this._ground(v);
+        return true;
+    }
+
+    /** For reinforcements: to the barracks (or the gate), and the others come out. */
+    _runner(v, sq, fp, d, dt) {
+        const tac = v.tac, cs = v.cs, gr = cs.graph;
+        if (tac.node == null) {
+            const doors = gr.tagged('barracksDoor').concat(gr.tagged('keepDoor'), gr.tagged('gateIn'));
+            let best = -1, bd = Infinity;
+            for (const id of doors) { const n = gr.nodes[id]; const dd = Math.hypot(n.x - v.x, n.z - v.z); if (Math.hypot(n.x - fp.x, n.z - fp.z) > 10 && dd < bd) { bd = dd; best = id; } }
+            tac.node = best;
+        }
+        const n = gr.nodes[tac.node];
+        if (!n || Math.hypot(n.x - v.x, n.z - v.z) < 3) { this._callHelp(sq, v); tac.role = 'sword'; return false; }
+        if (!v.path) this._goTo(v, tac.node);
+        if (!v.path || this._followPath(v, dt, RUN)) { v.path = null; this._steer(v, n.x, n.z, RUN, dt, 0.5); }
+        v.mode = 'run';
+        this._ground(v);
+        return true;
+    }
+
+    _callHelp(sq, v) {
+        const cs = sq.cs;
+        sq.mem.helpAt = this.clock || 0;
+        const had = new Set(cs.active.keys());
+        this._reinforce(cs, sq.foe);
+        // (and those about the castle doing nothing come too)
+        let n = 0;
+        for (const k of cs.active.values()) {
+            if (n >= 3 || k.dead || k.foe || k.role !== 'knight') continue;
+            if (Math.hypot(k.x - v.x, k.z - v.z) < 60 && k.job !== 'guard') { k.foe = sq.foe; k.investigate = null; n++; }
+        }
+        const fresh = [...cs.active.values()].find((k) => !had.has(k.idx) && k.foe === sq.foe) || [...cs.active.values()].find((k) => k !== v && k.foe === sq.foe && k.role === 'knight');
+        if (fresh) this._say(fresh, pick(LINES.help), 3);
+    }
+
+    /** Fall back: to the gate / the keep, catch breath (a little health back), shields to him. */
+    _retreat(v, sq, fp, d, dt) {
+        if (this._closeTo(v, fp, d)) return false;
+        const tac = v.tac, gr = v.cs.graph;
+        if (tac.node == null) {
+            let best = -1, bs = -Infinity;
+            for (const id of gr.tagged('gateIn').concat(gr.tagged('keepDoor'), gr.tagged('throneFront'), gr.tagged('yard'))) {
+                const n = gr.nodes[id];
+                const s = Math.hypot(n.x - fp.x, n.z - fp.z) - 0.6 * Math.hypot(n.x - v.x, n.z - v.z);
+                if (s > bs) { bs = s; best = id; }
+            }
+            tac.node = best;
+        }
+        const n = gr.nodes[tac.node];
+        if (n && Math.hypot(n.x - v.x, n.z - v.z) > 2.5) {
+            if (!v.path) this._goTo(v, tac.node);
+            if (!v.path || this._followPath(v, dt, RUN)) { v.path = null; this._steer(v, n.x, n.z, RUN, dt, 0.5); }
+            v.mode = 'run';
+        } else {
+            v.speed = 0; v.path = null;
+            this._face(v, fp, dt);
+            v.mode = 'block';
+            v.hp = Math.min(v.maxHp, v.hp + 0.5 * dt);
+        }
+        this._ground(v);
+        return true;
+    }
+
+    /** By the king: between him and the foe, shields up. */
+    _guardKing(v, sq, fp, d, dt) {
+        const king = v.cs.active.get(0);
+        if (!king || king.dead) { v.tac.role = 'sword'; return false; }
+        if (this._closeTo(v, fp, d)) return false;
+        const tac = v.tac;
+        const a = Math.atan2(fp.z - king.z, fp.x - king.x) + (tac.k - (tac.of - 1) / 2) * 0.8;
+        if (this._goSpot(v, king.x + Math.cos(a) * 3.2, king.z + Math.sin(a) * 3.2, RUN, dt, 0.6) || v.speed === 0) { v.speed = 0; this._face(v, fp, dt); v.mode = 'block'; }
+        else v.mode = v.speed > WALK * 1.2 ? 'run' : 'walk';
+        this._ground(v);
+        return true;
+    }
+
     /** People don't walk through each other: the near ones push apart. */
     _separate(dt) {
         const list = [];
@@ -997,6 +1568,9 @@ export class CastleLife {
         if (v.model.limbs?.rightArm != null) return; // (no sword arm any more)
         const fp = this._playerPos(v.foe);
         if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4) return;
+        if (Math.abs(fp.y - 1.95 - v.y) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
+        const sq = v.cs?.squads?.get(v.foe);
+        if (sq) sq.blows++;
         // (its sword knocked out by «Экспеллиармус»: fists)
         const dmg = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : STATS[v.role].dmg;
         if (v.foe === this.game.localId) this.struck(dmg, v.x, v.z, v.title);
@@ -1030,6 +1604,14 @@ export class CastleLife {
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
+        // a shield held up (the shield wall, the ones holding a place) takes a blow or a spell from the
+        // front: little gets through. «Авада Кедавра» passes any shield.
+        if (v.model.shield && dir && !opts.pierce && v.foe && (v.mode === 'block' || v.tac?.role === 'shield')) {
+            if (dir.x * -Math.sin(v.yaw) + dir.z * -Math.cos(v.yaw) < -0.35) {
+                dmg *= 0.25;
+                for (let i = 0; i < 5; i++) this.game.fx.spark(_v.set(v.x - Math.sin(v.yaw) * 0.8, v.y + 2.6, v.z - Math.cos(v.yaw) * 0.8), 0xffe9a0, 0.08, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
+            }
+        }
         // armour takes most of the blow: the hearts go down many times slower
         if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
         else if (v.armor > 0) {
@@ -1478,6 +2060,7 @@ export class CastleLife {
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
             for (const cs of this.castles.values()) if (cs.awake) { if (isWizSite(cs.def)) this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
+            this._squads(dt);
             this._assignSlots();
             for (const v of [...this.byId.values()]) if (!v.handLink) this._think(v, dt); // (held by the hand: HandHold leads them)
             this._separate(dt);
@@ -1504,6 +2087,8 @@ export class CastleLife {
                 // (far people move their arms and legs less often — nobody sees the difference)
                 v.animT = (v.animT || 0) + dt;
                 if (d < 35 || v.foe || v.animT > (d < 60 ? 0.066 : 0.12)) {
+                    // (a knight's bow out of its place on the back — and back again for the sword)
+                    if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     v.model.update(v.animT, { mode: v.mode, speed: v.speed });
                     v.animT = 0;
                 }
@@ -1605,6 +2190,7 @@ export class CastleLife {
             v.mode = mode;
             if (hp < v.hp || armor < v.armor) v.barT = 8;
             v.hp = hp; v.armor = armor; v.seated = !!seated; v.speed = speed;
+            if (v.role === 'knight') { v.fx = fx ?? 0; v.aimPitch = pitch ?? 0; } // (a bow in his hands, where it aims)
             if (v.wizard) {
                 // (a wizard's small magic, and where the wand aims; a blink: there at once, in a puff of smoke)
                 if ((fx & 128) && !(v.fx & 128)) { this.wizards.fx.smoke(v); v.x = x; v.y = y; v.z = z; this.wizards.fx.smoke(v); }
@@ -1662,6 +2248,8 @@ export class CastleLife {
         this.castles.clear();
     }
 }
+
+function angDiff(a, b) { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return Math.abs(d); }
 
 function turn(a, b, k) {
     let d = b - a;

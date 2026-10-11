@@ -24,8 +24,8 @@ import { SKIN_TONES } from './Appearance.js';
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
-export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer'];
+export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot'];
 /** How far up the tool the tip of a wand / a staff is (tool-local y). */
 export const TIP_Y = { wand: 1.05, staff: 2.45 };
 /** group.position.y = ground surface + this (feet at local −1.95). */
@@ -643,6 +643,21 @@ function toolBoxes(kind) {
             b(B, 0.14, 0.12, 0.14, 0, 2.2, 0, 0x3a2414);
             b(B, 0.2, 0.2, 0.2, 0, 2.38, 0, 0x8fe3ff, Math.PI / 4, 0, Math.PI / 4);
             break;
+        case 'longbow': {
+            // a knight's bow: the grip in the fist, the stave up and down across the forearm (local Z),
+            // the string behind it (towards the archer), an arrow on the string along the arm
+            b(B, 0.1, 0.14, 0.24, 0, 0, 0, LEATHER);
+            for (const s of [1, -1]) {
+                b(B, 0.08, 0.08, 0.8, 0, 0, s * 0.5, WOOD);
+                b(B, 0.07, 0.07, 0.62, 0, -0.12, s * 1.16, WOOD, s * 0.38, 0, 0); // (the limbs bend back to the archer)
+                b(B, 0.08, 0.08, 0.08, 0, -0.24, s * 1.42, 0x3a2414);
+            }
+            b(B, 0.02, 0.02, 2.84, 0, -0.26, 0, 0xe8e0c8); // the string
+            b(B, 0.04, 1.26, 0.04, 0.05, 0.37, 0, 0x8b6a3a); // the arrow
+            b(B, 0.07, 0.14, 0.07, 0.05, 1.02, 0, IRON);
+            b(B, 0.02, 0.24, 0.1, 0.05, -0.12, 0, 0xf2f2f2);
+            break;
+        }
         case 'pouch':
             b(B, 0.16, 0.1, 0.14, 0, -0.1, 0, 0x6b3e1e);
             b(B, 0.2, 0.05, 0.18, 0, -0.14, 0, GOLD);
@@ -1031,6 +1046,15 @@ export class VillagerModel {
                 rate = 30;
                 break;
             }
+            case 'shoot':
+                // the bow arm straight out at the target, the other hand drawing the string back to the chin
+                T.aRX = Math.PI / 2 + this.aimPitch; T.aRZ = 0.08;
+                T.wrist = -Math.PI;
+                T.aLX = Math.PI / 2 + this.aimPitch * 0.8 - 0.15; T.aLZ = -0.75;
+                T.hx = -0.05; T.hy = 0.25;
+                T.headX = -this.aimPitch * 0.5; T.headY = -0.2;
+                rate = 20;
+                break;
             case 'practice':
                 // little circles and flicks of the wand (practising)
                 T.aRX = 1.1 + 0.3 * Math.sin(t * 2.2);

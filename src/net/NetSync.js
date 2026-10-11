@@ -592,9 +592,10 @@ export class NetSync {
         this.net.send({ t: 'rescue', to }, true);
     }
 
-    arrow(from, dir, dmg) {
+    /** An arrow flies (mine; or, from the host, a castle knight's: `by` his id). */
+    arrow(from, dir, dmg, by = this.me) {
         const v = dir.clone();
-        this.net.send({ t: 'arrow', by: this.me, o: [r3(from.x), r3(from.y), r3(from.z)], v: [r3(v.x), r3(v.y), r3(v.z)], d: Math.round(dmg * 10) / 10 }, true);
+        this.net.send({ t: 'arrow', by, o: [r3(from.x), r3(from.y), r3(from.z)], v: [r3(v.x), r3(v.y), r3(v.z)], d: Math.round(dmg * 10) / 10 }, true);
     }
 
     weather(seconds) {
