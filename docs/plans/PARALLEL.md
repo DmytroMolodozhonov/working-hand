@@ -1,0 +1,98 @@
+# Many sessions at once — rules for every session
+
+About 25 Claude Code sessions work on this game at the same time, each on its own task, and all of
+them push to the same branch `main-fbxy0j`. Nobody answers questions.
+
+## Work
+
+- Work fully on your own: never ask, never wait for confirmation, never stop halfway to report.
+  Finish the whole task, phase by phase, pushing each finished phase. If something is unclear,
+  choose the most realistic option in the spirit of the author's rules and say so in the commit.
+- Read `CLAUDE.md` first and obey it strictly:
+  - every action is a real hand/finger interaction, never a canned animation;
+  - hands never pass through things;
+  - nothing drops or happens by accident;
+  - «characters» means EVERY creature (players, villagers, knights, sailors, wizards, zombies,
+    animals, living trees — not book-birds): hits, pushes, cuts and spells work on all of them;
+  - everything new is tested.
+- Stay inside your task. Prefer new files/modules for new features. When you must touch shared code
+  (`src/game/Game.js`, `src/net/NetSync.js`, `src/fx/SpellManager.js`, `src/game/Combat.js`…),
+  make small, clearly separated edits.
+- Design notes for several features are in `docs/plans/` (see `README.md` there). They are starting
+  points: check them against the current code.
+
+## The game in one paragraph
+
+A browser voxel game (three.js, ES modules, no build step) controlled by the player's real body through
+a webcam (pose + hands), with Russian voice spells (`src/fx/SpellManager.js` `matchSpell`), PeerJS
+multiplayer where the host is the authority (`src/net/NetSync.js`), and modes `config.mode`
+`'creative' | 'survival' | 'freeworld'` (PvP free world with HP and mana: `Combat.enabled`) | maps.
+The page exposes `window.__zns.game` for tests.
+
+## Tests
+
+- Setup: `npm ci` (or `npm install`) if `node_modules` is missing.
+- Unit: `npm test` (node --test tests/unit) — must always pass before a push.
+- E2E: Playwright + Chromium (pre-installed; `executablePath: '/opt/pw-browsers/chromium'` if needed):
+  `ZNS_TEST_PORT=<free port> node --test --test-name-pattern="<part of name>" tests/e2e/<file>.test.mjs`.
+  Synthetic poses: `tests/e2e/poses.mjs` (`frame({...})`, `feed(page, opts, count, ms)`); helpers:
+  `tests/e2e/harness.mjs` (`startServer`, `launch`, `openPage`, `startFromMenu(page, mode)`,
+  `waitHudVisible`, `realErrors`). Run the e2e tests you add and the ones covering what you change.
+
+## Git (very important)
+
+- Branch `main-fbxy0j` only. Small, finished, tested commits.
+- Commit as the author with Claude as the committer:
+  `GIT_COMMITTER_NAME=Claude GIT_COMMITTER_EMAIL=noreply@anthropic.com git -c user.name=DmytroMolodozhonov -c user.email=forsahenew@gmail.com commit ...`
+  Message: one English line saying what the player gets, then details, then the attribution trailer
+  your own session's instructions give you. No model names in commits or code.
+- To push:
+  1. `git fetch origin main-fbxy0j && git rebase origin/main-fbxy0j`
+  2. resolve conflicts KEEPING BOTH SIDES' work — others change the same files; never drop or revert
+     someone else's change;
+  3. `npm test` (must pass);
+  4. `git push origin HEAD:main-fbxy0j`; if rejected because someone pushed meanwhile, go back to 1.
+- NEVER force-push, never push other branches, never open pull requests, never rewrite pushed history.
+- Push each finished phase as soon as it is green; fetch + rebase often while you work.
+- Never commit `.env.local` or any keys; never bypass GitHub push protection (the vendored
+  `transformers.min.js` false positive is already handled). Don't touch the minimap lake (it is correct).
+
+## Texts
+
+Player-facing text is simple Russian. When behaviour or spells change, update `README.md` (Russian)
+and the in-game book `src/ui/Codex.js`. The fatigue bar is being renamed to «мана» (internally still
+`Combat.fatigue` until the mana session lands) — in new player-facing texts say «мана».
+
+## When done
+
+Make sure everything is pushed, then end with a short report in simple Russian: what the player can
+do now, and what is left, if anything.
+
+## Who does what (don't do other sessions' tasks)
+
+| Session | Task |
+|---|---|
+| spider | The giant spider twice as big |
+| mana | Mana instead of fatigue (max grows with practice) → mana crystals in caves → «Максима» in a duel clash |
+| tower | The Wizards' Tower (academy), wizard houses, wizards, wandering wizards |
+| houses | Lying in a villager's bed; houses without getting stuck or flicker; knights not crowding |
+| alive | The «Alive» spell (a living tree) + Brainrot on any creature |
+| herds | Animal herds keep a distance and behave like animals |
+| models | New horse and pig models |
+| handshake | Handshake and holding/pulling someone's hand |
+| impacts | Pushes, staggers, knockdowns, punches, head jolts, falls — on every creature; each spell's physical effect |
+| vortex | The «Water Vortex» spell + Bubble, Frozen, Fire Maxima |
+| hands | Nothing drops by accident, real throws, reliable grabs, realistic holds, bow string |
+| book | The spell book held really realistically |
+| scrolls | Scrolls, the saved worlds menu, small fixes |
+| cuts | Sword/axe cut off limbs and heads of every creature where the blade passed |
+| death | Death: the body stays (bones), everything drops and can be looted, respawn with only the wooden wand |
+| runner | The running book (+30% run speed) |
+| fishing | The fishing rod and fishing |
+| sea | The sea: deep water, beaches, waves, sea castles with a port → then the surfboard |
+| ships | 17th-century ships: model, decks, sails, wheel, wind → then crews, cannons, damage, sinking, sync |
+| look | The new look: the name «Волшебство только начинается», interface, modes, logo |
+| launcher | Windows launch: an app window with a loading/update screen, shortcut, install folder |
+| talk | Villagers really talk (a small neural net) and carry out orders |
+| voices | Better villager voices (female/male never mixed) |
+| (main session) | Inferno following the hand; Avada only from a scroll |
