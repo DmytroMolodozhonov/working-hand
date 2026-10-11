@@ -508,6 +508,85 @@ test('saved worlds menu: each world shows its game version; deleting asks in the
     await page.close();
 });
 
+test('«Бомбардо Максима» into a tree crown bursts in the leaves (not 50 m past the tree) and the tree is gone', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const p = g.character.group.position;
+        const trees = g.world.trees.filter((t) => t.alive && t.crown);
+        trees.sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+        // a tree and a side to shoot from with no other tree on the way
+        let tree = null, from = null;
+        for (const t of trees) {
+            for (let k = 0; k < 8 && !from; k++) {
+                const a = (k / 8) * Math.PI * 2, o = new T.Vector3(t.x + Math.cos(a) * 9, 8.2, t.z + Math.sin(a) * 9);
+                const clear = trees.every((u) => {
+                    if (u === t) return true;
+                    const ax = o.x, az = o.z, bx = t.x - ax, bz = t.z - az, L2 = bx * bx + bz * bz;
+                    const q = Math.max(0, Math.min(1, ((u.x - ax) * bx + (u.z - az) * bz) / L2));
+                    return Math.hypot(u.x - (ax + bx * q), u.z - (az + bz * q)) > 5;
+                });
+                if (clear && !g.terrain?.data?.get?.(Math.round(o.x), Math.floor(o.y), Math.round(o.z))) from = o;
+            }
+            if (from) { tree = t; break; }
+        }
+        const n0 = g.explosions.length;
+        const dir = new T.Vector3(tree.x - from.x, 0, tree.z - from.z).normalize();
+        g.spells.cast('BombardoMaxima', from, dir, 'right', 'local');
+        const t0 = performance.now();
+        while (g.explosions.length === n0 && performance.now() - t0 < 8000) await frames(1);
+        const e = g.explosions[n0];
+        return { found: !!tree, blast: e ? Math.hypot(e.p[0] - tree.x, e.p[2] - tree.z) : null, y: e?.p[1], alive: tree.alive };
+    });
+    assert.ok(r.found, 'a start-area tree to shoot at');
+    assert.ok(r.blast != null && r.blast < 4.5, 'the orb burst in the crown, by the tree ' + JSON.stringify(r));
+    assert.equal(r.alive, false, 'the tree is blown away');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('«Даст»: a sandy duel charge flies at the zombie the raised hand points at and slows it down for 5 s', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const raw = frame({ arms: 'forward', wristOffset: [0, 0.05] });
+    await page.evaluate((raw) => {
+        window.__dustPose = setInterval(() => window.__zns.poseService.injectRaw({ ...JSON.parse(JSON.stringify(raw)), ts: performance.now() }), 33);
+    }, raw);
+    await page.waitForFunction(() => window.__zns.game.character.isArmRaised('right'), null, { timeout: 20000 });
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const ahead = () => {
+            const o = g.castOrigin('right', new T.Vector3());
+            const d = ch.getPointingDirection('right', new T.Vector3());
+            const p = new T.Vector3();
+            for (let t = 3; t < 25; t += 0.1) { p.copy(o).addScaledVector(d, t); if (p.y < g.collision.groundY(p.x, p.z) + 1) break; }
+            return new T.Vector3(p.x, g.collision.groundY(p.x, p.z), p.z);
+        };
+        const z = g._createZombie(ahead());
+        z.setSleeping(true);
+        g.lastSpellCastTime = 0; g._lastDuelCast = 0;
+        const cast = g.castLocalSpell('даст', true);
+        const bolts = [...g.duel.bolts.values()].map((b) => b.spell);
+        const t0 = performance.now();
+        while (!(z.slowT > 0) && performance.now() - t0 < 10000) await frames(1);
+        const slowT = z.slowT || 0;
+        return { cast, bolts, slowT, factor: z.slowT > 0 ? z.speed * 0.4 / z.baseSpeed : 1, alive: !z.isDead };
+    });
+    await page.evaluate(() => clearInterval(window.__dustPose));
+    assert.equal(r.cast, 'Sands');
+    assert.deepEqual(r.bolts, ['SandsDuel'], 'a duel charge flew');
+    assert.ok(r.slowT > 4, 'the zombie is slowed for ~5 s: ' + JSON.stringify(r));
+    assert.ok(r.factor < 0.5, 'it moves at less than half its speed');
+    assert.ok(r.alive, 'Dust slows, it does not kill');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
 test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «Раскрой свои секреты», Люмос, eating', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');

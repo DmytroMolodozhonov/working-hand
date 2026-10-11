@@ -33,6 +33,7 @@ import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS } from './WizardLife.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster } from './WizardAI.js';
 import { VillagerOrders } from './VillagerOrders.js';
+import { slowFactor, tickSlow } from './Slow.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -492,7 +493,7 @@ export class CastleLife {
         const dx = tx - v.x, dz = tz - v.z;
         const d = Math.hypot(dx, dz);
         if (d < 0.6) { v.node = v.path[v.pathI]; v.pathI++; return v.pathI >= v.path.length; }
-        const s = Math.min(d, speed * dt);
+        const s = Math.min(d, speed * slowFactor(v) * dt);
         v.x += dx / d * s; v.z += dz / d * s;
         v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 8);
         v.speed = speed;
@@ -512,7 +513,7 @@ export class CastleLife {
         const d = Math.hypot(dx, dz);
         v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 10);
         if (d <= stopAt) { v.speed = 0; return d; }
-        const s = Math.min(d - stopAt, speed * dt);
+        const s = Math.min(d - stopAt, speed * slowFactor(v) * dt);
         // a ledge right ahead (half a body high): climb it rather than inch at it
         if (!this._walkable(v.x + dx / d * 0.75, v.z + dz / d * 0.75, v.y) && this._tryClimb(v, dx / d, dz / d)) { v.speed = 0; return d; }
         const nx = v.x + dx / d * s, nz = v.z + dz / d * s;
@@ -602,6 +603,7 @@ export class CastleLife {
         const cs = v.cs;
         v.damageCooldown -= dt;
         v.sayT -= dt;
+        tickSlow(v, dt); // («Даст»: slowed for a while)
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.vy) this._fallStep(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
         // held up by «Вингардиум Левиоса»: Levitation carries the body
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; }

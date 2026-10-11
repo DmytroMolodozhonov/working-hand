@@ -33,6 +33,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { animalModel, animateLegs, HORSE_COLORS } from './AnimalModels.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
 import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs } from './AnimalHerd.js';
+import { slowFactor, tickSlow } from './Slow.js';
 
 export { animalModel };
 
@@ -537,6 +538,7 @@ export class Animals {
         const p = a.group.position;
         a.t += dt;
         if (a.damageCooldown > 0) a.damageCooldown -= dt;
+        tickSlow(a, dt); // («Даст»: slowed for a while)
         if (a.stunT > 0) {
             // stunned / thrown by a spell or a blast: no walking until it comes to itself
             a.stunT -= dt;
@@ -824,7 +826,7 @@ export class Animals {
         if (a.spd < 0.02) a.spd = 0;
         if (a.spd > 0) {
             const yaw = a.group.rotation.y;
-            const step = a.spd * dt;
+            const step = a.spd * slowFactor(a) * dt;
             p.x -= Math.sin(yaw) * step; p.z -= Math.cos(yaw) * step;
             a.walkT += dt * a.spd * 2.2;
         }

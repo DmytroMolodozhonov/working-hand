@@ -384,3 +384,32 @@ test('duel spells fly where the hand points — standing and hovering after «Ф
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('«Earthquake Maxima»: three cracks, the ground really breaks along them (blocks fall in, earth heaves up), the ground shakes under the hero near the wave', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        ch.group.position.set(0, ch.group.position.y, 30);
+        await frames(20);
+        const o = ch.group.position.clone();
+        o.y = g.collision.surfaceY(o.x, o.z);
+        const dir = new T.Vector3(0, 0, -1);
+        const edits0 = (g.blockEdits || []).length;
+        const n0 = g.scene.children.length;
+        g.spells.cast('EarthquakeMaxima', o, dir, 'right', g.localId);
+        const crack = g.scene.children[n0];
+        let shake = 0;
+        for (let i = 0; i < 120; i++) { await frames(1); shake = Math.max(shake, g.fx.shake || 0); }
+        const edits = (g.blockEdits || []).slice(edits0);
+        return { segs: crack?.children?.length ?? 0, dug: edits.filter((e) => e[3] === 0).length, heaved: edits.filter((e) => e[3] !== 0).length, shake };
+    });
+    assert.ok(r.segs >= 50, 'three cracks side by side ' + JSON.stringify(r));
+    assert.ok(r.dug >= 5, 'blocks fell into the crack ' + JSON.stringify(r));
+    assert.ok(r.heaved >= 2, 'the earth heaved up beside it ' + JSON.stringify(r));
+    assert.ok(r.shake > 0.5, 'the ground shakes under the hero ' + r.shake);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

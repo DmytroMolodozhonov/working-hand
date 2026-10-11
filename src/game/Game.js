@@ -30,6 +30,7 @@ import { PerfLog } from '../core/PerfLog.js';
 import { BookBirds, makeBookModel } from './BookBirds.js';
 import { RunningBook } from './RunningBook.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
+import { Quake } from './Quake.js';
 import { Swimming } from './Swimming.js';
 import { ItemSystem } from './Items.js';
 import { WandMagic } from './WandMagic.js';
@@ -79,7 +80,7 @@ const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'Sapira', 'Stupefy', 'AvadaKedavra']);
+const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -206,6 +207,8 @@ export class Game {
             blowMe: (casterId, origin, pushAt, name) => this._blowMe(casterId, origin, pushAt, name),
             creatures: (name, casterId, pushAt, opts) => this.creatureImpact.spellArea(name, casterId, pushAt, opts),
             quakeMe: (casterId, origin, reached, power, dir) => this._quakeMe(casterId, origin, reached, power, dir),
+            quakeGround: (x, z, power, side) => this.quake.breakGround(x, z, power, side), // (Quake.js: the ground breaks along the crack)
+            quakeShake: (front, power) => this.quake.shake(front, power), // (…and shakes under whoever is near the wave)
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
@@ -227,6 +230,7 @@ export class Game {
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
             collision: this.collision,
             terrain: () => this.terrain,
+            leavesAt: (x, y, z) => !!this.world.leavesAt?.(x, y, z), // (the start-area trees' crowns stop a «Бомбардо»)
         });
         if (this.sound) {
             this.sound.setScene(this.scene);
@@ -253,6 +257,7 @@ export class Game {
         this.creatureImpact = new CreatureImpact(this);
         this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
         this._headBase = { yaw: 0, pitch: 0 };
+        this.quake = new Quake(this); // «Earthquake»: creatures thrown, the ground breaking, shaking (Quake.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
@@ -880,7 +885,7 @@ export class Game {
         // Duel magic: a charge flies at the creature the hand points at
         // Duel spells need a raised, pointing hand: the word alone (e.g. a friend's voice
         // reaching this microphone) never fires them while the arms hang down
-        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : (name === 'Stupefy' || name === 'AvadaKedavra') ? name : null;
+        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : (name === 'Stupefy' || name === 'AvadaKedavra') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);
             const side = aim ? aim.side : (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : ['right', 'left'].find((s) => this.character.isArmRaised(s)));
@@ -1789,6 +1794,7 @@ export class Game {
         }
         if (name === 'Stupefy' || name === 'AvadaKedavra') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
+        if (name === 'Sands') { this._lastDuelCast = 0; return this._castDuel('Sands', 'SandsDuel', true); }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);

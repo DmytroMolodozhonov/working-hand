@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three';
+import { slowFactor, tickSlow } from '../game/Slow.js';
 
 let SHARED = null;
 function shared() {
@@ -166,6 +167,7 @@ export class Zombie {
         const ground = collision ? (collision.groundAt ? collision.groundAt(pos.x, pos.z, pos.y - 1.0 + 1.1) : collision.groundY(pos.x, pos.z)) : -0.5;
 
         if (this.damageCooldown > 0) this.damageCooldown -= dt;
+        tickSlow(this, dt); // («Даст»: slowed for a while)
         this._spinHalo(dt);
         // Blown by «Вайнд»: slides away, slowing down (also when stunned or frozen)
         if (this.windVel && !this.isDead && !this.isDying) {
@@ -274,7 +276,7 @@ export class Zombie {
             if (Number.isFinite(distance)) {
                 if (distance > 1.8) {
                     if (distance > 0.1) _v.divideScalar(distance);
-                    pos.addScaledVector(_v, this.speed * dt);
+                    pos.addScaledVector(_v, this.speed * slowFactor(this) * dt);
                     this.group.lookAt(targetPos.x, pos.y, targetPos.z);
                     this.group.rotation.x = 0;
                     this.group.rotation.z = 0;

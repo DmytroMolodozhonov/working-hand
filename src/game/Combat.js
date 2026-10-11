@@ -28,6 +28,7 @@
 import * as THREE from 'three';
 import { sharpJerk } from './Jerk.js';
 import { spellPush } from './Impact.js';
+import { SLOW } from './Slow.js';
 
 export const PVP = {
     MAX_HP: 20,
@@ -233,6 +234,8 @@ export class Combat {
         this.chill = 0;
         this.stunLeft = 0;
         this.encased = false;
+        this.slowLeft = 0;
+        if (this.game.character) this.game.character.slowScale = 1;
         this.dead = false;
         if (this.game.knock) this.game.knock.reset(); else this.game.character.knockedDown = false;
         this.game.hud.setStatus?.('');
@@ -261,6 +264,14 @@ export class Combat {
         if (this.game.flight?.busy) this.game.flight.land('stunned');
         if (this.game.water?.active) this.game.water.drop();
         if (this.game.levitation?.active) this.game.levitation.release(false);
+    }
+
+    /** «Даст»: sand in the eyes and the joints — slowed for a while (every mode). */
+    slow(seconds = SLOW.TIME, byId = null) {
+        this.slowLeft = Math.max(this.slowLeft || 0, seconds);
+        this.slowBy = byId;
+        if (this.game.character) this.game.character.slowScale = SLOW.SCALE;
+        this._hudKey = '';
     }
 
     // ================================================================ fatigue
@@ -528,6 +539,12 @@ export class Combat {
 
     // ================================================================ update
     update(dt) {
+        if (this.slowLeft > 0) {
+            this.slowLeft = Math.max(0, this.slowLeft - dt);
+            const ch = this.game.character;
+            if (ch) ch.slowScale = this.slowLeft > 0 ? SLOW.SCALE : 1;
+            if (!this.stunned && !this.frozen) this.game.hud.setStatus?.(this.slowLeft > 0 ? `🏜️ Даст: песок в глазах — вы замедлены ещё <b>${Math.ceil(this.slowLeft)}</b> с` : '');
+        }
         if (this.stunLeft > 0) {
             this.stunLeft = Math.max(0, this.stunLeft - dt);
             const left = `<b>${Math.ceil(this.stunLeft)}</b> с`;
@@ -561,7 +578,7 @@ export class Combat {
         if (this.chillTimer <= 0 && this.chill > 0) this.chill = Math.max(0, this.chill - dt * 0.3);
         this.infernoCooldown -= dt;
         for (const t of this.targets.values()) t.damageCooldown -= dt;
-        this.game.character.slowScale = this.frozen ? 0 : 1 - 0.6 * this.chill; // (the ice beam's cold slows the legs)
+        this.game.character.slowScale = this.frozen ? 0 : (1 - 0.6 * this.chill) * (this.slowLeft > 0 ? SLOW.SCALE : 1); // (the ice beam's cold slows the legs; «Даст»'s sand too)
 
         this._updateVisuals(dt);
         this._hud();

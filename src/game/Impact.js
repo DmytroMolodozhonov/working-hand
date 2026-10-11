@@ -125,7 +125,7 @@ export const SPELL_PHYSICS = {
     Protection: null, ProtectionMaxima: null, Levitation: null, LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,
     Fire: { push: 0, jolt: 0.6 },
     Inferno: { push: 1.5, jolt: 0.6 },
-    Sands: { push: 5, jolt: 2.5 },
+    Sands: { push: 5, jolt: 2.5 }, SandsDuel: { push: 5, jolt: 2.5 }, // («Даст»: a light puff — the head jolts, the legs slow down: Slow.js)
     Wind: { push: 13, range: 14, jolt: 1 }, WindMaxima: { push: 39, range: 24, jolt: 2 },
     WaveAttack: { push: 10, toss: 3.5, wet: true }, WaveAttackMaxima: { push: 17.2, toss: 4.7, wet: true },
     Thunderwave: { push: 20, thunder: true, jolt: 3 },

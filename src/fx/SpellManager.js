@@ -503,22 +503,26 @@ export class SpellManager {
         const crack = new THREE.Group();
         this.scene.add(crack);
         const segs = [];
-        let prev = origin.clone().addScaledVector(dir, 1);
-        const w = power > 1 ? 0.55 : 0.32;
-        for (let d = 2; d <= length; d += 1.6) {
-            const p = origin.clone().addScaledVector(dir, d).addScaledVector(side, (Math.random() - 0.5) * 1.2);
-            for (const q of [prev, p]) q.y = ground(q.x, q.z) + 0.04;
-            const len = prev.distanceTo(p);
-            const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, len), crackMat);
-            m.position.copy(prev).lerp(p, 0.5);
-            m.lookAt(p);
-            m.scale.set(0.01, 1, 1);
-            const glow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.35, 0.05, len), glowMat);
-            glow.position.y = 0.01;
-            m.add(glow);
-            crack.add(m);
-            segs.push({ m, d });
-            prev = p;
+        // a «Максима» tears three cracks side by side (the middle one wide and glowing)
+        const lanes = power > 1 ? [0, -2.2, 2.2] : [0];
+        for (const lane of lanes) {
+            let prev = origin.clone().addScaledVector(dir, 1).addScaledVector(side, lane * 0.4);
+            const w = (power > 1 ? 0.55 : 0.32) * (lane ? 0.7 : 1);
+            for (let d = 2; d <= length; d += 1.6) {
+                const p = origin.clone().addScaledVector(dir, d).addScaledVector(side, lane * Math.min(1, d / 6) + (Math.random() - 0.5) * 1.2);
+                for (const q of [prev, p]) q.y = ground(q.x, q.z) + 0.04;
+                const len = prev.distanceTo(p);
+                const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, len), crackMat);
+                m.position.copy(prev).lerp(p, 0.5);
+                m.lookAt(p);
+                m.scale.set(0.01, 1, 1);
+                const glow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.35, 0.05, len), glowMat);
+                glow.position.y = 0.01;
+                m.add(glow);
+                crack.add(m);
+                segs.push({ m, d, lane, at: p.clone() });
+                prev = p;
+            }
         }
         const hit = new Set(), fell = new Set(); // (hurt once; thrown off the feet once)
         let t = 0;
@@ -530,13 +534,22 @@ export class SpellManager {
                 for (const s of segs) {
                     if (s.d > front) continue;
                     s.m.scale.x = Math.min(1, s.m.scale.x + dt * 6);
-                    // dust and stones jump where the wave passes now
-                    if (s.d > front - SPEED * dt * 1.5 && !s.burst) {
+                    // dust and stones jump where the wave passes now (every piece once, even on a slow frame)
+                    if (!s.burst) {
                         s.burst = true;
                         const p = s.m.position;
-                        for (let i = 0; i < (power > 1 ? 7 : 4); i++) {
+                        for (let i = 0; i < (power > 1 ? 12 : 6); i++) {
                             this.fx.spark(_a.set(p.x + (Math.random() - 0.5) * half, p.y + 0.2, p.z + (Math.random() - 0.5) * half), [0x8a6a4a, 0x6b5440, 0xa38766][i % 3], 0.3 + Math.random() * 0.3 * power, _b.set((Math.random() - 0.5) * 3, 3 + Math.random() * 4 * power, (Math.random() - 0.5) * 3), 1.0);
                         }
+                        // big rocks thrown out of the crack, and a cloud of dust along it
+                        for (let i = 0; i < (power > 1 ? 4 : 2); i++) {
+                            this.fx.spark(_a.set(p.x, p.y + 0.3, p.z), i % 2 ? 0x5a4a3c : 0x7d6a55, 0.55 + Math.random() * 0.35 * power, _b.copy(side).multiplyScalar((Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 3)).setY(5 + Math.random() * 3 * power), 1.4);
+                        }
+                        for (let i = 0; i < (power > 1 ? 5 : 3); i++) {
+                            this.fx.glow?.spawn(p.x + (Math.random() - 0.5) * half, p.y + 0.4, p.z + (Math.random() - 0.5) * half, (Math.random() - 0.5) * 1.5, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 1.5, 0xb59a78, 0.9 + Math.random() * 0.8 * power, 1.4, { shrink: -0.4 });
+                        }
+                        // the ground really breaks along the crack (the host decides, everybody gets the blocks)
+                        if (this.auth) this.hooks.quakeGround?.(s.at.x, s.at.z, power, s.lane >= 0 ? side : _b.copy(side).negate());
                     }
                 }
                 // Whatever the wave runs under falls down (once)
@@ -567,6 +580,8 @@ export class SpellManager {
                     if (this.hooks.quakeMe && !hit.has('me')) {
                         if (this.hooks.quakeMe(casterId, origin, reached, power, dir)) hit.add('me');
                     }
+                    // the ground shakes under whoever is near the running wave
+                    this.hooks.quakeShake?.(_c.copy(origin).addScaledVector(dir, Math.min(front, length)), power);
                 }
                 // the crack fades away after a while
                 const fade = t - length / SPEED - 5;
@@ -1030,6 +1045,10 @@ export class SpellManager {
                 // Walls / tables / trees / floor
                 if (collision && collision.pointBlocked(orb.position.x, orb.position.y, orb.position.z)) {
                     explodeAt(prev); spell.life = 0; return;
+                }
+                // a tree's crown: the orb bursts in the leaves (not through them, 50 m on)
+                if (this.hooks.leavesAt?.(orb.position.x, orb.position.y, orb.position.z)) {
+                    explodeAt(orb.position); spell.life = 0; return;
                 }
                 // Players: a shield sends the orb back, otherwise it blows up on them
                 for (const p of players) {

@@ -303,7 +303,10 @@ export class VoxelWorld {
             const lt = SPAWN_TREE_TINTS[kind];
             this.leafMesh.setColorAt(placed, tint.setRGB(v * lt.leaf[0] * (0.95 + rng() * 0.1), v * lt.leaf[1], v * lt.leaf[2] * (0.95 + rng() * 0.1)));
             const boxId = this.collision.addBox({ minX: x - 1, maxX: x + 1, minY: -0.5, maxY: 5.5, minZ: z - 1, maxZ: z + 1, kind: 'tree', noSupport: true });
-            this.trees.push({ x, z, alive: true, index: placed, boxId, kind });
+            // the crown's bulk (crownGeo × scale; it turns in 90° steps, so the box stays the same):
+            // leaves are solid for flying spells, as the voxel trees' leaves are further out
+            const crown = { minX: x - 3.1 * scale, maxX: x + 3.1 * scale, minY: 5.3 * scale, maxY: 11.3 * scale, minZ: z - 3.1 * scale, maxZ: z + 3.1 * scale };
+            this.trees.push({ x, z, alive: true, index: placed, boxId, kind, crown });
             placed++;
         }
         for (let i = 0; i < placed; i++) { const tk = SPAWN_TREE_TINTS[this.trees[i].kind].trunk; this.trunkMesh.setColorAt(i, tint.setRGB(tk[0], tk[1], tk[2])); }
@@ -532,6 +535,16 @@ export class VoxelWorld {
      * Blow up everything destructible inside a sphere.
      * Returns {blocks, props} for debris effects; also reports destroyed tables.
      */
+    /** A living start-area tree whose crown (leaves) is at this point, or null. */
+    leavesAt(x, y, z) {
+        for (const t of this.trees) {
+            const c = t.crown;
+            if (!t.alive || !c) continue;
+            if (x >= c.minX && x <= c.maxX && y >= c.minY && y <= c.maxY && z >= c.minZ && z <= c.maxZ) return t;
+        }
+        return null;
+    }
+
     explode(center, radius) {
         const out = { blocks: [], props: [], tables: [], falls: [] };
         if (!this.destructible) return out;

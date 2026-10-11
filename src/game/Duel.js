@@ -33,7 +33,8 @@
 
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
-import { PVP } from './Combat.js';
+import { PVP, PLAYER_DAMAGE } from './Combat.js';
+import { SLOW } from './Slow.js';
 import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
@@ -46,6 +47,8 @@ export const DUEL_SPELLS = {
     LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса' },
     // Slower and thicker: a dark-violet ball of force rolling through the air
     SapiraDuel: { color: 0x8e2de2, name: 'Сапира', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
+    // «Даст»: a sandy charge — whoever it hits is slowed for 5 s
+    SandsDuel: { color: 0xd2b48c, name: 'Даст', speed: 13, coreColor: 0xfff1cf },
 };
 
 export const DUEL = {
@@ -651,6 +654,10 @@ export class Duel {
             g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
             hit(10);
             if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
+        } else if (spell === 'SandsDuel') {
+            c.slowT = Math.max(c.slowT || 0, SLOW.TIME);
+            this._sand(p);
+            if (!c.dead) g.creatureImpact?.spellHit(c, 'SandsDuel', src, byId);
         }
     }
 
@@ -703,6 +710,13 @@ export class Duel {
             if (c.enabled) c.damage(4, byId, 'Sapira');
             else g.hud.setVoice('💜 Сапира попала в вас', true);
             g.impact?.apply({ v: push(12), from, by: byId, spell: 'SapiraDuel', jolt: 3, noShield: true });
+        } else if (spell === 'SandsDuel') {
+            this._sand(p);
+            g.hud.flashColor?.('rgba(210, 180, 140, 0.6)');
+            c.slow(SLOW.TIME, byId);
+            if (c.enabled) c.damage(PLAYER_DAMAGE.Sands ?? 3, byId, 'Sands');
+            else g.hud.setVoice('🏜️ Даст попал в вас: песок в глазах — 5 секунд вы медленнее', true);
+            g.impact?.apply({ v: push(5), from, by: byId, spell: 'SandsDuel', jolt: 2.5, noShield: true });
         }
     }
 
@@ -727,7 +741,17 @@ export class Duel {
             g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
             g.damageZombie(z, 10, true, _v2.set(0, 0, 1), byId);
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'SapiraDuel', src, byId);
+        } else if (spell === 'SandsDuel') {
+            z.slowT = Math.max(z.slowT || 0, SLOW.TIME);
+            this._sand(p);
+            if (!z.isDead) g.creatureImpact?.spellHit(z, 'SandsDuel', src, byId);
         }
+    }
+
+    /** A puff of sand where «Даст» hit. */
+    _sand(p) {
+        const g = this.game;
+        for (let i = 0; i < 24; i++) g.fx.spark(p, i % 3 ? 0xd2b48c : 0xf3e2b3, 0.14, _v2.set((Math.random() - 0.5) * 4, Math.random() * 2.5, (Math.random() - 0.5) * 4), 1.0);
     }
 
     _end(b, res, broadcast = true) {
