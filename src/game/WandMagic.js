@@ -9,9 +9,10 @@
  *  - «Люмос»: the wand's tip shines — a real light that lights up everything
  *    around (no glass ball: a glow at the tip), costs a little strength over
  *    time. «Люмос Максима»: brighter — say it again for even more light.
- *    A sharp flick of the wand throws the light: it flies until it meets a wall
- *    or the ground and stays there, lighting the place, then fades.
- *    «Нокс» puts it out. Everybody sees (and is lit by) everybody's Lumos.
+ *    A sharp flick of the wand throws the light: it leaves the tip (the tip goes
+ *    dark), flies until a wall, the ground or 40 m stops it, and fades out —
+ *    about 10 s after the throw. «Нокс» or «стоп» puts out all of it (the tip
+ *    and the thrown light). Everybody sees (and is lit by) everybody's Lumos.
  *  - «Латин Вратин» (drawing): the tip leaves glowing lines in the air while
  *    you move the wand; they fade in about 10 seconds.
  *
@@ -30,8 +31,10 @@ const _q = new THREE.Quaternion();
 
 export const LUMOS = {
     THROW_SPEED: 18, // m/s
-    THROW_RANGE: 40, // m: then it stops in the air and hangs there
-    STAY: 20, // s it shines where it landed (the last 4 s fading)
+    THROW_RANGE: 40, // m: then it stops in the air
+    LIFE: 10, // s from the throw: then it is gone
+    FADE: 3, // s of fading out at the end
+    AGAIN: 1500, // ms: the same word heard again (the speech's final result) is not a second cast
 };
 
 let _glowTex = null;
@@ -131,7 +134,12 @@ export class WandMagic {
         if (!this.wand && !this._bare()) { if (isFinal) g.hud.setVoice('🪄 Это заклинание работает только с волшебной палочкой в руке', true); return null; }
         if (!this.wand) this._bareHand = ['right', 'left'].find((s) => g.character.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || 'right';
         if (name === 'Lumos' || name === 'LumosMaxima') {
-            if (!isFinal && name === 'Lumos') return null; // (wait for «Максима»)
+            // (lit at once — «Максима» said right after only makes it brighter; the same word
+            // heard again as the speech's final result is not a second cast)
+            const now = performance.now();
+            if (name === 'Lumos' && this.light) return null;
+            if (now - (this._said?.[name] || -1e9) < LUMOS.AGAIN) return null;
+            (this._said || (this._said = {}))[name] = now;
             const tired = g.combat.check(name);
             if (tired) { g.hud.setVoice(tired, true); return null; }
             g.combat.pay(name);
@@ -160,38 +168,49 @@ export class WandMagic {
         g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — кончик палочки светится («Нокс» — погасить; резкий взмах палочкой — бросить свет)', true);
     }
 
-    _nox() {
+    /** «Нокс» / «стоп»: all my Lumos goes out — the tip and the thrown light. True if something did. */
+    _nox(say = true) {
         const l = this.light;
-        if (!l) return;
-        this.game.scene.remove(l.glow);
-        l.glow.material.dispose();
-        this.light = null;
-        this.game.hud.setVoice('🌑 Нокс — свет погас', true);
+        if (l) { this.game.scene.remove(l.glow); l.glow.material.dispose(); this.light = null; }
+        const mine = this.thrown.filter((t) => t.mine);
+        for (const t of mine) { this.game.scene.remove(t.glow); t.glow.material.dispose(); }
+        if (mine.length) { this.thrown = this.thrown.filter((t) => !t.mine); this.game.sync?.lumosOut?.(); }
+        if (!l && !mine.length) return false;
+        if (say) this.game.hud.setVoice('🌑 Нокс — свет погас', true);
+        return true;
+    }
+
+    /** Another player put out their thrown light. */
+    outBy(by) {
+        for (const t of this.thrown) if (t.by === by) t.age = LUMOS.LIFE;
     }
 
     /** A flick of the wand: the light leaves the tip and flies (the others are told). */
     _throwLight(dir) {
         const g = this.game;
         const l = this.light;
-        if (this.thrown.some((t) => t.mine)) return; // (one at a time; the tip shines again when it fades)
         const p = this.tip(new THREE.Vector3());
-        if (!p) return;
+        if (!l || !p) return;
         this.addThrown(p, dir.clone().multiplyScalar(LUMOS.THROW_SPEED), Math.max(2, l.level + 1), true);
         g.sync?.lumosThrow?.(p, dir, Math.max(2, l.level + 1));
-        g.hud.setVoice('💫 Свет брошен — он останется там, куда долетит', true);
+        // the light has left the wand: its tip is dark (say «Люмос» to light it again)
+        g.scene.remove(l.glow); l.glow.material.dispose(); this.light = null;
+        this._thrownAt = performance.now();
+        g.hud.setVoice('💫 Свет брошен — летит и гаснет; «Люмос» — зажечь палочку снова', true);
     }
 
     /** A thrown light (mine or another player's). */
-    addThrown(pos, vel, level, mine = false) {
+    addThrown(pos, vel, level, mine = false, by = null) {
         const glow = makeGlow(glowSize(level) * 1.3);
         glow.position.copy(pos);
         this.game.scene.add(glow);
-        this.thrown.push({ glow, pos: pos.clone(), vel: vel.clone(), flown: 0, stuck: false, life: LUMOS.STAY, level, mine });
+        this.thrown.push({ glow, pos: pos.clone(), vel: vel.clone(), flown: 0, stuck: false, age: 0, level, mine, by });
     }
 
-    /** It flies straight until a wall / the ground stops it, then stays and shines. */
+    /** It flies straight until a wall / the ground / its range stops it, and fades out LIFE s after the throw. */
     _flyThrown(t, dt) {
         const col = this.game.collision;
+        t.age += dt;
         if (!t.stuck) {
             const step = t.vel.length() * dt;
             const n = Math.max(1, Math.ceil(step / 0.25));
@@ -202,13 +221,15 @@ export class WandMagic {
                 t.flown += step / n;
                 if (t.flown > LUMOS.THROW_RANGE) { t.stuck = true; break; }
             }
-        } else t.life -= dt;
+        }
         t.glow.position.copy(t.pos);
-        const k = Math.min(1, t.life / 4); // (fading in the last seconds)
+        const k = this._fade(t); // (fading in the last seconds)
         t.glow.scale.setScalar(glowSize(t.level) * 1.3 * (0.4 + 0.6 * k) * (1 + Math.sin(this._flick * 1.7 + t.flown) * 0.05));
         t.glow.material.opacity = k;
-        return t.life > 0;
+        return t.age < LUMOS.LIFE;
     }
+
+    _fade(t) { return Math.max(0, Math.min(1, (LUMOS.LIFE - t.age) / LUMOS.FADE)); }
 
     /** Another player's Lumos (their pose message says how bright): a glow at their wand's tip. */
     _updateRemote() {
@@ -234,8 +255,8 @@ export class WandMagic {
     _placeLights() {
         const cam = this.game.camera?.position;
         const src = [];
-        if (this.light && !this.thrown.some((t) => t.mine)) src.push({ p: this.light.glow.position, level: this.light.level });
-        for (const t of this.thrown) src.push({ p: t.pos, level: t.level * Math.min(1, t.life / 4) });
+        if (this.light) src.push({ p: this.light.glow.position, level: this.light.level });
+        for (const t of this.thrown) src.push({ p: t.pos, level: t.level * this._fade(t) });
         for (const e of this.remote.values()) src.push({ p: e.glow.position, level: e.level });
         if (cam) src.sort((a, b) => a.p.distanceToSquared(cam) - b.p.distanceToSquared(cam));
         this.lights.forEach((light, i) => {
@@ -347,14 +368,13 @@ export class WandMagic {
     update(dt) {
         const g = this.game;
         const hasWand = !!this.wand || this._bare();
-        if (this.light && !hasWand) this._nox();
+        if (this.light && !hasWand) this._nox(false);
         this._flick = (this._flick || 0) + dt;
         // Lumos at the tip (a little strength over time); a flick throws it
         if (this.light) {
             const tip = this.tip(new THREE.Vector3(), _v2);
-            const away = this.thrown.some((t) => t.mine); // (the light is flying: the tip only glimmers)
             this.light.glow.position.copy(tip);
-            this.light.glow.scale.setScalar(glowSize(this.light.level) * (away ? 0.35 : 1) * (1 + Math.sin(this._flick * 2.3) * 0.05));
+            this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
             const side = g.items.heldOf('wand')?.side || this._bareSide();
             const v = g.character.handVelocity[side];

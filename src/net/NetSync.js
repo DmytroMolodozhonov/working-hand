@@ -330,10 +330,13 @@ export class NetSync {
         this.net.send({ t: 'btake', id });
     }
 
-    /** My Lumos light thrown: everybody sees it fly and stay where it lands. */
+    /** My Lumos light thrown: everybody sees it fly and fade. */
     lumosThrow(p, dir, level) {
         this.net.send({ t: 'lum', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], l: level }, true);
     }
+
+    /** My thrown light put out («Нокс» / «стоп»). */
+    lumosOut() { this.net.send({ t: 'lumx', by: this.me }, true); }
 
     /** A guest's «Левиоса» caught a book-bird (on) / let it go; where its hand holds it. */
     birdHold(id, on) { if (!this.net.isHost) this.net.send({ t: 'bhold', id, on: on ? 1 : 0 }); }
@@ -672,7 +675,8 @@ export class NetSync {
             case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
             case 'rbcatch': case 'rbgot': case 'rbaccio': g.runner?.onNet(m); break; // (the running book)
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
-            case 'lum': if (m.by !== this.me && Array.isArray(m.p) && Array.isArray(m.d)) g.wandMagic?.addThrown(vec(m.p), vec(m.d).normalize().multiplyScalar(18), Math.max(1, Math.min(6, +m.l || 2)), false); break;
+            case 'lum': if (m.by !== this.me && Array.isArray(m.p) && Array.isArray(m.d)) g.wandMagic?.addThrown(vec(m.p), vec(m.d).normalize().multiplyScalar(18), Math.max(1, Math.min(6, +m.l || 2)), false, m.by); break;
+            case 'lumx': if (m.by !== this.me) g.wandMagic?.outBy(m.by); break;
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;

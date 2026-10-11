@@ -79,7 +79,7 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
     await page.close();
 });
 
-test('Люмос: a glow at the tip (no ball) that lights the place; thrown, the light flies until the ground stops it and shines there', async () => {
+test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it leaves the tip, flies until the ground stops it and fades; «стоп» puts out all of it', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -94,7 +94,7 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, the
         await frames(5);
         const W = g.wandMagic;
         const tip = W.tip(new T.Vector3());
-        const glow = { sprite: !!W.light?.glow?.isSprite, atTip: W.light ? W.light.glow.position.distanceTo(tip) : -1, light: W.lights[0].intensity, lightAt: W.lights[0].position.distanceTo(tip) };
+        const glow = { sprite: !!W.light?.glow?.isSprite, atTip: W.light ? W.light.glow.position.distanceTo(tip) : -1, light: W.lights[0].intensity, lightAt: W.lights[0].position.distanceTo(tip), scale0: W.light ? W.light.glow.scale.x : 0 };
         // throw it ahead and down: it flies, the ground stops it, it stays shining there
         const dir = ch.getHandDirection('right', new T.Vector3()).setY(-0.5).normalize();
         W._throwLight(dir);
@@ -105,7 +105,24 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, the
         const ground = t ? g.collision.surfaceY(t.pos.x, t.pos.z) : null;
         await frames(30);
         const landed = t ? { stuck: t.stuck, aboveGround: t.pos.y - ground, flown: t.flown, lit: W.lights.some((l) => l.intensity > 1 && l.position.distanceTo(t.pos) < 0.01), still: W.thrown.includes(t) } : null;
-        return { said, glow, flying, landed };
+        // the light left the wand: its tip is dark; «Люмос» lights it again at once, in full (not a glimmer)
+        const tipDark = !W.light;
+        g.castLocalSpell('Люмос', true);
+        await frames(3);
+        const relit = { on: !!W.light, scale: W.light ? W.light.glow.scale.x / glow.scale0 : 0 };
+        // «стоп» puts out all of it: the tip and the thrown light
+        g.castLocalSpell('стоп', true);
+        await frames(2);
+        const stopped = { tip: !!W.light, thrown: W.thrown.filter((x) => x.mine).length };
+        // a thrown light goes out by itself (about 10 s after the throw)
+        g.castLocalSpell('Люмос', true);
+        await frames(2);
+        W._throwLight(dir);
+        const t2 = W.thrown[0];
+        t2.age = 9.9;
+        await frames(10);
+        const gone = !W.thrown.includes(t2);
+        return { said, glow, flying, landed, tipDark, relit, stopped, gone };
     });
     assert.equal(r.said, 'Lumos');
     assert.ok(r.glow.sprite && r.glow.atTip < 0.01, 'a glow at the tip, not a ball ' + JSON.stringify(r.glow));
@@ -113,6 +130,10 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, the
     assert.ok(r.flying && !r.flying.stuck, 'thrown: it flies');
     assert.ok(r.landed && r.landed.stuck && r.landed.aboveGround > -0.05 && r.landed.aboveGround < 0.6 && r.landed.still, 'it stopped at the ground and stays ' + JSON.stringify(r.landed));
     assert.ok(r.landed.lit, 'and lights the place');
+    assert.ok(r.tipDark, 'the light has left the wand');
+    assert.ok(r.relit.on && r.relit.scale > 0.85, '«Люмос» again: the tip shines in full at once ' + JSON.stringify(r.relit));
+    assert.deepEqual(r.stopped, { tip: false, thrown: 0 }, '«стоп» puts out the tip and the thrown light');
+    assert.ok(r.gone, 'a thrown light goes out by itself');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

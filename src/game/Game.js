@@ -819,6 +819,8 @@ export class Game {
     /** A spell of mine is going (or was just cast): the wand stays in the hand whatever the hand does. */
     spellBusy() {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
+        // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
+        if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
         return !!(this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this._wave || this.lightning || this.wandMagic?.drawing);
     }
 
@@ -1024,7 +1026,7 @@ export class Game {
         if (this.vortex?.stop()) done.push('водоворот');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
         if (this._wave) { this._wave = null; done.push('волна'); }
-        if (W?.light) { W._nox(); done.push('Люмос'); }
+        if (W?._nox(false)) done.push('Люмос'); // (the tip and the thrown light)
         if (W?.drawing && W.drawing.until > performance.now()) { W.drawing.until = 0; done.push('рисование'); }
         if (W?.holo) { W._closeHolo(); done.push('тайны'); }
         if (this.accio?.stop()) done.push('Акцио');
