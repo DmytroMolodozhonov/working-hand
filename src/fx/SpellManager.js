@@ -47,7 +47,8 @@ export function matchSpell(text) {
     if (has('раскрой', 'раскрои', 'секрет', 'тайны', 'reveal', 'secret')) return 'Reveal';
     if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';
     if (has('нокс', 'nox', 'нокса', 'knox')) return 'Nox';
-    if (has('латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
+    // «Lightning Writing»: drawing in the air (before «Lightning Strike»: the same first word)
+    if (has('райтинг', 'райтин', 'врайтин', 'райдинг', 'writing', 'writin', 'righting', 'латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
     // «Water Vortex» («вотер вортекс»): before everything that shares its sounds (water ball, Maxima…)
     if (has('vortex', 'vortec', 'vortx', 'вортекс', 'вортэкс', 'вортикс', 'вортекз', 'вортес', 'вотекс', 'вортакс', 'водоворот', 'ворт экс')) return 'WaterVortex';
     // «Total Destruction» («Тотал Дестракшн»): before Stand («st…») and every short token

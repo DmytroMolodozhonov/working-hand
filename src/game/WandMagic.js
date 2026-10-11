@@ -13,7 +13,7 @@
  *    dark), flies until a wall, the ground or 40 m stops it, and fades out —
  *    about 10 s after the throw. «Нокс» or «стоп» puts out all of it (the tip
  *    and the thrown light). Everybody sees (and is lit by) everybody's Lumos.
- *  - «Латин Вратин» (drawing): the tip leaves glowing lines in the air while
+ *  - «Lightning Writing» (drawing): the tip leaves glowing lines in the air while
  *    you move the wand; they fade in about 10 seconds.
  *
  * About holding a real pen as a wand: the camera recognises hands, not
@@ -108,6 +108,8 @@ export class WandMagic {
         this.thrown = []; // thrown lights (mine and others'): {glow, pos, vel, flown, stuck, life, level, mine}
         this.remote = new Map(); // playerId -> glow at their wand's tip
         this.drawing = null; // {until, lines: [], last}
+        this.remoteDrawings = new Map(); // playerId -> {color, lines: [], last}: other players' drawings
+        this._drawOut = null; // my drawing's new points, sent to the others a few times a second
         this.holo = null; // {mesh, until, target}
         // The lights exist from the start (intensity 0): adding a light later
         // would make every material recompile — a freeze in the middle of play
@@ -148,7 +150,7 @@ export class WandMagic {
 
     power(spell) { return wandPower(this.wand, spell); }
 
-    /** Voice: «Люмос», «Люмос Максима», «Нокс», «Латин Вратин», «Раскрой свои секреты». Returns a hint or the name. */
+    /** Voice: «Люмос», «Люмос Максима», «Нокс», «Lightning Writing», «Раскрой свои секреты». Returns a hint or the name. */
     cast(name, isFinal) {
         const g = this.game;
         if (name === 'Reveal') { this.reveal(); return name; } // (a wand, or a bare hand)
@@ -169,7 +171,7 @@ export class WandMagic {
         }
         if (name === 'Nox') { this._nox(); return name; }
         if (name === 'Draw') {
-            this.drawing = { until: performance.now() + 12000, lines: [], last: null, color: new THREE.Color(this.wand?.color ?? 0xffffff).lerp(new THREE.Color(0xffffff), 0.3) };
+            this.drawing = { until: performance.now() + 12000, lines: this.drawing?.lines || [], last: null, color: new THREE.Color(this.wand?.color ?? 0xffffff).lerp(new THREE.Color(0xffffff), 0.3) };
             g.hud.setVoice('✨ Рисуйте палочкой в воздухе (12 секунд)', true);
             return name;
         }
@@ -433,17 +435,23 @@ export class WandMagic {
             if (now < d.until && hasWand) {
                 const tip = this.tip(new THREE.Vector3());
                 if (!d.last || d.last.distanceTo(tip) > 0.04) {
-                    if (d.last && d.last.distanceTo(tip) < 0.8) this._stroke(d, d.last, tip);
+                    const joined = d.last && d.last.distanceTo(tip) < 0.8;
+                    if (joined) this._stroke(d, d.last, tip);
                     d.last = tip.clone();
+                    // (the others see it too: the new points go out a few times a second; null: the line breaks)
+                    const out = this._drawOut || (this._drawOut = { pts: [], at: now });
+                    if (!joined) out.pts.push(null);
+                    out.pts.push([+tip.x.toFixed(3), +tip.y.toFixed(3), +tip.z.toFixed(3)]);
                 }
+                if (this._drawOut && (now - this._drawOut.at > 120 || this._drawOut.pts.length >= 16)) this._sendDraw(d);
             }
-            for (let i = d.lines.length - 1; i >= 0; i--) {
-                const s = d.lines[i];
-                const age = (now - s.born) / 1000;
-                s.mesh.material.opacity = Math.max(0, 1 - age / 10);
-                if (age > 10) { g.scene.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); d.lines.splice(i, 1); }
-            }
+            this._fadeLines(d, now);
             if (now > d.until && !d.lines.length) this.drawing = null;
+        }
+        // the others' drawings fade the same way
+        for (const [id, e] of this.remoteDrawings) {
+            this._fadeLines(e, performance.now());
+            if (!e.lines.length && performance.now() - e.at > 2000) this.remoteDrawings.delete(id);
         }
         // hologram: faces the camera, fades in and out
         const h = this.holo;
@@ -454,6 +462,38 @@ export class WandMagic {
             h.mesh.position.y = h.at.y + 1.1 + Math.sin(h.t * 2) * 0.05;
             h.mesh.quaternion.copy(g.camera.getWorldQuaternion(_q));
             if (left <= 0) this._closeHolo();
+        }
+    }
+
+    /** My drawing's new points to the others (the next batch goes on where this one ended). */
+    _sendDraw(d) {
+        const out = this._drawOut;
+        this._drawOut = null;
+        if (out?.pts.length) this.game.sync?.draw?.(d.color.getHex(), out.pts);
+    }
+
+    /** Another player's drawing in the air: the points they sent, joined into glowing lines (null: a break). */
+    remoteDraw(by, color, pts) {
+        if (!Array.isArray(pts) || pts.length > 64) return;
+        let e = this.remoteDrawings.get(by);
+        if (!e) { e = { color: new THREE.Color(), lines: [], last: null, at: 0 }; this.remoteDrawings.set(by, e); }
+        e.color.setHex(Number(color) & 0xffffff);
+        e.at = performance.now();
+        for (const q of pts) {
+            if (!Array.isArray(q) || q.length < 3 || !q.every(Number.isFinite)) { e.last = null; continue; }
+            const p = new THREE.Vector3(q[0], q[1], q[2]);
+            if (e.last && e.last.distanceTo(p) < 0.8) this._stroke(e, e.last, p);
+            e.last = p;
+        }
+    }
+
+    /** Lines fade out over 10 s and are gone. */
+    _fadeLines(d, now) {
+        for (let i = d.lines.length - 1; i >= 0; i--) {
+            const s = d.lines[i];
+            const age = (now - s.born) / 1000;
+            s.mesh.material.opacity = Math.max(0, 1 - age / 10);
+            if (age > 10) { this.game.scene.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); d.lines.splice(i, 1); }
         }
     }
 
@@ -474,5 +514,6 @@ export class WandMagic {
         for (const e of this.remote.values()) this.game.scene.remove(e.glow);
         for (const l of this.lights) this.game.scene.remove(l);
         if (this.drawing) for (const s of this.drawing.lines) this.game.scene.remove(s.mesh);
+        for (const e of this.remoteDrawings.values()) for (const s of e.lines) this.game.scene.remove(s.mesh);
     }
 }

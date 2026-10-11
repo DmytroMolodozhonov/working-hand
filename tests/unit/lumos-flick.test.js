@@ -41,3 +41,19 @@ test('Lumos flick: never by walking (the arm swings), a jumpy frame, a slow move
     assert.equal(lumosFlick(back.trail, back.now, FWD), null, 'against the wand');
     assert.ok(LUMOS.STILL >= 1000, 'a moment standing still first');
 });
+
+test('«Lightning Writing»: another player\'s drawing comes as points — joined into lines, broken where they broke it', async () => {
+    const { WandMagic } = await import('../../src/game/WandMagic.js');
+    const added = [];
+    const game = { scene: { add: (o) => added.push(o), remove: () => {} } };
+    const w = new WandMagic(game);
+    w.remoteDraw('p1', 0xff8800, [[0, 1, 0], [0.1, 1, 0], [0.2, 1.05, 0], null, [5, 1, 0], [5.1, 1, 0]]);
+    const e = w.remoteDrawings.get('p1');
+    assert.equal(e.lines.length, 3, 'two strokes, a break, one stroke');
+    // the next batch goes on from the last point
+    w.remoteDraw('p1', 0xff8800, [[5.2, 1, 0]]);
+    assert.equal(e.lines.length, 4);
+    // garbage from the network draws nothing
+    w.remoteDraw('p1', 0xff8800, [['x', 1, 0], [1e9]]);
+    assert.equal(e.lines.length, 4);
+});
