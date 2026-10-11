@@ -41,6 +41,17 @@ def _pts(lms, vis=False):
     return [{"x": p.x, "y": p.y, "z": p.z} for p in lms]
 
 
+def _sticks(frame, out):
+    """The sticks held in the hands seen in this picture (never breaks the camera)."""
+    try:
+        from stick_detect import find_sticks
+        hands = [h["landmarks"] for h in (out.get("hands") or []) if h.get("landmarks")]
+        hands += [out[k] for k in ("leftHandLandmarks", "rightHandLandmarks") if out.get(k)]
+        return find_sticks(frame, hands) if hands else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
 class NativePose:
     def __init__(self):
         self.state = "idle"  # idle | loading | running | error | unavailable
@@ -273,6 +284,10 @@ class NativePose:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 ts = int((time.time() - t_start) * 1000)
                 out = run(rgb, ts)
+                # a real stick (a pen, a brush) held in a hand: its direction (stick_detect.py)
+                sticks = _sticks(frame, out)
+                if sticks:
+                    out["sticks"] = sticks
                 cost = (time.perf_counter() - t0) * 1000
                 self.cost = cost if not self.cost else self.cost * 0.9 + cost * 0.1
                 frames += 1

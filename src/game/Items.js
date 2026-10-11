@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
 import { PEN_POINTS } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
+import { StickTracker, stickDirection } from '../input/RealStick.js';
 
 const PICK_RADIUS = 0.9;
 const _v = new THREE.Vector3();
@@ -179,6 +180,12 @@ export class ItemSystem {
             // spells of this hand fly exactly along it, out of its tip
             const ch = g.character;
             y = pen ? _a.copy(pen.dir) : ch.getForearmDirection(side, _a).multiplyScalar(0.6).addScaledVector(f.Y, 0.4).normalize();
+            // a real stick in the real hand (a pen, a brush): the wand goes the way it goes
+            const real = this._stickDir(side, y);
+            if (real) y.copy(real);
+            const hand = ch.getActiveHands()[side];
+            // (the fingers hold it as the stick lies: pointing … writing)
+            if (hand) hand.stickTilt = real ? Math.atan2(-y.dot(f.Z), y.dot(f.Y)) : null;
             x = _b.copy(f.X).addScaledVector(y, -f.X.dot(y));
             if (x.lengthSq() < 1e-4) x.set(1, 0, 0);
             x.normalize();
@@ -208,6 +215,35 @@ export class ItemSystem {
             const hand = g.character.getActiveHands()[side];
             if (hand && hand.setGrip) hand.setGrip(spec.curl ?? 0.62, spec.pose);
         }
+    }
+
+    /**
+     * The real sticks seen in the real hands (RealStick.js): believed after a few camera
+     * pictures, kept over a short miss. A hand holding one is a closed hand (the hero's
+     * fingers hold, the thing does not drop) — ch.realStick.
+     */
+    _updateSticks() {
+        const g = this.game, ch = g.character, pose = g.currentPose;
+        const st = this._sticks || (this._sticks = { left: new StickTracker(), right: new StickTracker(), to: null });
+        const fresh = g.poseSmoother?.to !== st.to;
+        st.to = g.poseSmoother?.to;
+        const now = performance.now();
+        ch.realStick = ch.realStick || { left: null, right: null };
+        // (the browser looks for one only round a hand holding a wand)
+        if (g.poseService) g.poseService.wantSticks = { left: this.held.left?.item.kind === 'wand', right: this.held.right?.item.kind === 'wand' };
+        for (const side of ['left', 'right']) {
+            ch.realStick[side] = pose ? st[side].update(pose[side + 'HandStick'] || null, now, fresh) : null;
+        }
+    }
+
+    /** The world direction of the real stick in this hand (or null); `finger`: the pen grip's direction (world). */
+    _stickDir(side, finger) {
+        const s = this.game.character.realStick?.[side];
+        if (!s) return null;
+        const body = this.game.character.group;
+        const qb = body.getWorldQuaternion(this._qb || (this._qb = new THREE.Quaternion()));
+        const fh = (this._fh || (this._fh = new THREE.Vector3())).copy(finger).applyQuaternion((this._qi || (this._qi = new THREE.Quaternion())).copy(qb).invert());
+        return stickDirection(s, fh, this._sd || (this._sd = new THREE.Vector3())).applyQuaternion(qb);
     }
 
     /**
@@ -334,6 +370,7 @@ export class ItemSystem {
         const ch = g.character;
         // loose things: fall, bounce, settle; hovering ones bob
         for (const L of this.loose.values()) this._physics(L, dt);
+        this._updateSticks();
         // held things follow the hand
         for (const side of ['right', 'left']) {
             const h = this.held[side];

@@ -13,6 +13,8 @@
 
 import { assignHands, HandStabilizer, PoseStabilizer } from './TrackingGuard.js';
 import { PoseInterpreter } from './PoseInterpreter.js';
+import { matchSticks } from './RealStick.js';
+import { detectStick } from './StickDetector.js';
 
 const POSE_LINKS = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28]];
 const HAND_LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [0, 9], [9, 10], [10, 11], [11, 12], [0, 13], [13, 14], [14, 15], [15, 16], [0, 17], [17, 18], [18, 19], [19, 20], [5, 9], [9, 13], [13, 17]];
@@ -46,6 +48,10 @@ export class PoseService {
         this._quality = 1;
         this._delegate = null; // null = auto
         this.injected = false; // tests / replay can inject poses instead of the camera
+        // a real stick in a hand, looked for in the browser's own camera picture while the
+        // game wants it ({left, right}: a wand in that hand) — the native program sends its own
+        this.wantSticks = null;
+        this.browserSticks = (l, r) => this._browserSticks(l, r);
     }
 
     _status(text) {
@@ -254,7 +260,59 @@ export class PoseService {
         }
         this.lastResults = r;
         this._drawSkeleton(r);
-        if (this.onPoseUpdate) this.onPoseUpdate(this.interpreter.process(r, this.native ? this._nativeVideo : this.videoElement));
+        if (this.onPoseUpdate) this.onPoseUpdate(this._withSticks(this.interpreter.process(r, this.native ? this._nativeVideo : this.videoElement), results.sticks, r.leftHandLandmarks, r.rightHandLandmarks));
+    }
+
+    /** The browser's own look for a real stick round the hands (StickDetector.js), ≤ 20 a second. */
+    _browserSticks(leftLm, rightLm) {
+        const want = this.wantSticks, v = this.videoElement;
+        if (!want || (!want.left && !want.right) || this.native || this.injected || !v || !(v.videoWidth > 0) || typeof document === 'undefined') return null;
+        const now = performance.now();
+        if (now - (this._stickAt || 0) < 50) return this._lastSticks;
+        this._stickAt = now;
+        const out = [];
+        const VW = v.videoWidth, VH = v.videoHeight;
+        try {
+            for (const [side, lm] of [['left', leftLm], ['right', rightLm]]) {
+                if (!want[side] || !lm || lm.length < 21) continue;
+                const px = lm.map((p) => ({ x: p.x * VW, y: p.y * VH }));
+                const palm = Math.hypot(px[0].x - px[9].x, px[0].y - px[9].y) + 0.5 * Math.hypot(px[5].x - px[17].x, px[5].y - px[17].y);
+                if (!(palm > 12)) continue;
+                let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+                for (const p of px) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+                const m = palm * 3.1;
+                x0 = Math.max(0, Math.floor(x0 - m)); y0 = Math.max(0, Math.floor(y0 - m));
+                x1 = Math.min(VW, Math.ceil(x1 + m)); y1 = Math.min(VH, Math.ceil(y1 + m));
+                const k = Math.min(1, 40 / palm); // (a palm of ~40 pixels is plenty)
+                const w = Math.max(8, Math.round((x1 - x0) * k)), h = Math.max(8, Math.round((y1 - y0) * k));
+                const c = this._stickCanvas || (this._stickCanvas = document.createElement('canvas'));
+                if (c.width < w) c.width = w;
+                if (c.height < h) c.height = h;
+                const ctx = c.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(v, x0, y0, x1 - x0, y1 - y0, 0, 0, w, h);
+                const rgba = ctx.getImageData(0, 0, w, h).data;
+                const g = this._stickGrey && this._stickGrey.length >= w * h ? this._stickGrey : (this._stickGrey = new Uint8Array(w * h * 2));
+                for (let i = 0, j = 0; i < w * h; i++, j += 4) g[i] = (rgba[j] * 77 + rgba[j + 1] * 150 + rgba[j + 2] * 29) >> 8;
+                const s = detectStick(g, w, h, px.map((p) => ({ x: (p.x - x0) * k, y: (p.y - y0) * k })));
+                if (s) out.push({ wrist: [lm[0].x, lm[0].y], ...s });
+            }
+        } catch (e) {
+            this.wantSticks = null; // (a picture the browser won't read: never break the camera)
+        }
+        this._lastSticks = out;
+        return out;
+    }
+
+    /** A real stick seen in a hand (RealStick.js): poseData.leftHandStick / rightHandStick. */
+    _withSticks(data, sticks, leftLm, rightLm) {
+        if (!data) return data;
+        if (!sticks?.length && this.browserSticks) sticks = this.browserSticks(leftLm, rightLm);
+        if (sticks?.length) {
+            const m = matchSticks(sticks, leftLm, rightLm);
+            if (m.left) data.leftHandStick = m.left;
+            if (m.right) data.rightHandStick = m.right;
+        }
+        return data;
     }
 
     async _startModels(quality) {
@@ -416,7 +474,7 @@ export class PoseService {
         if (r.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + r.cost * 0.1 : r.cost;
         this.stats.backend = r.backend;
         this._nativeVideo = { videoWidth: r.w || 640, videoHeight: r.h || 480 };
-        if (r.hands) this._handleResult({ ts: performance.now(), cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks });
+        if (r.hands) this._handleResult({ ts: performance.now(), cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks });
         else this._onHolistic(r);
     }
 
@@ -678,7 +736,7 @@ export class PoseService {
         };
         this.lastResults = results;
         this._drawSkeleton(results);
-        if (this.onPoseUpdate) this.onPoseUpdate(this.interpreter.process(results, this.native ? this._nativeVideo : this.videoElement));
+        if (this.onPoseUpdate) this.onPoseUpdate(this._withSticks(this.interpreter.process(results, this.native ? this._nativeVideo : this.videoElement), r.sticks, assigned.left, assigned.right));
     }
 
     /** Feed already-detected results (tests, replays) through the same guards. */

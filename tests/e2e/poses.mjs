@@ -47,7 +47,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -115,7 +115,16 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
     const hands = [];
     if (leftCurl != null) hands.push({ landmarks: hand(p[15].x, p[15].y, { curl: leftCurl, rot: leftRot, tilt: leftTilt }), label: 'Right', score: 0.95 });
     if (rightCurl != null) hands.push({ landmarks: hand(p[16].x, p[16].y, { curl: rightCurl, rot: rightRot, tilt: rightTilt, mirror: true }), label: 'Left', score: 0.95 });
-    return { poseLandmarks: p, hands, faceLandmarks: undefined, cost: 5 };
+    // a real stick held in the hand, as the camera program finds it (stick_detect.py):
+    // `rightStick` / `leftStick`: its angle in the picture (rad, 0 = up, + = towards the picture's right)
+    // or {angle, out, conf}
+    const sticks = [];
+    for (const [st, w] of [[rightStick, p[16]], [leftStick, p[15]]]) {
+        if (st == null) continue;
+        const o = typeof st === 'number' ? { angle: st } : st;
+        sticks.push({ wrist: [w.x, w.y], dir: [Math.sin(o.angle), -Math.cos(o.angle)], out: o.out ?? 2.5, len: (o.out ?? 2.5) + 1, conf: o.conf ?? 0.9 });
+    }
+    return { poseLandmarks: p, hands, faceLandmarks: undefined, cost: 5, ...(sticks.length ? { sticks } : {}) };
 }
 
 /** Feed `count` frames (~30 FPS) into the page. */

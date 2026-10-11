@@ -742,6 +742,8 @@ export class VoxelCharacter {
         const hand = this.getActiveHands()[side];
         if (!hand) return 0;
         const f = (hand.targetState || hand.currentState).fingers;
+        // a real stick seen in the real hand (RealStick.js): the fingers are closed round it
+        if (this.realStick?.[side]) return Math.max(0.85, (f.index + f.middle + f.ring) / 3);
         return (f.index + f.middle + f.ring) / 3;
     }
 
