@@ -1,77 +1,76 @@
 /**
- * Speech.js — villagers' voices (text-to-speech, Web Speech API, ru-RU).
+ * Speech.js — villagers' voices.
  *
- *   const speech = new Speech();
+ *   const speech = new Speech({ master: () => game.sound.globalVolume, onStatus });
  *   speech.say('Свежий хлеб!', { voiceKey: villager.id, role: 'merchant', female: false, volume: 0.6 });
  *
- * - Picks a Russian voice per villager deterministically (same villager → same
- *   voice every time), preferring local (offline) voices.
- * - Varies pitch/rate by role and gender: the king is slower and lower, knights
- *   low, women higher, farmers a bit faster.
- * - At most one utterance is pending: a new line from the SAME villager waits
- *   for the current one (replacing any older pending line); a line from a
- *   DIFFERENT villager cancels what is being said.
- * - A no-op in node or when the browser has no speechSynthesis.
+ * Two engines:
+ *  - 'neural' (default): Supertonic 3 in the browser (src/audio/NeuralVoice.js),
+ *    ten Russian voices — five women, five men. Downloaded once (~145 MB, with
+ *    progress through onStatus) and kept in the browser cache. Until it is
+ *    ready (or if it cannot load) the system voices below speak instead.
+ *  - 'system': the Web Speech API (Windows Irina/Pavel, Edge Svetlana/Dmitry…).
+ *
+ * The one hard rule (src/audio/VoiceCast.js): a woman always speaks with a
+ * female voice and a man with a male one, never mixed. Pass `female`
+ * (true/false) or `gender` ('female'/'male') for every speaker; without them
+ * the speaker is a man. Each villager keeps its own voice, pitch and pace.
+ *
+ * Volume: `volume` (distance) × `master()` — the game's sound volume.
+ * Queue: at most one line is pending: a new line from the SAME villager waits
+ * for the current one (replacing any older pending line); a line from a
+ * DIFFERENT villager cancels what is being said.
+ * A no-op in node or when the browser has neither engine.
  */
 
-const ROLE_VOICE = {
-    king: { rate: 0.86, pitch: 0.78 },
-    knight: { rate: 0.96, pitch: 0.72 },
-    builder: { rate: 1.0, pitch: 0.9 },
-    farmer: { rate: 1.1, pitch: 1.0 },
-    merchant: { rate: 1.06, pitch: 1.05 },
-};
-
-// Voice-name hints (Windows, macOS, Android, Chrome, Edge «Online (Natural)» voices).
-const FEMALE_HINT = /(milena|irina|katya|katja|anna|alena|alyona|elena|svetlana|dariya|daria|tatyana|tatiana|yelena|ekaterina|olga|natalia|female|женск|милена|ирина|катя|алёна|алена|светлана|дарья|google)/i;
-const MALE_HINT = /(yuri|yury|pavel|dmitry|dmitri|maxim|artem|artyom|nikolai|aleksandr|alexander|mikhail|ivan|(?<!fe)male|мужск|юрий|павел|дмитрий|максим|артём|артем|николай|михаил)/i;
-
-function hash(str) {
-    let h = 2166136261 >>> 0;
-    const s = String(str);
-    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return h >>> 0;
-}
-
-function genderOf(voice) {
-    const n = `${voice.name} ${voice.voiceURI || ''}`;
-    if (MALE_HINT.test(n)) return 'male';
-    if (FEMALE_HINT.test(n)) return 'female';
-    return 'unknown';
-}
-
-/** Text that TTS reads well: no stage directions, emoji or markup. */
-function cleanForSpeech(text) {
-    return String(text ?? '')
-        .replace(/\*[^*]*\*/g, ' ')
-        .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, ' ')
-        .replace(/[«»"]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
+import { NeuralVoice } from './NeuralVoice.js';
+import { castNeural, isFemale, pickSystemVoice, systemVoiceParams } from './VoiceCast.js';
+import { speakable } from './ruText.js';
 
 export class Speech {
-    constructor({ lang = 'ru-RU' } = {}) {
+    /**
+     * @param {{lang?:string, engine?:'neural'|'system', master?:Function, neural?:object|null,
+     *          onStatus?:Function, audioContext?:Function}} [opts]
+     *   neural: a NeuralVoice-like object (tests), or null for none;
+     *   onStatus({state:'loading'|'ready'|'failed', fraction, text});
+     *   audioContext: () => AudioContext (default: an own one, made on first use).
+     */
+    constructor({ lang = 'ru-RU', engine = 'neural', master = null, neural, onStatus = null, audioContext = null } = {}) {
         this.lang = lang;
         this.enabled = true;
+        this.engine = engine === 'system' ? 'system' : 'neural';
+        this.master = typeof master === 'function' ? master : () => 1;
+        this.onStatus = onStatus;
+        this._audioContext = audioContext;
+        this._ctx = null;
+        this.neural = neural !== undefined ? neural : (NeuralVoice.supported ? new NeuralVoice() : null);
         this.synth = (typeof window !== 'undefined' && window.speechSynthesis) || null;
         this._Utterance = (typeof window !== 'undefined' && window.SpeechSynthesisUtterance) || null;
         this._voices = [];
-        this._current = null; // { utter, voiceKey, opts }
+        this._current = null; // { voiceKey, opts, stop() }
         this._pending = null; // { text, opts }
-        if (!this.supported) return;
+        this.history = []; // the last lines: { engine, voice, female, pitch, speed, text }
+        if (!this.systemSupported) return;
         this._refreshVoices();
         const onChange = () => this._refreshVoices();
         if (typeof this.synth.addEventListener === 'function') this.synth.addEventListener('voiceschanged', onChange);
         else this.synth.onvoiceschanged = onChange;
     }
 
-    get supported() { return !!(this.synth && this._Utterance); }
+    get systemSupported() { return !!(this.synth && this._Utterance); }
 
-    /** Russian voices currently known to the browser. */
+    get neuralUsable() { return !!this.neural && this.engine === 'neural' && this.neural.state !== 'failed'; }
+
+    get supported() { return this.systemSupported || this.neuralUsable; }
+
+    /** Russian system voices currently known to the browser. */
     get voices() { return this._voices.slice(); }
 
     get speaking() { return !!this._current; }
+
+    setEngine(engine) {
+        this.engine = engine === 'system' ? 'system' : 'neural';
+    }
 
     _refreshVoices() {
         try {
@@ -83,83 +82,163 @@ export class Speech {
         }
     }
 
-    /** Deterministic voice for a villager (null → the browser picks by lang). */
+    /** The system voice of a villager (never of the other gender); null = none fits. */
     pickVoice(voiceKey, female) {
-        if (!this._voices.length) this._refreshVoices();
-        const voices = this._voices;
-        if (!voices.length) return null;
-        const local = voices.filter((v) => v.localService);
-        const pool = local.length ? local : voices;
-        const want = female ? 'female' : 'male';
-        const matching = pool.filter((v) => genderOf(v) === want);
-        const neutral = pool.filter((v) => genderOf(v) === 'unknown');
-        const list = matching.length ? matching : neutral.length ? neutral : pool;
-        return list[hash(voiceKey ?? 'villager') % list.length];
+        if (!this._voices.length && this.systemSupported) this._refreshVoices();
+        return pickSystemVoice(this._voices, voiceKey, !!female);
     }
 
-    /** Pitch and rate for a villager: role base × gender × small per-villager jitter. */
-    voiceParams({ voiceKey, role, female, voice, rate, pitch } = {}) {
-        const base = ROLE_VOICE[role] || { rate: 1, pitch: 1 };
-        const h = hash(`${voiceKey}|tone`);
-        const j1 = ((h & 0xff) / 255 - 0.5) * 0.16;
-        const j2 = (((h >>> 8) & 0xff) / 255 - 0.5) * 0.12;
-        let p = base.pitch * (female ? 1.28 : 1) + j1;
-        // the chosen voice has the "wrong" gender → bend the pitch further
-        const g = voice ? genderOf(voice) : 'unknown';
-        if (female && g === 'male') p += 0.35;
-        if (!female && g === 'female') p -= 0.3;
-        let r = base.rate + j2;
-        if (typeof pitch === 'number') p = pitch;
-        if (typeof rate === 'number') r = rate;
-        return { pitch: Math.max(0.1, Math.min(2, p)), rate: Math.max(0.5, Math.min(2, r)) };
+    /** Web Speech pitch and rate for a villager (role × gender × own jitter). */
+    voiceParams(opts = {}) {
+        return systemVoiceParams(opts);
+    }
+
+    /** Starts downloading the neural voices in the background (once). */
+    preload() {
+        const nv = this.neural;
+        if (!nv || this.engine !== 'neural' || nv.state !== 'idle') return;
+        this._status({ state: 'loading', fraction: 0, text: 'Голоса жителей: загрузка…' });
+        nv.load((fraction, text) => this._status({ state: 'loading', fraction, text }))
+            .then(() => this._status({ state: 'ready', fraction: 1, text: 'Голоса жителей готовы' }))
+            .catch((e) => this._status({ state: 'failed', fraction: null, text: `Голоса жителей не загрузились: ${e?.message || e}` }));
+    }
+
+    _status(s) {
+        if (typeof this.onStatus !== 'function') return;
+        try { this.onStatus(s); } catch (e) { /* ignore */ }
     }
 
     /**
      * Says a line.
      * @param {string} text
-     * @param {{voiceKey?:string|number, role?:string, female?:boolean, volume?:number, rate?:number, pitch?:number, onEnd?:Function}} [opts]
+     * @param {{voiceKey?:string|number, role?:string, female?:boolean, gender?:string, shout?:boolean,
+     *          volume?:number, rate?:number, pitch?:number, onEnd?:Function}} [opts]
      * @returns {boolean} true when the line was spoken or queued
      */
     say(text, opts = {}) {
         if (!this.supported || !this.enabled) return false;
-        const clean = cleanForSpeech(text);
+        const clean = speakable(text);
         if (!clean) return false;
-        const volume = Math.max(0, Math.min(1, opts.volume ?? 1));
-        if (volume < 0.03) return false; // too far away to hear
+        let master = 1;
+        try { master = Number(this.master()); } catch (e) { master = 1; }
+        if (!Number.isFinite(master)) master = 1;
+        const volume = Math.max(0, Math.min(1, (opts.volume ?? 1) * Math.max(0, master)));
+        if (volume < 0.03) return false; // too far away (or the sound is off)
         const key = opts.voiceKey ?? 'default';
+        const o = { ...opts, volume, voiceKey: key, female: isFemale(opts) };
         if (this._current) {
             if (this._current.voiceKey === key) {
                 // same villager: wait for the current line, keep only the newest pending one
                 if (this._pending?.opts.onEnd) this._safeCall(this._pending.opts.onEnd, false);
-                this._pending = { text: clean, opts: { ...opts, volume } };
+                this._pending = { text: clean, opts: o };
                 return true;
             }
             this.cancel();
         }
-        this._speak(clean, { ...opts, volume, voiceKey: key });
-        return true;
+        return this._speak(clean, o);
     }
 
     _speak(text, opts) {
+        if (this.neuralUsable) {
+            if (this.neural.ready) return this._speakNeural(text, opts);
+            this.preload();
+        }
+        return this._speakSystem(text, opts);
+    }
+
+    _remember(rec) {
+        this.history.push(rec);
+        if (this.history.length > 30) this.history.shift();
+    }
+
+    _finish(entry, ok) {
+        if (this._current !== entry) return;
+        this._current = null;
+        this._safeCall(entry.opts.onEnd, ok);
+        const next = this._pending;
+        this._pending = null;
+        if (next) this._speak(next.text, next.opts);
+    }
+
+    _audio() {
+        if (this._ctx) return this._ctx;
+        try {
+            if (this._audioContext) this._ctx = this._audioContext();
+            else if (typeof window !== 'undefined') {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (AC) this._ctx = new AC();
+            }
+        } catch (e) { this._ctx = null; }
+        return this._ctx;
+    }
+
+    _speakNeural(text, opts) {
+        const cast = castNeural(opts);
+        const entry = { voiceKey: opts.voiceKey, opts, stop: null, sources: [], started: false };
+        this._current = entry;
+        this._remember({ engine: 'neural', voice: cast.voice, female: cast.female, pitch: cast.pitch, speed: cast.speed, f0: cast.f0, text });
+        entry.stop = () => {
+            for (const src of entry.sources) { try { src.onended = null; src.stop(); } catch (e) { /* ignore */ } }
+            entry.sources.length = 0;
+        };
+        let nextAt = 0; // when the next sentence starts (AudioContext time)
+        let playing = 0;
+        let lastQueued = false;
+        const ended = () => { if (--playing <= 0 && lastQueued) this._finish(entry, true); };
+        // each sentence plays as soon as it is ready, right after the previous one
+        const onChunk = (pcm, sampleRate, last) => {
+            if (this._current !== entry) return;
+            if (last) lastQueued = true;
+            const ctx = this._audio();
+            if (!ctx || !pcm?.length) { if (last && playing <= 0) this._finish(entry, !!entry.started); return; }
+            const buf = ctx.createBuffer(1, pcm.length, sampleRate);
+            if (buf.copyToChannel) buf.copyToChannel(pcm, 0); else buf.getChannelData(0).set(pcm);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.playbackRate.value = cast.pitch; // played `pitch` times faster…
+            const gain = ctx.createGain();
+            gain.gain.value = opts.volume;
+            src.connect(gain);
+            gain.connect(ctx.destination);
+            src.onended = ended;
+            if (ctx.state === 'suspended') ctx.resume?.()?.catch?.(() => {});
+            const now = ctx.currentTime || 0;
+            const at = Math.max(now, nextAt);
+            nextAt = at + pcm.length / sampleRate / cast.pitch + 0.15;
+            entry.sources.push(src);
+            entry.started = true;
+            playing++;
+            src.start(at);
+        };
+        // …so it is synthesized that much slower: the pace stays `speed`
+        this.neural.synth(text, { voice: cast.voice, speed: cast.speed / cast.pitch, onChunk }).catch(() => {
+            // the neural voice failed on this line: the system voice says it (if nothing was heard yet)
+            if (this._current !== entry) return;
+            if (entry.started) { lastQueued = true; if (playing <= 0) this._finish(entry, true); return; }
+            this._current = null;
+            if (this._speakSystem(text, opts)) return;
+            const next = this._pending; // (onEnd(false) was called by _speakSystem)
+            this._pending = null;
+            if (next) this._speak(next.text, next.opts);
+        });
+        return true;
+    }
+
+    _speakSystem(text, opts) {
+        if (!this.systemSupported) { this._safeCall(opts.onEnd, false); return false; }
+        const voice = this.pickVoice(opts.voiceKey, opts.female);
+        if (!voice) { this._safeCall(opts.onEnd, false); return false; } // no voice of this gender: text only
         const u = new this._Utterance(text);
-        const voice = this.pickVoice(opts.voiceKey, !!opts.female);
-        u.lang = voice?.lang || this.lang;
-        if (voice) u.voice = voice;
+        u.lang = voice.lang || this.lang;
+        u.voice = voice;
         const { pitch, rate } = this.voiceParams({ ...opts, voice });
         u.pitch = pitch;
         u.rate = rate;
         u.volume = opts.volume;
-        const entry = { utter: u, voiceKey: opts.voiceKey, opts };
-        const done = () => {
-            if (this._current !== entry) return;
-            this._current = null;
-            this._safeCall(opts.onEnd, true);
-            const next = this._pending;
-            this._pending = null;
-            if (next) this._speak(next.text, { ...next.opts, voiceKey: next.opts.voiceKey ?? opts.voiceKey });
-        };
-        u.onend = done;
-        u.onerror = done;
+        const entry = { voiceKey: opts.voiceKey, opts, stop: null };
+        this._remember({ engine: 'system', voice: voice.name, female: opts.female, pitch, speed: rate, text });
+        u.onend = () => this._finish(entry, true);
+        u.onerror = () => this._finish(entry, false);
         this._current = entry;
         try {
             if (this.synth.paused) this.synth.resume(); // Chrome sometimes gets stuck paused
@@ -167,7 +246,9 @@ export class Speech {
         } catch (e) {
             this._current = null;
             this._safeCall(opts.onEnd, false);
+            return false;
         }
+        return true;
     }
 
     _safeCall(fn, ok) {
@@ -180,8 +261,10 @@ export class Speech {
         const cur = this._current, pend = this._pending;
         this._current = null;
         this._pending = null;
-        if (!this.supported) return;
-        try { this.synth.cancel(); } catch (e) { /* ignore */ }
+        if (cur?.stop) cur.stop();
+        if (this.systemSupported) {
+            try { this.synth.cancel(); } catch (e) { /* ignore */ }
+        }
         if (cur) this._safeCall(cur.opts.onEnd, false);
         if (pend) this._safeCall(pend.opts.onEnd, false);
     }

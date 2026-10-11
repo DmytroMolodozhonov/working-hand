@@ -15,3 +15,4 @@ Paths under `/tmp/...` mentioned inside were scratch experiments on another mach
 | `houses-beds-knights.md` | Lying in a villager's bed, houses without getting stuck or flicker, knights not crowding (patches in `patches/`, made against an older commit) |
 | `book-scrolls-menu-misc.md` | The book in the hands, scrolls, saved worlds menu, small fixes |
 | `talk.md` | Villagers really talk: a small neural net with game actions (tool calling), the king's orders, the advisor |
+| `voices.md` | Villager voices: Supertonic 3 neural TTS (5 female + 5 male), gender rules, the research behind it |

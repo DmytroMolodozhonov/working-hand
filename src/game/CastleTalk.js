@@ -47,7 +47,11 @@ export class CastleTalk {
     constructor(game, life) {
         this.game = game;
         this.life = life;
-        this.speech = new Speech();
+        this.speech = new Speech({
+            engine: game.config?.villagerVoiceEngine === 'system' ? 'system' : 'neural',
+            master: () => this.game.sound?.globalVolume ?? 1, // (the sounds volume: voices too)
+            onStatus: (st) => this._voiceStatus(st),
+        });
         this.brains = new Map(); // villager id -> brain (lives while the villager is out)
         this.memories = new Map(); // villager id -> brain memory (for the next time)
         this.offer = null; // {v, kind:'buy'|'sell', price, uid?, wid?, item}
@@ -116,9 +120,23 @@ export class CastleTalk {
         // a shout carries far and stays loud; a word is quiet beyond a few metres
         const volume = shout ? Math.max(0.3, Math.min(1, 1 - (d - 8) / (range - 8) * 0.7)) : Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
         this._lastSpoken = text;
-        const extra = shout ? this.speech.voiceParams({ voiceKey: v.id, role: v.role, female: v.entry.female }) : null;
-        const loud = volume * (this.game.sound?.globalVolume ?? 1); // (the sounds volume: voices too)
-        this.speech.say(text, { voiceKey: v.id, role: v.role, female: v.entry.female, volume: loud, ...(extra ? { pitch: Math.min(2, extra.pitch + 0.12), rate: Math.min(2, extra.rate * 1.15) } : {}) });
+        // (× the game's sound volume inside Speech; a woman always with a female voice, a man with a male one)
+        this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout });
+    }
+
+    /** The neural voices download once: show its progress, then that they are ready. */
+    _voiceStatus(st) {
+        const hud = this.game.hud;
+        const now = performance.now();
+        if (st.state === 'loading') {
+            if (now - (this._voiceNoteT || -1e9) < 4000) return;
+            this._voiceNoteT = now;
+            hud?.setVoice?.(`🗣️ ${st.text}${st.fraction != null ? ` (${Math.round(st.fraction * 100)}%)` : ''}`, true);
+        } else if (st.state === 'ready') hud?.notify?.('🗣️ Голоса жителей готовы — у каждого свой голос');
+        else if (st.state === 'failed') {
+            console.warn('[CastleTalk]', st.text);
+            hud?.notify?.('🗣️ Голоса жителей не загрузились — говорят голоса компьютера');
+        }
     }
 
     /** The microphone heard a sentence (not a spell). Returns true if a villager heard it. */
