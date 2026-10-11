@@ -15,8 +15,11 @@ test.before(async () => { srv = await startServer(PORT); browser = await launch(
 test.after(async () => { await browser?.close(); srv?.stop(); });
 
 /** The wand's direction as the picture sees it (rad, 0 = up, + = the picture's right), where spells fly, the grip. */
-const wandNow = (page, side = 'right') => page.evaluate((side) => {
+const wandNow = (page, side = 'right') => page.evaluate(async (side) => {
     const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+    // (read right after a drawn frame: the headless browser draws slowly)
+    const f0 = g.frameCount;
+    while (g.frameCount === f0) await new Promise((r) => setTimeout(r, 5));
     const dir = new T.Vector3();
     g.wandMagic.tip(new T.Vector3(), dir);
     const h = dir.clone().applyQuaternion(ch.group.getWorldQuaternion(new T.Quaternion()).invert());
@@ -63,7 +66,7 @@ test('a real stick in the hand: the wand and the spells go along it (any way it 
 
     // a stick seen short (pointing at the camera): the wand points ahead, not across
     await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: { angle: 0.3, out: 3 } }, 6, 40);
-    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: { angle: 0.3, out: 1 } }, 6, 40);
+    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: { angle: 0.3, out: 1 } }, 12, 40);
     const short = await wandNow(page);
     assert.ok(short.ahead > 0.7, `seen short, it points ahead (${short.ahead.toFixed(2)})`);
     assert.ok(angleOff(short.pic, 0.3) < 6, 'and still the same way across the picture');

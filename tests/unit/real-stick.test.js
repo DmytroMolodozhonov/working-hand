@@ -20,7 +20,7 @@ test('real stick: it belongs to the hand whose wrist it came with; a stick by no
     assert.deepEqual(matchSticks(undefined, lmAt(0.71, 0.6), null), { left: null, right: null });
 });
 
-test('real stick: believed after 3 pictures running, not from a weak or a single glimpse; kept over a short miss, then let go', () => {
+test('real stick: believed when seen for a moment (several pictures), not from a weak or a single glimpse; kept over a short miss, then let go', () => {
     const tr = new StickTracker();
     const s = { wrist: [0.3, 0.6], dir: [0, -1], out: 2, conf: 0.8 };
     let t = 0;
@@ -28,6 +28,10 @@ test('real stick: believed after 3 pictures running, not from a weak or a single
     assert.equal(tr.update(s, (t += 16), false), null, 'the same picture drawn again does not count');
     assert.equal(tr.update(s, (t += 33)), null);
     assert.ok(tr.update(s, (t += 33)), 'seen three times');
+    const g = new StickTracker();
+    assert.equal(g.update(s, (t += 33)), null);
+    assert.equal(g.update(null, (t += 33)), null, 'a glimpse, then nothing');
+    assert.equal(g.update(s, (t += 33)), null, 'a new glimpse starts over');
     assert.ok(tr.update(null, (t += 200)), 'a short miss: still there');
     assert.equal(tr.update(null, (t += 300)), null, 'gone');
     const weak = new StickTracker();

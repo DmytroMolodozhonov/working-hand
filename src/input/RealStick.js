@@ -8,7 +8,7 @@
  * sizes), conf 0…1}. Here it becomes the direction of the wand in the hero's hand:
  *
  *   - matchSticks: which hand it is in (the nearest wrist),
- *   - StickTracker: believed only when seen in several pictures running (nothing
+ *   - StickTracker: believed only when seen in pictures running for a moment (nothing
  *     happens by accident), held over a short miss, steadied without delay,
  *   - stickDirection: the picture shows the stick's direction across the picture; its
  *     depth (towards / away from the camera) comes from how short it looks against
@@ -45,15 +45,17 @@ export function matchSticks(sticks, leftLm, rightLm) {
  * stick {dx, dy, out, outMax, conf} or null.
  */
 export class StickTracker {
-    constructor({ minConf = 0.45, need = 3, hold = 400 } = {}) {
+    constructor({ minConf = 0.45, need = 2, span = 60, hold = 400 } = {}) {
         this.minConf = minConf;
-        this.need = need; // pictures in a row to believe it
+        this.need = need; // seen this many times running…
+        this.span = span; // …over at least this many ms (drawn frames can take several camera pictures at once)
         this.hold = hold; // ms it is kept over a miss
         this.reset();
     }
 
     reset() {
         this.run = 0;
+        this.firstSeen = 0;
         this.lastSeen = -Infinity;
         this.state = null;
         this.outMax = 0;
@@ -67,14 +69,17 @@ export class StickTracker {
                 const n = Math.hypot(stick.dir[0], stick.dir[1]) || 1;
                 const dx = stick.dir[0] / n, dy = stick.dir[1] / n;
                 const s = this.state;
-                if (s && dx * s.dx + dy * s.dy < 0.5 && this.run >= this.need) {
-                    // a sudden turn of over 60° between two pictures: a new stick is confirmed afresh
+                if (!this.run || (s && dx * s.dx + dy * s.dy < 0.5 && this._believed(now))) {
+                    // the first sight, or a sudden turn of over 60° between two pictures: confirmed afresh
                     this.run = 1;
+                    this.firstSeen = now;
                 } else this.run++;
                 this.lastSeen = now;
                 // the longest it stuck out lately: how long it really is (slowly forgotten)
                 const out = stick.out || 0;
-                if (out >= this.outMax || now - this.outMaxAt > 5000) { this.outMax = out; this.outMaxAt = now; }
+                if (this.outMaxAt) this.outMax *= Math.exp(-0.05 * Math.max(0, now - this.outMaxAt) / 1000); // (forgotten ~5% a second)
+                this.outMaxAt = now;
+                if (out > this.outMax) this.outMax = out;
                 if (!s) this.state = { dx, dy, out, conf: stick.conf, outMax: this.outMax };
                 else {
                     // steadied by its own speed: a quick turn passes at once, a still stick stays still
@@ -83,17 +88,22 @@ export class StickTracker {
                     s.dx += (dx - s.dx) * k; s.dy += (dy - s.dy) * k;
                     const m = Math.hypot(s.dx, s.dy) || 1;
                     s.dx /= m; s.dy /= m;
-                    s.out += (out - s.out) * 0.5;
+                    s.out += (out - s.out) * 0.75;
                     s.conf = stick.conf;
                     s.outMax = this.outMax;
                 }
-            } else if (now - this.lastSeen > this.hold) {
+            } else if (now - this.lastSeen > this.hold || !this._believed(now)) {
+                // gone — or a glimpse not yet believed: a miss starts it over
                 this.run = 0;
                 this.state = null;
             }
         }
         if (now - this.lastSeen > this.hold) { this.run = 0; this.state = null; }
-        return this.run >= this.need ? this.state : null;
+        return this._believed(now) ? this.state : null;
+    }
+
+    _believed(now) {
+        return this.run >= this.need && now - this.firstSeen >= this.span;
     }
 }
 
