@@ -167,7 +167,7 @@ export class Animals {
         if (!t) return;
         const top = t.topLayer(Math.round(cx), Math.round(cz));
         if (t.get(Math.round(cx), top, Math.round(cz)) !== BLOCK.GRASS || t.get(Math.round(cx), top + 1, Math.round(cz)) === BLOCK.WATER) return; // only on grass
-        if (t.castles?.landAt(Math.round(cx), Math.round(cz))) return; // (not in castles and villages)
+        if ((t.sites || t.castles)?.landAt(Math.round(cx), Math.round(cz))) return; // (not in castles, villages, wizards' towers)
         this.spawnHerdAt(type, n, cx, cz);
     }
 

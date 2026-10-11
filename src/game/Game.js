@@ -646,7 +646,7 @@ export class Game {
         for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) if (t.solidIn(Math.round(p.x) + dx, Math.round(p.z) + dz, head, head + 14)) n++;
         const covered = n >= 3 ? 1 : 0;
         // under the roof of a castle or a village house: lit rooms (lanterns, windows), not a dark cave
-        const built = covered && !!t.castles?.landAt(Math.round(p.x), Math.round(p.z));
+        const built = covered && !!(t.sites || t.castles)?.landAt(Math.round(p.x), Math.round(p.z)); // (castles and wizards' towers)
         this._caveK = (this._caveK || 0) + ((covered && !built ? 1 : 0) - (this._caveK || 0)) * Math.min(1, dt * 1.5);
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
@@ -1837,7 +1837,7 @@ export class Game {
             // on a server: its name on the map and a mark at its start point
             const online = this.net && this.net.active;
             const server = online ? { name: (this.net.isHost ? this.net.info?.name : this.net.serverName) || 'Сервер', players: this.remotes.size + 1, home: this.world.mapResult?.playerSpawn || { x: 0, z: 0 } } : null;
-            const castleIdx = this.world.terrain?.data?.castles;
+            const castleIdx = this.world.terrain?.data?.sites || this.world.terrain?.data?.castles; // (castles and wizards' towers)
             const castles = castleIdx ? castleIdx.nearestForMap(cp) : [];
             this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);

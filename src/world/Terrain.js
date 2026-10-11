@@ -24,6 +24,8 @@ import * as THREE from 'three';
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
 import { applyVoxelDetail } from './VoxelShading.js';
 import { CastleIndex } from './Castles.js';
+import { TowerIndex } from './WizardTowers.js';
+import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 
 export const BLOCK = {
@@ -302,10 +304,12 @@ export class TerrainData {
         this.seas = mountains && seas ? new SeaIndex(seed) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
         const raw = createHeightField(seed, mountains, this.seas);
-        this.castles = null;
+        this.castles = this.towers = this.sites = null;
         if (mountains) {
-            // castles and their villages stand on levelled land
-            const idx = this.castles = new CastleIndex(seed, raw, this.seas);
+            // castles and their villages, the wizards' towers stand on levelled land
+            this.castles = new CastleIndex(seed, raw, this.seas);
+            this.towers = new TowerIndex(seed, raw, this.castles);
+            const idx = this.sites = new SiteIndex(this.castles, this.towers);
             const fn = (ix, iz) => {
                 const h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)
                 const land = idx.landAt(ix, iz);
@@ -396,7 +400,7 @@ export class TerrainData {
 
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
-        const lists = this.castles.partsForChunk(c.cx, c.cz, CHUNK);
+        const lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
         if (!lists.length) return;
         const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
         const blocks = c.blocks;
@@ -550,7 +554,7 @@ export class TerrainData {
                 const tz = gz * TREE_CELL + 2 + Math.floor(hash01(gx + 911, gz - 37, this.seed) * (TREE_CELL - 6));
                 if (Math.hypot(tx, tz) < TREE_MIN_DIST) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue; // not on a beach (nor its crown)
-                if (this.castles && (this.castles.landAt(tx, tz) || this.castles.landAt(tx + 1, tz + 1))) continue; // no trees in villages
+                if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue; // no trees in villages
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
                 // Only on level dry ground (the 2×2 trunk and its surroundings)

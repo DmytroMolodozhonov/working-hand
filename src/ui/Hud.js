@@ -345,13 +345,14 @@ export class Hud {
             label(text, tx, ty);
         };
         this.minimapCastles = [];
-        for (const c of castles.slice(0, 2)) {
+        for (const c of castles.slice(0, 3)) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
-            this.minimapCastles.push(c.name);
+            const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
+            this.minimapCastles.push(icon === '🏰' ? c.name : `${icon} ${c.name}`);
             if (inside(cx, cz, 10)) {
                 // (the walls are drawn by the terrain picture already: just the name)
-                label('🏰 ' + c.name.replace(/^(Замок|Крепость) /, ''), cx, Math.max(-hh + 12, cz - 10));
-            } else edgeArrow(cx, cz, '#c9c4b8', '#3b3b3b', `🏰 ${Math.round(Math.hypot(cx, cz) / scale)} м`);
+                label(icon + ' ' + c.name.replace(/^(Замок|Крепость|Академия) /, ''), cx, Math.max(-hh + 12, cz - 10));
+            } else edgeArrow(cx, cz, icon === '🧙' ? '#b48be0' : '#c9c4b8', '#3b3b3b', `${icon} ${Math.round(Math.hypot(cx, cz) / scale)} м`);
         }
         // The server: a flag at its start point (an arrow on the edge when far)
         this.minimapServer = server ? server.name : null;
