@@ -15,7 +15,8 @@
  *   4. Teleport: a sudden jump far from the last good position is only
  *      accepted if the next frames confirm it.
  *   5. Ghosts: a hand far away from any pose wrist is ignored.
- *   6. Smoothing: light One-Euro filter (removes jitter, no lag in fast moves).
+ *   6. Smoothing: a One-Euro filter for the whole hand (HandFilter: removes jitter,
+ *      no lag in quick moves — the speed above the camera's own jitter opens it).
  *   Lost hands return null → the hand model keeps its last pose (2 s), so the
  *   animation never "drops" because of a short loss.
  *
@@ -106,15 +107,18 @@ export function assignHands(hands, pose) {
 
 /** Per-hand validator + filter. */
 export class HandStabilizer {
+    /** The hand filter's strength (see HandFilter; tuned in tests/unit/hand-latency.test.js). */
+    static params = { minCutoff: 0.8, beta: 8, dCutoff: 4, floorK: 1.5, floorT: 3 };
+
     constructor() {
         this.signature = null; // running average of bone signature
         this.lastGood = null;
         this.lastGoodTime = -Infinity;
         this.pendingJump = null;
         this.pendingCount = 0;
-        // 1.3 Hz at rest: a still hand stays still (2.5 let the network's jitter through);
-        // beta 7: the cut-off rises fast with speed, so quick moves are not delayed
-        this.filters = Array.from({ length: 21 * 3 }, () => new OneEuroFilter(1.3, 7.0, 1.0));
+        // the whole hand through one speed-adaptive filter (HandFilter): every point
+        // with the same strength, so the hand keeps its shape and turns without delay
+        this.filter = new HandFilter(HandStabilizer.params);
         this.out = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
         this.rejected = 0;
         this.accepted = 0;
@@ -126,7 +130,7 @@ export class HandStabilizer {
         this.lastGoodTime = -Infinity;
         this.pendingJump = null;
         this.pendingCount = 0;
-        for (const f of this.filters) f.reset();
+        this.filter.reset();
     }
 
     /**
@@ -161,8 +165,8 @@ export class HandStabilizer {
                 if (this.pendingJump && dist2(lm[0], this.pendingJump[0]) < size * 1.2) this.pendingCount++;
                 else { this.pendingJump = lm; this.pendingCount = 1; }
                 if (this.pendingCount < 3) { this.rejected++; return null; }
-                // Confirmed: it really moved there. Restart filters to avoid a smear.
-                for (const f of this.filters) f.reset();
+                // Confirmed: it really moved there. Restart the filter to avoid a smear.
+                this.filter.reset();
             }
         }
         this.pendingJump = null;
@@ -176,14 +180,73 @@ export class HandStabilizer {
         this.lastGoodTime = tMs;
         this.accepted++;
 
-        const t = tMs / 1000;
-        for (let i = 0; i < 21; i++) {
-            const p = lm[i];
-            this.out[i].x = this.filters[i * 3].filter(p.x, t);
-            this.out[i].y = this.filters[i * 3 + 1].filter(p.y, t);
-            this.out[i].z = this.filters[i * 3 + 2].filter(p.z || 0, t);
+        return this.filter.filter(lm, tMs / 1000, this.out);
+    }
+}
+
+/**
+ * A One-Euro filter for the whole hand at once (Casiez et al., CHI 2012). The
+ * speed is the hand's own: how fast its points move, in palm sizes a second (the
+ * same near the camera and far from it), so a quick turn of the wrist — the
+ * fingertips sweep a palm or more in a tenth of a second — passes at once, while
+ * a still hand's jitter (a few hundredths of a palm) is smoothed away. Every point
+ * gets the same strength: the hand keeps its shape (the palm's turn and the finger
+ * joints are measured from differences between the points).
+ */
+export class HandFilter {
+    constructor({ minCutoff = 0.8, beta = 8, dCutoff = 4, floorK = 1.5, floorT = 3 } = {}) {
+        this.minCutoff = minCutoff;
+        this.beta = beta;
+        this.dCutoff = dCutoff;
+        this.floorK = floorK;
+        this.floorT = floorT;
+        this.prev = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+        this.reset();
+    }
+
+    reset() {
+        this.has = false;
+        this.speed = 0;
+        this.floor = null;
+        this.lastTime = null;
+    }
+
+    static alpha(cutoff, dt) {
+        return 1 / (1 + 1 / (2 * Math.PI * cutoff * dt));
+    }
+
+    /** lm: 21 points; tSec: seconds; out: 21 {x,y,z} (written and returned). */
+    filter(lm, tSec, out) {
+        const P = this.prev;
+        let dt = this.lastTime == null ? 0 : tSec - this.lastTime;
+        if (!this.has || !(dt > 0) || dt > 0.5) {
+            // the first picture (or after a long gap): as it is
+            for (let i = 0; i < 21; i++) { P[i].x = lm[i].x; P[i].y = lm[i].y; P[i].z = lm[i].z || 0; }
+            this.has = true; this.speed = 0;
+        } else {
+            let sum = 0;
+            for (let i = 0; i < 21; i++) {
+                const dx = lm[i].x - P[i].x, dy = lm[i].y - P[i].y, dz = (lm[i].z || 0) - P[i].z;
+                sum += dx * dx + dy * dy + dz * dz;
+            }
+            const size = Math.max(0.02, palmSize(lm));
+            const seen = Math.sqrt(sum / 21) / size / dt; // (palm sizes a second)
+            // the camera's own jitter: the floor the seen speed comes down to while the hand
+            // is still (it drops at once, rises over `floorT` s) — only a move above it counts
+            if (this.floor == null) this.floor = seen;
+            this.floor += (seen < this.floor ? 0.3 : Math.min(1, dt / this.floorT)) * (seen - this.floor);
+            const raw = Math.max(0, seen - this.floorK * this.floor);
+            this.speed += HandFilter.alpha(this.dCutoff, dt) * (raw - this.speed);
+            const a = HandFilter.alpha(this.minCutoff + this.beta * this.speed, dt);
+            for (let i = 0; i < 21; i++) {
+                P[i].x += a * (lm[i].x - P[i].x);
+                P[i].y += a * (lm[i].y - P[i].y);
+                P[i].z += a * ((lm[i].z || 0) - P[i].z);
+            }
         }
-        return this.out;
+        this.lastTime = tSec;
+        for (let i = 0; i < 21; i++) { out[i].x = P[i].x; out[i].y = P[i].y; out[i].z = P[i].z; }
+        return out;
     }
 }
 

@@ -105,6 +105,7 @@ do now, and what is left, if anything.
 | talk | Villagers really talk (a small neural net) and carry out orders |
 | voices | Better villager voices (female/male never mixed) |
 | head | Head turning gets slow over time (right turns crawl after a while) |
+| wand | Hand lag; the wand's direction and grip; a real stick (pen, brush) in the hand seen by the camera |
 | (main session) | Inferno following the hand; Avada only from a scroll |
 
 ## Sea API (from the «sea» session — stable, use it)

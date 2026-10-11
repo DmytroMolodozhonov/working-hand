@@ -170,7 +170,8 @@ export class ItemSystem {
         if (spec.face === 'back') { z = _c.copy(f.Z); x = _b.crossVectors(y, z); } // shield: the face where the back of the hand looks
         _m4.makeBasis(x, y, z);
         _q.setFromRotationMatrix(_m4);
-        if (!h.q) h.q = _q.clone(); else h.q.slerp(_q, Math.min(1, dt * 28));
+        // (exactly as the hand turns: the hand is already steadied — easing it again made the thing trail the hand)
+        if (!h.q) h.q = _q.clone(); else h.q.copy(_q);
         h.model.quaternion.copy(h.q);
         if (h.item.kind === 'wand') {
             const a = g.character.aim[side] || (g.character.aim[side] = { dir: new THREE.Vector3(), at: 0 });

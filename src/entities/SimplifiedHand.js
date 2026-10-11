@@ -53,9 +53,10 @@ export class SimplifiedHand {
         this.PALM_H = 0.45;
         this.PALM_D = 0.14;
 
-        // The landmarks come 1€-filtered (TrackingGuard) and blended (PoseSmoother):
-        // a long average on top only made the hand lag
-        this.HISTORY_LENGTH = 2;
+        // The landmarks come 1€-filtered (TrackingGuard, the whole hand at once) and
+        // blended between camera pictures (PoseSmoother): any average or easing on top
+        // only made the hand lag (it took ~10 drawn frames to follow a turn of the wrist)
+        this.HISTORY_LENGTH = 1;
         this.landmarkHistory = [];
         this._historyPool = [];
         this._avg = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
@@ -75,8 +76,13 @@ export class SimplifiedHand {
         };
         this.targetState = JSON.parse(JSON.stringify(this.currentState));
 
+        // easing per drawn frame: only for the hands of other players (their network
+        // snapshots come in steps); our own hand follows the camera's directly (FOLLOW)
         this.LERP_SPEED = 0.5;
         this.ROT_LERP_SPEED = 0.45;
+        this.FOLLOW = 1;
+        this._k = this.LERP_SPEED;
+        this._kr = this.ROT_LERP_SPEED;
 
         // Safeguards
         this._pendingTwist = null;
@@ -215,6 +221,7 @@ export class SimplifiedHand {
             }
         }
 
+        this._k = this._kr = this.FOLLOW;
         this._stepState();
         this.animateModel();
     }
@@ -232,17 +239,19 @@ export class SimplifiedHand {
                 if (f === 'thumb') target = Math.max(0.45, Math.min(target, this.gripOverride.thumb));
                 else target = Math.min(this.gripOverride.curl + 0.04, Math.max(this.gripOverride.curl - 0.06, target));
             }
-            cs.fingers[f] += (target - cs.fingers[f]) * this.LERP_SPEED;
+            // (fingers closing round a handle settle into it rather than snap)
+            cs.fingers[f] += (target - cs.fingers[f]) * (this.gripOverride ? this.LERP_SPEED : this._k);
         }
-        cs.fingerSpread += ((this.gripOverride ? 0 : ts.fingerSpread) - cs.fingerSpread) * this.LERP_SPEED;
-        cs.thumbSpread += (ts.thumbSpread - cs.thumbSpread) * this.LERP_SPEED;
-        cs.wristTwist = lerpAngle(cs.wristTwist, ts.wristTwist, this.ROT_LERP_SPEED);
-        cs.wristTilt = lerpAngle(cs.wristTilt, ts.wristTilt, this.ROT_LERP_SPEED);
-        cs.wristRoll = lerpAngle(cs.wristRoll, ts.wristRoll, this.ROT_LERP_SPEED);
+        const k = this._k, kr = this._kr;
+        cs.fingerSpread += ((this.gripOverride ? 0 : ts.fingerSpread) - cs.fingerSpread) * k;
+        cs.thumbSpread += (ts.thumbSpread - cs.thumbSpread) * k;
+        cs.wristTwist = lerpAngle(cs.wristTwist, ts.wristTwist, kr);
+        cs.wristTilt = lerpAngle(cs.wristTilt, ts.wristTilt, kr);
+        cs.wristRoll = lerpAngle(cs.wristRoll, ts.wristRoll, kr);
         if (this._jointsT) {
             for (const n of JOINT_FINGERS) {
                 const t = this._jointsT[n], c = this._jointsC[n];
-                for (let i = 0; i < 4; i++) c[i] += (t[i] - c[i]) * this.LERP_SPEED;
+                for (let i = 0; i < 4; i++) c[i] += (t[i] - c[i]) * k;
             }
         }
     }
@@ -425,7 +434,7 @@ export class SimplifiedHand {
                 else { this._pend = null; this._pendN = 0; }
             } else this._pendN = 0;
             (this._qShown || (this._qShown = new THREE.Quaternion())).copy(q);
-            this.palm.quaternion.slerp(q, this.ROT_LERP_SPEED);
+            this.palm.quaternion.slerp(q, this._kr);
         } else {
             this.palm.rotation.y = cs.wristTwist;
             this.palm.rotation.x = cs.wristTilt;
@@ -518,6 +527,7 @@ export class SimplifiedHand {
                 JOINT_FINGERS.forEach((n, k) => { for (let i = 0; i < 4; i++) this._jointsT[n][i] = arr[14 + k * 4 + i]; });
             } else this._jointsT = this._jointsC = null;
         } else { this.netPalm = null; this._jointsT = this._jointsC = null; }
+        this._k = this.LERP_SPEED; this._kr = this.ROT_LERP_SPEED;
         this._stepState();
         this.animateModel();
     }
