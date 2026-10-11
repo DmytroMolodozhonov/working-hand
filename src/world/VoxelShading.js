@@ -121,6 +121,13 @@ float cobbleEdge(vec2 p, float layer) {
         // lantern: a glowing pane in a dark frame
         vec2 g = fract(uv);
         if (min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y)) < 0.12) diffuseColor.rgb *= 0.25;
+    } else if (pat == 12.0) {
+        // crystal lamp: faceted bands
+        diffuseColor.rgb *= 0.8 + 0.4 * step(0.5, fract((uv.x + uv.y) * 2.0));
+    } else if (pat == 13.0) {
+        // runes: a faint glowing circle cut into dark stone
+        float ring = 1.0 - smoothstep(0.02, 0.04, abs(length(f - 0.5) - 0.32));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.75, 1.0), ring * 0.7);
     }
     // soft edge darkening (fake ambient occlusion along block borders)
     vec2 e = min(f, 1.0 - f);
@@ -130,7 +137,17 @@ float cobbleEdge(vec2 p, float layer) {
     diffuseColor.rgb *= 1.0 - edgeAmt + edgeAmt * edge;
 }`)
             .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-if (floor(vVoxPat + 0.5) == 11.0) totalEmissiveRadiance += diffuseColor.rgb * 0.9; // lanterns glow at night`);
+{
+    float vp = floor(vVoxPat + 0.5);
+    if (vp == 11.0 || vp == 12.0) totalEmissiveRadiance += diffuseColor.rgb * 0.9; // lanterns and crystal lamps glow at night
+    else if (vp == 13.0) {
+        vec3 rn = abs(vVoxNormal);
+        vec3 rq = vVoxPos + vec3(0.5);
+        vec2 rf = fract(rn.y > 0.5 ? rq.xz : (rn.x > 0.5 ? rq.zy : rq.xy));
+        float ring = 1.0 - smoothstep(0.02, 0.04, abs(length(rf - 0.5) - 0.32));
+        totalEmissiveRadiance += diffuseColor.rgb * 0.5 * ring; // runes glow faintly
+    }
+}`);
     };
     material.customProgramCacheKey = () => 'voxel-detail';
     return material;

@@ -27,7 +27,7 @@ import { createRng } from '../core/math.js';
 
 export const CASTLE_CELL = 480;
 const MIN_SPAWN_DIST = 360;
-const BLEND = 26; // m of slope between the flat castle land and the wild
+export const BLEND = 26; // m of slope between the flat castle land and the wild
 
 const CASTLE_NAMES_A = ['Белый', 'Вороний', 'Старый', 'Северный', 'Золотой', 'Каменный', 'Высокий', 'Серый', 'Королевский', 'Туманный', 'Дубовый', 'Орлиный', 'Волчий', 'Солнечный', 'Лунный', 'Красный'];
 const CASTLE_NAMES_B = ['Утёс', 'Камень', 'Холм', 'Бор', 'Щит', 'Рог', 'Дол', 'Град', 'Вал', 'Брод', 'Клык', 'Перевал'];
@@ -42,7 +42,7 @@ export const ROOM_NAMES = {
 };
 
 /** Cheap deterministic hash → [0, 1). */
-function hash01(a, b, seed) {
+export function hash01(a, b, seed) {
     let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(seed, 2246822519)) | 0;
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     h ^= h >>> 16;
@@ -51,7 +51,7 @@ function hash01(a, b, seed) {
 
 // ------------------------------------------------------------------ plan
 /** Collects block parts in local coordinates and turns them into world parts. */
-class Plan {
+export class Plan {
     constructor(X, Z, F, rot) {
         this.X = X; this.Z = Z; this.F = F; this.rot = rot;
         this.parts = [];
@@ -77,6 +77,28 @@ class Plan {
     cyl(u, v, r, l0, l1, t, hr = -1) {
         const cx = this.wx(u, v), cz = this.wz(u, v);
         this.parts.push({ k: 1, cx, cz, r, hr, x0: cx - Math.ceil(r), x1: cx + Math.ceil(r), z0: cz - Math.ceil(r), z1: cz + Math.ceil(r), L0: this.L(l0), L1: this.L(l1), t });
+    }
+
+    /**
+     * A sector of a ring (or of a disc when hr < 0) between local angles a0…a1
+     * (radians, counter-clockwise from +u towards +v), layers l0…l1.
+     */
+    sector(u, v, r, hr, a0, a1, l0, l1, t) {
+        const cx = this.wx(u, v), cz = this.wz(u, v);
+        const span = a1 - a0; // (world start angle = a0 + rot·π/2: wx/wz are proper rotations)
+        // the world-angle direction: local (cos a, sin a) in (u, v) turns into world (x, z) like wx/wz do
+        const dir = (a) => [this.wx(Math.cos(a), Math.sin(a)) - this.X, this.wz(Math.cos(a), Math.sin(a)) - this.Z];
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        const add = (a) => {
+            const [dx, dz] = dir(a);
+            for (const rr of [r, Math.max(0, hr)]) {
+                const x = cx + dx * rr, z = cz + dz * rr;
+                if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
+            }
+        };
+        add(a0); add(a1);
+        for (let k = Math.ceil(a0 / (Math.PI / 2)); k * Math.PI / 2 <= a1; k++) add(k * Math.PI / 2);
+        this.parts.push({ k: 2, cx, cz, r, hr, a0w: Math.atan2(dir(a0)[1], dir(a0)[0]), span, x0: Math.floor(x0) - 1, x1: Math.ceil(x1) + 1, z0: Math.floor(z0) - 1, z1: Math.ceil(z1) + 1, L0: this.L(l0), L1: this.L(l1), t });
     }
 
     /** Hollow walls around a rectangle (inner air is not carved). */
@@ -218,7 +240,7 @@ function stairsU(p, u0, dir, v0, v1, n, t, l0 = 0) {
 }
 
 // ------------------------------------------------------------ furniture
-function furnish(p0, room, s, chests, aisles = []) {
+export function furnish(p0, room, s, chests, aisles = []) {
     const { u0, u1, v0, v1, kind } = room;
     // furniture never stands in the way of the walking paths (aisles) through the room
     const hits = (a0, a1, b0, b1) => aisles.some((r) => a1 >= r.u0 && a0 <= r.u1 && b1 >= r.v0 && b0 <= r.v1);
@@ -744,7 +766,7 @@ export const RICH_HOUSES = ['manor', 'stone', 'brick', 'manor', 'towerhouse'];
  * flower boxes, a woodpile...). The game puts the real door, the glass, the
  * beds and the chests in (src/game/Houses.js) from the records in `out.houses`.
  */
-function buildHouse(p, kind, cu, cv, face, rng, s, out) {
+export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     const P = {
         box: (a0, a1, l0, l1, b0, b1, t) => {
             const [x0, z0] = rotLot(a0, b0, face), [x1, z1] = rotLot(a1, b1, face);
@@ -783,12 +805,13 @@ function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     // ---- the door (3 wide, 5 high; a barn: 5 wide, open)
     const da = rich && kind !== 'towerhouse' ? -2 : 0;
     const dw = T.barn ? 2 : 1;
-    P.box(da - dw, da + dw, 0, 4, -d, -d, 0);
-    P.box(da - dw - 1, da + dw + 1, 5, 5, -d, -d, timber); // the lintel
+    const doorTop = s.doorTop ?? 4; // (wizards' houses: a door one higher, for the pointed hats)
+    P.box(da - dw, da + dw, 0, doorTop, -d, -d, 0);
+    P.box(da - dw - 1, da + dw + 1, doorTop + 1, doorTop + 1, -d, -d, timber); // the lintel
     P.box(da - dw, da + dw, -1, -1, -d - 2, -d - 1, BLOCK.PATH); // the doorstep
     if (!T.barn) {
         const dp = P.pt(da, -d);
-        house.doorRec = { x: dp.x, y: dp.y, z: dp.z, ry: P.along(1, 0), w: 3, h: 5 };
+        house.doorRec = { x: dp.x, y: dp.y, z: dp.z, ry: P.along(1, 0), w: 3, h: doorTop + 1 };
     }
     // ---- windows (holes the game glazes): front, sides, the back of a rich house
     const win = (a0, a1, b0, b1, l0, l1) => {
@@ -883,7 +906,7 @@ function buildHouse(p, kind, cu, cv, face, rng, s, out) {
         house.beds = kind === 'longhouse' ? 4 : 2;
     }
     // a woodpile by a poor house
-    if (!rich && !T.barn && rng() < 0.6) P.box(w + 1, w + 1, 0, 1, 1, 3, BLOCK.WOOD);
+    if (!s.noWoodpile && !rich && !T.barn && rng() < 0.6) P.box(w + 1, w + 1, 0, 1, 1, 3, BLOCK.WOOD);
     // the walking graph: in front of the door → inside (→ the bedroom)
     const door = P.node(da, -d - 3, 0);
     const inside = P.node(da, -1, 0, 'home');
@@ -893,6 +916,7 @@ function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     house.inside = P.pt(da, -1, 0);
     house.doorNode = door; house.homeNode = inside;
     house.bedColour = bedColour;
+    s.decorate?.(P, { kind, w, d, h, rich, da, top, house });
     out.houses.push(house);
     return door;
 }
@@ -926,7 +950,7 @@ function buildYard(p, cu, cv, face, rng, s, out, pen) {
 }
 
 /** Rotate lot-local (a, b) so that −b (the door side) points to `face`. */
-function rotLot(a, b, face) {
+export function rotLot(a, b, face) {
     if (face === 0) return [a, b];
     if (face === 1) return [-b, a];
     if (face === 2) return [-a, -b];

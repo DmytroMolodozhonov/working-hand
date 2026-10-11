@@ -37,11 +37,14 @@ export const BLOCK = {
     LANTERN: 40, HAY: 41, CLOTH_WHITE: 42, BOOKS: 43, CLOTH_YELLOW: 44,
     // houses: fences, vegetable beds, flowers, whitewashed plaster
     FENCE: 45, VEG: 46, FLOWERS: 47, PLASTER: 48,
+    // the wizards' tower and houses (src/world/WizardTowers.js): blue-grey arcane stone, a violet roof,
+    // glowing crystal lamps, a violet carpet, potion shelves, runes in the floor
+    ARCANE: 49, ARCANE_DARK: 50, ROOF_PURPLE: 51, ARCANE_LAMP: 52, ARCANE_LAMP_VIOLET: 53, CARPET_PURPLE: 54, POTION: 55, RUNE: 56,
 };
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -112,6 +115,14 @@ export const BASE_COLORS = {
     [BLOCK.VEG]: 0x4e9a35,
     [BLOCK.FLOWERS]: 0xd9548c,
     [BLOCK.PLASTER]: 0xe8e0cc,
+    [BLOCK.ARCANE]: 0x56597f,
+    [BLOCK.ARCANE_DARK]: 0x3b3d5c,
+    [BLOCK.ROOF_PURPLE]: 0x5b2d8e,
+    [BLOCK.ARCANE_LAMP]: 0x8fe3ff,
+    [BLOCK.ARCANE_LAMP_VIOLET]: 0xc58bff,
+    [BLOCK.CARPET_PURPLE]: 0x6a2c91,
+    [BLOCK.POTION]: 0x5dff8a,
+    [BLOCK.RUNE]: 0x2e3150,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -121,6 +132,9 @@ Object.assign(PATTERN_OF, {
     [BLOCK.THATCH]: PATTERN.STRAW, [BLOCK.HAY]: PATTERN.STRAW, [BLOCK.WHEAT]: PATTERN.STRAW,
     [BLOCK.CARPET_RED]: PATTERN.CLOTH, [BLOCK.CARPET_BLUE]: PATTERN.CLOTH, [BLOCK.CARPET_GREEN]: PATTERN.CLOTH, [BLOCK.CLOTH_WHITE]: PATTERN.CLOTH, [BLOCK.CLOTH_YELLOW]: PATTERN.CLOTH,
     [BLOCK.GOLD]: PATTERN.GOLD, [BLOCK.FARMLAND]: PATTERN.FURROWS, [BLOCK.BOOKS]: PATTERN.BOOKS, [BLOCK.LANTERN]: PATTERN.GLOW,
+    [BLOCK.ARCANE]: PATTERN.ASHLAR, [BLOCK.ARCANE_DARK]: PATTERN.ASHLAR, [BLOCK.ROOF_PURPLE]: PATTERN.TILES,
+    [BLOCK.ARCANE_LAMP]: PATTERN.CRYSTAL, [BLOCK.ARCANE_LAMP_VIOLET]: PATTERN.CRYSTAL, [BLOCK.CARPET_PURPLE]: PATTERN.CLOTH,
+    [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES,
 });
 /** The shader pattern of a block type. */
 export const patternOf = (t) => PATTERN_OF[t] || 0;
@@ -148,11 +162,15 @@ export const OLD_BEDROCK = -9;
  * A saved world and a guest keep the generation their world was made with.
  */
 export const WORLD_GEN = 2;
-export const MAX_LAYER = 40;
+// (56 = room for the wizards' tower with its pointed roof; mountains stay as they always were,
+// capped at MOUNTAIN_TOP, so old worlds and saves are unchanged)
+export const MAX_LAYER = 56;
+export const MOUNTAIN_TOP = 36;
 export const CHUNK = 32;
 const SHIFT = 5; // log2(CHUNK)
 const MASK = CHUNK - 1;
 const HEIGHT = MAX_LAYER - MIN_LAYER + 1;
+const TAU = Math.PI * 2;
 const NEAR_CAP = 22; // mountains around spawn: as high as they always were
 
 /** Numeric key of a chunk (fast Map lookups). */
@@ -190,7 +208,7 @@ export function createHeightField(seed, mountains, seas = null) {
         if (far > 0) {
             const r = region(ix / 260, iz / 260);
             amp = 1 + (0.12 + 1.3 * smoothstep(-0.25, 0.55, r) - 1) * far;
-            cap = NEAR_CAP + (MAX_LAYER - 4 - NEAR_CAP) * far;
+            cap = NEAR_CAP + (MOUNTAIN_TOP - NEAR_CAP) * far;
         }
         let h = Math.min(Math.floor(cap), Math.floor(ridge * ridge * 30 * near * amp));
 
@@ -289,17 +307,17 @@ export class TerrainData {
             // castles and their villages stand on levelled land
             const idx = this.castles = new CastleIndex(seed, raw, this.seas);
             const fn = (ix, iz) => {
-                const h = raw(ix, iz);
+                const h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)
                 const land = idx.landAt(ix, iz);
-                fn.sea = raw.sea; fn.beach = raw.beach;
+                fn.sea = sea; fn.beach = beach;
                 if (land && land.side === 'sea') {
                     // beyond a sea castle's quay: the sea (dug deep in the harbour)
                     const k = land.castle.port;
-                    const d = Math.max(raw.sea ? raw.water : 0, land.harbour ? k.depth : 0, 1);
+                    const d = Math.max(sea ? wet : 0, land.harbour ? k.depth : 0, 1);
                     fn.water = d; fn.sea = true; fn.beach = false;
                     return -d;
                 }
-                if (!land || (land.w < 1 && raw.water)) { fn.water = raw.water; return h; } // (rivers keep their banks)
+                if (!land || (land.w < 1 && wet)) { fn.water = wet; return h; } // (rivers keep their banks)
                 fn.water = 0; fn.sea = false;
                 if (land.w >= 1) fn.beach = false;
                 const F = land.castle.F;
@@ -390,13 +408,18 @@ export class TerrainData {
                 const L0 = Math.max(p.L0, MIN_LAYER + 1), L1 = Math.min(p.L1, MAX_LAYER);
                 if (ax > bx || az > bz || L0 > L1) continue;
                 const t = p.t;
-                const cyl = p.k === 1;
+                const cyl = p.k === 1 || p.k === 2; // (2: a sector of a ring — the tower's spiral stair)
                 const r2 = cyl ? p.r * p.r + p.r * 0.6 : 0, h2 = cyl && p.hr >= 0 ? p.hr * p.hr + p.hr * 0.6 : -1;
                 for (let z = az; z <= bz; z++) {
                     for (let x = ax; x <= bx; x++) {
                         if (cyl) {
                             const d2 = (x - p.cx) * (x - p.cx) + (z - p.cz) * (z - p.cz);
                             if (d2 > r2 || d2 <= h2) continue;
+                            if (p.k === 2) {
+                                let a = Math.atan2(z - p.cz, x - p.cx) - p.a0w;
+                                a -= Math.floor(a / TAU) * TAU;
+                                if (a >= p.span) continue;
+                            }
                         }
                         const col = (z - z0) * CHUNK + (x - x0);
                         for (let L = L0; L <= L1; L++) blocks[(L - MIN_LAYER) * CHUNK * CHUNK + col] = t;
