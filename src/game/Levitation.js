@@ -19,10 +19,10 @@
 import * as THREE from 'three';
 
 export const LEVITATE = {
-    RANGE: 10, // m
+    RANGE: 30, // m (the heroes are big: 10 was only a few real steps — a thing on the ground was out of reach)
     CONE: 0.5, // rad around the pointing direction
     MIN_HOLD: 2, // m in front of the hand
-    MAX_HOLD: 6,
+    MAX_HOLD: 30, // (it is lifted where it is — not pulled to the hand first: that looked like a teleport)
     TWIST: 1.6, // the object turns this much more than the wrist (a small turn of the hand swings it)
     FOLLOW: 3.5, // how fast the float point follows the hand (1/s)
     DROP_DISTANCE: 0.75, // m of hand movement within DROP_WINDOW = a jerk
@@ -115,11 +115,13 @@ export class Levitation {
                 if (d > LEVITATE.RANGE || d < 0.3) continue;
                 const ang = dir.angleTo(to.normalize());
                 if (ang > LEVITATE.CONE + Math.atan2(c.r || 0, d)) continue; // (a big body is easier to point at)
-                const score = ang * 6 + d * 0.15 - (this.game.magicHand === side ? 0.3 : 0);
+                // the one the hand points at most truly (beyond its own size), not merely the nearest:
+                // a weapon on a pedestal near the line must not win over the cow pointed at
+                const score = Math.max(0, ang - Math.atan2(c.r || 0.3, d)) * 10 + d * 0.01 - (this.game.magicHand === side ? 0.05 : 0);
                 if (!best || score < best.score) best = { ...c, side, score, d };
             }
         }
-        if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар) или на животное, зомби, жителя — не дальше 10 м — и скажите «Вингардиум Левиоса»';
+        if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар) или на животное, зомби, жителя — не дальше 30 м — и скажите «Вингардиум Левиоса»';
         const s = {
             kind: best.kind,
             obj: best.obj,
