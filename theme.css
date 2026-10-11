@@ -267,13 +267,14 @@ button, input, select, textarea { font-family: inherit; }
 .sub-tab { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--ui-border); color: var(--ui-muted); padding: 7px 14px; border-radius: 999px; font-weight: 700; }
 .sub-tab:hover { color: var(--ui-text); border-color: var(--ui-violet); }
 .sub-tab.active { background: rgba(167, 139, 255, 0.22); border-color: var(--ui-violet); color: #fff; box-shadow: 0 0 14px rgba(167, 139, 255, 0.35); }
-#tab-settings .sub-pane.active { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; text-align: left; align-items: start; }
-#tab-settings .settings-group { margin: 0; padding: 12px 14px; background: rgba(5, 3, 18, 0.38); border: 1px solid var(--ui-border); border-radius: 14px; }
-#tab-settings #set-voice.sub-pane.active { display: block; }
+/* (columns, not a grid: a short card sits right under the one above it — no holes next to a tall one) */
+#tab-settings .sub-pane.active { display: block; column-width: 280px; column-gap: 12px; text-align: left; }
+#tab-settings .settings-group { margin: 0 0 12px; padding: 12px 14px; background: rgba(5, 3, 18, 0.38); border: 1px solid var(--ui-border); border-radius: 14px; break-inside: avoid; }
+#tab-settings #set-voice.sub-pane.active, #tab-settings #set-log.sub-pane.active { display: block; column-width: auto; }
 #tab-settings .settings-group h3 { color: var(--ui-gold) !important; font-family: var(--ui-font-title); }
 #voice-test-output { border-color: var(--ui-violet) !important; background: rgba(5, 3, 18, 0.5) !important; }
 #voice-toggle-btn { background: var(--ui-grad-magic) !important; border: none; border-radius: 12px; color: #fff; font-weight: 800; cursor: pointer; }
-#test-mode-btn.menu-btn { grid-column: 1 / -1; background: rgba(255, 255, 255, 0.06) !important; border: 1px solid var(--ui-border); color: var(--ui-text); border-radius: 12px; padding: 10px 16px; font-weight: 800; margin-top: 0; }
+#test-mode-btn.menu-btn { column-span: all; display: block; width: 100%; background: rgba(255, 255, 255, 0.06) !important; border: 1px solid var(--ui-border); color: var(--ui-text); border-radius: 12px; padding: 10px 16px; font-weight: 800; margin-top: 0; }
 #test-mode-btn.menu-btn:hover { border-color: var(--ui-violet); background: rgba(167, 139, 255, 0.16) !important; }
 .info-text { color: var(--ui-muted); }
 
@@ -287,7 +288,8 @@ button, input, select, textarea { font-family: inherit; }
 .mp-btn:disabled { opacity: 0.5; cursor: default; box-shadow: none; filter: none; }
 
 /* saved worlds */
-#saved-worlds { padding: 12px 14px; }
+/* about 10 worlds are seen, the rest by scrolling — the list never runs below the window */
+#saved-worlds { padding: 12px 14px; max-height: max(220px, min(730px, calc(100vh - 330px))); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--ui-violet) transparent; }
 .world-row { border-top-color: var(--ui-border); }
 .world-row:first-child { border-top: none; }
 .ver-new { margin: 6px auto 0; max-width: 560px; color: var(--ui-gold); font-weight: 700; }
@@ -326,14 +328,13 @@ button, input, select, textarea { font-family: inherit; }
 .stat-row > span:first-child { white-space: nowrap; }
 
 /* «Механика игры»: plain readable sections, not item cards */
-.mech-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; text-align: left; align-items: start; }
-.mech-card { background: rgba(5, 3, 18, 0.42); border: 1px solid var(--ui-border); border-left: 3px solid var(--ui-gold); border-radius: 12px; padding: 12px 16px 10px; }
+.mech-list { column-width: 330px; column-gap: 12px; text-align: left; }
+.mech-card { break-inside: avoid; margin: 0 0 12px; background: rgba(5, 3, 18, 0.42); border: 1px solid var(--ui-border); border-left: 3px solid var(--ui-gold); border-radius: 12px; padding: 12px 16px 10px; }
 .mech-title { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; color: var(--ui-gold); font-family: var(--ui-font-title); font-size: 1.15rem; font-weight: 700; }
 .mech-icon { font-size: 1.3rem; line-height: 1; }
 .mech-lead { margin: 0 0 6px; color: var(--ui-text); font-weight: 700; line-height: 1.4; }
 .mech-points { margin: 0; padding-left: 18px; color: rgba(241, 237, 255, 0.82); line-height: 1.45; font-size: 0.92rem; }
 .mech-points li { margin: 3px 0; }
-@media (max-width: 760px) { .mech-list { grid-template-columns: 1fr; } }
 .stat-val { color: var(--ui-gold); text-align: right; }
 .max-badge { background: var(--ui-grad-magic); }
 
