@@ -104,4 +104,5 @@ do now, and what is left, if anything.
 | launcher | Windows launch: an app window with a loading/update screen, shortcut, install folder |
 | talk | Villagers really talk (a small neural net) and carry out orders |
 | voices | Better villager voices (female/male never mixed) |
+| head | Head turning gets slow over time (right turns crawl after a while) |
 | (main session) | Inferno following the hand; Avada only from a scroll |

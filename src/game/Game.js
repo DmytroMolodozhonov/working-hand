@@ -52,6 +52,7 @@ import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { BLOCK, isCastleBlock, BASE_COLORS } from '../world/Terrain.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
+import { headTurnStep } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { Mana } from './Mana.js';
 
@@ -98,6 +99,7 @@ export class Game {
         this.cameraBaseRotation = 0;
         this.smoothHead = { yaw: 0, pitch: 0 };
         this.yawNeutral = 0; // head yaw that counts as "straight ahead" (drifting camera)
+        this._headTurn = { neutral: 0 };
         this.smoothBody = 0;
         this.knockback = new THREE.Vector3();
         this.flight = new FlightController();
@@ -1842,17 +1844,15 @@ export class Game {
                 const targetPitch = lookPitch(pose.headRotation.pitch * s.sensitivity); // (tilt the head back: straight up)
                 // Per-frame smoothing tuned at 60 FPS, scaled so 144 Hz screens behave the same
                 const alpha = frameAlpha(pose.isRunning && !flying ? Math.min(s.smoothness, 0.1) : s.smoothness, dt);
-                this.smoothHead.yaw += (targetYaw - this.smoothHead.yaw) * alpha;
-                this.smoothHead.pitch += (targetPitch - this.smoothHead.pitch) * alpha;
+                // (a broken frame — NaN — must not poison the head for the rest of the game)
+                if (Number.isFinite(targetYaw)) this.smoothHead.yaw += (targetYaw - this.smoothHead.yaw) * alpha;
+                if (Number.isFinite(targetPitch)) this.smoothHead.pitch += (targetPitch - this.smoothHead.pitch) * alpha;
                 if (s.drifting) {
-                    // "Straight ahead" adapts slowly to where the player really looks (camera beside
-                    // the screen), so a small constant head turn doesn't spin the view.
-                    const off = this.smoothHead.yaw - this.yawNeutral;
-                    if (Math.abs(off) < 0.3) this.yawNeutral += off * Math.min(1, dt * 0.12);
-                    // Turning speed grows smoothly past the dead zone, with a cap
-                    const DEAD = 0.15;
-                    const over = Math.abs(off) - DEAD;
-                    if (over > 0) this.cameraBaseRotation += Math.sign(off) * Math.min(2.2, over * 4) * dt;
+                    // Past a dead zone the head turns the body; "straight ahead" adapts slowly to
+                    // where the player really looks, but only while not turning (HeadTurn.js)
+                    const turn = headTurnStep(this._headTurn, this.smoothHead.yaw, dt);
+                    this.yawNeutral = this._headTurn.neutral;
+                    this.cameraBaseRotation += turn.rate * dt;
                     ch.setBodyRotation(this.cameraBaseRotation);
                 } else if (pose.bodyRotation !== undefined && !flying) {
                     this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
