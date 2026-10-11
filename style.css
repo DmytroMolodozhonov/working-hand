@@ -1482,3 +1482,26 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #pause-continue-btn { background: linear-gradient(135deg, #27ae60, #2ecc71); }
 #pause-exit-btn { background: linear-gradient(135deg, #c0392b, #e74c3c); }
 .pause-hint { font-size: 13px; opacity: 0.75; margin-top: 10px; }
+
+/* ---------------- The words the microphone is catching (Creative only) ---------------- */
+#voice-heard {
+    position: fixed;
+    top: 46px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    pointer-events: none;
+    max-width: 90vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: 700 24px/1.25 var(--font-ui, sans-serif);
+    color: #fff;
+    background: rgba(10, 12, 20, 0.72);
+    padding: 6px 16px;
+    border-radius: 10px;
+    text-shadow: 0 2px 3px #000;
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+#voice-heard.on { opacity: 1; transition: opacity 0.1s; }

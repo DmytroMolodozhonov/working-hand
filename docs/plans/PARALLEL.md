@@ -123,6 +123,7 @@ do now, and what is left, if anything.
 | voices | Better villager voices (female/male never mixed) |
 | head | Head turning gets slow over time (right turns crawl after a while) |
 | wand | Hand lag; the wand's direction and grip; a real stick (pen, brush) in the hand seen by the camera |
+| heard | The recognised-words line only in Creative: big, bold, the newest few words |
 | (main session) | Inferno following the hand; Avada only from a scroll |
 
 ## Sea API (from the «sea» session — stable, use it)

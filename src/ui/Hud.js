@@ -5,6 +5,14 @@
 
 const MINIMAP_WINDOW = 128; // m of terrain drawn around the player
 const MINIMAP_W = 240, MINIMAP_H = 160; // the map's own units (drawn bigger by the size setting)
+const HEARD_WORDS = 4;       // the «heard words» line keeps only the newest few words
+const HEARD_FADE_MS = 1500;  // …and fades this long after the microphone goes quiet
+
+/** The last `n` words of what the microphone heard (the newest ones). */
+export function lastWords(text, n = HEARD_WORDS) {
+    const words = String(text ?? '').trim().split(/\s+/).filter(Boolean);
+    return words.slice(-n).join(' ');
+}
 import { BLOCK, BASE_COLORS } from '../world/Terrain.js';
 
 /**
@@ -226,11 +234,37 @@ export class Hud {
         if (show) {
             v.classList.remove('hidden');
             v.style.display = 'block';
-            if (html !== this._lastVoice) { v.innerHTML = html; this._lastVoice = html; }
+            if (html !== this._lastVoice) { v.innerHTML = html; this._lastVoice = html; this._voiceAt = performance.now(); }
         } else {
             v.classList.add('hidden');
             v.style.display = 'none';
         }
+    }
+
+    /**
+     * The live words the microphone is catching. Only in Creative (it is partly a developer
+     * mode); elsewhere nothing is shown. Big, bold, only the newest few words, and it fades
+     * shortly after the speech stops. Game messages stay in their own line (`setVoice`).
+     */
+    heard(text, creative) {
+        let el = this._heardEl;
+        if (!creative) { if (el) { el.classList.remove('on'); el.textContent = ''; } return; }
+        const words = lastWords(text);
+        if (!words) return;
+        if (!el) {
+            el = this._heardEl = document.createElement('div');
+            el.id = 'voice-heard';
+            document.body.appendChild(el);
+        }
+        el.textContent = words;
+        el.classList.add('on');
+        clearTimeout(this._heardTimer);
+        this._heardTimer = setTimeout(() => el.classList.remove('on'), HEARD_FADE_MS);
+    }
+
+    /** ms since the message line was last written. */
+    voiceAge() {
+        return performance.now() - (this._voiceAt ?? -1e9);
     }
 
     voiceText() {

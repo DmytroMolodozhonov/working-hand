@@ -2700,7 +2700,8 @@ export class Game {
                 this.isMagicActive = true;
                 this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
                 if (this.voice) this.voice.start();
-            } else if (!this.hud.voiceText().includes('СЛЫШУ')) {
+            } else if (this.hud.voiceText().includes('ЖДУ КОМАНДУ') || this.hud.voiceAge() > 2500) {
+                // (a fresh game message — «Не хватает маны», a spell result — stays readable)
                 this.hud.setVoice(`🎤 <span style="color:#55efc4">ЖДУ КОМАНДУ (${label})</span>`);
             }
         } else if (this.isMagicActive && Date.now() - this.lastMagicTime > 1200) {

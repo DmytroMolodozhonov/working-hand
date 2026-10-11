@@ -9,7 +9,7 @@ import { HandRecorder } from './game/HandRecorder.js';
 import { PoseService } from './input/PoseService.js';
 import { VoiceService } from './input/VoiceService.js';
 import { SoundManager } from './audio/SoundManager.js';
-import { Hud, setMinimapSize } from './ui/Hud.js';
+import { Hud, setMinimapSize, lastWords } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
@@ -408,19 +408,19 @@ voice.onResult = (command, isFinal = true, held = false) => {
         }
     }
     if (game && game.active) {
-        if (game.isMagicActive || Date.now() - game.lastMagicTime < 1500) hud.setVoice(`🎤 СЛЫШУ: "${escapeHtml(command)}"`);
+        // the words being caught: a big short line, only in Creative (partly a developer mode)
+        hud.heard(command, game.config?.mode === 'creative');
         // talking to a villager near me, the hand not raised to cast: words they understand are words,
         // not a spell («собери войско» is not «Gather», «спасибо» is not «Rescue», «в атаку» is an order)
         // (first: they cast nothing, so the checks below that a spell is really mine — loudness, lips,
         // a friend's echo — must not eat a guest's words to a villager)
         if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
-            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
-            return;
+            return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)
         }
         // Multiplayer: a friend's voice heard by this microphone must not cast here
         const margin = parseInt($('voice-filter')?.value ?? '9', 10);
         if (margin > 0 && game.remotes?.size > 0 && matchSpell(command) && !voice.isOwnVoice(margin)) {
-            hud.setVoice(`🔇 Тихо — похоже, это голос другого игрока: "${escapeHtml(command)}"`);
+            hud.setVoice(`🔇 Тихо — похоже, это голос другого игрока: «${escapeHtml(lastWords(command))}»`);
             return;
         }
         // …and it must be ME who said it: my lips moved (the camera sees the mouth), and it isn't
@@ -430,7 +430,7 @@ voice.onResult = (command, isFinal = true, held = false) => {
         if (heard && (game.remotes?.size > 0 || game.voiceGate.echoes(heard, performance.now()))) {
             const gate = game.voiceGate.check(heard, performance.now(), { levels: voice._levels, floor: voice.noiseFloor });
             if (!gate.ok) {
-                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(command)}» — ваш рот не двигался вместе с этим голосом: это сказали не вы` : `🔇 «${escapeHtml(command)}» — это чужой голос (это заклинание только что сказал кто-то другой)`);
+                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(lastWords(command))}» — ваш рот не двигался вместе с этим голосом: это сказали не вы` : `🔇 «${escapeHtml(lastWords(command))}» — это чужой голос (это заклинание только что сказал кто-то другой)`);
                 if (isFinal || held) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
                 return;
             }
@@ -445,19 +445,17 @@ voice.onResult = (command, isFinal = true, held = false) => {
         }
         // (the same with a ship's sailor near me)
         if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
-            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
             return;
         }
         const name = game.castLocalSpell(command, isFinal);
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
         // («стоп» with nothing to stop is still words to a villager: «стой» / «стоп» = stop following me)
         if (!name && isFinal && (!heard || heard === 'Stand') && (game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command))) {
-            hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
-            return;
+            return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)
         }
         if (name) {
             voice.learnOwnVoice();
-            hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span> (было: "${escapeHtml(command)}")`);
+            hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span>`);
             if (voiceTestText && isMenuVoiceActive) voiceTestText.innerHTML = `✨ ${name.toUpperCase()} ✨`;
         }
     }
