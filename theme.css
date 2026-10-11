@@ -498,4 +498,6 @@ button, input, select, textarea { font-family: inherit; }
    the title bar moves the window */
 .app-window #main-menu { padding: 0; }
 .app-window #main-menu > .menu-container { --win-w: 100vw; --win-h: 100vh; border-radius: 0; border: none; box-shadow: none; }
-.app-window #main-menu > .menu-container > .brand { cursor: default; user-select: none; }
+.app-window #main-menu > .menu-container > .brand { cursor: grab; user-select: none; touch-action: none; }
+.app-window #main-menu > .menu-container > .brand.dragging { cursor: grabbing; }
+.app-window #main-menu > .menu-container > .brand .win-btn { cursor: pointer; }

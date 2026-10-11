@@ -599,7 +599,8 @@ def open_game_window(url):
             # (the usual browser profile: saved worlds, the hero and the settings live there)
             try:
                 subprocess.Popen([
-                    exe, f"--app={url}", "--window-size=1180,780",  # (the page makes it frameless: /api/window)
+                    # (off the screen first: the page cuts the frame away and brings it to the middle — /api/window)
+                    exe, f"--app={url}", "--window-size=1180,780", "--window-position=-6000,-6000",
                     "--force_high_performance_gpu", "--ignore-gpu-blocklist",
                     # the camera network's page (ai.html) gets a process of its own — it never stops the game
                     "--site-per-process",
@@ -607,6 +608,14 @@ def open_game_window(url):
                     "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
                 ])
                 print(f"  Игра открыта в отдельном окне ({os.path.basename(exe)}, мощная видеокарта)")
+                try:
+                    here = os.path.join(ROOT, "launcher")
+                    if here not in sys.path:
+                        sys.path.insert(0, here)
+                    import zns_window
+                    threading.Thread(target=zns_window.rescue_offscreen, daemon=True).start()
+                except Exception:  # noqa: BLE001
+                    pass
                 return
             except OSError as e:
                 print(f"  (не удалось открыть {exe}: {e})")

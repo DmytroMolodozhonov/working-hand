@@ -17,7 +17,7 @@ Only the Python standard library.
 import sys
 
 GAME_TITLE = "Волшебство только начинается"
-ACTIONS = ("minimize", "close", "frameless", "framed", "drag")
+ACTIONS = ("minimize", "close", "frameless", "fullscreen", "moveby")
 
 
 def _user32():
@@ -95,12 +95,15 @@ def window_action(action, data=None):
             user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
         elif action == "close":
             user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
-        elif action == "drag":
-            user32.ReleaseCapture()
-            user32.PostMessageW(hwnd, 0x0112, 0xF012, 0)  # WM_SYSCOMMAND, SC_MOVE | HTCAPTION: follow the mouse
-        elif action == "framed":
-            user32.SetWindowRgn(hwnd, None, True)  # the whole window again (full screen for the game)
-        else:  # frameless
+        elif action == "moveby":
+            # the game's own title bar drags the window (the page sends how far the mouse went)
+            dpr = float(data.get("dpr") or 1) or 1
+            win = wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(win))
+            dx, dy = round(float(data.get("dx") or 0) * dpr), round(float(data.get("dy") or 0) * dpr)
+            user32.SetWindowPos(hwnd, None, win.left + dx, win.top + dy, 0, 0, 0x0001 | 0x0004 | 0x0010)  # NOSIZE|NOZORDER|NOACTIVATE
+        else:  # frameless (the menu's size, in the middle) / fullscreen (the whole screen, for the game)
+            full = action == "fullscreen"
             dpr = float(data.get("dpr") or 1) or 1
             inner_w = round(float(data.get("innerWidth") or 0) * dpr)
             inner_h = round(float(data.get("innerHeight") or 0) * dpr)
@@ -123,16 +126,53 @@ def window_action(action, data=None):
             mi = MONITORINFO()
             mi.cbSize = ctypes.sizeof(MONITORINFO)
             user32.GetMonitorInfoW(ctypes.c_void_p(user32.MonitorFromWindow(hwnd, 2)), ctypes.byref(mi))
-            wa = mi.rcWork
-            target_w = min(target_w, wa.right - wa.left)
-            target_h = min(target_h, wa.bottom - wa.top)
+            area = mi.rcMonitor if full else mi.rcWork  # (full screen covers the taskbar too)
+            if full:
+                target_w, target_h = area.right - area.left, area.bottom - area.top
+            target_w = min(target_w, area.right - area.left)
+            target_h = min(target_h, area.bottom - area.top)
             x, y, w, h, (rl, rt, rr, rb) = clip_layout(
                 (win.left, win.top, win.right, win.bottom), (vis.left, vis.top, vis.right, vis.bottom),
-                inner_w, inner_h, target_w, target_h, (wa.left, wa.top, wa.right, wa.bottom))
-            user32.SetWindowPos(hwnd, None, x, y, w, h, 0x0004 | 0x0010)  # SWP_NOZORDER | SWP_NOACTIVATE
+                inner_w, inner_h, target_w, target_h, (area.left, area.top, area.right, area.bottom))
+            # the cut first (not drawn yet), then the move: the frame is never seen
             gdi32 = ctypes.windll.gdi32
             gdi32.CreateRectRgn.restype = ctypes.c_void_p
-            user32.SetWindowRgn(hwnd, ctypes.c_void_p(gdi32.CreateRectRgn(rl, rt, rr, rb)), True)  # (the window owns it now)
+            user32.SetWindowRgn(hwnd, ctypes.c_void_p(gdi32.CreateRectRgn(rl, rt, rr, rb)), False)  # (the window owns it now)
+            user32.SetWindowPos(hwnd, None, x, y, w, h, 0x0004 | 0x0010)  # SWP_NOZORDER | SWP_NOACTIVATE
+            if full:
+                user32.SetForegroundWindow(hwnd)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# Where the launcher opens the window: far off the screen. The page cuts the frame away and puts the
+# window in the middle — so the Windows frame is never seen. A page that never asks (an old one)
+# is brought back after a while.
+OFFSCREEN = (-6000, -6000)
+
+
+def rescue_offscreen(seconds=12.0, poll=0.5):
+    """Bring the game's window back to the screen if after `seconds` it is still off it."""
+    if sys.platform != "win32":
+        return False
+    import time
+    import ctypes
+    from ctypes import wintypes
+    end = time.time() + seconds
+    while time.time() < end:
+        time.sleep(poll)
+    try:
+        user32 = _user32()
+        found = find_game_window(user32)
+        if not found:
+            return False
+        hwnd = ctypes.c_void_p(found)
+        r = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(r))
+        if r.right > -1000 and r.bottom > -1000:
+            return False  # (on the screen already)
+        user32.SetWindowPos(hwnd, None, 80, 60, 0, 0, 0x0001 | 0x0004)
         return True
     except Exception:  # noqa: BLE001
         return False

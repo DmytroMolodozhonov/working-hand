@@ -205,19 +205,37 @@ test('look: in the game\'s own app window the menu fills the window (no empty sp
     await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; window.__ZNS_NO_WORLD_PROBE__ = true; window.__ZNS_FIXED_QUALITY__ = true; });
     const asked = [];
     // (the game's server on Windows answers «ok» for its own app window; here it is played by the test)
-    await page.route('**/api/window', async (r) => { asked.push(JSON.parse(r.request().postData()).action); r.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); });
+    const moved = { dx: 0, dy: 0 };
+    await page.route('**/api/window', async (r) => {
+        const d = JSON.parse(r.request().postData());
+        asked.push(d.action);
+        if (d.action === 'moveby') { moved.dx += d.dx; moved.dy += d.dy; }
+        r.fulfill({ contentType: 'application/json', body: '{"ok":true}' });
+    });
     await page.goto(srv.url);
     await page.waitForFunction(() => document.documentElement.classList.contains('app-window'));
     assert.deepEqual(asked, ['frameless']);
     const r = await page.$eval('#main-menu > .menu-container', (el) => { const b = el.getBoundingClientRect(); return [b.left, b.top, Math.round(b.width), Math.round(b.height)]; });
     assert.deepEqual(r, [0, 0, 1180, 780]);
+    // dragging the title bar moves the window by the mouse's way
     const box = await page.locator('.brand-tagline').boundingBox();
     await page.mouse.move(box.x + 5, box.y + 5);
     await page.mouse.down();
+    await page.mouse.move(box.x + 45, box.y + 25, { steps: 4 });
     await page.mouse.up();
-    await page.waitForFunction(() => true);
-    for (let i = 0; i < 20 && !asked.includes('drag'); i++) await new Promise((res) => setTimeout(res, 100));
-    assert.ok(asked.includes('drag'), asked.join(','));
+    for (let i = 0; i < 20 && moved.dx < 40; i++) await new Promise((res) => setTimeout(res, 100));
+    assert.deepEqual(moved, { dx: 40, dy: 20 });
+    // a button on the bar does not drag
+    const before = asked.filter((a) => a === 'moveby').length;
+    await page.click('#win-full');
+    for (let i = 0; i < 20 && !asked.includes('fullscreen'); i++) await new Promise((res) => setTimeout(res, 100));
+    assert.equal(asked.filter((a) => a === 'moveby').length, before);
+    // «во весь экран» in the app window is the game's own (no browser full screen that brings the frame back)
+    assert.ok(asked.includes('fullscreen'));
+    assert.equal(await page.evaluate(() => !!document.fullscreenElement), false);
+    await page.click('#win-full');
+    for (let i = 0; i < 20 && asked.at(-1) !== 'frameless'; i++) await new Promise((res) => setTimeout(res, 100));
+    assert.equal(asked.at(-1), 'frameless');
     await page.close();
     // a real server here (not Windows): it refuses, and a browser tab keeps the normal look
     const res = await (await fetch(srv.url + 'api/window', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"action":"close"}' })).json();

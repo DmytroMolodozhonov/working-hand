@@ -1,12 +1,14 @@
 /**
  * WindowControls.js — the menu is a window of its own: its own «свернуть»,
  * «во весь экран» and «закрыть» buttons (drawn by the game, not by Windows),
- * and the game itself goes full screen when it starts.
+ * its own title bar to drag the window by, and the game itself plays full screen.
  *
- * Minimise / close: the game's window is asked to close itself first
- * (window.close() works for the launcher's app window); the game's server
- * (/api/window, Windows) minimises or closes the window in front only when
- * it is the game's own window.
+ * In the game's own app window (shortcut / «Запустить игру.bat») the game's server
+ * (/api/window → launcher/zns_window.py, Windows) does it: the window is cut to the page
+ * (the Windows title bar and borders are never seen), given the menu's size or the whole
+ * screen, moved by the title bar, minimised and closed. No browser full screen there —
+ * the browser would bring its frame back when leaving it. In a browser tab: the browser's
+ * full screen, and the menu floats in the middle of the page.
  */
 
 async function askServer(action, extra = {}) {
@@ -16,30 +18,74 @@ async function askServer(action, extra = {}) {
     } catch (e) { return false; }
 }
 
-const isFull = (doc) => !!doc.fullscreenElement;
+/** The menu window's size (the app window takes exactly this size, without the Windows frame). */
+export const MENU_WINDOW = { width: 1180, height: 780 };
+
+let appWindow = false;
+let appFull = false;
+const listeners = new Set();
+const changed = () => listeners.forEach((f) => f());
+/** The page's size now: the game's server measures the window's frame from it. */
+const metrics = () => ({ ...MENU_WINDOW, innerWidth: window.innerWidth, innerHeight: window.innerHeight, dpr: window.devicePixelRatio || 1 });
+
+const isFull = (doc) => (appWindow ? appFull : !!doc.fullscreenElement);
+
+async function setAppFull(on) {
+    if (await askServer(on ? 'fullscreen' : 'frameless', metrics())) {
+        appFull = on;
+        document.documentElement.classList.toggle('app-full', on);
+        changed();
+    }
+}
 
 /** Full screen for the game (a click on «Играть» is the user's gesture). Escape stays the game's pause key. */
 export async function enterGameFullscreen(doc = document) {
-    if (appWindow) askServer('framed'); // (the whole window again: nothing of the game may be cut away)
+    if (appWindow) { await setAppFull(true); return; }
     try {
-        if (!isFull(doc) && doc.documentElement.requestFullscreen) await doc.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        if (!doc.fullscreenElement && doc.documentElement.requestFullscreen) await doc.documentElement.requestFullscreen({ navigationUI: 'hide' });
         // (without this the first Escape would only leave full screen, not open the pause menu)
         await navigator.keyboard?.lock?.(['Escape']);
     } catch (e) { /* not allowed here (a test, an iframe): the game simply stays in its window */ }
 }
 
-/** The menu window's size (the app window takes exactly this size, without the Windows frame). */
-export const MENU_WINDOW = { width: 1180, height: 780 };
-
-let appWindow = false;
-/** The page's size now: the game's server measures the window's frame from it and cuts the frame away. */
-const metrics = () => ({ ...MENU_WINDOW, innerWidth: window.innerWidth, innerHeight: window.innerHeight, dpr: window.devicePixelRatio || 1 });
+/** Drag the window by `bar` (the game's own title bar): the mouse's way is sent to the server. */
+function dragBy(bar) {
+    let last = null;
+    let pending = { dx: 0, dy: 0 };
+    let sending = false;
+    const flush = async () => {
+        if (sending || (!pending.dx && !pending.dy)) return;
+        sending = true;
+        const step = pending;
+        pending = { dx: 0, dy: 0 };
+        await askServer('moveby', { ...step, dpr: window.devicePixelRatio || 1 });
+        sending = false;
+        flush();
+    };
+    bar.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || e.target.closest('button, a, input, select') || appFull) return;
+        last = { x: e.screenX, y: e.screenY };
+        bar.setPointerCapture?.(e.pointerId);
+        bar.classList.add('dragging');
+    });
+    bar.addEventListener('pointermove', (e) => {
+        if (!last) return;
+        // (screen coordinates: they do not change when the window under the mouse moves)
+        pending.dx += e.screenX - last.x;
+        pending.dy += e.screenY - last.y;
+        last = { x: e.screenX, y: e.screenY };
+        flush();
+    });
+    const stop = () => { last = null; bar.classList.remove('dragging'); };
+    bar.addEventListener('pointerup', stop);
+    bar.addEventListener('pointercancel', stop);
+    bar.addEventListener('lostpointercapture', stop);
+}
 
 /**
- * The game's own app window (from the shortcut / «Запустить игру.bat»): the game's server cuts the
- * Windows title bar and borders away and gives the window the menu's size; then the menu fills the
- * window (no empty space around it) and its title bar moves the window. In a browser tab nothing
- * changes. Full screen for the game takes the cut away; back in the menu it is cut again.
+ * The game's own app window: the game's server cuts the Windows frame away and gives the window the
+ * menu's size in the middle of the screen; then the menu fills the window (no empty space around it)
+ * and its title bar drags the window. In a browser tab nothing changes (false).
  */
 export async function becomeAppWindow({ bar } = {}, doc = document) {
     let ok = false;
@@ -49,44 +95,44 @@ export async function becomeAppWindow({ bar } = {}, doc = document) {
     }
     if (!ok) return false;
     appWindow = true;
+    appFull = false;
     doc.documentElement.classList.add('app-window');
-    bar?.addEventListener('mousedown', (e) => {
-        if (e.button !== 0 || e.target.closest('button, a, input, select') || isFull(doc)) return;
-        askServer('drag');
-    });
-    doc.addEventListener('fullscreenchange', () => {
-        if (!isFull(doc)) setTimeout(() => askServer('frameless', metrics()), 300); // (after Chrome has put the window back)
-    });
+    if (bar) dragBy(bar);
+    changed();
     return true;
 }
 
 export function setupWindowControls({ min, full, close, onNote = () => {} }, doc = document) {
     const refresh = () => {
         if (!full) return;
-        // (the launcher opens the window already full screen, with no way back to a smaller window: no button then)
-        const coversScreen = !isFull(doc) && window.innerHeight >= screen.height - 1 && window.innerWidth >= screen.width - 1;
+        // (a browser tab already covering the whole screen: no button)
+        const coversScreen = !appWindow && !isFull(doc) && window.innerHeight >= screen.height - 1 && window.innerWidth >= screen.width - 1;
         full.hidden = coversScreen;
         full.textContent = isFull(doc) ? '🗗' : '⛶';
         full.title = isFull(doc) ? 'Окном' : 'Во весь экран';
         full.setAttribute('aria-label', full.title);
     };
+    listeners.add(refresh);
     doc.addEventListener('fullscreenchange', refresh);
     window.addEventListener('resize', refresh);
     refresh();
     if (full) full.onclick = async () => {
-        try { if (isFull(doc)) await doc.exitFullscreen(); else await doc.documentElement.requestFullscreen(); } catch (e) { /* not allowed */ }
+        if (appWindow) await setAppFull(!appFull);
+        else {
+            try { if (doc.fullscreenElement) await doc.exitFullscreen(); else await doc.documentElement.requestFullscreen(); } catch (e) { /* not allowed */ }
+        }
         refresh();
     };
     if (min) min.onclick = async () => {
         if (await askServer('minimize')) return;
-        if (isFull(doc)) { try { await doc.exitFullscreen(); } catch (e) { /* */ } }
+        if (doc.fullscreenElement) { try { await doc.exitFullscreen(); } catch (e) { /* */ } }
         onNote('Свернуть окно может только окно игры из ярлыка; здесь нажмите Win+D или кнопку «—» браузера');
     };
     if (close) close.onclick = async () => {
-        window.close(); // the launcher's app window closes itself
+        if (appWindow && (await askServer('close'))) return;
+        window.close(); // (an app window may close itself)
         await new Promise((r) => setTimeout(r, 250));
         if (doc.visibilityState === 'hidden') return;
-        if (await askServer('close')) return;
         onNote('Эту вкладку браузера закройте сами (Ctrl+W)');
     };
 }

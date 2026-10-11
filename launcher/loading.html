@@ -58,7 +58,7 @@
     body { padding-top: 64px; }
     #winbar {
         position: fixed; left: 0; right: 0; top: 0; height: 64px; z-index: 5;
-        display: flex; align-items: center; gap: 12px; padding: 0 14px 0 20px; user-select: none;
+        display: flex; align-items: center; gap: 12px; padding: 0 14px 0 20px; user-select: none; cursor: grab; touch-action: none;
         background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
         border-bottom: 1px solid var(--line);
     }
@@ -155,9 +155,36 @@
             if (await win('frameless', { width: 1180, height: 780, innerWidth: innerWidth, innerHeight: innerHeight, dpr: devicePixelRatio || 1 })) break;
         }
     })();
-    $('winbar').addEventListener('mousedown', (e) => { if (e.button === 0 && !e.target.closest('button')) win('drag'); });
+    // drag the window by this bar (the mouse's way is sent; screen coordinates do not move with the window)
+    (() => {
+        const bar = $('winbar');
+        let last = null, dx = 0, dy = 0, busy = false;
+        const flush = async () => {
+            if (busy || (!dx && !dy)) return;
+            busy = true;
+            const step = { dx, dy, dpr: devicePixelRatio || 1 };
+            dx = 0; dy = 0;
+            await win('moveby', step);
+            busy = false;
+            flush();
+        };
+        bar.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0 || e.target.closest('button')) return;
+            last = { x: e.screenX, y: e.screenY };
+            bar.setPointerCapture(e.pointerId);
+        });
+        bar.addEventListener('pointermove', (e) => {
+            if (!last) return;
+            dx += e.screenX - last.x; dy += e.screenY - last.y;
+            last = { x: e.screenX, y: e.screenY };
+            flush();
+        });
+        const stop = () => { last = null; };
+        bar.addEventListener('pointerup', stop);
+        bar.addEventListener('lostpointercapture', stop);
+    })();
     $('win-min').onclick = () => win('minimize');
-    $('win-close').onclick = async () => { window.close(); if (!(await win('close'))) window.close(); };
+    $('win-close').onclick = async () => { if (!(await win('close'))) window.close(); };
 
     // while this window is open the launcher keeps running
     try { new EventSource('/__launcher/alive'); } catch (e) { /* (old browser) */ }

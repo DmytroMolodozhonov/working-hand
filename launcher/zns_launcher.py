@@ -300,7 +300,9 @@ def window_args(exe, url):
     return [
         # the menu's size; the page then asks the game's server to take the Windows frame away
         # (it draws its own «свернуть / во весь экран / закрыть») and goes full screen for the game
-        exe, f"--app={url}", "--window-size=1180,780",
+        # (opened off the screen: the page cuts the frame away and brings it to the middle — the
+        # Windows title bar is never seen; zns_window.rescue_offscreen brings back one that never asks)
+        exe, f"--app={url}", "--window-size=1180,780", "--window-position=-6000,-6000",
         "--force_high_performance_gpu", "--ignore-gpu-blocklist",
         "--site-per-process",
         "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
@@ -316,6 +318,11 @@ def open_window(url):
         prefer_strong_gpu(exe)
         try:
             subprocess.Popen(window_args(exe, url))
+            try:
+                import zns_window
+                threading.Thread(target=zns_window.rescue_offscreen, daemon=True).start()
+            except Exception:  # noqa: BLE001
+                pass
             log(f"Окно игры: {os.path.basename(exe)}")
             return
         except OSError as e:
