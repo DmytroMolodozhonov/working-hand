@@ -15,19 +15,66 @@ import { ruinArea } from './Ruin.js';
 const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
 const _moon = new THREE.Color();
+const _c1 = new THREE.Color();
+const _c2 = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
 const _caveFog = new THREE.Color(0x020203); // (deep in a cave: black beyond the light)
 
 /** The night is the last quarter of the day: 6 of the 24 hours (18 hours of daylight). */
 export const NIGHT_START = 0.75;
-const DUSK = 0.045; // (≈1 minute of sunset / sunrise either side)
+// Dusk and dawn are long (≈1.7 game hours either side of the night's edge: golden hour,
+// sunset, blue twilight). The darkening is centred a little before the night / after it so
+// «night» (darker than 0.6) is still exactly 6 hours.
+const DUSK = 0.07;
+const EDGE = 0.1342 * DUSK; // (smoothstep = 0.6 at 0.567 of its way)
+const DUSK_AT = NIGHT_START - EDGE, DAWN_AT = EDGE;
+// The sun touches the horizon ≈35 game minutes before the night falls, and is up as long after dawn
+export const SUNSET = DUSK_AT - 0.025;
+export const SUNRISE = DAWN_AT + 0.025;
+const DAY_LEN = SUNSET - SUNRISE;
+const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /** How dark it is at day phase `phase` (0 = dawn … 1): 0 by day, 1 by night, soft dusk and dawn. */
 export function nightAt(phase) {
-    const p = ((phase % 1) + 1) % 1, N = NIGHT_START, e = DUSK;
-    const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-    const k = p < N ? ss(N - e, N + e, p) + (1 - ss(-e, e, p)) : ss(N - e, N + e, p) * (1 - ss(1 - e, 1 + e, p));
+    const p = ((phase % 1) + 1) % 1, e = DUSK;
+    const k = p < 0.5 ? 1 - ss(DAWN_AT - e, DAWN_AT + e, p) : ss(DUSK_AT - e, DUSK_AT + e, p) * (1 - ss(1 + DAWN_AT - e, 1 + DAWN_AT + e, p));
     return Math.max(0, Math.min(1, k));
+}
+
+/**
+ * Where the sun is at day phase `phase`: it rises in the east (+x), crosses the sky,
+ * sets in the west and goes on under the horizon at night — never jumps. `elev` is the
+ * height of the direction (sin of the angle above the horizon, < 0 below it); `dir` the unit
+ * direction. The moon rises as the sun sets and crosses the night sky.
+ */
+export function sunAt(phase, dir = new THREE.Vector3(), moon = null) {
+    const p = ((phase % 1) + 1) % 1;
+    const t = ((p - SUNRISE) % 1 + 1) % 1; // time since sunrise
+    let elev, az;
+    if (t < DAY_LEN) {
+        const arc = (t / DAY_LEN) * Math.PI; // 0 → π
+        elev = 0.94 * Math.sin(arc);
+        az = arc;
+    } else {
+        const u = (t - DAY_LEN) / (1 - DAY_LEN); // 0 → 1 under the horizon
+        elev = -0.55 * Math.sin(Math.PI * u);
+        az = Math.PI + Math.PI * u;
+    }
+    horizontalDir(dir, az, elev);
+    if (moon) {
+        const u = t < DAY_LEN ? 0 : (t - DAY_LEN) / (1 - DAY_LEN);
+        horizontalDir(moon, Math.PI * u, Math.max(0.06, 0.8 * Math.sin(Math.PI * u)));
+    }
+    return elev;
+}
+function horizontalDir(out, az, elev) {
+    const hx = Math.cos(az) * 0.9, hz = 0.35, hl = Math.hypot(hx, hz), r = Math.sqrt(1 - elev * elev);
+    return out.set((hx / hl) * r, elev, (hz / hl) * r);
+}
+
+/** How strong the sunset / sunrise colours are for the sun at height `elev` (0..1). */
+export function sunsetGlow(elev) {
+    return ss(-0.3, -0.01, elev) * (1 - ss(0.06, 0.42, elev));
 }
 // Spawn-area trees (instanced, vertex-coloured green / brown): tint multipliers per kind
 // (oak, birch, spruce, cherry, dark oak) — the same kinds as the voxel trees further out
@@ -177,6 +224,7 @@ export class VoxelWorld {
             this.scene.fog.color.lerp(_caveFog, 0.7 * cv); // (far down a tunnel: the dark, not a bright haze)
         }
         this.sky?.setNightAmount(Math.max(b.night, 0.72 * k));
+        this.sky?.setOvercast?.(k); // (the clouds cover the sunset and the stars)
         this.sky?.setClouds((this._cloudsWanted ?? true) || k > 0.1);
     }
 
@@ -191,13 +239,22 @@ export class VoxelWorld {
         if (Math.abs(k - (this._night ?? -1)) < 0.002 && Math.abs(p - (this._phase ?? -1)) < 0.0005) return;
         this._night = k;
         this._phase = p;
-        // Sun (by day) or moon (by night) moves across the sky
-        const arc = (p < NIGHT_START ? p / NIGHT_START : (p - NIGHT_START) / (1 - NIGHT_START)) * Math.PI; // 0 → π
-        const elev = Math.max(0.12, Math.sin(arc));
-        this.sunDir = (this.sunDir || new THREE.Vector3()).set(Math.cos(arc) * 0.9, elev, 0.35).normalize();
+        // The sun moves across the sky and on under the horizon; the moon crosses the night
+        const sun = (this._sunTrue || (this._sunTrue = new THREE.Vector3()));
+        const moon = (this._moonDir || (this._moonDir = new THREE.Vector3()));
+        const elev = sunAt(p, sun, moon);
+        const glow = sunsetGlow(elev);
         this.sky?.setNightAmount(k);
-        this.sky?.setSunDirection(this.sunDir);
+        this.sky?.setSunDirection(sun, moon);
+        // the light comes from the sun while it is up (low and long-shadowed at sunset), from the moon at night
+        const sunW = ss(-0.02, 0.1, elev);
+        const lightFrom = sunW > 0.001 ? sun : moon;
+        this.sunDir = (this.sunDir || new THREE.Vector3()).copy(lightFrom);
+        if (this.sunDir.y < 0.1) { this.sunDir.y = 0.1; this.sunDir.normalize(); } // (shadows not endless)
         const fogCol = (this._fogCol || (this._fogCol = new THREE.Color())).set(SKY_DAY.fog).lerp(_nightFog.set(SKY_NIGHT.fog), k);
+        // the haze at the horizon takes the sunset's warm colour, then the twilight's violet
+        fogCol.lerp(_c1.setRGB(0.86, 0.54, 0.46), 0.65 * glow * (1 - k * 0.6));
+        fogCol.lerp(_c1.setRGB(0.16, 0.18, 0.34), 0.5 * ss(0.2, 0.55, k) * (1 - ss(0.75, 1, k)));
         if (!this.scene.fog) this.scene.fog = new THREE.Fog(fogCol, 25, 90);
         this.scene.fog.color.copy(fogCol);
         if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(fogCol);
@@ -205,10 +262,20 @@ export class VoxelWorld {
         this.fogNear = 25 + (10 - 25) * k;
         this.fogFar = 90 + (50 - 90) * k;
         this.scene.fog.near = this.fogNear;
-        this.ambientLight.intensity = 0.3 + (0.15 - 0.3) * k;
-        this.dirLight.intensity = (0.85 + (0.18 - 0.85) * k) * (0.6 + 0.4 * elev);
-        this.dirLight.color.set(0xfff0d8).lerp(_moon.set(0x9fb6ff), k);
-        this.hemiLight.intensity = 0.35 + (0.08 - 0.35) * k;
+        // (the low sun lights the land less: evening comes before the night)
+        const eve = 1 - 0.25 * glow * ss(0.3, 1, 1 - ss(0, 0.4, elev));
+        this.ambientLight.intensity = (0.3 + (0.15 - 0.3) * k) * eve;
+        // sunlight: white by day, golden in the golden hour, orange-red as the sun touches the horizon
+        const low = 1 - ss(0.0, 0.4, elev);
+        const sunCol = _c1.set(0xfff0d8).lerp(_c2.set(0xffb768), ss(0, 0.7, low)).lerp(_c2.set(0xff6a3c), ss(0.6, 1, low));
+        const sunI = 0.85 * sunW * (0.55 + 0.45 * Math.min(1, Math.max(0, elev) / 0.5));
+        const moonI = 0.18 * ss(0.45, 0.85, k);
+        this.dirLight.intensity = sunI + moonI;
+        this.dirLight.color.copy(sunW > 0.001 ? sunCol : _moon.set(0x9fb6ff));
+        // the sky's light on everything: warm at sunset, cool blue-violet in the twilight
+        this.ambientLight.color.setRGB(1, 1, 1).lerp(_c2.setRGB(1, 0.72, 0.62), 0.55 * glow * (1 - k)).lerp(_c2.setRGB(0.72, 0.74, 1), 0.35 * k);
+        this.hemiLight.color.set(0xbfe3ff).lerp(_c2.setRGB(1, 0.7, 0.55), 0.55 * glow * (1 - k));
+        this.hemiLight.intensity = (0.35 + (0.08 - 0.35) * k) * eve;
         this._shadowX = null; // re-aim the shadow
         this._rememberBase(k);
     }

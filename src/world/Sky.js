@@ -5,6 +5,9 @@
  *   - a gradient from deep blue overhead to a bright, warm horizon,
  *   - the sun (direction of the scene's sunlight) with a soft glow,
  *   - soft clouds that slowly drift (a few layers of noise),
+ *   - at sunset / sunrise: a golden, then orange-red sun low at the horizon,
+ *     warm orange and pink on the sun's side, a pink belt over violet on the
+ *     other, clouds lit from below; then the blue-violet twilight,
  *   - at night: a dark sky, a moon and twinkling stars.
  * The fog uses the horizon colour, so far mountains melt into the sky.
  */
@@ -17,8 +20,6 @@ export const SKY_DAY = {
     ground: new THREE.Color(0x9fc6e8),
     fog: 0xc3e0fb,
 };
-
-const _dusk = new THREE.Color(0xff9a5a);
 
 export const SKY_NIGHT = {
     zenith: new THREE.Color(0x02040a),
@@ -41,9 +42,11 @@ uniform vec3 uZenith;
 uniform vec3 uHorizon;
 uniform vec3 uGround;
 uniform vec3 uSunDir;
+uniform vec3 uMoonDir;
 uniform float uTime;
 uniform float uNight;
 uniform float uClouds;
+uniform float uOvercast;
 varying vec3 vDir;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -57,37 +60,80 @@ float fbm(vec2 p) {
     for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
     return v;
 }
+float down(float a, float b, float x) { return 1.0 - smoothstep(a, b, x); } // (1 below a … 0 above b)
 
 void main() {
     vec3 d = normalize(vDir);
     float h = d.y;
+    vec3 sd = normalize(uSunDir);
+    float se = sd.y; // the sun's height (< 0: under the horizon)
+    float clear = 1.0 - uOvercast;
     // Sky gradient (a little brighter and warmer right at the horizon)
     vec3 col = mix(uHorizon, uZenith, pow(max(h, 0.0), 0.55));
-    col = mix(col, uGround, smoothstep(0.0, -0.25, h));
-    float sunAmt = max(dot(d, normalize(uSunDir)), 0.0);
-    // Sun: glow + disc (moon at night)
-    vec3 sunCol = mix(vec3(1.0, 0.93, 0.78), vec3(0.75, 0.82, 1.0), uNight);
-    col += sunCol * pow(sunAmt, 8.0) * mix(0.35, 0.08, uNight);
-    col += sunCol * pow(sunAmt, 64.0) * mix(0.6, 0.15, uNight);
-    col = mix(col, sunCol * mix(1.6, 0.9, uNight), smoothstep(0.9985, 0.9992, sunAmt));
-    // Clouds: projected on a high flat layer, drifting
+    col = mix(col, uGround, down(-0.25, 0.0, h));
+    // --- Sunset / sunrise: the colours come in as the sun gets low, peak as it touches the horizon,
+    //     and fade through the twilight while it sinks
+    float glow = smoothstep(-0.3, -0.01, se) * down(0.06, 0.42, se) * clear;
+    float low = down(-0.06, 0.16, se);          // 0 with the sun high … 1 when it has set
+    float dim = mix(1.0, 0.32, down(-0.26, 0.0, se)); // the twilight's colours grow dark
+    vec2 dh = d.xz / max(length(d.xz), 1e-4);
+    vec2 sh = sd.xz / max(length(sd.xz), 1e-4);
+    float toSun = dot(dh, sh) * 0.5 + 0.5;     // 1 looking towards the sun, 0 away
+    float sideSun = toSun * toSun;
+    float hb = max(h, 0.0);
+    float band = exp(-hb * 5.0);               // near the horizon
+    float bandTight = exp(-hb * 16.0);
+    vec3 gold = vec3(1.0, 0.68, 0.32);
+    vec3 orange = vec3(1.0, 0.46, 0.17);
+    vec3 red = vec3(0.88, 0.2, 0.12);
+    vec3 pink = vec3(0.93, 0.5, 0.62);
+    vec3 violet = vec3(0.34, 0.25, 0.55);
+    vec3 warm = mix(gold, mix(orange, red, smoothstep(0.45, 1.0, low)), smoothstep(0.0, 0.7, low));
+    vec3 sunSide = mix(pink, warm, band);                       // warm at the horizon, pink higher up
+    sunSide = mix(sunSide, mix(orange, red, low), bandTight * 0.7); // a burning line right at the horizon
+    vec3 farSide = mix(violet, pink * 0.85, band * 0.6);         // away from the sun: a pink belt over violet
+    vec3 tint = mix(farSide, sunSide, sideSun) * dim;
+    float amt = glow * (0.3 + 0.7 * band) * mix(0.45, 1.0, sideSun) * smoothstep(-0.12, 0.02, h);
+    col = mix(col, tint, clamp(amt, 0.0, 0.92));
+    // twilight: deep blue-violet overhead, before the night's black-blue
+    float tw = down(-0.12, 0.0, se) * smoothstep(-0.5, -0.25, se) * clear;
+    col = mix(col, vec3(0.13, 0.12, 0.34), tw * 0.55 * sqrt(hb));
+    // Sun: glow + disc — golden, then orange-red at the horizon; hidden under it
+    float sunAmt = max(dot(d, sd), 0.0);
+    float sunUp = smoothstep(-0.05, 0.01, se) * smoothstep(-0.015, 0.01, h);
+    vec3 sunCol = mix(vec3(1.0, 0.93, 0.78), mix(vec3(1.0, 0.64, 0.3), vec3(1.0, 0.36, 0.16), low), down(0.0, 0.35, se));
+    col += sunCol * pow(sunAmt, 8.0) * mix(0.35, 0.8, down(0.0, 0.4, se)) * smoothstep(-0.2, 0.0, se) * clear;
+    col += sunCol * pow(sunAmt, 64.0) * 0.6 * sunUp * clear;
+    col = mix(col, sunCol * mix(1.6, 1.25, low), smoothstep(0.9982, 0.999, sunAmt) * sunUp * mix(1.0, 0.25, uOvercast));
+    // Moon at night
+    vec3 md = normalize(uMoonDir);
+    float moonAmt = max(dot(d, md), 0.0);
+    vec3 moonCol = vec3(0.75, 0.82, 1.0);
+    col += moonCol * (pow(moonAmt, 8.0) * 0.08 + pow(moonAmt, 64.0) * 0.15) * uNight * clear;
+    col = mix(col, moonCol * 0.9, smoothstep(0.9985, 0.9992, moonAmt) * uNight * smoothstep(-0.01, 0.01, h) * mix(1.0, 0.3, uOvercast));
+    // Clouds: projected on a high flat layer, drifting (more and greyer under rain clouds)
     if (uClouds > 0.5 && h > 0.01) {
         vec2 uv = d.xz / (h + 0.08) * 1.6 + vec2(uTime * 0.012, uTime * 0.004);
         float c = fbm(uv);
-        c = smoothstep(0.48, 0.78, c) * smoothstep(0.01, 0.22, h);
+        c = smoothstep(mix(0.48, 0.3, uOvercast), mix(0.78, 0.62, uOvercast), c) * smoothstep(0.01, 0.22, h);
         vec3 cloudLit = mix(vec3(1.0), vec3(1.0, 0.95, 0.88), pow(sunAmt, 4.0));
-        vec3 cloudCol = mix(cloudLit, vec3(0.25, 0.28, 0.35), uNight * 0.85);
+        // at sunset the clouds are lit from below: orange-red towards the sun, pink away from it
+        vec3 cloudSun = mix(pink * 0.95, mix(orange * 1.05, red * 1.1, low), sideSun) * mix(1.0, 0.55, low);
+        cloudLit = mix(cloudLit, cloudSun, glow * 0.9);
+        vec3 cloudCol = mix(cloudLit, vec3(0.25, 0.28, 0.35), uNight * 0.85 * (1.0 - glow * 0.6));
+        cloudCol = mix(cloudCol, vec3(0.55, 0.58, 0.63) * (1.0 - 0.65 * uNight), uOvercast * 0.8);
         if (c > 0.002) {
             float shade = 0.82 + 0.18 * fbm(uv * 1.7 + 3.0);
-            col = mix(col, cloudCol * shade, c * mix(0.85, 0.35, uNight));
+            col = mix(col, cloudCol * shade, c * mix(mix(0.85, 0.35, uNight), 0.95, uOvercast));
         }
     }
-    // Stars at night
-    if (uNight > 0.01 && h > 0.0) {
+    // Stars at night (not through the clouds)
+    float starK = smoothstep(0.45, 1.0, uNight) * clear;
+    if (starK > 0.01 && h > 0.0) {
         vec2 sp = d.xz / (h + 0.3) * 120.0;
         float s = step(0.9975, hash(floor(sp)));
-        float tw = 0.6 + 0.4 * sin(uTime * 3.0 + hash(floor(sp)) * 40.0);
-        col += vec3(s * tw) * uNight * smoothstep(0.0, 0.3, h);
+        float tw2 = 0.6 + 0.4 * sin(uTime * 3.0 + hash(floor(sp)) * 40.0);
+        col += vec3(s * tw2) * starK * smoothstep(0.0, 0.3, h);
     }
     gl_FragColor = vec4(col, 1.0);
 }
@@ -100,6 +146,8 @@ export class Sky {
             uHorizon: { value: SKY_DAY.horizon.clone() },
             uGround: { value: SKY_DAY.ground.clone() },
             uSunDir: { value: new THREE.Vector3(0.45, 0.6, 0.35) },
+            uMoonDir: { value: new THREE.Vector3(0.45, 0.6, 0.35) },
+            uOvercast: { value: 0 }, // (rain clouds: the sunset and the stars covered)
             uTime: { value: 0 },
             uNight: { value: 0 },
             uClouds: { value: 1 }, // off at the lowest graphics levels (the clouds cost the most per pixel)
@@ -126,7 +174,14 @@ export class Sky {
         this.uniforms.uClouds.value = on ? 1 : 0;
     }
 
+    /** Rain / storm clouds (0..1). */
+    setOvercast(k) {
+        this.uniforms.uOvercast.value = Math.max(0, Math.min(1, k));
+    }
+
     setNight(night) {
+        this._fixedNight = night;
+        if (night) this.setSunDirection(this.uniforms.uSunDir.value.y > 0 ? this.uniforms.uSunDir.value.clone() : this.uniforms.uMoonDir.value);
         const p = night ? SKY_NIGHT : SKY_DAY;
         this.uniforms.uZenith.value.copy(p.zenith);
         this.uniforms.uHorizon.value.copy(p.horizon);
@@ -138,15 +193,21 @@ export class Sky {
     setNightAmount(k) {
         this.uniforms.uZenith.value.copy(SKY_DAY.zenith).lerp(SKY_NIGHT.zenith, k);
         this.uniforms.uHorizon.value.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, k);
-        // a warm glow on the horizon at sunset / sunrise
-        const dusk = Math.max(0, 1 - Math.abs(k - 0.5) * 2.5);
-        this.uniforms.uHorizon.value.lerp(_dusk, dusk * 0.55);
+        // (the sunset's colours come from the sun's height: the shader)
         this.uniforms.uGround.value.copy(SKY_DAY.ground).lerp(SKY_NIGHT.ground, k);
         this.uniforms.uNight.value = k;
     }
 
-    setSunDirection(v) {
+    /** The sun (it may be under the horizon) and the moon. */
+    setSunDirection(v, moon = null) {
+        if (this._fixedNight && !moon) {
+            // (a world that is always night: the moon where the sun was, the sun far down)
+            this.uniforms.uMoonDir.value.copy(v).normalize();
+            this.uniforms.uSunDir.value.set(-0.3, -0.9, 0.3).normalize();
+            return;
+        }
         this.uniforms.uSunDir.value.copy(v).normalize();
+        this.uniforms.uMoonDir.value.copy(moon || v).normalize();
     }
 
     update(dt) {
