@@ -447,6 +447,7 @@ export class CastleLife {
         else if (r < 0.5) node = choose('well');
         else if (r < 0.6) node = choose('yard');
         else if (r < 0.68) node = choose('room');
+        else if (r < 0.78 && v.cs.def.port) node = choose(Math.random() < 0.5 ? 'pier' : 'quay'); // (a sea castle: down to the port)
         else node = choose('home');
         if (node < 0) node = choose('home');
         v.purpose = g.nodes[node]?.tag || '';

@@ -960,11 +960,13 @@ export function rotLot(a, b, face) {
 function buildVillage(p, s, rng, out) {
     const { W, D } = s;
     const roadT = BLOCK.PATH;
+    // a sea castle: the village stays behind the quay (the sea is beyond it)
+    const lim = s.sea ? s.sea.vShore - 8 : Infinity;
     const R1 = W + 12, R1z = D + 12; // inner ring road (centre line)
     const R2 = W + 44, R2z = D + 44; // outer ring road
     const Rv = s.villageR;
     // roads (3 wide)
-    const road = (u0, u1, v0, v1) => p.box(u0, u1, -1, -1, v0, v1, roadT);
+    const road = (u0, u1, v0, v1) => { v1 = Math.min(v1, lim); if (v0 <= v1) p.box(u0, u1, -1, -1, v0, v1, roadT); };
     road(-R1 - 1, R1 + 1, -R1z - 1, -R1z + 1); road(-R1 - 1, R1 + 1, R1z - 1, R1z + 1);
     road(-R1 - 1, -R1 + 1, -R1z - 1, R1z + 1); road(R1 - 1, R1 + 1, -R1z - 1, R1z + 1);
     road(-R2 - 1, R2 + 1, -R2z - 1, -R2z + 1); road(-R2 - 1, R2 + 1, R2z - 1, R2z + 1);
@@ -974,6 +976,9 @@ function buildVillage(p, s, rng, out) {
     // walking graph along the roads: nodes at the corners and crossings and every
     // ~12 m; everything lying on a road line is joined up at the end (joinRoads)
     const roadNodes = (axis, fixed, from, to) => {
+        if (axis === 'u' && fixed > lim) return;
+        if (axis === 'v') to = Math.min(to, lim);
+        if (from > to) return;
         p.roadLine(axis, fixed, from, to);
         for (let t = from; t <= to; t += 12) p.node(axis === 'u' ? t : fixed, axis === 'u' ? fixed : t, 0);
         p.node(axis === 'u' ? to : fixed, axis === 'u' ? fixed : to, 0);
@@ -982,7 +987,7 @@ function buildVillage(p, s, rng, out) {
         roadNodes('u', -Rz, -R, R); roadNodes('u', Rz, -R, R);
         roadNodes('v', -R, -Rz, Rz); roadNodes('v', R, -Rz, Rz);
         // the crossings with the spokes
-        p.node(0, -Rz, 0); p.node(0, Rz, 0); p.node(-R, 0, 0); p.node(R, 0, 0);
+        p.node(0, -Rz, 0); if (Rz <= lim) p.node(0, Rz, 0); p.node(-R, 0, 0); p.node(R, 0, 0);
     }
     roadNodes('v', 0, -Rv + 2, -D - 5); roadNodes('v', 0, R1z, Rv - 2);
     roadNodes('u', 0, R1, Rv - 2); roadNodes('u', 0, -Rv + 2, -R1);
@@ -1023,6 +1028,7 @@ function buildVillage(p, s, rng, out) {
     const free = (u, v, r) => {
         if (Math.abs(u) < 6 + r || Math.abs(v) < 6 + r) return false; // spokes
         if (Math.abs(u) <= 16 + r && v >= mv0 - r - 2 && v <= mv1 + r + 2) return false; // market
+        if (s.sea && v + r > s.sea.vShore - 16) return false; // the quay and the sea
         return true;
     };
     const addLots = (along, fixed, from, to, side, face, inner) => {
@@ -1074,6 +1080,172 @@ function buildVillage(p, s, rng, out) {
         p.link(door, roadNode());
     }
     out.fields = fields;
+}
+
+// --------------------------------------------------------- sea castles
+/**
+ * Ships a port is built for (17th-century classes; the «ships» session builds the ships).
+ * L × B (m), draft (m), the pier's top layer (the pier top is about 1 m under the main deck).
+ */
+export const PORT_SHIPS = {
+    pinnace: { L: 44, B: 12, draft: 3.2, pierLayer: 3, ru: 'Пинас' },
+    fluyt: { L: 60, B: 15, draft: 4, pierLayer: 4, ru: 'Флейт' },
+    galleon: { L: 80, B: 20, draft: 5, pierLayer: 5, ru: 'Галеон' },
+};
+/** World direction of a plan's local +v (the back of the castle) for each rotation. */
+const V_DIR = [[0, 1], [-1, 0], [0, -1], [1, 0]];
+const PIER_W = 7; // a pier is 7 wide (u_k ± 3)
+/** The rotation whose local +v points closest to the world direction (nx, nz). */
+function rotFacing(nx, nz) {
+    let best = 0, bd = -Infinity;
+    for (let r = 0; r < 4; r++) { const d = V_DIR[r][0] * nx + V_DIR[r][1] * nz; if (d > bd) { bd = d; best = r; } }
+    return best;
+}
+const HARBOUR_DEPTH = 8; // water layers dug in the harbour (≥ the galleon's draft + 2)
+
+/** The ships of a sea castle by style. */
+function portShips(s, rng) {
+    return s.style === 'grand' ? ['galleon', 'fluyt', 'pinnace'] : s.style === 'fortress' ? ['galleon', 'pinnace'] : [rng() < 0.5 ? 'fluyt' : 'pinnace'];
+}
+
+/** Local layout of a port (u along the quay, v out to sea): piers and berths. */
+function portLayout(s, ships) {
+    const vShore = s.D - 8; // the back 8 m of the castle stand where the sea was
+    const u0 = s.W + s.towerSize + 6;
+    let uk = u0 + 3;
+    const piers = [];
+    let maxL = 0;
+    for (const cls of ships) {
+        const S = PORT_SHIPS[cls];
+        const us = uk + 3 + 1.5 + S.B / 2; // the ship lies along the pier's +u side
+        piers.push({ cls, uk, us, vs: vShore + 7 + S.L / 2, len: S.L + 14 });
+        maxL = Math.max(maxL, S.L);
+        uk = us + S.B / 2 + 4.5 + 3.5;
+    }
+    const last = piers[piers.length - 1];
+    const ub0 = Math.ceil(last.us + PORT_SHIPS[last.cls].B / 2 + 5); // the breakwater's inner edge
+    return { vShore, u0, piers, ub0, u1: ub0 + 3, len: maxL + 20 };
+}
+
+/**
+ * The back of a sea castle stands in the sea: a stone plinth under it, an
+ * embankment along the shore, a round sea tower joined to the back wall walk
+ * by a bridge on piers (cannon places on its top).
+ */
+function buildSeaWorks(p, s, rng, out) {
+    const { W, D, H } = s, ts = s.towerSize, F = p.F, st = s.stone, vShore = s.sea.vShore;
+    const deep = -F - 16; // (down to the bedrock: everything under the water is stone)
+    p.box(-W - ts, W + ts, deep, -F - 1, vShore, D + ts, st); // the plinth (a ledge at the water)
+    // the embankment along the shore on both sides of the castle
+    const R = s.sea.rect;
+    p.box(R.u0, -W - ts - 1, deep, -1, vShore, vShore, st);
+    p.box(W + ts + 1, R.u1, deep, -1, vShore, vShore, st);
+    // the sea tower and the bridge from the back wall walk
+    const walk = H - 1, tTop = H + s.towerExtra, tv = D + 24, r = 7;
+    p.cyl(0, tv, r, deep, -4, st);
+    roundTower(p, 0, tv, r, tTop, st, s.roof, { cone: false, walkL: walk });
+    p.box(-2, 2, walk - 1, walk, D + 1, tv - r + 1, st); // the bridge deck
+    p.box(-2, -2, walk + 1, walk + 1, D + 1, tv - r, st); p.box(2, 2, walk + 1, walk + 1, D + 1, tv - r, st); // parapets
+    p.box(-1, 1, H, H + 1, D - 1, D, 0); // through the battlements
+    p.box(-1, 1, walk + 1, walk + 5, tv - r - 1, tv - r + 3, 0); // the tower door
+    for (const v of [D + 8, D + 14]) p.box(-2, 2, deep, walk - 2, v, v + 1, st); // the bridge's piers (arches between)
+    // cannon places on the tower top (looking out to sea and along the shore)
+    const topY = p.L(tTop + 1) - 1.5;
+    for (const [du, dv, yaw] of [[0, r - 2, Math.PI], [-(r - 2), 0, Math.PI / 2], [r - 2, 0, -Math.PI / 2]]) {
+        out.cannons.push({ ...p.pt(du, tv + dv, tTop + 1), y: topY, yaw: p.yaw(yaw), at: 'tower' });
+    }
+    out.seaTower = { ...p.pt(0, tv, walk + 1), r };
+}
+
+/**
+ * The port beside the castle: a cobbled quay, a wooden pier per ship (stairs
+ * up from the quay, piles, bollards, a lantern at the end), a dug harbour, a
+ * breakwater wall with battlements and cannon places, a lighthouse at its end,
+ * crates, barrels and the port's chests on the quay.
+ */
+function buildPort(p, s, rng, out) {
+    const P = s.sea.port, F = p.F, st = s.stone, deep = -F - 16;
+    const { vShore, piers, ub0, u1, len } = P;
+    const qu0 = s.W + s.towerSize + 1;
+    // the quay
+    p.box(qu0, u1, -1, -1, vShore - 14, vShore, BLOCK.COBBLE);
+    p.box(qu0, u1, deep, -1, vShore, vShore, st);
+    const quayV = vShore - 8;
+    const R1 = s.W + 12;
+    p.roadLine('u', quayV, R1, u1 - 2);
+    for (let u = R1; u <= u1 - 2; u += 12) p.node(u, quayV, 0, u === R1 ? '' : 'quay');
+    p.node(u1 - 2, quayV, 0, 'quay');
+    const berths = [], pierRecs = [];
+    piers.forEach((pr, k) => {
+        const S = PORT_SHIPS[pr.cls];
+        const n = S.pierLayer - F; // steps up from the quay
+        const uk = Math.round(pr.uk), lDeck = n - 1, v0 = vShore + 1, v1 = vShore + pr.len;
+        // stairs on the quay, the deck, the beams, the piles
+        stairsV(p, uk - 3, uk + 3, vShore - n + 1, 1, n, BLOCK.PLANKS);
+        p.box(uk - 3, uk + 3, lDeck, lDeck, v0, v1, BLOCK.PLANKS);
+        p.box(uk - 3, uk + 3, lDeck - 1, lDeck - 1, v0, v1, BLOCK.PLANKS_DARK);
+        for (let v = v0 + 2; v <= v1; v += 6) for (const du of [-3, 3]) p.box(uk + du, uk + du, deep, lDeck - 2, v, v, BLOCK.PLANKS_DARK);
+        const bollards = [];
+        for (let v = v0 + 4; v <= v1 - 2; v += 10) for (const du of [-3, 3]) {
+            p.box(uk + du, uk + du, lDeck + 1, lDeck + 2, v, v, BLOCK.PLANKS_DARK);
+            if (du > 0) bollards.push({ ...p.pt(uk + du, v, lDeck + 1), v });
+        }
+        p.box(uk, uk, lDeck + 1, lDeck + 4, v1, v1, BLOCK.PLANKS_DARK);
+        p.box(uk, uk, lDeck + 5, lDeck + 5, v1, v1, BLOCK.LANTERN);
+        // walking: from the quay up the stairs to the end of the pier
+        const foot = p.node(uk, quayV, 0);
+        const bottom = p.node(uk, vShore - n - 1, 0, 'quay');
+        const top = p.node(uk, v0 + 1, n);
+        const end = p.node(uk, v1 - 2, n, 'pier');
+        p.link(foot, bottom); p.link(bottom, top); p.link(top, end);
+        // the berth: the ship along the pier, bow out to sea
+        const c = p.pt(pr.us, pr.vs, 0);
+        const fwd = V_DIR[p.rot];
+        const yaw = Math.atan2(-fwd[0], -fwd[1]);
+        const sx = Math.cos(yaw), sz = -Math.sin(yaw); // the ship's starboard (local +x) in the world
+        const pierC = p.pt(uk, pr.vs, 0);
+        const side = Math.sign(sx * (pierC.x - c.x) + sz * (pierC.z - c.z)) || 1;
+        const deckTop = p.L(lDeck) - 0.5;
+        const bow = pr.vs + S.L / 2, stern = pr.vs - S.L / 2;
+        const near = (v) => bollards.reduce((a, b) => (Math.abs(b.v - v) < Math.abs(a.v - v) ? b : a));
+        const strip = ({ v, ...q }) => ({ x: q.x, y: deckTop, z: q.z });
+        berths.push({
+            cls: pr.cls, pier: k, x: c.x, z: c.z, yaw, side, L: S.L, B: S.B, draft: S.draft,
+            plankA: { ...p.pt(uk + 3.5, pr.vs, 0), y: deckTop },
+            bollards: [strip(near(bow - 6)), strip(near(stern + 6))],
+        });
+        pierRecs.push({ k, cls: pr.cls, a: p.pt(uk, v0, 0), b: p.pt(uk, v1, 0), y: deckTop, w: PIER_W, layer: S.pierLayer });
+        // crates and barrels, and the port's chest at the back of the quay
+        const cu = Math.round(pr.us);
+        p.box(cu - 4, cu - 3, 0, 1, vShore - 14, vShore - 13, BLOCK.PLANKS);
+        p.box(cu - 1, cu - 1, 0, 0, vShore - 14, vShore - 14, BLOCK.HAY);
+        p.box(cu + 3, cu + 3, 0, 1, vShore - 14, vShore - 14, BLOCK.PLANKS_DARK);
+        out.chests.push({ ...p.pt(cu + 1, vShore - 12, 0), yaw: p.yaw(Math.PI), room: 'port' });
+    });
+    // the breakwater: a stone wall on the far side of the harbour, battlements outside, cannon places
+    const vEnd = vShore + len;
+    p.box(ub0, u1, deep, 2, vShore + 1, vEnd, st);
+    const cannonV = [];
+    for (let v = vShore + 14; v <= vEnd - 10; v += 16) cannonV.push(v);
+    for (let v = vShore + 1; v <= vEnd; v += 2) if (!cannonV.some((c) => Math.abs(c - v) <= 2)) p.box(u1, u1, 3, 4, v, v, st);
+    for (const v of cannonV) out.cannons.push({ ...p.pt(u1 - 1, v, 3), yaw: p.yaw(-Math.PI / 2), at: 'wall' });
+    stairsV(p, ub0, u1, vShore - 2, 1, 3, st);
+    const wb = p.node(u1 - 2, vShore - 3, 0);
+    p.link(p.node(u1 - 2, quayV, 0), wb);
+    const wt = p.node(u1 - 2, vShore + 3, 3);
+    p.link(wb, wt);
+    p.link(wt, p.node(u1 - 2, vEnd - 8, 3, 'wall'));
+    // the lighthouse at the end of the breakwater
+    const lu = ub0 + 1, lv = vEnd + 4;
+    p.cyl(lu, lv, 4, deep, -4, st);
+    roundTower(p, lu, lv, 4, 18, BLOCK.CS_WHITE, s.roof, { cone: false });
+    p.cyl(lu, lv, 1.5, 19, 20, BLOCK.LANTERN);
+    p.cyl(lu, lv, 2.5, 21, 21, s.roof);
+    out.cannons.push({ ...p.pt(lu, lv + 2, 19), yaw: p.yaw(Math.PI), at: 'lighthouse' });
+    out.lighthouse = { ...p.pt(lu, lv, 19) };
+    out.berths = berths;
+    out.piers = pierRecs;
+    out.quayV = quayV;
 }
 
 // ---------------------------------------------------------------- styles
@@ -1151,6 +1323,15 @@ export class CastleIndex {
         const s = pickStyle(rng);
         const zone = s.villageR + 8; // flat land radius (square half-size)
         const H = this.raw;
+        // a sea shore crossing the cell: a sea castle with a port (generation-2 worlds)
+        if (this.seas) {
+            const cx = (gx + 0.5) * CASTLE_CELL, cz = (gz + 0.5) * CASTLE_CELL;
+            const sd = this.seas.signedDist(cx, cz);
+            if (Math.abs(sd) < CASTLE_CELL * 0.75) {
+                const c = this._makeSeaCastle(gx, gz, s, rng, this.seas.seaAt(cx, cz));
+                if (c) return c;
+            }
+        }
         for (let t = 0; t < 8; t++) {
             const margin = zone + BLEND + 10;
             const span = CASTLE_CELL - 2 * margin;
@@ -1181,12 +1362,101 @@ export class CastleIndex {
         return null;
     }
 
-    _buildCastle(gx, gz, X, Z, F, s, rng, zone) {
-        const rot = Math.floor(rng() * 4);
+    /** A castle on a sea shore: its back in the sea, a port with piers for 1–3 ships. */
+    _makeSeaCastle(gx, gz, s, rng, sea) {
+        if (!sea) return null;
+        const ships = portShips(s, rng);
+        const P = portLayout(s, ships);
+        // the castle's land: the village on three sides, the port on one side, the harbour out to sea
+        const vr = s.villageR + 8;
+        const rect = { u0: -vr, u1: Math.max(vr, P.u1 + 8), v0: -vr, v1: P.vShore + P.len + 12 };
+        const zone = Math.max(-rect.u0, rect.u1, -rect.v0, rect.v1);
+        // the castle's centre must lie in the window that keeps its land inside the cell; the shore
+        // must cross local +v at vShore. Scan lines through the window for each facing.
+        const cands = [];
+        for (let rot = 0; rot < 4; rot++) {
+            const [dx, dz] = V_DIR[rot];
+            // the window keeping the land (and its blend) inside the cell, for this facing
+            const q = new Plan(0, 0, 0, rot);
+            const xs = [q.wx(rect.u0, rect.v0), q.wx(rect.u1, rect.v1)], zs = [q.wz(rect.u0, rect.v0), q.wz(rect.u1, rect.v1)];
+            const pad = BLEND + 10;
+            const x0 = gx * CASTLE_CELL + pad - Math.min(...xs), x1 = (gx + 1) * CASTLE_CELL - pad - Math.max(...xs);
+            const z0 = gz * CASTLE_CELL + pad - Math.min(...zs), z1 = (gz + 1) * CASTLE_CELL - pad - Math.max(...zs);
+            if (x1 - x0 < 4 || z1 - z0 < 4) continue;
+            // (the real shore may be up to SLACK m off the quay line: a little land is dug away or
+            // a little sea filled in — the site check below keeps that small)
+            const SLACK = 24;
+            const clampX = (x) => Math.max(x0, Math.min(x1, x)), clampZ = (z) => Math.max(z0, Math.min(z1, z));
+            for (let k = 0; k < 7; k++) {
+                const f = (k + 0.5) / 7;
+                let prev = null;
+                const lo = (dx !== 0 ? x0 : z0) - SLACK, hi = (dx !== 0 ? x1 : z1) + SLACK;
+                for (let a = lo; a <= hi + 0.01; a += 4) {
+                    // along +v (the perpendicular position fixed by f)
+                    const w = (dx || dz) > 0 ? a : lo + hi - a;
+                    const X = dx !== 0 ? w : x0 + f * (x1 - x0);
+                    const Z = dz !== 0 ? w : z0 + f * (z1 - z0);
+                    const sd = this.seas.signedDist(X + dx * P.vShore, Z + dz * P.vShore);
+                    if (prev && prev.sd <= 0 && sd > 0) {
+                        // the shore lies between: the castle centre where it is exactly vShore ahead
+                        const q = -prev.sd / (sd - prev.sd);
+                        const cx0 = prev.X + (X - prev.X) * q, cz0 = prev.Z + (Z - prev.Z) * q;
+                        const cX = clampX(cx0), cZ = clampZ(cz0);
+                        if (Math.hypot(cX - cx0, cZ - cz0) <= SLACK) cands.push({ rot, X: Math.round(cX), Z: Math.round(cZ), key: rng() });
+                    }
+                    prev = { X, Z, sd };
+                }
+            }
+        }
+        cands.sort((a, b) => a.key - b.key);
+        for (const c of cands.slice(0, 16)) {
+            const { rot, X, Z } = c;
+            const [dx, dz] = V_DIR[rot];
+            // the sea must really lie ahead (+v), the land behind
+            if (!(this.seas.signedDist(X + dx * (P.vShore + 40), Z + dz * (P.vShore + 40)) > 10)) continue;
+            if (!(this.seas.signedDist(X + dx * (P.vShore - 40), Z + dz * (P.vShore - 40)) < -10)) continue;
+            if (Math.hypot(X, Z) < MIN_SPAWN_DIST + zone) continue;
+            if (!this._seaSiteOk(X, Z, rot, s, P, rect)) continue;
+            return this._buildCastle(gx, gz, X, Z, 2, s, rng, zone, { rot, sea: sea.id, vShore: P.vShore, port: P, ships, zone, rect });
+        }
+        return null;
+    }
+
+    /** Land behind the shore (gentle, mostly dry), the sea in front of the port and behind the castle. */
+    _seaSiteOk(X, Z, rot, s, P, rect) {
+        const H = this.raw;
+        const p = new Plan(X, Z, 2, rot);
+        let all = 0, sea = 0, wet = 0;
+        const hs = [];
+        for (let v = rect.v0; v <= P.vShore - 10; v += 12) for (let u = rect.u0; u <= rect.u1; u += 12) {
+            const h = H(p.wx(u, v), p.wz(u, v));
+            all++;
+            if (H.sea) { sea++; continue; }
+            if (H.water) { wet++; continue; }
+            if (h > 22) return false; // (no mountains: the land by the sea is low)
+            hs.push(h);
+        }
+        if (sea > all * 0.12 || sea + wet > all * 0.3 || hs.length < 10) return false;
+        hs.sort((a, b) => a - b);
+        if (hs[Math.floor(hs.length * 0.8)] > 10 || hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > 10) return false;
+        const seaFrac = (u0, u1, v0, v1, step) => {
+            let n = 0, k = 0;
+            for (let v = v0; v <= v1; v += step) for (let u = u0; u <= u1; u += step) { H(p.wx(u, v), p.wz(u, v)); n++; if (H.sea) k++; }
+            return k / Math.max(1, n);
+        };
+        if (seaFrac(P.u0, P.u1, P.vShore + 4, P.vShore + P.len, 8) < 0.8) return false; // the harbour
+        if (seaFrac(-s.W, s.W, s.D + 4, s.D + 30, 8) < 0.7) return false; // behind the castle
+        return true;
+    }
+
+    _buildCastle(gx, gz, X, Z, F, s, rng, zone, seaOpts = null) {
+        const rot = seaOpts ? seaOpts.rot : Math.floor(rng() * 4);
         const p = new Plan(X, Z, F, rot);
-        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [] };
+        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [], cannons: [] };
+        s.sea = seaOpts;
         buildVillage(p, s, rng, out);
         buildCastle(p, s, rng, out);
+        if (seaOpts) { buildSeaWorks(p, s, rng, out); buildPort(p, s, rng, out); }
         p.joinRoads();
         const name = `${s.style === 'fortress' ? 'Крепость' : 'Замок'} ${CASTLE_NAMES_A[Math.floor(rng() * CASTLE_NAMES_A.length)]} ${CASTLE_NAMES_B[Math.floor(rng() * CASTLE_NAMES_B.length)]}`;
         const king = `${KING_NAMES[Math.floor(rng() * KING_NAMES.length)]} ${KING_EPITHETS[Math.floor(rng() * KING_EPITHETS.length)]}`;
@@ -1208,6 +1478,21 @@ export class CastleIndex {
             parts: p.parts,
             topL: F + 1 + s.H + s.towerExtra + 30,
         };
+        if (seaOpts) {
+            const P = seaOpts.port;
+            castle.variant = 'sea';
+            castle.sea = seaOpts.sea;
+            // the port: the ships session moors its ships at the berths and fires the cannons from the places
+            castle.port = {
+                vShore: P.vShore, keepU: s.W + s.towerSize, keepV: s.D, depth: HARBOUR_DEPTH, rect: seaOpts.rect,
+                basin: { u0: P.u0 - 2, u1: P.ub0 - 1, v0: P.vShore + 1, v1: P.vShore + P.len + 2 },
+                quay: { y: F - 0.5, ...p.rect(s.W + s.towerSize + 1, P.u1, P.vShore - 14, P.vShore) },
+                ships: seaOpts.ships.slice(), berths: out.berths, piers: out.piers,
+                cannons: out.cannons, lighthouse: out.lighthouse, seaTower: out.seaTower,
+                // world yaw of «out to sea» (the ships' bows at their berths point this way)
+                seaYaw: out.berths[0].yaw,
+            };
+        }
         // parts by chunk (filled lazily)
         castle._byChunk = new Map();
         return castle;
@@ -1243,7 +1528,18 @@ export class CastleIndex {
         const d = Math.max(Math.abs(ix - k.x), Math.abs(iz - k.z));
         if (d > k.zone + BLEND) return null;
         const w = d <= k.zone ? 1 : 1 - (d - k.zone) / BLEND;
-        return { castle: k, w: w * w * (3 - 2 * w) };
+        if (!k.port) return { castle: k, w: w * w * (3 - 2 * w) };
+        // a sea castle: its land is a rectangle in plan coordinates (the port on one side);
+        // beyond the quay line is the sea (dug deep in the harbour), except under the castle
+        const P = k.port, dx = ix - k.x, dz = iz - k.z, r = k.rot, R = P.rect;
+        const u = r === 0 ? dx : r === 1 ? dz : r === 2 ? -dx : -dz;
+        const v = r === 0 ? dz : r === 1 ? -dx : r === 2 ? -dz : dx;
+        const out = Math.max(R.u0 - u, u - R.u1, R.v0 - v, v - R.v1, 0);
+        if (out > BLEND) return null;
+        const ws = out <= 0 ? 1 : 1 - out / BLEND;
+        const sea = v > P.vShore && !(Math.abs(u) <= P.keepU && v <= P.keepV);
+        const B = P.basin;
+        return { castle: k, w: ws * ws * (3 - 2 * ws), side: sea ? 'sea' : 'land', harbour: sea && u >= B.u0 && u <= B.u1 && v >= B.v0 && v <= B.v1 };
     }
 
     /** The nearest castles for the minimap (within `r`), nearest first. */

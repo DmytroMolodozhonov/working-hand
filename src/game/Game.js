@@ -591,7 +591,7 @@ export class Game {
             if (this.authority) {
                 chest.mesh.updateMatrixWorld(true);
                 const rp = chest.getRewardPosition(new THREE.Vector3());
-                this.items.lootChest(rp, Math.random, chest.house || null);
+                this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null); // (a port chest: the sailors' stores)
                 // a pouch of coins too (a castle's treasury holds much more; a poor house — little or nothing)
                 const coins = chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
                     : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);

@@ -157,6 +157,30 @@ export function rollHouseLoot(r = Math.random, rich = false) {
     return out;
 }
 
+/**
+ * Things other features add to loot tables. The fishing rod (fishing session): set
+ * `LOOT_EXTRA.fishingRod = (r) => item` and port chests hold one fairly often.
+ */
+export const LOOT_EXTRA = { fishingRod: null };
+
+/** A chest in a sea castle's port: the sailors' stores — food, arrows, wool; sometimes a fishing rod, rarely something precious. */
+export function rollPortLoot(r = Math.random) {
+    const out = [];
+    if (LOOT_EXTRA.fishingRod && r() < 0.35) out.push(LOOT_EXTRA.fishingRod(r));
+    const n = randInt(r, 2, 3);
+    for (let i = 0; i < n; i++) {
+        const x = r();
+        if (x < 0.08) { out.push(...rollLoot(r, { cave: false }).slice(0, 1)); continue; }
+        if (x < 0.32) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
+        else if (x < 0.46) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
+        else if (x < 0.60) out.push({ kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
+        else if (x < 0.74) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 4, 12) });
+        else if (x < 0.86) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) });
+        else out.push({ kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) });
+    }
+    return out;
+}
+
 export function rollLoot(r = Math.random, { cave = true } = {}) {
     const out = [];
     const n = randInt(r, 1, cave ? 3 : 2);

@@ -143,3 +143,23 @@ Generation 2: `MIN_LAYER = -17` (bedrock), the deep sea floor is at layer −16.
 - `terrain.data.isSeaColumn(ix, iz)`, `terrain.data.seas` (the `SeaIndex`).
 - Sea castles: `castle.variant === 'sea'`, `castle.port` — see the note at the end of this file once
   phase 3 lands (berths for ships, cannon mount points, port chests).
+
+### Sea castles and ports (from the «sea» session — stable, use it)
+
+`castle.variant === 'sea'`, `castle.port` (all world coordinates; yaw = rotation.y, the model facing −Z):
+- `port.ships` — classes in berth order (`'galleon' | 'fluyt' | 'pinnace'`; grand 3, fortress 2, compact 1).
+  `PORT_SHIPS` in `src/world/Castles.js`: `{L, B, draft, pierLayer}` per class (44×12 / 60×15 / 80×20 m).
+- `port.berths[k]` — `{cls, pier, x, z, yaw, side, L, B, draft, plankA:{x,y,z}, bollards:[{x,y,z} bow, {x,y,z} stern]}`:
+  the ship's centre at the waterline, bow out to sea (`yaw` = hero convention, forward = (−sin yaw, −cos yaw)),
+  `side` = +1 if the pier is on the ship's starboard (local +x), −1 port side; `plankA` = the pier edge at
+  midships (gangplank end); `bollards` = the pier bollards nearest the bow and the stern (mooring lines).
+- `port.piers[k]` — `{a, b, y, w: 7, layer}` (centre line from the quay end `a` to the sea end `b`, deck top `y`).
+- `port.cannons` — `[{x, y, z, yaw, at: 'wall' | 'tower' | 'lighthouse'}]`: free stone places (feet level `y`)
+  facing out to sea / outwards — put the cannons there.
+- `port.depth` (8 water layers in the harbour), `port.basin`, `port.quay`, `port.seaYaw`, `port.lighthouse`,
+  `port.seaTower`. Port chests: castle chests with `room === 'port'` (loot `rollPortLoot` in ItemTypes.js).
+
+### Fishing rod loot (for the «fishing» session)
+
+Port chests already roll `rollPortLoot` (`src/game/ItemTypes.js`). Set `LOOT_EXTRA.fishingRod = (r) => item`
+(exported from ItemTypes.js) and every port chest holds a fishing rod with a 35% chance.

@@ -21,7 +21,7 @@
  */
 
 import * as THREE from 'three';
-import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
 import { PEN_POINTS } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 
@@ -99,8 +99,8 @@ export class ItemSystem {
     }
 
     /** A chest opens: its things float up above it. */
-    lootChest(pos, rng = Math.random, house = null) {
-        const items = house ? rollHouseLoot(rng, house.rich) : rollLoot(rng);
+    lootChest(pos, rng = Math.random, house = null, kind = null) {
+        const items = house ? rollHouseLoot(rng, house.rich) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng);
         items.forEach((it, i) => {
             const p = pos.clone().add(_v.set((i - (items.length - 1) / 2) * 0.8, 2.2, 0));
             if (it.kind === 'weapon') {
