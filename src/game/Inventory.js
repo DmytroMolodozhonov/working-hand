@@ -12,6 +12,9 @@
  * hip, a hand hanging or swinging never does anything):
  *   - the wand has its own place, tucked into the waistband in front (WandBelt.js):
  *     tucked in there to put it away, taken from there looking down at it;
+ *   - the coin pouches tied to the belt on the right side (CoinBelt.js): a pouch in the
+ *     right hand put on the side is tied on (the next ones emptied into it), taken off
+ *     looking down at it;
  *   - the right pocket: the right hand holding a thing puts it away; put in empty,
  *     it takes out the next thing of the slots (food, a scroll, a book, the building
  *     blocks…);
@@ -24,6 +27,7 @@ import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand } from './ItemTypes.js';
 import { WandBelt } from './WandBelt.js';
+import { CoinBelt, BELT_MAX } from './CoinBelt.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -97,6 +101,7 @@ export class Inventory {
         this.inHand = null; // {slot, kind, weapon?}: what of the selected slot is in the right hand
         this._pocket = { left: { out: 0, hist: [], armed: true }, right: { out: 0, hist: [], armed: true } };
         this.belt = new WandBelt(game); // (the wand's place at the waistband: WandBelt.js)
+        this.purse = new CoinBelt(game); // (the coin pouches on the belt's right side: CoinBelt.js)
         this._back = { left: { t: 0, at: 0 }, right: { t: 0, at: 0 } };
         this._backModels = []; // the weapons seen on the back
         this._handBlock = null;
@@ -155,9 +160,9 @@ export class Inventory {
         return true;
     }
 
-    /** All the coins I have (in the slots and in my hands). */
+    /** All the coins I have (on the belt, in the slots and in my hands). */
     coins() {
-        let n = 0;
+        let n = this.purse?.count || 0;
         for (const s of this.slots) if (s && s.kind === 'coins') n += s.count || 0;
         for (const side of ['right', 'left']) { const h = this.game.items?.held[side]; if (h && h.item.kind === 'coins') n += h.item.count || 0; }
         return n;
@@ -181,6 +186,7 @@ export class Inventory {
             s.count -= k; left -= k;
             if (s.count <= 0) this.slots[i] = null;
         }
+        if (left > 0) left -= this.purse.spend(left); // (the last pouch on the belt first)
         this._render();
         return true;
     }
@@ -312,6 +318,7 @@ export class Inventory {
         for (const side of ['right', 'left']) {
             const h = g.items?.held[side];
             if (!h || h.item.kind === 'wand') continue; // (the wand goes only to the waistband: WandBelt)
+            if (h.item.kind === 'coins' && this.purse.count < BELT_MAX) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
             if (this.storeItem(it)) this._fx('🎒 ' + (ITEM_INFO[it.kind]?.name || 'Предмет') + ' в ячейке');
@@ -336,7 +343,8 @@ export class Inventory {
      */
     update(dt) {
         const g = this.game;
-        if (!g.currentPose || g.combat.immobile) { this.belt._show(); this._updateHandBlock(); return; }
+        this._renderCoins();
+        if (!g.currentPose || g.combat.immobile) { this.belt._show(); this.purse._show(); this._updateHandBlock(); return; }
         const ch = g.character;
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
@@ -373,6 +381,7 @@ export class Inventory {
             if (b.t > 0.5 && now - b.at > 1200) { b.t = 0; b.at = now; this._backGesture(side); }
         }
         this.belt.update(dt);
+        this.purse.update(dt);
         this._updateHandBlock();
         this._updateBack();
         // the «hand» cell shows what the hands hold
@@ -592,6 +601,17 @@ export class Inventory {
         this._render();
     }
 
+    /** The coin counter at the top right of the screen: 🪙 and all my coins. */
+    _renderCoins() {
+        if (typeof document === 'undefined') return;
+        const n = this.coins();
+        if (n === this._coinsShown) return;
+        const el = document.getElementById('coin-count');
+        if (!el) return;
+        this._coinsShown = n;
+        el.textContent = n;
+    }
+
     show(on) {
         if (this.bar) this.bar.style.display = on ? 'flex' : 'none';
     }
@@ -639,6 +659,7 @@ export class Inventory {
     }
 
     dispose() {
+        this.purse.dispose();
         if (this._handBlock) { this.game.scene.remove(this._handBlock); this._handBlock.geometry.dispose(); this._handBlock.material.dispose(); }
         this.show(false);
     }

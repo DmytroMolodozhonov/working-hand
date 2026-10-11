@@ -101,6 +101,7 @@ export class NetSync {
         }
         // Late joiner: send the whole world state
         this.sendLook();
+        this.game.inventory?.purse?.resend(); // (the coin pouches on my belt)
         if (this.net.isHost) {
             const msg = this.welcomeMessage();
             msg.you = this.game.keeper?.playerFor(this.net.players.get(id)?.pid, this.net.players.get(id)?.name || name) || null; // a player coming back gets their things (by their own lasting id, not by a name someone else may have too)

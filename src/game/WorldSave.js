@@ -99,6 +99,7 @@ export function playerSnapshot(game) {
     return {
         slots,
         extraSlots: inv ? Math.max(0, inv.slots.length - 5) : 0,
+        purse: inv?.purse?.count || 0, // the coins in the pouches on the belt (CoinBelt)
         learned: game.books ? [...game.books.learned] : [],
         pos: [r2(p.x), r2(p.y), r2(p.z)],
         hp: game.playerHP,
@@ -119,6 +120,8 @@ export function applyPlayerSnapshot(game, s) {
         if (s.extraSlots && inv.setExtraSlots) inv.setExtraSlots(s.extraSlots);
         for (let i = 0; i < inv.slots.length; i++) inv.slots[i] = s.slots[i] ? { ...s.slots[i] } : null;
         inv.selected = -1;
+        if (inv.purse) inv.purse.count = 0;
+        if (inv.purse && Number.isFinite(s.purse) && s.purse > 0) { const rest = inv.purse.add(s.purse); if (rest > 0) inv.storeItem({ kind: 'coins', uid: 'c' + Date.now().toString(36), count: rest }); }
         inv._render?.();
     }
     if (game.books && Array.isArray(s.learned)) for (const k of s.learned) game.books.learned.add(k);

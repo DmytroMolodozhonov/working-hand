@@ -186,6 +186,14 @@ body {
     text-shadow: 1px 1px 2px black;
 }
 
+/* the coins (CoinBelt / Inventory.coins): 🪙 and the number, top right */
+#coin-counter {
+    margin: 0 0 4px;
+    font-size: 22px;
+    color: #ffd84a;
+    white-space: nowrap;
+}
+
 /* Game Over Screen */
 #game-over {
     position: absolute;

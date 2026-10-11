@@ -26,6 +26,7 @@
 
 import * as THREE from 'three';
 import { RESOURCE } from './Inventory.js';
+import { purseBags } from './CoinBelt.js';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
 import { newUid } from './ItemTypes.js';
@@ -174,6 +175,8 @@ export class DeathSystem {
         const g = this.game, inv = g.inventory, it = g.items;
         const held = [];
         if (it) for (const side of ['right', 'left']) if (it.held[side]) held.push(it.releaseHand(side));
+        // the coin pouches on the belt drop too, each as it was (CoinBelt)
+        if (inv?.purse?.count > 0) { for (const c of purseBags(inv.purse.count)) held.push({ kind: 'coins', count: c }); inv.purse.count = 0; }
         const slots = inv ? inv.slots.slice() : [];
         let backpack = null;
         if (it?.worn.backpack) {

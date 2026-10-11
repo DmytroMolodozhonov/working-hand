@@ -25,6 +25,7 @@ import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON } from './ItemTypes.js';
 import { PEN_POINTS } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
+import { makePurseModel } from './CoinBelt.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
 
 const SHOP_GRIP = 0.5; // fingers this closed (tracked curl) to take a good from a market counter
@@ -668,11 +669,19 @@ export class ItemSystem {
             if (left > 0) { item.count = left; this._noRoom(item); }
             return;
         }
-        // money goes into the purse (a slot, up to 500 coins)
+        // a pouch of money: into the hand (to be tied on the belt's right side: CoinBelt); «Gather»
+        // or both hands busy — straight onto the belt (what does not fit — into a slot)
         if (item.kind === 'coins') {
-            const g = this.game;
+            const g = this.game, purse = g.inventory.purse;
             const n = item.count || 0;
-            if (g.inventory.storeItem(item)) { g.hud.setVoice?.(`💰 +${n} монет (всего ${g.inventory.coins()})`, true); return; }
+            const busy = (s) => !!(this.held[s] || g.weapons?.hands?.[s]?.held);
+            if (purse && (side === 'slot' || (busy('right') && busy('left')))) {
+                item.count = purse.add(n);
+                if (item.count <= 0 || g.inventory.storeItem(item)) { g.hud.setVoice?.(`💰 +${n} монет (всего ${g.inventory.coins()})`, true); return; }
+            } else if (this.takeIntoHand(item, side) || this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
+                g.hud.setVoice?.(`💰 Мешочек: ${n} монет — приложите руку с ним к поясу справа, чтобы привязать`, true);
+                return;
+            }
         }
         // a good from a market stall: the merchant names the price
         if (item.shop) this.game.castleLife?.talk?.tookGood(item);
@@ -870,21 +879,22 @@ export class ItemSystem {
         }
     }
 
-    /** Somebody else's hands: show what they hold (and their backpack). */
+    /** Somebody else's hands: show what they hold (and their backpack, the coin pouches on their belt). */
     setRemoteHeld(id, side, item) {
         const g = this.game;
         const r = g.remotes.get(id);
         if (!r) return;
         const cur = this.remoteHeld.get(id) || {};
-        if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); g.scene.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
-        if (item) { const model = makeItemModel(item); g.scene.add(model); cur[side] = { item, model }; }
+        if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); cur[side].model.parent?.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
+        if (item && side === 'purse') { const model = makePurseModel(item.count || 0); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body)
+        else if (item) { const model = makeItemModel(item); g.scene.add(model); cur[side] = { item, model }; }
         this.remoteHeld.set(id, cur);
     }
 
     updateRemote() {
         for (const [id, cur] of this.remoteHeld) {
             const r = this.game.remotes.get(id);
-            if (!r) { for (const k of Object.keys(cur)) if (cur[k]) { this.game.scene.remove(cur[k].model); disposeModel(cur[k].model); } this.remoteHeld.delete(id); continue; }
+            if (!r) { for (const k of Object.keys(cur)) if (cur[k]) { cur[k].model.parent?.remove(cur[k].model); disposeModel(cur[k].model); } this.remoteHeld.delete(id); continue; }
             const ch = r.character;
             for (const side of ['right', 'left']) {
                 const h = cur[side];

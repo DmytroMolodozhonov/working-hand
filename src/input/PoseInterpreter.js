@@ -55,6 +55,33 @@ export function pocketPose(lm, hand, side, aspect = 4 / 3, hipSide = side) {
 }
 
 /**
+ * Is this hand at the coin pouches' place — on its side of the belt, beside the hip
+ * (CoinBelt.js)? The wrist at the waist, a little out beside the hip (not in front of it,
+ * where the pocket is), the elbow bent and further out than the wrist (a hand put on the
+ * side). An arm hanging or just lowered has a straight elbow, its wrist at or under the
+ * hip — never this.
+ */
+export function purseHand(lm, side, aspect = 4 / 3) {
+    const [s, e, w, h] = side === 'left' ? [11, 13, 15, 23] : [12, 14, 16, 24];
+    const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], hip = lm?.[h];
+    if (!sh || !el || !wr || !hip) return null;
+    if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5 || (wr.visibility ?? 1) < 0.5) return null;
+    const T = hip.y - sh.y;
+    if (T < 0.05) return null;
+    const out = side === 'left' ? 1 : -1; // (the person's left is the picture's right)
+    const outOf = (p) => ((p.x - hip.x) * out * aspect) / T;
+    const dy = (wr.y - hip.y) / T;
+    if (dy < -0.6 || dy > -0.08) return false; // (at the waist: not the chest, not the hip / the thigh)
+    const wOut = outOf(wr);
+    if (wOut < 0.12 || wOut > 0.75) return false; // (beside the hip, not in front of it)
+    if (outOf(el) - wOut < 0.06) return false; // (the elbow out to the side)
+    const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
+    const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
+    if (nu < 1e-4 || nf < 1e-4) return false;
+    return Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) > 0.6; // (~35°: bent)
+}
+
+/**
  * The hand brought to the mouth (eating): in the picture the hand covers the mouth —
  * the palm's middle (or, unseen, the wrist just under it) close to the mouth, the
  * elbow below. Sizes in shoulder widths, so near or far from the camera is the same.
@@ -189,6 +216,7 @@ export class PoseInterpreter {
                 right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect),
                 cross: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect, 'left'), // (the right hand in the LEFT pocket)
             };
+            data.purse = { left: purseHand(lm, 'left', data.aspect), right: purseHand(lm, 'right', data.aspect) }; // (CoinBelt)
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);

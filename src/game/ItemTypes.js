@@ -306,7 +306,7 @@ export function describeItem(it) {
         case 'meat': return { title: '🥩 Сырое мясо', color: 0xd9534f, lines: ['Поднесите ко рту: +2 HP', 'Пожарьте на костре («Fire») — будет +4'] };
         case 'steak': return { title: '🍖 Стейк', color: 0xb5651d, lines: ['Поднесите ко рту: +4 HP'] };
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
-        case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b> (до 500 в ячейке)`, 'Платите ими на рынке замка'] };
+        case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу справа: кулак с мешочком на правый бок', 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
         case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмитесь за него <b>обеими руками</b> и разломите (разведите руки или поверните) — мана +<b>5</b> к максимуму'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
@@ -542,16 +542,14 @@ function appleModel() {
     return g;
 }
 
-/** A pouch of coins (a few gold coins spilling on top). */
+/** A pouch of coins (tied at the neck: the coins are inside, not seen). */
 function coinsModel() {
     const g = new THREE.Group();
     const sack = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), mat(0x8b5a2b));
     sack.scale.set(1, 0.85, 1);
     g.add(sack);
     g.add(cyl(0.05, 0.07, 0.07, mat(0x7a4a22), 0, 0.12));
-    g.add(cyl(0.055, 0.055, 0.015, mat(0xc9a227), 0, 0.1));
-    const gold = mat(0xffd700, { standard: true, metal: 0.8, rough: 0.3, emissive: 0x332200 });
-    for (let i = 0; i < 3; i++) { const c = cyl(0.045, 0.045, 0.012, gold, -0.06 + i * 0.06, -0.09 + i * 0.012, 0.12); c.rotation.x = 0.3; g.add(c); }
+    g.add(cyl(0.055, 0.055, 0.015, mat(0xc9a227), 0, 0.1)); // (the cord)
     return g;
 }
 
