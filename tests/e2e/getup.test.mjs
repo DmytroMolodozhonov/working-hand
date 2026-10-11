@@ -9,7 +9,7 @@ import { startServer, launch, openPage, startFromMenu, waitHudVisible, realError
 import { frame } from './poses.mjs';
 
 const PORT = Number(process.env.ZNS_TEST_PORT) || 8263;
-let srv, browser;
+let srv, browser, shared;
 test.before(async () => { srv = await startServer(PORT); browser = await launch({}); });
 test.after(async () => { await browser?.close(); srv?.stop(); setTimeout(() => process.exit(0), 500).unref(); });
 
@@ -43,5 +43,34 @@ test('a noisy camera: standing still keeps me down, a shallow squat gets me up; 
     // the dizziness fades away and the picture is clear again
     await page.evaluate(() => { window.__zns.game.knock.dizzyLeft = 0.3; });
     await page.waitForFunction(() => window.__zns.game.knock.dizzy === 0 && !window.__zns.game.renderer.domElement.style.filter, null, { timeout: 30000, polling: 100 });
+    assert.deepEqual(realErrors(errors), []);
+    shared = { page, errors };
+});
+
+test('lying: turning the head looks round freely, the lying body does not spin; standing, it turns the body as before', async () => {
+    const { page, errors } = shared;                                                // (the same game: a second one is too slow headless)
+    await page.waitForFunction(() => window.__zns.game.knock.state === 'up', null, { timeout: 60000, polling: 100 });
+    const r = await page.evaluate(() => {
+        const g = window.__zns.game, base = { ...g.currentPose };
+        g.settings.drifting = true;
+        const run = (yaw, pitch, sec, dt = 1 / 60) => {
+            for (let t = 0; t < sec; t += dt) { g.poseSmoother.to = null; g.currentPose = { ...base, headRotation: { yaw, pitch } }; g._updatePlayer(dt); }
+        };
+        g.knock.knock({ dir: 'back', down: 60 });
+        run(0, 0, 1.5);
+        const b0 = g.cameraBaseRotation, ry0 = g.character.group.rotation.y;
+        run(0.6, 0, 2);
+        const lying = { body: g.cameraBaseRotation - b0, ry: g.character.group.rotation.y - ry0, head: g.character.head.rotation.y };
+        run(-0.6, -0.3, 2);
+        const back = { head: g.character.head.rotation.y, pitch: g.character.head.rotation.x, ry: g.character.group.rotation.y - ry0 };
+        g.knock.standNow(); run(0, 0, 2);
+        const b1 = g.cameraBaseRotation;
+        run(0.6, 0, 1);
+        return { lying, back, standing: g.cameraBaseRotation - b1, head: g.character.head.rotation.y };
+    });
+    assert.ok(Math.abs(r.lying.body) < 1e-6 && Math.abs(r.lying.ry) < 1e-6, `the lying body stays put: ${JSON.stringify(r.lying)}`);
+    assert.ok(r.lying.head > 0.8, `the head turns further lying: ${r.lying.head}`);
+    assert.ok(r.back.head < -0.8 && Math.abs(r.back.ry) < 1e-6, `and the other way: ${JSON.stringify(r.back)}`);
+    assert.ok(Math.abs(r.standing) > 0.3 && r.head < 0.8, `standing: the head turns the body as before: ${JSON.stringify(r)}`);
     assert.deepEqual(realErrors(errors), []);
 });

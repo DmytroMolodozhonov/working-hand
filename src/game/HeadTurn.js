@@ -39,3 +39,16 @@ export function headTurnStep(st, headYaw, dt) {
     return { rate, rel: off };
 }
 
+
+/**
+ * Lying (knocked down, in a bed): the head turns by itself, the body stays where it lies — and it
+ * turns further than the real head (`k` 0 … 1: how much lying, blended so nothing jumps), so a
+ * comfortable turn looks all round from the ground. Pure.
+ */
+export const LIE_GAIN = { yaw: 1.6, pitch: 1.3, yawMax: 1.7, pitchMax: 1.3 };
+export function lyingHead(yaw, pitch, k) {
+    k = Math.max(0, Math.min(1, k || 0));
+    const c = (v, m) => Math.max(-m, Math.min(m, v));
+    const y = yaw * (1 + (LIE_GAIN.yaw - 1) * k), p = pitch * (1 + (LIE_GAIN.pitch - 1) * k);
+    return k > 0 ? { yaw: c(y, LIE_GAIN.yawMax), pitch: c(p, LIE_GAIN.pitchMax) } : { yaw: y, pitch: p };
+}

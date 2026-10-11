@@ -70,7 +70,7 @@ import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
-import { headTurnStep } from './HeadTurn.js';
+import { headTurnStep, lyingHead } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { HandHold } from './HandHold.js';
 import { Mana } from './Mana.js';
@@ -2304,7 +2304,11 @@ export class Game {
                 // (a broken frame — NaN — must not poison the head for the rest of the game)
                 if (Number.isFinite(targetYaw)) this.smoothHead.yaw += (targetYaw - this.smoothHead.yaw) * alpha;
                 if (Number.isFinite(targetPitch)) this.smoothHead.pitch += (targetPitch - this.smoothHead.pitch) * alpha;
-                if (s.drifting) {
+                // lying on the ground / in a bed: the head looks round freely, the body never spins with it
+                const lying = this.knock.down || !!this.beds?.lying;
+                this._lieK = (this._lieK || 0) + ((lying ? 1 : 0) - (this._lieK || 0)) * Math.min(1, dt * 3);
+                if (lying) { /* (the body stays as it lies; "straight" is kept for when it stands up) */ }
+                else if (s.drifting) {
                     // Past a dead zone the head turns the body; "straight ahead" adapts slowly to
                     // where the player really looks, but only while not turning (HeadTurn.js)
                     const turn = headTurnStep(this._headTurn, this.smoothHead.yaw, dt);
@@ -2315,8 +2319,9 @@ export class Game {
                     this.smoothBody += (pose.bodyRotation - this.smoothBody) * alpha;
                     ch.setBodyRotation(this.smoothBody);
                 }
-                this._headBase.yaw = this.smoothHead.yaw - (s.drifting ? this.yawNeutral : 0);
-                this._headBase.pitch = this.smoothHead.pitch;
+                const hb = lyingHead(this.smoothHead.yaw - (s.drifting ? this.yawNeutral : 0), this.smoothHead.pitch, this._lieK);
+                this._headBase.yaw = hb.yaw;
+                this._headBase.pitch = hb.pitch;
             }
             ch.updateArmsLookAt(pose, dt);
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)

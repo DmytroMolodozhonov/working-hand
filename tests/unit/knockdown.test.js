@@ -271,3 +271,26 @@ test('the head spins after a fall: 5 s for a light one … 10 s for the hardest;
     h.g.impact.apply({ v: new THREE.Vector3(0, 0, 14), spell: 'Thunderwave' });
     assert.ok(h.g.knock.dizzyLeft > 5 && h.g.knock.dizzyLeft < 7, `blow ${h.g.knock.dizzyLeft}`);
 });
+
+test('lying: looking round (down, aside, a tilted head) never counts as getting up', () => {
+    const { g } = fakeGame(), cam = noisyCam(21);
+    feed(g, 1, () => cam(0.25));
+    g.knock.knock({ dir: 'back' });
+    for (let i = 0; i < 20; i++) {
+        feed(g, 0.5, () => cam(0.25 + 0.06, 0.42));                               // (the chin down: looking at the feet)
+        feed(g, 0.5, () => cam(0.25 - 0.03, 0.85));                               // (the head back)
+        feed(g, 0.5, () => cam(0.27, 0.6));                                       // (aside)
+    }
+    assert.equal(g.knock.state, 'down');
+});
+
+test('lying: the head turns further than standing and alone (blended, clamped)', async () => {
+    const { lyingHead, LIE_GAIN } = await import('../../src/game/HeadTurn.js');
+    assert.deepEqual(lyingHead(0.5, 0.2, 0), { yaw: 0.5, pitch: 0.2 });
+    const l = lyingHead(0.5, 0.2, 1);
+    assert.ok(Math.abs(l.yaw - 0.5 * LIE_GAIN.yaw) < 1e-9 && Math.abs(l.pitch - 0.2 * LIE_GAIN.pitch) < 1e-9);
+    const h = lyingHead(0.5, 0.2, 0.5);
+    assert.ok(h.yaw > 0.5 && h.yaw < l.yaw, 'blended: no jump');
+    assert.equal(lyingHead(3, -3, 1).yaw, LIE_GAIN.yawMax);
+    assert.equal(lyingHead(3, -3, 1).pitch, -LIE_GAIN.pitchMax);
+});
