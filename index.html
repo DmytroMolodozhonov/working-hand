@@ -602,8 +602,14 @@
             }
             window.addEventListener('error', function (e) { show((e.message || 'ошибка') + (e.filename ? ' — ' + e.filename.split('/').pop() + ':' + e.lineno : '')); });
             window.addEventListener('unhandledrejection', function (e) { show(e.reason && e.reason.message || e.reason || 'ошибка'); });
+            // Opened as a file (file://): the browser refuses to run the game's code — it must come from the game's server
+            if (location.protocol === 'file:') {
+                window.addEventListener('DOMContentLoaded', function () {
+                    show('Игра открыта как файл, поэтому браузер не запускает её код и кнопки не нажимаются. Запускайте игру через «Запустить игру.bat» (он включает сервер игры и открывает http://localhost:8000).');
+                });
+            }
             // (a script that could not even load fires no error event)
-            setTimeout(function () { if (!(window.__zns && window.__zns.startGame)) show('Код игры не загрузился за 20 секунд (файлы игры неполные или устарели — запустите «Обновить и запустить игру»).'); }, 20000);
+            setTimeout(function () { if (!(window.__zns && window.__zns.startGame)) show('Код игры не загрузился за 10 секунд (файлы игры неполные или устарели — запустите «Обновить и запустить игру»).'); }, 10000);
         })();
     </script>
     <!-- Libraries are bundled locally in vendor/ (works offline, no CDN outages) -->

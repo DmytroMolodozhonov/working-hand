@@ -5,7 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startServer, launch, openPage, realErrors, startFromMenu } from './harness.mjs';
+import { startServer, launch, openPage, realErrors, startFromMenu, ROOT } from './harness.mjs';
 
 const PORT = Number(process.env.ZNS_TEST_PORT || 8797);
 let srv, browser;
@@ -98,5 +98,13 @@ test('look: if the game code fails to start, the screen says so (not a dead menu
     await page.goto(srv.url);
     await page.waitForSelector('#start-error', { timeout: 15000 });
     assert.match(await page.textContent('#start-error'), /Игра не запустилась/);
+    await page.close();
+});
+
+test('look: opened as a file (no game server), the screen says how to start the game', async () => {
+    const page = await browser.newPage();
+    await page.goto('file://' + ROOT + '/index.html');
+    await page.waitForSelector('#start-error', { timeout: 15000 });
+    assert.match(await page.textContent('#start-error'), /открыта как файл/);
     await page.close();
 });
