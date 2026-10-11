@@ -48,23 +48,24 @@ export const VORTEX = {
     START_TURNS: 0.3, // turns of the hand that mean «it has started»
     MIN_RADIUS: 0.08, // m: the hand must really go round (after the slow centre is taken out)
     MIN_SPEED: 0.35, // m/s
-    GATHER: 3.2, // m³ of water a full turn of the hand brings (at a calm speed)
-    MAX_VOLUME: 48,
-    LAYER_VOLUME: 8, // m³ in one ring
+    GATHER: 5, // m³ of water a full turn of the hand brings (at a calm speed)
+    MAX_VOLUME: 120, // (keep swinging: up to 10 rings)
+    LAYER_VOLUME: 12, // m³ in one ring
     LAYER_R0: 1.45, // m: the first ring round the body
-    LAYER_GAP: 0.72, // m between the rings (a gap of air between the layers)
+    LAYER_GAP: 0.6, // m between the rings (a gap of air between the layers)
     SOURCE: 30, // m: the water it gathers from must be this close
     IDLE_END: 10, // s without swinging or pointing → the vortex falls
     AIM_STILL: 0.35, // s the pointing hand stays still → it flies
     MIN_LAUNCH: 1.5, // m³
-    V0: 7, // m/s at the start of the flight
-    ACCEL: 26, // m/s² — faster and faster
-    VMAX: 46,
+    V0: 20, // m/s: the stream's head as it leaves the vortex
+    ACCEL: 45, // m/s² — faster and faster
+    VMAX: 60,
+    DRAIN: 14, // m³/s at least: how fast the rings unwind into the stream
+    DRAIN_TIME: 1.3, // s: a big vortex unwinds in about this long
     RANGE: 50, // m
     TURN: 1.4, // rad/s while correcting towards the target
     BEND: 0.2, // rad: the most it turns in all
-    CLING: 1.6, // s the water clings to the one it hit (time to say «Bubble»)
-    BUBBLE_ARM: 2.5, // s before the hit a «Bubble» still counts
+    CLING: 2, // s after the last water reached the one it hit (still time to say «Bubble»)
     BUBBLE_GROW: 2.2, // s: the whole vortex flows into the bubble
     BUBBLE_LIFE: 15, // s a liquid bubble holds
     ICE_LIFE: 90, // s at most (then it cracks)
@@ -90,6 +91,7 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+const _srcInner = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
@@ -111,7 +113,7 @@ export function layersOf(volume) {
 
 export const layerRadius = (i) => VORTEX.LAYER_R0 + i * VORTEX.LAYER_GAP;
 
-/** Flight speed after `t` seconds: faster and faster. */
+/** Speed of the stream's head after `t` seconds: faster and faster. */
 export function flightSpeed(t) {
     return Math.min(VORTEX.VMAX, VORTEX.V0 + VORTEX.ACCEL * t);
 }
@@ -181,6 +183,11 @@ export class SwingMeter {
     }
 }
 
+/** How fast the rings unwind into the stream (m³/s): quicker as it goes. */
+export function drainRate(volume, t) {
+    return Math.max(VORTEX.DRAIN, volume / VORTEX.DRAIN_TIME) * Math.min(1, 0.45 + t);
+}
+
 /** Closest distance from point p to the segment a–b. */
 function segDist(p, a, b) {
     const ab = _c.subVectors(b, a);
@@ -214,7 +221,7 @@ export class WaterVortex {
         this._mats = [this.blobMat, this.bubbleMat, this.iceMat];
         this.blobGeo = new THREE.SphereGeometry(1, 14, 10);
         this.sphereGeo = new THREE.SphereGeometry(1, 40, 28);
-        this.blobs = new THREE.InstancedMesh(this.blobGeo, this.blobMat, 1600);
+        this.blobs = new THREE.InstancedMesh(this.blobGeo, this.blobMat, 2600);
         this.blobs.count = 0;
         this.blobs.visible = false;
         this.blobs.frustumCulled = false;
@@ -255,6 +262,8 @@ export class WaterVortex {
         if (name === 'WaterVortex') return this.cast(isFinal);
         if (name === 'FireMaxima') return this.castFire(isFinal);
         if ((name === 'AirBubble' || name === 'AirBubbleMaxima') && this._bubbleWanted()) return this.sayBubble(isFinal);
+        // «Атака» while gathering: it goes now, where the hand points
+        if (name === 'Attack' && this.state?.phase === 'gather') return this.attack(isFinal);
         if ((name === 'Frozen' || name === 'Ice') && this._myLiquidBubble()) return this.sayFrozen(isFinal);
         return undefined;
     }
@@ -272,8 +281,18 @@ export class WaterVortex {
     }
 
     _bubbleWanted() {
+        if (this.state?.phase === 'gather') return true;
         for (const f of this.flights.values()) if (f.by === this.me && (f.phase === 'fly' || f.phase === 'cling')) return true;
         return false;
+    }
+
+    /** «Атака»: the gathered vortex goes at once where the hand points. */
+    attack(isFinal) {
+        const s = this.state, ch = this.game.character;
+        if (s.volume < VORTEX.MIN_LAUNCH) return this._hint('🌀 Воды ещё мало — покрутите рукой', isFinal);
+        const dir = ch.getPointingDirection ? ch.getPointingDirection(s.side) : ch.getHandDirection(s.side);
+        this._launch(dir.normalize());
+        return 'Attack';
     }
 
     /** Which hand casts: the wand's; Creative without a wand: a raised hand (the spell hand first). */
@@ -357,6 +376,8 @@ export class WaterVortex {
         const tired = g.combat.check('VortexBubble');
         if (tired) return this._hint(tired, true);
         let done = false;
+        // said before it hits (while swinging or while the stream flies): it wraps the one it hits
+        if (this.state?.phase === 'gather' && !this.state.bubbleAt) { this.state.bubbleAt = this._t; done = true; }
         for (const f of this.flights.values()) {
             if (f.by !== this.me) continue;
             if (f.phase === 'fly' && !f.bubbleAt) { f.bubbleAt = this._t; done = true; }
@@ -450,7 +471,7 @@ export class WaterVortex {
     /** All the water flies where the hand points. */
     _launch(dir) {
         const g = this.game, s = this.state;
-        const o = g.character.group.position.clone().add(_a.set(0, 0.4, 0));
+        const o = g.character.group.position.clone().add(_a.set(0, 0.3, 0));
         // a creature the hand points right at: a small correction towards it in flight
         let tk = null, tid = null;
         const t = g.duel?.findTarget?.(s.side);
@@ -459,26 +480,69 @@ export class WaterVortex {
         const m = { ev: 'launch', id, o: [o.x, o.y, o.z].map(r3), d: [dir.x, dir.y, dir.z].map(r3), v: r3(s.volume), a: r3(s.angle), pw: r3(s.power), tk, tid };
         this.state = null;
         this._addFlight(this.me, m);
+        if (s.bubbleAt) this.flights.get(id).bubbleAt = s.bubbleAt; // («Bubble» already said)
         this._send(m);
         this._note({ ev: 'launch', id, v: m.v, tk, tid });
-        g.hud?.setVoice?.('🌀 Водоворот летит! Скажите <b>«Bubble»</b> в момент удара', true);
+        g.hud?.setVoice?.(s.bubbleAt ? '🌀 Струя летит — цель окажется в пузыре!' : '🌀 Струя летит! Скажите <b>«Bubble»</b>, когда она ударит', true);
         if (g.sound) g.sound.playWhoosh?.();
     }
 
     _addFlight(by, m) {
         if (this.flights.has(m.id)) return;
         const d = new THREE.Vector3(m.d[0], m.d[1], m.d[2]).normalize();
-        this.flights.set(m.id, {
-            id: m.id, by, phase: 'fly', t: 0, pos: new THREE.Vector3(m.o[0], m.o[1], m.o[2]), o: new THREE.Vector3(m.o[0], m.o[1], m.o[2]),
-            d0: d.clone(), dir: d, volume: +m.v || 1, angle: +m.a || 0, power: +m.pw || 1, tk: m.tk || null, tid: m.tid ?? null,
-            flown: 0, squeeze: 1, bent: 0,
-        });
+        const volume = +m.v || 1;
+        const o = new THREE.Vector3(m.o[0], m.o[1], m.o[2]);
+        const f = {
+            id: m.id, by, phase: 'fly', t: 0, o, d0: d.clone(), dir: d, volume, res: volume, angle: +m.a || 0,
+            power: +m.pw || 1, tk: m.tk || null, tid: m.tid ?? null, flown: 0, bent: 0, tailK: 0, dryT: 0,
+            src: o.clone(), // (the caster: the rings stay round them and unwind)
+        };
+        // the stream leaves the vortex from its outer ring, on the side the hand points to
+        f.pos = this._peel(f, new THREE.Vector3());
+        f.tail = f.pos.clone();
+        this.flights.set(m.id, f);
+    }
+
+    /** Where the caster's rings are now (they unwind round the caster). */
+    _srcOf(f) {
+        const g = this.game;
+        if (f.by === this.me) f.src.copy(g.character.group.position).add(_d.set(0, 0.3, 0));
+        else { const r = g.remotes?.get(f.by); if (r?.position) f.src.copy(r.position).add(_d.set(0, 0.3, 0)); }
+        return f.src;
+    }
+
+    /** The point on the outer ring where the water peels off into the stream. */
+    _peel(f, out) {
+        const src = this._srcOf(f);
+        const flat = _d.set(f.dir.x, 0, f.dir.z);
+        if (flat.lengthSq() < 1e-4) flat.set(0, 0, 1);
+        flat.normalize();
+        const n = Math.max(1, layersOf(f.res).length);
+        return out.copy(src).addScaledVector(flat, layerRadius(n - 1)).add(_d.set(0, 0.3, 0));
+    }
+
+    /** The rings unwind into the stream; when they are empty the stream's tail lets go. */
+    _unwind(f, dt, to) {
+        if (f.res > 0) {
+            f.res = Math.max(0, f.res - drainRate(f.volume, f.t) * dt);
+            this._peel(f, f.tail);
+            if (Math.random() < 0.6) this._spray(f.src, { volume: f.res, angle: f.angle, spin: 8 });
+            return false;
+        }
+        f.dryT += dt;
+        // the tail flies after the head as fast as the stream
+        const gap = _a.subVectors(to, f.tail);
+        const L = gap.length();
+        const step = flightSpeed(f.t) * dt;
+        if (L <= step) { f.tail.copy(to); return true; }
+        f.tail.addScaledVector(gap, step / L);
+        return false;
     }
 
     _updateFlights(dt) {
         for (const f of [...this.flights.values()]) {
             f.t += dt;
-            f.angle += dt * (6 + 4 * f.squeeze);
+            f.angle += dt * 9; // (the rings spin fast as they unwind)
             if (f.phase === 'fly') this._fly(f, dt);
             else if (f.phase === 'cling') this._cling(f, dt);
             else if (f.phase === 'feed') this._feed(f, dt);
@@ -487,7 +551,7 @@ export class WaterVortex {
 
     _fly(f, dt) {
         const g = this.game;
-        f.squeeze = Math.max(0.32, f.squeeze - dt * 2.2);
+        this._unwind(f, dt, f.pos);
         const v = flightSpeed(f.t);
         // a small correction towards the creature the hand pointed at (never a hard turn)
         if (f.tk && f.bent < VORTEX.BEND) {
@@ -502,16 +566,27 @@ export class WaterVortex {
                 }
             }
         }
+        const rf = 0.5 + 0.05 * Math.sqrt(f.volume);
+        if (!f.inner) {
+            // first: whoever stands inside the vortex on the stream's way out (between the caster and the outer ring)
+            f.inner = true;
+            const head = f.pos.clone(), from = _srcInner.copy(f.src).addScaledVector(f.dir, 0.8);
+            const L = from.distanceTo(head), n0 = Math.ceil(L / 0.4);
+            for (let i = 0; i <= n0; i++) {
+                f.pos.copy(from).lerp(head, i / Math.max(1, n0));
+                if (this._touch(f, rf)) return;
+            }
+            f.pos.copy(head);
+        }
         const stepLen = v * dt;
         const n = Math.max(1, Math.ceil(stepLen / 0.4));
-        const rf = 0.55 + 0.08 * layersOf(f.volume).length;
         for (let i = 0; i < n; i++) {
             f.pos.addScaledVector(f.dir, stepLen / n);
             f.flown += stepLen / n;
             if (this._touch(f, rf)) return;
             if (this._blockedAt(f.pos)) { this._endFlight(f, 'wall'); return; }
         }
-        if (Math.random() < 0.9) this._drop(f.pos, _a.copy(f.dir).multiplyScalar(-3).add(_b.set((Math.random() - 0.5) * 2, 1, (Math.random() - 0.5) * 2)));
+        if (Math.random() < 0.9) this._drop(f.pos, _a.copy(f.dir).multiplyScalar(4).add(_b.set((Math.random() - 0.5) * 3, 1.5, (Math.random() - 0.5) * 3)));
         if (f.flown > VORTEX.RANGE) this._endFlight(f, 'range');
     }
 
@@ -565,7 +640,7 @@ export class WaterVortex {
             this._push(f, tk, tid);
         }
         // «Bubble» said a moment before the hit
-        if (f.by === this.me && f.bubbleAt && this._t - f.bubbleAt < VORTEX.BUBBLE_ARM) this._startBubble(f);
+        if (f.by === this.me && f.bubbleAt) this._startBubble(f);
     }
 
     /** The push itself (on the computer that decides that creature). */
@@ -610,39 +685,40 @@ export class WaterVortex {
         }
     }
 
-    /** After the hit the water clings round the target for a moment (time to say «Bubble»). */
+    /** After the hit the stream keeps pouring onto the target until the rings are empty (time to say «Bubble»). */
     _cling(f, dt) {
         const g = this.game;
         const tp = g.duel?._targetPos?.({ tk: f.tk, tid: f.tid }, _a);
         if (tp) f.pos.lerp(tp, Math.min(1, dt * 10));
-        f.squeeze = Math.max(0.3, f.squeeze - dt);
-        if (f.t > VORTEX.CLING || !tp) this._endFlight(f, 'splash');
+        const done = this._unwind(f, dt, f.pos);
+        if (Math.random() < 0.7) this._splash(f.pos, 0.6, 3);
+        if ((done && f.dryT > VORTEX.CLING) || !tp) this._endFlight(f, 'splash');
     }
 
     _startBubble(f) {
         if (f.bubbled) return;
         f.bubbled = true;
         f.phase = 'feed';
-        f.t = 0;
         this._addBubble({ id: f.id, by: f.by, tk: f.tk, tid: f.tid, v: f.volume, p: f.pos });
         if (f.by === this.me) this._send({ ev: 'bubble', id: f.id, tk: f.tk, tid: f.tid, v: r3(f.volume), p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
     }
 
-    /** The vortex flows into the bubble until all of it is there. */
+    /** The stream flows into the bubble until the whole vortex is there (it grows as the water comes). */
     _feed(f, dt) {
         const b = this.bubbles.get(f.id);
         if (!b || b.phase === 'gone') { this.flights.delete(f.id); return; }
         f.pos.copy(b.pos);
-        f.volume = Math.max(0, b.total * (1 - f.t / VORTEX.BUBBLE_GROW));
-        f.squeeze = 0.3 + 0.4 * (1 - f.t / VORTEX.BUBBLE_GROW);
-        if (f.t >= VORTEX.BUBBLE_GROW) this.flights.delete(f.id);
+        const done = this._unwind(f, dt, f.pos);
+        b.feedK = Math.max(b.feedK || 0, Math.min(1, 1 - f.res / f.volume));
+        if (done) { b.feedK = 1; this.flights.delete(f.id); }
     }
 
     _endFlight(f, why, broadcast = true) {
         if (!this.flights.has(f.id)) return;
         this.flights.delete(f.id);
         this._note({ ev: 'end', id: f.id, why });
-        this._splash(f.pos, 1 + f.volume * 0.04, 25 + f.volume);
+        this._splash(f.pos, 1 + f.volume * 0.03, Math.min(60, 25 + f.volume));
+        if (f.res > 0.5) this._collapse(this._srcOf(f), f.res); // (what had not unwound yet falls round the caster)
         if (this.game.sound) this.game.sound.playSplash?.();
         if (broadcast && f.by === this.me && why !== 'block') this._send({ ev: 'end', id: f.id, why, p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
     }
@@ -749,7 +825,7 @@ export class WaterVortex {
             }
             if (tp && b.phase !== 'melt') b.pos.lerp(tp, Math.min(1, dt * 8));
             // grows while the vortex flows in
-            const grow = Math.min(1, b.t / VORTEX.BUBBLE_GROW);
+            const grow = b.feedK != null ? b.feedK : Math.min(1, b.t / VORTEX.BUBBLE_GROW);
             if (b.phase === 'liquid') b.r = 0.6 + (b.R - 0.6) * (1 - (1 - grow) * (1 - grow));
             if (b.mesh) {
                 b.mesh.position.copy(b.pos);
@@ -1105,7 +1181,27 @@ export class WaterVortex {
             r.angle += (r.spin || 0.6) * dt;
             ring(av.position, +r.s[1] || 0, r.angle, 1);
         }
-        for (const f of this.flights.values()) ring(f.pos, f.volume, f.angle, f.squeeze, 0.35);
+        // a throw: the rings round the caster unwind into a fast twisting stream (from its tail to its head)
+        for (const f of this.flights.values()) {
+            ring(this._srcOf(f), f.res, f.angle, 1);
+            const L = f.tail.distanceTo(f.pos);
+            if (L < 0.05) continue;
+            const thick = Math.min(0.6, 0.22 + 0.035 * Math.sqrt(f.volume));
+            const ax = _a.subVectors(f.pos, f.tail).divideScalar(L);
+            const u = _b.crossVectors(ax, UP);
+            if (u.lengthSq() < 1e-4) u.set(1, 0, 0);
+            u.normalize();
+            const w = _c.crossVectors(ax, u);
+            const n = Math.ceil(L / 0.26);
+            for (let j = 0; j <= n; j++) {
+                const k = j / n, a = j * 0.9 - this._t * 14;
+                const tw = thick * 0.45;
+                put(f.tail.x + ax.x * L * k + (u.x * Math.cos(a) + w.x * Math.sin(a)) * tw,
+                    f.tail.y + ax.y * L * k + (u.y * Math.cos(a) + w.y * Math.sin(a)) * tw,
+                    f.tail.z + ax.z * L * k + (u.z * Math.cos(a) + w.z * Math.sin(a)) * tw,
+                    thick * (0.85 + 0.15 * Math.sin(j * 1.7 + this._t * 9)) * (j === n ? 1.3 : 1));
+            }
+        }
         mesh.count = n;
         mesh.visible = n > 0;
         mesh.instanceMatrix.needsUpdate = true;

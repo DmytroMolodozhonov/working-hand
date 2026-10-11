@@ -76,10 +76,11 @@ test('the faster the hand, the more water each turn brings; more turns, more wat
 
 test('the rings: layers with gaps between them, up to the maximum', () => {
     assert.deepEqual(layersOf(0), []);
-    assert.deepEqual(layersOf(4), [0.5]);
-    assert.deepEqual(layersOf(20), [1, 1, 0.5]);
+    assert.deepEqual(layersOf(6), [0.5]);
+    assert.deepEqual(layersOf(30), [1, 1, 0.5]);
+    assert.equal(VORTEX.MAX_VOLUME / VORTEX.LAYER_VOLUME, 10, 'keep swinging: up to 10 rings');
     assert.equal(layersOf(1000).length, VORTEX.MAX_VOLUME / VORTEX.LAYER_VOLUME);
-    for (let i = 1; i < 6; i++) assert.ok(layerRadius(i) - layerRadius(i - 1) > 0.6, 'a gap of air between the rings');
+    for (let i = 1; i < 10; i++) assert.ok(layerRadius(i) - layerRadius(i - 1) > 0.5, 'a gap of air between the rings');
 });
 
 test('the flight goes faster and faster; a big vortex knocks down; bubble size', () => {
@@ -289,4 +290,33 @@ test('Fire Maxima elsewhere: burns the creatures in its flower (and stops at a s
     V.onNet({ by: 'other', ev: 'fire', id: 'other:f2', o: [0, 1, -10], p: [0, 0.6, 0], d: [0, 0, 1] });
     run(V, 0.6);
     assert.equal(hp - g.combat.hp, FIRE_MAXIMA.PLAYER_DMG, 'the dome stopped the second one');
+});
+
+test('the throw is a fast stream unwinding out of the rings; «Атака» throws it; «Bubble» said before still wraps the one it hits', () => {
+    const { g, ch, zombie, V } = world();
+    g.combat.fatigue = 500;
+    ch.dir.set(0, -0.2, -1).normalize();
+    assert.equal(V.cast(true), 'WaterVortex');
+    let t = 0;
+    run(V, 8, () => { t += 1 / 60; const a = t * Math.PI * 2 * 2; ch.hand.set(Math.cos(a) * 0.45, 0.4, Math.sin(a) * 0.45); });
+    assert.ok(V.state.volume > 60, `a long fast swinging gathers a lot of water (${V.state.volume.toFixed(0)} m³)`);
+    assert.ok(layersOf(V.state.volume).length >= 6, 'many rings');
+    // «Bubble» while still swinging, then «Атака» with the hand at the zombie (20 m away)
+    zombie.group.position.set(0, 0, -20);
+    assert.equal(V.voice('AirBubble', 'bubble', true), 'VortexBubble');
+    ch.dir.set(0, 0, -1);
+    assert.equal(V.voice('Attack', 'атака', true), 'Attack');
+    assert.equal(V.state, null);
+    const f = [...V.flights.values()][0];
+    const vol = f.volume;
+    V.update(0.1);
+    assert.ok(f.res < vol, 'the rings unwind into the stream');
+    assert.ok(f.tail.distanceTo(f.pos) > 1.5, `a long stream from the rings to its head (${f.tail.toArray()} → ${f.pos.toArray()} ${f.phase})`);
+    run(V, 0.5);
+    assert.ok(V.log.some((e) => e.ev === 'hit' && e.tk === 'z'), 'the stream is fast: 20 m in about half a second');
+    const b = [...V.bubbles.values()][0];
+    assert.ok(b && b.tk === 'z', '«Bubble» said before the hit wrapped the zombie');
+    const r0 = b.r;
+    run(V, 3);
+    assert.ok(b.r > r0 && V.flights.size === 0, 'the bubble grew as the whole vortex poured in');
 });

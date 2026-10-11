@@ -96,7 +96,7 @@ test('Water Vortex: a wand at the river, the hand going round gathers water, poi
     const hit = await page.evaluate((zid) => {
         const g = window.__zns.game, V = g.vortex;
         const b = [...V.bubbles.values()][0];
-        return { hit: V.log.find((e) => e.ev === 'hit'), push: V.log.find((e) => e.ev === 'push'), bubble: b && { tk: b.tk, tid: b.tid, phase: b.phase, r: b.r }, gathering: !!V.state, zid };
+        return { log: V.log.slice(-8), hit: V.log.find((e) => e.ev === 'hit'), push: V.log.find((e) => e.ev === 'push'), bubble: b && { tk: b.tk, tid: b.tid, phase: b.phase, r: b.r }, gathering: !!V.state, zid };
     }, zid);
     assert.ok(hit.hit && hit.hit.tk === 'z', `the water hit the zombie: ${JSON.stringify(hit)}`);
     assert.ok(hit.push && hit.push.speed > 6, 'pushed by the water');
