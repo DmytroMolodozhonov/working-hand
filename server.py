@@ -412,7 +412,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 # The menu's own window buttons (no Windows title bar in the game window)
                 data = self._read_json()
                 local = self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")  # (only this computer's own window)
-                ok = local and window_action(str(data.get("action", "")), data.get("width") or 0, data.get("height") or 0)
+                ok = local and window_action(str(data.get("action", "")), data)
                 return self._json(200, {"ok": ok})
 
             if path == "/api/rig":
@@ -489,78 +489,16 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(500, {"status": "error", "message": str(e)})
 
 
-GAME_TITLE = "Волшебство только начинается"
-
-
-def _game_window(user32, exact=False):
-    """The game's own window: its title is the game's name (an app window has exactly that title;
-    a browser tab's window adds « - Google Chrome»). The one in front first."""
-    import ctypes
-    found = []
-
-    def title(h):
-        buf = ctypes.create_unicode_buffer(512)
-        user32.GetWindowTextW(ctypes.c_void_p(h), buf, 512)
-        return buf.value
-
-    proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-    user32.GetForegroundWindow.restype = ctypes.c_void_p  # (64-bit handles: never through a C int)
-
-    def cb(h, _):
-        if h and user32.IsWindowVisible(ctypes.c_void_p(h)):
-            t = title(h)
-            if (t == GAME_TITLE) if exact else (GAME_TITLE in t):
-                found.append(h)
-        return True
-
-    user32.EnumWindows(proc(cb), 0)
-    fg = user32.GetForegroundWindow()
-    return fg if fg in found else (found[0] if found else None)
-
-
-def window_action(action, width=0, height=0):
-    """The game's window (Windows) — only the game's own window, found by its title, so nothing else
-    can ever be touched: «minimize», «close», «frameless» (no Windows frame, the menu's size, in the
-    middle of the screen — the game's app window only) and «drag» (move it with the mouse)."""
-    if sys.platform != "win32" or action not in ("minimize", "close", "frameless", "drag"):
-        return False
+def window_action(action, data=None):
+    """The game's own window on Windows (no frame, minimise, close, move): launcher/zns_window.py."""
     try:
-        import ctypes
-        from ctypes import wintypes
-        user32 = ctypes.windll.user32
-        found = _game_window(user32, exact=True)  # (never a browser with tabs: that would close the whole browser)
-        if not found:
-            return False
-        hwnd = ctypes.c_void_p(found)
-        user32.MonitorFromWindow.restype = ctypes.c_void_p
-        if action == "minimize":
-            user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
-        elif action == "close":
-            user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
-        elif action == "drag":
-            user32.ReleaseCapture()
-            user32.PostMessageW(hwnd, 0x0112, 0xF012, 0)  # WM_SYSCOMMAND, SC_MOVE | HTCAPTION: follow the mouse
-        else:
-            GWL_STYLE = -16
-            if user32.IsZoomed(hwnd):
-                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-            style = user32.GetWindowLongW(hwnd, GWL_STYLE)
-            user32.SetWindowLongW(hwnd, GWL_STYLE, style & ~(0x00C00000 | 0x00040000))  # no WS_CAPTION, no WS_THICKFRAME
-            # the menu's size, centred in the work area of the window's screen
-            class MONITORINFO(ctypes.Structure):
-                _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
-            mi = MONITORINFO()
-            mi.cbSize = ctypes.sizeof(MONITORINFO)
-            user32.GetMonitorInfoW(ctypes.c_void_p(user32.MonitorFromWindow(hwnd, 2)), ctypes.byref(mi))
-            wa = mi.rcWork
-            aw, ah = wa.right - wa.left, wa.bottom - wa.top
-            w = max(640, min(int(width or 1180), aw - 40))
-            h = max(480, min(int(height or 780), ah - 40))
-            x, y = wa.left + (aw - w) // 2, wa.top + (ah - h) // 2
-            user32.SetWindowPos(hwnd, None, x, y, w, h, 0x0004 | 0x0020)  # SWP_NOZORDER | SWP_FRAMECHANGED
-        return True
+        here = os.path.join(ROOT, "launcher")
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        from zns_window import window_action as act
     except Exception:  # noqa: BLE001
         return False
+    return act(action, data)
 
 
 class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):

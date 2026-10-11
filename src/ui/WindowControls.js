@@ -20,6 +20,7 @@ const isFull = (doc) => !!doc.fullscreenElement;
 
 /** Full screen for the game (a click on «Играть» is the user's gesture). Escape stays the game's pause key. */
 export async function enterGameFullscreen(doc = document) {
+    if (appWindow) askServer('framed'); // (the whole window again: nothing of the game may be cut away)
     try {
         if (!isFull(doc) && doc.documentElement.requestFullscreen) await doc.documentElement.requestFullscreen({ navigationUI: 'hide' });
         // (without this the first Escape would only leave full screen, not open the pause menu)
@@ -30,17 +31,31 @@ export async function enterGameFullscreen(doc = document) {
 /** The menu window's size (the app window takes exactly this size, without the Windows frame). */
 export const MENU_WINDOW = { width: 1180, height: 780 };
 
+let appWindow = false;
+/** The page's size now: the game's server measures the window's frame from it and cuts the frame away. */
+const metrics = () => ({ ...MENU_WINDOW, innerWidth: window.innerWidth, innerHeight: window.innerHeight, dpr: window.devicePixelRatio || 1 });
+
 /**
- * The game's own app window (from the shortcut / «Запустить игру.bat»): the game's server takes the
- * Windows frame away and gives it the menu's size; then the menu fills the window (no empty space
- * around it) and its title bar moves the window. In a browser tab nothing changes.
+ * The game's own app window (from the shortcut / «Запустить игру.bat»): the game's server cuts the
+ * Windows title bar and borders away and gives the window the menu's size; then the menu fills the
+ * window (no empty space around it) and its title bar moves the window. In a browser tab nothing
+ * changes. Full screen for the game takes the cut away; back in the menu it is cut again.
  */
 export async function becomeAppWindow({ bar } = {}, doc = document) {
-    if (!(await askServer('frameless', MENU_WINDOW))) return false;
+    let ok = false;
+    for (let i = 0; i < 3 && !ok; i++) {
+        if (i) await new Promise((r) => setTimeout(r, 600)); // (a maximised window is first restored)
+        ok = await askServer('frameless', metrics());
+    }
+    if (!ok) return false;
+    appWindow = true;
     doc.documentElement.classList.add('app-window');
     bar?.addEventListener('mousedown', (e) => {
         if (e.button !== 0 || e.target.closest('button, a, input, select') || isFull(doc)) return;
         askServer('drag');
+    });
+    doc.addEventListener('fullscreenchange', () => {
+        if (!isFull(doc)) setTimeout(() => askServer('frameless', metrics()), 300); // (after Chrome has put the window back)
     });
     return true;
 }

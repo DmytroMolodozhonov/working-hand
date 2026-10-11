@@ -47,7 +47,7 @@ REPO = "DmytroMolodozhonov/working-hand"
 BRANCH = "main-fbxy0j"
 HERE = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
-LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html")
+LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html", "zns_window.py")
 LOGO_FILES = (("assets/logo/logo.ico", "logo.ico"), ("assets/logo/logo-256.png", "logo.png"))
 OLD_DESKTOP_BATS = ("Зомби не спят.bat", "Волшебство только начинается.bat")  # the old icons (a black window)
 NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: helper programs never flash a black window
@@ -892,6 +892,16 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
 
     def launcher_post(self, path):
         L = self.launcher
+        if path == "/api/window" and not L.game:
+            # the loading screen's own window buttons (no Windows frame): zns_window.py
+            data = self._body()
+            try:
+                from zns_window import window_action
+                ok = window_action(str(data.get("action", "")), data)
+            except Exception:  # noqa: BLE001
+                ok = False
+            self._send(200, {"ok": ok})
+            return True
         if path == "/__launcher/folder":
             ok = L.choose_folder(str(self._body().get("path") or ""))
             self._send(200, {"ok": ok, "status": L.status.snapshot()})
