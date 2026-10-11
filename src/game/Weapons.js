@@ -666,6 +666,9 @@ export class WeaponSystem {
             const [base, tip] = w.getBladeSegment(_a, _b);
             // the edge this frame and the last (Dismember: a real cut where the edge went through)
             const swing = this.game.dismember?.slot(hs, w, dt, this.frame) || null;
+            // How fast the HAND carries the point (the blade can't go faster than the hand drives
+            // it: a blade held back on a bone and then slipping on must not count as a blow)
+            const handSpeed = hs === lev || !w.drive ? Infinity : this._handTipSpeed(hs, w, dt);
             if (!hs.hasPrev) {
                 hs.basePrev.copy(base); hs.tipPrev.copy(tip); hs.hasPrev = true;
                 continue;
@@ -676,6 +679,7 @@ export class WeaponSystem {
             const tipVel = _c.subVectors(tip, hs.tipPrev).divideScalar(Math.max(dt, 1 / 240));
             const bodyVel = w.pointVelocity(tip, _d);
             if (bodyVel.lengthSq() > tipVel.lengthSq()) tipVel.copy(bodyVel);
+            if (tipVel.length() > handSpeed * 1.25 + 1) tipVel.setLength(handSpeed * 1.25 + 1);
             const speed = tipVel.length();
             if (speed >= MIN_SWING_SPEED) {
                 // Swept test: interpolate the blade between last and this frame so a
@@ -690,7 +694,8 @@ export class WeaponSystem {
                     const reach = cap ? 8 + cap.a.distanceTo(cap.b) + cap.r : 8;
                     if (Math.abs(zp.x - tip.x) > reach || Math.abs(zp.z - tip.z) > reach) continue;
                     // the edge through an arm / a leg / the neck: cut off right there (any creature)
-                    const cut = swing && this.game.dismember.tryCut(z, swing);
+                    let cut = swing && this.game.dismember.tryCut(z, swing);
+                    if (cut?.kind === 'cut' && handSpeed < swing.E.cutSpeed * 0.8) cut = { ...cut, kind: 'touch', sever: null }; // (the hand was too slow for it)
                     if (cut?.kind === 'cut') {
                         if (!(z.severCooldown > now(this))) { z.severCooldown = now(this) + 300; this.game.dismember.commit(z, cut); }
                         w.velocity.multiplyScalar(0.7);
@@ -750,6 +755,19 @@ export class WeaponSystem {
             hs.tipPrev.copy(tip);
             if (hs !== lev && w.drive && !w.stuckIn) this._bodyStop(w, zombies);
         }
+    }
+
+    /** The speed of the point where the hand takes it (its drive pose), m/s; the faster of this frame and the last. */
+    _handTipSpeed(hs, w, dt) {
+        const sp = w.spec;
+        _e.set(-sp.com[0] * w.S, (sp.length - sp.com[1]) * w.S, -sp.com[2] * w.S).applyQuaternion(w.drive.quaternion).add(w.drive.position);
+        const fresh = hs.driveFrame === this.frame - 1 && hs.driveTip;
+        const v = fresh ? _e.distanceTo(hs.driveTip) / Math.max(dt, 1 / 240) : 0;
+        (hs.driveTip || (hs.driveTip = new THREE.Vector3())).copy(_e);
+        hs.driveFrame = this.frame;
+        const out = Math.max(v, fresh ? hs.driveV || 0 : 0);
+        hs.driveV = v;
+        return fresh ? out : Infinity;
     }
 
     /** A target's body as a capsule (world): a person's axis from the legs to the head; null — no solid body to stop a blade. */

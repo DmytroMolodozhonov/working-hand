@@ -338,6 +338,7 @@ function swing(game, w, zs, y, targets, sx = 0) {
     const ws = game.weapons;
     for (const z of zs) {
         w.position.set(w.position.x + sx, y, z);
+        if (w.drive) { w.drive.position.copy(w.position); w.drive.quaternion.copy(w.quaternion); } // (the hand carries it there)
         ws.frame = (ws.frame || 0) + 1;
         game.advance(16);
         ws.checkHits(targets, 1 / 60);
@@ -403,6 +404,7 @@ test('WeaponSystem: a swing through a zombie\'s arm cuts it where the edge passe
     const ws = game.weapons;
     for (const dy of [0.8, 0.6, 0.4, 0.2, 0.0, -0.2, -0.4]) {
         w.position.set(mid.x, mid.y + dy, zc);
+        w.drive.position.copy(w.position); w.drive.quaternion.copy(w.quaternion); // (the hand carries it there)
         ws.frame = (ws.frame || 0) + 1; game.advance(16);
         ws.checkHits([z], 1 / 60);
     }
@@ -591,4 +593,49 @@ test('WeaponSystem with real swings (the blade follows the hand): a strong blow 
     const slow = run(1.55, 3);
     assert.equal(slow.limb, null, 'a slow blade cuts nothing');
     assert.ok(slow.z < 0.1, `it stops on the neck's bone (${slow.z.toFixed(2)})`);
+});
+
+test('pressing a blade slowly on a zombie\'s arm: it stops on the bone and never cuts (no fake blow when it slips); a strong chop cuts', () => {
+    for (const speed of [2.5, 12]) {
+    const scene = new THREE.Scene();
+    const c = new CollisionWorld();
+    const character = new VoxelCharacter(scene);
+    let t = 1000;
+    const game = { headless: true, scene, renderer: null, world: { collision: c }, collision: c, character, localId: 'A', authority: true,
+        config: { mode: 'freeworld' }, remotes: new Map(), now: () => t, advance: (ms) => { t += ms; },
+        fx: { blood() {}, spark() {} }, hud: { setVoice() {} }, sync: null, bleeding: { start() {} }, damageZombie() {} };
+    game.combat = { enabled: true };
+    game.weapons = new WeaponSystem(game);
+    game.dismember = new Dismemberment(game);
+    character.group.position.set(-9, 1.5, 0);
+    const z = new Zombie(scene, new THREE.Vector3(0, 1.5, 0), 7, {}); z.health = 999;
+    z.group.updateMatrixWorld(true);
+    const L = boneLines(zombieBody(z)).find((l) => l.limb === 'leftArm');
+    const mid = new THREE.Vector3().fromArray(L.a).lerp(new THREE.Vector3().fromArray(L.b), 0.5);
+    const dirArm = new THREE.Vector3().fromArray(L.b).sub(new THREE.Vector3().fromArray(L.a)).normalize();
+    const w = game.weapons.spawn('sword', new THREE.Vector3(), new THREE.Quaternion());
+    // blade across the arm (horizontal, ⟂ arm), edge down
+    const bladeDir = new THREE.Vector3(0, 1, 0).cross(dirArm).normalize();
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, -1, 0), bladeDir, new THREE.Vector3(0, -1, 0).cross(bladeDir)));
+    w.quaternion.copy(q); w.mesh.updateMatrixWorld(true);
+    const tip = w.getTipPosition().sub(w.position);
+    const at = (k) => mid.clone().addScaledVector(bladeDir, 0.3).sub(tip).add(new THREE.Vector3(0, k, 0));
+    w.position.copy(at(1.6)); w.mesh.updateMatrixWorld(true);
+    w.attach({ playerId: 'A', side: 'right' });
+    game.weapons.hands.right.held = w;
+    w.drive.position.copy(w.position); w.drive.quaternion.copy(q);
+    const ws = game.weapons; ws.frame = 1;
+    const n = Math.round(3.2 / (speed / 60)) + 20;
+    for (let i = 0; i < n; i++) {
+        ws.frame++; game.advance(1000 / 60);
+        w.drive.position.copy(at(Math.max(-1.6, 1.6 - speed / 60 * (i + 1))));
+        w.step(1 / 60, null);
+        ws.checkHits([z], 1 / 60);
+        z.damageCooldown = 0;
+    }
+    if (speed < 5) {
+        assert.equal(z.limbs?.leftArm ?? null, null, 'a slow chop never cuts, however long the hand presses');
+        assert.ok(w.getTipPosition().y - mid.y > -0.2, 'it stays on the bone');
+    } else assert.ok(z.limbs?.leftArm != null, 'a strong chop takes the arm');
+    }
 });

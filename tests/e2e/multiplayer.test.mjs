@@ -630,10 +630,14 @@ test('sword duel: a thrust stays in the other player — both see it in the same
     assert.ok(hostSees.held, 'still in the host\'s hand');
     await wf(guest.page, () => window.__zns.game.bleeding.anchors.has('duelsw') && window.__zns.game.bleeding.rate > 0, null, 20000);
     await wf(guest.page, (h) => window.__zns.game.combat.hp < h, hp0, 20000);
-    await sleep(600); // (a few frames on both)
-    const [tipH, tipG] = [await local(host.page, true), await local(guest.page, false)];
-    const off = Math.hypot(tipH[0] - tipG[0], tipH[1] - tipG[1], tipH[2] - tipG[2]);
-    assert.ok(off < 0.05, `both see the point in the same place in the body (${off.toFixed(3)} m apart)`);
+    const tipH = await local(host.page, true);
+    // (the guest's computer draws it there on its next frame)
+    await wf(guest.page, (t) => {
+        const g = window.__zns.game;
+        const p = g.character.group.worldToLocal(g.weapons.byId.get('duelsw').getTipPosition());
+        return Math.hypot(p.x - t[0], p.y - t[1], p.z - t[2]) < 0.05;
+    }, tipH, 20000);
+    const tipG = await local(guest.page, false);
     // the guest steps aside: on both computers the blade goes with the body
     await ev(guest.page, () => { const g = window.__zns.game; g.character.group.position.x += 2; });
     await wf(guest.page, ([t, gp]) => {
@@ -653,6 +657,93 @@ test('sword duel: a thrust stays in the other player — both see it in the same
     await ev(host.page, () => window.__zns.game.weapons._unstick(window.__zns.game.weapons.byId.get('duelsw'), false));
     await wf(guest.page, () => !window.__zns.game.bleeding.anchors.has('duelsw') && window.__zns.game.bleeding.rate === 0.5, null, 20000);
     assert.ok(await ev(host.page, () => window.__zns.game.weapons.hands.right.held?.id === 'duelsw'), 'still held');
+    for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
+    await host.context.close();
+    await guest.context.close();
+});
+
+test('sword duel: a strong slash cuts off the other player\'s arm, then the head — on both computers; a slow one cuts nothing', async () => {
+    const host = await openPlayer('Рубака1');
+    await host.page.click('#mp-private-btn');
+    await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    const guest = await openPlayer('Рубака2');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await wf(host.page, () => window.__zns.game && window.__zns.game.active && window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game && window.__zns.game.active && window.__zns.game.remotes.size === 1, null, 120000);
+    const ids = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.localId)));
+    const spot = await ev(host.page, () => { const p = window.__zns.game.character.group.position; return [p.x + 3, p.y, p.z - 3]; });
+    await ev(guest.page, (t) => { const g = window.__zns.game; g.character.group.position.set(t[0], t[1], t[2]); g.knockback.set(0, 0, 0); }, spot);
+    await wf(host.page, (t) => { const r = [...window.__zns.game.remotes.values()][0]; return Math.hypot(r.position.x - t[0], r.position.z - t[2]) < 0.3; }, spot, 20000);
+    await ev(host.page, () => {
+        const g = window.__zns.game;
+        const w = g.weapons.spawn('sword', g.character.getHandWorldPosition('right'), null, 'cutsw');
+        g.sync.weaponAppeared(w);
+        g.weapons.grab(w, 'right', 0.5);
+    });
+    await wf(guest.page, (hid) => window.__zns.game.sync.weaponOwners.get('cutsw') === hid, ids[0], 20000);
+    // The host's hand carries the blade through the guest's body at `speed` m/s, frame by frame
+    // (1/60 s): the blade itself follows the hand, the host's weapons find the cut, it goes to
+    // the guest's computer by the network. In the guest's own frame: the blade lies along X with
+    // its point at tipX; `down` — a chop at (y, z) edge down, else a slash along Z at height y.
+    const slash = (o) => ev(host.page, ([gid, o]) => {
+        const g = window.__zns.game, T = window.__zns.THREE;
+        const grp = g.remotes.get(gid).character.group;
+        const ws = g.weapons, w = ws.byId.get('cutsw');
+        const qL = new T.Quaternion().setFromRotationMatrix(o.down
+            ? new T.Matrix4().makeBasis(new T.Vector3(0, -1, 0), new T.Vector3(1, 0, 0), new T.Vector3(0, 0, 1))
+            : new T.Matrix4().makeBasis(new T.Vector3(0, 0, 1), new T.Vector3(1, 0, 0), new T.Vector3(0, 1, 0)));
+        const [b, t] = w.getBladeSegment();
+        const tip = t.clone().sub(w.position).applyQuaternion(w.quaternion.clone().invert()).applyQuaternion(qL); // (COM → point)
+        grp.updateMatrixWorld(true);
+        const qW = grp.getWorldQuaternion(new T.Quaternion()).multiply(qL);
+        const at = (k) => grp.localToWorld(o.down ? new T.Vector3(o.tipX - tip.x, o.y + k - tip.y, o.z - tip.z) : new T.Vector3(o.tipX - tip.x, o.y - tip.y, k - tip.z));
+        const target = g.combat.meleeTarget(gid);
+        const k0 = o.down ? 1.6 : -1.8, k1 = o.down ? -1.6 : 1.8;
+        w.position.copy(at(k0)); w.quaternion.copy(qW); w.velocity.set(0, 0, 0); w.angularVelocity.set(0, 0, 0);
+        w.drive.quaternion.copy(qW);
+        ws.hands.right.hasPrev = false;
+        const n = Math.round(Math.abs(k1 - k0) / (o.speed / 60)) + 20;
+        for (let i = 0; i < n; i++) {
+            ws.frame++;
+            w.drive.position.copy(at(k0 + Math.sign(k1 - k0) * Math.min(Math.abs(k1 - k0), (o.speed / 60) * (i + 1))));
+            w.step(1 / 60, null);
+            ws.checkHits([target], 1 / 60);
+            target.damageCooldown = 0;
+        }
+        const p = grp.worldToLocal(w.getTipPosition());
+        return o.down ? p.y : p.z;
+    }, [ids[1], o]);
+    // where the guest's left arm is (as the host sees it): the middle of its bone
+    const arm = await ev(host.page, (gid) => {
+        const g = window.__zns.game, T = window.__zns.THREE;
+        const grp = g.remotes.get(gid).character.group;
+        const L = g.dismember.which(g.combat.meleeTarget(gid)).body.limbs.find((l) => l.name === 'leftArm');
+        const sg = L.segs[0], ob = sg.objs ? sg.objs[0] : sg.obj;
+        ob.updateWorldMatrix(true, false);
+        return grp.worldToLocal(new T.Vector3(...(sg.o || [0, 0, 0])).addScaledVector(new T.Vector3(...sg.ax).normalize(), Math.min(0.7, sg.len * 0.7)).applyMatrix4(ob.matrixWorld)).toArray();
+    }, ids[1]);
+    const lost = (page, isHost) => ev(page, ([isH, gid]) => {
+        const g = window.__zns.game;
+        const ch = isH ? g.remotes.get(gid).character : g.character;
+        return Object.keys(ch.limbs || {}).filter((k) => ch.limbs[k] != null).sort().join(',');
+    }, [isHost, ids[1]]);
+    // slow: nothing comes off
+    const chop = { down: true, tipX: arm[0] + 0.3, y: arm[1], z: arm[2] };
+    const ySlow = await slash({ ...chop, speed: 2.5 });
+    assert.ok(ySlow > arm[1] - 0.2, `a slow blade stops on the arm's bone (${ySlow.toFixed(2)} by ${arm[1].toFixed(2)})`);
+    await sleep(1500);
+    assert.equal(await lost(guest.page, false), '', 'a slow blade cuts nothing');
+    // strong: the left arm
+    await slash({ ...chop, speed: 12 });
+    await wf(guest.page, () => window.__zns.game.character.limbs?.leftArm != null, null, 20000);
+    await wf(host.page, (gid) => window.__zns.game.remotes.get(gid).character.limbs?.leftArm != null, ids[1], 20000);
+    // strong at the neck: the head — the guest dies
+    await sleep(500); // (one cut per 0.3 s)
+    await slash({ down: false, tipX: 1.2, y: 1.55, speed: 12 });
+    await wf(guest.page, () => window.__zns.game.combat.dead, null, 20000);
+    await wf(host.page, (gid) => window.__zns.game.remotes.get(gid).character.limbs?.head != null || window.__zns.game.remotes.get(gid).dead, ids[1], 20000);
     for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
     await host.context.close();
     await guest.context.close();
