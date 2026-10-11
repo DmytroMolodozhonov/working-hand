@@ -67,7 +67,12 @@ export const VORTEX = {
     TURN: 1.4, // rad/s while correcting towards the target
     BEND: 0.2, // rad: the most it turns in all
     CLING: 2, // s after the last water reached the one it hit (still time to say «Bubble»)
-    BUBBLE_GROW: 2.2, // s: the whole vortex flows into the bubble
+    BUBBLE_GROW: 2.2, // s: the whole vortex flows into the bubble (when no stream feeds it: from the puddle)
+    BUBBLE_FORM: 2.5, // s at least: the water swirls round the creature into a ball (never all at once)
+    BUBBLE_LATE: 4, // s after the stream ran out «Bubble» still gathers its water back into a ball
+    BUBBLE_LIFT: 0.6, // m: the ball lifts the one inside this far off the ground as it forms
+    BUBBLE_SPEED: 5, // m/s at most when the caster carries it by hand (it is heavy)
+    BUBBLE_GRAB: 0.3, // rad: the hand pointing this close to the ball takes hold of it
     BUBBLE_LIFE: 15, // s a liquid bubble holds
     ICE_LIFE: 90, // s at most (then it cracks)
     COLD_DPS: 1, // HP a second from the cold
@@ -94,6 +99,12 @@ const _d = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _srcInner = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+/** A zombie kicks its legs in the water. */
+function z_kick(z) {
+    const k = Math.sin(performance.now() * 0.012) * 0.6;
+    if (z.leftLeg) z.leftLeg.rotation.x = k;
+    if (z.rightLeg) z.rightLeg.rotation.x = -k;
+}
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
 /** How much water one turn of the hand brings at this hand speed (m/s): faster → more. */
@@ -290,8 +301,15 @@ export class WaterVortex {
 
     _bubbleWanted() {
         if (this.state?.phase === 'gather') return true;
+        if (this._lateBubble()) return true;
         for (const f of this.flights.values()) if (f.by === this.me && (f.phase === 'fly' || f.phase === 'cling')) return true;
         return false;
+    }
+
+    /** My stream that ran out a moment ago (its water still lies there): «Bubble» can still gather it. */
+    _lateBubble() {
+        const e = this._lastEnd;
+        return e && this._t - e.at < VORTEX.BUBBLE_LATE && !this.bubbles.has(e.id) ? e : null;
     }
 
     /** «Атака»: the gathered vortex goes at once where the hand points. */
@@ -391,6 +409,17 @@ export class WaterVortex {
             if (f.phase === 'fly' && !f.bubbleAt) { f.bubbleAt = this._t; done = true; }
             if (f.phase === 'cling' && !f.bubbled) { this._startBubble(f); done = true; }
         }
+        const late = !done && this._lateBubble();
+        if (late) {
+            // the water that splashed down rises back round the one it hit (or where it stopped)
+            const tp = late.tk ? g.duel?._targetPos?.({ tk: late.tk, tid: late.tid }, new THREE.Vector3()) : null;
+            if (!late.tk || tp) {
+                const p = tp || late.p;
+                this._addBubble({ id: late.id, by: this.me, tk: late.tk, tid: late.tid, v: late.v, p });
+                this._send({ ev: 'bubble', id: late.id, tk: late.tk, tid: late.tid, v: r3(late.v), p: [p.x, p.y, p.z].map(r3) });
+                done = true;
+            }
+        }
         if (!done) return null;
         g.combat.pay('VortexBubble');
         g.hud?.setVoice?.('🫧 Bubble! Вода обнимает цель…', true);
@@ -477,7 +506,7 @@ export class WaterVortex {
     }
 
     /** All the water flies where the hand points. */
-    _launch(dir) {
+    _launch(dir, asIs = false) {
         const g = this.game, s = this.state;
         const o = g.character.group.position.clone().add(_a.set(0, 0.3, 0));
         // a creature the hand points right at: a small correction towards it in flight
@@ -493,7 +522,7 @@ export class WaterVortex {
             for (; k < VORTEX.RANGE * 0.6; k += 0.5) if (this._blockedAt(_b.copy(ho).addScaledVector(dir, k))) break;
             aim = ho.clone().addScaledVector(dir, k);
         }
-        if (aim.distanceTo(o) > 1) dir = aim.sub(o).normalize();
+        if (!asIs && aim.distanceTo(o) > 1) dir = aim.sub(o).normalize();
         const id = `${this.me}:${++this._seq}`;
         const m = { ev: 'launch', id, o: [o.x, o.y, o.z].map(r3), d: [dir.x, dir.y, dir.z].map(r3), v: r3(s.volume), a: r3(s.angle), pw: r3(s.power), tk, tid };
         this.state = null;
@@ -749,6 +778,7 @@ export class WaterVortex {
         }
         this.flights.delete(f.id);
         this._note({ ev: 'end', id: f.id, why });
+        if (f.by === this.me && why !== 'block' && !f.bubbled) this._lastEnd = { id: f.id, tk: f.tk, tid: f.tid, v: f.volume, p: f.pos.clone(), at: this._t };
         this._splash(f.pos, 1 + f.volume * 0.03, Math.min(60, 25 + f.volume));
         if (f.res > 0.5) this._collapse(this._srcOf(f), f.res); // (what had not unwound yet falls round the caster)
         if (this.game.sound) this.game.sound.playSplash?.();
@@ -761,7 +791,7 @@ export class WaterVortex {
         const p = m.p instanceof THREE.Vector3 ? m.p.clone() : new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
         const b = {
             id: m.id, by: m.by, tk: m.tk, tid: m.tid, phase: 'liquid', t: 0, total: +m.v || 1,
-            r: 0.5, R: bubbleRadius(+m.v || 1), pos: p, anchor: null, dmgT: 0, iceT: 0, meltT: 0, burstAsked: false,
+            r: 0.5, R: bubbleRadius(+m.v || 1), pos: p, home: p.clone(), grow: 0, held: null, rest: null, net: null, sentP: null, sendT: 0, anchor: null, dmgT: 0, iceT: 0, meltT: 0, burstAsked: false,
         };
         if (this.scene) {
             b.mesh = new THREE.Mesh(this.sphereGeo, this.bubbleMat);
@@ -842,6 +872,14 @@ export class WaterVortex {
             g.hud?.setStatus?.('');
             g.character.verticalVelocity = 0;
         }
+        if (b.tk && b.tk !== 'p' && g.authority) {
+            const c = b.tk === 'z' ? g.zombieById?.get(b.tid) : g.duel?._creature?.(b.tk, b.tid);
+            // let go up there: it falls (and a long fall hurts, as after «Левиоса»)
+            if (c?.lev?.vortex === b.id) {
+                if (g.levitation?.letGo) g.levitation.letGo(b.tk, c, false);
+                else c.lev = null;
+            }
+        }
     }
 
     _updateBubbles(dt) {
@@ -856,10 +894,11 @@ export class WaterVortex {
                 if (mine || !tp) this._burst(b, 'gone', mine);
                 continue;
             }
-            if (tp && b.phase !== 'melt') b.pos.lerp(tp, Math.min(1, dt * 8));
-            // grows while the vortex flows in
-            const grow = b.feedK != null ? b.feedK : Math.min(1, b.t / VORTEX.BUBBLE_GROW);
+            // grows as the water flows in — swirling round the creature, never all at once
+            const form = Math.min(1, b.t / VORTEX.BUBBLE_FORM);
+            const grow = b.grow = Math.min(b.feedK != null ? b.feedK : Math.min(1, b.t / VORTEX.BUBBLE_GROW), form * form * (3 - 2 * form));
             if (b.phase === 'liquid') b.r = 0.6 + (b.R - 0.6) * (1 - (1 - grow) * (1 - grow));
+            if (b.phase !== 'melt') this._moveBubble(b, dt);
             if (b.mesh) {
                 b.mesh.position.copy(b.pos);
                 b.mesh.scale.setScalar(b.r * (b.phase === 'liquid' ? 1 + 0.03 * Math.sin(this._t * 3 + b.t) : 1));
@@ -890,14 +929,71 @@ export class WaterVortex {
         }
     }
 
+    /**
+     * Where the ball goes: as it forms it lifts the one inside off the ground; then its caster can carry
+     * it with the hand like «Левиоса» — point at it and move the hand (raise it: the ball rises); a hand
+     * let down leaves it hanging where it is. The caster's computer moves it, the others follow ('bpos').
+     */
+    _moveBubble(b, dt) {
+        const g = this.game;
+        if (b.by !== this.me) {
+            if (b.net) b.pos.lerp(b.net, Math.min(1, dt * 8));
+            else this._liftStep(b, dt, null);
+            return;
+        }
+        let want = null;
+        const side = this._castSide() || g.magicHand || g.lastMagicHand || 'right';
+        const ch = g.character;
+        const raised = ch.isArmRaised ? ch.isArmRaised(side) : true;
+        if (b.grow >= 1 && !this.state) {
+            const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
+            const d = ch.getPointingDirection ? ch.getPointingDirection(side) : ch.getHandDirection(side);
+            const to = _b.subVectors(b.pos, o);
+            const dist = to.length();
+            if (!b.held && raised && dist > 0.5 && dist < 40 && to.angleTo(d) < VORTEX.BUBBLE_GRAB + Math.atan(b.r / dist) * 0.5) {
+                b.held = { dist: Math.max(dist, b.r + 1.5) };
+                this._note({ ev: 'grab', id: b.id });
+            }
+            if (b.held && !raised) { b.held = null; b.rest = b.pos.clone(); this._note({ ev: 'letgo', id: b.id }); }
+            if (b.held) want = _c.copy(o).addScaledVector(d, b.held.dist);
+        }
+        this._liftStep(b, dt, want);
+        // tell the others where it is
+        b.sendT -= dt;
+        if (b.sendT <= 0 && (!b.sentP || b.sentP.distanceToSquared(b.pos) > 0.0025)) {
+            b.sendT = 0.1;
+            b.sentP = (b.sentP || new THREE.Vector3()).copy(b.pos);
+            this._send({ ev: 'bpos', id: b.id, p: [b.pos.x, b.pos.y, b.pos.z].map(r3) });
+        }
+    }
+
+    _liftStep(b, dt, want) {
+        const g = this.game;
+        if (!want) {
+            want = _c.copy(b.rest || b.home);
+            if (!b.rest) {
+                // as it forms, it rises off the ground with the one inside
+                const gy = g.collision?.surfaceY?.(b.home.x, b.home.z);
+                const top = Number.isFinite(gy) ? Math.max(b.home.y, gy + b.R + VORTEX.BUBBLE_LIFT) : b.home.y;
+                want.y = b.home.y + (top - b.home.y) * b.grow;
+            }
+        }
+        const gy = g.collision?.surfaceY?.(want.x, want.z);
+        if (Number.isFinite(gy)) want.y = Math.max(want.y, gy + b.r * 0.9);
+        const step = _d.subVectors(want, b.pos);
+        const L = step.length(), max = VORTEX.BUBBLE_SPEED * dt;
+        if (L > max) step.multiplyScalar(max / L);
+        b.pos.add(step);
+    }
+
     /** The one inside floats in the bubble and can't get out. */
     _hold(b, dt) {
         const g = this.game;
         if (!b.tk) return;
         if (b.tk === 'p') {
             const ch = g.character;
-            if (!b.anchor) b.anchor = ch.group.position.clone().add(_b.set(0, 0.5, 0));
-            ch.group.position.lerp(b.anchor, Math.min(1, dt * 12));
+            // (floating in the middle of the ball, wherever it goes)
+            ch.group.position.lerp(_b.copy(b.pos).add(_c.set(0, -0.6, 0)), Math.min(1, dt * 12));
             ch.verticalVelocity = 0;
             g.knockback?.set(0, 0, 0);
             this._hudT = (this._hudT || 0) - dt;
@@ -910,16 +1006,23 @@ export class WaterVortex {
             }
             return;
         }
-        if (b.tk === 'z') {
-            const z = g.zombieById?.get(b.tid);
-            if (z) { z.stunTimer = Math.max(z.stunTimer || 0, 0.4); z.windVel = null; }
-            return;
+        const c = b.tk === 'z' ? g.zombieById?.get(b.tid) : g.duel?._creature?.(b.tk, b.tid);
+        if (!c || c.isDead || c.dead) return;
+        // the body floats in the middle of the ball (held up the way «Левиоса» holds it: its own AI waits)
+        if (!c.lev) c.lev = { vortex: b.id, by: b.by, vel: new THREE.Vector3(), top: -1e9 };
+        if (c.lev.vortex !== b.id) return; // (somebody's «Левиоса» has it)
+        const centre = g.duel?._targetPos?.({ tk: b.tk, tid: b.tid }, _c);
+        if (centre) {
+            const d = _d.subVectors(b.pos, centre).multiplyScalar(Math.min(1, dt * 10));
+            if (b.tk === 'v') { c.x += d.x; c.y += d.y; c.z += d.z; c.vx = 0; c.vz = 0; c.vy = 0; c.lev.top = Math.max(c.lev.top, c.y); } else {
+                c.group.position.add(d);
+                c.lev.top = Math.max(c.lev.top, c.group.position.y - (b.tk === 'z' ? 0 : 0.5));
+            }
         }
-        const c = g.duel?._creature?.(b.tk, b.tid);
-        if (!c) return;
-        c.stunT = Math.max(c.stunT || 0, 0.4);
-        if (b.tk === 'v') { c.vx = 0; c.vz = 0; }
-        else if (c.vel) c.vel.x = c.vel.z = 0;
+        // kicking in the water
+        if (b.tk === 'a') { c.vel?.set(0, 0, 0); c.walkT = (c.walkT || 0) + dt * 10; g.animals?._animate?.(c, 1); c.stunT = Math.max(c.stunT || 0, 0.5); }
+        else if (b.tk === 'z') { z_kick(c); c.stunTimer = Math.max(c.stunTimer || 0, 0.4); c.windVel = null; c.vy = 0; }
+        else { c.stunT = Math.max(c.stunT || 0, 0.4); c.mode = 'idle'; c.speed = 0; }
     }
 
     /** One second in the ice: −1 HP from the cold, −1 HP without air. */
@@ -1010,6 +1113,8 @@ export class WaterVortex {
     /** Where the fire blooms: the first creature, ice bubble or wall along the hand (or at full range). */
     _fireTarget(o, dir, side) {
         const g = this.game;
+        // ice right at the hand (round the caster, or beside them): it blooms there
+        for (const b of this.bubbles.values()) if (b.phase !== 'melt' && b.pos.distanceTo(o) < b.r + 2.5) return b.pos.clone();
         let best = FIRE_MAXIMA.RANGE;
         const t = g.duel?.findTarget?.(side);
         if (t && t.dist < best) best = t.dist;
@@ -1170,6 +1275,7 @@ export class WaterVortex {
                 break;
             }
             case 'freeze': this._freeze(this.bubbles.get(m.id)); break;
+            case 'bpos': { const b = this.bubbles.get(m.id); if (b && Array.isArray(m.p)) b.net = (b.net || new THREE.Vector3()).set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); break; }
             case 'burst': this._burst(this.bubbles.get(m.id), m.why || 'burst', false); break;
             case 'fire': if (Array.isArray(m.o) && Array.isArray(m.p)) this._fire(by, m); break;
         }
@@ -1259,6 +1365,26 @@ export class WaterVortex {
                     const a = j * 0.8 - this._t * 16 + sI * (TAU / 3), tw = thick * 0.6;
                     put(cx + (u.x * Math.cos(a) + w.x * Math.sin(a)) * tw, cy + (u.y * Math.cos(a) + w.y * Math.sin(a)) * tw, cz + (u.z * Math.cos(a) + w.z * Math.sin(a)) * tw,
                         thick * (0.4 + 0.08 * Math.sin(j * 1.7 + this._t * 9 + sI)));
+                }
+            }
+        }
+        // a ball forming: the water climbs from the ground and swirls round the creature in a spiral
+        for (const b of this.bubbles.values()) {
+            if (b.phase !== 'liquid' || b.grow >= 1) continue;
+            const R = Math.max(b.R, 1) * (1.25 - 0.25 * b.grow), left = 1 - b.grow;
+            const cnt = Math.ceil(48 * left) + 6;
+            for (let j = 0; j < cnt; j++) {
+                const k = j / cnt;
+                const h = -1 + 2 * ((k + this._t * 0.35) % 1);
+                const rr = R * Math.sqrt(Math.max(0.05, 1 - h * h));
+                const a = k * TAU * 3 + this._t * 7;
+                put(b.pos.x + Math.cos(a) * rr, b.pos.y + h * R, b.pos.z + Math.sin(a) * rr, 0.2 + 0.18 * left);
+            }
+            const gy = this.game.collision?.surfaceY?.(b.pos.x, b.pos.z);
+            if (Number.isFinite(gy) && b.pos.y - b.r > gy) {
+                for (let y = gy; y < b.pos.y - b.r * 0.6; y += 0.35) {
+                    const a = y * 3 + this._t * 9;
+                    put(b.pos.x + Math.cos(a) * 0.35, y, b.pos.z + Math.sin(a) * 0.35, 0.22 * left + 0.06);
                 }
             }
         }

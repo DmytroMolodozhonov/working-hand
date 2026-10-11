@@ -72,7 +72,8 @@ export function matchSpell(text) {
     if (has('паузин', 'паузен', 'паузи', 'пауза', 'паузу', 'pausin', 'pauzin', 'pause', 'повзин')) return 'Pause';
     // Water: «Air Bubble», «Wave Attack» (before Thunderwave/Wind: they share sounds)
     const maxW = () => has('макс', 'max', 'мах');
-    if (has('bubble', 'бабл', 'баббл', 'бабол', 'пузыр', 'эйр баб', 'air bub')) return maxW() ? 'AirBubbleMaxima' : 'AirBubble';
+    // («Bubble» as the Russian recognizer hears it: «бабал», «бобл», «бубл», «пабл»…)
+    if (has('bubble', 'bubbl', 'buble', 'bobble', 'babble', 'бабл', 'баббл', 'бабол', 'бабал', 'бабел', 'бабэл', 'бабыл', 'бобл', 'боббл', 'бубл', 'пабл', 'паббл', 'баблы', 'пузыр', 'эйр баб', 'air bub')) return maxW() ? 'AirBubbleMaxima' : 'AirBubble';
     if ((has('wave', 'вейв', 'вэйв', 'уэйв', 'волн') && has('attack', 'атак', 'аттак', 'атт', 'атэк', 'эттак', 'атак')) || has('waveattack', 'вейватак')) return maxW() ? 'WaveAttackMaxima' : 'WaveAttack';
     if (has('breakthrough', 'брейкфру', 'брейкср', 'брэйкфру', 'брейк сру', 'брейк фру', 'брейксру', 'break through', 'прорыв')) return has('макс', 'max', 'мах') ? 'BreakthroughMaxima' : 'Breakthrough';
     if (has('рескью', 'рескю', 'рэскью', 'rescue', 'рескьу', 'спасен', 'спаси')) return 'Rescue';

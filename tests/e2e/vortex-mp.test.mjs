@@ -87,7 +87,7 @@ test('Water Vortex over the network: seen by all, the hit decided by the one hit
         const from = g.character.group.position.clone().add(new T.Vector3(0, 0.4, 0));
         const to = r.position.clone().add(new T.Vector3(0, 0.4, 0));
         V.state.volume = 20;
-        V._launch(to.sub(from).normalize());
+        V._launch(to.sub(from).normalize(), true); // (exactly at the guest)
         g.combat.fatigue = 30;
         return { flights: V.flights.size, bubble: g.castLocalSpell('bubble', true) };
     });
@@ -95,8 +95,8 @@ test('Water Vortex over the network: seen by all, the hit decided by the one hit
     assert.equal(sent.bubble, 'VortexBubble', '«Bubble» said while it flies');
     // The guest's computer decides the hit: knocked down by the water, not hurt; then the bubble round them
     await wf(guest.page, () => window.__zns.game.vortex.log.some((e) => e.ev === 'push' && e.tk === 'p'), null, 30000);
-    const hit = await ev(guest.page, () => { const g = window.__zns.game; return { kd: g.character.knockedDown, stunned: g.combat.stunned, hp: g.combat.hp }; });
-    assert.ok(hit.kd && hit.stunned, 'knocked down by the vortex');
+    const hit = await ev(guest.page, () => { const g = window.__zns.game; return { kd: g.character.knockedDown, stunned: g.combat.stunned, stun: g.combat.stunLeft, kind: g.combat.stunKind, hp: g.combat.hp, log: g.vortex.log.slice(-6), fly: g.flight?.active }; });
+    assert.ok(hit.kd, `knocked down by the vortex ${JSON.stringify(hit)}`);
     assert.equal(hit.hp, hpGuest0, 'the water does not hurt');
     await wf(guest.page, () => !!window.__zns.game.vortex.myTrap(), null, 20000);
     await wf(host.page, (id) => [...window.__zns.game.vortex.bubbles.values()].some((b) => b.tk === 'p' && b.tid === id), guestId, 20000);

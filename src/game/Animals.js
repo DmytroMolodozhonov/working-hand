@@ -44,7 +44,23 @@ export const SPECIES = {
     horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 2.3 },
     runbook: { name: 'Бегущая книга', hp: 4, speed: 2.2, run: 9.5, dmg: 0, meat: 0, size: RUNNER.SIZE }, // (rare; its mind is RunningBook.js)
 };
-const MAX_NEAR = 14;
+/** New herds: rare, small, far away and never in sight (they must not pop up next to the player). */
+export const HERDS = {
+    MAX_NEAR: 8, // animals within NEAR m: no new herd while there are this many
+    NEAR: 120,
+    EVERY: 75, // s between tries (± a third)
+    MIN_D: 75, // m away (the player is ~4.6 m tall: closer is in plain sight)
+    MAX_D: 115,
+    BEHIND: 1.9, // rad from where the player looks (~110°): only behind them
+    GONE: 200, // m: farther than this a herd is gone (only when not in sight)
+};
+/** Is the point (x, z) outside the player's view: far enough off where `look` points? */
+export function outOfSight(me, look, x, z, behind = HERDS.BEHIND) {
+    const dx = x - me.x, dz = z - me.z;
+    const L = Math.hypot(dx, dz), l = Math.hypot(look.x, look.z);
+    if (L < 1e-6 || l < 1e-6) return false;
+    return Math.acos(Math.max(-1, Math.min(1, (dx * look.x + dz * look.z) / (L * l)))) > behind;
+}
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
@@ -160,15 +176,36 @@ export class Animals {
         const me = g.character.group.position;
         const types = ['cow', 'pig', 'sheep', 'horse'];
         const type = types[Math.floor(Math.random() * types.length)];
-        const n = 3 + Math.floor(Math.random() * 6);
-        const a = Math.random() * Math.PI * 2, d = 28 + Math.random() * 25;
-        const cx = me.x + Math.cos(a) * d, cz = me.z + Math.sin(a) * d;
+        const n = 2 + Math.floor(Math.random() * 4);
+        // far away, behind the player (where they don't look) — never popping up in sight
+        const look = this._look(new THREE.Vector3());
+        let cx = 0, cz = 0, ok = false;
+        for (let k = 0; k < 8 && !ok; k++) {
+            const a = Math.random() * Math.PI * 2, d = HERDS.MIN_D + Math.random() * (HERDS.MAX_D - HERDS.MIN_D);
+            cx = me.x + Math.cos(a) * d; cz = me.z + Math.sin(a) * d;
+            ok = outOfSight(me, look, cx, cz) && this._unseenByOthers(cx, cz);
+        }
+        if (!ok) return;
         const t = g.terrain?.data;
         if (!t) return;
         const top = t.topLayer(Math.round(cx), Math.round(cz));
         if (t.get(Math.round(cx), top, Math.round(cz)) !== BLOCK.GRASS || t.get(Math.round(cx), top + 1, Math.round(cz)) === BLOCK.WATER) return; // only on grass
         if ((t.sites || t.castles)?.landAt(Math.round(cx), Math.round(cz))) return; // (not in castles, villages, wizards' towers)
         this.spawnHerdAt(type, n, cx, cz);
+    }
+
+    /** Where the player looks (flat). */
+    _look(out) {
+        const cam = this.game.camera;
+        if (cam?.getWorldDirection) cam.getWorldDirection(out);
+        else { const y = this.game.character.group.rotation.y; out.set(-Math.sin(y), 0, -Math.cos(y)); }
+        return out.setY(0);
+    }
+
+    /** (host) No other player stands near enough to see a herd appear there. */
+    _unseenByOthers(x, z) {
+        for (const r of this.game.remotes?.values() || []) if (r.position && Math.hypot(r.position.x - x, r.position.z - z) < HERDS.MIN_D) return false;
+        return true;
     }
 
     /** (host) A herd of n spread loosely around (cx, cz): nobody on top of another. */
@@ -919,12 +956,15 @@ export class Animals {
             this._seePeople(dt);
             this._spawnT -= dt;
             if (this._spawnT <= 0) {
-                this._spawnT = 20;
-                const near = this.list.filter((a) => !a.dead && a.group.position.distanceTo(me) < 80).length;
-                if (near < MAX_NEAR) this._spawnHerd();
+                this._spawnT = HERDS.EVERY * (0.67 + Math.random() * 0.67);
+                const near = this.list.filter((a) => !a.dead && a.group.position.distanceTo(me) < HERDS.NEAR).length;
+                if (near < HERDS.MAX_NEAR) this._spawnHerd();
             }
+            const look = this._look(this._lookV || (this._lookV = new THREE.Vector3()));
             for (const a of [...this.list]) {
-                if (a.group.position.distanceTo(me) > 150 && !a.tamed && !a.rider) { this._remove(a); continue; }
+                // (gone only far away and out of sight: never vanishing in front of the player)
+                const ap = a.group.position;
+                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && outOfSight(me, look, ap.x, ap.z, 1.2)) { this._remove(a); continue; }
                 if (a.dead) {
                     if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)

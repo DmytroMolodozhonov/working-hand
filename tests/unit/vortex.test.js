@@ -343,3 +343,48 @@ test('«Bubble» said but the stream touched nobody: the water still gathers int
     run(V, 2);
     assert.ok(V.bubbles.has(b.id), 'an ice ball hanging there');
 });
+
+test('the ball forms slowly round the creature and lifts it; the caster carries it up with the hand; «Bubble» a moment after the stream ran out still works', () => {
+    const { g, ch, zombie, V } = world();
+    g.combat.fatigue = 500;
+    g.collision.surfaceY = () => 0;
+    ch.dir.set(0, -0.2, -1).normalize();
+    assert.equal(V.cast(true), 'WaterVortex');
+    let t = 0;
+    run(V, 2, () => { t += 1 / 60; const a = t * Math.PI * 2 * 1.5; ch.hand.set(Math.cos(a) * 0.45, 0.4, Math.sin(a) * 0.45); });
+    ch.dir.set(0, 0, -1);
+    assert.equal(V.voice('Attack', 'атака', true), 'Attack');
+    // nothing said: the stream hits, pours and runs out
+    run(V, 6);
+    assert.equal(V.bubbles.size, 0);
+    assert.equal(V.flights.size, 0, 'the stream ran out');
+    // «Bubble» a moment later (as the Russian recognizer hears it)
+    assert.equal(V.voice('AirBubble', 'бабал', true), 'VortexBubble');
+    const b = [...V.bubbles.values()][0];
+    assert.ok(b && b.tk === 'z', 'the water rose back round the zombie');
+    const y0 = zombie.group.position.y;
+    V.update(1 / 60);
+    assert.ok(b.grow < 0.1, 'not a ball at once');
+    run(V, 1);
+    assert.ok(b.grow > 0.2 && b.grow < 1, `it forms over a few seconds (${b.grow.toFixed(2)})`);
+    run(V, 2);
+    assert.equal(b.grow, 1);
+    assert.ok(zombie.group.position.y > y0 + 0.4, `the zombie is lifted off the ground inside (${(zombie.group.position.y - y0).toFixed(2)} m)`);
+    assert.ok(zombie.lev && zombie.lev.vortex === b.id, 'held up in the water');
+    // the caster points at the ball and raises the hand: the ball goes up
+    const o = ch.getHandWorldPosition('right');
+    ch.dir.copy(b.pos).sub(o).normalize();
+    V.update(1 / 60);
+    assert.ok(b.held, 'pointing at the ball takes hold of it');
+    const yb = b.pos.y;
+    ch.dir.y += 0.4; ch.dir.normalize();
+    run(V, 2);
+    assert.ok(b.pos.y > yb + 2, `raised with the hand (${(b.pos.y - yb).toFixed(1)} m)`);
+    assert.ok(zombie.group.position.y > y0 + 2, 'the zombie goes up with it');
+    // the hand let down: it hangs there
+    ch.isArmRaised = () => false;
+    run(V, 0.2);
+    const yh = b.pos.y;
+    run(V, 1);
+    assert.ok(!b.held && Math.abs(b.pos.y - yh) < 0.05, 'a hand let down leaves it hanging');
+});
