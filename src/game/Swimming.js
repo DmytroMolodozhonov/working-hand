@@ -46,7 +46,7 @@ export class Swimming {
         const ix = Math.round(x), iz = Math.round(z);
         const top = data.topLayer(ix, iz); // highest solid block
         let L = top + 1, n = 0;
-        while (n < 12 && data.get(ix, L, iz) === BLOCK.WATER) { L++; n++; }
+        while (n < 24 && data.get(ix, L, iz) === BLOCK.WATER) { L++; n++; }
         if (!n) return null;
         // a layer L spans y from L-1.5 to L-0.5
         return { surface: L - 1.5, bottom: top - 0.5, depth: n };

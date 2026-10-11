@@ -48,7 +48,7 @@ export const MAP_WALL_HEIGHT = 8;
 export class VoxelWorld {
     /**
      * @param {THREE.Scene} scene
-     * @param {object} opts {seed, mountains, map}
+     * @param {object} opts {seed, mountains, map, seas}
      */
     constructor(scene, opts = {}) {
         this.scene = scene;
@@ -68,7 +68,7 @@ export class VoxelWorld {
         if (opts.map) {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
-            this.createTerrain(!!opts.mountains);
+            this.createTerrain(!!opts.mountains, !!opts.seas);
             this.createSkybox();
         }
     }
@@ -216,9 +216,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains) {
+    createTerrain(mountains, seas = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas });
         this.collision.setTerrain(this.terrain);
 
         // Decorative grass cubes (1000, instanced) — same look as before.

@@ -836,7 +836,7 @@ net.on('message', (msg) => {
     if ((game && game.active) || starting) return;
     pendingWelcome = msg;
     const local = readConfig();
-    startGame({ ...local, mode: msg.config.mode, map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed }, msg);
+    startGame({ ...local, mode: msg.config.mode, map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1 }, msg);
 });
 
 function escapeHtml(s) {

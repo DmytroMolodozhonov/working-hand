@@ -822,6 +822,7 @@ function sanitizeConfig(c) {
         map: c.map || null,
         zombieCount: c.zombieCount || 0,
         seed: c.seed,
+        gen: c.gen ?? 1, // world generation (an old host sends none: 1)
     };
 }
 

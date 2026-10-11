@@ -52,7 +52,7 @@ test('explosion removes blocks in a sphere, never bedrock, and marks chunks dirt
     // A second blast deeper still stops at bedrock
     d.removeSphere(0, -4, 0, 6);
     assert.equal(d.get(0, MIN_LAYER, 0), BLOCK.BEDROCK);
-    assert.equal(d.surfaceY(0, 0), MIN_LAYER - 0.5);
+    assert.equal(d.surfaceY(0, 0), d.bedrockTop - 0.5);
 });
 
 test('removing blocks next to a chunk border also rebuilds the neighbour chunk', () => {

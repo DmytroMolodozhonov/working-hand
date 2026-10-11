@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
 import { applyVoxelDetail } from './VoxelShading.js';
 import { CastleIndex } from './Castles.js';
+import { SeaIndex, SEA, seaDepth } from './Sea.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -138,7 +139,15 @@ const SHADES = {
 };
 const GRASS_SIDE = 0x6b4a2a; // dirt-coloured sides under a grass top
 
-export const MIN_LAYER = -9; // bedrock layer (indestructible); deep lakes reach down to -7
+export const MIN_LAYER = -17; // the lowest layer: bedrock (indestructible); the deep sea's floor is at -16
+/** Bedrock top of old worlds (generation 1, and every world without seas): lakes reach down to -7. */
+export const OLD_BEDROCK = -9;
+/**
+ * World generation version. 1: the original worlds (no seas, bedrock at −9).
+ * 2: seas (deep basins far from spawn), sea castles with ports, bedrock at −17.
+ * A saved world and a guest keep the generation their world was made with.
+ */
+export const WORLD_GEN = 2;
 export const MAX_LAYER = 40;
 export const CHUNK = 32;
 const SHIFT = 5; // log2(CHUNK)
@@ -157,7 +166,7 @@ export function chunkKey(cx, cz) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains) {
+export function createHeightField(seed, mountains, seas = null) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -169,7 +178,7 @@ export function createHeightField(seed, mountains) {
     const lakes = createNoise2D(seed ^ 0x6a09e667);
     const rivers = createNoise2D(seed ^ 0x3c6ef372);
     const fn = (ix, iz) => {
-        fn.water = 0;
+        fn.water = 0; fn.sea = false; fn.beach = false;
         const dist = Math.sqrt(ix * ix + iz * iz);
         const near = smoothstep(38, 70, dist); // flat play area around spawn
         if (near <= 0) return 0;
@@ -184,6 +193,21 @@ export function createHeightField(seed, mountains) {
             cap = NEAR_CAP + (MAX_LAYER - 4 - NEAR_CAP) * far;
         }
         let h = Math.min(Math.floor(cap), Math.floor(ridge * ridge * 30 * near * amp));
+
+        // The sea (generation 2): a deep basin; the land sinks gently to a sandy beach
+        if (seas) {
+            const s = seas.signedDist(ix, iz);
+            if (s > -SEA.TAPER) {
+                if (s > 0) {
+                    const j = s > SEA.SHELF ? Math.round(noise(ix / 37 + 91, iz / 37 - 13) * 1.2) : 0;
+                    const d = seaDepth(s, j);
+                    fn.water = d; fn.sea = true;
+                    return -d;
+                }
+                h = Math.min(h, seaLandCap(-s));
+                fn.beach = s > -SEA.BEACH;
+            }
+        }
 
         // Rivers and lakes (never in the original play area)
         const wet = smoothstep(95, 135, dist);
@@ -202,8 +226,8 @@ export function createHeightField(seed, mountains) {
             // Valley sides rise gently from the banks
             h = Math.min(h, Math.floor(((rv - width) / (width * 2)) * 6));
         }
-        // Lakes in low land
-        if (h <= 1) {
+        // Lakes in low land (not on a beach)
+        if (h <= 1 && !fn.beach) {
             const ln = lakes(ix / 110, iz / 110) * wet;
             const d = (ln - 0.42) * 14;
             if (d > 0) {
@@ -215,8 +239,15 @@ export function createHeightField(seed, mountains) {
         }
         return h;
     };
-    fn.water = 0;
+    fn.water = 0; fn.sea = false; fn.beach = false;
     return fn;
+}
+
+/** The highest the land may be `d` metres from a sea shore: a beach, then slopes up to the hills. */
+export function seaLandCap(d) {
+    if (d < SEA.BEACH) return Math.floor(d / 6);
+    const e = d - SEA.BEACH;
+    return 2 + Math.floor(e / 6 + (e * e) / 180);
 }
 
 /** Cheap deterministic hash → [0, 1). */
@@ -246,23 +277,35 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
-        const raw = createHeightField(seed, mountains);
+        // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
+        this.seas = mountains && seas ? new SeaIndex(seed) : null;
+        this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
+        const raw = createHeightField(seed, mountains, this.seas);
         this.castles = null;
         if (mountains) {
             // castles and their villages stand on levelled land
-            const idx = this.castles = new CastleIndex(seed, raw);
+            const idx = this.castles = new CastleIndex(seed, raw, this.seas);
             const fn = (ix, iz) => {
                 const h = raw(ix, iz);
                 const land = idx.landAt(ix, iz);
+                fn.sea = raw.sea; fn.beach = raw.beach;
+                if (land && land.side === 'sea') {
+                    // beyond a sea castle's quay: the sea (dug deep in the harbour)
+                    const k = land.castle.port;
+                    const d = Math.max(raw.sea ? raw.water : 0, land.harbour ? k.depth : 0, 1);
+                    fn.water = d; fn.sea = true; fn.beach = false;
+                    return -d;
+                }
                 if (!land || (land.w < 1 && raw.water)) { fn.water = raw.water; return h; } // (rivers keep their banks)
-                fn.water = 0;
+                fn.water = 0; fn.sea = false;
+                if (land.w >= 1) fn.beach = false;
                 const F = land.castle.F;
                 return land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w));
             };
-            fn.water = 0;
+            fn.water = 0; fn.sea = false; fn.beach = false;
             this.heightAt = fn;
         } else this.heightAt = raw;
         this._caves = new Map();
@@ -295,15 +338,21 @@ export class TerrainData {
         const x0 = cx * CHUNK, z0 = cz * CHUNK;
         const rng = createRng((this.seed ^ Math.imul(cx, 73856093) ^ Math.imul(cz, 19349663)) >>> 0);
         let maxTop = 0; // highest non-air layer (water included: it is drawn)
+        const bedrock = this.bedrockTop ?? OLD_BEDROCK;
+        let seaMask = null; // columns of sea water (drawn by the wave surface)
         for (let lz = 0; lz < CHUNK; lz++) {
             for (let lx = 0; lx < CHUNK; lx++) {
                 const h = this.heightAt(x0 + lx, z0 + lz);
                 const water = this.heightAt.water;
+                const sea = this.heightAt.sea, beach = this.heightAt.beach;
                 const col = lz * CHUNK + lx;
+                if (sea) (seaMask ||= new Uint8Array(CHUNK * CHUNK))[col] = 1;
                 for (let L = MIN_LAYER; L <= h; L++) {
                     let type;
-                    if (L === MIN_LAYER) type = BLOCK.BEDROCK;
+                    if (L <= bedrock) type = BLOCK.BEDROCK;
                     else if (water && L === h) type = BLOCK.SAND;
+                    else if (sea && L >= h - 3) type = BLOCK.SAND; // the seabed
+                    else if (L === h && beach) type = BLOCK.SAND; // the beach
                     else if (L === h) {
                         // snow only on the peaks (a few patches on the tips, solid higher up)
                         if (h >= 24 || (h >= 21 && rng() < smoothstep(21, 24, h))) type = BLOCK.SNOW;
@@ -322,7 +371,7 @@ export class TerrainData {
         // the lowest layer that is not solid rock (meshing skips the solid rock below it)
         let minOpen = MAX_LAYER;
         for (let i = 0; i < top.length; i++) if (top[i] + 1 < minOpen) minOpen = top[i] + 1;
-        const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen };
+        const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen, sea: seaMask };
         if (this.mountains) { this._carveCaves(c); this._buildCastles(c); this._plantTrees(c); }
         return c;
     }
@@ -477,6 +526,7 @@ export class TerrainData {
                 const tx = gx * TREE_CELL + 2 + Math.floor(hash01(gz, gx, this.seed + 7) * (TREE_CELL - 6));
                 const tz = gz * TREE_CELL + 2 + Math.floor(hash01(gx + 911, gz - 37, this.seed) * (TREE_CELL - 6));
                 if (Math.hypot(tx, tz) < TREE_MIN_DIST) continue;
+                if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue; // not on a beach (nor its crown)
                 if (this.castles && (this.castles.landAt(tx, tz) || this.castles.landAt(tx + 1, tz + 1))) continue; // no trees in villages
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
@@ -589,6 +639,12 @@ export class TerrainData {
     topLayer(ix, iz) {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         return c.top[(iz & MASK) * CHUNK + (ix & MASK)];
+    }
+
+    /** Is this column sea water (a sea or a sea castle's harbour), as generated? */
+    isSeaColumn(ix, iz) {
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        return !!(c.sea && c.sea[(iz & MASK) * CHUNK + (ix & MASK)]);
     }
 
     /** World Y of the walkable surface at a world point. */
@@ -798,6 +854,7 @@ export class TerrainData {
         const sizes = [CHUNK, layers, CHUNK];
         const origin = [x0, lowest, z0];
         const blocks = c.blocks;
+        const skipSea = !!(this.skipSeaTop && c.sea);
         const below = lowest > MIN_LAYER ? BLOCK.STONE : BLOCK.AIR; // (all rock under `lowest`)
         // Fast access inside this chunk; neighbours only for border occlusion
         const at = (gx, gy, gz) => {
@@ -843,7 +900,8 @@ export class TerrainData {
                                 kind = L >= 1 ? 1 : 0;
                             }
                         } else if (a === BLOCK.WATER && (bRaw === BLOCK.AIR || bRaw === BLOCK.ICE_SHAPE)) {
-                            key = BASE_COLORS[BLOCK.WATER] + 1; kind = 2;
+                            // (the sea's top is drawn by the moving wave surface instead)
+                            if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) { key = BASE_COLORS[BLOCK.WATER] + 1; kind = 2; }
                         } else if (b === BLOCK.WATER && (aRaw === BLOCK.AIR || aRaw === BLOCK.ICE_SHAPE)) {
                             key = -(BASE_COLORS[BLOCK.WATER] + 1); kind = 2;
                         }
@@ -926,10 +984,12 @@ export function mountainHeight(ix, iz, seed = 1) {
  * touched chunks, a couple per frame, so nothing ever causes a hitch.
  */
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains });
+        this.data.generate({ seed, mountains, seas });
+        // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
+        this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
         this.waterMaterial = new THREE.MeshPhongMaterial({
             vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false,

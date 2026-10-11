@@ -106,3 +106,23 @@ do now, and what is left, if anything.
 | voices | Better villager voices (female/male never mixed) |
 | head | Head turning gets slow over time (right turns crawl after a while) |
 | (main session) | Inferno following the hand; Avada only from a scroll |
+
+## Sea API (from the «sea» session — stable, use it)
+
+`src/world/Sea.js` (pure, Node-testable). New worlds are generation 2 (`Terrain.WORLD_GEN`, `game.gen`,
+saved in the world and sent to guests); old saves and old hosts stay generation 1 (no seas, bedrock −9).
+Generation 2: `MIN_LAYER = -17` (bedrock), the deep sea floor is at layer −16.
+
+- `game.sea` (null when the world has no seas) — a `SeaWaves`:
+  - `sea.time()` — the wave clock in seconds, the same on every computer (`game.seaTime()`).
+  - `sea.s(x, z)` — metres from the shore, > 0 in the sea (a castle harbour counts as sea, quays as land).
+  - `sea.height(x, z, t?)` — the water surface is at `WATER_LEVEL_Y + height` (0 off the sea).
+  - `sea.sample(x, z, t, out)` → `{h, gx, gz, vx, vz, c, dx, dz, breaking, depth, s}` or null off the sea
+    (slope, surface water speed, wave speed and direction towards the shore, whitewater 0..1, depth in layers).
+  - `sea.beachesNear(x, z, r)` → `[{x, z, yaw, s}]` sand spots facing the sea.
+  - `sea.storm` (0..1) makes every wave bigger.
+- Low level: `seaWaveHeight(x, z, t, s, storm)` — THE wave (the drawn water uses the GLSL copy `waveGlsl()`),
+  `waveAmp(s)`, `SeaIndex` (`signedDist`, `nearest`, `near`, `pointAt`), `seaDepth(s)`.
+- `terrain.data.isSeaColumn(ix, iz)`, `terrain.data.seas` (the `SeaIndex`).
+- Sea castles: `castle.variant === 'sea'`, `castle.port` — see the note at the end of this file once
+  phase 3 lands (berths for ships, cannon mount points, port chests).

@@ -1102,9 +1102,10 @@ export class CastleIndex {
      * @param {number} seed
      * @param {(ix:number, iz:number) => number} rawHeight the wild height field (with .water)
      */
-    constructor(seed, rawHeight) {
+    constructor(seed, rawHeight, seas = null) {
         this.seed = seed;
         this.raw = rawHeight;
+        this.seas = seas; // SeaIndex (generation-2 worlds): sea castles with a port
         this.cells = new Map();
         this._lastCell = null;
     }

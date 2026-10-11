@@ -50,7 +50,8 @@ import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN } from '../world/Terrain.js';
+import { SeaWaves, WAVES } from '../world/Sea.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
@@ -137,6 +138,8 @@ export class Game {
         this.cameraMode = config.cameraMode || 'fpv';
         this.seed = config.seed ?? (config.map ? hashString(config.map.name || 'map') : (Math.random() * 1e9) >>> 0);
         this.config.seed = this.seed;
+        // world generation: a new world is the newest kind; a saved world and a guest keep theirs
+        this.config.gen = this.gen = config.gen ?? (config.saved ? (config.saved.gen ?? 1) : WORLD_GEN);
 
         progress(62, 'Создание мира...');
         this.scene = new THREE.Scene();
@@ -148,6 +151,7 @@ export class Game {
             seed: this.seed,
             mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map,
             map: config.map || null,
+            seas: this.gen >= 2, // (generation 2: seas, sea castles, deeper bedrock)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
         // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
@@ -157,6 +161,9 @@ export class Game {
         if (this.dayCycle) this.world.setDayPhase(this.dayPhase());
         this.collision = this.world.collision;
         this.terrain = this.world.terrain;
+        // the sea (generation-2 worlds): its waves, the same on every computer (src/world/Sea.js)
+        const seas = this.terrain?.data?.seas;
+        this.sea = seas ? new SeaWaves(seas, () => this.seaTime(), (ix, iz) => { const h = this.terrain.data.heightAt; h(ix, iz); return !!h.sea; }) : null;
         this.hud.setTerrain(this.terrain);
 
         this.fx = new Effects(this.scene, this.collision);
@@ -271,7 +278,7 @@ export class Game {
         // The world is saved by itself on the host's (or single player's) computer
         if (!isTest && !config.map && this.authority) {
             const sv = config.saved;
-            this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players } : { name: config.worldName });
+            this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players, gen: sv.gen ?? 1 } : { name: config.worldName });
             if (sv) {
                 restoreWorld(this, sv, THREE);
                 applyPlayerSnapshot(this, sv.players?.[this.keeper.myName]);
@@ -1977,6 +1984,12 @@ export class Game {
     /** Where we are in the day: 0–0.75 day (18 hours), 0.75–1 night (6 hours). */
     dayPhase() {
         return (((Date.now() - this.dayStart) / DAY_CYCLE_MS) % 1 + 1) % 1;
+    }
+
+    /** The wave clock (s): the same on every computer (it runs from the shared dayStart), wraps seamlessly. */
+    seaTime() {
+        const P = WAVES.PERIOD * 1000;
+        return ((((Date.now() - this.dayStart) % P) + P) % P) / 1000;
     }
 
     /** Is it night now (spiders come out)? */

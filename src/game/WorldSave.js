@@ -118,12 +118,13 @@ export function applyPlayerSnapshot(game, s) {
  * Keeps the current game's world saved (host or single player only).
  */
 export class WorldKeeper {
-    constructor(game, { id, name, mode, seed, created, players } = {}) {
+    constructor(game, { id, name, mode, seed, created, players, gen } = {}) {
         this.game = game;
         this.id = id || newWorldId();
         this.name = name || 'Мир';
         this.mode = mode || game.config.mode;
         this.seed = seed ?? game.seed;
+        this.gen = gen ?? game.gen ?? 1; // world generation (seas from 2)
         this.created = created || Date.now();
         this.players = players || {}; // name -> snapshot (guests and the host)
         this._t = 0;
@@ -151,6 +152,7 @@ export class WorldKeeper {
             name: this.name,
             mode: this.mode,
             seed: this.seed,
+            gen: this.gen,
             created: this.created,
             updated: Date.now(),
             dayPhase: g.dayPhase ? g.dayPhase() : 0,
