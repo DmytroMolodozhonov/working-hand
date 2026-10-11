@@ -15,6 +15,8 @@ export const ACCIO = {
     SPEED: 18, // m/s the object flies at
     CATCH: 0.8, // m from the hand: caught
     MAX_TIME: 4, // s: gives up if it can't get there (stuck behind a wall)
+    LIFT: 0.06, // the arm lifted this much from hanging (1 − cos: ~20°) is enough — a thing close by the feet
+    NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
 };
 
 const _v1 = new THREE.Vector3();
@@ -50,8 +52,10 @@ export class Accio {
         // the thing comes into a free hand: the pointing one, or the other (a wand in the
         // pointing hand: the other hand catches — before, things lying about were not even looked at)
         const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd];
+        // (an arm only ~20° from hanging counts too: a thing lying right by the feet is pointed at low)
+        const lift = g.currentPose?.armLift;
         for (const side of ['right', 'left']) {
-            if (!ch.isArmRaised(side)) continue;
+            if (!ch.isArmRaised(side) && !(lift && lift[side] > ACCIO.LIFT)) continue;
             const other = side === 'right' ? 'left' : 'right';
             const catcher = free(side) ? side : free(other) ? other : null;
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
@@ -62,7 +66,7 @@ export class Accio {
                 const d = to.length();
                 if (d > ACCIO.RANGE || d < 0.3) continue;
                 const ang = dir.angleTo(to.normalize());
-                if (ang > ACCIO.CONE) continue;
+                if (ang > ACCIO.CONE + Math.atan2(ACCIO.NEAR, d)) continue;
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { w, side: catcher, score };
             }
@@ -96,7 +100,7 @@ export class Accio {
                 const d = to.length();
                 if (d > ACCIO.RANGE || d < 0.3) continue;
                 const ang = dir.angleTo(to.normalize());
-                if (ang > ACCIO.CONE + Math.atan2(0.3, d)) continue;
+                if (ang > ACCIO.CONE + Math.atan2(ACCIO.NEAR, d)) continue;
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { L, side: catcher, score };
             }
