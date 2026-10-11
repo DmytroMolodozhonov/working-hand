@@ -210,3 +210,43 @@ test('«Брейнрот» on somebody\'s living tree: it obeys the new master f
     g.servants.plan('t', t, t.model.position, 3);
     assert.equal(t.master, 'other');
 });
+
+test('«Атек» as it is often heard: still «Attack»', () => {
+    for (const w of ['атек', 'Атек!', 'аттек', 'эттек', 'атак']) assert.equal(matchSpell(w), 'Attack', w);
+    assert.equal(matchSpell('вейв атек'), 'WaveAttack');
+});
+
+test('Creative: «Атак» at another player — the tree goes and strikes; their computer throws them back (no damage)', () => {
+    const g = fakeGame();
+    const sent = [];
+    const friend = { dead: false, position: new THREE.Vector3(-14, 0, 0), character: { group: { position: new THREE.Vector3(-14, 0, 0) } } };
+    g.remotes.set('friend', friend);
+    g.sync = { servantHit: (to, dmg, dir, by, kind) => sent.push({ to, dmg, by, kind, dx: dir.x }) };
+    const t = g.livingTrees.spawn({ ...D }, 'me');
+    run(g, 3.2);
+    g.servants.command('me', { k: 'p', id: 'friend' });
+    run(g, 12);
+    assert.ok(sent.length >= 1 && sent.every((s) => s.to === 'friend' && s.by === 'me' && s.kind === 'tree' && s.dx < 0), JSON.stringify(sent));
+    assert.ok(t.model.position.x < 0, 'it walked to them');
+    // on their computer (Creative): thrown back, the HP stays
+    const v = fakeGame();
+    v.knockback = new THREE.Vector3();
+    let hp = 10;
+    v.damageLocalPlayer = (d) => { if (v.config.mode !== 'creative') hp -= d; };
+    v.servants.hitMe(ALIVE.DMG, new THREE.Vector3(-1, 0, 0), 'me', 'tree');
+    assert.equal(hp, 10);
+    assert.ok(v.knockback.x < -5 && v.knockback.y > 0);
+    assert.match(v.said.at(-1), /Живое дерево ударило вас/);
+});
+
+test('«Alive»: a trunk just beside the line of the hand still counts (a hand never points exactly); one far off does not', () => {
+    const g = fakeGame();
+    const cells = new Map();
+    for (let L = 1; L <= 5; L++) cells.set(`10,${L},0`, 6); // an oak trunk 10 m ahead, one block thick
+    for (let x = 9; x <= 11; x++) for (let z = -1; z <= 1; z++) cells.set(`${x},6,${z}`, 7);
+    g.builder = { data: { get: (x, L, z) => cells.get(`${x},${L},${z}`) || 0 }, _treeOnRay: () => null, _hitCell: () => null };
+    const o = new THREE.Vector3(0, 1.5, 0);
+    const near = g.livingTrees.aimAt(o, new THREE.Vector3(10, 0, 0.9).normalize()); // (~5° beside the trunk)
+    assert.ok(near && near.cell && near.kind === 0, JSON.stringify(near));
+    assert.equal(g.livingTrees.aimAt(o, new THREE.Vector3(10, 0, 4).normalize()), null); // (~22° off)
+});

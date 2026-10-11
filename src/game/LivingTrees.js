@@ -32,6 +32,7 @@ export const ALIVE = {
     HP: 15,
     RANGE: 50, // m from its caster
     AIM: 14, // m: the tree pointed at
+    AIM_SLACK: 0.12, // rad: a tree this much beside the line of the hand still counts
     GROW: 3, // s to come alive
     STIFFEN: 2.6, // s to turn back into a tree
     SPEED: 2.8, // m/s walking after its master
@@ -240,8 +241,10 @@ export class LivingTrees {
         let best = null;
         const t = g.builder?._treeOnRay(o, d, ALIVE.AIM);
         if (t) best = { inst: t, dist: Math.hypot(t.x - o.x, t.z - o.z) };
-        const cell = g.builder?._hitCell(o, d, ALIVE.AIM);
-        const kind = cell ? TREE_KINDS.findIndex((k) => k.wood === cell.type || k.leaves === cell.type) : -1;
+        let cell = g.builder?._hitCell(o, d, ALIVE.AIM);
+        let kind = cell ? TREE_KINDS.findIndex((k) => k.wood === cell.type || k.leaves === cell.type) : -1;
+        // (a hand never points exactly: a trunk or a crown just beside the line counts too — not one behind a hill)
+        if (kind < 0) { cell = this._treeNearRay(o, d, cell ? Math.min(ALIVE.AIM, cell.point.distanceTo(o) + 2) : ALIVE.AIM); kind = cell ? cell.kind : -1; }
         if (kind >= 0) {
             const dist = Math.hypot(cell.x - o.x, cell.L - 1 - o.y, cell.z - o.z);
             if (!best || dist < best.dist) best = { cell, kind, dist };
@@ -252,6 +255,33 @@ export class LivingTrees {
             const dist = to.length();
             if (dist > ALIVE.AIM || d.angleTo(to.normalize()) > 0.35) continue;
             if (!best || dist < best.dist) best = { golden: tr, dist };
+        }
+        return best;
+    }
+
+    /** The tree block nearest to the line of the hand (within ~7°), up to `max` m: {x, L, z, type, kind} | null. */
+    _treeNearRay(o, d, max) {
+        const data = this.game.builder?.data;
+        if (!data) return null;
+        let best = null;
+        for (let t = 1; t <= max; t += 0.5) {
+            const px = o.x + d.x * t, py = o.y + d.y * t, pz = o.z + d.z * t;
+            const r = Math.max(0.7, t * ALIVE.AIM_SLACK);
+            for (let x = Math.round(px - r); x <= Math.round(px + r); x++) for (let z = Math.round(pz - r); z <= Math.round(pz + r); z++) {
+                for (let L = Math.floor(py - r + 1.5); L <= Math.floor(py + r + 1.5); L++) {
+                    const type = data.get(x, L, z);
+                    const kind = TREE_KINDS.findIndex((k) => k.wood === type || k.leaves === type);
+                    if (kind < 0) continue;
+                    // how far the block's middle is off the line, as an angle
+                    const bx = x - o.x, by = L - 1 - o.y, bz = z - o.z;
+                    const along = bx * d.x + by * d.y + bz * d.z;
+                    if (along < 0.5 || along > max) continue;
+                    const off = Math.sqrt(Math.max(0, bx * bx + by * by + bz * bz - along * along)) - 0.5;
+                    const miss = Math.max(0, off) / along;
+                    if (miss > ALIVE.AIM_SLACK) continue;
+                    if (!best || miss < best.miss - 0.01 || (miss < best.miss + 0.01 && along < best.along)) best = { x, L, z, type, kind, miss, along };
+                }
+            }
         }
         return best;
     }

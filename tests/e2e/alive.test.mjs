@@ -116,7 +116,7 @@ test('survival: «Alive» is learnt from its scroll; the tree lives on the mana 
         const lt = g.livingTrees.list[0];
         if (!lt) return { refused, said, none: true, alive: tree.alive };
         await frames(30);
-        const drained = g.combat.fatigue;
+        const drained = g.combat.fatigue - ((g.combat.maxFatigue || 30) - max0); // (the same mana growth taken out)
         const t0 = performance.now();
         while (lt.phase === 'rise' && performance.now() - t0 < 40000) await frames(3);
         g.combat.fatigue = 0.4; // (almost no mana left)

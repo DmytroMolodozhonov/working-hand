@@ -26,6 +26,7 @@ export const SERVANT = {
 };
 
 const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
 
 /**
  * Where a servant goes (pure: positions are {x, z}).
@@ -221,13 +222,27 @@ export class Servants {
         else if (target.k === 't') g.livingTrees.hit(c, dmg, kind);
         else if (target.k === 's') g.spiders.hit(c, dmg, 'melee');
         else if (target.k === 'p') {
-            if (c.local) {
-                if (g.combat?.enabled) g.combat.damage(dmg, by, kind);
-                else g.damageLocalPlayer?.(dmg);
-                g.knockback?.add(_v.copy(d).setY(0).normalize().multiplyScalar(7).setY(3));
-                g.hud?.setVoice?.(kind === 'tree' ? `🌳 Живое дерево ударило вас веткой: −${dmg}` : `🌀 Слуга ударил вас: −${dmg}`, true);
+            if (c.local) this.hitMe(dmg, d, by, kind);
+            else if (g.sync?.servantHit) {
+                // (their computer moves their body and counts the damage — in Creative too: thrown back, no harm)
+                g.sync.servantHit(target.id, dmg, d, by, kind);
+                const p = _v.copy(c.r.character.group.position).add(_v2.set(0, 1.2, 0));
+                for (let i = 0; i < 8; i++) g.fx?.spark(p, 0xff3030, 0.15, new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
+                g.sound?.playHit?.();
             } else g.combat?.hitRemote?.({ id: target.id, damageCooldown: 0, group: c.r.character.group }, dmg, false);
         }
+    }
+
+    /** A servant's blow (a living tree's branch…) lands on me: thrown back; hurt where players can be hurt. */
+    hitMe(dmg, dir, by, kind = 'servant') {
+        const g = this.game;
+        if (g.combat?.dead || g.isDeadLocal) return;
+        const hurts = g.combat?.enabled || g.config?.mode !== 'creative';
+        if (g.combat?.enabled) g.combat.damage(dmg, by, kind);
+        else g.damageLocalPlayer?.(dmg);
+        g.knockback?.add(_v.copy(dir).setY(0).normalize().multiplyScalar(7).setY(3));
+        const who = kind === 'tree' ? '🌳 Живое дерево ударило вас веткой' : '🌀 Слуга ударил вас';
+        g.hud?.setVoice?.(hurts ? `${who}: −${dmg}` : who, true);
     }
 
     // -------------------------------------------------------------- frame
