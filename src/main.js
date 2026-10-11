@@ -19,6 +19,7 @@ import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/Branding.js';
+import { setupLogPanel, keepLauncherAlive } from './ui/LogPanel.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -142,6 +143,9 @@ document.querySelectorAll('#tab-settings .sub-tab').forEach((btn) => {
         document.querySelectorAll('#tab-settings .sub-pane').forEach((p) => p.classList.toggle('active', p.id === btn.dataset.sub));
     });
 });
+// Settings → «Журнал»; and the app launcher keeps running while this window is open
+setupLogPanel();
+keepLauncherAlive();
 
 if (creativeZombieCount && zombieCountDisplay) {
     creativeZombieCount.oninput = (e) => { zombieCountDisplay.textContent = e.target.value; };

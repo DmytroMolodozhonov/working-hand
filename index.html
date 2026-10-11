@@ -203,6 +203,7 @@
                         <button class="sub-tab" data-sub="set-vision">🧠 Распознавание</button>
                         <button class="sub-tab" data-sub="set-audio">🔊 Звук</button>
                         <button class="sub-tab" data-sub="set-voice">🎤 Голос</button>
+                        <button class="sub-tab" data-sub="set-log">📜 Журнал</button>
                     </div>
                     <div id="set-view" class="sub-pane active">
                     <div class="settings-group">
@@ -384,6 +385,18 @@
                             <p>Теперь система будет слушать только после нажатия кнопки. Это позволяет проверить
                                 микрофон точно тогда, когда вам это нужно.</p>
                         </div>
+                    </div>
+                    </div>
+                    <div id="set-log" class="sub-pane">
+                    <div class="settings-group">
+                        <h3 style="margin-bottom: 10px;">📜 Журнал</h3>
+                        <p class="info-text" style="font-size:0.85rem;color:#a4b0be;margin-bottom:10px">Здесь игра записывает, как она запускалась и что с ней происходило. Если что-то не работает — нажмите «Скопировать» и отправьте разработчику.</p>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                            <select id="log-file" style="flex:1;min-width:160px"></select>
+                            <button id="log-refresh" class="menu-btn" style="padding:8px 14px">🔄 Обновить</button>
+                            <button id="log-copy" class="menu-btn" style="padding:8px 14px">📋 Скопировать</button>
+                        </div>
+                        <pre id="log-text" style="height:46vh;overflow:auto;background:rgba(0,0,0,0.45);border-radius:8px;padding:10px;font-size:0.75rem;white-space:pre-wrap;text-align:left;margin:0"></pre>
                     </div>
                     </div>
                 </div>

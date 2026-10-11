@@ -11,6 +11,8 @@ API:
   GET    /api/rig             — настройки рига рук
   POST   /api/rig             — сохранить настройки рига рук
   GET    /api/version         — дата версии игры (видна в меню)
+  GET    /api/logs            — журналы игры (настройки → «Журнал»)
+  GET    /api/alive           — окно игры открыто, пока держит эту строку (запускатор)
   POST   /api/perflog         — строка дневника производительности → zns-perf.log
   GET    /api/pose/status     — нейросеть камеры вне браузера (pose_native.py): есть ли, работает ли
   GET    /api/pose/stream     — её точки тела, рук и лица (Server-Sent Events)
@@ -36,6 +38,14 @@ PORT = int(os.environ.get("ZNS_PORT", "8000"))
 MAPS_DIR = "maps"
 RIG_FILE = "hand_rig.json"
 PERF_LOG = "zns-perf.log"  # the game's performance diary (send it to the developer)
+LOG_DIR = "logs"  # what the game prints (settings → «Журнал»)
+LOG_TITLES = {
+    "launcher.log": "Запуск и игра",
+    "launcher.prev.log": "Прошлый запуск",
+    "server.log": "Запуск и игра",
+    "server.prev.log": "Прошлый запуск",
+    PERF_LOG: "Производительность",
+}
 MAX_BODY = 5 * 1024 * 1024  # 5 MB is plenty for a map
 
 # Windows often maps .js to text/plain in the registry, which breaks ES modules.
@@ -135,6 +145,81 @@ def update_desktop_launcher():
         return
 
 
+def log_files():
+    """The game's logs: the launcher's (it passes them in ZNS_LOG_FILES) or our own, then the perf diary."""
+    paths = [p for p in os.environ.get("ZNS_LOG_FILES", "").split(os.pathsep) if p]
+    if not paths:
+        paths = [os.path.join(LOG_DIR, "server.log"), os.path.join(LOG_DIR, "server.prev.log")]
+    paths.append(PERF_LOG)
+    return paths
+
+
+def read_logs(limit=200_000):
+    """[{name, title, size, text}] — the end of each log that exists (the newest lines matter)."""
+    out = []
+    for p in log_files():
+        try:
+            with open(p, "rb") as fh:
+                fh.seek(0, 2)
+                size = fh.tell()
+                fh.seek(max(0, size - limit))
+                text = fh.read().decode("utf-8", "replace")
+        except OSError:
+            continue
+        name = os.path.basename(p)
+        out.append({"name": name, "title": LOG_TITLES.get(name, name), "size": size, "text": text})
+    return out
+
+
+class _Tee:
+    """print() into logs/server.log as well as the console window."""
+
+    def __init__(self, fh, other):
+        self.fh, self.other = fh, other
+
+    def write(self, s):
+        for f in (self.fh, self.other):
+            if f is not None:
+                try:
+                    f.write(s)
+                    f.flush()
+                except Exception:  # noqa: BLE001
+                    pass
+        return len(s)
+
+    def flush(self):
+        pass
+
+
+def start_server_log():
+    """Started by a .bat or the Mac launcher: keep a copy of what it prints for the «Журнал»."""
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        cur = os.path.join(LOG_DIR, "server.log")
+        if os.path.isfile(cur) and os.path.getsize(cur) > 0:
+            os.replace(cur, os.path.join(LOG_DIR, "server.prev.log"))
+        fh = open(cur, "a", encoding="utf-8", errors="replace")
+        sys.stdout = _Tee(fh, sys.__stdout__)
+        sys.stderr = _Tee(fh, sys.__stderr__)
+    except OSError:
+        pass
+
+
+def adopt_app_launcher():
+    """Windows, started by the old desktop «Зомби не спят.bat»: put the new app icon
+    (no black window, a loading screen) on the desktop instead — once."""
+    if os.name != "nt" or os.environ.get("ZNS_LAUNCHER"):
+        return
+    if not os.path.isfile(os.path.join(os.environ.get("LOCALAPPDATA", ""), "ZombieNeSpyat", "start.bat")):
+        return
+    try:
+        sys.path.insert(0, os.path.join(ROOT, "launcher"))
+        import zns_launcher
+        zns_launcher.adopt_existing_install(ROOT)
+    except Exception as e:  # noqa: BLE001 — never stop the game for this
+        print(f"  (новый значок игры не создан: {e})")
+
+
 def safe_map_name(name):
     if not isinstance(name, str):
         return ""
@@ -146,7 +231,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
-        if "/api/perflog" in (self.path or "") or "/api/pose/" in (self.path or ""):
+        if any(p in (self.path or "") for p in ("/api/perflog", "/api/pose/", "/api/alive", "/api/logs")):
             return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
@@ -215,6 +300,21 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             POSE.clients -= 1
             POSE.last_client = time.time()
 
+    def _alive(self):
+        """The game page holds this open while its window lives (the app launcher
+        quits when no window is left; here it only keeps the line open)."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        try:
+            while True:
+                self.wfile.write(b": ping\n\n")
+                self.wfile.flush()
+                time.sleep(15)
+        except OSError:
+            return
+
     # ---------- GET ----------
     def do_GET(self):
         path = urlparse(self.path).path
@@ -224,6 +324,10 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_stream(urlparse(self.path).query)
         if path == "/api/version":
             return self._json(200, game_version())
+        if path == "/api/logs":
+            return self._json(200, {"logs": read_logs(), "launcher": bool(os.environ.get("ZNS_LAUNCHER"))})
+        if path == "/api/alive":
+            return self._alive()
         if path == "/api/maps":
             maps = {}
             if os.path.isdir(MAPS_DIR):
@@ -473,8 +577,10 @@ def ensure_pose_native():
 
 def main():
     no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
+    start_server_log()
     threading.Thread(target=ensure_pose_native, daemon=True).start()
     update_desktop_launcher()
+    adopt_app_launcher()
     httpd, port = open_server()
     url = f"http://localhost:{port}"
     print("=" * 50)

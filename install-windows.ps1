@@ -1,4 +1,4 @@
-# Волшебство только начинается — установка на Windows одной командой (без .bat из интернета).
+# «Волшебство только начинается» — установка на Windows одной командой (без .bat из интернета).
 #
 # Windows 11 («Интеллектуальное управление приложениями» / Smart App Control)
 # блокирует скачанные .bat и неподписанные .exe. Команда, набранная в PowerShell,
@@ -7,17 +7,18 @@
 #
 #   irm https://raw.githubusercontent.com/DmytroMolodozhonov/working-hand/main-fbxy0j/install-windows.ps1 | iex
 #
-# Скрипт ставит Python (если его нет), скачивает игру в %LOCALAPPDATA%\ZombieNeSpyat,
-# кладёт на рабочий стол «Волшебство только начинается.bat» (создан на этом компьютере —
-# Windows его не блокирует; он же обновляет игру) и запускает игру.
+# Скрипт ставит Python (если его нет), кладёт маленький запускатор игры в
+# %LOCALAPPDATA%\Volshebstvo\launcher и открывает его окно. Дальше всё — в этом окне:
+# выбор папки для игры, скачивание, значок на рабочем столе, запуск.
+# Запускатор работает через pythonw.exe (подписан разработчиками Python) — без чёрного окна.
 # Только обычные команды PowerShell: работает и в защищённом режиме языка.
 
 & {
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue' # иначе скачивание идёт в разы медленнее
-    $zipUrl = 'https://github.com/DmytroMolodozhonov/working-hand/archive/refs/heads/main-fbxy0j.zip'
-    $base = Join-Path $env:LOCALAPPDATA 'ZombieNeSpyat'
-    $game = Join-Path $base 'ZombieNeSpyat'
+    $raw = 'https://raw.githubusercontent.com/DmytroMolodozhonov/working-hand/main-fbxy0j'
+    $home2 = Join-Path $env:LOCALAPPDATA 'Volshebstvo'
+    $ldir = Join-Path $home2 'launcher'
 
     function Test-Python($exe, $pre) {
         try {
@@ -35,7 +36,7 @@
     }
 
     Write-Host ''
-    Write-Host '=== Волшебство только начинается: установка ===' -ForegroundColor Green
+    Write-Host '=== Волшебство только начинается: установка ===' -ForegroundColor Yellow
 
     # ---- Python
     $py = Find-Python
@@ -58,54 +59,35 @@
         Start-Process 'https://www.python.org/downloads/windows/'
         return
     }
+    # настоящий путь к python.exe (а не к «py»), рядом с ним pythonw.exe — он без чёрного окна
+    $exe = (& $py.exe @($py.pre) -c 'import sys; print(sys.executable)').Trim()
+    $pyw = Join-Path (Split-Path $exe) 'pythonw.exe'
+    if (-not (Test-Path $pyw)) { $pyw = $exe }
 
-    # ---- Игра
-    Write-Host 'Скачиваю игру (около 150 МБ), подождите...'
-    $zip = Join-Path $env:TEMP 'zns_game.zip'
-    $tmp = Join-Path $env:TEMP 'zns_game'
-    try {
-        Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
-    } catch {
-        Write-Host 'Не удалось скачать игру. Проверьте интернет и повторите команду.' -ForegroundColor Red
-        return
-    }
-    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-    # tar.exe есть в Windows 10/11 и распаковывает zip (Expand-Archive в защищённом режиме не работает)
-    tar -xf $zip -C $tmp
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host 'Архив повреждён — повторите команду.' -ForegroundColor Red
-        return
-    }
-    $src = (Get-ChildItem $tmp | Select-Object -First 1).FullName
-    New-Item -ItemType Directory -Force -Path $game | Out-Null
-    Copy-Item -Path (Join-Path $src '*') -Destination $game -Recurse -Force # свои карты (maps) остаются
-    # Запускатель с обновлением (тот же, что «Обновить и запустить игру.bat»)
-    # (ищем по содержимому: русские имена файлов при распаковке могут исказиться)
-    $bat = Get-ChildItem -Path $src -Filter '*.bat' | Where-Object { Select-String -Path $_.FullName -Pattern 'set ZIP=' -Quiet } | Select-Object -First 1
-    Copy-Item -Path $bat.FullName -Destination (Join-Path $base 'start.bat') -Force
-    Remove-Item $zip, $tmp -Recurse -Force -ErrorAction SilentlyContinue
-    # Номер версии: значок на рабочем столе скачивает игру заново только при обновлении
-    try {
-        $ver = (Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/DmytroMolodozhonov/working-hand/branches/main-fbxy0j').commit.sha
-        if ($ver) { Set-Content -Encoding Ascii -Path (Join-Path $game '.zns-version') -Value $ver }
-    } catch { }
-
-    # ---- Значок на рабочем столе (создан здесь — Windows его не блокирует)
-    $desk = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name Desktop -ErrorAction SilentlyContinue).Desktop
-    if (-not $desk) { $desk = Join-Path $env:USERPROFILE 'Desktop' }
-    # (the game was called «Зомби не спят» before: its old desktop icon is replaced)
-    Remove-Item -Path (Join-Path $desk 'Зомби не спят.bat') -Force -ErrorAction SilentlyContinue
-    Set-Content -Path (Join-Path $desk 'Волшебство только начинается.bat') -Encoding Ascii -Value @(
-        '@echo off',
-        'call "%LOCALAPPDATA%\ZombieNeSpyat\start.bat"'
+    # ---- Запускатор (несколько маленьких файлов; саму игру он скачает в своём окне)
+    Write-Host 'Скачиваю запускатор игры...'
+    New-Item -ItemType Directory -Force -Path $ldir | Out-Null
+    $files = @(
+        @('launcher/launcher.pyw', 'launcher.pyw'),
+        @('launcher/zns_launcher.py', 'zns_launcher.py'),
+        @('launcher/loading.html', 'loading.html'),
+        @('assets/logo/logo.ico', 'logo.ico'),
+        @('assets/logo/logo-256.png', 'logo.png')
     )
+    foreach ($f in $files) {
+        try {
+            Invoke-WebRequest -Uri "$raw/$($f[0])" -OutFile (Join-Path $ldir $f[1]) -UseBasicParsing
+        } catch {
+            if ($f[1] -like 'logo*') { continue } # без значка тоже работает
+            Write-Host 'Не удалось скачать запускатор. Проверьте интернет и повторите команду.' -ForegroundColor Red
+            return
+        }
+    }
 
     Write-Host ''
-    Write-Host 'Готово! На рабочем столе появился значок «Волшебство только начинается» —' -ForegroundColor Green
-    Write-Host 'в следующий раз запускайте игру им (он сам обновляет игру).'
-    Write-Host 'Сейчас откроется браузер с игрой. Не закрывайте это окно, пока играете.'
+    Write-Host 'Готово! Сейчас откроется окно игры: выберите в нём папку для игры —' -ForegroundColor Green
+    Write-Host 'дальше оно само скачает игру и положит значок на рабочий стол.'
+    Write-Host 'Это окно PowerShell можно закрыть.'
     Write-Host ''
-    Set-Location $game
-    & $py.exe @($py.pre) server.py
+    Start-Process -FilePath $pyw -ArgumentList ('"' + (Join-Path $ldir 'launcher.pyw') + '"') -WorkingDirectory $ldir
 }
