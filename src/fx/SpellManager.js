@@ -40,6 +40,8 @@ export function matchSpell(text) {
     if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';
     if (has('нокс', 'nox', 'нокса', 'knox')) return 'Nox';
     if (has('латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
+    // «Water Vortex» («вотер вортекс»): before everything that shares its sounds (water ball, Maxima…)
+    if (has('vortex', 'vortec', 'vortx', 'вортекс', 'вортэкс', 'вортикс', 'вортекз', 'вортес', 'вотекс', 'вортакс', 'водоворот', 'ворт экс')) return 'WaterVortex';
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)
@@ -75,6 +77,8 @@ export function matchSpell(text) {
     if (has('брейнрот', 'брейн рот', 'брейнрод', 'брэйнрот', 'brainrot', 'brain rot', 'брейн', 'брэйн', 'brain')) return 'Brainrot';
     if (has('вайнд', 'винд', 'вайн', 'уинд', 'wind', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
+    // «Fire Maxima» (before the lone «Максима» and the campfire «Fire»)
+    if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер') && has('макс', 'max', 'мах', 'maks')) return 'FireMaxima';
     // Water bending (before Ice/Sands: their short tokens would catch these words)
     const water = has('вотер', 'ватер', 'уотер', 'water', 'вотр', 'водян', 'вода', 'воду', 'уатер', 'watter', 'woter');
     if (has('форминг', 'forming', 'формин') || (water && has('форм', 'form'))) return 'WaterForming';

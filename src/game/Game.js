@@ -18,6 +18,7 @@ import { WeaponSystem } from './Weapons.js';
 import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
+import { WaterVortex } from './WaterVortex.js';
 import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Accio } from './Accio.js';
@@ -211,6 +212,7 @@ export class Game {
 
         this.weapons = new WeaponSystem(this);
         this.water = new WaterMagic(this);
+        this.vortex = new WaterVortex(this); // «Water Vortex» (+ «Bubble», «Frozen») and «Fire Maxima»
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
@@ -718,6 +720,9 @@ export class Game {
             if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творческом режиме. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
+        // «Water Vortex», its «Bubble» / «Frozen», «Fire Maxima» (and nothing else from inside its ice)
+        const vx = this.vortex.voice(name, text, isFinal);
+        if (vx !== undefined) return vx;
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
         // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
         // (before the duel's block: nothing may keep you from stopping your own spells)
@@ -894,6 +899,7 @@ export class Game {
         if (this.combat.dropShield('🛑 Стоп — щит снят')) done.push('щит');
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
+        if (this.vortex?.stop()) done.push('водоворот');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
         if (this._wave) { this._wave = null; done.push('волна'); }
         if (W?.light) { W._nox(); done.push('Люмос'); }
@@ -1784,6 +1790,7 @@ export class Game {
         this.weapons.update(dt);
         this.water.update(dt);
         this.combat.update(dt);
+        this.vortex.update(dt);
         this.combat.updatePunches();
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
@@ -2378,6 +2385,7 @@ export class Game {
         this.swim?.dispose();
         this.items?.dispose();
         this.wandMagic?.dispose();
+        this.vortex?.dispose();
         this.gear?.dispose();
         this.bleeding?.dispose();
         this.animals?.dispose();

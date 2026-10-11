@@ -21,6 +21,7 @@
  *   w        host→all     free weapon poses 10×/s
  *   bite     host→player  zombie bit you;  win: someone reached the finish
  *   wb       player→all   water ball in hand (10×/s);  wdrop: ball dropped
+ *   vx       player→all   «Water Vortex» (its state 10×/s, launch, hit, bubble, freeze, burst) and «Fire Maxima»
  *   ice      player→all   ice blocks built with water forming
  *   phit     player→all   my fist/weapon hit player `to` (Свободный мир)
  *   pdead    player→all   I was killed (by `killer`)
@@ -346,6 +347,11 @@ export class NetSync {
     /** «Стоп»: the flames / ice beams / storm I hold end everywhere. */
     stopSpells() {
         this.net.send({ t: 'stop', by: this.me }, true);
+    }
+
+    /** «Water Vortex» / «Fire Maxima» events and my vortex's state (see WaterVortex.onNet). */
+    vortex(m) {
+        this.net.send({ t: 'vx', by: this.me, ...m }, true);
     }
 
     waterDrop(b) {
@@ -734,6 +740,7 @@ export class NetSync {
             }
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
+            case 'vx': if (m.by !== this.me) g.vortex?.onNet(m); break;
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
             case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now()); g.duel.remoteCast(m); } break;
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;

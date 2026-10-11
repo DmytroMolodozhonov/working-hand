@@ -78,6 +78,9 @@ export const SPELL_COST = {
     LumosMaxima: 4,
     CreateBed: 6,
     ChangeColor: 2,
+    WaterVortex: 25, // very strong: a whole vortex of water (see WaterVortex.js)
+    VortexBubble: 5, // «Bubble» on the one the vortex hit
+    FireMaxima: 20, // the only way out of the vortex's ice
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */
@@ -224,6 +227,7 @@ export class Combat {
         this.frozenBy = null;
         this.chill = 0;
         this.stunLeft = 0;
+        this.encased = false;
         this.dead = false;
         this.game.character.knockedDown = false;
         this.game.hud.setStatus?.('');
@@ -242,7 +246,7 @@ export class Combat {
 
     /** Frozen or stunned: the body can't move. */
     get immobile() {
-        return this.frozen || this.stunned || this.dead || this.webbed;
+        return this.frozen || this.stunned || this.dead || this.webbed || this.encased; // (encased: in the vortex's ice bubble)
     }
 
     stun(seconds, byId, kind = 'stupefy') {
@@ -485,9 +489,9 @@ export class Combat {
             this.stunLeft = Math.max(0, this.stunLeft - dt);
             const left = `<b>${Math.ceil(this.stunLeft)}</b> с`;
             this.game.hud.setStatus(this.stunLeft > 0
-                ? (this.stunKind === 'quake' ? `🌋 Вас сбило землетрясением — встанете через ${left}` : `💫 Остолбеней! Вы не можете двигаться ещё ${left}`)
+                ? (this.stunKind === 'quake' ? `🌋 Вас сбило землетрясением — встанете через ${left}` : this.stunKind === 'water' ? `🌊 Вас сбило водой — встанете через ${left}` : `💫 Остолбеней! Вы не можете двигаться ещё ${left}`)
                 : '');
-            if (this.stunLeft <= 0 && this.stunKind === 'quake') this.game.character.knockedDown = false;
+            if (this.stunLeft <= 0 && (this.stunKind === 'quake' || this.stunKind === 'water')) this.game.character.knockedDown = false;
         }
         if (!this.enabled) {
             // Other modes: only the shield (no HP / fatigue rules)
