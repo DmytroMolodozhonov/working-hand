@@ -35,6 +35,7 @@ export const LUMOS = {
     LIFE: 10, // s from the throw: then it is gone
     FADE: 3, // s of fading out at the end
     AGAIN: 1500, // ms: the same word heard again (the speech's final result) is not a second cast
+    FLICK: 7, // m/s of the hand against the body: a flick of the wand throws the light
 };
 
 let _glowTex = null;
@@ -376,9 +377,16 @@ export class WandMagic {
             this.light.glow.position.copy(tip);
             this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
+            // a flick: the hand fast against the BODY (running adds the body's speed to the hand's —
+            // that threw the light by itself), the arm raised, not running or flying
+            const ch = g.character;
             const side = g.items.heldOf('wand')?.side || this._bareSide();
-            const v = g.character.handVelocity[side];
-            if (v.length() > 7 && performance.now() - (this._flickAt || 0) > 900) { this._flickAt = performance.now(); this._throwLight(v.clone().normalize()); }
+            const vr = ch.handRelVelocity?.[side];
+            const fast = vr ? vr.length() > LUMOS.FLICK : ch.handVelocity[side].length() > LUMOS.FLICK;
+            if (fast && !ch.isRunning && !ch.flying && (ch.isArmRaised?.(side) ?? true) && performance.now() - (this._flickAt || 0) > 900) {
+                this._flickAt = performance.now();
+                this._throwLight(vr ? vr.clone().applyQuaternion(ch.group.getWorldQuaternion(_q)).normalize() : ch.handVelocity[side].clone().normalize());
+            }
         }
         for (let i = this.thrown.length - 1; i >= 0; i--) {
             const t = this.thrown[i];

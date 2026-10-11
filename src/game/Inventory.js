@@ -382,9 +382,18 @@ export class Inventory {
         if (hk !== this._hk) { this._hk = hk; this._render(); }
     }
 
-    /** The wand's pocket (the left one): draw the wand into `side`, or put it away. */
+    /**
+     * The wand's pocket (the left one): put the wand away (from whichever hand holds it), or draw
+     * it — always into the RIGHT hand (the left only if the right is busy), whichever hand went in.
+     */
     wandPocket(side) {
         const g = this.game;
+        const holder = ['right', 'left'].find((sd) => g.items?.held[sd]?.item.kind === 'wand');
+        if (holder) side = holder;
+        else {
+            const busy = (sd) => !!(g.items?.held[sd] || g.weapons.hands[sd].held);
+            side = !busy('right') ? 'right' : !busy('left') ? 'left' : side;
+        }
         const h = g.items?.held[side];
         if (h && h.item.kind === 'wand') {
             const it = g.items.releaseHand(side);

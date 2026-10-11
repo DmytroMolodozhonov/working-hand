@@ -428,7 +428,7 @@ test('the hand follows the camera\'s hand fully: bent left / right at the wrist,
     await page.close();
 });
 
-test('pockets: the left pocket is the wand\'s (in and out draws it, in with it puts it away); hanging arms do nothing; the right pocket puts a thing away / takes the next one', async () => {
+test('pockets: the left pocket is the wand\'s (in and out draws it — into the RIGHT hand —, in again puts it away); hanging arms do nothing; the right pocket puts a thing away / takes the next one', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -458,9 +458,9 @@ test('pockets: the left pocket is the wand\'s (in and out draws it, in with it p
     await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 20, 40);
     const stored = await state();
     assert.ok(!hanging.l && !hanging.r && hanging.sel === -1 && hanging.wandSlot, 'hanging arms: nothing happens ' + JSON.stringify(hanging));
-    assert.ok(drawn.l === 'wand' && !drawn.wandSlot, 'the wand drawn from the left pocket ' + JSON.stringify(drawn));
+    assert.ok(drawn.r === 'wand' && !drawn.l && !drawn.wandSlot, 'the wand drawn from the left pocket into the right hand ' + JSON.stringify(drawn));
     assert.ok(drawn.cell.includes('🪄'), 'the «hand» cell shows the wand in the hand');
-    assert.ok(!away.l && away.wandSlot, 'and put back ' + JSON.stringify(away));
+    assert.ok(!away.l && !away.r && away.wandSlot, 'and put back ' + JSON.stringify(away));
     assert.equal(next.r, 'apple', 'the right pocket, empty hand: the next thing ' + JSON.stringify(next));
     assert.ok(!stored.r, 'the right hand with a thing puts it away ' + JSON.stringify(stored));
     assert.deepEqual(realErrors(errors), []);
