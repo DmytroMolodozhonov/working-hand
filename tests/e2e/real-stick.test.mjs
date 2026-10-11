@@ -35,7 +35,7 @@ const wandNow = (page, side = 'right') => page.evaluate(async (side) => {
 
 const angleOff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) * 180 / Math.PI;
 
-test('a real stick in the hand: the wand and the spells go along it (any way it is turned), the open-looking hand still holds; without it the fingers lead again', async () => {
+test('a real stick in the hand (V4): seen only when it really is there; the open-looking hand holding it still holds the wand; the wand keeps to the arm', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -56,26 +56,13 @@ test('a real stick in the hand: the wand and the spells go along it (any way it 
     await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0 }, 10, 40);
     assert.equal((await wandNow(page)).seen, false, 'one picture with a line: nothing');
 
-    // the stick turned different ways in the picture: the wand follows it
-    for (const a of [0.6, -0.5, 0.35, 0.1]) {
-        await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: a }, 8, 40);
-        const w = await wandNow(page);
-        assert.ok(w.seen, 'the stick is seen');
-        assert.ok(angleOff(w.pic, a) < 6, `stick at ${a}: the wand at ${w.pic.toFixed(2)} in the picture`);
-        assert.ok(w.aimAlong < 3, `spells fly along it (${w.aimAlong.toFixed(1)}°)`);
-    }
-
-    // a line straight across the hand (where no hand holds a stick): not taken for one
-    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: 1.65 }, 10, 40);
-    const across = await wandNow(page);
-    assert.ok(angleOff(across.pic, 1.65) > 30, `a line across the hand is not the wand (${across.pic.toFixed(2)})`);
-
-    // a stick seen short (pointing at the camera): the wand points ahead, not across
-    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: { angle: 0.3, out: 3 } }, 6, 40);
-    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: { angle: 0.3, out: 1 } }, 12, 40);
-    const short = await wandNow(page);
-    assert.ok(short.ahead > 0.7, `seen short, it points ahead (${short.ahead.toFixed(2)})`);
-    assert.ok(angleOff(short.pic, 0.3) < 6, 'and still the same way across the picture');
+    // the stick seen: the wand stays the arm's continuation (V3's wand — the pen grip that
+    // followed the stick is off, PEN_WAND in Items.js), it does not jump to the stick
+    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: 0.6 }, 10, 40);
+    const w = await wandNow(page);
+    assert.ok(w.seen, 'the stick is seen');
+    assert.ok(angleOff(w.pic, fingers.pic) < 8, `the wand keeps to the arm (${w.pic.toFixed(2)} vs ${fingers.pic.toFixed(2)})`);
+    assert.ok(w.aimAlong < 3, `spells fly along the wand (${w.aimAlong.toFixed(1)}°)`);
 
     // the fingers around a real stick look open-ish to the network: it is a closed hand all the same
     await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0, rightStick: 0.4 }, 40, 40);
@@ -92,7 +79,7 @@ test('a real stick in the hand: the wand and the spells go along it (any way it 
     await page.close();
 });
 
-test('a real stick in the left hand: the left hand\'s wand follows it; a stick by the right hand doesn\'t turn the left wand', async () => {
+test('a real stick in the left hand is the left hand\'s; a stick by the right hand is not', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -108,8 +95,7 @@ test('a real stick in the left hand: the left hand\'s wand follows it; a stick b
     assert.equal(r.seen, false, 'the right hand\'s stick is not the left hand\'s');
     await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.4, leftStick: -0.45 }, 10, 40);
     const l = await wandNow(page, 'left');
-    assert.ok(l.seen);
-    assert.ok(angleOff(l.pic, -0.45) < 6, `the left wand at ${l.pic.toFixed(2)}`);
+    assert.ok(l.seen, 'the left hand\'s stick is the left hand\'s');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

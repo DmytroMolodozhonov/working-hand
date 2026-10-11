@@ -138,7 +138,7 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it 
     await page.close();
 });
 
-test('the wand is held like a pen: its back in the web of the thumb, pinched by the thumb and index tips, pointing where the fingers point; spells fly along it', async () => {
+test('the wand is held like a pen: its back in the web of the thumb, pinched by the thumb and index tips, pointing where the fingers point; spells fly along it', { skip: 'the pen grip is off: V4 hands hold the wand as V3 (PEN_WAND in Items.js)' }, async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);

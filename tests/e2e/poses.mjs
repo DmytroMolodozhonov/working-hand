@@ -48,7 +48,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
  *   bob: shoulder vertical offset (for running animation)
  *   legs: {left, right}: 'stand' | 'up' | 'heel' | 'off' (opt-in; see below)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, legs = null } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, legs = null } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -82,6 +82,10 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
     // a hand put into its front trouser pocket: the wrist at the hip, the elbow bent out (the hand not seen)
     if (pocket === 'left' || pocket === 'both') { lElbow = [0.67, sh + 0.18]; lWrist = [0.58, sh + 0.37]; leftCurl = null; }
     if (pocket === 'right' || pocket === 'both') { rElbow = [0.33, sh + 0.18]; rWrist = [0.42, sh + 0.37]; rightCurl = null; }
+    // a hand at the wand's place on the waistband: in front, at the person's left of the middle
+    // (the right hand reaching across; the left one just in front of its hip), in front of the body
+    if (belt === 'right') { rElbow = [0.43, sh + 0.2]; rWrist = [0.525, sh + 0.31]; }
+    if (belt === 'left') { lElbow = [0.62, sh + 0.2]; lWrist = [0.54, sh + 0.31]; }
     // a hand brought to the mouth (eating): the elbow down in front, the hand at the mouth
     if (toMouth === 'right') { rElbow = [0.42, sh + 0.12]; rWrist = [0.485, noseY + 0.1]; }
     if (toMouth === 'left') { lElbow = [0.58, sh + 0.12]; lWrist = [0.515, noseY + 0.1]; }
@@ -111,6 +115,8 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
     p[14] = { x: rElbow[0], y: rElbow[1], z: z ? z.re : ez, visibility: 0.99 };
     p[15] = { x: lWrist[0], y: lWrist[1], z: z ? z.lw : wz, visibility: 0.99 };
     p[16] = { x: rWrist[0], y: rWrist[1], z: z ? z.rw : wz, visibility: 0.99 };
+    if (belt === 'right') { p[14].z = -0.15; p[16].z = -0.35; }
+    if (belt === 'left') { p[13].z = -0.15; p[15].z = -0.35; }
     p[23] = { x: 0.57, y: 0.8, z: 0, visibility: 0.9 };
     p[24] = { x: 0.43, y: 0.8, z: 0, visibility: 0.9 };
     // legs: {left, right}: 'stand' | 'up' (the knee to the hip) | 'heel' (the foot kicked up behind) | 'off' (not seen)

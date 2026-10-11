@@ -10,8 +10,8 @@
  *
  * Hands, no words (a hand really put INTO the pocket for a moment — a slap on the
  * hip, a hand hanging or swinging never does anything):
- *   - the LEFT pocket is the wand's: a hand (the left, or the right reaching across)
- *     put in and taken out draws the wand; put in holding the wand, puts it away;
+ *   - the wand has its own place, tucked into the waistband in front (WandBelt.js):
+ *     tucked in there to put it away, taken from there looking down at it;
  *   - the right pocket: the right hand holding a thing puts it away; put in empty,
  *     it takes out the next thing of the slots (food, a scroll, a book, the building
  *     blocks…);
@@ -23,6 +23,7 @@
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand } from './ItemTypes.js';
+import { WandBelt } from './WandBelt.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -95,6 +96,7 @@ export class Inventory {
         this.selected = -1; // -1: the «hand» cell (free right hand)
         this.inHand = null; // {slot, kind, weapon?}: what of the selected slot is in the right hand
         this._pocket = { left: { out: 0, hist: [], armed: true }, right: { out: 0, hist: [], armed: true } };
+        this.belt = new WandBelt(game); // (the wand's place at the waistband: WandBelt.js)
         this._back = { left: { t: 0, at: 0 }, right: { t: 0, at: 0 } };
         this._backModels = []; // the weapons seen on the back
         this._handBlock = null;
@@ -309,7 +311,7 @@ export class Inventory {
         }
         for (const side of ['right', 'left']) {
             const h = g.items?.held[side];
-            if (!h) continue;
+            if (!h || h.item.kind === 'wand') continue; // (the wand goes only to the waistband: WandBelt)
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
             if (this.storeItem(it)) this._fx('🎒 ' + (ITEM_INFO[it.kind]?.name || 'Предмет') + ' в ячейке');
@@ -334,7 +336,7 @@ export class Inventory {
      */
     update(dt) {
         const g = this.game;
-        if (!g.currentPose || g.combat.immobile) { this._updateHandBlock(); return; }
+        if (!g.currentPose || g.combat.immobile) { this.belt._show(); this._updateHandBlock(); return; }
         const ch = g.character;
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
@@ -351,13 +353,8 @@ export class Inventory {
             const pk = g.currentPose.pocket;
             const inPocket = side === 'left' ? pk?.left : pk?.right;
             // the right hand reaching across into the LEFT pocket: the wand's pocket too
-            if (side === 'right') {
-                const cr = this._cross || (this._cross = { inT: 0, outT: 0, armed: true, out: 0 });
-                cr.inT = pk?.cross ? cr.inT + dt : 0;
-                cr.outT = pk?.cross ? 0 : cr.outT + dt;
-                if (cr.outT > 0.4) cr.armed = true;
-                if (cr.armed && cr.inT > POCKET_DWELL && now - cr.out > 700) { cr.armed = false; cr.out = now; this.wandPocket('right'); }
-            }
+            // (the wand is no longer put away / drawn by a pocket — lowering the arm did it by
+            // accident: it has its own place at the waistband, WandBelt.js)
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
             st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
             if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
@@ -366,7 +363,7 @@ export class Inventory {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
-                if (side === 'left') this.wandPocket('left');
+                if (side === 'left') { /* (the left pocket was the wand's: see WandBelt) */ }
                 else if (g.items?.held.right || g.weapons.hands.right.held) this.pocketRight();
                 else this.takeNext('right');
             }
@@ -375,6 +372,7 @@ export class Inventory {
             if (behindBack(local, ch.handVelocity[side].length())) b.t += dt; else b.t = 0;
             if (b.t > 0.5 && now - b.at > 1200) { b.t = 0; b.at = now; this._backGesture(side); }
         }
+        this.belt.update(dt);
         this._updateHandBlock();
         this._updateBack();
         // the «hand» cell shows what the hands hold
