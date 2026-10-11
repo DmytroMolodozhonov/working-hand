@@ -17,7 +17,7 @@ export const LEGS = {
     UP: 0.26, // knee this far below the hip (in torso lengths) or less: lifted
     DOWN: 0.40, // … this far or more: down again (hysteresis)
     HEEL: 0.25, // the shin looks this short (the foot kicked up behind)
-    STROKE_MS: 1200,
+    STROKE_MS: 2500, // (a slow stroke still pushes the water)
     SEEN_MS: 500,
 };
 

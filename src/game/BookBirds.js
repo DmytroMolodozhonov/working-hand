@@ -21,7 +21,7 @@ import { isLeaves } from '../world/Terrain.js';
 import { BUILD_SPELLS } from './Builder.js';
 import { BookReading } from './BookReading.js';
 
-export const BOOK_POOL = ['Gather', 'CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor'];
+export const BOOK_POOL = ['Gather', 'CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'CreateBoard'];
 const BIRDS = 4;
 const SPEED = 7;
 const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];
@@ -33,6 +33,7 @@ const HOW = {
     CreateWall: { words: 'Create a Wall', hand: 'wall', text: 'Укажите рукой место стены и скажите заклинание. Ведите руку в сторону и вверх — стена растёт в ширину и в высоту, пока хватает ресурса.' },
     CreateCeiling: { words: 'Create a Ceiling', hand: 'reach', text: 'Укажите рукой место — потолок появится на высоте трёх блоков. Тяните руку — он растёт над вами.' },
     BuildRoof: { words: 'Build a Roof', hand: 'reach', text: 'Укажите место и тяните руку: двускатная крыша растёт ступенями от краёв к коньку.' },
+    CreateBoard: { words: 'Create a Board', hand: 'board', text: 'Поднимите руку, покажите на дерево и скажите заклинание — ствол станет доской для волн. Несите её двумя руками за края или под мышкой. Положите на воду и разожмите руки. Поднимите колено над доской и опустите ногу — вы на доске; другой ногой гребите. Волна подхватила — встаньте обеими ногами; наклон влево-вправо поворачивает.' },
     CreateDoor: { words: 'Create a Door', hand: 'door', text: 'Держите в руке дерево (не меньше 12). Скажите заклинание — кубик станет маленькой дверью. Отводите руку — дверь растёт; покажите, куда её поставить, и скажите «Stand».' },
 };
 
@@ -117,7 +118,13 @@ function drawPage(spell, side) {
         x.fillStyle = '#8b6b3e';
         if (how.hand === 'wall') { for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) x.fillRect(165 + i * 22, 140 + j * 22, 20, 20); }
         else if (how.hand === 'door') { x.fillRect(170, 150, 40, 80); x.fillStyle = '#d4af37'; x.beginPath(); x.arc(202, 192, 4, 0, 7); x.fill(); }
-        else if (how.hand === 'one') { x.fillStyle = '#2f8a2f'; x.fillRect(170, 150, 50, 40); x.fillStyle = '#6b3f1e'; x.fillRect(188, 190, 14, 60); }
+        else if (how.hand === 'board') {
+            // a tree, an arrow, a surfboard with its fins
+            x.fillStyle = '#2f8a2f'; x.fillRect(160, 120, 30, 26); x.fillStyle = '#6b3f1e'; x.fillRect(170, 146, 10, 40);
+            x.strokeStyle = '#9b5bff'; x.beginPath(); x.moveTo(185, 196); x.lineTo(200, 214); x.stroke();
+            x.fillStyle = '#b07c45'; x.beginPath(); x.ellipse(205, 250, 14, 44, 0.2, 0, Math.PI * 2); x.fill();
+            x.fillStyle = '#5a3a1a'; x.fillRect(208, 288, 4, 10);
+        } else if (how.hand === 'one') { x.fillStyle = '#2f8a2f'; x.fillRect(170, 150, 50, 40); x.fillStyle = '#6b3f1e'; x.fillRect(188, 190, 14, 60); }
         else { for (let i = 0; i < 4; i++) x.fillRect(140 + i * 24, 250, 22, 14); }
         // magic dots
         x.fillStyle = '#9b5bff';

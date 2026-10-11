@@ -27,6 +27,7 @@ export const BUILD_SPELLS = {
     CreateCeiling: { name: 'Create a Ceiling', ru: 'потолок', cost: 4 },
     BuildRoof: { name: 'Build a Roof', ru: 'крыша', cost: 6 },
     CreateDoor: { name: 'Create a Door', ru: 'дверь', cost: 4 },
+    CreateBoard: { name: 'Create a Board', ru: 'доска для волн', cost: 6 },
 };
 
 const MAX_SPAN = 6; // cells from the first block in each direction
@@ -53,7 +54,8 @@ export class Builder {
     /** May this spell be used now? (creative: all; elsewhere: learned from a book) */
     knows(spell) {
         if (this.game.config.mode === 'creative') return true;
-        return !!this.game.books?.learned?.has(spell);
+        // (learned from a book-bird's book — or a burnt scroll, for the spells that have one)
+        return !!this.game.books?.learned?.has(spell) || !!this.game.bonus?.spells?.[spell];
     }
 
     // =================================================================== aim

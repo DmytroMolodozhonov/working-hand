@@ -285,6 +285,7 @@ export class WeaponSystem {
         if (!allowGrab || !visible) return;
         if (this.game.items?.held[side]) return; // the hand holds another thing
         if (this.game.books?.reading?.handBusy(side)) return; // (it holds the book's cover)
+        if (this.game.boards?.handBusy(side)) return; // (it holds a surfboard's rail)
         // "Recently open" in time OR in frames (slow computers render few frames per second)
         const closing = curl > CLOSE_CURL && (now - hs.lastOpen < CLOSE_WINDOW_MS || this.frame - hs.lastOpenFrame <= 12);
         if (!closing) return;

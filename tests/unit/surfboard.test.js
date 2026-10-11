@@ -161,3 +161,34 @@ test('board registry: first come wins, owners keep it, saves leave racks out', (
     r2.restore(snap, [...r.beachTaken]);
     assert.ok(r2.beachTaken.has('cb_1_1_0') && r2.map.get('b1').owner === null);
 });
+
+test('«Create a Board»: heard right, not mixed up with other spells, learned from a book or a scroll', async () => {
+    const { matchSpell } = await import('../../src/fx/SpellManager.js');
+    for (const t of ['Create a Board', 'create a board', 'криэйт э борд', 'крейт э борд', 'создай доску', 'surfboard']) assert.equal(matchSpell(t), 'CreateBoard', t);
+    assert.equal(matchSpell('Create a Door'), 'CreateDoor');
+    assert.equal(matchSpell('Create a Bed'), 'CreateBed');
+    assert.equal(matchSpell('Create a Floor'), 'CreateFloor');
+    assert.notEqual(matchSpell('абордаж'), 'CreateBoard');
+    assert.equal(matchSpell('инферно'), 'Inferno');
+    const { BUILD_SPELLS, Builder } = await import('../../src/game/Builder.js');
+    assert.equal(BUILD_SPELLS.CreateBoard.cost, 6);
+    const { BOOK_POOL, bookSpells } = await import('../../src/game/BookBirds.js');
+    assert.ok(BOOK_POOL.includes('CreateBoard'));
+    let n = 0;
+    for (let i = 0; i < 2000; i++) if (bookSpells(i).includes('CreateBoard')) n++;
+    assert.ok(n >= 50, `in ${n} books`);
+    const { rollLoot, SCROLL_SPELL_COLOR, SPELL_RIBBON } = await import('../../src/game/ItemTypes.js');
+    const { createRng } = await import('../../src/core/math.js');
+    const r = createRng(99);
+    let all = 0, boards = 0;
+    for (let i = 0; i < 5000; i++) for (const it of rollLoot(r)) { all++; if (it.spell === 'CreateBoard') boards++; }
+    assert.ok(boards / all > 0.005 && boards / all < 0.04, `${boards} of ${all}`);
+    assert.equal(SCROLL_SPELL_COLOR.CreateBoard, undefined);
+    assert.ok(SPELL_RIBBON.CreateBoard);
+    const game = { config: { mode: 'freeworld' }, books: { learned: new Set() }, bonus: null };
+    const b = new Builder(game);
+    assert.equal(b.knows('CreateBoard'), false);
+    game.books.learned.add('CreateBoard'); assert.equal(b.knows('CreateBoard'), true);
+    game.books.learned.clear(); game.bonus = { spells: { CreateBoard: true } }; assert.equal(b.knows('CreateBoard'), true);
+    game.bonus = null; game.config.mode = 'creative'; assert.equal(b.knows('CreateBoard'), true);
+});

@@ -32,7 +32,7 @@ export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation'] },
     destroy: { name: 'разрушения', spells: ['Bombardo', 'BombardoMaxima', 'Inferno', 'Thunderwave', 'Earthquake', 'EarthquakeMaxima', 'LightningStrike', 'Sands', 'Ice'] },
     gather: { name: 'собирательства', spells: ['Gather', 'Accio', 'Wind', 'WindMaxima', 'Waterball', 'WaveAttack', 'WaveAttackMaxima', 'WaterVortex'] },
-    build: { name: 'строительства', spells: ['CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'WaterForming'] },
+    build: { name: 'строительства', spells: ['CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'WaterForming', 'CreateBoard'] },
 };
 /** Spells a wand can favour; a Maxima form goes with its base spell. */
 export const WAND_FAVOURITES = ['Inferno', 'Thunderwave', 'Sapira', 'Ice', 'Sands', 'Bombardo', 'Earthquake', 'Wind', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Accio', 'Protection', 'LightningStrike', 'WaveAttack', 'Lumos', 'Gather', 'Brainrot'];
@@ -40,12 +40,14 @@ export const SPELL_RU = {
     Inferno: 'Инферно', Thunderwave: 'Тандервейв', Sapira: 'Сапира', Ice: 'Айс', Sands: 'Даст', Bombardo: 'Бомбардо', Earthquake: 'Earthquake',
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
-    WaterVortex: 'Water Vortex',
+    WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board',
     Unfurl: 'Анфёрл', Furl: 'Фёрл',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
 export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e };
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
+/** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
+export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
 export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
@@ -228,7 +230,8 @@ export function rollLoot(r = Math.random, { cave = true } = {}) {
                 : y < 0.45 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
                 : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Alive' }
                 : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
-                : y < 0.72 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
+                : y < 0.58 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateBoard' }
+                : y < 0.76 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
                 : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
         }
         else if (x < 0.55) out.push({ kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: r() < 0.6, bonus: randInt(r, 1, 60), uid: newUid() });
@@ -267,7 +270,7 @@ export function describeItem(it) {
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
-            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SCROLL_SPELL_COLOR[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, 'Без свитка оно есть только в Творческом режиме'] };
+            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, it.spell === 'CreateBoard' ? 'Его можно выучить и из книги птицы-книги' : 'Без свитка оно есть только в Творческом режиме'] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: мана +<b>${it.amount}</b> навсегда`] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
@@ -345,7 +348,7 @@ function scrollModel(it) {
     const r = cyl(0.06, 0.06, 0.36, paper);
     r.rotation.z = Math.PI / 2;
     g.add(r);
-    const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SCROLL_SPELL_COLOR[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
+    const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
     for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }

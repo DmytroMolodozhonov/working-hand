@@ -294,6 +294,7 @@ export class Inventory {
     /** Right pocket: what the hand holds goes into a slot. */
     pocketRight() {
         const g = this.game;
+        if (g.boards?.hold) { g.hud.toast?.('🏄 Доска слишком большая для кармана'); return; }
         for (const side of ['right', 'left']) {
             const w = g.weapons.hands[side].held;
             if (w) {

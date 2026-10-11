@@ -118,6 +118,7 @@ export class NetSync {
         this.game.water?.applyRemote(id, null);
         this.game.levitation?.onLeave(id); // (what they held falls; if they held me, I fall)
         this.game.handHold?.onLeave(id); // (hands they held or that held mine: let go)
+        this.game.boards?.onLeave(id); // (the surfboard they held or rode stays where it was)
         // Drop weapons they were holding
         for (const [wid, owner] of this.weaponOwners) {
             if (owner !== id) continue;
@@ -141,6 +142,7 @@ export class NetSync {
             players: this.net.playerList(),
             dayStart: g.dayStart,
             doors: g.doors?.snapshot() || [],
+            boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             houses: g.houses?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
@@ -165,6 +167,7 @@ export class NetSync {
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         if (msg.doors) g.doors?.restore(msg.doors);
+        if (msg.boards) g.boards?.restore(msg.boards);
         if (msg.campfires) g.campfires?.restore(msg.campfires);
         if (msg.houses) g.houses?.restore(msg.houses);
         if (msg.beds) g.beds?.restore(msg.beds);
@@ -229,6 +232,7 @@ export class NetSync {
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
                 sh: g.ships?.myNet(), // (standing on a ship: my place on its deck)
+                bd: g.boards?.netMine(), // (the surfboard I carry or ride)
             }, true);
         }
         // Water ball in my hand
@@ -625,6 +629,7 @@ export class NetSync {
             case 'p': {
                 const r = g.remotes.get(m.id || m.from);
                 if (r) r.applyState(m);
+                g.boards?.remotePose(m.id || m.from, m.bd); // (the surfboard they carry or ride)
                 for (const ws of m.w || []) {
                     const w = g.weapons.byId.get(ws[0]);
                     if (w && !w.holder) { w.setRemoteTarget(ws); w.hover = null; }
@@ -705,6 +710,7 @@ export class NetSync {
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
             case 'bnote': g.hud.notify?.('🕷️ Из темноты выходит гигантская паучиха...'); break;
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
+            case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;

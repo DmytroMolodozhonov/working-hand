@@ -22,7 +22,7 @@
 
 import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON } from './ItemTypes.js';
 import { PEN_POINTS } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
@@ -420,7 +420,7 @@ export class ItemSystem {
         const now = performance.now();
         // pick up: an empty hand touching a thing
         for (const side of ['right', 'left']) {
-            if (this.held[side] || g.weapons.hands[side].held || g.books?.reading?.handBusy(side)) continue;
+            if (this.held[side] || g.weapons.hands[side].held || g.books?.reading?.handBusy(side) || g.boards?.handBusy(side)) continue;
             const hand = ch.getHandWorldPosition(side, _v);
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
@@ -675,7 +675,7 @@ export class ItemSystem {
             const ru = SPELL_RU[item.spell] || item.spell;
             g.hud.setVoice?.(`📜🔥 Свиток сгорел: теперь вы знаете заклинание «${ru}»!`, true);
             const c = g.character.group.position;
-            const col = SCROLL_SPELL_COLOR[item.spell] || 0xffe9a8;
+            const col = SPELL_RIBBON[item.spell] || 0xffe9a8;
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 6;
                 g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), col, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);

@@ -126,7 +126,7 @@ export class BookReading {
     /** Free for the book: holds nothing else. */
     _free(side) {
         const g = this.game;
-        return !g.items.held[side] && !g.weapons.hands[side].held;
+        return !g.items.held[side] && !g.weapons.hands[side].held && !g.boards?.handBusy(side);
     }
 
     _eye(out) {

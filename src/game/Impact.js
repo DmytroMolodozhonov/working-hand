@@ -119,7 +119,7 @@ export class HeadJolt {
  */
 export const SPELL_PHYSICS = {
     Lumos: null, LumosMaxima: null, Nox: null, Draw: null, Reveal: null, Accio: null, ChangeColor: null, CreateBed: null,
-    Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, Stand: null,
+    Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, CreateBoard: null, Stand: null,
     Brainrot: null, ToTheSun: null, Storm: null, LightningCatch: null, LightningHold: null, Rescue: null, Pause: null, Flight: null,
     AirBubble: null, AirBubbleMaxima: null, Waterball: null, Maxima: null, WaterForming: null, Frozen: null,
     Protection: null, ProtectionMaxima: null, Levitation: null, LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,

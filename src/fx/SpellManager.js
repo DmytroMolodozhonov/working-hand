@@ -37,6 +37,9 @@ export function matchSpell(text) {
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
     if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';
+    // «Create a Board» (a surfboard) — never «абордаж» (boarding a ship)
+    if (!has('абордаж', 'abordag', 'aborda') && (has('surfboard', 'surf board', 'серфборд', 'сёрфборд', 'серф борд', 'сёрф борд') ||
+        (has('board', 'борд', 'bord', 'bored', 'доск') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк')))) return 'CreateBoard';
     // Wand spells
     if (has('раскрой', 'раскрои', 'секрет', 'тайны', 'reveal', 'secret')) return 'Reveal';
     if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';
@@ -695,6 +698,7 @@ export class SpellManager {
         const width = 3.2 * power, height = 1.6 + 1.1 * power;
         const speed = 11;
         this._sound('playWhoosh');
+        this.hooks.waveMade?.({ x: origin.x, z: origin.z, dirX: dir.x, dirZ: dir.z, speed, height, width, dist }); // (a surfboard can ride it)
         const geo = new THREE.CylinderGeometry(width / 2, width / 2, 1, 20, 1, true, -Math.PI / 2, Math.PI);
         geo.rotateZ(Math.PI / 2);
         const mat = new THREE.MeshPhongMaterial({ color: 0x2f8fd0, transparent: true, opacity: 0.75, shininess: 90, specular: 0xffffff, side: THREE.DoubleSide, depthWrite: false });

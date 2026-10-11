@@ -62,6 +62,7 @@ import { hashString } from '../core/math.js';
 import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, WATER_LEVEL_Y } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
+import { SurfBoards } from './SurfBoards.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
@@ -197,6 +198,7 @@ export class Game {
             sand: (z) => this.sandZombie(z),
             chill: (z, amt) => z.applyChill(amt),
             explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
+            waveMade: (w) => this.boards?.water.addTransient(w), // («Wave Attack» can be ridden on a surfboard)
             success: (casterId, name) => { if (casterId === this.localId || casterId === 'local') this.mana?.success(name); }, // (mana: my spell worked)
             handPose: (casterId, side) => this.handPose(casterId, side),
             players: (casterId) => this._spellPlayers(casterId),
@@ -275,6 +277,7 @@ export class Game {
         this.onFlame.push((o, d, len, casterId) => this.ships.igniteAlong(o, d, len, casterId)); // («Инферно» sets sails and decks on fire)
         this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
         this.doors = new Doors(this); // «Create a Door», opening by the handle
+        this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
@@ -376,6 +379,8 @@ export class Game {
             this.weapons.spawnHovering('axe', new THREE.Vector3(-7, s1 + 1.3, pz), 'tA');
             const s2 = this.world.createPedestal(7, pz);
             this.weapons.spawnHovering('sword', new THREE.Vector3(7, s2 + 1.3, pz), 'tS');
+            // Creative: a surfboard to try, standing in the ground by the pedestals (the same id on every computer)
+            if (config.mode === 'creative') this.boards.spawn({ id: 'cboard0', wood: 0, st: 'stand', p: [-12, this.collision.groundY(-12, -9) + 4.4 * 0.38, -9], yaw: 0 });
             // Creative: bows and shields of every kind on pedestals too
             if (config.mode === 'creative') {
                 const gear = [
@@ -581,6 +586,7 @@ export class Game {
         const pp = this.character.group.position;
         const dPlayer = _v2.set(pp.x - pos.x, (pp.y - 1.5) - pos.y, pp.z - pos.z).length();
         this.fx.shake = Math.max(this.fx.shake, Math.max(0, (power > 1 ? 2 : 1.2) - dPlayer / (power > 1 ? 45 : 30)));
+        this.boards?.blast(pos, radius, power);
         if (dPlayer < radius + 3) {
             // thrown by the blast: near it off the feet (and up into the air), further a stagger
             const k = 1 - dPlayer / (radius + 3);
@@ -1488,7 +1494,7 @@ export class Game {
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
         if (now - (this._lastBuild || 0) < 900) return null;
         if (!this.builder.knows(name)) {
-            if (isFinal) this.hud.setVoice(`📖 «${BUILD_SPELLS[name].name}» ещё не изучено — найдите его в книге птицы`, true);
+            if (isFinal) this.hud.setVoice(name === 'CreateBoard' ? '🏄 «Create a Board» ещё не изучено — найдите его в книге птицы или сожгите свиток' : `📖 «${BUILD_SPELLS[name].name}» ещё не изучено — найдите его в книге птицы`, true);
             return null;
         }
         if (this.combat.enabled && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает маны'); return null; }
@@ -1515,6 +1521,7 @@ export class Game {
         }
         if (name === 'Gather') hint = this.builder.gather();
         else if (name === 'CreateDoor') hint = this.doors ? this.doors.create() : '🚪 Двери скоро будут';
+        else if (name === 'CreateBoard') hint = this.boards.create();
         else hint = this.builder.start(name);
         if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
         if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
@@ -1568,6 +1575,7 @@ export class Game {
         if (!v) return;
         // (a shield turned to it holds most of it: felt, the shield arm pushed back, never a fall)
         if (this.combat.shieldFactor(origin) >= 1) this.combat._blocked(origin);
+        if (this.boards?.mounted && !this.boards.onPush(v)) return; // (on a surfboard: a push along the board just rides on)
         const P = SPELL_PHYSICS[name] || {};
         this.impact.apply({ v: v.clone(), from: origin, by: casterId, spell: name, jolt: P.jolt || 0 });
     }
@@ -1695,6 +1703,7 @@ export class Game {
         this.ships?.onLocalDeath(); // (lets go of a ship's wheel)
         this.hud.setStatus('');
         if (this.flight.busy) this.flight.land('dead');
+        this.boards?.dropAll('dead');
         this.weapons.releaseAll?.();
         this.ui.died?.(text, () => this.respawn());
     }
@@ -1943,6 +1952,7 @@ export class Game {
         this.inventory.update(dt);
         this.builder.update(dt);
         this.swim.update(dt);
+        this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();
         this.death.update(dt);
@@ -2088,7 +2098,7 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted);
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted);
 
         // Explosion knockback (decays; a body lying on the ground slides less far)
         if (this.knockback.lengthSq() > 0.0001) {
@@ -2097,7 +2107,7 @@ export class Game {
         }
 
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
-        if (!flight.active && !this.beds?.lying) {
+        if (!flight.active && !this.beds?.lying && !this.boards?.mounted) {
             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
         }
@@ -2342,6 +2352,7 @@ export class Game {
             this.hud.setVoice('📜 В «Выживании» летать нельзя, пока не найдёте в сундуке <b>Свиток полёта</b> (и не сожжёте его «Инферно»)', true);
             return false;
         }
+        this.boards?.dropAll('fly'); // (off the board first; the board stays where it is)
         // Maps (labyrinths etc.) are meant to be walked: no flying over the walls
         if (this.world.isMap) {
             this.hud.setVoice('🚫 На картах «Флайн» не работает — только в режимах «Творческий», «Хардкор» и «Выживание»', true);
@@ -2590,6 +2601,7 @@ export class Game {
         this.castleLife?.dispose();
         this.death?.dispose();
         this.doors?.dispose();
+        this.boards?.dispose();
         this.campfires?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
@@ -2626,6 +2638,7 @@ export class Game {
             active: this.active,
             mode: this.config.mode,
             player: [p.x, p.y, p.z],
+            surf: this.boards?.debugState() || null,
             hp: this.playerHP,
             kills: this.killCount,
             punches: this.punchCount,

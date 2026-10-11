@@ -115,6 +115,8 @@ export class VoxelCharacter {
         this.slowScale = 1; // walking speed (the ice beam's chill slows it)
         this.airTop = null; // the highest point of this fall (landing → Knockdown)
         this.landing = null; // {drop, speed, at} of the last landing
+        this.legPose = null; // {left: {hip}, right: {hip}}: the legs held so (a surfboard), not walked
+        this.boardRoll = 0; // the body tilted sideways with a surfboard under it
         this.flying = false;
     }
 
@@ -612,7 +614,7 @@ export class VoxelCharacter {
         this._fallPitch += (px - this._fallPitch) * kf;
         this._fallRoll += (rz - this._fallRoll) * kf;
         if (Math.abs(this._fallRoll) < 0.002 && rz === 0) this._fallRoll = 0;
-        if (Math.abs(this._fallRoll) > 0.002 || this.group.rotation.z !== 0) this.group.rotation.z = this._fallRoll;
+        if (Math.abs(this._fallRoll) > 0.002 || this.boardRoll || this.group.rotation.z !== 0) this.group.rotation.z = this._fallRoll + (this.boardRoll || 0); // (+ tilted with a surfboard)
         // (x is shared with flight and the bed: owned only while falling, lying, rising or reeling — those exclude flight and bed)
         const own = this.knockedDown || Math.abs(this._fallPitch) > 0.002;
         if (own) this.group.rotation.x = this._fallPitch;
@@ -666,7 +668,12 @@ export class VoxelCharacter {
             }
         }
 
-        if (this.flying) {
+        if (this.legPose) {
+            // on a surfboard: one leg on the deck, the other paddling (or both bent, standing)
+            const k = Math.min(1, 10 * dt);
+            this.leftLegPivot.rotation.x += ((this.legPose.left?.hip || 0) - this.leftLegPivot.rotation.x) * k;
+            this.rightLegPivot.rotation.x += ((this.legPose.right?.hip || 0) - this.rightLegPivot.rotation.x) * k;
+        } else if (this.flying) {
             // Superman: legs straight back, slight flutter
             this.runCycle += dt * 6;
             const k = Math.min(1, 6 * dt);
@@ -820,6 +827,8 @@ export class VoxelCharacter {
             cr: this.isCrouching ? 1 : 0,
             kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
             sg: this.stepping > 0 ? [r2(this.staggerLean || 0), r2(this.staggerRoll || 0)] : undefined,
+            lg: this.legPose ? [r3(this.legPose.left?.hip || 0), r3(this.legPose.right?.hip || 0)] : undefined, // (on a surfboard)
+            rz: this.boardRoll ? r3(this.boardRoll) : undefined,
             lh: this.leftSimplifiedHand.serializeState(),
             rh: this.rightSimplifiedHand.serializeState(),
         };

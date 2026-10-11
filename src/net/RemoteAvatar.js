@@ -127,7 +127,9 @@ export class RemoteAvatar {
         ch.staggerRoll = sg ? +sg[1] || 0 : 0;
         if (sg) ch.stepping = Math.max(ch.stepping || 0, 0.15);
         if (!kd && !sg && !ch._pitchOwned) ch.group.rotation.x += ((s.s.rx || 0) - ch.group.rotation.x) * k; // flight tilt
-        ch.flying = !kd && !sg && Math.abs(s.s.rx || 0) > 0.05;
+        ch.flying = !kd && !sg && !s.bd && Math.abs(s.s.rx || 0) > 0.05; // (pitched on a wave on a surfboard is not flying)
+        ch.legPose = Array.isArray(s.s.lg) ? { left: { hip: +s.s.lg[0] || 0 }, right: { hip: +s.s.lg[1] || 0 } } : null;
+        ch.boardRoll = Number.isFinite(+s.s.rz) ? +s.s.rz : 0;
         ch.head.rotation.y += (s.s.hy - ch.head.rotation.y) * k;
         ch.head.rotation.x += (s.s.hp - ch.head.rotation.x) * k;
         const slerp = (obj, arr) => { if (arr) obj.quaternion.slerp(_q.set(arr[0], arr[1], arr[2], arr[3]), k); };

@@ -217,6 +217,7 @@ export class WorldKeeper {
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             animals: g.animals?.snapshot() || [],
             doors: g.doors?.snapshot() || [],
+            boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             houses: g.houses?.snapshot() || null,
             beds: g.beds?.snapshot() || [],
@@ -261,6 +262,7 @@ export function restoreWorld(game, save, THREE) {
     for (const e of save.items || []) g.items?.spawnLoose(e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (save.animals) g.animals?.restore(save.animals);
     if (save.doors) g.doors?.restore(save.doors);
+    if (save.boards) g.boards?.restore(save.boards);
     if (save.campfires) g.campfires?.restore(save.campfires);
     if (save.houses) g.houses?.restore(save.houses);
     if (save.beds) g.beds?.restore(save.beds);
