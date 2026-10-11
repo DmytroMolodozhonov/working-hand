@@ -446,9 +446,11 @@ export class ItemSystem {
             }
             const arm = ch.armState(side, this._arm[side]);
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
-            const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight: ITEM_INFO[kind]?.weight ?? 1 });
+            const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight: ITEM_INFO[kind]?.weight ?? 1, blurOk: true });
             if (thr) { this._throw(side, this._throwVelocity(side, thr, new THREE.Vector3()), { spin: ch.palmSpin?.[side] }); continue; }
-            if (this._drop[side].update({ now: gt, curl, tracked, ...arm })) this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2));
+            // (a wand is held in a pinch like a pen: the camera often sees that hand as open — it never
+            // falls out of an open hand; it leaves the hand only thrown, or put into its pocket)
+            if (kind !== 'wand' && this._drop[side].update({ now: gt, curl, tracked, ...arm })) this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2));
         }
         this._eat(dt, ch);
         this._wear(dt, ch);

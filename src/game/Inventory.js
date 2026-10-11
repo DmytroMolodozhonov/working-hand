@@ -8,14 +8,16 @@
  * Before the slots there is the «hand» cell: nothing can be put there, it
  * just means «the right hand is free».
  *
- * Hands, no words:
- *   - right pocket: lift the hand a little and STRIKE it down onto the right
- *     hip — the sword / axe / book in it goes into a slot (simply lowering
- *     the hand never does: you can run with a sword held down);
- *   - left pocket: strike the left hip the same way — the next cell is
- *     chosen, and what is in it appears in the right hand (a weapon to hold,
- *     a book, or a small block of the resource the building spells use).
- * Keys 1–5 choose a slot too, the key 0 / ` — the free hand.
+ * Hands, no words (a hand really put INTO the pocket for a moment — a slap on the
+ * hip, a hand hanging or swinging never does anything):
+ *   - the LEFT pocket is the wand's: a hand (the left, or the right reaching across)
+ *     put in and taken out draws the wand; put in holding the wand, puts it away;
+ *   - the right pocket: the right hand holding a thing puts it away; put in empty,
+ *     it takes out the next thing of the slots (food, a scroll, a book, the building
+ *     blocks…);
+ *   - over the shoulder: swords, axes, shields, the bow, the hammer — on the back,
+ *     or taken from it.
+ * The «hand» cell shows what the hands hold. Keys 1–5 choose a slot too, 0 / ` — the free hand.
  */
 
 import * as THREE from 'three';
@@ -342,21 +344,30 @@ export class Inventory {
             st.hist.push({ t: now, y: local.y });
             while (st.hist.length && now - st.hist[0].t > 600) st.hist.shift();
             if (ch.isRunning || ch.flying) { st.hist.length = 0; continue; }
-            const atHip = pocketStrike(st.hist, local, sx);
             // the hand put INTO the pocket (as the camera sees it): it stays there a moment
-            const inPocket = g.currentPose.pocket?.[side];
+            // (a slap on the hip no longer counts: people did it by accident)
+            const pk = g.currentPose.pocket;
+            const inPocket = side === 'left' ? pk?.left : pk?.right;
+            // the right hand reaching across into the LEFT pocket: the wand's pocket too
+            if (side === 'right') {
+                const cr = this._cross || (this._cross = { inT: 0, outT: 0, armed: true, out: 0 });
+                cr.inT = pk?.cross ? cr.inT + dt : 0;
+                cr.outT = pk?.cross ? 0 : cr.outT + dt;
+                if (cr.outT > 0.4) cr.armed = true;
+                if (cr.armed && cr.inT > POCKET_DWELL && now - cr.out > 700) { cr.armed = false; cr.out = now; this.wandPocket('right'); }
+            }
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
             st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
             if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
             const putIn = st.armed && st.inT > POCKET_DWELL;
-            if ((atHip && !st.inZone || putIn) && now - st.out > 700) {
-                st.inZone = true;
+            if (putIn && now - st.out > 700) {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
-                if (side === 'right') this.pocketRight();
-                else this.select(this.selected + 1);
-            } else if (local.y > 0.7) st.inZone = false;
+                if (side === 'left') this.wandPocket('left');
+                else if (g.items?.held.right || g.weapons.hands.right.held) this.pocketRight();
+                else this.takeNext('right');
+            }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
             const b = this._back[side];
             if (behindBack(local, ch.handVelocity[side].length())) b.t += dt; else b.t = 0;
@@ -364,6 +375,59 @@ export class Inventory {
         }
         this._updateHandBlock();
         this._updateBack();
+        // the «hand» cell shows what the hands hold
+        const hk = this._handKey();
+        if (hk !== this._hk) { this._hk = hk; this._render(); }
+    }
+
+    /** The wand's pocket (the left one): draw the wand into `side`, or put it away. */
+    wandPocket(side) {
+        const g = this.game;
+        const h = g.items?.held[side];
+        if (h && h.item.kind === 'wand') {
+            const it = g.items.releaseHand(side);
+            if (this.inHand?.item === it) this.inHand = null;
+            const free = this.slots.findIndex((x) => !x);
+            if (free >= 0) { this.slots[free] = it; this._render(); } else if (!this.storeItem(it)) return false;
+            this._fx('🪄 Палочка в кармане', side);
+            return true;
+        }
+        if (h || g.weapons.hands[side].held) return false; // (the hand is busy)
+        const i = this.slots.findIndex((x) => x?.kind === 'wand');
+        if (i < 0) { this.game.hud.toast?.('🪄 В кармане нет палочки'); return false; }
+        if (!this._fromSlot(i, side)) return false;
+        this._fx('🪄 Палочка в руке', side);
+        this._render();
+        return true;
+    }
+
+    /** The right pocket, an empty hand: the next thing of the slots (not the wand, not what goes on the back). */
+    takeNext(side = 'right') {
+        const n = this.slots.length;
+        const start = this._next ?? -1;
+        for (let k = 1; k <= n; k++) {
+            const i = (start + k) % n;
+            const it = this.slots[i];
+            if (!it || it.kind === 'wand' || BACK_KINDS.has(it.kind)) continue;
+            this._next = i;
+            this.select(i);
+            this._fx(`${it.kind === 'res' ? '🧱' : ITEM_INFO[it.kind]?.icon || '✋'} ${it.kind === 'res' ? RESOURCE[it.block]?.name || 'Блоки' : ITEM_INFO[it.kind]?.name || 'Предмет'}`, side);
+            return true;
+        }
+        this.game.hud.toast?.('🎒 В кармане пусто');
+        return false;
+    }
+
+    /** What the hands hold, as a short key (to redraw the «hand» cell when it changes). */
+    _handKey() {
+        const g = this.game;
+        const one = (side) => {
+            const w = g.weapons?.hands?.[side]?.held;
+            if (w) return w.type === 'axe' ? '🪓' : '🗡️';
+            const h = g.items?.held?.[side];
+            return h ? ITEM_INFO[h.item.kind]?.icon || '❔' : '';
+        };
+        return one('left') + '|' + one('right');
     }
 
     /** What the hand holds, if it goes on the back: {kind:'weapon', w} | {kind:'item', h}. */
@@ -526,6 +590,12 @@ export class Inventory {
     _render() {
         if (!this.cells) return;
         this.handCell?.classList.toggle('sel', this.selected < 0);
+        if (this.handCell) {
+            const [l, r] = this._handKey().split('|');
+            const icon = this.handCell.querySelector('.hb-icon');
+            if (icon) icon.textContent = l || r ? (l && r ? l + r : l || r) : '✋';
+            this.handCell.title = l || r ? 'В руках' : 'Свободная рука';
+        }
         this.cells.forEach((c, i) => {
             const s = this.slots[i];
             const icon = c.querySelector('.hb-icon');

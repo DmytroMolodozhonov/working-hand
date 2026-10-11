@@ -120,3 +120,23 @@ test('Character.armState: an arm stretched forward reads outstretched; a hanging
     a = ch.armState('right');
     assert.ok(a.up < -0.9, 'hanging: ' + a.up);
 });
+
+import { ThrowDetector as TD2, THROW as TH2 } from '../../src/game/HandRelease.js';
+
+test('a throw whose hand the camera lost in the blur: a strong swing forward lets go at its end; a blow down, or a sword, does not', () => {
+    const run = (vz, vy, blurOk) => {
+        const t = new TD2();
+        const sh = { x: 0, y: 0, z: 0 };
+        let out = null;
+        const step = (i, hand, v, curl, tracked) => { out = out || t.update({ now: i * 33, hand, shoulder: sh, vRel: v, vWorld: [0, 0, 0], curl, tracked, blurOk }); };
+        step(0, { x: 0, y: 0.6, z: 0.2 }, { x: 0, y: 0, z: 0 }, 0.9, true); // wound up, held
+        step(1, { x: 0, y: 0.5, z: 0.1 }, { x: 0, y: 0, z: 0 }, 0.9, true);
+        step(2, { x: 0, y: 0.2, z: -0.6 }, { x: 0, y: vy, z: vz }, 0.9, false); // the fast swing: the hand is lost
+        step(3, { x: 0, y: 0.0, z: -1.2 }, { x: 0, y: vy * 0.3, z: vz * 0.3 }, 0, false); // its end
+        return out;
+    };
+    assert.ok(run(-12, -2, true), 'forward: thrown');
+    assert.equal(run(-3, -12, true), null, 'a blow down keeps hold');
+    assert.equal(run(-12, -2, false), null, 'a sword (no blur rule) keeps hold');
+    assert.ok(TH2.END > 0 && TH2.END < 1);
+});

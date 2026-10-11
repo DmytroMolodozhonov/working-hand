@@ -36,6 +36,7 @@ export const THROW = {
     HOLD: 0.5, // (they held the thing during the swing)
     LATE_MS: 450, // the fingers must open this soon after the fastest moment (the camera sees them open a little late)
     BEHIND: 0.4, // (the camera sees the wrist behind the shoulder: the real hand is this far behind it)
+    END: 0.45, // the swing has ended: its speed fell below this share of the fastest (a hand lost in the blur)
 };
 
 /** The camera's depth says the wrist is behind the shoulder (pose z: bigger = further from the camera). */
@@ -70,7 +71,15 @@ export class DropGate {
 export class ThrowDetector {
     constructor() { this.reset(); }
 
-    reset() { this.cockAt = -1e9; this.cock = null; this.peak = null; this.held = false; this.back = false; }
+    reset() { this.cockAt = -1e9; this.cock = null; this.peak = null; this.held = false; this.back = false; this.seenHold = false; }
+
+    /** The swing (peak) went forward/up, not down, strong enough, and has slowed down: its end. */
+    blurred(speed) {
+        const p = this.peak;
+        const [x, y, z] = p.vRel;
+        const fwd = -z, down = -y;
+        return p.speed > (THROW.SPEED + 2) && fwd > 0 && fwd >= down * 1.2 && Math.hypot(x, y, z) > 0 && speed < p.speed * THROW.END;
+    }
 
     /**
      * @param {object} s  now (ms); hand, shoulder, vRel: the body's space (x right, y up, z back),
@@ -78,7 +87,7 @@ export class ThrowDetector {
      *   behind the shoulder); weight (the thing's)
      * @returns {null|{speed:number, vRel:number[], vWorld:number[], at:number}} the throw, at the fingers' opening
      */
-    update({ now, hand, shoulder, vRel, vWorld, curl, tracked, behind = false, weight = 1 }) {
+    update({ now, hand, shoulder, vRel, vWorld, curl, tracked, behind = false, weight = 1, blurOk = false }) {
         const speed = Math.hypot(vRel.x, vRel.y, vRel.z);
         if (!this.peak && (hand.y - shoulder.y > THROW.UP || hand.z - shoulder.z > THROW.BACK || behind)) {
             this.cockAt = now;
@@ -97,6 +106,11 @@ export class ThrowDetector {
         if (!this.peak) return null;
         if (now - this.peak.at > THROW.LATE_MS) { this.reset(); return null; } // the fist kept hold: a chop, not a throw
         if (tracked && curl < THROW.OPEN) { const p = this.peak; this.reset(); return p; } // (a hand lost in the blur waits ≤450 ms)
+        if (tracked && curl > THROW.HOLD) this.seenHold = true; // (seen still gripping after the swing: a chop)
+        // the camera lost the hand in the swing's blur: a strong swing FORWARD (not down, as a blow is)
+        // that has come to its end lets go — people throw this way and the fingers are rarely seen opening
+        // (blurOk: things only — a sword's thrust forward must never throw it)
+        if (blurOk && !tracked && !this.seenHold && this.blurred(speed)) { const p = this.peak; this.reset(); return p; }
         return null;
     }
 }

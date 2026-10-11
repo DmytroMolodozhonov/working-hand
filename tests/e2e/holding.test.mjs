@@ -428,30 +428,41 @@ test('the hand follows the camera\'s hand fully: bent left / right at the wrist,
     await page.close();
 });
 
-test('pockets: the left hand put into its pocket picks the next slot; arms hanging at the sides do nothing; the right hand with a thing puts it away', async () => {
+test('pockets: the left pocket is the wand\'s (in and out draws it, in with it puts it away); hanging arms do nothing; the right pocket puts a thing away / takes the next one', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
-    await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.inventory.select(-1); });
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.inventory.select(-1);
+        g.inventory.slots.fill(null);
+        g.inventory.slots[0] = { kind: 'apple', uid: 'pa0', count: 1 };
+        g.inventory.slots[2] = { kind: 'wand', uid: 'pw1', type: 0 };
+        g.inventory._render();
+    });
+    const state = () => page.evaluate(() => { const g = window.__zns.game; return { l: g.items.held.left?.item.kind || null, r: g.items.held.right?.item.kind || null, sel: g.inventory.selected, wandSlot: g.inventory.slots.some((s) => s?.kind === 'wand'), cell: g.inventory.handCell?.textContent || '' }; });
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 60, 40); // 2.4 s just standing
-    const hanging = await page.evaluate(() => window.__zns.game.inventory.selected);
-    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 20, 40); // the left hand into the pocket
-    const afterLeft = await page.evaluate(() => window.__zns.game.inventory.selected);
-    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 30, 40); // kept there: no more
-    const kept = await page.evaluate(() => window.__zns.game.inventory.selected);
-    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40); // out
-    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 20, 40); // in again
-    const again = await page.evaluate(() => window.__zns.game.inventory.selected);
-    // the right hand holding an apple goes into the right pocket: the apple goes into a slot
-    await page.evaluate(() => { const g = window.__zns.game; g.inventory.select(-1); g.items.takeIntoHand({ kind: 'apple', uid: 'pa1', count: 1 }, 'right'); });
-    await feed(page, { arms: 'hang', rightCurl: 0.9, leftCurl: 0 }, 20, 40);
+    const hanging = await state();
+    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 20, 40); // the left hand into the left pocket…
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.8 }, 20, 40); // …and out
+    const drawn = await state();
+    await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0 }, 20, 40); // in again, holding the wand: put away
+    const away = await state();
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40);
+    // the right pocket, the empty hand: the next thing (the apple, not the wand)
     await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 20, 40);
-    const stored = await page.evaluate(() => { const g = window.__zns.game; return { held: !!g.items.held.right, slot: g.inventory.slots.some((s) => s && s.kind === 'apple') }; });
-    assert.equal(hanging, -1, 'hanging arms: nothing happens');
-    assert.equal(afterLeft, 0, 'the hand into the left pocket: the next slot');
-    assert.equal(kept, 0, 'keeping it there: once only');
-    assert.equal(again, 1, 'out and in again: the next one');
-    assert.ok(!stored.held && stored.slot, 'the apple went into the pocket ' + JSON.stringify(stored));
+    const next = await state();
+    await feed(page, { arms: 'hang', rightCurl: 0.9, leftCurl: 0 }, 20, 40);
+    // in again, holding it: it goes back
+    await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 20, 40);
+    const stored = await state();
+    assert.ok(!hanging.l && !hanging.r && hanging.sel === -1 && hanging.wandSlot, 'hanging arms: nothing happens ' + JSON.stringify(hanging));
+    assert.ok(drawn.l === 'wand' && !drawn.wandSlot, 'the wand drawn from the left pocket ' + JSON.stringify(drawn));
+    assert.ok(drawn.cell.includes('🪄'), 'the «hand» cell shows the wand in the hand');
+    assert.ok(!away.l && away.wandSlot, 'and put back ' + JSON.stringify(away));
+    assert.equal(next.r, 'apple', 'the right pocket, empty hand: the next thing ' + JSON.stringify(next));
+    assert.ok(!stored.r, 'the right hand with a thing puts it away ' + JSON.stringify(stored));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

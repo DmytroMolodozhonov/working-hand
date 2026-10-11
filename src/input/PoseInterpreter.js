@@ -27,14 +27,15 @@ export function lookPitch(p) {
  * Measured in torso heights (shoulder → hip), so the distance to the camera
  * doesn't matter. true / false, or null when the hip or the shoulder isn't seen.
  */
-export function pocketPose(lm, hand, side, aspect = 4 / 3) {
-    const [s, e, w, h] = side === 'left' ? [11, 13, 15, 23] : [12, 14, 16, 24];
+export function pocketPose(lm, hand, side, aspect = 4 / 3, hipSide = side) {
+    const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
+    const h = hipSide === 'left' ? 23 : 24; // (the right hand can reach across to the LEFT pocket: the wand's)
     const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], hip = lm?.[h];
     if (!sh || !el || !wr || !hip) return null;
     if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5) return null;
     const T = hip.y - sh.y;
     if (T < 0.05) return null;
-    const out = side === 'left' ? 1 : -1; // (the person's left is the picture's right)
+    const out = hipSide === 'left' ? 1 : -1; // (the person's left is the picture's right)
     const dy = (wr.y - hip.y) / T;
     const dxOut = ((wr.x - hip.x) * out * aspect) / T;
     if (dy < -0.3 || dy > 0.25 || dxOut < -0.25 || dxOut > 0.3) return false;
@@ -181,7 +182,11 @@ export class PoseInterpreter {
             data.rightShoulder = P(12); data.rightElbow = P(14); data.rightWrist = P(16);
             data.nose = P(0);
             data.armLift = this._armLift(lm);
-            data.pocket = { left: pocketPose(lm, results.leftHandLandmarks, 'left', data.aspect), right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect) };
+            data.pocket = {
+                left: pocketPose(lm, results.leftHandLandmarks, 'left', data.aspect),
+                right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect),
+                cross: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect, 'left'), // (the right hand in the LEFT pocket)
+            };
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
