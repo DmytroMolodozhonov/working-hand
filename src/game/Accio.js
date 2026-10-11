@@ -71,6 +71,18 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { rb: a, side, score, hand };
             }
+            // a dead animal's body (a cow, a running book…): pulled through the air to the feet
+            for (const a of g.animals?.list || []) {
+                if (!a.dead || a.lev) continue;
+                const pos = g.levitation?._centreOf ? g.levitation._centreOf('a', a) : a.group.position;
+                const to = _v1.subVectors(pos, hand);
+                const d = to.length();
+                if (d > ACCIO.RANGE || d < 0.3) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang > ACCIO.CONE + Math.atan2(1, d)) continue;
+                const score = ang * 5 + d * 0.05;
+                if (!best || score < best.score) best = { body: a, side, score, hand };
+            }
             // any other thing lying about (a bow, a shield, a wand, a scroll, food, coins…)
             if (g.items?.held[side]) continue;
             for (const L of g.items?.loose.values() || []) {
@@ -99,6 +111,7 @@ export class Accio {
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку…) не дальше 30 м — и скажите «Акцио»';
         }
         if (best.rb) { g.runner.accio(best.rb, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
+        if (best.body) { g.runner?.accio(best.body, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
         if (best.L) return this._castItem(best.L, best.side);
         if (best.bk) {
             // the book rises and flies to the hand; it is caught when it gets there

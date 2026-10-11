@@ -476,7 +476,7 @@ export class RunningBook {
 
     _pull(a, to) {
         const g = this.game;
-        if (!a || a.dead) return;
+        if (!a) return; // (alive, or a dead body of any animal: «Акцио» pulls it all the same)
         const p = a.group.position;
         const d = _v.set(to.x - p.x, 0, to.z - p.z);
         const L = d.length();
@@ -497,7 +497,7 @@ export class RunningBook {
         else if (m.t === 'rbgot' && m.to === g.localId) this.grant();
         else if (m.t === 'rbaccio' && isHost && Array.isArray(m.p)) {
             const a = A?.byId.get(m.id);
-            if (a && a.type === 'runbook') this._pull(a, new THREE.Vector3(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0));
+            if (a && (a.type === 'runbook' || a.dead)) this._pull(a, new THREE.Vector3(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0));
         }
     }
 

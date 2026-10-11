@@ -920,7 +920,8 @@ export class Animals {
             for (const a of [...this.list]) {
                 if (a.group.position.distanceTo(me) > 150 && !a.tamed && !a.rider) { this._remove(a); continue; }
                 if (a.dead) {
-                    if (a.lev) g.levitation?.letGo('a', a, false);
+                    if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
+                    if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)
                     this._body(a, dt); // (carcasses fall into craters too)
                     if (a.bonesAt && performance.now() - a.bonesAt > 120000) this._remove(a);
                     else if (!a.bonesAt && performance.now() - a.deadAt > 600000) this._remove(a);

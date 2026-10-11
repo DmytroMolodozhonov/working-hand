@@ -88,6 +88,8 @@ export class Levitation {
         for (const z of g.zombies || []) if (!z.isDead && !z.isDying && !z.isFrozen && !z.lev) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 });
         for (const a of g.animals?.targets() || []) if (!a.rider && !a.lev && g.animals.riding !== a) out.push({ kind: 'creature', ck: 'a', obj: a, pos: this._centreOf('a', a), r: g.duel?._animalBody(a).r || 1 });
         for (const v of g.castleLife?.targets() || []) if (!v.lev && !v.seated && !v.climb) out.push({ kind: 'creature', ck: 'v', obj: v, pos: this._centreOf('v', v), r: 1.2 });
+        // a dead animal's body (a cow, a running book…) is a thing like any other
+        for (const a of g.animals?.list || []) if (a.dead && !a.lev) out.push({ kind: 'creature', ck: 'a', obj: a, pos: this._centreOf('a', a), r: g.duel?._animalBody(a).r || 1 });
         return out;
     }
 
@@ -388,7 +390,9 @@ export class Levitation {
     _creature(ck, id) {
         const g = this.game;
         const c = ck === 'z' ? g.zombieById?.get(id) : ck === 'a' ? g.animals?.byId.get(id) : ck === 'v' ? g.castleLife?.byId.get(id) : null;
-        if (!c || c.dead || c.isDead || c.isDying) return null;
+        if (!c) return null;
+        // (a dead animal's body is a thing: it can be lifted — but one that died while held falls)
+        if ((c.dead || c.isDead || c.isDying) && !(ck === 'a' && c.dead && (!c.lev || c.lev.body))) return null;
         return c;
     }
 
@@ -415,7 +419,7 @@ export class Levitation {
         const p = new THREE.Vector3();
         this._centre(ck, c, p);
         const feet = ck === 'v' ? c.y : p.y - this._centre(ck, c, _h1);
-        c.lev = { by, side, hold, target: p.clone(), vel: new THREE.Vector3(), top: feet, age: 0, lower: false };
+        c.lev = { by, side, hold, target: p.clone(), vel: new THREE.Vector3(), top: feet, age: 0, lower: false, body: !!(c.dead || c.isDead) };
         if (ck === 'a') { c.vel?.set(0, 0, 0); c.airborne = false; }
         if (ck === 'z') { c.vy = 0; c.windVel = null; }
         if (ck === 'v') { c.vy = 0; c.mode = 'idle'; c.speed = 0; g.castleLife?.reportCrime?.(c, by, 'magic'); }
@@ -429,7 +433,7 @@ export class Levitation {
         const g = this.game;
         const { ck, c } = e;
         const L = c.lev;
-        if (!L || c.dead || c.isDead || c.isDying) { if (L) this.letGo(ck, c, false); else this.carried.delete(ck + ':' + c.id); return; }
+        if (!L || (!L.body && (c.dead || c.isDead || c.isDying))) { if (L) this.letGo(ck, c, false); else this.carried.delete(ck + ':' + c.id); return; }
         L.age += dt;
         const centre = _h1;
         const up = this._centre(ck, c, centre);
