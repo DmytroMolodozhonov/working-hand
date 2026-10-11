@@ -609,7 +609,29 @@
                 });
             }
             // (a script that could not even load fires no error event)
-            setTimeout(function () { if (!(window.__zns && window.__zns.startGame)) show('Код игры не загрузился за 10 секунд (файлы игры неполные или устарели — запустите «Обновить и запустить игру»).'); }, 10000);
+            // Find out why and say it plainly: a missing file, code served as plain text, or not the game's own server
+            function diagnose() {
+                var started = function () { return window.__zns && window.__zns.startGame; };
+                if (started()) return;
+                var say = function (t) { if (!started()) show(t); };
+                fetch('src/main.js', { cache: 'no-store' }).then(function (r) {
+                    var ct = (r.headers.get('content-type') || '').toLowerCase();
+                    if (!r.ok) return say('Файл игры src/main.js не найден (ответ ' + r.status + '). Файлы игры неполные — запустите «Обновить и запустить игру».');
+                    if (ct.indexOf('javascript') < 0) return say('Сервер отдаёт код игры как «' + (ct || 'без типа') + '», а не как JavaScript, поэтому браузер его не запускает. Игру должен открывать сервер игры (server.py) — запускайте через «Запустить игру.bat».');
+                    return fetch('api/version', { cache: 'no-store' }).then(function (v) {
+                        if (!v.ok) return say('Игру открыл не сервер игры (нет /api/version, ответ ' + v.status + '). Запускайте через «Запустить игру.bat» (server.py).');
+                        // our server and the main file are fine: one of the other game files failed — import it to get the browser's reason
+                        return import('./src/main.js').then(function () {
+                            setTimeout(function () { say('Код игры загрузился, но не запустился. Нажмите Ctrl+F5.'); }, 3000);
+                        }, function (e) { say('Не загрузился файл игры: ' + (e && e.message || e) + ' — запустите «Обновить и запустить игру».'); });
+                    });
+                }).catch(function (e) { say('Нет связи с сервером игры: ' + (e && e.message || e) + '. Запускайте через «Запустить игру.bat».'); });
+            }
+            setTimeout(diagnose, 10000);
+            // (a slow computer may still finish: then the note goes away)
+            var gone = setInterval(function () {
+                if (window.__zns && window.__zns.startGame) { var el = document.getElementById('start-error'); if (el) el.remove(); clearInterval(gone); }
+            }, 1000);
         })();
     </script>
     <!-- Libraries are bundled locally in vendor/ (works offline, no CDN outages) -->

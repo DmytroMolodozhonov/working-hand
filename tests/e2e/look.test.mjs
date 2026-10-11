@@ -108,3 +108,18 @@ test('look: opened as a file (no game server), the screen says how to start the 
     assert.match(await page.textContent('#start-error'), /открыта как файл/);
     await page.close();
 });
+
+test('look: code served as plain text or a missing game file — the note says which', async () => {
+    // a server that gives .js as text/plain (Windows registry, a foreign web server): modules never run
+    let page = await browser.newPage();
+    await page.route('**/src/main.js', async (r) => { const res = await r.fetch(); r.fulfill({ response: res, headers: { ...res.headers(), 'content-type': 'text/plain' } }); });
+    await page.goto(srv.url);
+    await page.waitForFunction(() => /как «text\/plain»/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 20000 });
+    await page.close();
+    // one of the game's files is missing
+    page = await browser.newPage();
+    await page.route('**/src/ui/Branding.js', (r) => r.fulfill({ status: 404, body: 'File not found' }));
+    await page.goto(srv.url);
+    await page.waitForFunction(() => /Не загрузился файл игры/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 20000 });
+    await page.close();
+});

@@ -54,6 +54,8 @@ FORCED_TYPES = {
     ".jpg": "image/jpeg",
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
+    ".woff2": "font/woff2",
+    ".ico": "image/x-icon",
 }
 for ext, ctype in FORCED_TYPES.items():
     mimetypes.add_type(ctype.split(";")[0], ext)
