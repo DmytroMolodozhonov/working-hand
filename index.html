@@ -44,12 +44,18 @@
             <div class="pause-tabs" role="tablist">
                 <button class="pause-tab active" data-pause-tab="pause-main" role="tab">⏸ Меню</button>
                 <button class="pause-tab" data-pause-tab="pause-audio" role="tab">🔊 Звук</button>
+                <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Заклинания</button>
             </div>
             <div id="pause-main" class="pause-pane active">
                 <button id="pause-continue-btn">▶ Продолжить</button>
                 <button id="pause-exit-btn">🏠 Выйти в главное меню</button>
             </div>
             <div id="pause-audio" class="pause-pane"></div>
+            <!-- Creative only: the whole spell book without leaving the game -->
+            <div id="pause-spells" class="pause-pane">
+                <div id="pause-spell-cats" class="sub-tabs"></div>
+                <div id="pause-spells-grid" class="items-grid"></div>
+            </div>
             <div class="pause-hint">Мир сохранится сам. Escape — закрыть это окно</div>
         </div>
     </div>
@@ -99,31 +105,33 @@
 
     <div id="main-menu">
         <div class="menu-container">
-            <header class="brand">
-                <img class="brand-logo" src="assets/logo/logo-128.png" srcset="assets/logo/logo-256.png 2x" alt="" width="72" height="72">
-                <div class="brand-text">
-                    <h1 id="game-title">Волшебство только начинается</h1>
-                    <div class="brand-tagline">Магия — в ваших руках и голосе</div>
-                </div>
-                <div id="game-version-top" class="game-version-top"></div>
+            <!-- the left column: the window's buttons, the name, the sections, the version — no strip on top -->
+            <aside class="menu-side">
                 <div class="win-controls" role="group" aria-label="Окно игры">
+                    <button id="win-close" class="win-btn win-close" title="Закрыть игру" aria-label="Закрыть игру">✕</button>
                     <button id="win-min" class="win-btn" title="Свернуть" aria-label="Свернуть">—</button>
                     <button id="win-full" class="win-btn" title="Во весь экран" aria-label="Во весь экран">⛶</button>
-                    <button id="win-close" class="win-btn win-close" title="Закрыть игру" aria-label="Закрыть игру">✕</button>
                 </div>
-            </header>
-            <div id="win-note" class="win-note" role="status"></div>
-
-            <div class="tabs">
-                <button class="tab-btn active" data-tab="tab-game">🎮 Одиночная игра</button>
-                <button class="tab-btn" data-tab="tab-mp">🌐 Мультиплеер</button>
-                <button class="tab-btn" data-tab="tab-character">🧙 Персонаж</button>
-                <button class="tab-btn" data-tab="tab-spells">✨ Заклинания</button>
-                <button class="tab-btn" data-tab="tab-items">🗡️ Предметы</button>
-                <button class="tab-btn" data-tab="tab-mechanics">🧩 Механика игры</button>
-                <button class="tab-btn" data-tab="tab-editor">🗺️ Редактор карт</button>
-                <button class="tab-btn" data-tab="tab-settings">⚙️ Настройки</button>
-            </div>
+                <header class="brand">
+                    <img class="brand-logo" src="assets/logo/logo-128.png" srcset="assets/logo/logo-256.png 2x" alt="" width="72" height="72">
+                    <div class="brand-text">
+                        <h1 id="game-title">Волшебство только начинается</h1>
+                        <div class="brand-tagline">Магия — в ваших руках и голосе</div>
+                    </div>
+                </header>
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="tab-game">🎮 Одиночная игра</button>
+                    <button class="tab-btn" data-tab="tab-mp">🌐 Мультиплеер</button>
+                    <button class="tab-btn" data-tab="tab-character">🧙 Персонаж</button>
+                    <button class="tab-btn" data-tab="tab-spells">✨ Заклинания</button>
+                    <button class="tab-btn" data-tab="tab-items">🗡️ Предметы</button>
+                    <button class="tab-btn" data-tab="tab-mechanics">🧩 Механика игры</button>
+                    <button class="tab-btn" data-tab="tab-editor">🗺️ Редактор карт</button>
+                    <button class="tab-btn" data-tab="tab-settings">⚙️ Настройки</button>
+                </div>
+                <div id="game-version-top" class="game-version-top"></div>
+                <div id="win-note" class="win-note" role="status"></div>
+            </aside>
 
             <div class="tab-content">
                 <!-- SINGLE PLAYER -->

@@ -40,6 +40,7 @@ try {
             await page.click('[data-pause-tab="pause-audio"]');
             await sleep(200);
             await shot(page, `${tag}-11b-pause-audio`);
+            await page.keyboard.press('Escape');
             await page.evaluate(() => { document.getElementById('pause-menu').classList.add('hidden'); document.getElementById('death-screen').classList.remove('hidden'); });
             await shot(page, `${tag}-12-death`);
             await page.evaluate(() => { document.getElementById('death-screen').classList.add('hidden'); document.getElementById('game-over').classList.remove('hidden'); });

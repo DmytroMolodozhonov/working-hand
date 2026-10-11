@@ -233,8 +233,9 @@ function renderCats(catsId, gridId, cats, list, current, pick) {
 let currentCat = 'fight';
 let currentItemCat = 'weapon';
 
-export function renderSpellsTab() {
-    renderCats('spell-cats', 'spells-grid', SPELL_CATEGORIES, SPELLS, currentCat, (id) => { currentCat = id; renderSpellsTab(); });
+export function renderSpellsTab(catsId = 'spell-cats', gridId = 'spells-grid') {
+    // (the same spell book in the menu and in the game's pause menu — Creative)
+    renderCats(catsId, gridId, SPELL_CATEGORIES, SPELLS, currentCat, (id) => { currentCat = id; renderSpellsTab(catsId, gridId); });
 }
 
 export function renderItemsTab(extra = []) {

@@ -82,6 +82,19 @@ for (const [mode, label] of [['creative', 'Творческий'], ['survival', 
         await page.keyboard.press('Escape');
         await page.waitForFunction(() => !document.getElementById('pause-menu').classList.contains('hidden'));
         assert.equal(await page.$eval('.pause-title', (el) => getComputedStyle(el).fontFamily.includes('Philosopher')), true);
+        // «✨ Заклинания» in the pause menu: the whole spell book — only in Creative
+        const spellsTab = '[data-pause-tab="pause-spells"]';
+        assert.equal(await page.isVisible(spellsTab), mode === 'creative');
+        if (mode === 'creative') {
+            await page.click(spellsTab);
+            await page.waitForSelector('#pause-spells-grid .item-card');
+            const cats = await page.$$eval('#pause-spell-cats .sub-tab', (els) => els.length);
+            assert.ok(cats >= 5, 'the categories are there: ' + cats);
+            const before = await page.$$eval('#pause-spells-grid .item-name', (els) => els.map((e) => e.textContent).join());
+            await page.click('#pause-spell-cats .sub-tab:nth-child(2)');
+            assert.notEqual(await page.$$eval('#pause-spells-grid .item-name', (els) => els.map((e) => e.textContent).join()), before);
+            assert.ok(!(await page.isVisible('#pause-continue-btn')));
+        }
         assert.deepEqual(realErrors(errors), []);
         await page.close();
     });

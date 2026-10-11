@@ -54,39 +54,29 @@
     .err { color: var(--bad); margin-top: 10px; min-height: 1.2em; }
     pre { max-height: 40vh; overflow: auto; background: rgba(0, 0, 0, 0.4); border-radius: 10px; padding: 10px; font-size: 0.75rem; white-space: pre-wrap; text-align: left; }
     [hidden] { display: none !important; }
-    /* the same window as the game's menu: its own title bar (logo, name, buttons), no Windows frame */
-    body { padding-top: 64px; }
-    #winbar {
-        position: fixed; left: 0; right: 0; top: 0; height: 64px; z-index: 5;
-        display: flex; align-items: center; gap: 12px; padding: 0 14px 0 20px; user-select: none; cursor: grab; touch-action: none;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
-        border-bottom: 1px solid var(--line);
-    }
-    #winbar img { width: 40px; height: 40px; border-radius: 11px; filter: drop-shadow(0 0 10px rgba(245, 200, 76, 0.45)); }
-    #winbar .name { font-family: "Philosopher", Georgia, "Times New Roman", serif; font-weight: 700; font-size: 1.35rem;
-        background: linear-gradient(180deg, #fff1b8, #ffd76a 45%, #f0a93c); -webkit-background-clip: text; background-clip: text; color: transparent; white-space: nowrap; }
-    #winbar .sub { color: var(--dim); font-size: 0.8rem; }
-    #winbar .btns { margin-left: auto; display: flex; gap: 6px; }
-    #winbar button { width: 38px; height: 32px; padding: 0; border-radius: 10px; font-size: 15px; font-weight: 800; display: grid; place-items: center; }
-    #winbar button:hover { background: rgba(167, 139, 255, 0.2); border-color: #a78bff; }
-    #winbar button.x:hover { background: #d23a5c; border-color: #ff5d7a; }
+    /* the same window as the game's menu: no Windows frame and no strip on top — only three small
+       buttons in the corner; the whole window drags it */
+    html, body { cursor: grab; user-select: none; touch-action: none; }
+    body.dragging { cursor: grabbing; }
+    button, input { cursor: pointer; user-select: text; }
+    input { cursor: text; }
+    #winbtns { position: fixed; top: 12px; left: 12px; z-index: 5; display: flex; gap: 6px; }
+    #winbtns button { width: 30px; height: 26px; padding: 0; border-radius: 9px; font-size: 13px; font-weight: 800;
+        display: grid; place-items: center; color: var(--dim); background: rgba(255, 255, 255, 0.05); }
+    #winbtns button:hover { color: var(--text); background: rgba(167, 139, 255, 0.2); border-color: #a78bff; }
+    #winbtns button.x:hover { background: #d23a5c; border-color: #ff5d7a; color: #fff; }
     h1 { font-family: "Philosopher", Georgia, "Times New Roman", serif; }
-    .logo { width: 112px; height: 112px; }
 </style>
 </head>
 <body>
 <div id="stars"></div>
-<div id="winbar">
-    <img src="/__launcher/logo.png" alt="" onerror="this.style.visibility='hidden'">
-    <div><div class="name">Волшебство только начинается</div><div class="sub">Магия — в ваших руках и голосе</div></div>
-    <div class="btns">
-        <button id="win-min" title="Свернуть" aria-label="Свернуть">—</button>
-        <button id="win-close" class="x" title="Закрыть" aria-label="Закрыть">✕</button>
-    </div>
+<div id="winbtns">
+    <button id="win-close" class="x" title="Закрыть" aria-label="Закрыть">✕</button>
+    <button id="win-min" title="Свернуть" aria-label="Свернуть">—</button>
 </div>
 <main>
     <img class="logo" src="/__launcher/logo.png" alt="" onerror="this.style.visibility='hidden'">
-    <h1 hidden>Волшебство только начинается</h1>
+    <h1>Волшебство только начинается</h1>
     <div id="title">Готовлю игру…</div>
 
     <!-- the first launch: where to install -->
@@ -157,7 +147,7 @@
     })();
     // drag the window by this bar (the mouse's way is sent; screen coordinates do not move with the window)
     (() => {
-        const bar = $('winbar');
+        const bar = document.body;
         let last = null, dx = 0, dy = 0, busy = false;
         const flush = async () => {
             if (busy || (!dx && !dy)) return;
@@ -169,9 +159,10 @@
             flush();
         };
         bar.addEventListener('pointerdown', (e) => {
-            if (e.button !== 0 || e.target.closest('button')) return;
+            if (e.button !== 0 || e.target.closest('button, input, a, pre, .card')) return;
             last = { x: e.screenX, y: e.screenY };
             bar.setPointerCapture(e.pointerId);
+            bar.classList.add('dragging');
         });
         bar.addEventListener('pointermove', (e) => {
             if (!last) return;
@@ -179,7 +170,7 @@
             last = { x: e.screenX, y: e.screenY };
             flush();
         });
-        const stop = () => { last = null; };
+        const stop = () => { last = null; bar.classList.remove('dragging'); };
         bar.addEventListener('pointerup', stop);
         bar.addEventListener('lostpointercapture', stop);
     })();

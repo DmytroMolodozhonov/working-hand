@@ -140,10 +140,10 @@ button, input, select, textarea { font-family: inherit; }
     --win-h: min(780px, calc(100vh - 48px));
     width: var(--win-w); height: var(--win-h); max-width: none; margin: 0;
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-columns: 236px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     column-gap: 20px;
-    padding: 0 20px 20px;
+    padding: 16px 20px 18px 16px;
     overflow: hidden;
     background: linear-gradient(180deg, rgba(30, 21, 72, 0.94), rgba(14, 10, 36, 0.97));
     border: 1px solid var(--ui-border);
@@ -151,25 +151,27 @@ button, input, select, textarea { font-family: inherit; }
     box-shadow: var(--ui-shadow), 0 0 0 1px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.07);
     /* (no backdrop blur here: on a big panel it is slow and draws seams) */
 }
-/* the window's own title bar: logo, name, version and the window buttons */
-#main-menu > .menu-container > .brand {
-    grid-column: 1 / -1; grid-row: 1;
-    display: flex; align-items: center; justify-content: flex-start; gap: 12px;
-    margin: 0 -20px 16px; padding: 12px 14px 12px 20px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
-    border-bottom: 1px solid var(--ui-border);
+/* NO strip on top: the left column holds the window's buttons, the name, the sections and the version */
+.menu-side { grid-column: 1; grid-row: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.win-controls { display: flex; gap: 6px; flex-shrink: 0; }
+.win-btn {
+    width: 30px; height: 26px; border-radius: 9px; display: grid; place-items: center; padding: 0;
+    background: rgba(255, 255, 255, 0.05); border: 1px solid var(--ui-border); color: var(--ui-muted);
+    font-size: 13px; font-weight: 800; line-height: 1; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.brand-logo { width: 44px; height: 44px; border-radius: 12px; filter: drop-shadow(0 0 10px rgba(255, 215, 106, 0.45)); flex-shrink: 0; }
+.win-btn:hover { background: rgba(167, 139, 255, 0.2); border-color: var(--ui-violet); color: var(--ui-text); }
+.win-btn.win-close:hover { background: #d23a5c; border-color: #ff5d7a; color: #fff; }
+.menu-side .brand { display: flex; align-items: center; gap: 10px; padding: 2px 2px 4px; }
+.brand-logo { width: 46px; height: 46px; border-radius: 12px; filter: drop-shadow(0 0 10px rgba(255, 215, 106, 0.45)); flex-shrink: 0; }
 .brand-text { text-align: left; min-width: 0; }
 .menu-container h1, #game-title {
     font-family: var(--ui-font-title);
     font-weight: 700;
-    font-size: clamp(1.25rem, 2.2vw, 1.75rem);
-    line-height: 1.05;
-    letter-spacing: 0.4px;
+    font-size: 1.12rem;
+    line-height: 1.12;
+    letter-spacing: 0.3px;
     text-transform: none;
     margin: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     color: var(--ui-gold);
     background: var(--ui-grad-gold);
     -webkit-background-clip: text;
@@ -177,33 +179,23 @@ button, input, select, textarea { font-family: inherit; }
     -webkit-text-fill-color: transparent;
     filter: drop-shadow(0 2px 8px rgba(240, 169, 60, 0.3));
 }
-.brand-tagline { color: var(--ui-muted); font-size: 0.82rem; margin-top: 3px; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.game-version-top { color: var(--ui-muted); font-size: 0.8rem; margin: 0 0 0 auto; text-align: right; min-height: 0; line-height: 1.3; max-width: 34%; }
+.brand-tagline { color: var(--ui-muted); font-size: 0.74rem; margin-top: 3px; letter-spacing: 0.2px; }
+.game-version-top { color: var(--ui-muted); font-size: 0.74rem; text-align: left; line-height: 1.35; margin: 0; padding: 0 4px; flex-shrink: 0; }
 .game-version-top b { color: var(--ui-gold); font-weight: 700; }
-.win-controls { display: flex; gap: 6px; margin-left: 10px; flex-shrink: 0; }
-.win-btn {
-    width: 38px; height: 32px; border-radius: 10px; display: grid; place-items: center;
-    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--ui-border); color: var(--ui-text);
-    font-size: 15px; font-weight: 800; line-height: 1; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.win-btn:hover { background: rgba(167, 139, 255, 0.2); border-color: var(--ui-violet); }
-.win-btn.win-close:hover { background: #d23a5c; border-color: #ff5d7a; color: #fff; }
-.win-note {
-    grid-column: 1 / -1; grid-row: 2; justify-self: end; margin: -10px 0 8px;
-    color: var(--ui-gold); font-size: 0.85rem; opacity: 0; max-height: 0; transition: opacity 0.2s;
-}
-.win-note.on { opacity: 1; max-height: 3em; }
+.win-note { color: var(--ui-gold); font-size: 0.8rem; padding: 0 4px; opacity: 0; max-height: 0; overflow: hidden; transition: opacity 0.2s; }
+.win-note.on { opacity: 1; max-height: 6em; }
 #gpu-warning { position: relative; z-index: 1; margin: 0 0 12px; background: rgba(90, 31, 18, 0.85); border: 1px solid #ff8a3d; border-radius: 12px; font-size: 13px; padding: 8px 12px; max-width: none; }
 
 /* the main sections: a list on the left, the chosen section on the right (it scrolls inside) */
 .tabs {
-    grid-column: 1; grid-row: 3; align-self: start; max-height: 100%; overflow-y: auto;
+    flex: 0 1 auto; min-height: 0; overflow-y: auto;
     display: flex; flex-direction: column; align-items: stretch; gap: 4px;
     padding: 8px; margin: 0;
     background: rgba(5, 3, 18, 0.45); border: 1px solid var(--ui-border); border-radius: 18px;
 }
+.menu-side .game-version-top { margin-top: auto; }
 .tab-content {
-    grid-column: 2; grid-row: 3; min-width: 0; min-height: 0; height: 100%;
+    grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; height: 100%;
     overflow-y: auto; overflow-x: hidden; padding: 2px 8px 4px 2px;
     scrollbar-width: thin; scrollbar-color: rgba(167, 139, 255, 0.5) transparent;
 }
@@ -448,25 +440,24 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ------------------------------------------------------------ small windows */
 @media (max-width: 900px) {
-    #main-menu > .menu-container { grid-template-columns: 170px minmax(0, 1fr); column-gap: 14px; }
+    #main-menu > .menu-container { grid-template-columns: 190px minmax(0, 1fr); column-gap: 14px; }
     .tab-btn { padding: 9px 10px; font-size: 0.86rem; }
     .ce-layout { grid-template-columns: 1fr; }
     .brand-tagline { display: none; }
 }
 @media (max-width: 760px) {
     #main-menu { padding: 10px; }
-    #main-menu > .menu-container { --win-w: calc(100vw - 20px); --win-h: calc(100vh - 20px); padding: 0 12px 12px; border-radius: 16px; }
-    #main-menu > .menu-container > .brand { margin: 0 -12px 12px; padding: 8px 8px 8px 12px; gap: 8px; }
+    #main-menu > .menu-container { --win-w: calc(100vw - 20px); --win-h: calc(100vh - 20px); padding: 10px 12px 12px 10px; border-radius: 16px; }
     .brand-logo { width: 36px; height: 36px; border-radius: 10px; }
-    .game-version-top { display: none; }
-    .win-btn { width: 32px; height: 30px; }
     .mp-list-head, .mp-server-row { grid-template-columns: 1.3fr 1.1fr 0.5fr; }
 }
 @media (max-width: 600px) {
-    #main-menu > .menu-container { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); }
-    .tabs { grid-column: 1; grid-row: 3; flex-direction: row; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+    #main-menu > .menu-container { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .menu-side { grid-row: 1; flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .menu-side .game-version-top { display: none; }
+    .tabs { flex-direction: row; flex-wrap: wrap; justify-content: center; width: 100%; }
     .tab-btn { width: auto; padding: 6px 8px; font-size: 0.76rem; }
-    .tab-content { grid-column: 1; grid-row: 4; }
+    .tab-content { grid-column: 1; grid-row: 2; }
 }
 @media (max-height: 640px) {
     .mode-hint { font-size: 0.8rem; }
@@ -498,6 +489,15 @@ button, input, select, textarea { font-family: inherit; }
    the title bar moves the window */
 .app-window #main-menu { padding: 0; }
 .app-window #main-menu > .menu-container { --win-w: 100vw; --win-h: 100vh; border-radius: 0; border: none; box-shadow: none; }
-.app-window #main-menu > .menu-container > .brand { cursor: grab; user-select: none; touch-action: none; }
-.app-window #main-menu > .menu-container > .brand.dragging { cursor: grabbing; }
-.app-window #main-menu > .menu-container > .brand .win-btn { cursor: pointer; }
+.app-window .menu-side { cursor: grab; user-select: none; touch-action: none; }
+.app-window .menu-side.dragging { cursor: grabbing; }
+.app-window .menu-side button { cursor: pointer; }
+
+/* pause → «✨ Заклинания» (Creative): the menu's spell book over the game, scrolling inside */
+#pause-menu.pause-wide .pause-box { width: min(1040px, calc(100vw - 32px)); }
+#pause-spells { max-height: min(64vh, 620px); overflow-y: auto; text-align: left; padding-right: 4px; }
+#pause-spells .sub-tabs { position: sticky; top: 0; z-index: 1; padding: 4px 0 8px; background: rgba(20, 14, 50, 0.96); }
+#pause-spells .items-grid { height: auto; overflow: visible; }
+.pause-box .pause-tabs .pause-tab[hidden] { display: none; }
+#pause-spells .sub-tab { display: inline-flex; width: auto; margin: 0; font-size: 0.85rem; padding: 6px 12px; }
+#pause-menu.pause-wide { backdrop-filter: none; -webkit-backdrop-filter: none; background: radial-gradient(circle at 50% 40%, rgba(36, 23, 94, 0.75), rgba(5, 3, 18, 0.9)); } /* (a blur behind a scrolling book draws seams) */

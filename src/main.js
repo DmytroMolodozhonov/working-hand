@@ -736,7 +736,7 @@ setupWindowControls({
     onNote: (t) => { const n = $('win-note'); if (!n) return; n.textContent = t; n.classList.add('on'); clearTimeout(n._t); n._t = setTimeout(() => n.classList.remove('on'), 4000); },
 });
 // the game's own window (shortcut / .bat): no Windows frame, exactly the menu's size
-if (!window.__ZNS_NO_FULLSCREEN__) becomeAppWindow({ bar: document.querySelector('#main-menu .brand') });
+if (!window.__ZNS_NO_FULLSCREEN__) becomeAppWindow({ bar: document.querySelector('#main-menu .menu-side') });
 
 // ------------------------------------------------------------------ pause menu (Escape)
 // (in a game with others the world goes on; alone it waits)
@@ -745,13 +745,21 @@ const pauseAudio = setupPauseAudio($('pause-audio'));
 function showPauseTab(id) {
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
+    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells'); // (the spell book needs room)
     if (id === 'pause-audio') pauseAudio.sync();
+    if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid');
 }
 document.querySelectorAll('.pause-tab').forEach((b) => { b.onclick = () => showPauseTab(b.dataset.pauseTab); });
 function togglePauseMenu(show) {
     const el = $('pause-menu');
     const open = show ?? el.classList.contains('hidden');
-    if (open) { pauseAudio.sync(); showPauseTab('pause-main'); }
+    if (open) {
+        pauseAudio.sync();
+        // «✨ Заклинания» — only in Creative (not on a map)
+        const creative = game?.config?.mode === 'creative' && !game?.config?.map;
+        document.querySelector('[data-pause-tab="pause-spells"]').hidden = !creative;
+        showPauseTab('pause-main');
+    }
     el.classList.toggle('hidden', !open);
     if (open && document.pointerLockElement) document.exitPointerLock();
     if (game && !(net && net.active)) game.paused = open;
