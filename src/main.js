@@ -441,7 +441,9 @@ function startHandRecording() {
     if (handRecorder.active) return;
     let left = 10;
     const say = (t) => hud.setVoice?.(t, true);
-    if (!handRecorder.start(10, (text) => { clearInterval(tick); say(text); })) return;
+    // (the result stays on the screen a while: other notes would cover it at once)
+    const done = (text) => { clearInterval(tick); let n = 0; const keep = setInterval(() => { say(text); if (++n > 30) clearInterval(keep); }, 300); say(text); };
+    if (!handRecorder.start(10, done)) return;
     say(`🔴 Запись руки: ${left} с — двигайте палочкой / рукой как обычно`);
     const tick = setInterval(() => { left--; if (left > 0) say(`🔴 Запись руки: ${left} с`); }, 1000);
 }
