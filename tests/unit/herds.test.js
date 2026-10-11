@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { Animals, SPECIES } from '../../src/game/Animals.js';
+import { Animals, SPECIES, pigSize } from '../../src/game/Animals.js';
 import { solidGap, pairRoom, measureBody, ROOM } from '../../src/game/AnimalHerd.js';
 
 /**
@@ -98,7 +98,7 @@ test('personal space comes from the model: sheep closer than cows; nobody bigger
     const before = big.room;
     const { A: B } = fakeGame();
     const orig = SPECIES.pig.size; SPECIES.pig.size = orig * 1.5;
-    try { const pig2 = B._spawn('pig', new THREE.Vector3(0, 0.5, 0)); assert.ok(pig2.room > before * 1.4, 'a bigger pig keeps more room'); }
+    try { const pig2 = B._spawn('pig', new THREE.Vector3(0, 0.5, 0)); assert.ok(pig2.room / pigSize(pig2.id) > before / pigSize(big.id) * 1.4, 'a bigger pig keeps more room'); } // (each pig its own size ±10%)
     finally { SPECIES.pig.size = orig; }
     assert.ok(cow.model.userData.head, 'the head has its own pivot (down to the grass, looking about)');
 });
