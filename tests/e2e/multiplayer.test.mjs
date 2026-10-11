@@ -585,6 +585,79 @@ test('Свободный мир: no tables, 20 HP, fatigue, spells hurt players,
     await guest.context.close();
 });
 
+test('sword duel: a thrust stays in the other player — both see it in the same place in the body, it bleeds; it comes out on the hand drawing back', async () => {
+    const host = await openPlayer('Мечник1');
+    await host.page.click('#mp-private-btn');
+    await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    const guest = await openPlayer('Мечник2');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await wf(host.page, () => window.__zns.game && window.__zns.game.active && window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game && window.__zns.game.active && window.__zns.game.remotes.size === 1, null, 120000);
+    const ids = await Promise.all([host.page, guest.page].map((p) => ev(p, () => window.__zns.game.localId)));
+    // the guest stands right in front of the host
+    const spot = await ev(host.page, () => { const p = window.__zns.game.character.group.position; return [p.x, p.y, p.z - 1.8]; });
+    await ev(guest.page, (t) => { const g = window.__zns.game; g.character.group.position.set(t[0], t[1], t[2]); g.knockback.set(0, 0, 0); }, spot);
+    await wf(host.page, (t) => { const r = [...window.__zns.game.remotes.values()][0]; return Math.hypot(r.position.x - t[0], r.position.z - t[2]) < 0.3; }, spot, 20000);
+    // the host takes a sword (everybody sees it)
+    await ev(host.page, () => {
+        const g = window.__zns.game;
+        const w = g.weapons.spawn('sword', g.character.getHandWorldPosition('right'), null, 'duelsw');
+        g.sync.weaponAppeared(w);
+        g.weapons.grab(w, 'right', 0.5);
+    });
+    await wf(guest.page, (hid) => window.__zns.game.sync.weaponOwners.get('duelsw') === hid && window.__zns.game.weapons.byId.has('duelsw'), ids[0], 20000);
+    const hp0 = await ev(guest.page, () => window.__zns.game.combat.hp);
+    // a thrust into the guest (Weapons.checkHits finds it; the unit tests cover the swing itself)
+    const local = (page, isHost) => ev(page, ([isH, gid]) => {
+        const g = window.__zns.game;
+        const grp = isH ? g.remotes.get(gid).character.group : g.character.group;
+        const w = g.weapons.byId.get('duelsw');
+        grp.updateMatrixWorld(true);
+        return grp.worldToLocal(w.getTipPosition()).toArray();
+    }, [isHost, ids[1]]);
+    const hostSees = await ev(host.page, (gid) => {
+        const g = window.__zns.game;
+        const w = g.weapons.byId.get('duelsw');
+        const t = g.combat.meleeTarget(gid);
+        g.weapons.onHit(t, 4, new window.__zns.THREE.Vector3(0, 0, -1), true, w, null);
+        const [b, tp] = w.getBladeSegment();
+        g.weapons._stab(w, t, g.weapons.hands.right, b, tp);
+        return { stuck: !!w.stuckIn, held: g.weapons.hands.right.held === w };
+    }, ids[1]);
+    assert.ok(hostSees.stuck, 'the blade went in');
+    assert.ok(hostSees.held, 'still in the host\'s hand');
+    await wf(guest.page, () => window.__zns.game.bleeding.anchors.has('duelsw') && window.__zns.game.bleeding.rate > 0, null, 20000);
+    await wf(guest.page, (h) => window.__zns.game.combat.hp < h, hp0, 20000);
+    await sleep(600); // (a few frames on both)
+    const [tipH, tipG] = [await local(host.page, true), await local(guest.page, false)];
+    const off = Math.hypot(tipH[0] - tipG[0], tipH[1] - tipG[1], tipH[2] - tipG[2]);
+    assert.ok(off < 0.05, `both see the point in the same place in the body (${off.toFixed(3)} m apart)`);
+    // the guest steps aside: on both computers the blade goes with the body
+    await ev(guest.page, () => { const g = window.__zns.game; g.character.group.position.x += 2; });
+    await wf(guest.page, ([t, gp]) => {
+        const g = window.__zns.game;
+        if (g.character.group.position.x < gp - 0.1) return false;
+        const p = g.character.group.worldToLocal(g.weapons.byId.get('duelsw').getTipPosition());
+        return Math.hypot(p.x - t[0], p.y - t[1], p.z - t[2]) < 0.05;
+    }, [tipG, spot[0] + 2], 20000);
+    await wf(host.page, ([gid, t, gp]) => {
+        const g = window.__zns.game;
+        const grp = g.remotes.get(gid).character.group;
+        if (grp.position.x < gp - 0.1) return false;
+        const p = grp.worldToLocal(g.weapons.byId.get('duelsw').getTipPosition());
+        return Math.hypot(p.x - t[0], p.y - t[1], p.z - t[2]) < 0.05;
+    }, [ids[1], tipH, spot[0] + 2], 20000);
+    // the host draws the hand back: it comes out, still in the host's hand; the guest bleeds slower
+    await ev(host.page, () => window.__zns.game.weapons._unstick(window.__zns.game.weapons.byId.get('duelsw'), false));
+    await wf(guest.page, () => !window.__zns.game.bleeding.anchors.has('duelsw') && window.__zns.game.bleeding.rate === 0.5, null, 20000);
+    assert.ok(await ev(host.page, () => window.__zns.game.weapons.hands.right.held?.id === 'duelsw'), 'still held');
+    for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
+    await host.context.close();
+    await guest.context.close();
+});
+
 test('duel magic: Остолбеней flies and stuns, charges meet and push, calm exit, shield, Авада Кедавра', async () => {
     const host = await openPlayer('Гарри');
     await host.page.click('#mp-private-btn');

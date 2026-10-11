@@ -962,6 +962,7 @@ export class CastleLife {
         const g = this.game;
         const from = _v.set(x, g.character.group.position.y, z);
         if (g.gear?.shieldFaces?.(from)) { g.gear.shieldTook?.('melee'); return; }
+        if (g.weapons?.parried?.(x, z)) { g.hud.setVoice(`⚔️ Вы отбили удар: ${who}`, true); return; } // (his sword met my blade)
         if (g.combat.enabled) g.combat.damage(dmg, null, 'knight');
         else g.damageLocalPlayer(dmg);
         // the blow shoves me back (a stagger) and jerks my head

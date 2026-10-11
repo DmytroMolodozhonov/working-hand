@@ -56,6 +56,7 @@ export class Bleeding {
         this.rate = 0; // my bleeding: HP per second
         this._acc = 0;
         this.impaled = new Map(); // weaponId -> playerId the blade is in
+        this.anchors = new Map(); // weaponId -> {pid, p, q}: where in that body (someone else's blade: drawn there)
         this.remote = new Map(); // playerId -> rate (to draw their blood)
         this._zT = 0;
         this._touch = new Map();
@@ -203,14 +204,18 @@ export class Bleeding {
     }
 
     /** (network) a blade went into / out of a player. */
-    noteImpale(wid, pid) {
+    noteImpale(wid, pid, rel = null) {
         this.impaled.set(wid, pid);
+        if (Array.isArray(rel) && rel.length === 7 && rel.every(Number.isFinite)) {
+            this.anchors.set(wid, { pid, p: new THREE.Vector3(rel[0], rel[1], rel[2]), q: new THREE.Quaternion(rel[3], rel[4], rel[5], rel[6]).normalize() });
+        }
         if (pid === this.game.localId) this.start(1);
     }
 
     noteUnimpale(wid) {
         const pid = this.impaled.get(wid);
         this.impaled.delete(wid);
+        this.anchors.delete(wid);
         if (pid === this.game.localId && !this._bladesInMe().length) this.slower();
     }
 
@@ -250,7 +255,7 @@ export class Bleeding {
         if (g.currentPose) {
             for (const [wid] of this.impaled) {
                 const w = g.weapons.byId.get(wid);
-                if (!w) continue;
+                if (!w || w.holder?.side) continue; // (my own hand on its handle: it comes out when the hand draws back)
                 const near = ['right', 'left'].some((s) => ch(g).getHandWorldPosition(s, _v).distanceTo(w.position) < 0.45);
                 const t = near ? (this._touch.get(wid) || 0) + dt : 0;
                 this._touch.set(wid, t);

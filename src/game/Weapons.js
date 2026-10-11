@@ -20,7 +20,7 @@
 import * as THREE from 'three';
 import { Weapon } from '../entities/Weapon.js';
 import { segmentSegmentDistSq, clamp } from '../core/math.js';
-import { bladeContact, bladePower, overpowers } from './BladeClash.js';
+import { bladePower, overpowers, sweptBladeContact } from './BladeClash.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
@@ -29,6 +29,11 @@ const OPEN_CURL = 0.35; // fingers open
 const CLOSE_WINDOW_MS = 900; // hand must have been open this recently to count as "closing on" the handle
 const SETTLE_TIME = 0.18; // seconds for the handle to settle into the grip
 const MIN_SWING_SPEED = 3.2; // m/s at the tip to count as a strike
+const STAB_SPEED = 4.5; // m/s of the point along the blade: a thrust that goes into the body
+const STAB_DEPTH = 0.4; // m: how far the point goes in at most
+const PULL_OUT = 0.28; // m the hand draws back along the blade to pull it out of the body
+const SLIP_OFF = 0.95; // m the hand gets away from a stuck handle: the fingers slip off it
+const BODY_R = 0.5; // a person's body round its axis (feet at -1.95, head top 2.7 in its frame)
 
 const _P = new THREE.Vector3();
 const _X = new THREE.Vector3();
@@ -156,6 +161,7 @@ export class WeaponSystem {
             w.step(dt, collision);
         }
 
+        this._anchorImpaled();
         // Blade against another player's blade: stopped, metal rings
         if (ch) this._bladeClash(dt, now);
 
@@ -163,7 +169,7 @@ export class WeaponSystem {
         if (ch) {
             for (const side of ['left', 'right']) {
                 const hs = this.hands[side];
-                if (!hs.held || hs.held.contactHard < 0.02) continue;
+                if (!hs.held || (hs.held.contactHard < 0.02 && !hs.held.stuckIn)) continue;
                 this._pushHandBack(side, hs.held, ch);
             }
         }
@@ -190,22 +196,26 @@ export class WeaponSystem {
     }
 
     /**
-     * My held blades against blades in other players' hands: they don't pass
-     * through each other — mine stops on theirs (the hand too), metal rings.
+     * My held blades against blades in other players' hands (and knights' /
+     * sailors' swords): they don't pass through each other — mine stops on
+     * theirs (the hand too), metal rings. Checked along the way both blades
+     * went since the last frame, so a fast swing can't jump through.
      * A much stronger blow beats the other blade aside and goes on.
      */
     _bladeClash(dt, now) {
         const foreign = this._foreign || (this._foreign = []);
         foreign.length = 0;
         for (const w of this.weapons) if (this._isForeignHeld(w)) foreign.push(w);
+        this._npcBlades(foreign);
         const pairs = this._pairs || (this._pairs = new Map());
         if (!foreign.length) { pairs.clear(); return; }
-        for (const o of foreign) o._clashSpeed = this._tipSpeed(o, dt);
+        for (const o of foreign) { o._clashSpeed = this._tipSpeed(o, dt); this._segNow(o); }
         for (const side of ['left', 'right']) {
             const w = this.hands[side].held;
-            if (!w || !w.drive) continue;
+            if (!w || !w.drive || w.stuckIn) continue;
             const mySpeed = this._tipSpeed(w, dt);
             const myPow = bladePower(mySpeed, w.mass);
+            const sw = this._segNow(w);
             for (const o of foreign) {
                 if (o.position.distanceToSquared(w.position) > 16) continue;
                 const key = w.id + '|' + o.id;
@@ -213,9 +223,8 @@ export class WeaponSystem {
                 if (!pr) { pr = { n: null, touching: false, passUntil: 0, clangAt: -1e9, frame: 0 }; pairs.set(key, pr); }
                 if (pr.frame !== this.frame - 1) { pr.n = null; pr.touching = false; }
                 pr.frame = this.frame;
-                w.getBladeSegment(_a, _b); o.getBladeSegment(_c, _d);
-                _a.toArray(A0); _b.toArray(A1); _c.toArray(B0); _d.toArray(B1);
-                const c = bladeContact(A0, A1, B0, B1, now < pr.passUntil ? null : pr.n);
+                const so = o._seg;
+                const c = sweptBladeContact(sw.hasPrev ? sw.pa : null, sw.pb, sw.a, sw.b, so.hasPrev ? so.pa : null, so.pb, so.a, so.b, now < pr.passUntil ? null : pr.n);
                 if (!c.touch) {
                     pr.touching = false;
                     pr.n = c.n && c.d < 0.6 ? c.n : null;
@@ -227,10 +236,12 @@ export class WeaponSystem {
                 if (start) {
                     const rel = _e.copy(w._clashVel).sub(o._clashVel).length();
                     if (rel > 0.8 && now - pr.clangAt > 120) { pr.clangAt = now; this._clang(c.point, rel); }
-                    if (overpowers(myPow, mySpeed, oPow)) pr.passUntil = now + 300;
+                    if (!o.npc && overpowers(myPow, mySpeed, oPow)) pr.passUntil = now + 300;
                 }
+                if (o.npc) { this.parryAt = now; this.parryBy = o.npc; } // (a knight's blow met my blade)
                 if (now < pr.passUntil) { pr.n = null; continue; } // beat the other blade aside
                 // stopped on the other blade
+                pr.n = c.n;
                 _e.fromArray(c.n);
                 const depth = Math.min(c.depth, 0.5);
                 w.position.addScaledVector(_e, depth);
@@ -242,10 +253,54 @@ export class WeaponSystem {
                 w.contactHard = Math.max(w.contactHard, depth + 0.02);
                 w.mesh.updateMatrixWorld(true);
                 w.clashes = (w.clashes || 0) + 1;
+                this._segStore(w);
             }
             w.getTipPosition(w._clashTip);
         }
         if (this.frame % 120 === 0) for (const [k, pr] of pairs) if (pr.frame < this.frame - 60) pairs.delete(k);
+    }
+
+    /** This frame's blade ends (as arrays) and last frame's, if it was seen then. */
+    _segNow(w) {
+        const s = w._seg || (w._seg = { a: [0, 0, 0], b: [0, 0, 0], pa: [0, 0, 0], pb: [0, 0, 0], frame: -9, hasPrev: false });
+        if (s.frame === this.frame) return s;
+        s.hasPrev = s.frame === this.frame - 1;
+        for (let i = 0; i < 3; i++) { s.pa[i] = s.a[i]; s.pb[i] = s.b[i]; }
+        s.frame = this.frame;
+        return this._segStore(w);
+    }
+
+    /** (after the blade was put back) where it is now. */
+    _segStore(w) {
+        const s = w._seg;
+        w.getBladeSegment(_a, _b);
+        _a.toArray(s.a); _b.toArray(s.b);
+        return s;
+    }
+
+    /** Swords in the hands of knights / sailors near me: they block my blade too. */
+    _npcBlades(out) {
+        const g = this.game;
+        const me = g.character?.group.position;
+        if (!me) return;
+        for (const list of [g.castleLife?.targets?.(), g.ships?.crew?.targets?.()]) {
+            for (const v of list || []) {
+                const m = v.model;
+                if (!m?.tool || (m.toolKind !== 'sword' && m.toolKind !== 'bigsword') || v.dead) continue;
+                if (Math.abs(v.x - me.x) > 6 || Math.abs(v.z - me.z) > 6) continue;
+                const px = v._bladeProxy || (v._bladeProxy = npcBlade(v));
+                px.getBladeSegment(_a, _b);
+                px.position.addVectors(_a, _b).multiplyScalar(0.5);
+                out.push(px);
+            }
+        }
+    }
+
+    /** Did my blade meet a knight's sword just now (near x, z)? Then his blow is parried. */
+    parried(x, z, ms = 700) {
+        const v = this.parryBy;
+        if (!v || this.game.now() - (this.parryAt || -1e9) > ms) return false;
+        return Math.hypot(v.x - x, v.z - z) < 3;
     }
 
     _clang(point, relSpeed) {
@@ -279,6 +334,7 @@ export class WeaponSystem {
             if (w.holder == null || w.holder.side !== side) { this._forget(side, hand); return; }
             // Summoned into an open hand («Акцио», a slot): kept until the hand has closed on it once
             if (hs.waitClose) { hs.waitClose = false; hs.drop.reset(false); }
+            if (w.stuckIn) { this._holdStuck(side, hs, w, dt, ch, curl, tracked); return; }
             if (ch.armState) {
                 const arm = ch.armState(side, hs.arm);
                 const gt = hs.clock = (hs.clock || 0) + dt * 1000; // (the game's clock: a stalled frame must not cut a swing in two)
@@ -481,15 +537,49 @@ export class WeaponSystem {
     }
 
     _pushHandBack(side, w, ch) {
-        // Push the visible hand by how far the blade was stopped.
+        // Push the visible hand by how far the blade was stopped
+        // (a blade stuck in a body: the hand stays right on its handle).
         const hand = ch.getActiveHands()[side];
         if (!hand || !hand.group.visible || !hand.group.parent) return;
         _a.subVectors(w.position, w.drive.position);
         if (_a.lengthSq() < 0.0004) return;
-        _a.clampLength(0, 0.45);
+        _a.clampLength(0, w.stuckIn ? SLIP_OFF : 0.45);
         hand.group.parent.getWorldQuaternion(_q).invert();
         _a.applyQuaternion(_q);
-        hand.group.position.addScaledVector(_a, 0.8);
+        hand.group.position.addScaledVector(_a, w.stuckIn ? 1 : 0.8);
+    }
+
+    /**
+     * The hand still holds a blade stuck in a body: the blade stays where it went in
+     * (it moves with the body), the hand stays on its handle. Drawing the hand back
+     * along the blade pulls it out (then it is in the hand as before); opening the
+     * hand lets go of it — it stays in the body.
+     */
+    _holdStuck(side, hs, w, dt, ch, curl, tracked) {
+        this._driveHeld(side, dt, ch); // (where the hand would take it)
+        hs.openT = curl < OPEN_CURL && tracked ? (hs.openT || 0) + dt : 0;
+        if (hs.openT > 0.25) { this._letGoStuck(side); return; }
+        _c.subVectors(w.drive.position, w.position);
+        const [base, tip] = w.getBladeSegment(_a, _b);
+        _d.subVectors(tip, base).normalize(); // (into the body)
+        const back = -_c.dot(_d) - (w.stuckIn.gap || 0);
+        if (back > PULL_OUT) {
+            this._unstick(w, false);
+            w.velocity.set(0, 0, 0); w.angularVelocity.set(0, 0, 0);
+            w.cutPassUntil = now(this) + 400; // (it slides out the way it went in)
+            this.game.sound?.playHit?.();
+            return;
+        }
+        if (_c.length() > SLIP_OFF + (w.stuckIn.gap || 0)) this._letGoStuck(side);
+    }
+
+    /** The hand lets go of a blade stuck in a body: it stays there. */
+    _letGoStuck(side) {
+        const w = this.hands[side].held;
+        this._forget(side, this.game.character?.getActiveHands()[side]);
+        if (!w) return;
+        w.drive = null;
+        w.holder = { stuck: true, side: null };
     }
 
     /** Palm and finger meshes of the player's visible hands (cached per hand model). */
@@ -522,6 +612,7 @@ export class WeaponSystem {
         const hs = this.hands[side];
         const w = hs.held;
         if (!w) return;
+        if (w.stuckIn) { this._letGoStuck(side); return; } // (stays in the body)
         const hand = this.game.character?.getActiveHands()[side];
         this._forget(side, hand);
         w.release();
@@ -567,6 +658,7 @@ export class WeaponSystem {
         for (const hs of [this.hands.left, this.hands.right, lev]) {
             const w = hs.held;
             if (!w) continue;
+            if (w.stuckIn) { hs.hasPrev = false; continue; } // (in a body: it strikes nothing more)
             const [base, tip] = w.getBladeSegment(_a, _b);
             // the edge this frame and the last (Dismember: a real cut where the edge went through)
             const swing = this.game.dismember?.slot(hs, w, dt, this.frame) || null;
@@ -598,6 +690,7 @@ export class WeaponSystem {
                     if (cut?.kind === 'cut') {
                         if (!(z.severCooldown > now(this))) { z.severCooldown = now(this) + 300; this.game.dismember.commit(z, cut); }
                         w.velocity.multiplyScalar(0.7);
+                        w.cutPassUntil = now(this) + 250; // (the edge goes on through what it cut off)
                     } else if (cut?.kind === 'armour' && now(this) - (w.armourClangAt || 0) >= 300) {
                         w.armourClangAt = now(this);
                         this._clang(cut.point, speed); // steel stops the blade
@@ -629,7 +722,7 @@ export class WeaponSystem {
                     // A thrust (the blade moving along itself, point first) sticks it into the body
                     _e.subVectors(tip, base).normalize();
                     const along = tipVel.dot(_e);
-                    const stab = !cut && !z.isPlayer && along > 6 && along > 0.8 * speed && hs !== this._levSlot && hy > 0.4 && hy < 2.2;
+                    const stab = !cut && z.group && !z.isBird && along > STAB_SPEED && along > 0.7 * speed && hs !== this._levSlot && hy > -0.6 && hy < 2.6;
                     const factor = clamp(speed / 9, 0.7, 1.6);
                     const damage = Math.max(1, Math.round(w.spec.damage * factor));
                     const dir = tipVel.clone().setY(0);
@@ -637,9 +730,10 @@ export class WeaponSystem {
                     dir.normalize();
                     w.lastHitTime = now(this);
                     if (stab) {
-                        // Run through: double damage, no cut, and the sword stays in the zombie
+                        // Run through: double damage, no cut, and the blade stays in the body
+                        // (still in the hand: drawn back it comes out, the hand opened it stays in)
                         if (this.onHit) this.onHit(z, damage * 2, dir, true, w, null);
-                        if (!z.isDead) this._stick(w, z, hs);
+                        if (!z.isDead) this._stab(w, z, hs, base, tip);
                         break;
                     }
                     // The blade loses energy in the hit
@@ -650,16 +744,94 @@ export class WeaponSystem {
             }
             hs.basePrev.copy(base);
             hs.tipPrev.copy(tip);
+            if (hs !== lev && w.drive && !w.stuckIn) this._bodyStop(w, zombies);
         }
+    }
+
+    /** A target's body as a capsule (world): a person's axis from the legs to the head; null — no solid body to stop a blade. */
+    _bodyOf(z, out) {
+        if (z.bodyCapsule) return z.bodyCapsule(out);
+        if (z.isAnimal || z.isBoss || z.isLivingTree || z.isBird || !z.group) return null;
+        const g = z.group, sy = g.scale.y, p = g.position;
+        out.a.set(p.x, p.y - 1.5 * sy, p.z);
+        out.b.set(p.x, p.y + 2.2 * sy, p.z);
+        out.r = BODY_R * g.scale.x;
+        return out;
+    }
+
+    /**
+     * A held blade doesn't go through a body: it stops on it (and the hand with it),
+     * checked along the way the blade went since the last frame. Only a cut-off part
+     * lets the edge on through; a thrust goes in (_stab).
+     */
+    _bodyStop(w, targets) {
+        const t = now(this);
+        if (t < (w.cutPassUntil || 0)) return;
+        const sw = this._segNow(w);
+        const cap = this._bodyCap || (this._bodyCap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 });
+        const st = w._bodyN || (w._bodyN = new Map());
+        for (const z of targets) {
+            if (z.isDead) continue;
+            const zp = z.group?.position;
+            if (!zp || zp.distanceToSquared(w.position) > 36) continue;
+            if (!this._bodyOf(z, cap)) continue;
+            let pr = st.get(z);
+            if (!pr) { pr = { n: null, frame: 0 }; st.set(z, pr); }
+            if (pr.frame !== this.frame - 1) pr.n = null;
+            pr.frame = this.frame;
+            cap.a.toArray(B0); cap.b.toArray(B1);
+            const c = sweptBladeContact(sw.hasPrev ? sw.pa : null, sw.pb, sw.a, sw.b, B0, B1, B0, B1, pr.n, cap.r);
+            if (!c.touch) { pr.n = c.n && c.d < cap.r + 0.6 ? c.n : null; continue; }
+            pr.n = c.n;
+            _e.fromArray(c.n);
+            const depth = Math.min(c.depth, 1.0);
+            w.position.addScaledVector(_e, depth);
+            const vn = w.velocity.dot(_e);
+            if (vn < 0) w.velocity.addScaledVector(_e, -vn);
+            w.angularVelocity.multiplyScalar(0.5);
+            w.contactHard = Math.max(w.contactHard || 0, depth + 0.02);
+            w.mesh.updateMatrixWorld(true);
+            w.bodyStops = (w.bodyStops || 0) + 1;
+            this._segStore(w);
+        }
+        if (this.frame % 120 === 0) for (const [k, pr] of st) if (pr.frame < this.frame - 60) st.delete(k);
+    }
+
+    /** A thrust went in: the point goes into the body and the blade stays there, still in the hand. */
+    _stab(w, z, hs, base, tip) {
+        const g = this.game;
+        let victim = z;
+        if (z.isPlayer) {
+            const id = z.id;
+            victim = { group: z.group, get isDead() { const r = g.remotes?.get(id); return !r || !!r.dead; }, removable: false, playerId: id };
+        }
+        // the point goes on in, at most up to the middle of the body
+        let s = 0;
+        const cap = this._bodyOf(z, this._bodyCap || (this._bodyCap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }));
+        if (cap) {
+            _e.subVectors(tip, base).normalize();
+            _f.copy(tip).addScaledVector(_e, 1);
+            const st = [0, 0];
+            segmentSegmentDistSq(tip.toArray(), _f.toArray(), cap.a.toArray(), cap.b.toArray(), st);
+            s = Math.min(STAB_DEPTH, st[0]);
+            w.position.addScaledVector(_e, s);
+            w.mesh.updateMatrixWorld(true);
+        }
+        this._stick(w, victim, hs, true);
+        w.stuckIn.gap = s;
+        g.hud?.setVoice?.('🗡️ Клинок вошёл в тело — потяните руку назад, чтобы вынуть, или разожмите пальцы', true);
+        if (victim.playerId) g.sync?.impale?.(victim.playerId, w.id, [...w.stuckIn.pos.toArray(), ...w.stuckIn.quat.toArray()]);
     }
 
     // ------------------------------------------------------- stuck in a zombie
     /** The sword goes into the zombie and stays there (the hand lets go). */
-    _stick(w, z, hs) {
+    _stick(w, z, hs, keepInHand = false) {
         const side = hs === this.hands.left ? 'left' : hs === this.hands.right ? 'right' : null;
-        if (side) this._forget(side, this.game.character?.getActiveHands()[side]);
-        w.drive = null;
-        w.holder = { stuck: true, side: null };
+        if (!keepInHand || !side) {
+            if (side) this._forget(side, this.game.character?.getActiveHands()[side]);
+            w.drive = null;
+            w.holder = { stuck: true, side: null };
+        }
         z.group.updateMatrixWorld(true);
         _m.copy(z.group.matrixWorld).invert().multiply(w.mesh.matrixWorld);
         const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3();
@@ -678,6 +850,7 @@ export class WeaponSystem {
         if (pid) { this.game.sync?.unimpale?.(w.id); this.game.bleeding?.noteUnimpale(w.id); }
         w.stuckIn = null;
         this.stuck?.delete(w);
+        if (w.holder?.side && w.drive) { w.sleeping = false; return; } // (still in the hand: it follows the hand again)
         w.holder = null;
         if (fall) {
             w.wake();
@@ -699,6 +872,26 @@ export class WeaponSystem {
         }
     }
 
+    /**
+     * A blade of someone else's stuck in a player (me or another): it sits where it
+     * went in, on that body as I see it (the network is late, the body is not).
+     */
+    _anchorImpaled() {
+        const an = this.game.bleeding?.anchors;
+        if (!an?.size) return;
+        for (const [wid, a] of an) {
+            const w = this.byId.get(wid);
+            if (!w || w.stuckIn) continue; // (mine: _updateStuck)
+            const grp = a.pid === this.game.localId ? this.game.character?.group : this.game.remotes?.get(a.pid)?.character?.group;
+            if (!grp) continue;
+            grp.updateMatrixWorld(true);
+            _m.compose(a.p, a.q, _e.set(1, 1, 1)).premultiply(grp.matrixWorld);
+            _m.decompose(w.position, w.quaternion, _e);
+            if (w.remoteTarget) { w.remoteTarget.p.copy(w.position); w.remoteTarget.q.copy(w.quaternion); }
+            w.mesh.updateMatrixWorld(true);
+        }
+    }
+
     /** Weapons stuck in zombies (multiplayer: their position goes out with my pose). */
     stuckWeapons() {
         return this.stuck ? [...this.stuck] : [];
@@ -716,3 +909,19 @@ export class WeaponSystem {
 }
 
 const now = (sys) => sys.game.now();
+
+const _s1 = new THREE.Vector3();
+/** A knight's / sailor's sword as a blade (it lies along its tool's +Y). */
+function npcBlade(v) {
+    return {
+        id: 'npc' + v.id, npc: v, mass: 1.5, position: new THREE.Vector3(),
+        getBladeSegment(a, b) {
+            const t = v.model.tool;
+            t.updateWorldMatrix(true, false);
+            t.localToWorld(a.set(0, 0.28, 0));
+            t.localToWorld(b.set(0, v.model.toolKind === 'bigsword' ? 2.55 : 1.69, 0));
+            return [a, b];
+        },
+        getTipPosition(out) { return this.getBladeSegment(_s1, out)[1]; },
+    };
+}

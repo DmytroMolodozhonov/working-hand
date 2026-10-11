@@ -227,7 +227,7 @@ export class NetSync {
             this.pTimer = 0;
             const held = [];
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());
-            for (const w of g.weapons.stuckWeapons()) held.push(w.serialize()); // stuck in a zombie: still mine
+            for (const w of g.weapons.stuckWeapons()) if (!w.holder?.side) held.push(w.serialize()); // stuck in a body: still mine (one still in my hand went above)
             const floating = g.levitation?.heldWeapon();
             if (floating) held.push(floating.serialize());
             this.net.send({
@@ -548,9 +548,9 @@ export class NetSync {
         if (look) this.net.send({ t: 'look', by: this.me, look }, true);
     }
 
-    impale(to, wid) {
+    impale(to, wid, rel = null) {
         this.game.bleeding?.noteImpale(wid, to);
-        this.net.send({ t: 'impale', w: wid, to }, true);
+        this.net.send({ t: 'impale', w: wid, to, r: rel || undefined }, true);
     }
 
     unimpale(wid) {
@@ -781,7 +781,7 @@ export class NetSync {
                 if (g.combat.enabled) g.combat.damage(m.dmg || 1, null, 'animal'); else g.damageLocalPlayer(m.dmg || 1);
                 if (Array.isArray(m.p) && g.impact) { const from = vec(m.p); g.impact.apply({ v: g.character.group.position.clone().sub(from).setY(0).normalize().multiplyScalar(6), from, kind: 'butt', noShield: true }); }
             } break;
-            case 'impale': g.bleeding?.noteImpale(m.w, m.to); break;
+            case 'impale': g.bleeding?.noteImpale(m.w, m.to, m.r); break;
             case 'unimpale': g.bleeding?.noteUnimpale(m.w); break;
             case 'pullout': { const w = g.weapons.byId.get(m.w); if (w && w.stuckIn) g.weapons._unstick(w, true); break; }
             case 'bleed': if (m.by !== this.me) g.bleeding?.remote.set(m.by, m.r || 0); break;

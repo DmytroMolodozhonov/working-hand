@@ -47,6 +47,34 @@ export function bladeContact(a0, a1, b0, b1, lastN = null, R = BLADE_RADIUS) {
     return { touch: false, n: norm3(rel), depth: 0, point, d };
 }
 
+const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+/**
+ * The same contact along the way both blades went since the last frame
+ * (p = last frame's ends): a fast swing that went right through the other
+ * blade (or a body's axis, with its radius as R) between two frames is still
+ * caught, and my blade is put back on the side it came from.
+ */
+export function sweptBladeContact(a0p, a1p, a0, a1, b0p, b1p, b0, b1, lastN = null, R = BLADE_RADIUS) {
+    const end = bladeContact(a0, a1, b0, b1, lastN, R);
+    if (end.touch || !a0p || !b0p) return end;
+    const moved = Math.max(dist3(a0p, a0), dist3(a1p, a1)) + Math.max(dist3(b0p, b0), dist3(b1p, b1));
+    const steps = Math.min(16, Math.ceil(moved / Math.max(0.05, R * 1.5)));
+    if (steps < 2) return end;
+    let n = lastN;
+    for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        const c = bladeContact(lerp3(a0p, a0, t), lerp3(a1p, a1, t), lerp3(b0p, b0, t), lerp3(b1p, b1, t), n, R);
+        if (c.touch) {
+            const d = Math.sqrt(segmentSegmentDistSq(a0, a1, b0, b1, _st));
+            const along = dot3(sub3(lerp3(a0, a1, _st[0]), lerp3(b0, b1, _st[1])), c.n);
+            return { touch: true, n: c.n, depth: Math.max(0, R - along), point: c.point, d, swept: true };
+        }
+        n = c.n && c.d < R + 0.5 ? c.n : n;
+    }
+    return end;
+}
+
 /** How hard a blade pushes: tip speed, heavier weapons a bit more. */
 export function bladePower(speed, mass = 1) {
     return speed * Math.sqrt(Math.max(0.3, mass));
