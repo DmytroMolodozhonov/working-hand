@@ -391,7 +391,7 @@ export class WaterVortex {
         this._updateBubbles(dt);
         this._updateEffects(dt);
         this._sendState(dt);
-        this._draw();
+        this._draw(dt);
     }
 
     _updateMine(dt) {
@@ -763,7 +763,8 @@ export class WaterVortex {
                     this._burst(b, 'dome', true);
                     continue;
                 }
-                if (b.by === this.me && b.t > VORTEX.BUBBLE_LIFE) { this._burst(b, 'time', true); continue; }
+                // (the caster bursts it on time; if their word never comes — they left — it bursts here too)
+                if ((b.by === this.me && b.t > VORTEX.BUBBLE_LIFE) || b.t > VORTEX.BUBBLE_LIFE + 3) { this._burst(b, 'time', b.by === this.me); continue; }
             } else if (b.phase === 'ice') {
                 b.iceT += dt;
                 if (mine) {
@@ -772,7 +773,7 @@ export class WaterVortex {
                     while (b.dmgT >= 1) { b.dmgT -= 1; this._iceHurt(b); }
                 }
                 if (Math.random() < 0.08) this._sparkle(b.pos, 1, b.r);
-                if (b.by === this.me && b.iceT > VORTEX.ICE_LIFE) { this._burst(b, 'time', true); continue; }
+                if ((b.by === this.me && b.iceT > VORTEX.ICE_LIFE) || b.iceT > VORTEX.ICE_LIFE + 3) { this._burst(b, 'time', b.by === this.me); continue; }
             } else if (b.phase === 'melt') {
                 this._meltStep(b, dt);
             }
@@ -1062,7 +1063,7 @@ export class WaterVortex {
 
     // ============================================================= drawing
     /** Every vortex (mine, other wizards', flying, clinging) as rings of living water blobs. */
-    _draw() {
+    _draw(dt = 1 / 60) {
         const mesh = this.blobs;
         if (!mesh) return;
         let n = 0;
@@ -1098,7 +1099,7 @@ export class WaterVortex {
             if (this._t - r.at > 1.5) { this.remote.delete(by); continue; }
             const av = this.game.remotes?.get(by);
             if (!av || !r.s[0]) continue;
-            r.angle += (r.spin || 0.6) * (1 / 60);
+            r.angle += (r.spin || 0.6) * dt;
             ring(av.position, +r.s[1] || 0, r.angle, 1);
         }
         for (const f of this.flights.values()) ring(f.pos, f.volume, f.angle, f.squeeze, 0.35);

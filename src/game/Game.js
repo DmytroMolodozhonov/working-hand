@@ -794,7 +794,7 @@ export class Game {
             if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
         }
         if (name === 'Accio') return this._castAccio(isFinal);
-        if (name === 'Fire') return this.campfires.cast(isFinal);
+        if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
