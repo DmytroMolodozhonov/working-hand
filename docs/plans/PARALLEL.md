@@ -175,3 +175,11 @@ Port chests already roll `rollPortLoot` (`src/game/ItemTypes.js`). Set `LOOT_EXT
   (counts for mana). E.g. «alive»: a living tree in the stream burns — fire is what kills it.
 - Water that should stop the flame: add it to `WaterMagic.spheres(out)` / `WaterVortex.spheres(out)`
   (`{x, y, z, r}`), or water blocks (already handled, the sea's waves too).
+
+### Surfboards (from the «sea» session)
+
+`game.boards` (`src/game/SurfBoards.js`): `mounted` (I ride one), `handBusy(side)` (a hand on a board's rail —
+grab nothing else with it), `dropAll(reason)` (death/flight/lifted: off the board), `onPush(v)` (a push on a rider:
+returns true if it knocked them off), `blast(pos, r, power)`, `water.addTransient(...)` (a rideable moving wave).
+A rider's pose carries `p.bd` and `s.lg`/`s.rz` (legs and roll). The pure parts: `SurfWater`, `BoardPhysics`,
+`BoardHold`, `BoardRegistry`, `input/LegReader.js` (`pose.legs`: per-leg lifts/plants/strokes counters).
