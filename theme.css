@@ -205,58 +205,52 @@ button, input, select, textarea { font-family: inherit; }
 }
 .menu-box { background: rgba(5, 3, 18, 0.4); border: 1px solid var(--ui-border); border-radius: 14px; }
 
-/* the first choice: three big mode cards */
-.mode-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-@media (max-width: 720px) { .mode-row { grid-template-columns: 1fr; } }
+/* «Одиночная игра»: my worlds first, «Создать мир» opens the choice (compact chips) */
+.sp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.sp-head .menu-h4 { margin: 0; }
+#create-world-btn { padding: 8px 16px; font-size: 0.95rem; }
+#create-world { padding: 12px 14px; margin-bottom: 10px; }
+.mode-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .map-card.mode-card {
     --mode-a: #2fd39a; --mode-b: #1b8f8a;
-    align-items: flex-start; text-align: left; padding: 16px 16px 14px; min-height: 150px;
-    border-radius: 18px; border: 1px solid color-mix(in srgb, var(--mode-a) 45%, transparent);
-    background:
-        radial-gradient(160px 120px at 85% 0%, color-mix(in srgb, var(--mode-a) 35%, transparent), transparent 70%),
-        linear-gradient(160deg, color-mix(in srgb, var(--mode-b) 30%, rgba(20, 14, 50, 0.9)), rgba(14, 10, 36, 0.9));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    flex-direction: row; align-items: center; gap: 8px; padding: 8px 14px; min-height: 0;
+    border-radius: 999px; border: 1px solid color-mix(in srgb, var(--mode-a) 45%, transparent);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--mode-b) 28%, rgba(20, 14, 50, 0.9)), rgba(14, 10, 36, 0.9));
 }
 .map-card.mode-card.survival { --mode-a: #ff4f6d; --mode-b: #7a1030; }
 .map-card.mode-card.freeworld { --mode-a: #b18cff; --mode-b: #4b2aa8; }
-.map-card.mode-card:hover { transform: translateY(-2px); border-color: var(--mode-a); box-shadow: 0 10px 28px color-mix(in srgb, var(--mode-a) 30%, transparent); background-color: transparent; }
-.map-card.mode-card.selected {
-    border: 2px solid var(--mode-a);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--mode-a) 22%, transparent), 0 12px 34px color-mix(in srgb, var(--mode-a) 40%, transparent);
-}
-.map-card.mode-card.selected::after {
-    content: '✓'; position: absolute; top: 10px; right: 12px; width: 26px; height: 26px; border-radius: 50%;
-    display: grid; place-items: center; font-weight: 900; color: #120c33; background: var(--mode-a);
-}
-.mode-icon { font-size: 34px; line-height: 1; margin-bottom: 10px; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
-.map-card.mode-card .map-name {
-    font-family: var(--ui-font-title); font-weight: 700; font-size: 1.45rem; color: #fff;
-    text-align: left; white-space: normal; overflow: visible; letter-spacing: 0.3px;
-}
-.mode-hint { color: rgba(241, 237, 255, 0.78); font-size: 0.86rem; line-height: 1.35; margin-top: 6px; }
+.map-card.mode-card.maps { --mode-a: #ffd76a; --mode-b: #8a6414; }
+.map-card.mode-card:hover { border-color: var(--mode-a); background-color: transparent; }
+.map-card.mode-card.selected { border: 2px solid var(--mode-a); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mode-a) 22%, transparent); }
+.mode-icon { font-size: 20px; line-height: 1; }
+.map-card.mode-card .map-name { font-family: var(--ui-font-title); font-weight: 700; font-size: 1.05rem; color: #fff; white-space: nowrap; }
+.mode-hint { color: var(--ui-muted); font-size: 0.86rem; line-height: 1.35; margin: 8px 2px 0; text-align: left; }
 
-/* «Карты»: a separate, quieter section */
-h4.menu-h4.maps-entry { margin-top: 24px; }
-.maps-hint { font-family: var(--ui-font); font-weight: 600; font-size: 0.85rem; color: var(--ui-muted); }
-.map-list-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; padding: 2px; margin-top: 0; max-height: 210px; }
+/* «Карты»: only when chosen */
+.map-list-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; padding: 2px; margin-top: 8px; max-height: 190px; }
 .map-card { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--ui-border); border-radius: 14px; padding: 8px 6px 6px; }
 .map-card:hover { background: rgba(167, 139, 255, 0.12); border-color: var(--ui-violet); }
 .map-card.selected { border: 2px solid var(--ui-gold); box-shadow: 0 0 0 3px rgba(255, 215, 106, 0.2), 0 0 18px rgba(255, 215, 106, 0.35); }
 .map-preview-canvas { border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); background: #120c2c; }
 .map-name { color: var(--ui-text); font-weight: 700; }
+#creative-settings { margin-top: 10px; }
+.create-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+.create-actions #create-cancel { padding: 10px 16px; }
+.worlds-empty { color: var(--ui-muted); padding: 4px 2px; text-align: left; }
 
 #creative-settings label, .settings-group label { color: var(--ui-muted); font-weight: 700; }
 #zombie-count-val { color: var(--ui-gold); }
 
-/* the big play button */
+/* the play button (in «Создать мир») */
 #start-btn {
-    display: block; width: min(420px, 100%); margin: 20px auto 0 !important;
-    padding: 15px 20px; border-radius: 16px; border: none;
+    flex: 1; width: auto; margin: 0 !important;
+    padding: 11px 18px; border-radius: 14px; border: none;
     background: var(--ui-grad-gold); color: #2a1a05;
-    font-family: var(--ui-font-title); font-weight: 700; font-size: 1.45rem; letter-spacing: 1.5px;
-    box-shadow: 0 8px 30px rgba(240, 169, 60, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    font-family: var(--ui-font-title); font-weight: 700; font-size: 1.2rem; letter-spacing: 1px;
+    box-shadow: 0 6px 22px rgba(240, 169, 60, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
-#start-btn:hover { background: var(--ui-grad-gold); filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 10px 40px rgba(255, 215, 106, 0.6); }
+#start-btn:hover { background: var(--ui-grad-gold); filter: brightness(1.07); transform: translateY(-1px); }
+#start-btn:disabled { background: rgba(255, 255, 255, 0.1); color: var(--ui-muted); box-shadow: none; filter: none; transform: none; cursor: default; }
 
 /* forms */
 #main-menu input[type="text"], #main-menu select, .settings-group select, #tab-mp input[type="text"], #tab-mp select, #tab-character input[type="text"] {
@@ -295,6 +289,7 @@ h4.menu-h4.maps-entry { margin-top: 24px; }
 /* saved worlds */
 #saved-worlds { padding: 12px 14px; }
 .world-row { border-top-color: var(--ui-border); }
+.world-row:first-child { border-top: none; }
 .world-name { color: var(--ui-text); }
 .world-meta { color: var(--ui-muted); }
 
@@ -328,6 +323,16 @@ h4.menu-h4.maps-entry { margin-top: 24px; }
 .item-stats { background: rgba(5, 3, 18, 0.5); border-radius: 10px; }
 .stat-row { color: var(--ui-muted); gap: 10px; text-align: left; }
 .stat-row > span:first-child { white-space: nowrap; }
+
+/* «Механика игры»: plain readable sections, not item cards */
+.mech-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; text-align: left; align-items: start; }
+.mech-card { background: rgba(5, 3, 18, 0.42); border: 1px solid var(--ui-border); border-left: 3px solid var(--ui-gold); border-radius: 12px; padding: 12px 16px 10px; }
+.mech-title { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; color: var(--ui-gold); font-family: var(--ui-font-title); font-size: 1.15rem; font-weight: 700; }
+.mech-icon { font-size: 1.3rem; line-height: 1; }
+.mech-lead { margin: 0 0 6px; color: var(--ui-text); font-weight: 700; line-height: 1.4; }
+.mech-points { margin: 0; padding-left: 18px; color: rgba(241, 237, 255, 0.82); line-height: 1.45; font-size: 0.92rem; }
+.mech-points li { margin: 3px 0; }
+@media (max-width: 760px) { .mech-list { grid-template-columns: 1fr; } }
 .stat-val { color: var(--ui-gold); text-align: right; }
 .max-badge { background: var(--ui-grad-magic); }
 
@@ -435,12 +440,8 @@ h4.menu-h4.maps-entry { margin-top: 24px; }
     .brand { gap: 10px; }
     .brand-logo { width: 52px; height: 52px; border-radius: 14px; }
     .brand-tagline { font-size: 0.82rem; }
-    .map-card.mode-card { min-height: 0; padding: 12px 14px; }
-    .mode-icon { font-size: 26px; margin-bottom: 6px; }
-    .map-card.mode-card .map-name { font-size: 1.2rem; }
     .mp-list-head, .mp-server-row { grid-template-columns: 1.3fr 1.1fr 0.5fr; }
 }
 @media (max-height: 640px) {
-    .map-card.mode-card { min-height: 0; }
     .mode-hint { font-size: 0.8rem; }
 }

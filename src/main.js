@@ -13,7 +13,7 @@ import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
-import { renderSpellsTab, renderItemsTab } from './ui/Codex.js';
+import { renderSpellsTab, renderItemsTab, renderMechanicsTab } from './ui/Codex.js';
 import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
@@ -99,6 +99,7 @@ const zombieCountDisplay = $('zombie-count-val');
 
 let selectedMode = 'creative';
 let selectedMap = null;
+let pickingMap = false; // «Создать мир» → «Карты» chosen: the maps are shown
 let cachedMaps = null;
 let isMenuVoiceActive = false;
 
@@ -130,6 +131,7 @@ tabBtns.forEach((btn) => {
         }
         if (btn.dataset.tab === 'tab-game') { updateGameMapList(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-items') renderItemsTab();
+        if (btn.dataset.tab === 'tab-mechanics') renderMechanicsTab();
         if (btn.dataset.tab === 'tab-spells') renderSpellsTab();
         if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-character') { window.__charEditor = window.__charEditor || new CharacterEditor($('tab-character')); window.__charEditor.show(); }
@@ -255,35 +257,38 @@ async function updateGameMapList(forceRefresh = false) {
     const sortedNames = [...mapOrder, ...mapNames.filter((n) => !mapOrder.includes(n)).sort()];
     try { localStorage.setItem('mapOrder', JSON.stringify(sortedNames)); } catch (e) { /* private mode */ }
 
-    // The first choice: Творческий / Хардкор / Выживание (internal modes unchanged)
+    // «Создать мир»: Творческий / Хардкор / Выживание, and «Карты» as a fourth choice
+    // (internal modes unchanged; a map is a 'survival' game with the map)
     const modeRow = document.createElement('div');
     modeRow.className = 'mode-row';
     mapListDiv.appendChild(modeRow);
-    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld' };
-    for (const id of MODE_ORDER) {
-        const m = MODES[id];
+    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld', maps: 'mode-card maps' };
+    const choices = [...MODE_ORDER.map((id) => [id, MODES[id]]), ['maps', MAPS_ENTRY]];
+    for (const [id, m] of choices) {
         const card = document.createElement('div');
-        card.className = `map-card ${MODE_CLS[id]}` + (selectedMode === id && !selectedMap ? ' selected' : '');
+        const on = id === 'maps' ? pickingMap : !pickingMap && selectedMode === id;
+        card.className = `map-card ${MODE_CLS[id]}` + (on ? ' selected' : '');
         card.dataset.mode = id;
         card.setAttribute('role', 'button');
         card.tabIndex = 0;
-        card.innerHTML = `<div class="mode-icon">${m.icon}</div><div class="map-name">${m.label}</div><div class="mode-hint">${m.hint}</div>`;
+        card.innerHTML = `<span class="mode-icon">${m.icon}</span><span class="map-name">${m.label}</span>`;
         card.onclick = () => {
-            selectedMode = id;
+            pickingMap = id === 'maps';
             selectedMap = null;
+            selectedMode = pickingMap ? 'survival' : id;
             updateGameMapList();
         };
         card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.onclick(); } };
         modeRow.appendChild(card);
     }
+    const hint = document.createElement('div');
+    hint.className = 'mode-hint';
+    hint.textContent = pickingMap ? MAPS_ENTRY.hint + (sortedNames.length ? ' — выберите карту:' : ' — карт пока нет (их делают в «Редакторе карт»)') : MODES[selectedMode]?.hint || '';
+    mapListDiv.appendChild(hint);
 
-    // «Карты»: a separate entry — hand-made maps (each is played as a 'survival' map game)
-    const mapsHead = document.createElement('h4');
-    mapsHead.className = 'menu-h4 maps-entry';
-    mapsHead.innerHTML = `${MAPS_ENTRY.icon} ${MAPS_ENTRY.label} <span class="maps-hint">— ${MAPS_ENTRY.hint}</span>`;
-    mapListDiv.appendChild(mapsHead);
+    // the maps themselves: only when «Карты» is chosen
     const grid = document.createElement('div');
-    grid.className = 'map-list-grid';
+    grid.className = 'map-list-grid' + (pickingMap ? '' : ' hidden');
     mapListDiv.appendChild(grid);
 
     for (const name of sortedNames) {
@@ -315,18 +320,17 @@ async function updateGameMapList(forceRefresh = false) {
         card.appendChild(cvs);
         card.appendChild(nameDiv);
         card.onclick = () => {
-            if (selectedMap && selectedMap.name === name) {
-                selectedMap = null;
-                selectedMode = 'creative';
-            } else {
-                selectedMap = { ...mapData, name };
-                selectedMode = 'survival';
-            }
+            pickingMap = true;
+            selectedMap = selectedMap && selectedMap.name === name ? null : { ...mapData, name };
+            selectedMode = 'survival';
             updateGameMapList();
         };
         grid.appendChild(card);
     }
-    if (creativeSettings) creativeSettings.style.display = selectedMode === 'creative' ? 'block' : 'none';
+    if (creativeSettings) creativeSettings.style.display = selectedMode === 'creative' && !pickingMap ? 'block' : 'none';
+    const start = $('start-btn');
+    start.disabled = pickingMap && !selectedMap;
+    start.textContent = pickingMap ? (selectedMap ? '✨ Играть на карте' : 'Выберите карту') : '✨ Создать и играть';
 }
 window.updateGameMapList = updateGameMapList;
 updateGameMapList();
@@ -579,6 +583,15 @@ $('start-btn').addEventListener('click', () => {
     startGame(cfg);
 });
 
+// ------------------------------------------------------------------ «Создать мир»
+let createTouched = false; // (the player opened or closed it: leave it as they want)
+function showCreateWorld(on) {
+    $('create-world').classList.toggle('hidden', !on);
+    $('create-world-btn').classList.toggle('hidden', on);
+}
+$('create-world-btn').addEventListener('click', () => { createTouched = true; showCreateWorld(true); });
+$('create-cancel').addEventListener('click', () => { createTouched = true; showCreateWorld(false); });
+
 // ------------------------------------------------------------------ saved worlds
 // Every world you play (not the maps) is saved by itself; continue it here.
 async function renderSavedWorlds() {
@@ -591,8 +604,13 @@ async function renderSavedWorlds() {
         if (worlds.some((w) => w.id === cur)) sel.value = cur;
     }
     if (!box) return;
-    if (!worlds.length) { box.innerHTML = ''; return; }
-    box.innerHTML = '<h4 class="menu-h4" style="margin-bottom:8px">💾 Мои миры (сохраняются сами)</h4>' + worlds.map((w) => {
+    if (!worlds.length) {
+        box.innerHTML = '<div class="worlds-empty">Пока нет ни одного мира. Созданный мир сохраняется сам — потом его можно продолжить отсюда.</div>';
+        if (!createTouched) showCreateWorld(true); // (nothing to continue: the choice is open at once)
+        return;
+    }
+    if (!createTouched) showCreateWorld(false); // (worlds to continue: the choice waits for «Создать мир»)
+    box.innerHTML = worlds.map((w) => {
         const ver = worldVersionLabel(w);
         return `
         <div class="world-row" data-id="${w.id}">
@@ -783,6 +801,7 @@ $('mp-host-btn').addEventListener('click', async () => {
         showCodeInGame(net.code);
         selectedMode = mode;
         selectedMap = null;
+        pickingMap = false;
         startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: srvName });
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
@@ -803,6 +822,7 @@ $('mp-private-btn').addEventListener('click', async () => {
         renderPlayers();
         selectedMode = mode;
         selectedMap = null;
+        pickingMap = false;
         startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: 'Игра ' + code });
         showCodeInGame(code);
     } catch (e) {

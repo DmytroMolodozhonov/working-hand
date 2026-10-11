@@ -30,7 +30,10 @@ test('menu: maps, modes and the new spell are listed; no errors on load', async 
     assert.ok(cards.some((c) => c.startsWith('Карта')), cards.join(','));
     await page.click('[data-tab="tab-items"]');
     const items = await page.$$eval('#items-grid .item-name', (els) => els.map((e) => e.textContent));
-    assert.ok(items.includes('Меч'), items.join(','));
+    assert.ok(items.includes('Меч') && !items.some((n) => /Волшебн|Мана/.test(n)), 'one card per thing, mana is not an item: ' + items.join(','));
+    await page.click('[data-tab="tab-mechanics"]');
+    const mech = await page.$$eval('#mechanics-list .mech-title', (els) => els.map((e) => e.textContent));
+    assert.ok(mech.some((n) => n.includes('Мана')) && mech.some((n) => n.includes('Смерть')), mech.join(','));
     await page.click('[data-tab="tab-spells"]');
     const spells = await page.$$eval('#spells-grid .item-name', (els) => els.map((e) => e.textContent));
     assert.ok(spells.some((n) => n.startsWith('Бомбардо') && n.includes('Максима')), 'one card with a Maxima badge: ' + spells.join(','));

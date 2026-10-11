@@ -18,9 +18,9 @@ test.after(async () => {
     srv?.stop();
 });
 
-test('look: the new name, the logo, the three modes and «Карты»; the old labels are gone', async () => {
+test('look: the new name, the logo, «Мои миры» first, «Создать мир» → three modes and «Карты»; the old labels are gone', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await page.waitForSelector('.mode-row .mode-card');
+    await page.waitForSelector('.mode-row .mode-card'); // (no worlds yet: the choice is open by itself)
     assert.equal(await page.title(), 'Волшебство только начинается');
     assert.equal(await page.textContent('#game-title'), 'Волшебство только начинается');
     // the logo is really there (loaded, not a broken image)
@@ -28,9 +28,21 @@ test('look: the new name, the logo, the three modes and «Карты»; the old 
     // the new fonts are vendored and load (no CDN)
     assert.ok(await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('700 20px Philosopher', 'Волшебство'); }));
     const modes = await page.$$eval('.mode-row .mode-card', (els) => els.map((e) => [e.dataset.mode, e.querySelector('.map-name').textContent]));
-    assert.deepEqual(modes, [['creative', 'Творческий'], ['survival', 'Хардкор'], ['freeworld', 'Выживание']]);
-    assert.match(await page.textContent('.maps-entry'), /Карты/);
-    assert.ok((await page.$$('.map-list-grid .map-card[data-name]')).length >= 1, 'maps are listed under «Карты»');
+    assert.deepEqual(modes, [['creative', 'Творческий'], ['survival', 'Хардкор'], ['freeworld', 'Выживание'], ['maps', 'Карты']]);
+    assert.match(await page.textContent('.sp-head'), /Мои миры/);
+    assert.match(await page.textContent('#saved-worlds'), /нет ни одного мира/, 'no worlds yet: it says so');
+    // «Отмена» closes the choice, «Создать мир» opens it again
+    await page.click('#create-cancel');
+    assert.equal(await page.isVisible('.mode-row'), false);
+    await page.click('#create-world-btn');
+    assert.ok(await page.isVisible('.mode-row'));
+    // the maps show only when «Карты» is chosen
+    assert.equal(await page.isVisible('.map-list-grid'), false);
+    await page.click('.mode-card[data-mode="maps"]');
+    assert.ok(await page.isVisible('.map-list-grid .map-card[data-name]'), 'maps are listed under «Карты»');
+    assert.ok(await page.isDisabled('#start-btn'), 'no map chosen yet: nothing to start');
+    await page.click('.mode-card[data-mode="creative"]');
+    assert.equal(await page.isVisible('.map-list-grid'), false);
     const tabs = await page.$$eval('.tab-btn', (els) => els.map((e) => e.textContent.trim()));
     assert.ok(tabs.includes('🎮 Одиночная игра') && tabs.includes('⚙️ Настройки'), tabs.join(','));
     const opts = await page.$$eval('#mp-mode option', (els) => els.map((o) => [o.value, o.textContent.replace(/^\S+\s/, '')]));
@@ -77,7 +89,7 @@ for (const [mode, label] of [['creative', 'Творческий'], ['survival', 
 
 test('look: a map from «Карты» starts a map game (internally \'survival\' with the map)', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await page.waitForSelector('.map-list-grid .map-card[data-name]');
+    await page.waitForSelector('.map-list-grid .map-card[data-name]', { state: 'attached' }); // (shown once «Карты» is chosen)
     const name = await page.$eval('.map-list-grid .map-card[data-name]', (el) => el.dataset.name);
     await startFromMenu(page, name);
     const cfg = await page.evaluate(() => ({ mode: window.__zns.game.config.mode, map: window.__zns.game.config.map?.name }));
