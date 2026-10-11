@@ -28,7 +28,11 @@ test('heard: Creative shows only the newest few words, big and bold, then it fad
         window.__zns.voice.onResult(long, false);
         const el = document.getElementById('voice-heard');
         const cs = getComputedStyle(el);
-        const dbg = parseFloat(getComputedStyle(document.getElementById('voice-debug')).fontSize);
+        // (against the small «ЖДУ КОМАНДУ» indicator; a game hint on that line is big on purpose — Hud.setVoice)
+        const dl = document.getElementById('voice-debug'), wasHint = dl.classList.contains('hint');
+        dl.classList.remove('hint');
+        const dbg = parseFloat(getComputedStyle(dl).fontSize);
+        if (wasHint) dl.classList.add('hint');
         const now = { text: el.textContent, on: el.classList.contains('on'), weight: cs.fontWeight, size: parseFloat(cs.fontSize), dbg, inDebug: document.getElementById('voice-debug').innerText };
         await new Promise((res) => setTimeout(res, 2200));
         return { ...now, later: el.classList.contains('on') };

@@ -31,6 +31,15 @@ test('a blast: «Вас отбросило взрывом»; the hand down / no 
     });
     await page.waitForFunction(() => window.__zns.game.knock.down, null, { timeout: 10000, polling: 100 });
     assert.match(await voice(page), /отбросило взрывом «Бомбардо»/);
+    // big, at the top (not in the middle where spells are aimed), and it fades by itself after ~5 s
+    const box = await page.evaluate(() => {
+        const el = document.getElementById('voice-debug'), r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, size: parseFloat(cs.fontSize), weight: cs.fontWeight, h: innerHeight, w: innerWidth, hint: el.classList.contains('hint') };
+    });
+    if (process.env.ZNS_SHOT) await page.screenshot({ path: process.env.ZNS_SHOT });
+    assert.ok(box.hint && box.size >= 24 && +box.weight >= 700, `big and bold: ${JSON.stringify(box)}`);
+    assert.ok(box.top >= 100 && box.bottom < box.h * 0.4 && box.left >= 0 && box.right <= box.w, `at the top, on the screen: ${JSON.stringify(box)}`);
+    await page.waitForFunction(() => !document.getElementById('voice-debug').classList.contains('on'), null, { timeout: 8000, polling: 200 });
 
     // the hand hanging down: «Бомбардо» does not fly, and the line says why
     await page.evaluate(() => { const g = window.__zns.game; g.knock.reset(); g.lastSpellCastTime = 0; g.isMagicActive = false; g.lastMagicTime = 0; });

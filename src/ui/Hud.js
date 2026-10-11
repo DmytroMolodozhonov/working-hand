@@ -6,6 +6,8 @@
 const MINIMAP_WINDOW = 128; // m of terrain drawn around the player
 const MINIMAP_W = 240, MINIMAP_H = 160; // the map's own units (drawn bigger by the size setting)
 const HEARD_WORDS = 4;       // the «heard words» line keeps only the newest few words
+const HINT_MS = 5000;        // a hint (the message line) fades after this long…
+const HINT_AGAIN_MS = 8000;  // …and the very same one is not shown again before this
 const HEARD_FADE_MS = 1500;  // …and fades this long after the microphone goes quiet
 
 /** The last `n` words of what the microphone heard (the newest ones). */
@@ -266,17 +268,39 @@ export class Hud {
         them.style.background = hex(d.them);
     }
 
+    /**
+     * The message line. A game message (why I fell, why a spell did not work…) is a HINT: big and
+     * bold for a player a few metres from the screen, at the top (not where spells are aimed, not over
+     * the bars or the minimap), and it fades by itself after HINT_MS; a new one replaces it, the same
+     * one is not shown again for a while. «ЖДУ КОМАНДУ» stays the small indicator it was.
+     */
     setVoice(html, show = true) {
         const v = this.el.voice;
         if (!v) return;
+        const now = performance.now();
         if (show) {
-            v.classList.remove('hidden');
-            v.style.display = 'block';
-            if (html !== this._lastVoice) { v.innerHTML = html; this._lastVoice = html; this._voiceAt = performance.now(); }
+            const hint = !!html && !html.includes('ЖДУ КОМАНДУ');
+            if (html === this._lastVoice) {
+                // the same line again: an indicator just stays; a hint only after a while (no flicker)
+                if (!hint || now - this._voiceAt < HINT_AGAIN_MS) { if (!hint || v.classList.contains('on')) this._showVoice(v, hint); return; }
+            }
+            v.innerHTML = html; this._lastVoice = html; this._voiceAt = now;
+            this._showVoice(v, hint);
+            clearTimeout(this._voiceTimer);
+            if (hint) this._voiceTimer = setTimeout(() => { v.classList.remove('on'); this._voiceTimer = setTimeout(() => { if (!v.classList.contains('on')) { v.style.display = 'none'; } }, 450); }, HINT_MS);
         } else {
+            if (v.classList.contains('hint') && v.classList.contains('on')) return; // (a hint still being read fades by itself)
             v.classList.add('hidden');
+            v.classList.remove('on');
             v.style.display = 'none';
         }
+    }
+
+    _showVoice(v, hint) {
+        v.classList.remove('hidden');
+        v.classList.toggle('hint', hint);
+        v.style.display = 'block';
+        v.classList.add('on');
     }
 
     /**
@@ -303,6 +327,12 @@ export class Hud {
     /** ms since the message line was last written. */
     voiceAge() {
         return performance.now() - (this._voiceAt ?? -1e9);
+    }
+
+    /** A hint is on the screen now (still being read). */
+    hintShowing() {
+        const v = this.el.voice;
+        return !!v && v.classList.contains('hint') && v.classList.contains('on');
     }
 
     voiceText() {
