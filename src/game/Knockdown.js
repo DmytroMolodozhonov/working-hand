@@ -20,6 +20,7 @@
  */
 
 import { KD, fallDir, IMPACT } from './Impact.js';
+import { knockMessage, lyingMessage } from './Hints.js';
 
 export const KNOCK = { MIN_DOWN: 1.5, FALL_T: 0.45, RISE_T: 0.7, SQUAT_T: 0.14, BOW_LOW: 0.3, BOW_UP: 0.4, NO_POSE_T: 2, AUTO_RISE: 6, STAGGER_MAX: 0.8,
     LIFT_T: 0.35, SINK_T: 0.5, LIFT_UP: 0.9, // (pulled up by a hand: the body's fastest rise / sinking back (s for all the way); up at this much)
@@ -84,7 +85,7 @@ export class Knockdown {
     constructor(game) { this.game = game; this.reset(); }
 
     reset() {
-        this.state = 'up'; this.dir = 'back'; this.t = 0; this.minDown = 0; this.by = null; this.kind = null;
+        this.state = 'up'; this.dir = 'back'; this.t = 0; this.minDown = 0; this.by = null; this.kind = null; this.cause = null;
         this.squatT = 0; this.bowT = 0; this.squatted = false; this.bowed = false; this.pending = false; this.noPoseT = 0; this.staggerT = 0;
         this.lift = 0; this.liftWant = 0;
         this.dizzyLeft = 0; this.dizzyDur = 0; this.dizzyS = 0;
@@ -102,7 +103,7 @@ export class Knockdown {
     netCode() { return this.state === 'falling' || this.state === 'down' ? KD[this.dir] : 0; }
 
     /** Off the feet: falls `dir`, lies at least `down` s, then gets up by the player's own movement. */
-    knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', toss = 0, strength = 0.3 } = {}) {
+    knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', cause = null, toss = 0, strength = 0.3 } = {}) {
         const g = this.game, ch = g.character;
         if (kind !== 'Stupefy' && !g.combat?.stunned && !g.combat?.frozen) this.daze(strength); // (not the stun's or the ice's stiff fall)
         if (this.state === 'falling' || this.state === 'down') {
@@ -113,11 +114,13 @@ export class Knockdown {
         if (g.animals?.riding) g.animals.dismount?.();
         if (g.flight?.busy) g.flight.land?.('knocked');
         g.handHold?.breakAll?.('knocked');
-        this.state = 'falling'; this.dir = dir || 'back'; this.t = 0; this.minDown = down; this.by = by; this.kind = kind;
+        this.state = 'falling'; this.dir = dir || 'back'; this.t = 0; this.minDown = down; this.by = by; this.kind = kind; this.cause = cause || kind;
         this.squatT = this.bowT = 0; this.squatted = this.bowed = this.pending = false; this.noPoseT = 0; this.lift = this.liftWant = 0; ch.liftUp = 0;
         ch.knockedDown = true; ch.fallDir = this.dir; ch.stepping = 0; ch.staggerLean = 0;
         if (toss > 2) { ch.group.position.y += 0.7; ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, toss); ch.onGround = false; }
-        g.hud?.setVoice?.('💥 Вас сбили с ног!', true);
+        // (why I am on the ground: «вас отбросило взрывом…», «вас сбил рыцарь (Имя)»…)
+        const who = by && by !== g.localId ? g.remotes?.get?.(by)?.name || '' : '';
+        g.hud?.setVoice?.(knockMessage(this.cause, { by: who, down }), true);
         return true;
     }
 
@@ -214,7 +217,7 @@ export class Knockdown {
                 const pose = g.currentPose;                                    // (not the null pose of a stun: the camera itself)
                 this.noPoseT = pose && pose.hasPose ? 0 : this.noPoseT + dt;
                 const ready = this.t >= this.minDown;
-                if (ready && !this._told) { this._told = true; g.hud?.setVoice?.('🧍 Чтобы встать — присядьте и выпрямитесь', true); }
+                if (ready && !this._told) { this._told = true; g.hud?.setVoice?.(lyingMessage(this.cause), true); }
                 if (getUpStep(this, pose, dt, this.minDown - this.t)
                     || (this.noPoseT > KNOCK.NO_POSE_T && this.t >= KNOCK.AUTO_RISE)) {
                     this.state = 'rising'; this.t = 0; ch.knockedDown = false; this._told = false;

@@ -228,7 +228,7 @@ export class WaterStorm {
     // ================================================================ voice
     cast(isFinal = true) {
         const g = this.game;
-        if (this.state) return null;
+        if (this.state) { if (isFinal && this.state.t > 3) g._why?.('busy', STORM.NAME); return null; } // (the interim and the final version of one phrase; later: say why)
         if (this._t - (this._endAt ?? -9) < 2.5) return null;
         const side = this._castSide();
         if (!side) return this._hint('🪄 «Water Vortex Super Maxima» вызывается только <b>волшебной палочкой в руке</b>', isFinal);

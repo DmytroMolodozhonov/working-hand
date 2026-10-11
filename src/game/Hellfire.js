@@ -220,7 +220,7 @@ export class Hellfire {
     /** The words. @returns the spell name, or null */
     cast(isFinal = true) {
         const g = this.game;
-        if (this.state) return null; // (the interim and the final version of one phrase)
+        if (this.state) { if (isFinal && this.state.t > 3) g._why?.('busy', HELLFIRE.NAME); return null; } // (the interim and the final version of one phrase; later: say why)
         if (this._t - (this._endAt ?? -9) < 2.5) return null; // (…and the final one after a quick «стоп»)
         const side = this._castSide();
         if (!side) return this._hint('🪄 «Let the Hellfire Come» вызывается только <b>волшебной палочкой в руке</b>', isFinal);

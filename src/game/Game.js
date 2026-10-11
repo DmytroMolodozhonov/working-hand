@@ -42,6 +42,7 @@ import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js'
 import { CastleLife } from './CastleLife.js';
 import { Ships } from './Ships.js';
 import { DeathSystem } from './Death.js';
+import { refusal, HintGate } from './Hints.js';
 import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
@@ -625,7 +626,7 @@ export class Game {
             _v1.set(pp.x - pos.x, 0, pp.z - pos.z);
             if (_v1.lengthSq() < 1e-6) _v1.set(0, 0, 1);
             _v1.normalize().multiplyScalar(blastPush(dPlayer, radius, power));
-            this.impact.apply({ v: _v1.clone(), from: pos.clone(), by: casterId === 'local' ? this.localId : casterId, spell: name, blast: true,
+            this.impact.apply({ v: _v1.clone(), from: pos.clone(), by: casterId === 'local' ? this.localId : casterId, spell: name, cause: power < 1 ? 'cannon' : null, blast: true,
                 toss: k > 0.35 && !this.flight.active ? 10 * k * push : 0, jolt: SPELL_PHYSICS[name].jolt * k, down: SPELL_PHYSICS[name].down });
         }
         // My own Bombardo too close to me hurts me too — the closer, the worse
@@ -991,10 +992,10 @@ export class Game {
         // Water bending: the hand is at the water / holding the ball, not raised to the face
         const waterName = this._waterSpell(name);
         if (waterName) return this._castWater(waterName, text, isFinal);
-        if (name === 'Maxima') return null;
+        if (name === 'Maxima') { if (isFinal) this._why('maximaAlone'); return null; }
         const recent = this.isMagicActive || Date.now() - this.lastMagicTime < 1500;
         // Flight has its own gesture (both arms up) — checked in startFlight
-        if (!recent && name !== 'Flight') return null;
+        if (!recent && name !== 'Flight') { if (isFinal) this._why('handDown', name); return null; }
         const now = Date.now();
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
         // the player may be saying «Бомбардо Максима».
@@ -1012,7 +1013,7 @@ export class Game {
             if (early.name === name) { this._interimCast = null; return null; }
         }
         if (name === 'Bombardo' || name === 'BombardoMaxima') this._pendingBombardo = null;
-        if (now - this.lastSpellCastTime < SPELL_COOLDOWN) return null;
+        if (now - this.lastSpellCastTime < SPELL_COOLDOWN) { if (isFinal && !early) this._why('cooldown'); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         if (name === 'Flight' && !this.startFlight()) return null;
@@ -1026,6 +1027,17 @@ export class Game {
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
         return name;
+    }
+
+    /**
+     * A recognized spell that did not work, and why (Hints.refusal), on the message line —
+     * once per reason every two seconds (the recognizer repeats a phrase many times).
+     */
+    _why(code, name = null) {
+        const gate = this._hintGate || (this._hintGate = new HintGate(2000));
+        if (!gate.pass(code)) return;
+        const text = refusal(code, { name: name ? SPELL_RU[baseSpell(name)] || name : null });
+        if (text) this.hud.setVoice(text, true);
     }
 
     /** Which voice commands go to the water ball. */

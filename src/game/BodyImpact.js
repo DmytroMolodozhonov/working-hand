@@ -69,7 +69,7 @@ export class BodyImpact {
         const dir = fallDir(o.v.x, o.v.z, ch.group.rotation.y);
         if (res === 'knockdown') {
             if (g.flight?.busy) g.flight.land?.('blown');
-            g.knock.knock({ dir, down: o.always?.down ?? o.down ?? undefined, by: o.by, kind: o.spell || o.kind, toss: o.toss || 0, strength: Math.max(fallStrength({ v: v * k }), 0.15) });
+            g.knock.knock({ dir, down: o.always?.down ?? o.down ?? undefined, by: o.by, kind: o.spell || o.kind, cause: o.cause || null, toss: o.toss || 0, strength: Math.max(fallStrength({ v: v * k }), 0.15) });
         } else if (res === 'stagger') g.knock.stagger({ dir, v: v * k });
         if (facing) this._recoil(o);
         return (facing || dome) && res === 'none' ? 'blocked' : res;
