@@ -39,6 +39,10 @@ try {
             await shot(page, `${tag}-11-pause`);
             await page.evaluate(() => { document.getElementById('pause-menu').classList.add('hidden'); document.getElementById('death-screen').classList.remove('hidden'); });
             await shot(page, `${tag}-12-death`);
+            await page.evaluate(() => { document.getElementById('death-screen').classList.add('hidden'); document.getElementById('game-over').classList.remove('hidden'); });
+            await shot(page, `${tag}-13-game-over`);
+            await page.evaluate(() => { document.getElementById('game-over').classList.add('hidden'); const l = document.getElementById('loading'); l.classList.remove('hidden'); l.style.display = 'flex'; document.getElementById('loading-bar-fill').style.width = '62%'; });
+            await shot(page, `${tag}-14-loading`);
         }
         console.log(tag, 'errors:', errors.length ? errors.join('\n') : 'none');
         await page.close();

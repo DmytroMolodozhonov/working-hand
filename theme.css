@@ -138,12 +138,11 @@ button, input, select, textarea { font-family: inherit; }
     max-width: 1040px;
     margin: auto;
     padding: 22px 26px 26px;
-    background: linear-gradient(180deg, rgba(30, 21, 72, 0.82), rgba(14, 10, 36, 0.88));
+    background: linear-gradient(180deg, rgba(30, 21, 72, 0.9), rgba(14, 10, 36, 0.94));
     border: 1px solid var(--ui-border);
     border-radius: 24px;
     box-shadow: var(--ui-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    /* (no backdrop blur here: on a tall scrolling menu it is slow and draws seams) */
 }
 #gpu-warning { position: relative; z-index: 1; width: min(1040px, 100%); max-width: 1040px; margin: 0 auto 12px; background: rgba(90, 31, 18, 0.85); border-radius: 14px; flex-shrink: 0; font-size: 13px; padding: 8px 12px; }
 
@@ -171,14 +170,14 @@ button, input, select, textarea { font-family: inherit; }
 
 /* the tabs: one rounded rail */
 .tabs {
-    display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;
-    padding: 5px; margin: 0 auto 18px;
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 2px;
+    padding: 4px; margin: 0 auto 18px;
     background: rgba(5, 3, 18, 0.45); border: 1px solid var(--ui-border); border-radius: 16px;
     width: fit-content; max-width: 100%;
 }
 .tab-btn {
     background: transparent; border: 1px solid transparent; color: var(--ui-muted);
-    padding: 9px 14px; border-radius: 12px; font-weight: 800; font-size: 0.92rem; letter-spacing: 0.2px;
+    padding: 8px 11px; border-radius: 12px; font-weight: 800; font-size: 0.88rem; letter-spacing: 0.1px; white-space: nowrap;
     transition: color 0.15s, background 0.15s, box-shadow 0.2s;
 }
 .tab-btn:hover { color: var(--ui-text); background: rgba(167, 139, 255, 0.12); }
@@ -314,8 +313,9 @@ h4.menu-h4.maps-entry { margin-top: 24px; }
 .item-desc b { color: var(--ui-cyan); }
 .item-max { color: var(--ui-pink) !important; }
 .item-stats { background: rgba(5, 3, 18, 0.5); border-radius: 10px; }
-.stat-row { color: var(--ui-muted); }
-.stat-val { color: var(--ui-gold); }
+.stat-row { color: var(--ui-muted); gap: 10px; text-align: left; }
+.stat-row > span:first-child { white-space: nowrap; }
+.stat-val { color: var(--ui-gold); text-align: right; }
 .max-badge { background: var(--ui-grad-magic); }
 
 /* character editor and map editor */
@@ -327,14 +327,20 @@ h4.menu-h4.maps-entry { margin-top: 24px; }
 #ce-canvas { background: radial-gradient(circle at 50% 35%, #3a2a8a, #120c33 75%); border: 1px solid var(--ui-border); }
 .sidebar-section { background: rgba(5, 3, 18, 0.4); border-color: var(--ui-border); border-radius: 14px; }
 .sidebar-section h4 { color: var(--ui-gold); }
-.tool-btn { border-radius: 10px; }
-.tool-btn.active { background: var(--ui-grad-magic); border-color: transparent; }
-#editor-canvas { border-radius: 12px; border-color: var(--ui-border); }
+.sidebar-section h4 { border-bottom-color: var(--ui-border); }
+.sidebar-section button, .tool-btn { border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--ui-border); color: var(--ui-text); font-weight: 700; }
+.sidebar-section button:hover, .tool-btn:hover { background: rgba(167, 139, 255, 0.16); border-color: var(--ui-violet); box-shadow: var(--ui-glow); }
+.sidebar-section .tool-btn.active { background: var(--ui-grad-magic); border-color: transparent; color: #fff; box-shadow: 0 4px 18px rgba(155, 91, 255, 0.45); }
+#editor-canvas { border-radius: 12px; border: 1px solid var(--ui-border-strong); background: linear-gradient(135deg, #1a1240 0%, #0e0a24 100%); }
+.map-delete-btn { background: var(--ui-danger); }
 
 /* ------------------------------------------------------------ loading */
 #loading { background: radial-gradient(900px 500px at 70% 10%, rgba(123, 92, 255, 0.35), transparent 60%), linear-gradient(180deg, var(--ui-night-1), var(--ui-night-0)); }
 #loading .menu-container { width: min(460px, calc(100% - 32px)); background: var(--ui-panel); border: 1px solid var(--ui-border); border-radius: 22px; backdrop-filter: blur(12px); }
 #loading h1 { font-size: 1.8rem; }
+.loading-logo { display: block; margin: 0 auto 10px; width: 84px; height: 84px; border-radius: 20px; filter: drop-shadow(0 0 18px rgba(255, 215, 106, 0.5)); animation: zns-float 3s ease-in-out infinite; }
+@keyframes zns-float { 50% { transform: translateY(-5px); } }
+@media (prefers-reduced-motion: reduce) { .loading-logo { animation: none; } }
 #loading-bar-container { background: rgba(5, 3, 18, 0.7) !important; border: 1px solid var(--ui-border-strong) !important; border-radius: 999px !important; height: 14px !important; }
 #loading-bar-fill { background: linear-gradient(90deg, var(--ui-violet-deep), var(--ui-gold)) !important; box-shadow: 0 0 14px rgba(255, 215, 106, 0.6) !important; }
 #loading-status { color: var(--ui-muted) !important; }

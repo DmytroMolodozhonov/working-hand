@@ -27,6 +27,9 @@ A browser voxel game (three.js, ES modules, no build step) controlled by the pla
 a webcam (pose + hands), with Russian voice spells (`src/fx/SpellManager.js` `matchSpell`), PeerJS
 multiplayer where the host is the authority (`src/net/NetSync.js`), and modes `config.mode`
 `'creative' | 'survival' | 'freeworld'` (PvP free world with HP and mana: `Combat.enabled`) | maps.
+The player sees them as «Творческий» / «Хардкор» / «Выживание» and «Карты» (names in `src/ui/Branding.js`;
+the game is «Волшебство только начинается»). New HUD pieces: use the shared `.ui-panel`, `.ui-btn`,
+`.ui-chip`, `.ui-bar` classes and `--ui-*` colours from `theme.css`.
 The page exposes `window.__zns.game` for tests.
 
 ## Tests
