@@ -497,7 +497,7 @@ export class Hellfire {
         // book-birds fall (the book of protection too: it is fire), glass breaks
         if (blaze) { g.books?.hitAt?.(f.c, f.R, by, 'fire'); g.houses?.hitAt?.(f.c, f.R * 0.5); }
         // a house's sphere of protection holds the fire out — and wears down (HouseWards.js)
-        if (blaze) g.wards?.struck?.(f.c, f.R, HELLFIRE.NAME);
+        if (blaze) g.wards?.struck?.(f.c, f.R, HELLFIRE.NAME, by); // (held on it ~7 s: burnt through)
         // creatures of every kind (players: every computer burns its own — _burnMe)
         const bodies = g.duel?._bodies?.(null) || [];
         const auth = !!g.authority;

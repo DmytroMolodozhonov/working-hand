@@ -126,6 +126,7 @@ export const SPELL_PHYSICS = {
     Levitation: null, LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,
     Fire: { push: 0, jolt: 0.6 },
     Inferno: { push: 1.5, jolt: 0.6 },
+    Ward: { push: 7, jolt: 1.5 }, // (a house's barrier shoves back the one who pushes on it: HouseWards.js)
     Hellfire: { push: 0, jolt: 0.8 }, // (it burns, it does not push: Hellfire.js)
     Sands: { push: 5, jolt: 2.5 }, SandsDuel: { push: 5, jolt: 2.5 }, // («Даст»: a light puff — the head jolts, the legs slow down: Slow.js)
     Wind: { push: 13, range: 14, jolt: 1 }, WindMaxima: { push: 39, range: 24, jolt: 2 },

@@ -86,7 +86,7 @@ function fakeGame({ id = 'H', host = true } = {}) {
     const me = new THREE.Vector3(0, 0, 2);
     const voice = [];
     const g = {
-        authority: host, localId: id,
+        authority: host, localId: id, config: { mode: 'freeworld' },
         net: { active: true, isHost: host, localId: id, pid: 'pid-' + id, name: 'Хозяин', players: new Map([['H', { pid: 'pid-H', name: 'Хозяин' }], ['P2', { pid: 'pid-P2', name: 'Друг' }], ['P3', { pid: 'pid-P3', name: 'Чужой' }]]) },
         terrain: { data }, blockEdits: edits,
         character: {
@@ -235,13 +235,10 @@ test('spells from outside stop at the sphere, from inside go out; blasts keep th
     assert.equal(data.get(3, 2, 0), BLOCK.PLANKS, 'inside the sphere: still there');
     assert.equal(data.get(8, 2, 0), BLOCK.AIR, 'outside: blown away');
     assert.deepEqual(W.keepFor({ x: 0, y: 2, z: 0 }, 3), [], 'a blast inside: the sphere doesn\'t hold it');
-    // only very strong magic wears it down
-    W.struck({ x: 8, y: 2, z: 0 }, 3, 'Bombardo');
+    // lightning, Sapira… only make it flash
+    W.struck({ x: 8, y: 2, z: 0 }, 3, 'LightningStrike');
+    W.struck({ x: 8, y: 2, z: 0 }, 3, 'Sapira');
     assert.equal(W.list.get('w').hp, WARD.HP);
-    W.struck({ x: 8, y: 2, z: 0 }, 3, 'TotalDestructionMaxima');
-    assert.equal(W.list.get('w').hp, WARD.HP - 60);
-    W.struck({ x: 8, y: 2, z: 0 }, 3, 'TotalDestruction');
-    assert.equal(W.list.size, 0, 'it broke');
 });
 
 test('the book of protection: its own id, its three spells; Avada and the duel spells bounce, fire and an ice ball bring it down', () => {
@@ -276,4 +273,111 @@ test('the book of protection: its own id, its three spells; Avada and the duel s
     const b4 = { ...bird(), ward: false };
     BookBirds.prototype._damage.call(me, b4, 2, null);
     assert.equal(b4.state, 'fall');
+});
+
+function warded() {
+    const g = fakeGame();
+    const W = new HouseWards(g);
+    W._add({ id: 'w', owner: 'pid-H', ownerName: 'Хозяин', c: { x: 0, y: 2, z: 0 }, n: 2, inv: false, grant: [], grantNames: [], hp: WARD.HP });
+    return { g, W, at: { x: 8, y: 2, z: 0 } };
+}
+
+test('only four spells break it: «Total Destruction» and «Бомбардо Максима» at once, «Бомбардо» three times, the Hellfire held ~7 s', () => {
+    for (const sp of ['TotalDestruction', 'TotalDestructionMaxima', 'BombardoMaxima']) {
+        const { W, at } = warded();
+        W.struck(at, 3, sp, 'P3');
+        assert.equal(W.list.size, 0, sp);
+        assert.ok(W.log.some((e) => e.ev === 'broken' && e.by === 'P3'));
+    }
+    const b = warded();
+    b.W.struck(b.at, 3, 'Bombardo');
+    b.W.struck(b.at, 3, 'Bombardo');
+    assert.equal(b.W.list.size, 1, 'two blasts: cracked');
+    assert.ok(b.W.list.get('w').hp < WARD.HP);
+    b.W.struck(b.at, 3, 'Bombardo');
+    assert.equal(b.W.list.size, 0, 'the third breaks it');
+    // cracks heal when it is left alone for a minute
+    const h = warded();
+    h.W.struck(h.at, 3, 'Bombardo');
+    h.W._t = 30; h.W._heal(1);
+    assert.ok(h.W.list.get('w').hp < WARD.HP, 'not yet');
+    for (let t = 61; t < 90; t++) { h.W._t = t; h.W._heal(1); }
+    assert.equal(h.W.list.get('w').hp, WARD.HP, 'healed');
+    // the Hellfire: held on it ~7 s burns through; taken away, it cools
+    const f = warded();
+    for (let t = 0; t <= 5; t += 0.5) { f.W._t = t; f.W.struck(f.at, 3, 'Hellfire'); }
+    assert.equal(f.W.list.size, 1, '5 s: it holds (glowing)');
+    f.W._t = 9; f.W._heal(0.1);
+    assert.equal(f.W.list.get('w').hellT, 0, 'the fire taken away: it cools');
+    for (let t = 10; t <= 18; t += 0.5) { f.W._t = t; f.W.struck(f.at, 3, 'Hellfire'); }
+    assert.equal(f.W.list.size, 0, 'held 7 s: burnt through');
+    // the others do nothing to it
+    const o = warded();
+    for (const sp of ['Sapira', 'Thunderwave', 'LightningStrike', 'Inferno', 'AvadaKedavra', 'IceBall', 'arrow']) o.W.struck(o.at, 3, sp);
+    assert.equal(o.W.list.get('w').hp, WARD.HP);
+    // the owner is told (wherever he is)
+    const m = warded();
+    m.W.struck(m.at, 3, 'BombardoMaxima');
+    assert.ok(m.g.voice.includes(refusal('wardBroken')));
+});
+
+test('the barrier is not seen — it shows where a stranger comes close; pushing on it shoves back and takes 2 HP', () => {
+    const { g, W } = warded();
+    const shoves = [];
+    g.impact = { apply: (o) => shoves.push(o) };
+    g.combat.enabled = true; g.combat.hp = 20; g.combat.damage = (n) => { g.combat.hp -= n; };
+    W._look(W.list.get('w'));
+    W.update(0.016);
+    assert.equal(W.looks.get('w').dome.visible, false, 'not seen');
+    // a stranger's computer (P3) walks into it
+    const gs = fakeGame({ id: 'P3', host: false });
+    gs.impact = { apply: (o) => shoves.push(o) };
+    gs.combat.enabled = true; gs.combat.hp = 20; gs.combat.damage = (n) => { gs.combat.hp -= n; };
+    const Ws = new HouseWards(gs);
+    Ws.applyNet(W.netList());
+    gs.character.group.position.set(-6.5, 0, 0);
+    Ws.update(0.016);
+    assert.ok(Ws.looks.get('w').dome.visible, 'it flashes into view');
+    const p = gs.character.group.position;
+    for (let i = 0; i < 60; i++) { p.x += 0.05; Ws._t += 0.05; Ws.keepOut(p, 0, 3.5, 0.05); } // (3 s pushing on it)
+    assert.ok(Math.hypot(p.x, p.z) >= 5.5, 'held at the surface');
+    assert.ok(shoves.length >= 1 && shoves[0].spell === 'Ward', 'shoved back');
+    assert.ok(gs.combat.hp <= 18 && gs.combat.hp >= 14, 'a few HP: ' + gs.combat.hp);
+    assert.ok(gs.voice.includes(refusal('wardBarrier')));
+    // in Creative: shoved, no harm
+    const gc = fakeGame({ id: 'P3', host: false });
+    gc.config.mode = 'creative'; gc.impact = { apply() {} }; gc.combat.enabled = true; gc.combat.hp = 20; gc.combat.damage = (n) => { gc.combat.hp -= n; };
+    const Wc = new HouseWards(gc);
+    Wc.applyNet(W.netList());
+    const pc = new THREE.Vector3(-5.9, 0, 0);
+    Wc._t = 1; Wc.keepOut(pc, 0, 3.5, 0.016); pc.x += 0.4; Wc._t = 1.05; Wc.keepOut(pc, 0, 3.5, 0.016); // (run into it)
+    assert.equal(gc.combat.hp, 20);
+    // the owner walks through, nothing shows
+    const pos = new THREE.Vector3(-4, 0, 0);
+    W.keepOut(pos, 0, 3.5, 0.016);
+    assert.equal(pos.x, -4);
+    // a zombie pressing on it (the host): shoved back and hurt
+    const hurt = [];
+    g.damageZombie = (z, n) => hurt.push(n);
+    g.creatureImpact = { apply: () => 'stagger' };
+    const z = { id: 7, group: { position: new THREE.Vector3(5.6, 1.4, 0), visible: true }, isDead: false, takeDamage() {} };
+    g.zombies.push(z);
+    for (let i = 0; i < 40; i++) { z.group.position.x -= 0.05; W._t += 0.05; W._creatures(0.05); }
+    assert.ok(hurt.length >= 1 && hurt[0] === WARD.SHOVE_HP, 'the zombie is shoved and hurt');
+    assert.ok(Math.hypot(z.group.position.x, z.group.position.z) >= 5.5);
+});
+
+test('«Protection Invisible» said again on an invisible house: it is seen again, free', () => {
+    const g = fakeGame();
+    const W = new HouseWards(g);
+    W.cast('ProtectionHouse'); W.fix();
+    const w = [...W.list.values()][0];
+    g.character.getHandDirection = (s, out) => out.set(w.c.x - 0, w.c.y - 2, w.c.z - 2).normalize();
+    const m0 = g.combat.fatigue;
+    assert.equal(W.cast('ProtectionInvisible'), 'ProtectionInvisible');
+    assert.ok(w.inv);
+    assert.equal(g.combat.fatigue, m0 - 15);
+    assert.equal(W.cast('ProtectionInvisible'), 'ProtectionInvisible');
+    assert.equal(w.inv, false);
+    assert.equal(g.combat.fatigue, m0 - 15);
 });

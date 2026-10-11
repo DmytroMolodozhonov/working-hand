@@ -15,22 +15,25 @@
  *                             may come in and go out freely, like the owner.
  *
  * What the sphere does — for EVERY kind (CLAUDE.md «на кого и на что»):
- *   - players: me (my computer pushes my body back out at the surface) and the others (theirs do)
- *     — except the owner and the granted ones, who pass both ways;
- *   - creatures (host): zombies, villagers / knights / the king / wizards, animals (pigs with wings
- *     too), sailors, living trees, the giant spider, servants (a servant of the owner or of a granted
- *     player comes in with its master) — softly pushed back out; book-birds fly over it as they like
- *     (they never come into houses);
- *   - spells from outside stop at it (a flash and the hex pattern where they touch): duel charges
- *     (Авада, Остолбеней, Сапира, Айс, Даст, Экспеллиармус…), rays (Сапира, Тандервейв, Вайнд,
- *     Overgrown, Бомбардо…), the Инферно flame, lightning, arrows, thrown water / ice balls bounce,
- *     pushes (Вайнд, waves, blasts) don't reach the bodies inside, blasts (Бомбардо, cannon balls)
- *     don't eat into the blocks inside, fire doesn't catch inside, «Total Destruction» leaves what
- *     is inside standing, an earthquake's crack stops at it;
- *   - what is cast from inside goes out freely (the defenders may shoot);
- *   - only very strong magic wears it down: «Бомбардо Максима» −15, «Lightning Strike» −20, «Total
- *     Destruction» −40 (Максима −60), «Let the Hellfire Come» −4 a burn. 100 strength: it breaks
- *     (the owner may cast it again). Nothing else breaks it.
+ *   - it is NOT seen: only while it is being set (and a moment after «стоп»), and when somebody who
+ *     may not come in is close to it (≈1.5 m) — then it flashes into view, the hex pattern lighting
+ *     up where they are, and fades again when they go;
+ *   - it holds them like a wall: players (my computer holds me; theirs hold them) and creatures (the
+ *     host): zombies, villagers / knights / the king / wizards, animals (pigs with wings too),
+ *     sailors, living trees, the giant spider, servants (a servant of the owner or of a granted
+ *     player comes in with its master). Pushing on (more than ~1.5 s against it, or running into it)
+ *     → it shoves them back (the impact system) and takes 2 HP (not more than once a second; no harm
+ *     in Creative; a living tree is only shoved — only fire hurts it). Book-birds fly over it freely;
+ *   - the owner and the granted players pass both ways and never wake it;
+ *   - spells from outside stop at it (a flash where they touch): duel charges (Авада, Остолбеней,
+ *     Сапира, Айс, Даст, Экспеллиармус…), rays, the Инферно flame, lightning, arrows, water / ice balls
+ *     bounce, pushes don't reach inside, blasts don't eat into the blocks inside, fire doesn't catch
+ *     inside, an earthquake's crack stops at it; what is cast from inside goes out freely;
+ *   - only four spells break it (from outside): «Total Destruction» at once, «Бомбардо Максима» — one
+ *     blast on it, «Бомбардо» — about three (each cracks it; the cracks heal slowly if it is left
+ *     alone for a minute), «Let the Hellfire Come» held against it for ~7 s (it glows red first).
+ *     Broken: it falls apart in shards, «🛡️ Защита дома разрушена!» to the owner and to the one who
+ *     broke it; the house is unprotected (and seen again); the owner may cast it anew.
  * Saved with the world (owner, centre, radius, invisible, granted, strength) and kept by the host:
  * every computer has the same list (the host sends it), guests ask the host to change it.
  */
@@ -55,7 +58,17 @@ export const WARD = {
     SEE_NEAR: 3.5, // m from the sphere: an invisible house is all there
     SEE_FAR: 6.5, // m: … and not seen at all from this far
     HP: 100,
-    WEAR: { BombardoMaxima: 15, LightningStrike: 20, TotalDestruction: 40, TotalDestructionMaxima: 60, Hellfire: 4 },
+    BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100 }, // strength taken (nothing else breaks it)
+    HELL_T: 7, // s of «Let the Hellfire Come» held against it: burnt through
+    HEAL_AFTER: 60, // s left alone: its cracks heal…
+    HEAL_RATE: 5, // …this much strength a second
+    NEAR: 1.5, // m from it: one who may not come in wakes it (it shows)
+    SHOW_AFTER_SET: 2.5, // s it is still seen after «стоп»
+    PRESS_T: 1.5, // s pushing on it: it shoves back
+    RAM_SPEED: 7, // m/s into it: shoved at once
+    SHOVE_GAP: 1, // s between shoves
+    SHOVE_HP: 2,
+    SHOVE_V: 7, // m/s
     HIDE_MAX: 8, // invisible houses drawn hidden at once (the nearest)
 };
 
@@ -142,6 +155,7 @@ export function keepIn(spheres) {
 }
 
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const _c = new THREE.Color();
 const r2 = (v) => Math.round(v * 100) / 100;
 
 // ------------------------------------------------------------ the look of the sphere
@@ -155,7 +169,7 @@ void main() {
     gl_Position = projectionMatrix * viewMatrix * w;
 }`;
 const DOME_FS = `
-uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet;
+uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet; uniform float uCrack;
 varying vec3 vN; varying vec3 vW; varying vec3 vL;
 float hexDist(vec2 p) { p = abs(p); return max(dot(p, vec2(0.5, 0.866)), p.x); }
 float hexEdge(vec2 uv) {
@@ -173,8 +187,13 @@ void main() {
     float shimmer = 0.5 + 0.5 * sin(uTime * 1.7 + vW.y * 1.3 + vW.x * 0.7);
     float f = 0.0;
     if (uFlash.w > 0.0) f = uFlash.w * smoothstep(3.0, 0.0, distance(vW, uFlash.xyz));
-    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25;
-    gl_FragColor = vec4(uColor * (1.0 + f * 1.5), clamp(a, 0.0, 0.9));
+    // cracks: some edges of a coarser pattern light up white (more of them the more it is broken)
+    vec2 cu = uv * 0.45;
+    float ce = hexEdge(cu);
+    float pick = fract(sin(dot(floor(cu * 1.7), vec2(12.9898, 78.233))) * 43758.5453);
+    float crack = uCrack > 0.0 && pick < uCrack ? ce : 0.0;
+    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04 + hx * 0.12) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25 + crack * 0.6;
+    gl_FragColor = vec4(mix(uColor * (1.0 + f * 1.5), vec3(1.0), crack * 0.7), clamp(a, 0.0, 0.9));
 }`;
 
 export class HouseWards {
@@ -408,7 +427,13 @@ export class HouseWards {
         const on = this._wardOnRay(h.o, h.d);
         if (!on) return this._no('wardInvNone');
         if (on.w.owner !== this.myKey) return this._no('wardNotYours', { owner: on.w.ownerName });
-        if (on.w.inv) return this._no('wardInvDone');
+        if (on.w.inv) {
+            // said again on an invisible house: it is seen again (free)
+            this._op({ op: 'vis', id: on.w.id });
+            g.hud?.setVoice?.(refusal('wardVisible'), true);
+            this.log.push({ ev: 'vis', id: on.w.id });
+            return 'ProtectionInvisible';
+        }
         if (!this._pay('ProtectionInvisible')) return null;
         this._op({ op: 'inv', id: on.w.id });
         g.hud?.setVoice?.('🫥 Дом скрыт: издалека на его месте видна только земля. Ближе 3–4 м он проступает', true);
@@ -466,6 +491,7 @@ export class HouseWards {
         else if (op.op === 'grow') { if (w.owner === key && w.r < WARD.MAX_R) { w.n++; w.r = wardRadius(w.n); w.gy = this._groundY(w.c, w.r); this._rebuildDisc(w); } }
         else if (op.op === 'set') { if (w.owner === key) w.setting = !!op.on; }
         else if (op.op === 'inv') { if (w.owner === key) w.inv = true; }
+        else if (op.op === 'vis') { if (w.owner === key) w.inv = false; }
         else if (op.op === 'grant') {
             if (w.owner !== key || !op.to) return;
             const k = this.keyOf(op.to);
@@ -482,6 +508,7 @@ export class HouseWards {
         if (op.op === 'grow') { w.n++; w.r = wardRadius(w.n); w.gy = this._groundY(w.c, w.r); this._rebuildDisc(w); }
         if (op.op === 'set') w.setting = !!op.on;
         if (op.op === 'inv') w.inv = true;
+        if (op.op === 'vis') w.inv = false;
     }
 
     _add(w) {
@@ -505,28 +532,30 @@ export class HouseWards {
     }
 
     /** (host) Tell everybody (and remember: the world save asks for it). */
-    _changed() {
+    _changed(gone = null) {
         const g = this.game;
-        if (this.auth) g.sync?.wards?.(this.netList());
+        if (this.auth) g.sync?.wards?.(this.netList(), gone);
     }
 
     /** One sphere as it is sent and saved. */
     _rec(w, ids = false) {
         const o = { id: w.id, o: w.owner, on: w.ownerName, c: [r2(w.c.x), r2(w.c.y), r2(w.c.z)], n: w.n, inv: w.inv ? 1 : 0, g: w.grant.slice(), gn: w.grantNames.slice(), hp: Math.round(w.hp) };
         if (w.setting) o.s = 1;
+        if (w.hellT > 0) o.h = Math.round(w.hellT * 10) / 10;
         if (ids) o.ids = this._ids(w);
         return o;
     }
 
     _fromRec(o) {
         if (!o || !Array.isArray(o.c) || !o.c.every(Number.isFinite)) return null;
-        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null };
+        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null };
     }
 
     netList() { return [...this.list.values()].map((w) => this._rec(w, true)); }
 
-    /** (guests) The host's list. */
-    applyNet(list) {
+    /** (guests) The host's list (gone: the spheres just broken, [{id, by}]). */
+    applyNet(list, gone = null) {
+        for (const b of gone || []) if (this.list.has(b?.id)) this._broken(b.id, b.by);
         const seen = new Set();
         const meBefore = new Set([...this.list.values()].filter((w) => this.mine(w) && w.owner !== this.myKey).map((w) => w.id));
         for (const o of list || []) {
@@ -538,7 +567,7 @@ export class HouseWards {
             this._add(w);
             if (old) this._rebuildDisc(this.list.get(w.id));
         }
-        for (const id of [...this.list.keys()]) if (!seen.has(id)) this._broken(id, false);
+        for (const id of [...this.list.keys()]) if (!seen.has(id)) this._remove(id);
         // I was let into somebody's house
         for (const w of this.list.values()) {
             if (w.owner !== this.myKey && this.mine(w) && !meBefore.has(w.id)) this.game.hud?.setVoice?.(`🛡️ ${w.ownerName || 'Хозяин'} пустил вас в свой дом: вы можете входить и выходить`, true);
@@ -624,49 +653,64 @@ export class HouseWards {
     }
 
     /**
-     * (host) Very strong magic at `p` (radius `r`) hit the spheres from outside: they wear down
-     * (strength WARD.HP — at 0 it breaks). Other magic does nothing to them.
+     * Magic at `p` (radius `r`) hit the spheres from outside: they flash there. Only «Бомбардо»
+     * (cracks it: ~3 break it), «Бомбардо Максима» and «Total Destruction» (at once), and «Let the
+     * Hellfire Come» held on it ~7 s break it (the host decides). Nothing else harms it.
      */
-    struck(p, r, spell) {
-        const n = WARD.WEAR[spell];
+    struck(p, r, spell, by = null) {
         let any = false;
         for (const w of [...this.list.values()]) {
             if (inWard(w, p) || Math.hypot(p.x - w.c.x, p.y - w.c.y, p.z - w.c.z) > w.r + r + 0.5) continue;
             any = true;
             this.flash(w, _v1.set(p.x, p.y, p.z));
-            if (!n || !this.auth) continue;
-            w.hp -= n;
-            this.log.push({ ev: 'wear', id: w.id, spell, hp: w.hp });
-            if (w.hp <= 0) this._broken(w.id, true);
-            else this._changed();
+            if (!this.auth) continue;
+            let broken = false;
+            if (spell === 'Hellfire') {
+                const gap = this._t - (w.hellAt ?? -1e9);
+                w.hellT = gap < 1.5 ? (w.hellT || 0) + gap : 0;
+                w.hellAt = this._t;
+                broken = w.hellT >= WARD.HELL_T;
+            } else {
+                const n = WARD.BREAK[spell];
+                if (!n) continue;
+                w.hp -= n;
+                broken = w.hp <= 0;
+                if (!broken) this.game.sound?.playCrack?.(_v1.set(p.x, p.y, p.z), 1.2);
+            }
+            w.hitAt = this._t;
+            this.log.push({ ev: 'hit', id: w.id, spell, hp: w.hp, hellT: w.hellT || 0 });
+            if (broken) {
+                this._broken(w.id, by);
+                this._changed([{ id: w.id, by }]);
+            } else this._changed();
         }
         return any;
     }
 
-    /** The sphere broke (strong magic) or the host says it is gone. */
-    _broken(id, loud) {
+    /** The sphere is broken: it falls apart in shards; the owner and the one who broke it are told. */
+    _broken(id, by = null) {
         const w = this.list.get(id);
         if (!w) return;
         const g = this.game;
-        if (loud || this.looks.has(id)) {
-            const c = _v1.set(w.c.x, w.c.y, w.c.z);
-            for (let i = 0; i < 60; i++) {
-                const a = Math.random() * Math.PI * 2, b = Math.acos(2 * Math.random() - 1);
-                const dir = _v2.set(Math.sin(b) * Math.cos(a), Math.cos(b), Math.sin(b) * Math.sin(a));
-                g.fx?.spark?.(_v3.copy(c).addScaledVector(dir, w.r), i % 2 ? 0x8fc8ff : 0xe8f6ff, 0.12, dir.multiplyScalar(3), 1);
-            }
-            if (w.owner === this.myKey) g.hud?.setVoice?.('💥🛡️ Защита вашего дома разбита сильной магией!', true);
+        const c = _v1.set(w.c.x, w.c.y, w.c.z);
+        for (let i = 0; i < 160; i++) {
+            const a = Math.random() * Math.PI * 2, b = Math.acos(2 * Math.random() - 1);
+            const dir = _v2.set(Math.sin(b) * Math.cos(a), Math.max(0, Math.cos(b)), Math.sin(b) * Math.sin(a));
+            g.fx?.spark?.(_v3.copy(c).addScaledVector(dir, w.r), i % 3 ? 0x8fc8ff : 0xffffff, 0.16, dir.multiplyScalar(2 + Math.random() * 3).setY(-1 - Math.random() * 3), 1.4);
         }
+        g.fx?.lightFlash?.(c, 0x8fc8ff, 3, 0.4, w.r * 3);
+        g.sound?.playFrozenHit?.();
+        g.sound?.playExplosion?.(c, g.character?.group.position || c, 0.4);
+        if (w.owner === this.myKey || (by != null && (by === g.localId || by === 'local'))) g.hud?.setVoice?.(refusal('wardBroken'), true);
+        this.log.push({ ev: 'broken', id, by });
         this._remove(id);
-        if (loud) { this.log.push({ ev: 'broken', id }); this._changed(); }
     }
 
     /** The hex pattern lights up where something touched the sphere. */
     flash(w, p) {
         const L = this.looks.get(w.id);
-        if (L) { L.flash = 1; L.dome.material.uniforms.uFlash.value.set(p.x, p.y, p.z, 1); }
+        if (L) { L.flash = 1; L.flashAt = (L.flashAt || new THREE.Vector3()).set(p.x, p.y, p.z); }
         if (Math.random() < 0.7) this.game.fx?.spark?.(p, 0x9fd8ff, 0.1, _v3.set(0, 1, 0), 0.4);
-        this.game.sound?.playShieldHit?.(p);
     }
 
     _pulse(w) {
@@ -675,24 +719,64 @@ export class HouseWards {
     }
 
     // ------------------------------------------------------------ bodies
-    /** My body may not come in (my computer moves me): pushed back out at the surface. */
+    /** How long this one has been pushing on a sphere (it shoves back after WARD.PRESS_T, or at once when run into). */
+    _pressing(key, depthSpeed, dt) {
+        const m = this._press || (this._press = new Map());
+        let e = m.get(key);
+        if (!e || this._t - e.last > 0.5) { e = { t: 0, last: this._t, shoveAt: e?.shoveAt ?? -1e9 }; m.set(key, e); }
+        e.t += dt;
+        e.last = this._t;
+        if (this._t - e.shoveAt < WARD.SHOVE_GAP) return false;
+        if (e.t < WARD.PRESS_T && depthSpeed < WARD.RAM_SPEED) return false;
+        e.shoveAt = this._t;
+        e.t = 0;
+        return true;
+    }
+
+    /** My body may not come in (my computer moves me): held at the surface; pushing on — shoved back, −2 HP. */
     keepOut(pos, feet, height, dt) {
+        const g = this.game;
         for (const w of this.list.values()) {
             if (this.mine(w)) continue;
             const push = bodyPush(w, pos.x, feet, feet + height, pos.z, 0.5);
             if (!push) continue;
-            // just walked in: back to the surface at once; deep inside (it was set over me): out softly
+            // walked into it: back to the surface at once; deep inside (it was set over me): out softly
             const k = push.depth < 1.2 ? 1 : Math.min(1, (6 * dt) / push.depth);
             pos.x += push.x * k; pos.y += Math.max(0, push.y * k); pos.z += push.z * k;
+            const at = _v1.set(pos.x, feet + 1.5, pos.z);
+            this._wake(w, at);
+            if (push.depth < 1.2 && this._pressing('me', dt > 0 ? push.depth / dt : 0, dt)) {
+                const dir = _v2.set(push.x, 0, push.z);
+                if (dir.lengthSq() < 1e-8) dir.set(1, 0, 0);
+                dir.normalize();
+                g.impact?.apply?.({ v: dir.clone().multiplyScalar(WARD.SHOVE_V), from: new THREE.Vector3(w.c.x, w.c.y, w.c.z), by: null, spell: 'Ward', jolt: 1.5, noShield: true });
+                if (g.config?.mode !== 'creative') { if (g.combat?.enabled) g.combat.damage(WARD.SHOVE_HP, null, 'Ward'); else g.damageLocalPlayer?.(WARD.SHOVE_HP); }
+                this.flash(w, at);
+                g.sound?.playClang?.();
+                this.log.push({ ev: 'shove', who: 'me', id: w.id });
+            }
             if (!this._bumpAt || performance.now() - this._bumpAt > 2500) {
                 this._bumpAt = performance.now();
-                this.flash(w, _v1.set(pos.x, feet + 1.5, pos.z));
-                this.game.hud?.toast?.(`🛡️ Дом защищён — войти может только хозяин (${w.ownerName || '?'}) и те, кого он пустил`, 2500);
+                g.hud?.toast?.(refusal('wardBarrier'), 2500);
             }
         }
     }
 
-    /** (host) Creatures of every kind are pushed back out softly. */
+    /** (host) A creature pushing on it too long (or run into it) is shoved back and hurt a little. */
+    _shoveCreature(w, ck, c, dir) {
+        const g = this.game;
+        const v = dir.clone().multiplyScalar(WARD.SHOVE_V);
+        g.creatureImpact?.apply?.(c, { v, by: null, spell: 'Ward', from: new THREE.Vector3(w.c.x, w.c.y, w.c.z), jolt: 1 });
+        const n = WARD.SHOVE_HP, d = dir.clone();
+        if (ck === 'z') g.damageZombie?.(c, n, false, d, null);
+        else if (ck === 'a') g.animals?.hit?.(c, n, d, null);
+        else if (ck === 'v') g.castleLife?.hit?.(c, n, d, null, {});
+        else if (ck === 'c') g.ships?.crew?.hit?.(c, n, d, null);
+        // (a living tree: only shoved — nothing but fire hurts it)
+        this.log.push({ ev: 'shove', who: ck, id: w.id });
+    }
+
+    /** (host) Creatures of every kind are held at the surface (and shoved back when they push on). */
     _creatures(dt) {
         const g = this.game;
         for (const w of this.list.values()) {
@@ -705,15 +789,66 @@ export class HouseWards {
                     if (!push) continue;
                     const k = push.depth < 1.2 ? 1 : Math.min(1, (5 * dt) / push.depth);
                     K.move(g, c, push.x * k, push.z * k);
+                    if (push.depth < 1.2 && this._pressing(ck + '|' + c.id, dt > 0 ? push.depth / dt : 0, dt)) {
+                        const dir = new THREE.Vector3(push.x, 0, push.z);
+                        if (dir.lengthSq() < 1e-8) dir.set(1, 0, 0);
+                        this._shoveCreature(w, ck, c, dir.normalize());
+                    }
                 }
             }
             for (const s of g.spiders?.list || []) {
                 if (s.dead) continue;
                 const p = s.model.position;
                 const push = bodyPush(w, p.x, p.y, p.y + 3, p.z, 2.5);
-                if (push) { const k = push.depth < 1.5 ? 1 : Math.min(1, (5 * dt) / push.depth); p.x += push.x * k; p.z += push.z * k; }
+                if (!push) continue;
+                const k = push.depth < 1.5 ? 1 : Math.min(1, (5 * dt) / push.depth);
+                p.x += push.x * k; p.z += push.z * k;
+                if (push.depth < 1.5 && this._pressing('s|' + s.id, dt > 0 ? push.depth / dt : 0, dt)) {
+                    const dir = _v2.set(push.x, 0, push.z);
+                    if (dir.lengthSq() > 1e-8) p.addScaledVector(dir.normalize(), 1.5);
+                    g.spiders.hit?.(s, WARD.SHOVE_HP, 'Ward');
+                    this.log.push({ ev: 'shove', who: 's', id: w.id });
+                }
             }
         }
+    }
+
+    /** It shows where one who may not come in is close (every computer sees it so). */
+    _wake(w, p) {
+        const L = this.looks.get(w.id);
+        if (!L) return;
+        L.near = 1;
+        L.nearAt = (L.nearAt || new THREE.Vector3()).copy(p);
+    }
+
+    /** Who is close to it and may not come in (me, the other players, creatures of every kind). */
+    _intruders() {
+        const g = this.game;
+        const pts = [];
+        const me = g.character?.group.position;
+        for (const w of this.list.values()) {
+            const near = (p) => { const d = Math.hypot(p.x - w.c.x, p.y - w.c.y, p.z - w.c.z); return d < w.r + WARD.NEAR && d > w.r - 1.5; };
+            const wake = (p) => { if (near(p)) { this._wake(w, p); return true; } return false; };
+            if (me && !this.mine(w) && wake(_v1.set(me.x, me.y + 1, me.z))) continue;
+            let done = false;
+            for (const [id, r] of g.remotes || []) {
+                if (r.dead) continue;
+                const may = this.auth ? mayPass(w, this.keyOf(id)) : !!w.ids?.includes(id);
+                if (!may && wake(_v1.set(r.position.x, r.position.y + 1, r.position.z))) { done = true; break; }
+            }
+            if (done) continue;
+            for (const ck of Object.keys(KINDS)) {
+                const K = KINDS[ck];
+                for (const c of K.list(g)) {
+                    if (!K.alive(c) || this._creatureMay(w, c)) continue;
+                    if (wake(K.centre(c, _v1))) { done = true; break; }
+                }
+                if (done) break;
+            }
+            if (done) continue;
+            for (const s of g.spiders?.list || []) if (!s.dead && wake(_v1.copy(s.model.position).setY(s.model.position.y + 1.5))) break;
+        }
+        return pts;
     }
 
     // ------------------------------------------------------------ the look
@@ -722,14 +857,14 @@ export class HouseWards {
         if (L) return L;
         const mat = new THREE.ShaderMaterial({
             vertexShader: DOME_VS, fragmentShader: DOME_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0.5 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 } },
+            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 }, uCrack: { value: 0 } },
         });
         const dome = new THREE.Mesh(this._domeGeo, mat);
         dome.renderOrder = 3;
         dome.userData.noWardHide = true;
         dome.frustumCulled = true;
         this.game.scene?.add(dome);
-        L = { dome, disc: null, k: 1, flash: 0, pulse: 0, discR: 0 };
+        L = { dome, disc: null, k: 1, flash: 0, pulse: 0, discR: 0, near: 0, show: 0, wasSetting: !!w.setting };
         this.looks.set(w.id, L);
         return L;
     }
@@ -784,10 +919,23 @@ export class HouseWards {
             L.dome.scale.setScalar(w.r * (1 + 0.04 * L.pulse));
             u.uTime.value = this._t;
             u.uSet.value = w.setting ? 1 : 0;
-            u.uAlpha.value = (w.setting ? 0.9 + L.pulse : 0.32) * k;
+            // not seen — but while it is being set (and a moment after «стоп»), where one who may not
+            // come in is close, where magic hits it, while it is cracked or the Hellfire burns on it
+            if (L.wasSetting && !w.setting) L.show = WARD.SHOW_AFTER_SET;
+            L.wasSetting = !!w.setting;
+            L.show = Math.max(0, L.show - dt);
+            const crack = Math.max(0, 1 - w.hp / WARD.HP), hell = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
             L.flash = Math.max(0, L.flash - dt * 1.5);
-            u.uFlash.value.w = L.flash;
-            L.dome.visible = k > 0.01;
+            const seen = Math.max(w.setting ? 0.9 + L.pulse : 0, Math.min(1, L.show) * 0.7, L.near * 0.75, L.flash * 0.8, crack * 0.5, hell * 0.9);
+            u.uAlpha.value = seen * k;
+            u.uCrack.value = crack;
+            u.uColor.value.setHex(0x7fbfff).lerp(_c.setHex(0xff3a1a), hell);
+            // the hex pattern lights up where it is touched / pressed
+            const fp = L.near > L.flash ? L.nearAt : L.flashAt;
+            if (fp) u.uFlash.value.set(fp.x, fp.y, fp.z, Math.max(L.flash, L.near * 0.8));
+            else u.uFlash.value.w = 0;
+            L.near = Math.max(0, L.near - dt * 1.5);
+            L.dome.visible = k > 0.01 && seen > 0.005;
             if (w.inv && k < 0.999) hidden.push({ w, k, d: Math.hypot(eye.x - w.c.x, eye.z - w.c.z) });
             // the land over it, seen from far
             if (w.inv) {
@@ -836,12 +984,28 @@ export class HouseWards {
             else if (this.setting.idle > WARD.SET_IDLE) this.fix();
         }
         if (!this.list.size && !this.looks.size && !this._hidden.size) return;
-        if (this.auth) this._creatures(dt);
+        if (this.auth) { this._creatures(dt); this._heal(dt); }
+        for (const w of this.list.values()) this._look(w);
+        this._intruders();
         const hidden = this._updateLooks(dt);
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 0.25; if (this._hidden.size || hidden.length) this._hideObjects(hidden); }
         else for (const o of this._hidden.keys()) o.visible = false; // (others may have shown it again this frame)
         if (!hidden.length) WARD_HIDE.n.value = 0;
+    }
+
+    /** (host) Left alone, its cracks heal slowly; the Hellfire taken off it, it cools. */
+    _heal(dt) {
+        let any = false;
+        for (const w of this.list.values()) {
+            if (w.hellT > 0 && this._t - (w.hellAt ?? -1e9) > 1.5) { w.hellT = 0; any = true; }
+            if (w.hp < WARD.HP && this._t - (w.hitAt ?? -1e9) > WARD.HEAL_AFTER) {
+                const was = Math.floor(w.hp / 10);
+                w.hp = Math.min(WARD.HP, w.hp + WARD.HEAL_RATE * dt);
+                if (Math.floor(w.hp / 10) !== was || w.hp >= WARD.HP) any = true;
+            }
+        }
+        if (any) this._changed();
     }
 
     dispose() {

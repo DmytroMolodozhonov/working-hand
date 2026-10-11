@@ -24,6 +24,7 @@ const CAUSES = [
     [/^(vortex|WaterVortex)/, '🌀 Вас сбило водоворотом'],
     [/^Thunderwave/, '⚡ Вас сбило громовой волной'],
     [/^(Lightning|LightningStrike)$/, '⚡ Вас сбило молнией'],
+    [/^Ward$/, '🛡️ Вас отбросил барьер защиты дома'],
     [/^Expelliarmus$/, '🪄 Вас толкнуло заклинанием «Экспеллиармус»'],
     [/^Stupefy$/, '💫 Вас сбило заклинанием «Остолбеней»'],
     [/^(avada|AvadaKedavra)$/i, '💚 Вас отбросило «Авадой Кедаврой»'],
@@ -79,7 +80,9 @@ export function refusal(code, d = {}) {
         case 'wardMax': return `🛡️ Сфера уже самая большая (${d.r} м) — скажите «стоп»`;
         case 'wardNoMana': return `😮‍💨 Мана кончилась — сфера осталась ${d.r} м`;
         case 'wardInvNone': return '🛡️ «Protection Invisible» работает только на доме с защитой: сначала «Protection House»';
-        case 'wardInvDone': return '🫥 Этот дом уже невидим издалека';
+        case 'wardVisible': return '👁️ Дом снова виден издалека';
+        case 'wardBarrier': return '🛡️ Дом защищён — вас не пускает барьер';
+        case 'wardBroken': return '🛡️ Защита дома разрушена!';
         case 'wardGrantFar': return '🛡️ «Protection House Grant»: встаньте у своего защищённого дома (или внутри него)';
         case 'wardGrantAim': return '🛡️ «Protection House Grant»: направьте руку на игрока, которого пускаете в дом';
         case 'wardGrantDone': return `🛡️ ${d.who || 'Этот игрок'} уже может входить в ваш дом`;

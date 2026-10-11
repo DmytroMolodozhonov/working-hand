@@ -170,7 +170,7 @@ export class TotalDestruction {
         const keep = g.wards?.keepFor(p, R) || [];
         const out = g.world.ruin(p, R, keepIn(keep));
         g.explosions?.push({ p: [p.x, p.y, p.z], r: R, ruin: 1, ...(keep.length ? { k: keep } : {}) }); // (saves and late joiners: the same ruins)
-        g.wards?.struck(p, R, d.max ? 'TotalDestructionMaxima' : 'TotalDestruction');
+        g.wards?.struck(p, R, d.max ? 'TotalDestructionMaxima' : 'TotalDestruction', d.by); // (it breaks a house's sphere at once)
         for (const f of out.falls || []) g.falling?.add(f);
         g.wreck?.afterBlast(p, R);
         if (authoritative) {

@@ -553,7 +553,8 @@ export class Game {
         const keep = this.wards?.keepFor(pos, radius) || [];
         this.applyExplosion(pos, radius, true, power, casterId, keep);
         this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius, ...(keep.length ? { k: keep } : {}) }); // (k: the houses' spheres it could not eat into)
-        if (power > 1) this.wards?.struck(pos, radius, 'BombardoMaxima'); // (only very strong magic wears a sphere down)
+        // («Бомбардо» cracks a house's sphere — three break it —, «Бомбардо Максима» breaks it at once)
+        if (power >= 1) this.wards?.struck(pos, radius, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId === 'local' ? this.localId : casterId);
         if (this.sync) this.sync.explosion(pos, radius, power, casterId);
     }
 
@@ -2644,7 +2645,7 @@ export class Game {
             const top = new THREE.Vector3(point.x, 0, point.z);
             const h = w.r * w.r - (point.x - w.c.x) ** 2 - (point.z - w.c.z) ** 2;
             top.y = w.c.y + Math.sqrt(Math.max(0, h)) + 0.6;
-            W.struck(top, 1, 'LightningStrike');
+            W.struck(top, 1, 'LightningStrike'); // (it only flashes: lightning doesn't break it)
             return top;
         }
         return point;

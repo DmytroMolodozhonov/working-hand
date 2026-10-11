@@ -349,7 +349,7 @@ export class NetSync {
 
     /** A guest's «Левиоса» caught a book-bird (on) / let it go; where its hand holds it. */
     // houses' spheres of protection (HouseWards.js): the host keeps the list, guests ask it to change it
-    wards(list) { if (this.net.isHost) this.net.send({ t: 'wards', l: list }); }
+    wards(list, gone = null) { if (this.net.isHost) this.net.send({ t: 'wards', l: list, ...(gone ? { g: gone } : {}) }); }
     wardOp(op) { if (!this.net.isHost) this.net.send({ t: 'wardop', op }); }
     /** (guest) My frozen ball hit a book-bird (the book of protection falls only to ice or fire). */
     birdIce(id) { if (!this.net.isHost) this.net.send({ t: 'bice', id }); }
@@ -719,7 +719,7 @@ export class NetSync {
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
             case 'lum': if (m.by !== this.me && Array.isArray(m.p) && Array.isArray(m.d)) g.wandMagic?.addThrown(vec(m.p), vec(m.d).normalize().multiplyScalar(18), Math.max(1, Math.min(6, +m.l || 2)), false, m.by); break;
             case 'lumx': if (m.by !== this.me) g.wandMagic?.outBy(m.by); break;
-            case 'wards': if (!this.net.isHost) g.wards?.applyNet(m.l); break;
+            case 'wards': if (!this.net.isHost) g.wards?.applyNet(m.l, m.g); break;
             case 'wardop': if (this.net.isHost) g.wards?.apply(m.op, m.from); break;
             case 'bice': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.hitBird(b, 99, 'ice'); } break;
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
