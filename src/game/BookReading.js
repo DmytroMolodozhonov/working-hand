@@ -261,10 +261,18 @@ export class BookReading {
             const mid = g.character.group.position;
             h.bookSpine = T.x * (mid.x - f.P.x) + T.z * (mid.z - f.P.z) < 0;
         }
-        // Z: from the spine to the fore-edge; the book along the fingers (Y); X = Y × Z
-        const Z = _v1.copy(T).multiplyScalar(h.bookSpine ? -1 : 1);
-        const X = _v2.crossVectors(f.Y, Z);
-        _m4.makeBasis(X, f.Y, Z);
+        // the covers lie flat on the palm; in the palm's plane the book stands as upright as it
+        // can (it turns in the grip as a held book does; a palm turned up or down: along the fingers)
+        const F = _v5.copy(f.Z).negate();
+        const Yb = _v6.set(0, 1, 0).addScaledVector(F, -F.y);
+        if (Yb.lengthSq() < 0.09) Yb.addScaledVector(f.Y, 0.3 - Math.sqrt(Yb.lengthSq()));
+        Yb.addScaledVector(F, -Yb.dot(F)).normalize();
+        // Z: from the spine to the fore-edge (towards the thumb: the fore-edge in the web; away: the spine)
+        const Z = _v1.copy(T).addScaledVector(Yb, -T.dot(Yb));
+        if (Z.lengthSq() < 1e-4) Z.crossVectors(Yb, F).multiplyScalar(Math.sign(Z.dot(T)) || 1);
+        Z.normalize().multiplyScalar(h.bookSpine ? -1 : 1);
+        const X = _v2.crossVectors(Yb, Z);
+        _m4.makeBasis(X, Yb, Z);
         _q.setFromRotationMatrix(_m4);
         if (!h.q) h.q = _q.clone(); else h.q.slerp(_q, Math.min(1, dt * 28));
         m.quaternion.copy(h.q);
@@ -312,13 +320,12 @@ export class BookReading {
         const hA = this._hand(hb.side);
         const aLeft = hA.G.dot(right) < h.G.dot(right);
         const Y = new THREE.Vector3(0, 1, 0).applyQuaternion(m.quaternion);
-        if (Y.y < 0) Y.negate(); // (upright, whichever way the fist had it)
         const lim = H * m.scale.x / 2 - 0.1;
         const gy = Math.max(-lim, Math.min(lim, (_v5.subVectors(hA.G, m.position).dot(Y) + _v6.subVectors(h.G, m.position).dot(Y)) / 2));
         this.s = {
             mode: 'two', model: m, item: hb.item, owner: hb.side,
             hold: { left: aLeft ? hb.side : B, right: aLeft ? B : hb.side },
-            phi: 0, pos: m.position.clone(), quat: m.quaternion.clone(), Y, gy,
+            phi: 0, pos: m.position.clone(), quat: m.quaternion.clone(), gy,
             from: { pos: m.position.clone(), quat: m.quaternion.clone(), t: 0 },
             pL: null, pR: null, spread: 0, sheet: null, readT: 0, lowT: 0, support: false,
         };
@@ -327,13 +334,13 @@ export class BookReading {
         this.game.hud.setVoice?.('📖 Разведите руки — книга раскроется. Чтобы листать, отпустите одну руку и подденьте пальцем край страницы', true);
     }
 
-    /** Which way the hands hold the spine: along their fingers (each hand's sign as before). */
+    /** Which way the hands' fingers point (both together; each hand's sign as before). */
     _handsY(s, hs) {
         const Y = this._hy || (this._hy = new THREE.Vector3());
         Y.set(0, 0, 0);
         for (const h of hs) {
             const y = h.f?.Y || h.Y;
-            if (y) Y.addScaledVector(y, y.dot(s.Y) < 0 ? -1 : 1);
+            if (y) Y.addScaledVector(y, s.hyPrev && y.dot(s.hyPrev) < 0 ? -1 : 1);
         }
         return Y.lengthSq() > 1e-6 ? Y.normalize() : null;
     }
@@ -348,9 +355,18 @@ export class BookReading {
         s.pL = s.pL ? s.pL.lerp(hl.G, k) : hl.G.clone();
         s.pR = s.pR ? s.pR.lerp(hr.G, k) : hr.G.clone();
         const eye = this._eye(_v1);
-        const f = frameFromHands(s.pL, s.pR, eye, this.w, this._f || (this._f = {}), { Y: this._handsY(s, [hl, hr]), gy: s.gy, t: this.t });
+        // upright to the eyes, turned on by however the hands have turned since they took it
+        // (bend the wrists — it tilts with them)
+        const up = frameFromHands(s.pL, s.pR, eye, this.w, this._f0 || (this._f0 = {}), { gy: s.gy, t: this.t });
+        let Y = null;
+        const hy = this._handsY(s, [hl, hr]);
+        if (hy) {
+            if (!s.hy0) s.hy0 = hy.clone();
+            Y = _v2.copy(up.Y).applyQuaternion(_q2.setFromUnitVectors(s.hy0, hy));
+            s.hyPrev = (s.hyPrev || new THREE.Vector3()).copy(hy);
+        }
+        const f = frameFromHands(s.pL, s.pR, eye, this.w, this._f || (this._f = {}), { Y, gy: s.gy, t: this.t });
         s.phi = f.phi;
-        s.Y.copy(f.Y);
         this._place(s, f.pos, f.quat, dt);
         const boxes = this._openBoxes(s.model);
         this._fitHand(s.hold.left, boxes);
@@ -456,7 +472,7 @@ export class BookReading {
             s.mode = 'two';
             s.hold = { [s.half]: H, [freeHalf]: Fr };
             s.pL = s.pR = null;
-            s.Y = new THREE.Vector3(0, 1, 0).applyQuaternion(s.quat);
+            s.hy0 = s.hyPrev = null;
             s.from = { pos: s.model.position.clone(), quat: s.model.quaternion.clone(), t: 0 };
             this._setGrip(Fr, 0.55, 'book');
             return;

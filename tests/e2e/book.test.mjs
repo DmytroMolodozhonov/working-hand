@@ -21,11 +21,12 @@ test.after(async () => {
     srv?.stop();
 });
 
-test('book: taken by the cover, opened by the hands, a page turned by a fingertip, closed by lowering the arm', async () => {
+test('book: taken by the cover, opened by the hands, tilted by the wrists, a page turned by a fingertip, closed by lowering the arm', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
-    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0 }, 10, 40);
+    // (the camera's hands closed: the book stays in whichever hand the test gives it)
+    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 10, 40);
     const r = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
@@ -55,6 +56,16 @@ test('book: taken by the cover, opened by the hands, a page turned by a fingerti
         H.left.G.copy(C).addScaledVector(side, -0.78); H.right.G.copy(C).addScaledVector(side, 0.78);
         await frames(20);
         const open2 = { phi: R.s.phi, scale: m.scale.x };
+        // the hands' fingers turn (the wrists bend back by 0.5 rad): the book tilts with them
+        const spine = () => new T.Vector3(0, 1, 0).applyQuaternion(m.quaternion);
+        H.left.Y = new T.Vector3(0, 1, 0); H.right.Y = new T.Vector3(0, 1, 0);
+        await frames(5);
+        const s0 = spine();
+        H.left.Y = new T.Vector3(0, Math.cos(0.5), Math.sin(0.5)).applyQuaternion(ch.group.quaternion); H.right.Y = H.left.Y.clone();
+        await frames(10);
+        const tilt = s0.angleTo(spine());
+        delete H.left.Y; delete H.right.Y;
+        await frames(5);
         const eye = R._eye(new T.Vector3());
         const facing = new T.Vector3(0, 0, 1).applyQuaternion(m.quaternion).dot(eye.clone().sub(m.position).normalize());
         // 3) the right hand opens: it lets go; the book stays open in the left hand (Items: left now)
@@ -97,7 +108,7 @@ test('book: taken by the cover, opened by the hands, a page turned by a fingerti
         await frames(50);
         const closed = { s: !!R.s, phi: book.phi, held: g.items.held.left?.item.kind };
         R.input = null;
-        return { two, open1, open2, facing, one, turned, back, learned, closed };
+        return { two, open1, open2, tilt, facing, one, turned, back, learned, closed };
     });
     assert.deepEqual(r.two.mode, 'two', 'the other hand took the cover: ' + JSON.stringify(r.two));
     assert.ok(r.two.busyL, 'the hand on the cover holds nothing else');
@@ -106,6 +117,7 @@ test('book: taken by the cover, opened by the hands, a page turned by a fingerti
     assert.ok(r.open1.gy < -0.05, 'held below the middle of the edges ' + JSON.stringify(r.open1));
     assert.ok(r.open2.phi > r.open1.phi + 0.2, 'hands wider: more open');
     assert.ok(Math.abs(r.open2.scale - 1.6) < 1e-6, 'it does not grow by magic');
+    assert.ok(Math.abs(r.tilt - 0.5) < 0.08, 'the wrists bent: the book tilted as much ' + r.tilt);
     assert.ok(r.facing > 0.6, 'the pages look at the reader ' + r.facing);
     assert.equal(r.one.mode, 'one', 'a hand let go: open in the other ' + JSON.stringify(r.one));
     assert.ok(r.one.owner === 'book' && !r.one.right, 'the book is in the left hand now');
@@ -150,7 +162,7 @@ const MEASURE = () => {
     return res;
 };
 
-test('book: with the camera hands — held by its edge, fingers on the covers never in them, opened by the hands apart, tilted by the wrists, dropped only by an opened stretched arm', async () => {
+test('book: with the camera hands — held by its edge, fingers on the covers never in them, opened by the hands apart, dropped only by an opened stretched arm', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -165,7 +177,7 @@ test('book: with the camera hands — held by its edge, fingers on the covers ne
     // apart
     await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.02, 0] }), 20, 40);
     const apart = await page.evaluate(MEASURE);
-    // the wrists bent (the fingers towards the camera): the book tilts with them
+    // the wrists bent (the fingers towards the camera): still no finger in it
     await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.02, 0], leftTilt: 0.6, rightTilt: 0.6 }), 20, 40);
     const tilted = await page.evaluate(MEASURE);
     // much wider than the book: it lies flat between the hands, nothing lets go
@@ -196,30 +208,29 @@ test('book: with the camera hands — held by its edge, fingers on the covers ne
         const after = depth(R._tip(hand, 'right'));
         return { before, after, moved };
     });
-    // the left (holding) hand opens with the arm stretched: only now the book falls
+    // the left (holding) hand opens: never held by an open hand — it lies on the palm (turned up) or falls
     const drop = [];
     for (let i = 0; i < 6; i++) {
         await feed(page, pose({ rightCurl: 0, leftCurl: 0, wristOffset: [0.02, 0] }), 4, 40);
         drop.push(await page.evaluate(MEASURE));
     }
-    const angle = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
     assert.equal(fist.right, 0, 'the closed book in the fist: no finger in it ' + JSON.stringify(fist));
     assert.equal(two.mode, 'two', 'the left hand took the covers\' edge ' + JSON.stringify(two));
     assert.ok(apart.phi > two.phi + 0.5, 'hands apart: it opened ' + JSON.stringify({ two, apart }));
     assert.ok(apart.left === 0 && apart.right === 0, 'held open: no finger in the pages ' + JSON.stringify(apart));
     assert.ok(Math.abs(apart.spine[1]) > 0.9, 'upright, not a tray ' + JSON.stringify(apart));
-    assert.ok(angle(apart.spine, tilted.spine) > 10 * Math.PI / 180, 'the wrists tilted it ' + JSON.stringify({ apart: apart.spine, tilted: tilted.spine }));
     assert.ok(tilted.left === 0 && tilted.right === 0, 'tilted: no finger in it ' + JSON.stringify(tilted));
     assert.ok(wide.mode === 'two' && wide.phi > 3.0, 'pulled wide: still in both hands, flat ' + JSON.stringify(wide));
     assert.ok(one.mode === 'one' && one.left === 'book' && !one.right, 'the right hand let go ' + JSON.stringify(one));
     assert.equal(oneIn.left, 0, 'in one hand: no finger in it ' + JSON.stringify(oneIn));
     assert.ok(push && push.before < -0.02 && push.after > push.before && push.moved <= 0.15 + 1e-6, 'the finger is pushed back out of the pages, never torn off the arm ' + JSON.stringify(push));
-    assert.ok(drop.some((d) => d.none && d.loose), 'an opened stretched arm dropped it ' + JSON.stringify(drop));
+    const last = drop[drop.length - 1];
+    assert.ok((last.none && last.loose) || (last.mode === 'one' && last.support && last.left === 0), 'the opened hand does not pinch it: on the palm or dropped ' + JSON.stringify(last));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
 
-test('book: in one hand, the hand opens palm up — the book lies on the palm, it is not dropped', async () => {
+test('book: in one hand, the hand opens palm up — the book lies on the palm; opened palm down on a stretched arm — it falls', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -249,12 +260,22 @@ test('book: in one hand, the hand opens palm up — the book lies on the palm, i
         H.right.curl = 0.9;
         await frames(15);
         const again = { support: !!R.s?.support, mode: R.s?.mode };
+        // the arm bent, the hand opens palm down: the fingers still have it (nothing falls by accident)
+        H.right.palmUp = false; H.right.ext = false; H.right.curl = 0;
+        await frames(25);
+        const bent = { mode: R.s?.mode, held: g.items.held.right?.item.kind };
+        // the arm stretched and the hand opened: now it falls
+        H.right.ext = true;
+        await frames(25);
+        const dropped = { held: !!g.items.held.right, loose: [...g.items.loose.values()].some((L) => L.item.uid === 'bk3'), open: m.userData.book.phi };
         R.input = null;
-        return { one, lying, again };
+        return { one, lying, again, bent, dropped };
     });
     assert.equal(r.one.mode, 'one', JSON.stringify(r));
     assert.ok(r.lying.support && r.lying.held === 'book', 'lies on the palm, still in that hand ' + JSON.stringify(r));
     assert.ok(r.again.mode === 'one' && !r.again.support, 'the fingers closed on it again ' + JSON.stringify(r));
+    assert.ok(r.bent.mode === 'one' && r.bent.held === 'book', 'a bent arm opened: still in the hand ' + JSON.stringify(r));
+    assert.ok(!r.dropped.held && r.dropped.loose && r.dropped.open === 0, 'an opened stretched arm let it fall (closed) ' + JSON.stringify(r));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
