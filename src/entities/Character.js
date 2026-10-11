@@ -526,7 +526,7 @@ export class VoxelCharacter {
             // Movement (original speeds)
             if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 7.5;
-                const speed = (walkSpeed + (runSpeed - walkSpeed) * this.runIntensity) * (this.speedScale ?? 1);
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * this.runIntensity) * (this.speedScale ?? 1) * (this.runBonus ?? 1); // (runBonus: a caught running book)
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;

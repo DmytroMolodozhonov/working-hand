@@ -30,6 +30,7 @@ import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
 import { animalModel, animateLegs, HORSE_COLORS } from './AnimalModels.js';
+import { runBookColor, RUNNER } from './RunningBook.js';
 
 export { animalModel };
 
@@ -39,6 +40,7 @@ export const SPECIES = {
     pig: { name: 'Свинья', hp: 6, speed: 1.5, run: 5.5, dmg: 1, meat: 3, size: 1.45 },
     sheep: { name: 'Баран', hp: 6, speed: 1.5, run: 5.8, dmg: 1, meat: 2, size: 1.55 },
     horse: { name: 'Конь', hp: 12, speed: 2.0, run: 7.5, dmg: 2, meat: 4, size: 2.3 },
+    runbook: { name: 'Бегущая книга', hp: 4, speed: 2.2, run: 9.5, dmg: 0, meat: 0, size: RUNNER.SIZE }, // (rare; its mind is RunningBook.js)
 };
 const MAX_NEAR = 14;
 const _v = new THREE.Vector3();
@@ -127,7 +129,7 @@ export class Animals {
         const id = opts.id ?? (++_nextId);
         if (this.byId.has(id)) return this.byId.get(id);
         const S = SPECIES[type];
-        const color = type === 'horse' ? (opts.color ?? HORSE_COLORS[Math.floor(Math.random() * HORSE_COLORS.length)]) : null;
+        const color = type === 'horse' ? (opts.color ?? HORSE_COLORS[Math.floor(Math.random() * HORSE_COLORS.length)]) : type === 'runbook' ? (opts.color || runBookColor(id)) : null;
         const model = animalModel(type, color);
         model.scale.setScalar(S.size);
         model.position.copy(pos);
@@ -186,7 +188,7 @@ export class Animals {
         if (a.hp <= 0) { this._die(a, fire); return; }
         // defend (65%) or run away; sheep stand up for each other
         const attacker = by;
-        const fight = Math.random() < 0.65;
+        const fight = a.type !== 'runbook' && Math.random() < 0.65; // (a running book only runs)
         a.state = fight ? 'attack' : 'flee';
         a.attacker = attacker;
         a.stateT = fight ? 15 : 8;
@@ -471,6 +473,7 @@ export class Animals {
             this._animate(a, 0);
             return;
         }
+        if (a.type === 'runbook' && g.runner) { g.runner.think(a, dt); return; } // (runs, dodges, hides: RunningBook.js)
         if (a.state === 'attack' || a.state === 'flee') {
             a.stateT -= dt;
             const tp = this._playerPos(a.attacker);
@@ -638,6 +641,7 @@ export class Animals {
         } else {
             for (const a of this.list) if (a.net && a !== this.riding) {
                 a.group.position.lerp(a.net, Math.min(1, dt * 8));
+                if (a.type === 'runbook') continue; // (RunningBook moves its little legs)
                 a.walkT += dt * (a.netMoving ? 6 : 0);
                 this._animate(a, a.netMoving ? 0.8 : 0);
             }

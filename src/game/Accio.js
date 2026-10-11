@@ -61,6 +61,16 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { w, side, score };
             }
+            // a running book (it is pulled to the feet, dazed — catch it by hand)
+            for (const { a, pos } of g.runner?.accioTargets() || []) {
+                const to = _v1.subVectors(pos, hand);
+                const d = to.length();
+                if (d > ACCIO.RANGE || d < 0.3) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang > ACCIO.CONE + Math.atan2(1, d)) continue;
+                const score = ang * 5 + d * 0.05;
+                if (!best || score < best.score) best = { rb: a, side, score, hand };
+            }
             // any other thing lying about (a bow, a shield, a wand, a scroll, food, coins…)
             if (g.items?.held[side]) continue;
             for (const L of g.items?.loose.values() || []) {
@@ -88,6 +98,7 @@ export class Accio {
             const busy = g.weapons.hands.left.held && g.weapons.hands.right.held;
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку…) не дальше 30 м — и скажите «Акцио»';
         }
+        if (best.rb) { g.runner.accio(best.rb, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
         if (best.L) return this._castItem(best.L, best.side);
         if (best.bk) {
             // the book rises and flies to the hand; it is caught when it gets there

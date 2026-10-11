@@ -22,6 +22,7 @@
  */
 
 import * as THREE from 'three';
+import { runningBookModel } from './RunningBook.js';
 
 // ------------------------------------------------------------ materials
 const _mats = new Map();
@@ -540,6 +541,7 @@ function sheep() {
 
 /** A new model of an animal: 'cow' | 'pig' | 'sheep' | 'horse' (horse colour optional). */
 export function animalModel(type, color) {
+    if (type === 'runbook') return runningBookModel(color ?? undefined); // (the rare running book)
     if (type === 'cow') return cow();
     if (type === 'pig') return pig();
     if (type === 'sheep') return sheep();

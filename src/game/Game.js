@@ -27,6 +27,7 @@ import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
 import { PerfLog } from '../core/PerfLog.js';
 import { BookBirds, makeBookModel } from './BookBirds.js';
+import { RunningBook } from './RunningBook.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
 import { Swimming } from './Swimming.js';
 import { ItemSystem } from './Items.js';
@@ -222,6 +223,7 @@ export class Game {
         this.inventory.show(config.mode !== 'test');
         this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
         this.books = isTest ? null : new BookBirds(this); // book-birds: building spells are learned from their books
+        this.runner = new RunningBook(this); // the rare running book: caught by hand — +30% run speed
         this.scrolls = new ScrollReading(this); // a scroll opened with both hands and read
         this.swim = new Swimming(this); // deep water: swimming, air, «Air Bubble»
         this.items = new ItemSystem(this); // wands, scrolls, shields, backpacks, bows, food… in the world and the hands
@@ -683,6 +685,7 @@ export class Game {
         if (this.sound) this.sound.playHit();
         if (this.playerHP <= 0) {
             this.isDeadLocal = true;
+            this.runner?.onDeath();
             // Multiplayer: the game (and the host's room) goes on — wait to respawn
             if (this.net && this.net.active) { this.onLocalDeath('💀 Вас убили', null); return; }
             this.ui.gameOver(this.killCount, this.punchCount);
@@ -1505,6 +1508,7 @@ export class Game {
      */
     onLocalDeath(text, byId) {
         this.mana?.onDeath(); // all the mana grown with practice is lost
+        this.runner?.onDeath(); // (the running book's quickness is lost)
         if (this.sync) this.sync.died(byId);
         this.castleLife?.playerDied(this.localId);
         this.hud.setStatus('');
@@ -1760,6 +1764,7 @@ export class Game {
         this.gear.update(dt);
         this.bleeding.update(dt);
         this.animals.update(dt);
+        this.runner.update(dt);
         this.castleLife.update(dt);
         this.doors.update(dt);
         this.campfires.update(dt);
