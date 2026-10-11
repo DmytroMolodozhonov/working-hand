@@ -151,7 +151,8 @@ export function animatePose(a, dt, pose) {
     const k = Math.min(1, dt * 2.5);
     const wantLie = pose === POSE.rest ? 1 : 0;
     a.lie = (a.lie || 0) + (wantLie - (a.lie || 0)) * Math.min(1, dt * 1.2);
-    const wantPitch = pose === POSE.graze ? -1.05 : pose === POSE.look ? 0.18 : pose === POSE.rest ? -0.25 : 0;
+    // (grazing: the muzzle down to the grass — a horse's long neck goes down further)
+    const wantPitch = pose === POSE.graze ? (a.model?.userData?.grazePitch ?? -1.05) : pose === POSE.look ? 0.18 : pose === POSE.rest ? -0.25 : 0;
     a.headP = (a.headP || 0) + (wantPitch - (a.headP || 0)) * k;
     a.lookT = (a.lookT || 0) + dt;
     const wantYaw = pose === POSE.look ? Math.sin(a.lookT * 0.9 + a.id) * 0.7 : pose === POSE.graze ? Math.sin(a.lookT * 0.5 + a.id) * 0.15 : 0;

@@ -159,7 +159,7 @@ const bellyShade = (back, belly = [1, 1, 1]) => (t, ang) => mix(belly, back, smo
  * knee / hock, the lower segment (with its pivot at the knee) down to the ground.
  * `up` / `lo`: [z offset at the joint, length, profile key table]; hoof: [radius, height, colour].
  */
-function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat) {
+function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat, lowMat = mat) {
     const pivot = group(parent, name, x, y, z);
     const [uz, uLen, uKeys] = upper;
     const [lz, lLen, lKeys] = lower;
@@ -168,9 +168,9 @@ function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat
     up.name = name + 'Upper';
     const knee = group(pivot, name + 'Knee', 0, -uLen, uz);
     const jr = lKeys[0][1] * 1.05;
-    blob(knee, mat, jr, jr * 1.3, jr * 1.15, 0, 0, 0); // the joint
+    blob(knee, lowMat, jr, jr * 1.3, jr * 1.15, 0, 0, 0); // the joint
     const lGeo = cached(geoKey + 'l', () => sweep([v3(0, 0.04, 0), v3(0, -lLen + hoof[1] * 0.6, lz)], keys(lKeys), { rings: 10, sides: 8 }));
-    mesh(knee, lGeo, mat);
+    mesh(knee, lGeo, lowMat);
     if (hoof) {
         const [r, h, c] = hoof;
         mesh(knee, cone(r * 0.82, r, h, 9), lam(c), 0, -lLen + h / 2, lz);
@@ -250,7 +250,7 @@ function finish(g, parts) {
 }
 
 // ================================================================ horse
-export const HORSE_COLORS = [0x6b3f1e, 0x2b2118, 0xe8e2d6, 0x9a5a2a, 0x8a8a8a, 0xc49a5a];
+export const HORSE_COLORS = [0x4a3022, 0x33241a, 0x5e3a26, 0x1d1916, 0x7d7a75, 0xb3aea4, 0x8c7756];
 
 function horse(color) {
     const c = color ?? HORSE_COLORS[0];
@@ -280,15 +280,16 @@ function horse(color) {
     }), skin);
 
     // neck: from the withers up and forward to the poll, a crest on top
-    const neck = group(g, 'neck', 0, 0, 0);
-    const neckPath = [v3(0, 1.56, -0.56), v3(0, 1.98, -0.9), v3(0, 2.34, -1.07), v3(0, 2.5, -1.1)];
+    // (the neck turns at its root on the withers: lowering it to graze keeps it on the body)
+    const neck = group(g, 'neck', 0, 1.56, -0.56);
+    const neckPath = [v3(0, 0, 0), v3(0, 0.42, -0.34), v3(0, 0.78, -0.51), v3(0, 0.94, -0.54)];
     const neckK = keys([[0, 0.24, 0.34, 0], [0.35, 0.16, 0.24, 0.02], [0.75, 0.105, 0.16, 0.015], [1, 0.095, 0.12, 0]]);
     mesh(neck, cached('horseNeck', () => sweep(neckPath, neckK, { rings: 14, sides: 10, color: bellyShade([0.92, 0.92, 0.92], [1.03, 1.03, 1.03]) })), skin);
     // mane along the crest
     mesh(neck, cached('horseMane', () => sweep(neckPath, (t) => { const [, ry, dy] = neckK(t); const h = 0.05 + 0.035 * Math.sin(Math.PI * Math.min(1, t * 1.1)); return [0.05 * (1 - 0.3 * t), h, dy + ry - h * 0.15]; }, { rings: 14, sides: 6 })), lamV(hair));
 
     // head: hangs from the poll nose-down; a deep jowl, a long narrow face, a soft muzzle
-    const head = group(neck, 'head', 0, 2.48, -1.12);
+    const head = group(neck, 'head', 0, 0.92, -0.56);
     head.rotation.x = -1.0;
     mesh(head, cached('horseHead', () => sweep([v3(0, 0, 0.1), v3(0, -0.02, -0.25), v3(0, 0, -0.66)], keys([
         [0.00, 0.06, 0.07, -0.01],
@@ -313,19 +314,29 @@ function horse(color) {
 
     // tail: from the top of the rump, arched out, the hair falls to the hocks
     const tail = group(g, 'tail', 0, 1.8, 0.93);
-    mesh(tail, cached('horseTail', () => sweep([v3(0, 0, -0.04), v3(0, 0.02, 0.16), v3(0, -0.25, 0.32), v3(0, -0.65, 0.36), v3(0, -1.08, 0.28)], keys([
-        [0, 0.055, 0.06], [0.15, 0.07, 0.08], [0.45, 0.1, 0.12], [0.8, 0.1, 0.11], [1, 0.03, 0.04],
-    ]), { rings: 14, sides: 8 })), lamV(hair));
+    // (the dock, then hair: thin strands that fan out a little and end at different lengths —
+    // one smooth paddle looked like rubber)
+    mesh(tail, cached('horseTailDock', () => sweep([v3(0, 0, -0.04), v3(0, 0.02, 0.14), v3(0, -0.12, 0.26)], keys([
+        [0, 0.05, 0.055], [0.5, 0.055, 0.06], [1, 0.04, 0.045],
+    ]), { rings: 6, sides: 7 })), lamV(hair));
+    const STRANDS = [[0, 0, 1.0], [0.05, 0.03, 0.92], [-0.05, 0.02, 0.95], [0.03, -0.04, 0.86], [-0.035, -0.035, 0.9], [0.015, 0.05, 0.8], [-0.02, 0.06, 0.84]];
+    STRANDS.forEach(([sx, sz, len], i) => {
+        mesh(tail, cached('horseTailStrand' + i, () => sweep([v3(0, -0.1, 0.25), v3(sx * 1.2, -0.45 * len, 0.33 + sz), v3(sx * 2.2, -0.82 * len, 0.33 + sz * 1.6), v3(sx * 2.8, -1.06 * len, 0.28 + sz * 2)], keys([
+            [0, 0.03, 0.03], [0.3, 0.034, 0.03], [0.8, 0.022, 0.02], [1, 0.006, 0.006],
+        ]), { rings: 8, sides: 5 })), lamV(hair));
+    });
 
     // legs: forearm → knee → cannon → fetlock → hoof in front; gaskin → hock behind
-    const fUp = [[0, 0.17, 0.18], [0.25, 0.14, 0.15], [0.75, 0.075, 0.085], [0.92, 0.08, 0.09], [1, 0.07, 0.08]];
-    const hUp = [[0, 0.17, 0.22], [0.3, 0.13, 0.17], [0.8, 0.07, 0.1], [0.94, 0.07, 0.1], [1, 0.06, 0.085]];
+    const fUp = [[0, 0.1, 0.16], [0.25, 0.115, 0.14], [0.75, 0.072, 0.085], [0.92, 0.078, 0.09], [1, 0.07, 0.08]];
+    const hUp = [[0, 0.1, 0.2], [0.3, 0.115, 0.17], [0.8, 0.068, 0.1], [0.94, 0.07, 0.1], [1, 0.06, 0.085]];
     const low = [[0, 0.065, 0.075], [0.15, 0.052, 0.065], [0.62, 0.05, 0.062], [0.75, 0.068, 0.08], [0.88, 0.052, 0.06], [1, 0.07, 0.075]];
     const hoof = [0.085, 0.11, 0x2a2420];
-    for (const [x, z, front] of [[0.19, -0.6, true], [-0.19, -0.6, true], [0.19, 0.6, false], [-0.19, 0.6, false]]) {
+    // (a bay or a dark coat: black lower legs; a light one: its own colour a shade darker)
+    const points = base.getHSL({}).l < 0.45 ? lamV(hair) : lamV(base.clone().multiplyScalar(0.8).getHex());
+    for (const [x, z, front] of [[0.15, -0.6, true], [-0.15, -0.6, true], [0.15, 0.6, false], [-0.15, 0.6, false]]) {
         const name = (front ? 'front' : 'hind') + (x > 0 ? 'Right' : 'Left') + 'Leg';
-        if (front) leg(g, legs, name, x, 1.3, z, true, 'horseF', [0, 0.6, fUp], [0, 0.7, low], hoof, skin);
-        else leg(g, legs, name, x, 1.3, z, false, 'horseH', [0.13, 0.6, hUp], [-0.1, 0.7, low], hoof, skin);
+        if (front) leg(g, legs, name, x, 1.3, z, true, 'horseF', [0, 0.6, fUp], [0, 0.7, low], hoof, skin, points);
+        else leg(g, legs, name, x, 1.3, z, false, 'horseH', [0.13, 0.6, hUp], [-0.1, 0.7, low], hoof, skin, points);
     }
 
     // saddle (shown while ridden): a blanket, the seat rising to the pommel and the cantle, the flaps
@@ -343,6 +354,7 @@ function horse(color) {
     }
     saddle.visible = false;
 
+    g.userData.grazePitch = -1.8; // (the long neck right down: the muzzle at the grass)
     return finish(g, { body, neck, head, tail, legs, saddle });
 }
 
@@ -442,12 +454,12 @@ function cow() {
     blob(g, pinkM, 0.17, 0.12, 0.17, 0, 0.82, 0.4);
     for (const [x, z] of [[0.07, 0.34], [-0.07, 0.34], [0.07, 0.46], [-0.07, 0.46]]) mesh(g, cone(0.02, 0.025, 0.08, 5), pinkM, x, 0.7, z, false);
 
-    const neck = group(g, 'neck', 0, 0, 0);
-    const neckPath = [v3(0, 1.28, -0.62), v3(0, 1.36, -0.92), v3(0, 1.42, -1.04)];
+    const neck = group(g, 'neck', 0, 1.28, -0.62); // (turns at its root, on the shoulders)
+    const neckPath = [v3(0, 0, 0), v3(0, 0.08, -0.3), v3(0, 0.14, -0.42)];
     mesh(neck, cached('cowNeck', () => sweep(neckPath, keys([[0, 0.3, 0.3, -0.04], [0.5, 0.21, 0.24, -0.04], [1, 0.16, 0.18, 0]]), { rings: 8, sides: 10, color: coat })), skin);
-    blob(neck, lam(white), 0.06, 0.12, 0.2, 0, 1.12, -0.84); // dewlap
+    blob(neck, lam(white), 0.06, 0.12, 0.2, 0, -0.16, -0.22); // dewlap
 
-    const head = group(neck, 'head', 0, 1.5, -1.04);
+    const head = group(neck, 'head', 0, 0.22, -0.42);
     head.rotation.x = -0.7;
     mesh(head, cached('cowHead', () => sweep([v3(0, 0, 0.06), v3(0, 0, -0.5)], keys([
         [0, 0.15, 0.13, 0], [0.2, 0.17, 0.15, 0], [0.55, 0.13, 0.12, 0], [0.85, 0.14, 0.12, -0.01], [1, 0.1, 0.08, -0.01],

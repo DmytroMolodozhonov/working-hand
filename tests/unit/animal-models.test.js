@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { animalModel, animateLegs, HORSE_COLORS } from '../../src/game/AnimalModels.js';
 
-const boxOf = (obj) => { obj.updateMatrixWorld(true); return new THREE.Box3().setFromObject(obj); };
+const boxOf = (obj) => { let r = obj; while (r.parent) r = r.parent; r.updateMatrixWorld(true); return new THREE.Box3().setFromObject(obj); };
 const meshes = (g) => { const out = []; g.traverse((o) => { if (o.isMesh) out.push(o); }); return out; };
 const isInside = (o, root) => { for (let p = o; p; p = p.parent) if (p === root) return true; return false; };
 
