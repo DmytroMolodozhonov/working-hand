@@ -94,7 +94,7 @@ test('look: if the game code fails to start, the screen says so (not a dead menu
     await ok.page.close();
     // a broken main.js: the warning appears with the reason
     const page = await browser.newPage();
-    await page.route('**/src/main.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'import { nope } from "./ui/Branding.js";' }));
+    await page.route('**/src/main.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'import { nope } from "./ui/GameNames.js";' }));
     await page.goto(srv.url);
     await page.waitForSelector('#start-error', { timeout: 15000 });
     assert.match(await page.textContent('#start-error'), /Игра не запустилась/);
@@ -118,7 +118,7 @@ test('look: code served as plain text or a missing game file — the note says w
     await page.close();
     // one of the game's files is missing
     page = await browser.newPage();
-    await page.route('**/src/ui/Branding.js', (r) => r.fulfill({ status: 404, body: 'File not found' }));
+    await page.route('**/src/ui/GameNames.js', (r) => r.fulfill({ status: 404, body: 'File not found' }));
     await page.goto(srv.url);
     await page.waitForFunction(() => /Не загрузился файл игры/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 20000 });
     await page.close();

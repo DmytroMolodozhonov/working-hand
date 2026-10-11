@@ -18,8 +18,8 @@ import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel }
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
-import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/Branding.js';
-import { setupLogPanel, keepLauncherAlive } from './ui/LogPanel.js';
+import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/GameNames.js';
+import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 
 const $ = (id) => document.getElementById(id);
 

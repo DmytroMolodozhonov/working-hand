@@ -29,6 +29,14 @@ test('no leftover merge conflict markers in the game\'s text files', () => {
     assert.deepEqual(bad, [], 'conflict markers left in: ' + bad.join(', '));
 });
 
+test('no game script has a name an ad blocker refuses to run (e.g. «Branding.js» kept the whole menu dead)', () => {
+    // Blockers (uBlock, AdBlock, AdGuard, antivirus web shields) refuse scripts whose path looks
+    // like ads or tracking — while a plain download of the same file still works.
+    const risky = /(brand|banner|advert|(^|[/_.-])ads?([/_.-]|$)|sponsor|promo|popup|analytic|beacon|pixel|telemetr)/i;
+    const bad = tracked().filter((f) => /\.m?js$/.test(f) && (f.startsWith('src/') || f === 'index.html') && risky.test(f));
+    assert.deepEqual(bad, [], 'rename: ' + bad.join(', '));
+});
+
 test('every game script parses (a syntax error in one file stops the whole game)', () => {
     const files = tracked().filter((f) => f.startsWith('src/') && /\.m?js$/.test(f) && fs.existsSync(path.join(ROOT, f)));
     assert.ok(files.length > 50);

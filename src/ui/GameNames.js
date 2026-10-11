@@ -1,5 +1,5 @@
 /**
- * Branding.js — the game's name and the names of the modes, in one place.
+ * GameNames.js — the game's name and the names of the modes, in one place.
  *
  * The player sees «Волшебство только начинается» and the modes
  *   Творческий ('creative') · Хардкор ('survival') · Выживание ('freeworld')
