@@ -935,6 +935,7 @@ def make_game_handler(launcher, game_handler):
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
+    request_queue_size = 128  # (the game's ~150 files are asked for at once)
     allow_reuse_address = not IS_WIN  # (as server.py: never share a busy port on Windows)
 
     def handle_error(self, request, client_address):

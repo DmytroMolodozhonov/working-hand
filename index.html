@@ -636,9 +636,46 @@
                         // our server and the main file are fine: one of the other game files failed — import it to get the browser's reason
                         return import('./src/main.js').then(function () {
                             setTimeout(function () { say('Код игры загрузился, но не запустился. Нажмите Ctrl+F5.'); }, 3000);
-                        }, function (e) { say('Не загрузился файл игры: ' + (e && e.message || e) + ' — запустите «Обновить и запустить игру».'); });
+                        }, function (e) {
+                            say('Не загрузился файл игры: ' + (e && e.message || e) + ' — ищу, какой именно…');
+                            // the browser names only the first file: walk the imports and find the one that fails
+                            findBroken(new URL('src/main.js', location.href).href).then(function (bad) {
+                                say(bad ? 'Не загрузился файл игры ' + bad + '. Запустите «Обновить и запустить игру». Если не поможет — пришлите этот снимок.'
+                                    : 'Не загрузился файл игры: ' + (e && e.message || e) + ' — запустите «Обновить и запустить игру».');
+                            });
+                        });
                     });
                 }).catch(function (e) { say('Нет связи с сервером игры: ' + (e && e.message || e) + '. Запускайте через «Запустить игру.bat».'); });
+            }
+            // Every file the game's code imports (static imports only), fetched one by one:
+            // the first one that is missing, not JavaScript, or can't be fetched → «path (why)».
+            function findBroken(start) {
+                var seen = {}, queue = [start], n = 0;
+                var re = /(?:^|[;\s}])(?:import|export)\s*(?:[^'"`;]*?\sfrom\s*)?['"]([^'"]+)['"]/g;
+                function short(u) { return u.replace(location.origin + '/', ''); }
+                function next() {
+                    var u = queue.shift();
+                    if (!u || n > 600) return Promise.resolve(null);
+                    if (seen[u]) return next();
+                    seen[u] = 1; n++;
+                    return fetch(u, { cache: 'no-store' }).then(function (r) {
+                        var ct = (r.headers.get('content-type') || '').toLowerCase();
+                        if (!r.ok) return short(u) + ' (ответ ' + r.status + ')';
+                        if (/\.m?js$/.test(u) && ct.indexOf('javascript') < 0) return short(u) + ' (тип «' + ct + '», а не JavaScript)';
+                        return r.text().then(function (t) {
+                            var m;
+                            // (imports mentioned in comments are not imports)
+                            t = t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"\\])\/\/.*$/gm, '$1');
+                            re.lastIndex = 0;
+                            while ((m = re.exec(t))) {
+                                var spec = m[1];
+                                if (spec[0] === '.' || spec[0] === '/') { try { queue.push(new URL(spec, u).href.split('#')[0]); } catch (_) { /* ignore */ } }
+                            }
+                            return next();
+                        });
+                    }, function (err) { return short(u) + ' (нет связи: ' + (err && err.message || err) + ')'; });
+                }
+                return next().catch(function () { return null; });
             }
             setTimeout(diagnose, 10000);
             // (a slow computer may still finish: then the note goes away)

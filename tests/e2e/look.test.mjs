@@ -122,4 +122,10 @@ test('look: code served as plain text or a missing game file — the note says w
     await page.goto(srv.url);
     await page.waitForFunction(() => /Не загрузился файл игры/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 20000 });
     await page.close();
+    // a file deep in the imports that can't be fetched at all: the note names it (the browser itself names only main.js)
+    page = await browser.newPage();
+    await page.route('**/src/game/Duel.js', (r) => r.abort());
+    await page.goto(srv.url);
+    await page.waitForFunction(() => /файл игры src\/game\/Duel\.js \(нет связи/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 30000 });
+    await page.close();
 });

@@ -417,6 +417,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
+    # the browser asks for ~150 game files at once: a long queue so none is refused
+    request_queue_size = 128
     # On Windows SO_REUSEADDR lets a second server share a port that is still
     # busy — the browser would then keep talking to an OLD game window.
     allow_reuse_address = os.name != "nt"
