@@ -27,6 +27,12 @@
  *                shield. Water fights it: water balls, the vortex's water, a river or the sea —
  *                the blaze hisses into steam and shrinks there (and goes out if it is drowned);
  *                whoever stands in water magic is not burnt.
+ *   «Стоп»       costs 50 mana (free world): without 50 it can't be stopped by voice — it burns
+ *                on until the mana runs out. Stopped (or out of mana), it no longer grows, follows
+ *                the hand or circles: it breaks into fires left on the ground where it was (the
+ *                blaze, the ring's wall) that burn on for 30 s more, then die down — still
+ *                burning anyone who walks in (the caster too). What caught fire (trees, plants,
+ *                wood) burns on till it has burnt out (Fire.js). Water puts the fires out.
  *   Network      the caster's fire is sent ~10×/s ('hf'); every computer draws it, sets its
  *                trees on fire and burns its own player; the host burns the creatures.
  */
@@ -63,6 +69,10 @@ export const HELLFIRE = {
     SHIELD: 0.5, // what a shield lets through
     QUENCH: 2.2, // m a second of the blaze's radius lost in water
     MAX_LIFE: 90, // s at most (the mana runs out much sooner in the free world)
+    STOP_COST: 50, // mana «стоп» takes to put it out (without it: it burns on until the mana runs out)
+    LEFT_LIFE: 30, // s the fires left on the ground (after «стоп» / no mana) burn at full strength…
+    LEFT_FADE: 6, // …then die down over this long
+    LEFT_MAX: 14, // fires left at once (all wizards)
     SEND: 0.1, // s between network updates
     STALE: 1.5, // s without news: another computer's fire is gone
 };
@@ -80,6 +90,17 @@ export function hellfireBlock({ enabled, max, mana }) {
     if (!((max ?? 0) >= HELLFIRE.MIN_MAX_MANA)) return 'max';
     if (!((mana ?? 0) >= HELLFIRE.COST)) return 'mana';
     return null;
+}
+
+/** May «стоп» put it out now? (free world: it costs 50 mana) */
+export function hellfireCanStop({ enabled, mana }) {
+    return !enabled || (mana ?? 0) >= HELLFIRE.STOP_COST;
+}
+
+/** How strong a fire left on the ground is `t` s after it was left (1 … 0; 0: gone). */
+export function leftStrength(t) {
+    if (t <= HELLFIRE.LEFT_LIFE) return 1;
+    return Math.max(0, 1 - (t - HELLFIRE.LEFT_LIFE) / HELLFIRE.LEFT_FADE);
 }
 
 /** Mana the held fire takes in `dt` seconds. */
@@ -157,6 +178,7 @@ export class Hellfire {
         this.state = null; // my fire: {side, t, c, R, k (0 blaze … 1 ring), ang, spin, ...}
         this.remote = new Map(); // by -> another computer's fire
         this.meter = new SwingMeter();
+        this.left = []; // fires left on the ground (everyone's): {by, c, R0, R, k: 0, t, wet, burnT, meT}
         this.log = []; // events (tests / debugging)
         this._t = 0;
         this._sendT = 0;
@@ -228,19 +250,75 @@ export class Hellfire {
         return HELLFIRE.NAME;
     }
 
-    /** «Стоп» / no mana / the caster can't go on: my fire goes out (everywhere). */
+    /**
+     * «Стоп» said: 50 mana (free world) puts it out — fires stay where it was.
+     * @returns true: stopped; 'mana': not enough mana to stop it (it burns on); false: no fire
+     */
+    sayStop() {
+        if (!this.state) return false;
+        const c = this.game.combat;
+        if (!hellfireCanStop({ enabled: !!c?.enabled, mana: c?.fatigue })) {
+            this._note({ ev: 'cantStop', mana: c.fatigue });
+            this.game.hud?.setVoice?.(`🔥 Погасить адский огонь словом «стоп» стоит <b>${HELLFIRE.STOP_COST} маны</b> — у вас ${Math.floor(c.fatigue)}. Огонь горит, пока не кончится мана`, true);
+            return 'mana';
+        }
+        if (c?.enabled) c.fatigue = Math.max(0, c.fatigue - HELLFIRE.STOP_COST);
+        return this.stop('stop');
+    }
+
+    /** «Стоп» / no mana / the caster can't go on: my fire goes out (everywhere) — fires stay where it was (not after water). */
     stop(why = 'stop') {
         if (!this.state) return false;
         const s = this.state;
         this.state = null;
         this._endAt = this._t;
         this._note({ ev: 'out', why });
-        this._dieDown(s.c, s.R * (1 - s.k));
-        this._send(null);
-        if (why === 'mana') this.game.hud?.setVoice?.('🔥 Адский огонь погас — мана кончилась', true);
+        if (why === 'water') this._dieDown(s.c, s.R * (1 - s.k));
+        else this._leave(this.me, s, this.game.character.group.position);
+        this._send(null, why);
+        if (why === 'mana') this.game.hud?.setVoice?.('🔥 Адский огонь вышел из-под власти — мана кончилась. Брошенный огонь догорает ещё полминуты', true);
         else if (why === 'water') this.game.hud?.setVoice?.('💨 Вода погасила адский огонь', true);
-        else if (why === 'wand') this.game.hud?.setVoice?.('🔥 Палочка не в руке — адский огонь погас', true);
+        else if (why === 'wand') this.game.hud?.setVoice?.('🔥 Палочка не в руке — огонь больше не слушается и догорает', true);
+        else if (why === 'stop') this.game.hud?.setVoice?.(`🛑 Адский огонь остановлен (−${HELLFIRE.STOP_COST} маны), но брошенный огонь догорает ещё полминуты — не входите в него`, true);
         return true;
+    }
+
+    /** The fire breaks into fires left on the ground: the blaze where it stood, the ring's wall round `body`. */
+    _leave(by, f, body) {
+        const add = (x, y, z, R) => {
+            if (!(R > 0.3)) return;
+            if (this.left.length >= HELLFIRE.LEFT_MAX) this.left.shift();
+            const g = this.game;
+            const gy = g.collision?.groundY ? g.collision.groundY(x, z) : y - R * 0.55;
+            const c = new THREE.Vector3(x, Math.min(y, gy + R * 0.55), z); // (it falls to the ground)
+            this.left.push({ by, c, R0: R, R, k: 0, t: 0, wet: 0, burnT: 0, meT: 0, o: null });
+        };
+        const wb = 1 - f.k;
+        if (wb > 0.2) add(f.c.x, f.c.y, f.c.z, f.R * Math.min(1, wb + 0.2) * 0.85);
+        if (f.k > 0.2) {
+            const n = 6;
+            for (let i = 0; i < n; i++) {
+                const a = f.ang + i * (TAU / n);
+                add(body.x + Math.cos(a) * f.rr, body.y - 1.4, body.z + Math.sin(a) * f.rr, 1.4 * Math.min(1, f.k + 0.2));
+            }
+        }
+        this._note({ ev: 'left', n: this.left.length });
+    }
+
+    /** Fires left on the ground: they burn on (everyone near, the caster too), water puts them out. */
+    _updateLeft(dt) {
+        for (let i = this.left.length - 1; i >= 0; i--) {
+            const f = this.left[i];
+            f.t += dt;
+            f.wet = this._wet(f.c, f.R);
+            if (f.wet > 0) f.R0 = Math.max(0, f.R0 - HELLFIRE.QUENCH * f.wet * dt);
+            f.R = f.R0 * leftStrength(f.t);
+            if (f.R < 0.25) { this._dieDown(f.c, f.R0 * 0.6); this.left.splice(i, 1); continue; }
+            f.burnT -= dt;
+            if (f.burnT <= 0) { f.burnT = HELLFIRE.TICK * 2; this._burn(f.by, f, f.c); }
+            this._burnMe(f, f.c, dt);
+            this._draw(dt, f, f.c, 0.35);
+        }
     }
 
     // ================================================================ update
@@ -249,9 +327,10 @@ export class Hellfire {
         this._t += dt;
         if (this.state) this._updateMine(dt);
         for (const [by, f] of this.remote) {
-            if (this._t - f.at > HELLFIRE.STALE) { this._dieDown(f.c, f.R * (1 - f.k)); this.remote.delete(by); continue; }
+            if (this._t - f.at > HELLFIRE.STALE) { this._leave(by, f, f.body); this.remote.delete(by); continue; }
             this._updateRemote(f, dt);
         }
+        if (this.left.length) this._updateLeft(dt);
         this.pool?.update(dt);
     }
 
@@ -462,7 +541,7 @@ export class Hellfire {
         let dmg = HELLFIRE.PLAYER_DMG;
         if ((c.shield && c.shield.left > 0) || c.shieldFactor?.(from) >= 1) dmg *= HELLFIRE.SHIELD; // (fire goes round a shield)
         if (c.frozen) c.frozenLeft = 0; // (the ice on me melts)
-        const by = f === this.state ? null : f.by;
+        const by = f === this.state || f.by === this.me ? null : f.by;
         this._note({ ev: 'hurtMe', dmg, by: by || 'self' });
         if (c.enabled) c.damage(dmg, by, HELLFIRE.NAME);
         else g.damageLocalPlayer?.(dmg);
@@ -471,10 +550,10 @@ export class Hellfire {
     }
 
     // ============================================================= network
-    _send(s) {
+    _send(s, why = null) {
         if (!s && !this._sent) return;
         this._sent = !!s;
-        this.game.sync?.hellfire?.(s);
+        this.game.sync?.hellfire?.(s, why);
     }
 
     /** Another computer's fire ('hf'). */
@@ -483,7 +562,7 @@ export class Hellfire {
         const s = m.s;
         if (!Array.isArray(s) || s.length < 14 || !s.every(Number.isFinite)) {
             const f = this.remote.get(m.by);
-            if (f) { this._dieDown(f.c, f.R * (1 - f.k)); this.remote.delete(m.by); }
+            if (f) { if (m.w === 'water') this._dieDown(f.c, f.R * (1 - f.k)); else this._leave(m.by, f, f.body); this.remote.delete(m.by); }
             return;
         }
         let f = this.remote.get(m.by);
@@ -527,13 +606,13 @@ export class Hellfire {
     }
 
     /** One frame of a fire: the blaze (weight 1 − k) and the ring round `body` (weight k). */
-    _draw(dt, f, body) {
+    _draw(dt, f, body, amt = 1) {
         const P = this.pool, fx = this.game.fx;
         if (!P || !fx) return;
         const t = this._t;
         const flick = 0.8 + 0.2 * Math.sin(t * 31) * Math.sin(t * 17 + 1.3);
         const pulse = 1 + 0.1 * Math.sin(t * 5.3) + 0.05 * Math.sin(t * 13.1 + 0.7);
-        const wb = 1 - f.k, wr = f.k;
+        const wb = (1 - f.k) * amt, wr = f.k * amt;
         const R = f.R * pulse;
         const c = f.c;
         // ---------------------------------------------------------- the blaze
@@ -637,7 +716,7 @@ export class Hellfire {
         }
         // the firelight on everything round it
         _a.copy(c).lerp(_b.set(body.x, body.y + 0.5, body.z), wr);
-        fx.lightFlash(_a, 0xff6a1a, (4 + 4 * Math.min(1.5, f.R / 3)) * flick, 0.15, 30 + f.R * 6);
+        if (amt >= 1 || !this.state) fx.lightFlash(_a, 0xff6a1a, (4 + 4 * Math.min(1.5, f.R / 3)) * flick * Math.max(0.5, amt), 0.15, 30 + f.R * 6);
         if (f === this.state) fx.shake = Math.max(fx.shake || 0, 0.05 + 0.08 * Math.min(1, f.R / 4)); // (the roar shakes the air)
     }
 
@@ -662,6 +741,7 @@ export class Hellfire {
     clear() {
         this.state = null;
         this.remote.clear();
+        this.left.length = 0;
         this.pool?.clear?.();
     }
 

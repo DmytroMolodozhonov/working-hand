@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { HELLFIRE, Hellfire, hellfireBlock, hellfireDrain, hellfireReward, blazeReach, blazeRadius, inBlaze, inRing, ringRadius } from '../../src/game/Hellfire.js';
+import { HELLFIRE, Hellfire, hellfireBlock, hellfireCanStop, leftStrength, hellfireDrain, hellfireReward, blazeReach, blazeRadius, inBlaze, inRing, ringRadius } from '../../src/game/Hellfire.js';
 import { SPELL_COST, Combat } from '../../src/game/Combat.js';
 import { Mana } from '../../src/game/Mana.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -162,4 +162,61 @@ test('Hellfire: the caster is not immune — the blaze on him burns him (a shiel
     g.hellfire.log.length = 0;
     run(g, 1);
     assert.ok(g.hellfire.log.some((e) => e.ev === 'hurtMe' && e.dmg === HELLFIRE.PLAYER_DMG * HELLFIRE.SHIELD), 'a shield only halves it');
+});
+
+test('Hellfire: «стоп» costs 50 mana; without 50 it burns on until the mana runs out', () => {
+    assert.equal(HELLFIRE.STOP_COST, 50);
+    assert.equal(hellfireCanStop({ enabled: true, mana: 49 }), false);
+    assert.equal(hellfireCanStop({ enabled: true, mana: 50 }), true);
+    assert.equal(hellfireCanStop({ enabled: false, mana: 0 }), true, 'Creative: free');
+    const g = fakeGame();
+    const c = g.combat;
+    c.maxFatigue = 200; c.fatigue = 200;
+    g.hellfire.cast(true);
+    run(g, 0.5);
+    c.fatigue = 40;
+    assert.equal(g.hellfire.sayStop(), 'mana', 'not enough mana to stop it');
+    assert.ok(g.hellfire.busy, 'it burns on');
+    c.fatigue = 100;
+    assert.equal(g.hellfire.sayStop(), true);
+    assert.equal(c.fatigue, 50, '50 mana for «стоп»');
+    assert.equal(g.hellfire.busy, false);
+});
+
+test('Hellfire: stopped (or out of mana), it leaves fires that burn on ≥ 30 s where it was — no growing, no following the hand', () => {
+    assert.equal(leftStrength(0), 1);
+    assert.equal(leftStrength(30), 1);
+    assert.ok(leftStrength(33) > 0 && leftStrength(33) < 1);
+    assert.equal(leftStrength(40), 0);
+    const g = fakeGame('creative');
+    g.hellfire.cast(true);
+    run(g, 2);
+    g.hellfire.stop('stop');
+    const L = g.hellfire.left;
+    assert.ok(L.length >= 1, 'fires left on the ground');
+    const at = L[0].c.clone(), R0 = L[0].R;
+    // the hand points elsewhere now: the left fire stays put and never grows
+    g.character.getPointingDirection = (side, out = new THREE.Vector3()) => out.set(1, 0, 0);
+    run(g, 29.5, 0.5);
+    assert.ok(g.hellfire.left.length >= 1, 'still burning after 29.5 s');
+    assert.ok(g.hellfire.left[0].c.distanceTo(at) < 1e-6, 'it does not move');
+    assert.ok(g.hellfire.left[0].R <= R0 + 1e-6, 'it does not grow');
+    run(g, 10, 0.5);
+    assert.equal(g.hellfire.left.length, 0, 'then it dies down');
+});
+
+test('Hellfire: the fire left on the ground burns the caster who walks into it; out of mana leaves fires too', () => {
+    const g = fakeGame();
+    const c = g.combat;
+    c.maxFatigue = 200; c.fatigue = 82;
+    g.hellfire.cast(true);
+    run(g, 2);
+    assert.equal(g.hellfire.busy, false, 'the mana ran out');
+    assert.ok(g.hellfire.log.some((e) => e.ev === 'out' && e.why === 'mana'));
+    const f = g.hellfire.left[0];
+    assert.ok(f, 'fires left after the mana ran out');
+    g.character.group.position.set(f.c.x, f.c.y + 0.5, f.c.z);
+    const hp0 = c.hp;
+    run(g, 1.5);
+    assert.ok(c.hp < hp0, `walked into it: burnt (${hp0} → ${c.hp})`);
 });

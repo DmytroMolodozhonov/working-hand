@@ -1082,7 +1082,8 @@ export class Game {
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
-        if (this.hellfire?.stop()) done.push('адский огонь');
+        const hf = this.hellfire?.sayStop(); // («стоп» costs 50 mana for it)
+        if (hf === true) done.push('адский огонь');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
         if (this._wave) { this._wave = null; done.push('волна'); }
         if (W?._nox(false)) done.push('Люмос'); // (the tip and the thrown light)
@@ -1095,6 +1096,7 @@ export class Game {
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (!done.length) return false;
         this.sync?.stopSpells?.();
+        if (hf === true) return true; // (its own words: the fire left on the ground)
         this.hud.setVoice(`🛑 Стоп: ${done.join(', ')}`, true);
         return true;
     }

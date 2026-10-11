@@ -399,8 +399,8 @@ export class NetSync {
     }
 
     /** My «Let the Hellfire Come» fire (~10×/s; null: it went out) — see Hellfire.onNet. */
-    hellfire(s) {
-        this.net.send({ t: 'hf', by: this.me, s }, true);
+    hellfire(s, why = null) {
+        this.net.send(why ? { t: 'hf', by: this.me, s, w: why } : { t: 'hf', by: this.me, s }, true);
     }
 
     /** «Water Vortex» / «Fire Maxima» events and my vortex's state (see WaterVortex.onNet). */
