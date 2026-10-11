@@ -4,9 +4,9 @@
  * The world slowly darkens (5 s), rain pours around the player and far
  * lightning flickers; when the storm is over it clears up again. Everybody
  * within reach of the caster sees it.
- * «Let it rain» is rain without the lightning: grey clouds, a little less
- * dark, the hiss of the rain, drops splashing on the ground — over the whole
- * world, for 2 game hours (2 minutes).
+ * «Let it rain» calls a real thunderstorm: dark clouds, the hiss of the rain,
+ * drops splashing on the ground, far lightning (Thor's hammer catches it too) —
+ * over the whole world, for 2 game hours (2 minutes).
  */
 
 import * as THREE from 'three';
@@ -20,7 +20,6 @@ export const SKY_AIM = 0.7;
 export function aimedAtSky(dir) {
     return !!dir && dir.y >= SKY_AIM;
 }
-const RAIN_DARK = 0.62; // (rain alone: the clouds darken the world less than a thunderstorm)
 
 const _p = new THREE.Vector3();
 const _vel = new THREE.Vector3();
@@ -30,7 +29,7 @@ export class Storm {
         this.game = game;
         this.k = 0;
         this.until = 0; // a thunderstorm (with lightning) until then
-        this.rainUntil = 0; // «Let it rain» (rain only) until then
+        this.rainUntil = 0; // «Let it rain» (a thunderstorm too, the whole world) until then
         this._flashT = 0;
         this._splashT = 0;
         const pos = new Float32Array(DROPS * 6);
@@ -54,9 +53,9 @@ export class Storm {
         return now < this.until || now < this.rainUntil;
     }
 
-    /** A thunderstorm (lightning), not just rain. */
+    /** A thunderstorm (lightning): «Lightning Strike», the weather or «Let it rain». */
     get thunder() {
-        return performance.now() < this.until;
+        return this.raining;
     }
 
     /** «Let it rain»: rain everywhere for `seconds` (default 2 game hours). */
@@ -90,7 +89,7 @@ export class Storm {
 
     update(dt) {
         const now = performance.now();
-        const want = now < this.until ? 1 : now < this.rainUntil ? RAIN_DARK : 0;
+        const want = now < this.until || now < this.rainUntil ? 1 : 0;
         if (want === 0 && this.k <= 0) { if (this._sound) { this._sound = false; this.game.sound?.setRain?.(0); } return; }
         // darkens over ~5 s, clears over ~3 s
         this.k = this.k < want ? Math.min(want, this.k + dt / 5) : Math.max(want, this.k - dt / 3);
@@ -133,7 +132,7 @@ export class Storm {
                 }
             }
         }
-        // Far lightning now and then (a thunderstorm; «Let it rain» has none)
+        // Far lightning now and then
         if (this.k > 0.7 && this.thunder) {
             this._flashT -= dt;
             if (this._flashT <= 0) {

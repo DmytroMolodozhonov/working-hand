@@ -23,12 +23,12 @@ test('«Let it rain» costs 20 mana; only the hand / wand pointed up to the sky 
     assert.equal(aimedAtSky(new THREE.Vector3(0, 0, -1)), false, 'forward');
 });
 
-test('the rain lasts 2 game hours (2 minutes), without lightning; «To the Sun» stops it', () => {
+test('the rain is a thunderstorm of 2 game hours (2 minutes); «To the Sun» stops it', () => {
     assert.equal(RAIN_SECONDS, 120);
     const s = Object.create(Storm.prototype);
     s.until = 0; s.rainUntil = 0; s.k = 0;
     s.startRain();
-    assert.ok(s.raining && !s.thunder);
+    assert.ok(s.raining && s.thunder, 'lightning, and Thor\'s hammer works');
     assert.ok(Math.abs(s.rainLeft() - 120) <= 1);
     s.clearSky();
     assert.equal(s.raining, false);

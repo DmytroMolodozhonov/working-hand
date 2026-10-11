@@ -1464,7 +1464,7 @@ export class Game {
 
     /**
      * «Let it rain» (20): the hand — or the wand in it — pointed up to the sky + the words.
-     * A stream of magic goes up from it and it rains for 2 game hours (2 minutes), no lightning.
+     * A stream of magic goes up from it and a thunderstorm comes for 2 game hours (2 minutes).
      */
     _castRain(isFinal) {
         const ch = this.character;
@@ -1483,7 +1483,7 @@ export class Game {
         this.spells.cast('LetItRain', o, _v1.set(0, 1, 0), side, this.localId);
         if (this.sync) this.sync.spell('LetItRain', o, _v1.set(0, 1, 0), side);
         if (this.sound) this.sound.playBombardoCast();
-        this.hud.setVoice('🌧️ <span style="color:#9fd4ff">Let it rain!</span> Небо затягивают тучи — дождь на 2 часа', true);
+        this.hud.setVoice('🌧️ <span style="color:#9fd4ff">Let it rain!</span> Небо затягивают тучи — гроза на 2 часа', true);
         return 'LetItRain';
     }
 
