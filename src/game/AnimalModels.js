@@ -70,9 +70,10 @@ const _X = new THREE.Vector3(1, 0, 0);
  *   color(t, ang, p) → [r, g, b] multipliers (ang: 0 = right side, π/2 = top, −π/2 = bottom)
  *   bump(t, ang) → a radius multiplier (lumps of wool)
  */
-function sweep(points, prof, { rings = 16, sides = 10, color = null, side = _X, bump = null } = {}) {
+function sweep(points, prof, { rings = 16, sides = 10, color = null, side = _X, bump = null, uv = null } = {}) {
     const curve = points.length === 2 ? new THREE.LineCurve3(points[0], points[1]) : new THREE.CatmullRomCurve3(points, false, 'centripetal');
-    const pos = [], col = [], idx = [];
+    const pos = [], col = [], idx = [], uvs = [];
+    const cols = uv ? sides + 1 : sides;
     const P = new THREE.Vector3(), T = new THREE.Vector3(), U = new THREE.Vector3(), S = new THREE.Vector3(), V = new THREE.Vector3();
     const ringC = [];
     for (let i = 0; i <= rings; i++) {
@@ -84,18 +85,21 @@ function sweep(points, prof, { rings = 16, sides = 10, color = null, side = _X, 
         const [rx, ry, dy = 0] = prof(t);
         const c = P.clone().addScaledVector(U, dy);
         ringC.push({ c, T: T.clone() });
-        for (let j = 0; j < sides; j++) {
-            const ang = (j / sides) * Math.PI * 2;
+        // (with a texture: one more column where the ring closes — the seam under the belly — so the
+        // picture doesn't smear across it; its normals are joined below)
+        for (let j = 0; j < cols; j++) {
+            const ang = uv ? -Math.PI / 2 + (j / sides) * Math.PI * 2 : (j / sides) * Math.PI * 2;
             const k = bump ? bump(t, ang) : 1;
             V.copy(c).addScaledVector(S, Math.cos(ang) * rx * k).addScaledVector(U, Math.sin(ang) * ry * k);
             pos.push(V.x, V.y, V.z);
             const cl = color ? color(t, ang, V) : [1, 1, 1];
             col.push(cl[0], cl[1], cl[2]);
+            if (uv) uvs.push(t * uv[0], (j / sides) * uv[1]);
         }
         if (i > 0) {
-            const a0 = (i - 1) * sides, b0 = i * sides;
+            const a0 = (i - 1) * cols, b0 = i * cols;
             for (let j = 0; j < sides; j++) {
-                const j1 = (j + 1) % sides;
+                const j1 = uv ? j + 1 : (j + 1) % sides;
                 idx.push(a0 + j, b0 + j, a0 + j1, a0 + j1, b0 + j, b0 + j1);
             }
         }
@@ -109,9 +113,10 @@ function sweep(points, prof, { rings = 16, sides = 10, color = null, side = _X, 
         pos.push(e.x, e.y, e.z);
         const k = color ? color(ri / rings, 0, e) : [1, 1, 1];
         col.push(k[0], k[1], k[2]);
-        const base = ri * sides;
+        if (uv) uvs.push((ri / rings) * uv[0], 0.5 * uv[1]);
+        const base = ri * cols;
         for (let j = 0; j < sides; j++) {
-            const j1 = (j + 1) % sides;
+            const j1 = uv ? j + 1 : (j + 1) % sides;
             if (dir < 0) idx.push(ci, base + j, base + j1);
             else idx.push(ci, base + j1, base + j);
         }
@@ -119,8 +124,18 @@ function sweep(points, prof, { rings = 16, sides = 10, color = null, side = _X, 
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
+    if (uv) {
+        // the seam's two columns: one normal (no crease line along the belly)
+        const N = g.getAttribute('normal');
+        for (let i = 0; i <= rings; i++) {
+            const a = i * cols, b = i * cols + sides;
+            const x = N.getX(a) + N.getX(b), y = N.getY(a) + N.getY(b), z = N.getZ(a) + N.getZ(b), l = Math.hypot(x, y, z) || 1;
+            N.setXYZ(a, x / l, y / l, z / l); N.setXYZ(b, x / l, y / l, z / l);
+        }
+    }
     g.computeBoundingSphere();
     return g;
 }
@@ -159,17 +174,18 @@ const bellyShade = (back, belly = [1, 1, 1]) => (t, ang) => mix(belly, back, smo
  * knee / hock, the lower segment (with its pivot at the knee) down to the ground.
  * `up` / `lo`: [z offset at the joint, length, profile key table]; hoof: [radius, height, colour].
  */
-function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat, lowMat = mat) {
+function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat, lowMat = mat, paint = null) {
     const pivot = group(parent, name, x, y, z);
     const [uz, uLen, uKeys] = upper;
     const [lz, lLen, lKeys] = lower;
-    const uGeo = cached(geoKey + 'u', () => sweep([v3(0, 0.12, 0), v3(0, -uLen * 0.5, uz * 0.45), v3(0, -uLen, uz)], keys(uKeys), { rings: 10, sides: 8 }));
+    // (paint: {up, lo} vertex colours by the point — a pig's muddy legs — and texture coordinates)
+    const uGeo = cached(geoKey + 'u', () => sweep([v3(0, 0.12, 0), v3(0, -uLen * 0.5, uz * 0.45), v3(0, -uLen, uz)], keys(uKeys), { rings: 10, sides: 8, color: paint?.up, uv: paint?.uv }));
     const up = mesh(pivot, uGeo, mat);
     up.name = name + 'Upper';
     const knee = group(pivot, name + 'Knee', 0, -uLen, uz);
     const jr = lKeys[0][1] * 1.05;
     blob(knee, lowMat, jr, jr * 1.3, jr * 1.15, 0, 0, 0); // the joint
-    const lGeo = cached(geoKey + 'l', () => sweep([v3(0, 0.04, 0), v3(0, -lLen + hoof[1] * 0.6, lz)], keys(lKeys), { rings: 10, sides: 8 }));
+    const lGeo = cached(geoKey + 'l', () => sweep([v3(0, 0.04, 0), v3(0, -lLen + hoof[1] * 0.6, lz)], keys(lKeys), { rings: 10, sides: 8, color: paint?.lo, uv: paint?.uv }));
     mesh(knee, lGeo, lowMat);
     if (hoof) {
         const [r, h, c] = hoof;
@@ -184,9 +200,10 @@ function leg(parent, legs, name, x, y, z, front, geoKey, upper, lower, hoof, mat
 
 /** One shape out of several (positions, normals and — for vertex-coloured materials — colours). */
 function mergeShapes(list, withColor) {
-    const pos = [], nor = [], col = [], idx = [];
+    const pos = [], nor = [], col = [], idx = [], uvs = [];
     const n = new THREE.Matrix3();
     const v = new THREE.Vector3();
+    const withUv = list.some((m) => m.geometry.getAttribute('uv') && m.material.map);
     for (const m of list) {
         m.updateMatrix();
         n.getNormalMatrix(m.matrix);
@@ -199,6 +216,7 @@ function mergeShapes(list, withColor) {
             v.fromBufferAttribute(N, i).applyMatrix3(n).normalize();
             nor.push(v.x, v.y, v.z);
             if (withColor) col.push(C ? C.getX(i) : 1, C ? C.getY(i) : 1, C ? C.getZ(i) : 1);
+            if (withUv) { const UV = geo.getAttribute('uv'); uvs.push(UV ? UV.getX(i) : 0, UV ? UV.getY(i) : 0); }
         }
         if (geo.index) for (let i = 0; i < geo.index.count; i++) idx.push(base + geo.index.getX(i));
         else for (let i = 0; i < P.count; i++) idx.push(base + i);
@@ -207,6 +225,7 @@ function mergeShapes(list, withColor) {
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
     if (withColor) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    if (withUv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     g.setIndex(idx);
     g.computeBoundingSphere();
     return g;
@@ -359,14 +378,240 @@ function horse(color) {
 }
 
 // ================================================================== pig
-function pig() {
+/**
+ * Pigs: matte skin, not plastic — a small picture per look (mottled pink, a few bristles,
+ * pores, spots for some) times soft vertex shading (a darker back, mud on the belly, the
+ * legs and the snout), and feathered wings (folded along the sides; see PigFlight.js).
+ * Looks 1…4 (sent as the animal's `color`): pale pink, rosy-ginger, pink with big dark
+ * spots, dusky with brown patches.
+ */
+export const PIG_LOOKS = [
+    { tint: 0xf7cdc9, mottle: 0.12, warm: 0.05, spots: 0, spotC: [0.6, 0.52, 0.52], feather: 0xf4efe6 },
+    { tint: 0xf3b8a6, mottle: 0.14, warm: 0.1, spots: 0, spotC: [0.75, 0.55, 0.45], feather: 0xece0cc },
+    { tint: 0xf9d4d0, mottle: 0.1, warm: 0.04, spots: 7, spotC: [0.3, 0.27, 0.28], feather: 0xf2eee8 },
+    { tint: 0xe6b6b0, mottle: 0.16, warm: 0.06, spots: 5, spotC: [0.62, 0.46, 0.38], feather: 0xddd5ca },
+];
+/** The look of a pig from its `color` (1…4; anything else is taken round into that). */
+export const pigLook = (c) => ((Math.abs(Math.round(c || 1)) - 1) % PIG_LOOKS.length + PIG_LOOKS.length) % PIG_LOOKS.length;
+
+/** A repeatable random (one look draws the same picture on every computer). */
+function rng(seed) {
+    let x = seed >>> 0 || 1;
+    return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+}
+
+const _skins = new Map();
+/**
+ * The skin picture of a look (128 along the body × 256 round it, made once): a soft
+ * mottling, warmer and paler patches, spots, pores and short bristles lying along the body.
+ * Values are a multiplier around 0.92 (the material's colour gives the pink).
+ */
+function pigSkin(look) {
+    if (_skins.has(look)) return _skins.get(look);
+    const L = PIG_LOOKS[look];
+    const W = 128, H = 256;
+    const r = rng(9001 + look * 7919);
+    // value noise on a wrapping grid (so the picture closes round the body)
+    const grid = (n) => { const a = new Float32Array(n * n * 2); for (let i = 0; i < a.length; i++) a[i] = r(); return a; };
+    const g1 = grid(8), g2 = grid(16), g3 = grid(32);
+    const vn = (gr, n, u, v) => {
+        const x = u * n, y = v * n * 2, xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+        const at = (i, j) => gr[(((j % (n * 2)) + n * 2) % (n * 2)) * n + (((i % n) + n) % n)];
+        const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+        return (at(xi, yi) * (1 - sx) + at(xi + 1, yi) * sx) * (1 - sy) + (at(xi, yi + 1) * (1 - sx) + at(xi + 1, yi + 1) * sx) * sy;
+    };
+    const R = new Float32Array(W * H), G = new Float32Array(W * H), B = new Float32Array(W * H);
+    const spots = [];
+    for (let i = 0; i < L.spots; i++) spots.push({ u: 0.1 + r() * 0.8, v: r(), ru: 0.06 + r() * 0.1, rv: 0.04 + r() * 0.07 });
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const u = x / W, v = y / H;
+        const n = vn(g1, 8, u, v) * 0.55 + vn(g2, 16, u, v) * 0.3 + vn(g3, 32, u, v) * 0.15;
+        let m = 0.94 - L.mottle * (n - 0.5) * 1.6;
+        const warm = (vn(g2, 16, u + 0.37, v + 0.21) - 0.5) * L.warm * 2;
+        let cr = m * (1 + warm), cg = m * (1 - warm * 0.5), cb = m * (1 - warm);
+        // spots: soft-edged blotches with a ragged rim
+        for (const s of spots) {
+            let dv = Math.abs(v - s.v); dv = Math.min(dv, 1 - dv);
+            const d = Math.hypot((u - s.u) / s.ru, dv / s.rv) + (vn(g3, 32, u, v) - 0.5) * 0.5;
+            const k = 1 - Math.min(1, Math.max(0, (d - 0.75) / 0.3));
+            if (k > 0) { cr *= 1 + (L.spotC[0] - 1) * k; cg *= 1 + (L.spotC[1] - 1) * k; cb *= 1 + (L.spotC[2] - 1) * k; }
+        }
+        const i = y * W + x;
+        R[i] = cr; G[i] = cg; B[i] = cb;
+    }
+    // pores (tiny darker dots) and bristles: short hairs along the body, pale ones catch the light
+    for (let i = 0; i < 2600; i++) { const p = Math.floor(r() * W * H); R[p] *= 0.9; G[p] *= 0.88; B[p] *= 0.88; }
+    for (let i = 0; i < 1500; i++) {
+        const x0 = Math.floor(r() * W), y0 = Math.floor(r() * H), len = 2 + Math.floor(r() * 4);
+        const pale = r() < 0.6, k = pale ? 1.07 + r() * 0.05 : 0.86;
+        for (let j = 0; j < len; j++) {
+            const p = y0 * W + ((x0 + j) % W), f = 1 + (k - 1) * (1 - j / (len + 1));
+            R[p] *= f; G[p] *= f; B[p] *= pale ? f * 0.99 : f;
+        }
+    }
+    const data = new Uint8Array(W * H * 4);
+    for (let i = 0; i < W * H; i++) {
+        data[i * 4] = Math.min(255, R[i] * 255); data[i * 4 + 1] = Math.min(255, G[i] * 255); data[i * 4 + 2] = Math.min(255, B[i] * 255); data[i * 4 + 3] = 255;
+    }
+    const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.needsUpdate = true;
+    tex.userData = { keep: true };
+    _skins.set(look, tex);
+    return tex;
+}
+/** The pig's skin material of a look: the picture × vertex shading × the look's pink (shared). */
+function pigMat(look, tint = PIG_LOOKS[look].tint) {
+    const k = 'pig' + look + ':' + tint;
+    if (!_mats.has(k)) _mats.set(k, new THREE.MeshLambertMaterial({ color: tint, vertexColors: true, map: pigSkin(look) }));
+    return _mats.get(k);
+}
+
+const MUD = [0.5, 0.39, 0.31];
+/** Lumps of dried mud: a smooth pattern by the point (no randomness — every pig of a kind alike in shape). */
+const mudAt = (p) => 0.5 + 0.5 * Math.sin(p.x * 23.1 + p.z * 17.3) * Math.sin(p.z * 19.7 - p.y * 13.1 + 0.6);
+
+// ----- wings: feathers on two bones, folded along the side; spread by a morph (open), the tips bend (flex)
+/** One feather: base at 0, along +Z (length L, width W), normal +Y, a little curved; vertex shading. */
+function feather(L, W, tone, out) {
+    const segs = 6, base = out.pos.length / 3;
+    for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const w = W * (0.3 + 0.7 * Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.55 + 0.45 * t * t)), 0.6)) * (t === 1 ? 0.2 : 1);
+        const z = L * t, y = 0.06 * L * Math.sin(Math.PI * t * 0.8);
+        for (const s of [-1, 0, 1]) {
+            out.pos.push(s * w * 0.5, y - Math.abs(s) * W * 0.06, z);
+            const c = tone * (s === 0 ? 0.84 : 1) * (1 - 0.14 * Math.max(0, (t - 0.7) / 0.3));
+            out.col.push(c, c * 0.985, c * 0.97);
+        }
+        if (i > 0) {
+            const a = base + (i - 1) * 3, b = base + i * 3;
+            out.idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2);
+        }
+    }
+    return base;
+}
+/** A thin bone (the wing's leading edge): along +Z, length L. */
+function bone(L, r0, r1, out) {
+    const segs = 5, sides = 6, base = out.pos.length / 3;
+    for (let i = 0; i <= segs; i++) {
+        const t = i / segs, r = r0 + (r1 - r0) * t;
+        for (let j = 0; j < sides; j++) {
+            const a = (j / sides) * Math.PI * 2;
+            out.pos.push(Math.cos(a) * r, Math.sin(a) * r * 0.8, L * t);
+            out.col.push(0.9, 0.88, 0.86);
+        }
+        if (i > 0) for (let j = 0; j < sides; j++) {
+            const a = base + (i - 1) * sides, b = base + i * sides, j1 = (j + 1) % sides;
+            out.idx.push(a + j, b + j, a + j1, a + j1, b + j, b + j1);
+        }
+    }
+    return base;
+}
+/** A matrix putting local +Z along `d` with local +Y towards `n`, at `p`. */
+function frame(p, d, n) {
+    const Z = d.clone().normalize();
+    const Y = n.clone().addScaledVector(Z, -n.dot(Z)).normalize();
+    const X = new THREE.Vector3().crossVectors(Y, Z);
+    return new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(p);
+}
+
+/** The pig wing's shape (right wing, its root at 0; shared). Base = folded, morph 0 = spread, morph 1 = tips up. */
+export const PIG_WING = { ARM: 0.46, HAND: 0.32 };
+function pigWingGeo() {
+    return cached('pigWing', () => {
+        const r = rng(4242);
+        const parts = []; // {build(out) → first vertex, fold, open, flex}
+        const UP = v3(0, 1, 0);
+        // spread: the span along +X, the trailing edge to +Z (back), the top +Y
+        const open = (b, a) => frame(b, v3(Math.sin(a), 0, Math.cos(a)), UP);
+        // folded: the arm along the side going back (a little up), the feathers hanging down and out a bit
+        const S = v3(0, 0.1, 1).normalize(), C = v3(0.42, -1, 0).normalize();
+        const N = new THREE.Vector3().crossVectors(C, S).normalize(); // (the top of the folded wing: towards the body)
+        const Rf = new THREE.Matrix4().makeBasis(S, N, C);
+        const out = N.clone().negate();
+        const Wr = v3(PIG_WING.ARM, 0.01, 0); // the wrist
+        const flex = new THREE.Matrix4().makeTranslation(Wr.x, Wr.y, Wr.z).multiply(new THREE.Matrix4().makeRotationZ(0.6)).multiply(new THREE.Matrix4().makeTranslation(-Wr.x, -Wr.y, -Wr.z));
+        const away = new THREE.Matrix4().makeTranslation(out.x * 0.015, out.y * 0.015, out.z * 0.015); // (folded: just off the skin)
+        const inner = (make, M) => parts.push({ make, open: M, fold: away.clone().multiply(Rf).multiply(M), flex: M });
+        // the arm
+        inner((o) => bone(PIG_WING.ARM, 0.042, 0.03, o), frame(v3(0, 0, 0), v3(1, 0, 0), UP));
+        // secondaries (long, along the arm) and coverts over them
+        for (let i = 0; i < 8; i++) inner((o) => feather(0.27 + 0.07 * Math.min(1, i / 4), 0.085, 0.93 + r() * 0.07, o), open(v3(0.03 + i * 0.059, -0.004, 0.01), 0.04 + i * 0.035));
+        for (let i = 0; i < 7; i++) inner((o) => feather(0.15, 0.075, 0.97 + r() * 0.03, o), open(v3(0.02 + i * 0.066, 0.014, -0.01), 0.08 + i * 0.04));
+        // the hand: its bone, primaries fanning out to the tip, coverts; folded it lies over the arm
+        const fw = Rf.clone().multiply(new THREE.Matrix4().makeTranslation(Wr.x, Wr.y, Wr.z)); // (the folded wrist)
+        const fwP = new THREE.Vector3().setFromMatrixPosition(fw);
+        const fwd = S.clone().negate();
+        const hand = (make, M, foldM) => parts.push({ make, open: M, fold: foldM, flex: flex.clone().multiply(M) });
+        hand((o) => bone(PIG_WING.HAND, 0.03, 0.018, o), frame(Wr, v3(1, 0, 0), UP), frame(fwP.clone().addScaledVector(out, 0.03), fwd, N));
+        const PL = [0.4, 0.44, 0.48, 0.52, 0.54, 0.52, 0.47];
+        for (let j = 0; j < 7; j++) {
+            const bx = j * 0.05, a = 0.4 + j * 0.15;
+            const fold = frame(fwP.clone().addScaledVector(fwd, bx * 0.9).addScaledVector(out, 0.012 * (j + 1)), S.clone().multiplyScalar(0.92).addScaledVector(C, 0.38 - j * 0.03), N);
+            hand((o) => feather(PL[j], 0.082, 0.9 + r() * 0.08, o), open(v3(Wr.x + bx, Wr.y - 0.004, 0.005), a), fold);
+        }
+        for (let j = 0; j < 4; j++) {
+            const bx = j * 0.075;
+            const fold = frame(fwP.clone().addScaledVector(fwd, bx * 0.9).addScaledVector(out, 0.1), S.clone().addScaledVector(C, 0.3), N);
+            hand((o) => feather(0.15, 0.07, 0.97 + r() * 0.03, o), open(v3(Wr.x + bx, Wr.y + 0.014, -0.005), 0.5 + j * 0.15), fold);
+        }
+        // build: base positions folded, morph deltas to spread and to the bent tips
+        const o = { pos: [], col: [], idx: [] };
+        const P = [], N0 = [], dO = [], dON = [], dF = [], dFN = [];
+        const v = new THREE.Vector3(), w = new THREE.Vector3(), q = new THREE.Vector3();
+        for (const pt of parts) {
+            const from = o.pos.length / 3;
+            pt.make(o);
+            const to = o.pos.length / 3;
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(o.pos.slice(from * 3, to * 3), 3));
+            geo.setIndex(o.idx.filter((i) => i >= from && i < to).map((i) => i - from));
+            geo.computeVertexNormals();
+            const lp = geo.getAttribute('position'), ln = geo.getAttribute('normal');
+            const nf = new THREE.Matrix3().getNormalMatrix(pt.fold), no = new THREE.Matrix3().getNormalMatrix(pt.open), nx = new THREE.Matrix3().getNormalMatrix(pt.flex);
+            for (let i = 0; i < lp.count; i++) {
+                v.fromBufferAttribute(lp, i).applyMatrix4(pt.fold);
+                w.fromBufferAttribute(lp, i).applyMatrix4(pt.open);
+                q.fromBufferAttribute(lp, i).applyMatrix4(pt.flex);
+                P.push(v.x, v.y, v.z); dO.push(w.x - v.x, w.y - v.y, w.z - v.z); dF.push(q.x - w.x, q.y - w.y, q.z - w.z);
+                v.fromBufferAttribute(ln, i).applyMatrix3(nf).normalize();
+                w.fromBufferAttribute(ln, i).applyMatrix3(no).normalize();
+                q.fromBufferAttribute(ln, i).applyMatrix3(nx).normalize();
+                N0.push(v.x, v.y, v.z); dON.push(w.x - v.x, w.y - v.y, w.z - v.z); dFN.push(q.x - w.x, q.y - w.y, q.z - w.z);
+            }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+        g.setAttribute('normal', new THREE.Float32BufferAttribute(N0, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(o.col, 3));
+        g.setIndex(o.idx);
+        g.morphAttributes.position = [new THREE.Float32BufferAttribute(dO, 3), new THREE.Float32BufferAttribute(dF, 3)];
+        g.morphAttributes.normal = [new THREE.Float32BufferAttribute(dON, 3), new THREE.Float32BufferAttribute(dFN, 3)];
+        g.morphTargetsRelative = true;
+        g.boundingBox = new THREE.Box3().setFromBufferAttribute(g.getAttribute('position')); // (folded only: the body is measured with its wings folded)
+        g.boundingSphere = new THREE.Sphere(v3(0.4, 0, 0.1), 1.5); // (spread too: never culled while on screen)
+        return g;
+    });
+}
+function wingMat(c) {
+    const k = 'wing' + c;
+    if (!_mats.has(k)) _mats.set(k, new THREE.MeshLambertMaterial({ color: c, vertexColors: true, side: THREE.DoubleSide, morphTargets: true, morphNormals: true }));
+    return _mats.get(k);
+}
+
+function pig(lookC) {
+    const look = pigLook(lookC);
+    const L = PIG_LOOKS[look];
     const g = new THREE.Group();
     g.name = 'pig';
     const legs = [];
-    const pink = 0xfbd0d2; // the belly; the back and sides are a deeper pink (vertex colours)
-    const back = [0.93, 0.74, 0.77];
-    const skin = lamV(pink);
-    const body = mesh(g, cached('pigBody', () => {
+    const back = [0.95, 0.83, 0.84];
+    const skin = pigMat(look);
+    const body = mesh(g, cached('pigBody2', () => {
         const k = keys([
             [0.00, 0.80, 0.62, 0.12],
             [0.07, 0.95, 0.47, 0.29],
@@ -376,28 +621,42 @@ function pig() {
             [0.92, 0.98, 0.47, 0.31],
             [1.00, 0.9, 0.6, 0.18],
         ]);
-        return sweep([v3(0, 0, 0.58), v3(0, 0, -0.56)], (t) => { const [top, bot, w] = k(t); return [w, (top - bot) / 2, (top + bot) / 2]; },
-            { rings: 20, sides: 14, color: bellyShade(back) });
+        const shade = bellyShade(back);
+        return sweep([v3(0, 0, 0.58), v3(0, 0, -0.56)], (t) => { const [top, bot, w] = k(t); return [w, (top - bot) / 2, (top + bot) / 2]; }, {
+            rings: 34, sides: 18, uv: [1, 1],
+            // (not a smooth balloon: heavy hams and shoulders, folds of skin behind the head, small lumps)
+            bump: (t, ang) => 1 + 0.025 * Math.exp(-(((t - 0.2) / 0.1) ** 2)) + 0.02 * Math.exp(-(((t - 0.74) / 0.08) ** 2)) - 0.035 * Math.exp(-(((t - 0.86) / 0.025) ** 2)) - 0.025 * Math.exp(-(((t - 0.915) / 0.02) ** 2)) + 0.01 * Math.sin(t * 37 + ang * 3) * Math.sin(ang * 5 + t * 11),
+            color: (t, ang, p) => {
+                let c = shade(t, ang);
+                const fold = 1 - 0.08 * Math.exp(-(((t - 0.86) / 0.03) ** 2)) - 0.06 * Math.exp(-(((t - 0.915) / 0.025) ** 2));
+                c = [c[0] * fold, c[1] * fold, c[2] * fold];
+                // mud: the belly, the lower sides, splashes on the hams
+                const low = smooth(0.62, 0.42, p.y), hams = smooth(0.2, 0.02, t) * smooth(0.8, 0.55, p.y);
+                return mix(c, MUD, Math.min(0.75, (low * 0.75 + hams * 0.4) * mudAt(p)));
+            },
+        });
     }), skin);
 
     const neck = group(g, 'neck', 0, 0.8, -0.5);
-    // head: a cone-like skull with heavy jowls, down to the snout
+    // head: a cone-like skull with heavy jowls, down to the snout (darker and a bit dirty towards it)
     const head = group(neck, 'head', 0, 0.02, -0.02);
     head.rotation.x = -0.32;
-    mesh(head, cached('pigHead', () => sweep([v3(0, 0, 0.12), v3(0, -0.02, -0.2), v3(0, -0.02, -0.4)], keys([
+    mesh(head, cached('pigHead2', () => sweep([v3(0, 0, 0.12), v3(0, -0.02, -0.2), v3(0, -0.02, -0.4)], keys([
         [0, 0.22, 0.22, -0.02], [0.25, 0.25, 0.24, -0.05], [0.55, 0.18, 0.17, -0.02], [0.85, 0.11, 0.1, 0], [1, 0.1, 0.09, 0],
-    ]), { rings: 12, sides: 12, color: bellyShade(back) })), skin);
-    // the snout: a short round tube ending in a flat disc with two nostrils
-    const snout = mesh(head, cone(0.095, 0.105, 0.1, 14), lam(0xeea5ab), 0, -0.02, -0.44);
+    ]), { rings: 12, sides: 12, uv: [0.45, 0.6], color: (t, ang, p) => mix(mix(bellyShade(back)(t, ang), [0.86, 0.68, 0.68], smooth(0.6, 1, t)), MUD, 0.35 * smooth(0.75, 1, t) * smooth(0.0, -0.12, p.y) * mudAt(p)) })), skin);
+    // the snout: a short round tube ending in a flat disc with two nostrils (duller, a little muddy)
+    const snout = mesh(head, cone(0.095, 0.105, 0.1, 14), lam(0xd9959a), 0, -0.02, -0.44);
     snout.rotation.x = Math.PI / 2;
-    const disc = mesh(head, cone(0.1, 0.1, 0.012, 14), lam(0xe58a94), 0, -0.02, -0.495, false);
+    const disc = mesh(head, cone(0.1, 0.1, 0.012, 14), lam(0xc98186), 0, -0.02, -0.495, false);
     disc.rotation.x = Math.PI / 2;
     for (const s of [1, -1]) {
-        const n = blob(head, lam(0x6b2f38), 0.018, 0.03, 0.01, 0.035 * s, -0.02, -0.5, false);
+        const n = blob(head, lam(0x4e2228), 0.018, 0.03, 0.01, 0.035 * s, -0.02, -0.5, false);
         n.rotation.z = 0.2 * s;
         blob(head, lam(0x1a1212), 0.025, 0.028, 0.02, 0.135 * s, 0.09, -0.2, false); // small eyes
-        // ears: wide flat triangles flopping forward over the eyes
-        const ear = mesh(head, cached('pigEar', () => sweep([v3(0, 0, 0), v3(0, 0.1, -0.02), v3(0, 0.2, -0.02)], keys([[0, 0.07, 0.025], [0.4, 0.1, 0.022], [1, 0.012, 0.012]]), { rings: 6, sides: 6 })), lamV(0xeca0a8), 0.12 * s, 0.17, -0.02);
+        // ears: wide flat triangles flopping forward over the eyes; darker inside, thin veined edges
+        const ear = mesh(head, cached('pigEar2', () => sweep([v3(0, 0, 0), v3(0, 0.1, -0.02), v3(0, 0.2, -0.02)], keys([[0, 0.07, 0.025], [0.4, 0.1, 0.022], [1, 0.012, 0.012]]), {
+            rings: 6, sides: 8, color: (t, ang) => mix([1, 0.97, 0.97], [0.8, 0.58, 0.62], smooth(0.2, -0.8, Math.sin(ang)) * (0.6 + 0.4 * t)),
+        })), lamV(0xe3a0a4), 0.12 * s, 0.17, -0.02);
         ear.rotation.set(-1.75, 0.35 * s, -0.5 * s);
     }
 
@@ -411,15 +670,46 @@ function pig() {
             pts.push(v3(Math.sin(a) * r, 0.03 + Math.cos(a) * r - 0.06 + i * 0.006, 0.02 + i * 0.008));
         }
         return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.016, 5, false);
-    }), lam(0xeea0a8));
+    }), lam(0xd8989c));
 
+    // legs: mud up to the knees, darker hooves
     const up = [[0, 0.13, 0.15], [0.5, 0.1, 0.12], [1, 0.065, 0.075]];
     const low = [[0, 0.065, 0.075], [0.7, 0.055, 0.062], [1, 0.06, 0.065]];
+    const paint = {
+        uv: [0.3, 0.25],
+        up: (t, ang, p) => mix(bellyShade(back)(0, ang), MUD, 0.3 * smooth(-0.12, -0.26, p.y) * mudAt(p)),
+        lo: (t, ang, p) => mix([0.96, 0.88, 0.88], MUD, Math.min(0.9, (0.25 + 0.75 * smooth(-0.04, -0.2, p.y)) * (0.6 + 0.4 * mudAt(p)))),
+    };
     for (const [x, z, front] of [[0.2, -0.33, true], [-0.2, -0.33, true], [0.2, 0.36, false], [-0.2, 0.36, false]]) {
         const name = (front ? 'front' : 'hind') + (x > 0 ? 'Right' : 'Left') + 'Leg';
-        leg(g, legs, name, x, 0.5, z, front, 'pig' + (front ? 'F' : 'H'), [front ? 0 : 0.04, 0.25, up], [front ? 0 : -0.03, 0.25, low], [0.06, 0.07, 0x5a3a36], lam(0xeba3aa));
+        leg(g, legs, name, x, 0.5, z, front, 'pig2' + (front ? 'F' : 'H'), [front ? 0 : 0.04, 0.25, up], [front ? 0 : -0.03, 0.25, low], [0.06, 0.07, 0x4a3430], skin, skin, paint);
     }
-    return finish(g, { body, neck, head, tail, legs });
+
+    // wings: on the shoulders, folded along the sides (the left one is the right one mirrored)
+    const wings = [];
+    for (const s of [1, -1]) {
+        const w = group(g, s > 0 ? 'wingRight' : 'wingLeft', 0.33 * s, 0.95, -0.3);
+        w.scale.x = s;
+        w.userData.side = s;
+        const m = mesh(w, pigWingGeo(), wingMat(L.feather));
+        m.name = 'wing';
+        w.userData.mesh = m;
+        wings.push(w);
+    }
+    return finish(g, { body, neck, head, tail, legs, wings, look });
+}
+
+/**
+ * The pig's wings: open 0 (folded along the sides) … 1 (spread), flap — the up / down angle
+ * of a spread wing (rad, + up), flex — the tips bent up (+) or down (−).
+ */
+export function animateWings(model, open, flap = 0, flex = 0) {
+    for (const w of model.userData.wings || []) {
+        const m = w.userData.mesh;
+        if (m.morphTargetInfluences) { m.morphTargetInfluences[0] = open; m.morphTargetInfluences[1] = flex * open; }
+        w.rotation.z = flap * open * w.userData.side;
+        w.rotation.y = -0.12 * Math.sin(flap * 2) * open * w.userData.side; // (a little forward on the downstroke)
+    }
 }
 
 // ================================================================== cow
@@ -555,7 +845,7 @@ function sheep() {
 export function animalModel(type, color) {
     if (type === 'runbook') return runningBookModel(color ?? undefined); // (the rare running book)
     if (type === 'cow') return cow();
-    if (type === 'pig') return pig();
+    if (type === 'pig') return pig(color); // (color: the look, 1…4)
     if (type === 'sheep') return sheep();
     return horse(color);
 }

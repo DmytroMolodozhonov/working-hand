@@ -225,12 +225,13 @@ export class SoundManager {
         v.play();
     }
 
-    _playAt(buffer, position, volume = 1, refDistance = 5) {
+    _playAt(buffer, position, volume = 1, refDistance = 5, rate = 1) {
         if (!this.enabled || !buffer || !this.posVoices.length) return;
         const v = this.posVoices[this._posIdx];
         this._posIdx = (this._posIdx + 1) % this.posVoices.length;
         if (v.isPlaying) v.stop();
         v.setBuffer(buffer);
+        v.setPlaybackRate(rate);
         v.setRefDistance(refDistance);
         v.setVolume(volume * this.globalVolume);
         v.position.copy(position);
@@ -532,6 +533,37 @@ export class SoundManager {
             const env = Math.sin(Math.PI * Math.min(1, t / 0.6)) ** 2;
             lp += ((Math.random() * 2 - 1) - lp) * (0.05 + 0.3 * t);
             d[i] = lp * env * 1.8 + Math.sin(2 * Math.PI * (180 + 500 * t) * t) * env * 0.15;
+        }
+        return buf;
+    }
+
+    /** A pig's oink at a place (rate > 1: a squeal); far off it is faint (refDistance). */
+    playOink(position, volume = 1, refDistance = 6, rate = 1) {
+        if (!this.enabled || !this.loaded) return;
+        if (!this.sounds.oink) this.sounds.oink = [this._synthOink(0), this._synthOink(1)];
+        this._playAt(this.sounds.oink[Math.floor(Math.random() * 2)], position, volume, refDistance, rate);
+    }
+
+    /** A nasal grunt: a buzzing low voice through the snout, two or three short pulses. */
+    _synthOink(kind) {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, dur = kind ? 0.42 : 0.3, len = Math.floor(sr * dur);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        let ph = 0, lp = 0, bp1 = 0, bp2 = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const pulses = kind ? Math.max(0, Math.sin(Math.PI * t / 0.14)) : Math.max(0, Math.sin(Math.PI * t / 0.15));
+            const env = Math.min(1, t * 40) * Math.exp(-t * 3) * (0.4 + 0.6 * pulses);
+            const f0 = (kind ? 150 : 125) - 50 * t / dur;
+            ph += f0 / sr;
+            const buzz = (ph % 1) < 0.3 ? 1 : -0.4; // (a rough pulse: the voice)
+            const noise = Math.random() * 2 - 1;
+            // two crude resonances (the snout) by one-pole filters
+            bp1 += (buzz - bp1) * 0.12;
+            bp2 += (buzz + noise * 0.4 - bp2) * 0.35;
+            lp += ((bp1 * 0.7 + (bp2 - bp1) * 0.5) - lp) * 0.5;
+            d[i] = lp * env * 0.7;
         }
         return buf;
     }
