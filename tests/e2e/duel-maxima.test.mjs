@@ -115,6 +115,8 @@ test('duel «Максима»: the guest shouts it in a clash — −5 mana, the
     const said = await ev(guest.page, () => window.__zns.game.castLocalSpell('максима', true));
     const m1 = await ev(guest.page, () => window.__zns.game.combat.fatigue);
     const pulse = await ev(guest.page, () => !!window.__zns.game.duel.clashes[0]?.pulse);
+    // (the shout's own price is checked above; give the 5 mana back so only its push is measured)
+    await ev(guest.page, (m) => { window.__zns.game.combat.fatigue = m; }, m0);
     await wf(host.page, (k) => { const c = window.__zns.game.duel.clashes[0]; return c && (c[k] || 0) === 1; }, guestIsB ? 'boostB' : 'boostA', 10000);
     const s2 = await sample();
     await sleep(1500);
@@ -127,7 +129,7 @@ test('duel «Максима»: the guest shouts it in a clash — −5 mana, the
     assert.ok(m0 - m1 >= 4.9, `−5 mana at once (${m0.toFixed(1)} → ${m1.toFixed(1)})`);
     assert.ok(pulse, 'the meeting point pulses');
     assert.ok(hostHeard, 'the host counted it');
-    assert.ok(after > before + 0.015, `the meeting point goes to the host faster (${before.toFixed(3)} → ${after.toFixed(3)} a second)`);
+    assert.ok(after > before + 0.03, `the meeting point goes to the host faster (${before.toFixed(3)} → ${after.toFixed(3)} a second)`);
     assert.equal(again, null, 'not again within 3 s');
     for (const p of [host, guest]) assert.deepEqual(realErrors(p.errors), [], 'no errors');
     await host.context.close();
