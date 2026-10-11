@@ -304,6 +304,55 @@ export class SoundManager {
         this._play(this._clangBuf, 0.45 + 0.6 * Math.min(1, power), 0.85 + Math.random() * 0.35);
     }
 
+    /** A bow being drawn: a short creak of wood and string (made here). `k` 0..1: how hard. */
+    playBowDraw(k = 0.5) {
+        if (!this.enabled) return;
+        if (!this._creakBuf) {
+            const ctx = this.context;
+            if (!ctx) return;
+            const rate = ctx.sampleRate, len = Math.floor(rate * 0.35);
+            const buf = ctx.createBuffer(1, len, rate);
+            const d = buf.getChannelData(0);
+            let seed = 11, lp = 0;
+            const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+            for (let i = 0; i < len; i++) {
+                const t = i / rate;
+                // stick-slip: little clicks ~70 a second, rising, filtered dull
+                const click = Math.max(0, Math.sin(2 * Math.PI * (60 + 40 * t) * t)) ** 12;
+                lp += (rnd() * click - lp) * 0.18;
+                d[i] = lp * 3 * Math.min(1, t / 0.03) * Math.min(1, (0.35 - t) / 0.08);
+            }
+            this._creakBuf = buf;
+        }
+        this._play(this._creakBuf, 0.25 + 0.35 * Math.min(1, k), 0.9 + 0.2 * k);
+    }
+
+    /** A bow's string let go: a low twang and the thump of the arrow leaving (made here). `power` 0..1. */
+    playBowRelease(power = 1) {
+        if (!this.enabled) return;
+        if (!this._twangBuf) {
+            const ctx = this.context;
+            if (!ctx) return;
+            const rate = ctx.sampleRate, len = Math.floor(rate * 0.6);
+            const buf = ctx.createBuffer(1, len, rate);
+            const d = buf.getChannelData(0);
+            // a plucked string (Karplus–Strong) ~120 Hz
+            const N = Math.round(rate / 120), ring = new Float32Array(N);
+            let seed = 5;
+            const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+            for (let i = 0; i < N; i++) ring[i] = rnd();
+            for (let i = 0, j = 0; i < len; i++, j = (j + 1) % N) {
+                const nx = (j + 1) % N;
+                const v = ring[j];
+                ring[j] = 0.497 * (ring[j] + ring[nx]);
+                const t = i / rate;
+                d[i] = Math.tanh((v * 0.7 + rnd() * Math.exp(-t / 0.01) * 0.6) * 1.3) * 0.8;
+            }
+            this._twangBuf = buf;
+        }
+        this._play(this._twangBuf, 0.35 + 0.6 * Math.min(1, power), 0.95 + Math.random() * 0.1);
+    }
+
     playFrozenHit() {
         if (this.sounds.shatter) this._play(this.sounds.shatter, 1.2);
         else this.playHit();

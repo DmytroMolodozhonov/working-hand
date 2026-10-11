@@ -67,8 +67,9 @@ test('bow and shields: big enough, held through a shaky camera, shooting (creati
         z.group.position.y = bowM.position.y - 1.0; // (the arrow flies at its chest)
         const hp0 = z.hp;
         const orig = ch.getHandWorldPosition.bind(ch);
-        const origCurl = ch.getGripCurl.bind(ch);
+        const origCurl = ch.getGripCurl.bind(ch), origSeen = ch.isHandTracked.bind(ch);
         let pull = 0, curl = 1;
+        ch.isHandTracked = () => true; // (no new pictures meanwhile: the hand is still seen)
         ch.getHandWorldPosition = (side, out = new T.Vector3()) => (side === 'right' ? out.copy(bowM.position).addScaledVector(fwd, -0.3 - pull) : orig(side, out));
         ch.getGripCurl = (side) => (side === 'right' ? curl : origCurl(side));
         await frames(4);
@@ -82,6 +83,7 @@ test('bow and shields: big enough, held through a shaky camera, shooting (creati
         while (z.hp >= hp0 && !z.isDead && performance.now() - t0 < 8000) await frames(2);
         ch.getHandWorldPosition = orig;
         ch.getGripCurl = origCurl;
+        ch.isHandTracked = origSeen;
         return { nocked, drawn, flew, hit: z.isDead || z.hp < hp0, arrowsLeft: g.items.held.left?.item.arrows };
     });
     assert.ok(shot.nocked, 'the hand at the bow puts an arrow on the string');

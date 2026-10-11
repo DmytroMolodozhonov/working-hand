@@ -238,6 +238,7 @@ export class NetSync {
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
                 sh: g.ships?.myNet(), // (standing on a ship: my place on its deck)
                 bd: g.boards?.netMine(), // (the surfboard I carry or ride)
+                bw: g.gear?.netBow(), // (an arrow on my bow's string, and how far it is drawn)
             }, true);
         }
         // Water ball in my hand

@@ -6,12 +6,17 @@
  * one); a magic shield has its own strength (20–50, comes back by itself)
  * and breaks only when it is nearly spent and a strong spell hits.
  *
- * Bow (in one hand): reach over the shoulder behind your back with the
- * other hand — an arrow appears in it (from the quiver); bring it to the
- * bow, pull the hand back (the further, the stronger), then let go — a quick
- * move of the hand forward. The arrow flies along the bow, where the bow arm
- * points (shoulder → bow hand); the bow turns to it. The arrow rests on top of
- * the bow fist and the drawing fingers hold the string at its nock.
+ * Bow (in one hand): bring the other hand to the bow (or reach over the
+ * shoulder for the quiver and bring the arrow to the bow) — an arrow is on the
+ * string. Close the fingers on the string at the bow and draw the hand back to
+ * the chin: the string and the arrow follow the hand all the way (BowDraw.js);
+ * open the fingers — the arrow flies, as strong as it was drawn. The hand
+ * brought forward again lets the string down without a shot. Fully drawn, a
+ * faint line of dots shows where the arrow will fly. The arrow flies along the
+ * bow, where the bow arm points (shoulder → bow hand); the bow turns to it. The
+ * arrow rests on top of the bow fist and the drawing fingers hold the string at
+ * its nock. Everybody sees a drawn bow (netBow). Creative: the quiver never
+ * runs out.
  *
  * Thor's hammer: only in a thunderstorm. Raise it above the head — lightning
  * strikes it; then aim it at a creature for up to 5 s (like «Lightning
@@ -26,6 +31,7 @@ import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
 import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
+import { BowDraw, drawProgress } from './BowDraw.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -37,6 +43,7 @@ const _bu = new THREE.Vector3();
 const _fw = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const STRONG = 15; // spells costing this much break a plain shield
+const HINT_NOCKED = '🏹 Стрела на тетиве — сожмите пальцы на тетиве и отведите руку к подбородку, разожмите — выстрел';
 
 /** The arrow rests on top of the bow fist: this far above the grip's middle (bow-local units). */
 export const ARROW_REST = 0.1;
@@ -179,21 +186,21 @@ export class Gear {
         const local = hand.clone().applyMatrix4(_inv);
         const bowPos = bow.model.position;
         const has = this._endless() || it.arrows > 0;
+        // where the drawing hand is on its way from the bow to the chin (see BowDraw)
+        const way = drawProgress(this._picBow(bow.side, other), hand.distanceTo(bowPos));
         // 1) an arrow: from the quiver (the hand over the shoulder) or simply by
         //    bringing the other hand to the bow — it is on the string at once
         if (!this.nock) {
             if (held) held.aim = null;
             const quiver = local.y > 0.9 && local.z > 0.1;
-            // (at the bow: in 3D, or — the camera hardly sees depth — the wrists together in the picture)
-            const pic = this._picApart(bow.side, other);
-            const atBow = hand.distanceTo(bowPos) < 1.0 || (pic != null && pic < 0.6);
+            const atBow = way.near;
             if (quiver || atBow) {
                 if (!has) { if (!this._noArrowsSaid) { this._noArrowsSaid = true; g.hud.setVoice('🏹 Стрел больше нет — найдите стрелы', true); } return; }
                 this._noArrowsSaid = false;
                 const model = arrowModel();
                 g.scene.add(model);
-                this.nock = { side: other, model, state: atBow ? 'nocked' : 'hand', draw: 0, peak: 0, open: 0, t: 0 };
-                g.hud.setVoice(atBow ? '🏹 Стрела на тетиве — отведите руку назад и отпустите' : '🏹 Стрела в руке — поднесите её к луку', true);
+                this.nock = { side: other, model, state: atBow ? 'nocked' : 'hand', draw: 0, t: 0, string: new BowDraw() };
+                g.hud.setVoice(atBow ? HINT_NOCKED : '🏹 Стрела в руке — поднесите её к луку', true);
             }
             this._bowString(bow);
             return;
@@ -203,43 +210,139 @@ export class Gear {
         if (n.state === 'hand') {
             n.model.position.copy(hand);
             n.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), _v2.subVectors(bowPos, hand).normalize());
-            const pic = this._picApart(bow.side, other);
-            if (hand.distanceTo(bowPos) < 1.0 || (pic != null && pic < 0.6)) { n.state = 'nocked'; n.t = 0; g.hud.setVoice('🏹 Натяните тетиву — отведите руку назад, потом отпустите', true); }
+            if (way.near) { n.state = 'nocked'; n.t = 0; g.hud.setVoice(HINT_NOCKED, true); }
             return;
         }
-        // 2) drawn: the further the hand from the bow, the stronger (an arm's length — full)
-        // (the picture too: the hands apart by shoulder widths, whatever the camera guesses of depth)
-        const dist = hand.distanceTo(bowPos);
-        const pic = this._picApart(bow.side, other);
-        n.draw = Math.max(0, Math.min(1, Math.max((dist - 0.6) / 1.3, pic == null ? 0 : (pic - 0.25) / 0.75)));
-        n.peak = Math.max(n.peak * 0.985, n.draw);
+        // 2) the fingers on the string: it follows the hand back to the chin (see BowDraw)
+        const tracked = ch.isHandTracked ? ch.isHandTracked(other) : true;
+        const curl = tracked ? (ch.getGripCurl ? ch.getGripCurl(other) : 1) : null;
+        const was = n.draw;
+        const ev = n.string.step({ progress: way.progress, near: way.near, take: way.take, curl }, dt);
+        n.draw = n.string.draw;
+        if (ev?.type === 'take') g.sound?.playBowDraw?.(0.5);
+        if (was < 0.9 && n.draw >= 0.9) g.sound?.playBowDraw?.(1);
         // the arrow goes along the bow arm (shoulder → bow hand), refined by the drawing hand
         // only when it agrees — never along the hands' sideways line (see bowAim)
         const shoulder = (bow.side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_v4);
         const yaw = ch.group.rotation.y;
         const fwd = _fw.set(-Math.sin(yaw), 0, -Math.cos(yaw));
-        const dir = bowAim(shoulder, ch.getHandWorldPosition(bow.side, _v5), bowPos, hand, _v3, fwd);
+        const dir = bowAim(shoulder, ch.getHandWorldPosition(bow.side, _v5), bowPos, n.string.held ? hand : bowPos, _v3, fwd);
         // the bow turns to where the arrow goes; the string follows the drawing fingers back
         // (a «V» from the tips), the arrow lies on top of the bow fist with its nock on the string
         if (held) held.aim = dir.clone();
         const S = bow.model.userData.bowString;
         const sc = bow.model.scale.x;
-        const pull = Math.min(dist, S ? S.R * 1.1 * sc : 1.5);
+        const pull = n.draw * (S ? S.R * 1.1 * sc : 1.2);
         if (S) setBowString(bow.model, S.tipX - pull / sc, ARROW_REST, n.draw);
         const nock = arrowOnBow(bowPos, dir, sc, S ? S.tipX : 0, pull, fwd, n.rest || (n.rest = new THREE.Vector3()), n.at || (n.at = new THREE.Vector3()));
         const half = 0.4 * ARROW_SCALE;
         n.model.position.copy(nock).addScaledVector(dir, half);
         n.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), dir);
-        // 3) let go: the fingers open, or the hand jumps forward, or the draw collapses fast
-        const curl = ch.getGripCurl ? ch.getGripCurl(other) : 1;
-        if (curl > 0.55) n.closed = true; // (the fingers held the string)
-        n.open = n.closed && curl < 0.3 ? n.open + dt : 0;
-        const v = ch.handVelocity[other];
-        if (n.peak > 0.25 && n.t > 0.25 && (n.open > 0.1 || v.dot(dir) > 4 || n.draw < n.peak - 0.4)) {
-            this._shoot(bow, n.peak, dir.clone());
+        // 3) the fingers open: the arrow flies, as strong as it was drawn (hardly drawn: the string just goes back)
+        if (ev?.type === 'shoot') {
+            this._shoot(bow, ev.power, dir.clone());
             if (held) held.aim = null;
             return;
         }
+        if (ev?.type === 'letdown') g.hud.setVoice('🏹 Тетива отпущена без выстрела', true);
+        this._aimLine(n.string.held ? n.draw : 0, n.rest, dir);
+    }
+
+    /** My drawn bow for the others: [the bow hand (0 right, 1 left), how far drawn] or undefined. */
+    netBow() {
+        const n = this.nock, bow = n && this.game.items?.heldOf('bow');
+        if (!bow || n.state !== 'nocked') return undefined;
+        return [bow.side === 'left' ? 1 : 0, Math.round(n.draw * 100) / 100];
+    }
+
+    /**
+     * Other players' bows: an arrow on the string, the bow turned along the bow arm and
+     * the string drawn as far as they draw it (their own computer says how far).
+     */
+    _updateRemoteBows(dt) {
+        const g = this.game;
+        const rb = this._rbows || (this._rbows = new Map()); // id -> {model (the arrow), bow}
+        for (const [id, r] of g.remotes || []) {
+            const bw = r.target?.bw;
+            const cur = g.items?.remoteHeld?.get(id);
+            const side = Array.isArray(bw) ? (bw[0] ? 'left' : 'right') : null;
+            const h = side && cur?.[side];
+            let e = rb.get(id);
+            if (!h || h.item.kind !== 'bow' || r.dead) {
+                if (e) { if (e.bow.model) setBowString(e.bow.model, null); g.scene.remove(e.model); disposeModel(e.model); rb.delete(id); }
+                continue;
+            }
+            if (!e || e.bow !== h) {
+                if (e) { g.scene.remove(e.model); disposeModel(e.model); }
+                e = { model: arrowModel(), bow: h, draw: 0, rest: new THREE.Vector3(), at: new THREE.Vector3() };
+                g.scene.add(e.model);
+                rb.set(id, e);
+            }
+            // (smoothly between their messages)
+            const want = Math.max(0, Math.min(1, +bw[1] || 0));
+            e.draw += (want - e.draw) * Math.min(1, dt * 12);
+            const ch = r.character;
+            const shoulder = (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_v4);
+            const yaw = ch.group.rotation.y;
+            const fwd = _fw.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+            const dir = bowAim(shoulder, ch.getHandWorldPosition(side, _v5), h.model.position, h.model.position, _v3, fwd);
+            const up = _v2.set(0, 1, 0).addScaledVector(dir, -dir.y);
+            if (up.lengthSq() < 1e-3) up.copy(fwd); else up.normalize();
+            h.model.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(dir, up, _v.crossVectors(dir, up)));
+            const S = h.model.userData.bowString, sc = h.model.scale.x;
+            const pull = e.draw * (S ? S.R * 1.1 * sc : 1.2);
+            if (S) setBowString(h.model, S.tipX - pull / sc, ARROW_REST, e.draw);
+            const nock = arrowOnBow(h.model.position, dir, sc, S ? S.tipX : 0, pull, fwd, e.rest, e.at);
+            e.model.position.copy(nock).addScaledVector(dir, 0.4 * ARROW_SCALE);
+            e.model.quaternion.setFromUnitVectors(_v.set(0, 1, 0), dir);
+        }
+        for (const [id, e] of rb) if (!g.remotes?.has(id)) { g.scene.remove(e.model); disposeModel(e.model); rb.delete(id); }
+    }
+
+    /**
+     * The drawing hand and the bow in the camera's picture (x times the picture's aspect,
+     * so distances are true), with the anchor just under the mouth; null: not seen.
+     */
+    _picBow(bowSide, other) {
+        const p = this.game.currentPose;
+        const wb = p?.[bowSide + 'Wrist'], wh = p?.[other + 'Wrist'], sl = p?.leftShoulder, sr = p?.rightShoulder;
+        if (!wb || !wh || !sl || !sr) return null;
+        const a = p.aspect || 4 / 3;
+        const sw = Math.hypot((sl.x - sr.x) * a, sl.y - sr.y);
+        const m = p.mouth || (p.nose ? { x: p.nose.x, y: p.nose.y + 0.25 * sw } : null);
+        return {
+            hand: { x: wh.x * a, y: wh.y }, bow: { x: wb.x * a, y: wb.y }, sw,
+            anchor: m ? { x: m.x * a, y: m.y + 0.15 * sw } : null,
+        };
+    }
+
+    /**
+     * A faint line of dots where the arrow will fly — only while the bow is fully drawn
+     * (the same flight as the arrow's: its speed, its fall).
+     */
+    _aimLine(draw, rest, dir) {
+        const k = Math.max(0, Math.min(1, (draw - 0.85) / 0.12));
+        let L = this._sight;
+        if (!k) { if (L) L.visible = false; return; }
+        const N = 18;
+        if (!L) {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+            L = this._sight = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xfff4d6, size: 0.07, transparent: true, opacity: 0, depthWrite: false }));
+            L.frustumCulled = false;
+            this.game.scene.add(L);
+        }
+        L.visible = true;
+        L.material.opacity = 0.35 * k;
+        const arr = L.geometry.attributes.position.array;
+        const speed = 22 + draw * 58;
+        for (let i = 0; i < N; i++) {
+            const t = (0.03 + i * 0.022); // (s of flight: ~2 … 30 m ahead)
+            arr[i * 3] = rest.x + dir.x * (0.8 + speed * t);
+            arr[i * 3 + 1] = rest.y + dir.y * (0.8 + speed * t) - 4.9 * t * t;
+            arr[i * 3 + 2] = rest.z + dir.z * (0.8 + speed * t);
+        }
+        L.geometry.attributes.position.needsUpdate = true;
     }
 
     _bowString(bow) { setBowString(bow.model, null); } // (at rest: straight)
@@ -254,7 +357,7 @@ export class Gear {
     _updateDrawHand(dt) {
         const h = this._hold || (this._hold = { side: null, w: 0, at: new THREE.Vector3() });
         const n = this.nock;
-        if (n && n.state === 'nocked' && n.at && !this.game.combat?.dead) {
+        if (n && n.state === 'nocked' && n.string?.held && n.at && !this.game.combat?.dead) {
             if (h.side !== n.side) h.w = 0;
             h.side = n.side;
             h.at.copy(n.at);
@@ -317,7 +420,7 @@ export class Gear {
         const dmg = (2 + draw * 7) * (it.magic ? 1 + (it.bonus || 0) / 100 : 1);
         this.fire(from, dir.multiplyScalar(speed), dmg, g.localId);
         if (g.sync) g.sync.arrow?.(from, dir, dmg);
-        g.sound?.playWhoosh?.();
+        g.sound?.playBowRelease?.(draw);
         g.hud.setVoice(`🏹 Выстрел! (сила ${Math.round(draw * 100)}%${this._endless() ? '' : `, стрел: ${it.arrows}`})`, true);
     }
 
@@ -455,13 +558,18 @@ export class Gear {
             this._updateBow(dt);
             this._updateHammer(dt);
         }
+        if (this._sight && !this.nock?.string?.held) this._sight.visible = false;
         this._updateDrawHand(dt);
+        this._updateRemoteBows(dt);
         this._updateArrows(dt);
         this._updateWeather(dt);
     }
 
     dispose() {
         this._dropNock();
+        for (const e of this._rbows?.values() || []) { this.game.scene.remove(e.model); disposeModel(e.model); }
+        this._rbows?.clear();
+        if (this._sight) { this.game.scene.remove(this._sight); this._sight.geometry.dispose(); this._sight.material.dispose(); this._sight = null; }
         for (const a of this.arrows) { a.model.parent?.remove(a.model); disposeModel(a.model); }
         this.arrows.length = 0;
     }

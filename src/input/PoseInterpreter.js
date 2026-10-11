@@ -214,6 +214,7 @@ export class PoseInterpreter {
             data.leftShoulder = P(11); data.leftElbow = P(13); data.leftWrist = P(15);
             data.rightShoulder = P(12); data.rightElbow = P(14); data.rightWrist = P(16);
             data.nose = P(0);
+            data.mouth = { x: (lm[9].x + lm[10].x) / 2, y: (lm[9].y + lm[10].y) / 2, z: 0 }; // (a bow's anchor is just under it)
             data.armLift = this._armLift(lm);
             data.pocket = {
                 left: pocketPose(lm, results.leftHandLandmarks, 'left', data.aspect),
