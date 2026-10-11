@@ -75,3 +75,12 @@ test('eating: the hand brought to the mouth is seen in the picture; a hand in fr
     const down = frame({ arms: 'hang', rightCurl: 0.8 });
     assert.equal(handAtMouth(down.poseLandmarks, hands(down, 'Left'), 'right'), false, 'arm hanging');
 });
+
+test('pocket: lowering a hand that holds a thing (the elbow a little bent, the wrist beside the thigh, the fist down) does not put it away', () => {
+    // the wrist at the hip height but beside the thigh, the elbow relaxed (~15–25°)
+    const lEl = [0.64, 0.6], lWr = [0.655, 0.8];
+    const p = person({ lEl, lWr, rEl: mirror(lEl), rWr: mirror(lWr) });
+    assert.equal(pocketPose(p, null, 'left'), false, 'hand unseen at the side');
+    assert.equal(pocketPose(p, handAt(lWr, 0), 'left'), false, 'a fist pointing down at the side');
+    assert.equal(pocketPose(p, null, 'right'), false);
+});

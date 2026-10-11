@@ -297,11 +297,13 @@ export class Inventory {
     pocketRight() {
         const g = this.game;
         if (g.boards?.hold) { g.hud.toast?.('🏄 Доска слишком большая для кармана'); return; }
+        // a sword, an axe, a hammer, a bow, a shield never go into a pocket: only on the back (over the shoulder)
         for (const side of ['right', 'left']) {
             const w = g.weapons.hands[side].held;
-            if (w) {
-                if (this.inHand?.weapon === w) this.inHand = null;
-                if (this._storeWeapon(w)) { this._fx('🎒 ' + (w.type === 'axe' ? 'Топор' : 'Меч') + ' в ячейке'); this.selected = -1; this._render(); }
+            const h = g.items?.held[side];
+            if (w || (h && BACK_KINDS.has(h.item.kind))) {
+                const name = w ? (w.type === 'axe' ? 'Топор' : 'Меч') : ITEM_INFO[h.item.kind]?.name || 'Это';
+                g.hud.toast?.(`${name} не влезет в карман — заведите руку с ним за плечо, чтобы убрать за спину`, 1800);
                 return;
             }
         }

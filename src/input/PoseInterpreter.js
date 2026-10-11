@@ -38,13 +38,15 @@ export function pocketPose(lm, hand, side, aspect = 4 / 3, hipSide = side) {
     const out = hipSide === 'left' ? 1 : -1; // (the person's left is the picture's right)
     const dy = (wr.y - hip.y) / T;
     const dxOut = ((wr.x - hip.x) * out * aspect) / T;
-    if (dy < -0.3 || dy > 0.25 || dxOut < -0.25 || dxOut > 0.3) return false;
+    // (the wrist in FRONT of the hip, where the pocket is — not beside the thigh, where a lowered
+    // arm with a thing in the hand hangs: lowering a hand never puts what it holds away)
+    if (dy < -0.3 || dy > 0.25 || dxOut < -0.25 || dxOut > 0.18) return false;
     // the elbow bent (the upper arm and the forearm in the picture)
     const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
     const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
     if (nu < 1e-4 || nf < 1e-4) return false;
     const bend = Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf))));
-    if (bend < 0.35) return false; // (~20°: a straight, hanging arm)
+    if (bend < 0.5) return false; // (~30°: a straight or relaxed hanging arm — a hand going into a pocket bends the elbow)
     // the hand: gone into the pocket, or its fingers pointing down
     if (!hand || hand.length < 21) return true;
     const dxh = (hand[9].x - hand[0].x) * aspect, dyh = hand[9].y - hand[0].y;
