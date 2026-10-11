@@ -11,6 +11,7 @@ API:
   GET    /api/rig             — настройки рига рук
   POST   /api/rig             — сохранить настройки рига рук
   GET    /api/version         — дата версии игры (видна в меню)
+  GET    /api/update          — есть ли на GitHub версия новее (только при запуске через запускатор)
   GET    /api/logs            — журналы игры (настройки → «Журнал»)
   GET    /api/alive           — окно игры открыто, пока держит эту строку (запускатор)
   POST   /api/perflog         — строка дневника производительности → zns-perf.log
@@ -25,6 +26,7 @@ import mimetypes
 import os
 import shutil
 import time
+import urllib.request
 import socketserver
 import sys
 import threading
@@ -102,6 +104,32 @@ def game_version():
             pass
     date = time.strftime("%d.%m.%Y %H:%M", time.localtime(newest)) if newest else ""
     return {"date": date, "sha": sha[:7]}
+
+
+_LATEST = {"sha": "", "at": 0.0}
+
+
+def latest_version():
+    """The newest version's commit id on GitHub (7 letters, '' if unknown), checked at most every 10 min.
+    Only when the launcher started the game: it downloads a new version on the next start."""
+    if not os.environ.get("ZNS_LAUNCHER"):
+        return ""
+    if time.time() - _LATEST["at"] < 600:
+        return _LATEST["sha"]
+    _LATEST["at"] = time.time()
+    try:
+        req = urllib.request.Request("https://github.com/DmytroMolodozhonov/working-hand/info/refs?service=git-upload-pack",
+                                     headers={"User-Agent": "Volshebstvo"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            text = r.read().decode("utf-8", "replace")
+        for line in text.splitlines():
+            if line.rstrip().endswith(" refs/heads/main-fbxy0j"):
+                sha = line.split(" ")[0][-40:]
+                _LATEST["sha"] = sha[:7]
+                break
+    except Exception:  # noqa: BLE001  (no internet: nothing to say)
+        pass
+    return _LATEST["sha"]
 
 
 def update_desktop_launcher():
@@ -324,6 +352,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_stream(urlparse(self.path).query)
         if path == "/api/version":
             return self._json(200, game_version())
+        if path == "/api/update":
+            return self._json(200, {"have": game_version()["sha"], "latest": latest_version()})
         if path == "/api/logs":
             return self._json(200, {"logs": read_logs(), "launcher": bool(os.environ.get("ZNS_LAUNCHER"))})
         if path == "/api/alive":

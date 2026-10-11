@@ -345,6 +345,11 @@ fetch('/api/version').then((r) => r.json()).then((v) => {
     if (!v || !v.date) return;
     const el = $('game-version-top');
     if (el) el.innerHTML = `Версия от <b>${v.date}</b>` + (v.sha ? ` <span class="ver-sha">(${v.sha})</span>` : '');
+    // a newer version is out (the launcher downloads it on the next start): say so
+    fetch('/api/update').then((r) => r.json()).then((u) => {
+        if (!el || !u?.latest || !u.have || u.latest === u.have) return;
+        el.insertAdjacentHTML('beforeend', '<div class="ver-new">✨ Вышла новая версия игры — закройте окно игры, подождите полминуты и откройте снова значком: она скачается сама.</div>');
+    }).catch(() => {});
 }).catch(() => {});
 
 // ------------------------------------------------------------------ voice

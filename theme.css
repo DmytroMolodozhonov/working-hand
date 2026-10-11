@@ -290,6 +290,7 @@ button, input, select, textarea { font-family: inherit; }
 #saved-worlds { padding: 12px 14px; }
 .world-row { border-top-color: var(--ui-border); }
 .world-row:first-child { border-top: none; }
+.ver-new { margin: 6px auto 0; max-width: 560px; color: var(--ui-gold); font-weight: 700; }
 .world-name { color: var(--ui-text); }
 .world-meta { color: var(--ui-muted); }
 
