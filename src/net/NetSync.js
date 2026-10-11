@@ -360,6 +360,11 @@ export class NetSync {
         this.net.send({ t: 'hit', id: z.id, dmg, dir: [r3(dir.x), r3(dir.y), r3(dir.z)], w: isWeapon ? 1 : 0, h: hit ? [r3(hit.y), hit.side, r3(hit.speed)] : null });
     }
 
+    /** My microphone heard me say a spell: the others are told at once (my voice from their speakers is not theirs). */
+    say(name) {
+        this.net.send({ t: 'say', by: this.me, name }, true);
+    }
+
     spell(name, origin, dir, side) {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
     }
@@ -700,6 +705,7 @@ export class NetSync {
                 g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)
                 g.spells.stopBy(m.by);
                 break;
+            case 'say': if (m.by !== this.me && typeof m.name === 'string') g.voiceGate?.noteRemote(m.name, performance.now()); break;
             case 'spell': {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.name, performance.now()); // (my microphone may hear their voice)

@@ -18,6 +18,7 @@ import { renderSpellsTab, renderItemsTab, renderMechanicsTab } from './ui/Codex.
 import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
+import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio } from './ui/PauseAudio.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/WindowControls.js';
@@ -384,7 +385,15 @@ voiceToggleBtn?.addEventListener('click', () => {
     }
 });
 
-voice.onResult = (command, isFinal = true) => {
+// (multiplayer, my lips not seen: a spell waits a moment — the friend's word may be on its way over the network)
+let heldSpell = null;
+function holdSpell(command, isFinal) {
+    if (heldSpell) { heldSpell.command = command; heldSpell.isFinal = heldSpell.isFinal || isFinal; return; }
+    heldSpell = { command, isFinal };
+    setTimeout(() => { const h = heldSpell; heldSpell = null; if (h) voice.onResult(h.command, h.isFinal, true); }, GATE.HOLD);
+}
+
+voice.onResult = (command, isFinal = true, held = false) => {
     if (!command) return;
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
@@ -410,8 +419,15 @@ voice.onResult = (command, isFinal = true) => {
             const gate = game.voiceGate.check(heard, performance.now());
             if (!gate.ok) {
                 hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(command)}» — ваши губы не двигались: это сказали не вы` : `🔇 «${escapeHtml(command)}» — это чужой голос (это заклинание только что сказал кто-то другой)`);
-                if (isFinal) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
+                if (isFinal || held) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
                 return;
+            }
+            if (game.remotes?.size > 0) {
+                // sure it's me (my lips moved right then): the others are told at once — my voice from
+                // their speakers then casts nothing there; not sure: wait a moment for their word
+                if (gate.sure) game.sync?.say?.(heard);
+                else if (!held) { holdSpell(command, isFinal); return; }
+                else game.sync?.say?.(heard);
             }
         }
         // talking to a villager near me, the hand not raised to cast: words they understand are words,

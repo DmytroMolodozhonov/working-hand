@@ -2180,9 +2180,18 @@ export class Game {
         if (iced) ch.setRunning(false);
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing); // (on a rope ladder the hands hold the body)
 
-        // Explosion knockback (decays; a body lying on the ground slides less far)
+        // Explosion knockback (decays; a body lying on the ground slides less far) — in short steps
+        // against the walls: a blast throws the body at the rock, never into it (a cave, a house)
         if (this.knockback.lengthSq() > 0.0001) {
-            ch.group.position.addScaledVector(this.knockback, dt);
+            const n = Math.max(1, Math.ceil(this.knockback.length() * dt / 0.25));
+            const solid = !flight.active && !this.beds?.lying && !this.boards?.mounted;
+            for (let i = 0; i < n; i++) {
+                const was = _v1.copy(ch.group.position);
+                ch.group.position.addScaledVector(this.knockback, dt / n);
+                if (!solid) continue;
+                this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0), 3.5);
+                if (this._bodyInRock(ch.group.position)) { ch.group.position.copy(was); this.knockback.set(0, 0, 0); break; } // (against the rock: it stops there)
+            }
             this.knockback.multiplyScalar(Math.max(0, 1 - (this.knock.down ? 8 : 4) * dt));
         }
 
@@ -2190,6 +2199,11 @@ export class Game {
         if (!flight.active && !this.beds?.lying && !this.boards?.mounted) {
             const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
+            // never inside the rock (tossed up under an overhang, the walls' push would carry the body
+            // on through the stone, block by block): back where it last stood free
+            if (this._bodyInRock(ch.group.position)) {
+                if (this._lastFree && this._lastFree.distanceToSquared(ch.group.position) < 400) { ch.group.position.copy(this._lastFree); this.knockback.set(0, 0, 0); if (ch.verticalVelocity > 0) ch.verticalVelocity = 0; }
+            } else (this._lastFree || (this._lastFree = new THREE.Vector3())).copy(ch.group.position);
         }
         this._keepInsideMap(ch.group.position);
         // Other players are solid: stopped here already, before the things in my hands are put
@@ -2662,7 +2676,33 @@ export class Game {
             this.camera.position.y += (Math.random() - 0.5) * s;
             this.camera.position.z += (Math.random() - 0.5) * s;
         }
+        if (this.config.mode !== 'test') this._cameraOutOfRock(ch);
         this.camera.updateMatrixWorld(true);
+    }
+
+    /** Is the body's own column rock where the body is (above a step, up to the head)? */
+    _bodyInRock(p) {
+        const T = this.terrain;
+        if (!T?.solidIn) return false;
+        const feet = p.y - PLAYER_GROUND_OFFSET + (this.character.isCrouching ? 1.0 : 0);
+        return T.solidIn(Math.round(p.x), Math.round(p.z), Math.ceil(feet + 1.05 + 0.5 + 1e-3), Math.floor(feet + 3.5 + 1.5 - 1e-3));
+    }
+
+    /**
+     * The eye never inside the rock (thrown against a cave wall, lying with the head at the rock,
+     * a shake, the camera behind the back in a tunnel): it comes in towards the body until clear.
+     */
+    _cameraOutOfRock(ch) {
+        const t = this.terrain?.data;
+        if (!t?.raycast) return;
+        const from = _v2.copy(ch.group.position);
+        from.y += this.knock?.down ? 0.4 : 1.2;
+        if (this.collision.pointBlocked(from.x, from.y, from.z)) return; // (the body itself stuck: nothing better to do)
+        const to = this.camera.position, d = _v1.subVectors(to, from), len = d.length();
+        if (len < 1e-3) return;
+        d.divideScalar(len);
+        const hit = t.raycast(from, d, len + 0.25);
+        if (hit && hit.dist < len + 0.25) to.copy(from).addScaledVector(d, Math.max(0, hit.dist - 0.25));
     }
 
     // ================================================================ cleanup

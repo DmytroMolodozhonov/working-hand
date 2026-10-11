@@ -12,10 +12,12 @@
  */
 
 export const GATE = {
-    WINDOW: 3500, // ms: the spell was said within this (the recognition comes a little late)
-    MOVED: 0.07, // the mouth opened and closed by this much (of its width): speaking
+    WINDOW: 2500, // ms: the spell was said within this (the recognition comes a little late)
+    RECENT: 1500, // ms: the lips moved this lately — sure it's me, even if a friend just said the same
+    MOVED: 0.08, // the mouth opened and closed by this much (of its width): speaking
     SEEN: 0.35, // the face seen in this share of the pictures: the lips can decide
-    ECHO: 3500, // ms: the same spell cast by somebody else just now: an echo of their voice
+    ECHO: 3500, // ms: the same spell said / cast by somebody else just now: an echo of their voice
+    HOLD: 700, // ms a spell waits (multiplayer, the lips unseen) for a friend's word to come over the network
 };
 
 /** How open the mouth is (inner lips apart / mouth width), from the face network's points. */
@@ -56,32 +58,36 @@ export class VoiceGate {
         return this.remote.some((r) => r.base === base && t - r.t < GATE.ECHO);
     }
 
-    /** Did my lips move just now? true / false / null (can't tell: the mouth wasn't seen). */
-    lipsMoved(t) {
-        let seen = 0, n = 0, lo = Infinity, hi = -Infinity;
+    /**
+     * Did my lips move just now (within `win` ms)? true / false / null (can't tell: the mouth wasn't
+     * seen). Robust to a jumpy picture: the mouth's usual spread (10th to 90th percentile), not one frame.
+     */
+    lipsMoved(t, win = GATE.WINDOW) {
+        let n = 0;
+        const open = [];
         for (const s of this.samples) {
-            if (t - s.t > GATE.WINDOW) continue;
+            if (t - s.t > win || s.t > t) continue;
             n++;
-            if (s.open == null) continue;
-            seen++;
-            lo = Math.min(lo, s.open);
-            hi = Math.max(hi, s.open);
+            if (s.open != null) open.push(s.open);
         }
-        if (!n || seen / n < GATE.SEEN || seen < 4) return null;
-        return hi - lo >= GATE.MOVED;
+        if (!n || open.length / n < GATE.SEEN || open.length < 4) return null;
+        open.sort((a, b) => a - b);
+        const q = (k) => open[Math.min(open.length - 1, Math.floor(k * open.length))];
+        return q(0.9) - q(0.1) >= GATE.MOVED;
     }
 
     /**
      * May the spell `name`, just heard by my microphone, be cast?
-     * @returns {{ok: boolean, why?: 'lips'|'echo'}}
+     * sure: my lips moved right then — it is mine (and the others may be told at once).
+     * @returns {{ok: boolean, why?: 'lips'|'echo', sure?: boolean}}
      */
     check(name, t) {
         const lips = this.lipsMoved(t);
         if (lips === false) return { ok: false, why: 'lips' };
-        const base = baseOf(name);
-        const echo = this.remote.some((r) => r.base === base && t - r.t < GATE.ECHO);
-        // (the lips moved: it's mine, even if a friend said the same just now)
-        if (echo && lips !== true) return { ok: false, why: 'echo' };
-        return { ok: true };
+        const recent = lips && this.lipsMoved(t, GATE.RECENT) === true;
+        const echo = this.echoes(name, t);
+        // (my lips moved right then: it's mine, even if a friend said the same just now)
+        if (echo && !recent) return { ok: false, why: 'echo' };
+        return { ok: true, sure: !!recent };
     }
 }

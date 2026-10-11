@@ -114,6 +114,16 @@ export class CollisionWorld {
         return this.movers.length ? this._moverFloor(x, z, reachY, y) : y;
     }
 
+    /**
+     * The underside of the rock (a cave roof, a ceiling) above a body over x,z whose head is at
+     * `headY` or above it — the head may rise to it, never into it. Infinity: the open sky.
+     */
+    ceilingAt(x, z, headY) {
+        if (!this.terrain?.ceilingAbove) return Infinity;
+        const L = this.terrain.ceilingAbove(Math.round(x), Math.round(z), Math.floor(headY + 1.5));
+        return L === Infinity ? Infinity : L - 1.5;
+    }
+
     /** Visible floor / terrain height for physical objects (weapons, debris). */
     surfaceY(x, z) {
         return this.terrain ? this.terrain.surfaceY(x, z) : this.floorY;
@@ -202,7 +212,9 @@ export class CollisionWorld {
         for (const b of boxes) {
             if (y >= b.minY && y <= b.maxY) return true;
         }
-        if (y < this.surfaceY(x, z)) return true;
+        // under the ground's top — unless it is open air there (a cave, a tunnel, under a ledge):
+        // a light thrown in a cave flies on, it does not stick at the hand
+        if (y < this.surfaceY(x, z) && (!this.terrain?.blockAt || this.terrain.blockAt(Math.round(x), Math.floor(y + 1.5), Math.round(z)) !== 0)) return true;
         for (let i = 0; i < this.movers.length; i++) {
             const m = this.movers[i];
             if (m.hasXZ(x, z) && m.pointBlocked(x, y, z)) return true;

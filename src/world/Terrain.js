@@ -955,6 +955,18 @@ export class TerrainData {
         return MIN_LAYER - 1;
     }
 
+    /** The lowest solid layer at or above L in a column, under its top (a ceiling, cave rock) — or Infinity. */
+    ceilingAbove(ix, iz, L) {
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        const col = (iz & MASK) * CHUNK + (ix & MASK);
+        const top = c.top[col];
+        for (let l = Math.max(L, MIN_LAYER); l <= top; l++) {
+            const b = c.blocks[(l - MIN_LAYER) * CHUNK * CHUNK + col];
+            if (b !== BLOCK.AIR && b !== BLOCK.WATER && b !== BLOCK.ICE_SHAPE) return l;
+        }
+        return Infinity;
+    }
+
     /** Is any solid block in layers L0…L1 of a column? */
     solidIn(ix, iz, L0, L1) {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
@@ -1435,6 +1447,8 @@ export class Terrain {
     topLayer(ix, iz) { return this.data.topLayer(ix, iz); }
     floorBelow(ix, iz, L) { return this.data.floorBelow(ix, iz, L); }
     solidIn(ix, iz, L0, L1) { return this.data.solidIn(ix, iz, L0, L1); }
+    ceilingAbove(ix, iz, L) { return this.data.ceilingAbove(ix, iz, L); }
+    blockAt(ix, L, iz) { return this.data.get(ix, L, iz); }
     raycast(origin, dir, maxDist) { return this.data.raycast(origin, dir, maxDist); }
     removeSphere(x, y, z, r) { return this.data.removeSphere(x, y, z, r); }
 

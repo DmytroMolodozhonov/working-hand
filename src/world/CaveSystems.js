@@ -17,7 +17,7 @@ export const CAVES = {
     MIN_SPAWN: 150, // m: no mouth nearer the spawn (the creative test cave aside)
     KEEP_SPAWN: 80, // m: a natural cave never reaches the spawn's ground
     STEP: 3, // m per tunnel segment
-    R_MIN: 2.4, R_MAX: 3.4, // tunnel radius (5–7 m wide and as high; now and then wider)
+    R_MIN: 2.9, R_MAX: 4.1, // tunnel radius (6–8 m wide and as high; now and then wider)
     FLOOR_MIN: -12.5, // the lowest a tunnel's middle goes (bedrock at −17)
     JAG: 0.3, // how ragged the rock is (a part of the radius, by 3D noise)
     ROOF: 2, // layers of ground always left over a tunnel (but at the mouth)
@@ -61,10 +61,10 @@ export function growCaveSystem({ id, rng, start, H, blocked, test = false }) {
     const deepest = { y: Infinity, at: null };
 
     const chamber = (x, y, z, end, big = false) => {
-        const r = big ? 12 + rng() * 5 : (end ? 6.5 : 5) + rng() * (test ? 5 : 4); // (a dead end opens into a bigger one)
-        const F = Math.round(y - 2.4);
-        const roof = Math.min(H(Math.round(x), Math.round(z)) - CAVES.ROOF - F, big ? 11 + Math.round(rng() * 3) : 6 + Math.round(rng() * 3));
-        if (roof < (big ? 8 : 5)) return null; // (too near the ground above)
+        const r = big ? 13 + rng() * 6 : (end ? 7 : 5.5) + rng() * (test ? 5.5 : 4.5); // (a dead end opens into a bigger one)
+        const F = Math.round(y - 2.9);
+        const roof = Math.min(H(Math.round(x), Math.round(z)) - CAVES.ROOF - F, big ? 13 + Math.round(rng() * 4) : 7 + Math.round(rng() * 4));
+        if (roof < (big ? 10 : 6)) return null; // (too near the ground above)
         // (none under water or a village: the rock there is never carved — its chest would sit in stone)
         // (rings of points no more than 3 m apart: even a narrow river is caught)
         const R = Math.max(r, end ? 8 : 0) * 1.35 + 1;
@@ -249,10 +249,10 @@ export function carveColumn(s, x, z, out, floorKeep = -Infinity) {
         const a = Math.atan2(z - c.z, x - c.x);
         const R = c.r * (1 + (c.w1 || 0) * Math.sin(3 * a + (c.p1 || 0)) + (c.w2 || 0) * Math.sin(7 * a + (c.p2 || 0)) + (c.w1 ? 0.08 * noise3(x / 2.5, c.F, z / 2.5, s.seed) : 0));
         if (d > R) continue;
-        // a dome, 3 high at its wall; its roof ragged (hanging rock); its floor uneven — mounds of
+        // a dome, 4 high at its wall; its roof ragged (hanging rock); its floor uneven — mounds of
         // rock, rising to the wall (the main chamber's and the floor under a chest stay flat)
         const k = 1 - (d * d) / (R * R);
-        const top = c.F + Math.max(3, Math.round(3 + (c.h - 3) * k + 1.6 * noise3(x / 3, c.F + 7, z / 3, s.seed + 1)));
+        const top = c.F + Math.max(4, Math.round(4 + (c.h - 4) * k + 1.6 * noise3(x / 3, c.F + 7, z / 3, s.seed + 1)));
         let floor = c.F + 1;
         if (c.w1 && !s.chests.some((ch) => Math.hypot(x - ch.x, z - ch.z) < 3.2)) {
             floor += Math.max(0, Math.min(top - c.F - 3, Math.round(1.8 * noise3(x / 3.5, c.F - 5, z / 3.5, s.seed + 2) + 2 * (d / R) ** 3 - 0.4)));

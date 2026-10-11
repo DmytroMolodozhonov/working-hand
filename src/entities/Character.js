@@ -52,6 +52,8 @@ const FALL = { left: [0, 1.4], back: [1.45, 0], front: [-1.45, 0], right: [0, -1
 
 // Ground at y=-0.5 corresponded to group.y = 1.5 (baseY) in the original.
 export const PLAYER_GROUND_OFFSET = 2.0;
+/** From the feet to just over the head: room a body needs under a roof. */
+export const HEAD_ROOM = 3.4;
 
 export class VoxelCharacter {
     constructor(scene, { remote = false } = {}) {
@@ -650,7 +652,13 @@ export class VoxelCharacter {
                 // Falling into a crater / off a ledge
                 this.airTop = Math.max(this.airTop ?? y, y);
                 this.verticalVelocity -= 20 * dt;
-                this.group.position.y = Math.max(targetY, y + this.verticalVelocity * dt);
+                let ny = y + this.verticalVelocity * dt;
+                // (thrown up under a cave roof / a ceiling: the head stops at the rock, never in it)
+                if (collision?.ceilingAt) {
+                    const roof = collision.ceilingAt(this.group.position.x, this.group.position.z, feetNow + 1.1) - HEAD_ROOM + PLAYER_GROUND_OFFSET - this.bodyDrop();
+                    if (ny > roof) { ny = Math.max(roof, targetY); if (this.verticalVelocity > 0) this.verticalVelocity = 0; }
+                }
+                this.group.position.y = Math.max(targetY, ny);
                 this.onGround = this.group.position.y <= targetY + 1e-3;
                 if (this.onGround) {
                     // (how far it fell and how fast it hit the ground: a high fall knocks over — Knockdown.js)
