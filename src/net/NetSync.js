@@ -150,6 +150,7 @@ export class NetSync {
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
+            crystals: g.crystals?.snapshot() || [],
         };
     }
 
@@ -158,6 +159,7 @@ export class NetSync {
         const g = this.game;
         if (Array.isArray(msg.edits) && msg.edits.length) g.builder?.applyEdits(msg.edits.slice(-30000));
         for (const i of msg.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
+        if (msg.crystals) g.crystals?.restore(msg.crystals);
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         if (msg.doors) g.doors?.restore(msg.doors);
@@ -290,6 +292,15 @@ export class NetSync {
         this.net.send({ t: 'tree', i: index }, true);
     }
 
+    /** Mana crystals broken off in a cave (gone for everybody) / one shattered in my hands. */
+    crystalsGone(ids) {
+        this.net.send({ t: 'mcg', l: ids }, true);
+    }
+
+    crystalFx(p) {
+        this.net.send({ t: 'mcfx', p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
+    }
+
     /** A weapon went into my inventory (gone from the world) / came out of it. */
     weaponGone(w) {
         this.weaponOwners.delete(w.id);
@@ -382,6 +393,11 @@ export class NetSync {
 
     duelClash(a, b, p, v = 0, k = 3) {
         if (this.net.isHost) this.net.send({ t: 'clash', a, b, p: Math.round(p * 1000) / 1000, v: Math.round(v * 1000) / 1000, k });
+    }
+
+    /** I shouted «Максима» in this clash (the host counts it in the push maths; all see it). */
+    duelMaxima(a, b) {
+        this.net.send({ t: 'dmax', a, b, by: this.me }, true);
     }
 
     duelClashEnd(a, b, loser) {
@@ -625,6 +641,8 @@ export class NetSync {
                 break;
             }
             case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
+            case 'mcg': g.crystals?.applyGone((m.l || []).slice(0, 50)); break;
+            case 'mcfx': if (Array.isArray(m.p)) g.crystals?.shatterFx(vec(m.p)); break;
             case 'tree': { const t = g.world.trees?.find((x) => x.index === m.i); if (t && t.alive) g.world.removeTree(t); break; }
             case 'wgone': {
                 const w = g.weapons.byId.get(m.w);
@@ -817,6 +835,7 @@ export class NetSync {
             case 'ppush': if (m.to === this.me) g.impact?.onStrike(m, false); break;
             case 'cimp': if (!this.net.isHost) g.creatureImpact?.onNet(m.l); break;
             case 'cstrike': if (this.net.isHost) g.creatureImpact?.onStrike(m, m.from); break;
+            case 'dmax': if (m.by !== this.me) g.duel.applyMaxima(m.a, m.b, this.net.isHost ? (m.from || m.by) : m.by); break;
             case 'hgrip': case 'hfree': case 'vhand': case 'vfree': g.handHold?.onNet(m); break;
             case 'cut': {
                 const r = m.by !== this.me && g.remotes.get(m.by);

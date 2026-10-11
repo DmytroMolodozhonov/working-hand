@@ -38,6 +38,7 @@ export class Accio {
         if (s.w) { s.w.release(); g.sync?._localRelease?.(s.w); }
         else if (s.L) { s.L.accio = false; s.L.vel?.set(0, 0, 0); }
         else if (s.bk) { s.bk.accio = false; g.books?.dropBook(s.bk, null); }
+        // (a crystal is tiny and already broken off: it still comes to the hand)
         return true;
     }
 
@@ -105,6 +106,16 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { bk, side, score };
             }
+            // a mana crystal growing in a cave (one by one)
+            for (const c of g.crystals?.growing() || []) {
+                const to = _v1.subVectors(c.center, hand);
+                const d = to.length();
+                if (d > ACCIO.RANGE || d < 0.3) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang > ACCIO.CONE) continue;
+                const score = ang * 5 + d * 0.05;
+                if (!best || score < best.score) best = { mc: c, side, score };
+            }
         }
         if (!best) {
             const busy = g.weapons.hands.left.held && g.weapons.hands.right.held;
@@ -113,6 +124,13 @@ export class Accio {
         if (best.rb) { g.runner.accio(best.rb, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
         if (best.body) { g.runner?.accio(best.body, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
         if (best.L) return this._castItem(best.L, best.side);
+        if (best.mc) {
+            const f = g.crystals.accio(best.mc, best.side);
+            if (!f) return '🪄 Этот кристалл уже кто-то взял';
+            this.state = { mc: f, side: best.side, t: 0 };
+            if (g.sound) g.sound.playWhoosh?.();
+            return null;
+        }
         if (best.bk) {
             // the book rises and flies to the hand; it is caught when it gets there
             // (the host gives it, as when a hand reaches it)
@@ -202,6 +220,7 @@ export class Accio {
         const s = this.state;
         if (!s) return;
         if (s.L) { this._updateItem(dt); return; }
+        if (s.mc) { if (s.mc.done) this.state = null; return; } // (ManaCrystals flies it)
         if (s.bk) { this._updateBook(dt); return; }
         const g = this.game;
         const w = s.w;

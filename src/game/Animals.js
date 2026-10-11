@@ -345,6 +345,7 @@ export class Animals {
             return `✨ Gather: ${n} кусков мяса`;
         }
         for (const tr of this.trees.values()) {
+            if (!tr) continue; // (a cell without a golden tree)
             const to = _v.set(tr.x - o.x, tr.y + 4 - o.y, tr.z - o.z);
             if (to.length() > 12 || d.angleTo(to.normalize()) > 0.35) continue;
             let n = 0;

@@ -26,6 +26,7 @@
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
 import { makeSpellBookModel, COVERS } from './BookModel.js';
+import { crystalItemModel } from './CrystalModel.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation'] },
@@ -71,6 +72,8 @@ export const ITEM_INFO = {
     logs: { name: 'Брёвна', icon: '🪵', weight: 1.2 },
     // blocks dropped at a body (Death.js): picked up, they go back into a resource stack
     blocks: { name: 'Блоки', icon: '🧱', weight: 1 },
+    // deep in caves (ManaCrystals.js): break one with both hands — the mana maximum +5
+    crystal: { name: 'Кристалл маны', icon: '💎', weight: 0.3, stack: 10 },
 };
 
 /**
@@ -94,6 +97,7 @@ export function itemValue(it) {
         case 'arrows': return Math.max(1, Math.round((it.count || 1) * 0.6));
         case 'bread': case 'cheese': return 1 * (it.count || 1);
         case 'pie': return 2 * (it.count || 1);
+        case 'crystal': return 40 * (it.count || 1);
         default: return 0;
     }
 }
@@ -252,6 +256,7 @@ export function describeItem(it) {
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
         case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b> (до 500 в ячейке)`, 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
+        case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмитесь за него <b>обеими руками</b> и разломите (разведите руки или поверните) — мана +<b>5</b> к максимуму'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
 }
@@ -533,6 +538,7 @@ function buildItemModel(it) {
         case 'wool': return woolModel();
         case 'logs': return logsModel(it.color);
         case 'blocks': return blocksModel(it.color);
+        case 'crystal': return crystalItemModel();
         case 'book': return makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
@@ -547,5 +553,5 @@ function blocksModel(color = 0x999999) {
 }
 
 export function disposeModel(m) {
-    m.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (!o.material.userData.shared) o.material.dispose?.(); } });
+    m.traverse((o) => { if (o.isMesh) { if (!o.geometry.userData?.shared) o.geometry.dispose(); if (!o.material.userData.shared) o.material.dispose?.(); } });
 }

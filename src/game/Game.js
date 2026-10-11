@@ -71,6 +71,7 @@ import { Knockdown } from './Knockdown.js';
 import { CreatureImpact } from './CreatureImpact.js';
 import { BodyStrikes } from './BodyStrikes.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
+import { ManaCrystals } from './ManaCrystals.js';
 
 const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
@@ -270,6 +271,7 @@ export class Game {
         this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
+        this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
@@ -391,6 +393,7 @@ export class Game {
                     { kind: 'scroll', uid: 'cr1', stat: 'spell', spell: 'LightningStrike' },
                     { kind: 'scroll', uid: 'cr2', stat: 'spell', spell: 'Thunderwave' },
                     { kind: 'scroll', uid: 'cr3', stat: 'hp', amount: 3 },
+                    { kind: 'crystal', uid: 'cmc0', count: 1 }, // a mana crystal (break it with both hands)
                 ];
                 magic.forEach((it, i) => {
                     const x = -12.5 + i * 5, z = -18;
@@ -830,6 +833,8 @@ export class Game {
         if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
+        // «Максима» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
+        if (name === 'Maxima' && this._inDuel() && !this.water?.active) return this.duel.maxima(isFinal);
         // In a duel nothing else can be cast (only the shield, with the other hand)
         if (this._inDuel()) { if (isFinal) this.hud.setVoice('⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)', true); return null; }
         if (name === 'AirBubble' || name === 'AirBubbleMaxima') {
@@ -1485,6 +1490,16 @@ export class Game {
             // things lying about (at a body): all of them into the slots (Death.js)
             const loot = this.death?.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
             if (loot && loot.startsWith('✨')) { this.hud.setVoice(loot, true); this._lastBuild = now; if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost); return 'Gather'; }
+            // a cluster of mana crystals: all of it into the slots
+            const cr = this.crystals?.gatherAt(this.castOrigin(side), this.character.getHandDirection(side), side);
+            if (cr && cr.startsWith('🎒')) { if (isFinal) this.hud.setVoice(cr, true); return null; }
+            if (cr) {
+                this.hud.setVoice(cr, true);
+                if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
+                this.mana?.success('Gather');
+                this._lastBuild = now;
+                return 'Gather';
+            }
             const got = this.animals.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
             if (got && !got.startsWith('🍏')) { this.hud.setVoice(got, true); this._lastBuild = now; return 'Gather'; }
             if (got) { if (isFinal) this.hud.setVoice(got, true); return null; }
@@ -1494,6 +1509,7 @@ export class Game {
         else hint = this.builder.start(name);
         if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
         if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
+        this.mana?.success(name); // (mana: gathered / the building started)
         this._lastBuild = now;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
@@ -1929,6 +1945,7 @@ export class Game {
         this.castleLife.update(dt);
         this.doors.update(dt);
         this.campfires.update(dt);
+        this.crystals?.update(dt);
         this.beds.update(dt);
         this.houses.update(dt);
         this.spiders.update(dt);
@@ -2560,6 +2577,7 @@ export class Game {
         this.death?.dispose();
         this.doors?.dispose();
         this.campfires?.dispose();
+        this.crystals?.dispose();
         this.houses?.dispose();
         this.beds?.dispose();
         this.spiders?.dispose();

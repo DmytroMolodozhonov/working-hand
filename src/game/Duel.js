@@ -56,8 +56,19 @@ export const DUEL = {
     PUSH: 0.16, // how fast the meeting point moves per unit of strength difference
     LUCK: 0.1, // ±10 % random
     STUN_TIME: 15,
-    CLASH_FATIGUE: 1.5, // fatigue per second while pushing (free world)
+    CLASH_FATIGUE: 1, // mana per second while pushing (free world), each side
+    MAXIMA_BOOST: 0.05, // «Максима» shouted in a clash: the meeting point goes 5 % of the way a second faster to the opponent (they add up)
+    MAXIMA_COST: 5, // mana, at once
+    MAXIMA_EVERY: 3, // s: at most once every 3 seconds
 };
+
+/**
+ * The extra push of «Максима» shouts in a clash (a's shouts minus b's; only a hand still on the
+ * opponent pushes): +5 % of the way a second towards the opponent for each shout.
+ */
+export function maximaPush(boostA = 0, boostB = 0) {
+    return DUEL.MAXIMA_BOOST * (Math.max(0, boostA | 0) - Math.max(0, boostB | 0));
+}
 
 /** Where a charge goes: along the hand; a target only right on that line, and only a small correction towards it. */
 export const AIM = {
@@ -864,7 +875,7 @@ export class Duel {
         // A hand off the opponent doesn't push at all
         const sa = ca.ok ? this._strength(a.by, c.luckA) : 0;
         const sb = cb.ok ? this._strength(b.by, c.luckB) : 0;
-        c.v = (sa - sb) * DUEL.PUSH;
+        c.v = (sa - sb) * DUEL.PUSH + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));
 
@@ -883,6 +894,55 @@ export class Duel {
             this._finishClash(c, loser);
             if (g.sync) g.sync.duelClashEnd(a.id, b.id, loser);
         }
+    }
+
+    // ============================================================ «Максима»
+    /**
+     * «Максима» shouted alone during my clash: −5 mana at once, +5 % to my push in this
+     * clash (it adds up), at most once every 3 s. The host does the push maths: a guest tells it.
+     * @returns {string|null} 'Maxima' when it worked
+     */
+    maxima(isFinal = true) {
+        const g = this.game;
+        const c = this.clashes.find((x) => x.a.by === this.me || x.b.by === this.me);
+        if (!c) return null;
+        const now = performance.now();
+        if (now - (this._maximaAt || -1e9) < DUEL.MAXIMA_EVERY * 1000) {
+            if (isFinal) g.hud.setVoice(`⚡ «Максима» — не чаще раза в ${DUEL.MAXIMA_EVERY} секунды`, true);
+            return null;
+        }
+        const cm = g.combat;
+        if (cm.enabled && cm.fatigue < DUEL.MAXIMA_COST) {
+            const msg = `😮‍💨 Не хватает маны: нужно ${DUEL.MAXIMA_COST}, есть ${Math.floor(cm.fatigue)}`;
+            if (isFinal) g.hud.setVoice(msg, true);
+            return null;
+        }
+        this._maximaAt = now;
+        if (cm.enabled) cm.fatigue = Math.max(0, cm.fatigue - DUEL.MAXIMA_COST);
+        this.applyMaxima(c.a.id, c.b.id, this.me);
+        g.sync?.duelMaxima?.(c.a.id, c.b.id);
+        return 'Maxima';
+    }
+
+    /** (everybody) a wizard shouted «Максима» in this clash: the host counts it; all see the pulse. */
+    applyMaxima(aId, bId, by) {
+        const c = this.clashes.find((x) => x.a.id === aId && x.b.id === bId);
+        if (!c || (by !== c.a.by && by !== c.b.by)) return false;
+        const A = by === c.a.by;
+        if (this._referee()) {
+            // (the host keeps the 3-second limit too: a guest can't push more often)
+            const key = A ? 'maxAtA' : 'maxAtB';
+            if (c.t - (c[key] ?? -1e9) < DUEL.MAXIMA_EVERY - 0.25) return false;
+            c[key] = c.t;
+            if (A) c.boostA = (c.boostA || 0) + 1; else c.boostB = (c.boostB || 0) + 1;
+        }
+        c.pulse = { t: 0, side: A ? 0 : 1 };
+        this._note({ ev: 'maxima', by, boostA: c.boostA || 0, boostB: c.boostB || 0 });
+        const g = this.game;
+        if (g.sound) g.sound.playThunder?.();
+        if (by === this.me) g.hud.setVoice('⚡ <b>МАКСИМА!</b> Ваш напор сильнее', true);
+        else if (c.a.by === this.me || c.b.by === this.me) g.hud.setVoice('⚡ Соперник крикнул «Максима» — держитесь!', true);
+        return true;
     }
 
     _finishClash(c, loser) {
@@ -1021,12 +1081,21 @@ export class Duel {
         const [colA, colB] = c.marks;
         const { lead, push } = clashLead(c.p, c.v);
         const toB = _mB.subVectors(hb, ha).normalize(), toA = _mA.copy(toB).negate();
-        const pulse = 1 + Math.sin(c.t * 18) * 0.12;
+        let pulse = 1 + Math.sin(c.t * 18) * 0.12;
+        // «Максима»: the shouter's half flares up for half a second
+        let flareA = 0, flareB = 0;
+        if (c.pulse) {
+            c.pulse.t += dt;
+            const k = Math.max(0, 1 - c.pulse.t / 0.5);
+            if (c.pulse.side === 0) flareA = k; else flareB = k;
+            pulse += 0.5 * k;
+            if (k <= 0) c.pulse = null;
+        }
         for (const o of [mk.a, mk.b, mk.core]) { o.position.copy(m); o.visible = true; }
         mk.a.quaternion.setFromUnitVectors(_Y, toA);
         mk.b.quaternion.setFromUnitVectors(_Y, toB);
-        mk.a.scale.setScalar(pulse * (1 + 0.45 * lead));
-        mk.b.scale.setScalar(pulse * (1 - 0.45 * lead));
+        mk.a.scale.setScalar(pulse * (1 + 0.45 * lead) * (1 + 0.6 * flareA));
+        mk.b.scale.setScalar(pulse * (1 - 0.45 * lead) * (1 + 0.6 * flareB));
         mk.core.scale.setScalar(pulse);
         mk.a.material.color.setHex(colA);
         mk.b.material.color.setHex(colB);
