@@ -29,11 +29,11 @@ export const CRYSTAL = {
     LIGHT_RANGE: 18, // m: the soft light shines at the nearest cluster this close
     OPEN: 0.35, // finger curl below this: an open hand
     CLOSED: 0.6, // …above this: the fingers closed on it
-    BOTH: 0.3, // m: the other hand on the held crystal
+    BOTH: 0.45, // m between the palms: the other hand on the held crystal (two palms round a small gem)
     PULL: 0.22, // m the hands move apart (both still holding it): it breaks
     TWIST: 0.9, // rad the hands turn against each other: it breaks
     GATHER_RANGE: 10, // m
-    GATHER_CONE: 0.35, // rad
+    GATHER_CONE: 0.45, // rad (as «Акцио»)
     ACCIO_SPEED: 18, // m/s
 };
 
@@ -278,7 +278,7 @@ export class ManaCrystals {
         for (const side of ['right', 'left']) {
             const held = g.items?.held[side];
             if ((held && held.item.kind !== 'crystal') || g.weapons?.hands?.[side]?.held) { this._touch[side] = null; continue; }
-            const hand = ch.getHandWorldPosition(side, _v2);
+            const hand = ch.getGripObject ? ch.getGripObject(side).getWorldPosition(_v2) : ch.getHandWorldPosition(side, _v2); // (the palm)
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 0;
             let near = null, nd = Infinity;
             for (const c of this.growing()) {
@@ -307,7 +307,7 @@ export class ManaCrystals {
             if (dist > CRYSTAL.GATHER_RANGE) continue;
             const ang = d.angleTo(to.normalize());
             if (ang > CRYSTAL.GATHER_CONE) continue;
-            if (this._blocked(o, d, dist)) continue;
+            if (this._blocked(o, to.clone(), dist)) continue; // (along the line to it)
             if (!best || ang < best.ang) best = { c, ang };
         }
         if (!best) return null;
@@ -378,8 +378,9 @@ export class ManaCrystals {
         const heldB = g.items.held[B];
         if ((heldB && heldB.item.kind !== 'crystal') || g.weapons?.hands?.[B]?.held) { this._break = null; return; }
         const crystal = g.items.held[A].model.position;
-        const hA = ch.getHandWorldPosition(A, new THREE.Vector3());
-        const hB = ch.getHandWorldPosition(B, new THREE.Vector3());
+        // (the palms, where the fingers close — not the wrists)
+        const palm = (sd) => (ch.getGripObject ? ch.getGripObject(sd).getWorldPosition(new THREE.Vector3()) : ch.getHandWorldPosition(sd, new THREE.Vector3()));
+        const hA = palm(A), hB = palm(B);
         const curlA = ch.getGripCurl ? ch.getGripCurl(A) : 1;
         const curlB = ch.getGripCurl ? ch.getGripCurl(B) : 0;
         const dirA = ch.getHandDirection(A, new THREE.Vector3()), dirB = ch.getHandDirection(B, new THREE.Vector3());
