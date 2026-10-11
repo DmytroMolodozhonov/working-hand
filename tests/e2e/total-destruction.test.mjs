@@ -76,3 +76,50 @@ test('pointing at a castle and saying «Total Destruction»: only with its scrol
     assert.ok(after.ruinSaved, 'kept for saves and late joiners');
     assert.deepEqual(realErrors(errors), []);
 });
+
+test('in a cave: the ground shakes, then its ceiling comes down — heaps of stones, nobody is left inside the rock; «Maxima» needs 200 max mana', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    const info = await page.evaluate(() => {
+        const g = window.__zns.game, T = g.world.terrain.data;
+        const all = T.cavesNear(0, 0, 900).filter((c) => c.chambers?.length).sort((a, b) => Math.hypot(a.x0, a.z0) - Math.hypot(b.x0, b.z0));
+        const ch = all[0].chambers.slice().sort((a, b) => b.r - a.r)[0];
+        window.__ch = ch;
+        g.character.group.position.set(ch.x, ch.F + 2.2, ch.z);
+        g.world.terrain.flushAround(ch.x, ch.z);
+        return { n: all.length, ch };
+    });
+    assert.ok(info.n > 0, 'a cave is near');
+    await frames(page, 30);
+    const res = await page.evaluate(() => {
+        const g = window.__zns.game, T = g.world.terrain.data, c = window.__ch, ch = g.character;
+        const V = ch.group.position.constructor;
+        ch.isArmRaised = () => true;
+        ch.getHandDirection = () => new V(0.6, -0.8, 0).normalize(); // (at the cave's floor a little ahead)
+        const L0 = Math.round(c.F + 1.5);
+        const air = () => { let n = 0; for (let x = Math.round(c.x) - 6; x <= c.x + 6; x++) for (let z = Math.round(c.z) - 6; z <= c.z + 6; z++) for (let L = L0; L < L0 + 16; L++) if (T.get(x, L, z) === 0) n++; return n; };
+        const low = () => { let n = 0; for (let x = Math.round(c.x) - 6; x <= c.x + 6; x++) for (let z = Math.round(c.z) - 6; z <= c.z + 6; z++) for (let L = L0; L < L0 + 3; L++) if (T.get(x, L, z) === 0) n++; return n; };
+        window.__air = air; window.__low = low;
+        g.bonus = g.bonus || { hp: 0, fatigue: 0 }; g.bonus.spells = { ...(g.bonus.spells || {}), TotalDestruction: true };
+        g.combat.addMaxFatigue(150);
+        g.combat.fatigue = g.combat.maxFatigue;
+        const out = { before: air(), lowBefore: low() };
+        out.maxima = g.castLocalSpell('Total Destruction Maxima', true);
+        out.cast = g.castLocalSpell('Total Destruction', true);
+        return out;
+    });
+    assert.equal(res.maxima, null, '«Maxima» needs a mana maximum of 200');
+    assert.equal(res.cast, 'TotalDestruction');
+    await page.waitForFunction(() => window.__zns.game.destruction.list.length === 0, null, { timeout: 150000 });
+    await frames(page, 20);
+    const after = await page.evaluate(() => {
+        const g = window.__zns.game, T = g.world.terrain.data, me = g.character.group.position;
+        const inRock = g._bodyInRock(me); // (the game's own rule: from above a step up to the head)
+        return { air: window.__air(), low: window.__low(), inRock };
+    });
+    assert.ok(after.low < res.lowBefore * 0.6, `heaps of fallen rock on the cave's floor (${res.lowBefore} → ${after.low})`);
+    assert.notEqual(after.air, res.before, 'the cave changed');
+    assert.equal(after.inRock, false, 'the body is not inside the stones');
+    assert.deepEqual(realErrors(errors), []);
+});

@@ -10,6 +10,10 @@
  *
  *   - only for one whose mana MAXIMUM is 100 or more (in «Выживание»); 80 mana a cast;
  *   - outside Creative only from its scroll (a dark red ribbon, very rare);
+ *   - «Total Destruction Maxima»: twice as strong (a wider circle, longer shaking, twice
+ *     the harm); a mana maximum of 200, 160 mana a cast; learnt from the same scroll;
+ *   - in a cave (or over one) the caves cave in: their ceilings break off and lie on
+ *     their floors (Ruin.js);
  *   - multiplayer: the caster sends the place ('tdes'), every computer shakes and
  *     brings down the same blocks (Ruin.js is deterministic); the host hurts the
  *     creatures, everyone hurts himself.
@@ -20,6 +24,7 @@ import { RUIN, ruinSample, hash01 } from '../world/Ruin.js';
 import { BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
 import { bombardoDamage } from './Combat.js';
 import { MAXIMA_POWER } from '../fx/SpellManager.js';
+import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 export const TOTAL = {
     NAME: 'TotalDestruction',
@@ -31,7 +36,17 @@ export const TOTAL = {
     FALL: 2.6, // s the blocks are seen falling
     RANGE: 160, // m: how far one can point it
     MAX_BLOCKS: 4000, // falling blocks drawn (more just turn to dust)
+    // «Total Destruction Maxima»: twice as strong
+    MAXIMA: { NAME: 'TotalDestructionMaxima', MIN_MAX_MANA: 200, COST: 160, RADIUS: 28, SHAKE: 4.4, HARM: 2 },
 };
+
+/** The numbers of one form of the spell. */
+function form(max) {
+    const M = TOTAL.MAXIMA;
+    return max
+        ? { name: M.NAME, label: 'Total Destruction Maxima', minMax: M.MIN_MAX_MANA, R: M.RADIUS, shake: M.SHAKE, harm: M.HARM }
+        : { name: TOTAL.NAME, label: 'Total Destruction', minMax: TOTAL.MIN_MAX_MANA, R: TOTAL.RADIUS, shake: TOTAL.SHAKE, harm: 1 };
+}
 
 const G = 22;
 const _m = new THREE.Matrix4();
@@ -58,38 +73,41 @@ export class TotalDestruction {
      * The words heard: point the raised hand at the place.
      * @returns {string|null} the spell name when cast
      */
-    cast(isFinal) {
+    cast(isFinal, name = TOTAL.NAME) {
         const g = this.game, ch = g.character;
+        const max = name === TOTAL.MAXIMA.NAME, f = form(max);
         const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
         if (this.busy) return null;
+        if (!max && !isFinal) return null; // (wait: maybe «…Максима»)
         const c = g.combat;
-        if (c?.enabled && (c.maxFatigue || 30) < TOTAL.MIN_MAX_MANA) {
-            return hint(`🔷 «Total Destruction» подвластно только сильным магам: нужен <b>максимум маны ${TOTAL.MIN_MAX_MANA}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`);
+        if (c?.enabled && (c.maxFatigue || 30) < f.minMax) {
+            return hint(`🔷 «${f.label}» подвластно только сильным магам: нужен <b>максимум маны ${f.minMax}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`);
         }
         const terrain = g.world?.terrain;
-        if (!terrain || !g.world.destructible) return hint('🚫 Здесь «Total Destruction» не работает');
+        if (!terrain || !g.world.destructible) return hint(`🚫 Здесь «${f.label}» не работает`);
         const side = g.wandSide() || (ch.isArmRaised(g.magicHand || g.lastMagicHand || 'right') ? (g.magicHand || g.lastMagicHand || 'right') : ['right', 'left'].find((s) => ch.isArmRaised(s)));
-        if (!side || !ch.isArmRaised(side)) return hint('✋ Поднимите руку и <b>направьте её</b> на то, что должно рухнуть, — и скажите «Total Destruction»');
+        if (!side || !ch.isArmRaised(side)) return hint(`✋ Поднимите руку и <b>направьте её</b> на то, что должно рухнуть, — и скажите «${f.label}»`);
         const origin = g.castOrigin(side);
         const dir = ch.getHandDirection(side);
         const hit = terrain.raycast(origin, dir, TOTAL.RANGE);
         if (!hit) return hint('🎯 Направьте руку на землю, замок или дом — рука сейчас показывает в небо');
-        const tired = c?.check(TOTAL.NAME);
+        const tired = c?.check(f.name);
         if (tired) { g.hud.setVoice(tired, true); return null; }
-        c?.pay(TOTAL.NAME);
+        c?.pay(f.name);
         const p = new THREE.Vector3(hit.x, hit.y, hit.z);
-        this.start(p, g.localId, true);
-        g.sync?.ruin?.(p);
-        return TOTAL.NAME;
+        this.start(p, g.localId, true, max);
+        g.sync?.ruin?.(p, max);
+        return f.name;
     }
 
     /** It begins at `p` (my cast, or another player's from the network). */
-    start(p, by, mine = false) {
+    start(p, by, mine = false, max = false) {
         const g = this.game;
         const data = g.world?.terrain?.data;
-        const d = { p: p.clone(), by, mine, t: 0, done: false, collapsed: false, sample: data ? ruinSample(data, p.x, p.z, TOTAL.RADIUS, 400) : [], crash: 0 };
+        const f = form(max);
+        const d = { p: p.clone(), by, mine, max, ...f, P: TOTAL.POWER * f.harm, t: 0, done: false, collapsed: false, sample: data ? ruinSample(data, p.x, p.z, f.R, 400, p.y) : [], crash: 0 };
         this.list.push(d);
-        g.sound?.playRumble?.(d.p, g.character.group.position, TOTAL.SHAKE + 1.5);
+        g.sound?.playRumble?.(d.p, g.character.group.position);
         return d;
     }
 
@@ -99,7 +117,7 @@ export class TotalDestruction {
             d.t += dt;
             if (!d.collapsed) {
                 this._shake(d, dt);
-                if (d.t >= TOTAL.SHAKE) this._collapse(d);
+                if (d.t >= d.shake) this._collapse(d);
             } else this._fall(d, dt);
             if (d.done) this.list.splice(this.list.indexOf(d), 1);
         }
@@ -107,8 +125,8 @@ export class TotalDestruction {
 
     // --------------------------------------------------------------- shaking
     _shake(d, dt) {
-        const g = this.game, fx = g.fx, R = TOTAL.RADIUS;
-        const k = Math.min(1, d.t / TOTAL.SHAKE); // it grows
+        const g = this.game, fx = g.fx, R = d.R;
+        const k = Math.min(1, d.t / d.shake); // it grows
         // the camera: the ground trembles under my feet (felt far away too)
         const me = g.character.group.position;
         const dist = Math.hypot(me.x - d.p.x, me.z - d.p.z);
@@ -143,7 +161,7 @@ export class TotalDestruction {
 
     // --------------------------------------------------------------- collapse
     _collapse(d) {
-        const g = this.game, R = TOTAL.RADIUS, P = TOTAL.POWER, p = d.p;
+        const g = this.game, R = d.R, p = d.p;
         d.collapsed = true;
         d.t = 0;
         const authoritative = !!g.authority;
@@ -168,12 +186,18 @@ export class TotalDestruction {
             const gr = 120 + ((Math.random() * 50) | 0);
             g.fx.smoke.spawn(x, y + Math.random() * 6, z, Math.cos(a) * 2, 1 + Math.random() * 2.5, Math.sin(a) * 2, (gr << 16) | ((gr - 8) << 8) | (gr - 18), 1.6 + Math.random() * 2.2, 3 + Math.random() * 2.5, { shrink: -0.3, spin: 1 });
         }
+        // …and in the caves under it (where a ceiling came down)
+        if (data) for (const [x, L, z] of d.sample) {
+            if (L >= data.topLayer(x, z) || Math.random() < 0.5) continue;
+            for (let i = 0; i < 2; i++) g.fx.smoke.spawn(x + (Math.random() - 0.5) * 3, L - 2 - Math.random() * 2, z + (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 1.5, -0.5 + Math.random(), (Math.random() - 0.5) * 1.5, DUST[(Math.random() * DUST.length) | 0], 1.2 + Math.random() * 1.5, 3 + Math.random() * 2, { shrink: -0.3, spin: 1 });
+        }
         const me = g.character.group.position;
         g.sound?.playExplosion?.(p, me, 3);
         const dist = Math.hypot(me.x - p.x, me.z - p.z);
         g.fx.shake = Math.max(g.fx.shake || 0, 2.2 * Math.max(0, 1 - Math.max(0, dist - R) / (R * 4)));
         g.books?.hitAt?.(p, R);
         g.houses?.hitAt?.(p, R);
+        this._unburyAll(d, authoritative); // (a cave's heap of stones fell where someone stood: on top of it)
         this._hurtMe(d);
         if (authoritative) this._hurtCreatures(d);
         // the weapons lying there jump
@@ -186,12 +210,52 @@ export class TotalDestruction {
                 w.angularVelocity.set((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
             }
         }
-        if (d.mine) g.mana?.success(TOTAL.NAME); // (it worked)
+        if (d.mine) g.mana?.success(d.name); // (it worked)
+    }
+
+    /** Feet at `feet` in the stones: where they stand on top of them (null: free already). */
+    _onTop(x, z, feet) {
+        const T = this.game.world.terrain?.data;
+        if (!T) return null;
+        const ix = Math.round(x), iz = Math.round(z);
+        let L = Math.floor(feet + 1.5 + 1e-3);
+        const L0 = L;
+        while (L - L0 < 24 && T.solidIn(ix, iz, L, L + 2)) L++;
+        return L > L0 ? L - 1.5 : null;
+    }
+
+    /** Whoever stood where the stones came down now stands on them (never inside the rock). */
+    _unburyAll(d, authoritative) {
+        const g = this.game, R = d.R + 4, p = d.p;
+        const near = (x, z) => Math.abs(x - p.x) < R && Math.abs(z - p.z) < R;
+        const me = g.character.group.position;
+        if (near(me.x, me.z)) {
+            const f = this._onTop(me.x, me.z, me.y - PLAYER_GROUND_OFFSET);
+            if (f != null) { me.y = f + PLAYER_GROUND_OFFSET; g._lastFree?.copy(me); }
+        }
+        if (!authoritative) return;
+        for (const z of g.zombies || []) {
+            const q = z.group?.position;
+            if (!q || z.isDead || !near(q.x, q.z)) continue;
+            const f = this._onTop(q.x, q.z, q.y - 1.0);
+            if (f != null) q.y = f + 1.0;
+        }
+        for (const v of g.castleLife?.byId?.values() || []) {
+            if (v.dead || !near(v.x, v.z)) continue;
+            const f = this._onTop(v.x, v.z, v.y);
+            if (f != null) v.y = f;
+        }
+        for (const a of g.animals?.list || []) {
+            const q = a.group?.position;
+            if (!q || a.dead || !near(q.x, q.z)) continue;
+            const f = this._onTop(q.x, q.z, q.y - 0.5);
+            if (f != null) q.y = f + 0.5;
+        }
     }
 
     /** The ground jumps under my feet and the walls fall on me. */
     _hurtMe(d) {
-        const g = this.game, R = TOTAL.RADIUS, p = d.p;
+        const g = this.game, R = d.R, p = d.p, harm = d.harm;
         if (g.isDeadLocal) return;
         const me = g.character.group.position;
         const dist = Math.hypot(me.x - p.x, me.z - p.z);
@@ -200,22 +264,22 @@ export class TotalDestruction {
         if (!g.flight?.active) {
             _v.set(me.x - p.x, 0, me.z - p.z);
             if (_v.lengthSq() < 1e-6) _v.set(0, 0, 1);
-            g.impact?.apply({ v: _v.normalize().multiplyScalar(3 + 6 * k), from: null, by: d.by, spell: TOTAL.NAME, always: { down: 3 }, toss: 3 + 5 * k, jolt: 3 * k, down: 3 });
+            g.impact?.apply({ v: _v.normalize().multiplyScalar(3 + 6 * k), from: null, by: d.by, spell: d.name, always: { down: 3 * harm }, toss: (3 + 5 * k) * Math.sqrt(harm), jolt: 3 * k, down: 3 * harm });
         }
         // 5× «Бомбардо Максима» (a shield takes part of it)
-        let dmg = 5 * bombardoDamage(dist, R, MAXIMA_POWER);
+        let dmg = 5 * harm * bombardoDamage(dist, R, MAXIMA_POWER); // (Maxima: twice)
         const c = g.combat, s = c?.shield;
         if (s && s.left > 0) dmg *= s.type === 2 ? 0.25 : 0.5;
         dmg = Math.round(dmg);
         if (dmg <= 0) return;
         const by = d.by === g.localId ? null : d.by;
-        if (c?.enabled) c.damage(dmg, by, TOTAL.NAME);
+        if (c?.enabled) c.damage(dmg, by, d.name);
         else g.damageLocalPlayer?.(dmg);
     }
 
     /** (host) Every creature in the area: off its feet, crushed. */
     _hurtCreatures(d) {
-        const g = this.game, R = TOTAL.RADIUS, P = TOTAL.POWER, p = d.p, by = d.by;
+        const g = this.game, R = d.R, P = d.P, p = d.p, by = d.by;
         const reach = R + 3;
         for (const z of g.zombies || []) {
             if (z.isDead) continue;
@@ -232,11 +296,11 @@ export class TotalDestruction {
         }
         const at = new THREE.Vector3(p.x, p.y, p.z);
         g.animals?.hitAt(at, R, 6 * P, by);
-        g.spiders?.hitAt(at, R, 12 * P, TOTAL.NAME, by);
+        g.spiders?.hitAt(at, R, 12 * P, d.name, by);
         g.castleLife?.hitAt(at, R, 8 * P, by);
         g.ships?.blast?.(at, R, P, by);
         g.ships?.crew?.hitAt(at, R, 8 * P, by);
-        g.creatureImpact?.spellArea(TOTAL.NAME, by, (c) => {
+        g.creatureImpact?.spellArea(d.name, by, (c) => {
             const dd = Math.hypot(c.x - p.x, c.z - p.z);
             if (dd > reach || Math.abs(c.y - p.y) > 30) return null;
             const v = new THREE.Vector3(c.x - p.x, 0, c.z - p.z);
@@ -262,7 +326,7 @@ export class TotalDestruction {
         d.blocks = cells.map(([x, L, z, t], i) => {
             mesh.setColorAt(i, _c.setHex(BASE_COLORS[t] ?? 0x888888));
             const h = hash01(x, L, z, 21);
-            const floor = data ? data.topLayer(x, z) : L - 4; // (where it comes down: the ruins under it)
+            const floor = data ? data.floorBelow(x, z, L) : L - 4; // (where it comes down: the ruins, a cave's floor)
             return {
                 x, y: L - 1, z, vx: (hash01(x, L, z, 22) - 0.5) * 2.4, vy: 0, vz: (hash01(x, L, z, 23) - 0.5) * 2.4,
                 wait: h * 0.9 + Math.max(0, 6 - (L - floor)) * 0.02, // (it crumbles: not all at once)
@@ -299,7 +363,7 @@ export class TotalDestruction {
             this._draw(d);
             // crash after crash while it comes down
             if (d.crash < 4 && d.t > d.crash * 0.45 + 0.3) { d.crash++; g.sound?.playExplosion?.(d.p, g.character.group.position, 1 + Math.random()); }
-            if (!left || d.t > TOTAL.FALL + 1.5) this._endFall(d);
+            if (!left || d.t > TOTAL.FALL + 2.5) this._endFall(d);
         } else if (d.t > 0.5) this._endFall(d);
         if (d.rubbleKeys && d.t > 1.3) { g.world.terrain?.data?.showCells?.(d.rubbleKeys); d.rubbleKeys = null; }
     }

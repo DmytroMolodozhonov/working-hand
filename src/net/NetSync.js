@@ -478,8 +478,8 @@ export class NetSync {
     }
 
     /** «Total Destruction» of mine begins at `p`: every computer shakes and brings down the same blocks. */
-    ruin(p) {
-        this.net.send({ t: 'tdes', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
+    ruin(p, max = false) {
+        this.net.send({ t: 'tdes', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], k: max ? 1 : 0 }, true);
     }
 
     explosion(pos, radius, power = 1, casterId = null) {
@@ -723,8 +723,8 @@ export class NetSync {
             }
             case 'tdes': {
                 if (m.by === this.me) break;
-                g.voiceGate?.noteRemote('TotalDestruction', performance.now()); // (my microphone may hear their voice)
-                g.destruction?.start(vec(m.p), m.by);
+                g.voiceGate?.noteRemote(m.k ? 'TotalDestructionMaxima' : 'TotalDestruction', performance.now()); // (my microphone may hear their voice)
+                g.destruction?.start(vec(m.p), m.by, false, !!m.k);
                 break;
             }
             case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;

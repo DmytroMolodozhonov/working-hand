@@ -51,6 +51,30 @@ test('«Total Destruction» leaves the same ruins on every computer; far away no
 test('«Total Destruction» is heard in English and in Russian', async () => {
     const { matchSpell } = await import('../../src/fx/SpellManager.js');
     for (const t of ['Total Destruction', 'тотал дестракшн', 'Тотал Дестракшен', 'тотал дистракшн']) assert.equal(matchSpell(t), 'TotalDestruction', t);
+    for (const t of ['Total Destruction Maxima', 'тотал дестракшн максима']) assert.equal(matchSpell(t), 'TotalDestructionMaxima', t);
     assert.equal(matchSpell('бомбардо максима'), 'BombardoMaxima');
     assert.equal(matchSpell('стоп'), 'Stand');
+});
+
+test('«Total Destruction» over a cave: its ceiling breaks off and lies on its floor as heaps of stones (a cave-in)', () => {
+    const d = flat();
+    // a cave hall 21×21, 4 high, under 5 blocks of ground
+    const air = () => { let n = 0; for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) for (let L = -8; L <= -5; L++) if (d.get(x, L, z) === BLOCK.AIR) n++; return n; };
+    for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) for (let L = -8; L <= -5; L++) d.set(x, L, z, BLOCK.AIR);
+    const before = air();
+    const r = ruinArea(d, 0, -0.5, 0);
+    let heaps = 0, higher = 0;
+    for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) {
+        if (d.get(x, -8, z) !== BLOCK.AIR) heaps++;
+        if (d.get(x, -4, z) === BLOCK.AIR) higher++;
+    }
+    assert.ok(air() < before * 0.85, `the cave is partly filled (${before} → ${air()})`);
+    assert.ok(heaps > 150, 'stones lie on the cave floor');
+    assert.ok(higher > 150, 'the ceiling broke off: the cave is higher and ragged');
+    assert.ok(r.removed.filter(([, L]) => L < 0).length > 300, 'the falling ceiling is seen falling');
+    // the same cave-in on another computer
+    const e = flat();
+    for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) for (let L = -8; L <= -5; L++) e.set(x, L, z, BLOCK.AIR);
+    ruinArea(e, 0, -0.5, 0);
+    for (let x = -12; x <= 12; x++) for (let z = -12; z <= 12; z++) for (let L = -9; L <= 2; L++) assert.equal(d.get(x, L, z), e.get(x, L, z));
 });

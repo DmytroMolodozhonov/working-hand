@@ -15,6 +15,7 @@ import { BLOCK, MIN_LAYER, isSolid, isLeaves } from './Terrain.js';
 import { collapseAfter } from './Collapse.js';
 
 export const RUIN = {
+    DEEP: 28, // blocks: how deep under the place the caves cave in
     RADIUS: 20, // m: 5× «Бомбардо Максима» (its crater is ~6 m): a castle's whole keep
     EDGE: 0.18, // the edge of the circle is ragged by this share of the radius
     RUBBLE: 0.3, // share of the fallen heavy blocks that lies as rubble
@@ -48,6 +49,29 @@ function groundTop(data, x, z, from, floor) {
     return null;
 }
 
+/**
+ * The hollows of a column between layers L0 and its top: caves, tunnels, the space under
+ * an overhang — air with rock (or anything solid) both under and over it.
+ * @returns {Array<{F: number, C: number}>} F: the floor's layer, C: the ceiling's lowest layer
+ */
+export function hollows(data, x, z, L0, top) {
+    const out = [];
+    let F = null, wet = false;
+    for (let L = L0; L <= top; L++) {
+        const t = data.get(x, L, z);
+        if (t === BLOCK.AIR || t === BLOCK.WATER) {
+            if (F === null) { if (L > L0 && isSolid(data.get(x, L - 1, z))) { F = L - 1; wet = false; } else continue; }
+            if (t === BLOCK.WATER) wet = true;
+        } else if (F !== null) {
+            if (!wet) out.push({ F, C: L }); // (a flooded cave stays as it is)
+            F = null;
+        }
+    }
+    return out;
+}
+
+const deepFrom = (data, cy, floor) => Math.max(floor - 1, Math.round(cy + 1.5) - RUIN.DEEP); // (from the bedrock up)
+
 /** The columns of the area: [x, z, e] (e: 0 at the centre, 1 at the edge). */
 export function ruinColumns(cx, cz, radius = RUIN.RADIUS) {
     const out = [];
@@ -66,13 +90,15 @@ export function ruinColumns(cx, cz, radius = RUIN.RADIUS) {
  * The built blocks the area holds now (to see them crack while the ground shakes).
  * @returns {Array<[number, number, number, number]>} [x, L, z, type] (at most `max`, spread over the area)
  */
-export function ruinSample(data, cx, cz, radius = RUIN.RADIUS, max = 400) {
+export function ruinSample(data, cx, cz, radius = RUIN.RADIUS, max = 400, cy = null) {
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
     const all = [];
     for (const [x, z] of ruinColumns(cx, cz, radius)) {
         const top = data.topLayer(x, z);
         const g = groundTop(data, x, z, top, floor) ?? floor - 1;
         for (let L = top; L > g; L--) { const t = data.get(x, L, z); if (built(t) && !light(t)) all.push([x, L, z, t]); }
+        // a cave's ceiling cracks too (stones and dust fall from it)
+        if (cy != null) for (const { C } of hollows(data, x, z, deepFrom(data, cy, floor), top)) all.push([x, C, z, data.get(x, C, z)]);
     }
     if (all.length <= max) return all;
     const step = all.length / max, out = [];
@@ -90,7 +116,7 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS) {
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
     const cols = ruinColumns(cx, cz, radius);
     const removed = [], rubble = [], heavy = [];
-    const dips = [];
+    const dips = [], caveRubble = [];
     for (const [x, z, e] of cols) {
         const top = data.topLayer(x, z);
         const g = groundTop(data, x, z, top, floor);
@@ -117,6 +143,8 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS) {
                 for (let i = 0; i < s; i++) dips.push({ x, y: g - s + i, z });
             }
         }
+        // the caves under it cave in: their ceilings break off and lie on their floors
+        caveIn(data, x, z, e, deepFrom(data, cy, floor), removed, caveRubble);
         // how much of it lies here as rubble (it lands on this column or a neighbour)
         const k = Math.min(RUIN.RUBBLE_MAX, Math.round(n * RUIN.RUBBLE * (0.5 + hash01(x, 4, z, 14))));
         for (let i = 0; i < k; i++) {
@@ -134,7 +162,49 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS) {
         data.set(x, L, z, t);
         out.push([x, L, z, t]);
     }
+    out.push(...caveRubble);
     // the rest of what hangs at the edge falls down
     const falls = collapseAfter(data, cx, cy, cz, radius * (1 + RUIN.EDGE));
     return { removed, rubble: out, falls, sunk: dips.length };
+}
+
+/**
+ * A column's caves cave in (changes the data): 3–6 blocks of every ceiling break off
+ * (more in the middle; a thin ceiling comes down whole — the cave opens to the sky)
+ * and lies as a heap of broken stones on the cave's floor (a bigger one: the cave fills up).
+ */
+function caveIn(data, x, z, e, L0, removed, rubble) {
+    const top = data.topLayer(x, z);
+    const list = hollows(data, x, z, L0, top);
+    if (!list.length) return;
+    const heaps = [];
+    for (const { F, C } of list) {
+        let th = 0;
+        while (C + th <= top && isSolid(data.get(x, C + th, z)) && data.get(x, C + th, z) !== BLOCK.BEDROCK) th++;
+        let k = e > 0.85 ? 1 : 3 + Math.floor(hash01(x, C, z, 31) * 3) + (e < 0.5 ? 1 : 0);
+        if (th <= k + 1) k = th; // (a thin roof: all of it)
+        const fell = [];
+        for (let L = C; L < C + k; L++) {
+            const t = data.get(x, L, z);
+            if (!isSolid(t) || t === BLOCK.BEDROCK || t === BLOCK.ICE_SHAPE) break;
+            data.set(x, L, z, BLOCK.AIR);
+            removed.push([x, L, z, t]);
+            if (!light(t)) fell.push(t);
+        }
+        // (broken rock takes more room than whole rock: the heap is bigger than what fell)
+        const n = Math.min(C - F - 1, Math.round(fell.length * (1.3 + 0.5 * hash01(x, F, z, 32))));
+        const types = [];
+        for (let i = 0; i < n; i++) types.push(fell[i] ?? BLOCK.COBBLE);
+        heaps.push({ C, types });
+    }
+    // the stones lie on whatever is under them now (a lower cave's floor if its ceiling went too)
+    for (const { C, types } of heaps) {
+        for (const t of types) {
+            const L = data.floorBelow(x, z, C - 1) + 1;
+            if (L >= C || data.get(x, L, z) !== BLOCK.AIR) break;
+            const stone = isGround(t) && hash01(x, L, z, 33) < 0.5 ? BLOCK.COBBLE : t; // (broken rock)
+            data.set(x, L, z, stone);
+            rubble.push([x, L, z, stone]);
+        }
+    }
 }

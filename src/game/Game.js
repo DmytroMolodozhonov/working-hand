@@ -85,7 +85,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
+const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -953,7 +953,7 @@ export class Game {
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'Alive') return this.livingTrees.cast(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
-        if (name === 'TotalDestruction') return this.destruction.cast(isFinal);
+        if (name === 'TotalDestruction' || name === 'TotalDestructionMaxima') return this.destruction.cast(isFinal, name);
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (name === 'LetItRain') return this._castRain(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);

@@ -134,6 +134,7 @@ export const SPELL_PHYSICS = {
     Bombardo: { blast: true, jolt: 3, down: 1.5 }, BombardoMaxima: { blast: true, jolt: 4, down: 2.5 },
     Earthquake: { push: 3, always: true, down: 1.5, toss: 4 }, EarthquakeMaxima: { push: 5, always: true, down: 2.5, toss: 6 },
     TotalDestruction: { push: 6, always: true, down: 3, toss: 6, jolt: 3 }, // (the ground jumps, the walls fall)
+    TotalDestructionMaxima: { push: 9, always: true, down: 6, toss: 8.5, jolt: 4 },
     Lightning: { push: 8, always: true, down: 2, jolt: 2 }, LightningStrike: { push: 8, always: true, down: 2, jolt: 2 },
     Breakthrough: { push: 8, toss: 6 }, BreakthroughMaxima: { push: 12, toss: 8 },
     WallRise: { push: 8, toss: 6 }, WallRiseMaxima: { push: 12, toss: 8 },
