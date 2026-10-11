@@ -223,3 +223,13 @@ test('memory per villager: the net is given the earlier lines', async () => {
     assert.ok(last.history.some((h) => h.role === 'user' && /дима/.test(h.content)));
     assert.match(last.system, /Дима/);
 });
+
+test('«почему» is not «почём»; a question with no answer gets an honest «не знаю», not a line about something else', async () => {
+    const { detectIntent } = await import('../../src/game/VillagerBrain.js');
+    assert.ok(!detectIntent('почему ты грустный').all.includes('price'));
+    assert.ok(detectIntent('почем хлеб').all.includes('price'));
+    const b = brain('farmer', { seed: 9 });
+    let honest = 0;
+    for (let i = 0; i < 20; i++) if (/(знаю|знает|спроси|слыхал|попроще)/i.test(b.hear('почему у драконов нет крыльев', {}).reply)) honest++;
+    assert.ok(honest >= 8, `honest answers: ${honest}/20`);
+});

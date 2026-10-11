@@ -152,7 +152,8 @@ export class TalkMind {
                 new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs); }),
             ]);
             clearTimeout(timer);
-        } catch (e) { return res; }
+        } catch (e) { this.lastTimedOut = false; return res; }
+        this.lastTimedOut = !raw; // (the net said nothing in time: the rules answered)
         const { text: said, calls } = parseToolCalls(raw);
         const clean = sanitizeReply(said, brain.villager?.name);
         const good = this._acceptText(clean, text);

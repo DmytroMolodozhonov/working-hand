@@ -28,6 +28,7 @@ import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
 
 const PICK_RADIUS = 0.9;
+const SHOP_GRIP = 0.5; // fingers this closed (tracked curl) to take a good from a market counter
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -405,6 +406,8 @@ export class ItemSystem {
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
                 if (L.model.position.distanceTo(hand) > PICK_RADIUS) continue;
+                // a good on a market counter: only taken by really closing the fingers on it (a brush of the hand takes nothing)
+                if (L.item.shop && !((ch.isHandTracked ? ch.isHandTracked(side) : false) && (ch.getGripCurl ? ch.getGripCurl(side) : 0) > SHOP_GRIP)) continue;
                 if (this.auth) this.pickUp(L.item.uid, g.localId, side);
                 else { L.asked = true; g.sync?.itemTake?.(L.item.uid, side); setTimeout(() => { L.asked = false; }, 1500); }
                 break;
@@ -536,7 +539,7 @@ export class ItemSystem {
         // a good from a market stall: the merchant names the price
         if (item.shop) this.game.castleLife?.talk?.tookGood(item);
         // arrows go straight into a bow's quiver (in a hand or in a slot), up to 25
-        if (item.kind === 'arrows') {
+        if (item.kind === 'arrows' && !item.shop) { // (unpaid arrows stay in the hand until paid)
             const g = this.game;
             const bow = this.heldOf('bow')?.item || g.inventory.slots.find((s) => s && s.kind === 'bow');
             if (bow && (bow.arrows || 0) < 25) {

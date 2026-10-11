@@ -120,13 +120,34 @@ export class CastleTalk {
         if (d > range) return;
         // a shout carries far and stays loud; a word is quiet beyond a few metres
         const volume = shout ? Math.max(0.3, Math.min(1, 1 - (d - 8) / (range - 8) * 0.7)) : Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
+        if (this._mute) return; // («Хм…» is only seen, not said)
         this._lastSpoken = text;
         // a spell's word said aloud (a wizard practising, a cry in a duel): my microphone may hear it
         // from the speakers — it must not cast that spell from my hand (VoiceGate echo, until it is said)
         const sp = matchSpell(text);
         if (sp) this.game.voiceGate?.noteRemote(sp, performance.now() + Math.min(8000, 400 + text.length * 70));
+        // an answer in a talk: what is written over the head is what you hear — now, not after older lines
+        if (this._urgent) this.speech.cancel();
+        const now = performance.now();
+        this._spoken = (this._spoken || []).filter((l) => now - l.at < 12000);
+        this._spoken.push({ text, at: now });
         // (× the game's sound volume inside Speech; a woman always with a female voice, a man with a male one)
         this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout });
+    }
+
+    /** A line of the conversation with me: said at once (cutting what was being said), no chatter over it. */
+    _sayReply(v, text, seconds = 5) {
+        if (!text) return;
+        v.talkedAt = performance.now();
+        this._urgent = true;
+        try { this.life._say(v, text, seconds); } finally { this._urgent = false; }
+    }
+
+    /** «Хм…» while the net thinks: over the head only. */
+    _sayThinking(v) {
+        v.talkedAt = performance.now();
+        this._mute = true;
+        try { this.life._say(v, thinkingLine(v.role), 3); } finally { this._mute = false; }
     }
 
     /** The neural voices download once: show its progress, then that they are ready. */
@@ -148,7 +169,7 @@ export class CastleTalk {
     hear(text) {
         const g = this.game;
         if (!text || !this.life.enabled) return false;
-        if (this.speech.speaking && this._echo(text)) return false; // (the villager's own voice in the microphone)
+        if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
         const v = this._listener();
         if (!v) return false;
         const b = this.brain(v);
@@ -160,17 +181,27 @@ export class CastleTalk {
         // a guest without a net of their own: the host's net answers (not the market — that is mine)
         if (!g.authority && this.hostSmart && !this.llm?.ready && g.sync?.villagerAsk && this.offer?.v !== v) {
             this._asks.set(v.id, performance.now());
-            this.life._say(v, thinkingLine(v.role), 3);
+            this._sayThinking(v);
             g.sync.villagerAsk(v.id, text, { coins: ctx.coins, heldItem: ctx.heldItem, hostile: ctx.hostile });
             // (no answer in time: my own rules answer)
             setTimeout(() => { if (this._asks.delete(v.id)) done(b.hear(text, ctx)); }, 12000);
             return true;
         }
         this.mind.llm = this.llm?.ready ? this.llm : null;
+        if (!this.mind.llm) this._whyNoNet();
         const first = this.mind.first(b, text, ctx);
         if (first.done) { done(first.res); return true; } // (the rules: at once)
-        const thinking = () => this.life._say(v, thinkingLine(v.role), 3);
-        this.mind.ask(b, text, ctx, first, { onThinking: thinking }).then(done, () => done(first.res));
+        const thinking = () => this._sayThinking(v);
+        const t0 = performance.now();
+        this.mind.ask(b, text, ctx, first, { onThinking: thinking }).then((res) => {
+            // (too slow on this computer: say so now and then — the answer came from the rules)
+            if (this.mind.lastTimedOut) {
+                this._slow = (this._slow || 0) + 1;
+                if (this._slow >= 2 && performance.now() - (this._slowT || -1e9) > 180000) { this._slowT = performance.now(); g.hud.notify?.('🧠 Нейросеть жителей не успевает отвечать на этом компьютере — отвечают готовыми фразами'); }
+            } else this._slow = 0;
+            console.info(`[CastleTalk] ${res.smart ? 'net' : 'rules'} ${Math.round(performance.now() - t0)} ms: «${text}» → «${res.reply}»${res.action ? ` [${res.action}]` : ''}`);
+            done(res);
+        }, () => done(first.res));
         return true;
     }
 
@@ -205,7 +236,7 @@ export class CastleTalk {
         this.mind.llm = this.llm?.ready ? this.llm : null;
         const send = (res) => {
             if (!res || v.dead) return;
-            if (res.reply) this.life._say(v, res.reply, 5);
+            if (res.reply) this._sayReply(v, res.reply);
             if (res.action) this._act(v, res, from);
             g.sync?.villagerAnswer?.(from, id, { action: res.action || null, offer: res.offer || null });
         };
@@ -224,10 +255,17 @@ export class CastleTalk {
 
     /** Is what the microphone heard just the villager's own words from the speakers? */
     _echo(text) {
-        const words = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
-        const heard = words(text), said = new Set(words(this._lastSpoken));
-        if (!heard.length || !said.size) return false;
-        return heard.filter((w) => said.has(w)).length >= Math.max(1, heard.length * 0.6);
+        const words = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 1);
+        const heard = words(text);
+        if (!heard.length) return false;
+        // (the lines said in the last seconds: the neural voice speaks a little after the bubble, the microphone hears it later still)
+        const now = performance.now();
+        for (const l of this._spoken || []) {
+            if (now - l.at > 12000) continue;
+            const said = new Set(words(l.text));
+            if (said.size && heard.filter((w) => said.has(w)).length >= Math.max(1, heard.length * 0.6)) return true;
+        }
+        return false;
     }
 
     /** Who hears me: the nearest villager within earshot, the one in front first. */
@@ -253,7 +291,8 @@ export class CastleTalk {
     _apply(v, res) {
         if (!res || v.dead) return;
         const g = this.game;
-        if (res.reply) { this.life._say(v, res.reply, 5); }
+        if (res.reply) this._sayReply(v, res.reply);
+        if ((res.offer && res.action !== 'trade_yes') || res.action === 'offer_goods') this._pitch = { v, at: performance.now() };
         const me = g.character.group.position;
         switch (res.action) {
             case 'trade_yes': this._tradeYes(v, res); break;
@@ -341,19 +380,23 @@ export class CastleTalk {
         this.offer = { v, kind: 'buy', price: item.shop.price, uid: item.uid, item, stall: key };
         const line = this.brain(v).priceLine({ name: nameOf(item) }, item.shop.price, 'buy', this._ctx(v));
         v.talking = 4;
-        this.life._say(v, line, 6);
+        this._sayReply(v, line, 6);
         this.game.hud.setVoice?.(`💰 ${item.shop.price} монет — скажите «да», чтобы купить (у вас ${this.game.inventory.coins()})`, true);
     }
 
     _tradeYes(v, res = null) {
         const g = this.game;
         const o = this.offer;
-        if ((!o || o.v !== v) && res?.offer?.kind === 'buy') { this._buyByWord(v, res.offer); return; }
+        // «да» right after the merchant named a good and its price (not to an old offer, not by chance)
+        if ((!o || o.v !== v) && res?.offer?.kind === 'buy') {
+            if (this._pitch?.v === v && performance.now() - this._pitch.at < 30000) { this._pitch = null; this._buyByWord(v, res.offer); }
+            return;
+        }
         if (!o || o.v !== v) return;
         if (o.kind === 'buy') {
             const item = this._findMine(o.uid);
             if (!item) { this.offer = null; return; }
-            if (!g.inventory.spendCoins(o.price)) { this.life._say(v, this.brain(v).noMoneyLine(this._ctx(v)), 5); return; }
+            if (!g.inventory.spendCoins(o.price)) { this._sayReply(v, this.brain(v).noMoneyLine(this._ctx(v))); return; }
             delete item.shop;
             g.inventory._render?.();
             g.hud.setVoice?.(`💰 Куплено: ${nameOf(item)} за ${o.price} (осталось ${g.inventory.coins()})`, true);
@@ -373,8 +416,8 @@ export class CastleTalk {
         const g = this.game;
         const want = String(offer.item?.name || offer.item || '').toLowerCase();
         const good = this._goodsOf(v).find((x) => x.name === want || want.includes(x.name.slice(0, 4))) || null;
-        if (!good) { this.life._say(v, 'Ой, это уже разобрали...', 4); return; }
-        if (!g.inventory.spendCoins(good.price)) { this.life._say(v, this.brain(v).noMoneyLine(this._ctx(v)), 5); return; }
+        if (!good) { this._sayReply(v, 'Ой, это уже разобрали...', 4); return; }
+        if (!g.inventory.spendCoins(good.price)) { this._sayReply(v, this.brain(v).noMoneyLine(this._ctx(v))); return; }
         this.prepaid.add(good.uid);
         const side = g.items.held.right ? 'left' : 'right';
         if (g.authority) {
@@ -443,7 +486,7 @@ export class CastleTalk {
                 this.offer = { v, kind: 'sell', price, ...found, stall: key };
                 const line = this.brain(v).priceLine({ name: nameOf(found.item), magic: isMagicItem(found.item) }, price, 'sell', this._ctx(v));
                 v.talking = 4;
-                this.life._say(v, line, 6);
+                this._sayReply(v, line, 6);
                 g.hud.setVoice?.(`💰 Торговец даёт ${price} монет — скажите «да», чтобы продать`, true);
             });
         }
@@ -470,7 +513,7 @@ export class CastleTalk {
         const g = this.game;
         const me = g.character.group.position;
         for (const v of this.life.byId.values()) {
-            if (v.dead || v.foe || v.talking > 0) continue;
+            if (v.dead || v.foe || v.talking > 0 || now - (v.talkedAt || -1e9) < 60000) continue; // (not in the middle of a talk)
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             if (d > 5) continue;
             if (now - (this._greetT.get(v.id) || 0) < 90000) continue;
@@ -519,13 +562,14 @@ export class CastleTalk {
     async _loadLLM(setting) {
         const g = this.game;
         let LocalLLM;
-        try { ({ LocalLLM } = await import('../ai/LocalLLM.js')); } catch (e) { return; }
-        if (!LocalLLM.supported) return;
+        this.llmState = { state: 'loading', text: 'готовится' };
+        try { ({ LocalLLM } = await import('../ai/LocalLLM.js')); } catch (e) { this.llmState = { state: 'failed', text: 'не загрузилась' }; return; }
+        if (!LocalLLM.supported) { this.llmState = { state: 'failed', text: 'этот браузер её не умеет' }; return; }
         let gpu = false;
         // ('auto': a real graphics adapter, not only the word WebGPU in the browser)
         if (setting === 'auto') { try { gpu = !!(await navigator.gpu?.requestAdapter?.()); } catch (e) { gpu = false; } }
         let key = LocalLLM.pick(setting, gpu);
-        if (!key) return;
+        if (!key) { this.llmState = { state: 'nogpu', text: 'не включилась: браузер не видит видеокарту (в настройках звука можно включить её вручную)' }; return; }
         while (key) {
             const llm = new LocalLLM({ model: key });
             this.llm = llm;
@@ -537,9 +581,11 @@ export class CastleTalk {
                     const now = performance.now();
                     if (now - last < 1500 && f !== 1) return;
                     last = now;
+                    this.llmState = { state: 'loading', text: `ещё скачивается${f != null ? ` (${Math.round(f * 100)}%)` : ''}` };
                     g.hud.setVoice?.(`🧠 ${text || 'Нейросеть жителей'}${f != null ? ` ${Math.round(f * 100)}%` : ''}`, true);
                 });
                 if (this.llm !== llm) return; // (disposed meanwhile)
+                this.llmState = { state: 'ready', text: `готова (${m.label}, ${llm.device === 'webgpu' ? 'видеокарта' : 'процессор'})` };
                 g.hud.notify?.('🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
                 g.sync?.villagerAI?.(true);
                 return;
@@ -550,7 +596,19 @@ export class CastleTalk {
                 key = m.fallback || null;
             }
         }
+        this.llmState = { state: 'failed', text: 'не загрузилась' };
         g.hud.notify?.('🧠 Нейросеть не загрузилась — жители говорят готовыми фразами (приказы всё равно понимают)');
+    }
+
+    /** I talk to a villager without the net: say once in a while why (still downloading, no graphics card, failed, off). */
+    _whyNoNet() {
+        const g = this.game;
+        if (this.llm?.ready || this.hostSmart) return;
+        const now = performance.now();
+        if (now - (this._whyT || -1e9) < 120000) return;
+        this._whyT = now;
+        const st = g.config.villagerAI === 'off' ? { text: 'выключена в настройках звука' } : this.llmState || { text: 'ещё не начала загружаться (подойдите к замку)' };
+        g.hud.notify?.(`🧠 Нейросеть жителей ${st.text} — пока они отвечают готовыми фразами`);
     }
 
     dispose() {

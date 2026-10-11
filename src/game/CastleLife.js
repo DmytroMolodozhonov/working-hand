@@ -1315,7 +1315,9 @@ export class CastleLife {
         if (this._chatT > 0 || !this.auth) return;
         this._chatT = 5 + Math.random() * 6;
         const me = this.game.character.group.position;
-        const near = [...this.byId.values()].filter((v) => !v.dead && !v.foe && Math.hypot(v.x - me.x, v.z - me.z) < 22);
+        const now = performance.now();
+        // (not one talking with somebody: no line of their own over the answer)
+        const near = [...this.byId.values()].filter((v) => !v.dead && !v.foe && !(v.talking > 0) && now - (v.talkedAt || -1e9) > 30000 && Math.hypot(v.x - me.x, v.z - me.z) < 22);
         if (!near.length) return;
         const v = near[Math.floor(Math.random() * near.length)];
         const line = this.brainLine?.(v) || pick(SHOUT.ambient[v.role] || WIZ_SHOUT.ambient[v.role] || SHOUT.hurt);

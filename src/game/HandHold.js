@@ -439,7 +439,7 @@ export class HandHold {
     }
 
     _faceVillager(v, p, dt) {
-        const want = Math.atan2(-(p.x - v.x), -(p.z - v.z)) + Math.PI; // (a villager's front is +z)
+        const want = Math.atan2(-(p.x - v.x), -(p.z - v.z)); // (a villager's face is at −z, like CastleLife turns them: never the back to the player)
         let d = want - v.yaw;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;

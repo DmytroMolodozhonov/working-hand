@@ -6,6 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, realErrors } from './harness.mjs';
+import { feed } from './poses.mjs';
 
 const PORT = Number(process.env.ZNS_TEST_PORT) || 8163;
 let srv, browser;
@@ -157,6 +158,69 @@ test('talk: the neural net (a fake one) understands free words — «Хм…» f
     assert.match(r.plain, /Стены крепкие/);
     assert.ok(r.tools.includes('defend_castle') && r.tools.includes('follow_me'));
     assert.match(r.system, /КОРОЛЬ этого замка/);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('market: a brush of the open hand takes nothing from the counter — only closed fingers do; the villager\'s own voice in the microphone is not an answer', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const c = g.world.terrain.data.castles.near(0, 0, 2500).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+        window.__castle = c;
+        const s = c.stalls[0];
+        g.character.group.position.set(s.front.x, s.front.y + 2.2, s.front.z);
+        g.world.terrain.flushAround(s.front.x, s.front.z);
+        g.castleLife.talk._llmTried = true;
+    });
+    let uid = null;
+    for (let i = 0; i < 60 && !uid; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        uid = await page.evaluate(() => { const g = window.__zns.game; for (const [, s] of g.castleLife.talk.stalls) for (const u of s.goods) if (g.items.loose.get(u)?.item.shop) return u; return null; });
+    }
+    assert.ok(uid, 'a good on the counter');
+    // the hand lies on the good with the fingers open: nothing is taken
+    await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 5, 40);
+    const r = await page.evaluate(async (uid) => {
+        const g = window.__zns.game, ch = g.character, T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const L = g.items.loose.get(uid);
+        const origPos = ch.getHandWorldPosition.bind(ch), origCurl = ch.getGripCurl.bind(ch), origTr = ch.isHandTracked?.bind(ch);
+        let curl = 0;
+        ch.getHandWorldPosition = (side, out = new T.Vector3()) => (side === 'right' ? out.copy(L.model.position) : origPos(side, out));
+        ch.getGripCurl = (side) => (side === 'right' ? curl : 0);
+        ch.isHandTracked = () => true;
+        g.currentPose = g.currentPose || {};
+        await frames(15);
+        const brushed = g.items.loose.has(uid);
+        curl = 1;
+        await frames(15);
+        const took = !g.items.loose.has(uid) && (g.items.held.right?.item.uid === uid || g.items.held.left?.item.uid === uid);
+        ch.getHandWorldPosition = origPos; ch.getGripCurl = origCurl; if (origTr) ch.isHandTracked = origTr;
+        const unpaid = !!(g.items.held.right?.item.shop || g.items.held.left?.item.shop);
+        // the merchant's line comes back through the microphone: nobody answers it
+        const T2 = g.castleLife.talk;
+        const m = T2.offer?.v;
+        const said = m?.bubble?.text || '';
+        const echo = said ? T2.hear(said) : null;
+        // a villager who gives me a hand turns his face to me — not his back (the face of the model is at −z)
+        const me = ch.group.position;
+        let face = null;
+        if (m) {
+            g.handHold._faceVillager(m, me, 1);
+            g.handHold._faceVillager(m, me, 1);
+            const fx = -Math.sin(m.yaw), fz = -Math.cos(m.yaw);
+            const d = Math.hypot(me.x - m.x, me.z - m.z) || 1;
+            face = (fx * (me.x - m.x) + fz * (me.z - m.z)) / d;
+        }
+        return { brushed, took, unpaid, offered: T2.offer?.kind === 'buy', said, echo, face };
+    }, uid);
+    assert.ok(r.brushed, 'an open hand on the good takes nothing');
+    assert.ok(r.took && r.unpaid && r.offered, `closed fingers take it, the merchant names the price: ${JSON.stringify(r)}`);
+    assert.equal(r.echo, false, 'the merchant\'s own words from the speakers are not an answer');
+    assert.ok(r.face > 0.9, `the merchant faces me when giving a hand (${r.face})`);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

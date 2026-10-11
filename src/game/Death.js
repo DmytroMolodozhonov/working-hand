@@ -385,7 +385,7 @@ export class DeathSystem {
             const s = ang * 5 + dist * 0.05;
             if (!best || s < best.s) best = { s, p: p.clone() };
         };
-        for (const L of g.items?.loose.values() || []) if (!L.hover && !L.accio) consider(L.model.position);
+        for (const L of g.items?.loose.values() || []) if (!L.hover && !L.accio && !L.item.shop) consider(L.model.position); // (not the market's goods)
         for (const w of g.weapons?.weapons || []) if (this._freeWeapon(w)) consider(w.position);
         for (const b of this.bodies.values()) consider(_v2.set(b.x, b.y + 0.4, b.z).clone());
         if (!best) return null;
@@ -400,7 +400,7 @@ export class DeathSystem {
             n++;
         }
         for (const L of [...(g.items?.loose.values() || [])]) {
-            if (full || L.hover || L.accio || L.asked || L.model.position.distanceTo(c) > DEATH.GATHER_R) continue;
+            if (full || L.hover || L.accio || L.asked || L.item.shop || L.model.position.distanceTo(c) > DEATH.GATHER_R) continue;
             if (g.items.auth) g.items.pickUp(L.item.uid, g.localId, 'slot');
             else { L.asked = true; g.sync?.itemTake?.(L.item.uid, 'slot'); setTimeout(() => { L.asked = false; }, 1500); }
             n++;
