@@ -214,3 +214,102 @@ class SecondStart(unittest.TestCase):
     def test_the_exact_version_is_downloaded(self):
         self.assertTrue(L.zip_url(SHA).endswith(f"/archive/{SHA}.zip"))
         self.assertTrue(L.zip_url().endswith("/archive/refs/heads/main-fbxy0j.zip"))
+
+
+class QuickUpdate(unittest.TestCase):
+    """Only the changed files: to a newer version, and back to an older one (a friend's server)."""
+    OLD, NEW = "a" * 40, "c" * 40
+
+    def setUp(self):
+        self.game = tempfile.mkdtemp()
+        for rel, text in {"src/a.js": "old a", "src/gone.js": "gone", "src/moved.js": "moved",
+                          "maps/my.json": "mine", "start.bat": "x"}.items():
+            p = os.path.join(self.game, *rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(text)
+
+    def read(self, rel):
+        p = os.path.join(self.game, *rel.split("/"))
+        if not os.path.isfile(p):
+            return None
+        with open(p, "rb") as fh:
+            return fh.read().decode("utf-8")
+
+    def fake(self, compare, files):
+        seen = []
+
+        def get(url):
+            seen.append(url)
+            if "/compare/" in url:
+                return json.dumps(compare[url.rsplit("/", 1)[1]]).encode()
+            for rel, blob in files.items():
+                if url.endswith("/" + rel):
+                    return blob
+            raise OSError("404 " + url)
+        return get, seen
+
+    def test_forward(self):
+        diff = {"status": "ahead", "files": [
+            {"filename": "src/a.js", "status": "modified"},
+            {"filename": "src/new.js", "status": "added"},
+            {"filename": "src/gone.js", "status": "removed"},
+            {"filename": "src/there.js", "previous_filename": "src/moved.js", "status": "renamed"},
+            {"filename": "start.bat", "status": "modified"},
+        ]}
+        get, seen = self.fake({f"{self.OLD}...{self.NEW}": diff},
+                              {"src/a.js": b"new a", "src/new.js": b"n", "src/there.js": b"t", "start.bat": b"@echo off\nexit\n"})
+        self.assertTrue(L.quick_update(self.game, self.OLD, self.NEW, get=get))
+        self.assertEqual(self.read("src/a.js"), "new a")
+        self.assertEqual(self.read("src/new.js"), "n")
+        self.assertIsNone(self.read("src/gone.js"))
+        self.assertIsNone(self.read("src/moved.js"))
+        self.assertEqual(self.read("src/there.js"), "t")
+        self.assertEqual(self.read("maps/my.json"), "mine", "the person's own things stay")
+        with open(os.path.join(self.game, "start.bat"), "rb") as fh:
+            self.assertEqual(fh.read(), b"@echo off\r\nexit\r\n", ".bat with Windows line ends")
+        self.assertTrue(all(self.NEW in u for u in seen if "/compare/" not in u), "the files of exactly that version")
+
+    def test_back_to_an_older_version(self):
+        # the friend's server runs the OLDER «c»; this computer has «a» (newer): GitHub says «behind»
+        behind = {"status": "behind", "files": []}
+        what_a_changed = {"status": "ahead", "files": [
+            {"filename": "src/a.js", "status": "modified"},
+            {"filename": "src/gone.js", "status": "added"},          # (only in the newer one)
+            {"filename": "src/moved.js", "previous_filename": "src/old-name.js", "status": "renamed"},
+        ]}
+        get, _ = self.fake({f"{self.OLD}...{self.NEW}": behind, f"{self.NEW}...{self.OLD}": what_a_changed},
+                           {"src/a.js": b"older a", "src/old-name.js": b"o"})
+        self.assertTrue(L.quick_update(self.game, self.OLD, self.NEW, get=get))
+        self.assertEqual(self.read("src/a.js"), "older a")
+        self.assertIsNone(self.read("src/gone.js"))
+        self.assertIsNone(self.read("src/moved.js"))
+        self.assertEqual(self.read("src/old-name.js"), "o")
+
+    def test_not_this_way(self):
+        get, _ = self.fake({f"{self.OLD}...{self.NEW}": {"status": "diverged", "files": []}}, {})
+        self.assertFalse(L.quick_update(self.game, self.OLD, self.NEW, get=get), "diverged: the whole archive instead")
+        many = {"status": "ahead", "files": [{"filename": f"f{i}", "status": "added"} for i in range(300)]}
+        get, _ = self.fake({f"{self.OLD}...{self.NEW}": many}, {})
+        self.assertFalse(L.quick_update(self.game, self.OLD, self.NEW, get=get), "too many files to list")
+        bad = {"status": "ahead", "files": [{"filename": "../evil.js", "status": "added"}]}
+        get, _ = self.fake({f"{self.OLD}...{self.NEW}": bad}, {"../evil.js": b"x"})
+        self.assertFalse(L.quick_update(self.game, self.OLD, self.NEW, get=get), "never outside the game folder")
+        self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.game), "evil.js")))
+
+    def test_a_lost_connection_leaves_the_old_version_whole(self):
+        diff = {"status": "ahead", "files": [{"filename": "src/a.js", "status": "modified"}, {"filename": "src/b.js", "status": "added"}]}
+        get, _ = self.fake({f"{self.OLD}...{self.NEW}": diff}, {"src/a.js": b"new a"})  # (b.js never comes)
+        with self.assertRaises(OSError):
+            L.quick_update(self.game, self.OLD, self.NEW, get=get)
+        self.assertEqual(self.read("src/a.js"), "old a")
+
+    def test_archive_says_its_version(self):
+        z = os.path.join(self.game, "g.zip")
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("x/server.py", "")
+            zf.comment = SHA.encode()
+        self.assertEqual(L.zip_sha(z), SHA)
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("x/server.py", "")
+        self.assertEqual(L.zip_sha(z), "")

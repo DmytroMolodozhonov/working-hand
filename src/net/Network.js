@@ -94,6 +94,7 @@ export class Network extends Emitter {
         this._heartbeat = null;
         this._colorCounter = 1;
         this.version = ''; // this game's version (commit): host and guests must play the same one
+        this.fullVersion = ''; // (its whole commit id: a guest with another version downloads exactly this one)
         this.relayed = false; // a link goes through the slow go-between (TURN): send less
         this.joinedAt = new Map(); // host: peerId -> when it came
         this.talked = new Set(); // host: peers that sent anything but pings (their game runs)
@@ -169,8 +170,8 @@ export class Network extends Emitter {
             const theirs = conn.metadata?.v || '';
             netLog(`игрок «${String(conn.metadata?.name || '?').slice(0, 16)}» соединился напрямую (его версия ${theirs || 'старая'}, моя ${this.version || '?'})`);
             if (this.version && theirs && theirs !== this.version) { // another version of the game: things would go wrong in odd ways
-                this._sendConn(conn, { t: 'version', host: this.version });
-                this.emit('status', `Игрок «${String(conn.metadata?.name || '?').slice(0, 16)}» пытался войти с другой версией игры — пусть запустит «Обновить и запустить игру»`);
+                this._sendConn(conn, { t: 'version', host: this.version, full: this.fullVersion });
+                this.emit('status', `Игрок «${String(conn.metadata?.name || '?').slice(0, 16)}» входит с другой версией игры — у него сейчас скачается ваша версия, и он войдёт сам`);
                 setTimeout(() => { try { conn.close(); } catch (e) { /* ignore */ } }, 1500);
                 return;
             }
@@ -338,7 +339,10 @@ export class Network extends Emitter {
                         netLog(`у хоста другая версия игры: ${msg.host}, у меня ${this.version}`);
                         this.role = null; this.hostConn = null;
                         try { peer.destroy(); } catch (e) { /* ignore */ }
-                        this.emit('disconnected', { reason: humanError({ type: 'version' }) });
+                        // (the menu gets the host's version for this computer at once, then joins again)
+                        const ev = { host: String(msg.host || ''), full: String(msg.full || ''), handled: false };
+                        this.emit('version', ev);
+                        if (!ev.handled) this.emit('disconnected', { reason: humanError({ type: 'version' }) });
                         return;
                     }
                     if (msg.t === 'host-left') { lost(); return; }

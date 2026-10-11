@@ -50,12 +50,13 @@ function fakeGithub(zip) {
     return new Promise((r) => srv.listen(0, '127.0.0.1', () => r({ srv, hits, port: srv.address().port })));
 }
 
-function startLauncher(home, port, gh, install) {
+function startLauncher(home, port, gh, install, extra = {}) {
     const proc = spawn(PY, [path.join(ROOT, 'launcher', 'launcher.pyw')], {
         env: {
             ...process.env, ZNS_LAUNCHER_HOME: home, ZNS_PORT: String(port), ZNS_LAUNCHER_NO_WINDOW: '1',
             ZNS_UPDATE_ZIP: `http://127.0.0.1:${gh.port}/game.zip`, ZNS_UPDATE_REFS: `http://127.0.0.1:${gh.port}/refs`,
             ZNS_UPDATE_API: 'http://127.0.0.1:9/none', ZNS_NO_PIP: '1', ZNS_DEFAULT_INSTALL: install, ZNS_LAUNCHER_GRACE: '1.5',
+            ...extra,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -161,6 +162,60 @@ test('launcher: no internet on the first launch → a friendly error and «По�
     } finally {
         L.proc.kill();
         await browser.close();
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('launcher: while the game runs it gets the newer version at once (only the changed files), and a friend\'s older one', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zns-launcher-'));
+    const home = path.join(tmp, 'home');
+    const install = path.join(tmp, 'Game');
+    const NEW = 'd'.repeat(40);
+    const page = (title) => `<!doctype html><meta charset="utf-8"><title>${title}</title>`;
+    let latest = SHA;
+    const zip = makeZip(tmp);
+    const hits = { zip: 0, raw: [] };
+    const diff = { status: 'ahead', files: [{ filename: 'index.html', status: 'modified' }] };
+    const gh = http.createServer((req, res) => {
+        const u = req.url;
+        if (u.startsWith('/refs')) return res.end(`001e# service=git-upload-pack\n0000003f${latest} refs/heads/main-fbxy0j\n`);
+        if (u.startsWith('/game.zip')) { hits.zip++; return res.end(zip); }
+        if (u === `/compare/${SHA}...${NEW}`) return res.end(JSON.stringify(diff));
+        if (u === `/compare/${NEW}...${SHA}`) return res.end(JSON.stringify({ status: 'behind', files: [] }));
+        if (u === `/commit/${SHA.slice(0, 7)}`) return res.end(JSON.stringify({ sha: SHA }));
+        if (u.startsWith('/raw/')) { hits.raw.push(u); return res.end(page(u.includes(NEW) ? 'GAME 2' : 'GAME')); }
+        res.statusCode = 404; res.end();
+    });
+    await new Promise((r) => gh.listen(0, '127.0.0.1', r));
+    const g = `http://127.0.0.1:${gh.address().port}`;
+    const port = BASE + 9;
+    const L = startLauncher(home, port, { port: gh.address().port }, install, { ZNS_UPDATE_COMPARE: `${g}/compare`, ZNS_UPDATE_RAW: `${g}/raw`, ZNS_UPDATE_COMMIT: `${g}/commit` });
+    const api = (p, body) => fetch(`http://127.0.0.1:${port}${p}`, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}).then((r) => (p === '/' ? r.text() : r.json()));
+    const until = async (fn, ms = 30000) => { const t0 = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('timeout: ' + L.out()); await new Promise((r) => setTimeout(r, 150)); } };
+    try {
+        await waitUp(`http://127.0.0.1:${port}/__launcher/ping`);
+        await api('/__launcher/folder', { path: install });
+        await until(async () => (await api('/__launcher/status')).done);
+        assert.match(await api('/'), /<title>GAME<\/title>/);
+        // a newer version comes out while the menu is open: the menu asks, it is in place in a moment
+        latest = NEW;
+        assert.equal((await api('/api/update?fresh=1')).latest, NEW.slice(0, 7));
+        assert.ok((await api('/__launcher/update', {})).ok);
+        const done = await until(async () => { const s = await api('/__launcher/update'); return s.state === 'done' || s.state === 'fail' ? s : null; });
+        assert.equal(done.state, 'done', JSON.stringify(done));
+        assert.match(await api('/'), /GAME 2/, 'the page reloads into the new version');
+        assert.equal((await api('/api/version')).full, NEW);
+        assert.equal(hits.zip, 1, 'only the changed files were downloaded, not the whole game again');
+        assert.deepEqual(hits.raw, [`/raw/${NEW}/index.html`]);
+        // a friend's server runs the older version (it says only «bbbbbbb»): exactly that one comes back
+        assert.ok((await api('/__launcher/update', { sha: SHA.slice(0, 7) })).ok);
+        const back = await until(async () => { const s = await api('/__launcher/update'); return s.state === 'done' || s.state === 'fail' ? s : null; });
+        assert.equal(back.state, 'done', JSON.stringify(back));
+        assert.match(await api('/'), /<title>GAME<\/title>/);
+        assert.equal(fs.readFileSync(path.join(install, '.zns-version'), 'ascii').trim(), SHA);
+    } finally {
+        L.proc.kill();
+        gh.close();
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 });

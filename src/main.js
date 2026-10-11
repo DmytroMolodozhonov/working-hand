@@ -24,6 +24,7 @@ import { setupPauseAudio } from './ui/PauseAudio.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/WindowControls.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
+import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -351,17 +352,20 @@ updateGameMapList();
 
 // ------------------------------------------------------------------ version
 // Shown in the menu so everyone can see at a glance that the game is up to date
+// (a friend's server is being joined with its version, just downloaded: keep that one)
+const rejoinNow = pendingRejoin(true);
 fetch('/api/version').then((r) => r.json()).then((v) => {
     if (v?.sha) net.version = v.sha; // (players must play the same version together)
+    if (v?.full) net.fullVersion = v.full;
     setGameVersion(v); // (saved worlds remember the version that wrote them)
     renderSavedWorlds();
     if (!v || !v.date) return;
     const el = $('game-version-top');
     if (el) el.innerHTML = `Версия от <b>${v.date}</b>` + (v.sha ? ` <span class="ver-sha">(${v.sha})</span>` : '');
-    // a newer version is out (the launcher downloads it on the next start): say so
-    fetch('/api/update').then((r) => r.json()).then((u) => {
-        if (!el || !u?.latest || !u.have || u.latest === u.have) return;
-        el.insertAdjacentHTML('beforeend', '<div class="ver-new">✨ Вышла новая версия игры — закройте окно игры, подождите полминуты и откройте снова значком: она скачается сама.</div>');
+    // a newer version is out: it is downloaded right now (a loading window), then the menu opens again
+    fetch('/api/update?fresh=1').then((r) => r.json()).then(async (u) => {
+        if (game?.active || starting || rejoinNow) return; // (never in the middle of a game)
+        await updateIfNewer(u);
     }).catch(() => {});
 }).catch(() => {});
 
@@ -859,6 +863,7 @@ async function joinRoom(code) {
     net.stopProbe();
     setMpStatus('Подключаемся...');
     net.serverName = servers?.find((x) => x.code === code)?.name || 'Сервер';
+    lastJoin = { code, server: mpServer.value, name: net.serverName, byCode: false };
     try {
         await net.join(code, playerName(), mpServer.value);
         if (!net.active) return; // (the server was full)
@@ -929,6 +934,7 @@ $('mp-join-btn').addEventListener('click', async () => {
     if (code.length < 4) { setMpStatus('Введите код комнаты от друга.'); return; }
     setMpStatus('Подключаемся...');
     net.serverName = 'Закрытая игра';
+    lastJoin = { code, server: mpServer.value, name: net.serverName, byCode: true };
     try {
         await net.join(code, playerName(), mpServer.value);
         setMpStatus('✅ Подключено! Ждём, когда хост начнёт игру...');
@@ -950,6 +956,35 @@ net.on('relayed', ({ who }) => {
 });
 net.on('players', () => renderPlayers());
 net.on('status', (text) => setMpStatus('⚠️ ' + escapeHtml(text)));
+// The friend's server runs another version: get exactly that one now, then join it again by itself
+let lastJoin = null;
+net.on('version', (ev) => {
+    if (!lastJoin || (game && game.active)) return;
+    ev.handled = true;
+    const join = lastJoin;
+    (async () => {
+        if (await canUpdate()) {
+            rememberRejoin(join);
+            if (await runUpdate(ev.full || ev.host, 'Скачиваю версию игры, как на сервере друга…')) { location.reload(); return; }
+            pendingRejoin(true);
+        }
+        setMpStatus('❌ ' + escapeHtml('У вас с сервером разные версии игры, и скачать нужную не получилось — проверьте интернет и попробуйте войти ещё раз'));
+        renderPlayers();
+    })();
+});
+// …and here it is again, with the server's version: join it
+{
+    const join = rejoinNow;
+    if (join) {
+        setTimeout(async () => {
+            document.querySelector('.tab-btn[data-tab="tab-mp"]')?.click();
+            mpServer.value = join.server || '';
+            if (join.byCode) { mpCode.value = join.code; $('mp-join-btn').click(); return; }
+            await joinRoom(join.code);
+            if (net.serverName === 'Сервер' && join.name) net.serverName = join.name;
+        }, 1200);
+    }
+}
 net.on('disconnected', ({ reason }) => {
     if (game && game.active) {
         alert('Мультиплеер: ' + reason);

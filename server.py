@@ -107,22 +107,23 @@ def game_version():
         except OSError:
             pass
     date = time.strftime("%d.%m.%Y %H:%M", time.localtime(newest)) if newest else ""
-    return {"date": date, "sha": sha[:7]}
+    return {"date": date, "sha": sha[:7], "full": sha if len(sha) == 40 else ""}
 
 
 _LATEST = {"sha": "", "at": 0.0}
 
 
-def latest_version():
-    """The newest version's commit id on GitHub (7 letters, '' if unknown), checked at most every 10 min.
-    Only when the launcher started the game: it downloads a new version on the next start."""
+def latest_version(fresh=False):
+    """The newest version's commit id on GitHub (7 letters, '' if unknown), checked at most every 10 min
+    (fresh: at most every 20 s — the menu as it opens). Only when the launcher started the game:
+    it can get the new version at once (/__launcher/update)."""
     if not os.environ.get("ZNS_LAUNCHER"):
         return ""
-    if time.time() - _LATEST["at"] < 600:
+    if time.time() - _LATEST["at"] < (20 if fresh else 600):
         return _LATEST["sha"]
     _LATEST["at"] = time.time()
     try:
-        req = urllib.request.Request("https://github.com/DmytroMolodozhonov/working-hand/info/refs?service=git-upload-pack",
+        req = urllib.request.Request(os.environ.get("ZNS_UPDATE_REFS") or "https://github.com/DmytroMolodozhonov/working-hand/info/refs?service=git-upload-pack",
                                      headers={"User-Agent": "Volshebstvo"})
         with urllib.request.urlopen(req, timeout=8) as r:
             text = r.read().decode("utf-8", "replace")
@@ -381,7 +382,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/version":
             return self._json(200, game_version())
         if path == "/api/update":
-            return self._json(200, {"have": game_version()["sha"], "latest": latest_version()})
+            fresh = "fresh" in parse_qs(urlparse(self.path).query)
+            return self._json(200, {"have": game_version()["sha"], "latest": latest_version(fresh)})
         if path == "/api/logs":
             return self._json(200, {"logs": read_logs(), "launcher": bool(os.environ.get("ZNS_LAUNCHER"))})
         if path == "/api/alive":

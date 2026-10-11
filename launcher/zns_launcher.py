@@ -23,6 +23,7 @@ Only the Python standard library. Environment (for tests):
   ZNS_PORT               the game's port (8000)
   ZNS_LAUNCHER_NO_WINDOW do not open a browser window
   ZNS_UPDATE_ZIP / ZNS_UPDATE_REFS / ZNS_UPDATE_API   where versions come from
+  ZNS_UPDATE_COMPARE / ZNS_UPDATE_RAW / ZNS_UPDATE_COMMIT   (the quick update: only the changed files)
   ZNS_NO_UPDATE          never download
   ZNS_DEFAULT_INSTALL    the folder suggested the first time
   ZNS_LAUNCHER_GRACE     seconds without any open window before quitting (20)
@@ -40,7 +41,7 @@ import time
 import traceback
 import urllib.request
 import zipfile
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 APP_NAME = "Волшебство только начинается"
 REPO = "DmytroMolodozhonov/working-hand"
@@ -71,6 +72,18 @@ def refs_url():
 
 def api_url():
     return env("ZNS_UPDATE_API", f"https://api.github.com/repos/{REPO}/branches/{BRANCH}")
+
+
+def compare_url(base, head):
+    return env("ZNS_UPDATE_COMPARE", f"https://api.github.com/repos/{REPO}/compare") + f"/{base}...{head}"
+
+
+def raw_url(sha, path):
+    return env("ZNS_UPDATE_RAW", f"https://raw.githubusercontent.com/{REPO}") + f"/{sha}/" + quote(path)
+
+
+def commit_url(sha):
+    return env("ZNS_UPDATE_COMMIT", f"https://api.github.com/repos/{REPO}/commits") + f"/{sha}"
 
 
 def home_dir():
@@ -187,6 +200,131 @@ def latest_version():
     except Exception as e:  # noqa: BLE001
         log(f"  (версия через GitHub API не получена: {e})")
     return ""
+
+
+def full_sha(sha):
+    """A full commit id for a short one (a host's game may tell only its first 7 letters)."""
+    sha = (sha or "").strip().lower()
+    if len(sha) == 40 or not sha:
+        return sha
+    try:
+        full = json.loads(http_get(commit_url(sha)).decode("utf-8"))["sha"]
+        return full if isinstance(full, str) and full.startswith(sha) else ""
+    except Exception as e:  # noqa: BLE001
+        log(f"  (полный номер версии {sha} не получен: {e})")
+        return ""
+
+
+def plan_changes(data, back=False):
+    """What to fetch and what to delete to turn one version into another, from GitHub's
+    «compare» answer. Forward (compare old...new): the files changed since the old one.
+    Back (compare new...old — going to an OLDER version, a host's): the same list read the
+    other way. → (fetch, delete) lists of paths, or None when the list can't be trusted."""
+    files = data.get("files")
+    if not isinstance(files, list) or len(files) >= 300:  # (GitHub lists at most 300 files)
+        return None
+    fetch, delete = [], []
+    for f in files:
+        name, prev, st = f.get("filename") or "", f.get("previous_filename") or "", f.get("status") or ""
+        if not name:
+            return None
+        if not back:
+            if st == "removed":
+                delete.append(name)
+            else:
+                if st == "renamed" and prev:
+                    delete.append(prev)
+                fetch.append(name)
+        else:  # the list says how the NEWER one differs from the one wanted: undo it
+            if st == "added":
+                delete.append(name)
+            elif st == "renamed" and prev:
+                delete.append(name)
+                fetch.append(prev)
+            else:
+                fetch.append(name)
+    return fetch, delete
+
+
+def safe_path(game, rel):
+    """The file's place inside the game folder (None for anything that would leave it)."""
+    rel = (rel or "").replace("\\", "/")
+    if not rel or rel.startswith("/") or ".." in rel.split("/") or ":" in rel:
+        return None
+    return os.path.join(game, *rel.split("/"))
+
+
+def write_file(path, data):
+    """Write a game file in place (retried: on Windows the game may be reading it this moment)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".zns-new"
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+    for i in range(10):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            time.sleep(0.3 * (i + 1))
+    os.replace(tmp, path)
+
+
+def remove_file(path):
+    for i in range(10):
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+            return
+        except PermissionError:
+            time.sleep(0.3 * (i + 1))
+
+
+def quick_update(game, old, new, progress=None, get=None):
+    """Only the files that differ between the version on this computer and the wanted one
+    (newer — or older: a host's). True when done; False when it can't be done this way."""
+    get = get or http_get
+    if not old or not new or old == new:
+        return old == new and bool(old)
+    data = json.loads(get(compare_url(old, new)).decode("utf-8"))
+    back = data.get("status") == "behind"
+    if back:  # (the wanted one is older: list what the newer one changed, then undo it)
+        data = json.loads(get(compare_url(new, old)).decode("utf-8"))
+    elif data.get("status") not in ("ahead", "identical"):
+        return False  # (diverged: the archive is the safe way)
+    plan = plan_changes(data, back)
+    if plan is None:
+        return False
+    fetch, delete = plan
+    log(f"Быстрое обновление {old[:7]} → {new[:7]}: файлов {len(fetch)}, убрать {len(delete)}")
+    got = []
+    for i, rel in enumerate(fetch):
+        path = safe_path(game, rel)
+        if path is None:
+            return False
+        blob = get(raw_url(new, rel))
+        if rel.lower().endswith(".bat"):  # (as Git puts them out on Windows: .gitattributes)
+            blob = blob.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        got.append((path, blob))
+        if progress:
+            progress((i + 1) / max(1, len(fetch)), rel)
+    # all downloaded first: a lost connection halfway leaves the old version whole
+    for path, blob in got:
+        write_file(path, blob)
+    for rel in delete:
+        path = safe_path(game, rel)
+        if path:
+            remove_file(path)
+    return True
+
+
+def zip_sha(zpath):
+    """GitHub writes the archive's commit id as the zip's comment."""
+    try:
+        with zipfile.ZipFile(zpath) as z:
+            c = (z.comment or b"").decode("ascii", "replace").strip()
+        return c if len(c) == 40 and all(ch in "0123456789abcdef" for ch in c) else ""
+    except (OSError, zipfile.BadZipFile):
+        return ""
 
 
 def local_version(game):
@@ -587,6 +725,11 @@ class Launcher:
         self.pages_lock = threading.Lock()
         self.browse_lock = threading.Lock()
         self.log_files = []
+        self.game_dir = None
+        # an update while the game runs (the menu: «a newer version is out»; joining a friend's
+        # server that runs another version): the page waits behind its own loading window
+        self.live_lock = threading.Lock()
+        self.live = {"state": "idle", "title": "", "detail": "", "progress": 0, "version": "", "error": ""}
 
     # ---------- pages alive
     def page_open(self):
@@ -608,7 +751,7 @@ class Launcher:
                 idle = self.pages <= 0 and time.time() - self.last_page > grace
                 never = not self.ever_page and time.time() - started > 600
             if (self.ever_page and idle) or never:
-                if self.work_lock.locked():
+                if self.work_lock.locked() or self.live_lock.locked():
                     continue  # never stop in the middle of an update
                 log("Окно игры закрыто — завершаю работу.")
                 threading.Thread(target=self.httpd.shutdown, daemon=True).start()
@@ -665,18 +808,37 @@ class Launcher:
             st.set(version=new[:7])
             return
         st.step("update", "ok", "есть новая версия" if have else "игра ещё не скачана")
+        if have and old and new and self.quick(game, old, new, st):
+            return
         try:
-            self.download(game, cfg, new)
+            got = self.download(game, cfg, new)
         except Exception as e:  # noqa: BLE001
             log("Скачивание не удалось: " + "".join(traceback.format_exception(type(e), e, e.__traceback__)))
             if have:
                 st.step("download", "fail", "нет интернета? — запускаю уже скачанную версию")
                 return
             raise RuntimeError("Не получилось скачать игру. Проверьте интернет и нажмите «Попробовать ещё раз».") from e
+        new = new or got  # (the archive itself says which version it is)
         if new:
             with open(os.path.join(game, ".zns-version"), "w", encoding="ascii") as fh:
                 fh.write(new + "\n")
             st.set(version=new[:7])
+
+    def quick(self, game, old, new, st):
+        """Only the changed files (seconds instead of the whole game). True when done."""
+        st.step("download", "run", "", title="Скачиваю новую версию игры…", progress=0)
+        try:
+            ok = quick_update(game, old, new, lambda k, f: st.set(progress=k * 0.95, detail=f))
+        except Exception as e:  # noqa: BLE001
+            log(f"  (быстрое обновление не вышло: {e}) — скачиваю всю игру")
+            ok = False
+        if not ok:
+            return False
+        with open(os.path.join(game, ".zns-version"), "w", encoding="ascii") as fh:
+            fh.write(new + "\n")
+        st.set(version=new[:7], detail="")
+        st.step("download", "ok", "только изменения", progress=1)
+        return True
 
     def update_git(self, game):
         st = self.status
@@ -697,8 +859,8 @@ class Launcher:
         else:
             st.step("download", "fail", "нет интернета? — запускаю уже скачанную версию")
 
-    def download(self, game, cfg, sha=""):
-        st = self.status
+    def download(self, game, cfg, sha="", st=None):
+        st = st or self.status
         st.step("download", "run", "", title="Скачиваю новую версию игры…", progress=0)
         tmp = os.path.join(self.home, "download")
         shutil.rmtree(tmp, ignore_errors=True)
@@ -739,8 +901,10 @@ class Launcher:
             raise RuntimeError("архив без игры")
         st.set(title="Кладу файлы на место…", progress=0.95)
         copy_over(src, game)
+        sha = zip_sha(zpath)
         shutil.rmtree(tmp, ignore_errors=True)
         st.step("download", "ok", f"{got / 1048576:.0f} МБ", progress=1)
+        return sha
 
     def camera(self, game):
         st = self.status
@@ -764,11 +928,93 @@ class Launcher:
         import importlib
         mod = importlib.import_module("server")  # chdir()s into the game folder
         self.game = mod
+        self.game_dir = game
         if hasattr(mod, "ensure_pose_native"):
             threading.Thread(target=mod.ensure_pose_native, daemon=True).start()
         self.httpd.RequestHandlerClass = make_game_handler(self, mod.GameRequestHandler)
         log(f"Игра запущена: http://localhost:{self.port}")
         st.step("start", "ok", "", title="Открываю игру…", done=True, progress=1)
+
+    # ---------- an update while the game runs
+    def live_status(self):
+        with self.pages_lock:
+            return dict(self.live)
+
+    def _live(self, **kw):
+        with self.pages_lock:
+            self.live.update(kw)
+
+    def start_live_update(self, sha=""):
+        """Get the newest version (sha '') or exactly that one (a host's) now. False: busy / impossible."""
+        if not self.game or not self.game_dir or self.work_lock.locked() or self.live_lock.locked():
+            return False
+        self._live(state="run", title="Узнаю, какая версия нужна…", detail="", progress=0, error="")
+        threading.Thread(target=self.live_update, args=(sha,), daemon=True).start()
+        return True
+
+    def live_update(self, sha=""):
+        with self.live_lock:
+            game = self.game_dir
+            try:
+                target = full_sha(sha) if sha else latest_version()
+                if not target:
+                    raise RuntimeError("не удалось узнать версию — нет интернета?")
+                old = local_version(game)
+                log(f"Обновление во время игры: {old[:7] or '—'} → {target[:7]}")
+                if os.path.isdir(os.path.join(game, ".git")) and shutil.which("git"):
+                    self._live_git(game, target)
+                elif old != target:
+                    self._live(title="Скачиваю версию игры…", progress=0.02)
+                    done = False
+                    try:
+                        done = bool(old) and quick_update(game, old, target, lambda k, f: self._live(progress=0.02 + 0.9 * k, detail=f))
+                    except Exception as e:  # noqa: BLE001
+                        log(f"  (быстрое обновление не вышло: {e}) — скачиваю всю игру")
+                    if not done:
+                        st = Status()
+                        poll = threading.Thread(target=self._mirror, args=(st,), daemon=True)
+                        poll.start()
+                        self.download(game, load_config(self.home), target, st)
+                        st.set(done=True)
+                    with open(os.path.join(game, ".zns-version"), "w", encoding="ascii") as fh:
+                        fh.write(target + "\n")
+                try:
+                    self_update(game, self.home)
+                except Exception as e:  # noqa: BLE001
+                    log(f"  (запускатор: {e})")
+                # the game's server code may be new too: take it now
+                import importlib
+                mod = importlib.reload(self.game)
+                self.game = mod
+                self.httpd.RequestHandlerClass = make_game_handler(self, mod.GameRequestHandler)
+                self._live(state="done", title="Готово!", detail="", progress=1, version=target[:7])
+                log(f"Версия {target[:7]} готова.")
+            except Exception as e:  # noqa: BLE001
+                log("Обновление во время игры не вышло: " + "".join(traceback.format_exception(type(e), e, e.__traceback__)))
+                self._live(state="fail", error=str(e) or e.__class__.__name__)
+
+    def _mirror(self, st):
+        """The whole-archive download's progress into the page's loading window."""
+        while True:
+            d = st.snapshot()
+            self._live(progress=0.02 + 0.95 * (d.get("progress") or 0), detail=d.get("detail") or "")
+            if d.get("done"):
+                return
+            time.sleep(0.2)
+
+    def _live_git(self, game, target):
+        def git(*a):
+            r = subprocess.run(["git", *a], cwd=game, capture_output=True, text=True, timeout=600,
+                               creationflags=NO_WINDOW if IS_WIN else 0)
+            log(f"git {' '.join(a)} → {r.returncode} {(r.stderr or '').strip()[-300:]}")
+            return r.returncode == 0
+        self._live(title="Обновляю игру…", progress=0.3)
+        if not git("fetch", "origin", BRANCH):
+            raise RuntimeError("не удалось скачать — нет интернета?")
+        if not git("cat-file", "-e", target + "^{commit}"):
+            git("fetch", "origin", target)
+        if not git("reset", "-q", "--hard", target):
+            raise RuntimeError("такой версии нет")
 
     # ---------- folder screen
     def choose_folder(self, chosen):
@@ -881,6 +1127,9 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
                 log("Запущено заново — уступаю место (новый запуск проверит обновления).")
                 threading.Thread(target=L.httpd.shutdown, daemon=True).start()
             return True
+        if path == "/__launcher/update":
+            self._send(200, L.live_status())
+            return True
         if path == "/__launcher/log":
             self._send(200, read_tail(L.log_files[0]) if L.log_files else "", "text/plain; charset=utf-8")
             return True
@@ -916,6 +1165,10 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
         if path == "/__launcher/browse":
             start = str(self._body().get("path") or "")
             self._send(200, {"path": L.browse(start)})
+            return True
+        if path == "/__launcher/update":
+            ok = L.start_live_update(str(self._body().get("sha") or ""))
+            self._send(200, {"ok": ok, "status": L.live_status()})
             return True
         if path == "/__launcher/retry":
             L.start_work()
