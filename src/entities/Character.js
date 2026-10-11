@@ -278,8 +278,9 @@ export class VoxelCharacter {
     _updateHands(poseData) {
         if (this.handVersion === 'v3') {
             for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) { h.body = this.group; if (poseData.aspect) h.aspect = poseData.aspect; }
-            if (this.leftSimplifiedHand.group.visible) this.leftSimplifiedHand.update(poseData.leftHandLandmarks || null, this.group.rotation.y);
-            if (this.rightSimplifiedHand.group.visible) this.rightSimplifiedHand.update(poseData.rightHandLandmarks || null, this.group.rotation.y);
+            const now = this.handNow ? this.handNow() : Date.now(); // (tests give their own clock)
+            if (this.leftSimplifiedHand.group.visible) this.leftSimplifiedHand.update(poseData.leftHandLandmarks || null, this.group.rotation.y, now);
+            if (this.rightSimplifiedHand.group.visible) this.rightSimplifiedHand.update(poseData.rightHandLandmarks || null, this.group.rotation.y, now);
         } else {
             if (this.leftDetailedHand.group.visible) this.leftDetailedHand.update(poseData.leftHandLandmarks || null);
             if (this.rightDetailedHand.group.visible) this.rightDetailedHand.update(poseData.rightHandLandmarks || null);

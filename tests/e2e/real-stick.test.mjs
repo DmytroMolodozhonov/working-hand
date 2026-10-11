@@ -56,13 +56,18 @@ test('a real stick in the hand: the wand and the spells go along it (any way it 
     assert.equal((await wandNow(page)).seen, false, 'one picture with a line: nothing');
 
     // the stick turned different ways in the picture: the wand follows it
-    for (const a of [0.6, -0.5, 1.2, 0.1]) {
+    for (const a of [0.6, -0.5, 0.35, 0.1]) {
         await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: a }, 8, 40);
         const w = await wandNow(page);
         assert.ok(w.seen, 'the stick is seen');
         assert.ok(angleOff(w.pic, a) < 6, `stick at ${a}: the wand at ${w.pic.toFixed(2)} in the picture`);
         assert.ok(w.aimAlong < 3, `spells fly along it (${w.aimAlong.toFixed(1)}°)`);
     }
+
+    // a line straight across the hand (where no hand holds a stick): not taken for one
+    await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: 1.65 }, 10, 40);
+    const across = await wandNow(page);
+    assert.ok(angleOff(across.pic, 1.65) > 30, `a line across the hand is not the wand (${across.pic.toFixed(2)})`);
 
     // a stick seen short (pointing at the camera): the wand points ahead, not across
     await feed(page, { arms: 'forward', rightCurl: 0.4, leftCurl: 0, rightStick: { angle: 0.3, out: 3 } }, 6, 40);
@@ -99,10 +104,10 @@ test('a real stick in the left hand: the left hand\'s wand follows it; a stick b
     const r = await wandNow(page, 'left');
     assert.equal(r.held, 'wand');
     assert.equal(r.seen, false, 'the right hand\'s stick is not the left hand\'s');
-    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.4, leftStick: -0.7 }, 10, 40);
+    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.4, leftStick: -0.45 }, 10, 40);
     const l = await wandNow(page, 'left');
     assert.ok(l.seen);
-    assert.ok(angleOff(l.pic, -0.7) < 6, `the left wand at ${l.pic.toFixed(2)}`);
+    assert.ok(angleOff(l.pic, -0.45) < 6, `the left wand at ${l.pic.toFixed(2)}`);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

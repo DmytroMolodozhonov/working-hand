@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import { lerpAngle } from '../core/math.js';
-import { handFrame, fingerJoints, heroPoints } from './HandPose.js';
+import { handFrame, fingerJoints } from './HandPose.js';
 
 /** The fingers bend at most this far from the forearm at the wrist (a real wrist's range). */
 const MAX_WRIST_BEND = 1.4; // rad (~80°)
@@ -50,9 +50,8 @@ export const SHAKE_GRIP = {
 /**
  * The same grip pointing (as one points a wand or a brush): the index finger nearly
  * straight along the wand, the thumb's pad pressing it against the index's middle
- * bone. The hand shows whatever lies between the two, as the real index finger is
- * bent (`penT`: 0 pointing … 1 writing) — the wand goes 5° … 30° off the palm's line
- * towards the palm, as the real one does.
+ * bone. The hand shows a grip between the two (`penT`: 0 pointing … 1 writing; the
+ * wand 5° … 30° off the palm's line towards the palm).
  */
 export const PEN_POINT_GRIP = {
     index: [0, 0.7, 0.24, -0.3],
@@ -63,8 +62,10 @@ export const PEN_POINT_GRIP = {
 };
 /** Where the pen grip touches the wand: the web (palm frame), the index's and the thumb's pads (on their end bones); indexMid: the index's middle bone (pointing). */
 export const PEN_POINTS = { web: [-0.17, 0.17, -0.04], index: [0, 0.049, -0.038], indexMid: [0, 0.06, -0.04], thumb: [0, 0.104, -0.045] };
-/** The real index finger's line (knuckle → tip) off the palm's line towards the palm (rad): pointing, writing. */
+/** The wand's line off the palm's line towards the palm (rad): pointing, writing. */
 export const PEN_TILT = [0.09, 0.52];
+/** The steady grip: between pointing and writing — the wand ~16° off the palm's line (30° pointed it down). */
+export const PEN_T_STEADY = 0.45;
 
 const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 
@@ -108,6 +109,13 @@ export class SimplifiedHand {
         this.LERP_SPEED = 0.5;
         this.ROT_LERP_SPEED = 0.45;
         this.FOLLOW = 1;
+        // the network lost the hand for a moment: meanwhile the hand stays as it was ON THE
+        // FOREARM (it moves with the arm, not frozen in the air); when it is seen again it
+        // glides into the new pose over REACQUIRE_MS instead of jumping there
+        this.REACQUIRE_GAP = 120; // ms without the hand
+        this.REACQUIRE_MS = 220;
+        this.REACQUIRE_K = 0.3; // per drawn frame
+        this._reacq = null;
         this._k = this.LERP_SPEED;
         this._kr = this.ROT_LERP_SPEED;
 
@@ -127,10 +135,9 @@ export class SimplifiedHand {
         this._pend = null; // a sudden turn-over waiting to be confirmed
         this._pendN = 0;
         this.netPalm = null; // (remote avatars) the palm's turn sent over the network
-        // a pen grip as the real index finger is bent (0 pointing … 1 writing); indexTilt:
-        // the real index's line off the palm's line (rad); stickTilt: a real stick's (set by the game)
-        this.penT = 1;
-        this.indexTilt = null;
+        // the pen grip between pointing and writing (0 … 1): steady, or as a real stick seen
+        // in the hand lies (stickTilt: its line off the palm's, rad — set by the game)
+        this.penT = PEN_T_STEADY;
         this.stickTilt = null;
         this._penPose = { index: [0, 0, 0, 0], middle: PEN_GRIP.middle, ring: PEN_GRIP.ring, pinky: PEN_GRIP.pinky, thumb: [0, 0, 0, 0, 0] };
 
@@ -224,7 +231,11 @@ export class SimplifiedHand {
     update(landmarks, bodyRotation = 0, now = Date.now()) {
         const timeGap = now - this.lastTrackingTime;
 
-        if (landmarks && landmarks.length >= 21) {
+        this._now = now;
+        this._lost = !(landmarks && landmarks.length >= 21);
+        if (!this._lost) {
+            // back after the network lost it: glide into the new pose (no jump)
+            if (this.lastTrackingTime && timeGap > this.REACQUIRE_GAP) { this._reacq = now; this._qShown = null; this._pendN = 0; }
             if (timeGap > 300 && this.landmarkHistory.length > 0) {
                 this._recycleHistory();
                 this.currentState.wristTwist = this.targetState.wristTwist;
@@ -255,6 +266,7 @@ export class SimplifiedHand {
         }
 
         this._k = this._kr = this.FOLLOW;
+        if (this._reacq != null && now - this._reacq < this.REACQUIRE_MS) this._k = this._kr = this.REACQUIRE_K;
         this._stepState();
         this.animateModel();
     }
@@ -413,15 +425,6 @@ export class SimplifiedHand {
             if (f.X.lengthSq() < 1e-6) f.X.copy(fr.X); else f.X.normalize();
         } else f.X.copy(fr.X);
         f.Z.crossVectors(f.X, f.Y);
-        // the real index finger's line (knuckle → tip) off the palm's line, towards the palm
-        const P = heroPoints(landmarks, this.aspect);
-        const v = _vc.subVectors(P[8], P[5]);
-        const towardPalm = v.dot(f.Z) * (this.side === 'right' ? -1 : 1);
-        if (v.lengthSq() > 1e-8) this.indexTilt = Math.atan2(towardPalm, v.dot(f.Y));
-        // a real pinch (a pen, a brush held like a pen): the line it lies along — from the web
-        // between the thumb and the index finger through where the thumb's tip presses the
-        // index finger. null when the thumb's tip is not on the index finger (no pinch).
-        this.pinchDir = this._pinch(P, f, this.pinchDir || new THREE.Vector3());
         const j = fingerJoints(landmarks, this.aspect, this.side, this._jBuf || (this._jBuf = {}));
         if (!j) return;
         if (!this._jointsT) { this._jointsT = {}; this._jointsC = {}; for (const n of JOINT_FINGERS) { this._jointsT[n] = [0, 0, 0, 0]; this._jointsC[n] = [0, 0, 0, 0]; } }
@@ -432,25 +435,6 @@ export class SimplifiedHand {
             t[2] = Math.max(0, Math.min(1.6, j[n][2]));
             t[3] = Math.max(-0.45, Math.min(0.45, j.spread[n] || 0));
         }
-    }
-
-    /**
-     * The line a held pen / brush lies along, from the real points (hero's space): the web
-     * (between the thumb's and the index's knuckles) → the pinch (the thumb's tip and the
-     * nearest point of the index finger). Also sets `pinchTilt` (off the palm's line towards
-     * the palm, rad). null when the thumb's tip is not on the index finger.
-     */
-    _pinch(P, f, out) {
-        const palm = P[0].distanceTo(P[9]) + 0.5 * P[5].distanceTo(P[17]);
-        let near = null, nd = Infinity;
-        for (const i of [6, 7, 8]) { const d = P[4].distanceTo(P[i]); if (d < nd) { nd = d; near = P[i]; } }
-        if (!(palm > 1e-6) || nd > 0.45 * palm) { this.pinchTilt = null; return null; }
-        const web = _va.addVectors(P[2], P[5]).multiplyScalar(0.5);
-        out.addVectors(P[4], near).multiplyScalar(0.5).sub(web);
-        if (out.length() < 0.25 * palm) { this.pinchTilt = null; return null; }
-        out.normalize();
-        this.pinchTilt = Math.atan2(out.dot(f.Z) * (this.side === 'right' ? -1 : 1), out.dot(f.Y));
-        return out;
     }
 
     /**
@@ -485,8 +469,12 @@ export class SimplifiedHand {
 
     animateModel() {
         const cs = this.currentState;
-        const q = this.netPalm || (this.fullPose ? this._palmTarget(this._qT || (this._qT = new THREE.Quaternion())) : null);
-        if (q) {
+        // (a lost hand keeps its turn on the forearm: its last seen turn in the hero's space
+        // would twist the wrist as the arm moves on)
+        const q = this.netPalm || (this.fullPose && !this._lost ? this._palmTarget(this._qT || (this._qT = new THREE.Quaternion())) : null);
+        if (this._lost && !this.netPalm && this._qShown) {
+            // keep the palm as it is
+        } else if (q) {
             // the whole turn of the real hand; a sudden turn-over (an edge-on glitch) must last to be believed
             if (this._qShown && this._qShown.angleTo(q) > 1.6 && !this.netPalm) {
                 if (this._pend && this._pend.angleTo(q) < 0.5) this._pendN++;
@@ -556,8 +544,12 @@ export class SimplifiedHand {
 
     /** The pen grip between pointing and writing, as the real index finger (or a real stick) shows it. */
     _penBlend() {
-        const tilt = this.stickTilt ?? this.pinchTilt ?? this.indexTilt;
-        if (tilt != null) this.penT = Math.max(0, Math.min(1, (tilt - PEN_TILT[0]) / (PEN_TILT[1] - PEN_TILT[0])));
+        // one steady grip (the network's points of fingers pinching a stick jump about: a grip
+        // following them twisted the fingers and shook the wand) — only a real stick seen by
+        // the camera sets it
+        const tilt = this.stickTilt;
+        const t0 = tilt != null ? Math.max(0, Math.min(1, (tilt - PEN_TILT[0]) / (PEN_TILT[1] - PEN_TILT[0]))) : PEN_T_STEADY;
+        this.penT += (t0 - this.penT) * 0.2;
         const t = this.penT, o = this._penPose;
         for (let i = 0; i < 4; i++) o.index[i] = PEN_POINT_GRIP.index[i] + (PEN_GRIP.index[i] - PEN_POINT_GRIP.index[i]) * t;
         for (let i = 0; i < 5; i++) o.thumb[i] = PEN_POINT_GRIP.thumb[i] + (PEN_GRIP.thumb[i] - PEN_POINT_GRIP.thumb[i]) * t;

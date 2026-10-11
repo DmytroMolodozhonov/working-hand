@@ -184,10 +184,9 @@ export class ItemSystem {
             // spells of this hand fly exactly along it, out of its tip
             const ch = g.character;
             y = pen ? _a.copy(pen.dir) : ch.getForearmDirection(side, _a).multiplyScalar(0.6).addScaledVector(f.Y, 0.4).normalize();
-            // a real stick in the real hand (a pen, a brush): the wand goes the way it goes;
-            // else, a real pinch: the way the real thumb and index finger hold it
+            // a real stick in the real hand (a pen, a brush): the wand goes the way it goes
             const hand = ch.getActiveHands()[side];
-            const real = this._stickDir(side, y) || this._pinchDir(hand);
+            const real = this._stickDir(side, y);
             if (real) y.copy(real);
             // (the fingers hold it as the stick lies: pointing … writing)
             if (hand) hand.stickTilt = real ? Math.atan2(-y.dot(f.Z), y.dot(f.Y)) : null;
@@ -203,8 +202,12 @@ export class ItemSystem {
         if (spec.face === 'back') { z = _c.copy(f.Z); x = _b.crossVectors(y, z); } // shield: the face where the back of the hand looks
         _m4.makeBasis(x, y, z);
         _q.setFromRotationMatrix(_m4);
-        // (exactly as the hand turns: the hand is already steadied — easing it again made the thing trail the hand)
-        if (!h.q) h.q = _q.clone(); else h.q.copy(_q);
+        // (exactly as the hand turns: the hand is already steadied — easing it again made the thing
+        // trail the hand). A wand's tip is far from the hand and shows every tremble: it is
+        // steadied by its own speed — a still wand stays still, a quick turn passes at once
+        if (!h.q) h.q = _q.clone();
+        else if (h.item.kind === 'wand') h.q.slerp(_q, Math.min(1, dt * 14 + h.q.angleTo(_q) * 4));
+        else h.q.copy(_q);
         h.model.quaternion.copy(h.q);
         if (h.item.kind === 'wand') {
             const a = g.character.aim[side] || (g.character.aim[side] = { dir: new THREE.Vector3(), at: 0 });
@@ -246,13 +249,6 @@ export class ItemSystem {
         }
     }
 
-    /** The line the real thumb and index finger pinch along (world), or null (SimplifiedHand._pinch). */
-    _pinchDir(hand) {
-        if (!hand?.pinchDir || !hand.group?.visible) return null;
-        const qb = this.game.character.group.getWorldQuaternion(this._qp || (this._qp = new THREE.Quaternion()));
-        return (this._pd || (this._pd = new THREE.Vector3())).copy(hand.pinchDir).applyQuaternion(qb);
-    }
-
     /** The world direction of the real stick in this hand (or null); `finger`: the pen grip's direction (world). */
     _stickDir(side, finger) {
         const s = this.game.character.realStick?.[side];
@@ -260,7 +256,9 @@ export class ItemSystem {
         const body = this.game.character.group;
         const qb = body.getWorldQuaternion(this._qb || (this._qb = new THREE.Quaternion()));
         const fh = (this._fh || (this._fh = new THREE.Vector3())).copy(finger).applyQuaternion((this._qi || (this._qi = new THREE.Quaternion())).copy(qb).invert());
-        return stickDirection(s, fh, this._sd || (this._sd = new THREE.Vector3())).applyQuaternion(qb);
+        const d = stickDirection(s, fh, this._sd || (this._sd = new THREE.Vector3())).applyQuaternion(qb);
+        // (a line the camera took for a stick but going off where the hand can't hold it: not it)
+        return d.angleTo(finger) < 0.87 ? d : null;
     }
 
     /**
