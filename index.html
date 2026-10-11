@@ -39,9 +39,16 @@
     </div>
     <div id="pause-menu" class="hidden">
         <div class="pause-box">
-            <div class="pause-title">⏸ Меню</div>
-            <button id="pause-continue-btn">▶ Продолжить</button>
-            <button id="pause-exit-btn">🏠 Выйти в главное меню</button>
+            <div class="pause-title">⏸ Пауза</div>
+            <div class="pause-tabs" role="tablist">
+                <button class="pause-tab active" data-pause-tab="pause-main" role="tab">⏸ Меню</button>
+                <button class="pause-tab" data-pause-tab="pause-audio" role="tab">🔊 Звук</button>
+            </div>
+            <div id="pause-main" class="pause-pane active">
+                <button id="pause-continue-btn">▶ Продолжить</button>
+                <button id="pause-exit-btn">🏠 Выйти в главное меню</button>
+            </div>
+            <div id="pause-audio" class="pause-pane"></div>
             <div class="pause-hint">Мир сохранится сам. Escape — закрыть это окно</div>
         </div>
     </div>
@@ -97,8 +104,14 @@
                     <h1 id="game-title">Волшебство только начинается</h1>
                     <div class="brand-tagline">Магия — в ваших руках и голосе</div>
                 </div>
+                <div id="game-version-top" class="game-version-top"></div>
+                <div class="win-controls" role="group" aria-label="Окно игры">
+                    <button id="win-min" class="win-btn" title="Свернуть" aria-label="Свернуть">—</button>
+                    <button id="win-full" class="win-btn" title="Во весь экран" aria-label="Во весь экран">⛶</button>
+                    <button id="win-close" class="win-btn win-close" title="Закрыть игру" aria-label="Закрыть игру">✕</button>
+                </div>
             </header>
-            <div id="game-version-top" class="game-version-top"></div>
+            <div id="win-note" class="win-note" role="status"></div>
 
             <div class="tabs">
                 <button class="tab-btn active" data-tab="tab-game">🎮 Одиночная игра</button>

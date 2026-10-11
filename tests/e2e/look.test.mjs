@@ -156,3 +156,46 @@ test('look: code served as plain text or a missing game file — the note says w
     await page.waitForFunction(() => /файл игры vendor\/three\/three\.module\.js — браузер не принял его как код/.test(document.getElementById('start-error')?.textContent || ''), null, { timeout: 40000 });
     await page.close();
 });
+
+test('look: the menu is one fixed-size window with its own buttons; the pause menu has «Звук»', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 1366, height: 768 } });
+    await page.waitForSelector('.tab-btn');
+    const size = () => page.$eval('#main-menu > .menu-container', (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), Math.round(r.left), Math.round(r.top)]; });
+    const first = await size();
+    assert.ok(first[0] < 1366 && first[1] < 768 && first[2] > 0 && first[3] > 0, 'a window inside the screen: ' + first);
+    for (const tab of ['tab-mp', 'tab-character', 'tab-spells', 'tab-items', 'tab-settings', 'tab-editor', 'tab-game']) {
+        await page.click(`[data-tab="${tab}"]`);
+        assert.deepEqual(await size(), first, 'the same size on ' + tab);
+    }
+    // the page itself never scrolls: long sections scroll inside the window
+    assert.ok(await page.evaluate(() => document.getElementById('main-menu').scrollHeight <= window.innerHeight + 1));
+    for (const id of ['win-min', 'win-close']) assert.ok(await page.isVisible('#' + id), id);
+    assert.ok(await page.$('#win-full')); // (hidden when the window already covers the whole screen)
+    // the game asks for full screen when it starts (only the menu is a window)
+    await page.evaluate(() => {
+        window.__ZNS_NO_FULLSCREEN__ = false;
+        window.__fs = 0;
+        document.documentElement.requestFullscreen = () => { window.__fs++; return Promise.resolve(); };
+    });
+    await startFromMenu(page, 'creative');
+    assert.equal(await page.evaluate(() => window.__fs), 1);
+    // Escape → pause → «Звук»: the music volume changes the game's sound and the remembered setting
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#pause-menu:not(.hidden)');
+    await page.click('[data-pause-tab="pause-audio"]');
+    assert.ok(await page.isVisible('#pause-music-vol'));
+    assert.ok(!(await page.isVisible('#pause-continue-btn')), 'the «Меню» page is hidden while «Звук» is open');
+    await page.$eval('#pause-music-vol', (el) => { el.value = '65'; el.dispatchEvent(new Event('input')); });
+    assert.equal(await page.$eval('#music-vol', (el) => el.value), '65');
+    assert.match(await page.textContent('#music-vol-val'), /65%/);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('zns-settings'))['music-vol']), '65');
+    await page.$eval('#pause-audio-ambient-toggle', (el) => { el.value = '0'; el.dispatchEvent(new Event('change')); });
+    assert.equal(await page.evaluate(() => window.__zns.game.sound.ambientEnabled), false);
+    // opening the pause again starts on «Меню»
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#pause-menu:not(.hidden)');
+    assert.ok(await page.isVisible('#pause-continue-btn'));
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

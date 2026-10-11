@@ -408,6 +408,12 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         try:
+            if path == "/api/window":
+                # The menu's own window buttons (no Windows title bar in the game window)
+                action = str(self._read_json().get("action", ""))
+                local = self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")  # (only this computer's own window)
+                return self._json(200, {"ok": local and window_action(action)})
+
             if path == "/api/rig":
                 data = self._read_json()
                 with open(RIG_FILE, "w", encoding="utf-8") as f:
@@ -480,6 +486,28 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, {"status": "success", "message": f"Map '{safe_name}' deleted"})
         except Exception as e:  # noqa: BLE001
             return self._json(500, {"status": "error", "message": str(e)})
+
+
+def window_action(action):
+    """Minimise or close the game's window (Windows): the window in front, and only if it is the
+    game's own (its title is the game's name — so nothing else can ever be closed by this)."""
+    if sys.platform != "win32" or action not in ("minimize", "close"):
+        return False
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        buf = ctypes.create_unicode_buffer(512)
+        user32.GetWindowTextW(hwnd, buf, 512)
+        if "Волшебство только начинается" not in buf.value:
+            return False
+        if action == "minimize":
+            user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+        else:
+            user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -580,7 +608,7 @@ def open_game_window(url):
             # (the usual browser profile: saved worlds, the hero and the settings live there)
             try:
                 subprocess.Popen([
-                    exe, f"--app={url}",
+                    exe, f"--app={url}", "--start-fullscreen",  # (the game draws its own window buttons)
                     "--force_high_performance_gpu", "--ignore-gpu-blocklist",
                     # the camera network's page (ai.html) gets a process of its own — it never stops the game
                     "--site-per-process",

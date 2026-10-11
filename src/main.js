@@ -19,6 +19,8 @@ import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel }
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
+import { setupPauseAudio } from './ui/PauseAudio.js';
+import { setupWindowControls, enterGameFullscreen } from './ui/WindowControls.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 
@@ -63,7 +65,7 @@ if (gpuWeak) {
     warn.innerHTML = `⚠️ Игра рисует на слабой встроенной графике (<b>${gpuShort.replace(/[<>&]/g, '')}</b>) — поэтому мало FPS. `
         + 'Запускайте игру через <b>«Запустить игру.bat»</b> — он сам включит мощную видеокарту (если Chrome уже был открыт — <b>закройте все окна Chrome</b> и запустите игру снова). '
         + 'Или вручную: Параметры Windows → Система → Дисплей → Графика → Chrome → «Высокая производительность», потом перезапустите Chrome.';
-    document.getElementById('main-menu')?.prepend(warn);
+    document.getElementById('tab-game')?.prepend(warn); // (inside the menu window, above the modes)
 }
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 window.addEventListener('resize', () => {
@@ -534,6 +536,8 @@ async function ensureSound() {
 
 let starting = false;
 async function startGame(config, welcome = null) {
+    // the menu is a window; the game itself is played full screen
+    if (!window.__ZNS_NO_FULLSCREEN__) enterGameFullscreen();
     window.__charEditor?.hide(); // (its preview must not keep drawing under the game)
     if (starting) return; // a second click / duplicate invitation while loading
     starting = true;
@@ -705,11 +709,26 @@ $('test-mode-btn').addEventListener('click', async () => {
 
 const backToMenu = () => { net.sayGoodbye(); net.leave(); window.location.href = window.location.origin + window.location.pathname; };
 
+// ------------------------------------------------------------------ the menu window's own buttons
+setupWindowControls({
+    min: $('win-min'), full: $('win-full'), close: $('win-close'),
+    onNote: (t) => { const n = $('win-note'); if (!n) return; n.textContent = t; n.classList.add('on'); clearTimeout(n._t); n._t = setTimeout(() => n.classList.remove('on'), 4000); },
+});
+
 // ------------------------------------------------------------------ pause menu (Escape)
 // (in a game with others the world goes on; alone it waits)
+// «🔊 Звук» in the pause menu: the sound settings without leaving the game
+const pauseAudio = setupPauseAudio($('pause-audio'));
+function showPauseTab(id) {
+    document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
+    document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
+    if (id === 'pause-audio') pauseAudio.sync();
+}
+document.querySelectorAll('.pause-tab').forEach((b) => { b.onclick = () => showPauseTab(b.dataset.pauseTab); });
 function togglePauseMenu(show) {
     const el = $('pause-menu');
     const open = show ?? el.classList.contains('hidden');
+    if (open) { pauseAudio.sync(); showPauseTab('pause-main'); }
     el.classList.toggle('hidden', !open);
     if (open && document.pointerLockElement) document.exitPointerLock();
     if (game && !(net && net.active)) game.paused = open;

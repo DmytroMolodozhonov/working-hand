@@ -599,7 +599,10 @@ test('map editor: draw a map, save it, it appears in the game list, delete it', 
     assert.equal(maps[name].chests.length, 1);
     await page.click('[data-tab="tab-game"]');
     await page.evaluate(() => window.updateGameMapList(true));
-    await page.waitForSelector(`.map-card[data-name="${name}"]`);
+    // (maps are under «Создать мир» → «Карты»)
+    if (await page.isHidden('#create-world')) await page.click('#create-world-btn');
+    await page.click('.mode-card[data-mode="maps"]');
+    await page.waitForSelector(`.map-list-grid .map-card[data-name="${name}"]`);
     // Delete through the API used by the editor's ✕ button
     const del = await fetch(srv.url + 'api/maps?name=' + encodeURIComponent(name), { method: 'DELETE' });
     assert.equal(del.status, 200);

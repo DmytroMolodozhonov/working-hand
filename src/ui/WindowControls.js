@@ -1,0 +1,59 @@
+/**
+ * WindowControls.js — the menu is a window of its own: its own «свернуть»,
+ * «во весь экран» and «закрыть» buttons (drawn by the game, not by Windows),
+ * and the game itself goes full screen when it starts.
+ *
+ * Minimise / close: the game's window is asked to close itself first
+ * (window.close() works for the launcher's app window); the game's server
+ * (/api/window, Windows) minimises or closes the window in front only when
+ * it is the game's own window.
+ */
+
+async function askServer(action) {
+    try {
+        const r = await fetch('/api/window', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+        return !!(await r.json()).ok;
+    } catch (e) { return false; }
+}
+
+const isFull = (doc) => !!doc.fullscreenElement;
+
+/** Full screen for the game (a click on «Играть» is the user's gesture). Escape stays the game's pause key. */
+export async function enterGameFullscreen(doc = document) {
+    try {
+        if (!isFull(doc) && doc.documentElement.requestFullscreen) await doc.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        // (without this the first Escape would only leave full screen, not open the pause menu)
+        await navigator.keyboard?.lock?.(['Escape']);
+    } catch (e) { /* not allowed here (a test, an iframe): the game simply stays in its window */ }
+}
+
+export function setupWindowControls({ min, full, close, onNote = () => {} }, doc = document) {
+    const refresh = () => {
+        if (!full) return;
+        // (the launcher opens the window already full screen, with no way back to a smaller window: no button then)
+        const coversScreen = !isFull(doc) && window.innerHeight >= screen.height - 1 && window.innerWidth >= screen.width - 1;
+        full.hidden = coversScreen;
+        full.textContent = isFull(doc) ? '🗗' : '⛶';
+        full.title = isFull(doc) ? 'Окном' : 'Во весь экран';
+        full.setAttribute('aria-label', full.title);
+    };
+    doc.addEventListener('fullscreenchange', refresh);
+    window.addEventListener('resize', refresh);
+    refresh();
+    if (full) full.onclick = async () => {
+        try { if (isFull(doc)) await doc.exitFullscreen(); else await doc.documentElement.requestFullscreen(); } catch (e) { /* not allowed */ }
+        refresh();
+    };
+    if (min) min.onclick = async () => {
+        if (await askServer('minimize')) return;
+        if (isFull(doc)) { try { await doc.exitFullscreen(); } catch (e) { /* */ } }
+        onNote('Свернуть окно может только окно игры из ярлыка; здесь нажмите Win+D или кнопку «—» браузера');
+    };
+    if (close) close.onclick = async () => {
+        window.close(); // the launcher's app window closes itself
+        await new Promise((r) => setTimeout(r, 250));
+        if (doc.visibilityState === 'hidden') return;
+        if (await askServer('close')) return;
+        onNote('Эту вкладку браузера закройте сами (Ctrl+W)');
+    };
+}

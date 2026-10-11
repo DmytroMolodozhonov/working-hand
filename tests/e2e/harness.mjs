@@ -68,7 +68,7 @@ export async function openPage(browser, url, { noCamera = false, viewport = { wi
     page.on('dialog', (d) => { errors.push('dialog: ' + d.message()); d.dismiss().catch(() => {}); });
     if (noCamera) await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; });
     // (the menu's «Общий сервер» check would try the public broker — no internet here)
-    await page.addInitScript(() => { window.__ZNS_NO_WORLD_PROBE__ = true; window.__ZNS_FIXED_QUALITY__ = true; });
+    await page.addInitScript(() => { window.__ZNS_NO_WORLD_PROBE__ = true; window.__ZNS_FIXED_QUALITY__ = true; window.__ZNS_NO_FULLSCREEN__ = true; });
     await page.goto(url);
     await page.waitForFunction(() => !!window.__zns, null, { timeout: 30000 });
     await page.evaluate(() => document.fonts?.ready).catch(() => {}); // (the menu's fonts change its layout when they arrive)
