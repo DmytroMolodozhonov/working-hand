@@ -53,7 +53,8 @@ The page exposes `window.__zns.game` for tests.
   1. `git fetch origin main-fbxy0j && git rebase origin/main-fbxy0j`
   2. resolve conflicts KEEPING BOTH SIDES' work — others change the same files; never drop or revert
      someone else's change;
-  3. `npm test` (must pass);
+  3. `npm test` (must pass — it also fails on leftover conflict markers `<<<<<<<`/`=======`/`>>>>>>>` and on any
+     game script that doesn't parse: one such file stops the WHOLE game from starting for every player);
   4. `git push origin HEAD:main-fbxy0j`; if rejected because someone pushed meanwhile, go back to 1.
 - NEVER force-push, never push other branches, never open pull requests, never rewrite pushed history.
 - Push each finished phase as soon as it is green; fetch + rebase often while you work.
