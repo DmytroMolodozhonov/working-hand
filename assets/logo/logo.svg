@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Волшебство только начинается</title>
+  <defs>
+    <radialGradient id="bg" cx="62%" cy="30%" r="85%">
+      <stop offset="0" stop-color="#5b34b8"/>
+      <stop offset="0.55" stop-color="#2a1764"/>
+      <stop offset="1" stop-color="#0d0826"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff6cf" stop-opacity="1"/>
+      <stop offset="0.25" stop-color="#ffd76a" stop-opacity="0.85"/>
+      <stop offset="0.6" stop-color="#ff9ad5" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#ff9ad5" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wand" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#3a2212"/>
+      <stop offset="0.7" stop-color="#7a4a26"/>
+      <stop offset="1" stop-color="#b07a44"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff1b8"/>
+      <stop offset="1" stop-color="#f0b43c"/>
+    </linearGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7ee8ff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#7ee8ff" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#ffd76a" stroke-opacity="0.55" stroke-width="10"/>
+  <!-- magic trail: a spiral sweep that is just beginning -->
+  <path d="M150 430 C 330 470, 450 330, 388 214" fill="none" stroke="url(#trail)" stroke-width="12" stroke-linecap="round" opacity="0.8"/>
+  <path d="M210 440 C 360 450, 420 360, 410 290" fill="none" stroke="#c8b6ff" stroke-opacity="0.45" stroke-width="6" stroke-linecap="round"/>
+  <!-- wand -->
+  <g transform="rotate(-45 256 256)">
+    <rect x="96" y="238" width="250" height="36" rx="18" fill="url(#wand)"/>
+    <rect x="96" y="238" width="78" height="36" rx="18" fill="#24140a"/>
+    <rect x="166" y="234" width="14" height="44" rx="5" fill="url(#gold)"/>
+  </g>
+  <!-- glow and star at the tip -->
+  <circle cx="352" cy="160" r="150" fill="url(#glow)"/>
+  <path d="M352 52 L374 138 L460 160 L374 182 L352 268 L330 182 L244 160 L330 138 Z" fill="url(#gold)"/>
+  <circle cx="352" cy="160" r="22" fill="#fffbe8"/>
+  <!-- small sparkles -->
+  <path d="M150 112 L158 136 L182 144 L158 152 L150 176 L142 152 L118 144 L142 136 Z" fill="#ffe9a8"/>
+  <path d="M430 330 L436 348 L454 354 L436 360 L430 378 L424 360 L406 354 L424 348 Z" fill="#c8b6ff"/>
+  <circle cx="224" cy="96" r="7" fill="#ffffff" opacity="0.9"/>
+  <circle cx="420" cy="262" r="6" fill="#ffd76a"/>
+  <circle cx="300" cy="400" r="5" fill="#a8e8ff"/>
+</svg>
