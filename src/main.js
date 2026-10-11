@@ -18,6 +18,7 @@ import { listWorlds, loadWorld, deleteWorld } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
+import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/Branding.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -241,6 +242,33 @@ async function updateGameMapList(forceRefresh = false) {
     const sortedNames = [...mapOrder, ...mapNames.filter((n) => !mapOrder.includes(n)).sort()];
     try { localStorage.setItem('mapOrder', JSON.stringify(sortedNames)); } catch (e) { /* private mode */ }
 
+    // The first choice: Творческий / Хардкор / Выживание (internal modes unchanged)
+    const modeRow = document.createElement('div');
+    modeRow.className = 'mode-row';
+    mapListDiv.appendChild(modeRow);
+    const MODE_CLS = { creative: 'mode-card', survival: 'mode-card survival', freeworld: 'mode-card freeworld' };
+    for (const id of MODE_ORDER) {
+        const m = MODES[id];
+        const card = document.createElement('div');
+        card.className = `map-card ${MODE_CLS[id]}` + (selectedMode === id && !selectedMap ? ' selected' : '');
+        card.dataset.mode = id;
+        card.setAttribute('role', 'button');
+        card.tabIndex = 0;
+        card.innerHTML = `<div class="mode-icon">${m.icon}</div><div class="map-name">${m.label}</div><div class="mode-hint">${m.hint}</div>`;
+        card.onclick = () => {
+            selectedMode = id;
+            selectedMap = null;
+            updateGameMapList();
+        };
+        card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.onclick(); } };
+        modeRow.appendChild(card);
+    }
+
+    // «Карты»: a separate entry — hand-made maps (each is played as a 'survival' map game)
+    const mapsHead = document.createElement('h4');
+    mapsHead.className = 'menu-h4 maps-entry';
+    mapsHead.innerHTML = `${MAPS_ENTRY.icon} ${MAPS_ENTRY.label} <span class="maps-hint">— ${MAPS_ENTRY.hint}</span>`;
+    mapListDiv.appendChild(mapsHead);
     const grid = document.createElement('div');
     grid.className = 'map-list-grid';
     mapListDiv.appendChild(grid);
@@ -248,7 +276,7 @@ async function updateGameMapList(forceRefresh = false) {
     for (const name of sortedNames) {
         const mapData = maps[name];
         const card = document.createElement('div');
-        card.className = 'map-card';
+        card.className = 'map-card' + (selectedMap && selectedMap.name === name ? ' selected' : '');
         card.dataset.name = name;
         const cvs = document.createElement('canvas');
         cvs.className = 'map-preview-canvas';
@@ -256,14 +284,14 @@ async function updateGameMapList(forceRefresh = false) {
         cvs.height = 80;
         const ctx = cvs.getContext('2d');
         const cellSize = 80 / (mapData.gridSize || 20);
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = '#120c2c';
         ctx.fillRect(0, 0, 80, 80);
         if (mapData.walls) {
-            ctx.fillStyle = '#5D4037';
+            ctx.fillStyle = '#8f7bd6';
             for (const w of mapData.walls) ctx.fillRect(w.x * cellSize, w.z * cellSize, cellSize, cellSize);
         }
         if (mapData.playerSpawn) {
-            ctx.fillStyle = '#4CAF50';
+            ctx.fillStyle = '#ffd76a';
             ctx.beginPath();
             ctx.arc((mapData.playerSpawn.x + 0.5) * cellSize, (mapData.playerSpawn.z + 0.5) * cellSize, cellSize / 2, 0, Math.PI * 2);
             ctx.fill();
@@ -273,10 +301,6 @@ async function updateGameMapList(forceRefresh = false) {
         nameDiv.innerText = name;
         card.appendChild(cvs);
         card.appendChild(nameDiv);
-        if (selectedMap && selectedMap.name === name) {
-            card.style.borderColor = '#e74c3c';
-            card.style.boxShadow = '0 0 15px #e74c3c';
-        }
         card.onclick = () => {
             if (selectedMap && selectedMap.name === name) {
                 selectedMap = null;
@@ -285,33 +309,6 @@ async function updateGameMapList(forceRefresh = false) {
                 selectedMap = { ...mapData, name };
                 selectedMode = 'survival';
             }
-            updateGameMapList();
-        };
-        grid.appendChild(card);
-    }
-
-    const MODE_COLOR = { creative: '#2ecc71', survival: '#e74c3c', freeworld: '#3498db' };
-    const MODE_ICON = { creative: '🏗️', survival: '🧟', freeworld: '🌍' };
-    for (const m of [{ id: 'creative', name: 'ТВОРЧЕСТВО', cls: 'mode-card' }, { id: 'survival', name: 'ВЫЖИВАНИЕ', cls: 'mode-card survival' }, { id: 'freeworld', name: 'СВОБОДНЫЙ МИР', cls: 'mode-card freeworld' }]) {
-        const card = document.createElement('div');
-        card.className = `map-card ${m.cls}`;
-        if (selectedMode === m.id && !selectedMap) {
-            const c = MODE_COLOR[m.id];
-            card.style.borderColor = c;
-            card.style.boxShadow = `0 0 15px ${c}`;
-        }
-        const icon = document.createElement('div');
-        icon.style.fontSize = '40px';
-        icon.style.margin = '10px 0';
-        icon.innerText = MODE_ICON[m.id];
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'map-name';
-        nameDiv.innerText = m.name;
-        card.appendChild(icon);
-        card.appendChild(nameDiv);
-        card.onclick = () => {
-            selectedMode = m.id;
-            selectedMap = null;
             updateGameMapList();
         };
         grid.appendChild(card);
@@ -562,13 +559,12 @@ $('start-btn').addEventListener('click', () => {
         return;
     }
     const cfg = readConfig();
-    if (!cfg.map) cfg.worldName = `${MODE_LABEL[cfg.mode] || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+    if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     startGame(cfg);
 });
 
 // ------------------------------------------------------------------ saved worlds
 // Every world you play (not the maps) is saved by itself; continue it here.
-const MODE_LABEL = { freeworld: 'Свободный мир', creative: 'Творчество', survival: 'Выживание' };
 async function renderSavedWorlds() {
     const box = $('saved-worlds');
     const sel = $('mp-world');
@@ -583,7 +579,7 @@ async function renderSavedWorlds() {
     box.innerHTML = '<h4 class="menu-h4" style="margin-bottom:8px">💾 Мои миры (сохраняются сами)</h4>' + worlds.map((w) => `
         <div class="world-row" data-id="${w.id}">
             <span class="world-name">${escapeHtml(w.name)}</span>
-            <span class="world-meta">${MODE_LABEL[w.mode] || ''} · ${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+            <span class="world-meta">${modeLabel(w.mode)} · ${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
             <button class="mp-btn world-play">▶ Продолжить</button>
             <button class="mp-btn mp-btn-grey world-del" title="Удалить">🗑</button>
         </div>`).join('');
@@ -648,7 +644,6 @@ const mpPlayers = $('mp-players');
 const mpName = $('mp-name');
 const mpCode = $('mp-code');
 const mpServer = $('mp-server');
-const MODE_NAME = { freeworld: '🌍 Свободный мир', creative: '🏗️ Творчество', survival: '🧟 Выживание' };
 try {
     mpName.value = localStorage.getItem('zns-name') || '';
     mpServer.value = localStorage.getItem('zns-server') || '';
@@ -704,7 +699,7 @@ function renderServers() {
             // (a server there, but no direct link to it yet: no name / players known)
             row.innerHTML = sv.noInfo
                 ? `<span class="mp-srv-name">Сервер ${escapeHtml(sv.code)}</span><span>—</span><span title="нет прямой связи">?/${sv.max || MAX_PLAYERS}</span>`
-                : `<span class="mp-srv-name">${escapeHtml(sv.name || 'Сервер')}</span><span>${MODE_NAME[sv.mode] || '—'}</span><span class="${full ? 'mp-full' : ''}">${sv.players.length}/${sv.max || MAX_PLAYERS}</span>`;
+                : `<span class="mp-srv-name">${escapeHtml(sv.name || 'Сервер')}</span><span>${modeTitle(sv.mode) || '—'}</span><span class="${full ? 'mp-full' : ''}">${sv.players.length}/${sv.max || MAX_PLAYERS}</span>`;
             row.onclick = () => { pickedServer = sv; renderServers(); };
             list.appendChild(row);
         }
@@ -719,7 +714,7 @@ function renderServers() {
         $('mp-enter-btn').onclick = () => joinRoom(sv.code);
         return;
     }
-    info.innerHTML = `<h4>${escapeHtml(sv.name || 'Сервер')}</h4><div class="mp-info-mode">${MODE_NAME[sv.mode] || ''}${sv.playing ? ' · идёт игра' : ''}</div>
+    info.innerHTML = `<h4>${escapeHtml(sv.name || 'Сервер')}</h4><div class="mp-info-mode">${modeTitle(sv.mode)}${sv.playing ? ' · идёт игра' : ''}</div>
         <div class="mp-info-players">${sv.players.map((n) => `<div>🧙 ${escapeHtml(n)}</div>`).join('')}</div>
         <button id="mp-enter-btn" class="mp-btn" ${full ? 'disabled' : ''}>${full ? 'Заполнен' : '▶ Войти'}</button>`;
     $('mp-enter-btn').onclick = () => joinRoom(sv.code);
@@ -891,4 +886,4 @@ function escapeHtml(s) {
 })();
 
 window.__zns = Object.defineProperties(window.__zns || {}, Object.getOwnPropertyDescriptors({ THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } }));
-console.log('ЗОМБИ НЕ СПЯТ: готово.');
+console.log(GAME_NAME + ': готово.');

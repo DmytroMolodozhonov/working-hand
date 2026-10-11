@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title ZOMBI NE SPYAT - obnovlenie
+title VOLSHEBSTVO TOLKO NACHINAETSYA - obnovlenie
 cd /d "%~dp0"
 set REPO=https://github.com/DmytroMolodozhonov/working-hand.git
 set BRANCH=main-fbxy0j

@@ -4,8 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ЗОМБИ НЕ СПЯТ</title>
+    <title>Волшебство только начинается</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/logo/logo-32.png">
+    <link rel="icon" type="image/svg+xml" href="assets/logo/logo.svg">
+    <link rel="apple-touch-icon" href="assets/logo/logo-256.png">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="theme.css">
 </head>
 
 <body>
@@ -23,7 +27,7 @@
         <div id="mp-hud" class="hidden"></div>
     </div>
     <div id="damage-flash" class="hidden"></div>
-    <!-- Свободный мир: fatigue, status, frozen frame, death screen -->
+    <!-- «Выживание» (internal 'freeworld'): fatigue, status, frozen frame, death screen -->
     <div id="frozen-overlay"></div>
     <div id="pvp-status" class="hidden"></div>
     <div id="fatigue-container" class="hidden">
@@ -83,24 +87,30 @@
 
     <div id="main-menu">
         <div class="menu-container">
-            <h1>ЗОМБИ НЕ СПЯТ</h1>
+            <header class="brand">
+                <img class="brand-logo" src="assets/logo/logo-128.png" srcset="assets/logo/logo-256.png 2x" alt="" width="72" height="72">
+                <div class="brand-text">
+                    <h1 id="game-title">Волшебство только начинается</h1>
+                    <div class="brand-tagline">Магия — в ваших руках и голосе</div>
+                </div>
+            </header>
             <div id="game-version-top" class="game-version-top"></div>
 
             <div class="tabs">
-                <button class="tab-btn active" data-tab="tab-game">🎮 ОДИНОЧНАЯ ИГРА</button>
-                <button class="tab-btn" data-tab="tab-mp">🌐 МУЛЬТИПЛЕЕР</button>
-                <button class="tab-btn" data-tab="tab-character">🧙 ПЕРСОНАЖ</button>
-                <button class="tab-btn" data-tab="tab-spells">✨ ЗАКЛИНАНИЯ</button>
-                <button class="tab-btn" data-tab="tab-items">🗡️ ПРЕДМЕТЫ</button>
-                <button class="tab-btn" data-tab="tab-editor">🗺️ РЕДАКТОР КАРТ</button>
-                <button class="tab-btn" data-tab="tab-settings">⚙️ НАСТРОЙКИ</button>
+                <button class="tab-btn active" data-tab="tab-game">🎮 Одиночная игра</button>
+                <button class="tab-btn" data-tab="tab-mp">🌐 Мультиплеер</button>
+                <button class="tab-btn" data-tab="tab-character">🧙 Персонаж</button>
+                <button class="tab-btn" data-tab="tab-spells">✨ Заклинания</button>
+                <button class="tab-btn" data-tab="tab-items">🗡️ Предметы</button>
+                <button class="tab-btn" data-tab="tab-editor">🗺️ Редактор карт</button>
+                <button class="tab-btn" data-tab="tab-settings">⚙️ Настройки</button>
             </div>
 
             <div class="tab-content">
                 <!-- SINGLE PLAYER -->
                 <div id="tab-game" class="tab-pane active">
                     <div id="game-map-container">
-                        <h4 class="menu-h4">Режим и карта:</h4>
+                        <h4 class="menu-h4">Выберите режим</h4>
                         <div id="game-map-list"></div>
                         <div id="creative-settings" class="menu-box" style="display: none;">
                             <label>Количество зомби (Творческий): <span id="zombie-count-val">0</span></label>
@@ -108,7 +118,7 @@
                         </div>
                         <div id="saved-worlds" class="menu-box"></div>
                     </div>
-                    <button id="start-btn" style="margin-top: 20px;">ИГРАТЬ</button>
+                    <button id="start-btn">✨ Играть</button>
                 </div>
 
                 <!-- MULTIPLAYER: list of servers -->
@@ -127,9 +137,9 @@
                         <div class="mp-row">
                             <label for="mp-mode">Режим:</label>
                             <select id="mp-mode">
-                                <option value="freeworld" selected>🌍 Свободный мир</option>
-                                <option value="creative">🏗️ Творчество</option>
-                                <option value="survival">🧟 Выживание</option>
+                                <option value="creative">🏗️ Творческий</option>
+                                <option value="survival">💀 Хардкор</option>
+                                <option value="freeworld" selected>🌍 Выживание</option>
                             </select>
                             <label for="mp-world">Мир:</label>
                             <select id="mp-world"><option value="">✨ Новый мир</option></select>

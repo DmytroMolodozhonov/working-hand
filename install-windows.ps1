@@ -1,4 +1,4 @@
-# ЗОМБИ НЕ СПЯТ — установка на Windows одной командой (без .bat из интернета).
+# Волшебство только начинается — установка на Windows одной командой (без .bat из интернета).
 #
 # Windows 11 («Интеллектуальное управление приложениями» / Smart App Control)
 # блокирует скачанные .bat и неподписанные .exe. Команда, набранная в PowerShell,
@@ -8,7 +8,7 @@
 #   irm https://raw.githubusercontent.com/DmytroMolodozhonov/working-hand/main-fbxy0j/install-windows.ps1 | iex
 #
 # Скрипт ставит Python (если его нет), скачивает игру в %LOCALAPPDATA%\ZombieNeSpyat,
-# кладёт на рабочий стол «Зомби не спят.bat» (создан на этом компьютере —
+# кладёт на рабочий стол «Волшебство только начинается.bat» (создан на этом компьютере —
 # Windows его не блокирует; он же обновляет игру) и запускает игру.
 # Только обычные команды PowerShell: работает и в защищённом режиме языка.
 
@@ -35,7 +35,7 @@
     }
 
     Write-Host ''
-    Write-Host '=== ЗОМБИ НЕ СПЯТ: установка ===' -ForegroundColor Green
+    Write-Host '=== Волшебство только начинается: установка ===' -ForegroundColor Green
 
     # ---- Python
     $py = Find-Python
@@ -94,13 +94,15 @@
     # ---- Значок на рабочем столе (создан здесь — Windows его не блокирует)
     $desk = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name Desktop -ErrorAction SilentlyContinue).Desktop
     if (-not $desk) { $desk = Join-Path $env:USERPROFILE 'Desktop' }
-    Set-Content -Path (Join-Path $desk 'Зомби не спят.bat') -Encoding Ascii -Value @(
+    # (the game was called «Зомби не спят» before: its old desktop icon is replaced)
+    Remove-Item -Path (Join-Path $desk 'Зомби не спят.bat') -Force -ErrorAction SilentlyContinue
+    Set-Content -Path (Join-Path $desk 'Волшебство только начинается.bat') -Encoding Ascii -Value @(
         '@echo off',
         'call "%LOCALAPPDATA%\ZombieNeSpyat\start.bat"'
     )
 
     Write-Host ''
-    Write-Host 'Готово! На рабочем столе появился значок «Зомби не спят» —' -ForegroundColor Green
+    Write-Host 'Готово! На рабочем столе появился значок «Волшебство только начинается» —' -ForegroundColor Green
     Write-Host 'в следующий раз запускайте игру им (он сам обновляет игру).'
     Write-Host 'Сейчас откроется браузер с игрой. Не закрывайте это окно, пока играете.'
     Write-Host ''

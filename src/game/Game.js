@@ -712,7 +712,7 @@ export class Game {
         if (this.combat.dead) return null;
         if (!this.knowsSpell(name)) {
             const base = baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
-            if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творчестве. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
+            if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творческом режиме. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
@@ -2125,12 +2125,12 @@ export class Game {
         if (this.flight.active) return false;
         if (this.levitation.lifted) return false; // (held up by another wizard's Leviosa)
         if (!force && !this.knowsFlight()) {
-            this.hud.setVoice('📜 В «Свободном мире» летать нельзя, пока не найдёте в сундуке <b>Свиток полёта</b> (и не сожжёте его «Инферно»)', true);
+            this.hud.setVoice('📜 В «Выживании» летать нельзя, пока не найдёте в сундуке <b>Свиток полёта</b> (и не сожжёте его «Инферно»)', true);
             return false;
         }
         // Maps (labyrinths etc.) are meant to be walked: no flying over the walls
         if (this.world.isMap) {
-            this.hud.setVoice('🚫 На картах «Флайн» не работает — только в Творчестве, Выживании и Свободном мире', true);
+            this.hud.setVoice('🚫 На картах «Флайн» не работает — только в режимах «Творческий», «Хардкор» и «Выживание»', true);
             return false;
         }
         const armsUp = this.character.areBothHandsUp() || Date.now() - (this._armsUpAt || 0) < 1500;

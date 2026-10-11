@@ -656,7 +656,7 @@ test('server list: «Создать сервер» starts a game that the other 
     await b.page.click('#mp-refresh-btn');
     await wf(b.page, () => document.getElementById('mp-server-list').textContent.includes('Замок Димы'), null, 40000);
     const row = await b.page.textContent('.mp-server-row');
-    assert.match(row, /Свободный мир/);
+    assert.match(row, /Выживание/); // (the player-facing name of 'freeworld')
     assert.match(row, /1\/10/);
     await b.page.click('.mp-server-row');
     await wf(b.page, () => document.getElementById('mp-server-info').textContent.includes('Дима'), null, 10000);

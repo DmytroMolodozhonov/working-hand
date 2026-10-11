@@ -26,7 +26,7 @@ test('menu: maps, modes and the new spell are listed; no errors on load', async 
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await page.waitForSelector('.map-card');
     const cards = await page.$$eval('.map-card .map-name', (els) => els.map((e) => e.textContent));
-    assert.ok(cards.includes('ТВОРЧЕСТВО') && cards.includes('ВЫЖИВАНИЕ'));
+    assert.ok(cards.includes('Творческий') && cards.includes('Хардкор') && cards.includes('Выживание'), cards.join(','));
     assert.ok(cards.some((c) => c.startsWith('Карта')), cards.join(','));
     await page.click('[data-tab="tab-items"]');
     const items = await page.$$eval('#items-grid .item-name', (els) => els.map((e) => e.textContent));

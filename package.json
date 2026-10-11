@@ -2,7 +2,7 @@
   "name": "zombie-ne-spyat",
   "private": true,
   "version": "2.0.0",
-  "description": "ЗОМБИ НЕ СПЯТ — 3D-игра с управлением телом и руками через веб-камеру",
+  "description": "Волшебство только начинается — 3D-игра с управлением телом и руками через веб-камеру",
   "type": "module",
   "scripts": {
     "start": "python server.py",

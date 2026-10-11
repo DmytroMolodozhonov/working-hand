@@ -209,7 +209,7 @@ export function describeItem(it) {
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
-            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SCROLL_SPELL_COLOR[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, 'Без свитка оно есть только в Творчестве'] };
+            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SCROLL_SPELL_COLOR[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, 'Без свитка оно есть только в Творческом режиме'] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: мана +<b>${it.amount}</b> навсегда`] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };

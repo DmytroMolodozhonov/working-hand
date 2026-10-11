@@ -641,7 +641,7 @@ export class Duel {
             g.fx.lightFlash(p, 0x2dff5a, 6, 0.6, 30);
             g.hud.flashColor?.('rgba(40, 255, 90, 0.75)');
             if (c.enabled) c.die(byId, 'avada');
-            else g.hud.setVoice('💚 Авада Кедавра попала в вас (вне «Свободного мира» не смертельно)', true);
+            else g.hud.setVoice('💚 Авада Кедавра попала в вас (вне «Выживания» не смертельно)', true);
         } else if (spell === 'Stupefy') {
             c.stun(DUEL.STUN_TIME, byId);
         } else if (spell === 'IceDuel') {
