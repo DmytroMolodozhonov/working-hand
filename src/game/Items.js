@@ -148,7 +148,11 @@ export class ItemSystem {
                 w.magic = !!it.magic; w.bonus = it.magic ? it.bonus : 0;
                 w.applyMagicLook?.();
                 if (this.game.sync) this.game.sync.weaponAppeared?.(w);
-            } else this.spawnLoose(it, p, { hover: true, rise: true });
+            } else {
+                // (a house's things belong to the house: taking one while its people see it is a theft)
+                if (house?.def?.id != null) it.home = { c: house.def.id, h: house.i };
+                this.spawnLoose(it, p, { hover: true, rise: true });
+            }
         });
         return items;
     }
@@ -655,11 +659,14 @@ export class ItemSystem {
         const L = this.loose.get(uid);
         if (!L) return;
         const item = this.removeLoose(uid);
+        // (a thing of a house chest: taken by this player — the theft is theirs, if anybody of the house sees it)
+        if (item.home) { const home = item.home; delete item.home; if (toId && toId[0] !== '#') this.game.castleLife?.tookFromHome?.(home, toId); }
         if (this.game.sync) this.game.sync.itemGone?.(uid, toId, side);
         if (toId === this.game.localId) this._gotItem(item, side);
     }
 
     _gotItem(item, side) {
+        delete item.home; // (it is mine now)
         // a bundle of logs goes back into the wood stack (Beds.js)
         if (this.game.beds?.gotItem(item)) return;
         // blocks (dropped at a body, Death.js) go back into the resource stacks

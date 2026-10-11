@@ -215,7 +215,8 @@ export class BodyStrikes {
             return;
         }
         const c = t.creature, ck = kindOf(c);
-        if (msg.k === 'punch') g.onLocalHit?.(c, PUNCH_DAMAGE, dir.clone().setY(0).normalize(), false);
+        // (a villager feels how hard it was: a light knock is not a hard blow)
+        if (msg.k === 'punch') g.onLocalHit?.(c, PUNCH_DAMAGE, dir.clone().setY(0).normalize(), false, c.isVillager ? { hard: msg.sp >= 8 || (msg.pt === 'head' && msg.sp >= 6) } : null);
         const head = msg.pt === 'head' && msg.lp ? { lp: msg.lp, dir: [dir.x, dir.y, dir.z], speed: msg.sp } : null;
         const v = new THREE.Vector3().fromArray(msg.i);
         if (g.authority !== false) g.creatureImpact?.apply(c, { v, by: g.localId, kind: msg.k, head });

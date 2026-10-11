@@ -68,7 +68,7 @@ test('castles: people, knights at their posts, the king on his throne; seen viol
     await frames(page, 60);
     assert.ok(await page.evaluate(() => [...window.__zns.game.castleLife.byId.values()].filter((v) => v.job === 'wander').length) >= 2, 'townsfolk walk about');
 
-    // hit a gate guard in front of the others: armour first, the hearts go down slowly; the guard turns on me
+    // hit a gate guard in front of the others: armour first, the hearts go down slowly; that guard turns on me
     const fight = await page.evaluate(() => {
         const g = window.__zns.game, L = g.castleLife;
         const me = g.character.group.position;
@@ -79,7 +79,8 @@ test('castles: people, knights at their posts, the king on his throne; seen viol
     });
     assert.equal(fight.armor, 50 - 18, 'armour took the blows');
     assert.ok(fight.hp > 16 && fight.hp < 20, `hearts go down slowly (${fight.hp})`);
-    assert.ok(fight.hostile && fight.foes >= 2, `the guard attacks (${fight.foes} knights)`);
+    // (a fight with one knight is between the two of us: he fights me himself, the castle is not called)
+    assert.ok(!fight.hostile && fight.foes === 1, `that guard fights me, alone (${fight.foes} knights)`);
     // they run at me and strike (or I am already down)
     let seenRun = false, hp = 20;
     for (let i = 0; i < 12; i++) {
@@ -122,7 +123,49 @@ test('castles: people, knights at their posts, the king on his throne; seen viol
     await page.close();
 });
 
-test('market and talk: buy from a counter with «да», sell a wand for a pouch of coins, theft calls the guard; only near villagers hear you', async () => {
+test('a blow is between two: a light knock — told off; a hard punch — that one fights me, no guards; hurting people one after another — the guard comes', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const c = g.world.terrain.data.castles.near(0, 0, 2500).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+        window.__castle = c;
+        g.character.group.position.set(c.gate.x, c.gate.y + 2.2, c.gate.z);
+        g.world.terrain.flushAround(c.gate.x, c.gate.z);
+        g.combat.damage = () => {}; g.damageLocalPlayer = () => {};
+    });
+    for (let i = 0; i < 60; i++) {
+        await frames(page, 10);
+        if (await page.evaluate(() => [...window.__zns.game.castleLife.byId.values()].filter((v) => !v.dead && v.role !== 'knight' && v.role !== 'king').length >= 4)) break;
+    }
+    const r = await page.evaluate(() => {
+        const g = window.__zns.game, L = g.castleLife;
+        const cs = L.castles.get(window.__castle.id);
+        const folk = [...cs.active.values()].filter((v) => !v.dead && v.role !== 'knight' && v.role !== 'king' && !v.wizard);
+        const knightsOnMe = () => [...cs.active.values()].filter((v) => v.role === 'knight' && v.foe === g.localId).length;
+        const punch = (v, hard) => { v.damageCooldown = 0; g.onLocalHit(v, 1, null, false, { hard }); };
+        const [a, b, c, d] = folk;
+        punch(a, false);
+        const light = { foe: a.foe === g.localId, said: a.bubble?.text || '', hostile: cs.hostile.has(g.localId), knights: knightsOnMe() };
+        punch(b, true);
+        const hard = { foe: b.foe === g.localId, grudge: b.grudge?.id === g.localId, hostile: cs.hostile.has(g.localId), knights: knightsOnMe() };
+        punch(c, true);
+        const two = { hostile: cs.hostile.has(g.localId), knights: knightsOnMe() };
+        punch(d, true); // (the third person hurt within two minutes: a rampage)
+        const rampage = { hostile: cs.hostile.has(g.localId), knights: knightsOnMe() };
+        return { n: folk.length, light, hard, two, rampage };
+    });
+    assert.ok(r.n >= 4, `townsfolk: ${r.n}`);
+    assert.ok(!r.light.foe && !r.light.hostile && r.light.knights === 0 && r.light.said, `a light knock: told off (${JSON.stringify(r.light)})`);
+    assert.ok(r.hard.foe && r.hard.grudge && !r.hard.hostile && r.hard.knights === 0, `a hard punch: that one fights me, no guards (${JSON.stringify(r.hard)})`);
+    assert.ok(!r.two.hostile && r.two.knights === 0, 'two scuffles are still no war');
+    assert.ok(r.rampage.hostile, `a rampage: the castle turns on me (${JSON.stringify(r.rampage)})`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('market and talk: buy from a counter with «да», sell a wand for a pouch of coins, the merchant goes for a thief; only near villagers hear you', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -198,7 +241,7 @@ test('market and talk: buy from a counter with «да», sell a wand for a pouch
         return { near, far };
     });
     assert.deepEqual(ear, { near: true, far: false });
-    // theft: take a good and walk away unpaid — the castle turns on me
+    // theft: take a good and walk away unpaid — the merchant turns on me
     let uid2 = null;
     for (let i = 0; i < 30 && !uid2; i++) {
         await frames(page, 10);
@@ -213,8 +256,9 @@ test('market and talk: buy from a counter with «да», sell a wand for a pouch
         g.character.group.position.x += 25;
     }, uid2);
     await frames(page, 15);
-    const theft = await page.evaluate(() => { const g = window.__zns.game; const cs = g.castleLife.castles.get(window.__castle.id); return { hostile: cs.hostile.has(g.localId), stolen: !g.items.held.right?.item.shop }; });
-    assert.deepEqual(theft, { hostile: true, stolen: true });
+    const theft = await page.evaluate(() => { const g = window.__zns.game; const cs = g.castleLife.castles.get(window.__castle.id); return { hostile: cs.hostile.has(g.localId), merchant: [...cs.active.values()].some((v) => v.role === 'merchant' && v.foe === g.localId), stolen: !g.items.held.right?.item.shop }; });
+    // (the merchant goes for the thief himself — a theft brings no guards)
+    assert.deepEqual(theft, { hostile: false, merchant: true, stolen: true });
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

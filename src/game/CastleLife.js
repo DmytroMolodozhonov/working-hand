@@ -41,6 +41,10 @@ const SEE = 32; // m: villagers see violence this far (with a free line of sight
 const VIEW = 80; // m: farther villagers are not drawn
 const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
+const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
+const THEFT_MS = 90000;
+const RAMPAGE = 3; // different people of a castle hurt by one player within 2 min: that is a rampage — the guard comes
+const PETTY = 12; // blocks of quiet damage (a pane, a few blocks) per player in 5 min: the people grumble, no guards
 const LEASH = 20; // m: out of their land, knights chase on until the enemy is this far ahead
 const HEAR_BOOM = 110; // m: a blast is heard this far (the guards come to look)
 export const STATS = {
@@ -70,7 +74,11 @@ const SHOUT = {
     boom: ['Что это было?!', 'Взрыв! Бегите!', 'Стену ломают!', 'Спасайтесь!', 'Стража! Тут колдун!'],
     swear: ['Получай, сволочь!', 'Ах ты ж гад!', 'Чтоб тебя!', 'Вот тебе, зараза!', 'Чёрт тебя дери!', 'Да чтоб ты провалился!', 'На, получи, мерзавец!'],
     thief: ['Ах ты ж ворюга!', 'Положи на место, зараза!', 'Ах ты, сволочь, в мой сундук полез?!', 'Чёрт бы тебя побрал, вор!', 'Ну всё, гад, получишь!', 'Вон из моего дома, паскуда!'],
-    thiefSeen: ['Вор! Держи вора!', 'Грабят!', 'Стража! Вор в доме!'],
+    thiefSeen: ['Вор! Держи вора!', 'Грабят!', 'Вор в доме!'],
+    offended: ['Ну знаешь ли!', 'Я тебе это припомню!', 'Совсем обнаглел?!', 'Ещё раз тронешь — получишь!'],
+    fightBack: ['Ах так?! Ну держись!', 'Сам напросился!', 'Ну всё, получишь!', 'Сейчас я тебе покажу!'],
+    fightBackKnight: ['Ты за это ответишь!', 'Ну держись, наглец!', 'Сам напросился, странник.'],
+    petty: ['Эй! Ты что творишь?!', 'Окно разбил! Кто платить будет?', 'А ну перестань ломать!', 'Совсем совести нет!'],
     investigate: ['Что там грохнуло? За мной!', 'К стене, живо!', 'Кто посмел?! Проверить!'],
     wrecker: ['Вот он, разрушитель!', 'Держи колдуна!', 'Ты сломал нашу стену — ответишь!', 'Взять его, он ломает замок!'],
     captured: ['Король пал! Да здравствует новый король!', 'Мы служим вам, Ваше Величество!'],
@@ -834,9 +842,11 @@ export class CastleLife {
         // they don't stop at the edge of their land: only when the enemy got well
         // away from them (~20 m) beyond it — or very far from the castle
         const gone = !fp || (!this._inLand(cs.def, fp, 30) && (d > LEASH || !this._inLand(cs.def, fp, 160)));
-        if (gone || !(cs.hostile.get(v.foe) > Date.now())) {
+        // (the whole castle against them — or only this one, angry at this player: a blow, a theft)
+        const grudge = v.grudge && v.grudge.id === v.foe && v.grudge.until > Date.now();
+        if (gone || !(cs.hostile.get(v.foe) > Date.now() || grudge)) {
             if (fp && gone) v.gaveUp = { id: v.foe, until: Date.now() + 15000 }; // (not straight back at them)
-            v.foe = null; v.path = null; v.chaseT = 0;
+            v.foe = null; v.path = null; v.chaseT = 0; v.grudge = null;
             return;
         }
         v.seated = false;
@@ -981,7 +991,7 @@ export class CastleLife {
     /** Someone hit a villager (weapons, fists, spells). */
     hit(v, dmg, dir, by, opts = {}) {
         if (!v || v.dead) return;
-        if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, opts.magic ? 1 : 0); this._flash(v); return; }
+        if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
         // armour takes most of the blow: the hearts go down many times slower
@@ -998,19 +1008,50 @@ export class CastleLife {
         const killed = v.hp <= 0;
         const pos = { x: v.x, y: v.y, z: v.z };
         if (killed) this._die(v, by);
-        // one light knock with a bare hand (a hand reaching for a handshake, a bump in a crowd): they
-        // tell you off and nobody raises the alarm; a second one within half a minute is a real fight
-        if (!killed && by && dmg <= 1 && !opts.weapon && !opts.spell && !opts.pierce && !opts.magic) {
-            const bumps = v.cs.bumps || (v.cs.bumps = new Map());
-            const now = Date.now();
-            if (!(now - (bumps.get(by) || 0) < 30000)) {
-                bumps.set(by, now);
-                this._say(v, pick(v.role === 'knight' || v.role === 'king' ? SHOUT.bumpKnight : SHOUT.bump), 3);
-                return;
-            }
-        }
+        // a blow without magic (a fist, a slap, a blade) on one person is between the two of them:
+        // they tell you off, take offence, or — a hard blow — fight YOU; no guards (only a rampage brings them)
+        if (!killed && by && !opts.spell && !opts.pierce && !opts.magic && !(opts.weapon && v.role === 'king') && this._personal(v, by, dmg, opts)) return;
         if (!killed && v.role !== 'knight' && v.role !== 'king') this._say(v, pick(SHOUT.hurt));
         if (by) this._offence(v.cs, by, v, killed, pos);
+    }
+
+    /**
+     * A blow without magic between one player and one villager. Returns false when it is no
+     * longer personal: this player has hurt several people here lately (a rampage — the castle turns on them).
+     */
+    _personal(v, by, dmg, opts = {}) {
+        const g = this.game;
+        if (!(by === g.localId || g.remotes?.has(by))) return false;
+        const cs = v.cs;
+        const now = Date.now();
+        const bumps = cs.bumps || (cs.bumps = new Map());
+        const key = by + '|' + v.id;
+        const prev = bumps.get(key);
+        const n = prev && now - prev.t < 30000 ? prev.n + 1 : 1;
+        bumps.set(key, { t: now, n });
+        const hard = !!opts.weapon || !!opts.hard || dmg > 1;
+        // (the people really hurt by this player lately — a single light knock is not counted)
+        if (hard || n > 1) {
+            const hurt = cs.hurtBy || (cs.hurtBy = new Map());
+            let m = hurt.get(by);
+            if (!m) hurt.set(by, (m = new Map()));
+            m.set(v.id, now);
+            for (const [id, t] of m) if (now - t > 120000) m.delete(id);
+            if (m.size >= RAMPAGE) return false;
+        }
+        const b = this.talk?.brain?.(v);
+        if (b) { b.mood -= hard ? 0.5 : 0.2; b.memory.insults = (b.memory.insults || 0) + 1; }
+        const knightly = v.role === 'knight' || v.role === 'king';
+        // (a light knock — a hand reaching for a handshake, a bump in a crowd — once: just told off)
+        if (!hard && n === 1) { this._say(v, pick(knightly ? SHOUT.bumpKnight : SHOUT.bump), 3); return true; }
+        // (again and again, or the king of this castle himself: offended — not a fight)
+        if ((!hard && n < 3) || this.state(cs.def.id).owner === by) { this._say(v, pick(knightly ? SHOUT.bumpKnight : SHOUT.offended), 3); return true; }
+        // a hard blow (or the third knock): this one fights back — only them, only this player
+        v.grudge = { id: by, until: now + GRUDGE_MS };
+        if (v.foe !== by) { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; v.seated = false; }
+        this._say(v, pick(knightly ? SHOUT.fightBackKnight : SHOUT.fightBack), 3);
+        if (by === g.localId) g.hud.setVoice?.(`😠 ${v.title} ${v.name} разозлился и дерётся с вами`, true);
+        return true;
     }
 
     _flash(v) {
@@ -1086,7 +1127,7 @@ export class CastleLife {
         st.owner = by || null;
         st.ownerName = by ? g.playerName(by) : null;
         cs.hostile.clear();
-        for (const v of cs.active.values()) { v.foe = null; v.fleeT = 0; }
+        for (const v of cs.active.values()) { v.foe = null; v.fleeT = 0; v.grudge = null; }
         for (const c of cs.chests) c.locked = false;
         const someone = [...cs.active.values()].find((v) => !v.dead && v.role !== 'king');
         if (someone) this._say(someone, pick(SHOUT.captured));
@@ -1121,8 +1162,10 @@ export class CastleLife {
             if (!cs.awake) continue;
             const st = this.state(def.id);
             if (by && by === st.owner) continue; // (the king may pull down his own walls)
-            const hear = loud ? HEAR_BOOM : 30;
             const bp = isPlayer ? this._playerPos(by) : null;
+            // a quiet little damage (a pane, a block or two): whoever sees it grumbles at that player — no guards
+            if (!loud && isPlayer && blocks > 0 && this._petty(cs, by, blocks, bp, pos)) continue;
+            const hear = loud ? HEAR_BOOM : 30;
             let seen = false;
             let comers = 0;
             for (const v of cs.active.values()) {
@@ -1144,6 +1187,25 @@ export class CastleLife {
             if (loud && comers < 4) this._sendGuards(cs, pos, by, 4 - comers);
             if (seen) this._catch(cs, by, pos);
         }
+    }
+
+    /** Quiet small damage by one player (5 min memory): true while it is still petty. */
+    _petty(cs, by, blocks, bp, pos) {
+        const now = Date.now();
+        const q = cs.petty || (cs.petty = new Map());
+        const r = q.get(by);
+        const n = (r && now - r.t < 300000 ? r.n : 0) + blocks;
+        q.set(by, { n, t: now });
+        if (n >= PETTY) return false;
+        let said = false;
+        for (const v of cs.active.values()) {
+            if (v.dead || v.foe || v.role === 'king' || !bp) continue;
+            if (Math.hypot(v.x - pos.x, v.z - pos.z) > 25 || !this._sees(v, bp)) continue;
+            const b = this.talk?.brain?.(v);
+            if (b) b.mood -= 0.3;
+            if (!said) { said = true; this._say(v, pick(SHOUT.petty), 3); }
+        }
+        return true;
     }
 
     /** A few knights come out (barracks, keep, gate) and run to look at a place. */
@@ -1282,21 +1344,31 @@ export class CastleLife {
             if (this._sees(v, bp)) seers.push({ v, fam });
         }
         if (!seers.length) return false;
-        cs.hostile.set(by, Date.now() + HOSTILE_MS);
+        // only the thief, and only the family goes for them (the neighbours shout) — a theft is no war: no guards
+        const until = Date.now() + THEFT_MS;
+        let owners = 0;
         for (const { v, fam } of seers) {
-            if (fam || v.role === 'knight') { v.foe = by; v.fleeT = 0; v.path = null; this._say(v, pick(fam ? SHOUT.thief : SHOUT.knight)); }
-            else { v.fleeFrom = by; v.fleeT = 8 + Math.random() * 6; v.fleeing = false; v.path = null; if (Math.random() < 0.6) this._say(v, pick(SHOUT.thiefSeen)); }
+            if (fam) { owners++; v.grudge = { id: by, until }; v.foe = by; v.fleeT = 0; v.path = null; v.seated = false; this._say(v, pick(SHOUT.thief)); }
+            else if (v.role !== 'knight' && v.role !== 'king' && Math.random() < 0.6) this._say(v, pick(SHOUT.thiefSeen));
         }
-        for (const k of cs.active.values()) if (!k.dead && !k.foe && k.role === 'knight' && Math.hypot(k.x - bp.x, k.z - bp.z) < 45) k.foe = by;
-        if (by === g.localId) g.hud.setVoice('😡 Хозяева увидели, что вы берёте их вещи! Они идут на вас', true);
-        else g.sync?.villagerAlarm?.(by, def.name);
+        if (by === g.localId) g.hud.setVoice(owners ? '😡 Хозяева увидели, что вы берёте их вещи! Они идут на вас' : '👀 Соседи видели, как вы взяли чужое', true);
         return true;
+    }
+
+    /** (host) A player took a thing that lay in a house chest: a theft, if anybody sees it. */
+    tookFromHome(home, by) {
+        if (!home || !by || !this.enabled || !this.auth) return false;
+        const cs = this.castles.get(home.c) || this._runtimeById(home.c);
+        if (!cs || !cs.def.houses?.[home.h]) return false;
+        return this.theft(cs.def, home.h, by, this._playerPos(by) || cs.def.houses[home.h].inside);
     }
 
     /** A villager saw / suffered a crime (theft, threats) by a player. */
     reportCrime(v, by, kind = 'crime') {
         if (!v || v.dead) return;
         if (!this.auth) { this.game.sync?.villagerCrime?.(v.id, kind); return; }
+        // (a thing carried off from the market: the merchant goes for the thief himself — no guards)
+        if (kind === 'theft' && by && by !== this.state(v.cs.def.id).owner) { v.grudge = { id: by, until: Date.now() + THEFT_MS }; v.foe = by; v.fleeT = 0; v.path = null; return; }
         this._offence(v.cs, by, v, false, { x: v.x, y: v.y, z: v.z });
     }
 
@@ -1304,7 +1376,7 @@ export class CastleLife {
     playerDied(id) {
         for (const cs of this.castles.values()) {
             cs.hostile.delete(id);
-            for (const v of cs.active.values()) if (v.foe === id) v.foe = null;
+            for (const v of cs.active.values()) if (v.foe === id) { v.foe = null; v.grudge = null; }
         }
     }
 

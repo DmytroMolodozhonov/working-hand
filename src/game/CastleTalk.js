@@ -588,7 +588,7 @@ export class CastleTalk {
             delete it.shop;
             if (this.offer?.uid === it.uid) this.offer = null;
             if (v) {
-                this.life._say(v, 'Вор! Держи вора! Стража!', 5);
+                this.life._say(v, 'Вор! Держи вора!', 5);
                 this.life.reportCrime(v, g.localId, 'theft');
                 g.hud.setVoice?.('🚨 Вы ушли, не заплатив! Торговец зовёт стражу', true);
             }
@@ -605,7 +605,8 @@ export class CastleTalk {
             if (d > 5) continue;
             if (now - (this._greetT.get(v.id) || 0) < 90000) continue;
             this._greetT.set(v.id, now);
-            if (v.role !== 'merchant' && v.role !== 'king' && Math.random() < 0.6) continue;
+            // (the people of a house greet whoever comes in: a visit is no theft)
+            if (v.role !== 'merchant' && v.role !== 'king' && v.job !== 'home' && Math.random() < 0.6) continue;
             const b = this.brain(v);
             const line = b.greet(this._ctx(v));
             if (line) {

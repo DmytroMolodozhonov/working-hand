@@ -508,7 +508,7 @@ export class Game {
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
-        if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon }); return; }
+        if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon, hard: !!hit?.hard }); return; }
         if (z.isSailor) { this.ships.crew.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon }); return; }
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         if (z.isLivingTree) { this.livingTrees.hit(z, dmg, 'melee'); return; } // (only fire hurts it)
@@ -713,8 +713,7 @@ export class Game {
                     const testing = this.config.mode === 'creative' && /^(cvtest|creative-test)/.test(String(chest.id));
                     this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null, { chest, extra: pouch, key: testing ? 1 : undefined });
                 } // (a port chest: the sailors' stores; all in one row along the chest, within reach)
-                // a house chest: the family may be watching
-                if (chest.house) this.houses?.chestOpened(chest, by);
+                // (a house chest opening is no theft by itself: taking a thing out of it is — Items.pickUp)
                 if (this.sync) this.sync.chestOpenedLoot?.(chest);
             }
             return;

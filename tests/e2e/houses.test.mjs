@@ -83,29 +83,35 @@ test('houses: a door in the doorway, glass that breaks, beds, a chest of food th
     });
     assert.ok(glass.n1 < glass.n0 && glass.saved, 'the pane broke and stays broken');
 
-    // the chest: food inside; the family sees me take it and attacks (cursing)
+    // the chest: food inside. Coming in, the chest opening — no theft (the family greets a visitor);
+    // taking a thing out of it while they see it is: the family goes for the thief only, no guards
     const theft = await page.evaluate(async () => {
-        const g = window.__zns.game, c = window.__castle, h = c.houses[window.__hi];
+        const g = window.__zns.game, c = window.__castle, h = c.houses[window.__hi], L = g.castleLife;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
         const chest = g.chests.find((x) => x.id === h.id + 'c0');
-        const fam = [...g.castleLife.byId.values()].filter((v) => v.job === 'home' && v.house === window.__hi);
-        for (const v of fam) { v.x = h.inside.x; v.z = h.inside.z; v.y = h.inside.y; }
+        const fam = [...L.byId.values()].filter((v) => v.job === 'home' && v.house === window.__hi);
+        for (const v of fam) { v.x = h.inside.x; v.z = h.inside.z; v.y = h.inside.y; v.talking = 0; }
         const cp = chest.getPosition();
         g.character.group.position.set(h.inside.x, h.inside.y + 2.2, h.inside.z);
         const before = new Set(g.items.loose.keys());
-        const wasOpen = chest.isOpen;
-        const seen = g.castleLife.theft(window.__castle, window.__hi, g.localId, chest.getPosition());
-        const dbg = JSON.stringify({ wasOpen, seen, fam: fam.map((v) => [v.id, v.entry.home, Math.round(v.x - g.character.group.position.x), Math.round(v.y), Math.round(g.character.group.position.y), g.castleLife._sees(v, g.character.group.position)]) });
-        g.openChest(chest, null, g.localId);
+        if (!chest.isOpen) g.openChest(chest, null, g.localId);
         await frames(5);
-        const loot = [...g.items.loose.values()].filter((L) => !before.has(L.item.uid)).map((L) => L.item.kind);
+        const looseNew = [...g.items.loose.values()].filter((x) => !before.has(x.item.uid));
+        const loot = looseNew.map((x) => x.item.kind);
+        const foesOpen = fam.filter((v) => v.foe === g.localId).length;
+        const taken = looseNew.find((x) => x.item.home);
+        if (g.items.held.right) g.items.releaseHand('right');
+        g.items.pickUp(taken.item.uid, g.localId, 'right');
         const foes = fam.filter((v) => v.foe === g.localId).length;
-        const said = fam.map((v) => v.bubble?.text || v.lastSaid || '').join(' | ');
-        return { loot, foes, said, cp: [cp.x, cp.z], dbg };
+        const cs = L.castles.get(c.id);
+        const knights = [...cs.active.values()].filter((v) => v.role === 'knight' && v.foe === g.localId).length;
+        return { loot, foesOpen, foes, home: !!taken, hostile: cs.hostile.has(g.localId), knights, cp: [cp.x, cp.z] };
     });
     const food = theft.loot.filter((k) => ['bread', 'cheese', 'pie', 'steak', 'apple', 'wool', 'arrows', 'coins'].includes(k)).length;
     assert.ok(theft.loot.length >= 2 && food >= theft.loot.length - 1, 'mostly food: ' + theft.loot.join(','));
-    assert.ok(theft.foes >= 1, 'the family attacks the thief ' + theft.dbg);
+    assert.equal(theft.foesOpen, 0, 'coming in and the chest opening are no theft');
+    assert.ok(theft.home && theft.foes >= 1, 'the family attacks the thief');
+    assert.ok(!theft.hostile && theft.knights === 0, 'no guards for a theft');
 
     // pens: animals inside their fences
     if (info.pens) {

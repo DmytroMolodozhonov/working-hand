@@ -10,8 +10,9 @@
  *    fist or a blade into it (not a touch, not walking past), an arrow, a thrown
  *    thing, a blast or a strong spell breaks it — for good;
  *  - beds (src/game/Beds.js — you can lie in them) and chests: mostly food,
- *    seldom something precious. Taking from a chest while the family sees it
- *    makes them attack (src/game/CastleLife.js theft);
+ *    seldom something precious. Taking a thing out of a chest while the family
+ *    sees it makes them attack the thief (src/game/CastleLife.js theft); opening
+ *    it, coming in — no theft (the people of the house greet a visitor);
  *  - the family at home, and the animals in the pens and the barns.
  *
  * Multiplayer: every computer makes the doors, panes, beds and chests of the
@@ -206,14 +207,6 @@ export class Houses {
 
     /** (host) A pen animal was taken away for being far: it comes back with the pen. */
     penReturn(id) { this.pens.set(id, (this.pens.get(id) || 0) + 1); this.activePens.delete(id); }
-
-    // ------------------------------------------------------------------ chests
-    /** (host) A house chest was opened by `by`: the family may have seen it. */
-    chestOpened(chest, by) {
-        const H = chest.house;
-        if (!H || !by) return false;
-        return !!this.game.castleLife?.theft(H.def, H.i, by, chest.getPosition());
-    }
 
     // ------------------------------------------------------------------- glass
     _rebuildGlass() {
