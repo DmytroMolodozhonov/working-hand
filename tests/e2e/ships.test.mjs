@@ -177,6 +177,7 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
     const speeds = await page.evaluate(async () => {
         const g = window.__zns.game, s = window.__ship;
         const out = [];
+        window.__home = { x: s.st.x, z: s.st.z, yaw: s.st.yaw };
         const t0 = performance.now();
         // simulate in fixed steps through the game's own physics (the frame rate of the test browser is low)
         for (let i = 0; i < 250; i++) { g.ships._simulate(s, 0.1); if (i === 49) out.push(s.st.u); }
@@ -199,8 +200,12 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
         return { u0, u: s.st.u };
     });
     assert.ok(coast.u > 0.6 * coast.u0, `a heavy ship coasts (${coast.u0.toFixed(2)} → ${coast.u.toFixed(2)} in 10 s)`);
-    // «Фёрл»: rolled up again
-    assert.equal(await page.evaluate(() => window.__zns.game.castLocalSpell('фёрл', true)), 'Furl');
+    // «Фёрл»: rolled up again (the ship back where I stand: the fast simulation above sailed it away without me)
+    await page.evaluate(() => { const s = window.__ship, h = window.__home; s.st.x = h.x; s.st.z = h.z; s.st.yaw = h.yaw; s.st.u = s.st.v = s.st.r = 0; window.__zns.game.ships._place(s); });
+    await standAt(page, 2, q.z0 + 6, 0, q.y);
+    await feed(page, { arms: 'up' }, 15, 40);
+    const furl = await page.evaluate(() => { const g = window.__zns.game; let said = null; const sv = g.hud.setVoice.bind(g.hud); g.hud.setVoice = (t, f) => { said = t; return sv(t, f); }; const r = g.castLocalSpell('фёрл', true); g.hud.setVoice = sv; return { r, said, me: g.ships.me?.ship.id, raised: g.character.isArmRaised('right') }; });
+    assert.equal(furl.r, 'Furl', JSON.stringify(furl));
     await until(page, () => window.__ship.sails.filter((s) => s.target === 0).every((s) => s.open < 0.02));
     const furled = await page.evaluate(() => window.__ship.sails.filter((s) => s.target === 0).map((s) => s.open));
     assert.ok(furled.length >= 1 && furled.every((o) => o < 0.02), 'a mast\'s sails are rolled up');
