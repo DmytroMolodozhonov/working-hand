@@ -72,7 +72,7 @@ export class Houses {
     }
 
     get auth() { return this.game.authority; }
-    get index() { return this.game.world?.terrain?.data?.castles || null; }
+    get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || null; } // (castles and wizards' towers)
 
     _points() {
         const g = this.game;

@@ -31,6 +31,7 @@ import { VillagerBrain } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { TalkMind, thinkingLine } from '../ai/TalkMind.js';
+import { matchSpell } from '../fx/SpellManager.js';
 
 export const HEAR = 7; // m: a villager hears you this far
 const VOICE = 18; // m: a villager's voice carries this far
@@ -120,6 +121,10 @@ export class CastleTalk {
         // a shout carries far and stays loud; a word is quiet beyond a few metres
         const volume = shout ? Math.max(0.3, Math.min(1, 1 - (d - 8) / (range - 8) * 0.7)) : Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
         this._lastSpoken = text;
+        // a spell's word said aloud (a wizard practising, a cry in a duel): my microphone may hear it
+        // from the speakers — it must not cast that spell from my hand (VoiceGate echo, until it is said)
+        const sp = matchSpell(text);
+        if (sp) this.game.voiceGate?.noteRemote(sp, performance.now() + Math.min(8000, 400 + text.length * 70));
         // (× the game's sound volume inside Speech; a woman always with a female voice, a man with a male one)
         this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout });
     }

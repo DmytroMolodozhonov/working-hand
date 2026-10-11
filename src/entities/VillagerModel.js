@@ -21,9 +21,13 @@
 import * as THREE from 'three';
 import { SKIN_TONES } from './Appearance.js';
 
-export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king'];
-export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb'];
+// (the wizards are appended: the look of every older role stays the same — its seed uses the index)
+export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
+export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
+export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer'];
+/** How far up the tool the tip of a wand / a staff is (tool-local y). */
+export const TIP_Y = { wand: 1.05, staff: 2.45 };
 /** group.position.y = ground surface + this (feet at local −1.95). */
 export const VILLAGER_FOOT_OFFSET = 1.95;
 /** Sitting: group.position.y = seat top + this (thighs 0.5 thick; feet reach the floor for a seat 0.7 high). */
@@ -199,8 +203,38 @@ export function villagerLook(seed, role = 'farmer', female, opts = {}) {
             L.accent = 0xb0202a; // cape
             if (L.hair === 'spiky') L.hair = 'long';
             break;
+        default:
+            if (WIZARD_LOOK_ROLES.has(role)) wizardLook(L, r, pick);
+            break;
     }
     return L;
+}
+
+/** Wizards: a robe to the ground, a pointed hat, a wand (a wanderer: a staff), the Master — a long beard. */
+function wizardLook(L, r, pick) {
+    const role = L.role;
+    L.wizard = true;
+    L.dress = true;
+    const robes = {
+        student: [0x2c4f9e, 0x2f7a3e, 0x8e2b2b, 0xb8922a],
+        teacher: [0x1f2f6b, 0x4b2a7a, 0x23364f, 0x5a2d82],
+        seller: [0x6a2c91, 0x2b5f8e, 0x7a3b1f],
+        master: [0x3a1d5e],
+        wanderer: [0x6d6a62, 0x6b5640, 0x55584f],
+    }[role];
+    L.dressColor = pick(robes);
+    L.shirt = L.dressColor; // (the sleeves are the robe's)
+    L.pants = shade(L.dressColor, 0.6);
+    L.accent = role === 'master' ? GOLD : role === 'wanderer' ? 0x8a7a5a : role === 'student' ? 0xd8d4c8 : 0xc0c8d8;
+    L.hatColor = role === 'student' ? shade(L.dressColor, 0.8) : role === 'wanderer' ? shade(L.dressColor, 0.85) : shade(L.dressColor, 0.9);
+    L.hat = role === 'master' ? 'wizardTall' : role === 'wanderer' ? 'wizardWide' : 'wizard';
+    L.tool = role === 'wanderer' ? 'staff' : 'wand';
+    L.boots = pick([0x3a2a1a, 0x2b2b2b, 0x4a3020]);
+    if (role === 'master') {
+        L.hairColor = GREY_HAIR;
+        if (!L.female) { L.beard = 'long'; L.hair = 'long'; } else L.hair = 'long';
+    } else if (role === 'wanderer' && !L.female && r() < 0.7) L.beard = 'long';
+    else if (role === 'student') L.beard = 'none';
 }
 
 // ==================================================================== parts
@@ -235,6 +269,14 @@ function headBoxes(L) {
         } else if (L.beard === 'goatee') {
             b(B, 0.38, 0.32, 0.1, 0, 0.12, -0.63, bc);
             b(B, 0.56, 0.1, 0.06, 0, 0.38, -0.665, bc);
+        } else if (L.beard === 'long') {
+            // a wizard's long beard down onto the chest
+            b(B, 1.22, 0.42, 0.12, 0, 0.18, -0.6, bc);
+            b(B, 0.9, 0.5, 0.14, 0, -0.25, -0.6, bc);
+            b(B, 0.6, 0.45, 0.14, 0, -0.7, -0.62, bc);
+            b(B, 0.3, 0.3, 0.12, 0, -1.05, -0.63, shade(bc, 0.95));
+            b(B, 0.1, 0.55, 0.8, -0.62, 0.35, -0.15, bc); b(B, 0.1, 0.55, 0.8, 0.62, 0.35, -0.15, bc);
+            b(B, 0.62, 0.12, 0.08, 0, 0.38, -0.67, shade(bc, 0.9));
         } else if (L.beard === 'moustache') {
             b(B, 0.56, 0.1, 0.08, 0, 0.38, -0.65, bc);
             b(B, 0.1, 0.16, 0.08, -0.28, 0.31, -0.65, bc); b(B, 0.1, 0.16, 0.08, 0.28, 0.31, -0.65, bc);
@@ -341,6 +383,31 @@ function headBoxes(L) {
     return B;
 }
 
+/**
+ * A wizard's pointed hat in two parts (its own meshes, so it can bend): the brim and
+ * the lower crown sit on the head (pivot at head y 1.22); the upper crown and the
+ * bent tip hang on a joint above them and fold back when the hat meets a ceiling.
+ * Returns {base, top, joint}: boxes relative to the pivot / to the joint.
+ */
+const HAT_PIVOT_Y = 1.22;
+function hatParts(L) {
+    const c = L.hatColor, band = L.role === 'master' ? GOLD : shade(c, 0.6);
+    const tall = L.hat === 'wizardTall', wide = L.hat === 'wizardWide';
+    const base = [], top = [];
+    const brim = wide ? 2.1 : 1.7, t1 = wide ? 0.26 : 0.3;
+    b(base, brim, 0.06, brim, 0, 0.03, 0, shade(c, 0.85));
+    b(base, 1.32, t1, 1.32, 0, 0.06 + t1 / 2, 0, c);
+    b(base, 1.34, 0.08, 1.34, 0, 0.1, 0, band); // a band round it
+    const joint = 0.06 + t1;
+    const t2 = tall ? 0.36 : wide ? 0.24 : 0.28, t3 = tall ? 0.26 : wide ? 0.18 : 0.22;
+    b(top, 0.95, t2, 0.95, 0, t2 / 2, 0.03, c);
+    b(top, 0.6, t3, 0.6, 0, t2 + t3 / 2, 0.08, shade(c, 1.05));
+    b(top, 0.3, 0.1, 0.36, 0, t2 + t3 + 0.04, 0.2, shade(c, 0.95)); // the tip, bent back
+    if (tall) b(top, 0.16, 0.16, 0.16, 0, t2 + t3 + 0.04, 0.32, 0xfff2a0, Math.PI / 4, 0, Math.PI / 4); // a star on it
+    else b(top, 0.16, 0.16, 0.05, 0.3, t2 * 0.5, -0.46, 0xe8e8ff, 0, 0, Math.PI / 4); // a little star on the front
+    return { base, top, joint };
+}
+
 /** Torso box 1.2×1.5×0.8 centred at 0 (torso group at hip y 0.75). */
 function bodyBoxes(L) {
     const B = [];
@@ -402,6 +469,14 @@ function bodyBoxes(L) {
             b(B, 1.22, 0.45, 0.82, 0, -0.55, 0, p); // the overalls' waist
             b(B, 0.22, 0.22, 0.03, -0.32, -0.55, -0.42, shade(p, 1.3)); // patch
         }
+    } else if (L.wizard) { // a robe: a trimmed front, a sash, a star
+        const rc = L.dressColor, tr = L.accent;
+        b(B, 1.26, 1.4, 0.86, 0, 0.05, 0, rc);
+        b(B, 0.12, 1.42, 0.03, 0, 0.05, -0.44, tr);
+        b(B, 0.56, 0.16, 0.08, 0, 0.72, -0.4, tr); // collar
+        b(B, 1.3, 0.16, 0.9, 0, -0.62, 0, shade(rc, 0.7)); b(B, 0.18, 0.16, 0.04, 0, -0.62, -0.46, tr); // sash
+        b(B, 0.2, 0.2, 0.03, 0.32, 0.32, -0.45, L.role === 'master' ? 0xfff2a0 : 0xe8e8ff, 0, 0, Math.PI / 4); // a star
+        if (L.role === 'seller' || L.role === 'wanderer') { b(B, 0.3, 0.34, 0.2, -0.42, -0.84, -0.38, 0x8b5a2b); b(B, 0.2, 0.08, 0.22, -0.42, -0.66, -0.38, tr); } // a satchel of scrolls
     } else { // merchant: vest, gold trim, coin pouch
         const v = L.accent;
         b(B, 1.24, 1.3, 0.84, 0, 0.08, 0, v);
@@ -441,6 +516,7 @@ function armBoxes(L, side) {
         b(B, 0.36, 0.4, 0.36, 0, -1.15, 0, L.skin);
     }
     if (L.role === 'merchant') b(B, 0.44, 0.08, 0.44, 0, 0.1, 0, L.accent); // vest shoulder
+    if (L.wizard) b(B, 0.54, 0.2, 0.54, 0, -0.95, 0, shade(L.dressColor, 0.85)); // a wide robe cuff
     return B;
 }
 
@@ -549,6 +625,24 @@ function toolBoxes(kind) {
             b(B, 0.5, 0.08, 0.64, 0, -0.3, 0, WOOD);
             for (const [x, z, c] of [[-0.1, -0.15, 0xc0392b], [0.08, 0.12, 0xc0392b], [0.05, -0.05, 0x7cb342], [-0.08, 0.16, 0xf1c40f]]) b(B, 0.16, 0.16, 0.16, x, -0.25, z, c);
             break;
+        case 'wand':
+            // a handle, a slim shaft, a pale tip (the grip at the origin, the tip at TIP_Y.wand)
+            b(B, 0.09, 0.3, 0.09, 0, 0.0, 0, 0x3a2414);
+            b(B, 0.11, 0.05, 0.11, 0, 0.16, 0, GOLD_DARK);
+            b(B, 0.06, 0.75, 0.06, 0, 0.55, 0, 0x6b4426);
+            b(B, 0.07, 0.07, 0.07, 0, 0.96, 0, 0xe8e0c8);
+            break;
+        case 'wandMaster':
+            b(B, 0.1, 0.3, 0.1, 0, 0.0, 0, 0x1c1410);
+            b(B, 0.12, 0.05, 0.12, 0, 0.16, 0, GOLD);
+            b(B, 0.06, 0.75, 0.06, 0, 0.55, 0, 0x2a1d2e);
+            b(B, 0.1, 0.1, 0.1, 0, 0.97, 0, 0xc58bff, Math.PI / 4, 0, Math.PI / 4);
+            break;
+        case 'staff':
+            b(B, 0.1, 2.4, 0.1, 0, 1.0, 0, 0x5a3a1e);
+            b(B, 0.14, 0.12, 0.14, 0, 2.2, 0, 0x3a2414);
+            b(B, 0.2, 0.2, 0.2, 0, 2.38, 0, 0x8fe3ff, Math.PI / 4, 0, Math.PI / 4);
+            break;
         case 'pouch':
             b(B, 0.16, 0.1, 0.14, 0, -0.1, 0, 0x6b3e1e);
             b(B, 0.2, 0.05, 0.18, 0, -0.14, 0, GOLD);
@@ -611,6 +705,26 @@ export class VillagerModel {
         this.head.position.y = 0.75;
         this.torso.add(this.head);
         this._mesh(this.head, headBoxes(look));
+        // a wizard's pointed hat: its own two meshes (it folds back under a low ceiling)
+        this.hat = null;
+        this.hatTilt = 0;
+        this._hatTarget = 0;
+        if (String(look.hat).startsWith('wizard')) {
+            const H = hatParts(look);
+            this.hatPivot = new THREE.Object3D();
+            this.hatPivot.position.set(0, HAT_PIVOT_Y, 0);
+            this.head.add(this.hatPivot);
+            this.hat = this._mesh(this.hatPivot, H.base);
+            this.hatBend = new THREE.Object3D();
+            // (the fold is at the front edge of the upper crown: the cloth falls back over it)
+            this.hatBend.position.set(0, H.joint, -0.45);
+            this.hatPivot.add(this.hatBend);
+            this.hatTop = this._mesh(this.hatBend, H.top);
+            this.hatTop.position.z = 0.45;
+        }
+        this.aimPitch = 0;
+        this.castNow = false;
+        this._flickT = 0;
 
         this.leftArm = new THREE.Group();
         this.leftArm.position.set(-0.8, 0.55, 0);
@@ -701,7 +815,7 @@ export class VillagerModel {
         }
         this.toolKind = kind;
         if (kind === 'none') return;
-        this.tool = new THREE.Mesh(partGeometry(toolBoxes(kind)), this._currentMat());
+        this.tool = new THREE.Mesh(partGeometry(toolBoxes(kind === 'wand' && this.look.role === 'master' ? 'wandMaster' : kind)), this._currentMat());
         this.tool.castShadow = this._shadow;
         if (HANGING.has(kind)) this.tool.rotation.x = -REST_WRIST; // hangs along the arm
         this.handSlot.add(this.tool);
@@ -727,6 +841,28 @@ export class VillagerModel {
     getRightHandWorldPosition(out = new THREE.Vector3()) {
         return this.handSlot.getWorldPosition(out);
     }
+
+    /** World position of the tip of a wand / a staff (else the hand). */
+    getWandTip(out = new THREE.Vector3()) {
+        const y = TIP_Y[this.toolKind];
+        if (!this.tool || y == null) return this.getRightHandWorldPosition(out);
+        this.tool.updateWorldMatrix(true, false);
+        return this.tool.localToWorld(out.set(0, y, 0));
+    }
+
+    /** World direction the wand points (from the grip to the tip). */
+    getWandDir(out = new THREE.Vector3()) {
+        if (!this.tool) return out.set(-Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
+        this.tool.updateWorldMatrix(true, false);
+        const e = this.tool.matrixWorld.elements;
+        return out.set(e[4], e[5], e[6]).normalize(); // (the tool's +Y axis)
+    }
+
+    /** Where the wand aims up / down (radians, + up) when casting. */
+    setAim(pitch) { this.aimPitch = Math.max(-1.2, Math.min(1.2, pitch || 0)); }
+
+    /** 0 = the hat stands up, 1 = it meets a ceiling and folds back. */
+    setHatTilt(k) { this._hatTarget = k ? 1 : 0; }
 
     /** Turn the head toward a world point (yaw only, ±70°); null = look ahead again. */
     lookAt(worldPos) {
@@ -883,6 +1019,39 @@ export class VillagerModel {
                 T.aLX = 0.45; T.aRX = 1.4; T.aRZ = -0.9;
                 rate = 6;
                 break;
+            case 'cast': {
+                // the wand arm points where the spell goes; the wand continues the forearm
+                if (this.castNow) { this.castNow = false; this._flickT = 0.12; }
+                T.aRX = Math.PI / 2 + this.aimPitch;
+                T.aRZ = 0.05;
+                T.wrist = -Math.PI - (this._flickT > 0 ? 0.3 : 0);
+                T.aLX = 0.35; T.aLZ = -0.25;
+                T.hx = -0.05;
+                T.headX = -this.aimPitch * 0.5;
+                rate = 30;
+                break;
+            }
+            case 'practice':
+                // little circles and flicks of the wand (practising)
+                T.aRX = 1.1 + 0.3 * Math.sin(t * 2.2);
+                T.aRZ = -0.3 * Math.sin(t * 4.4);
+                T.wrist = -Math.PI + 0.4;
+                T.aLX = 0.3; T.aLZ = -0.15;
+                T.headX = -0.2;
+                rate = 18;
+                break;
+            case 'shield':
+                // the free hand up in front: a shield of light before it
+                T.aLX = Math.PI / 2; T.aLZ = 0.2;
+                T.aRX = Math.PI / 2 + this.aimPitch; T.wrist = -Math.PI;
+                rate = 30;
+                break;
+            case 'offer':
+                // holding a scroll out to you
+                T.aLX = 1.2; T.aLZ = 0.15;
+                T.headX = 0.1;
+                rate = 12;
+                break;
             case 'sit':
                 T.lL = T.lR = Math.PI / 2; T.kL = T.kR = -Math.PI / 2;
                 T.hx = 0.08;
@@ -894,6 +1063,14 @@ export class VillagerModel {
             default: break;
         }
         if (this._lookYaw != null && mode !== 'bow') T.headY = this._lookYaw;
+        if (this._flickT > 0) this._flickT -= dt;
+        if (this.hat) {
+            // the hat folds back under a low ceiling and stands up again (soft cloth)
+            this.hatTilt += (this._hatTarget - this.hatTilt) * (1 - Math.exp(-6 * dt));
+            // (soft cloth: the upper crown bends back and crumples down)
+            this.hatBend.rotation.x = 1.1 * this.hatTilt;
+            this.hatBend.scale.y = 1 - 0.25 * this.hatTilt;
+        }
         if (breathe) { T.aLZ -= Math.sin(t * 2.2) * 0.02; T.aRZ += Math.sin(t * 2.2) * 0.02; }
 
         // ---- smooth toward the targets and apply

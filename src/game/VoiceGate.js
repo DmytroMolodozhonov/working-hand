@@ -50,6 +50,12 @@ export class VoiceGate {
         while (this.remote.length && t - this.remote[0].t > GATE.ECHO + 1000) this.remote.shift();
     }
 
+    /** Was the same spell just said by somebody else (a player, or a wizard of the game aloud)? */
+    echoes(name, t) {
+        const base = baseOf(name);
+        return this.remote.some((r) => r.base === base && t - r.t < GATE.ECHO);
+    }
+
     /** Did my lips move just now? true / false / null (can't tell: the mouth wasn't seen). */
     lipsMoved(t) {
         let seen = 0, n = 0, lo = Infinity, hi = -Infinity;

@@ -29,6 +29,8 @@ import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 import { createRng } from '../core/math.js';
 import { CastleTalk } from './CastleTalk.js';
+import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS } from './WizardLife.js';
+import { WIZ, wizardRoster } from './WizardAI.js';
 import { VillagerOrders } from './VillagerOrders.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
@@ -181,12 +183,16 @@ export class CastleLife {
         this._lockMsgT = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test';
         this.talk = new CastleTalk(game, this); // conversations and the market
+        this.wizards = new WizardLife(this); // the wizards' towers and the wandering wizards
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.brainLine = (v) => this.talk.ambientLine(v);
     }
 
     get auth() { return this.game.authority; }
-    get index() { return this.game.world?.terrain?.data?.castles || null; }
+    get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || null; } // (castles and wizards' towers)
+
+    /** Who is person number `idx` of a site (a castle's villager or a wizard). */
+    _roster(def, idx) { return isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
 
     state(id) {
         let s = this.states.get(id);
@@ -227,11 +233,11 @@ export class CastleLife {
     _activate(cs, idx, at, job, extra = {}) {
         const def = cs.def;
         if (cs.active.has(idx) || this.state(def.id).killed.has(idx)) return null;
-        const e = rosterEntry(def, idx);
+        const e = this._roster(def, idx);
         const look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
         const model = new VillagerModel(look, { castleColor: def.color });
         this.game.scene.add(model.group);
-        const S = STATS[e.role];
+        const S = WIZ[e.role] ? { hp: WIZ[e.role].hp, armor: WIZ[e.role].ward } : STATS[e.role]; // (a wizard's ward is its armour)
         const v = {
             id: def.id + ':' + idx, cs, idx, entry: e, role: e.role, name: e.name, title: roleTitle(e),
             model, group: model.group, isVillager: true,
@@ -243,6 +249,7 @@ export class CastleLife {
             walk: WALK * (0.72 + ((e.seed >>> 4) % 100) / 220), lane: (((e.seed >>> 11) % 100) / 100 - 0.5) * 2.6,
             bubble: null, bar: null, net: null,
         };
+        if (WIZ[e.role]) this.wizards.init(v);
         v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
         v.group.rotation.y = v.yaw;
         cs.active.set(idx, v);
@@ -283,7 +290,7 @@ export class CastleLife {
             }
         }
         for (const cs of this.castles.values()) {
-            if (!cs.awake || seen.has(cs.def.id)) continue;
+            if (!cs.awake || seen.has(cs.def.id) || cs.def.kind === 'wander') continue; // (wanderers keep their own pace)
             const far = players.every((pl) => Math.max(Math.abs(pl.p.x - cs.def.x), Math.abs(pl.p.z - cs.def.z)) > cs.def.zone + SLEEP);
             if (far) this._sleep(cs);
         }
@@ -294,6 +301,7 @@ export class CastleLife {
         this._makeChests(cs);
         if (!this.auth) return;
         const def = cs.def;
+        if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
         const st = this.state(def.id);
         let k = 1; // knights by number
         const knight = (at, job, post) => { while (k <= def.knights && (st.killed.has(k) || cs.active.has(k))) k++; if (k > def.knights) return null; return this._activate(cs, k++, at, job, { post }); };
@@ -365,7 +373,7 @@ export class CastleLife {
         for (let tries = 0; tries < 30; tries++) {
             const idx = first + Math.floor(Math.random() * (n - first));
             if (cs.active.has(idx) || st.killed.has(idx)) continue;
-            if (role && rosterEntry(def, idx).role !== role) continue;
+            if (role && this._roster(def, idx).role !== role) continue;
             return idx;
         }
         return -1;
@@ -426,6 +434,7 @@ export class CastleLife {
 
     /** A wanderer picks where to go next (or goes home at the end). */
     _nextTrip(v) {
+        if (v.wizard && this.wizards.nextTrip(v)) return;
         const g = v.cs.graph;
         if (v.trips <= 0) { v.goingHome = true; this._goTo(v, this._homeNode(v)); return; }
         v.trips--;
@@ -602,6 +611,7 @@ export class CastleLife {
         if (v.climb) { this._climbStep(v, dt); return; }
         // «Брейнрот»: a servant follows its master and fights for them
         if (v.servantOf != null && this._serve(v, dt)) return;
+        if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
         // a hostile player in sight: knights go for them
         if ((v.role === 'knight' || v.role === 'king') && !v.foe) {
             v.lookT = (v.lookT || 0) - dt;
@@ -629,7 +639,7 @@ export class CastleLife {
                 let best = -1, bs = -Infinity;
                 for (let k = 0; k < 16; k++) {
                     const n = g2.nodes[Math.floor(Math.random() * g2.nodes.length)];
-                    if (Math.abs(n.y - v.y) > 6) continue;
+                    if (!n || Math.abs(n.y - v.y) > 6) continue; // (a wanderer on the road: no paths)
                     const away = Math.hypot(n.x - fp.x, n.z - fp.z), mine = Math.hypot(n.x - v.x, n.z - v.z);
                     const s = away - 0.4 * mine + (n.tag === 'home' ? 15 : 0);
                     if (away > 25 && s > bs) { bs = s; best = n.id; }
@@ -637,7 +647,7 @@ export class CastleLife {
                 if (best >= 0) this._goTo(v, best);
             }
             if (v.path && v.pathI < (v.path?.length || 0)) this._followPath(v, dt, RUN);
-            else if (fp && Math.hypot(fp.x - v.x, fp.z - v.z) < 10) this._steer(v, v.x + (v.x - fp.x), v.z + (v.z - fp.z), RUN, dt);
+            else if (fp && (Math.hypot(fp.x - v.x, fp.z - v.z) < 10 || !cs.graph.nodes.length)) this._steer(v, v.x + (v.x - fp.x), v.z + (v.z - fp.z), RUN, dt);
             else v.speed = 0;
             v.mode = v.speed > 0 ? 'flee' : 'idle';
             this._ground(v);
@@ -677,6 +687,7 @@ export class CastleLife {
                 return;
             }
         }
+        if (WIZ_JOBS.has(v.job)) { this.wizards.job(v, dt); return; } // (the wizards' places: chair, lectern, cauldron…)
         switch (v.job) {
             case 'king':
             case 'guard':
@@ -1055,6 +1066,7 @@ export class CastleLife {
 
     _announceCapture(cs, st) {
         const g = this.game;
+        if (cs.def.kind === 'tower') { g.hud.notify?.(`🧙 Мастер академии «${cs.def.name.replace(/^Академия «|»$/g, '')}» повержен — хранилище открыто`); return; } // (a tower is never «captured»)
         if (st.owner === g.localId) g.hud.notify?.(`👑 Вы победили короля! ${cs.def.name} теперь ваш — сундуки открыты`);
         else g.hud.notify?.(`👑 ${st.ownerName || 'Кто-то'} захватил ${cs.def.name}`);
     }
@@ -1183,7 +1195,7 @@ export class CastleLife {
         const first = def.knights + 1 + def.stalls.length;
         const last = Math.min(Math.max(first + 1, def.population), first + 900);
         for (let idx = first; idx < last; idx++) {
-            const e = rosterEntry(def, idx);
+            const e = this._roster(def, idx);
             if (e.home < 0) continue;
             (m.get(e.home) || m.set(e.home, []).get(e.home)).push(idx);
         }
@@ -1287,7 +1299,7 @@ export class CastleLife {
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         // a cry in a fight, a call for help, an alarm: shouted (seen and heard far)
         const shout = /!$/.test(text) && (!!v.foe || !!v.investigate || v.fleeT > 0 || v.role === 'knight' || v.role === 'king');
-        v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
+        v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.wizard ? '#5b2d8e' : v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
         this.talk.voice(v, text, shout);
         if (broadcast) this.game.sync?.villagerSay?.(v.id, text); // (everybody near sees the bubble)
     }
@@ -1306,7 +1318,7 @@ export class CastleLife {
         const near = [...this.byId.values()].filter((v) => !v.dead && !v.foe && Math.hypot(v.x - me.x, v.z - me.z) < 22);
         if (!near.length) return;
         const v = near[Math.floor(Math.random() * near.length)];
-        const line = this.brainLine?.(v) || pick(SHOUT.ambient[v.role]);
+        const line = this.brainLine?.(v) || pick(SHOUT.ambient[v.role] || WIZ_SHOUT.ambient[v.role] || SHOUT.hurt);
         this._say(v, line);
     }
 
@@ -1317,7 +1329,7 @@ export class CastleLife {
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
-            for (const cs of this.castles.values()) if (cs.awake) this._crowd(cs, dt);
+            for (const cs of this.castles.values()) if (cs.awake) { if (isWizSite(cs.def)) this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
             this._assignSlots();
             for (const v of [...this.byId.values()]) if (!v.handLink) this._think(v, dt); // (held by the hand: HandHold leads them)
             this._separate(dt);
@@ -1336,7 +1348,7 @@ export class CastleLife {
         const punching = !!(pose && pose.isPunching) && !g.weapons.hasWeapon() && (g.playerAttackCooldown || 0) <= 0 && !g.handHold?.anyBusy();
         for (const v of [...this.byId.values()]) {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
-            const visible = d < VIEW;
+            const visible = d < VIEW && !(v.wizard && d < 20 && Math.abs(v.y - (me.y - 1.95)) > 9); // (a wizard on another floor of the tower: not drawn)
             v.group.visible = visible;
             v.group.position.set(v.x, v.y + (v.seated ? VILLAGER_SIT_OFFSET : VILLAGER_FOOT_OFFSET), v.z);
             v.group.rotation.y = v.yaw;
@@ -1351,7 +1363,7 @@ export class CastleLife {
                 if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
                 else if (this.auth && v.model.strikeNow && v.order) this.orders.strike(v);
             }
-            if (v.bubble) v.bubble.update(dt, _v.set(v.x, v.y + 4.4, v.z), cam);
+            if (v.bubble) v.bubble.update(dt, _v.set(v.x, v.y + (v.wizard ? 5.6 : 4.4), v.z), cam);
             this._updateBar(v, dt, cam);
             if (v.dead) continue;
             if (d < 1.4 && d > 1e-3 && Math.abs(v.y - (me.y - 1.95)) < 2) {
@@ -1363,6 +1375,7 @@ export class CastleLife {
                 g.onLocalHit(v, 1, _v.set(v.x - me.x, 0, v.z - me.z).normalize().clone(), false);
             }
         }
+        this.wizards.update(dt);
         this._chatter(dt);
         this.talk.update(dt);
         this._lockHint(dt);
@@ -1392,11 +1405,11 @@ export class CastleLife {
             c.clearRect(0, 0, 128, 32);
             c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(0, 0, 128, 32);
             c.fillStyle = '#d0202c'; c.fillRect(4, 4, 120 * v.hp / v.maxHp, 11);
-            if (v.maxArmor) { c.fillStyle = '#b8c2cc'; c.fillRect(4, 18, 120 * v.armor / v.maxArmor, 10); }
+            if (v.maxArmor) { c.fillStyle = v.wizard ? '#5aa0ff' : '#b8c2cc'; c.fillRect(4, 18, 120 * v.armor / v.maxArmor, 10); }
             v.bar.tex.needsUpdate = true;
         }
         v.bar.sprite.visible = true;
-        v.bar.sprite.position.set(v.x, v.y + (v.role === 'king' ? 5.9 : 5.5), v.z);
+        v.bar.sprite.position.set(v.x, v.y + (v.role === 'master' ? 6.3 : v.wizard ? 6.0 : v.role === 'king' ? 5.9 : 5.5), v.z);
     }
 
     _lockHint(dt) {
@@ -1409,7 +1422,7 @@ export class CastleLife {
                 if (!c.locked || c.isOpen) continue;
                 const p = c.getPosition();
                 if (Math.hypot(p.x - me.x, p.z - me.z) < 5) {
-                    g.hud.setVoice('🔒 Сундук заперт. Сундуки замка откроются, когда падёт король', true);
+                    g.hud.setVoice(cs.def.kind === 'tower' ? '🔒 Сундук заперт. Сундуки академии откроются, когда падёт Мастер' : '🔒 Сундук заперт. Сундуки замка откроются, когда падёт король', true);
                     this._lockMsgT = 6;
                     return;
                 }
@@ -1426,7 +1439,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed)]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0)]);
         g.sync.villagers?.(list);
     }
 
@@ -1435,7 +1448,7 @@ export class CastleLife {
         const idx = this.index;
         if (!idx) return;
         const seen = new Set();
-        for (const [id, x, y, z, yaw, mode, hp, armor, seated, speed] of list || []) {
+        for (const [id, x, y, z, yaw, mode, hp, armor, seated, speed, fx, pitch] of list || []) {
             seen.add(id);
             let v = this.byId.get(id);
             if (!v) {
@@ -1449,6 +1462,11 @@ export class CastleLife {
             v.mode = mode;
             if (hp < v.hp || armor < v.armor) v.barT = 8;
             v.hp = hp; v.armor = armor; v.seated = !!seated; v.speed = speed;
+            if (v.wizard) {
+                // (a wizard's small magic, and where the wand aims; a blink: there at once, in a puff of smoke)
+                if ((fx & 128) && !(v.fx & 128)) { this.wizards.fx.smoke(v); v.x = x; v.y = y; v.z = z; this.wizards.fx.smoke(v); }
+                v.fx = fx ?? 0; v.aimPitch = pitch ?? 0;
+            }
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead') v.dead = true;
         }
@@ -1456,9 +1474,11 @@ export class CastleLife {
     }
 
     _runtimeById(cid) {
-        const m = /^cs(-?\d+)_(-?\d+)$/.exec(cid);
-        if (!m || !this.index) return null;
-        const def = this.index.cellOf(+m[1], +m[2]);
+        const idx = this.index;
+        if (!idx) return null;
+        let def = null;
+        if (idx.byId) def = idx.byId(cid); // (castles, towers, wanderers)
+        else { const m = /^cs(-?\d+)_(-?\d+)$/.exec(cid); if (m) def = idx.cellOf(+m[1], +m[2]); }
         return def ? this._runtime(def) : null;
     }
 

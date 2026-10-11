@@ -383,10 +383,11 @@ voice.onResult = (command, isFinal = true) => {
         // …and it must be ME who said it: my lips moved (the camera sees the mouth), and it isn't
         // the echo of a spell a friend has just cast (their voice from my speakers / headphones)
         const heard = matchSpell(command);
-        if (heard && game.remotes?.size > 0) {
+        // (alone too: a wizard of the game may have just said that spell's word aloud from the speakers)
+        if (heard && (game.remotes?.size > 0 || game.voiceGate.echoes(heard, performance.now()))) {
             const gate = game.voiceGate.check(heard, performance.now());
             if (!gate.ok) {
-                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(command)}» — ваши губы не двигались: это сказали не вы` : `🔇 «${escapeHtml(command)}» — это голос друга (он только что сказал это заклинание)`);
+                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(command)}» — ваши губы не двигались: это сказали не вы` : `🔇 «${escapeHtml(command)}» — это чужой голос (это заклинание только что сказал кто-то другой)`);
                 if (isFinal) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
                 return;
             }
