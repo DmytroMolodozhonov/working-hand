@@ -181,3 +181,36 @@ class AdoptFromOldBat(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SecondStart(unittest.TestCase):
+    """The icon clicked again right after closing the game: the old launcher (still waiting
+    its last seconds) steps aside, so the new start checks for a new version."""
+
+    def serve(self, pages):
+        import threading
+        la = L.Launcher(home=tempfile.mkdtemp())
+        la.pages = pages
+        la.httpd = L.Server(("127.0.0.1", 0), L.make_handler(la))
+        port = la.httpd.server_address[1]
+        t = threading.Thread(target=la.httpd.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        t.start()
+        return la, port, t
+
+    def test_no_window_open_steps_aside(self):
+        la, port, t = self.serve(0)
+        self.assertTrue(L.handover(port))
+        t.join(5)
+        self.assertFalse(t.is_alive(), "the old launcher stopped")
+        la.httpd.server_close()
+
+    def test_a_window_open_keeps_running(self):
+        la, port, t = self.serve(1)
+        self.assertFalse(L.handover(port))
+        self.assertTrue(t.is_alive())
+        la.httpd.shutdown()
+        la.httpd.server_close()
+
+    def test_the_exact_version_is_downloaded(self):
+        self.assertTrue(L.zip_url(SHA).endswith(f"/archive/{SHA}.zip"))
+        self.assertTrue(L.zip_url().endswith("/archive/refs/heads/main-fbxy0j.zip"))

@@ -57,8 +57,12 @@ def env(name, default=""):
     return os.environ.get(name) or default
 
 
-def zip_url():
-    return env("ZNS_UPDATE_ZIP", f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip")
+def zip_url(sha=""):
+    """The game's archive: of that exact commit when its id is known (an archive of the
+    branch can come a little stale from GitHub — and then counted as the new version)."""
+    if env("ZNS_UPDATE_ZIP"):
+        return env("ZNS_UPDATE_ZIP")
+    return f"https://github.com/{REPO}/archive/{sha}.zip" if sha else f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip"
 
 
 def refs_url():
@@ -653,7 +657,7 @@ class Launcher:
             return
         st.step("update", "ok", "есть новая версия" if have else "игра ещё не скачана")
         try:
-            self.download(game, cfg)
+            self.download(game, cfg, new)
         except Exception as e:  # noqa: BLE001
             log("Скачивание не удалось: " + "".join(traceback.format_exception(type(e), e, e.__traceback__)))
             if have:
@@ -684,14 +688,14 @@ class Launcher:
         else:
             st.step("download", "fail", "нет интернета? — запускаю уже скачанную версию")
 
-    def download(self, game, cfg):
+    def download(self, game, cfg, sha=""):
         st = self.status
         st.step("download", "run", "", title="Скачиваю новую версию игры…", progress=0)
         tmp = os.path.join(self.home, "download")
         shutil.rmtree(tmp, ignore_errors=True)
         os.makedirs(tmp, exist_ok=True)
         zpath = os.path.join(tmp, "game.zip")
-        req = urllib.request.Request(zip_url(), headers={"User-Agent": "Volshebstvo-launcher"})
+        req = urllib.request.Request(zip_url(sha), headers={"User-Agent": "Volshebstvo-launcher"})
         guess = int(cfg.get("zip_size") or 150 * 1024 * 1024)
         got = 0
         with urllib.request.urlopen(req, timeout=60) as r, open(zpath, "wb") as out:
@@ -858,6 +862,16 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
         if path == "/__launcher/ping":
             self._send(200, {"app": APP_NAME, "game": bool(L.game)})
             return True
+        if path == "/__launcher/handover":
+            # started again (the icon) while no window is open — the game was just closed:
+            # this one steps aside, the new start checks for a new version and runs it
+            with L.pages_lock:
+                ok = L.pages <= 0 and not L.work_lock.locked()
+            self._send(200, {"ok": ok})
+            if ok:
+                log("Запущено заново — уступаю место (новый запуск проверит обновления).")
+                threading.Thread(target=L.httpd.shutdown, daemon=True).start()
+            return True
         if path == "/__launcher/log":
             self._send(200, read_tail(L.log_files[0]) if L.log_files else "", "text/plain; charset=utf-8")
             return True
@@ -956,6 +970,15 @@ def game_already_running(port):
     return False
 
 
+def handover(port):
+    """Ask a launcher still running on this port (no window open) to step aside. True: it did."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/__launcher/handover", timeout=3) as r:
+            return bool(json.loads(r.read()).get("ok"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main():
     L = Launcher()
     cur, prev = start_log(os.path.join(L.home, "logs"), "launcher")
@@ -970,6 +993,18 @@ def main():
             break
         except OSError:
             if game_already_running(port):
+                if handover(port):
+                    # (the old one is closing: take its place, and the update check runs)
+                    for _ in range(40):
+                        time.sleep(0.25)
+                        try:
+                            L.httpd = Server(("127.0.0.1", port), make_handler(L))
+                            L.port = port
+                            break
+                        except OSError:
+                            pass
+                    if L.httpd:
+                        break
                 log(f"Игра уже запущена (порт {port}) — открываю ещё одно окно.")
                 open_window(f"http://localhost:{port}/")
                 return
