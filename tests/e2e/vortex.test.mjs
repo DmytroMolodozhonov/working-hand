@@ -24,9 +24,10 @@ test.after(async () => {
 /** Both hands forward; the wrists going round a circle (radius `r` in the picture) `turns` times a second. */
 const circling = (r, turnsPerSec, fps = 30) => (i) => {
     const a = (i / fps) * turnsPerSec * Math.PI * 2;
-    return { arms: 'forward', wristOffset: [Math.cos(a) * r, Math.sin(a) * r] };
+    return { arms: 'forward', wristOffset: [Math.cos(a) * r, Math.sin(a) * r], rightTilt: 1.57 };
 };
-const still = { arms: 'forward', wristOffset: [0, 0.05] };
+// (the right hand's fingers towards the camera: the wand, held along the fingers, points forward, a little down)
+const still = { arms: 'forward', wristOffset: [0, 0.05], rightTilt: 1.57 };
 
 test('Water Vortex: a wand at the river, the hand going round gathers water, pointing sends it, Bubble wraps, Frozen freezes (−2 HP/s), Fire Maxima melts', async () => {
     const { page, errors } = await openPage(browser, srv.url, { viewport: { width: 480, height: 300 } });
@@ -89,7 +90,8 @@ test('Water Vortex: a wand at the river, the hand going round gathers water, poi
             return l || null;
         });
     }
-    assert.ok(launched && launched.v > 4, `the hand pointed: the whole vortex flies (${JSON.stringify(launched)})`);
+    const why = launched ? null : await page.evaluate(() => window.__zns.game.vortex.state?.why);
+    assert.ok(launched && launched.v > 4, `the hand pointed: the whole vortex flies (${JSON.stringify(launched)} ${JSON.stringify(why)})`);
     await feed(page, still, 30, 33);
     const hit = await page.evaluate((zid) => {
         const g = window.__zns.game, V = g.vortex;
@@ -122,14 +124,18 @@ test('Water Vortex: a wand at the river, the hand going round gathers water, poi
         const melt = await page.evaluate(async () => {
             const g = window.__zns.game, V = g.vortex;
             const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+            const b = [...V.bubbles.values()][0];
+            const o = g.castOrigin('right'), d = g.character.getPointingDirection('right');
+            const along = b.pos.clone().sub(o).dot(d);
+            const dbg = { along, miss: o.clone().addScaledVector(d, along).distanceTo(b.pos), r: b.r, d: d.toArray(), fx: g.vortex._fireTarget(o, d, 'right').distanceTo(b.pos) };
             const name = g.castLocalSpell('fire maxima', true);
             for (let i = 0; i < 60 && !V.log.some((e) => e.ev === 'melt'); i++) await sleep(100);
             const melting = V.log.some((e) => e.ev === 'melt' && e.ice);
             for (let i = 0; i < 80 && V.bubbles.size; i++) await sleep(100);
-            return { name, melting, left: V.bubbles.size };
+            return { name, melting, left: V.bubbles.size, dbg, log: V.log.slice(-6) };
         });
         assert.equal(melt.name, 'FireMaxima');
-        assert.ok(melt.melting, 'the ice melts in golden fire');
+        assert.ok(melt.melting, `the ice melts in golden fire ${JSON.stringify(melt)}`);
         assert.equal(melt.left, 0, 'melted away');
     }
     assert.deepEqual(realErrors(errors), []);

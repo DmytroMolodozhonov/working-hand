@@ -437,6 +437,7 @@ export class WaterVortex {
         const raised = ch.isArmRaised ? ch.isArmRaised(s.side) : true;
         const calm = this.meter.rate < 0.15 && sp < 0.6 && turnRate < 1.2;
         s.still = calm && raised && dir.y > -0.85 ? s.still + dt : 0;
+        s.why = { rate: this.meter.rate, sp, turnRate, raised, dy: dir.y }; // (tests / debugging)
         if (s.still >= VORTEX.AIM_STILL && s.volume >= VORTEX.MIN_LAUNCH) { this._launch(dir.clone()); return; }
         s.idle = turns > 0 ? 0 : s.idle + dt;
         if (s.idle > VORTEX.IDLE_END) {
@@ -904,9 +905,10 @@ export class WaterVortex {
         for (const b of this.bubbles.values()) {
             const to = _a.subVectors(b.pos, o);
             const along = to.dot(dir);
-            if (along <= 0 || along > best + b.r) continue;
-            const miss = _b.copy(o).addScaledVector(dir, along).distanceTo(b.pos);
-            if (miss < b.r + 1.2) best = Math.min(best, Math.max(0.5, along - b.r * 0.5));
+            // (ice right next to the hand — even round it or a little behind the tip — counts too)
+            if (along < -b.r || along > best + b.r) continue;
+            const miss = _b.copy(o).addScaledVector(dir, Math.max(0, along)).distanceTo(b.pos);
+            if (miss < b.r + 1.2) best = Math.min(best, Math.max(0.1, along - b.r * 0.5));
         }
         for (let k = 0.5; k < best; k += 0.5) {
             _a.copy(o).addScaledVector(dir, k);
