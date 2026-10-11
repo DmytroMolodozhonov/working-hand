@@ -532,12 +532,43 @@ function buildWizardHouses(p, rng, out) {
         houseStone: B.ARCANE, villageRoof: B.ROOF_PURPLE, poorRoof: rng() < 0.35 ? B.ROOF_BLUE : B.ROOF_PURPLE, poorWall: B.PLASTER,
         roof: B.ROOF_PURPLE, carpet: B.CARPET_PURPLE, bedRich: 'purple', doorTop: 5, noWoodpile: true, decorate,
     };
-    for (const lot of lots.slice(0, n)) {
+    lots.slice(0, n).forEach((lot, i) => {
         const kind = kinds[Math.floor(rng() * kinds.length)];
         const door = buildHouse(p, kind, lot.u, lot.v, lot.face, rng, style, out);
         const [ra, rb] = rotLot(0, -9, lot.face);
-        p.link(door, p.node(lot.u + ra, lot.v + rb, 0));
-    }
+        const road = p.node(lot.u + ra, lot.v + rb, 0);
+        p.link(door, road);
+        if (i === 0) out.potionStall = potionStall(p, lot, road);
+    });
+}
+
+/**
+ * The little shop of the master of cauldrons and potions, by the first wizards' house: a counter
+ * beside the house towards the road (flasks and ingredients on it), the master behind it, and
+ * a big cauldron for sale standing next to it (Cauldrons.js puts it out).
+ */
+function potionStall(p, lot, road) {
+    const B = BLOCK;
+    const at = (a, b) => { const [x, z] = rotLot(a, b, lot.face); return [lot.u + x, lot.v + z]; };
+    const box = (a0, a1, l0, l1, b0, b1, t) => { const [u0, v0] = at(a0, b0), [u1, v1] = at(a1, b1); p.box(u0, u1, l0, l1, v0, v1, t); };
+    const pt = (a, b, l = 0) => { const [u, v] = at(a, b); return p.pt(u, v, l); };
+    box(8, 11, 0, 1, -7, -7, B.PLANKS_DARK); // the counter
+    box(8, 11, 1, 1, -7, -7, B.CLOTH_WHITE);
+    box(8, 8, 2, 2, -7, -7, B.POTION); // a potion bottle for a sign
+    box(11, 11, 0, 3, -5, -5, B.PLANKS_DARK); // a post with a lamp
+    box(11, 11, 4, 4, -5, -5, B.ARCANE_LAMP);
+    const [fu, fv] = at(9, -9), frontNode = p.node(fu, fv, 0, 'stall');
+    p.link(frontNode, road);
+    const c0 = pt(8, -7), c1 = pt(11, -7);
+    const o = pt(0, 0), f = pt(0, -1);
+    const caul = pt(13.5, -5);
+    return {
+        potions: true, // (Cauldrons.js / CastleTalk.js: what this master sells)
+        front: pt(9.5, -9), back: pt(9.5, -5), frontNode,
+        counter: { x0: Math.min(c0.x, c1.x), x1: Math.max(c0.x, c1.x), z0: Math.min(c0.z, c1.z), z1: Math.max(c0.z, c1.z), top: p.L(1) - 0.5 },
+        yaw: Math.atan2(-(f.x - o.x), -(f.z - o.z)), // (facing the road)
+        cauldron: { x: caul.x, y: caul.y, z: caul.z, yaw: Math.atan2(f.x - o.x, f.z - o.z) },
+    };
 }
 
 /** The whole site: tower, grounds, houses. Returns the castle-shaped record. */
@@ -573,7 +604,7 @@ export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
         population, knights: 0, teachers,
         throne: out.throne, throneFront: out.throneFront, posts: out.posts,
         rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: id + '_ch' + i })),
-        houses, stalls: [out.stall], fields: [], pens: [], market: null, wallWalk: [],
+        houses, stalls: [out.stall, out.potionStall].filter(Boolean), fields: [], pens: [], market: null, wallWalk: [],
         dummies: out.dummies, spots: out.spots,
         nodes: p.nodes, edges: p.edges, parts: p.parts,
         topL: F + 1 + ROOF_L + 14,

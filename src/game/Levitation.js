@@ -123,6 +123,8 @@ export class Levitation {
             out.push({ kind: 'weapon', obj: w, pos: w.position });
         }
         for (const b of g.water?.resting || []) out.push({ kind: 'ice', obj: b, pos: b.pos });
+        // a big cauldron (heavy: it floats slowly; tilted in the air it pours out) — the host's, like things
+        if (g.cauldrons && (g.authority || !g.sync)) for (const c of g.cauldrons.list.values()) if (!c.lev) out.push({ kind: 'cauldron', obj: c, pos: c.pos, r: 1.6 });
         // (things and books are the host's: a guest's hand can't carry them yet)
         if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked) out.push({ kind: 'item', obj: L, pos: L.model.position });
         if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
@@ -199,6 +201,8 @@ export class Levitation {
             s.obj.lev = true;
         } else if (s.kind === 'bird') {
             this.game.books.holdBird(s.obj, true); // (caught: it hangs in the air, flapping)
+        } else if (s.kind === 'cauldron') {
+            this.game.cauldrons.levStart(s.obj);
         } else if (s.kind === 'weapon') {
             const w = s.obj;
             w.hover = null;
@@ -233,6 +237,7 @@ export class Levitation {
         if (s.kind === 'item' && !this.game.items.loose.has(s.obj.item.uid)) { this.state = null; return; }
         if (s.kind === 'book' && !this.game.books.books.has(s.obj.id)) { this.state = null; return; }
         if (s.kind === 'bird' && (s.obj.state !== 'held' || !this.game.books.birds.has(s.obj.id))) { this.state = null; return; }
+        if (s.kind === 'cauldron' && (!s.obj.lev || !this.game.cauldrons?.list.has(s.obj.id))) { this.state = null; return; }
         if (s.attack) { this._updateAttack(s, dt); return; }
 
         // Where the object should float: in front of the hand, following it slowly
@@ -254,6 +259,8 @@ export class Levitation {
             const w = s.obj;
             w.drive.position.copy(s.target);
             w.drive.quaternion.copy(turn).multiply(s.objQ0);
+        } else if (s.kind === 'cauldron') {
+            this.game.cauldrons.levMove(s.obj, s.target, _q2.copy(turn).multiply(s.objQ0), dt);
         } else if (m) {
             // carried by the magic: it lags a little behind the hand, turns with the wrist
             _v1.subVectors(s.target, m.position);
@@ -404,6 +411,8 @@ export class Levitation {
             this.game.books.dropBook(s.obj, vel);
         } else if (s.kind === 'bird') {
             this.game.books.holdBird(s.obj, false); // free: it flies off
+        } else if (s.kind === 'cauldron') {
+            this.game.cauldrons?.levDrop(s.obj, vel, gentle); // (it falls; let down gently it comes down slowly)
         } else {
             const b = s.obj;
             const iceVel = gentle ? new THREE.Vector3() : b.vel.clone().multiplyScalar(1.5);

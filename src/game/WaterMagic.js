@@ -634,6 +634,8 @@ export class WaterMagic {
                 b.pos.copy(ward);
                 b.vel.reflect(n).multiplyScalar(0.5);
             }
+            // over a standing cauldron's opening: it pours in (Cauldrons.js; ice does not)
+            if (this.game.cauldrons?.catchBall(b)) { this.falling.splice(i, 1); this._remove(b.mesh); continue; }
             const inWater = t && t.isWaterAt(b.pos.x, b.pos.y - b.r * 0.5, b.pos.z);
             const ground = col.surfaceY(b.pos.x, b.pos.z);
             if (inWater) {

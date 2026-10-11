@@ -22,7 +22,8 @@
 
 import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid } from './ItemTypes.js';
+import { recipeById } from './Potions.js';
 import { PEN_POINTS } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 import { makePurseModel } from './CoinBelt.js';
@@ -54,6 +55,8 @@ const GRIPPED = {
     scroll: { axis: 'x', handle: 0, curl: 0.5, pose: 'roll', at: [0.15, -0.194] },
     shield: { axis: 'y', handle: 0, face: 'back', pose: 'thin', at: [0.13, -0.115] },
     apple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (cupped, its stem out of the hand)
+    flask: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (its belly in the cupped fingers, the neck up)
+    potion: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     wool: { axis: 'body', pose: 'wool', at: [0.22, -0.374] },
     bread: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
     cheese: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
@@ -81,7 +84,7 @@ const ARM_MASS = 1.2;
 /** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
 const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
-export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, logs: 0.006, hammer: 0.004 };
+export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01 };
 
 export class ItemSystem {
     constructor(game) {
@@ -600,9 +603,17 @@ export class ItemSystem {
         if (wv > 1e-3) { m.quaternion.premultiply(_q.setFromAxisAngle(_v.copy(L.spin).divideScalar(wv), wv * dt)); L.spin.multiplyScalar(Math.max(0, 1 - 0.2 * dt)); }
         // moving in small steps: a wall / a tree / a chest stops it (it bounces off), never goes through
         const col = this.game.collision;
+        const cauls = this.game.cauldrons?.list.size ? this.game.cauldrons : null;
         const steps = Math.max(1, Math.ceil(L.vel.length() * dt / 0.25)), hs = dt / steps;
         for (let s = 0; s < steps; s++) {
             _v.copy(m.position).addScaledVector(L.vel, hs);
+            // into a cauldron's opening: it falls in (the iron walls round it are not in its way);
+            // at the water it dissolves, or it lies on the bottom (Cauldrons.js)
+            if (cauls) {
+                const r = cauls.intoOpening(L, _v);
+                if (r === 'stop') return;
+                if (r === 'in') { m.position.copy(_v); continue; }
+            }
             const gy = col.groundAt ? col.groundAt(_v.x, _v.z, _v.y + 0.5) : col.groundY(_v.x, _v.z);
             if (_v.y > gy + 0.15 && col.pointBlocked?.(_v.x, _v.y, _v.z)) {
                 let hit = false;
@@ -734,7 +745,7 @@ export class ItemSystem {
     _eat(dt, ch) {
         const g = this.game;
         let food = null;
-        for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
+        for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || h.item.kind === 'potion' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
         if (!food) { this._eatT = 0; return; }
         const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
         // the food at the mouth: the model's hand there, or the camera sees the hand cover the mouth
@@ -744,6 +755,7 @@ export class ItemSystem {
         if (this._eatT < 0.6) return;
         this._eatT = 0;
         if (food.h.item.shop) { g.hud.setVoice?.('💰 Сначала заплатите торговцу (скажите «да»)', true); return; }
+        if (food.h.item.kind === 'potion') { this._drink(food.side, food.h, mouth); return; }
         const heal = { apple: 10, meat: 2, steak: 4 }[food.h.item.kind] ?? ITEM_INFO[food.h.item.kind]?.heal ?? 1;
         g.playerHP = Math.min(g.maxHP, g.playerHP + heal);
         g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
@@ -751,6 +763,31 @@ export class ItemSystem {
         for (let i = 0; i < 10; i++) g.fx.spark(mouth, food.h.item.kind === 'apple' ? 0xffd700 : 0xd9534f, 0.07, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.5);
         food.h.item.count = (food.h.item.count || 1) - 1;
         if (food.h.item.count <= 0) this.releaseHand(food.side);
+    }
+
+    /** A potion at the mouth: drunk — its recipe's effect; the empty flask stays in the hand. */
+    _drink(side, h, mouth) {
+        const g = this.game;
+        const r = recipeById(h.item.rec);
+        const fx = r?.effect || {};
+        const said = [];
+        if (fx.hp) {
+            g.playerHP = Math.min(g.maxHP, g.playerHP + fx.hp);
+            if (g.combat?.enabled && !g.combat.dead) {
+                const max = g.combat.maxHp || 20;
+                g.combat.hp = Math.min(max, (g.combat.hp ?? 0) + fx.hp);
+                g.hud.update(g.combat.hp, max, g.killCount, g.punchCount);
+            } else g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
+            said.push(`+${fx.hp} HP`);
+        }
+        if (fx.mana && g.combat) { g.combat.fatigue = Math.min(g.combat.maxFatigue ?? 100, (g.combat.fatigue ?? 0) + fx.mana); said.push(`+${fx.mana} маны`); }
+        g.hud.setVoice?.(`🧪 ${r ? r.name : 'Зелье'} выпито${said.length ? ': ' + said.join(', ') : ''}`, true);
+        const col = h.item.color ?? 0x9fd8ff;
+        for (let i = 0; i < 14; i++) g.fx?.spark(mouth, col, 0.07, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.6);
+        g.sound?.playSplash?.();
+        // (the flask is empty again, still in the same hand)
+        this.releaseHand(side);
+        this.takeIntoHand({ kind: 'flask', uid: newUid(), count: 1 }, side, { closed: true });
     }
 
     _wear(dt, ch) {

@@ -37,6 +37,8 @@ import { matchSpell } from '../fx/SpellManager.js';
 export const HEAR = 7; // m: a villager hears you this far
 const VOICE = 18; // m: a villager's voice carries this far
 const SHOUT_RANGE = 55; // m: a battle cry / a call for help carries much farther
+/** The master of cauldrons and potions (a wizards' house's stall): flasks and ingredients (the cauldron stands beside: Cauldrons.js). */
+const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', price: 35 }, { kind: 'crystal', price: 70 }];
 const GOODS = [
     { kind: 'bread', price: 3 }, { kind: 'cheese', price: 4 }, { kind: 'pie', price: 6 }, { kind: 'steak', price: 6 },
     { kind: 'apple', price: 30 }, { kind: 'arrows', price: 8, count: 10 }, { kind: 'shield', price: 25, type: 0 }, { kind: 'bow', price: 30, type: 0 },
@@ -76,7 +78,7 @@ export class CastleTalk {
             const def = v.cs.def;
             const life = this.life;
             b = new VillagerBrain(
-                { id: v.id, name: v.name, role: v.role, female: v.entry.female, castleName: def.name, kingName: def.king, seed: v.entry.seed },
+                { id: v.id, name: v.name, role: this._trader(v) ? 'merchant' : v.role, female: v.entry.female, castleName: def.name, kingName: def.king, seed: v.entry.seed },
                 () => ({ castleName: def.name, kingName: life.state(def.id).kingDead ? (life.state(def.id).ownerName || def.king) : def.king, playerIsKing: life.state(def.id).owner === this.game.localId, timeOfDay: this.game.isNight ? 'night' : 'day', danger: v.cs.hostile.size > 0 }),
                 { memory: this.memories.get(v.id) },
             );
@@ -98,7 +100,7 @@ export class CastleTalk {
             playerIsKing: st.owner === g.localId,
             hostile: v.cs.hostile.get(g.localId) > Date.now(),
             coins: g.inventory?.coins?.() ?? 0,
-            nearbyGoods: v.role === 'merchant' ? this._goodsOf(v) : [],
+            nearbyGoods: this._trader(v) ? this._goodsOf(v) : [],
             heldItem: null,
             players: this._players(),
             selfId: g.localId,
@@ -281,7 +283,7 @@ export class CastleTalk {
             playerIsKing: st.owner === from,
             hostile: v.cs.hostile.get(from) > Date.now(),
             coins: +gctx.coins || 0,
-            nearbyGoods: v.role === 'merchant' ? this._goodsOf(v) : [],
+            nearbyGoods: this._trader(v) ? this._goodsOf(v) : [],
             heldItem: gctx.heldItem && typeof gctx.heldItem === 'object' ? { name: String(gctx.heldItem.name || '').slice(0, 30), magic: !!gctx.heldItem.magic, value: +gctx.heldItem.value || 0 } : null,
             players: this._players(),
             selfId: from,
@@ -420,8 +422,13 @@ export class CastleTalk {
     }
 
     _merchantOf(def, i) {
-        for (const v of this.life.byId.values()) if (v.cs.def === def && v.role === 'merchant' && v.entry.stall === i && !v.dead) return v;
+        for (const v of this.life.byId.values()) if (v.cs.def === def && this._trader(v) && v.entry.stall === i && !v.dead) return v;
         return null;
+    }
+
+    /** Sells and buys at a stall: a market merchant, or the wizards' master of cauldrons and potions. */
+    _trader(v) {
+        return v.role === 'merchant' || (v.role === 'seller' && !!v.cs?.def?.stalls?.[v.entry?.stall]?.potions);
     }
 
     /** (host) keep goods on the counters of the markets near players. */
@@ -441,7 +448,7 @@ export class CastleTalk {
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
-                    const pick = GOODS[((n % GOODS.length) + GOODS.length) % GOODS.length];
+                    const pick = stall.potions ? POTION_GOODS[k % POTION_GOODS.length] : GOODS[((n % GOODS.length) + GOODS.length) % GOODS.length];
                     const price = Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     const item = { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
                     if (pick.kind === 'shield') { item.type = pick.type; item.magic = false; item.max = 0; delete item.count; }
@@ -454,6 +461,32 @@ export class CastleTalk {
                 }
             });
         }
+    }
+
+    /** I started moving the master's cauldron away: he names its price. True if somebody sells it. */
+    offerCauldron(c) {
+        const [cid, s] = String(c.shop?.stall || '').split(':s');
+        const cs = this.life.castles.get(cid);
+        const v = cs ? this._merchantOf(cs.def, +s) : null;
+        if (!v || v.foe) return false;
+        this.offer = { v, kind: 'buy', price: c.shop.price, cauldron: c.id, item: { kind: 'cauldron' }, stall: c.shop.stall };
+        const line = this.brain(v).priceLine({ name: 'котёл' }, c.shop.price, 'buy', this._ctx(v));
+        v.talking = 4;
+        this._sayReply(v, line, 6);
+        this.game.hud.setVoice?.(`💰 Котёл — ${c.shop.price} монет: скажите «да», чтобы купить (у вас ${this.game.inventory.coins()})`, true);
+        return true;
+    }
+
+    /** I dragged the master's cauldron far away unpaid: «Вор!» (nobody there to see — it is just mine). */
+    cauldronStolen(c) {
+        const [cid, s] = String(c.shop?.stall || '').split(':s');
+        const cs = this.life.castles.get(cid);
+        const v = cs ? this._merchantOf(cs.def, +s) : null;
+        if (this.offer?.cauldron === c.id) this.offer = null;
+        if (!v) return;
+        this.life._say(v, 'Вор! Держи вора! Мой котёл!', 5);
+        this.life.reportCrime(v, this.game.localId, 'theft');
+        this.game.hud.setVoice?.('🚨 Вы утащили котёл, не заплатив! Мастер зовёт на помощь', true);
     }
 
     /** I took a good from a counter: the merchant names its price. */
@@ -480,6 +513,15 @@ export class CastleTalk {
             return;
         }
         if (!o || o.v !== v) return;
+        if (o.kind === 'buy' && o.cauldron) {
+            // the big cauldron I am moving away from the master's stall
+            if (!g.inventory.spendCoins(o.price)) { this._sayReply(v, this.brain(v).noMoneyLine(this._ctx(v))); return; }
+            g.cauldrons?.paid(o.cauldron);
+            g.inventory._render?.();
+            g.hud.setVoice?.(`💰 Котёл куплен за ${o.price} (осталось ${g.inventory.coins()}) — он ваш, тащите его домой`, true);
+            this.offer = null;
+            return;
+        }
         if (o.kind === 'buy') {
             const item = this._findMine(o.uid);
             if (!item) { this.offer = null; return; }
@@ -613,7 +655,7 @@ export class CastleTalk {
                 v.talking = 3;
                 this.life._say(v, line, 5);
                 if (b.lastAction === 'bow') v.bowing = 1.6;
-                if (b.lastAction === 'offer_goods' && v.role === 'merchant') {
+                if (b.lastAction === 'offer_goods' && this._trader(v)) {
                     // (a plain «да» now buys what was offered — the merchant hands it over from the counter)
                     this._pitch = { v, at: now };
                 }

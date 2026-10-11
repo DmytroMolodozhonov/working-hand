@@ -147,6 +147,7 @@ export class NetSync {
             doors: g.doors?.snapshot() || [],
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
+            cauldrons: g.cauldrons?.snapshot() || null,
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.netList() || [], // houses' spheres of protection
             beds: g.beds?.snapshot() || [],
@@ -175,6 +176,7 @@ export class NetSync {
         if (msg.doors) g.doors?.restore(msg.doors);
         if (msg.boards) g.boards?.restore(msg.boards);
         if (msg.campfires) g.campfires?.restore(msg.campfires);
+        if (msg.cauldrons) g.cauldrons?.restore(msg.cauldrons);
         if (msg.houses) g.houses?.restore(msg.houses);
         if (msg.wards) g.wards?.applyNet(msg.wards);
         if (msg.beds) g.beds?.restore(msg.beds);
@@ -561,6 +563,8 @@ export class NetSync {
     door(d) { this.net.send({ t: 'door', d }, true); }
     /** Campfires: {t:'cf'} host → all, {t:'cfask'|'cfwood'} guest → host. */
     campfire(msg) { this.net.send(msg); }
+
+    cauldron(msg) { this.net.send(msg); }
     /** Beds (Beds.js): {a: set | create | color | msg | lie | sleep, …}; `to`: only that player (host). */
     bed(m, to = null) { if (to) this.net.sendTo(to, { t: 'bed', ...m }); else this.net.send({ t: 'bed', ...m }, true); }
     doorAngle(id, a) { this.net.send({ t: 'dang', id, a: Math.round(a * 100) / 100 }, true); }
@@ -772,6 +776,7 @@ export class NetSync {
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
+            case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
             case 'bed': g.beds?.onNet(m); break;
             case 'look': {

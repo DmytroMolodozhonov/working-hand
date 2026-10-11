@@ -47,6 +47,7 @@ import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, make
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Campfires } from './Campfires.js';
+import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
 import { Wreck } from './Wreck.js';
@@ -308,6 +309,7 @@ export class Game {
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
+        this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
@@ -455,6 +457,19 @@ export class Game {
                 this.books?.placeBook(new THREE.Vector3(sx, stop + 1.0, bz), SWIFT_PEDESTAL_ID); // (the swift book: «Флайн»)
                 const wx = sx + 5, wtop = this.world.createPedestal(wx, bz);
                 this.books?.placeBook(new THREE.Vector3(wx, wtop + 1.0, bz), WARD_PEDESTAL_ID); // (the book of protection: «Защита дома»)
+                // potions: a cauldron to try (water from the lake with «Waterbollow»), flasks and the
+                // healing potion's ingredients (a golden apple, a mana crystal) on pedestals beside it
+                this.cauldrons?.spawn({ id: 'ccaul0', x: 20, y: this.collision.groundY(20, -3), z: -3, yaw: 0 });
+                const potionKit = [
+                    { kind: 'flask', uid: 'cfl0', count: 3 },
+                    { kind: 'apple', uid: 'cap0', count: 1 },
+                    { kind: 'crystal', uid: 'cmc1', count: 1 },
+                ];
+                potionKit.forEach((it, i) => {
+                    const x = 24.5, z = -9 + i * 5;
+                    const top = this.world.createPedestal(x, z);
+                    this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false });
+                });
                 // a chest to try things with: it opens as you come, and fills up again once you walk away
                 const cx = 12, cz = -6;
                 const chest = new Chest(this.scene, new THREE.Vector3(cx, this.collision.groundY(cx, cz), cz), 'loot', -Math.PI / 2, 'creative-test');
@@ -634,6 +649,7 @@ export class Game {
         const dPlayer = _v2.set(pp.x - pos.x, (pp.y - 1.5) - pos.y, pp.z - pos.z).length();
         this.fx.shake = Math.max(this.fx.shake, Math.max(0, (power > 1 ? 2 : 1.2) - dPlayer / (power > 1 ? 45 : 30)));
         this.boards?.blast(pos, radius, power);
+        this.cauldrons?.blast(pos, radius, power); // (a cauldron near the blast is thrown aside, knocked over)
         if (dPlayer < radius + 3 && !meSafe) {
             // thrown by the blast: near it off the feet (and up into the air), further a stagger
             const k = 1 - dPlayer / (radius + 3);
@@ -2102,6 +2118,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
+        for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), this.campfires.sampleModel());
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
@@ -2239,6 +2256,7 @@ export class Game {
         this.castleLife.update(dt);
         this.doors.update(dt);
         this.campfires.update(dt);
+        this.cauldrons?.update(dt);
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         this.crystals?.update(dt);
         this.beds.update(dt);
@@ -2960,6 +2978,7 @@ export class Game {
         this.doors?.dispose();
         this.boards?.dispose();
         this.campfires?.dispose();
+        this.cauldrons?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
         this.beds?.dispose();

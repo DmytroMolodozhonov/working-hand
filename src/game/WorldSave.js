@@ -227,6 +227,7 @@ export class WorldKeeper {
             doors: g.doors?.snapshot() || [],
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
+            cauldrons: g.cauldrons?.snapshot() || null,
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
             beds: g.beds?.snapshot() || [],
@@ -275,6 +276,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.doors) g.doors?.restore(save.doors);
     if (save.boards) g.boards?.restore(save.boards);
     if (save.campfires) g.campfires?.restore(save.campfires);
+    if (save.cauldrons) g.cauldrons?.restore(save.cauldrons);
     if (save.houses) g.houses?.restore(save.houses);
     if (save.wards) g.wards?.restore(save.wards); // houses' spheres of protection
     if (save.beds) g.beds?.restore(save.beds);

@@ -28,6 +28,8 @@ import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
 import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
 import { crystalItemModel } from './CrystalModel.js';
+import { flaskModel } from './CauldronModel.js';
+import { recipeById } from './Potions.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Expelliarmus'] },
@@ -84,6 +86,9 @@ export const ITEM_INFO = {
     // the herds' guardians (HerdGuards.js): what they leave when killed
     bronzeHorn: { name: 'Бронзовый рог', icon: '📯', weight: 1.5 },
     minotaurHorn: { name: 'Рог Минотавра', icon: '🌀', weight: 1.5 }, // (an ingredient of the invisibility potion)
+    // potions (Cauldrons.js): an empty flask is dipped into a ready cauldron; a full one is drunk
+    flask: { name: 'Пустая колба', icon: '⚗️', weight: 0.2, stack: 5 },
+    potion: { name: 'Зелье', icon: '🧪', weight: 0.3 },
 };
 
 /**
@@ -110,6 +115,8 @@ export function itemValue(it) {
         case 'crystal': return 40 * (it.count || 1);
         case 'bronzeHorn': return 160;
         case 'minotaurHorn': return 200;
+        case 'flask': return 3 * (it.count || 1);
+        case 'potion': return 60;
         default: return 0;
     }
 }
@@ -320,6 +327,11 @@ export function describeItem(it) {
         case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу справа: кулак с мешочком на правый бок', 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
         case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмитесь за него <b>обеими руками</b> и разломите (разведите руки или поверните) — мана +<b>5</b> к максимуму'] };
+        case 'flask': return { title: '⚗️ Пустая колба', color: 0xcfe9f2, lines: [`Колб: <b>${it.count || 1}</b>`, 'Окуните её в котёл с готовым зельем — она наполнится'] };
+        case 'potion': {
+            const r = recipeById(it.rec);
+            return { title: `🧪 ${r ? r.name : 'Зелье'}`, color: it.color ?? 0x9fd8ff, lines: [r ? r.desc : 'Неизвестное зелье', 'Поднесите ко рту и подержите — выпьете (колба останется)'] };
+        }
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
 }
@@ -599,7 +611,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4 };
+export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -629,6 +641,8 @@ function buildItemModel(it) {
         case 'cannonball': { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 9), mat(0x2b2b2e))); return g; }
         case 'blocks': return blocksModel(it.color);
         case 'crystal': return crystalItemModel();
+        case 'flask': return flaskModel(null);
+        case 'potion': return flaskModel(it.color ?? 0x9fd8ff);
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);
         case 'book': return it.ward || it.spells?.includes('ProtectionHouse') ? makeSpellBookModel(WARD_COVER, WARD_TRIM) : it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
