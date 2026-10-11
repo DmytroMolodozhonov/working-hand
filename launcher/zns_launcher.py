@@ -298,8 +298,9 @@ def prefer_strong_gpu(exe):
 
 def window_args(exe, url):
     return [
-        # (no Windows title bar: the game draws its own window with «свернуть / во весь экран / закрыть»)
-        exe, f"--app={url}", "--start-fullscreen",
+        # the menu's size; the page then asks the game's server to take the Windows frame away
+        # (it draws its own «свернуть / во весь экран / закрыть») and goes full screen for the game
+        exe, f"--app={url}", "--window-size=1180,780",
         "--force_high_performance_gpu", "--ignore-gpu-blocklist",
         "--site-per-process",
         "--disable-background-timer-throttling", "--disable-renderer-backgrounding",

@@ -199,3 +199,27 @@ test('look: the menu is one fixed-size window with its own buttons; the pause me
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('look: in the game\'s own app window the menu fills the window (no empty space) and its bar moves it', async () => {
+    const page = await browser.newPage({ viewport: { width: 1180, height: 780 } });
+    await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; window.__ZNS_NO_WORLD_PROBE__ = true; window.__ZNS_FIXED_QUALITY__ = true; });
+    const asked = [];
+    // (the game's server on Windows answers «ok» for its own app window; here it is played by the test)
+    await page.route('**/api/window', async (r) => { asked.push(JSON.parse(r.request().postData()).action); r.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); });
+    await page.goto(srv.url);
+    await page.waitForFunction(() => document.documentElement.classList.contains('app-window'));
+    assert.deepEqual(asked, ['frameless']);
+    const r = await page.$eval('#main-menu > .menu-container', (el) => { const b = el.getBoundingClientRect(); return [b.left, b.top, Math.round(b.width), Math.round(b.height)]; });
+    assert.deepEqual(r, [0, 0, 1180, 780]);
+    const box = await page.locator('.brand-tagline').boundingBox();
+    await page.mouse.move(box.x + 5, box.y + 5);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForFunction(() => true);
+    for (let i = 0; i < 20 && !asked.includes('drag'); i++) await new Promise((res) => setTimeout(res, 100));
+    assert.ok(asked.includes('drag'), asked.join(','));
+    await page.close();
+    // a real server here (not Windows): it refuses, and a browser tab keeps the normal look
+    const res = await (await fetch(srv.url + 'api/window', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"action":"close"}' })).json();
+    assert.equal(res.ok, false);
+});

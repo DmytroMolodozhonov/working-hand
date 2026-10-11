@@ -9,9 +9,9 @@
  * it is the game's own window.
  */
 
-async function askServer(action) {
+async function askServer(action, extra = {}) {
     try {
-        const r = await fetch('/api/window', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+        const r = await fetch('/api/window', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }) });
         return !!(await r.json()).ok;
     } catch (e) { return false; }
 }
@@ -25,6 +25,24 @@ export async function enterGameFullscreen(doc = document) {
         // (without this the first Escape would only leave full screen, not open the pause menu)
         await navigator.keyboard?.lock?.(['Escape']);
     } catch (e) { /* not allowed here (a test, an iframe): the game simply stays in its window */ }
+}
+
+/** The menu window's size (the app window takes exactly this size, without the Windows frame). */
+export const MENU_WINDOW = { width: 1180, height: 780 };
+
+/**
+ * The game's own app window (from the shortcut / «Запустить игру.bat»): the game's server takes the
+ * Windows frame away and gives it the menu's size; then the menu fills the window (no empty space
+ * around it) and its title bar moves the window. In a browser tab nothing changes.
+ */
+export async function becomeAppWindow({ bar } = {}, doc = document) {
+    if (!(await askServer('frameless', MENU_WINDOW))) return false;
+    doc.documentElement.classList.add('app-window');
+    bar?.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || e.target.closest('button, a, input, select') || isFull(doc)) return;
+        askServer('drag');
+    });
+    return true;
 }
 
 export function setupWindowControls({ min, full, close, onNote = () => {} }, doc = document) {
