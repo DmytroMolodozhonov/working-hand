@@ -25,12 +25,12 @@ test('the words: «Water Vortex» (and «вотер вортекс»), «Fire Ma
     assert.equal(matchSpell('water forming'), 'WaterForming');
 });
 
-test('mana: Water Vortex is a very strong spell (25), Fire Maxima 20, Bubble 5', () => {
+test('mana: Water Vortex is a very strong spell (25), Fire Maxima 20, Bubble free', () => {
     assert.equal(SPELL_COST.WaterVortex, 25);
     assert.equal(VORTEX.COST, 25);
     assert.equal(SPELL_COST.FireMaxima, 20);
     assert.equal(FIRE_MAXIMA.COST, 20);
-    assert.equal(SPELL_COST.VortexBubble, 5);
+    assert.equal(SPELL_COST.VortexBubble, 0, '«Bubble» is part of the vortex (already paid)');
 });
 
 /** Feed a hand going round a circle (radius r m, `turnsPerSec`) for `secs` at 30 FPS. */
@@ -419,4 +419,10 @@ test('the stream flies along the very line of the hand (like a duel spell) and t
     ch.dir.set(-0.4, 0.05, -1).normalize();
     run(V, 0.4);
     assert.ok(f.dir.angleTo(ch.dir) < 0.15, 'the stream turned after the hand');
+});
+
+import { bubbleLike } from '../../src/game/WaterVortex.js';
+test('«Bubble» as the Russian recognizer may write it (only while the vortex waits for it)', () => {
+    for (const t of ['бабл', 'Бабал', 'бобл', 'пабл', 'баббл', 'бубл', 'пузырь', 'Пузырь!', 'bubble', 'вабл']) assert.ok(bubbleLike(t), t);
+    for (const t of ['стоп', 'атака', 'фрозен', 'Инферно', 'баран', 'привет']) assert.ok(!bubbleLike(t), t);
 });

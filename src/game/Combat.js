@@ -84,7 +84,7 @@ export const SPELL_COST = {
     CreateBed: 6,
     ChangeColor: 2,
     WaterVortex: 25, // very strong: a whole vortex of water (see WaterVortex.js)
-    VortexBubble: 5, // «Bubble» on the one the vortex hit
+    VortexBubble: 0, // «Bubble» on the one the vortex hit: part of the vortex (already paid)
     FireMaxima: 20, // the only way out of the vortex's ice
     Alive: 25, // a living tree (then it drains the mana while it lives)
 };

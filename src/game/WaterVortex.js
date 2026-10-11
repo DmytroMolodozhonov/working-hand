@@ -71,7 +71,7 @@ export const VORTEX = {
     CLING: 2, // s after the last water reached the one it hit (still time to say «Bubble»)
     BUBBLE_GROW: 2.2, // s: the whole vortex flows into the bubble (when no stream feeds it: from the puddle)
     BUBBLE_FORM: 2.5, // s at least: the water swirls round the creature into a ball (never all at once)
-    BUBBLE_LATE: 4, // s after the stream ran out «Bubble» still gathers its water back into a ball
+    BUBBLE_LATE: 6, // s after the stream ran out «Bubble» still gathers its water back into a ball
     BUBBLE_LIFT: 0.6, // m: the ball lifts the one inside this far off the ground as it forms
     BUBBLE_SPEED: 5, // m/s at most when the caster carries it by hand (it is heavy)
     BUBBLE_GRAB: 0.3, // rad: the hand pointing this close to the ball takes hold of it
@@ -80,7 +80,7 @@ export const VORTEX = {
     COLD_DPS: 1, // HP a second from the cold
     AIR_DPS: 1, // HP a second without air
     KNOCK_VOLUME: 10, // m³: from this much water the hit knocks down
-    BUBBLE_COST: 5,
+    BUBBLE_COST: 0, // (part of the vortex: already paid)
 };
 
 export const FIRE_MAXIMA = {
@@ -203,6 +203,30 @@ export function drainRate(volume, t) {
     return Math.max(VORTEX.DRAIN, volume / VORTEX.DRAIN_TIME) * Math.min(1, 0.45 + t);
 }
 
+/** Letters a few apart (Levenshtein). */
+function editDistance(a, b) {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+}
+
+/**
+ * Does a phrase sound like «Bubble» (as the Russian recognizer writes what it heard: «бабал»,
+ * «бобл», «пабл», «баббл», «пузырь»…)? Used only while the vortex waits for that word.
+ */
+export function bubbleLike(text) {
+    const words = String(text || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/).filter(Boolean);
+    for (const w of words) {
+        if (w.startsWith('пузыр')) return true;
+        if (w.length < 3 || w.length > 8 || !/^[бпвbpv]/.test(w)) continue;
+        for (const t of ['бабл', 'бабол', 'баббл', 'бубл', 'бобл', 'bubble', 'babl', 'bubl']) {
+            if (editDistance(w, t) <= (t.length <= 4 ? 1 : 2)) return true;
+        }
+    }
+    return false;
+}
+
 /** Closest distance from point p to the segment a–b. */
 function segDist(p, a, b) {
     const ab = _c.subVectors(b, a);
@@ -300,6 +324,11 @@ export class WaterVortex {
         let best = null;
         for (const b of this.bubbles.values()) if (b.by === this.me && b.phase === 'liquid' && (!best || b.t < best.t)) best = b;
         return best;
+    }
+
+    /** The vortex waits for «Bubble» now (gathering, flying, pouring, or its water just splashed down). */
+    bubbleOpen() {
+        return this._bubbleWanted();
     }
 
     _bubbleWanted() {

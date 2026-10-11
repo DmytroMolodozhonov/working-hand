@@ -18,7 +18,7 @@ import { WeaponSystem } from './Weapons.js';
 import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
-import { WaterVortex } from './WaterVortex.js';
+import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Accio } from './Accio.js';
@@ -831,6 +831,9 @@ export class Game {
     _castLocalSpell(text, isFinal = true) {
         if (!this.active) return null;
         let name = matchSpell(text);
+        // the vortex waits for «Bubble»: a word that sounds like it is it (the recognizer writes it many ways)
+        if (this.vortex?.bubbleOpen?.() && name !== 'AirBubble' && (!name || name === 'Sands' || name === 'Sapira') && bubbleLike(text)) name = 'AirBubble';
+        if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
         if (this.combat.dead) return null;
         if (!this.knowsSpell(name)) {
