@@ -747,7 +747,7 @@ export class WaterVortex {
             ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, knock ? 5 : 3);
             if (knock && !g.flight?.active) {
                 // off the feet the way the water pushed (Knockdown: up by a squat once it has passed)
-                if (g.knock) g.knock.knock({ dir: fallDir(dir.x, dir.z, ch.group.rotation.y), down: 1.4 + Math.min(2, f.volume / 24), by, kind: 'vortex' });
+                if (g.knock) g.knock.knock({ dir: fallDir(dir.x, dir.z, ch.group.rotation.y), down: 1.4 + Math.min(2, f.volume / 24), by, kind: 'vortex', strength: Math.min(1, f.volume / 48) });
                 else { c.stun(1.4 + Math.min(2, f.volume / 24), by, 'water'); ch.knockedDown = true; }
             }
             g.fx && (g.fx.shake = Math.max(g.fx.shake || 0, knock ? 0.8 : 0.4));

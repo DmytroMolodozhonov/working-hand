@@ -168,6 +168,44 @@ export class Hud {
         if (this.el.frozen) this.el.frozen.style.opacity = String(Math.max(0, Math.min(1, k)));
     }
 
+    /**
+     * Dizzy after a fall (0 … 1): the game picture blurred (not the HUD), a dark wavering edge,
+     * and a faint ringing in the ears after a hard one. Cheap: touched only when it changes.
+     */
+    setDizzy(k, canvas) {
+        k = Math.max(0, Math.min(1, k || 0));
+        if (Math.abs(k - (this._dizzyK || 0)) < 0.02 && (k > 0 || !this._dizzyK)) return;
+        this._dizzyK = k;
+        if (canvas?.style) canvas.style.filter = k > 0.02 ? `blur(${(k * 2.2).toFixed(2)}px) saturate(${(1 - 0.3 * k).toFixed(2)})` : '';
+        let v = this._dizzyEl;
+        if (!v && k > 0 && typeof document !== 'undefined') {
+            v = this._dizzyEl = document.createElement('div');
+            v.id = 'dizzy-overlay';
+            v.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0;'
+                + 'background:radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(25,10,35,0.75) 100%);';
+            document.body.appendChild(v);
+        }
+        if (v) v.style.opacity = (k * 0.8).toFixed(2);
+        this._ringing(k);
+    }
+
+    _ringing(k) {
+        const g = k > 0.45 ? (k - 0.45) * 0.02 : 0;              // (only a hard fall rings, and faintly)
+        try {
+            if (g > 0 && !this._ring && typeof AudioContext !== 'undefined') {
+                const ac = this._ringAc || (this._ringAc = new AudioContext());
+                const o = ac.createOscillator(), gain = ac.createGain();
+                o.frequency.value = 3600; gain.gain.value = 0;
+                o.connect(gain).connect(ac.destination); o.start();
+                this._ring = { o, gain, ac };
+            }
+            if (this._ring) {
+                this._ring.gain.gain.setTargetAtTime(g, this._ring.ac.currentTime, 0.3);
+                if (g === 0) { const r = this._ring; this._ring = null; r.o.stop(r.ac.currentTime + 1.5); }
+            }
+        } catch { this._ring = null; }
+    }
+
     /** A coloured flash around the screen (green for Avada Kedavra). */
     flashColor(color) {
         const f = this.el.flash;

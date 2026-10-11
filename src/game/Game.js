@@ -2822,6 +2822,15 @@ export class Game {
             this.camera.position.y += (Math.random() - 0.5) * s;
             this.camera.position.z += (Math.random() - 0.5) * s;
         }
+        // the head spinning after a fall (Knockdown.dizzy): a slow, gentle sway; the blur is the Hud's
+        const dz = this.knock?.dizzy || 0;
+        if (dz > 0.001) {
+            const t = performance.now() / 1000;
+            this.camera.rotateZ(Math.sin(t * 0.8) * 0.05 * dz);
+            this.camera.rotateX(Math.sin(t * 0.53 + 1) * 0.02 * dz);
+            this.camera.rotateY(Math.sin(t * 0.37 + 2) * 0.03 * dz);
+        }
+        this.hud?.setDizzy?.(dz, this.renderer?.domElement);
         if (this.config.mode !== 'test') this._cameraOutOfRock(ch);
         this.camera.updateMatrixWorld(true);
     }

@@ -715,7 +715,7 @@ export class Duel {
             g.fx.lightFlash(p, 0x2dff5a, 6, 0.6, 30);
             g.hud.flashColor?.('rgba(40, 255, 90, 0.75)');
             // the body crumples back (off the feet; up again by a squat)
-            g.knock?.knock({ dir: 'back', down: 1.5, by: byId, kind: 'avada' });
+            g.knock?.knock({ dir: 'back', down: 1.5, by: byId, kind: 'avada', strength: 0.5 });
             // (not a killing curse: −25 HP at once)
             if (c.enabled) c.damage(25, byId, 'AvadaKedavra');
             else g.hud.setVoice('💚 Авада Кедавра попала в вас: −25 HP (здесь не ранит)', true);
