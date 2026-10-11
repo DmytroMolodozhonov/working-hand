@@ -233,3 +233,11 @@ test('«почему» is not «почём»; a question with no answer gets an 
     for (let i = 0; i < 20; i++) if (/(знаю|знает|спроси|слыхал|попроще)/i.test(b.hear('почему у драконов нет крыльев', {}).reply)) honest++;
     assert.ok(honest >= 8, `honest answers: ${honest}/20`);
 });
+
+test('a wizard of the towers gets the wizard prompt, not a farmer\'s', () => {
+    const b = new VillagerBrain({ id: 'w1', name: 'Финеас', role: 'teacher', seed: 3 }, { timeOfDay: 'day' }, { rng: createRng(3) });
+    const p = new TalkMind({}).systemPrompt(b, {});
+    assert.match(p, /наставник в Башне волшебников/);
+    assert.ok(p.includes(ROLE_PROMPTS.wizard));
+    assert.doesNotMatch(p, /фермер/);
+});

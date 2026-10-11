@@ -20,6 +20,7 @@
 
 import { normalize, sanitizeReply, isMostlyRussian } from '../game/VillagerBrain.js';
 import { toolsFor, parseToolCalls, validateCall, detectOrder, ARMY, ORDER_LINES } from './TalkActions.js';
+import { WIZ_ROLE_RU } from '../game/WizardAI.js';
 
 /** Who each role is (the system prompt, in Russian). */
 export const ROLE_PROMPTS = {
@@ -70,10 +71,13 @@ export class TalkMind {
         const role = brain.role;
         const m = brain.memory || {};
         const king = !!ctx.playerIsKing;
+        // (the wizards of the towers talk through the same brain: their own role and words)
+        const wiz = WIZ_ROLE_RU[v.role];
         const lines = [
-            `Ты — ${v.name || 'житель'}, ${brain.roleName}, ${v.female ? 'женщина' : 'мужчина'}, в средневековом замке «${w.castleName || v.castleName || 'Каменный Утёс'}». Это игра; ты живой человек этого мира и никогда не говоришь, что ты программа.`,
-            ROLE_PROMPTS[role] || ROLE_PROMPTS.farmer,
-            role === 'king' ? '' : `Правитель замка — ${king ? 'твой собеседник' : `${w.kingFemale ? 'королева' : 'король'} ${w.kingName || v.kingName || ''}`.trim()}.`,
+            wiz ? `Ты — ${v.name || 'волшебник'}, ${wiz[v.female ? 1 : 0].toLowerCase()} в Башне волшебников. Это игра; ты живой человек этого мира и никогда не говоришь, что ты программа.`
+                : `Ты — ${v.name || 'житель'}, ${brain.roleName}, ${v.female ? 'женщина' : 'мужчина'}, в средневековом замке «${w.castleName || v.castleName || 'Каменный Утёс'}». Это игра; ты живой человек этого мира и никогда не говоришь, что ты программа.`,
+            wiz ? ROLE_PROMPTS.wizard : ROLE_PROMPTS[role] || ROLE_PROMPTS.farmer,
+            role === 'king' || wiz ? '' : `Правитель замка — ${king ? 'твой собеседник' : `${w.kingFemale ? 'королева' : 'король'} ${w.kingName || v.kingName || ''}`.trim()}.`,
             `Настроение: ${brain.mood > 0.3 ? 'хорошее, ты дружелюбен' : brain.mood < -0.3 ? 'плохое, ты раздражён и груб' : 'обычное'}.`,
             `Сейчас ${w.timeOfDay === 'night' ? 'ночь, у стен бродят зомби' : 'день'}${w.danger || ctx.danger ? ', рядом опасность' : ''}.`,
             king ? 'Собеседник — КОРОЛЬ этого замка. Обращайся «Ваше Величество». Его приказы ты выполняешь сразу и без споров.'
