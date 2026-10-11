@@ -456,3 +456,74 @@ test('ships: a sea castle\'s port has its ships moored at the piers, guns on the
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('ships: hand over hand up the rope ladder out of the sea onto the deck; a mooring loop lifted off its bollard by hand', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await shipAtSea(page, 'pinnace', 'climb-ship', 0.2);
+    // in the water beside the starboard ladder
+    await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship, ld = s.layout.ladders.find((l) => l.side > 0);
+        const w = window.__w(ld.x + 0.8, -1.6 + 2.0, ld.z);
+        g.character.group.position.set(w.x, w.y, w.z);
+        s.collider.forget(g.character.group.position);
+        for (const sd of ['left', 'right']) g.items.releaseHand(sd);
+        // the hands: on the ladder's line, `h` metres above the feet
+        window.__rh = { left: { h: 3, curl: 0 }, right: { h: 3, curl: 0 } };
+        g.ships.rigging.input = (side) => {
+            const p = g.character.group.position, k = window.__rh[side];
+            const L = s.pose.toLocal(p.x, p.y - 2.0, p.z, { x: 0, y: 0, z: 0 });
+            const lx = ld.side * (s.layout.hullHalfWidth(ld.z, s.layout.deck) + 0.35);
+            const q = s.pose.toWorld(lx, L.y + k.h, ld.z, { x: 0, y: 0, z: 0 });
+            return { G: new window.__zns.THREE.Vector3(q.x, q.y, q.z), curl: k.curl };
+        };
+    });
+    await feed(page, { arms: 'forward' }, 10, 40);
+    const y0 = await page.evaluate(() => { const s = window.__ship, p = window.__zns.game.character.group.position; return s.pose.toLocal(p.x, p.y, p.z, {}).y - 2; });
+    let onDeck = false;
+    const log = [];
+    const set = (side, h, curl) => page.evaluate(({ side, h, curl }) => { Object.assign(window.__rh[side], { h, curl }); }, { side, h, curl });
+    for (let cycle = 0; cycle < 8 && !onDeck; cycle++) {
+        const a = cycle % 2 ? 'right' : 'left', b = cycle % 2 ? 'left' : 'right';
+        // reach up to the highest rung within the arm's reach (the bulwark's top last), open, close on it
+        const reach = await page.evaluate(() => {
+            const g = window.__zns.game, s = window.__ship, R = g.ships.rigging, p = g.character.group.position;
+            const feet = R.climb ? R.climb.ly : s.pose.toLocal(p.x, p.y - 2, p.z, {}).y;
+            const ld = s.layout.ladders.find((l) => l.side > 0);
+            const ys = [];
+            for (let y = ld.bottom + 0.4; y <= ld.top + 0.01; y += ld.rung) ys.push(y);
+            ys.push(ld.top + s.layout.rail);
+            const up = ys.filter((y) => y <= feet + 4.3).pop();
+            return up - feet;
+        });
+        await set(a, reach, 0); await frames(page, 2);
+        await set(a, reach, 1); await frames(page, 3);
+        await set(b, 3, 0); await frames(page, 3);           // the other hand lets go
+        for (let k = 0; k < 6; k++) { await set(a, reach - 0.3 * (k + 1), 1); await frames(page, 3); } // pull down: the body goes up
+        onDeck = await page.evaluate(() => window.__zns.game.ships.me?.ship.id === 'climb-ship' && !window.__zns.game.ships.rigging.climbing);
+        log.push(await page.evaluate(() => { const R = window.__zns.game.ships.rigging; return R.climb ? { ly: +R.climb.ly.toFixed(2), holds: JSON.stringify(R.climb.holds) } : 'none'; }));
+    }
+    const top = await page.evaluate(() => { const g = window.__zns.game, s = window.__ship, p = g.character.group.position; return { y: s.pose.toLocal(p.x, p.y, p.z, {}).y - 2, deck: s.layout.deck, rider: g.ships.me?.ship.id || null }; });
+    assert.ok(onDeck, `climbed up onto the deck (feet from ${y0.toFixed(1)} to ${top.y.toFixed(1)}, deck ${top.deck}) ${JSON.stringify(log)}`);
+
+    // a mooring loop: close the fingers on it and lift the hand
+    const line = await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship, R = g.ships.rigging;
+        g.ships.rigging.input = null;
+        s.lines = [{ id: 'bow', bitt: { ...s.layout.bitts[0] }, bollard: (() => { const w = window.__w(12, 0, s.layout.bitts[0].z); return { x: w.x, y: 2.5, z: w.z }; })(), L0: 13, state: 'tied', strain: 0 }];
+        const eye = R.eyeAt(s.lines[0], new window.__zns.THREE.Vector3());
+        window.__eye = { x: eye.x, y: eye.y, z: eye.z, dy: 0, curl: 0 };
+        R.input = (side) => side === 'right' ? { G: new window.__zns.THREE.Vector3(window.__eye.x, window.__eye.y + window.__eye.dy, window.__eye.z), curl: window.__eye.curl } : null;
+        return true;
+    });
+    assert.ok(line);
+    await frames(page, 2);
+    await page.evaluate(() => { window.__eye.curl = 1; });
+    await frames(page, 3);
+    await page.evaluate(() => { window.__eye.dy = 0.9; });
+    await frames(page, 3);
+    assert.equal(await page.evaluate(() => window.__ship.lines[0].state), 'free', 'the loop came off the bollard');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

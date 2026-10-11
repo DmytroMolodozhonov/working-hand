@@ -1957,6 +1957,7 @@ export class Game {
         this.items.updateRemote();
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
+        this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
         this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
         this.scrolls.update(dt);
         this.wandMagic.update(dt);

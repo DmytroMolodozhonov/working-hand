@@ -35,6 +35,7 @@ import { setNearShadow } from '../core/Shadows.js';
 import { Helm } from './Helm.js';
 import { Cannons } from './Cannons.js';
 import { Sailors } from './Sailors.js';
+import { Rigging } from './Rigging.js';
 import { rollShipLoot } from './ItemTypes.js';
 import { createRng } from '../core/math.js';
 
@@ -85,6 +86,7 @@ export class Ships {
         this._breeze = null;
         this.saved = new Map(); // id → saved state (ships not made yet)
         this.helm = new Helm(game, this);
+        this.rigging = new Rigging(game, this); // mooring lines and rope ladders in the hands
         this.cannons = new Cannons(game, this);
         this.crew = new Sailors(game, this);
         this._adapters = new Map();
@@ -364,6 +366,7 @@ export class Ships {
             if (s.plank?.fall) this._plankFallFx(s, dt);
         }
         this.helm.update(dt);
+        this.rigging.update(dt);
         this.cannons.update(dt);
         this.crew.update(dt);
         if (g.sync) this._net(dt);
@@ -561,7 +564,7 @@ export class Ships {
         return {
             pos: () => ch.group.position,
             turn: (d) => { ch.group.rotation.y += d; g.cameraBaseRotation += d; g.smoothBody += d; },
-            free: () => !g.flight?.active && !g.levitation?.lifted && !g.swim?.swimming && !g.isDeadLocal && !g.combat?.dead && !g.beds?.lying && !g.animals?.riding && !this.helm.climbing,
+            free: () => !g.flight?.active && !g.levitation?.lifted && !g.swim?.swimming && !g.isDeadLocal && !g.combat?.dead && !g.beds?.lying && !g.animals?.riding && !this.rigging.climbing,
             feet: () => ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1 : 0),
         };
     }
@@ -1047,6 +1050,7 @@ export class Ships {
     /** Somebody died on a ship: let go of the wheel. */
     onLocalDeath() {
         this.helm.releaseAll();
+        this.rigging.letGo();
         this.riders.delete('me');
         this.me = null;
     }
@@ -1093,6 +1097,7 @@ export class Ships {
             case 'shipev': if (!isHost) this._applyEvent(m); return;
             case 'screw': if (!isHost) this.crew.applyNet(m); return;
             case 'shelm': if (isHost) this.helm.applyRemote(m); return;
+            case 'smoor': if (isHost) this.rigging.applyRemote(m); return;
             case 'sunf': {
                 if (!isHost) return;
                 const s = this.list.get(m.id);
@@ -1264,6 +1269,7 @@ export class Ships {
         for (const s of [...this.awake]) this.sleep(s);
         this.list.clear();
         this.cannons.dispose?.();
+        this.rigging.dispose();
     }
 }
 

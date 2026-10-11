@@ -638,7 +638,7 @@ export class NetSync {
             }
             case 'z': if (!this.net.isHost) this._applyZombies(m.l, m.rm); break;
             // ships (src/game/Ships.js): the host's ships and crews; guests' wheel, sails, blows, guns
-            case 'ships': case 'shipev': case 'screw': case 'shelm': case 'sunf': case 'shit': case 'sfire': case 'scan': g.ships?.onNet(m, this.net.isHost); break;
+            case 'ships': case 'shipev': case 'screw': case 'shelm': case 'smoor': case 'sunf': case 'shit': case 'sfire': case 'scan': g.ships?.onNet(m, this.net.isHost); break;
             case 'zhit': if (!this.net.isHost) this._applyZombieHit(m); break;
             case 'zsand': {
                 const z = g.zombieById.get(m.id);
