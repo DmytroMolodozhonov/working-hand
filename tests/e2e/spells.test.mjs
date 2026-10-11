@@ -292,3 +292,90 @@ test('creative: wand spells with a bare hand, building out of nothing (no wood o
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('duel spells fly where the hand points — standing and hovering after «Флайн» + «Паузин»: a book-bird on the line is hit, one 12° off is not, the charge keeps to the line', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const pose = { arms: 'forward', rightCurl: 0, leftCurl: 0 };
+    await feed(page, pose, 12, 40);
+    // «Остолбеней» said with the right hand pointing; a book-bird (a small body, 0.6 m) put
+    // `dist` m along the hand's line turned `deg`° aside; how the charge flew
+    const shoot = (deg, dist) => page.evaluate(async ([deg, dist]) => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character, B = g.books;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 20)); };
+        // only our bird about (no other birds or animals in the way)
+        for (const b of [...B.birds.values()]) { g.scene.remove(b.model); B.birds.delete(b.id); }
+        for (const a of [...g.animals.list]) g.animals._remove(a);
+        const o = g.castOrigin('right', new T.Vector3());
+        const d = ch.getPointingDirection('right', new T.Vector3());
+        const at = o.clone().addScaledVector(d.clone().applyAxisAngle(new T.Vector3(0, 1, 0), -deg * Math.PI / 180), dist); // (to the right: away from the left hand)
+        const bird = B._spawnBird(null, at);
+        bird.state = 'perch'; bird.wait = 99; bird.t = 0;
+        await frames(2);
+        g._lastDuelCast = 0; g._interimCast = null;
+        const said = g.castLocalSpell('остолбеней', true);
+        const b = [...g.duel.bolts.values()].pop();
+        const hand = ch.getHandDirection(b.side, new T.Vector3());
+        const res = { said, side: b.side, tk: b.tk, d0: b.d0.toArray(), hand: hand.toArray(), pointing: d.toArray(), tilt: ch.flightTilt };
+        let maxOff = 0, maxAlong = 0, maxBend = 0;
+        const t0 = performance.now();
+        while (g.duel.bolts.has(b.id) && performance.now() - t0 < 10000) {
+            const rel = b.front.clone().sub(b.o);
+            const along = rel.dot(b.d0);
+            maxOff = Math.max(maxOff, rel.addScaledVector(b.d0, -along).length());
+            maxAlong = Math.max(maxAlong, along);
+            maxBend = Math.max(maxBend, b.dir.angleTo(b.d0));
+            await frames(1);
+        }
+        const hit = !B.birds.has(bird.id) || B.birds.get(bird.id).state === 'fall';
+        const touched = g.duel.log.filter((e) => e.ev === 'touch' && e.id === b.id).map((e) => e.kind + ':' + e.tid);
+        if (B.birds.has(bird.id)) { g.scene.remove(bird.model); B.birds.delete(bird.id); }
+        return { ...res, maxOff, maxAlong, maxBend, hit, touched, birdId: bird.id };
+    }, [deg, dist]);
+    const pitch = (v) => Math.asin(v[1]);
+
+    // --- standing on the ground (away from the pedestals)
+    await page.evaluate(async () => {
+        const g = window.__zns.game, ch = g.character;
+        ch.group.position.set(0, ch.group.position.y, 30);
+        const f = g.frameCount; while (g.frameCount < f + 20) await new Promise((res) => setTimeout(res, 20));
+    });
+    const onLine = await shoot(0, 10);
+    assert.equal(onLine.said, 'Stupefy');
+    assert.equal(onLine.tk, 'b', 'the bird on the line is the target ' + JSON.stringify(onLine));
+    assert.ok(onLine.hit && onLine.touched.includes('b:' + onLine.birdId), 'and is hit ' + JSON.stringify(onLine));
+    assert.ok(onLine.maxOff < 0.15, `the charge kept to the hand's line (${onLine.maxOff.toFixed(3)} m off)`);
+    const aside = await shoot(12, 10);
+    assert.equal(aside.said, 'Stupefy');
+    assert.equal(aside.tk, 'n', 'nothing pointed at ' + JSON.stringify(aside));
+    assert.ok(!aside.hit && !aside.touched.length, '12° off: not hit ' + JSON.stringify(aside));
+    assert.ok(aside.maxOff < 0.01 && aside.maxBend < 1e-6, `straight along the hand (${aside.maxOff.toFixed(4)} m off)`);
+    assert.ok(aside.maxAlong > 10, `it flew on past the bird (${aside.maxAlong.toFixed(1)} m)`);
+
+    // --- in the air: «Флайн», then «Паузин» — hovering, the body leans forward a little
+    await feed(page, { arms: 'up' }, 20, 60);
+    assert.equal(await page.evaluate(() => { const g = window.__zns.game; g.lastSpellCastTime = 0; return g.castLocalSpell('флайн'); }), 'Flight');
+    await feed(page, { arms: 'up' }, 20, 70);
+    await page.waitForFunction(() => window.__zns.game.flight.state === 'cruise', null, { timeout: 30000 });
+    await feed(page, pose, 10, 60);
+    assert.equal(await page.evaluate(() => window.__zns.game.castLocalSpell('паузин', true)), 'Pause');
+    await feed(page, pose, 40, 60);
+    await page.waitForFunction(() => { const f = window.__zns.game.flight; return f.hovering && f.speed < 0.1 && Math.abs(f.pitch) < 0.01 && Math.abs(f.tilt - 0.15) < 0.01; }, null, { timeout: 30000 });
+    const high = await page.evaluate(() => { const g = window.__zns.game, p = g.character.group.position; return p.y - g.collision.groundY(p.x, p.z); });
+    assert.ok(high > 4, `up in the air (${high.toFixed(1)} m)`);
+    const air = await shoot(0, 10);
+    assert.ok(air.tilt > 0.1, 'the body is tilted while hovering');
+    // the hero's forearm tips down with the body — but the hand points as on the ground
+    assert.ok(pitch(air.hand) < pitch(onLine.d0) - 0.1, `(the forearm alone points ${((pitch(onLine.d0) - pitch(air.hand)) * 57.3).toFixed(1)}° lower)`);
+    assert.ok(Math.abs(pitch(air.d0) - pitch(onLine.d0)) < 0.03, `the charge flies as the hand points, like on the ground (${(pitch(air.d0) * 57.3).toFixed(1)}° vs ${(pitch(onLine.d0) * 57.3).toFixed(1)}°)`);
+    assert.equal(air.tk, 'b', 'hovering: the bird on the line is the target ' + JSON.stringify(air));
+    assert.ok(air.hit, 'and is hit');
+    assert.ok(air.maxOff < 0.15, `kept to the line (${air.maxOff.toFixed(3)} m off)`);
+    const airAside = await shoot(12, 10);
+    assert.equal(airAside.tk, 'n');
+    assert.ok(!airAside.hit && !airAside.touched.length, 'hovering, 12° off: not hit ' + JSON.stringify(airAside));
+    assert.ok(airAside.maxOff < 0.01, 'straight along the hand');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

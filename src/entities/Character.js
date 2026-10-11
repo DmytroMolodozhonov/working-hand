@@ -18,6 +18,7 @@ const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _qBody = new THREE.Quaternion();
 const _up = new THREE.Vector3();
+const _ax = new THREE.Vector3();
 const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3();
 const _r5 = new THREE.Vector3(), _r6 = new THREE.Vector3(), _ru = new THREE.Vector3(), _rn = new THREE.Vector3();
 
@@ -90,6 +91,7 @@ export class VoxelCharacter {
         // Yaw first, then tilt (flight). Identical to the old order while upright.
         this.group.rotation.order = 'YXZ';
         this.flightTilt = 0;
+        this.flightView = 0; // flight: how far the view is pitched along the flight path (rad, + up)
         this.knockedDown = false; // «Earthquake»: lying on the ground for a few seconds
         this._fallRoll = 0;
         this.flying = false;
@@ -321,8 +323,13 @@ export class VoxelCharacter {
         const hand = this.getHandWorldPosition(side, _v1);
         const v = hand.sub(shoulder);
         const len = v.length();
+        // (measured along the body's own "up", like isHandRaised: in flight the body tips
+        // forward, and an arm hanging along it must not count as raised — nor an arm
+        // stretched at the camera as hanging)
+        this.group.getWorldQuaternion(_qBody);
+        _up.set(0, 1, 0).applyQuaternion(_qBody);
         // (a hand lifted ~15° from hanging is enough to cast)
-        return len > 1e-3 && v.y / len > -0.96;
+        return len > 1e-3 && v.dot(_up) / len > -0.96;
     }
 
     /** Both arms stretched out sideways at shoulder height (a «T»). */
@@ -356,6 +363,29 @@ export class VoxelCharacter {
         const a = this.aim?.[side];
         if (a && performance.now() - a.at < 250) return out.copy(a.dir);
         return this.getForearmDirection(side, out);
+    }
+
+    /**
+     * Where this hand points as the player sees it. In flight the hero's body tips
+     * forward (a little while hovering, flat like Superman when cruising) while the
+     * eyes keep looking along the flight and the player stands upright at the camera:
+     * a hand pointed at something on the screen points at it in the world too, so the
+     * body's tilt is taken out of the hand's direction (and the view's own pitch along
+     * the flight put in). On the ground it is just the hand's direction.
+     */
+    getPointingDirection(side, out = new THREE.Vector3()) {
+        this.getHandDirection(side, out);
+        const t = this.aimTilt();
+        if (Math.abs(t) < 1e-5) return out;
+        const yaw = this.group.rotation.y;
+        return out.applyAxisAngle(_ax.set(Math.cos(yaw), 0, -Math.sin(yaw)), t).normalize();
+    }
+
+    /** How far (rad) the view is pitched up from the body's own front (flight only). */
+    aimTilt() {
+        // (another player's hero: the tilt comes over the network as the body's rotation)
+        const tilt = this.remote ? (this.flying ? Math.max(0, Math.min(1.6, -this.group.rotation.x)) : 0) : (this.flightTilt || 0);
+        return tilt + (this.flightView || 0);
     }
 
     /** Elbow → hand (the forearm), whatever is held. */

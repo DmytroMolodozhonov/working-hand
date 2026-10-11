@@ -8,8 +8,13 @@
  *   Сапира                    a slow, heavy violet charge: 4 HP to a wizard, 10 to a zombie
  *
  * A duel spell is not an instant beam: a crackling, jagged charge flies from
- * the hand to the target (fast, ~0.7 s over 10 m) and acts only when
- * it touches. Until then the target can:
+ * the hand (fast, ~0.7 s over 10 m) and acts only when it touches. It flies
+ * where the hand points (as the player sees it — in flight too): a creature is
+ * its target only when the hand points right at it (a few degrees beside the
+ * body at most; the nearest one along that line), and towards it the charge
+ * turns a little (AIM.BEND, ~7°, in all) — never round after it. Whatever body
+ * it really touches on its way is hit; nothing touched — it flies on straight.
+ * Until it touches, the target can:
  *   - raise a shield («Protection») — the charge bursts on it, or
  *   - answer with any duel spell aimed back: the two charges meet and push
  *     against each other. The meeting point slides towards the weaker wizard;
@@ -44,8 +49,6 @@ export const DUEL_SPELLS = {
 export const DUEL = {
     SPEED: 15, // m/s — fast (≈0.7 s over 10 m), but still visible and answerable
     RANGE: 30, // m
-    CONE: 0.4, // rad: what the hand is pointing at
-    HIT_RADIUS: 0.8,
     CONTACT_ANGLE: 0.9, // rad: hand still on the opponent (~50°: aiming roughly is enough)
     CONTACT_GRACE: 0.25, // s off the opponent before a flick counts as "shaking it off"
     PUSH: 0.16, // how fast the meeting point moves per unit of strength difference
@@ -53,6 +56,129 @@ export const DUEL = {
     STUN_TIME: 15,
     CLASH_FATIGUE: 1.5, // fatigue per second while pushing (free world)
 };
+
+/** Where a charge goes: along the hand; a target only right on that line, and only a small correction towards it. */
+export const AIM = {
+    CONE: 0.07, // rad (4°): how far beside a body the hand may point and still mean it
+    BEND: 0.12, // rad (~7°): the most a charge ever turns off the line it was cast along
+    TURN: 2.0, // rad/s: how fast it turns while correcting
+};
+
+/** Body sizes (metres) as a charge touches them: a line a–b and a radius around it. */
+export const BODY = {
+    HERO: { DOWN: 1.3, UP: 2.15, R: 0.7 }, // a wizard: from the soles (2.0 below the body origin) to the hair (2.85 above), along the body
+    ZOMBIE: { DOWN: -0.1, UP: 2.0, R: 0.7 },
+    VILLAGER: { DOWN: 1.25, UP: 2.0, R: 0.7 },
+    BIRD: 0.6,
+};
+
+const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _bx = new THREE.Vector3();
+const _ch = new THREE.Vector3(), _cd = new THREE.Vector3(), _co = new THREE.Vector3();
+
+/**
+ * Where the line from `o` along the unit direction `d` (forwards only) comes closest to
+ * the segment a–b: {along: how far along the line, k: 0…1 on the segment, dist: how close}.
+ */
+export function rayToSegment(o, d, a, b, out = {}) {
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const wx = o.x - a.x, wy = o.y - a.y, wz = o.z - a.z;
+    const B = d.x * ux + d.y * uy + d.z * uz, C = ux * ux + uy * uy + uz * uz;
+    const D = d.x * wx + d.y * wy + d.z * wz, E = ux * wx + uy * wy + uz * wz;
+    const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+    let k = 0;
+    const den = C - B * B;
+    if (C > 1e-9) k = den > 1e-9 ? clamp01((E - B * D) / den) : 0;
+    const t = Math.max(0, k * B - D);
+    if (C > 1e-9) k = clamp01((E + t * B) / C);
+    const px = wx + t * d.x - k * ux, py = wy + t * d.y - k * uy, pz = wz + t * d.z - k * uz;
+    out.along = t;
+    out.k = k;
+    out.dist = Math.sqrt(px * px + py * py + pz * pz);
+    return out;
+}
+
+/**
+ * Where the segment p–q (a charge's move this frame) comes closest to the segment a–b:
+ * {s: 0…1 on p–q, k: 0…1 on a–b, dist}.
+ */
+export function segmentToSegment(p, q, a, b, out = {}) {
+    const d1x = q.x - p.x, d1y = q.y - p.y, d1z = q.z - p.z;
+    const d2x = b.x - a.x, d2y = b.y - a.y, d2z = b.z - a.z;
+    const rx = p.x - a.x, ry = p.y - a.y, rz = p.z - a.z;
+    const A = d1x * d1x + d1y * d1y + d1z * d1z, E = d2x * d2x + d2y * d2y + d2z * d2z;
+    const F = d2x * rx + d2y * ry + d2z * rz;
+    const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+    let s = 0, k = 0;
+    if (A <= 1e-12 && E <= 1e-12) { s = 0; k = 0; }
+    else if (A <= 1e-12) { s = 0; k = clamp01(F / E); }
+    else {
+        const C = d1x * rx + d1y * ry + d1z * rz;
+        if (E <= 1e-12) { k = 0; s = clamp01(-C / A); }
+        else {
+            const Bv = d1x * d2x + d1y * d2y + d1z * d2z;
+            const den = A * E - Bv * Bv;
+            s = den > 1e-12 ? clamp01((Bv * F - C * E) / den) : 0;
+            k = (Bv * s + F) / E;
+            if (k < 0) { k = 0; s = clamp01(-C / A); }
+            else if (k > 1) { k = 1; s = clamp01((Bv - C) / A); }
+        }
+    }
+    const px = rx + d1x * s - d2x * k, py = ry + d1y * s - d2y * k, pz = rz + d1z * s - d2z * k;
+    out.s = s;
+    out.k = k;
+    out.dist = Math.sqrt(px * px + py * py + pz * pz);
+    return out;
+}
+
+/**
+ * The body the hand points at: the line from `o` along `d` passes it within AIM.CONE
+ * plus the body's own angular size (a big body is easier to point at), and of those the
+ * nearest along the line. bodies: [{a, b, r, …}]. → {body, along, k, dist, miss} | null
+ * (miss: how far beside the body the line goes, rad; 0 = right through it).
+ */
+export function pickBody(o, d, bodies, range = DUEL.RANGE) {
+    let best = null;
+    const c = {};
+    for (const body of bodies) {
+        rayToSegment(o, d, body.a, body.b, c);
+        if (c.along < 0.5 || c.along > range) continue;
+        if (Math.atan2(c.dist, c.along) > AIM.CONE + Math.atan2(body.r, c.along)) continue;
+        if (!best || c.along < best.along) best = { body, along: c.along, k: c.k, dist: c.dist, miss: Math.max(0, Math.atan2(c.dist - body.r, c.along)) };
+    }
+    return best;
+}
+
+/**
+ * A flying charge corrects its way a little: `dir` turns towards `want` by at most `step`
+ * rad now, and never more than `maxBend` off the line it was cast along (`d0`), however
+ * far its target is. Unit vectors; `dir` is changed and returned.
+ */
+export function bendToward(dir, d0, want, step, maxBend = AIM.BEND) {
+    const ang = dir.angleTo(want);
+    if (ang > 1e-7 && step > 0) {
+        _bx.crossVectors(dir, want);
+        if (_bx.lengthSq() > 1e-14) dir.applyAxisAngle(_bx.normalize(), Math.min(step, ang));
+    }
+    const off = dir.angleTo(d0);
+    if (off > maxBend) {
+        _bx.crossVectors(d0, dir);
+        if (_bx.lengthSq() > 1e-14) dir.copy(d0).applyAxisAngle(_bx.normalize(), maxBend);
+        else dir.copy(d0);
+    }
+    return dir.normalize();
+}
+
+/** The first of `bodies` the move p→q touches: {body, s (0…1 along the move), k} | null. */
+export function firstTouched(p, q, bodies) {
+    let best = null;
+    const c = {};
+    for (const body of bodies) {
+        segmentToSegment(p, q, body.a, body.b, c);
+        if (c.dist > body.r) continue;
+        if (!best || c.s < best.s) best = { body, s: c.s, k: c.k };
+    }
+    return best;
+}
 
 const _v1 = new THREE.Vector3();
 const _qInv = new THREE.Quaternion();
@@ -132,59 +258,120 @@ export class Duel {
     }
 
     // ============================================================ targets
-    /** Creatures the hand points at: wizards (other players) and zombies. */
+    /** Where my spell leaves this hand (the wand's tip, else the hand) and where the hand points. */
+    _myRay(side, outPos, outDir) {
+        const g = this.game, ch = g.character;
+        if (g.castOrigin) g.castOrigin(side, outPos);
+        else ch.getHandWorldPosition(side, outPos);
+        // (as the player sees it: in flight without the body's forward tilt)
+        if (ch.getPointingDirection) ch.getPointingDirection(side, outDir);
+        else ch.getHandDirection(side, outDir);
+        return outDir;
+    }
+
+    /**
+     * The creature this hand points at: a wizard, a zombie, an animal, a castle person or a
+     * book-bird right on the line of the hand (see pickBody). {kind, id, dist, miss} | null
+     */
     findTarget(side) {
+        const o = new THREE.Vector3(), d = new THREE.Vector3();
+        this._myRay(side, o, d);
+        const hit = pickBody(o, d, this._bodies(this.me));
+        return hit ? { kind: hit.body.kind, id: hit.body.id, dist: hit.along, miss: hit.miss } : null;
+    }
+
+    /**
+     * Every body a charge can touch (`skip`: the caster — never his own), as capsules
+     * {kind, id, a, b, r}. (The entries are reused: read them before the next call.)
+     */
+    _bodies(skip = null) {
         const g = this.game;
-        const ch = g.character;
-        const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
-        const dir = ch.getHandDirection(side, new THREE.Vector3());
-        let best = null;
-        // (a big target — a knight, a cow — is easier to point at than a small one)
-        const consider = (kind, id, pos, size = 0.5) => {
-            const to = _v1.subVectors(pos, hand);
-            const d = to.length();
-            if (d > DUEL.RANGE || d < 0.5) return;
-            const ang = dir.angleTo(to.normalize());
-            if (ang > DUEL.CONE + Math.atan2(size, d)) return;
-            const score = ang * 8 + d * 0.05;
-            if (!best || score < best.score) best = { kind, id, score, dist: d };
+        const pool = this._bpool || (this._bpool = []);
+        const out = [];
+        const put = (kind, id) => {
+            let e = pool[out.length];
+            if (!e) e = pool[out.length] = { kind, id, a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
+            e.kind = kind; e.id = id;
+            out.push(e);
+            return e;
         };
-        for (const [id, r] of g.remotes) if (!r.dead) consider('p', id, r.position.clone().add(_v2.set(0, 0.6, 0)));
-        for (const z of g.zombies) if (!z.isDead) consider('z', z.id, z.group.position.clone().add(_v2.set(0, 1.0, 0)), 1.2);
+        if (skip !== this.me && g.character && !g.combat?.dead && !g.isDeadLocal) this._heroBody(g.character.group, put('p', this.me));
+        for (const [id, r] of g.remotes || []) if (!r.dead && id !== skip) this._heroBody(r.character.group, put('p', id));
+        for (const z of g.zombies || []) if (!z.isDead) this._zombieBody(z, put('z', z.id));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
-        for (const a of g.animals?.targets() || []) consider('a', a.id, this._creaturePoint(a, new THREE.Vector3()), this._animalBody(a).r);
-        for (const v of g.castleLife?.targets() || []) consider('v', v.id, this._creaturePoint(v, new THREE.Vector3()), 1.6);
-        for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall') consider('b', b.id, b.model.position.clone());
-        return best;
+        for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
+        for (const v of g.castleLife?.targets() || []) this._villagerBody(v, put('v', v.id));
+        for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall') this._roundBody('b', bd, put('b', bd.id));
+        return out;
     }
 
-    /** A creature whose body the point is inside (zombies, animals, castle people, book-birds). */
-    _bodyAt(p, by) {
+    /** One creature's body (as in _bodies), or null when it is gone. */
+    _bodyOf(kind, id, e) {
         const g = this.game;
-        for (const v of g.castleLife?.byId.values() || []) {
-            if (v.dead) continue;
-            if (Math.hypot(v.x - p.x, v.z - p.z) < 1.3 && p.y > v.y - 0.3 && p.y < v.y + 4.8) return { kind: 'v', id: v.id };
+        e.kind = kind; e.id = id;
+        if (kind === 'p') {
+            if (id === this.me) return g.combat?.dead || g.isDeadLocal ? null : this._heroBody(g.character.group, e);
+            const r = g.remotes?.get(id);
+            return r && !r.dead ? this._heroBody(r.character.group, e) : null;
         }
-        for (const z of g.zombies) {
-            if (z.isDead) continue;
-            const zp = z.group.position;
-            if (Math.hypot(zp.x - p.x, zp.z - p.z) < 1.2 && p.y > zp.y - 2.2 && p.y < zp.y + 2.6) return { kind: 'z', id: z.id };
+        if (kind === 'z') {
+            const z = g.zombieById?.get(id);
+            return z && !z.isDead ? this._zombieBody(z, e) : null;
         }
-        for (const a of g.animals?.targets() || []) {
-            const c = this._creaturePoint(a, _v3);
-            if (c.distanceTo(p) < this._animalBody(a).r) return { kind: 'a', id: a.id };
-        }
-        for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall' && bd.model.position.distanceTo(p) < 1.0) return { kind: 'b', id: bd.id };
-        return null;
+        const c = this._creature(kind, id);
+        if (!c) return null;
+        return kind === 'v' ? this._villagerBody(c, e) : this._roundBody(kind, c, e);
     }
 
-    /** Which hand casts: the one pointing at a creature (or the spell hand). */
+    /** A wizard's hero: along the body (upright, or lying flat flying like Superman). */
+    _heroBody(group, e) {
+        const up = _sa.set(0, 1, 0).applyQuaternion(group.quaternion);
+        e.a.copy(group.position).addScaledVector(up, -BODY.HERO.DOWN);
+        e.b.copy(group.position).addScaledVector(up, BODY.HERO.UP);
+        e.r = BODY.HERO.R;
+        return e;
+    }
+
+    _zombieBody(z, e) {
+        const p = z.group.position;
+        e.a.set(p.x, p.y - BODY.ZOMBIE.DOWN, p.z);
+        e.b.set(p.x, p.y + BODY.ZOMBIE.UP, p.z);
+        e.r = BODY.ZOMBIE.R;
+        return e;
+    }
+
+    _villagerBody(v, e) {
+        // (the model's origin is the hip, as the player's: the feet 1.95 below it)
+        const p = v.group ? v.group.position : _sb.set(v.x, v.y + 1.95, v.z);
+        e.a.set(p.x, p.y - BODY.VILLAGER.DOWN, p.z);
+        e.b.set(p.x, p.y + BODY.VILLAGER.UP, p.z);
+        e.r = BODY.VILLAGER.R;
+        return e;
+    }
+
+    /** An animal / a book-bird: a ball round its middle. */
+    _roundBody(kind, c, e) {
+        this._creaturePoint(c, e.a);
+        e.b.copy(e.a);
+        e.r = kind === 'a' ? this._animalBody(c).r : BODY.BIRD;
+        return e;
+    }
+
+    /**
+     * Which hand casts: a raised one pointing right at a creature (the spell hand when
+     * both do). A hand hanging along the body points at nothing — in the air it would
+     * point at whatever is below.
+     */
     pickSide(preferPlayers = false) {
+        const g = this.game, ch = g.character;
+        const pref = g.magicHand || g.lastMagicHand || 'right';
         let best = null;
-        for (const side of ['right', 'left']) {
+        for (const side of [pref, pref === 'right' ? 'left' : 'right']) {
+            if (ch.isArmRaised && !ch.isArmRaised(side)) continue;
             const t = this.findTarget(side);
             if (!t || (preferPlayers && t.kind !== 'p')) continue;
-            if (!best || t.score < best.t.score) best = { side, t };
+            // (the hand pointing more truly at its target)
+            if (!best || t.miss < best.t.miss - 0.005) best = { side, t };
         }
         return best;
     }
@@ -232,8 +419,7 @@ export class Duel {
     _handOf(by, side, outPos, outDir) {
         const g = this.game;
         if (by === this.me) {
-            g.castOrigin(side, outPos);
-            g.character.getHandDirection(side, outDir);
+            this._myRay(side, outPos, outDir);
             return true;
         }
         const r = g.remotes.get(by);
@@ -246,20 +432,22 @@ export class Duel {
 
     // =============================================================== cast
     /**
-     * Cast a duel spell from my hand.
+     * Cast a duel spell from my hand: it flies where the hand points.
      * @param {string} spell  key of DUEL_SPELLS
-     * @param {object} [aim] {side, t} from pickSide (else: straight ahead from the spell hand)
+     * @param {object} [aim] {side, t} from pickSide (else: from the spell hand, at whatever it points at)
      */
     cast(spell, aim = null, handSide = null) {
+        const side = aim ? aim.side : (handSide || this.game.magicHand || this.game.lastMagicHand || 'right');
+        const origin = new THREE.Vector3(), dir = new THREE.Vector3();
+        this._myRay(side, origin, dir);
+        // the body it may turn a little towards: the one pointed at — and where on it
+        // the line of the hand comes closest (the head, the legs…)
+        let tk = 'n', tid = null, ak = 0.5;
+        const t = aim ? aim.t : (() => { const f = pickBody(origin, dir, this._bodies(this.me)); return f ? { kind: f.body.kind, id: f.body.id } : null; })();
+        const body = t ? this._bodyOf(t.kind, t.id, this._tmpBody()) : null;
+        if (body) { tk = t.kind; tid = t.id; ak = rayToSegment(origin, dir, body.a, body.b).k; }
+        const b = this._addBolt({ id: `${this.me}:${nextId++}`, by: this.me, spell, side, tk, tid, ak, o: origin, d: dir });
         const g = this.game;
-        const side = aim ? aim.side : (handSide || g.magicHand || g.lastMagicHand || 'right');
-        const origin = g.castOrigin(side);
-        const dir = g.character.getHandDirection(side, new THREE.Vector3());
-        const b = this._addBolt({
-            id: `${this.me}:${nextId++}`, by: this.me, spell, side,
-            tk: aim ? aim.t.kind : 'n', tid: aim ? aim.t.id : null,
-            o: origin, d: dir,
-        });
         if (g.sync) g.sync.duelCast(b);
         if (g.sound) g.sound.playSapira?.();
         // the spell leaves the hand with a flash
@@ -272,7 +460,7 @@ export class Duel {
     /** A charge announced by another player. */
     remoteCast(m) {
         if (this.bolts.has(m.id)) return;
-        this._addBolt({ id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk, tid: m.tid, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
+        this._addBolt({ id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
     }
 
     _addBolt(o) {
@@ -280,6 +468,8 @@ export class Duel {
             ...o,
             front: o.o.clone(),
             dir: o.d.clone().normalize(),
+            d0: o.d.clone().normalize(), // the line of the hand it was cast along (it never turns far from it)
+            ak: o.ak ?? 0.5,
             traveled: 0,
             state: 'flying',
             age: 0,
@@ -287,6 +477,16 @@ export class Duel {
         };
         this.bolts.set(b.id, b);
         return b;
+    }
+
+    _tmpBody() {
+        return this._tb || (this._tb = { kind: 'n', id: null, a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 });
+    }
+
+    /** The point on its target a charge corrects its way towards (follows the body), or null. */
+    _aimPoint(b, out) {
+        const body = b.tk !== 'n' ? this._bodyOf(b.tk, b.tid, this._tmpBody()) : null;
+        return body ? out.copy(body.a).lerp(body.b, b.ak) : null;
     }
 
     // ============================================================= update
@@ -312,43 +512,60 @@ export class Duel {
         const origin = b._origin || (b._origin = new THREE.Vector3());
         const hdir = b._hdir || (b._hdir = new THREE.Vector3());
         if (!this._handOf(b.by, b.side, origin, hdir)) origin.copy(b.o);
-        const tp = b.tk !== 'n' ? this._targetPos(b, new THREE.Vector3()) : null;
-        if (b.tk !== 'n' && !tp) { this._end(b, 'fizzle'); return; }
-        // The charge homes in on its target (or flies straight)
-        if (tp) b.dir.copy(tp).sub(b.front).normalize();
+        if (b.state === 'flying' && !this._fly(b, dt)) return;
+        this._drawBolt(b.spell, origin, b.front, b.by);
+        if (b.state === 'arrived') this._arrive(b, dt);
+    }
+
+    /**
+     * One step of a flying charge: along the line of the hand, correcting its way a little
+     * towards its target (never round after it), until it touches a body (→ 'arrived'),
+     * the ground, or flies out of range. false: it is gone.
+     */
+    _fly(b, dt) {
+        const g = this.game;
+        if (b.tk !== 'n') {
+            const tp = this._aimPoint(b, _v3);
+            const want = tp ? _v2.subVectors(tp, b.front) : null;
+            // the target is gone, or the charge has flown past it: it just flies on straight
+            if (!want || want.dot(b.d0) <= 0) { b.tk = 'n'; b.tid = null; }
+            else bendToward(b.dir, b.d0, want.normalize(), AIM.TURN * dt);
+        }
         const step = (DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED) * dt;
         const from = _vFrom.copy(b.front);
         b.front.addScaledVector(b.dir, step);
-        this.game.books?.hitAt(b.front, 0.4);
-        if (this.game.authority && this.game.spiders?.boltAt(b.front, b.spell)) { this._end(b, 'fizzle'); return; }
         b.traveled += step;
-        this._drawBolt(b.spell, origin, b.front, b.by);
-        if (!tp) {
-            // a charge flying free hits the first creature it passes through
-            // (along the whole step: at a low FPS a charge moves a metre and more per frame)
-            let hit = null;
-            const n = Math.max(1, Math.ceil(step / 0.5));
-            for (let i = 1; i <= n && !hit; i++) hit = this._bodyAt(_v2.copy(from).lerp(b.front, i / n), b.by);
-            if (hit) { b.tk = hit.kind; b.tid = hit.id; return; }
-            const t = this.game.terrain;
-            if (b.traveled > DUEL.RANGE || (t && t.data.isSolidAt(b.front.x, b.front.y, b.front.z))) this._end(b, 'fizzle');
-            return;
+        // (book-birds are bodies like any other creature: touched below, not by a blast radius)
+        if (g.authority && g.spiders?.boltAt(b.front, b.spell)) { this._end(b, 'fizzle'); return false; }
+        // it hits the first body it really touches on its way (along the whole step: at a
+        // low FPS a charge moves a metre and more per frame) — its target or anybody else
+        const hit = firstTouched(from, b.front, this._bodies(b.by));
+        if (hit) {
+            b.front.lerpVectors(from, b.front, hit.s);
+            b.state = 'arrived';
+            b.tk = hit.body.kind;
+            b.tid = hit.body.id;
+            b.waitT = 0;
+            this._note({ ev: 'touch', id: b.id, kind: b.tk, tid: b.tid });
+            return true;
         }
-        if (b.front.distanceTo(tp) > DUEL.HIT_RADIUS) return;
-        // Arrived: who decides?
-        if (b.tk === 'p' && b.tid === this.me) this._arriveAtMe(b);
-        else if (b.tk === 'z' && this._referee()) this._arriveAtZombie(b);
-        else if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b') && this._referee()) this._arriveAtCreature(b);
-        else if (b.state === 'flying') { b.state = 'waiting'; b.waitT = 0; }
-        if (b.state === 'waiting') {
-            b.waitT += dt;
-            b.front.copy(tp);
-            if (b.waitT > 2) this._end(b, 'fizzle', false);
-        }
+        const t = g.terrain;
+        if (b.traveled > DUEL.RANGE || (t && t.data.isSolidAt(b.front.x, b.front.y, b.front.z))) { this._end(b, 'fizzle'); return false; }
+        return true;
+    }
+
+    /** The charge touched a body: who decides what happens? */
+    _arrive(b, dt) {
+        if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
+        if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
+        if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b') && this._referee()) { this._arriveAtCreature(b); return; }
+        // another computer decides (the wizard it touched, or the host): wait for its word
+        b.waitT += dt;
+        if (b.waitT > 2) this._end(b, 'fizzle', false);
     }
 
     _arriveAtMe(b) {
-        this._note({ ev: 'arrive', id: b.id, by: b.by });
+        if (!b.noted) { b.noted = true; this._note({ ev: 'arrive', id: b.id, by: b.by }); }
         const g = this.game;
         // Answered with a charge aimed back? Then the referee will start a duel — wait.
         for (const o of this.bolts.values()) if (o.by === this.me && o.tk === 'p' && o.tid === b.by && o.state === 'flying') return;
@@ -479,7 +696,7 @@ export class Duel {
                 if (b === a || b.state === 'clash' || b.tk !== 'p') continue;
                 if (a.tid !== b.by || b.tid !== a.by || a.id > b.id) continue;
                 // Charges aimed at each other: do their fronts meet?
-                        const L = this._casterDistance(a.by, b.by);
+                const L = this._casterDistance(a.by, b.by);
                 if (L == null) continue;
                 if (a.traveled + b.traveled < L - 0.6 && a.front.distanceTo(b.front) > 0.8) continue;
                 const p = Math.min(0.9, Math.max(0.1, a.traveled / Math.max(0.1, a.traveled + b.traveled)));
@@ -545,9 +762,9 @@ export class Duel {
     /** Is this wizard still holding the duel (hand on the opponent)? jerk = gave up sharply. */
     _contact(id, bolt, opponentId) {
         if (id === this.me) {
-            const hand = this.game.character.getHandWorldPosition(bolt.side, _v1);
-            const dir = this.game.character.getHandDirection(bolt.side, _v2);
-            const op = this._playerPos(opponentId, _v3);
+            // (own vectors: _playerPos writes into _v2 — the hand's direction must survive it)
+            const hand = _ch, dir = this._myRay(bolt.side, _ch, _cd);
+            const op = this._playerPos(opponentId, _co);
             const ok = op ? dir.angleTo(op.sub(hand).normalize()) < DUEL.CONTACT_ANGLE : false;
             return { ok, jerk: this._jerked(bolt.side) };
         }

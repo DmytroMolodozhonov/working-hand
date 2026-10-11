@@ -1979,9 +1979,10 @@ export class Game {
         // The head looks where we fly (counter the body tilt)
         const view = flight.active ? Math.max(-1.0, Math.min(0.35, out.pitch)) : 0;
         ch.head.rotation.x = this.smoothHead.pitch + out.tilt + view;
+        ch.flightView = view; // (a hand pointed at the screen points along this view: getPointingDirection)
 
         if (!flight.active) {
-            if (flight.state === 'idle') { ch.flying = false; ch.setFlightTilt(0); }
+            if (flight.state === 'idle') { ch.flying = false; ch.setFlightTilt(0); ch.flightView = 0; }
             return;
         }
 

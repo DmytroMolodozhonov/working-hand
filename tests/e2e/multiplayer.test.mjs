@@ -541,6 +541,26 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
         g._lastDuelCast = 0;
         return g._castDuel(spell, spell, true);
     }, spell);
+    // The guest answers: turns to the host, points the right hand right at him (a charge flies
+    // where the hand points — it is not steered round to a wizard the hand is not on) and casts
+    const guestAnswer = () => ev(guest.page, () => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const host = [...g.remotes.values()][0];
+        const target = host.position.clone().add(new T.Vector3(0, 0.6, 0));
+        for (let i = 0; i < 6; i++) {
+            ch.group.updateMatrixWorld(true);
+            const o = g.castOrigin('right', new T.Vector3());
+            const d = ch.getPointingDirection('right', new T.Vector3());
+            const want = target.clone().sub(o);
+            const err = Math.atan2(-want.x, -want.z) - Math.atan2(-d.x, -d.z);
+            ch.group.rotation.y = g.smoothBody = g.cameraBaseRotation = ch.group.rotation.y + Math.atan2(Math.sin(err), Math.cos(err));
+        }
+        ch.group.updateMatrixWorld(true);
+        const aim = g.duel.pickSide(true);
+        if (!aim) return null;
+        g.duel.cast('Stupefy', aim);
+        return aim.t.id;
+    });
     // In the test browser there is no camera: the guest "keeps the hand on the opponent" by decree
     // (only for this player's own hand — what it hears about the other player stays real)
     const setContact = (page, ok, jerk) => ev(page, ([ok, jerk]) => {
@@ -567,10 +587,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await ev(guest.page, () => { window.__zns.game.combat.fatigue = 3; window.__zns.game.combat.hp = 4; });
     await aim();
     await hostCast('Stupefy');
-    await ev(guest.page, (hostId) => {
-        const g = window.__zns.game;
-        g.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 25 } });
-    }, ids[0]);
+    assert.equal(await guestAnswer(), ids[0], 'the guest points at the host');
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 40000);
     await wf(guest.page, () => window.__zns.game.duel.clashes.length === 1, null, 20000);
     await wf(guest.page, () => window.__zns.game.combat.stunned, null, 90000);
@@ -582,7 +599,7 @@ test('duel magic: Остолбеней flies and stuns, charges meet and push, c
     await ev(guest.page, () => { window.__zns.game.combat.fatigue = 30; window.__zns.game.combat.hp = 20; });
     await aim();
     await hostCast('Stupefy');
-    await ev(guest.page, (hostId) => window.__zns.game.duel.cast('Stupefy', { side: 'right', t: { kind: 'p', id: hostId, dist: 25 } }), ids[0]);
+    assert.equal(await guestAnswer(), ids[0], 'the guest points at the host');
     await wf(host.page, () => window.__zns.game.duel.clashes.length === 1, null, 40000);
     // (the guest's hand off the opponent stops pushing — a quick, calm move away then a flick)
     await ev(guest.page, () => {
