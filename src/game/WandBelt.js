@@ -21,7 +21,7 @@ import { makeItemModel, disposeModel } from './ItemTypes.js';
 export const BELT_TOP = new THREE.Vector3(-0.2, 0.42, -0.5);
 /** Where its tip goes (into the trousers, against the left thigh). */
 export const BELT_TIP = new THREE.Vector3(-0.36, -0.75, -0.22);
-const TUCK_S = 0.35; // s the wand is held tucked in
+const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
@@ -33,8 +33,8 @@ const _inv = new THREE.Matrix4();
  */
 export function atBelt(local) {
     if (local.z > -0.3) return Infinity; // (beside or behind the body)
-    if (local.x < -0.55 || local.x > 0.4) return Infinity; // (at the side: a hanging arm, a hip)
-    if (local.y > 0.55 || local.y < -0.65) return Infinity; // (the waist, not the chest or the knees)
+    if (local.x < -0.62 || local.x > 0.5) return Infinity; // (at the side: a hanging arm, a hip)
+    if (local.y > 0.65 || local.y < -0.75) return Infinity; // (the waist, not the chest or the knees)
     return Math.hypot(local.x - BELT_TOP.x, local.y - 0.1);
 }
 
@@ -69,7 +69,7 @@ export class WandBelt {
             const h = items.held[side];
             if (h && h.item.kind === 'wand') {
                 // tucking it in: at the waistband, the tip down
-                const down = h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.55 : false;
+                const down = h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.2 : false; // (pointing down at all)
                 this._tuck[side] = near && down ? this._tuck[side] + dt : 0;
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
                 continue;
@@ -81,7 +81,7 @@ export class WandBelt {
             if (curl < 0.4) this._open[side] = now;
             const free = !h && !g.weapons?.hands?.[side]?.held;
             const rightFirst = side === 'left' && !items.held.right && !g.weapons?.hands?.right?.held; // (the right hand takes it when it can)
-            if (free && !rightFirst && this.beltWand() && this.lookingDown() && curl > 0.55 && now - this._open[side] < 1500) {
+            if (free && !rightFirst && this.beltWand() && this.lookingDown() && curl > 0.45 && now - this._open[side] < 2500) {
                 this._take(side);
                 return;
             }
@@ -93,7 +93,7 @@ export class WandBelt {
         const ch = this.game.character;
         if (!ch.getHeadQuaternion) return false;
         const f = _w.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion(_q));
-        return f.y < -0.3;
+        return f.y < -0.1; // (a slight look down is enough)
     }
 
     _putAway(side) {

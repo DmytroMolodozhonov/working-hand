@@ -442,7 +442,7 @@ test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked 
         g.inventory._render();
     });
     const look = (pitch) => page.evaluate((p) => { window.__zns.poseService.interpreter.lastHead.pitch = p; }, pitch); // (the head as the face network gives it)
-    const state = () => page.evaluate(() => { const g = window.__zns.game; return { l: g.items.held.left?.item.kind || null, r: g.items.held.right?.item.kind || null, sel: g.inventory.selected, wandSlot: g.inventory.slots.some((s) => s?.kind === 'wand'), belt: !!g.inventory.belt.model, cell: g.inventory.handCell?.textContent || '' }; });
+    const state = () => page.evaluate(() => { const g = window.__zns.game; return { l: g.items.held.left?.item.kind || null, r: g.items.held.right?.item.kind || null, sel: g.inventory.selected, wandSlot: g.inventory.slots.some((s) => s?.kind === 'wand'), belt: !!g.inventory.belt.model, cell: g.inventory.handCell?.textContent || '', look: g.inventory.belt.lookingDown(), curl: +g.character.getGripCurl('right').toFixed(2), hand: (() => { const ch = g.character, T = window.__zns.THREE; ch.group.updateMatrixWorld(true); return ch.getHandWorldPosition('right', new T.Vector3()).applyMatrix4(new T.Matrix4().copy(ch.group.matrixWorld).invert()).toArray().map((v) => +v.toFixed(2)); })(), fps: Math.round(g.stats?.frameMs ? 1000 / g.stats.frameMs : 0) }; });
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 60, 40); // 2.4 s just standing
     const hanging = await state();
     // the old wand pocket (the left one) does nothing now
@@ -456,6 +456,8 @@ test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked 
     // looking down at it: the open hand at the handle, the fingers close on it — drawn
     await look(-0.8);
     await feed(page, { arms: 'hang', belt: 'right', rightCurl: 0, leftCurl: 0 }, 10, 40);
+    await page.waitForFunction(() => window.__zns.game.inventory.belt.lookingDown(), null, { timeout: 30000 }); // (the view eases down)
+    await feed(page, { arms: 'hang', belt: 'right', rightCurl: 0, leftCurl: 0 }, 5, 40);
     await feed(page, { arms: 'hang', belt: 'right', rightCurl: 0.9, leftCurl: 0 }, 15, 40);
     const drawn = await state();
     await look(0);
