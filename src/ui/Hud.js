@@ -4,7 +4,67 @@
  */
 
 const MINIMAP_WINDOW = 128; // m of terrain drawn around the player
+const MINIMAP_W = 240, MINIMAP_H = 160; // the map's own units (drawn bigger by the size setting)
 import { BLOCK, BASE_COLORS } from '../world/Terrain.js';
+
+/**
+ * The minimap's size, % of 240 × 160 (settings → «Размер мини-карты»): the same picture,
+ * bigger and sharp. 120% by default.
+ */
+export function setMinimapSize(pct) {
+    if (pct != null) setMinimapSize.pct = pct;
+    // (never over the slots at the bottom in a small window: at most ~36% of its width, half its height)
+    const fit = Math.min((window.innerWidth || 1280) * 0.36 / MINIMAP_W, (window.innerHeight || 800) * 0.5 / MINIMAP_H);
+    const k = Math.max(0.6, Math.min(3, fit, (+setMinimapSize.pct || 120) / 100));
+    const box = document.getElementById('minimap-container'), cvs = document.getElementById('minimap');
+    if (!box || !cvs) return;
+    const w = Math.round(MINIMAP_W * k), h = Math.round(MINIMAP_H * k), dpr = Math.min(2, window.devicePixelRatio || 1);
+    box.style.width = w + 'px';
+    box.style.height = h + 'px';
+    cvs.width = Math.round(w * dpr);
+    cvs.height = Math.round(h * dpr);
+    document.documentElement.style.setProperty('--minimap-h', h + 'px');
+}
+
+if (typeof window !== 'undefined') window.addEventListener?.('resize', () => { if (setMinimapSize.pct) setMinimapSize(); });
+
+/** «640 м» / «1,2 км». */
+function distText(m) {
+    return m < 1000 ? `${Math.round(m)} м` : `${(m / 1000).toFixed(1).replace('.', ',')} км`;
+}
+
+/** A place's picture, centred at (0, 0), about `s` tall: a castle (towers, walls, a gate) or a wizards' tower. */
+function placeIcon(ctx, kind, s) {
+    const u = s / 20;
+    ctx.save();
+    ctx.scale(u, u);
+    ctx.lineWidth = 1.4;
+    ctx.lineJoin = 'round';
+    if (kind === 'tower') {
+        // a slim stone tower with a pointed violet roof and a gold star on top
+        ctx.fillStyle = '#cfc6e6'; ctx.strokeStyle = '#2a1f45';
+        ctx.beginPath(); ctx.rect(-3.5, -3, 7, 13); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#7b4fd0';
+        ctx.beginPath(); ctx.moveTo(-6, -2.5); ctx.lineTo(0, -12); ctx.lineTo(6, -2.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffd76a';
+        ctx.beginPath(); ctx.arc(0, -12.5, 1.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2a1f45';
+        ctx.fillRect(-1, 1, 2, 3); // (a window)
+    } else {
+        // a castle: two towers with merlons, a wall between them, a dark gate
+        ctx.fillStyle = '#e2dccd'; ctx.strokeStyle = '#3a3428';
+        ctx.beginPath();
+        ctx.moveTo(-10, 9); ctx.lineTo(-10, -7); ctx.lineTo(-8, -7); ctx.lineTo(-8, -9); ctx.lineTo(-6.5, -9); ctx.lineTo(-6.5, -7); ctx.lineTo(-5, -7); ctx.lineTo(-5, -9); ctx.lineTo(-3.5, -9);
+        ctx.lineTo(-3.5, -2); ctx.lineTo(-2, -2); ctx.lineTo(-2, -4); ctx.lineTo(-0.7, -4); ctx.lineTo(-0.7, -2); ctx.lineTo(0.7, -2); ctx.lineTo(0.7, -4); ctx.lineTo(2, -4); ctx.lineTo(2, -2); ctx.lineTo(3.5, -2);
+        ctx.lineTo(3.5, -9); ctx.lineTo(5, -9); ctx.lineTo(5, -7); ctx.lineTo(6.5, -7); ctx.lineTo(6.5, -9); ctx.lineTo(8, -9); ctx.lineTo(8, -7); ctx.lineTo(10, -7); ctx.lineTo(10, 9);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#3a3428';
+        ctx.beginPath(); ctx.moveTo(-2.5, 9); ctx.lineTo(-2.5, 4); ctx.arc(0, 4, 2.5, Math.PI, 0); ctx.lineTo(2.5, 9); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#d33f3f'; // (a flag)
+        ctx.beginPath(); ctx.moveTo(-6.75, -9); ctx.lineTo(-6.75, -14); ctx.lineTo(-3, -12.5); ctx.lineTo(-6.75, -11); ctx.fill();
+    }
+    ctx.restore();
+}
 
 export class Hud {
     constructor() {
@@ -285,7 +345,10 @@ export class Hud {
         const ctx = this.mmCtx;
         if (!ctx) return;
         const cvs = this.el.minimap;
-        const W = cvs.width, Hh = cvs.height;
+        // (drawn in the map's own 240 × 160 units; the canvas may be bigger — «Размер мини-карты»)
+        const zoom = cvs.width / MINIMAP_W;
+        ctx.setTransform(zoom, 0, 0, zoom, 0, 0);
+        const W = MINIMAP_W, Hh = MINIMAP_H;
         const hw = W / 2, hh = Hh / 2;
         const scale = 2.0;
         ctx.clearRect(0, 0, W, Hh);
@@ -328,31 +391,53 @@ export class Hud {
         }
         // Other players: a dot in their colour with the name; beyond the edge of the
         // map an arrow on the edge shows which way to look (with the distance)
-        ctx.font = 'bold 10px sans-serif';
+        ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
+        ctx.lineJoin = 'round'; // (an outlined letter has no spikes)
         const label = (text, x, y) => { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(text, x, y); ctx.fillText(text, x, y); };
-        // Castles: a little castle with the name; far ones — an arrow on the edge with the distance
-        const edgeArrow = (dx, dy, fill, stroke, text) => {
-            const a = Math.atan2(dy, dx);
-            const k = Math.min((hw - 9) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - 9) / Math.max(1e-6, Math.abs(Math.sin(a))));
-            ctx.save();
-            ctx.translate(Math.cos(a) * k, Math.sin(a) * k);
-            ctx.rotate(a);
-            ctx.fillStyle = fill; ctx.strokeStyle = stroke; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
-            ctx.restore();
-            const tx = Math.max(-hw + 36, Math.min(hw - 36, Math.cos(a) * (k - 16))), ty = Math.max(-hh + 10, Math.min(hh - 4, Math.sin(a) * (k - 16) + 3));
-            label(text, tx, ty);
+        // Castles and wizards' towers: their picture in a round badge — at the place when it is on
+        // the map; far ones on the edge, pointing the way, with the distance in big letters
+        const BADGE = 13;
+        const bigLabel = (text, x, y) => {
+            ctx.font = 'bold 18px sans-serif';
+            const w = ctx.measureText(text).width;
+            const tx = Math.max(-hw + w / 2 + 3, Math.min(hw - w / 2 - 3, x)), ty = Math.max(-hh + 17, Math.min(hh - 4, y));
+            ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+            ctx.strokeText(text, tx, ty); ctx.fillText(text, tx, ty);
+            ctx.font = 'bold 12px sans-serif';
+        };
+        const badge = (x, y, kind, a = null) => {
+            const ring = kind === 'tower' ? '#b48be0' : '#ffd76a';
+            if (a != null) {
+                // the pointer: which way the place is
+                ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+                ctx.fillStyle = ring; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.2;
+                ctx.beginPath(); ctx.moveTo(BADGE + 7, 0); ctx.lineTo(BADGE - 1, -6); ctx.lineTo(BADGE - 1, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+            }
+            ctx.fillStyle = 'rgba(18, 12, 40, 0.88)'; ctx.strokeStyle = ring; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, y, BADGE, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.save(); ctx.translate(x, y + 1); placeIcon(ctx, kind, 19); ctx.restore();
         };
         this.minimapCastles = [];
         for (const c of castles.slice(0, 3)) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
+            const kind = icon === '🧙' ? 'tower' : 'castle';
             this.minimapCastles.push(icon === '🏰' ? c.name : `${icon} ${c.name}`);
-            if (inside(cx, cz, 10)) {
-                // (the walls are drawn by the terrain picture already: just the name)
-                label(icon + ' ' + c.name.replace(/^(Замок|Крепость|Академия) /, ''), cx, Math.max(-hh + 12, cz - 10));
-            } else edgeArrow(cx, cz, icon === '🧙' ? '#b48be0' : '#c9c4b8', '#3b3b3b', `${icon} ${Math.round(Math.hypot(cx, cz) / scale)} м`);
+            if (inside(cx, cz, BADGE)) {
+                badge(cx, cz, kind);
+                label(c.name.replace(/^(Замок|Крепость|Академия) /, ''), cx, Math.max(-hh + 12, cz - BADGE - 4));
+            } else {
+                const a = Math.atan2(cz, cx);
+                const m = BADGE + 9;
+                const k = Math.min((hw - m) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - m) / Math.max(1e-6, Math.abs(Math.sin(a))));
+                const bx = Math.cos(a) * k, by = Math.sin(a) * k;
+                badge(bx, by, kind, a);
+                // the distance: next to the badge, towards the middle of the map
+                const up = by > 0 ? -BADGE - 6 : BADGE + 19;
+                bigLabel(distText(Math.hypot(cx, cz) / scale), bx - Math.cos(a) * 30, by + up);
+            }
         }
         // The server: a flag at its start point (an arrow on the edge when far)
         this.minimapServer = server ? server.name : null;
@@ -375,7 +460,7 @@ export class Hud {
                 ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
                 ctx.restore();
                 const tx = Math.max(-hw + 36, Math.min(hw - 36, Math.cos(a) * (k - 16))), ty = Math.max(-hh + 10, Math.min(hh - 4, Math.sin(a) * (k - 16) + 3));
-                label(`🏰 ${Math.round(Math.hypot(sx, sz) / scale)} м`, tx, ty);
+                bigLabel(`🚩 ${distText(Math.hypot(sx, sz) / scale)}`, tx, ty + 6);
             }
         }
         for (const o of others) {

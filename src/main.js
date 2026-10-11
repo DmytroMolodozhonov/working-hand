@@ -9,7 +9,7 @@ import { HandRecorder } from './game/HandRecorder.js';
 import { PoseService } from './input/PoseService.js';
 import { VoiceService } from './input/VoiceService.js';
 import { SoundManager } from './audio/SoundManager.js';
-import { Hud } from './ui/Hud.js';
+import { Hud, setMinimapSize } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
@@ -205,6 +205,15 @@ showHandsToggle?.addEventListener('change', (e) => {
     const preview = $('webcam-preview');
     if (preview) preview.style.display = e.target.checked ? 'block' : 'none';
 });
+
+// The minimap's size (settings → «Размер мини-карты»)
+const minimapSize = $('minimap-size');
+minimapSize?.addEventListener('input', (e) => {
+    setMinimapSize(e.target.value);
+    const v = $('minimap-size-val');
+    if (v) v.textContent = e.target.value + '%';
+});
+setMinimapSize(minimapSize?.value || 120);
 
 function readConfig() {
     return {
@@ -922,7 +931,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
-        'show-hands-toggle', 'drift-camera', 'creative-zombie-count'];
+        'show-hands-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
