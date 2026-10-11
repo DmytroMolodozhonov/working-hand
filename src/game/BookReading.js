@@ -76,6 +76,29 @@ export function drawTitlePage(side, spells) {
     });
 }
 
+/** The running book's one spread: its quickness, written down. */
+export function drawRunPage(side) {
+    return canvasPage((x) => {
+        x.textAlign = 'center';
+        if (side === 'left') {
+            x.fillStyle = '#5a1a1a'; x.font = 'bold 24px serif';
+            x.fillText('Бегущая', 128, 110); x.fillText('книга', 128, 140);
+            x.strokeStyle = '#d4af37'; x.lineWidth = 3;
+            // two little running legs
+            x.beginPath(); x.moveTo(110, 200); x.lineTo(96, 250); x.moveTo(146, 200); x.lineTo(166, 246); x.stroke();
+            x.fillStyle = '#7a6a4a'; x.font = 'italic 15px serif';
+            x.fillText('у неё одна страница', 128, 318);
+        } else {
+            x.fillStyle = '#5a1a1a'; x.font = 'bold 22px serif';
+            x.fillText('Быстрота', 128, 70);
+            x.fillStyle = '#3a2a1a'; x.font = '17px serif';
+            ['Кто прочтёт эту', 'страницу, получит', 'мою быстроту:', 'бег на 30% быстрее,', 'пока он жив.'].forEach((t, i) => x.fillText(t, 128, 130 + i * 30));
+            x.fillStyle = '#d4af37'; x.font = '30px serif';
+            x.fillText('✦', 128, 310);
+        }
+    });
+}
+
 export class BookReading {
     /** @param {(spell: string, side: 'left'|'right') => THREE.Texture} drawPage */
     constructor(game, books, drawPage) {
@@ -286,7 +309,9 @@ export class BookReading {
     _initPages(s) {
         const b = s.model.userData.book;
         const spells = s.item.spells || [];
-        s.tex = [{ left: drawTitlePage('left', spells), right: drawTitlePage('right', spells) }, ...spells.map((sp) => ({ left: this.drawPage(sp, 'left'), right: this.drawPage(sp, 'right') }))];
+        // (the running book: one spread only)
+        s.tex = s.item.runbook ? [{ left: drawRunPage('left'), right: drawRunPage('right') }]
+            : [{ left: drawTitlePage('left', spells), right: drawTitlePage('right', spells) }, ...spells.map((sp) => ({ left: this.drawPage(sp, 'left'), right: this.drawPage(sp, 'right') }))];
         s.matL = new THREE.MeshBasicMaterial({ map: s.tex[0].left });
         s.matR = new THREE.MeshBasicMaterial({ map: s.tex[0].right });
         s.paper = b.faceL.material;
@@ -385,6 +410,16 @@ export class BookReading {
         const facing = n.dot(_v3.subVectors(eye, s.pos).normalize());
         const reading = !s.sheet && s.phi > 2.0 && facing > 0.6;
         s.readT = reading ? s.readT + dt : 0;
+        // the running book: reading its page gives its quickness — then it is gone in golden sparks
+        if (s.item.runbook && s.readT > HOLD.LEARN_T && !s.item.used) {
+            s.item.used = true;
+            const g = this.game, side = s.owner, p = s.pos.clone();
+            g.runner?.bless?.();
+            for (let i = 0; i < 40; i++) g.fx?.spark(p, i % 2 ? 0xffd23f : 0xfff2a8, 0.12, _v4.set((Math.random() - 0.5) * 4, Math.random() * 4, (Math.random() - 0.5) * 4), 1);
+            g.items?.releaseHand(side);
+            this._end(true);
+            return;
+        }
         const learned = this.books.learned;
         if (spell && s.readT > HOLD.LEARN_T && !learned.has(spell)) {
             learned.add(spell);

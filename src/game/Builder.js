@@ -63,7 +63,7 @@ export class Builder {
     _hand() {
         const ch = this.game.character;
         const pref = this.game.magicHand || this.game.lastMagicHand || 'right';
-        const side = ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s));
+        const side = this.game.wandSide?.() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s))); // (a wand: its hand only)
         if (!side) return null;
         return { side, o: ch.getHandWorldPosition(side, new THREE.Vector3()), d: ch.getHandDirection(side, new THREE.Vector3()) };
     }

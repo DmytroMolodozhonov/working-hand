@@ -399,12 +399,15 @@ export class RunningBook {
     /** My hand got one. */
     caughtByMe(a, side = 'right') {
         const g = this.game;
-        if (this.bonus > 0) {
+        // (already has one in the hands or a slot, not read yet: the same as having its quickness)
+        const unread = ['left', 'right'].some((sd) => g.items?.held?.[sd]?.item?.runbook) || g.inventory?.slots?.some?.((it) => it?.runbook);
+        if (this.bonus > 0 || unread) {
             // only once: it wriggles out of the fingers and runs on
             if (performance.now() - this._toldT > 3000) { this._toldT = performance.now(); g.hud?.toast?.('📕 Вы уже получили быстроту от бегущей книги — вторая больше не даёт. Она вырвалась!', 3000); }
             if (this.auth) this._wriggle(a);
             return;
         }
+        this._side = side; // (the hand that caught it holds it)
         if (this.auth) { this._caught(a, g.localId); return; }
         const t = this._asked.get(a.id) ?? -1e9;
         if (performance.now() - t < 1500) return;
@@ -435,12 +438,30 @@ export class RunningBook {
         else g.sync?.net?.send({ t: 'rbgot', to: who, id: a.id }, true);
     }
 
-    /** +30% run speed (once). */
+    /**
+     * Caught: the book is in the hand that caught it (a real book: open it with both hands —
+     * it has one page; reading it gives its quickness, then it vanishes: bless()).
+     */
     grant() {
         const g = this.game;
         if (this.bonus > 0) return false;
+        const item = { kind: 'book', uid: 'rb' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), id: Math.floor(Math.random() * 5), spells: [], runbook: true };
+        const free = (sd) => sd && !g.items?.held[sd] && !g.weapons?.hands?.[sd]?.held;
+        const side = free(this._side) ? this._side : free('right') ? 'right' : free('left') ? 'left' : null;
+        if (side && g.items?.takeIntoHand?.(item, side)) {
+            g.hud?.toast?.('📕 Вы поймали бегущую книгу! Раскройте её двумя руками — на её единственной странице её быстрота', 4000);
+            return true;
+        }
+        if (g.inventory?.storeItem?.(item)) { g.hud?.toast?.('📕 Бегущая книга в кармане: достаньте и раскройте её', 4000); return true; }
+        return this.bless(); // (no room anywhere: its quickness at once)
+    }
+
+    /** The running book's page was read: +30% run speed (once). */
+    bless() {
+        const g = this.game;
+        if (this.bonus > 0) return false;
         g.bonus = { ...(g.bonus || {}), run: RUNNER.BONUS };
-        g.hud?.toast?.('👟 Вы поймали бегущую книгу! Она отдала вам свою быстроту: бег на 30% быстрее (пока вы живы)', 4000);
+        g.hud?.toast?.('👟 Бегущая книга отдала вам свою быстроту: бег на 30% быстрее (пока вы живы)', 4000);
         g.sound?.playWhoosh?.();
         this._apply();
         return true;

@@ -19,6 +19,7 @@ import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
+import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Accio } from './Accio.js';
@@ -282,6 +283,7 @@ export class Game {
         this.castleLife = new CastleLife(this); // the people of the castles
         this.ships = new Ships(this); // the ships of the sea castles: decks, sails, the wheel, crews, cannons
         this.onFlame.push((o, d, len, casterId) => this.ships.igniteAlong(o, d, len, casterId)); // («Инферно» sets sails and decks on fire)
+        this.onFlame.push((o, d, len, casterId) => this._flameBurnsPaper(o, d, len, casterId)); // (scrolls and books in it burn)
         this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
@@ -820,6 +822,11 @@ export class Game {
         return name;
     }
 
+    /** The hand holding a wand (null: none). While a wand is held, every spell is cast with that hand. */
+    wandSide() {
+        return this.items?.heldOf?.('wand')?.side || null;
+    }
+
     /** A spell of mine is going (or was just cast): the wand stays in the hand whatever the hand does. */
     spellBusy() {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
@@ -901,7 +908,7 @@ export class Game {
         const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : (name === 'Stupefy' || name === 'AvadaKedavra') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);
-            const side = aim ? aim.side : (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : ['right', 'left'].find((s) => this.character.isArmRaised(s)));
+            const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : (this.wandSide() || ['right', 'left'].find((s) => this.character.isArmRaised(s))));
             if (!side || !this.character.isArmRaised(side)) {
                 if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
                 return null;
@@ -965,7 +972,7 @@ export class Game {
         this._interimCast = isFinal ? null : { name, at: now };
         this.lastSpellCastTime = now;
         if (name === 'Flight') return name;
-        const side = this.magicHand || this.lastMagicHand || 'right';
+        const side = this.wandSide() || this.magicHand || this.lastMagicHand || 'right';
         const origin = this.castOrigin(side);
         const dir = this.character.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
@@ -1184,7 +1191,7 @@ export class Game {
         if (!isFinal && name === 'WaveAttack') return null; // (wait for a possible «Максима»)
         if (this._wave) return null;
         const ch = this.character;
-        const side = ['right', 'left'].find((s) => ch.isArmRaised(s)) || this.magicHand || 'right';
+        const side = (this.wandSide() || ['right', 'left'].find((s) => ch.isArmRaised(s))) || this.magicHand || 'right';
         const o = this.castOrigin(side);
         const d = ch.getHandDirection(side);
         // the hand must point at water nearby
@@ -1241,7 +1248,7 @@ export class Game {
         if (now - (this._lastWind || 0) < 900) return null;
         const ch = this.character;
         const pref = this.magicHand || this.lastMagicHand || 'right';
-        const side = ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s));
+        const side = this.wandSide() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s)));
         if (!side) { if (isFinal) this.hud.setVoice('🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
@@ -1519,7 +1526,7 @@ export class Game {
         let hint;
         // «Gather» at a carcass (meat) or a golden tree (apples)
         if (name === 'Gather') {
-            const side = ['right', 'left'].find((sd) => this.character.isArmRaised(sd)) || 'right';
+            const side = (this.wandSide() || ['right', 'left'].find((sd) => this.character.isArmRaised(sd))) || 'right';
             // things lying about (at a body): all of them into the slots (Death.js)
             const loot = this.death?.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
             if (loot && loot.startsWith('✨')) { this.hud.setVoice(loot, true); this._lastBuild = now; if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost); return 'Gather'; }
@@ -1625,7 +1632,7 @@ export class Game {
         if (this.doors.carried) { this.doors._putDown(); this._lastLevitate = now; return 'Levitation'; }
         const hint = this.levitation.cast();
         if (hint) {
-            const side = ['right', 'left'].find((sd) => this.character.isArmRaised(sd)) || 'right';
+            const side = (this.wandSide() || ['right', 'left'].find((sd) => this.character.isArmRaised(sd))) || 'right';
             if (this.doors.tryLift(side)) { this.combat.pay('Levitation'); this._lastLevitate = now; return 'Levitation'; }
             this.hud.setVoice(hint, true);
             return null;
@@ -1650,6 +1657,49 @@ export class Game {
             if (this.livingTrees?.burnAlong(o, d, len)) hit = true; // (fire is what kills a living tree)
         }
         for (const f of this.onFlame) { try { if (f(o, d, len, casterId)) hit = true; } catch (e) { console.warn('onFlame', e); } }
+        return hit;
+    }
+
+    /**
+     * «Инферно» reaches a scroll or a book — in my hands (every computer: its own player's hands) or
+     * lying in the world (the host): it burns. A scroll burnt by my own flame gives me its power.
+     */
+    _flameBurnsPaper(o, d, len, casterId) {
+        const items = this.items;
+        if (!items) return false;
+        const mine = casterId === this.localId || casterId === 'local';
+        const paper = (it) => it && (it.kind === 'scroll' || it.kind === 'book');
+        let hit = false;
+        const burnt = (p, it, mineToo) => {
+            hit = true;
+            for (let i = 0; i < 30; i++) this.fx.spark(p, i % 3 ? 0xff8a1a : 0xffe066, 0.12, _v2.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3), 0.9);
+            for (let i = 0; i < 10; i++) this.fx.spark(p, 0x3a3330, 0.1, _v2.set((Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5)), 1.4); // (ash)
+            if (it.kind === 'scroll' && mineToo) items.applyScroll(it);
+            else if (it.kind === 'book') this.hud.toast?.('📕🔥 Книга сгорела', 2000);
+            else this.hud.toast?.('📜🔥 Свиток сгорел', 2000);
+        };
+        for (const side of ['left', 'right']) {
+            const h = items.held[side];
+            if (!h || !paper(h.item) || !h.model) continue;
+            const p = h.model.getWorldPosition(_v1);
+            if (!inStream(o, d, len, p, 0.45)) continue;
+            const it = items.releaseHand(side);
+            if (it) burnt(p.clone(), it, mine);
+        }
+        if (this.authority) {
+            for (const L of [...items.loose.values()]) {
+                if (!paper(L.item) || L.lev || L.accio) continue;
+                const p = L.model.position;
+                if (!inStream(o, d, len, p, 0.5)) continue;
+                const at = p.clone();
+                const it = items.removeLoose(L.item.uid);
+                this.sync?.itemGone?.(L.item.uid, null, null);
+                if (!it) continue;
+                burnt(at, it, mine);
+                // (another player's flame burnt a scroll lying here: its power is theirs)
+                if (it.kind === 'scroll' && !mine) this.sync?.net?.send({ t: 'sburn', to: casterId, item: it }, true);
+            }
+        }
         return hit;
     }
 
@@ -2545,8 +2595,10 @@ export class Game {
         const tracked = this.currentPose && this.currentPose.hasPose;
         const res = tracked && (this.config.mode !== 'test' || this.testState === 'fpv') ? this._raisedHand() : null;
         if (res && !loading) {
-            this.magicHand = res.side;
-            this.lastMagicHand = res.side;
+            // a wand in a hand: the magic is always that hand's (the other hand never casts)
+            const side = this.wandSide() || res.side;
+            this.magicHand = side;
+            this.lastMagicHand = side;
             this.lastMagicTime = Date.now();
             const label = res.bothLevel ? 'ОБЕ' : res.side.toUpperCase();
             if (!this.isMagicActive) {

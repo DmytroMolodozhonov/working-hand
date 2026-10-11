@@ -839,6 +839,7 @@ export class NetSync {
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
             case 'vx': if (m.by !== this.me) g.vortex?.onNet(m); break;
+            case 'sburn': if (m.to === this.me && m.item) g.items?.applyScroll?.(m.item); break; // (my «Инферно» burnt a scroll lying at the host's)
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
             case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now()); g.duel.remoteCast(m); } break;
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;

@@ -74,6 +74,10 @@ test('running book: found running about, caught by a closing hand as it passes â
     };
     await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 10, 40);
     await pass();
+    // caught: a real book in the hand that caught it â€” not quick yet; its one page read: quick
+    const inHand = await page.evaluate(() => { const g = window.__zns.game; return { held: g.items.held.right?.item.runbook || false, bonus: g.bonus?.run || 0 }; });
+    assert.ok(inHand.held && !inHand.bonus, 'caught: the book is in the hand, its page not read yet ' + JSON.stringify(inHand));
+    await page.evaluate(() => { const g = window.__zns.game; g.runner.bless(); g.items.releaseHand('right'); });
     const caught = await page.evaluate(() => {
         const g = window.__zns.game;
         const ch = g.character;
@@ -82,7 +86,7 @@ test('running book: found running about, caught by a closing hand as it passes â
         ch.group.position.x = s.x; ch.group.position.z = s.z;
         return { left: g.runner.books().length, bonus: g.bonus?.run, mul: ch.runBonus, v, toast: document.getElementById('hud-toast')?.textContent || '' };
     });
-    assert.equal(caught.left, 0, 'the caught book gave its quickness and vanished');
+    assert.equal(caught.left, 0, 'the caught book is no longer running about');
     assert.equal(caught.bonus, 0.3);
     assert.ok(Math.abs(caught.v - 7.5 * 1.3) < 0.05, `run Ã—1.3 (${caught.v.toFixed(2)} m/s)`);
     assert.match(caught.toast, /30%/);

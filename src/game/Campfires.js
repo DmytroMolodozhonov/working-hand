@@ -220,7 +220,7 @@ export class Campfires {
         let side = null;
         if (force) side = 'right';
         else if (ch.isArmRaised(pref) || g.isMagicActive || Date.now() - (g.lastMagicTime || 0) < 1500) side = pref;
-        else side = ['right', 'left'].find((s) => ch.isArmRaised(s)) || null;
+        else side = g.wandSide?.() || ['right', 'left'].find((s) => ch.isArmRaised(s)) || null; // (a wand: its hand only)
         const say = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
         if (!side) return say('🔥 Поднимите руку, покажите на землю и скажите «Fire»');
         const tired = g.combat.check('Fire');

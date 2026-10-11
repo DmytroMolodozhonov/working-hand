@@ -115,7 +115,7 @@ export function streamStop(o, d, len, w = {}) {
 
 const WHITE = [0xfffbe6, 0xfff2b0, 0xffe680];
 const TONGUE = [0xffb030, 0xff8a1a, 0xff6400, 0xf04a00, 0xd42a00, 0xa81800];
-const SMOKE = [0x2a2522, 0x3a3330, 0x221d1b];
+const SMOKE = [0x6a625c, 0x5a524d, 0x7a726b]; // (grey: what burns smokes — not black blocks out of the flame itself)
 const STEAM = [0xe8eef2, 0xd5dde2, 0xffffff];
 const pick = (a) => a[(Math.random() * a.length) | 0];
 
@@ -171,12 +171,16 @@ export class InfernoLook {
                 d.x * sp + (right.x * ca + up.x * sa) * lat, d.y * sp + (right.y * ca + up.y * sa) * lat + 0.6, d.z * sp + (right.z * ca + up.z * sa) * lat,
                 pick(TONGUE), (0.22 + Math.random() * 0.22) * flick, life * (0.8 + Math.random() * 0.2), { shrink: -1.6, spin: 7 });
         }
-        // dark smoke rising from the far half of the stream
-        for (let i = this._n('smoke', 45, dt, 4); i > 0; i--) {
-            const s = len * (0.45 + Math.random() * 0.55);
-            smoke.spawn(o.x + d.x * s, o.y + d.y * s + 0.3, o.z + d.z * s,
-                d.x * 3 + (Math.random() - 0.5), 1.6 + Math.random() * 1.4, d.z * 3 + (Math.random() - 0.5),
-                pick(SMOKE), 0.35 + Math.random() * 0.3, 1.1 + Math.random() * 0.6, { shrink: -1.4, spin: 1.5 });
+        // smoke: only where the flame meets something and burns it (a wall, a shield…), rising
+        // softly from above the flame there — a fire smokes from what burns, not from its middle
+        if (end && end !== 'water') {
+            const R = flameRadius(len);
+            for (let i = this._n('smoke', 14, dt, 2); i > 0; i--) {
+                const s = len * (0.9 + Math.random() * 0.1);
+                smoke.spawn(o.x + d.x * s + (Math.random() - 0.5) * R, o.y + d.y * s + R + 0.3 + Math.random() * 0.3, o.z + d.z * s + (Math.random() - 0.5) * R,
+                    (Math.random() - 0.5) * 0.5, 1.0 + Math.random() * 0.8, (Math.random() - 0.5) * 0.5,
+                    pick(SMOKE), 0.25 + Math.random() * 0.2, 1.4 + Math.random() * 0.8, { shrink: -0.9, spin: 0.8 });
+            }
         }
         // embers: tiny bright bits flying off and falling
         for (let i = this._n('ember', 40, dt, 3); i > 0; i--) {

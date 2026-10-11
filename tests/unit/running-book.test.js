@@ -144,3 +144,15 @@ test('running book: runs from a person, dodges aside when a hand is near, calms 
     assert.ok(book.vel.x < -5 && book.stunT > 1, 'flies to the caster, dazed');
     void g;
 });
+
+test('running book: caught, it is a real book in the hand (one page); its quickness comes only when that page is read', () => {
+    const { g, rb, palm, curl } = world();
+    const held = {};
+    g.items = { held, takeIntoHand(item, side) { held[side] = { item }; return true; } };
+    palm.set(6, (BODY.y0 + BODY.h / 2) * RUNNER.SIZE, 0);
+    curl.right = 0; rb.update(0.016); curl.right = 0.9; rb.update(0.016);
+    assert.ok(held.right?.item.runbook && held.right.item.kind === 'book', 'the book is in the hand that caught it');
+    assert.ok(!g.bonus?.run, 'not quick yet: the page is not read');
+    rb.bless();
+    assert.equal(g.bonus.run, 0.3, 'read: its quickness');
+});

@@ -692,7 +692,7 @@ export class Ships {
     castSails(name, text, isFinal) {
         const g = this.game, ch = g.character;
         const pref = g.magicHand || g.lastMagicHand || 'right';
-        const side = ch.isArmRaised(pref) ? pref : ['right', 'left'].find((sd) => ch.isArmRaised(sd));
+        const side = g.wandSide?.() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((sd) => ch.isArmRaised(sd))); // (a wand: its hand only)
         const say = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
         if (!side) return say('⛵ Поднимите руку к парусам и скажите «Анфёрл»');
         const tired = g.combat.check(name);

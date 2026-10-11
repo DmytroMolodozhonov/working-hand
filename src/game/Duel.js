@@ -395,7 +395,8 @@ export class Duel {
         const g = this.game, ch = g.character;
         const pref = g.magicHand || g.lastMagicHand || 'right';
         let best = null;
-        for (const side of [pref, pref === 'right' ? 'left' : 'right']) {
+        const wand = g.wandSide?.(); // (a wand in a hand: only that hand casts)
+        for (const side of wand ? [wand] : [pref, pref === 'right' ? 'left' : 'right']) {
             if (ch.isArmRaised && !ch.isArmRaised(side)) continue;
             const t = this.findTarget(side);
             if (!t || (preferPlayers && t.kind !== 'p')) continue;
