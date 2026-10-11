@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 
 /** The reader's right in the view from `eye` to `at` (horizontal). */
@@ -31,12 +31,18 @@ export function viewRight(eye, at, out = new THREE.Vector3()) {
  * @param {THREE.Vector3} pL  the grip of the hand on the reader's left
  * @param {THREE.Vector3} pR  the grip of the hand on the reader's right
  * @param {THREE.Vector3} eye  where the reader looks from
- * @param {number} w  a half's width (spine → outer edge), world units
+ * @param {number} w  a half's width (its hinge → its outer edge), world units
+ * @param {object} [opts]
+ *   Y: which way the hands hold the spine (the edges lie along their fingers; unit, the
+ *      sign as before) — tilting the hands tilts the book; null / along the line between
+ *      the hands: upright to the eye.
+ *   gy: how high along the edges the hands hold them (the book's own y, world units: − lower).
+ *   t: how far each half's hinge is from the middle of the spine (world units).
  * @returns {{pos: THREE.Vector3, quat: THREE.Quaternion, phi: number, d: number}}
  *   pos: the spine (the book's origin); quat: X from the left hand to the right one,
  *   Z towards the reader; phi: how far it is open (0 closed … π flat).
  */
-export function frameFromHands(pL, pR, eye, w, out = {}) {
+export function frameFromHands(pL, pR, eye, w, out = {}, opts = {}) {
     const X = _a.subVectors(pR, pL);
     const d = X.length();
     const mid = _b.addVectors(pL, pR).multiplyScalar(0.5);
@@ -44,15 +50,81 @@ export function frameFromHands(pL, pR, eye, w, out = {}) {
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     n.normalize();
     if (d < 1e-4) X.copy(viewRight(eye, mid, X)); else X.divideScalar(d);
-    // Z: towards the reader, square to the line between the hands
+    // upright to the eye: Z towards the reader, square to the line between the hands
     const Z = n.addScaledVector(X, -n.dot(X));
     if (Z.lengthSq() < 1e-6) Z.set(0, 1, 0).cross(X);
     Z.normalize();
-    const Y = new THREE.Vector3().crossVectors(Z, X);
-    const phi = 2 * Math.asin(Math.min(1, d / (2 * w)));
+    const Y = (out.Y || (out.Y = new THREE.Vector3())).crossVectors(Z, X);
+    // the hands' own way: the spine along their fingers (square to the line between them);
+    // the less they say (fingers along that line), the more it is upright to the eye
+    if (opts.Y) {
+        const yh = _d.copy(opts.Y).addScaledVector(X, -opts.Y.dot(X));
+        const m = yh.length();
+        Y.multiplyScalar(Math.max(0, 0.5 - m)).add(yh);
+        Y.addScaledVector(X, -Y.dot(X));
+        if (Y.lengthSq() < 1e-8) Y.crossVectors(Z, X);
+        Y.normalize();
+        Z.crossVectors(X, Y);
+    }
+    const t = opts.t || 0, gy = opts.gy || 0;
+    const phi = openFor(d, w, t);
     out.phi = phi;
     out.d = d;
-    out.pos = (out.pos || new THREE.Vector3()).copy(mid).addScaledVector(Z, -w * Math.cos(phi / 2));
+    out.pos = (out.pos || new THREE.Vector3()).copy(mid).addScaledVector(Z, -w * Math.cos(phi / 2)).addScaledVector(Y, -gy);
+    out.quat = (out.quat || new THREE.Quaternion()).setFromRotationMatrix(_m.makeBasis(X, Y, Z));
+    return out;
+}
+
+/** The outer edge of a half (at height gy) in the book's own frame (world units, as frameFromHands). */
+export function edgeInBook(half, phi, w, gy = 0, t = 0, out = new THREE.Vector3()) {
+    const sx = half === 'left' ? -1 : 1;
+    return out.set(sx * (t + w * Math.sin(phi / 2)), gy, w * Math.cos(phi / 2));
+}
+
+/** A half's turn in the world: the book's turned about its spine (as BookModel.setBookAngle). */
+export function halfQuat(bookQuat, half, phi, out = new THREE.Quaternion()) {
+    const a = Math.PI / 2 - phi / 2;
+    return out.setFromAxisAngle(_d.set(0, 1, 0), half === 'left' ? a : -a).premultiply(bookQuat);
+}
+
+/**
+ * The book from one half held rigidly in a hand: that half's turn and where its outer
+ * edge is (at height gy); the other half is wherever φ puts it.
+ */
+export function bookFromHalf(edge, hq, half, phi, w, gy = 0, t = 0, out = {}) {
+    const a = Math.PI / 2 - phi / 2;
+    out.quat = (out.quat || new THREE.Quaternion()).setFromAxisAngle(_d.set(0, 1, 0), half === 'left' ? -a : a).premultiply(hq);
+    out.pos = (out.pos || new THREE.Vector3()).copy(edge).sub(edgeInBook(half, phi, w, gy, t, _c).applyQuaternion(out.quat));
+    out.phi = phi;
+    return out;
+}
+
+/** The book from one half held rigidly: that half's turn (hq) and where its hinge is (world). */
+export function bookFromHinge(hinge, hq, half, phi, t = 0, out = {}) {
+    const a = Math.PI / 2 - phi / 2;
+    out.quat = (out.quat || new THREE.Quaternion()).setFromAxisAngle(_d.set(0, 1, 0), half === 'left' ? -a : a).premultiply(hq);
+    out.pos = (out.pos || new THREE.Vector3()).copy(hinge).sub(_c.set(half === 'left' ? -t : t, 0, 0).applyQuaternion(out.quat));
+    out.phi = phi;
+    return out;
+}
+
+/** How far a book is open (φ) whose halves' outer edges are d apart (halves w wide, hinges t from the middle). */
+export function openFor(d, w, t = 0) {
+    return 2 * Math.asin(Math.max(0, Math.min(1, (d / 2 - t) / w)));
+}
+
+/**
+ * An open book lying on an open palm (palm up): the spine along the palm (Y: wrist →
+ * fingers), the pages away from the palm (F: where the palm looks), the back of the
+ * spine on the palm's face (`lift` from P).
+ */
+export function frameOnPalm(P, Yp, F, lift, out = {}) {
+    const Z = _a.copy(F).normalize();
+    const Y = _b.copy(Yp).addScaledVector(Z, -Yp.dot(Z));
+    if (Y.lengthSq() < 1e-8) Y.set(0, 0, 1).addScaledVector(Z, -Z.z);
+    Y.normalize();
+    const X = _c.crossVectors(Y, Z);
+    out.pos = (out.pos || new THREE.Vector3()).copy(P).addScaledVector(Z, lift);
     out.quat = (out.quat || new THREE.Quaternion()).setFromRotationMatrix(_m.makeBasis(X, Y, Z));
     return out;
 }

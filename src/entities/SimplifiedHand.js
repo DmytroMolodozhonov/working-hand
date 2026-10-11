@@ -101,6 +101,23 @@ export const PEN_TILT = [0.09, 0.52];
 /** The steady grip: between pointing and writing — the wand ~16° off the palm's line (30° pointed it down). */
 export const PEN_T_STEADY = 0.45;
 
+/**
+ * A book (or any flat thing) held by its edge, like in life: the edge deep in the web
+ * between the thumb and the index finger, the palm and the fingers flat on one side,
+ * the thumb on the other. The fingers don't take a fixed shape: each one closes from
+ * `open` towards `closed` only until it touches the thing (fitGrip) — it lies on it.
+ * The thumb, when it can't come round to the other side, lies back along the hand.
+ * Same joints as PEN_GRIP.
+ */
+export const BOOK_GRIP = {
+    open: { index: [0, 0, 0, 0], middle: [0, 0, 0, 0], ring: [0, 0, 0, 0.04], pinky: [0, 0, 0, 0.08], thumb: [0.24, -1.38, 1.57, 0, 0] },
+    closed: { index: [1.2, 1.2, 0.9, 0], middle: [1.2, 1.2, 0.9, 0], ring: [1.2, 1.2, 0.9, 0.04], pinky: [1.2, 1.2, 0.9, 0.08], thumb: [0.24, -1.38, 1.57, 1.5, 1.2] },
+    // where the thumb goes when it can't come round: back along the hand, across the palm, tucked behind the index
+    back: { thumb: [[0.09, 0.03, 0.34, 0.1, 0.1], [-0.21, 0.27, -0.9, 0.1, 0.1], [-2.85, 0.03, -3.05, 0.1, 0.1]] },
+};
+/** In the palm's frame (right hand; a left one is its mirror): where a held edge lies — x of the web, the palm's face. */
+export const BOOK_POINTS = { edgeX: -0.12, edgeY: 0.05, face: -0.075 };
+
 const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 
 export class SimplifiedHand {
@@ -531,6 +548,7 @@ export class SimplifiedHand {
         const thumbOut = cs.thumbSpread;
         let pose = this.gripOverride?.pose;
         if (pose === PEN_GRIP) pose = this._penBlend();
+        if (pose?.closed) pose = this._fittedPose(pose, this.gripOverride.fit);
         if (pose) {
             // the fingers settle into the grip the thing needs (a pen grip on a wand)
             const k = this.LERP_SPEED;
@@ -625,8 +643,89 @@ export class SimplifiedHand {
      * ('pen', 'shake' a handshake, 'power' a handle, 'ball' an apple…) or the joint angles themselves. null releases.
      */
     setGrip(curl, pose = null) {
+        if (curl != null && pose === 'book' && this.gripOverride?.pose === BOOK_GRIP) return; // (already round it: keep where the fingers lie)
         // (the pen grip is V4's; V3 holds a wand in the fist)
-        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: typeof pose === 'string' ? (pose === 'pen' && !this.fullPose ? null : GRIP_POSES[pose] ?? null) : pose };
+        this.gripOverride = curl == null ? null : { curl, thumb: Math.min(1, curl + 0.15), pose: typeof pose === 'string' ? (pose === 'book' ? BOOK_GRIP : pose === 'pen' && !this.fullPose ? null : GRIP_POSES[pose] ?? null) : pose };
+        if (this.gripOverride?.pose === BOOK_GRIP) this.gripOverride.fit = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+    }
+
+    /** A grip that closes on the thing (BOOK_GRIP): each finger as far as `fit` says (−1, −2…: out of the way). */
+    _fittedPose(pose, fit) {
+        const out = this._fitPose || (this._fitPose = { index: [0, 0, 0, 0], middle: [0, 0, 0, 0], ring: [0, 0, 0, 0], pinky: [0, 0, 0, 0], thumb: [0, 0, 0, 0, 0] });
+        for (const name of FINGERS) {
+            const t = fit?.[name] ?? 0, o = out[name];
+            const back = t < 0 && pose.back?.[name]?.[-t - 1];
+            if (back) { for (let i = 0; i < o.length; i++) o[i] = back[i]; continue; }
+            const a = pose.open[name], b = pose.closed[name], k = Math.max(0, Math.min(1, t));
+            for (let i = 0; i < o.length; i++) o[i] = a[i] + (b[i] - a[i]) * k;
+        }
+        return out;
+    }
+
+    /** Put one finger straight into the joint angles J (as animateModel does for a pose). */
+    _setFinger(name, J) {
+        const seg = this.fingerMeshes[name];
+        if (name === 'thumb') {
+            seg[0].pivot.rotation.set(J[0], J[1], J[2]);
+            seg[1].pivot.rotation.x = -J[3];
+            seg[2].pivot.rotation.x = -J[4];
+            return;
+        }
+        seg[0].pivot.rotation.z = -J[3];
+        for (let i = 0; i < seg.length; i++) seg[i].pivot.rotation.x = -J[i];
+    }
+
+    /** Is any part of this finger (its bones, `margin` thick) inside one of the boxes? */
+    _fingerIn(name, boxes, margin) {
+        const seg = this.fingerMeshes[name];
+        seg[0].pivot.updateMatrixWorld(true);
+        const p = _va;
+        for (const s of seg) {
+            const len = s.mesh.position.y * 2;
+            for (const k of [0.3, 0.65, 1]) {
+                s.pivot.localToWorld(p.set(0, len * k, 0));
+                for (const b of boxes) {
+                    const l = _vb.copy(p).applyMatrix4(b.inv), m = margin / (b.scale || 1);
+                    if (l.x > b.min.x - m && l.x < b.max.x + m && l.y > b.min.y - m && l.y < b.max.y + m && l.z > b.min.z - m && l.z < b.max.z + m) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Close the fingers of a BOOK_GRIP on the thing: each finger from open towards closed,
+     * stopping where it would first go into one of the boxes — it lies on the surface.
+     * boxes: [{inv: world → the box's own frame, min, max, scale: world units per its unit}].
+     * Returns the fit {finger: 0…1; −1, −2…: the thumb out of the way, as BOOK_GRIP.back} (also kept for the drawing).
+     */
+    fitGrip(boxes, margin = 0.035, steps = 20) {
+        const go = this.gripOverride;
+        if (!go?.pose?.closed || !this.group.visible) return null;
+        const P = go.pose, fit = go.fit || (go.fit = {});
+        this.group.updateMatrixWorld(true);
+        const J = [0, 0, 0, 0, 0];
+        const at = (name, t) => {
+            const a = P.open[name], b = P.closed[name];
+            for (let i = 0; i < a.length; i++) J[i] = a[i] + (b[i] - a[i]) * t;
+            this._setFinger(name, J);
+            return this._fingerIn(name, boxes, margin);
+        };
+        for (const name of FINGERS) {
+            const seg = this.fingerMeshes[name];
+            const saved = seg.map((s) => [s.pivot.rotation.x, s.pivot.rotation.y, s.pivot.rotation.z]);
+            let t = 0;
+            if (at(name, 0)) {
+                const backs = P.back?.[name] || [];
+                for (let i = 0; i < backs.length; i++) { this._setFinger(name, backs[i]); if (!this._fingerIn(name, boxes, margin)) { t = -1 - i; break; } }
+            } else {
+                for (let i = 1; i <= steps; i++) { if (at(name, i / steps)) break; t = i / steps; }
+            }
+            seg.forEach((s, i) => s.pivot.rotation.set(saved[i][0], saved[i][1], saved[i][2]));
+            seg[0].pivot.updateMatrixWorld(true);
+            fit[name] = t;
+        }
+        return fit;
     }
 
     // ------------------------------------------------------------- networking

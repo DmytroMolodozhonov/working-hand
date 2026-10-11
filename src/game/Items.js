@@ -233,6 +233,8 @@ export class ItemSystem {
      */
     _gripHold(side, h, dt) {
         const g = this.game;
+        // (the book: held by its edge, the fingers on its covers — BookReading)
+        if (h.item.kind === 'book' && g.books?.reading?.holdClosed(side, h, dt)) return;
         const f = g.weapons.palmFrame(side, this._pf || (this._pf = {}));
         // The wand, V3 and V4 hands alike: in the fist, the arm's continuation (the author:
         // «V3's wand is very steady and good» — the pen grip of V4 was not; it is kept in

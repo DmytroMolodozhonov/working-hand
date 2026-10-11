@@ -40,16 +40,17 @@ test('book: taken by the cover, opened by the hands, a page turned by a fingerti
         const C = ch.group.position.clone().addScaledVector(fwd, 1.4).setY(ch.group.position.y + 1.0);
         const H = { left: { G: m.position.clone(), curl: 0, tip: null, up: true }, right: { G: m.position.clone(), curl: 0.9, tip: null, up: true } };
         R.input = (s) => H[s];
-        // 1) the left hand comes to the book and closes on its cover: both hands hold it
-        H.left.G.copy(m.position); H.left.curl = 0.9;
+        // 1) the left hand comes to the covers' edge (the fore-edge) and closes on it: both hands hold it
+        m.updateMatrixWorld(true);
+        H.left.G.copy(m.localToWorld(new T.Vector3(0, -0.1, 0.42))); H.left.curl = 0.9;
         await frames(12);
         const two = { mode: R.s?.mode, holdL: R.s?.hold.left, holdR: R.s?.hold.right, busyL: R.handBusy('left') };
         // 2) hands apart (1.3 m): open at 2·asin(0.65 / w)
         H.left.G.copy(C).addScaledVector(side, -0.65); H.right.G.copy(C).addScaledVector(side, 0.65);
         await frames(20);
-        const w = R.w;
-        const edge = (half) => new T.Vector3((half === 'left' ? -1 : 1) * w * Math.sin(R.s.phi / 2), 0, w * Math.cos(R.s.phi / 2)).applyQuaternion(m.quaternion).add(m.position);
-        const open1 = { phi: R.s.phi, want: 2 * Math.asin(0.65 / w), eL: edge('left').distanceTo(H.left.G), eR: edge('right').distanceTo(H.right.G) };
+        const w = R.w, t = R.t, gy = R.s.gy;
+        const edge = (half) => new T.Vector3((half === 'left' ? -1 : 1) * (t + w * Math.sin(R.s.phi / 2)), gy, w * Math.cos(R.s.phi / 2)).applyQuaternion(m.quaternion).add(m.position);
+        const open1 = { phi: R.s.phi, want: 2 * Math.asin((0.65 - t) / w), eL: edge('left').distanceTo(H.left.G), eR: edge('right').distanceTo(H.right.G), gy };
         // wider: more open
         H.left.G.copy(C).addScaledVector(side, -0.78); H.right.G.copy(C).addScaledVector(side, 0.78);
         await frames(20);
@@ -102,6 +103,7 @@ test('book: taken by the cover, opened by the hands, a page turned by a fingerti
     assert.ok(r.two.busyL, 'the hand on the cover holds nothing else');
     assert.ok(Math.abs(r.open1.phi - r.open1.want) < 0.08, 'as open as the hands are apart ' + JSON.stringify(r.open1));
     assert.ok(r.open1.eL < 0.05 && r.open1.eR < 0.05, 'the edges are in the hands ' + JSON.stringify(r.open1));
+    assert.ok(r.open1.gy < -0.05, 'held below the middle of the edges ' + JSON.stringify(r.open1));
     assert.ok(r.open2.phi > r.open1.phi + 0.2, 'hands wider: more open');
     assert.ok(Math.abs(r.open2.scale - 1.6) < 1e-6, 'it does not grow by magic');
     assert.ok(r.facing > 0.6, 'the pages look at the reader ' + r.facing);
@@ -116,47 +118,143 @@ test('book: taken by the cover, opened by the hands, a page turned by a fingerti
     await page.close();
 });
 
-test('book: with the camera hands — the left fist closes on it, the hands apart open it, the right hand opens and lets go', async () => {
+/** Hand points inside the book (the halves' boards and pages, or the closed book), per holding hand. */
+const MEASURE = () => {
+    const g = window.__zns.game, T = window.__zns.THREE, R = g.books.reading;
+    const hb = g.items.heldOf('book');
+    if (!hb) return { none: true, loose: [...g.items.loose.values()].some((L) => L.item.kind === 'book') };
+    const m = hb.model, b = m.userData.book;
+    const W = 0.42, H = 0.6, Tt = 0.06, Bb = 0.025;
+    m.updateMatrixWorld(true);
+    const res = { mode: R.s?.mode || 'fist', phi: b.phi || 0, support: !!R.s?.support, spine: new T.Vector3(0, 1, 0).applyQuaternion(m.quaternion).toArray(), held: hb.side };
+    const busy = R.s ? Object.values(R.s.hold).filter(Boolean) : [hb.side];
+    for (const side of busy) {
+        const hand = g.character.getActiveHands()[side];
+        hand.group.updateMatrixWorld(true);
+        let n = 0;
+        for (const segs of Object.values(hand.fingerMeshes)) for (const sg of segs) for (const y of [0.05, 0.1, 0.14]) {
+            const p = sg.pivot.localToWorld(new T.Vector3(0, y, 0));
+            for (const [half, sx] of [[b.L, -1], [b.R, 1]]) {
+                const l = half.worldToLocal(p.clone()), x = sx * l.x;
+                // (deeper than 1 cm: a touch is not "in")
+                if (x > 0.01 && x < W - 0.01 && Math.abs(l.y) < H / 2 - 0.01 && l.z > -Bb + 0.006 && l.z < Tt - 0.006) n++;
+            }
+        }
+        const palm = hand.palm.getWorldPosition(new T.Vector3());
+        for (const [half, sx] of [[b.L, -1], [b.R, 1]]) {
+            const l = half.worldToLocal(palm.clone()), x = sx * l.x;
+            if (x > 0 && x < W && Math.abs(l.y) < H / 2 && l.z > -Bb && l.z < Tt) n += 100;
+        }
+        res[side] = n;
+    }
+    return res;
+};
+
+test('book: with the camera hands — held by its edge, fingers on the covers never in them, opened by the hands apart, tilted by the wrists, dropped only by an opened stretched arm', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
-    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0, wristOffset: [-0.07, 0] }, 10, 40);
+    const pose = (o) => ({ arms: 'forward', palmsIn: true, ...o });
+    await feed(page, pose({ rightCurl: 0.9, leftCurl: 0, wristOffset: [-0.1, 0] }), 10, 40);
     await page.evaluate(() => window.__zns.game.items._gotItem({ kind: 'book', uid: 'bk2', id: 4243, spells: ['Gather'] }, 'right'));
-    // hands together in front, the left one closes on the book
-    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9, wristOffset: [-0.07, 0] }, 20, 40);
-    const two = await page.evaluate(() => { const R = window.__zns.game.books.reading; return { mode: R.s?.mode, phi: R.s?.phi }; });
+    await feed(page, pose({ rightCurl: 0.9, leftCurl: 0, wristOffset: [-0.1, 0] }), 20, 40);
+    const fist = await page.evaluate(MEASURE);
+    // the left hand closes on the covers' edge
+    await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [-0.1, 0] }), 20, 40);
+    const two = await page.evaluate(MEASURE);
     // apart
-    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.02, 0] }, 20, 40);
-    const apart = await page.evaluate(() => { const R = window.__zns.game.books.reading; return { mode: R.s?.mode, phi: R.s?.phi }; });
-    // the right hand opens
-    await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0.9, wristOffset: [0.02, 0] }, 20, 40);
+    await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.02, 0] }), 20, 40);
+    const apart = await page.evaluate(MEASURE);
+    // the wrists bent (the fingers towards the camera): the book tilts with them
+    await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.02, 0], leftTilt: 0.6, rightTilt: 0.6 }), 20, 40);
+    const tilted = await page.evaluate(MEASURE);
+    // much wider than the book: it lies flat between the hands, nothing lets go
+    await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.08, 0] }), 20, 40);
+    const wide = await page.evaluate(MEASURE);
+    // the right hand opens: it lets go, the book stays open in the left one (rigidly)
+    await feed(page, pose({ rightCurl: 0, leftCurl: 0.9, wristOffset: [0.02, 0] }), 20, 40);
     const one = await page.evaluate(() => { const g = window.__zns.game, R = g.books.reading; return { mode: R.s?.mode, left: g.items.held.left?.item.kind, right: !!g.items.held.right }; });
-    // a finger pushed into the pages comes back out of them
+    const oneIn = await page.evaluate(MEASURE);
+    // a finger pushed into the pages comes back out of them (at most a little at a time)
     const push = await page.evaluate(() => {
         const g = window.__zns.game, T = window.__zns.THREE, R = g.books.reading, s = R.s;
         if (!s) return null;
         const hand = g.character.getActiveHands().right;
         const book = s.model.userData.book;
-        // move the hand so that its index tip is 0.1 deep in the middle of the right page
         hand.group.updateMatrixWorld(true);
         const tip = R._tip(hand, 'right').clone();
         book.R.updateWorldMatrix(true, false);
         const target = book.R.localToWorld(new T.Vector3(0.25, 0, 0.0));
-        const off = target.clone().sub(tip);
-        hand.group.parent.getWorldQuaternion(new T.Quaternion());
         const inv = hand.group.parent.getWorldQuaternion(new T.Quaternion()).invert();
-        hand.group.position.add(off.applyQuaternion(inv));
+        hand.group.position.add(target.clone().sub(tip).applyQuaternion(inv));
         hand.group.updateMatrixWorld(true);
         const depth = (p) => book.R.worldToLocal(p.clone()).z - 0.062;
         const before = depth(R._tip(hand, 'right'));
+        const at = hand.group.position.clone();
         R._pushOut(s, 'right', { hand });
+        const moved = hand.group.position.distanceTo(at);
         const after = depth(R._tip(hand, 'right'));
-        return { before, after };
+        return { before, after, moved };
     });
-    assert.equal(two.mode, 'two', 'the left fist took the cover ' + JSON.stringify(two));
-    assert.ok(apart.phi > (two.phi || 0) + 0.2, 'hands apart: it opened ' + JSON.stringify({ two, apart }));
+    // the left (holding) hand opens with the arm stretched: only now the book falls
+    const drop = [];
+    for (let i = 0; i < 6; i++) {
+        await feed(page, pose({ rightCurl: 0, leftCurl: 0, wristOffset: [0.02, 0] }), 4, 40);
+        drop.push(await page.evaluate(MEASURE));
+    }
+    const angle = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+    assert.equal(fist.right, 0, 'the closed book in the fist: no finger in it ' + JSON.stringify(fist));
+    assert.equal(two.mode, 'two', 'the left hand took the covers\' edge ' + JSON.stringify(two));
+    assert.ok(apart.phi > two.phi + 0.5, 'hands apart: it opened ' + JSON.stringify({ two, apart }));
+    assert.ok(apart.left === 0 && apart.right === 0, 'held open: no finger in the pages ' + JSON.stringify(apart));
+    assert.ok(Math.abs(apart.spine[1]) > 0.9, 'upright, not a tray ' + JSON.stringify(apart));
+    assert.ok(angle(apart.spine, tilted.spine) > 10 * Math.PI / 180, 'the wrists tilted it ' + JSON.stringify({ apart: apart.spine, tilted: tilted.spine }));
+    assert.ok(tilted.left === 0 && tilted.right === 0, 'tilted: no finger in it ' + JSON.stringify(tilted));
+    assert.ok(wide.mode === 'two' && wide.phi > 3.0, 'pulled wide: still in both hands, flat ' + JSON.stringify(wide));
     assert.ok(one.mode === 'one' && one.left === 'book' && !one.right, 'the right hand let go ' + JSON.stringify(one));
-    assert.ok(push && push.before < -0.02 && push.after >= -0.005, 'the finger is not inside the pages ' + JSON.stringify(push));
+    assert.equal(oneIn.left, 0, 'in one hand: no finger in it ' + JSON.stringify(oneIn));
+    assert.ok(push && push.before < -0.02 && push.after > push.before && push.moved <= 0.15 + 1e-6, 'the finger is pushed back out of the pages, never torn off the arm ' + JSON.stringify(push));
+    assert.ok(drop.some((d) => d.none && d.loose), 'an opened stretched arm dropped it ' + JSON.stringify(drop));
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('book: in one hand, the hand opens palm up — the book lies on the palm, it is not dropped', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await feed(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0 }, 10, 40);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, R = g.books.reading;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        g.items._gotItem({ kind: 'book', uid: 'bk3', id: 4244, spells: ['Gather'] }, 'right');
+        await frames(3);
+        const m = g.items.held.right.model;
+        m.updateMatrixWorld(true);
+        const H = { left: { G: m.localToWorld(new T.Vector3(0, -0.1, 0.42)), curl: 0.9, tip: null, up: true }, right: { G: m.position.clone(), curl: 0.9, tip: null, up: true } };
+        R.input = (s) => H[s];
+        await frames(12);
+        const C = H.right.G.clone();
+        H.left.G.copy(C).add(new T.Vector3(-1.2, 0, 0));
+        await frames(15);
+        // the left hand lets go: open in the right one
+        H.left.curl = 0;
+        await frames(15);
+        const one = { mode: R.s?.mode, half: R.s?.half };
+        // the right hand opens, its palm up (the arm stretched — still not a drop: the palm is under it)
+        H.right.curl = 0; H.right.palmUp = true; H.right.ext = true;
+        await frames(25);
+        const lying = { support: !!R.s?.support, held: g.items.held.right?.item.kind, n: new T.Vector3(0, 0, 1).applyQuaternion(m.quaternion).y };
+        // it closes on it again: held where it lies
+        H.right.curl = 0.9;
+        await frames(15);
+        const again = { support: !!R.s?.support, mode: R.s?.mode };
+        R.input = null;
+        return { one, lying, again };
+    });
+    assert.equal(r.one.mode, 'one', JSON.stringify(r));
+    assert.ok(r.lying.support && r.lying.held === 'book', 'lies on the palm, still in that hand ' + JSON.stringify(r));
+    assert.ok(r.again.mode === 'one' && !r.again.support, 'the fingers closed on it again ' + JSON.stringify(r));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

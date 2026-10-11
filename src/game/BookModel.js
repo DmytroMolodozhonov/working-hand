@@ -39,9 +39,12 @@ export function makeSpellBookModel(color = COVERS[0]) {
         return { pv, face };
     };
     const L = half(-1), R = half(1);
-    // the fold of the pages over the spine (seen only when open)
-    const gutter = new THREE.Mesh(new THREE.PlaneGeometry(2 * T + 0.03, H - 0.04), new THREE.MeshLambertMaterial({ color: 0xe2d6b4 }));
-    gutter.position.z = T - 0.004;
+    // the fold of the pages down into the spine: a V from the inner edge of one page to the other
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(18), 3));
+    gg.setIndex([0, 1, 2, 2, 1, 3, 2, 3, 4, 4, 3, 5]);
+    const gutter = new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ color: 0xe2d6b4, side: THREE.DoubleSide }));
+    gutter.frustumCulled = false;
     gutter.visible = false;
     g.add(gutter);
     g.userData.book = { L: L.pv, R: R.pv, faceL: L.face, faceR: R.face, gutter, paper, open: 0 };
@@ -64,7 +67,22 @@ export function setBookAngle(model, phi) {
     const a = Math.PI / 2 - phi / 2; // each half's turn from lying flat
     b.L.rotation.y = a;
     b.R.rotation.y = -a;
-    b.gutter.visible = phi > 2.7;
+    b.gutter.visible = phi > 0.3;
+    if (b.gutter.visible) fitGutter(b.gutter, a);
+}
+
+/** The gutter's V between the inner edges of the two page faces (each half turned by ±a about its hinge). */
+function fitGutter(gutter, a) {
+    const { H, T } = BOOK;
+    const p = gutter.geometry.attributes.position;
+    const h = (H - 0.04) / 2, x0 = 0.01, z0 = T + 0.002, c = Math.cos(a), s = Math.sin(a);
+    // inner edge of a face: hinge (±T, 0) + its turn of (±x0, z0)
+    const ex = T + x0 * c - z0 * s, ez = x0 * s + z0 * c;
+    const v = [[-ex, ez], [0, 0.004], [ex, ez]];
+    v.forEach(([x, z], i) => { p.setXYZ(i * 2, x, -h, z); p.setXYZ(i * 2 + 1, x, h, z); });
+    p.needsUpdate = true;
+    gutter.geometry.computeVertexNormals();
+    gutter.geometry.computeBoundingSphere();
 }
 
 /**
