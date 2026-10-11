@@ -73,6 +73,7 @@ import { HandHold } from './HandHold.js';
 import { Mana } from './Mana.js';
 import { BodyImpact } from './BodyImpact.js';
 import { Knockdown } from './Knockdown.js';
+import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
 import { BodyStrikes } from './BodyStrikes.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
@@ -261,6 +262,7 @@ export class Game {
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
         this.impact = new BodyImpact(this);
         this.knock = new Knockdown(this);
+        this.up = new UpSpell(this); // «Up»: get up from the ground / leap out of the water
         this.creatureImpact = new CreatureImpact(this);
         this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
         this._headBase = { yaw: 0, pitch: 0 };
@@ -869,6 +871,8 @@ export class Game {
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
         // both hands cut off: no spell (the stump still stops the blood with «Rescue»)
         if (this.character.handLost?.('left') && this.character.handLost?.('right') && name !== 'Rescue' && name !== 'Stand') { if (isFinal) this.hud.setVoice('🩸 Без рук колдовать нельзя', true); return null; }
+        // «Up»: a raised hand, lying (get up) or in the water (leap out)
+        if (name === 'Up') return this.up.cast(isFinal);
         // lying on the ground: look, aim, shield and cast — but no flying off or stamping the ground
         if (this.knock.down && /^(Flight|Earthquake|Breakthrough)/.test(name)) { if (isFinal) this.hud.setVoice('🧍 Сначала встаньте', true); return null; }
         // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
@@ -1849,6 +1853,7 @@ export class Game {
         ch.verticalVelocity = 0;
         this.knockback.set(0, 0, 0);
         this.knock.reset();
+        this.up?.reset();
         this.impact.reset();
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.inventory?.ensureStarterWand();
@@ -2219,6 +2224,7 @@ export class Game {
             ch.head.rotation.z = J.roll;
         }
         this.knock.update(dt); // (before ch.update: knockedDown / fallDir this frame)
+        this.up.update(dt); // («Up» out of the water: the arc's sideways part)
         if (this.config.mode === 'test' && this.testState === 'setup') ch.setRunning(false);
 
         if (flying) this._updateFlight(dt, pose);

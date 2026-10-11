@@ -68,6 +68,13 @@ export class Knockdown {
         return true;
     }
 
+    /** «Up» (UpSpell.js): back on the feet now, lying or still falling. */
+    standNow() {
+        if (this.state !== 'falling' && this.state !== 'down') return false;
+        this.state = 'rising'; this.t = 0; this.game.character.knockedDown = false; this._told = false;
+        return true;
+    }
+
     /** Reeling: a few steps back (or aside), the body leaning, the arms flailing. */
     stagger({ dir, v }) {
         if (this.down) return;

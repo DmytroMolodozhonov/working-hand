@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 import { thunderPush } from '../game/Impact.js';
+import { isUpWord } from '../game/UpSpell.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -34,6 +35,8 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Up» («Ап»): a short word — only the whole phrase (UpSpell.js)
+    if (isUpWord(s)) return 'Up';
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
     if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';

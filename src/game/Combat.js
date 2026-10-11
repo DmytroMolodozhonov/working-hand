@@ -57,6 +57,7 @@ export const SPELL_COST = {
     Ice: 10,
     Sands: 8,
     Flight: 10,
+    Up: 7, // get up / leap out of the water
     Waterball: 5,
     Maxima: 4,
     WaterForming: 5,

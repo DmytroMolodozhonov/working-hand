@@ -89,7 +89,7 @@ export class Swimming {
 
         // on a surfboard: the board holds you up (SurfBoards places the body)
         if (g.boards?.mounted) { this.swimming = false; this.underwater = false; this.air = Math.min(AIR_MAX, this.air + dt * 5); this._renderHud(); return; }
-        this.swimming = !!w && w.depth >= SWIM_DEPTH && p.y - FEET < w.surface;
+        this.swimming = !!w && w.depth >= SWIM_DEPTH && p.y - FEET < w.surface && !g.up?.rising; // («Up»: thrown up out of it)
         if (this.swimming) {
             // floating: the head out of the water; sinking: down to the bottom
             const floatY = w.surface - EYES + 0.55;
