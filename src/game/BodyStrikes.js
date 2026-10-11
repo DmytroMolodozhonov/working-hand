@@ -161,7 +161,7 @@ export class BodyStrikes {
             else this.vel[side].set(0, 0, 0);
             const p0 = this.has[side] ? this.prev[side].clone() : p1.clone();
             this.prev[side].copy(p1); this.has[side] = true; this.contact[side] = null;
-            if (off || g.weapons?.hands?.[side]?.held || g.books?.reading || g.handHold?.busy?.(side)) continue; // (a blade: Weapons.checkHits)
+            if (off || g.weapons?.hands?.[side]?.held || g.books?.reading?.handBusy?.(side) || g.books?.readingSide === side || g.handHold?.busy?.(side)) continue; // (a blade: Weapons.checkHits)
             const curl = ch.getGripCurl(side);
             const shape = curl >= IMPACT.FIST_CURL ? 'fist' : curl <= IMPACT.PALM_CURL ? 'palm' : 'half';
             if (shape !== 'fist' && g.items?.held?.[side]) continue; // (a wand / food in the fist can still punch)

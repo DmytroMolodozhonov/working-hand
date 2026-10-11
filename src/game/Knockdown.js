@@ -38,7 +38,12 @@ export class Knockdown {
         this.squatT = 0; this.bowT = 0; this.squatted = false; this.noPoseT = 0; this.staggerT = 0;
         this._seenLanding = performance.now();
         const ch = this.game.character;
-        if (ch) { ch.knockedDown = false; ch.stepping = 0; ch.staggerLean = 0; }
+        if (ch) {
+            ch.knockedDown = false; ch.stepping = 0; ch.staggerLean = 0; ch.staggerRoll = 0;
+            // (respawn / a fresh start: upright at once, not slowly getting up)
+            if (ch._pitchOwned) { ch._fallPitch = 0; ch._pitchOwned = false; if (ch.group) ch.group.rotation.x = 0; }
+            if (ch._fallRoll) { ch._fallRoll = 0; if (ch.group) ch.group.rotation.z = 0; }
+        }
     }
 
     get down() { return this.state === 'falling' || this.state === 'down' || this.state === 'rising'; }

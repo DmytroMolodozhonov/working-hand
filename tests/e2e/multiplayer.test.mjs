@@ -112,7 +112,8 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
         g.character.group.position.set(z.group.position.x - 2.5, 1.5, z.group.position.z);
         g.currentPose = { ...(g.currentPose || {}), hasPose: true, headRotation: { yaw: 0, pitch: 0 } };
         const S = g.strikes;
-        const st = { x: -1.6 };
+        const st = { x: -3 };
+        S.has.left = S.has.right = false; // (the fist's path starts where it is put)
         window.__punch = { orig: S.update, knuckles: S._knuckles, curl: g.character.getGripCurl };
         g.character.getGripCurl = () => 0.95;
         S._knuckles = (side, out) => {
@@ -120,9 +121,9 @@ test('host + 2 guests: lobby, shared world, zombies, hits, explosions, weapons, 
             const head = z.head.getWorldPosition(new THREE.Vector3());
             return out.copy(head).add(new THREE.Vector3(st.x, 0, 0));
         };
-        S.update = (dt) => { st.x = Math.min(0.2, st.x + 8 * dt); window.__punch.orig.call(S, dt); };
+        S.update = (dt) => { st.x = Math.min(0.3, st.x + 10 * dt); window.__punch.orig.call(S, dt); };
     }, zid2);
-    await wf(host.page, (id) => window.__zns.game.zombieById.get(id).health < 5, zid2, 20000);
+    await wf(host.page, (id) => window.__zns.game.zombieById.get(id).health < 5, zid2, 60000);
     await ev(guest.page, () => {
         const g = window.__zns.game, P = window.__punch;
         g.strikes.update = P.orig; g.strikes._knuckles = P.knuckles; g.character.getGripCurl = P.curl;

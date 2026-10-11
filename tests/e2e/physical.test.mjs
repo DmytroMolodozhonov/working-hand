@@ -26,7 +26,12 @@ test.after(async () => {
 
 const wf = (page, fn, arg, timeout = 30000) => page.waitForFunction(fn, arg, { timeout, polling: 100 });
 const ev = (page, fn, arg) => page.evaluate(fn, arg);
-const squatUp = async (page) => { await feed(page, { arms: 'down', noseY: 0.62 }, 12, 40); await feed(page, { arms: 'down', noseY: 0.25 }, 12, 40); };
+/** (headless frames are slow: wait in game time) lying long enough, then a squat held, then straight up */
+const squatUp = async (page) => {
+    await wf(page, () => { const k = window.__zns.game.knock; return k.state === 'down' && k.t >= k.minDown; }, null, 60000);
+    for (let i = 0; i < 80 && !(await ev(page, () => window.__zns.game.knock.squatted)); i++) await feed(page, { arms: 'down', noseY: 0.62 }, 2, 40);
+    for (let i = 0; i < 80 && (await ev(page, () => window.__zns.game.knock.state === 'down')); i++) await feed(page, { arms: 'down', noseY: 0.25 }, 2, 40);
+};
 
 /** Drive one of `page`'s hands with a fist along a path to a point (the real BodyStrikes code decides). */
 const fistInto = (page, targetExpr, from, speed = 8) => ev(page, ([targetExpr, from, speed]) => {
@@ -36,6 +41,7 @@ const fistInto = (page, targetExpr, from, speed = 8) => ev(page, ([targetExpr, f
     const len = Math.hypot(...from);
     window.__fist = window.__fist || { orig: S.update, knuckles: S._knuckles, curl: g.character.getGripCurl };
     g.character.getGripCurl = () => 0.95;
+    S.has.left = S.has.right = false; // (the path starts where the stub puts the fist, not where the arm stood)
     S._knuckles = (side, out) => {
         if (side !== 'right') return out.set(0, -80, 0);
         const t = target(g, T);
@@ -59,14 +65,13 @@ test('falls and creatures: a high fall knocks me over (up by a squat); spells an
 
     // 1) dropped from 9 m: off the feet; up only after lying 1.5 s and a squat
     await ev(page, () => { const g = window.__zns.game; g.knock.reset(); g.character.group.position.y += 9; });
-    await wf(page, () => window.__zns.game.knock.state === 'down', null, 5000);
+    await wf(page, () => window.__zns.game.knock.state === 'down', null, 60000);
     assert.ok(await ev(page, () => window.__zns.game.character.group.rotation.x > 1 || Math.abs(window.__zns.game.character.group.rotation.z) > 1 || window.__zns.game.knock.state === 'down'));
-    await new Promise((r) => setTimeout(r, 1700));
     await squatUp(page);
-    await wf(page, () => window.__zns.game.knock.state === 'up', null, 5000);
+    await wf(page, () => window.__zns.game.knock.state === 'up', null, 60000);
     // a small drop: stays on the feet
-    await ev(page, () => { window.__zns.game.character.group.position.y += 2.5; });
-    await new Promise((r) => setTimeout(r, 1500));
+    await ev(page, () => { window.__zns.game.character.group.position.y += 2.5; window.__f0 = window.__zns.game.frameCount; });
+    await wf(page, () => window.__zns.game.frameCount > window.__f0 + 30, null, 60000);
     assert.equal(await ev(page, () => window.__zns.game.knock.state), 'up');
 
     // 2) Earthquake under a zombie and a pig: both fall, lie, then get up by themselves
@@ -87,11 +92,11 @@ test('falls and creatures: a high fall knocks me over (up by a squat); spells an
         const o = ch.group.position.clone().setY(g.collision.groundY(ch.group.position.x, ch.group.position.z));
         g.spells.cast('EarthquakeMaxima', o, d, 'right', g.localId);
     });
-    await wf(page, (id) => ['falling', 'down'].includes(window.__zns.game.creatureImpact.stateOf(window.__zns.game.zombieById.get(id))), ids.z, 5000);
-    await wf(page, (id) => ['falling', 'down'].includes(window.__zns.game.creatureImpact.stateOf(window.__zns.game.animals.byId.get(id))), ids.pig, 5000);
-    await wf(page, (id) => Math.abs(window.__zns.game.zombieById.get(id).group.userData.impPivot?.rotation.x || 0) > 1.3, ids.z, 3000);
+    await wf(page, (id) => ['falling', 'down'].includes(window.__zns.game.creatureImpact.stateOf(window.__zns.game.zombieById.get(id))), ids.z, 60000);
+    await wf(page, (id) => ['falling', 'down'].includes(window.__zns.game.creatureImpact.stateOf(window.__zns.game.animals.byId.get(id))), ids.pig, 60000);
+    await wf(page, (id) => Math.abs(window.__zns.game.zombieById.get(id).group.userData.impPivot?.rotation.x || 0) > 1.3, ids.z, 60000);
     assert.equal(await ev(page, () => window.__zns.game.knock.state), 'up', 'my own quake does not throw me');
-    await wf(page, (ids) => { const g = window.__zns.game; return g.creatureImpact.stateOf(g.zombieById.get(ids.z)) === 'up' && g.creatureImpact.stateOf(g.animals.byId.get(ids.pig)) === 'up'; }, ids, 12000);
+    await wf(page, (ids) => { const g = window.__zns.game; return g.creatureImpact.stateOf(g.zombieById.get(ids.z)) === 'up' && g.creatureImpact.stateOf(g.animals.byId.get(ids.pig)) === 'up'; }, ids, 90000);
 
     // 3) a real fist into the zombie's face: it is hurt and its head snaps
     await ev(page, (id) => {
@@ -101,8 +106,8 @@ test('falls and creatures: a high fall knocks me over (up by a squat); spells an
         const tick = () => { if (!window.__zj_on) return; window.__zj = Math.max(window.__zj, Math.abs(z.head.rotation.x) + Math.abs(z.head.rotation.y) + Math.abs(z.head.rotation.z)); requestAnimationFrame(tick); };
         window.__zj_on = true; tick();
     }, ids.z);
-    await fistInto(page, `g.zombieById.get(${JSON.stringify(ids.z)}).head.getWorldPosition(new T.Vector3())`, [-1.6, 0, 0]);
-    await wf(page, (id) => window.__zns.game.zombieById.get(id).health < window.__zh, ids.z, 5000);
+    await fistInto(page, `g.zombieById.get(${JSON.stringify(ids.z)}).head.getWorldPosition(new T.Vector3())`, [-3, 0, 0], 10);
+    await wf(page, (id) => window.__zns.game.zombieById.get(id).health < window.__zh, ids.z, 60000);
     await fistOff(page);
     const jolt = await ev(page, () => { window.__zj_on = false; return window.__zj; });
     assert.ok(jolt > 0.08, `the zombie's head snapped (${jolt})`);
@@ -114,7 +119,7 @@ test('falls and creatures: a high fall knocks me over (up by a squat); spells an
         g.knock.reset();
         g.explode(new T.Vector3(p.x + 2, p.y - 1.5, p.z), 3.6, g.localId, 1);
     });
-    await wf(page, () => window.__zns.game.knock.down, null, 3000);
+    await wf(page, () => window.__zns.game.knock.down, null, 60000);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
@@ -167,11 +172,20 @@ test('players: a punch in the face snaps the head back and hurts; a shove throws
         const tick = () => { if (!window.__vj_on) return; window.__vj = Math.max(window.__vj, Math.abs(g.impact.jolt.pitch)); requestAnimationFrame(tick); };
         tick();
     });
-    const dirToV = await ev(A.page, () => { const g = window.__zns.game, y = g.character.group.rotation.y; return [Math.sin(y) * 1.6, 0, Math.cos(y) * 1.6]; });
-    await fistInto(A.page, '[...g.remotes.values()][0].character.head.getWorldPosition(new T.Vector3())', dirToV, 8);
-    await wf(V.page, () => window.__zns.game.combat.hp === 19, null, 10000);
+    const dirToV = await ev(A.page, () => { const g = window.__zns.game, y = g.character.group.rotation.y; return [Math.sin(y) * 3, 0, Math.cos(y) * 3]; });
+    // (V's arms hang at its sides — not a guard before its face — the whole time)
+    await ev(V.page, () => { const ch = window.__zns.game.character; ch.updateArmsLookAt = () => ch.setIdlePose(); });
+    await feed(V.page, { arms: 'down' }, 20, 40);
+    const hang = feed(V.page, { arms: 'down' }, 60, 60);
+    await fistInto(A.page, '[...g.remotes.values()][0].character.head.localToWorld(new T.Vector3(0, 0.35, 0))', dirToV, 10);
+    await wf(V.page, () => window.__zns.game.combat.hp === 19, null, 60000).catch(async (e) => {
+        console.log('A log', JSON.stringify(await ev(A.page, () => ({ log: window.__zns.game.strikes.log, c: window.__zns.game.strikes.contact, en: window.__zns.game.combat.enabled }))));
+        console.log('V', JSON.stringify(await ev(V.page, () => ({ hp: window.__zns.game.combat.hp, log: window.__zns.game.impact.log, mode: window.__zns.game.config.mode }))));
+        throw e;
+    });
     await fistOff(A.page);
-    await new Promise((r) => setTimeout(r, 600));
+    await hang;
+    await ev(V.page, () => { window.__f1 = window.__zns.game.frameCount; }); await wf(V.page, () => window.__zns.game.frameCount > window.__f1 + 15, null, 60000);
     const vj = await ev(V.page, () => { window.__vj_on = false; return window.__vj; });
     assert.ok(vj > 0.08, `V's head snapped back (${vj})`);
     assert.equal(await ev(V.page, () => window.__zns.game.knock.down), false, 'a punch alone does not throw a body');
@@ -183,14 +197,13 @@ test('players: a punch in the face snaps the head back and hurts; a shove throws
         const g = window.__zns.game, y = g.character.group.rotation.y;
         g.sync.playerPush(to, { k: 'shove', n: 2, pt: 'body', i: [-Math.sin(y) * 14, 0, -Math.cos(y) * 14], s: 'right' });
     }, vid);
-    await wf(V.page, () => window.__zns.game.knock.down, null, 10000);
+    await wf(V.page, () => window.__zns.game.knock.down, null, 60000);
     assert.equal(await ev(V.page, () => window.__zns.game.knock.dir), 'back');
     assert.equal(await ev(V.page, () => window.__zns.game.combat.hp), 19, 'a push never hurts');
-    await wf(A.page, () => { const r = [...window.__zns.game.remotes.values()][0]; return r.character.knockedDown && r.character.group.rotation.x > 1.0 && !r.character.flying; }, null, 10000);
-    await new Promise((r) => setTimeout(r, 1700));
+    await wf(A.page, () => { const r = [...window.__zns.game.remotes.values()][0]; return r.character.knockedDown && r.character.group.rotation.x > 1.0 && !r.character.flying; }, null, 60000);
     await squatUp(V.page);
-    await wf(V.page, () => window.__zns.game.knock.state === 'up', null, 6000);
-    await wf(A.page, () => ![...window.__zns.game.remotes.values()][0].character.knockedDown, null, 10000);
+    await wf(V.page, () => window.__zns.game.knock.state === 'up', null, 60000);
+    await wf(A.page, () => ![...window.__zns.game.remotes.values()][0].character.knockedDown, null, 60000);
 
     // 3) Earthquake runs under V: down (not stunned: the hands are free), −3
     await place();
@@ -200,7 +213,7 @@ test('players: a punch in the face snaps the head back and hurts; a shove throws
         const d = new T.Vector3(-Math.sin(y), 0, -Math.cos(y));
         g.spells.cast('Earthquake', o, d, 'right', g.localId); g.sync.spell('Earthquake', o, d, 'right');
     });
-    await wf(V.page, () => window.__zns.game.knock.down, null, 10000);
+    await wf(V.page, () => window.__zns.game.knock.down, null, 60000);
     assert.equal(await ev(V.page, () => window.__zns.game.combat.stunned), false);
     assert.equal(await ev(V.page, () => window.__zns.game.combat.hp), 16);
     assert.equal(await ev(V.page, () => window.__zns.game.startFlight(true)), false, 'no flying off while lying');
