@@ -1293,15 +1293,35 @@ function pickStyle(rng) {
  * Finds and remembers castles; answers "is this column inside castle land"
  * (for the flat ground) and "which parts touch this chunk".
  */
+/**
+ * The creative test ground's sea castle (generation 3): in the castle cell (0, −1), its back to
+ * the sea at −z, its village starting ~60 m from the pedestals. Deterministic for the seed — the
+ * terrain asks it first to lay the test sea's shore along its quay. null: it can't fit its cell.
+ */
+export function testSeaCastleSpot(seed) {
+    const rng = createRng((seed * 7919 + 424242) >>> 0);
+    const s = pickStyle(rng);
+    const ships = portShips(s, rng);
+    const P = portLayout(s, ships);
+    const vr = s.villageR + 8;
+    const rect = { u0: -vr, u1: Math.max(vr, P.u1 + 8), v0: -vr, v1: P.vShore + P.len + 12 };
+    const zone = Math.max(-rect.u0, rect.u1, -rect.v0, rect.v1);
+    const gx = 0, gz = -1, rot = 2, pad = BLEND + 10; // (rot 2: x = X − u, z = Z − v — the sea to −z)
+    const X = gx * CASTLE_CELL + pad + 24 + rect.u1, Z = (gz + 1) * CASTLE_CELL - pad - 24 + rect.v0;
+    if (X - rect.u0 > (gx + 1) * CASTLE_CELL - pad || Z - rect.v1 < gz * CASTLE_CELL + pad) return null;
+    return { rng, s, ships, P, rect, zone, rot, X, Z, shore: { x: X, z: Z - P.vShore } };
+}
+
 export class CastleIndex {
     /**
      * @param {number} seed
      * @param {(ix:number, iz:number) => number} rawHeight the wild height field (with .water)
      */
-    constructor(seed, rawHeight, seas = null) {
+    constructor(seed, rawHeight, seas = null, test = false) {
         this.seed = seed;
         this.raw = rawHeight;
         this.seas = seas; // SeaIndex (generation-2 worlds): sea castles with a port
+        this.test = test; // the creative test ground: a castle close by (cell 0, −1)
         this.cells = new Map();
         this._lastCell = null;
     }
@@ -1318,6 +1338,7 @@ export class CastleIndex {
     }
 
     _makeCastle(gx, gz) {
+        if (this.test && gx === 0 && gz === -1) return (this.seas?.test && this._makeTestSeaCastle(gx, gz)) || this._makeTestCastle(gx, gz);
         if (hash01(gx * 5 + 1, gz * 3 + 7, this.seed + 900) > 0.92) return null;
         const rng = createRng((this.seed * 7919 + gx * 104729 + gz * 1299709) >>> 0);
         const s = pickStyle(rng);
@@ -1360,6 +1381,26 @@ export class CastleIndex {
             return this._buildCastle(gx, gz, X, Z, F, s, rng, zone);
         }
         return null;
+    }
+
+    /**
+     * The creative test ground's castle: as close to the pedestals as its cell allows (its
+     * land starts ~50 m out, past the test river) — a castle, its village and people to try things on.
+     */
+    _makeTestCastle(gx, gz) {
+        const rng = createRng((this.seed * 7919 + 424242) >>> 0);
+        const s = pickStyle(rng);
+        const zone = s.villageR + 8;
+        const m = zone + BLEND + 10;
+        const off = Math.min(m + 40, CASTLE_CELL / 2); // (its land always inside its own cell)
+        return this._buildCastle(gx, gz, gx * CASTLE_CELL + off, (gz + 1) * CASTLE_CELL - off, 0, s, rng, zone);
+    }
+
+    /** The creative test ground's sea castle (its port, its people), on the test sea's shore. */
+    _makeTestSeaCastle(gx, gz) {
+        const t = testSeaCastleSpot(this.seed);
+        if (!t) return null;
+        return this._buildCastle(gx, gz, t.X, t.Z, 2, t.s, t.rng, t.zone, { rot: t.rot, sea: this.seas.test.id, vShore: t.P.vShore, port: t.P, ships: t.ships, zone: t.zone, rect: t.rect });
     }
 
     /** A castle on a sea shore: its back in the sea, a port with piers for 1–3 ships. */

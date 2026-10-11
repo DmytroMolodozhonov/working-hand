@@ -90,7 +90,7 @@ test('sandy beaches: low sand at the shore, no trees on it', () => {
 });
 
 test('old worlds are exactly the same (generation 1), and far land of new worlds too', () => {
-    assert.equal(WORLD_GEN, 2);
+    assert.equal(WORLD_GEN, 3); // (3: the creative test ground — the seas stay as in 2)
     const old = new TerrainData();
     old.generate({ seed: 12345, mountains: true });
     assert.equal(old.bedrockTop, OLD_BEDROCK);

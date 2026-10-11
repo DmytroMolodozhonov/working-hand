@@ -46,7 +46,7 @@ test('the sea: deep water far out, a sandy beach, a moving surface, swimming ris
             sea: d.isSeaColumn(Math.round(p.x), Math.round(p.z)),
         };
     });
-    assert.equal(info.gen, 2, 'a new world is generation 2');
+    assert.ok(info.gen >= 2, 'a new world has seas (generation 2 or newer): ' + info.gen);
     assert.ok(info.top <= -12, `deep: floor at layer ${info.top}`);
     assert.equal(info.beach, info.SAND, 'sand on the beach');
     assert.ok(info.sea);

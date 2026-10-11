@@ -23,7 +23,7 @@
 import * as THREE from 'three';
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
 import { applyVoxelDetail } from './VoxelShading.js';
-import { CastleIndex } from './Castles.js';
+import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
@@ -161,9 +161,16 @@ export const OLD_BEDROCK = -9;
 /**
  * World generation version. 1: the original worlds (no seas, bedrock at −9).
  * 2: seas (deep basins far from spawn), sea castles with ports, bedrock at −17.
+ * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 2;
+export const WORLD_GEN = 3;
+// 3: a creative world has a test ground — a river right past the pedestals and a castle close by.
+
+/** The creative test ground's river (generation 3): it winds east–west just past the pedestals. */
+export const TEST_RIVER = { Z: -34, HALF: 3.5, WIND: 4 };
+/** …and a round hill to the left of the pedestals with a cave in it (its mouth towards them). */
+export const TEST_CAVE = { X: -62, Z: 6, R: 36, H: 20, r: 8 };
 // (56 = room for the wizards' tower with its pointed roof; mountains stay as they always were,
 // capped at MOUNTAIN_TOP, so old worlds and saves are unchanged)
 export const MAX_LAYER = 56;
@@ -186,7 +193,7 @@ export function chunkKey(cx, cz) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains, seas = null) {
+export function createHeightField(seed, mountains, seas = null, test = false) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -199,6 +206,17 @@ export function createHeightField(seed, mountains, seas = null) {
     const rivers = createNoise2D(seed ^ 0x3c6ef372);
     const fn = (ix, iz) => {
         fn.water = 0; fn.sea = false; fn.beach = false;
+        // the creative test ground's river: water just past the pedestals, a valley through the hills
+        let rcap = Infinity;
+        if (test) {
+            const dz = Math.abs(iz - (TEST_RIVER.Z + TEST_RIVER.WIND * Math.sin(ix / 23)));
+            if (dz < TEST_RIVER.HALF) {
+                const depth = dz < TEST_RIVER.HALF * 0.55 ? 2 : 1;
+                fn.water = depth;
+                return -depth;
+            }
+            if (dz < TEST_RIVER.HALF + 10) rcap = Math.floor((dz - TEST_RIVER.HALF) * 0.8);
+        }
         const dist = Math.sqrt(ix * ix + iz * iz);
         const near = smoothstep(38, 70, dist); // flat play area around spawn
         if (near <= 0) return 0;
@@ -230,6 +248,7 @@ export function createHeightField(seed, mountains, seas = null) {
         }
 
         // Rivers and lakes (never in the original play area)
+        h = Math.min(h, rcap);
         const wet = smoothstep(95, 135, dist);
         if (wet <= 0) return h;
         // River: a winding band where the river noise crosses zero; it cuts a
@@ -260,7 +279,17 @@ export function createHeightField(seed, mountains, seas = null) {
         return h;
     };
     fn.water = 0; fn.sea = false; fn.beach = false;
-    return fn;
+    if (!test) return fn;
+    // the test ground's hill (with its cave, see TerrainData.caveOf)
+    const hill = (ix, iz) => {
+        let h = fn(ix, iz);
+        hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach;
+        const d = Math.hypot(ix - TEST_CAVE.X, iz - TEST_CAVE.Z);
+        if (d < TEST_CAVE.R && !fn.water) h = Math.max(h, Math.round(TEST_CAVE.H * (1 - (d / TEST_CAVE.R) ** 2)));
+        return h;
+    };
+    hill.water = 0; hill.sea = false; hill.beach = false;
+    return hill;
 }
 
 /** The highest the land may be `d` metres from a sea shore: a beach, then slopes up to the hills. */
@@ -297,17 +326,20 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
+        this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
-        this.seas = mountains && seas ? new SeaIndex(seed) : null;
+        // (the creative test ground: a sea right by its castle's quay — the castle is placed first)
+        const spot = mountains && seas && test ? testSeaCastleSpot(seed) : null;
+        this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
-        const raw = createHeightField(seed, mountains, this.seas);
+        const raw = createHeightField(seed, mountains, this.seas, this.test);
         this.castles = this.towers = this.sites = null;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
-            this.castles = new CastleIndex(seed, raw, this.seas);
+            this.castles = new CastleIndex(seed, raw, this.seas, this.test);
             this.towers = new TowerIndex(seed, raw, this.castles);
             const idx = this.sites = new SiteIndex(this.castles, this.towers);
             const fn = (ix, iz) => {
@@ -449,7 +481,11 @@ export class TerrainData {
         if (this._caves.has(key)) return this._caves.get(key);
         let cave = null;
         const H = this.heightAt;
-        if (hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101) < 0.6) {
+        const T = TEST_CAVE;
+        if (this.test && gx === Math.floor(T.X / CAVE_CELL) && gz === Math.floor(T.Z / CAVE_CELL)) {
+            // the test ground's cave: its mouth at the hill's foot, towards the pedestals
+            cave = { id: 'cvtest', kx: T.X, kz: T.Z, ex: T.X + T.R - 2, ez: T.Z, F: 0, r: T.r, test: true };
+        } else if (hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101) < 0.6) {
             for (let t = 0; t < 8 && !cave; t++) {
                 const kx = gx * CAVE_CELL + 12 + Math.floor(hash01(gx + t * 31, gz - t * 17, this.seed + 202) * (CAVE_CELL - 24));
                 const kz = gz * CAVE_CELL + 12 + Math.floor(hash01(gz + t * 29, gx + t * 11, this.seed + 303) * (CAVE_CELL - 24));
@@ -1032,10 +1068,10 @@ export function mountainHeight(ix, iz, seed = 1) {
  * touched chunks, a couple per frame, so nothing ever causes a hitch.
  */
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, seas = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains, seas });
+        this.data.generate({ seed, mountains, seas, test });
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));

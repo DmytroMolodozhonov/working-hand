@@ -69,7 +69,7 @@ export class VoxelWorld {
         if (opts.map) {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
-            this.createTerrain(!!opts.mountains, !!opts.seas);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround);
             this.createSkybox();
         }
     }
@@ -217,9 +217,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false) {
+    createTerrain(mountains, seas = false, test = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test });
         this.collision.setTerrain(this.terrain);
 
         // Decorative grass cubes (1000, instanced) — same look as before.
@@ -285,6 +285,7 @@ export class VoxelWorld {
             const z = (rng() - 0.5) * (this.terrainDepth - 10);
             // Keep trees on flat ground (not inside mountains) and off the spawn tables.
             if (this.terrain && !this._flatAround(x, z, 1)) continue;
+            if (this.terrain?.data?.sites?.landAt(Math.round(x), Math.round(z))) continue; // (not in a village)
             if (Math.abs(x) < 11 && z > -9 && z < 1) continue;
             const turn = Math.floor(rng() * 4) * (Math.PI / 2);
             const scale = 0.9 + rng() * 0.25;

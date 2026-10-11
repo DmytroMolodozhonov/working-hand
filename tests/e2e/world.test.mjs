@@ -79,7 +79,8 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
         out.dryHint = document.getElementById('voice-debug')?.innerText || '';
         // Find water and stand in it (on the river bed)
         let spot = null;
-        for (let x = 140; x < 900 && !spot; x += 3) for (let z = -300; z < 300; z += 3) if (t.get(x, 0, z) === 8 && t.get(x + 1, 0, z) === 8) { spot = { x, z }; break; }
+        // (a river, not the sea — a creative world has one by its sea castle)
+        for (let x = 140; x < 900 && !spot; x += 3) for (let z = -300; z < 300; z += 3) if (t.get(x, 0, z) === 8 && t.get(x + 1, 0, z) === 8 && !t.isSeaColumn(x, z) && !t.isSeaColumn(x + 1, z)) { spot = { x, z }; break; }
         out.spot = spot;
         ch.group.position.set(spot.x, g.collision.groundY(spot.x, spot.z) + 1.0, spot.z);
         for (let i = 0; i < 60 && g.terrain._queue.length; i++) await sleep(100);

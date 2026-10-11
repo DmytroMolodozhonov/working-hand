@@ -79,7 +79,7 @@ function carved(cv, x, z) {
 export function crystalCluster(cv, seed = 0, heightAt = null) {
     if (!cv) return null;
     const rnd = rng(cv.id, seed);
-    if (rnd() >= CRYSTAL.CHANCE) return null;
+    if (rnd() >= CRYSTAL.CHANCE && !cv.test) return null; // (the creative test cave always has them)
     // the far side of the chamber (away from the tunnel), out of its rock wall at hand height
     const ta = Math.atan2(cv.ez - cv.kz, cv.ex - cv.kx);
     const a = ta + Math.PI + (rnd() - 0.5) * 1.6;

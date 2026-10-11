@@ -46,11 +46,27 @@ function hash01(a, b, seed) {
 const TAU = Math.PI * 2;
 
 export class SeaIndex {
-    constructor(seed) {
+    /**
+     * @param {number} seed
+     * @param {{x:number, z:number}|null} testShore the creative test ground (generation 3): a sea
+     *   whose shore runs through this point (east–west, the sea to −z) — by its sea castle's quay
+     */
+    constructor(seed, testShore = null) {
         this.seed = seed;
         this.noise = createNoise2D((seed ^ 0x51ed270b) >>> 0);
         this.cells = new Map();
         this._last = null;
+        this.test = null;
+        if (testShore) {
+            const R = 900; // (a big circle: along the castle's quay the shore is nearly straight)
+            this.test = { id: 'seatest', gx: 0, gz: -1, x: testShore.x, z: testShore.z - R, r0: R, rMax: R, prof: new Float32Array(SEA.N).fill(R), islands: [] };
+        }
+    }
+
+    /** The test sea when (x, z) is anywhere near it. */
+    _testAt(x, z) {
+        const t = this.test;
+        return t && Math.abs(x - t.x) < t.rMax + SEA.TAPER + 300 && Math.abs(z - t.z) < t.rMax + SEA.TAPER + 300 ? t : null;
     }
 
     /**
@@ -92,6 +108,8 @@ export class SeaIndex {
 
     /** The sea of the cell holding (x, z), or null. */
     seaAt(x, z) {
+        const t = this._testAt(x, z);
+        if (t) return t;
         const gx = Math.floor(x / SEA.CELL), gz = Math.floor(z / SEA.CELL);
         const l = this._last;
         if (l && l.gx === gx && l.gz === gz) return l.sea;
@@ -135,6 +153,8 @@ export class SeaIndex {
             const sea = this.cellOf(gx, gz);
             if (sea && Math.hypot(sea.x - x, sea.z - z) - sea.rMax - SEA.TAPER <= r) out.push(sea);
         }
+        const t = this.test;
+        if (t && Math.hypot(t.x - x, t.z - z) - t.rMax - SEA.TAPER <= r) out.push(t);
         return out.sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
     }
 
@@ -142,6 +162,7 @@ export class SeaIndex {
     nearest(x, z, maxCells = 6) {
         const cx = Math.floor(x / SEA.CELL), cz = Math.floor(z / SEA.CELL);
         let best = null, bd = Infinity;
+        if (this.test) { best = this.test; bd = Math.hypot(best.x - x, best.z - z) - best.r0; }
         for (let R = 0; R <= maxCells; R++) {
             for (let gz = cz - R; gz <= cz + R; gz++) for (let gx = cx - R; gx <= cx + R; gx++) {
                 if (Math.max(Math.abs(gx - cx), Math.abs(gz - cz)) !== R) continue;

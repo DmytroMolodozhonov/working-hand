@@ -176,6 +176,7 @@ export class Game {
             mountains: (config.mode === 'creative' || config.mode === 'freeworld') && !config.map,
             map: config.map || null,
             seas: this.gen >= 2, // (generation 2: seas, sea castles, deeper bedrock)
+            testGround: this.gen >= 3 && config.mode === 'creative' && !config.map, // (a river by the pedestals, a castle close by)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
         // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
