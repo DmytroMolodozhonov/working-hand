@@ -524,10 +524,13 @@ export class WeaponSystem {
                 for (const z of zombies) {
                     if (z.isDead || z.damageCooldown > 0) continue;
                     const zp = z.group.position;
-                    if (Math.abs(zp.x - tip.x) > 8 || Math.abs(zp.z - tip.z) > 8) continue;
+                    // (a big body — the giant spider — gives its own capsule)
+                    const cap = z.bodyCapsule ? z.bodyCapsule(this._cap || (this._cap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 })) : null;
+                    const reach = cap ? 8 + cap.a.distanceTo(cap.b) + cap.r : 8;
+                    if (Math.abs(zp.x - tip.x) > reach || Math.abs(zp.z - tip.z) > reach) continue;
                     if (now(this) - (w.lastHitTime || 0) < 120) continue;
-                    const zb = [zp.x, zp.y - 0.6, zp.z], zt = [zp.x, zp.y + 2.9, zp.z];
-                    const r = 0.8 + 0.12;
+                    const zb = cap ? [cap.a.x, cap.a.y, cap.a.z] : [zp.x, zp.y - 0.6, zp.z], zt = cap ? [cap.b.x, cap.b.y, cap.b.z] : [zp.x, zp.y + 2.9, zp.z];
+                    const r = (cap ? cap.r : 0.8) + 0.12;
                     let hit = false;
                     for (let k = 1; k <= steps && !hit; k++) {
                         const t = k / steps;

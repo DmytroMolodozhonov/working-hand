@@ -25,6 +25,7 @@
 import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
 import { SPELL_COST } from './Combat.js';
+import { spiderDist } from './Spider.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -320,7 +321,7 @@ export class Gear {
                     }
                 }
                 if (g.authority) for (const sp of g.spiders?.targets() || []) {
-                    if (a.hit.has(sp) || _v.copy(sp.model.position).add(_v2.set(0, 2.5, 0)).distanceTo(p) > 2.8) continue;
+                    if (a.hit.has(sp) || spiderDist(sp, p) > 0.3) continue; // (it touched the big body)
                     a.hit.add(sp);
                     g.spiders.hit(sp, a.dmg, 'arrow');
                     this._stick(a, sp.model);

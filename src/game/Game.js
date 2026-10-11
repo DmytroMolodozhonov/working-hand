@@ -1232,7 +1232,7 @@ export class Game {
         const out = [];
         for (const z of this.zombies) if (!z.isDead && !z.isThrall) out.push({ pos: z.group.position, key: 'z' + z.id, up: 1.2 });
         for (const [id, r] of this.remotes) if (!r.dead) out.push({ pos: r.position, key: 'p' + id, up: 0.5 });
-        for (const b of this.bosses || []) if (!b.dead) out.push({ pos: b.position, key: 'b' + b.id, up: 1.5 });
+        for (const b of this.bosses || []) if (!b.dead) out.push({ pos: b.position, key: 'b' + b.id, up: 2.6 * (b.size || 1) }); // (the middle of its body)
         for (const a of this.animals?.targets() || []) out.push({ pos: a.group.position, key: 'a' + a.id, up: 0.8 * a.group.scale.y });
         for (const v of this.castleLife?.targets() || []) out.push({ pos: v.group.position, key: 'v' + v.id, up: 0.5 });
         return out;

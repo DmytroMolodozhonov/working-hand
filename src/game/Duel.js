@@ -35,6 +35,7 @@ import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
 import { PVP } from './Combat.js';
 import { sharpJerk } from './Jerk.js';
+import { spiderBody, spiderCenter } from './Spider.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -302,6 +303,8 @@ export class Duel {
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
         for (const v of g.castleLife?.targets() || []) this._villagerBody(v, put('v', v.id));
         for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall') this._roundBody('b', bd, put('b', bd.id));
+        // the giant spider: its whole (big) body, nose to tail
+        for (const sp of g.spiders?.targets() || []) spiderBody(sp, put('s', sp.id));
         return out;
     }
 
@@ -318,6 +321,7 @@ export class Duel {
             const z = g.zombieById?.get(id);
             return z && !z.isDead ? this._zombieBody(z, e) : null;
         }
+        if (kind === 's') { const sp = g.spiders?.byId(id); return sp ? spiderBody(sp, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
         return kind === 'v' ? this._villagerBody(c, e) : this._roundBody(kind, c, e);
@@ -404,6 +408,7 @@ export class Duel {
     _targetPos(b, out) {
         const g = this.game;
         if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
             const r = g.remotes.get(b.tid);
@@ -559,6 +564,7 @@ export class Duel {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b') && this._referee()) { this._arriveAtCreature(b); return; }
+        if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
         if (b.waitT > 2) this._end(b, 'fizzle', false);

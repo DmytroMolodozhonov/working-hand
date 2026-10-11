@@ -775,7 +775,7 @@ test('«Breakthrough»: arms low, then up — a wall of earth and stone rises in
     await page.close();
 });
 
-test('the giant spider: Avada only 20, ice and wind do nothing, poison −7, web, grab + bite, Protection Maxima frees, a wand when it dies', async () => {
+test('the giant spider (twice as big): Avada only 20, ice and wind do nothing, poison −7, web, grab + bite, Protection Maxima frees, a wand when it dies', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -791,6 +791,14 @@ test('the giant spider: Avada only 20, ice and wind do nothing, poison −7, web
         sp.nextPoison = sp.nextWeb = sp.nextGrab = sp.nextAny = 999; // (tricks by hand below)
         await frames(5);
         const bar = document.getElementById('boss-bar').style.display;
+        // twice as big as the first spider: ~8 m high, its body up at ~5 m
+        const box = new T.Box3().setFromObject(sp.model).getSize(new T.Vector3());
+        const tall = box.y, scale = sp.model.scale.x;
+        const standY = sp.model.position.y - g.collision.groundY(sp.model.position.x, sp.model.position.z);
+        // a duel charge touching its flank (3 m beside its middle) hits it
+        const mid = sp.model.position.clone().add(new T.Vector3(0, 5.2, 0));
+        const flankAvada = S.boltAt(mid.clone().add(new T.Vector3(3, 0, 0)), 'AvadaKedavra');
+        sp.hp = 200;
         S.boltAt(sp.model.position.clone().add(new T.Vector3(0, 2, 0)), 'AvadaKedavra');
         const afterAvada = sp.hp;
         S.hit(sp, 30, 'Ice'); S.hit(sp, 30, 'Wind');
@@ -818,9 +826,13 @@ test('the giant spider: Avada only 20, ice and wind do nothing, poison −7, web
         S.hit(sp, 500, 'melee');
         await frames(3);
         const wands = [...g.items.loose.values()].filter((L) => L.item.kind === 'wand').length;
-        return { bar, afterAvada, afterIce, afterPoison, webbed, bitten, held, freed, dead: sp.dead, wands };
+        return { bar, tall, scale, standY, flankAvada, afterAvada, afterIce, afterPoison, webbed, bitten, held, freed, dead: sp.dead, wands };
     });
     assert.equal(r.bar, 'block', 'the boss bar shows');
+    assert.equal(r.scale, 2, 'twice as big');
+    assert.ok(r.tall > 7.5, `about 8 m high (${r.tall})`);
+    assert.ok(r.standY > -0.5, `not sunk into the ground (${r.standY})`);
+    assert.ok(r.flankAvada, 'a charge touching its big flank hits it');
     assert.equal(r.afterAvada, 180, 'Avada Kedavra takes only 20');
     assert.equal(r.afterIce, 180, 'ice and wind do nothing');
     assert.equal(r.afterPoison, 13, 'poison −7');
