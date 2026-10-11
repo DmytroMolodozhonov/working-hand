@@ -107,6 +107,7 @@ export class VoxelCharacter {
         this.flightTilt = 0;
         this.flightView = 0; // flight: how far the view is pitched along the flight path (rad, + up)
         this.knockedDown = false; // off the feet (Knockdown.js): lying the way `fallDir` says
+        this.liftUp = 0;          // lying, pulled up by another's hand: 0 lying … 1 up (Knockdown.js)
         this.fallDir = 'left';
         this._fallRoll = 0;
         this._fallPitch = 0;
@@ -611,7 +612,8 @@ export class VoxelCharacter {
         // Crouching lowers the body by 1 m: the legs fold back (kneeling) so they stay above the ground
         const crouchAngle = this.isCrouching ? -1.1 : 0;
         // Knocked down: tips over the way it was pushed (and gets up again); reeling: leans
-        const [px, rz] = this.knockedDown ? FALL[this.fallDir] || FALL.left : [this.staggerLean || 0, this.staggerRoll || 0];
+        const up = this.knockedDown ? 1 - (this.liftUp || 0) : 1; // (pulled up by a hand: the body follows it)
+        const [px, rz] = this.knockedDown ? (FALL[this.fallDir] || FALL.left).map((a) => a * up) : [this.staggerLean || 0, this.staggerRoll || 0];
         const kf = Math.min(1, dt * (this.knockedDown ? 6 : 4));
         this._fallPitch += (px - this._fallPitch) * kf;
         this._fallRoll += (rz - this._fallRoll) * kf;
@@ -639,7 +641,7 @@ export class VoxelCharacter {
             const feetNow = this.group.position.y - PLAYER_GROUND_OFFSET + this.bodyDrop();
             const ground = collision ? (collision.groundAt ? collision.groundAt(this.group.position.x, this.group.position.z, feetNow + 1.1) : collision.groundY(this.group.position.x, this.group.position.z)) : -0.5;
             this.groundY = ground;
-            const crouchDrop = this.knockedDown ? 1.45 : this.bodyDrop();
+            const crouchDrop = this.knockedDown ? 1.45 * (1 - (this.liftUp || 0)) : this.bodyDrop();
             const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;
             const y = this.group.position.y;
             if (this.swimY != null) {
@@ -834,6 +836,7 @@ export class VoxelCharacter {
             run: this.isRunning || this.stepping > 0 ? r2(this.isRunning ? this.runIntensity : 0.6) : -1,
             cr: this.isCrouching ? 1 : 0,
             kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
+            ku: this.knockedDown && this.liftUp > 0 ? r2(this.liftUp) : undefined,
             sg: this.stepping > 0 ? [r2(this.staggerLean || 0), r2(this.staggerRoll || 0)] : undefined,
             lg: this.legPose ? [r3(this.legPose.left?.hip || 0), r3(this.legPose.right?.hip || 0)] : undefined, // (on a surfboard)
             rz: this.boardRoll ? r3(this.boardRoll) : undefined,

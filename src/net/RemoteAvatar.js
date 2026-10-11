@@ -123,6 +123,7 @@ export class RemoteAvatar {
         const kd = s.s.kd | 0, sg = Array.isArray(s.s.sg) ? s.s.sg : null;
         ch.knockedDown = kd > 0;
         ch.fallDir = KD_NAME[kd] || ch.fallDir;
+        ch.liftUp = kd ? Math.max(0, Math.min(1, +s.s.ku || 0)) : 0; // (pulled up by a hand)
         ch.staggerLean = sg ? +sg[0] || 0 : 0;
         ch.staggerRoll = sg ? +sg[1] || 0 : 0;
         if (sg) ch.stepping = Math.max(ch.stepping || 0, 0.15);

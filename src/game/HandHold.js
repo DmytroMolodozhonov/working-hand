@@ -12,6 +12,10 @@
  *   against the pull, a sharp jerk of the held arm, a blow.
  * - A villager takes the hand I hold out to them (they turn to me, give me their hand and
  *   greet me); closing my fingers round it is a handshake.
+ * - Helping up one who lies on the ground (Knockdown.js): the one lying and the one standing
+ *   hold each other's hands (both close their fingers), and as the standing one's hand goes
+ *   up, the lying body follows it (on its own computer: `knock.liftWant`). Up on the feet: the
+ *   hands let go. Let go too early: it sinks back. A lying body is never led by the hand.
  *
  * Each computer decides only for its own hand and moves only its own body: `hgrip` (my hand
  * closed on / let go of someone's hand), `hfree` (my held hand: refused or broke free).
@@ -28,6 +32,8 @@ const V_ARM = 1.25;            // a villager's shoulder → the middle of its pa
 const V_REACH = 1.35 + 0.25;   // a villager led by the hand: shoulder this far from the holding palm
 const OFFER_R = 3.4;           // a hand held out this near a villager (flat) …
 const OFFER_T = 0.45;          // … this long: they give theirs
+const LIFT_H = 1.0;            // helping one up: the helper's hand goes up (or back, towards them) this much (≈ 35 cm) from where it took mine: on the feet
+const LIFT_APART = 3.0;        // (lifting: the real palms may be this far apart — the lying arm cannot follow the hand exactly)
 const GREET = ['Здравствуйте!', 'Добрый день!', 'Приветствую!', 'Рад знакомству!', 'Доброго здоровья!'];
 const BYE = ['Крепкая рука!', 'Будем знакомы!', 'Заходите ещё!', 'Всего доброго!'];
 const LET_GO = ['Отпустите!', 'Пустите меня!', 'Эй, руку отдайте!', 'Ну хватит!'];
@@ -124,6 +130,7 @@ export class HandHold {
         this._offerStep(dt);
         this._holderStep(dt);
         this._heldStep(dt);
+        this._liftStep();
         this._villagerStep(dt);
         this._draw();
         // other heroes' fingers back to their own when nobody holds them any more
@@ -270,7 +277,10 @@ export class HandHold {
             const my = this.palm(ch, side, _a), their = this.palm(r.character, L.ts, _b);
             if (this._shaking(side)) {
                 hand?.setGrip?.(0.6, 'shake');
-                if (pulledApart(L, my.distanceTo(their), dt)) {
+                const d = my.distanceTo(their);
+                // (one of us lying, being helped up: the lying arm cannot follow the hand exactly)
+                const lift = g.knock?.down || r.character.knockedDown;
+                if (pulledApart(L, lift ? (d > LIFT_APART ? d : 0) : d, dt)) {
                     // the hands slipped out of each other: mine out of theirs too
                     this._letGo(side, true, 'apart');
                     this._freeMe(side, false);
@@ -306,6 +316,7 @@ export class HandHold {
             const r = g.remotes.get(L.by);
             if (!r || r.dead || performance.now() - (r.lastUpdate || 0) > HAND.STALE * 1000 || !this._free() || !this._handFree(side)) { this._freeMe(side, false); continue; }
             if (this._shaking(side)) continue; // (both hold: the hands just slip apart when pulled apart)
+            if (g.knock?.down || r.character.knockedDown) continue; // (lying: never led by the hand, only helped up — _liftStep)
             const sh = (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_a);
             const their = this.palm(r.character, L.hs, _b);
             const yaw = ch.group.rotation.y;
@@ -317,6 +328,38 @@ export class HandHold {
             if (res.move) { this._moveMe(res.move); pulled = Math.max(pulled, Math.hypot(res.move.x, res.move.z) / Math.max(dt, 1e-3)); }
         }
         this._stumble(dt, pulled);
+    }
+
+    /** Lying on the ground, my hand and a standing player's hand holding each other: as their hand
+     * goes up from where it took mine, my body follows it up (Knockdown moves it). */
+    _liftStep() {
+        const g = this.game, K = g.knock;
+        this.lifting = null;
+        for (const side of SIDES) {
+            const L = this.mine[side], H = this.onMe[side];
+            const both = L && L.kind === 'p' && H && H.by === L.id && H.hs === L.ts;
+            const r = both && g.remotes.get(L.id);
+            if (!K || K.state !== 'down' || !r || r.character.knockedDown) { if (L) L.liftBase = null; continue; }
+            const p = this.palm(r.character, L.ts, _b), me = g.character.group.position;
+            if (L.liftBase == null) L.liftAt = { x: p.x, z: p.z };
+            L.liftBase = L.liftBase == null ? p.y : Math.min(L.liftBase, p.y); // (their hand went lower still before pulling)
+            // up, or back away from my body (pulled towards them): both pull me up
+            const ox = L.liftAt.x - me.x, oz = L.liftAt.z - me.z, oL = Math.hypot(ox, oz) || 1;
+            const back = Math.max(0, ((p.x - L.liftAt.x) * ox + (p.z - L.liftAt.z) * oz) / oL);
+            const want = Math.max(0, Math.min(1, (p.y - L.liftBase + 0.6 * back) / LIFT_H));
+            K.liftWant = Math.max(K.liftWant || 0, want);
+            if (!this.lifting || want > this.lifting.want) this.lifting = { by: L.id, side, want };
+        }
+    }
+
+    /** Helped up (Knockdown: on the feet): the hands that pulled me up let go. */
+    helpedUp() {
+        const side = this.lifting?.side;
+        if (!side) return;
+        this._note(`helped up ${side}`);
+        this._letGo(side, true, 'helped up');
+        this._freeMe(side, false);
+        this.lifting = null;
     }
 
     _moveMe(mv) {
@@ -576,6 +619,9 @@ export class HandHold {
         let line = '';
         for (const side of SIDES) {
             const L = this.mine[side], H = this.onMe[side];
+            const lying = g.knock?.state === 'down', other = L?.kind === 'p' ? g.remotes.get(L.id) : H ? g.remotes.get(H.by) : null;
+            if (lying && L?.kind === 'p' && H?.by === L.id) { line = `🤝 ${g.playerName?.(L.id) || 'Игрок'} держит вас за руку — пусть потянет вверх`; break; }
+            if (!lying && other?.character.knockedDown && L?.kind === 'p' && H?.by === L.id) { line = `🤝 Вы держите за руку: ${g.playerName?.(L.id) || 'игрок'} — потяните руку вверх, чтобы поднять`; break; }
             if (this._shaking(side)) { line = `🤝 Рукопожатие с ${g.playerName?.(L.id) || 'игроком'}`; break; }
             if (L?.kind === 'v') {
                 const v = this._villagers()?.get(L.id);
@@ -679,6 +725,7 @@ export class HandHold {
             mine: { left: pick1(this.mine.left), right: pick1(this.mine.right) },
             onMe: { left: this.onMe.left && { by: this.onMe.left.by, hs: this.onMe.left.hs }, right: this.onMe.right && { by: this.onMe.right.by, hs: this.onMe.right.hs } },
             shaking: SIDES.filter((s) => this._shaking(s)),
+            lifting: this.lifting ? { ...this.lifting } : null,
             others: [...this.others.values()].map((o) => ({ ...o })),
             offer: this.offer ? this.offer.v.id : null,
             line: this.line,
