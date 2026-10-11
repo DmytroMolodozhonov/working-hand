@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { createRng } from '../core/math.js';
 import { Terrain, BLOCK } from './Terrain.js';
 import { collapseAfter } from './Collapse.js';
+import { ruinArea } from './Ruin.js';
 
 const _sun = new THREE.Vector3();
 const _nightFog = new THREE.Color();
@@ -548,6 +549,20 @@ export class VoxelWorld {
             if (x >= c.minX && x <= c.maxX && y >= c.minY && y <= c.maxY && z >= c.minZ && z <= c.maxZ) return t;
         }
         return null;
+    }
+
+    /**
+     * «Total Destruction»: everything built around `center` falls apart (Ruin.js) —
+     * no crater; the start area's trees, grass and tables just break.
+     */
+    ruin(center, radius) {
+        const out = { blocks: [], props: [], tables: [], falls: [], removed: [], rubble: [] };
+        if (!this.destructible) return out;
+        const terrain = this.terrain;
+        if (terrain) Object.assign(out, ruinArea(terrain.data, center.x, center.y, center.z, radius));
+        this.terrain = null; // (the props only: the ground is not blown away)
+        try { const p = this.explode(center, radius); out.props = p.props; out.tables = p.tables; } finally { this.terrain = terrain; }
+        return out;
     }
 
     explode(center, radius) {

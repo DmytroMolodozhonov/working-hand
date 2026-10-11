@@ -29,7 +29,7 @@ export const MANA = {
 
 /** Strong spells: their first success gives +3 more (once). */
 export const STRONG_SPELLS = new Set([
-    'AvadaKedavra', 'LightningStrike', 'Thunderwave', 'WaterVortex', 'Alive',
+    'AvadaKedavra', 'LightningStrike', 'Thunderwave', 'WaterVortex', 'Alive', 'TotalDestruction',
 ]);
 
 /** Every Maxima form is strong too. */

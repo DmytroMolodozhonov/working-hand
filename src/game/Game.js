@@ -49,6 +49,7 @@ import { Campfires } from './Campfires.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
 import { Wreck } from './Wreck.js';
+import { TotalDestruction } from './TotalDestruction.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
@@ -81,7 +82,7 @@ const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
+const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -293,6 +294,7 @@ export class Game {
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
+        this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
@@ -929,6 +931,7 @@ export class Game {
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'Alive') return this.livingTrees.cast(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
+        if (name === 'TotalDestruction') return this.destruction.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
@@ -2085,6 +2088,7 @@ export class Game {
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
         this.world.update(this.character.group.position, this._viewBoost);
         this.falling?.update(Math.min(0.05, dt));
+        this.destruction?.update(Math.min(0.05, dt));
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(this.character.group.position);
         this.seaSurface?.update(dt, this.character.group.position);

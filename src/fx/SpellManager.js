@@ -47,6 +47,9 @@ export function matchSpell(text) {
     if (has('латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
     // «Water Vortex» («вотер вортекс»): before everything that shares its sounds (water ball, Maxima…)
     if (has('vortex', 'vortec', 'vortx', 'вортекс', 'вортэкс', 'вортикс', 'вортекз', 'вортес', 'вотекс', 'вортакс', 'водоворот', 'ворт экс')) return 'WaterVortex';
+    // «Total Destruction» («Тотал Дестракшн»): before Stand («st…») and every short token
+    if (has('total destr', 'totaldestr', 'тотал', 'тоталь', 'тоутал', 'тотл', 'totl', 'total') && has('destr', 'дестр', 'дистр', 'дэстр', 'destruct', 'дестракш', 'дестрак', 'дистрак', 'разруш', 'струкш', 'стракш')) return 'TotalDestruction';
+    if (has('дестракшн', 'дестракшен', 'дестрекшн', 'дистракшн', 'destruction', 'тотальное разрушение')) return 'TotalDestruction';
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)

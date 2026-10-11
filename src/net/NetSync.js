@@ -16,6 +16,7 @@
  *   lev      caster→all   Leviosa holds / lets go a body (host carries it) or a wizard;  levno: host→caster, taken
  *   lift     wizard→all   I am held up by `by` (or let go / broke free)
  *   boom     host→all     explosion (terrain + effects)
+ *   tdes     any→all      «Total Destruction» begins at a place (each computer ruins the same blocks)
  *   chest    host→all     chest opened;  wspawn: reward weapon
  *   grab/rel client→host  weapon picked up / thrown;  wown: owner changed
  *   w        host→all     free weapon poses 10×/s
@@ -177,7 +178,8 @@ export class NetSync {
         if (msg.bodies) g.death?.restore(msg.bodies);
         if (msg.vai && g.castleLife) g.castleLife.talk.hostSmart = true;
         for (const e of msg.explosions || []) {
-            g.world.explode(vec(e.p), e.r);
+            if (e.ruin) g.world.ruin(vec(e.p), e.r); // («Total Destruction»)
+            else g.world.explode(vec(e.p), e.r);
             g.explosions.push(e);
         }
         if (msg.ice && msg.ice.length) g.applyIce(msg.ice);
@@ -463,6 +465,11 @@ export class NetSync {
         this.net.send({ t: 'prespawn', by: this.me }, true);
     }
 
+    /** «Total Destruction» of mine begins at `p`: every computer shakes and brings down the same blocks. */
+    ruin(p) {
+        this.net.send({ t: 'tdes', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
+    }
+
     explosion(pos, radius, power = 1, casterId = null) {
         if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
     }
@@ -698,6 +705,12 @@ export class NetSync {
                 g.voiceGate?.noteRemote(m.name, performance.now()); // (my microphone may hear their voice)
                 g.noteCaster?.(m.name, m.by);
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
+                break;
+            }
+            case 'tdes': {
+                if (m.by === this.me) break;
+                g.voiceGate?.noteRemote('TotalDestruction', performance.now()); // (my microphone may hear their voice)
+                g.destruction?.start(vec(m.p), m.by);
                 break;
             }
             case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;

@@ -335,6 +335,21 @@ export class SoundManager {
         this._spell(this.sounds.explosion, vol, (big ? 0.7 : 0.95) + Math.random() * 0.1);
     }
 
+    /** «Total Destruction»: the ground rumbles deeper and louder for a few seconds. */
+    playRumble(position, listenerPos) {
+        if (!this.context) return;
+        if (!this.sounds.rumble) this.sounds.rumble = this._synthRumble(5);
+        const d = listenerPos ? position.distanceTo(listenerPos) : 0;
+        this._spell(this.sounds.rumble, Math.max(0.12, 1.9 - d / 70), 0.9 + Math.random() * 0.1);
+    }
+
+    /** Stone cracking (a wall about to give way). */
+    playCrack(position, volume = 1) {
+        if (!this.context) return;
+        if (!this.sounds.crack) this.sounds.crack = this._synthCrack();
+        this._playAt(this.sounds.crack, position, volume, 8);
+    }
+
     /** Water rising out of a river into the ball. */
     playWaterRise() {
         if (!this.context) return;
@@ -368,6 +383,40 @@ export class SoundManager {
             lp2 += (lp - lp2) * 0.08;
             const boom = Math.sin(2 * Math.PI * (55 - 25 * t) * t) * Math.exp(-t * 4);
             d[i] = Math.max(-1, Math.min(1, (lp * 2.2 + lp2 * 1.5 + boom * 0.9) * env));
+        }
+        return buf;
+    }
+
+    /** A deep rumble that grows (the ground shaking before everything comes down). */
+    _synthRumble(seconds) {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        let lp = 0, lp2 = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const env = Math.min(1, t / (seconds * 0.7)) ** 1.5 * Math.min(1, (seconds - t) * 3);
+            lp += ((Math.random() * 2 - 1) - lp) * 0.02;
+            lp2 += (lp - lp2) * 0.05;
+            const sub = Math.sin(2 * Math.PI * (32 + 6 * Math.sin(t * 7)) * t) * (0.6 + 0.4 * Math.sin(t * 23));
+            d[i] = Math.max(-1, Math.min(1, (lp2 * 9 + sub * 0.5) * env));
+        }
+        return buf;
+    }
+
+    /** A short dry crack of stone. */
+    _synthCrack() {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, len = Math.floor(sr * 0.35);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const env = Math.min(1, t * 2000) * Math.exp(-t * 18);
+            lp += ((Math.random() * 2 - 1) - lp) * 0.35;
+            d[i] = Math.max(-1, Math.min(1, (lp * 1.6 + Math.sin(2 * Math.PI * 140 * t) * Math.exp(-t * 30) * 0.5) * env));
         }
         return buf;
     }

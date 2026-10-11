@@ -254,7 +254,8 @@ export function restoreWorld(game, save, THREE) {
     if (Array.isArray(save.edits) && save.edits.length) { g.builder?.applyEdits(save.edits); }
     for (const i of save.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
     for (const e of save.explosions || []) {
-        g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r);
+        if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r); // («Total Destruction»)
+        else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r);
         g.explosions.push(e);
     }
     if (save.ice && save.ice.length) g.applyIce(save.ice);
