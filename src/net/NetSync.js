@@ -98,7 +98,7 @@ export class NetSync {
         this.sendLook();
         if (this.net.isHost) {
             const msg = this.welcomeMessage();
-            msg.you = this.game.keeper?.players[name] || null; // a player coming back gets their things
+            msg.you = this.game.keeper?.playerFor(this.net.players.get(id)?.pid, this.net.players.get(id)?.name || name) || null; // a player coming back gets their things (by their own lasting id, not by a name someone else may have too)
             this.net.sendTo(id, msg);
         }
     }
@@ -594,7 +594,7 @@ export class NetSync {
                 w.setRemoteTarget(m.s);
                 break;
             }
-            case 'pstate': if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.name || m.name, m.s); break;
+            case 'pstate': if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.pid, this.net.players.get(m.from)?.name || m.name, m.s); break;
             case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
             case 'rbcatch': case 'rbgot': case 'rbaccio': g.runner?.onNet(m); break; // (the running book)
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;

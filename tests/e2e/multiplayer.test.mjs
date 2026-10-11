@@ -358,6 +358,49 @@ test('players are solid: running straight at another player stops against the bo
     await guest.context.close();
 });
 
+test('two players both called «Игрок»: the guest becomes «Игрок 2» and never gets the host\'s learned scroll spell or things', async () => {
+    const host = await openPlayer('');
+    await host.page.click('#mp-private-btn');
+    await wf(host.page, () => !!document.querySelector('.mp-code-big'), null, 30000);
+    const code = await host.page.textContent('.mp-code-big');
+    await wf(host.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    // the host burns a Lightning Strike scroll: only the host learns it
+    const h = await ev(host.page, async () => {
+        const g = window.__zns.game;
+        const before = g.knowsSpell('LightningStrike');
+        g.items.releaseHand('left');
+        g.items.takeIntoHand({ kind: 'scroll', uid: 'ls1', stat: 'spell', spell: 'LightningStrike' }, 'left');
+        g.items.burnHeldScroll();
+        await g.keeper.save();
+        return { mode: g.config.mode, before, after: g.knowsSpell('LightningStrike'), name: g.net.name, keys: Object.keys(g.keeper.players) };
+    });
+    assert.equal(h.mode, 'freeworld');
+    assert.equal(h.name, 'Игрок');
+    assert.ok(!h.before && h.after, 'the host learned it by burning the scroll');
+    assert.ok(h.keys.every((k) => k.startsWith('id:')), 'kept under the host\'s own id, not the name ' + h.keys);
+    const guest = await openPlayer('');
+    await guest.page.fill('#mp-code', code);
+    await guest.page.click('#mp-join-btn');
+    await wf(guest.page, () => window.__zns.game && window.__zns.game.active, null, 90000);
+    await wf(host.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+    await wf(guest.page, () => window.__zns.game.remotes.size === 1, null, 120000);
+    await sleep(1500);
+    const gs = await ev(guest.page, () => {
+        const g = window.__zns.game;
+        return { knows: g.knowsSpell('LightningStrike'), spells: g.bonus?.spells ?? null, pid: g.net.pid };
+    });
+    assert.equal(gs.knows, false, 'the guest with the same name did not learn the host\'s scroll');
+    assert.equal(gs.spells, null);
+    const names = await ev(host.page, () => window.__zns.net.playerList().map((p) => p.name).sort());
+    assert.deepEqual(names, ['Игрок', 'Игрок 2']);
+    const pids = await ev(host.page, () => [...window.__zns.net.players.values()].map((p) => p.pid));
+    assert.ok(pids.every(Boolean) && pids[0] !== pids[1], 'each player has their own lasting id');
+    assert.deepEqual(realErrors(host.errors), []);
+    assert.deepEqual(realErrors(guest.errors), []);
+    await host.context.close();
+    await guest.context.close();
+});
+
 test('joining a wrong code shows a clear message', async () => {
     const p = await openPlayer('Кто-то');
     await p.page.fill('#mp-code', 'ZZZZZ');

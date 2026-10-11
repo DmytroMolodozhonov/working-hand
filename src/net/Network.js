@@ -68,6 +68,16 @@ export function parseServer(str) {
     return opts;
 }
 
+/** A name nobody here has yet: «Игрок» taken → «Игрок 2», «Игрок 3»… */
+export function uniqueName(name, taken) {
+    const set = new Set(taken);
+    if (!set.has(name)) return name;
+    for (let i = 2; ; i++) {
+        const n = `${name.slice(0, 13)} ${i}`;
+        if (!set.has(n)) return n;
+    }
+}
+
 export class Network extends Emitter {
     constructor() {
         super();
@@ -76,6 +86,7 @@ export class Network extends Emitter {
         this.code = null;
         this.localId = 'solo';
         this.name = 'Игрок';
+        this.pid = ''; // this player's own lasting id (kept by the browser): their saved things are theirs, whatever the name
         this.conns = new Map(); // host: peerId -> conn
         this.hostConn = null; // client: conn to host
         this.players = new Map(); // id -> {name, color}
@@ -131,7 +142,7 @@ export class Network extends Emitter {
                     this.role = 'host';
                     this.code = code;
                     this.localId = 'H';
-                    this.players.set('H', { name: this.name, color: 0 });
+                    this.players.set('H', { name: this.name, color: 0, pid: this.pid });
                     peer.on('connection', (conn) => this._acceptClient(conn));
                     peer.on('error', (err) => this.emit('status', humanError(err)));
                     peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) { /* ignore */ } });
@@ -168,9 +179,13 @@ export class Network extends Emitter {
                 setTimeout(() => { try { conn.close(); } catch (e) { /* ignore */ } }, 800);
                 return;
             }
-            const name = String(conn.metadata?.name || 'Игрок').slice(0, 16);
+            // two players may call themselves the same (both «Игрок»): the second becomes «Игрок 2»
+            const name = uniqueName(String(conn.metadata?.name || 'Игрок').slice(0, 16), this.playerList().map((p) => p.name));
+            // (the same lasting id twice — two tabs of one browser: the second one is nobody's)
+            let pid = String(conn.metadata?.pid || '').slice(0, 40);
+            if (pid && [...this.players.values()].some((p) => p.pid === pid)) pid = '';
             this.conns.set(id, conn);
-            this.players.set(id, { name, color: this._colorCounter++ });
+            this.players.set(id, { name, color: this._colorCounter++, pid });
             this.lastSeen.set(id, performance.now());
             this.joinedAt.set(id, performance.now());
             this._checkRelay(conn, name);
@@ -282,7 +297,7 @@ export class Network extends Emitter {
             peer.on('open', (myId) => {
                 stage.broker = true;
                 netLog(`сервер связи ответил (${sec()}), ищем игру ${clean}…`);
-                const conn = peer.connect(PREFIX + clean, { reliable: true, serialization: 'json', metadata: { name: this.name, v: this.version } });
+                const conn = peer.connect(PREFIX + clean, { reliable: true, serialization: 'json', metadata: { name: this.name, v: this.version, pid: this.pid } });
                 const lost = () => {
                     if (this.role !== 'client' || this.hostConn !== conn) return;
                     this.emit('disconnected', { reason: 'Хост закрыл игру или связь потеряна' });

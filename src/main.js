@@ -14,7 +14,7 @@ import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderSpellsTab, renderItemsTab } from './ui/Codex.js';
-import { listWorlds, loadWorld, deleteWorld } from './game/WorldSave.js';
+import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { startCamera } from './ui/CameraPanel.js';
@@ -75,6 +75,14 @@ const poseService = new PoseService({ faceSolver: KalidoFace });
 const voice = new VoiceService();
 const hud = new Hud();
 const net = new Network();
+// this player's own lasting id: a server keeps their things under it (not under a name others may have too)
+net.pid = (() => {
+    try {
+        let id = localStorage.getItem('zns-player-id');
+        if (!id) { id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem('zns-player-id', id); }
+        return id;
+    } catch (e) { return 'p' + Math.random().toString(36).slice(2, 12); }
+})();
 let sound = null;
 let game = null;
 let pendingWelcome = null;
@@ -322,6 +330,8 @@ updateGameMapList();
 // Shown in the menu so everyone can see at a glance that the game is up to date
 fetch('/api/version').then((r) => r.json()).then((v) => {
     if (v?.sha) net.version = v.sha; // (players must play the same version together)
+    setGameVersion(v); // (saved worlds remember the version that wrote them)
+    renderSavedWorlds();
     if (!v || !v.date) return;
     const el = $('game-version-top');
     if (el) el.innerHTML = `Версия от <b>${v.date}</b>` + (v.sha ? ` <span class="ver-sha">(${v.sha})</span>` : '');
@@ -576,22 +586,35 @@ async function renderSavedWorlds() {
     }
     if (!box) return;
     if (!worlds.length) { box.innerHTML = ''; return; }
-    box.innerHTML = '<h4 class="menu-h4" style="margin-bottom:8px">💾 Мои миры (сохраняются сами)</h4>' + worlds.map((w) => `
+    box.innerHTML = '<h4 class="menu-h4" style="margin-bottom:8px">💾 Мои миры (сохраняются сами)</h4>' + worlds.map((w) => {
+        const ver = worldVersionLabel(w);
+        return `
         <div class="world-row" data-id="${w.id}">
             <span class="world-name">${escapeHtml(w.name)}</span>
             <span class="world-meta">${modeLabel(w.mode)} · ${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
             <button class="mp-btn world-play">▶ Продолжить</button>
             <button class="mp-btn mp-btn-grey world-del" title="Удалить">🗑</button>
-        </div>`).join('');
+            <span class="world-ver${ver.old ? ' old' : ''}" title="${ver.old ? 'Сохранён другой версией игры' : 'Сохранён этой версией игры'}">${escapeHtml(ver.text)}</span>
+            <span class="world-confirm hidden">Удалить этот мир навсегда? <button class="mp-btn world-del-yes">Да, удалить</button> <button class="mp-btn mp-btn-grey world-del-no">Нет</button></span>
+        </div>`;
+    }).join('');
     for (const row of box.querySelectorAll('.world-row')) {
         const id = row.dataset.id;
+        const ask = row.querySelector('.world-confirm');
+        const asking = (on) => {
+            ask.classList.toggle('hidden', !on);
+            row.classList.toggle('confirming', on);
+            for (const b of row.querySelectorAll('.world-play, .world-del')) b.classList.toggle('hidden', on);
+        };
         row.querySelector('.world-play').onclick = async () => {
             const w = await loadWorld(id);
             if (!w) return;
             startGame({ ...readConfig(), mode: w.mode, map: null, seed: w.seed, saved: w });
         };
-        row.querySelector('.world-del').onclick = async () => {
-            if (!confirm('Удалить мир «' + (row.querySelector('.world-name').textContent) + '» навсегда?')) return;
+        // deleting asks first — right in the row, in the game's own look
+        row.querySelector('.world-del').onclick = () => asking(true);
+        row.querySelector('.world-del-no').onclick = () => asking(false);
+        row.querySelector('.world-del-yes').onclick = async () => {
             await deleteWorld(id);
             renderSavedWorlds();
         };

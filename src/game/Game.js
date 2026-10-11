@@ -289,10 +289,10 @@ export class Game {
         // The world is saved by itself on the host's (or single player's) computer
         if (!isTest && !config.map && this.authority) {
             const sv = config.saved;
-            this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players, gen: sv.gen ?? 1 } : { name: config.worldName });
+            this.keeper = new WorldKeeper(this, sv ? { id: sv.id, name: sv.name, mode: sv.mode, seed: sv.seed, created: sv.created, players: sv.players, gen: sv.gen ?? 1, createdVersion: sv.createdVersion } : { name: config.worldName });
             if (sv) {
                 restoreWorld(this, sv, THREE);
-                applyPlayerSnapshot(this, sv.players?.[this.keeper.myName]);
+                applyPlayerSnapshot(this, this.keeper.playerFor(this.net?.pid, this.keeper.myName, { self: true }));
                 this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
             }
         }

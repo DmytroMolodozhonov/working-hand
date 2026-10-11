@@ -533,11 +533,13 @@ export class ItemSystem {
             g.bonus.hp += item.amount;
             g.maxHP += item.amount;
             g.playerHP += item.amount;
+            // (the free world counts its own health: the scroll heals there too)
+            if (g.combat?.enabled) { g.combat.addMaxHp(item.amount); g.maxHP = g.combat.maxHp; g.playerHP = g.combat.hp; }
         } else {
             g.bonus.fatigue += item.amount;
             g.combat.addMaxFatigue?.(item.amount);
         }
-        g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
+        if (!g.combat?.enabled) g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
         g.hud.setVoice?.(item.stat === 'hp' ? `📜🔥 Свиток сгорел: здоровье +${item.amount} навсегда` : `📜🔥 Свиток сгорел: сила +${item.amount} навсегда`, true);
         // the magic of the scroll swirls around the hero
         const c = g.character.group.position;

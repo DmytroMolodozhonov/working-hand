@@ -302,59 +302,71 @@ test('the wand: held like a pen along the arm, the spell leaves its tip the way 
     await page.close();
 });
 
-test('a scroll: the other hand opens it, it unrolls between the hands and is read; «Раскрой свои секреты» with a bare hand', async () => {
+test('a scroll: the other hand opens it by closing on a roller, it unrolls between the hands and is read; an opened hand lets it go; «Раскрой свои секреты» with a bare hand', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
-    await feed(page, { arms: 'forward', rightCurl: 0.8, leftCurl: 0.2 }, 15, 40);
-    const r = await page.evaluate(async () => {
+    // the camera sees both hands: the scroll in the right fist, the left hand open beside its end
+    const P = (o) => ({ arms: 'forward', rightCurl: 0.9, leftCurl: 0, ...o });
+    await feed(page, P({}), 15, 40);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.items.takeIntoHand({ kind: 'scroll', uid: 'sc1', stat: 'spell', spell: 'LightningStrike' }, 'right');
+    });
+    const look = () => page.evaluate(() => {
+        const g = window.__zns.game, R = g.scrolls.r, s = g.items.held.right;
+        return { r: !!R, open: R?.open ?? 0, width: R?.parch.scale.x ?? 0, held: s?.item.uid, visible: !!s?.model.visible };
+    });
+    // an open hand right by the scroll's end takes nothing (sampled — never opens)
+    const passing = [];
+    for (let i = 0; i < 8; i++) { await feed(page, P({ wristOffset: [-0.1, 0] }), 5, 40); passing.push((await look()).r); }
+    assert.deepEqual(passing, Array(8).fill(false), 'an open hand by the scroll does not open it');
+    // the fingers close on the roller: it is taken
+    await feed(page, P({ wristOffset: [-0.1, 0], leftCurl: 0.9 }), 15, 40);
+    assert.equal((await look()).r, true, 'the closed hand took the other roller');
+    // hands kept together, both closed: no flicker of opening and closing
+    const kept = [];
+    for (let i = 0; i < 8; i++) { await feed(page, P({ wristOffset: [-0.1, 0], leftCurl: 0.9 }), 5, 40); kept.push((await look()).r); }
+    assert.deepEqual(kept, Array(8).fill(true), 'held together it stays taken, no open/close flicker');
+    // the hands apart: unrolled between them and read
+    await feed(page, P({ wristOffset: [0.06, 0], leftCurl: 0.9 }), 25, 40);
+    const read = await page.evaluate(() => {
+        const g = window.__zns.game, T = window.__zns.THREE, R = g.scrolls.r;
+        const n = new T.Vector3(0, 0, 1).applyQuaternion(R.group.quaternion);
+        R.group.updateMatrixWorld(true);
+        const rollers = [R.rollA, R.rollB].map((o) => o.getWorldPosition(new T.Vector3()));
+        const gr = g.scrolls._grip('right'), gl = g.scrolls._grip('left');
+        return {
+            open: R.open, width: R.parch.scale.x, hidden: !R.model.visible, map: !!R.mat.map,
+            inFists: Math.min(rollers[0].distanceTo(gr), rollers[1].distanceTo(gr)) + Math.min(rollers[0].distanceTo(gl), rollers[1].distanceTo(gl)),
+            facing: n.dot(g.camera.position.clone().sub(R.group.position).normalize()),
+        };
+    });
+    assert.ok(read.open > 0.8 && read.width > 1.5 && read.hidden && read.map, 'it unrolled between the hands ' + JSON.stringify(read));
+    assert.ok(read.facing > 0.7, 'the text looks at the reader ' + JSON.stringify(read));
+    assert.ok(read.inFists < 0.25, 'the rollers are in the fists ' + read.inFists);
+    // the left fingers open: that hand lets the roller go, rolled up in the right fist again
+    await feed(page, P({ wristOffset: [0.06, 0], leftCurl: 0 }), 20, 40);
+    const closed = await look();
+    assert.ok(!closed.r && closed.visible && closed.held === 'sc1', 'an opened hand let it go; rolled up in the right fist ' + JSON.stringify(closed));
+    // «Раскрой свои секреты» with no wand: a shield lying 6 m where the bare hand points
+    const rv = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
         for (const s of ['left', 'right']) g.items.releaseHand(s);
-        g.items.takeIntoHand({ kind: 'scroll', uid: 'sc1', stat: 'spell', spell: 'LightningStrike' }, 'right');
-        await frames(3);
-        const scroll = g.items.held.right.model;
-        const orig = g.scrolls._grip.bind(g.scrolls);
-        const camRight = new T.Vector3(1, 0, 0).applyQuaternion(g.camera.quaternion).setY(0).normalize();
-        let apart = 0;
-        // the left hand comes to the scroll, then moves away to the left
-        const leftG = new T.Vector3();
-        g.scrolls._grip = (side) => (side === 'left' ? leftG.copy(scroll.position).addScaledVector(camRight, -0.2 - apart).setY(scroll.position.y) : orig(side));
-        for (let i = 0; i < 40 && !g.scrolls.r; i++) await frames(1);
-        const began = !!g.scrolls.r;
-        for (let i = 1; i <= 15; i++) { apart = i * 0.13; await frames(1); }
-        await frames(20);
-        const R = g.scrolls.r;
-        const n = new T.Vector3(0, 0, 1).applyQuaternion(R.group.quaternion);
-        // the rollers are in the fists
-        R.group.updateMatrixWorld(true);
-        const rollers = [R.rollA, R.rollB].map((o) => o.getWorldPosition(new T.Vector3()));
-        const inFists = Math.min(rollers[0].distanceTo(g.scrolls._grip('right')), rollers[1].distanceTo(g.scrolls._grip('right'))) + Math.min(rollers[0].distanceTo(leftG), rollers[1].distanceTo(leftG));
-        const read = {
-            open: R.open, width: R.parch.scale.x, hidden: !scroll.visible, map: !!R.mat.map, inFists,
-            facing: n.dot(g.camera.position.clone().sub(R.group.position).normalize()),
-            camDist: g.camera.position.distanceTo(R.group.position),
-            stillHeld: g.items.held.right?.item.uid,
-        };
-        // hands back together: rolled up in the right fist again
-        apart = -0.15;
-        for (let i = 0; i < 60 && g.scrolls.r; i++) await frames(1);
-        const closed = { r: !!g.scrolls.r, visible: scroll.visible, held: g.items.held.right?.item.uid };
-        g.scrolls._grip = orig;
-        // «Раскрой свои секреты» with no wand: the scroll in the hand is revealed
+        await frames(2);
+        const tip = ch.getHandWorldPosition('right', new T.Vector3()), dir = ch.getHandDirection('right', new T.Vector3());
+        const at = tip.addScaledVector(dir, 6);
+        g.items.spawnLoose({ kind: 'shield', uid: 'rsh', type: 1 }, at, { hover: true, broadcast: false });
         g.lastSpellCastTime = 0;
         const said = g.castLocalSpell('раскрой свои секреты', true);
         await frames(2);
-        return { began, read, closed, said, holo: !!g.wandMagic.holo };
+        return { said, wand: !!g.wandMagic.wand, holo: g.wandMagic.holo ? g.wandMagic.holo.at.distanceTo(at) : null };
     });
-    assert.ok(r.began, 'the other hand took the scroll');
-    assert.ok(r.read.open > 0.8 && r.read.width > 1.5 && r.read.hidden && r.read.map, 'it unrolled between the hands ' + JSON.stringify(r.read));
-    assert.ok(r.read.facing > 0.7 && r.read.camDist < 6, 'the text looks at the reader, the camera came ' + JSON.stringify(r.read));
-    assert.equal(r.read.stillHeld, 'sc1');
-    assert.ok(r.read.inFists < 0.25, 'the rollers are in the fists, not floating beyond them ' + r.read.inFists);
-    assert.ok(!r.closed.r && r.closed.visible && r.closed.held === 'sc1', 'rolled up again in the fist ' + JSON.stringify(r.closed));
-    assert.equal(r.said, 'Reveal');
-    assert.ok(r.holo, 'a hologram about the scroll, without a wand');
+    assert.equal(rv.said, 'Reveal');
+    assert.equal(rv.wand, false);
+    assert.ok(rv.holo != null && rv.holo < 0.5, 'a hologram about the shield the bare hand points at ' + JSON.stringify(rv));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

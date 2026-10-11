@@ -1,11 +1,13 @@
 /**
  * ScrollReading.js — opening a scroll with the hands and reading it.
  *
- * A scroll in one fist; the other (empty) hand comes to it and takes the
- * other roller; pulling the hands apart unrolls the parchment between them
- * (the further apart, the more of it is seen). Its pages look at the reader,
- * the camera comes over the shoulder (as for the book). Hands back together —
- * it rolls up again in the first fist.
+ * A scroll in one fist; the other (empty) hand comes open to an end of it and
+ * closes its fingers on the other roller; pulling the hands apart unrolls the
+ * parchment between them (the further apart, the more of it is seen). Its
+ * pages look at the reader, the camera comes over the shoulder (as for the
+ * book). Hands back together — it rolls up between them; the second hand opens
+ * (or an arm drops) — it lets the roller go and the scroll is rolled up in the
+ * first fist again.
  *
  * Anybody can read any scroll. Learning is only by burning it (Inferno):
  * whoever burns it gets it (Items.burnHeldScroll).
@@ -16,7 +18,12 @@ import { describeItem, ITEM_SCALE } from './ItemTypes.js';
 
 const MAX_W = 2.2; // m of parchment, fully unrolled
 const PARCH_H = 0.95;
-const TOUCH = 0.6; // the free hand this near the scroll: it takes the other roller
+const END_NEAR = 0.35; // the free hand this near an end of the scroll can take that roller…
+const GRAB_CURL = 0.5; // …by closing its fingers this much…
+const GRAB_T = 0.2; // …for this long (s)
+const OPEN_CURL = 0.3; // fingers opened this much: the roller is let go…
+const LET_T = 0.3; // …after this long (s)
+const SCROLL_END = 0.21; // the ends of the scroll model (local x)
 const _v8 = new THREE.Vector3(), _v9 = new THREE.Vector3();
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3(), _v7 = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
@@ -78,23 +85,34 @@ export class ScrollReading {
         const other = s.side === 'right' ? 'left' : 'right';
         const free = !items.held[other] && !g.weapons.hands[other].held;
         const ho = this._grip(other);
+        const curl = g.character.getGripCurl ? g.character.getGripCurl(other) : 0;
         if (!this.r) {
-            // the free hand comes to the scroll: it takes the other roller
-            if (!free || !g.currentPose) { this._touchT = 0; return; }
-            this._touchT = ho.distanceTo(s.model.position) < TOUCH ? (this._touchT || 0) + dt : 0;
-            if (this._touchT < 0.3) return;
+            // the free hand takes the other roller: it comes to an end of the scroll OPEN and
+            // closes its fingers on it (an open hand passing by, or a fist arriving at it, takes nothing)
+            if (!free || !g.currentPose) { this._touchT = 0; this._armed = false; return; }
+            const d = this._endDist(s.model, ho);
+            if (d > END_NEAR * 2) this._armed = false;
+            else if (curl < OPEN_CURL) this._armed = true;
+            const near = d < END_NEAR;
+            const closing = curl > GRAB_CURL && this._armed;
+            this._touchT = near && closing ? (this._touchT || 0) + dt : 0;
+            if (this._touchT < GRAB_T) return;
             this._touchT = 0;
             this._begin(s, other);
             return;
         }
         if (!free) { this._close(); return; }
         const R = this.r;
+        // the fingers on the roller opened: that hand let it go — it rolls up in the first fist
+        R.letT = curl < OPEN_CURL ? (R.letT || 0) + dt : 0;
+        if (R.letT > LET_T) { this._close(); return; }
         // the rollers are in the fists: where the closed fingers are
         const hs = this._grip(s.side);
         const hoG = ho;
         const dist = hs.distanceTo(hoG);
-        // hands back together (or one dropped to the side): it rolls up again
-        R.closeT = dist < 0.4 || !this._up(hs) || !this._up(hoG) ? R.closeT + dt : 0;
+        // an arm dropped to the side: it rolls up again (hands brought together only roll it up
+        // between them — the other hand still holds its roller, so it does not jump closed and open)
+        R.closeT = !this._up(hs) || !this._up(hoG) ? R.closeT + dt : 0;
         if (R.closeT > 0.4) { this._close(); return; }
         const want = Math.max(0, Math.min(1, (dist - 0.35) / 1.4));
         R.open += (want - R.open) * Math.min(1, dt * 8);
@@ -124,7 +142,7 @@ export class ScrollReading {
         this.readingSide = s.side;
         const hand = g.character.getActiveHands?.()[other];
         if (hand?.setGrip) hand.setGrip(0.5);
-        g.hud.setVoice?.('📜 Разведите руки — свиток раскроется; сведите — свернётся', true);
+        g.hud.setVoice?.('📜 Разведите руки — свиток раскроется; разожмите вторую руку — свернётся', true);
     }
 
     /** The parchment between the hands, its face to the reader; the camera comes to it. */
@@ -171,8 +189,16 @@ export class ScrollReading {
         } else this.readCam = null;
         if (k > 0.6 && !R.told) {
             R.told = true;
-            g.hud.setVoice?.('📜 Свиток раскрыт. Чтобы выучить — сожгите его («Инферно»); сведите руки — свернётся', true);
+            g.hud.setVoice?.('📜 Свиток раскрыт. Чтобы выучить — сожгите его («Инферно»); разожмите вторую руку — свернётся', true);
         }
+    }
+
+    /** How far a point is from the nearer end of a rolled scroll. */
+    _endDist(model, p) {
+        model.updateMatrixWorld(true);
+        const a = model.localToWorld(_v1.set(-SCROLL_END, 0, 0)).distanceTo(p);
+        const b = model.localToWorld(_v1.set(SCROLL_END, 0, 0)).distanceTo(p);
+        return Math.min(a, b);
     }
 
     /** Where a hand's closed fingers are (a roller in the fist). */
@@ -200,6 +226,7 @@ export class ScrollReading {
         const R = this.r;
         this.readingSide = null;
         this.readCam = null;
+        this._armed = false; // (to take it again the hand opens and closes again)
         if (!R) return;
         this.r = null;
         const g = this.game;

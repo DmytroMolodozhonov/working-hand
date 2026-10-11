@@ -10,13 +10,29 @@
  * Nothing to press: it is written every few seconds and when the tab closes.
  * In the menu the world can be continued (single player, or as a server).
  *
- * Players are remembered by name: a friend who comes back to the same server
- * gets their things back.
+ * Players are remembered by their own lasting id (kept by their browser), not
+ * by name: a friend who comes back to the same server gets their things back,
+ * and two players who both call themselves «Игрок» never get each other's
+ * things or learned spells. (Old saves keyed by name still work once.)
  */
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
 const SAVE_EVERY = 8; // seconds
+
+/** The version of the game running now (from /api/version): written into every save. */
+export const GAME_VERSION = { date: '', sha: '' };
+export function setGameVersion(v) {
+    GAME_VERSION.date = v?.date || '';
+    GAME_VERSION.sha = v?.sha || '';
+}
+
+/** What the menu says about a saved world's version (old: saved by another version of the game). */
+export function worldVersionLabel(w, cur = GAME_VERSION) {
+    const v = w?.version;
+    if (!v || (!v.date && !v.sha)) return { text: 'версия неизвестна (сохранён до обновления)', old: true };
+    return { text: `версия от ${v.date || '?'}${v.sha ? ` (${v.sha})` : ''}`, old: !!(cur?.sha && v.sha && cur.sha !== v.sha) };
+}
 
 let _db = null;
 function db() {
@@ -46,7 +62,7 @@ function tx(mode, fn) {
 export async function listWorlds() {
     try {
         const all = await tx('readonly', (st) => st.getAll());
-        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: w.mode, seed: w.seed, updated: w.updated, created: w.created, players: Object.keys(w.players || {}) }))
+        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: w.mode, seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
             .sort((a, b) => b.updated - a.updated);
     } catch (e) { return []; }
 }
@@ -107,7 +123,10 @@ export function applyPlayerSnapshot(game, s) {
     if (Number.isFinite(s.hp) && s.hp > 0) game.playerHP = Math.min(game.maxHP, s.hp);
     if (s.bonus) {
         game.bonus = { ...s.bonus };
-        if (s.bonus.hp) { game.maxHP += s.bonus.hp; game.playerHP = Math.min(game.maxHP, game.playerHP + s.bonus.hp); }
+        if (s.bonus.hp) {
+            game.maxHP += s.bonus.hp; game.playerHP = Math.min(game.maxHP, game.playerHP + s.bonus.hp);
+            if (game.combat?.enabled) game.combat.addMaxHp?.(s.bonus.hp);
+        }
         if (s.bonus.fatigue) game.combat.addMaxFatigue?.(s.bonus.fatigue);
     }
     if (s.gear) game.items?.restore(s.gear);
@@ -118,7 +137,7 @@ export function applyPlayerSnapshot(game, s) {
  * Keeps the current game's world saved (host or single player only).
  */
 export class WorldKeeper {
-    constructor(game, { id, name, mode, seed, created, players, gen } = {}) {
+    constructor(game, { id, name, mode, seed, created, players, gen, createdVersion } = {}) {
         this.game = game;
         this.id = id || newWorldId();
         this.name = name || 'Мир';
@@ -126,7 +145,8 @@ export class WorldKeeper {
         this.seed = seed ?? game.seed;
         this.gen = gen ?? game.gen ?? 1; // world generation (seas from 2)
         this.created = created || Date.now();
-        this.players = players || {}; // name -> snapshot (guests and the host)
+        this.createdVersion = createdVersion || { ...GAME_VERSION };
+        this.players = players || {}; // 'id:'+lasting id (or an old name) -> snapshot (guests and the host)
         this._t = 0;
         this._saving = false;
         this._onHide = () => this.save();
@@ -137,15 +157,39 @@ export class WorldKeeper {
         return this.game.net?.name || 'Игрок';
     }
 
+    /** Where a player's things are kept: under their lasting id (or, without one, their name). */
+    static key(pid, name) {
+        return pid ? 'id:' + String(pid).slice(0, 40) : String(name || 'Игрок').slice(0, 16);
+    }
+
+    get myKey() {
+        return WorldKeeper.key(this.game.net?.pid, this.myName);
+    }
+
     /** A guest's things arrived (they send them now and then). */
-    notePlayer(name, snap) {
-        if (!name || !snap) return;
-        this.players[String(name).slice(0, 16)] = snap;
+    notePlayer(pid, name, snap) {
+        if (!snap || (!pid && !name)) return;
+        this.players[WorldKeeper.key(pid, name)] = { ...snap, name: String(name || '').slice(0, 16) };
+    }
+
+    /**
+     * A player's saved things: by their lasting id; an old save kept by name is
+     * used (once — it moves to the id) only if it is not the host's own name
+     * (`self`: the host / single player looking up their own).
+     */
+    playerFor(pid, name, { self = false } = {}) {
+        const byId = pid ? this.players[WorldKeeper.key(pid)] : null;
+        if (byId) return byId;
+        const nk = WorldKeeper.key(null, name);
+        const legacy = this.players[nk];
+        if (!legacy || (!self && nk === WorldKeeper.key(null, this.myName))) return null;
+        if (pid) delete this.players[nk];
+        return legacy;
     }
 
     snapshot() {
         const g = this.game;
-        this.players[this.myName] = playerSnapshot(g);
+        this.players[this.myKey] = { ...playerSnapshot(g), name: this.myName };
         const DAY = g.constructor.DAY_CYCLE_MS || 24 * 60 * 1000;
         return {
             id: this.id,
@@ -155,6 +199,8 @@ export class WorldKeeper {
             gen: this.gen,
             created: this.created,
             updated: Date.now(),
+            version: { ...GAME_VERSION }, // the game that wrote it last
+            createdVersion: this.createdVersion,
             dayPhase: g.dayPhase ? g.dayPhase() : 0,
             dayMs: DAY,
             explosions: g.explosions.slice(-4000),

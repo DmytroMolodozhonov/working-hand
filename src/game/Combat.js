@@ -220,7 +220,7 @@ export class Combat {
 
     /** Back to life (respawn): full health and strength, no ice / stun / shield. */
     revive() {
-        this.hp = PVP.MAX_HP;
+        this.hp = this.maxHp || PVP.MAX_HP;
         this.fatigue = this.maxFatigue || PVP.MAX_FATIGUE;
         this.shield = null;
         this.frozenLeft = 0;
@@ -291,6 +291,13 @@ export class Combat {
     addMaxFatigue(n) {
         this.maxFatigue = (this.maxFatigue || PVP.MAX_FATIGUE) + n;
         this.fatigue = Math.min(this.maxFatigue, this.fatigue + n);
+    }
+
+    /** A burnt health scroll: more health for good (and that much healed at once). */
+    addMaxHp(n) {
+        this.maxHp = (this.maxHp || PVP.MAX_HP) + n;
+        if (!this.dead) this.hp = Math.min(this.maxHp, this.hp + n);
+        this._hudKey = '';
     }
 
     spend(name) {
@@ -538,7 +545,7 @@ export class Combat {
         const key = `${this.hp}|${Math.floor(this.fatigue)}|${Math.ceil(this.frozenLeft)}|${Math.round(this.chill * 10)}|${Math.ceil(this.stunLeft || 0)}`;
         if (key === this._hudKey) return;
         this._hudKey = key;
-        hud.update(this.hp, PVP.MAX_HP, this.game.killCount, this.game.punchCount);
+        hud.update(this.hp, this.maxHp || PVP.MAX_HP, this.game.killCount, this.game.punchCount);
         hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE);
         if (this.stunned) return; // the stun message is shown by update()
         hud.setStatus(this.frozen

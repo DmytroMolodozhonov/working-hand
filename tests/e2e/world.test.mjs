@@ -466,6 +466,48 @@ test('worlds save themselves: built blocks and the inventory are there after «�
     await page.close();
 });
 
+test('saved worlds menu: each world shows its game version; deleting asks in the game\'s own row (no browser dialog), «Нет» keeps it', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    const ver = await page.evaluate(async () => (await (await fetch('/api/version')).json()));
+    await page.evaluate(async (ver) => {
+        const m = await import('/src/game/WorldSave.js');
+        for (const w of await m.listWorlds()) await m.deleteWorld(w.id);
+        const now = Date.now();
+        await m.putWorld({ id: 'wA', name: 'Первый', mode: 'creative', seed: 1, created: now, updated: now, version: { date: ver.date, sha: ver.sha }, players: {} });
+        await m.putWorld({ id: 'wB', name: 'Второй', mode: 'survival', seed: 2, created: now - 5, updated: now - 5, players: {} }); // (saved before versions were kept)
+    }, ver);
+    await page.reload();
+    await page.waitForFunction(() => !!window.__zns);
+    await page.waitForFunction(() => document.querySelectorAll('.world-row').length === 2 && document.querySelector('.world-row .world-ver')?.textContent.includes('версия'), null, { timeout: 20000 });
+    const vers = await page.$$eval('.world-row', (rows) => rows.map((r) => ({ id: r.dataset.id, text: r.querySelector('.world-ver').textContent, old: r.querySelector('.world-ver').classList.contains('old') })));
+    const a = vers.find((v) => v.id === 'wA'), b = vers.find((v) => v.id === 'wB');
+    if (ver.date) assert.ok(a.text.includes(ver.date), 'the version the world was saved by: ' + a.text);
+    assert.equal(a.old, false, 'saved by this version');
+    assert.match(b.text, /неизвестна/);
+    assert.equal(b.old, true, 'an old save is marked');
+    const count = () => page.evaluate(async () => (await (await import('/src/game/WorldSave.js')).listWorlds()).length);
+    // 🗑 asks first, right in the row
+    await page.click('.world-row[data-id="wA"] .world-del');
+    assert.ok(await page.isVisible('.world-row[data-id="wA"] .world-confirm'), 'the question is shown');
+    assert.equal(await page.isVisible('.world-row[data-id="wA"] .world-play'), false, 'the row only asks now');
+    assert.equal(await page.locator('.world-row').count(), 2);
+    assert.equal(await count(), 2, 'nothing deleted yet');
+    // «Нет» keeps it
+    await page.click('.world-row[data-id="wA"] .world-del-no');
+    assert.equal(await page.isVisible('.world-row[data-id="wA"] .world-confirm'), false);
+    assert.ok(await page.isVisible('.world-row[data-id="wA"] .world-play'));
+    assert.equal(await count(), 2);
+    // «Да, удалить» deletes just that one
+    await page.click('.world-row[data-id="wA"] .world-del');
+    await page.click('.world-row[data-id="wA"] .world-del-yes');
+    await page.waitForFunction(() => document.querySelectorAll('.world-row').length === 1, null, { timeout: 10000 });
+    assert.equal(await page.getAttribute('.world-row', 'data-id'), 'wB', 'the other world is still there');
+    assert.equal(await count(), 1);
+    assert.deepEqual(realErrors(errors), [], 'no browser dialogs');
+    await page.evaluate(async () => { const m = await import('/src/game/WorldSave.js'); for (const w of await m.listWorlds()) await m.deleteWorld(w.id); });
+    await page.close();
+});
+
 test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «Раскрой свои секреты», Люмос, eating', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
