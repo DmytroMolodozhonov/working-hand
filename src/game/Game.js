@@ -38,6 +38,7 @@ import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
+import { Ships } from './Ships.js';
 import { DeathSystem } from './Death.js';
 import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
@@ -205,13 +206,14 @@ export class Game {
             quakeMe: (casterId, origin, reached, power, dir) => this._quakeMe(casterId, origin, reached, power, dir),
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
-            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); } },
+            lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 this.books?.hitRay(o, d, len, width);
                 this.houses?.hitRay(o, d, len, width);
                 this.animals?.hitRay(o, d, len, width, 3, this.localId, name);
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
+                if (this.authority) this.ships?.crew.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId); // (the ships' crews)
             },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); if (this.authority) this.livingTrees?.burnAlong(o, d, len); },
             // «Инферно» (src/fx/InfernoStream.js): what its stream burns, what stops it, its mana
@@ -220,6 +222,7 @@ export class Game {
             blockAt: (x, y, z) => this._flameBlock(x, y, z),
             drain: (casterId, mana, dt) => (casterId === this.localId || casterId === 'local' ? this.combat.drain(mana, dt) : true),
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
+            windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
             collision: this.collision,
             terrain: () => this.terrain,
         });
@@ -268,6 +271,8 @@ export class Game {
         this.dismember = new Dismemberment(this); // a blade's edge cuts off arms, legs, heads (any creature)
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
+        this.ships = new Ships(this); // the ships of the sea castles: decks, sails, the wheel, crews, cannons
+        this.onFlame.push((o, d, len, casterId) => this.ships.igniteAlong(o, d, len, casterId)); // («Инферно» sets sails and decks on fire)
         this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
@@ -473,6 +478,7 @@ export class Game {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon }); return; }
+        if (z.isSailor) { this.ships.crew.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon }); return; }
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         if (z.isLivingTree) { this.livingTrees.hit(z, dmg, 'melee'); return; } // (only fire hurts it)
         this.punchCount++;
@@ -552,7 +558,7 @@ export class Game {
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
-        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); }
+        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId); }
         this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -662,9 +668,11 @@ export class Game {
             if (this.authority) {
                 chest.mesh.updateMatrixWorld(true);
                 const rp = chest.getRewardPosition(new THREE.Vector3());
-                this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null); // (a port chest: the sailors' stores)
+                if (chest.ship) { chest._openedBy = by; this.ships.lootChest(chest, rp); } // (a ship's chest: often a fishing rod)
+                else this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null); // (a port chest: the sailors' stores)
                 // a pouch of coins too (a castle's treasury holds much more; a poor house — little or nothing)
                 const coins = chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
+                    : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
                     : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
                 if (coins > 0) this.items.spawnLoose({ kind: 'coins', uid: newUid(), count: coins }, rp.clone().add(new THREE.Vector3(0, 3.2, 0)), { hover: true });
                 // a house chest: the family may be watching
@@ -882,6 +890,7 @@ export class Game {
             if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
         }
         if (name === 'Accio') return this._castAccio(isFinal);
+        if (name === 'Unfurl' || name === 'UnfurlMaxima' || name === 'Furl') return this.ships ? this.ships.castSails(name, text, isFinal) : null; // (a ship's sails)
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
@@ -1683,6 +1692,7 @@ export class Game {
         this.death?.playerDied(byId, text); // the body stays, everything drops (Death.js); game.onDeath hooks
         if (this.sync) this.sync.died(byId);
         this.castleLife?.playerDied(this.localId);
+        this.ships?.onLocalDeath(); // (lets go of a ship's wheel)
         this.hud.setStatus('');
         if (this.flight.busy) this.flight.land('dead');
         this.weapons.releaseAll?.();
@@ -1922,6 +1932,7 @@ export class Game {
         }
 
         const isTest = this.config.mode === 'test';
+        this.ships?.update(dt); // ships move first and carry everyone standing on them
         this._updatePlayer(dt);
         this._updateChests(dt);
         if (!isTest) this._checkVictory();
@@ -1936,6 +1947,7 @@ export class Game {
         this.items.updateRemote();
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
+        this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
         this.scrolls.update(dt);
         this.wandMagic.update(dt);
         this.gear.update(dt);
@@ -1970,7 +1982,7 @@ export class Game {
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
         this.creatureImpact.update(dt); // (after every creature moved: their falls and staggers are drawn on top)
-        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets(), this.livingTrees.targets()), dt);
+        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : []), dt);
         this.dismember.update(dt);
         mark('зомби');
 
@@ -1979,9 +1991,10 @@ export class Game {
         this._updatePendingSpell();
         if (!isTest) this._spawnWaves();
 
-        for (const r of this.remotes.values()) r.update(dt);
+        for (const r of this.remotes.values()) r.update(dt, this.ships);
         this.handHold.update(dt); // (hands holding hands: after the others' arms are set)
         this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
+        this.ships?.attach(); // (who stands on which ship now)
         if (this.sync) this.sync.update(dt);
         mark('мультиплеер');
 
@@ -2562,6 +2575,7 @@ export class Game {
     // ================================================================ cleanup
     dispose() {
         this.stop();
+        this.ships?.dispose();
         this.inventory?.dispose();
         this.books?.dispose();
         this.scrolls?.dispose();

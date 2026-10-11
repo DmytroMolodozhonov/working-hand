@@ -41,6 +41,7 @@ export const SPELL_RU = {
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
     WaterVortex: 'Water Vortex',
+    Unfurl: 'Анфёрл', Furl: 'Фёрл',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
 export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e };
@@ -74,6 +75,8 @@ export const ITEM_INFO = {
     blocks: { name: 'Блоки', icon: '🧱', weight: 1 },
     // deep in caves (ManaCrystals.js): break one with both hands — the mana maximum +5
     crystal: { name: 'Кристалл маны', icon: '💎', weight: 0.3, stack: 10 },
+    // ships (Cannons.js): a ball from the shot rack, put into a gun's muzzle by hand
+    cannonball: { name: 'Пушечное ядро', icon: '⚫', weight: 3 },
 };
 
 /**
@@ -181,6 +184,29 @@ export function rollPortLoot(r = Math.random) {
         else if (x < 0.74) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 4, 12) });
         else if (x < 0.86) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) });
         else out.push({ kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) });
+    }
+    return out;
+}
+
+/**
+ * A ship's chest: ship's food (bread, cheese, meat, pies), something valuable, a weapon now and then —
+ * and very often a fishing rod (sailors fish; the rod is the «fishing» feature's thing).
+ */
+export function rollShipLoot(r = Math.random, captain = false) {
+    const out = [];
+    if (LOOT_EXTRA.fishingRod && r() < (captain ? 0.5 : 0.7)) out.push(LOOT_EXTRA.fishingRod(r));
+    const n = randInt(r, 2, captain ? 4 : 3);
+    for (let i = 0; i < n; i++) {
+        const x = r();
+        if (x < 0.2) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
+        else if (x < 0.32) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
+        else if (x < 0.44) out.push({ kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
+        else if (x < 0.5) out.push({ kind: 'pie', uid: newUid(), count: 1 });
+        else if (x < 0.62) out.push({ kind: 'weapon', type: r() < 0.6 ? 'sword' : 'axe', magic: r() < (captain ? 0.5 : 0.2), bonus: randInt(r, 1, 60), uid: newUid() });
+        else if (x < 0.7) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 12) });
+        else if (x < 0.78) out.push({ kind: 'apple', uid: newUid(), count: 1 });
+        else if (x < (captain ? 0.92 : 0.86)) out.push(...rollLoot(r, { cave: false }).slice(0, 1)); // a wand, a scroll, a shield…
+        else out.push({ kind: 'cannonball', uid: newUid() });
     }
     return out;
 }
@@ -537,6 +563,7 @@ function buildItemModel(it) {
         case 'pie': return pieModel();
         case 'wool': return woolModel();
         case 'logs': return logsModel(it.color);
+        case 'cannonball': { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 9), mat(0x2b2b2e))); return g; }
         case 'blocks': return blocksModel(it.color);
         case 'crystal': return crystalItemModel();
         case 'book': return makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);

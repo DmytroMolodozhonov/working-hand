@@ -21,6 +21,23 @@ export class CollisionWorld {
         this.floorY = -0.5; // visible floor for physical objects (custom maps draw the floor at 0)
         this._nextId = 1;
         this._tmp = [];
+        // moving pieces of the world (ships, the gangplank): see src/game/ShipCollision.js
+        this.movers = [];
+    }
+
+    addMover(m) { if (!this.movers.includes(m)) this.movers.push(m); }
+
+    removeMover(m) { const i = this.movers.indexOf(m); if (i >= 0) this.movers.splice(i, 1); }
+
+    /** The highest mover floor (a deck) under x,z reachable from reachY above `y`, else y. */
+    _moverFloor(x, z, reachY, y) {
+        for (let i = 0; i < this.movers.length; i++) {
+            const m = this.movers[i];
+            if (!m.hasXZ(x, z)) continue;
+            const f = m.floorAt(x, z, reachY);
+            if (f !== null && f > y) y = f;
+        }
+        return y;
     }
 
     setTerrain(terrain) {
@@ -93,8 +110,8 @@ export class CollisionWorld {
      * a ceiling, a roof or a cave above is not «ground».
      */
     groundAt(x, z, reachY) {
-        if (!this.terrain || !this.terrain.floorBelow) return this.groundY(x, z);
-        return this.terrain.floorBelow(Math.round(x), Math.round(z), Math.floor(reachY + 1.5)) - 0.5;
+        const y = (!this.terrain || !this.terrain.floorBelow) ? this.groundY(x, z) : this.terrain.floorBelow(Math.round(x), Math.round(z), Math.floor(reachY + 1.5)) - 0.5;
+        return this.movers.length ? this._moverFloor(x, z, reachY, y) : y;
     }
 
     /** Visible floor / terrain height for physical objects (weapons, debris). */
@@ -114,7 +131,7 @@ export class CollisionWorld {
             if (x + radius < b.minX || x - radius > b.maxX || z + radius < b.minZ || z - radius > b.maxZ) continue;
             if (b.maxY <= fromY + 0.35 && b.maxY > y) y = b.maxY;
         }
-        return y;
+        return this.movers.length ? this._moverFloor(x, z, fromY + 0.35, y) : y;
     }
 
     /**
@@ -163,6 +180,12 @@ export class CollisionWorld {
                 }
             }
 
+            // 4) Ships: their rails, masts, bulkheads… (a body inside stays inside)
+            for (let i = 0; i < this.movers.length; i++) {
+                const m = this.movers[i];
+                if (m.hasXZ(pos.x, pos.z, radius) && m.pushCylinder(pos, radius, feetY, height, stepHeight)) moved = true;
+            }
+
             if (!moved) break;
             hit = true;
         }
@@ -180,6 +203,10 @@ export class CollisionWorld {
             if (y >= b.minY && y <= b.maxY) return true;
         }
         if (y < this.surfaceY(x, z)) return true;
+        for (let i = 0; i < this.movers.length; i++) {
+            const m = this.movers[i];
+            if (m.hasXZ(x, z) && m.pointBlocked(x, y, z)) return true;
+        }
         return false;
     }
 
@@ -200,6 +227,7 @@ export class CollisionWorld {
         this.hash.clear();
         this.walls = null;
         this.terrain = null;
+        this.movers = [];
     }
 }
 

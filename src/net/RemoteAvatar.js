@@ -10,6 +10,7 @@ import { CombatVisuals } from '../game/Combat.js';
 import { KD_NAME } from '../game/Impact.js';
 
 const COLORS = [0xe67e22, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0xf1c40f, 0x2ecc71, 0xecf0f1, 0x34495e];
+const _sh = { x: 0, y: 0, z: 0 };
 const _q = new THREE.Quaternion();
 const _d = new THREE.Vector3();
 
@@ -98,13 +99,16 @@ export class RemoteAvatar {
         }
     }
 
-    update(dt) {
+    update(dt, ships = null) {
         const s = this.target;
         if (!s) return;
         const ch = this.character;
         ch.restoreArms(); // (an arm drawn reaching last frame — a hand held — back to the tracked one first)
         const k = Math.min(1, dt * 12);
-        const p = s.s.p;
+        let p = s.s.p;
+        // on a ship: their place on its deck, put where this computer draws the ship (no sliding off)
+        this.ship = Array.isArray(s.sh) ? s.sh[0] : null;
+        if (this.ship && ships?.remoteOnShip(s.sh, _sh)) p = [_sh.x, _sh.y, _sh.z];
         const g = ch.group.position;
         if (Math.hypot(p[0] - g.x, p[2] - g.z) > 10) g.set(p[0], p[1], p[2]);
         else { g.x += (p[0] - g.x) * k; g.y += (p[1] - g.y) * k; g.z += (p[2] - g.z) * k; }

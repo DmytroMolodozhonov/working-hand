@@ -151,6 +151,8 @@ export class NetSync {
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
             crystals: g.crystals?.snapshot() || [],
+            ships: g.ships ? g.ships.snapshot(true) : [],
+            guns: g.ships ? g.ships.cannons.snapshot() : [],
         };
     }
 
@@ -167,6 +169,8 @@ export class NetSync {
         if (msg.houses) g.houses?.restore(msg.houses);
         if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.castles) g.castleLife?.restore(msg.castles);
+        if (msg.ships) g.ships?.restore(msg.ships);
+        if (msg.guns) g.ships?.cannons.restore(msg.guns);
         if (msg.bodies) g.death?.restore(msg.bodies);
         if (msg.vai && g.castleLife) g.castleLife.talk.hostSmart = true;
         for (const e of msg.explosions || []) {
@@ -224,6 +228,7 @@ export class NetSync {
                 c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, dc: g.duel.myContact(), w: held,
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
+                sh: g.ships?.myNet(), // (standing on a ship: my place on its deck)
             }, true);
         }
         // Water ball in my hand
@@ -627,6 +632,8 @@ export class NetSync {
                 break;
             }
             case 'z': if (!this.net.isHost) this._applyZombies(m.l, m.rm); break;
+            // ships (src/game/Ships.js): the host's ships and crews; guests' wheel, sails, blows, guns
+            case 'ships': case 'shipev': case 'screw': case 'shelm': case 'sunf': case 'shit': case 'sfire': case 'scan': g.ships?.onNet(m, this.net.isHost); break;
             case 'zhit': if (!this.net.isHost) this._applyZombieHit(m); break;
             case 'zsand': {
                 const z = g.zombieById.get(m.id);

@@ -274,6 +274,8 @@ export class Builder {
         if (b.placed.has(key)) return true;
         const cur = data.get(x, L, z);
         if (cur !== BLOCK.AIR && cur !== BLOCK.WATER) { b.placed.add(key); return true; }
+        // (never inside a ship: its decks move)
+        if (this.game.ships?.footprintAt(x, L - 1, z)) { b.placed.add(key); if (!b.shipHint) { b.shipHint = true; this.game.hud.setVoice('⚓ На корабле строить нельзя', true); } return true; }
         // pay: one block of the resource, or a little of the water ball
         if (b.water) {
             const s = b.water.state;

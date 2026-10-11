@@ -70,6 +70,10 @@ export function matchSpell(text) {
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
     if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return 'Levitation';
     if (has('паузин', 'паузен', 'паузи', 'пауза', 'паузу', 'pausin', 'pauzin', 'pause', 'повзин')) return 'Pause';
+    // Ships' sails: «Анфёрл» (unfurl) lets them down, «Фёрл» (furl) rolls them up (before Wind: «Вайнд» goes into the sails after)
+    if (has('убрать парус', 'убери парус', 'уберите парус', 'свернуть парус', 'сверни парус', 'сверните парус', 'спусти парус', 'furl the sail')) return 'Furl';
+    if (has('анфёрл', 'анферл', 'анфёл', 'анфел', 'анфорл', 'анфурл', 'анфирл', 'энфёрл', 'энферл', 'энфурл', 'ан фёрл', 'ан ферл', 'ан фурл', 'unfurl', 'un furl', 'open sail', 'опен сейл', 'поднять парус', 'подними парус', 'поднимите парус', 'открыть парус', 'открой парус', 'распусти парус', 'распустить парус', 'поставь парус', 'поставить парус')) return has('макс', 'max', 'мах') ? 'UnfurlMaxima' : 'Unfurl';
+    if (has('фёрл', 'ферл', 'фурл', 'furl')) return 'Furl';
     // Water: «Air Bubble», «Wave Attack» (before Thunderwave/Wind: they share sounds)
     const maxW = () => has('макс', 'max', 'мах');
     // («Bubble» as the Russian recognizer hears it: «бабал», «бобл», «бубл», «пабл»…)
@@ -673,6 +677,8 @@ export class SpellManager {
         }
         // Me, if another wizard blew at me (every machine moves its own player)
         if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos), power > 1 ? 'WindMaxima' : 'Wind');
+        // Ships: the wind fills the sails it reaches (src/game/Ships.js)
+        this.hooks.windShips?.(origin, direction, power, casterId);
     }
 
     // ----------------------------------------------------------- Wave Attack

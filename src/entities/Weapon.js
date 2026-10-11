@@ -468,6 +468,16 @@ export function contactAgainstWorld(p, r, collision, n) {
             }
         }
     }
+    // Ships (decks, rails, masts…)
+    const movers = collision.movers;
+    if (movers) {
+        for (let i = 0; i < movers.length; i++) {
+            const m = movers[i];
+            if (!m.hasXZ(p.x, p.z, r)) continue;
+            const d = m.sphereDepth(p, r, _v2);
+            if (d > best) { best = d; n.copy(_v2); }
+        }
+    }
     return best;
 }
 

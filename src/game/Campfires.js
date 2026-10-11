@@ -226,6 +226,9 @@ export class Campfires {
         const tired = g.combat.check('Fire');
         if (tired) { g.hud.setVoice(tired, true); return null; }
         const spot = this.aim(side);
+        // a ship's gun (its fuse is lit — no campfire needed) or a ship's deck (it burns): Ships.js
+        const onShip = g.ships?.fireSpell(side, spot, isFinal);
+        if (onShip !== undefined) { if (onShip) this._lastCast = now; return onShip; }
         if (!spot) return say('🔥 Покажите рукой на землю (не дальше 25 м)');
         if (spot.water) return say('🔥 На воде костёр не загорится — покажите на сушу');
         for (const f of this.list.values()) {

@@ -521,7 +521,7 @@ export class Animals {
             a.walkT += dt * base * 2;
         } else a.stamina = Math.min(100, a.stamina + dt * 6);
         // the horse can't climb cliffs
-        const gy = g.collision.groundY(a.group.position.x, a.group.position.z);
+        const gy = g.collision.groundAt ? g.collision.groundAt(a.group.position.x, a.group.position.z, a.group.position.y + 1) : g.collision.groundY(a.group.position.x, a.group.position.z); // (a ship's deck too)
         a.group.position.y += (gy + 0.5 - a.group.position.y) * Math.min(1, dt * 8);
         g.collision.resolveCylinder(a.group.position, 0.7, a.group.position.y - 0.5, 2.5, 1.2);
         a.pose = POSE.stand; a.spd = 0;

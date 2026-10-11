@@ -107,6 +107,7 @@ export function playerSnapshot(game) {
         mana: game.mana?.snapshot() || null, // the mana maximum grown with practice, strong spells already counted
         limbs: game.dismember?.snapshot() || null, // cut off (until death): no healing by leaving
         bleed: game.bleeding?.rate || 0,
+        ship: game.ships?.playerSnap() || null, // standing on a ship: [ship id, place on its deck]
     };
 }
 
@@ -134,6 +135,7 @@ export function applyPlayerSnapshot(game, s) {
     if (s.gear) game.items?.restore(s.gear);
     if (s.mana) game.mana?.restore(s.mana);
     if (s.limbs && Number.isFinite(s.hp) && s.hp > 0) game.dismember?.restoreMine(s.limbs, s.bleed || 0);
+    if (s.ship) game.ships?.applyPlayerSnap(s.ship); // (back on the ship's deck, wherever it sailed)
 }
 
 /**
@@ -221,6 +223,8 @@ export class WorldKeeper {
             castles: g.castleLife?.snapshot() || {},
             bodies: g.death?.snapshot() || [],
             crystals: g.crystals?.snapshot() || [],
+            ships: g.ships?.snapshot() || [], // ships that moved, burnt, sank, were captured…
+            guns: g.ships?.cannons.snapshot() || [],
             players: this.players,
         };
     }
@@ -263,6 +267,8 @@ export function restoreWorld(game, save, THREE) {
     if (save.castles) g.castleLife?.restore(save.castles);
     if (save.bodies) g.death?.restore(save.bodies);
     if (save.crystals) g.crystals?.restore(save.crystals);
+    if (save.ships) g.ships?.restore(save.ships);
+    if (save.guns) g.ships?.cannons.restore(save.guns);
     if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());
     // things lying around: exactly what was there (a sword taken into a slot is not on its pedestal any more)

@@ -50,6 +50,9 @@ export const SPELL_COST = {
     Sapira: 20,
     Inferno: 10,
     Fire: 4, // a campfire
+    Unfurl: 6, // a ship's sails let down (one mast)
+    UnfurlMaxima: 14, // all the sails
+    Furl: 3, // rolled up
     Ice: 10,
     Sands: 8,
     Flight: 10,

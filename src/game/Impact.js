@@ -140,6 +140,7 @@ export const SPELL_PHYSICS = {
     // (the vortex pushes by its own volume — WaterVortex.pushOf — and throws off the feet when big)
     WaterVortex: { push: 0, own: true, wet: true }, VortexBubble: null, FireMaxima: { push: 0, jolt: 0.6 },
     Alive: null, // (a tree comes alive: nobody is pushed by the spell itself)
+    Unfurl: null, UnfurlMaxima: null, Furl: null, // (a ship's sails: they move the ship, not bodies)
     IceBall: { push: 6, jolt: 1.5 }, IceBallBig: { push: 12, jolt: 2 }, WaterHit: { push: 4, wet: true },
 };
 

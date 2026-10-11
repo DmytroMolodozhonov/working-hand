@@ -110,6 +110,7 @@ export class Doors {
         const m = this.making;
         if (!m) return false;
         if (!m.ok) { g.hud.setVoice('🚪 Покажите рукой на землю рядом (до 8 м)', true); return true; }
+        if (g.ships?.footprintAt(m.at.x, m.at.y + 0.5, m.at.z)) { g.hud.setVoice('⚓ На корабле дверь не поставить', true); this._cancel(); return true; }
         if (!g.inventory.take(m.stack, WOOD_NEEDED)) { g.hud.setVoice('🚪 Не хватает дерева', true); return true; }
         const yaw = g.character.group.rotation.y;
         const id = 'd' + Date.now().toString(36) + Math.floor(Math.random() * 1e4);

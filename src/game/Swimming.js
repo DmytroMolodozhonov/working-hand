@@ -59,7 +59,8 @@ export class Swimming {
         const g = this.game;
         const ch = g.character;
         const p = ch.group.position;
-        const w = g.flight?.active ? null : this.waterAt(p.x, p.z);
+        const w0 = g.flight?.active ? null : this.waterAt(p.x, p.z);
+        const w = w0 && g.ships?.dryAt(p.x, p.y - FEET + 0.2, p.z) ? null : w0; // (inside a floating hull it is dry)
         const pose = g.currentPose;
 
         // Legs: every knee that goes up (or running in place) is a kick
