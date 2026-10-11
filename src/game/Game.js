@@ -50,6 +50,7 @@ import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
 import { Wreck } from './Wreck.js';
 import { TotalDestruction } from './TotalDestruction.js';
+import { Hellfire } from './Hellfire.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
@@ -85,7 +86,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
+const MANA_LATER = new Set(['Inferno', 'Hellfire', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -302,6 +303,7 @@ export class Game {
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
+        this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
@@ -858,7 +860,7 @@ export class Game {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
         // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
         if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
-        return !!(this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this._wave || this.lightning || this.wandMagic?.drawing);
+        return !!(this.hellfire?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this._wave || this.lightning || this.wandMagic?.drawing);
     }
 
     _castLocalSpell(text, isFinal = true) {
@@ -958,6 +960,7 @@ export class Game {
         if (name === 'Alive') return this.livingTrees.cast(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'TotalDestruction' || name === 'TotalDestructionMaxima') return this.destruction.cast(isFinal, name);
+        if (name === 'Hellfire') return this.hellfire.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
         if (name === 'LetItRain') return this._castRain(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
@@ -1079,6 +1082,7 @@ export class Game {
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
+        if (this.hellfire?.stop()) done.push('адский огонь');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
         if (this._wave) { this._wave = null; done.push('волна'); }
         if (W?._nox(false)) done.push('Люмос'); // (the tip and the thrown light)
@@ -2137,6 +2141,7 @@ export class Game {
         this.water.update(dt);
         this.combat.update(dt);
         this.vortex.update(dt);
+        this.hellfire?.update(dt);
         this.strikes.update(dt); // fists, slaps, pushes, shoves: real contact only
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
@@ -2791,6 +2796,7 @@ export class Game {
         this.items?.dispose();
         this.wandMagic?.dispose();
         this.vortex?.dispose();
+        this.hellfire?.dispose();
         this.gear?.dispose();
         this.bleeding?.dispose();
         this.animals?.dispose();

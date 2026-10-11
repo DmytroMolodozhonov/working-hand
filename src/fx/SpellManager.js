@@ -36,6 +36,10 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Let the Hellfire Come» (whole words only): before «fire» / «файр» (Fire, Fire Maxima), «лет» (Let it rain)…
+    const hell = hellfireWords(s);
+    if (hell === 2) return 'Hellfire';
+    if (hell === 1) return null; // («hellfire» alone: wait for «come» — never a campfire)
     // «Up» («Ап»): a short word — only the whole phrase (UpSpell.js)
     if (isUpWord(s)) return 'Up';
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
@@ -126,6 +130,29 @@ export function matchSpell(text) {
     return null;
 }
 const ICE_WORD = /^(?:(?:айс|айз|аис)(?:а|у|е|ом)?|ice|ais|лёд|лед)$/;
+
+// «Let the Hellfire Come» as the Russian recognizer writes it: «лет зе хеллфаер кам», «хелфайр кам»,
+// «come hellfire», «хелл фаер»… The word «hellfire» (whole, or «hell» + «fire» side by side) AND «come»
+// or «let» as words of their own: talk about fire, a «камин» or «5 лет» never casts it.
+const HELL_W = /^(?:х[еэ]лл?|hell?)$/;
+const FIRE_W = /^(?:ф[аэ][йи]?[еэя]?р|fire|fier|fyre|fair|faer|fayer)$/;
+const HELLFIRE_W = /^(?:х[еэ]лл?|hell?)(?:ф[аэ][йи]?[еэя]?р|fire|fier|fyre|fair|faer|fayer)$/;
+const COME_W = /^(?:кам|кем|кум|камм|ком|камон|комон|come|comes|cum|cam|kam|kum|cmon)$/;
+const LET_W = /^(?:лет|лэт|let)$/;
+
+/**
+ * «Let the Hellfire Come» (or «Hellfire come», «Come, hellfire», «Да придёт адский огонь»)?
+ * @returns 2 = the spell; 1 = only the word «hellfire» (not a spell yet); 0 = no
+ */
+export function hellfireWords(text) {
+    const w = String(text || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/).filter(Boolean);
+    let fire = false;
+    for (let i = 0; i < w.length && !fire; i++) fire = HELLFIRE_W.test(w[i]) || (HELL_W.test(w[i]) && i + 1 < w.length && FIRE_W.test(w[i + 1]));
+    if (fire) return w.some((x) => COME_W.test(x) || LET_W.test(x)) ? 2 : 1;
+    // the Russian words: «Да придёт адский огонь» (the whole phrase)
+    const t = w.join(' ');
+    return /(^| )адск[а-я]* (огон|огн|пламя)/.test(t) && /(^| )(прид[а-я]*|приди|явись|гряди)( |$)/.test(t) ? 2 : 0;
+}
 
 export class SpellManager {
     /**

@@ -47,7 +47,7 @@ export const ALIVE = {
 };
 
 /** Only fire hurts a living tree. */
-const FIRE = new Set(['Inferno', 'InfernoMaxima', 'FireMaxima', 'Fire', 'fire', 'campfire', 'burn', 'burning']);
+const FIRE = new Set(['Inferno', 'Hellfire', 'InfernoMaxima', 'FireMaxima', 'Fire', 'fire', 'campfire', 'burn', 'burning']);
 export const isFireDamage = (kind) => FIRE.has(kind);
 /** How much of a blow of `kind` a living tree takes. */
 export const aliveDamage = (kind, dmg) => (FIRE.has(kind) ? dmg : 0);

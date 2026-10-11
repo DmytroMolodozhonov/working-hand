@@ -398,6 +398,11 @@ export class NetSync {
         this.net.send({ t: 'stop', by: this.me }, true);
     }
 
+    /** My «Let the Hellfire Come» fire (~10×/s; null: it went out) — see Hellfire.onNet. */
+    hellfire(s) {
+        this.net.send({ t: 'hf', by: this.me, s }, true);
+    }
+
     /** «Water Vortex» / «Fire Maxima» events and my vortex's state (see WaterVortex.onNet). */
     vortex(m) {
         this.net.send({ t: 'vx', by: this.me, ...m }, true);
@@ -871,6 +876,7 @@ export class NetSync {
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
             case 'vx': if (m.by !== this.me) g.vortex?.onNet(m); break;
+            case 'hf': if (m.by !== this.me) g.hellfire?.onNet(m); break;
             case 'sburn': if (m.to === this.me && m.item) g.items?.applyScroll?.(m.item); break; // (my «Инферно» burnt a scroll lying at the host's)
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
             case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now()); g.duel.remoteCast(m); } break;

@@ -44,23 +44,26 @@ export class FireSystem {
     }
 
     // ============================================================ ignition
-    /** A point is on fire (Inferno, Bombardo): trees and leaf blocks there catch fire. */
+    /** A point is on fire (Inferno, Bombardo, Hellfire): trees and leaf blocks there catch fire. @returns true if something new caught fire */
     ignite(p, radius = 1.5) {
         const w = this.world;
+        let hit = false;
         for (const t of w.trees || []) {
             if (!t.alive || t.burning || t.burnt) continue;
             const dx = t.x - p.x, dz = t.z - p.z;
             if (dx * dx + dz * dz > (radius + 3) * (radius + 3) || p.y > 13 || p.y < -2) continue;
             this._igniteTree(t);
+            hit = true;
         }
         const terrain = this.game.terrain?.data;
-        if (!terrain) return;
+        if (!terrain) return hit;
         const r = Math.ceil(radius);
         for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) for (let dy = -r; dy <= r; dy++) {
             const x = Math.round(p.x) + dx, z = Math.round(p.z) + dz, L = Math.floor(p.y + 1.5) + dy;
             const b = terrain.get(x, L, z);
-            if (isFlammable(b)) this._igniteBlock(x, L, z);
+            if (isFlammable(b) && this._igniteBlock(x, L, z)) hit = true;
         }
+        return hit;
     }
 
     /** Fire along a ray (the Inferno stream): returns true if something caught fire. */
@@ -92,8 +95,9 @@ export class FireSystem {
 
     _igniteBlock(x, L, z) {
         const key = x + ',' + L + ',' + z;
-        if (this.burningBlocks.has(key) || this.burningBlocks.size >= FIRE.MAX_BLOCKS) return;
+        if (this.burningBlocks.has(key) || this.burningBlocks.size >= FIRE.MAX_BLOCKS) return false;
         this.burningBlocks.set(key, { x, L, z, t: 0, spread: false });
+        return true;
     }
 
     // =============================================================== update

@@ -93,6 +93,7 @@ export const SPELL_COST = {
     Alive: 25, // a living tree (then it drains the mana while it lives)
     TotalDestruction: 80, // the whole area falls into ruins (only with a mana maximum of 100+)
     TotalDestructionMaxima: 160, // twice as strong (only with a mana maximum of 200+)
+    Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */
@@ -319,7 +320,7 @@ export class Combat {
     costOf(name) {
         const base = SPELL_COST[name] ?? 5;
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^TotalDestruction/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|Hellfire)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name) {
