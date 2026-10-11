@@ -394,7 +394,7 @@ export class Gear {
     _updateHammer(dt) {
         const g = this.game;
         const hm = g.items.heldOf('hammer');
-        const storm = g.storm?.k > 0.5;
+        const storm = g.storm?.k > 0.5 && g.storm.thunder; // (a thunderstorm: «Let it rain» has no lightning)
         if (!storm) { if (this.hammer.storm) this.hammer = { uses: 0, failed: false, storm: 0 }; return; }
         this.hammer.storm = 1;
         if (!hm || g.lightning || this.hammer.failed || this.hammer.uses >= 3) return;

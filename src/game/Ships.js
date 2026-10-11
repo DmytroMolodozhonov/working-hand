@@ -958,7 +958,7 @@ export class Ships {
         const L = s.layout;
         // fire
         if (s.fires.length) {
-            const wet = !!(g.gear?.raining || (g.storm && g.storm.until > performance.now()));
+            const wet = !!(g.gear?.raining || g.storm?.raining);
             const before = s.sails.map((x) => x.burnt);
             const res = stepFire(s, dt, Math.random, wet);
             if (res.hull > 0) { s.hp = Math.max(0, s.hp - res.hull); s.changed = true; }

@@ -314,6 +314,36 @@ export class SoundManager {
     }
 
     playThunder() { this._spell(this.sounds.thunder, 1.0); }
+
+    /** The rain's hiss (0 = silent … 1 = pouring): a looped noise of many small drops. */
+    setRain(k) {
+        if (!this.enabled || !this.voices.length) return;
+        if (!this._rain) {
+            if (k <= 0.01) return;
+            const ctx = this.context;
+            const sr = ctx.sampleRate, len = Math.floor(sr * 4);
+            const buf = ctx.createBuffer(1, len, sr);
+            const d = buf.getChannelData(0);
+            let lp = 0, drip = 0, df = 2000;
+            for (let i = 0; i < len; i++) {
+                const n = Math.random() * 2 - 1;
+                lp += (n - lp) * 0.35;
+                if (Math.random() < 0.0012) { drip = 0.6 + Math.random() * 0.4; df = 1200 + Math.random() * 2600; }
+                drip *= 0.996;
+                d[i] = lp * 0.5 + Math.sin(2 * Math.PI * df * i / sr) * drip * 0.12;
+            }
+            // (no click where the loop wraps)
+            for (let i = 0; i < 2000; i++) { const a = i / 2000; d[i] = d[i] * a + d[len - 2000 + i] * (1 - a); }
+            this._rain = new THREE.Audio(this.audioListener);
+            this._rain.setBuffer(buf);
+            this._rain.setLoop(true);
+            this._rain.setVolume(0);
+        }
+        const r = this._rain;
+        r.setVolume(Math.min(1, k) * 0.9 * this.globalVolume);
+        if (k > 0.01 && !r.isPlaying) { try { r.play(); } catch (e) { /* not resumed yet */ } }
+        else if (k <= 0.01 && r.isPlaying) r.stop();
+    }
     playInferno() { this._spell(this.sounds.inferno, 0.8); }
     playSapira() { this._spell(this.sounds.sapira, 1.0); }
     playWhoosh() { this.playSand(); }

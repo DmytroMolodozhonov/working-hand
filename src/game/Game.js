@@ -23,7 +23,7 @@ import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { Accio } from './Accio.js';
-import { Storm } from '../fx/Storm.js';
+import { Storm, aimedAtSky } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
@@ -217,6 +217,7 @@ export class Game {
             quakeShake: (front, power) => this.quake.shake(front, power), // (…and shakes under whoever is near the wave)
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
+            rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
             lightningAt: (point, casterId) => { this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 this.books?.hitRay(o, d, len, width);
@@ -943,6 +944,7 @@ export class Game {
         if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'TotalDestruction') return this.destruction.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
+        if (name === 'LetItRain') return this._castRain(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
@@ -1443,6 +1445,31 @@ export class Game {
         if (this.sync) this.sync.spell('ToTheSun', o, _v1.set(0, 1, 0), side);
         this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Тучи расходятся, дождь стихает', true);
         return 'ToTheSun';
+    }
+
+    /**
+     * «Let it rain» (20): the hand — or the wand in it — pointed up to the sky + the words.
+     * A stream of magic goes up from it and it rains for 2 game hours (2 minutes), no lightning.
+     */
+    _castRain(isFinal) {
+        const ch = this.character;
+        const w = this.items?.heldOf('wand');
+        let side = null;
+        for (const s of w ? [w.side, w.side === 'left' ? 'right' : 'left'] : ['right', 'left']) {
+            if (!ch.isArmRaised(s)) continue;
+            const d = w && w.side === s ? (this.wandMagic.tip(_v2, _v1), _v1) : ch.getHandDirection(s, _v1);
+            if (aimedAtSky(d)) { side = s; break; }
+        }
+        if (!side) { if (isFinal) this.hud.setVoice('🌧️ Направьте руку (или палочку) <b>вверх, к небу</b> и скажите «Let it rain»', true); return null; }
+        const tired = this.combat.check('LetItRain');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('LetItRain');
+        const o = this.castOrigin(side);
+        this.spells.cast('LetItRain', o, _v1.set(0, 1, 0), side, this.localId);
+        if (this.sync) this.sync.spell('LetItRain', o, _v1.set(0, 1, 0), side);
+        if (this.sound) this.sound.playBombardoCast();
+        this.hud.setVoice('🌧️ <span style="color:#9fd4ff">Let it rain!</span> Небо затягивают тучи — дождь на 2 часа', true);
+        return 'LetItRain';
     }
 
     /** Creatures the lightning can be aimed at (everything alive). */
@@ -2448,7 +2475,7 @@ export class Game {
         this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false);
     }
 
-    /** Outside Creative «Lightning Strike», «Thunderwave», «To the Sun» and «Авада Кедавра» are learnt from a burnt scroll only. */
+    /** Outside Creative «Lightning Strike», «Thunderwave», «To the Sun», «Let it rain» and «Авада Кедавра» are learnt from a burnt scroll only. */
     knowsSpell(name) {
         const base = baseSpell(name);
         if (!SCROLL_SPELL_COLOR[base]) return true;

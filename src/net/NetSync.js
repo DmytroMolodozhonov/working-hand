@@ -151,6 +151,7 @@ export class NetSync {
             bodies: g.death?.snapshot() || [],
             vai: !!g.castleLife?.talk?.llm?.ready, // (the host's villager net answers the guests too)
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
+            rain: g.storm?.rainLeft?.() || 0, // («Let it rain» still falling)
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
             crystals: g.crystals?.snapshot() || [],
@@ -167,6 +168,7 @@ export class NetSync {
         if (msg.crystals) g.crystals?.restore(msg.crystals);
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
+        if (msg.rain > 0) g.storm?.startRain(msg.rain);
         if (msg.doors) g.doors?.restore(msg.doors);
         if (msg.boards) g.boards?.restore(msg.boards);
         if (msg.campfires) g.campfires?.restore(msg.campfires);

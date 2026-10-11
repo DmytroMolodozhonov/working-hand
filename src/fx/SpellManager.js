@@ -37,6 +37,9 @@ export function matchSpell(text) {
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
     if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';
+    // «Let it rain» («Лет ит рейн», heard as «летит рейн», «лед ит рэйн»…): before everything with short tokens
+    if ((has('rain', 'reign', 'рейн', 'рэйн', 'рейм', 'рэин', 'реин', 'рейна') && has('let', 'лет', 'лэт', 'лед', 'лит ит', 'лидит')) ||
+        has('letitrain', 'летитрейн', 'пусть идёт дождь', 'пусть идет дождь', 'пусть пойдёт дождь', 'пусть пойдет дождь', 'пусть льёт дождь', 'пусть льет дождь')) return 'LetItRain';
     // «Create a Board» (a surfboard) — never «абордаж» (boarding a ship)
     if (!has('абордаж', 'abordag', 'aborda') && (has('surfboard', 'surf board', 'серфборд', 'сёрфборд', 'серф борд', 'сёрф борд') ||
         (has('board', 'борд', 'bord', 'bored', 'доск') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк')))) return 'CreateBoard';
@@ -216,6 +219,7 @@ export class SpellManager {
             case 'Brainrot': this.castBrainrot(o, direction.clone()); break; // (its length = the distance)
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o); break;
+            case 'LetItRain': this.castLetItRain(o, casterId); break;
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
             case 'LightningCatch': this.castLightningCatch(o, casterId); break;
@@ -383,6 +387,32 @@ export class SpellManager {
             const v = wave(p.center());
             if (v) p.hit('Thunderwave', origin, v);
         }
+    }
+
+    // ---------------------------------------------------------- Let it rain
+    /**
+     * «Let it rain»: a silvery-blue stream of magic rises from the hand (the wand) high
+     * into the sky, a ring of sparks spreads up there — and the clouds gather into rain.
+     */
+    castLetItRain(origin, casterId) {
+        const top = _a.copy(origin).add(_b.set(0, 60, 0));
+        this.fx.straightBeam(origin, top, 0.09, 0x9fd4ff, 0.85, 1.6, null, THREE.AdditiveBlending);
+        this.fx.straightBeam(origin, top, 0.3, 0x5f8fff, 0.35, 1.6, null, THREE.AdditiveBlending);
+        this.fx.lightFlash(origin, 0x9fd4ff, 4, 0.5, 30);
+        // sparks spiral up along the stream
+        for (let i = 0; i < 70; i++) {
+            const a = i * 0.7, r = 0.25 + Math.random() * 0.25;
+            _c.set(Math.cos(a) * r * 2, 14 + Math.random() * 16, Math.sin(a) * r * 2);
+            this.fx.spark(origin, i % 3 ? 0xbfe6ff : 0xffffff, 0.1, _c, 1.2 + Math.random() * 0.8);
+        }
+        // a ring of light opens high above (where the clouds will be)
+        const ringAt = origin.clone().setY(origin.y + 26);
+        for (let i = 0; i < 48; i++) {
+            const a = (i / 48) * Math.PI * 2;
+            _c.set(Math.cos(a) * 9, 0.5, Math.sin(a) * 9);
+            this.fx.spark(ringAt, 0xcfe8ff, 0.22, _c, 1.6);
+        }
+        this.hooks.rain?.(origin, casterId);
     }
 
     // ------------------------------------------------------ Lightning Strike

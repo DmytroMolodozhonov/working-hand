@@ -62,7 +62,7 @@ export class SunBeam {
         this.group.position.copy(origin);
         this.group.visible = true;
         // the rain stops (the clouds part); the storm clears over ~3 s
-        if (g.storm) { g.storm.until = Math.min(g.storm.until, performance.now()); }
+        if (g.storm) g.storm.clearSky();
         g.fx?.lightFlash?.(origin, 0xffe08a, 6, 0.6, 60);
         g.sound?.playMagic?.();
         for (let i = 0; i < 40; i++) {

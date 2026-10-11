@@ -41,15 +41,15 @@ export const SPELL_RU = {
     Inferno: 'Инферно', Thunderwave: 'Тандервейв', Sapira: 'Сапира', Ice: 'Айс', Sands: 'Даст', Bombardo: 'Бомбардо', Earthquake: 'Earthquake',
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
-    WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction',
+    WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', LetItRain: 'Let it rain',
     Unfurl: 'Анфёрл', Furl: 'Фёрл',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
-export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c };
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc };
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
 export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
-export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная' };
+export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
@@ -234,6 +234,7 @@ export function rollKeyItem(r = Math.random) {
             : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
             : y < 0.535 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'TotalDestruction' }
             : y < 0.58 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateBoard' }
+            : y < 0.60 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LetItRain' }
             : y < 0.76 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
             : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
     }
@@ -292,7 +293,7 @@ export function describeItem(it) {
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
-            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, it.spell === 'CreateBoard' ? 'Его можно выучить и из книги птицы-книги' : 'Без свитка оно есть только в Творческом режиме'] };
+            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: дождь на 2 игровых часа'] : []), it.spell === 'CreateBoard' ? 'Его можно выучить и из книги птицы-книги' : 'Без свитка оно есть только в Творческом режиме'] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: мана +<b>${it.amount}</b> навсегда`] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
