@@ -127,6 +127,8 @@ export const SPELL_PHYSICS = {
     Inferno: { push: 1.5, jolt: 0.6 },
     Sands: { push: 5, jolt: 2.5 }, SandsDuel: { push: 5, jolt: 2.5 }, // («Даст»: a light puff — the head jolts, the legs slow down: Slow.js)
     Wind: { push: 13, range: 14, jolt: 1 }, WindMaxima: { push: 39, range: 24, jolt: 2 },
+    // («Overgrown»: thrown apart to the sides and up — never hurts by itself; Overgrown.js)
+    Overgrown: { push: 16, range: 16, toss: 5, jolt: 1 }, OvergrownMaxima: { push: 32, range: 24, toss: 10, jolt: 2 },
     WaveAttack: { push: 10, toss: 3.5, wet: true }, WaveAttackMaxima: { push: 17.2, toss: 4.7, wet: true },
     Thunderwave: { push: 20, thunder: true, jolt: 3 },
     Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 },

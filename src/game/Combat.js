@@ -72,6 +72,8 @@ export const SPELL_COST = {
     Earthquake: 10,
     EarthquakeMaxima: 25,
     WindMaxima: 20,
+    Overgrown: 10, // creatures thrown apart (Overgrown.js)
+    OvergrownMaxima: 20,
     Stupefy: 12,
     AvadaKedavra: 25,
     WaveAttack: 8,

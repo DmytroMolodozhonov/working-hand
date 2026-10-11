@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 import { thunderPush } from '../game/Impact.js';
 import { isUpWord } from '../game/UpSpell.js';
+import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -29,7 +30,7 @@ export function bombardoRadius(power = 1) {
 }
 
 /** Recognise a spell name in a voice transcript. Exported for tests. */
-const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Sands', 'Ice', 'Bombardo', 'BombardoMaxima']);
+const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Overgrown', 'OvergrownMaxima', 'Sands', 'Ice', 'Bombardo', 'BombardoMaxima']);
 
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
@@ -57,6 +58,9 @@ export function matchSpell(text) {
     // «Total Destruction» («Тотал Дестракшн»): before Stand («st…») and every short token
     if (has('total destr', 'totaldestr', 'тотал', 'тоталь', 'тоутал', 'тотл', 'totl', 'total') && has('destr', 'дестр', 'дистр', 'дэстр', 'destruct', 'дестракш', 'дестрак', 'дистрак', 'разруш', 'струкш', 'стракш')) return has('макс', 'max', 'мах', 'maks') ? 'TotalDestructionMaxima' : 'TotalDestruction';
     if (has('дестракшн', 'дестракшен', 'дестрекшн', 'дистракшн', 'destruction', 'тотальное разрушение')) return has('макс', 'max', 'мах', 'maks') ? 'TotalDestructionMaxima' : 'TotalDestruction';
+    // «Overgrown» («Овергроун», «Оверграун»): before the shield / Ice / Sands short tokens
+    const flat = s.replace(/[\s-]+/g, '');
+    if (/(овер|оувер|овир|авер|обер|офер|over|ower|ouer)(гро|гра|groun|grow|gron|gran)/.test(flat)) return has('макс', 'max', 'мах', 'maks') ? 'OvergrownMaxima' : 'Overgrown';
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)
@@ -232,6 +236,7 @@ export class SpellManager {
             case 'Earthquake': this.castEarthquake(o, d, casterId, 1); break;
             case 'EarthquakeMaxima': this.castEarthquake(o, d, casterId, 3); break;
             case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
+            case 'Overgrown': case 'OvergrownMaxima': this.castOvergrown(name, o, d, casterId); break;
             case 'WaveAttack': this.castWave(o, direction.clone(), casterId, 1); break; // (its length = the distance)
             case 'WaveAttackMaxima': this.castWave(o, direction.clone(), casterId, 2.2); break;
             case 'Inferno': this.castInferno(o, d, casterId, handSide || 'right'); break;
@@ -734,6 +739,53 @@ export class SpellManager {
         if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos), power > 1 ? 'WindMaxima' : 'Wind');
         // Ships: the wind fills the sails it reaches (src/game/Ships.js)
         this.hooks.windShips?.(origin, direction, power, casterId);
+    }
+
+    // ------------------------------------------------------------- Overgrown
+    /**
+     * «Overgrown»: whoever the hand points at — one creature or a crowd — is thrown apart, to the
+     * sides of the spell's line and up. Never hurts by itself (a fall from up high does).
+     * «Overgrown Максима» is twice as strong.
+     */
+    castOvergrown(name, origin, direction, casterId) {
+        const power = name === 'OvergrownMaxima' ? 2 : 1;
+        const range = overgrownRange(name);
+        this._sound('playWhoosh');
+        // a green burst at the hand and a ring-wave rolling out to the target, opening sideways
+        for (let i = 0; i < 14 * power; i++) {
+            const v = _a.set(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).multiplyScalar(4).addScaledVector(direction, 2);
+            this.fx.spark(_c.copy(origin), Math.random() < 0.5 ? 0x9cff7a : 0xd8ffb0, 0.15 + Math.random() * 0.15, v, 0.4 + Math.random() * 0.2);
+        }
+        const side = _b.set(-direction.z, 0, direction.x);
+        if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+        side.normalize();
+        const n = 26 * power;
+        for (let i = 0; i < n; i++) {
+            const along = 1 + Math.random() * range * 0.9;
+            const sgn = i % 2 ? 1 : -1;
+            const start = _c.copy(origin).addScaledVector(direction, along * 0.15);
+            const v = _a.copy(direction).multiplyScalar(along).addScaledVector(side, sgn * (1 + Math.random() * 3) * power);
+            v.y += 2 + Math.random() * 2 * power;
+            this.fx.spark(start, i % 3 ? 0x7be35a : 0xe8ffd0, 0.18 + Math.random() * 0.2, v, 0.8 + Math.random() * 0.3);
+        }
+        const push = (pos) => overgrownPush(name, origin, direction, pos);
+        // Creatures (where they are simulated): thrown apart; whoever flies off a ledge is watched till it lands
+        if (this.auth && this.hooks.creatures) {
+            this.hooks.creatures(name, casterId, (pos) => { const v = push(pos); return v && v.clone(); },
+                { from: origin, fly: true, each: (c, ck, res) => { if (res !== 'none') this.hooks.fallWatch?.(ck, c, casterId); } });
+            this.hooks.scatterCrew?.(origin, (pos) => push(pos), casterId);
+        }
+        // Loose things (where their physics runs)
+        for (const w of this.hooks.weapons ? this.hooks.weapons() : []) {
+            if (w.holder || w.remoteTarget) continue;
+            const v = push(w.position);
+            if (!v) continue;
+            w.hover = null;
+            w.wake();
+            w.velocity.add(v);
+        }
+        // Me, if another wizard pointed it at me (every machine moves its own player)
+        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos), name);
     }
 
     // ----------------------------------------------------------- Wave Attack

@@ -288,6 +288,26 @@ export class Sailors {
         }
     }
 
+    /** «Overgrown» (host): the sailors it reaches are thrown apart along the deck — near the rail, overboard. */
+    scatter(origin, pushAt, casterId) {
+        if (!this.auth) return;
+        const by = casterId === 'local' ? this.game.localId : casterId;
+        for (const v of this.byId.values()) {
+            if (v.dead || v.overboard) continue;
+            const p = pushAt(_w.set(v.x, v.y + 1.6, v.z));
+            if (!p) continue;
+            const s = v.ship;
+            const push = Math.hypot(p.x, p.z);
+            s.pose.dirToLocal(p.x, p.z, _o);
+            const ol = Math.hypot(_o.x, _o.z) || 1;
+            v.l.x += (_o.x / ol) * push * 0.3;
+            v.l.z += (_o.z / ol) * push * 0.3;
+            const half = hullHalfWidth(s.layout, v.l.z, s.layout.deck);
+            if (Math.abs(v.l.x) > half - 1) { if (push > 6) this._overboard(v, _o.x > 0 ? 1 : -1); else v.l.x = Math.sign(v.l.x) * (half - 1); }
+            this.provoke(s, by, null);
+        }
+    }
+
     _overboard(v, side) {
         const s = v.ship;
         const half = hullHalfWidth(s.layout, v.l.z, s.layout.deck);

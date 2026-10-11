@@ -213,6 +213,8 @@ export class Game {
             weapons: () => this.weapons.weapons,
             blowMe: (casterId, origin, pushAt, name) => this._blowMe(casterId, origin, pushAt, name),
             creatures: (name, casterId, pushAt, opts) => this.creatureImpact.spellArea(name, casterId, pushAt, opts),
+            fallWatch: (ck, c, casterId) => this.levitation.watchFall(ck, c, casterId), // («Overgrown»: a fall from up high hurts)
+            scatterCrew: (origin, pushAt, casterId) => this.ships?.crew.scatter?.(origin, pushAt, casterId),
             quakeMe: (casterId, origin, reached, power, dir) => this._quakeMe(casterId, origin, reached, power, dir),
             quakeGround: (x, z, power, side) => this.quake.breakGround(x, z, power, side), // (Quake.js: the ground breaks along the crack)
             quakeShake: (front, power) => this.quake.shake(front, power), // (…and shakes under whoever is near the wave)
@@ -949,7 +951,7 @@ export class Game {
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Unfurl' || name === 'UnfurlMaxima' || name === 'Furl') return this.ships ? this.ships.castSails(name, text, isFinal) : null; // (a ship's sails)
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
-        if (name === 'Wind' || name === 'WindMaxima') return this._castWind(name, isFinal);
+        if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
         if (name === 'Alive') return this.livingTrees.cast(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
@@ -1283,13 +1285,15 @@ export class Game {
         const now = Date.now();
         const early = this._interimCast;
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
-        // «Вайнд…» heard while the phrase goes on: wait for a possible «Максима»
-        if (name === 'Wind' && !isFinal) return null;
-        if (now - (this._lastWind || 0) < 900) return null;
+        // «Вайнд…» / «Overgrown…» heard while the phrase goes on: wait for a possible «Максима»
+        if ((name === 'Wind' || name === 'Overgrown') && !isFinal) return null;
+        const over = name.startsWith('Overgrown'); // (the same hand and the same way of aiming: «Overgrown» throws apart)
+        const key = over ? '_lastOvergrown' : '_lastWind';
+        if (now - (this[key] || 0) < 900) return null;
         const ch = this.character;
         const pref = this.magicHand || this.lastMagicHand || 'right';
         const side = this.wandSide() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s)));
-        if (!side) { if (isFinal) this.hud.setVoice('🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
+        if (!side) { if (isFinal) this.hud.setVoice(over ? '🌿 Поднимите руку и направьте её на тех, кого разбросать, — и скажите «Overgrown»' : '🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         const origin = this.castOrigin(side);
@@ -1297,7 +1301,7 @@ export class Game {
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
         this.combat.pay(name);
-        this._lastWind = now;
+        this[key] = now;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
     }
@@ -1668,6 +1672,7 @@ export class Game {
         if (this.boards?.mounted && !this.boards.onPush(v)) return; // (on a surfboard: a push along the board just rides on)
         const P = SPELL_PHYSICS[name] || {};
         this.impact.apply({ v: v.clone(), from: origin, by: casterId, spell: name, jolt: P.jolt || 0 });
+        if (name.startsWith('Overgrown')) this.levitation.watchMyFall(casterId); // (thrown off a ledge: the fall hurts)
     }
 
     _castAccio(isFinal) {
@@ -1913,8 +1918,8 @@ export class Game {
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
         if (name === 'Accio') { this._lastAccio = 0; return this._castAccio(true); }
         if (name === 'Fire') { this.campfires._lastCast = 0; return this.campfires.cast(true, true); }
-        if (name === 'Wind' || name === 'WindMaxima') {
-            this._lastWind = 0;
+        if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') {
+            this._lastWind = this._lastOvergrown = 0;
             const origin = this.character.getHandWorldPosition('right');
             const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
             this.spells.cast(name, origin, dir, 'right', this.localId);

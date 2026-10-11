@@ -222,6 +222,7 @@ export class Levitation {
         if (this.falls.length) this._landings(dt);
         if (this.lifted) this._updateLifted(dt);
         if (this.fallTop != null) this._myLanding();
+        if (this.myWatch) this._myWatchLanding();
         const s = this.state;
         if (!s) return;
         const ch = this.game.character;
@@ -552,6 +553,7 @@ export class Levitation {
             if (c.lev || c.dead || c.isDead || f.t > 12) { this.falls.splice(i, 1); if (ck === 'a') c.levFall = false; continue; }
             const up = this._centre(ck, c, _h1);
             const feet = _h1.y - up;
+            if (f.track) f.top = Math.max(f.top, feet); // (thrown by «Overgrown»: the fall counts from the highest point)
             const ground = g.collision.groundY(_h1.x, _h1.z);
             const down = ck === 'a' ? !c.airborne : feet <= ground + 0.15 && !(c.vy > 0);
             if (f.t < 0.1 || !down) continue;
@@ -571,6 +573,35 @@ export class Levitation {
             else if (ck === 'a') g.animals?.hit(c, d, null, f.by);
             else g.castleLife?.hit(c, d, null, f.by, { spell: true });
         }
+    }
+
+    /** (host) A body thrown by a spell («Overgrown»): if it comes down from up high, the fall hurts. */
+    watchFall(ck, c, by) {
+        if (ck !== 'z' && ck !== 'v' && ck !== 'a') return;
+        const up = this._centre(ck, c, _h1);
+        const i = this.falls.findIndex((f) => f.c === c);
+        if (i >= 0) { if (this.falls[i].track) this.falls.splice(i, 1); else return; } // (already falling from Leviosa)
+        this.falls.push({ ck, c, top: _h1.y - up, by, t: 0, v: null, track: true });
+    }
+
+    /** I was thrown by a spell («Overgrown»): my next landing from up high hurts. */
+    watchMyFall(by) {
+        this.myWatch = { by, since: performance.now() };
+    }
+
+    _myWatchLanding() {
+        const g = this.game, ch = g.character, W = this.myWatch, L = ch.landing, now = performance.now();
+        if (L && L.at > W.since) {
+            this.myWatch = null;
+            if (ch.swimY != null || now < (g.impact?.gentleUntil || 0)) return;
+            const d = fallDamage(L.drop);
+            if (!d) return;
+            if (g.combat.enabled) g.combat.damage(d, W.by, 'fall');
+            else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d);
+            return;
+        }
+        // (never left the ground, or too long ago: nothing to watch)
+        if (now - W.since > 10000 || (now - W.since > 600 && ch.onGround && ch.airTop == null)) this.myWatch = null;
     }
 
     /** My hold on a body / a wizard: it costs strength; a jerk or no strength left lets go. */

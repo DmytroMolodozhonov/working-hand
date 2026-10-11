@@ -42,7 +42,7 @@ export const SPELL_RU = {
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
     WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', LetItRain: 'Let it rain',
-    Unfurl: 'Анфёрл', Furl: 'Фёрл',
+    Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
 export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc };

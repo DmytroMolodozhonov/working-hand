@@ -25,7 +25,7 @@
 import * as THREE from 'three';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
 
-export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 1.5, STAGGER_MAX: 0.8, FRICTION: 4, FRICTION_DOWN: 8, GUEST_RISE: 20, REACH: 7 };
+export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 1.5, STAGGER_MAX: 0.8, FRICTION: 4, FRICTION_DOWN: 8, G: 24, GUEST_RISE: 20, REACH: 7 };
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
 const HALF_PI = Math.PI / 2;
@@ -205,7 +205,10 @@ export class CreatureImpact {
         // the push: the body slides (heavier: slower) — unless its own physics already throws it (noSlide)
         if (!o.noSlide) { s.vx += o.v.x / B.mass; s.vz += o.v.z / B.mass; }
         const toss = Math.max(o.toss || 0, o.v.y > 2 ? o.v.y : 0) / Math.sqrt(B.mass);
-        if (toss > 2 && !o.noSlide) K.toss(this.game, c, toss);
+        if (toss > 2 && !o.noSlide) {
+            K.toss(this.game, c, toss);
+            if (o.fly) s.airT = Math.max(s.airT || 0, 2 * toss / CREATURE.G); // (thrown: no ground to slow it until it comes down)
+        }
         // the head
         const kick = this._kick(K, c, o);
         if (kick) { s.jolt.kick(kick); this._emit(ck, c, 'j', [r2(kick.pitch), r2(kick.yaw), r2(kick.roll)]); }
@@ -310,7 +313,7 @@ export class CreatureImpact {
                 const p = K.centre(c, new THREE.Vector3());
                 const v = pushAt(p, c);
                 if (!v) continue;
-                const res = this.apply(c, { v: v.clone(), by: casterId, spell: name, jolt: P.jolt || 0, from: opts.from || null, noSlide: !!opts.noSlide?.(c),
+                const res = this.apply(c, { v: v.clone(), by: casterId, spell: name, jolt: P.jolt || 0, from: opts.from || null, noSlide: !!opts.noSlide?.(c), fly: !!opts.fly,
                     always: P.always ? { down: opts.down ?? P.down } : null, down: opts.down ?? P.down, toss: opts.toss ?? P.toss ?? 0 });
                 if (res !== 'none') n++;
                 opts.each?.(c, ck, res);
@@ -349,7 +352,9 @@ export class CreatureImpact {
             if (this.auth && (s.vx || s.vz)) {
                 const lying = s.state === 'falling' || s.state === 'down';
                 K.move(g, c, s.vx * dt, s.vz * dt);
-                const f = Math.max(0, 1 - (lying ? CREATURE.FRICTION_DOWN : CREATURE.FRICTION) * dt);
+                const air = s.airT > 0;
+                if (air) s.airT -= dt;
+                const f = air ? 1 : Math.max(0, 1 - (lying ? CREATURE.FRICTION_DOWN : CREATURE.FRICTION) * dt);
                 s.vx *= f; s.vz *= f;
                 if (Math.abs(s.vx) + Math.abs(s.vz) < 0.05) s.vx = s.vz = 0;
             }
