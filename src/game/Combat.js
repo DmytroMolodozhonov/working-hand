@@ -139,6 +139,7 @@ function shared() {
         dome: new THREE.SphereGeometry(1, 32, 20),
         domeGrid: new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 1)),
         shell: new THREE.IcosahedronGeometry(1, 1),
+        spike: new THREE.ConeGeometry(1, 1, 5).translate(0, 0.5, 0),
         shieldMat, ringMat, domeMat, gridMat, iceMat,
     };
     return SHARED;
@@ -161,7 +162,21 @@ export class CombatVisuals {
         this.domeGrid = new THREE.LineSegments(S.domeGrid, S.gridMat);
         this.domeGrid.scale.setScalar(1.01);
         this.dome.add(this.domeGrid);
-        this.shell = new THREE.Mesh(S.shell, S.iceMat);
+        // the ice shell: a faceted block round the body with crystal spikes sticking out of it
+        this.shell = new THREE.Group();
+        const block = new THREE.Mesh(S.shell, S.iceMat);
+        block.scale.set(1.3, 2.3, 1.3);
+        this.shell.add(block);
+        for (let i = 0; i < 12; i++) {
+            const a = i * 2.4, y = ((i * 7) % 12) / 11 * 1.6 - 0.8; // (spread all round, top to bottom)
+            const u = _v1.set(Math.cos(a) * Math.sqrt(1 - y * y), y, Math.sin(a) * Math.sqrt(1 - y * y));
+            const spike = new THREE.Mesh(S.spike, S.iceMat);
+            spike.position.set(u.x * 1.15, u.y * 2.05, u.z * 1.15);
+            spike.quaternion.setFromUnitVectors(_v2.set(0, 1, 0), _v3.set(u.x / 1.3, u.y / 2.3, u.z / 1.3).normalize());
+            const w = 0.13 + (i % 3) * 0.05;
+            spike.scale.set(w, 0.45 + (i % 4) * 0.15, w);
+            this.shell.add(spike);
+        }
         for (const o of [this.hand, this.dome, this.shell]) {
             o.visible = false;
             o.renderOrder = 4;
@@ -199,9 +214,12 @@ export class CombatVisuals {
             this.domeGrid.rotation.set(this._t * 0.4, this._t * 0.6, 0);
         }
         this.shell.visible = !!st.frozen;
+        this._iceAge = st.frozen ? (this._iceAge || 0) + dt : 0;
         if (st.frozen) {
+            // (the ice grows round the body in a quarter of a second)
+            const k = Math.min(1, this._iceAge / 0.25);
             this.shell.position.copy(body.center);
-            this.shell.scale.set(1.3, 2.3, 1.3);
+            this.shell.scale.setScalar(0.3 + 0.7 * (1 - (1 - k) * (1 - k)));
         }
     }
 
@@ -466,9 +484,9 @@ export class Combat {
         return true;
     }
 
-    freeze(byId) {
+    freeze(byId, time = PVP.FREEZE_TIME) {
         this.chill = 0;
-        this.frozenLeft = PVP.FREEZE_TIME;
+        this.frozenLeft = Math.max(this.frozenLeft, time);
         this.frozenBy = byId;
         this.shield = null;
         if (this.game.levitation?.active) this.game.levitation.release(false); // (a frozen hand holds nothing)
@@ -560,7 +578,14 @@ export class Combat {
             if (this.stunLeft <= 0 && (this.stunKind === 'quake' || this.stunKind === 'water' || this.stunKind === 'fall')) this.game.character.knockedDown = false;
         }
         if (!this.enabled) {
-            // Other modes: only the shield (no HP / fatigue rules)
+            // Other modes: only the shield and the ice of «Айс» (no HP / fatigue rules)
+            if (this.frozenLeft > 0) {
+                this.frozenLeft = Math.max(0, this.frozenLeft - dt);
+                const hud = this.game.hud;
+                hud.setStatus?.(this.frozen ? `🧊 Вас заморозили «Айсом» — разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с` : '');
+                hud.setFrozenOverlay?.(this.frozen ? 1 : 0);
+                if (!this.frozen) hud.setVoice?.('🧊 Вы разморозились', true);
+            }
             if (this.shield) { this.shield.left -= dt; this._shieldJerk(dt); if (this.shield && this.shield.left <= 0) this.shield = null; }
             this._updateVisuals(dt);
             return;
@@ -627,7 +652,7 @@ export class Combat {
     }
 
     serialize() {
-        if (!this.enabled && !this.shield) return null;
+        if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Айс» is seen in every mode)
         const s = this.shield;
         return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft)];
     }

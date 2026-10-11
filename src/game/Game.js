@@ -932,7 +932,14 @@ export class Game {
         // Duel magic: a charge flies at the creature the hand points at
         // Duel spells need a raised, pointing hand: the word alone (e.g. a friend's voice
         // reaching this microphone) never fires them while the arms hang down
-        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : (name === 'Stupefy' || name === 'AvadaKedavra') ? name : null;
+        // «Айс» is a duel spell too («Frozen» without a water ball as well) — but with a water ball it
+        // freezes the water, and right after freezing water the ice words belong to the water
+        let ice = false;
+        if ((name === 'Ice' || name === 'Frozen') && !this.water.active) {
+            if (performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
+            ice = true;
+        }
+        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : (this.wandSide() || ['right', 'left'].find((s) => this.character.isArmRaised(s))));
@@ -940,12 +947,7 @@ export class Game {
                 if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
                 return null;
             }
-            return this._castDuel(name, duelSpell, isFinal, aim || null, side);
-        }
-        // Ice / levitation aimed at a wizard become duel spells
-        if ((name === 'Ice' || name === 'Frozen') && performance.now() - (this.water.frozenAt || -1e9) > 4000) {
-            const aim = this.water.active ? null : this.duel.pickSide(true);
-            if (aim) return this._castDuel('Ice', 'IceDuel', isFinal, aim);
+            return this._castDuel(ice ? 'Ice' : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Айс» costs)
         }
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Unfurl' || name === 'UnfurlMaxima' || name === 'Furl') return this.ships ? this.ships.castSails(name, text, isFinal) : null; // (a ship's sails)
@@ -981,9 +983,6 @@ export class Game {
         // Water bending: the hand is at the water / holding the ball, not raised to the face
         const waterName = this._waterSpell(name);
         if (waterName) return this._castWater(waterName, text, isFinal);
-        if (name === 'Frozen') name = 'Ice';
-        // «Frozen» / ice words right after freezing water belong to the water — never an ice beam
-        if (name === 'Ice' && performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
         if (name === 'Maxima') return null;
         const recent = this.isMagicActive || Date.now() - this.lastMagicTime < 1500;
         // Flight has its own gesture (both arms up) — checked in startFlight
@@ -1928,6 +1927,7 @@ export class Game {
         if (name === 'Stupefy' || name === 'AvadaKedavra') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
         if (name === 'Sands') { this._lastDuelCast = 0; return this._castDuel('Sands', 'SandsDuel', true); }
+        if (name === 'Ice' || name === 'Frozen') { this._lastDuelCast = 0; return this._castDuel('Ice', 'IceDuel', true); }
         const origin = this.character.getHandWorldPosition('right');
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, 'right', this.localId);

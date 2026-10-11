@@ -120,9 +120,12 @@ export function matchSpell(text) {
     if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер', 'костёр', 'костер', 'костр')) return 'Fire';
     if (has('инфер', 'infer', 'огон')) return 'Inferno';
     if (has('санд', 'sand', 'сенд', 'send', 'санс', 'sans', 'песо', 'peso', 'цент', 'cent', 'даст', 'dust', 'sun', 'son', 'sam', 'set', 'sed')) return 'Sands';
-    if (has('айс', 'ice', 'аис', 'ais', 'лед', 'лёд', 'led', 'мороз', 'moroz', 'холод', 'cold', 'луч', 'beam', 'eyes', 'ace', 'is', 'snow', 'freeze', 'froze')) return 'Ice';
+    // «Айс» only as a word of its own: inside other words it is everywhere («лучше», «получилось»,
+    // «следующий», «наиболее», «найс», «this»…) and cast itself in the middle of a talk
+    if (s.split(/[^a-zа-яё]+/).some((w) => ICE_WORD.test(w))) return 'Ice';
     return null;
 }
+const ICE_WORD = /^(?:(?:айс|айз|аис)(?:а|у|е|ом)?|ice|ais|лёд|лед)$/;
 
 export class SpellManager {
     /**

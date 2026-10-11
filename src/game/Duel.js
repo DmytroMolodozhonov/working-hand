@@ -3,7 +3,8 @@
  *
  *   Остолбеней (Stupefy)      the target can't move or cast for 15 s
  *   Авада Кедавра             instant death (green)
- *   Айс on a wizard           freezes them (20 s, any hit shatters)
+ *   Айс                       a spinning ice crystal on a frosty beam: locks the target in ice
+ *                             (a wizard 20 s — any hit shatters him —, 5 s in Creative; a creature 8 s)
  *   Вингардиум Левиоса        on a creature: throws it up into the air
  *   Сапира                    a slow, heavy violet charge: 4 HP to a wizard, 10 to a zombie
  *
@@ -38,12 +39,14 @@ import { SLOW } from './Slow.js';
 import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
+import { IceLook, ICE } from '../fx/IceLook.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
     AvadaKedavra: { color: 0x2dff5a, name: 'Авада Кедавра' },
-    IceDuel: { color: 0x8fdcff, name: 'Айс' },
+    // «Айс»: a thin frosty beam (no crackling) with a spinning ice crystal at its head (IceLook.js)
+    IceDuel: { color: 0x8fdcff, name: 'Айс', speed: 17, core: 0.035, glow: 0.15, coreColor: 0xf2fbff },
     LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса' },
     // Slower and thicker: a dark-violet ball of force rolling through the air
     SapiraDuel: { color: 0x8e2de2, name: 'Сапира', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
@@ -241,6 +244,7 @@ export class Duel {
         this.markPools = {}; // the thin core of each wizard's beam, in their marker colour
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
         this.log = []; // last duel events (for testing / debugging)
+        this.ice = new IceLook(game); // how «Айс» looks
     }
 
     /** 0..3: this wizard's colour signature (same on every computer). */
@@ -489,6 +493,7 @@ export class Duel {
         const b = this._addBolt({ id: `${this.me}:${nextId++}`, by: this.me, spell, side, tk, tid, ak, o: origin, d: dir });
         const g = this.game;
         if (g.sync) g.sync.duelCast(b);
+        if (spell === 'IceDuel') { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
         if (g.sound) g.sound.playSapira?.();
         // the spell leaves the hand with a flash
         const col = this.colors(spell, this.me).glow;
@@ -646,7 +651,7 @@ export class Duel {
         const g = this.game;
         const src = from || this._casterAt(byId, c);
         const p = this._creaturePoint(c, _v1);
-        this._burst(p, DUEL_SPELLS[spell].color, 30);
+        this._hitBurst(spell, p, 30);
         // a book-bird: any charge knocks it out of the air (it falls as a book)
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         if (c.isBird) { if (spell !== 'LevitateDuel') g.books.hitBird(c, 99); return; }
@@ -662,8 +667,9 @@ export class Duel {
             // falls stiff on its back and lies while the spell holds it (then gets up by itself)
             g.creatureImpact?.spellHit(c, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
         } else if (spell === 'IceDuel') {
-            c.stunT = 8; c.frozenLook = 8;
-            for (let i = 0; i < 20; i++) g.fx.spark(p, 0xbfe9ff, 0.12, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.8);
+            // locked in a block of ice: it can't move while the ice holds
+            c.stunT = Math.max(c.stunT || 0, ICE.CREATURE_T);
+            this._encase(c.isAnimal ? 'a' : 'v', c.id, ICE.CREATURE_T);
         } else if (spell === 'LevitateDuel') {
             if (c.isAnimal) g.animals.push(c, _v2.set(0, 13, 0), 2.5);
             else { c.stunT = 3; c.vy = 11; }
@@ -697,7 +703,7 @@ export class Duel {
         const g = this.game;
         const c = g.combat;
         const p = c.center(_v1);
-        this._burst(p, DUEL_SPELLS[spell].color, 40);
+        this._hitBurst(spell, p, 40);
         // the way the charge pushes: from the caster's hand to me
         const hand = new THREE.Vector3();
         const from = this._handOf(byId, side || 'right', hand, new THREE.Vector3()) ? hand : null;
@@ -715,8 +721,10 @@ export class Duel {
             // falls stiff on the back (the shield was checked on arrival); once the stun ends — the get-up squat
             g.impact?.apply({ v: push(4), from, by: byId, spell: 'Stupefy', always: { down: 1.5 }, noShield: true });
         } else if (spell === 'IceDuel') {
-            if (c.enabled) c.freeze(byId);
-            else c.stun(5, byId);
+            // in a shell of ice (everyone sees it): 20 s in the free world (any hit shatters), 5 s in other modes
+            c.freeze(byId, c.enabled ? PVP.FREEZE_TIME : ICE.CREATIVE_T);
+            g.hud.flashColor?.('rgba(150, 220, 255, 0.6)');
+            if (!c.enabled) g.hud.setVoice('🧊 «Айс» попал в вас — вы во льду', true);
         } else if (spell === 'LevitateDuel') {
             // Lifted like a thing: my body hangs in front of the caster's hand and follows it
             // (until they let go — a fall from up there hurts — or my «Protection» breaks it)
@@ -741,7 +749,7 @@ export class Duel {
         const g = this.game;
         const src = from || this._casterAt(byId, z);
         const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
-        this._burst(p, DUEL_SPELLS[spell].color, 30);
+        this._hitBurst(spell, p, 30);
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
             g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
@@ -750,6 +758,11 @@ export class Duel {
             z.stunTimer = DUEL.STUN_TIME;
             g.creatureImpact?.spellHit(z, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
         } else if (spell === 'IceDuel') {
+            // ice crystals all over it at once, then it is frozen solid
+            if (!z.isFrozen && z.spawnIceCrystalOnBody) {
+                for (let i = 0; i < 16; i++) z.spawnIceCrystalOnBody();
+                for (const k of z.iceCrystals.children) k.scale.setScalar(1.8 + Math.random() * 1.2);
+            }
             z.freezeProgress = 1;
             z.freeze();
         } else if (spell === 'LevitateDuel') {
@@ -775,7 +788,7 @@ export class Duel {
         if (!this.bolts.has(b.id)) return;
         this.bolts.delete(b.id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
-        if (res === 'blocked' || res === 'fizzle') this._burst(b.front, DUEL_SPELLS[b.spell].color, 15);
+        if (res === 'blocked' || res === 'fizzle') this._hitBurst(b.spell, b.front, 15);
         if (broadcast && this.game.sync && (b.by === this.me || res === 'hit' || res === 'blocked')) this.game.sync.duelEnd(b.id, res);
     }
 
@@ -785,7 +798,9 @@ export class Duel {
         if (!b) return;
         this.bolts.delete(id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
-        this._burst(b.front, DUEL_SPELLS[b.spell].color, res === 'hit' ? 30 : 15);
+        this._hitBurst(b.spell, b.front, res === 'hit' ? 30 : 15);
+        // (another computer froze a creature: its ice is seen here too)
+        if (res === 'hit' && b.spell === 'IceDuel' && (b.tk === 'a' || b.tk === 'v')) this._encase(b.tk, b.tid, ICE.CREATURE_T);
         this.clashes = this.clashes.filter((c) => c.a !== b && c.b !== b);
     }
 
@@ -1099,6 +1114,7 @@ export class Duel {
     /** A jagged, flickering electric charge from a to b. */
     _drawBolt(spell, from, to, by, core = null) {
         if (!DUEL_SPELLS[spell]) return;
+        if (spell === 'IceDuel') { this._drawIce(from, to, by, core); return; }
         const pool = this._pool(spell, by);
         const col = this.colors(spell, by).glow;
         // own copies: the caller may pass the shared temp vectors
@@ -1127,6 +1143,47 @@ export class Duel {
         // bright head, and a glow at the hand it comes from
         if (Math.random() < 0.8) this.game.fx.spark(b, col, 0.22, _v1.set((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2), 0.25);
         if (Math.random() < 0.5) this.game.fx.spark(a, col, 0.12, _v1.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5), 0.2);
+    }
+
+    /** «Айс»: a thin, nearly straight frosty beam (no crackling); IceLook adds the threads, the snow and the crystal. */
+    _drawIce(from, to, by, core = null) {
+        const pool = this._pool('IceDuel', by);
+        const a = _da.copy(from), b = _db.copy(to);
+        const len = a.distanceTo(b);
+        if (len < 0.05) return;
+        const n = Math.max(2, Math.min(16, Math.round(len)));
+        const dir = _dd.subVectors(b, a).divideScalar(len);
+        const side = _ds.set(-dir.z, 0, dir.x);
+        if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
+        side.normalize();
+        const up = _du.crossVectors(dir, side).normalize();
+        const prev = _v3.copy(a), p = _v2;
+        for (let i = 1; i <= n; i++) {
+            p.copy(a).lerp(b, i / n);
+            if (i < n) p.addScaledVector(side, (Math.random() - 0.5) * 0.03).addScaledVector(up, (Math.random() - 0.5) * 0.03);
+            (core || pool.core).add(prev, p, this._segLife || 0.05);
+            pool.glow.add(prev, p, this._segLife || 0.05);
+            prev.copy(p);
+        }
+        this.ice?.beam(a, b, this._segLife || 0.05, !core);
+    }
+
+    /** Where a charge hits / bursts: «Айс» shatters into ice, the others spark. */
+    _hitBurst(spell, p, n) {
+        if (spell === 'IceDuel') this.ice?.shatter(p, n / 30);
+        else this._burst(p, DUEL_SPELLS[spell].color, n);
+    }
+
+    /** A creature locked in ice (it follows the body; breaks when the time is up or it is gone). */
+    _encase(kind, id, T) {
+        if (!this.ice) return;
+        const e = { kind, id, a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
+        this.ice.encase(`${kind}:${id}`, (out) => {
+            const body = this._bodyOf(kind, id, e);
+            if (!body) return null;
+            out.copy(body.a).lerp(body.b, 0.5);
+            return { center: out, rx: body.r * 1.15, ry: body.a.distanceTo(body.b) / 2 + body.r };
+        }, T);
     }
 
     _burst(p, color, n) {
@@ -1204,6 +1261,7 @@ export class Duel {
     /** Called by the effects' update (segment pools fade the flicker). */
     updateVisuals(dt) {
         for (const p of Object.values(this.pools)) { p.core.update(dt); p.glow.update(dt); }
+        this.ice?.update(dt);
         for (const p of Object.values(this.markPools)) p.update(dt);
         // markers of duels that ended this frame disappear
         for (let i = this._orbsUsed; i < this._orbs.length; i++) { const o = this._orbs[i]; o.a.visible = o.b.visible = o.core.visible = false; for (const r of o.rings) r.visible = false; }

@@ -139,11 +139,13 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
         out.afterJerk = W.state;
         for (let i = 0; i < 300 && W.falling.length; i++) await sleep(100);
         out.restingAfterLiquid = W.resting.length;
-        // «Frozen» without a water ball is the normal ice beam
-        await sleep(4200); // later, without water, «Frozen» is the ice beam again
+        // «Frozen» without a water ball is «Айс»: a duel charge from the raised hand
+        await sleep(4200); // later, without water, «Frozen» is «Айс» again
         g.lastMagicTime = Date.now();
         g.lastSpellCastTime = 0;
+        ch.isArmRaised = () => true; // (no camera here: the hand is raised)
         out.iceBeam = await say('frozen');
+        out.iceBolt = [...g.duel.bolts.values()].some((b) => b.spell === 'IceDuel');
         out.iceCells = g.iceCells.length;
         return out;
     });
@@ -176,6 +178,7 @@ test('water bending: Waterbollow at a river, Максима, Water forming, Froz
     assert.equal(r.afterJerk, null, 'a sharp jerk drops the spell');
     assert.equal(r.restingAfterLiquid, 1, 'liquid water just splashes');
     assert.equal(r.iceBeam, 'Ice');
+    assert.ok(r.iceBolt, '«Айс» flies as a duel charge');
     assert.ok(r.iceCells >= r.formed);
     assert.deepEqual(realErrors(errors), []);
     await page.close();
