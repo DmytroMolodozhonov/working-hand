@@ -172,7 +172,18 @@ test('open hand at the handle + closing fingers = grab; grip point and direction
     hand.lastTrackingTime = Date.now(); // tracked again, really open
     for (let i = 0; i < 3; i++) hand.update(null); // drawn state stays clamped to the handle
     assert.ok(hand.currentState.fingers.index > 0.4, 'drawn fingers still wrap the handle');
-    for (let i = 0; i < 20; i++) { game.advance(16); game.weapons.update(1 / 60); }
+    // the arm hanging at the side, the hand open for a second: still held (nothing drops by accident)
+    const ch = game.character;
+    ch.setIdlePose();
+    for (let i = 0; i < 60; i++) { hand.lastTrackingTime = Date.now(); game.advance(16); game.weapons.update(1 / 60); }
+    assert.equal(game.weapons.hands.right.held?.id, w.id, 'an open hand at the side keeps it');
+    // the arm stretched out forward, the hand opened: it falls out
+    ch.group.updateMatrixWorld(true);
+    ch.rightArmAnchor.lookAt(ch.rightArmAnchor.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0, -2)));
+    ch.rightElbowAnchor.rotation.set(0, 0, 0);
+    hand.palm.rotation.set(Math.PI, 0, 0); // (palm down: a flat palm turned up would hold it on)
+    for (let i = 0; i < 20; i++) ch.update(1 / 60, null, false); // (the hand's own speed settles)
+    for (let i = 0; i < 20; i++) { hand.lastTrackingTime = Date.now(); game.advance(16); game.weapons.update(1 / 60); }
     assert.equal(game.weapons.hands.right.held?.id ?? null, null, 'released');
     assert.equal(w.holder ?? null, null);
     assert.equal(hand.gripOverride ?? null, null);

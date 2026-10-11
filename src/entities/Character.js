@@ -22,6 +22,7 @@ const _up = new THREE.Vector3();
 const _ax = new THREE.Vector3();
 const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3();
 const _r5 = new THREE.Vector3(), _r6 = new THREE.Vector3(), _ru = new THREE.Vector3(), _rn = new THREE.Vector3();
+const _m4 = new THREE.Matrix4(), _hv = new THREE.Vector3(), _hq = new THREE.Quaternion();
 
 /**
  * An arm of two bones (L1 from the shoulder to the elbow, L2 on to the hand)
@@ -85,6 +86,12 @@ export class VoxelCharacter {
         this.handsVisible = false;
         this.handVelocity = { left: new THREE.Vector3(), right: new THREE.Vector3() };
         this._lastHandPos = { left: null, right: null };
+        // the hand's own speed against the body (running, crouching, turning add nothing) — throws
+        this.handRelVelocity = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+        this._lastHandLocal = { left: null, right: null };
+        // how fast the palm turns (rad/s, world axis × speed): a thrown thing keeps the wrist's snap
+        this.palmSpin = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+        this._lastPalmQ = { left: null, right: null };
 
         this.createCharacter();
         this.scene.add(this.group);
@@ -309,6 +316,60 @@ export class VoxelCharacter {
         return h(this.leftElbowAnchor) > headTop && h(this.rightElbowAnchor) > headTop;
     }
 
+    /** The hands' speed against the body and the palms' turning speed (see handRelVelocity, palmSpin). */
+    _updateHandMotion(dt) {
+        if (!(dt > 0)) return;
+        this.group.updateMatrixWorld(true);
+        _m4.copy(this.group.matrixWorld).invert();
+        for (const side of ['left', 'right']) {
+            const grip = this.getGripObject(side);
+            grip.getWorldPosition(_v1).applyMatrix4(_m4);
+            const last = this._lastHandLocal[side];
+            if (last) { this.handRelVelocity[side].lerp(_v2.subVectors(_v1, last).divideScalar(dt), 0.8); last.copy(_v1); } // (the camera's jitter is filtered upstream)
+            else this._lastHandLocal[side] = _v1.clone();
+            grip.getWorldQuaternion(_hq);
+            const lq = this._lastPalmQ[side];
+            if (lq) {
+                // the turn since the last frame: q·last⁻¹ = (axis, angle)
+                _q1.copy(_hq).multiply(_q2.copy(lq).invert());
+                if (_q1.w < 0) { _q1.x = -_q1.x; _q1.y = -_q1.y; _q1.z = -_q1.z; _q1.w = -_q1.w; }
+                const ang = 2 * Math.acos(Math.min(1, _q1.w)), s = Math.sqrt(Math.max(0, 1 - _q1.w * _q1.w));
+                if (s > 1e-6) _hv.set(_q1.x / s, _q1.y / s, _q1.z / s).multiplyScalar(ang / dt); else _hv.set(0, 0, 0);
+                this.palmSpin[side].lerp(_hv, 0.5).clampLength(0, 20);
+                lq.copy(_hq);
+            } else this._lastPalmQ[side] = _hq.clone();
+        }
+    }
+
+    /**
+     * The arm in the body's space (x right, y up, z back): hand, shoulder, reach (× the arm's
+     * length), forward (cos to the body's front), up (sin of the arm's elevation), the hand's
+     * speed against the body (vRel, speed), its world speed (vWorld), palmUp (cos of the palm's
+     * face to world up). For the hand letting go (HandRelease.js).
+     */
+    armState(side, out = {}) {
+        this.group.updateMatrixWorld(true);
+        _m4.copy(this.group.matrixWorld).invert();
+        out.shoulder = (side === 'left' ? this.leftArmAnchor : this.rightArmAnchor).getWorldPosition(out.shoulder || new THREE.Vector3()).applyMatrix4(_m4);
+        out.hand = this.getHandWorldPosition(side, out.hand || new THREE.Vector3()).applyMatrix4(_m4);
+        const d = _v3.subVectors(out.hand, out.shoulder), len = d.length() || 1e-6;
+        out.reach = len / (this.BONE_LENGTH_UPPER + this.BONE_LENGTH_LOWER);
+        out.forward = -d.z / len;
+        out.up = d.y / len;
+        out.vRel = this.handRelVelocity[side];
+        out.speed = out.vRel.length();
+        out.vWorld = this.handVelocity[side];
+        const g = this.getGripObject(side); // (the palm's face is its −Z, both hands)
+        out.palmUp = g.name === 'palm' ? -_v1.setFromMatrixColumn(g.matrixWorld, 2).normalize().y : 0;
+        return out;
+    }
+
+    /** The camera sees this hand now (seen within 400 ms): a lost hand never lets go of anything. */
+    isHandTracked(side) {
+        const h = this.getActiveHands()[side];
+        return !!h && h.group.visible && h.lastTrackingTime > 0 && Date.now() - h.lastTrackingTime < 400;
+    }
+
     /** Arm stretched out (hand far from the shoulder) — the shield gesture. */
     isArmExtended(side) {
         if (this.handLost(side)) return false;
@@ -523,6 +584,7 @@ export class VoxelCharacter {
                 this._lastHandPos[side] = _v1.clone();
             }
         }
+        this._updateHandMotion(dt);
 
         // Crouching lowers the body by 1 m: the legs fold back (kneeling) so they stay above the ground
         const crouchAngle = this.isCrouching ? -1.1 : 0;

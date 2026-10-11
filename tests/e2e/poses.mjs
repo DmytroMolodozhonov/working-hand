@@ -41,11 +41,13 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
  *   raise: degrees — both arms lifted sideways this far from hanging (overrides `arms`)
  *   archer: 'left' | 'right' — the bow arm stretched at the camera; draw: 0 (the other hand
  *     at the bow) … 1 (drawn back to the chin), null (that arm hangs)
+ *   windup: 'left' | 'right' — that hand drawn back for a throw: up by the head, the elbow out,
+ *     the wrist behind the shoulder (the camera sees it further away)
  *   leftCurl / rightCurl: 0 open … 1 fist, null = hand not detected
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0 } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -98,6 +100,9 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
         const bz = [-0.25, -0.5];
         z = archer === 'left' ? { le: bz[0], lw: bz[1], re: dz[0], rw: dz[1] } : { re: bz[0], rw: bz[1], le: dz[0], lw: dz[1] };
     }
+    // a hand drawn back for a throw (overhand): up by the head, the elbow out to the side, behind the shoulder
+    if (windup === 'right') { rElbow = [0.31, sh - 0.02]; rWrist = [0.36, sh - 0.17]; z = { le: -0.2, lw: -0.4, re: 0.08, rw: 0.22, ...(z || {}) }; }
+    if (windup === 'left') { lElbow = [0.69, sh - 0.02]; lWrist = [0.64, sh - 0.17]; z = { re: -0.2, rw: -0.4, le: 0.08, lw: 0.22, ...(z || {}) }; }
     if (lean) { lElbow[0] += lean; lWrist[0] += lean; rElbow[0] += lean; rWrist[0] += lean; }
     // (raised sideways: the arm stays in the body's plane, no depth)
     const ez = raise != null ? 0 : -0.2, wz = raise != null ? 0 : -0.4;

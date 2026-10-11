@@ -43,6 +43,7 @@ import { PVP } from './Combat.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
 import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS } from './BedRules.js';
+import { ThrowDetector, poseBehind } from './HandRelease.js';
 
 const DAY_MS = 24 * 60 * 1000; // (Game.DAY_CYCLE_MS)
 const LIE_AFTER = 1.5; // s of crouching at a bed
@@ -66,7 +67,6 @@ export class Beds {
         this._standAt = 0;
         this._sent = '';
         this._waitSaid = false;
-        this._hist = [];
         this._throwAt = 0;
         this._interim = null;
         this._lastCast = 0;
@@ -320,28 +320,24 @@ export class Beds {
         return true;
     }
 
-    /** Throwing wood out of the hand: a fast swing that stops (like any thing). */
-    _updateWoodThrow() {
+    /** Throwing wood out of the hand: a real throw (wind-up, swing, the fingers open — like any thing). */
+    _updateWoodThrow(dt = 1 / 60) {
         const g = this.game;
         const inv = g.inventory;
+        const ch = g.character;
         const s = inv?.inHand?.kind === 'res' ? inv.inHand.stack : null;
         const now = performance.now();
-        const v = g.character.handVelocity.right;
-        this._hist.push({ t: now, s: v.length(), v: v.clone() });
-        while (this._hist.length && now - this._hist[0].t > 250) this._hist.shift();
-        if (!s || !isWood(s.block) || s.count <= 0 || !inv.slots.includes(s) || !g.currentPose || g.combat.dead || this.lying) return;
+        const thrower = this._thrower || (this._thrower = new ThrowDetector());
+        if (!s || !isWood(s.block) || s.count <= 0 || !inv.slots.includes(s) || !g.currentPose || g.combat.dead || this.lying || !ch.armState) { thrower.reset(); return; }
         if (now - this._throwAt < 600) return;
-        let peak = null;
-        for (const e of this._hist) if (!peak || e.s > peak.s) peak = e;
-        if (peak && peak.s > 6.5 && v.length() < peak.s * 0.35 && now - peak.t < 200) {
-            this._hist.length = 0;
-            // a strike down onto the right pocket (putting the wood away) is not a throw
-            const ch = g.character;
-            ch.group.updateMatrixWorld(true);
-            const local = ch.getHandWorldPosition('right', _v).applyMatrix4(_m.copy(ch.group.matrixWorld).invert());
-            const pocket = local.x > 0.3 && local.y < 0.55 && Math.abs(local.z) < 0.85 && peak.v.y < -0.6 * peak.s;
-            if (!pocket) this.throwWood(peak.v);
-        }
+        const arm = ch.armState('right', this._arm || (this._arm = {}));
+        const thr = thrower.update({ now: this._clock = (this._clock || 0) + dt * 1000, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl: ch.getGripCurl('right'), tracked: ch.isHandTracked('right'), behind: poseBehind(g.currentPose, 'right'), weight: 1.2 });
+        if (!thr) return;
+        // a strike down onto the right pocket (putting the wood away) is not a throw
+        ch.group.updateMatrixWorld(true);
+        const local = ch.getHandWorldPosition('right', _v).applyMatrix4(_m.copy(ch.group.matrixWorld).invert());
+        const pocket = local.x > 0.3 && local.y < 0.55 && Math.abs(local.z) < 0.85 && thr.vRel[1] < -0.6 * thr.speed;
+        if (!pocket) this.throwWood(g.items?._throwVelocity ? g.items._throwVelocity('right', thr, new THREE.Vector3(), 1.2) : new THREE.Vector3().fromArray(thr.vWorld));
     }
 
     /** A bundle of logs leaves the right hand (up to 4 wood from the chosen stack). */
@@ -423,7 +419,7 @@ export class Beds {
     update(dt) {
         const g = this.game;
         const ch = g.character;
-        this._updateWoodThrow();
+        this._updateWoodThrow(dt);
         const dead = g.combat.dead || g.isDeadLocal;
         if (this.lying) {
             const b = this.list.get(this.lying);

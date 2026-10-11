@@ -523,8 +523,9 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'igone', uid, to, side }, true);
     }
 
-    itemThrow(item, p, v) {
-        this.net.send({ t: 'ithrow', item, p: [r3(p.x), r3(p.y), r3(p.z)], v: [r3(v.x), r3(v.y), r3(v.z)] });
+    itemThrow(item, p, v, q = null, w = null) {
+        // (q: how it was turned in the hand, w: its spin — it flies on as it left the hand)
+        this.net.send({ t: 'ithrow', item, p: [r3(p.x), r3(p.y), r3(p.z)], v: [r3(v.x), r3(v.y), r3(v.z)], q: q ? [r3(q.x), r3(q.y), r3(q.z), r3(q.w)] : null, w: w ? [r3(w.x), r3(w.y), r3(w.z)] : null });
     }
 
     itemGive(to, item, side) {
@@ -700,7 +701,7 @@ export class NetSync {
                 if (m.to === this.me && it) g.items._gotItem(it, m.side === 'left' ? 'left' : m.side === 'slot' ? 'slot' : 'right');
                 break;
             }
-            case 'ithrow': if (this.net.isHost && m.item) { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v) }); if (L) L.thrower = m.from; } break;
+            case 'ithrow': if (this.net.isHost && m.item) { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v), quat: Array.isArray(m.q) ? new THREE.Quaternion().fromArray(m.q).normalize() : null, spin: Array.isArray(m.w) ? vec(m.w) : null }); if (L) L.thrower = m.from; } break;
             case 'igive': if (m.to === this.me && m.item) { if (!g.items.takeIntoHand(m.item, m.side === 'left' ? 'left' : 'right')) g.inventory.storeItem(m.item); g.hud.setVoice?.('🤝 Вам передали предмет', true); } break;
             case 'ihold': if (m.by !== this.me) g.items?.setRemoteHeld(m.by, m.side, m.item || null); break;
             case 'wspawn': {

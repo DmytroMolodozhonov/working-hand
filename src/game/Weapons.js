@@ -7,8 +7,10 @@
  *   - the sword is held at the exact point of the handle you grabbed, the
  *     handle settles across the palm and the fingers wrap around it,
  *   - you keep the direction you grabbed it in (blade up / down / sideways),
- *   - opening the hand drops/throws it with its real velocity and spin.
- *   - short tracking drop-outs never make you drop the weapon.
+ *   - it leaves the hand only when the outstretched hand clearly opens, or in a
+ *     real throw (wind-up, swing, the fingers let go) — with the hand's real
+ *     velocity and spin (HandRelease.js); never by accident (a hand lost by the
+ *     camera, a half-open hand at the side, running, a quick move).
  *
  * Combat: a hit is a real contact between the blade and a zombie's body while
  * the blade moves fast enough; damage and knockback come from the blade speed
@@ -19,12 +21,11 @@ import * as THREE from 'three';
 import { Weapon } from '../entities/Weapon.js';
 import { segmentSegmentDistSq, clamp } from '../core/math.js';
 import { bladeContact, bladePower, overpowers } from './BladeClash.js';
+import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
 const CLOSE_CURL = 0.55; // fingers closed
 const OPEN_CURL = 0.35; // fingers open
-const RELEASE_CURL = 0.28;
-const RELEASE_HOLD_MS = 160; // fingers must stay open this long to drop (no accidental drops)
 const CLOSE_WINDOW_MS = 900; // hand must have been open this recently to count as "closing on" the handle
 const SETTLE_TIME = 0.18; // seconds for the handle to settle into the grip
 const MIN_SWING_SPEED = 3.2; // m/s at the tip to count as a strike
@@ -63,7 +64,7 @@ export class WeaponSystem {
     }
 
     _handState() {
-        return { held: null, lastOpen: 0, lastOpenFrame: -1000, openSince: 0, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false };
+        return { held: null, lastOpen: 0, lastOpenFrame: -1000, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false, drop: new DropGate(), thr: new ThrowDetector(), arm: {} };
     }
 
     spawn(type, position, quaternion, id) {
@@ -258,19 +259,24 @@ export class WeaponSystem {
         const curl = visible ? ch.getGripCurl(side) : (hs.held ? 1 : 0);
         // While the camera has lost this hand we never drop the weapon (safeguard):
         // the model then only shows the last pose / slowly relaxes.
-        const tracked = !hand || !hand.lastTrackingTime || Date.now() - hand.lastTrackingTime < 400;
-        if (curl < OPEN_CURL && tracked) { hs.lastOpen = now; hs.lastOpenFrame = this.frame; }
-        if (curl < RELEASE_CURL && tracked) { if (!hs.openSince) hs.openSince = now; } else hs.openSince = 0;
+        const tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
+        const seen = !hand || !hand.lastTrackingTime || Date.now() - hand.lastTrackingTime < 400; // (for closing on a handle)
+        if (curl < OPEN_CURL && seen) { hs.lastOpen = now; hs.lastOpenFrame = this.frame; }
 
         if (hs.held) {
             const w = hs.held;
             // Weapon got taken by the network (another player / host reset)
             if (w.holder == null || w.holder.side !== side) { this._forget(side, hand); return; }
-            // Summoned into an open hand («Акцио»): kept until the hand has closed on it once
-            if (hs.waitClose && curl > 0.5) hs.waitClose = false;
-            if (hs.openSince && now - hs.openSince > RELEASE_HOLD_MS && !hs.waitClose) {
-                this.release(side);
-                return;
+            // Summoned into an open hand («Акцио», a slot): kept until the hand has closed on it once
+            if (hs.waitClose) { hs.waitClose = false; hs.drop.reset(false); }
+            if (ch.armState) {
+                const arm = ch.armState(side, hs.arm);
+                const gt = hs.clock = (hs.clock || 0) + dt * 1000; // (the game's clock: a stalled frame must not cut a swing in two)
+                // a real throw: wind-up, a fast swing, the fingers let go — it flies with the hand's speed
+                const thr = hs.thr.update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(this.game.currentPose, side), weight: w.mass || 1 });
+                if (thr) { this.release(side); w.velocity.fromArray(thr.vWorld).clampLength(0, 22); return; }
+                // the outstretched hand clearly opened: it falls out of it
+                if (hs.drop.update({ now: gt, curl, tracked, ...arm })) { this.release(side); return; }
             }
             this._driveHeld(side, dt, ch);
             return;
@@ -393,7 +399,8 @@ export class WeaponSystem {
         hs.relC = { p: pRelC, q: qRelC };
         hs.settle = 0;
         hs.hasPrev = false;
-        hs.openSince = 0;
+        hs.drop.reset(true);
+        hs.thr.reset();
         w.hover = null;
         w.clearRemote();
         w.attach({ playerId: this.game.localId || 'local', side });
