@@ -5,6 +5,7 @@
  */
 
 import { mouthOpenness } from '../game/VoiceGate.js';
+import { LegReader } from './LegReader.js';
 
 /**
  * The head tilted back: a real head goes back ~40–45° before the camera loses the
@@ -90,6 +91,7 @@ export class PoseInterpreter {
         this.legs = { left: { liftedAt: 0 }, right: { liftedAt: 0 } };
         this.stompAt = 0;
         this.legsSeenAt = 0;
+        this.legReader = new LegReader(); // (the surfboard: getting on, paddling with a leg)
     }
 
     /**
@@ -206,6 +208,7 @@ export class PoseInterpreter {
             data.punchingHand = leftDist > rightDist ? 'left' : 'right';
 
             this._legs(lm, data);
+            data.legs = this.legReader.read(lm);
 
             // Crouch with hysteresis
             const noseY = data.nose.y;

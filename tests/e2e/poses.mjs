@@ -46,8 +46,9 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
  *   leftCurl / rightCurl: 0 open … 1 fist, null = hand not detected
  *   noseY: 0.25 standing, 0.6 crouching
  *   bob: shoulder vertical offset (for running animation)
+ *   legs: {left, right}: 'stand' | 'up' | 'heel' | 'off' (opt-in; see below)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, legs = null } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -112,6 +113,18 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
     p[16] = { x: rWrist[0], y: rWrist[1], z: z ? z.rw : wz, visibility: 0.99 };
     p[23] = { x: 0.57, y: 0.8, z: 0, visibility: 0.9 };
     p[24] = { x: 0.43, y: 0.8, z: 0, visibility: 0.9 };
+    // legs: {left, right}: 'stand' | 'up' (the knee to the hip) | 'heel' (the foot kicked up behind) | 'off' (not seen)
+    // (opt-in: without it the knees stay at the hips, as every older test had them)
+    if (legs) {
+        const T = 0.8 - sh;
+        for (const [side, kneeI, ankleI, hx] of [['left', 25, 27, 0.57], ['right', 26, 28, 0.43]]) {
+            const st = legs[side] || 'stand', vis = st === 'off' ? 0.1 : 0.95;
+            const knee = st === 'up' ? { x: hx, y: 0.8 + 0.05 * T, z: -0.3 } : { x: hx, y: 0.8 + 0.5 * T, z: 0 };
+            const ay = st === 'heel' ? knee.y + 0.12 * T : knee.y + 0.5 * T;
+            p[kneeI] = { ...knee, visibility: vis };
+            p[ankleI] = { x: hx, y: ay, z: st === 'heel' ? 0.25 : knee.z, visibility: ay < 1 ? vis : 0.3 };
+        }
+    }
     const hands = [];
     if (leftCurl != null) hands.push({ landmarks: hand(p[15].x, p[15].y, { curl: leftCurl, rot: leftRot, tilt: leftTilt }), label: 'Right', score: 0.95 });
     if (rightCurl != null) hands.push({ landmarks: hand(p[16].x, p[16].y, { curl: rightCurl, rot: rightRot, tilt: rightTilt, mirror: true }), label: 'Left', score: 0.95 });
