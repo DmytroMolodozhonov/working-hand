@@ -1283,13 +1283,15 @@ export class CastleLife {
     }
 
     hitRay(o, d, len, width, dmg, by) {
+        let any = false;
         for (const v of [...this.byId.values()]) {
             if (v.dead) continue;
             const to = _v.set(v.x - o.x, v.y + 2 - o.y, v.z - o.z);
             const along = to.dot(d);
             if (along < 0 || along > len) continue;
-            if (to.addScaledVector(d, -along).length() < width + 1.2) this.hit(v, dmg, d.clone(), by, { spell: true });
+            if (to.addScaledVector(d, -along).length() < width + 1.2) { this.hit(v, dmg, d.clone(), by, { spell: true }); any = true; }
         }
+        return any;
     }
 
     // ------------------------------------------------------------ speech

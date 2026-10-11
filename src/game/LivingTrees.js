@@ -341,6 +341,7 @@ export class LivingTrees {
 
     /** The Inferno stream along a ray. */
     burnAlong(o, d, len) {
+        let burnt = false;
         for (const t of this.list) {
             if (t.isDead || t.fireCd > 0) continue;
             const p = t.model.position, s = t.model.userData.s;
@@ -350,9 +351,11 @@ export class LivingTrees {
                 if (Math.hypot(q.x - p.x, q.z - p.z) > 2.2 * s || q.y < p.y - 1 || q.y > p.y + 10 * s) continue;
                 t.fireCd = 0.6;
                 this.hit(t, 3, 'Inferno');
+                burnt = true;
                 break;
             }
         }
+        return burnt;
     }
 
     /** Fire at a point (Fire Maxima and the like): only fire kinds do anything. */

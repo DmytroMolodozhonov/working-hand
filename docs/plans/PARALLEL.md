@@ -164,3 +164,14 @@ Generation 2: `MIN_LAYER = -17` (bedrock), the deep sea floor is at layer −16.
 
 Port chests already roll `rollPortLoot` (`src/game/ItemTypes.js`). Set `LOOT_EXTRA.fishingRod = (r) => item`
 (exported from ItemTypes.js) and every port chest holds a fishing rod with a 35% chance.
+
+## Inferno API (from the «inferno» session)
+
+«Инферно» is a held stream (`src/fx/InfernoStream.js`): it follows the caster's live hand every frame
+(`hooks.handPose`, also for remote casters), 10 mana to start + `INFERNO.DRAIN` (3) a second while held
+(`Combat.drain`), stops at a shield facing it, at water and at walls. Its burn hook runs every 0.25 s:
+- `game.onFlame.push((o, d, len, casterId) => bool)` — burn what you own along the stream
+  (`o + d·t`, `t ∈ [0, len]`; `inStream(o, d, len, p, bodyR)` helps); return true if something burnt
+  (counts for mana). E.g. «alive»: a living tree in the stream burns — fire is what kills it.
+- Water that should stop the flame: add it to `WaterMagic.spheres(out)` / `WaterVortex.spheres(out)`
+  (`{x, y, z, r}`), or water blocks (already handled, the sea's waves too).

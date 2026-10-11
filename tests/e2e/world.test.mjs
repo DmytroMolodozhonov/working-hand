@@ -283,7 +283,7 @@ test('fire: Inferno sets a tree on fire, it spreads and burns down; adaptive gra
         if (!t) t = trees[0];
         const origin = new THREE.Vector3(t.x + 10, 3, t.z);
         const dir = new THREE.Vector3(-1, 0.1, 0).normalize();
-        g.spells.cast('Inferno', origin, dir, 'right', g.localId);
+        g.spells.cast('Inferno', origin, dir, 'right', 'a-wizard'); // (a caster with no hand here: the stream stays where it was cast)
         await sleep(1500);
         const burning = !!t.burning;
         for (let i = 0; i < 300 && !t.burnt; i++) await sleep(100);

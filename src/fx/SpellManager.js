@@ -11,6 +11,7 @@
  */
 
 import * as THREE from 'three';
+import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -26,7 +27,7 @@ export function bombardoRadius(power = 1) {
 }
 
 /** Recognise a spell name in a voice transcript. Exported for tests. */
-const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Inferno', 'Sands', 'Ice', 'Bombardo', 'BombardoMaxima']);
+const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Sands', 'Ice', 'Bombardo', 'BombardoMaxima']);
 
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
@@ -111,6 +112,9 @@ export class SpellManager {
      *   explode(pos, radius, casterId, power)   (authoritative only)
      *   handPose(casterId, side) -> {origin, dir} | null   (live hand for ice beam)
  *   ignite(origin, dir, length) / igniteAt(pos, radius)   set trees on fire
+ *   burn(o, d, len, casterId) -> bool   the Inferno stream burns what it reaches (true: something burnt)
+ *   waters() -> [{x,y,z,r}]   water balls / vortex water that stop the flame;  blockAt(x,y,z) -> 'water'|'solid'|null
+ *   drain(casterId, mana) -> false when the caster has no mana left (the held flame goes out)
  *   players(casterId) -> player targets (Свободный мир): {local, center(), hit(kind, from, push), blocks(from), chill(amount, from)}
      *   collision: CollisionWorld
      *   terrain(): Terrain|null
@@ -210,7 +214,7 @@ export class SpellManager {
             case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
             case 'WaveAttack': this.castWave(o, direction.clone(), casterId, 1); break; // (its length = the distance)
             case 'WaveAttackMaxima': this.castWave(o, direction.clone(), casterId, 2.2); break;
-            case 'Inferno': this.castInferno(o, d, casterId); break;
+            case 'Inferno': this.castInferno(o, d, casterId, handSide || 'right'); break;
             case 'Sands': this.castSands(o, d, casterId); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
             case 'Bombardo': this.castBombardo(o, d, casterId); break;
@@ -255,51 +259,66 @@ export class SpellManager {
     }
 
     // -------------------------------------------------------------- Inferno
-    castInferno(origin, direction, casterId) {
-        const players = this._players(casterId);
-        let igniteT = 0;
+    /**
+     * A stream of fire from the hand (see InfernoStream.js): it follows the caster's live
+     * hand every frame, grows out in ~0.3 s, stops at a shield facing it, at water
+     * (steam) and at walls, burns every creature in it. The caster pays mana while holding it.
+     */
+    castInferno(origin, direction, casterId, handSide = 'right') {
         this._sound('playInferno');
-        const right = new THREE.Vector3().crossVectors(direction, UP).normalize();
-        if (right.lengthSq() < 0.01) right.set(1, 0, 0);
-        const localUp = new THREE.Vector3().crossVectors(right, direction).normalize();
-        const colors = [0xff0000, 0xff4500, 0xff8800, 0xffffff, 0x880000];
-        let acc = 0;
+        const look = new InfernoLook(this.fx);
+        const o = origin.clone(), d = direction.clone();
+        const right = new THREE.Vector3(), up = new THREE.Vector3();
+        const flame = { t: 0, len: 0, end: null, o, d, burnT: 0, drainT: 0, worked: false };
         this.spells.push({
-            life: 4.0,
-            held: true, by: casterId, // («стоп» ends it)
+            life: INFERNO.LIFE,
+            held: true, by: casterId, kind: 'Inferno', flame, // («стоп» ends it)
             onUpdate: (spell, dt) => {
-                // Original: 15 sparks per frame at 60 FPS → 900/s, now frame-rate independent
-                acc += dt * 900;
-                const count = Math.min(40, Math.floor(acc));
-                acc -= count;
-                for (let i = 0; i < count; i++) {
-                    const angle = spell.life * 10 + Math.random() * Math.PI * 2;
-                    const radius = 0.12 + Math.random() * 0.12;
-                    _a.copy(right).multiplyScalar(Math.cos(angle) * radius).addScaledVector(localUp, Math.sin(angle) * radius);
-                    const speed = 24 + Math.random() * 8;
-                    _b.copy(direction).multiplyScalar(speed).addScaledVector(_a.clone().normalize(), 0.4);
-                    _c.copy(origin).add(_a);
-                    this.fx.spark(_c, colors[(Math.random() * colors.length) | 0], 0.4 + Math.random() * 0.7, _b, 0.7 + Math.random() * 0.3);
-                }
+                // the stream comes out of the live hand, wherever it points now
+                const live = this.hooks.handPose ? this.hooks.handPose(casterId, handSide) : null;
+                if (live && live.dir && live.dir.lengthSq() > 1e-6) { o.copy(live.origin); d.copy(live.dir).normalize(); }
+                // the caster pays mana while holding it (the hook says no when it ran out)
+                if (this.hooks.drain && this.hooks.drain(casterId, infernoDrain(dt), dt) === false) { flame.noMana = true; spell.life = 0; return; }
+                flame.t += dt;
+                const players = this._players(casterId);
+                const stop = streamStop(o, d, infernoReach(flame.t), {
+                    waters: this.hooks.waters ? this.hooks.waters() : [],
+                    shields: players.filter((p) => p.blocks(o)).map((p) => { const c = p.center(); return { x: c.x, y: c.y, z: c.z, r: 0.8 }; }),
+                    blockAt: this.hooks.blockAt || null,
+                });
+                flame.len = stop.t; flame.end = stop.by;
+                right.crossVectors(d, UP);
+                if (right.lengthSq() < 1e-4) right.set(1, 0, 0);
+                right.normalize();
+                up.crossVectors(right, d).normalize();
+                look.draw(dt, o, d, flame.len, flame.end, right, up);
+                // water hisses (steam) where the flame meets it
+                flame.hissT = (flame.hissT || 0) - dt;
+                if (flame.end === 'water' && flame.hissT <= 0) { flame.hissT = 1.2; this._sound('playSplash'); }
+                let hit = false;
                 for (const z of this.zombies) {
-                    if (z.isDead) continue;
-                    _a.subVectors(z.group.position, origin);
-                    const dist = _a.length();
-                    if (dist > 30) continue;
-                    if (direction.angleTo(_a.normalize()) < 0.5 && z.damageCooldown <= 0) {
-                        this._damage(z, 1, true, direction);
-                        z.damageCooldown = 0.1;
-                    }
+                    if (z.isDead || z.damageCooldown > 0) continue;
+                    _a.copy(z.group.position); _a.y += 1;
+                    if (!inStream(o, d, flame.len, _a, 0.6)) continue;
+                    this._damage(z, 1, true, d);
+                    z.damageCooldown = 0.1;
+                    hit = true;
                 }
                 for (const p of players) {
-                    if (!p.local) continue;
-                    _a.subVectors(p.center(), origin);
-                    if (_a.length() < 30 && direction.angleTo(_a.normalize()) < 0.5) p.hit('Inferno', origin);
+                    if (!p.local) continue; // (every computer burns only its own player)
+                    if (inStream(o, d, flame.len, p.center(), 0.5) && p.hit('Inferno', o)) hit = true;
                 }
-                // Trees in the flames catch fire
-                igniteT -= dt;
-                if (igniteT <= 0 && this.hooks.ignite) { igniteT = 0.25; this.hooks.ignite(origin, direction, 26); }
+                // trees, dry blocks, animals, villagers, knights, spiders, living trees…
+                flame.burnT -= dt;
+                if (flame.burnT <= 0) {
+                    flame.burnT = INFERNO.BURN_TICK;
+                    if (this.hooks.burn && this.hooks.burn(o, d, flame.len, casterId)) hit = true;
+                    else if (!this.hooks.burn && this.hooks.ignite) this.hooks.ignite(o, d, flame.len);
+                }
+                // mana: the flame really burnt something
+                if (hit && !flame.worked) { flame.worked = true; this.hooks.success?.(casterId, 'Inferno'); }
             },
+            onEnd: () => { if (flame.noMana) this.hooks.flameOut?.(casterId); }, // (it went out everywhere)
         });
     }
 

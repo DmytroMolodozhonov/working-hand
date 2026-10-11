@@ -285,14 +285,16 @@ export class Animals {
 
     /** Inferno: living animals burn (and die cooked), carcasses get cooked. */
     burnAlong(o, d, len) {
+        let burnt = false;
         for (const a of this.list) {
             const to = _v.subVectors(a.group.position, o);
             const along = to.dot(d);
             if (along < 0 || along > len) continue;
             if (to.addScaledVector(d, -along).length() > 2.2) continue;
             if (a.dead) { if (!a.cooked && a.meat > 0) { a.cooked = true; this._tintCooked(a); this.game.hud.setVoice?.('🔥 Мясо поджарилось', true); } continue; }
-            if (a.damageCooldown <= 0) { a.cooked = true; this.hit(a, 2, d, this.game.localId, true); a.damageCooldown = 0.6; if (!a.dead) a.cooked = false; }
+            if (a.damageCooldown <= 0) { a.cooked = true; this.hit(a, 2, d, this.game.localId, true); a.damageCooldown = 0.6; if (!a.dead) a.cooked = false; burnt = true; }
         }
+        return burnt;
     }
 
     /** Targets for weapons (the same shape as zombies). */

@@ -288,6 +288,19 @@ export class Combat {
         if (this.enabled) this.fatigue = Math.max(0, this.fatigue - this.costOf(name));
     }
 
+    /**
+     * A held spell (the «Инферно» flame) takes `amount` mana now; over its `dt` seconds no
+     * mana comes back either (like a held «Protection»).
+     * @returns {boolean} false when there is no mana left (or I can't cast any more): it goes out
+     */
+    drain(amount, dt = 0) {
+        if (this.dead || this.frozen || this.stunned) return false;
+        if (!this.enabled) return true;
+        if (this.fatigue <= 0) return false;
+        this.fatigue = Math.max(0, this.fatigue - amount - PVP.FATIGUE_REGEN * dt);
+        return true;
+    }
+
     /** A burnt scroll: more strength for good. */
     addMaxFatigue(n) {
         this.maxFatigue = (this.maxFatigue || PVP.MAX_FATIGUE) + n;

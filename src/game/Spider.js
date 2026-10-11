@@ -182,6 +182,7 @@ export class Spiders {
     /** A beam / a cone (fire, thunder…) along o + d·t: it hurts when it touches the body. */
     hitRay(o, d, len, width, dmg, kind) {
         const q = new THREE.Vector3();
+        let any = false;
         for (const s of this.list) {
             if (s.dead) continue;
             const b = spiderBody(s, _c);
@@ -193,8 +194,9 @@ export class Spiders {
                 if (along < -b.r || along > len + b.r) continue;
                 hit = _v.addScaledVector(d, -Math.max(0, Math.min(len, along))).length() < width + b.r;
             }
-            if (hit) this.hit(s, dmg, kind);
+            if (hit) { this.hit(s, dmg, kind); any = true; }
         }
+        return any;
     }
 
     /** A duel charge reached it (Авада Кедавра = 20): it touched the body. */

@@ -690,6 +690,19 @@ export class WaterMagic {
 
     // ============================================================= network
     /** Compact state of the ball in hand for other players (null = none). */
+    /** The water that stops an «Инферно» flame: {x, y, z, r} of every ball (mine, others', flying, lying). */
+    spheres(out = []) {
+        const s = this.state;
+        if (s && s.volume >= 0.05) {
+            out.push({ x: s.pos.x, y: s.pos.y, z: s.pos.z, r: radiusOf(s.shown) });
+            for (const b of s.formed || []) out.push({ x: b.x, y: b.y, z: b.z, r: b.r });
+        }
+        for (const m of this.remotes.values()) out.push({ x: m.position.x, y: m.position.y, z: m.position.z, r: m.scale.x });
+        for (const b of this.falling) out.push({ x: b.pos.x, y: b.pos.y, z: b.pos.z, r: b.r });
+        for (const b of this.resting) out.push({ x: b.pos.x, y: b.pos.y, z: b.pos.z, r: b.r });
+        return out;
+    }
+
     serialize() {
         const s = this.state;
         if (!s || s.volume < 0.05) return null;

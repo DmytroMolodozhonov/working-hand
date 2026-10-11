@@ -1142,6 +1142,29 @@ export class WaterVortex {
 
     // ============================================================= drawing
     /** Every vortex (mine, other wizards', flying, clinging) as rings of living water blobs. */
+    /**
+     * The water that stops an «Инферно» flame: a gathering vortex (round its caster: its
+     * rings), a flying one, a bubble. {x, y, z, r}
+     */
+    spheres(out = []) {
+        const ring = (c, volume) => {
+            const n = layersOf(volume).length;
+            if (n) out.push({ x: c.x, y: c.y + 0.6, z: c.z, r: layerRadius(n - 1) + 0.3 });
+        };
+        const s = this.state;
+        if (s && s.phase === 'gather') ring(this.game.character.group.position, s.shown ?? s.volume);
+        for (const [by, r] of this.remote) {
+            const av = this.game.remotes?.get(by);
+            if (av && r.s?.[0]) ring(av.position, +r.s[1] || 0);
+        }
+        for (const f of this.flights.values()) {
+            const n = layersOf(f.volume).length;
+            out.push({ x: f.pos.x, y: f.pos.y + 0.35, z: f.pos.z, r: (n ? layerRadius(n - 1) : 1) * f.squeeze + 0.3 });
+        }
+        for (const b of this.bubbles.values()) out.push({ x: b.pos.x, y: b.pos.y, z: b.pos.z, r: b.r });
+        return out;
+    }
+
     _draw(dt = 1 / 60) {
         const mesh = this.blobs;
         if (!mesh) return;

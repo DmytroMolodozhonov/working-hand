@@ -56,7 +56,7 @@ import { QualityManager } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, WATER_LEVEL_Y } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { lookPitch } from '../input/PoseInterpreter.js';
@@ -69,7 +69,7 @@ const SPELL_COOLDOWN = 1000;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'Sapira', 'Stupefy', 'AvadaKedavra']);
+const MANA_LATER = new Set(['Inferno', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'Sapira', 'Stupefy', 'AvadaKedavra']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -107,6 +107,8 @@ export class Game {
         this.lastSpellCastTime = 0;
         // death hooks (Death.js): push (info) => … to run when my player dies / comes back
         this.onDeath = [];
+        // «Инферно»'s stream burns: (o, d, len, casterId) => true if something caught fire (e.g. a living tree)
+        this.onFlame = [];
         this.onRespawn = [];
         this.cameraBaseRotation = 0;
         this.smoothHead = { yaw: 0, pitch: 0 };
@@ -203,6 +205,12 @@ export class Game {
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
             },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); if (this.authority) this.livingTrees?.burnAlong(o, d, len); },
+            // «Инферно» (src/fx/InfernoStream.js): what its stream burns, what stops it, its mana
+            burn: (o, d, len, casterId) => this._burnRay(o, d, len, casterId),
+            waters: () => this._flameWaters(),
+            blockAt: (x, y, z) => this._flameBlock(x, y, z),
+            drain: (casterId, mana, dt) => (casterId === this.localId || casterId === 'local' ? this.combat.drain(mana, dt) : true),
+            flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
             collision: this.collision,
             terrain: () => this.terrain,
         });
@@ -1513,6 +1521,43 @@ export class Game {
     }
 
     /** Targets for spells cast by `casterId` (players hit each other only in the free world). */
+    /** «Инферно»: the stream burns what it reaches. True if something burnt. */
+    _burnRay(o, d, len, casterId) {
+        let hit = false;
+        if (this.fire?.igniteAlong(o, d, len)) hit = true; // trees, dry blocks
+        if (this.animals?.burnAlong(o, d, len)) hit = true;
+        this.books?.hitRay(o, d, len, 0.8); // (book-birds fall)
+        this.houses?.hitRay(o, d, len, 0.6); // (glass breaks)
+        if (this.authority) {
+            if (this.spiders?.hitRay(o, d, len, 0.6, 2, 'Inferno')) hit = true;
+            if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId)) hit = true; // villagers, knights, wizards
+            if (this.livingTrees?.burnAlong(o, d, len)) hit = true; // (fire is what kills a living tree)
+        }
+        for (const f of this.onFlame) { try { if (f(o, d, len, casterId)) hit = true; } catch (e) { console.warn('onFlame', e); } }
+        return hit;
+    }
+
+    /** Water that stops a flame: water balls (held, flying, lying, other players'), the vortex's water. */
+    _flameWaters() {
+        const out = [];
+        this.water?.spheres?.(out);
+        this.vortex?.spheres?.(out);
+        return out;
+    }
+
+    /** The world's block at a point, for the flame: 'water' | 'solid' | null. */
+    _flameBlock(x, y, z) {
+        const data = this.terrain?.data;
+        if (!data) return null;
+        const ix = Math.round(x), iz = Math.round(z), L = Math.floor(y + 1.5);
+        const b = data.get(ix, L, iz);
+        if (b === BLOCK.WATER) return 'water';
+        // the moving sea surface (waves above the still water blocks)
+        if (this.sea && L >= 1 && data.isSeaColumn?.(ix, iz) && y < WATER_LEVEL_Y + this.sea.height(x, z)) return 'water';
+        if (b && b !== BLOCK.AIR && b !== BLOCK.WHEAT && b !== BLOCK.FLOWERS && b !== BLOCK.VEG) return 'solid'; // (the flame goes over plants)
+        return null;
+    }
+
     _spellPlayers(casterId) {
         const c = this.combat;
         if (!c.enabled) return [];
