@@ -1106,6 +1106,7 @@ export class WaterVortex {
         if (!c) return;
         if (b.tk === 'a') g.animals?.hit?.(c, dmg, null, b.by);
         else if (b.tk === 'v') g.castleLife?.hit?.(c, dmg, null, b.by, { spell: true });
+        else if (b.tk === 'c') g.ships?.crew.hit(c, dmg, null, b.by, { spell: true });
     }
 
     _meltStep(b, dt) {
@@ -1281,6 +1282,7 @@ export class WaterVortex {
                     if (!cr) continue;
                     if (b.kind === 'a') g.animals?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, true);
                     else if (b.kind === 'v') g.castleLife?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, { spell: true, magic: true });
+                    else if (b.kind === 'c') g.ships?.crew.hit(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, { spell: true, magic: true });
                     else if (b.kind === 't') g.livingTrees?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, 'FireMaxima'); // (a living tree: fire is the only thing that hurts it)
                 }
             }

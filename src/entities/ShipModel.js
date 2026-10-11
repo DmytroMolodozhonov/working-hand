@@ -669,34 +669,139 @@ export class ShipModel {
         }
     }
 
-    /** A hole in the hull (ship-local) with a dark patch and splinters. */
+    /**
+     * A hole knocked in the hull or a deck (ship-local): a jagged black opening lying on the planking
+     * (it follows the hull's curve), its edge torn — fresh pale wood — and broken planks round it
+     * bent in by the blow (on a deck they hang down into the dark). The water of the hold shows in it
+     * once it rises that far (updateHoles).
+     */
     addHole(lx, ly, lz, r, deck = false) {
-        // a torn, jagged opening (dark inside) with broken planks sticking out round it
-        const R = Math.max(0.35, r);
-        const n = 11, pts = [];
+        const R = Math.max(0.45, r);
+        const L = this.L;
+        const n = 14, pts = [];
         let seed = Math.abs(Math.round(lx * 31 + ly * 17 + lz * 13)) + 7;
         const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-        for (let i = 0; i < n; i++) pts.push(new THREE.Vector2(Math.cos((i / n) * Math.PI * 2), Math.sin((i / n) * Math.PI * 2)).multiplyScalar(R * (0.65 + rnd() * 0.5)));
-        const hole = new THREE.Group();
-        hole.add(new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts)), shared().glass));
-        const b = new Batch();
+        // (planks break along the grain: a hole in the side is longer than high)
+        const ax = deck ? 1 : 1.25, ay = deck ? 1.15 : 0.8;
         for (let i = 0; i < n; i++) {
-            if (rnd() < 0.35) continue;
-            const p = pts[i], a = Math.atan2(p.y, p.x), len = 0.4 + rnd() * R * 0.6;
-            b.boxAt(p.x + Math.cos(a) * len * 0.3, p.y + Math.sin(a) * len * 0.3, 0.06 + rnd() * 0.15, len, 0.12, 0.08, rnd() < 0.5 ? 0x6b4526 : 0x3a2414, 0, 0, a);
+            const a = (i / n) * Math.PI * 2, k = R * (0.62 + rnd() * 0.5);
+            pts.push([Math.cos(a) * k * ax, Math.sin(a) * k * ay]);
         }
-        if (b.pos.length) hole.add(new THREE.Mesh(b.build(), shared().solid));
-        if (deck) {
-            hole.position.set(lx, ly + 0.03, lz);
-            hole.rotation.x = -Math.PI / 2;
-        } else {
-            const side = lx >= 0 ? 1 : -1;
-            const w = hullHalfWidth(this.L, lz, Math.max(-this.L.draft + 0.2, ly));
-            hole.position.set(side * (w + 0.04), ly, lz);
-            hole.rotation.y = side * Math.PI / 2;
+        const side = lx >= 0 ? 1 : -1;
+        // a point of the hole's own plane (u, v) on the ship, `out` m off the surface (+ outwards / up)
+        const at = (u, v, out = 0.05) => {
+            if (deck) return [lx + v, ly + out, lz + u];
+            const y = Math.max(-L.draft + 0.15, ly + v), z = lz + u;
+            return [side * (hullHalfWidth(L, z, y) + out), y, z];
+        };
+        const normal = deck ? [0, 1, 0] : [side, 0, 0];
+        const hole = new THREE.Group();
+        // the opening: black in the middle, dark brown at the edge (depth)
+        const dark = new Batch();
+        const c0 = at(0, 0, 0.06);
+        for (let i = 0; i < n; i++) {
+            const p = pts[i], q = pts[(i + 1) % n];
+            const A = at(p[0], p[1], 0.06), B = at(q[0], q[1], 0.06);
+            const m = at((p[0] + q[0]) * 0.3, (p[1] + q[1]) * 0.3, 0.06);
+            dark.tri(c0, m, A, 0x050302); dark.tri(m, B, A, 0x24180d); dark.tri(c0, B, m, 0x050302);
         }
+        const opening = new THREE.Mesh(dark.build(), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+        hole.add(opening);
+        // the water of the hold seen through it (shown as it rises: updateHoles)
+        const wb = new Batch();
+        for (let i = 0; i < n; i++) {
+            const p = pts[i], q = pts[(i + 1) % n];
+            wb.tri(at(0, 0, 0.065), at(q[0] * 0.92, q[1] * 0.92, 0.065), at(p[0] * 0.92, p[1] * 0.92, 0.065), 0xffffff);
+        }
+        const water = new THREE.Mesh(wb.build(), new THREE.MeshBasicMaterial({ color: 0x2f6f80, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+        water.visible = false;
+        hole.add(water);
+        // the torn edge (fresh pale wood, splintered) and the broken planks bent in by the blow
+        const wood = new Batch();
+        for (let i = 0; i < n; i++) {
+            const p = pts[i], q = pts[(i + 1) % n];
+            const k1 = 1.12 + rnd() * 0.18, k2 = 1.12 + rnd() * 0.18;
+            wood.quad(at(p[0], p[1], 0.07), at(q[0], q[1], 0.07), at(q[0] * k2, q[1] * k2, 0.07), at(p[0] * k1, p[1] * k1, 0.07), i % 2 ? 0xd1a468 : 0xb8874e);
+        }
+        for (let i = 0; i < n; i++) {
+            if (rnd() < 0.3) continue;
+            const p = pts[i];
+            // planks run along the ship (u): the broken ends stick into the hole from the sides
+            const du = -Math.sign(p[0] || 1) * (0.7 + rnd() * 0.3), dv = -p[1] / (R * 1.6) * (0.4 + rnd() * 0.4);
+            const len = 0.35 + rnd() * R * 0.55;
+            const start = at(p[0], p[1], 0.02);
+            const tip = at(p[0] + du * len, p[1] + dv * len, 0.02);
+            // bent in (into the hull / down into the deck) by the blast
+            const bend = 0.35 + rnd() * 0.75;
+            const dir = new THREE.Vector3(tip[0] - start[0], tip[1] - start[1], tip[2] - start[2]).normalize();
+            dir.addScaledVector(_p.set(normal[0], normal[1], normal[2]), -Math.sin(bend)).normalize();
+            const mid = new THREE.Vector3(start[0], start[1], start[2]).addScaledVector(dir, len / 2);
+            _q.setFromUnitVectors(_s.set(1, 0, 0), dir);
+            _m.compose(mid, _q, _s.set(1, 1, 1));
+            const g = new THREE.BoxGeometry(len, 0.16 + rnd() * 0.1, 0.07);
+            wood.add(g, _m, rnd() < 0.5 ? 0x6b4526 : 0x4a2e18);
+            g.dispose();
+            // its broken end: pale splinters
+            const end = new THREE.Vector3(start[0], start[1], start[2]).addScaledVector(dir, len);
+            _m.compose(end, _q, _s.set(1, 1, 1));
+            const e = new THREE.BoxGeometry(0.12, 0.2, 0.09);
+            wood.add(e, _m, 0xe0b878);
+            e.dispose();
+        }
+        const wm = new THREE.Mesh(wood.build(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+        wm.castShadow = true;
+        hole.add(wm);
+        hole.userData = { ly, R, deck, water };
         this.holes.add(hole);
         return hole;
+    }
+
+    /**
+     * The water inside the hull (holdY: its level, ship-local; null — dry): a sheet of water in the hold
+     * (seen down the hatches, and round the feet of one standing below), and in the holes it has reached.
+     */
+    updateHoles(holdY, t = 0) {
+        if (holdY == null) {
+            if (this.holdWater) this.holdWater.visible = false;
+            for (const h of this.holes.children) h.userData.water.visible = false;
+            return;
+        }
+        if (!this.holdWater || Math.abs(this._holdY - holdY) > 0.08) this._buildHoldWater(holdY);
+        this.holdWater.visible = true;
+        for (const h of this.holes.children) {
+            const u = h.userData;
+            // a deck hole: the water comes up under it; a side one: the water inside rises in it
+            const k = u.deck ? 1 - (u.ly - holdY) / 2.2 : (holdY - (u.ly - u.R * 0.8)) / (u.R * 1.6);
+            const o = Math.max(0, Math.min(1, k));
+            u.water.visible = o > 0.02;
+            u.water.material.opacity = o * (0.78 + 0.08 * Math.sin(t * 3 + u.ly));
+        }
+    }
+
+    _buildHoldWater(y) {
+        const L = this.L;
+        this._holdY = y;
+        const left = [], right = [];
+        const z0 = -L.L / 2 + 1.5, z1 = L.L / 2 - 1.5;
+        for (let i = 0; i <= 24; i++) {
+            const z = z0 + (z1 - z0) * (i / 24);
+            const w = hullHalfWidth(L, z, Math.max(-L.draft + 0.2, y)) - 0.35;
+            if (w < 0.2) continue;
+            left.push([-w, z]); right.push([w, z]);
+        }
+        const b = new Batch();
+        for (let i = 0; i + 1 < left.length; i++) {
+            const a = left[i], c = left[i + 1], d = right[i + 1], e = right[i];
+            b.quad([a[0], y, a[1]], [c[0], y, c[1]], [d[0], y, d[1]], [e[0], y, e[1]], 0xffffff);
+        }
+        if (!this.holdWater) {
+            this.holdWater = new THREE.Mesh(b.build(), new THREE.MeshLambertMaterial({ color: 0x2c6474, transparent: true, opacity: 0.82, side: THREE.DoubleSide, depthWrite: false }));
+            this.holdWater.name = 'hold-water';
+            this.group.add(this.holdWater);
+        } else {
+            this.holdWater.geometry.dispose();
+            this.holdWater.geometry = b.build();
+        }
     }
 
     /** The cannon's recoil and the fuse glow; loaded: the ball in the barrel. */

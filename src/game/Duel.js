@@ -328,6 +328,8 @@ export class Duel {
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
         for (const v of g.castleLife?.targets() || []) this._villagerBody(v, put('v', v.id));
+        // the ships' crews (on their decks, or swimming)
+        for (const v of g.ships?.crew.byId.values() || []) if (!v.dead) this._villagerBody(v, put('c', v.id));
         for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));
         for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall') this._roundBody('b', bd, put('b', bd.id));
         // the giant spider: its whole (big) body, nose to tail
@@ -351,7 +353,7 @@ export class Duel {
         if (kind === 's') { const sp = g.spiders?.byId(id); return sp ? spiderBody(sp, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
-        return kind === 'v' ? this._villagerBody(c, e) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
+        return kind === 'v' || kind === 'c' ? this._villagerBody(c, e) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
     }
 
     /** A wizard's hero: along the body (upright, or lying flat flying like Superman). */
@@ -441,12 +443,13 @@ export class Duel {
         if (kind === 'v') { const v = g.castleLife?.byId.get(id); return v && !v.dead ? v : null; }
         if (kind === 'b') { const b = g.books?.birds?.get(id); return b && b.state !== 'fall' ? b : null; }
         if (kind === 't') { const t = g.livingTrees?.byId.get(id); return t && !t.isDead ? t : null; }
+        if (kind === 'c') { const c = g.ships?.crew.byId.get(id); return c && !c.dead ? c : null; }
         return null;
     }
 
     _targetPos(b, out) {
         const g = this.game;
-        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
@@ -606,7 +609,7 @@ export class Duel {
     _arrive(b, dt) {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
-        if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't') && this._referee()) { this._arriveAtCreature(b); return; }
+        if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c') && this._referee()) { this._arriveAtCreature(b); return; }
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
@@ -657,7 +660,7 @@ export class Duel {
         if (c.isBird) { if (spell !== 'LevitateDuel') g.books.hitBird(c, 99); return; }
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
         if (c.isLivingTree) { g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }
-        const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
+        const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
             hit(25, { pierce: true }); // (not a killing curse: −25 HP at once, no armour stops it)

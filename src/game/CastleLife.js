@@ -22,6 +22,7 @@
  * guests show them and send their hits.
  */
 
+import { shareFoes } from './CrewTactics.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
@@ -906,6 +907,7 @@ export class CastleLife {
 
     /** Who fights whom: places round each enemy (each attacker its own), once a frame. */
     _assignSlots() {
+        this._shareFoes();
         const groups = new Map();
         for (const v of this.byId.values()) {
             if (v.dead || !v.foe) continue;
@@ -929,6 +931,38 @@ export class CastleLife {
                 this._slotBase.set(foe, b);
             }
             list.forEach((v, k) => { v.slotI = k; v.slotN = list.length; v.slotBase = b.a; });
+        }
+    }
+
+    /**
+     * A group attacks the castle: its defenders (knights, the king, anybody fighting) share the
+     * enemies out (CrewTactics.shareFoes) — nobody left free while all of them rush one; each stays on
+     * his own while that one has no more than his share. Once a second, per castle.
+     */
+    _shareFoes() {
+        const now = Date.now();
+        if (now - (this._shareT || 0) < 1000) return;
+        this._shareT = now;
+        const byCastle = new Map();
+        for (const v of this.byId.values()) {
+            if (v.dead || !v.foe || v.servantOf != null || !v.cs) continue;
+            (byCastle.get(v.cs) || byCastle.set(v.cs, []).get(v.cs)).push(v);
+        }
+        for (const [cs, men] of byCastle) {
+            if (men.length < 2) continue;
+            const foes = [];
+            for (const [pid, until] of cs.hostile) {
+                if (until < now) continue;
+                const p = this._playerPos(pid);
+                if (p && men.some((v) => Math.hypot(p.x - v.x, p.z - v.z) < 30)) foes.push({ id: pid, x: p.x, z: p.z });
+            }
+            if (foes.length < 2) continue;
+            const m = shareFoes(men.map((v) => ({ id: v.id, x: v.x, z: v.z, foe: v.foe })), foes, { reach: 30 });
+            for (const v of men) {
+                const id = m.get(v.id);
+                if (!id || id === v.foe || (v.gaveUp?.id === id && v.gaveUp.until > now)) continue;
+                v.foe = id; v.path = null; v.chaseT = 0;
+            }
         }
     }
 

@@ -414,8 +414,14 @@ voice.onResult = (command, isFinal = true, held = false) => {
         // not a spell («собери войско» is not «Gather», «спасибо» is not «Rescue», «в атаку» is an order)
         // (first: they cast nothing, so the checks below that a spell is really mine — loudness, lips,
         // a friend's echo — must not eat a guest's words to a villager)
-        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
+        // (in a port both may be near: the nearer one — a sailor at the rail or a man on the pier — hears)
+        const sailorFirst = !!game.ships?.crew.heardFirst?.(game.castleLife?.talk);
+        if (isFinal && !sailorFirst && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
             return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)
+        }
+        // (the same with a ship's sailor near me)
+        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
+            return;
         }
         // Multiplayer: a friend's voice heard by this microphone must not cast here
         const margin = parseInt($('voice-filter')?.value ?? '9', 10);
@@ -443,14 +449,10 @@ voice.onResult = (command, isFinal = true, held = false) => {
                 if (isFinal || held) netLog(`заклинание «${command}» моё: ${gate.sure ? 'рот двигался вместе с голосом' : 'лица не видно — друг этого заклинания не говорил'}`);
             }
         }
-        // (the same with a ship's sailor near me)
-        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
-            return;
-        }
         const name = game.castLocalSpell(command, isFinal);
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
         // («стоп» with nothing to stop is still words to a villager: «стой» / «стоп» = stop following me)
-        if (!name && isFinal && (!heard || heard === 'Stand') && (game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command))) {
+        if (!name && isFinal && (!heard || heard === 'Stand') && (sailorFirst ? game.ships.crew.hear(command) || game.castleLife?.talk?.hear(command) : game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command))) {
             return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)
         }
         if (name) {

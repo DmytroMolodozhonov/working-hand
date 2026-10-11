@@ -46,6 +46,7 @@ const UNFURL_RATE = 1 / 3; // sails unroll in 3 s
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _cam = new THREE.Vector3();
 const _l = { x: 0, y: 0, z: 0 };
 const _o = { x: 0, y: 0, z: 0 };
 
@@ -360,7 +361,8 @@ export class Ships {
         if ((this._scanT -= dt) <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth && !this.calm) this._weather(dt);
         const t = g.seaTime ? g.seaTime() : performance.now() / 1000;
-        const cam = g.camera?.getWorldPosition ? g.camera.getWorldPosition(_w) : g.character.group.position;
+        // (its own vector: the effects below use _w for their sparks)
+        const cam = g.camera?.getWorldPosition ? g.camera.getWorldPosition(_cam) : g.character.group.position;
         const night = !!g.isNight;
         for (const s of this.awake) {
             const prevX = s.pose.x, prevY = s.pose.y, prevZ = s.pose.z, prevYaw = s.pose.yaw, prevRoll = s.pose.roll, prevPitch = s.pose.pitch;
@@ -384,6 +386,7 @@ export class Ships {
                     s.model.updateFlags(_l, t);
                 }
                 this._fireFx(s, dt);
+                this._leakFx(s, dt, t, cam);
             }
             this._placeChests(s);
             if (s.plank?.fall) this._plankFallFx(s, dt);
@@ -776,8 +779,7 @@ export class Ships {
                 g.hud.setVoice(power > 1 ? '🌬️ Паруса наполнились! Корабль тяжёлый — разгоняется медленно. Ветер стихнет — повторите' : '🌬️ Ветер в парусах! Он скоро стихнет — повторите «Вайнд»', true);
             }
         }
-        // wind on the crew: sailors near the rail may go overboard
-        this.crew.wind?.(origin, dir, power, casterId);
+        // (the wind on the crew: CreatureImpact blows them like any creature — Sailors.js shove)
     }
 
     /** (host) A natural breeze now and then; a storm blows hard. */
@@ -1060,6 +1062,62 @@ export class Ships {
                 if (Math.random() < 0.3) fx.spark(_v, 0x3a3a3a, 0.8, _w.set(0, 3 + Math.random() * 2, 0), 2.2);
             }
         }
+    }
+
+    /** How high the water stands inside the hull (ship-local y), or null: dry. */
+    holdWaterY(s) {
+        if (s.state === 'wreck' || s.flooded) return null;
+        const L = s.layout;
+        const f = s.state === 'sinking' ? 1 : s.flood || 0;
+        if (f < 0.01) return null;
+        return -L.draft + 0.3 + f * (L.draft + L.deck - 0.9);
+    }
+
+    /**
+     * Holes at the water line: the sea pours in through them (a jet of water into the dark of the hull,
+     * foam swirling round the hole outside); deeper ones draw a whirl on the surface above them; and
+     * the water of the hold rises in the holes and under the broken deck (every computer draws it).
+     */
+    _leakFx(s, dt, t, cam) {
+        if (!s.holes.length) return;
+        s.model.updateHoles(this.holdWaterY(s), t);
+        const fx = this.game.fx;
+        if (!fx?.spark || s.model.detail < 2 || s.state === 'wreck' || s.flooded) return;
+        const W = WATER_LEVEL_Y;
+        const near = Math.hypot(cam.x - s.pose.x, cam.z - s.pose.z) < 90;
+        let loud = 0;
+        for (const h of s.holes) {
+            if (h.deck) continue;
+            s.pose.toWorld(h.lx, h.ly, h.lz, _o);
+            const wy = _o.y;
+            if (wy > W + 0.3 + h.r * 0.6) continue; // (above the water: dry)
+            const side = h.lx >= 0 ? 1 : -1;
+            s.pose.dirToWorld(side, 0, _l);
+            const ox = _l.x, oz = _l.z; // (outwards)
+            s.pose.dirToWorld(0, 1, _l);
+            const tx = _l.x, tz = _l.z; // (along the ship)
+            const rate = (near ? 60 : 20) * Math.min(2, h.r);
+            const n = Math.floor(rate * dt + Math.random());
+            if (wy > W - 2.2) {
+                // the sea pours in over the lower edge of the hole: a thick jet into the hull
+                loud = Math.max(loud, h.r);
+                for (let i = 0; i < n; i++) {
+                    const u = (Math.random() - 0.5) * h.r * 1.4;
+                    const y = Math.min(W + 0.05, wy + h.r * 0.4) - Math.random() * 0.5;
+                    _v.set(_o.x + tx * u + ox * 0.15, y, _o.z + tz * u + oz * 0.15);
+                    fx.spark(_v, Math.random() < 0.6 ? 0xcfe9f5 : 0x6fa9c0, 0.18 + Math.random() * 0.2, _w.set(-ox * (2.5 + Math.random() * 2.5) + tx * u * 0.6, -0.8 - Math.random() * 1.5, -oz * (2.5 + Math.random() * 2.5) + tz * u * 0.6), 0.45 + Math.random() * 0.25);
+                }
+            }
+            // foam on the surface outside, drawn round towards the hole
+            for (let i = 0; i < Math.ceil(n / 3); i++) {
+                const a = Math.random() * Math.PI * 2, rr = h.r * (0.6 + Math.random() * 1.2);
+                const px = _o.x + ox * (0.4 + Math.abs(Math.cos(a)) * rr) + tx * Math.sin(a) * rr, pz = _o.z + oz * (0.4 + Math.abs(Math.cos(a)) * rr) + tz * Math.sin(a) * rr;
+                _v.set(px, W + 0.06, pz);
+                fx.spark(_v, 0xf4fbff, 0.14 + Math.random() * 0.12, _w.set((_o.x - px) * 1.2 + tx * Math.cos(a) * 1.5, 0.15, (_o.z - pz) * 1.2 + tz * Math.cos(a) * 1.5), 0.7);
+            }
+        }
+        // the gurgle of the water coming in (now and then, close by)
+        if (loud && near && (s._gurgleT = (s._gurgleT || 0) - dt) <= 0) { s._gurgleT = 1.6 + Math.random() * 1.6; this.game.sound?.playSplash?.(); }
     }
 
     _plankFallFx(s, dt) {
