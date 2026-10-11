@@ -11,15 +11,51 @@
  *   - castle and village blocks carry a pattern number (vertex attribute
  *     `voxPat`): cut stone, cobbles, bricks, planks, roof tiles, cloth, gold,
  *     straw, furrows, book spines and glowing lanterns.
+ *   - a cave's dark: each face carries the daylight reaching it (`voxSky`, Minecraft-like sky
+ *     light from Terrain._skyLight); the sun and the sky light it only that much.
  */
+
+import * as THREE from 'three';
+
+/**
+ * The daylight in the world's lights: `comp` undoes the dimming of the lights round a player deep
+ * in a cave (World: their hands, the things by them are dark) for the land itself — the land is as
+ * lit as the sky reaches it (each block face's own daylight, `voxSky`), wherever the player is.
+ */
+export const SKY_LIGHT = { comp: { value: 1 } };
+
+/** A material of the open world (trees, grass, water): lit by the sky as it is, wherever the player stands. */
+export function applySkyComp(material) {
+    const before = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, renderer) => {
+        if (before) before.call(material, shader, renderer);
+        shader.uniforms.uSkyComp = SKY_LIGHT.comp;
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\nuniform float uSkyComp;')
+            .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.directDiffuse *= uSkyComp;\nreflectedLight.indirectDiffuse *= uSkyComp;');
+    };
+    const key = material.customProgramCacheKey?.bind(material);
+    material.customProgramCacheKey = () => (key ? key() : material.type) + '-sky';
+    return material;
+}
 
 export function applyVoxelDetail(material) {
     material.onBeforeCompile = (shader) => {
+        shader.uniforms.uSkyComp = SKY_LIGHT.comp;
         shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;')
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;');
+            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
+        // a cave's dark: the sun and the sky's light (ambient, hemisphere) reach a face only as far as
+        // the daylight gets in; a lamp, «Люмос», a fire light it fully
+        const lightsBegin = THREE.ShaderChunk.lights_fragment_begin.replace(
+            'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );',
+            'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );\n\t\tdirectLight.color *= vVoxSky * uSkyComp;');
         shader.fragmentShader = shader.fragmentShader
+            .replace('#include <lights_fragment_begin>', lightsBegin)
+            .replace('#include <lights_fragment_maps>', '#if defined( RE_IndirectDiffuse )\n\tirradiance *= vVoxSky * uSkyComp;\n#endif\n#include <lights_fragment_maps>')
             .replace('#include <common>', `#include <common>
+uniform float uSkyComp;
+varying float vVoxSky;
 varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
 varying float vVoxPat;

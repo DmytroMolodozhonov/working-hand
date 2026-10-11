@@ -42,7 +42,7 @@ const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
 import { CollisionWorld } from './Collision.js';
 import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
-import { applyTreeDetail } from './VoxelShading.js';
+import { applyTreeDetail, applySkyComp, SKY_LIGHT } from './VoxelShading.js';
 
 const GRASS_COLORS = [0x4CAF50, 0x66BB6A, 0x43A047, 0x81C784, 0x388E3C];
 export const MAP_CELL = 5; // metres per editor cell (original: 2.5x bigger than 2m)
@@ -160,16 +160,21 @@ export class VoxelWorld {
         this.storm = k;
         const b = this._base;
         if (!b) return;
-        const cave = 1 - 0.95 * (this.cave || 0); // (a cave is dark: «Люмос» shows the way)
+        // deep in a cave the daylight doesn't reach the player: their hands, the things by them are
+        // dark («Люмос» shows the way) — the land itself keeps the daylight that gets to each block
+        // (VoxelShading SKY_LIGHT: the cave's mouth lit, the meadow outside bright as ever)
+        const cv = this.cave || 0, dim = 1 - 0.8 * cv;
+        SKY_LIGHT.comp.value = 1 / dim;
         const ind = this.indoor || 0;
         // indoors: the sun is outside, the rooms are lit (brighter at night than the dark outside)
         const lamp = 1 + ind * (b.night > 0.5 ? 2.6 : 1.1);
-        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * cave * lamp;
-        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * (1 - 0.95 * (this.cave || 0)) * (1 - 0.6 * ind);
-        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * cave * (1 + ind * 0.8);
+        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp;
+        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * dim * (1 - 0.6 * ind);
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * (1 + ind * 0.8);
         if (this.scene.fog) {
-            this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k).lerp(_caveFog, this.cave || 0); // (the dark beyond the light)
+            this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
+            this.scene.fog.color.lerp(_caveFog, 0.7 * cv); // (far down a tunnel: the dark, not a bright haze)
         }
         this.sky?.setNightAmount(Math.max(b.night, 0.72 * k));
         this.sky?.setClouds((this._cloudsWanted ?? true) || k > 0.1);
@@ -227,7 +232,7 @@ export class VoxelWorld {
         // Decorative grass cubes (1000, instanced) — same look as before.
         const grassCount = 1000;
         const geo = new THREE.BoxGeometry(1, 1, 1);
-        const mat = new THREE.MeshPhongMaterial({ color: 0x4CAF50 });
+        const mat = applySkyComp(new THREE.MeshPhongMaterial({ color: 0x4CAF50 }));
         this.grass = new THREE.InstancedMesh(geo, mat, grassCount);
         this.grass.receiveShadow = true;
         this.grass.castShadow = false; // tiny cubes: their shadows cost more than they show
@@ -271,8 +276,8 @@ export class VoxelWorld {
             { size: [2.2, 1.8, 2.2], pos: [-2.7, 8.0, -1.6], color: 0x338f30 },
             { size: [1.8, 1.4, 1.8], pos: [1.2, 9.9, 2.0], color: 0x3f9f38 },
         ]);
-        const trunkMat = applyTreeDetail(new THREE.MeshLambertMaterial({ vertexColors: true }), 'bark');
-        const leafMat = applyTreeDetail(new THREE.MeshLambertMaterial({ vertexColors: true }), 'leaf');
+        const trunkMat = applySkyComp(applyTreeDetail(new THREE.MeshLambertMaterial({ vertexColors: true }), 'bark'));
+        const leafMat = applySkyComp(applyTreeDetail(new THREE.MeshLambertMaterial({ vertexColors: true }), 'leaf'));
         this.trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
         this.leafMesh = new THREE.InstancedMesh(crownGeo, leafMat, count);
         this.trunkMesh.castShadow = true;
@@ -647,10 +652,8 @@ export class VoxelWorld {
         if (this.scene.fog && this.fogFar) {
             // In flight the view opens up so the land below is visible
             const far = this.fogFar * (this.viewScale ?? 1) * (1 + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0));
-            // (in a cave the dark closes in: a few steps on, and black)
-            const cave = this.cave || 0;
-            this.scene.fog.far = far + (26 - far) * cave;
-            this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5) * (1 - cave) + 1.5 * cave;
+            this.scene.fog.far = far;
+            this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5);
             if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
         }
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);

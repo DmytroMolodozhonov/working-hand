@@ -759,7 +759,11 @@ export class Game {
         const covered = n >= 3 ? 1 : 0;
         // under the roof of a castle or a village house: lit rooms (lanterns, windows), not a dark cave
         const built = covered && !!(t.sites || t.castles)?.landAt(Math.round(p.x), Math.round(p.z)); // (castles and wizards' towers)
-        this._caveK = (this._caveK || 0) + ((covered && !built ? 1 : 0) - (this._caveK || 0)) * Math.min(1, dt * 1.5);
+        // in a cave: as dark as the daylight reaching the head (the mouth lit, deeper in dark — the
+        // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
+        const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;
+        const dark = sky < 1 ? 1 - sky : covered && !built ? 1 : 0;
+        this._caveK = (this._caveK || 0) + (dark - (this._caveK || 0)) * Math.min(1, dt * 1.5);
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
         this.world.setIndoor?.(this._indoorK);

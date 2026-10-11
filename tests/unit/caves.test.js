@@ -55,3 +55,18 @@ test('chest loot: one precious thing at most, and only in about a quarter of the
     // the creative test chests: always one
     for (let i = 0; i < 200; i++) assert.equal(rollLoot(r, { key: 1 }).filter(precious).length, 1);
 });
+
+test('cave light (as in Minecraft): daylight comes in by the mouth and fades a step a block; deep inside dark; the meadow lit', async () => {
+    const { TEST_CAVE } = await import('../../src/world/Terrain.js');
+    const d = new TerrainData();
+    d.generate({ seed: 12345, mountains: true, seas: true, test: true, deepCaves: true });
+    const cv = d.cavesNear(TEST_CAVE.X, TEST_CAVE.Z, 5).find((c) => c.id === 'cvtest');
+    const darkAt = (x, y, z) => { const ix = Math.round(x), iz = Math.round(z); return d._skyLight(ix >> 5, iz >> 5)(ix, Math.floor(y + 1.5), iz); };
+    const along = cv.segs.slice(0, 12).map((g) => darkAt((g.ax + g.bx) / 2, (g.ay + g.by) / 2 - 1, (g.az + g.bz) / 2));
+    assert.ok(along[0] <= 3, `the mouth is lit (${along})`);
+    assert.ok(along.slice(6).every((v) => v >= 13), `deeper in, dark (${along})`);
+    for (let i = 1; i < 6; i++) assert.ok(along[i] >= along[i - 1] - 1, `it fades going in (${along})`);
+    const deep = cv.chambers.slice().sort((a, b) => a.F - b.F)[0];
+    assert.ok(d.skyAt(deep.x, deep.F + 2, deep.z) < 0.06, 'the deepest hall: dark');
+    assert.equal(d.skyAt(0, 2, 0), 1, 'the pedestals in the open: full daylight');
+});

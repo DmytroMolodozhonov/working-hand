@@ -22,7 +22,7 @@
 
 import * as THREE from 'three';
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
-import { applyVoxelDetail } from './VoxelShading.js';
+import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
 import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { SiteIndex } from './Sites.js';
@@ -69,6 +69,9 @@ export const isFlammable = (t) => isWood(t) || isLeaves(t) || t === BLOCK.THATCH
 export const isSolid = (type) => type !== BLOCK.AIR && type !== BLOCK.WATER;
 /** Blocks drawn as cubes (frozen water shapes are drawn as their own smooth shapes). */
 const drawn = (type) => type !== BLOCK.AIR && type !== BLOCK.WATER && type !== BLOCK.ICE_SHAPE;
+/** Daylight left at a darkness 0…15 (Minecraft's light levels: a step down is a fifth less). */
+export const skyFactor = (dark) => (dark <= 0 ? 1 : Math.max(0.035, Math.pow(0.8, dark)));
+const _sky = { light: null, queue: null, tops: null }; // (reused buffers of _skyLight)
 /** Top of the water surface (water fills layers up to 0, drawn a little lower than the ground). */
 export const WATER_LEVEL_Y = -0.62;
 
@@ -685,7 +688,7 @@ export class TerrainData {
                 let keep = -Infinity;
                 if (sys.length > 1) for (const s of sys) keep = Math.max(keep, chamberFloor(s, x, z));
                 for (const s of sys) carveColumn(s, x, z, cut, keep);
-                if (carved) (this._walls || (this._walls = [])).push(col);
+                if (carved) { (this._walls || (this._walls = [])).push(col); c.caved = true; } // (its sky light: _skyLight)
                 if (carved) {
                     let top = MIN_LAYER - 1;
                     for (let L = c.top[col]; L >= MIN_LAYER; L--) {
@@ -762,6 +765,7 @@ export class TerrainData {
                     }
                 }
                 if (carved) {
+                    c.caved = true;
                     // an opening on the slope can lower the column's top
                     let top = MIN_LAYER - 1;
                     for (let L = c.top[col]; L >= MIN_LAYER; L--) {
@@ -1134,6 +1138,99 @@ export class TerrainData {
     }
 
     /**
+     * Sky light round a chunk with caves (as in Minecraft): 15 in the open air; in the rock's
+     * hollows (a cave, a tunnel) the daylight comes in only through their openings, one less a
+     * block — a few steps past the mouth it is dark. Villages and castles keep their own light.
+     * Returns (x, L, z) → darkness 0 (open) … 15 for the chunk and the cells round it, or null
+     * (no cave here or next door: all lit). Also keeps the chunk's own cells in c.sky (skyAt).
+     */
+    _skyLight(cx, cz) {
+        const c = this.chunk(cx, cz);
+        let any = false;
+        for (let dz = -1; dz <= 1 && !any; dz++) for (let dx = -1; dx <= 1 && !any; dx++) if (this.chunk(cx + dx, cz + dz).caved) any = true;
+        if (!any) { c.sky = null; return null; }
+        const P = 15, RW = CHUNK + 2 * P, x0 = cx * CHUNK - P, z0 = cz * CHUNK - P;
+        const chunks = [];
+        for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) chunks.push(this.chunk(cx + dx, cz + dz));
+        const N = RW * RW * HEIGHT;
+        if (!_sky.light || _sky.light.length < N) { _sky.light = new Uint8Array(N); _sky.queue = new Int32Array(N); _sky.tops = new Int16Array(RW * RW); }
+        const light = _sky.light, queue = _sky.queue, tops = _sky.tops;
+        light.fill(0, 0, N);
+        const blockAt = (rx, L, rz) => {
+            const wx = x0 + rx, wz = z0 + rz;
+            const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
+            return k.blocks[((L - MIN_LAYER) * CHUNK + (wz & MASK)) * CHUNK + (wx & MASK)];
+        };
+        let maxTop = MIN_LAYER;
+        for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) {
+            const wx = x0 + rx, wz = z0 + rz;
+            const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
+            let top = k.top[(wz & MASK) * CHUNK + (wx & MASK)];
+            if (k.caved && this.sites?.landAt(wx, wz)) top = MIN_LAYER - 1; // (houses and castles: their rooms as they are)
+            tops[rz * RW + rx] = top;
+            if (top > maxTop) maxTop = top;
+        }
+        // open: at or above the column's top, and light passes there (air, water)
+        const open = (rx, L, rz) => { const t = tops[rz * RW + rx]; return L > t || (L === t && !drawn(blockAt(rx, L, rz))); };
+        const D = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+        let tail = 0;
+        // the hollows' cells next to the open air get the daylight
+        for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) {
+            const wx = x0 + rx, wz = z0 + rz;
+            if (!chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)].caved) continue; // (no hollows there)
+            const top = tops[rz * RW + rx];
+            for (let L = MIN_LAYER + 1; L < top; L++) {
+                if (drawn(blockAt(rx, L, rz))) continue;
+                let lit = false;
+                for (const [dx, dy, dz] of D) {
+                    const nx = rx + dx, nz = rz + dz, nL = L + dy;
+                    if (nx < 0 || nz < 0 || nx >= RW || nz >= RW) continue;
+                    if (open(nx, nL, nz)) { lit = true; break; }
+                }
+                if (lit) { const i = ((L - MIN_LAYER) * RW + rz) * RW + rx; light[i] = 14; queue[tail++] = i; }
+            }
+        }
+        // …and it spreads into them, one less a block
+        for (let head = 0; head < tail; head++) {
+            const i = queue[head], v = light[i];
+            if (v <= 1) continue;
+            const rx = i % RW, rz = ((i - rx) / RW) % RW, L = Math.floor(i / (RW * RW)) + MIN_LAYER;
+            for (const [dx, dy, dz] of D) {
+                const nx = rx + dx, nz = rz + dz, nL = L + dy;
+                if (nx < 0 || nz < 0 || nx >= RW || nz >= RW || nL <= MIN_LAYER || nL > MAX_LAYER) continue;
+                if (nL >= tops[nz * RW + nx]) continue; // (the open air: lit anyway)
+                const j = ((nL - MIN_LAYER) * RW + nz) * RW + nx;
+                if (light[j] >= v - 1 || drawn(blockAt(nx, nL, nz))) continue;
+                light[j] = v - 1;
+                queue[tail++] = j;
+            }
+        }
+        const dark = (wx, L, wz) => {
+            const rx = wx - x0, rz = wz - z0;
+            if (rx < 0 || rz < 0 || rx >= RW || rz >= RW || L <= MIN_LAYER || L > MAX_LAYER) return 0;
+            if (L >= tops[rz * RW + rx]) return 0;
+            return 15 - light[((L - MIN_LAYER) * RW + rz) * RW + rx];
+        };
+        // the chunk's own cells, kept (how dark it is where the player stands: skyAt)
+        const own = c.sky && c.sky.length === CHUNK * CHUNK * HEIGHT ? c.sky : new Uint8Array(CHUNK * CHUNK * HEIGHT);
+        for (let L = MIN_LAYER; L <= Math.min(MAX_LAYER, maxTop); L++) for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
+            own[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = dark(cx * CHUNK + lx, L, cz * CHUNK + lz);
+        }
+        c.sky = own;
+        return dark;
+    }
+
+    /** How much daylight reaches a point (1: the open sky … ~0.04: deep in a cave). */
+    skyAt(x, y, z) {
+        const ix = Math.round(x), iz = Math.round(z), L = Math.floor(y + 1.5);
+        if (L < MIN_LAYER || L > MAX_LAYER) return 1;
+        const c = this.chunks.get(chunkKey(ix >> SHIFT, iz >> SHIFT));
+        if (c && c.sky === undefined) this._skyLight(ix >> SHIFT, iz >> SHIFT); // (not drawn yet: worked out now)
+        if (!c?.sky) return 1;
+        return skyFactor(c.sky[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)]);
+    }
+
+    /**
      * Greedy-mesh one chunk. Returns two vertex buffers: `ground` (faces of
      * blocks at or below layer 0 — receive shadows only, like the old plane) and
      * `raised` (mountains, trees — cast and receive shadows).
@@ -1155,6 +1252,8 @@ export class TerrainData {
         const skipSea = !!(this.skipSeaTop && c.sea);
         const below = lowest > MIN_LAYER ? BLOCK.STONE : BLOCK.AIR; // (all rock under `lowest`)
         const hid = this._hidden?.get(chunkKey(cx, cz)) || null; // (a falling piece not landed yet: not drawn there)
+        // (a cave's dark: a face is as lit as the air in front of it — _skyLight; null: all lit)
+        const sky = this._skyLight(cx, cz);
         // Fast access inside this chunk; neighbours only for border occlusion
         const at = (gx, gy, gz) => {
             if (gy < 0) return below;
@@ -1173,6 +1272,7 @@ export class TerrainData {
             const su = sizes[u], sv = sizes[v];
             const mask = new Int32Array(su * sv);
             const maskKind = new Int8Array(su * sv); // 0 ground, 1 raised, 2 water
+            const maskDark = new Int8Array(su * sv); // 0 open sky … 15 deep in a cave
             const qx = d === 0 ? 1 : 0, qy = d === 1 ? 1 : 0, qz = d === 2 ? 1 : 0;
             for (x[d] = -1; x[d] < sizes[d];) {
                 let n = 0;
@@ -1209,6 +1309,8 @@ export class TerrainData {
                         }
                         mask[n] = key;
                         maskKind[n] = kind;
+                        // the air the face looks into (a's face looks at b, b's at a)
+                        maskDark[n] = sky && key && kind !== 2 ? (key > 0 ? sky(x0 + ax + qx, lowest + ay + qy, z0 + az + qz) : sky(x0 + ax, lowest + ay, z0 + az)) : 0;
                     }
                 }
                 x[d]++;
@@ -1218,14 +1320,14 @@ export class TerrainData {
                     for (let i = 0; i < su;) {
                         const col = mask[n];
                         if (col === 0) { i++; n++; continue; }
-                        const kindC = maskKind[n];
+                        const kindC = maskKind[n], darkC = maskDark[n];
                         let w = 1;
-                        while (i + w < su && mask[n + w] === col && maskKind[n + w] === kindC) w++;
+                        while (i + w < su && mask[n + w] === col && maskKind[n + w] === kindC && maskDark[n + w] === darkC) w++;
                         let h = 1, done = false;
                         for (; j + h < sv; h++) {
                             for (let k = 0; k < w; k++) {
                                 const m = n + k + h * su;
-                                if (mask[m] !== col || maskKind[m] !== kindC) { done = true; break; }
+                                if (mask[m] !== col || maskKind[m] !== kindC || maskDark[m] !== darkC) { done = true; break; }
                             }
                             if (done) break;
                         }
@@ -1236,7 +1338,7 @@ export class TerrainData {
                         // The water surface sits a little below the ground around it
                         const drop = kindC === 2 && d === 1 && col > 0 ? 0.12 : 0;
                         const code = Math.abs(col) - 1;
-                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24);
+                        pushQuad(target, origin, pos, du, dv, d, col > 0, code & 0xffffff, drop, code >>> 24, skyFactor(darkC));
                         for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * su] = 0;
                         i += w; n += w;
                     }
@@ -1248,11 +1350,11 @@ export class TerrainData {
 }
 
 function newBuffers() {
-    return { positions: [], normals: [], colors: [], indices: [], patterns: [], patterned: false };
+    return { positions: [], normals: [], colors: [], indices: [], patterns: [], skies: [], patterned: false };
 }
 
 /** Convert grid-space quad to world space and append it. */
-function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0) {
+function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1) {
     // grid -> world: x_w = gx - 0.5, y_w = gy - 1.5, z_w = gz - 0.5 (gx = origin + local)
     const base = buf.positions.length / 3;
     const px = origin[0] + pos[0] - 0.5, py = origin[1] + pos[1] - 1.5 - drop, pz = origin[2] + pos[2] - 0.5;
@@ -1268,6 +1370,7 @@ function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, patter
         buf.normals.push(nx, ny, nz);
         buf.colors.push(r, g, b);
         buf.patterns.push(pattern);
+        buf.skies.push(sky);
     }
     if (pattern) buf.patterned = true;
     // Winding: (u, v, d) is a right-handed cyclic triple, so u×v = +d.
@@ -1293,10 +1396,10 @@ export class Terrain {
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
-        this.waterMaterial = new THREE.MeshPhongMaterial({
+        this.waterMaterial = applySkyComp(new THREE.MeshPhongMaterial({
             vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false,
             shininess: 90, specular: 0x88bbff,
-        });
+        }));
         this.group = new THREE.Group();
         this.group.name = 'terrain';
         this.meshes = new Map(); // chunk key -> {ground, raised, cx, cz}
@@ -1436,6 +1539,7 @@ export class Terrain {
         geo.setAttribute('color', new THREE.Float32BufferAttribute(buf.colors, 3));
         // castle stone, planks, roof tiles... (always set: one shader for every chunk)
         geo.setAttribute('voxPat', new THREE.Float32BufferAttribute(buf.patterns, 1));
+        geo.setAttribute('voxSky', new THREE.Float32BufferAttribute(buf.skies, 1)); // (daylight reaching it: a cave's dark)
         geo.setIndex(buf.indices);
         geo.computeBoundingSphere();
         geo.computeBoundingBox();
