@@ -2,10 +2,17 @@
  * Swimming.js — deep water, air and «Air Bubble».
  *
  * Shallow water is walked through. Where the water is deeper than the hero's
- * chest you swim: move your LEGS (march / kick in place — the knees going up
- * and down, or running in place) and you float with the head above the
- * water; stop, and you slowly sink to the bottom. Walking / running in place
- * still moves you forward, at half speed.
+ * chest you swim — with your ARMS, for real (SwimStroke.js reads the strokes):
+ *
+ *   On top of the water: the crawl (one arm reaches forward / up and pulls down
+ *   to the hip) or the breaststroke (the hands together in front, then both out
+ *   wide). Each stroke pushes you forward where you face; the body lies flat in
+ *   the water, the legs kick, the hands splash. No strokes: you tread water,
+ *   the head above it, and slowly stop.
+ *   Diving: look down and stroke. Under the water the breaststroke and the
+ *   dolphin pull (both arms down together) push you along where you look (look
+ *   down — deeper, up — towards the light); a lone crawl arm does little there.
+ *   Without strokes the body slowly floats up; at the top you swim on it again.
  *
  * With the head under water the air runs out: 20 seconds, then −1 HP every
  * second until you come up (or die). Air comes back quickly above water.
@@ -17,6 +24,7 @@
 
 import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
+import { StrokeDetector, SwimMotion, SWIM } from './SwimStroke.js';
 
 export const AIR_MAX = 20;
 const SWIM_DEPTH = 3.2; // water this deep (blocks) lifts you off your feet
@@ -25,6 +33,8 @@ const FEET = 1.95;
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _fogDeep = new THREE.Color(0x0b4f74);
 
 export class Swimming {
     constructor(game) {
@@ -32,8 +42,14 @@ export class Swimming {
         this.air = AIR_MAX;
         this.swimming = false;
         this.underwater = false;
-        this.kick = 0; // 0…1: how hard the legs are moving
-        this._knees = { left: false, right: false };
+        this.strokes = new StrokeDetector(); // the player's real arm strokes
+        this.motion = new SwimMotion(); // the body's way through the water
+        this.y = null; // where the water holds the body (its origin, the hips)
+        this.atTop = true; // on top of the water (false: dived under)
+        this._tilted = false; // the body's tilt is mine (lying in the water)
+        this._handUp = { left: null, right: null }; // each hand above the water? (a hand going in / out splashes)
+        this._bubbleT = 0;
+        this.ripples = [];
         this._drownT = 0;
         this.bubble = null; // {until, max, mesh}
         this._buildHud();
@@ -74,43 +90,17 @@ export class Swimming {
         const p = ch.group.position;
         const w0 = g.flight?.active ? null : this.waterAt(p.x, p.z, p.y - FEET + 0.3);
         const w = w0 && g.ships?.dryAt(p.x, p.y - FEET + 0.2, p.z) ? null : w0; // (inside a floating hull it is dry)
-        const pose = g.currentPose;
-
-        // Legs: every knee that goes up (or running in place) is a kick
-        if (pose) {
-            for (const side of ['left', 'right']) {
-                const up = !!pose[side + 'KneeUp'];
-                if (up && !this._knees[side]) this.kick = Math.min(1, this.kick + 0.55);
-                this._knees[side] = up;
-            }
-            if (pose.isRunning) this.kick = Math.min(1, this.kick + dt * 2.5);
-        }
-        this.kick = Math.max(0, this.kick - dt * 0.9);
+        const pose = g.combat?.immobile ? null : g.currentPose; // (frozen in ice: the arms can't swim)
 
         // on a surfboard: the board holds you up (SurfBoards places the body)
-        if (g.boards?.mounted) { this.swimming = false; this.underwater = false; this.air = Math.min(AIR_MAX, this.air + dt * 5); this._renderHud(); return; }
+        if (g.boards?.mounted) { this.swimming = false; this.underwater = false; this._leave(dt); this.air = Math.min(AIR_MAX, this.air + dt * 5); this._renderHud(); return; }
         this.swimming = !!w && w.depth >= SWIM_DEPTH && p.y - FEET < w.surface && !g.up?.rising; // («Up»: thrown up out of it)
-        if (this.swimming) {
-            // floating: the head out of the water; sinking: down to the bottom
-            const floatY = w.surface - EYES + 0.55;
-            const bottomY = w.bottom + 0.5 + FEET - 0.05;
-            const k = this.kick;
-            const vy = k > 0.15 ? 2.2 * k : -1.1;
-            let y = Math.max(bottomY, Math.min(floatY, p.y + vy * dt));
-            // afloat at the top of the sea: the body rises and falls with the waves
-            if (w.sea && k > 0.15 && p.y > floatY - 2) { y = Math.max(bottomY, floatY); p.y = y; }
-            this.floatY = floatY;
-            ch.swimY = y;
-            ch.speedScale = 0.5;
-            ch.swimming = true;
-        } else {
-            ch.swimY = null;
-            ch.speedScale = 1;
-            ch.swimming = false;
-        }
+        if (this.swimming) this._swim(dt, w, pose);
+        else this._leave(dt);
+        this._updateRipples(dt);
 
-        // Air
-        this.underwater = !!w && p.y + EYES < w.surface - 0.05;
+        // Air (the eyes: lower when the body lies in the water)
+        this.underwater = !!w && p.y + EYES * Math.cos(this._tilted ? this.motion.tilt : 0) < w.surface - 0.05;
         const now = performance.now();
         if (this.bubble && now > this.bubble.until) this._popBubble();
         if (this.underwater && !this.bubble) {
@@ -120,7 +110,7 @@ export class Swimming {
                 if (this._drownT >= 1) {
                     this._drownT -= 1;
                     if (g.config.mode !== 'creative') {
-                        g.hud.setVoice?.('🫧 Нет воздуха! Всплывайте — двигайте ногами!', true);
+                        g.hud.setVoice?.('🫧 Нет воздуха! Всплывайте — посмотрите вверх и гребите руками!', true);
                         g.damageLocalPlayer(1);
                     }
                 }
@@ -131,6 +121,183 @@ export class Swimming {
         }
         if (this.bubble) this._updateBubble(dt);
         this._renderHud();
+    }
+
+    /** In deep water: the arms' strokes move the body (SwimStroke.js); the water holds it. */
+    _swim(dt, w, pose) {
+        const g = this.game;
+        const ch = g.character;
+        const p = ch.group.position;
+        const M = this.motion;
+        const bottomY = w.bottom + 0.5 + FEET - 0.05;
+        // afloat, the eyes stay just above the water: the flatter the body lies, the lower its hips
+        const floatY = w.surface + 0.4 - EYES * Math.cos(M.tilt);
+        if (this.y == null) {
+            // just came into the deep water: floating where the body is (it sinks no further)
+            this.y = Math.min(p.y, floatY);
+            this.atTop = this.y > floatY - 0.6;
+            this.strokes.reset();
+            if (!this._told) { this._told = true; g.hud.setVoice?.('🏊 Глубоко — плывите руками: кроль (рука вперёд-вверх и вниз к бедру) или брасс (ладони вместе, потом в стороны). Посмотрите вниз и гребите — нырнёте', true); }
+        }
+        const look = g.smoothHead?.pitch || 0; // (+ up)
+        const under = !this.atTop;
+        for (const ev of this.strokes.update(dt, pose)) {
+            M.stroke(ev, { under, look });
+            this._strokeFx(ev, w, under);
+        }
+        const m = M.step(dt, { under, look });
+        if (this.atTop) {
+            if (m.up < -0.05) this.y += m.up * dt; // diving
+            else this.y += (floatY - this.y) * Math.min(1, dt * 4);
+            if (this.y < floatY - 0.6) this.atTop = false;
+        } else {
+            this.y += m.up * dt;
+            if (this.y >= floatY) { this.y = floatY; this.atTop = true; M.pitch = 0; } // up at the light: swimming on top again
+        }
+        this.y = Math.max(bottomY, Math.min(floatY, this.y));
+        // afloat at the top of the sea: the body rises and falls with the waves
+        if (w.sea && this.atTop && Math.abs(p.y - this.y) < 2) p.y = this.y;
+        this.floatY = floatY;
+        ch.swimY = this.y;
+        ch.speedScale = 0; // (no walking in deep water: the arms swim)
+        ch.swimming = true;
+        ch.swimMove = Math.min(1, M.speed / 1.5);
+        // the strokes push along the body's front (it turns with the head / body, as on land)
+        const yaw = ch.group.rotation.y;
+        ch.swimVel = { x: -Math.sin(yaw) * m.forward, z: -Math.cos(yaw) * m.forward };
+        this._setTilt(m.tilt);
+        this._waterFx(dt, w);
+    }
+
+    /** Out of the deep water: the body stands up again (smoothly), nothing swims it any more. */
+    _leave(dt) {
+        const ch = this.game.character;
+        ch.swimY = null;
+        ch.speedScale = 1;
+        ch.swimming = false;
+        ch.swimMove = 0;
+        ch.swimVel = null;
+        if (this.y != null) {
+            this.y = null;
+            this.atTop = true;
+            this.strokes.reset();
+            this.motion.speed = 0;
+            this.motion.pitch = 0;
+        }
+        if (!this._tilted) { this.motion.tilt = SWIM.TILT_IDLE; return; }
+        const t = this.motion.tilt = Math.max(0, this.motion.tilt - dt * 3);
+        this._setTilt(t);
+        if (t <= 0) { this._tilted = false; this.motion.tilt = SWIM.TILT_IDLE; }
+    }
+
+    /** Lie in the water: the body tilted, the eyes still looking where the player looks. */
+    _setTilt(t) {
+        const g = this.game, ch = g.character;
+        if (g.flight?.busy || g.boards?.mounted || g.ships?.rigging?.climbing) { this._tilted = false; return; } // (the body is theirs)
+        this._tilted = true;
+        ch.setFlightTilt(t);
+        ch.head.rotation.x += t; // (Game set the head's look this frame; the tilt is taken out of it)
+    }
+
+    /** Splashes where a hand goes into the water or comes out; bubbles from the mouth under it. */
+    _waterFx(dt, w) {
+        const g = this.game, ch = g.character, fx = g.fx;
+        if (!fx) return;
+        for (const side of ['left', 'right']) {
+            const h = ch.getHandWorldPosition(side, _v);
+            const up = h.y > w.surface;
+            const was = this._handUp[side];
+            this._handUp[side] = up;
+            const vy = ch.handVelocity?.[side]?.y || 0;
+            if (was != null && was !== up && Math.abs(vy) > 0.8 && Math.abs(h.y - w.surface) < 1) {
+                this._splash(_v2.set(h.x, w.surface, h.z), Math.min(1.5, Math.abs(vy) / 3));
+            }
+        }
+        const M = this.motion;
+        // the legs kick behind a body swimming on top: a little foam at the feet
+        if (this.atTop && M.speed > 0.6 && Math.random() < dt * 8 * M.speed / 3) {
+            const yaw = ch.group.rotation.y;
+            _v.set(ch.group.position.x + Math.sin(yaw) * 1.8, w.surface + 0.05, ch.group.position.z + Math.cos(yaw) * 1.8);
+            fx.spark(_v, 0xffffff, 0.1 + Math.random() * 0.08, _v2.set((Math.random() - 0.5) * 1.5, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 1.5), 0.4);
+        }
+        // under the water: the breath goes up in bubbles
+        if (this.underwater && !this.bubble) {
+            this._bubbleT -= dt;
+            if (this._bubbleT <= 0) {
+                this._bubbleT = 0.9 + Math.random() * 0.8;
+                const mouth = ch.getHeadPosition(_v3);
+                for (let i = 0; i < 4; i++) fx.spark(_v.copy(mouth).add(_v2.set((Math.random() - 0.5) * 0.15, i * 0.05, (Math.random() - 0.5) * 0.15)), 0xe8fbff, 0.05 + Math.random() * 0.06, _v2.set((Math.random() - 0.5) * 0.4, 1.2 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4), 1.6);
+            }
+        }
+    }
+
+    /** A stroke: the water swirls at the pulling hands (spray on top, bubbles under). */
+    _strokeFx(ev, w, under) {
+        const g = this.game, ch = g.character, fx = g.fx;
+        if (!fx) return;
+        const sides = ev.side ? [ev.side] : ['left', 'right'];
+        for (const side of sides) {
+            const h = ch.getHandWorldPosition(side, _v3);
+            if (under) {
+                for (let i = 0; i < 6; i++) fx.spark(_v.copy(h).add(_v2.set((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3)), 0xe8fbff, 0.04 + Math.random() * 0.05, _v2.set((Math.random() - 0.5) * 0.8, 0.8 + Math.random(), (Math.random() - 0.5) * 0.8), 1.3);
+            } else this._splash(_v.set(h.x, w.surface, h.z), 0.6 + 0.4 * (ev.power || 1));
+        }
+    }
+
+    _splash(at, k = 1) {
+        const fx = this.game.fx;
+        const n = Math.round(6 + 8 * k);
+        for (let i = 0; i < n; i++) {
+            fx.spark(at, i % 3 ? 0xffffff : 0x9fd8ff, 0.07 + Math.random() * 0.1 * k, _v2.set((Math.random() - 0.5) * 2.5 * k, 1.5 + Math.random() * 2.5 * k, (Math.random() - 0.5) * 2.5 * k), 0.45 + Math.random() * 0.25);
+        }
+        this._ripple(at, k);
+    }
+
+    /** A ring on the water, running out and fading. */
+    _ripple(at, k = 1) {
+        if (!this.game.scene) return;
+        let r = this.ripples.find((q) => q.t >= q.life);
+        if (!r) {
+            if (this.ripples.length >= 16) return;
+            const mesh = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.renderOrder = 2;
+            this.game.scene.add(mesh);
+            r = { mesh, t: 0, life: 1 };
+            this.ripples.push(r);
+        }
+        r.t = 0;
+        r.life = 1 + 0.4 * k;
+        r.size = 1.2 + 1.6 * k;
+        r.mesh.position.set(at.x, at.y + 0.04, at.z);
+        r.mesh.visible = true;
+    }
+
+    _updateRipples(dt) {
+        for (const r of this.ripples) {
+            if (r.t >= r.life) continue;
+            r.t += dt;
+            const a = Math.min(1, r.t / r.life);
+            r.mesh.scale.setScalar(0.2 + r.size * Math.sqrt(a));
+            r.mesh.material.opacity = 0.55 * (1 - a);
+            if (a >= 1) r.mesh.visible = false;
+        }
+    }
+
+    /** Under the water the view is murky and blue (after World set this frame's fog). */
+    applyFog() {
+        const fog = this.game.scene?.fog;
+        if (!fog) return;
+        if (this.underwater) {
+            if (!this._fogSaved || fog.color.getHex() !== this._fogSet) this._fogSaved = fog.color.clone();
+            fog.color.copy(this._fogSaved).lerp(_fogDeep, 0.85);
+            this._fogSet = fog.color.getHex();
+            fog.near = 0.5;
+            fog.far = Math.min(fog.far, this.bubble ? 34 : 26);
+        } else if (this._fogSaved) {
+            if (fog.color.getHex() === this._fogSet) fog.color.copy(this._fogSaved);
+            this._fogSaved = null;
+        }
     }
 
     // ---------------------------------------------------------- Air Bubble
@@ -221,9 +388,11 @@ export class Swimming {
 
     dispose() {
         this._popBubble();
+        for (const r of this.ripples) { this.game.scene?.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
+        this.ripples = [];
         if (this.hudEl) this.hudEl.style.display = 'none';
         if (this.overlay) this.overlay.style.opacity = '0';
         const ch = this.game.character;
-        if (ch) { ch.swimY = null; ch.speedScale = 1; ch.swimming = false; }
+        if (ch) { ch.swimY = null; ch.speedScale = 1; ch.swimming = false; ch.swimVel = null; if (this._tilted) ch.setFlightTilt(0); }
     }
 }

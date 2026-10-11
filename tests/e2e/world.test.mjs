@@ -378,7 +378,7 @@ test('book-birds: a spell knocks one down, the book is taken by hand, read, and 
     await page.close();
 });
 
-test('deep lakes: swim with the legs or sink, air runs out, «Air Bubble», «Wave Attack» washes a zombie away', async () => {
+test('deep lakes: afloat without strokes, air runs out under water, «Air Bubble», «Wave Attack» washes a zombie away', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -398,17 +398,18 @@ test('deep lakes: swim with the legs or sink, air runs out, «Air Bubble», «Wa
         }
         if (!spot) return { noLake: true };
         ch.group.position.set(spot.x, spot.w.surface + 1, spot.z);
-        g.currentPose = null; // no legs moving
+        g.currentPose = null; // no arms stroking
         const y0 = ch.group.position.y;
         await frames(60);
         const sank = y0 - ch.group.position.y;
         const swimming = g.swim.swimming;
+        const afloat = !g.swim.underwater; // (no strokes: treading water, the head above it)
+        // dived under: the air goes down, and without strokes the body floats up
+        g.swim.y = ch.group.position.y = spot.w.surface - 3.5; g.swim.atTop = false;
+        const yLow = g.swim.y;
+        await frames(40);
         const air0 = g.swim.air;
-        // legs moving: floats up
-        g.swim.kick = 1;
-        const yLow = ch.group.position.y;
-        for (let i = 0; i < 40; i++) { g.swim.kick = 1; await frames(1); }
-        const rose = ch.group.position.y - yLow;
+        const rose = g.swim.y - yLow;
         // air bubble needs the hands at the head (forced here)
         ch.isTPose = () => true;
         g.combat.fatigue = 30;
@@ -421,13 +422,13 @@ test('deep lakes: swim with the legs or sink, air runs out, «Air Bubble», «Wa
         g.spells.cast('WaveAttack', new window.__zns.THREE.Vector3(spot.x, spot.w.surface, spot.z), new window.__zns.THREE.Vector3(8, 0, 0), 'right', g.localId);
         let zMoved = -99;
         for (let i = 0; i < 40; i++) { await frames(1); zMoved = Math.max(zMoved, z.group.position.x - zx0); }
-        return { sank, swimming, air0, rose, bubble, hasBubble, zMoved, hp: g.playerHP };
+        return { sank, swimming, afloat, air0, rose, bubble, hasBubble, zMoved, hp: g.playerHP };
     });
     if (r.noLake) { assert.fail('no deep lake found near spawn'); }
     assert.ok(r.swimming, 'in deep water the hero swims');
-    assert.ok(r.sank > 0.5, `without moving the legs the hero sinks (${r.sank.toFixed(2)})`);
+    assert.ok(r.sank > 0.5 && r.afloat, `fallen in, the hero floats with the head above the water (${r.sank.toFixed(2)})`);
     assert.ok(r.air0 < 20, `under water the air goes down (${r.air0.toFixed(1)})`);
-    assert.ok(r.rose > 0.5, `moving the legs lifts the hero (${r.rose.toFixed(2)})`);
+    assert.ok(r.rose > 0.3, `under water the body floats up (${r.rose.toFixed(2)})`);
     assert.equal(r.bubble, 'AirBubbleMaxima');
     assert.ok(r.hasBubble, 'a bubble of air');
     assert.ok(r.zMoved > 2, `the wave washed the zombie away (${r.zMoved.toFixed(1)} m)`);

@@ -636,6 +636,11 @@ export class VoxelCharacter {
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
             }
+            // swimming: the arms' strokes push the body through the water (Swimming.js)
+            if (this.swimVel && this.swimY != null) {
+                this.group.position.x += this.swimVel.x * dt;
+                this.group.position.z += this.swimVel.z * dt;
+            }
             // Ground following + gravity (flat ground keeps the original baseY exactly)
             // the floor under the feet (not a ceiling / roof / cave rock above)
             const feetNow = this.group.position.y - PLAYER_GROUND_OFFSET + this.bodyDrop();
@@ -683,6 +688,14 @@ export class VoxelCharacter {
             const k = Math.min(1, 10 * dt);
             this.leftLegPivot.rotation.x += ((this.legPose.left?.hip || 0) - this.leftLegPivot.rotation.x) * k;
             this.rightLegPivot.rotation.x += ((this.legPose.right?.hip || 0) - this.rightLegPivot.rotation.x) * k;
+        } else if (this.swimming) {
+            // in deep water: the legs kick (flutter) as the arms swim, gently treading water when still
+            const m = this.swimMove || 0;
+            this.runCycle += dt * (3 + 6 * m);
+            const k = Math.min(1, 8 * dt);
+            const kick = Math.sin(this.runCycle) * (0.12 + 0.3 * m);
+            this.leftLegPivot.rotation.x += (kick - this.leftLegPivot.rotation.x) * k;
+            this.rightLegPivot.rotation.x += (-kick - this.rightLegPivot.rotation.x) * k;
         } else if (this.flying) {
             // Superman: legs straight back, slight flutter
             this.runCycle += dt * 6;
@@ -840,6 +853,7 @@ export class VoxelCharacter {
             sg: this.stepping > 0 ? [r2(this.staggerLean || 0), r2(this.staggerRoll || 0)] : undefined,
             lg: this.legPose ? [r3(this.legPose.left?.hip || 0), r3(this.legPose.right?.hip || 0)] : undefined, // (on a surfboard)
             rz: this.boardRoll ? r3(this.boardRoll) : undefined,
+            sw: this.swimming ? r2(this.swimMove || 0) : undefined, // (in deep water: how hard the legs kick)
             lh: this.leftSimplifiedHand.serializeState(),
             rh: this.rightSimplifiedHand.serializeState(),
         };

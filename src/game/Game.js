@@ -2161,6 +2161,7 @@ export class Game {
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
         this.world.update(this.character.group.position, this._viewBoost);
+        this.swim.applyFog(); // (under the water: murky and blue)
         this.falling?.update(Math.min(0.05, dt));
         this.destruction?.update(Math.min(0.05, dt));
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
