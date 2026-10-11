@@ -168,19 +168,32 @@ button, input, select, textarea { font-family: inherit; }
 .game-version-top { color: var(--ui-muted); font-size: 0.85rem; margin: 6px 0 14px; text-align: center; }
 .game-version-top b { color: var(--ui-gold); font-weight: 700; }
 
-/* the tabs: one rounded rail */
+/* the main sections: a list on the left, the chosen section on the right */
+#main-menu > .menu-container {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    column-gap: 22px;
+    align-items: start;
+    width: min(1220px, 100%);
+    max-width: 1220px;
+}
+#main-menu > .menu-container > .brand,
+#main-menu > .menu-container > .game-version-top { grid-column: 1 / -1; }
+#gpu-warning { width: min(1220px, 100%); max-width: 1220px; }
 .tabs {
-    display: flex; flex-wrap: wrap; justify-content: center; gap: 2px;
-    padding: 4px; margin: 0 auto 18px;
-    background: rgba(5, 3, 18, 0.45); border: 1px solid var(--ui-border); border-radius: 16px;
-    width: fit-content; max-width: 100%;
+    grid-column: 1; position: sticky; top: 0;
+    display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+    padding: 8px; margin: 0;
+    background: rgba(5, 3, 18, 0.45); border: 1px solid var(--ui-border); border-radius: 18px;
 }
+.tab-content { grid-column: 2; min-width: 0; }
 .tab-btn {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
     background: transparent; border: 1px solid transparent; color: var(--ui-muted);
-    padding: 8px 11px; border-radius: 12px; font-weight: 800; font-size: 0.88rem; letter-spacing: 0.1px; white-space: nowrap;
-    transition: color 0.15s, background 0.15s, box-shadow 0.2s;
+    padding: 11px 14px; border-radius: 12px; font-weight: 800; font-size: 0.98rem; letter-spacing: 0.1px; white-space: nowrap;
+    transition: color 0.15s, background 0.15s, box-shadow 0.2s, transform 0.12s;
 }
-.tab-btn:hover { color: var(--ui-text); background: rgba(167, 139, 255, 0.12); }
+.tab-btn:hover { color: var(--ui-text); background: rgba(167, 139, 255, 0.12); transform: translateX(2px); }
 .tab-btn.active {
     color: #fff; background: var(--ui-grad-magic); border-color: rgba(255, 255, 255, 0.15);
     box-shadow: 0 4px 18px rgba(155, 91, 255, 0.45);
@@ -405,13 +418,23 @@ h4.menu-h4.maps-entry { margin-top: 24px; }
 #victory-score { color: var(--ui-gold); }
 
 /* ------------------------------------------------------------ small windows */
+@media (max-width: 900px) {
+    #main-menu > .menu-container { grid-template-columns: 170px minmax(0, 1fr); column-gap: 14px; }
+    .tab-btn { padding: 9px 10px; font-size: 0.86rem; }
+    .ce-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+    #main-menu > .menu-container { grid-template-columns: minmax(0, 1fr); }
+    .tabs { grid-column: 1; position: static; flex-direction: row; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+    .tab-btn { width: auto; padding: 7px 9px; font-size: 0.78rem; }
+    .tab-content { grid-column: 1; }
+}
 @media (max-width: 760px) {
     #main-menu { padding: 12px 8px; }
     #main-menu > .menu-container, #main-menu .menu-container { padding: 14px 12px 18px; border-radius: 18px; }
     .brand { gap: 10px; }
     .brand-logo { width: 52px; height: 52px; border-radius: 14px; }
     .brand-tagline { font-size: 0.82rem; }
-    .tab-btn { padding: 7px 9px; font-size: 0.74rem; }
     .map-card.mode-card { min-height: 0; padding: 12px 14px; }
     .mode-icon { font-size: 26px; margin-bottom: 6px; }
     .map-card.mode-card .map-name { font-size: 1.2rem; }

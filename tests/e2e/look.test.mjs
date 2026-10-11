@@ -37,6 +37,13 @@ test('look: the new name, the logo, the three modes and «Карты»; the old 
     assert.deepEqual(opts, [['creative', 'Творческий'], ['survival', 'Хардкор'], ['freeworld', 'Выживание']]);
     const body = await page.evaluate(() => document.body.innerText);
     assert.doesNotMatch(body, /ЗОМБИ НЕ СПЯТ|Свободный мир|СВОБОДНЫЙ МИР|ТВОРЧЕСТВО|Творчество/);
+    // the main sections are a list on the left of the chosen section
+    const nav = await page.evaluate(() => {
+        const r = (el) => el.getBoundingClientRect();
+        const bs = [...document.querySelectorAll('.tab-btn')].map(r);
+        return { column: bs.every((b) => Math.abs(b.left - bs[0].left) < 2) && bs.every((b, i) => !i || b.top > bs[i - 1].top), leftOfContent: r(document.querySelector('.tabs')).right <= r(document.querySelector('.tab-content')).left };
+    });
+    assert.deepEqual(nav, { column: true, leftOfContent: true });
     // choosing a card marks it (and only it)
     await page.click('.mode-card.freeworld');
     assert.deepEqual(await page.$$eval('.map-card.selected', (els) => els.map((e) => e.dataset.mode || e.dataset.name)), ['freeworld']);
