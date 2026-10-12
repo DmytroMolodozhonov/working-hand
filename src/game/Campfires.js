@@ -22,6 +22,7 @@
 
 import * as THREE from 'three';
 import { isWood } from '../world/Terrain.js';
+import { FX_RENDER_ORDER } from '../fx/Particles.js';
 
 export const CAMPFIRE = {
     BURN: 180, // s a fresh campfire burns
@@ -178,6 +179,8 @@ export function campfireModel() {
     pool.scale.setScalar(7);
     g.add(pool);
     g.userData = { flames, tongues, logs, halo, pool };
+    // the flames and the glow after the see-through water (a campfire on a river bank stays bright)
+    g.traverse((o) => { if (o.material?.transparent) o.renderOrder = FX_RENDER_ORDER; });
     return g;
 }
 

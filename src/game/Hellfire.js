@@ -62,6 +62,10 @@ export const HELLFIRE = {
     RING_HOLD: 0.7, // s the hand may pause without the ring falling apart
     RING_W: 1.6, // m: the ring's wall is this thick…
     RING_H: 3.4, // …and this high
+    TURN_GROW: 1.3, // m wider (the radius) with every full turn of the hand while the ring goes…
+    TURN_WALL: 0.45, // …its wall this much thicker (the flames reach further out)…
+    TURN_TALL: 0.25, // …and this much taller
+    TURNS_MAX: 12, // (it grows for this many turns: a ring ~20 m wide)
     TICK: 0.25, // s between burns
     CREATURE_DMG: 4, // a burn (a tick) to a creature
     PLAYER_TICK: 0.5, // s between burns of a player
@@ -72,7 +76,7 @@ export const HELLFIRE = {
     STOP_COST: 50, // mana «стоп» takes to put it out (without it: it burns on until the mana runs out)
     LEFT_LIFE: 30, // s the fires left on the ground (after «стоп» / no mana) burn at full strength…
     LEFT_FADE: 6, // …then die down over this long
-    LEFT_MAX: 14, // fires left at once (all wizards)
+    LEFT_MAX: 18, // fires left at once (all wizards)
     SEND: 0.1, // s between network updates
     STALE: 1.5, // s without news: another computer's fire is gone
 };
@@ -141,11 +145,26 @@ export function inBlaze(c, R, p, bodyR = 0.5) {
     return dx * dx + dy * dy * 0.6 + dz * dz < r * r; // (the flames reach up more than sideways)
 }
 
-/** Is a body at `p` in the ring round `c` (the caster's feet), of radius `rr`? */
-export function inRing(c, rr, p, bodyR = 0.5) {
+/**
+ * The ring after `turns` full turns of the hand: every turn spreads it further out — wider
+ * (radius), a thicker wall of flame, taller, more serpents. {rr, w, h, serpents}
+ */
+export function ringSize(R, turns = 0) {
+    const n = clamp(Math.floor(Math.max(0, turns)), 0, HELLFIRE.TURNS_MAX);
+    return {
+        rr: ringRadius(R) + n * HELLFIRE.TURN_GROW,
+        w: HELLFIRE.RING_W + n * HELLFIRE.TURN_WALL,
+        h: HELLFIRE.RING_H + n * HELLFIRE.TURN_TALL,
+        serpents: 5 + n,
+        turns: n,
+    };
+}
+
+/** Is a body at `p` in the ring round `c` (the caster's feet), of radius `rr` (wall `w` thick, `h` high)? */
+export function inRing(c, rr, p, bodyR = 0.5, w = HELLFIRE.RING_W, h = HELLFIRE.RING_H) {
     const d = Math.hypot(p.x - c.x, p.z - c.z);
-    if (Math.abs(d - rr) > HELLFIRE.RING_W / 2 + bodyR) return false;
-    return p.y > c.y - 1.5 && p.y < c.y + HELLFIRE.RING_H + 0.5;
+    if (Math.abs(d - rr) > w / 2 + bodyR) return false;
+    return p.y > c.y - 1.5 && p.y < c.y + h + 0.5;
 }
 
 // ------------------------------------------------------------------ the look
@@ -238,7 +257,7 @@ export class Hellfire {
         this.state = {
             side, t: 0, o: o.clone(), d: d.clone().normalize(),
             c: o.clone().addScaledVector(d, HELLFIRE.REACH_MIN), // (it bursts out of the wand)
-            target: new THREE.Vector3(), R: 0.4, k: 0, ang: 0, spin: 1.5, rr: ringRadius(HELLFIRE.R0),
+            target: new THREE.Vector3(), R: 0.4, k: 0, ang: 0, spin: 1.5, rr: ringRadius(HELLFIRE.R0), rw: HELLFIRE.RING_W, rh: HELLFIRE.RING_H, turns: 0, ns: 5,
             ringT: 0, burnT: 0, meT: 0, roarT: 0, worked: false, wet: 0,
         };
         this._note({ ev: 'cast', side });
@@ -296,7 +315,7 @@ export class Hellfire {
         const wb = 1 - f.k;
         if (wb > 0.2) add(f.c.x, f.c.y, f.c.z, f.R * Math.min(1, wb + 0.2) * 0.85);
         if (f.k > 0.2) {
-            const n = 6;
+            const n = clamp(Math.ceil(TAU * f.rr / 5), 6, 12); // (a ring spread wide leaves more fires)
             for (let i = 0; i < n; i++) {
                 const a = f.ang + i * (TAU / n);
                 add(body.x + Math.cos(a) * f.rr, body.y - 1.4, body.z + Math.sin(a) * f.rr, 1.4 * Math.min(1, f.k + 0.2));
@@ -354,7 +373,7 @@ export class Hellfire {
         const want = blazeRadius(s.t, spread);
         // water drowns it: it hisses and shrinks there (the blaze, and the ring round the caster)
         s.wet = this._wet(s.c, s.R) * (1 - s.k);
-        const rw = s.k > 0.2 ? this._ringWet(ch.group.position, s.rr) * s.k : 0;
+        const rw = s.k > 0.2 ? this._ringWet(ch.group.position, s.rr, s.rw, s.rh) * s.k : 0;
         if (s.wet > 0 || rw > 0) s.R = Math.max(0, s.R - HELLFIRE.QUENCH * (s.wet + rw) * dt);
         else s.R += (want - s.R) * Math.min(1, dt * (s.t < 0.4 ? 6 : 1.6));
         if (s.R < HELLFIRE.R_MIN && s.t > 0.6) { this.stop('water'); return; }
@@ -375,10 +394,20 @@ export class Hellfire {
         s.k = s.ringT > 0 ? Math.min(1, s.k + HELLFIRE.RING_IN * dt) : Math.max(0, s.k - HELLFIRE.RING_OUT * dt);
         if (k0 < 0.5 && s.k >= 0.5) { this._note({ ev: 'ring' }); g.hud?.setVoice?.('🔥 Огненное кольцо! Крутите рукой — оно кружит вокруг вас и жжёт всех рядом', true); }
         if (k0 >= 0.5 && s.k < 0.5) this._note({ ev: 'unring' });
+        // every full turn of the hand while the ring goes spreads it further out
+        if (s.ringT > 0 && s.k > 0.3) s.turns += this.meter.last;
+        else if (s.k <= 0) s.turns = 0; // (back in the wand's blaze: a new ring starts small)
+        const size = ringSize(s.R, s.turns);
+        if (size.turns > (s.shownTurns || 0)) { this._note({ ev: 'grow', turns: size.turns, rr: r2(size.rr) }); this.game.fx && (this.game.fx.shake = Math.max(this.game.fx.shake || 0, 0.3)); }
+        s.shownTurns = size.turns;
         const target = Math.max(1.2, rate * TAU * 1.15);
         s.spin += (target - s.spin) * Math.min(1, dt * 2.5);
         s.ang += s.spin * dt;
-        s.rr = ringRadius(s.R);
+        // (it spreads out smoothly, not in jumps)
+        s.rr += (size.rr - s.rr) * Math.min(1, dt * 2.5);
+        s.rw += (size.w - s.rw) * Math.min(1, dt * 2.5);
+        s.rh += (size.h - s.rh) * Math.min(1, dt * 2.5);
+        s.ns = size.serpents;
         // the roar
         s.roarT -= dt;
         if (s.roarT <= 0) { s.roarT = 1.3; g.sound?.playInferno?.(); }
@@ -393,7 +422,7 @@ export class Hellfire {
         this._sendT += dt;
         if (this._sendT >= HELLFIRE.SEND) {
             this._sendT = 0;
-            this._send([r2(s.c.x), r2(s.c.y), r2(s.c.z), r2(s.R), r2(s.k), r2(s.ang), r2(s.spin), r2(s.rr), r2(s.o.x), r2(s.o.y), r2(s.o.z), r2(body.x), r2(body.y), r2(body.z)]);
+            this._send([r2(s.c.x), r2(s.c.y), r2(s.c.z), r2(s.R), r2(s.k), r2(s.ang), r2(s.spin), r2(s.rr), r2(s.o.x), r2(s.o.y), r2(s.o.z), r2(body.x), r2(body.y), r2(body.z), r2(s.rw), r2(s.rh), s.ns]);
         }
         this._draw(dt, s, body);
     }
@@ -449,11 +478,11 @@ export class Hellfire {
     }
 
     /** How much water is on the ring round `body` (radius rr). */
-    _ringWet(body, rr) {
+    _ringWet(body, rr, W = HELLFIRE.RING_W, H = HELLFIRE.RING_H) {
         let w = 0;
         for (const s of this.game._flameWaters?.() || []) {
             const d = Math.hypot(s.x - body.x, s.z - body.z);
-            if (Math.abs(d - rr) < s.r + HELLFIRE.RING_W / 2 && s.y > body.y - 3 && s.y < body.y + HELLFIRE.RING_H + s.r) w = Math.max(w, 1.5);
+            if (Math.abs(d - rr) < s.r + W / 2 && s.y > body.y - 3 && s.y < body.y + H + s.r) w = Math.max(w, 1.5);
         }
         return w;
     }
@@ -488,10 +517,11 @@ export class Hellfire {
         // trees, leaves, wood, plants
         if (blaze && g.fire?.ignite?.(f.c, f.R * 0.9)) hit = true;
         if (ring) {
-            for (let i = 0; i < 6; i++) {
-                const a = f.ang + i * (TAU / 6);
+            const n = Math.min(24, Math.max(6, Math.ceil(TAU * f.rr / 4))); // (a wider ring sets more on fire)
+            for (let i = 0; i < n; i++) {
+                const a = f.ang + i * (TAU / n);
                 _a.set(body.x + Math.cos(a) * f.rr, body.y - 1, body.z + Math.sin(a) * f.rr);
-                if (g.fire?.ignite?.(_a, 1.2)) hit = true;
+                if (g.fire?.ignite?.(_a, Math.max(1.2, (f.rw || HELLFIRE.RING_W) * 0.6))) hit = true;
             }
         }
         // book-birds fall (the book of protection too: it is fire), glass breaks
@@ -507,7 +537,7 @@ export class Hellfire {
             const mid = _c.copy(b.a).add(b.b).multiplyScalar(0.5);
             let inside = false;
             if (blaze && (segDist(f.c, b.a, b.b) < f.R * 0.95 + b.r || inBlaze(f.c, f.R, mid, b.r))) inside = true;
-            if (!inside && ring && inRing(body, f.rr, mid, b.r)) inside = true;
+            if (!inside && ring && inRing(body, f.rr, mid, b.r, f.rw, f.rh)) inside = true;
             if (!inside) continue;
             if (g.wards?.shields(blaze ? f.c : body, mid)) continue; // (in a protected house)
             hit = true;
@@ -547,7 +577,7 @@ export class Hellfire {
         if (g.wards?.shields(f.c, me) && g.wards.shields(body, me)) return; // (in a protected house)
         const blaze = 1 - f.k > 0.2 && inBlaze(f.c, f.R, me, 0.45);
         // (the ring of another wizard; my own ring goes round me)
-        const ring = f.k > 0.2 && f !== this.state && inRing(body, f.rr, me, 0.45);
+        const ring = f.k > 0.2 && f !== this.state && inRing(body, f.rr, me, 0.45, f.rw, f.rh);
         if (!blaze && !ring) return;
         // water magic round me keeps the fire off
         for (const s of g._flameWaters?.() || []) if (Math.hypot(me.x - s.x, me.y - s.y, me.z - s.z) < s.r) return;
@@ -588,7 +618,8 @@ export class Hellfire {
         }
         f.tc.set(s[0], s[1], s[2]);
         f.tR = clamp(s[3], 0, HELLFIRE.R_MAX); f.tk = clamp(s[4], 0, 1);
-        f.spin = clamp(s[6], 0, 40); f.rr = clamp(s[7], 2, 8);
+        f.spin = clamp(s[6], 0, 40); f.rr = clamp(s[7], 2, 30);
+        f.rw = clamp(Number.isFinite(s[14]) ? s[14] : HELLFIRE.RING_W, 1, 12); f.rh = clamp(Number.isFinite(s[15]) ? s[15] : HELLFIRE.RING_H, 1, 10); f.ns = clamp(s[16] | 0 || 5, 5, 20);
         if (Math.abs(s[5] - f.ang) > 1.5) f.ang = s[5];
         f.o.set(s[8], s[9], s[10]);
         f.netBody = [s[11], s[12], s[13]];
@@ -693,25 +724,26 @@ export class Hellfire {
         }
         // ----------------------------------------------------------- the ring
         if (wr > 0.03) {
-            const rr = f.rr, H = HELLFIRE.RING_H;
+            const rr = f.rr, H = f.rh || HELLFIRE.RING_H, W = f.rw || HELLFIRE.RING_W;
+            const more = Math.min(3, rr / ringRadius(HELLFIRE.R0)); // (a wider ring: more flames)
             const gy = body.y - 1.95; // (the ground under the caster's feet)
             const sp = f.spin;
             // the roaring wall: flames all round, carried round by the spin
-            for (let i = this._n('wall', 1100 * wr, dt, 30); i > 0; i--) {
-                const a = Math.random() * TAU, r = rr + (Math.random() - 0.5) * HELLFIRE.RING_W;
+            for (let i = this._n('wall', 1100 * wr * more, dt, 60); i > 0; i--) {
+                const a = Math.random() * TAU, r = rr + (Math.random() - 0.5) * W;
                 const ca = Math.cos(a), sa = Math.sin(a), v = sp * r;
-                P.spawn(body.x + ca * r, gy + Math.random() * 0.6, body.z + sa * r, -sa * v * 0.8, 2.5 + Math.random() * 4 * flick, ca * v * 0.8,
+                P.spawn(body.x + ca * r, gy + Math.random() * 0.6, body.z + sa * r, -sa * v * 0.8, (2.5 + Math.random() * 4 * flick) * H / HELLFIRE.RING_H, ca * v * 0.8,
                     Math.random() < 0.15 ? pick(CORE) : pick(FLAME), 0.35 + Math.random() * 0.5, 0.45 + Math.random() * 0.4, { shrink: -0.8, spin: 7 });
             }
             // fire serpents racing round it: heads high, bodies writhing up and down
-            const NS = 5;
-            for (let i = this._n('snake', 1300 * wr, dt, 34); i > 0; i--) {
+            const NS = f.ns || 5;
+            for (let i = this._n('snake', 1300 * wr * Math.min(2.2, NS / 5), dt, 60); i > 0; i--) {
                 const s = (Math.random() * NS) | 0;
                 const seg = Math.floor(Math.pow(Math.random(), 1.6) * 16); // (thicker at the head)
                 const head = f.ang * (1 + s * 0.07) + s * (TAU / NS);
                 const a = head - seg * 0.11;
                 const wave = t * (2.2 + s * 0.3) + s * 1.9 - seg * 0.45;
-                const r = rr + Math.sin(wave * 0.8 + s) * 0.9;
+                const r = rr + Math.sin(wave * 0.8 + s) * (0.9 + W * 0.25);
                 const y = gy + 1.2 + 0.4 * (s % 2) + Math.sin(wave) * 1.3 + (seg === 0 ? 0.2 : 0);
                 const ca = Math.cos(a), sa = Math.sin(a), v = sp * r;
                 const size = (seg === 0 ? 0.75 : 0.55 - seg * 0.025) * (0.8 + Math.random() * 0.4);

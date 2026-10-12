@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { HELLFIRE, Hellfire, hellfireBlock, hellfireCanStop, leftStrength, hellfireDrain, hellfireReward, blazeReach, blazeRadius, inBlaze, inRing, ringRadius } from '../../src/game/Hellfire.js';
+import { HELLFIRE, Hellfire, hellfireBlock, hellfireCanStop, leftStrength, hellfireDrain, hellfireReward, blazeReach, blazeRadius, inBlaze, inRing, ringRadius, ringSize } from '../../src/game/Hellfire.js';
 import { SPELL_COST, Combat } from '../../src/game/Combat.js';
 import { Mana } from '../../src/game/Mana.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -219,4 +219,46 @@ test('Hellfire: the fire left on the ground burns the caster who walks into it; 
     const hp0 = c.hp;
     run(g, 1.5);
     assert.ok(c.hp < hp0, `walked into it: burnt (${hp0} → ${c.hp})`);
+});
+
+test('Hellfire: every full turn of the hand spreads the ring further out — wider, a thicker wall, more serpents (up to a limit)', () => {
+    let prev = ringSize(3, 0);
+    for (let n = 1; n <= HELLFIRE.TURNS_MAX; n++) {
+        const r = ringSize(3, n);
+        assert.ok(r.rr > prev.rr && r.w > prev.w && r.h > prev.h && r.serpents > prev.serpents, `turn ${n} bigger`);
+        prev = r;
+    }
+    assert.deepEqual(ringSize(3, 100), ringSize(3, HELLFIRE.TURNS_MAX), 'a sensible maximum');
+    assert.equal(ringSize(3, 2.9).turns, 2, 'only full turns count');
+    // the damage area grows with it: a body far out is in the big ring, not the small one
+    const me = { x: 0, y: 2, z: 0 }, big = ringSize(3, 8), small = ringSize(3, 0);
+    const far = { x: big.rr, y: 1, z: 0 };
+    assert.ok(inRing(me, big.rr, far, 0.5, big.w, big.h));
+    assert.ok(!inRing(me, small.rr, far, 0.5, small.w, small.h));
+    // (a body right outside the thick wall is still in it — the flames reach further out)
+    assert.ok(inRing(me, big.rr, { x: big.rr + big.w / 2, y: 1, z: 0 }, 0.3, big.w, big.h));
+});
+
+test('Hellfire: the real hand going round — the ring grows turn after turn, mana still 2 a second', () => {
+    const g = fakeGame();
+    const c = g.combat;
+    c.maxFatigue = 500; c.fatigue = 500;
+    let t = 0;
+    // the wand hand circling in front of the body: one turn a second
+    g.character.getHandWorldPosition = (side, out = new THREE.Vector3()) => out.set(0.25 + Math.cos(t * Math.PI * 2) * 0.3, 1.6 + Math.sin(t * Math.PI * 2) * 0.3, -0.5);
+    g.hellfire.cast(true);
+    const step = 1 / 30;
+    const sizes = [];
+    for (let i = 0; i < 30 * 9; i++) {
+        t += step;
+        c.update(step); g.hellfire.update(step);
+        if (i % 30 === 29) sizes.push(g.hellfire.state.rr);
+    }
+    const s = g.hellfire.state;
+    assert.ok(s.k > 0.9, 'the fire is a ring');
+    const grows = g.hellfire.log.filter((e) => e.ev === 'grow');
+    assert.ok(grows.length >= 5, `it spread out turn after turn: ${JSON.stringify(grows)}`);
+    for (let i = 1; i < grows.length; i++) assert.ok(grows[i].rr > grows[i - 1].rr);
+    assert.ok(sizes[sizes.length - 1] > sizes[1] + 4, `metres wider: ${sizes.map((x) => x.toFixed(1)).join(' → ')}`);
+    assert.ok(Math.abs((500 - 80 - 2 * 9) - c.fatigue) < 0.2, `2 a second while held: ${c.fatigue}`);
 });

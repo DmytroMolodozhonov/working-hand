@@ -34,6 +34,13 @@ function withInstanceAlpha(material) {
     return material;
 }
 
+/**
+ * Glowing / see-through effects (fire, smoke, sparks of magic) are drawn AFTER the see-through water
+ * (rivers, lakes, the sea: renderOrder 1; water magic: 2). Drawn before it, the water's surface
+ * behind a fire was painted over the flames (the water writes no depth): the fire looked swallowed.
+ */
+export const FX_RENDER_ORDER = 3;
+
 export class ParticlePool {
     /**
      * @param {THREE.Scene} scene
@@ -58,6 +65,7 @@ export class ParticlePool {
         this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.capacity * 3).fill(1), 3);
         this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
         this.mesh.count = 0;
+        if (o.transparent) this.mesh.renderOrder = FX_RENDER_ORDER;
         if (o.transparent) {
             this.alpha = new THREE.InstancedBufferAttribute(new Float32Array(this.capacity).fill(1), 1);
             this.alpha.setUsage(THREE.DynamicDrawUsage);
@@ -193,6 +201,7 @@ export class SegmentPool {
         geo.translate(0, 0.5, 0);
         this.mat = new THREE.MeshBasicMaterial({ color, transparent, opacity, blending, depthWrite: !transparent, side: THREE.DoubleSide });
         this.mesh = new THREE.InstancedMesh(geo, this.mat, capacity);
+        if (transparent) this.mesh.renderOrder = FX_RENDER_ORDER;
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.mesh.frustumCulled = false;
         this.mesh.count = 0;
@@ -256,6 +265,7 @@ export class CurvedBeam {
         }
         geo.setIndex(idx);
         this.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+        this.mesh.renderOrder = FX_RENDER_ORDER;
         this.mesh.frustumCulled = false;
         this.mesh.visible = false;
         scene.add(this.mesh);
