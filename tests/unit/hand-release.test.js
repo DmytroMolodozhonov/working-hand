@@ -43,18 +43,18 @@ const V = (x, y, z) => ({ x, y, z });
 const SH = V(0.7, 1.25, 0);
 
 /** wind-up above the shoulder at t=0, then a swing forward/down for `n` frames, then the hand opens */
-function overhand(det, { start = V(0.8, 1.75, -0.2), vRel = V(0, -3, -9), curlSwing = 0.9, openAt = 150, curlOpen = 0.2, weight = 1, swingAt = 33, n = 3, track = () => true, curlWind = 0.9 } = {}) {
+function overhand(det, { start = V(0.8, 1.75, -0.2), vRel = V(0, -3, -9), curlSwing = 0.9, openAt = 150, curlOpen = 0.2, weight = 1, swingAt = 33, n = 3, track = () => true, curlWind = 0.9, strict = false, behind = false } = {}) {
     const r = [];
-    for (let t = 0; t < swingAt; t += 33) r.push(det.update({ now: t, hand: t < 99 ? start : V(start.x, SH.y + 0.1, start.z), shoulder: SH, vRel: V(0, 0, 0), vWorld: [0, 0, 0], curl: curlWind, tracked: true, weight }));
+    for (let t = 0; t < swingAt; t += 33) r.push(det.update({ now: t, hand: t < 99 ? start : V(start.x, SH.y + 0.1, start.z), shoulder: SH, vRel: V(0, 0, 0), vWorld: [0, 0, 0], curl: curlWind, tracked: true, weight, strict, behind: behind && t < 99 }));
     let h = { ...start };
     for (let i = 0; i < n; i++) {
         const t = swingAt + i * 33;
         h = V(h.x + vRel.x * 0.033, h.y + vRel.y * 0.033 - 0.12, h.z + vRel.z * 0.033);
-        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel, vWorld: [vRel.x + 1, vRel.y, vRel.z], curl: curlSwing, tracked: track(t), weight }));
+        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel, vWorld: [vRel.x + 1, vRel.y, vRel.z], curl: curlSwing, tracked: track(t), weight, strict }));
     }
     for (let t = swingAt + n * 33; t <= swingAt + n * 33 + 800; t += 33) {
         const curl = t >= swingAt + openAt ? curlOpen : curlSwing;
-        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel: V(0, 0, -0.5), vWorld: [0, 0, -0.5], curl, tracked: track(t), weight }));
+        r.push(det.update({ now: t, hand: h, shoulder: SH, vRel: V(0, 0, -0.5), vWorld: [0, 0, -0.5], curl, tracked: track(t), weight, strict }));
     }
     return r.find(Boolean) || null;
 }
@@ -139,4 +139,22 @@ test('a throw whose hand the camera lost in the blur: a strong swing forward let
     assert.equal(run(-3, -12, true), null, 'a blow down keeps hold');
     assert.equal(run(-12, -2, false), null, 'a sword (no blur rule) keeps hold');
     assert.ok(TH2.END > 0 && TH2.END < 1);
+});
+
+test('ThrowDetector (the wand, strict): a flick or a hand raised only a little never throws it; a real wind-up behind the shoulder and a strong swing do', () => {
+    // a little lift of the hand (just over the shoulder) and a quick flick, the fingers open
+    assert.equal(overhand(new ThrowDetector(), { strict: true, start: V(0.8, 1.75, -0.2), vRel: V(0, -3, -9) }), null, 'a wand swing from by the head: not thrown');
+    assert.equal(overhand(new ThrowDetector(), { strict: true, start: V(0.8, 1.6, -1.2), vRel: V(0, -2, -6) }), null, 'a small flick: not thrown');
+    // the hand drawn back behind the shoulder, a strong long swing forward, the fingers open
+    assert.ok(overhand(new ThrowDetector(), { strict: true, behind: true, start: V(0.8, 1.75, 0.3), vRel: V(0, -3, -12), n: 5 }), 'a real throw of the wand');
+    // the same small lift throws an apple (not strict) — the wand is just harder to lose
+    assert.ok(overhand(new ThrowDetector(), { start: V(0.8, 1.75, -0.2), vRel: V(0, -3, -9) }), 'an apple goes with a smaller swing');
+});
+
+test('ThrowDetector: a hand only a little over the shoulder is no wind-up', () => {
+    assert.equal(overhand(new ThrowDetector(), { start: V(0.8, 1.6, -0.6), vRel: V(0, -3, -9) }), null);
+});
+
+test('ThrowDetector (the wand): raised high to cast and then pointed forward with the fingers open is no throw', () => {
+    assert.equal(overhand(new ThrowDetector(), { strict: true, start: V(0.8, 2.3, -0.8), vRel: V(0, -4, -10), n: 5 }), null);
 });

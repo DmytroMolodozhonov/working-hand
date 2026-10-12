@@ -452,3 +452,62 @@ test('everything is held really in the fingers: nothing floats, nothing sits ins
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('the wand never flies off from flicks, jitter or a wand raised to cast; a real wind-up behind the shoulder throws the wand and the axe; the axe\'s edge faces forward in the hand', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 10);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        for (const s of ['left', 'right']) { g.items.releaseHand(s); g.weapons.release(s); }
+        g.items.takeIntoHand({ kind: 'wand', uid: 'thr-wand', plain: true, model: 0, color: 0x8b5a2b, power: 0 }, 'right');
+    });
+    await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 10);
+    const wandHeld = () => page.evaluate(() => window.__zns.game.items.held.right?.item.uid === 'thr-wand');
+    await watch(page);
+    // a shaky camera, the fingers flickering open and shut
+    await feedF(page, (i) => ({ arms: 'forward', rightCurl: i % 3 ? 0.9 : 0.15, leftCurl: 0.9, wristOffset: [(Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08] }), 30);
+    assert.ok(await wandHeld(), 'jitter and flickering fingers: the wand stays');
+    // quick flicks from down to forward with a loose hand
+    await feedF(page, (i) => ({ arms: Math.floor(i / 2) % 2 ? 'forward' : 'down', rightCurl: 0.2, leftCurl: 0.9 }), 16);
+    assert.ok(await wandHeld(), 'quick flicks: the wand stays');
+    // raised high to cast, then pointed forward fast with the fingers loose — four times
+    for (let k = 0; k < 4; k++) {
+        await feedF(page, { arms: 'up', rightCurl: 0.9, leftCurl: 0.9 }, 6);
+        await feedF(page, { arms: 'forward', rightCurl: 0.15, leftCurl: 0.9 }, 6);
+    }
+    assert.ok(await wandHeld(), 'raised to cast and pointed: the wand stays');
+    // a real throw: drawn back behind the shoulder, a strong fast swing, the fingers open
+    await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 8);
+    await overhand(page, { steps: 2 });
+    const wand = await page.evaluate(() => { const g = window.__zns.game, L = g.items.loose.get('thr-wand'); return { held: !!g.items.held.right, loose: !!L, v: L ? L.vel.length() : 0 }; });
+    assert.ok(!wand.held && wand.loose && wand.v > 3, 'a real wind-up and throw: the wand flies ' + JSON.stringify(wand) + '\n' + await ring(page));
+
+    // the axe: its edge faces forward (where the fist strikes, in line with the knuckles) — either hand
+    const edge = await page.evaluate(() => {
+        const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
+        const out = {};
+        for (const side of ['right', 'left']) {
+            for (const s of ['left', 'right']) { g.items.releaseHand(s); g.weapons.release(s); }
+            const w = g.weapons.byId.get('tA');
+            // (grabbed the "wrong" way round: its edge towards the wrist)
+            w.quaternion.copy(new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 0, 1), Math.PI).premultiply(ch.getGripObject(side).getWorldQuaternion(new T.Quaternion())));
+            w.position.copy(ch.getHandWorldPosition(side, new T.Vector3()));
+            g.weapons.grab(w, side);
+            const hs = g.weapons.hands[side];
+            const f = g.weapons.palmFrame(side);
+            const q = f.q.clone().multiply(hs.relC.q);
+            out[side] = new T.Vector3(1, 0, 0).applyQuaternion(q).dot(f.Y);
+        }
+        return out;
+    });
+    assert.ok(edge.right > 0.7 && edge.left > 0.7, 'the axe\'s edge faces forward in either hand ' + JSON.stringify(edge));
+    await page.evaluate(() => { const g = window.__zns.game; g.weapons.release('left'); g.weapons.grab(g.weapons.byId.get('tA'), 'right'); });
+    await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 10);
+    await overhand(page, { steps: 2 });
+    const axe = await page.evaluate(() => { const g = window.__zns.game, w = g.weapons.byId.get('tA'); return { held: !!g.weapons.hands.right.held, v: w.velocity.length() }; });
+    assert.ok(!axe.held && axe.v > 3, 'a real wind-up throws the heavy axe too ' + JSON.stringify(axe));
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

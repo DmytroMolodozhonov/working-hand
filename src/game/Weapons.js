@@ -342,7 +342,7 @@ export class WeaponSystem {
                 const arm = ch.armState(side, hs.arm);
                 const gt = hs.clock = (hs.clock || 0) + dt * 1000; // (the game's clock: a stalled frame must not cut a swing in two)
                 // a real throw: wind-up, a fast swing, the fingers let go — it flies with the hand's speed
-                const thr = hs.thr.update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(this.game.currentPose, side), weight: w.mass || 1 });
+                const thr = hs.thr.update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(this.game.currentPose, side), weight: w.mass || 1, blurOk: true }); // (a hand lost in the swing's blur after a wind-up behind the shoulder: thrown too)
                 if (thr) { this.release(side); w.velocity.fromArray(thr.vWorld).clampLength(0, 22); return; }
                 // the outstretched hand clearly opened: it falls out of it
                 if (hs.drop.update({ now: gt, curl, tracked, ...arm })) { this.release(side); return; }
@@ -496,7 +496,8 @@ export class WeaponSystem {
         const s = wY.dot(diag) < -0.3 ? -1 : 1;
         // Canonical grip: blade axis = s*diag, edge towards the knuckles (e*Y, square to the blade)
         const axY = diag.multiplyScalar(s).normalize();
-        const e = Math.sign(wX.dot(_Y)) || 1;
+        // (an axe has one edge: it always faces where the fist strikes — forward, in line with the knuckles)
+        const e = w.type === 'axe' ? 1 : Math.sign(wX.dot(_Y)) || 1;
         const axX = _Y.clone().multiplyScalar(e).addScaledVector(axY, -e * _Y.dot(axY)).normalize();
         const axZ = new THREE.Vector3().crossVectors(axX, axY);
         const qWorldC = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(axX, axY, axZ));
