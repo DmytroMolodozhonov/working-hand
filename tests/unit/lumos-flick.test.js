@@ -57,3 +57,27 @@ test('«Lightning Writing»: another player\'s drawing comes as points — joine
     w.remoteDraw('p1', 0xff8800, [['x', 1, 0], [1e9]]);
     assert.equal(e.lines.length, 4);
 });
+
+test('a thrown Lumos is seen flying: it slows down by itself, bounces off a wall instead of sticking to it, and hangs in the air', async () => {
+    const { WandMagic } = await import('../../src/game/WandMagic.js');
+    // a wall 3 m ahead (z < -3), the ground below y = 0
+    const blocked = (x, y, z) => z < -3 || y < 0;
+    const game = { scene: { add() {}, remove() {} }, collision: { pointBlocked: blocked } };
+    const w = new WandMagic(game);
+    w._flick = 0;
+    const throwOne = (wm) => { const t = { glow: { position: new THREE.Vector3(), scale: { setScalar() {} }, material: {} }, pos: new THREE.Vector3(0, 1.5, 0), vel: new THREE.Vector3(0, 0, -LUMOS.THROW_SPEED), flown: 0, stuck: false, bounces: 0, age: 0, level: 2, mine: true }; wm.thrown.push(t); return t; };
+    const t = throwOne(w);
+    const path = [];
+    for (let i = 0; i < 300 && !t.stuck; i++) { w._flyThrown(t, 1 / 60); path.push(t.pos.z); }
+    // not a jump: after a tenth of a second it is still on its way to the wall
+    assert.ok(path[5] > -2, 'still flying after 0.1 s: ' + path[5].toFixed(2));
+    assert.ok(Math.min(...path) > -3.01, 'never inside the wall');
+    assert.ok(t.bounces >= 1, 'it bounced off the wall');
+    assert.ok(t.pos.z > Math.min(...path) + 0.3, 'and came back off it (not stuck on it)');
+    // in the open it slows down and stops by itself, short of its range
+    const open = new WandMagic({ scene: { add() {}, remove() {} }, collision: { pointBlocked: () => false } });
+    open._flick = 0;
+    const o = throwOne(open);
+    for (let i = 0; i < 60 * 15 && !o.stuck; i++) open._flyThrown(o, 1 / 60);
+    assert.ok(o.stuck && o.flown > 15 && o.flown <= LUMOS.THROW_RANGE + 0.5, `drifted ${o.flown.toFixed(1)} m and hangs there`);
+});

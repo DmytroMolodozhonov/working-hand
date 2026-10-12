@@ -39,6 +39,7 @@ import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 import { keepIn } from '../game/HouseWards.js';
+import { LUMOS } from '../game/WandMagic.js';
 
 const _v = new THREE.Vector3();
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -722,7 +723,7 @@ export class NetSync {
             case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
             case 'rbcatch': case 'rbgot': case 'rbaccio': case 'rbtake': g.runner?.onNet(m); break; // (the running book)
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
-            case 'lum': if (m.by !== this.me && Array.isArray(m.p) && Array.isArray(m.d)) g.wandMagic?.addThrown(vec(m.p), vec(m.d).normalize().multiplyScalar(18), Math.max(1, Math.min(6, +m.l || 2)), false, m.by); break;
+            case 'lum': if (m.by !== this.me && Array.isArray(m.p) && Array.isArray(m.d)) g.wandMagic?.addThrown(vec(m.p), vec(m.d).normalize().multiplyScalar(LUMOS.THROW_SPEED), Math.max(1, Math.min(6, +m.l || 2)), false, m.by); break;
             case 'lumx': if (m.by !== this.me) g.wandMagic?.outBy(m.by); break;
             case 'wards': if (!this.net.isHost) g.wards?.applyNet(m.l, m.g); break;
             case 'wardop': if (this.net.isHost) g.wards?.apply(m.op, m.from); break;

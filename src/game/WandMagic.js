@@ -10,8 +10,10 @@
  *    around (no glass ball: a glow at the tip), costs a little strength over
  *    time. «Люмос Максима»: brighter — say it again for even more light.
  *    A sharp flick of the wand throws the light: it leaves the tip (the tip goes
- *    dark), flies until a wall, the ground or 40 m stops it, and fades out —
- *    about 10 s after the throw. «Нокс» or «стоп» puts out all of it (the tip
+ *    dark) and flies where the wand was flicked — slowly enough to watch it go: it
+ *    slows down by itself, bounces softly off walls, the ground and the cave's
+ *    ceiling, then hangs in the air where it stopped — and fades out about 15 s
+ *    after the throw. «Нокс» or «стоп» puts out all of it (the tip
  *    and the thrown light). Everybody sees (and is lit by) everybody's Lumos.
  *  - «Lightning Writing» (drawing): the tip leaves glowing lines in the air while
  *    you move the wand; they fade in about 10 seconds.
@@ -30,9 +32,13 @@ const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
 export const LUMOS = {
-    THROW_SPEED: 18, // m/s
+    THROW_SPEED: 10, // m/s at the start (it is seen flying: not a jump onto the wall)
+    DRAG: 0.6, // per second: it slows down by itself and stops in the air (~15 m on open ground, in ~5 s)
+    STOP: 0.5, // m/s: slower than this — it hangs where it is
+    BOUNCE: 0.3, // how much of its speed INTO a wall a bounce keeps (along the wall it glides on)
+    BOUNCES: 5, // then it stays where it is
     THROW_RANGE: 40, // m: then it stops in the air
-    LIFE: 10, // s from the throw: then it is gone
+    LIFE: 15, // s from the throw: then it is gone (time to see where it went — down a cave tunnel)
     FADE: 3, // s of fading out at the end
     AGAIN: 1500, // ms: the same word heard again (the speech's final result) is not a second cast
     FLICK: 0.6, // m the wand's tip goes in 0.15 s against the body, steadily one way: a flick throws the light
@@ -214,8 +220,9 @@ export class WandMagic {
         const l = this.light;
         const p = this.tip(new THREE.Vector3());
         if (!l || !p) return;
-        // (no throw into the rock right at the hand: it would only stick there, a star left behind)
-        if (g.collision?.pointBlocked(p.x + dir.x * 0.6, p.y + dir.y * 0.6, p.z + dir.z * 0.6)) return;
+        // (the tip in the rock — the hand at a cave wall: the light starts from the hand's side of it)
+        const head = g.character?.group?.position;
+        for (let i = 0; i < 6 && head && g.collision?.pointBlocked(p.x, p.y, p.z); i++) p.lerp(head, 0.3);
         this.addThrown(p, dir.clone().multiplyScalar(LUMOS.THROW_SPEED), Math.max(2, l.level + 1), true);
         g.sync?.lumosThrow?.(p, dir, Math.max(2, l.level + 1));
         // the light has left the wand: its tip is dark (say «Люмос» to light it again)
@@ -229,23 +236,42 @@ export class WandMagic {
         const glow = makeGlow(glowSize(level) * 1.3);
         glow.position.copy(pos);
         this.game.scene.add(glow);
-        this.thrown.push({ glow, pos: pos.clone(), vel: vel.clone(), flown: 0, stuck: false, age: 0, level, mine, by });
+        this.thrown.push({ glow, pos: pos.clone(), vel: vel.clone(), flown: 0, stuck: false, bounces: 0, age: 0, level, mine, by });
     }
 
-    /** It flies straight until a wall / the ground / its range stops it, and fades out LIFE s after the throw. */
+    /**
+     * It flies on where it was thrown, slowing down by itself; a wall, the ground or a ceiling it
+     * meets bounces it softly away (it keeps lighting its way: in a cave it drifts on down the
+     * tunnel); slow enough — or after a few bounces / its range — it hangs in the air. It fades
+     * out LIFE s after the throw.
+     */
     _flyThrown(t, dt) {
         const col = this.game.collision;
         t.age += dt;
         if (!t.stuck) {
-            const step = t.vel.length() * dt;
-            const n = Math.max(1, Math.ceil(step / 0.25));
-            for (let i = 0; i < n; i++) {
+            t.vel.multiplyScalar(Math.exp(-LUMOS.DRAG * dt));
+            const speed = t.vel.length();
+            const step = speed * dt;
+            const n = Math.max(1, Math.ceil(step / 0.2));
+            for (let i = 0; i < n && !t.stuck; i++) {
                 _v.copy(t.pos).addScaledVector(t.vel, dt / n);
-                if (col?.pointBlocked(_v.x, _v.y, _v.z)) { t.stuck = true; break; } // (stays just before the surface)
+                if (col?.pointBlocked(_v.x, _v.y, _v.z)) {
+                    // which way the surface faces: the axes whose move alone runs into it turn back
+                    let hit = false;
+                    for (const ax of ['x', 'y', 'z']) {
+                        _v3.copy(t.pos);
+                        _v3[ax] += t.vel[ax] * dt / n;
+                        if (col.pointBlocked(_v3.x, _v3.y, _v3.z)) { t.vel[ax] *= -LUMOS.BOUNCE; hit = true; }
+                    }
+                    if (!hit) t.vel.multiplyScalar(-LUMOS.BOUNCE);
+                    t.vel.multiplyScalar(0.85);
+                    if (++t.bounces >= LUMOS.BOUNCES) t.stuck = true;
+                    break; // (stays just before the surface this step)
+                }
                 t.pos.copy(_v);
                 t.flown += step / n;
-                if (t.flown > LUMOS.THROW_RANGE) { t.stuck = true; break; }
             }
+            if (t.flown > LUMOS.THROW_RANGE || t.vel.length() < LUMOS.STOP) t.stuck = true;
         }
         t.glow.position.copy(t.pos);
         const k = this._fade(t); // (fading in the last seconds)
@@ -434,7 +460,12 @@ export class WandMagic {
             if (flick) {
                 this._flickAt = now;
                 trail.length = 0;
-                this._throwLight(flick.applyQuaternion(_q));
+                // it goes where the wand was flicked: mostly where the wand points now (the hand aims
+                // with it), a little along the move itself — not just the way the tip happened to move
+                flick.applyQuaternion(_q);
+                const aimed = wandDir.clone().applyQuaternion(_q);
+                const dir = aimed.y < -0.5 ? flick : aimed.multiplyScalar(0.65).addScaledVector(flick, 0.35).normalize();
+                this._throwLight(dir);
             }
         }
         for (let i = this.thrown.length - 1; i >= 0; i--) {

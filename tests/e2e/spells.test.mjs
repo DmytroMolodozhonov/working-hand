@@ -79,7 +79,7 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
     await page.close();
 });
 
-test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it leaves the tip, flies until the ground stops it and fades; «стоп» puts out all of it', async () => {
+test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it leaves the tip, flies, bounces off the ground, hangs low and fades; «стоп» puts out all of it', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -95,7 +95,7 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it 
         const W = g.wandMagic;
         const tip = W.tip(new T.Vector3());
         const glow = { sprite: !!W.light?.glow?.isSprite, atTip: W.light ? W.light.glow.position.distanceTo(tip) : -1, light: W.lights[0].intensity, lightAt: W.lights[0].position.distanceTo(tip), scale0: W.light ? W.light.glow.scale.x : 0 };
-        // throw it ahead and down: it flies, the ground stops it, it stays shining there
+        // throw it ahead and down: it flies, bounces softly off the ground, slows down and hangs there shining
         const dir = ch.getHandDirection('right', new T.Vector3()).setY(-0.5).normalize();
         W._throwLight(dir);
         await frames(2);
@@ -114,12 +114,12 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it 
         g.castLocalSpell('стоп', true);
         await frames(2);
         const stopped = { tip: !!W.light, thrown: W.thrown.filter((x) => x.mine).length };
-        // a thrown light goes out by itself (about 10 s after the throw)
+        // a thrown light goes out by itself (about 15 s after the throw)
         g.castLocalSpell('Люмос', true);
         await frames(2);
         W._throwLight(dir);
         const t2 = W.thrown[0];
-        t2.age = 9.9;
+        t2.age = 14.9; // (it lives 15 s after the throw)
         await frames(10);
         const gone = !W.thrown.includes(t2);
         return { said, glow, flying, landed, tipDark, relit, stopped, gone };
@@ -128,7 +128,7 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it 
     assert.ok(r.glow.sprite && r.glow.atTip < 0.01, 'a glow at the tip, not a ball ' + JSON.stringify(r.glow));
     assert.ok(r.glow.light > 1 && r.glow.lightAt < 0.01, 'a real light there ' + JSON.stringify(r.glow));
     assert.ok(r.flying && !r.flying.stuck, 'thrown: it flies');
-    assert.ok(r.landed && r.landed.stuck && r.landed.aboveGround > -0.05 && r.landed.aboveGround < 0.6 && r.landed.still, 'it stopped at the ground and stays ' + JSON.stringify(r.landed));
+    assert.ok(r.landed && r.landed.stuck && r.landed.aboveGround > -0.05 && r.landed.aboveGround < 3 && r.landed.still, 'it bounced off the ground, stopped low over it and stays ' + JSON.stringify(r.landed));
     assert.ok(r.landed.lit, 'and lights the place');
     assert.ok(r.tipDark, 'the light has left the wand');
     assert.ok(r.relit.on && r.relit.scale > 0.85, '«Люмос» again: the tip shines in full at once ' + JSON.stringify(r.relit));
@@ -319,7 +319,7 @@ test('creative: wand spells with a bare hand, building out of nothing (no wood o
     await page.close();
 });
 
-test('duel spells fly where the hand points — standing and hovering after «Флайн» + «Паузин»: a book-bird on the line is hit, one 12° off is not, the charge keeps to the line', async () => {
+test('duel spells fly where the hand points — standing and hovering after «Флайн» + «Паузин»: a book-bird on the line is hit, one 16° off is not, the charge keeps to the line', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -372,10 +372,10 @@ test('duel spells fly where the hand points — standing and hovering after «Ф
     assert.equal(onLine.tk, 'b', 'the bird on the line is the target ' + JSON.stringify(onLine));
     assert.ok(onLine.hit && onLine.touched.includes('b:' + onLine.birdId), 'and is hit ' + JSON.stringify(onLine));
     assert.ok(onLine.maxOff < 0.15, `the charge kept to the hand's line (${onLine.maxOff.toFixed(3)} m off)`);
-    const aside = await shoot(12, 10);
+    const aside = await shoot(16, 10);
     assert.equal(aside.said, 'Stupefy');
     assert.equal(aside.tk, 'n', 'nothing pointed at ' + JSON.stringify(aside));
-    assert.ok(!aside.hit && !aside.touched.length, '12° off: not hit ' + JSON.stringify(aside));
+    assert.ok(!aside.hit && !aside.touched.length, '16° off: not hit ' + JSON.stringify(aside));
     assert.ok(aside.maxOff < 0.01 && aside.maxBend < 1e-6, `straight along the hand (${aside.maxOff.toFixed(4)} m off)`);
     assert.ok(aside.maxAlong > 10, `it flew on past the bird (${aside.maxAlong.toFixed(1)} m)`);
 
@@ -398,9 +398,9 @@ test('duel spells fly where the hand points — standing and hovering after «Ф
     assert.equal(air.tk, 'b', 'hovering: the bird on the line is the target ' + JSON.stringify(air));
     assert.ok(air.hit, 'and is hit');
     assert.ok(air.maxOff < 0.15, `kept to the line (${air.maxOff.toFixed(3)} m off)`);
-    const airAside = await shoot(12, 10);
+    const airAside = await shoot(16, 10);
     assert.equal(airAside.tk, 'n');
-    assert.ok(!airAside.hit && !airAside.touched.length, 'hovering, 12° off: not hit ' + JSON.stringify(airAside));
+    assert.ok(!airAside.hit && !airAside.touched.length, 'hovering, 16° off: not hit ' + JSON.stringify(airAside));
     assert.ok(airAside.maxOff < 0.01, 'straight along the hand');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
