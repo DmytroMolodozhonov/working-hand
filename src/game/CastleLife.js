@@ -32,7 +32,8 @@ import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 import { createRng } from '../core/math.js';
 import { CastleTalk } from './CastleTalk.js';
-import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS } from './WizardLife.js';
+import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS, FX } from './WizardLife.js';
+import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
@@ -518,6 +519,7 @@ export class CastleLife {
     /** Inside the castle walls (where paths are narrow: doors, stairs, rooms). */
     _inWalls(def, p) {
         const w = def.walls;
+        if (!w) return false; // (a wanderers' «site»: no walls)
         return p.x >= w.x0 - 2 && p.x <= w.x1 + 2 && p.z >= w.z0 - 2 && p.z <= w.z1 + 2;
     }
 
@@ -634,7 +636,7 @@ export class CastleLife {
         if (v.servantOf != null && this._serve(v, dt)) return;
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
         // a hostile player in sight: knights go for them
-        if ((v.role === 'knight' || v.role === 'king') && !v.foe) {
+        if (this._fights(v) && !v.foe) {
             v.lookT = (v.lookT || 0) - dt;
             if (v.lookT <= 0) {
                 v.lookT = 0.6;
@@ -643,7 +645,7 @@ export class CastleLife {
                     const p = this._playerPos(pid);
                     // (just given up on them out there: only if they come back near)
                     if (p && v.gaveUp?.id === pid && v.gaveUp.until > Date.now() && (Math.hypot(p.x - v.x, p.z - v.z) > 12 || !this._inLand(cs.def, p, 30))) continue;
-                    if (p && Math.hypot(p.x - v.x, p.z - v.z) < 26 && this._sees(v, p)) { v.foe = pid; this._say(v, pick(SHOUT.knight)); break; }
+                    if (p && Math.hypot(p.x - v.x, p.z - v.z) < 26 && this._sees(v, p)) { v.foe = pid; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : SHOUT.knight)); break; }
                 }
             }
         }
@@ -888,13 +890,13 @@ export class CastleLife {
         if (style?.wall) {
             // the shield wall: the shields side by side in front, the swords at its ends
             const k = v.slotI || 0;
-            if (v.tac.role === 'shield') { engaged = true; a = base + (k - (n - 1) / 2) * 0.45; R = 2.5; }
-            else { engaged = k < 2; a = base + (k % 2 ? 1 : -1) * (1.1 + 0.45 * Math.floor(k / 2)); R = engaged ? 2.3 : 4.6; }
+            if (v.tac.role === 'shield') { engaged = true; a = base + (k - (n - 1) / 2) * 0.75; R = 2.6; } // (shoulder to shoulder, not inside each other)
+            else { engaged = k < 2; a = base + (k % 2 ? 1 : -1) * (1.5 + 0.5 * Math.floor(k / 2)); R = engaged ? 2.3 : 5.5; }
         } else if (style?.spread && n >= 3) {
             // all round him at once: each his own side, the free ones close between
             const k = v.slotI || 0;
             a = base + (k / n) * Math.PI * 2;
-            R = engaged ? (style.close ? 2.1 : 2.3) : 4.6;
+            R = engaged ? (style.close ? 2.1 : 2.3) : (style.close ? 4.6 : 6.2); // (the free ones wait off, out of the swings)
         }
         let tx = fp.x + Math.cos(a) * R, tz = fp.z + Math.sin(a) * R;
         const toSlot = Math.hypot(tx - v.x, tz - v.z);
@@ -1604,9 +1606,12 @@ export class CastleLife {
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
-        // a shield held up (the shield wall, the ones holding a place) takes a blow or a spell from the
-        // front: little gets through. «Авада Кедавра» passes any shield.
-        if (v.model.shield && dir && !opts.pierce && v.foe && (v.mode === 'block' || v.tac?.role === 'shield')) {
+        if (v.wizard) v.hurtAt = Date.now();
+        // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
+        if (v.wizard && (v.fx & FX.DOME) && !opts.pierce) { v.domeHits = (v.domeHits || 1) - 1; if (v.domeHits <= 0) v.fx &= ~FX.DOME; this._flash(v); return; }
+        // a shield held up (the shield wall, the ones holding a place, a wizard's hand shield) takes a blow
+        // or a spell from the front: little gets through. «Авада Кедавра» passes any shield.
+        if (dir && !opts.pierce && v.foe && this._shieldUp(v)) {
             if (dir.x * -Math.sin(v.yaw) + dir.z * -Math.cos(v.yaw) < -0.35) {
                 dmg *= 0.25;
                 for (let i = 0; i < 5; i++) this.game.fx.spark(_v.set(v.x - Math.sin(v.yaw) * 0.8, v.y + 2.6, v.z - Math.cos(v.yaw) * 0.8), 0xffe9a0, 0.08, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
@@ -1689,6 +1694,25 @@ export class CastleLife {
         this._sendState(v.cs);
     }
 
+    /** Does this one fight (knights, the king; the tower's wizards but a timid student)? */
+    _fights(v) { return v.role === 'knight' || v.role === 'king' || (!!v.wizard && WizardFight.fights(v)); }
+
+    /** A shield up: a knight's in the shield wall / holding a place, a wizard's hand shield. */
+    _shieldUp(v) { return (!!v.model.shield && (v.mode === 'block' || v.tac?.role === 'shield')) || (!!v.wizard && !!(v.fx & FX.SHIELD)); }
+
+    /**
+     * (host) A duel charge reached a castle person (Duel.applyToCreature): taken by a shield? The
+     * Master's dome takes any (its hits are counted); a wizard's hand shield or a knight's raised
+     * shield — one from the front (Sapira's blow on a knight's shield: hit() weakens it). Not Avada.
+     */
+    wardOff(v, from, spell) {
+        if (v.dead || spell === 'AvadaKedavra') return false;
+        if (v.wizard && (v.fx & FX.DOME)) { v.domeHits = (v.domeHits || 1) - 1; if (v.domeHits <= 0) v.fx &= ~FX.DOME; return true; }
+        const front = !!from && (from.x - v.x) * -Math.sin(v.yaw) + (from.z - v.z) * -Math.cos(v.yaw) > 0;
+        if (!front || !v.foe || !this._shieldUp(v)) return false;
+        return v.wizard || spell !== 'SapiraDuel';
+    }
+
     /** Who saw it? If anyone did (or the victim lives to tell), the castle turns on `by`. */
     _offence(cs, by, victim, killed, pos) {
         const g = this.game;
@@ -1708,12 +1732,12 @@ export class CastleLife {
         cs.hostile.set(by, Date.now() + HOSTILE_MS);
         const kingHit = victim && victim.role === 'king';
         for (const w of witnesses) {
-            if (w.role === 'knight' || w.role === 'king') { w.foe = by; if (Math.random() < 0.6) this._say(w, pick(w.role === 'king' ? SHOUT.king : SHOUT.knight)); }
+            if (this._fights(w)) { w.foe = by; if (Math.random() < 0.6) this._say(w, pick(w.wizard ? WIZ_SHOUT.fight : w.role === 'king' ? SHOUT.king : SHOUT.knight)); }
             else { w.fleeFrom = by; w.fleeT = 14 + Math.random() * 6; w.fleeing = false; w.path = null; if (Math.random() < 0.7) this._say(w, pick(SHOUT.help)); }
         }
         // the alarm: knights near any witness come too; for the king — every knight
         for (const k of cs.active.values()) {
-            if (k.dead || k.foe || (k.role !== 'knight' && k.role !== 'king')) continue;
+            if (k.dead || k.foe || !this._fights(k)) continue;
             if (kingHit || witnesses.some((w) => Math.hypot(w.x - k.x, w.z - k.z) < 45)) k.foe = by;
         }
         if (kingHit) this._reinforce(cs, by);
@@ -1853,7 +1877,7 @@ export class CastleLife {
         cs.hostile.set(by, Date.now() + HOSTILE_MS);
         let shouted = false;
         for (const k of cs.active.values()) {
-            if (k.dead || k.foe || (k.role !== 'knight' && k.role !== 'king')) continue;
+            if (k.dead || k.foe || !this._fights(k)) continue;
             if (k.role === 'king' && Math.hypot(k.x - pos.x, k.z - pos.z) > 30) continue;
             if (Math.hypot(k.x - pos.x, k.z - pos.z) < 110) {
                 k.foe = by; k.investigate = null;

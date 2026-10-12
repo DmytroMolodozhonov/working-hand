@@ -335,7 +335,7 @@ export class Duel {
         for (const z of g.zombies || []) if (!z.isDead) this._zombieBody(z, put('z', z.id));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
-        for (const v of g.castleLife?.targets() || []) this._villagerBody(v, put('v', v.id));
+        for (const v of g.castleLife?.targets() || []) if (v.id !== skip) this._villagerBody(v, put('v', v.id)); // (never the wizard who cast it)
         // the ships' crews (on their decks, or swimming)
         for (const v of g.ships?.crew.byId.values() || []) if (!v.dead) this._villagerBody(v, put('c', v.id));
         for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));
@@ -478,7 +478,14 @@ export class Duel {
             return true;
         }
         const r = g.remotes.get(by);
-        if (!r) return false;
+        if (!r) {
+            // a tower's wizard: the tip of its wand
+            const v = g.castleLife?.byId.get(by);
+            if (!v?.wizard || v.dead) return false;
+            v.model.getWandTip(outPos);
+            v.model.getWandDir(outDir);
+            return true;
+        }
         const hp = r.handPose(side);
         outPos.copy(hp.origin);
         outDir.copy(hp.dir);
@@ -666,6 +673,7 @@ export class Duel {
         const src = from || this._casterAt(byId, c);
         const p = this._creaturePoint(c, _v1);
         this._hitBurst(spell, p, 30);
+        if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
         // a book-bird: any charge knocks it out of the air (it falls as a book)
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
@@ -852,6 +860,7 @@ export class Duel {
             for (let j = i + 1; j < list.length; j++) {
                 let a = list[i], b = list[j];
                 if (a.by === b.by || a.state === 'clash' || b.state === 'clash') continue;
+                if (a.npc || b.npc) continue; // (a tower wizard's charge: only two players' charges meet in a clash)
                 if (a.id > b.id) [a, b] = [b, a]; // (the same order on every computer)
                 const m = this._meeting(a, b, _v1);
                 if (!m) continue;

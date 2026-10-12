@@ -121,3 +121,88 @@ test('knights: a wizard on a roof — from the straight assault to bows and a ri
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('tower wizards: duel spells at a foe, shields against his, a plan of their own (up high → bring him down)', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const t = g.world.terrain.data.towers.near(0, 0, 4000).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+        window.__tower = t;
+        g.character.group.position.set(t.gate.x, t.gate.y + 2.2, t.gate.z);
+        g.world.terrain.flushAround(t.gate.x, t.gate.z);
+    });
+    await page.waitForFunction(() => [...window.__zns.game.castleLife.byId.values()].filter((v) => v.wizard && !v.dead && v.W && v.role !== 'student').length >= 2, null, { timeout: 60000, polling: 300 });
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, L = g.castleLife, t = window.__tower, T = window.__zns.THREE;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
+        const cs = L.castles.get(t.id);
+        g.combat.damage = () => {}; g.damageLocalPlayer = () => {}; if (g.impact) g.impact.apply = () => 'none';
+        g.combat.stun = () => {}; g.combat.freeze = () => {}; if (g.knock) g.knock.knock = () => {};
+        // out in front of the gate
+        const out = new T.Vector3(t.gate.x - t.x, 0, t.gate.z - t.z).normalize();
+        const at = (k) => ({ x: Math.round(t.gate.x + out.x * k), z: Math.round(t.gate.z + out.z * k) });
+        const me = at(22);
+        const stand = (p, y) => g.character.group.position.set(p.x + 0.5, y + 2.2, p.z + 0.5);
+        const wiz = [...cs.active.values()].filter((v) => v.wizard && !v.dead && v.W && v.role !== 'student').slice(0, 4);
+        wiz.forEach((v, i) => {
+            const p = at(10);
+            v.x = p.x + (i - 1.5) * 3; v.z = p.z; v.y = g.collision.groundY(v.x, v.z); v.job = 'wander'; v.post = null; v.path = null; v.seated = false;
+        });
+        let npcBolts = 0;
+        const add = g.duel._addBolt.bind(g.duel);
+        g.duel._addBolt = (o) => { if (o.npc) npcBolts++; return add(o); };
+        cs.hostile.set(g.localId, Date.now() + 300000);
+        for (const v of wiz) v.foe = g.localId;
+        const plans = new Set(), said = new Set();
+        let shield = false, cast = false;
+        const t0 = performance.now(), c0 = g.castleLife.wizards.fight.clock;
+        // the player strikes back now and then: «Остолбеней» at the nearest wizard
+        const ch = g.character;
+        const od = ch.getHandDirection.bind(ch);
+        let castT = 0;
+        while (g.castleLife.wizards.fight.clock - c0 < 25 && performance.now() - t0 < 120000) {
+            stand(me, g.collision.groundY(me.x, me.z));
+            const sq = cs.circles?.get(g.localId);
+            if (sq?.plan) plans.add(sq.plan);
+            for (const v of wiz) { if (v.fx & 2) shield = true; if (v.mode === 'cast') cast = true; if (v.bubble?.text) said.add(v.bubble.text); }
+            if (performance.now() - castT > 2500) {
+                castT = performance.now();
+                const v = wiz.filter((w) => !w.dead).sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z))[0];
+                if (v) {
+                    const hand = ch.getHandWorldPosition('right', new T.Vector3());
+                    ch.getHandDirection = (side, o = new T.Vector3()) => o.set(v.x, v.y + 2.6, v.z).sub(hand).normalize();
+                    g.duel.cast('Stupefy', { side: 'right', t: { kind: 'v', id: v.id } });
+                    ch.getHandDirection = od;
+                }
+            }
+            if (npcBolts >= 3 && shield && cast && plans.size) break;
+            await frames(3);
+        }
+        const first = { npcBolts, shield, cast, plans: [...plans] };
+        // up on a pillar 7 high: they change the plan — bring him down
+        const P = at(24);
+        const top0 = t.topLayer ? 0 : g.world.terrain.data.topLayer(P.x, P.z);
+        const td = g.world.terrain.data;
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let k = 1; k <= 7; k++) td.set(P.x + dx, top0 + k, P.z + dz, 3);
+        g.world.terrain.flushAround(P.x, P.z);
+        const c1 = g.castleLife.wizards.fight.clock, t1 = performance.now();
+        while (g.castleLife.wizards.fight.clock - c1 < 20 && performance.now() - t1 < 90000) {
+            stand(P, top0 + 7 - 0.5);
+            const sq = cs.circles?.get(g.localId);
+            if (sq?.plan) plans.add(sq.plan);
+            for (const v of wiz) if (v.bubble?.text) said.add(v.bubble.text);
+            if (plans.has('ground')) break;
+            await frames(3);
+        }
+        return { ...first, plans: [...plans], said: [...said], info: JSON.stringify(wiz.map((v) => [v.role, v.wt?.role, v.mode, Math.round(Math.hypot(v.x - me.x, v.z - me.z)), Math.round(v.mana)])) };
+    });
+    if (process.env.KDEBUG) console.log(JSON.stringify(r, null, 1));
+    assert.ok(r.npcBolts >= 3 && r.cast, `they cast duel spells (${r.npcBolts}): ${r.info}`);
+    assert.ok(r.shield, `a shield against my spell: ${r.info}`);
+    assert.ok(r.plans.includes('ground'), `up high → bring him down: ${r.plans}`);
+    assert.ok(r.said.length >= 2, `they talk it over: ${r.said.join(' | ')}`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

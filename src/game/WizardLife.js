@@ -19,6 +19,7 @@
 import { WIZ, WIZ_ROLE_RU, wizardRoster } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
 import { WizardFx, FX } from '../fx/WizardFx.js';
+import { WizardFight } from './WizardFight.js';
 
 export { FX };
 export const isWizSite = (def) => !!def && (def.kind === 'tower' || def.kind === 'wander');
@@ -37,6 +38,7 @@ export const WIZ_SHOUT = {
         master: ['Звёзды сегодня ясные…', 'Академия стоит уже триста лет.', 'Знание — сильнейшее из заклинаний.'],
         wanderer: ['Долгая дорога…', 'Ветер сегодня с севера.', 'Видал я и не такое в пути.'],
     },
+    fight: ['Как ты смеешь — в академии!', 'Палочки к бою!', 'Ты пожалеешь об этом!', 'Защищайтесь, ученики!'],
     levFail: ['Не Левиоса́, а Леви́оса!', 'Взмах и рывок! Ещё раз.', 'Не так резко, плавнее!'],
     oops: ['Ой!', 'Опять упала…', 'Ну вот…'],
 };
@@ -54,6 +56,7 @@ export class WizardLife {
         this.life = life;
         this.game = life.game;
         this.fx = new WizardFx(this.game);
+        this.fight = new WizardFight(this); // (a fight: duel spells, shields, the circle's plans)
         this._dayT = 0;
         this._practiceT = 0;
     }
@@ -194,6 +197,7 @@ export class WizardLife {
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;
         }
         if (v.lostWand) return this._fetchWand(v, dt);
+        if (v.foe && W) return this.fight.step(v, dt);
         return false;
     }
 
@@ -258,6 +262,7 @@ export class WizardLife {
                 for (const cs of L.castles.values()) if (cs.awake && cs.def.kind === 'tower' && cs.wizNight !== g.isNight) { cs.wizNight = g.isNight; this._staff(cs); }
             }
             this._practice(dt, wizards);
+            this.fight.update(dt); // (the circles after a foe: plans and roles)
             const night = g.isNight;
             for (const v of wizards) {
                 let f = 0;
@@ -266,7 +271,7 @@ export class WizardLife {
                 if (v.job === 'brew' && v.mode === 'work') f |= FX.BREW;
                 if (v.job === 'teach' && v.sparkT > 0) { v.sparkT -= dt; f |= FX.SPARK; }
                 if (v.noWand) f = FX.NOWAND; // (no wand in the hand: no Lumos, no magic of the hand — seen by all)
-                v.fx = (v.fx & (FX.SHIELD | FX.DOME)) | f;
+                v.fx = (v.fx & (FX.SHIELD | FX.DOME | FX.BLINK)) | f;
             }
         }
         // every computer: aim, the hats under low ceilings, the visible magic
