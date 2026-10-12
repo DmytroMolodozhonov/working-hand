@@ -50,11 +50,20 @@ export const poseBehind = (pose, side) => {
     return !!(w && s && (w.z || 0) - (s.z || 0) > THROW.DEPTH);
 };
 
+/** s after getting up off the ground when the arms are still pushing up (no throw yet). */
+export const GOT_UP_T = 1.5;
+
 /**
- * While swimming the arms stroke (a reach up and back, a fast pull): that is no throw and no
- * letting go — nothing leaves a swimmer's hand (the wand above all).
+ * While swimming the arms stroke (a reach up and back, a fast pull), and lying on the ground they
+ * flail to get up (pushing up, a hand raised for «Up», waving): that is no throw and no letting go
+ * — nothing leaves the hand then (the wand above all), nor in the moment after getting up.
  */
-export const holdsFast = (ch) => !!(ch?.swimming || ch?.swimY != null);
+export function holdsFast(ch, now = performance.now()) {
+    if (!ch) return false;
+    if (ch.swimming || ch.swimY != null) return true;
+    if (ch.knockedDown) { ch._downUntil = now + GOT_UP_T * 1000; return true; }
+    return now < (ch._downUntil || 0);
+}
 
 export class DropGate {
     constructor() { this.reset(true); }

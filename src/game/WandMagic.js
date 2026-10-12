@@ -487,7 +487,7 @@ export class WandMagic {
             // still a moment, the arm raised (walking swings the arms: that threw the light by itself)
             const ch = g.character, now = performance.now();
             const side = g.items.heldOf('wand')?.side || this._bareSide();
-            if (ch.isRunning || ch.stepping > 0 || ch.flying) this._movedAt = now;
+            if (ch.isRunning || ch.stepping > 0 || ch.flying || ch.knockedDown || ch.swimming) this._movedAt = now; // (lying, the arms flail to get up; swimming, they stroke: no throw)
             const trail = this._trail || (this._trail = []);
             trail.push({ t: now, p: ch.group.worldToLocal(tip.clone()) });
             while (trail.length > 2 && now - trail[1].t > LUMOS.WINDUP_T + 100) trail.shift(); // (long enough to see the wind-up)

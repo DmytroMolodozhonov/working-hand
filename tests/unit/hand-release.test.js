@@ -168,3 +168,11 @@ test('swimming: a stroke (a reach up behind the head and a fast pull, the hand o
     assert.equal(holdsFast({ swimY: 1.2 }), true, '(the body held up by the water)');
     assert.equal(holdsFast({ swimming: false, swimY: null }), false, 'on land: throws as usual');
 });
+
+test('lying on the ground (and a moment after getting up) the hand holds fast — flailing to get up throws nothing', () => {
+    const ch = { swimming: false, swimY: null, knockedDown: true };
+    assert.equal(holdsFast(ch, 1000), true, 'lying: the arms push and wave to get up');
+    ch.knockedDown = false;
+    assert.equal(holdsFast(ch, 1000 + 1000), true, 'just up: still pushing up');
+    assert.equal(holdsFast(ch, 1000 + 1600), false, 'standing a while: throws as usual');
+});
