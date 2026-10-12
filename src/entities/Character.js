@@ -754,10 +754,24 @@ export class VoxelCharacter {
     setFirstPerson(isFPV) {
         this._fpv = isFPV;
         const layer = isFPV ? 1 : 0;
+        // only the head (the eyes are in it) is hidden from one's own view: the body stays —
+        // looking down one sees one's torso, belt and hands (it vanished before)
         this.head.traverse((c) => c.layers.set(layer));
-        this.body.traverse((c) => c.layers.set(layer));
-        // clothes on the body (robe, cape, hood…) are not in the way of the eyes either
-        for (const p of this._lookParts || []) if (p.parent === this.torso || p.parent === this.head) p.traverse((c) => c.layers.set(layer));
+        this.body.traverse((c) => c.layers.set(0));
+        for (const p of this._lookParts || []) if (p.parent === this.head) p.traverse((c) => c.layers.set(layer));
+        for (const p of this._lookParts || []) if (p.parent === this.torso) p.traverse((c) => c.layers.set(0));
+        // a hidden head still casts its shadow (the renderer casts shadows only of what the
+        // camera's layers show: the shadow was a body without a head): an unseen double of it
+        if (!this._headShadow) {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.45, 1.25), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
+            m.position.y = 0.1; // (the hair on top)
+            m.castShadow = true;
+            m.name = 'head-shadow';
+            this.head.add(m);
+            this._headShadow = m;
+        }
+        this._headShadow.layers.set(0);
+        this._headShadow.visible = !!isFPV;
     }
 
     /** Dress the hero (face, hair, clothes — see Appearance.js). */

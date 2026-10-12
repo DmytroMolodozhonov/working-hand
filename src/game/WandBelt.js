@@ -18,9 +18,9 @@ import * as THREE from 'three';
 import { makeItemModel, disposeModel } from './ItemTypes.js';
 
 /** The wand's handle on the hero (its own space: +X its right, −Z ahead; the waist at y≈0). */
-export const BELT_TOP = new THREE.Vector3(-0.2, 0.42, -0.5);
+export const BELT_TOP = new THREE.Vector3(-0.12, 0.22, -0.52);
 /** Where its tip goes (into the trousers, against the left thigh). */
-export const BELT_TIP = new THREE.Vector3(-0.36, -0.75, -0.22);
+export const BELT_TIP = new THREE.Vector3(-0.3, -0.85, -0.24);
 const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
@@ -35,7 +35,20 @@ export function atBelt(local) {
     if (local.z > -0.3) return Infinity; // (beside or behind the body)
     if (local.x < -0.62 || local.x > 0.5) return Infinity; // (at the side: a hanging arm, a hip)
     if (local.y > 0.65 || local.y < -0.75) return Infinity; // (the waist, not the chest or the knees)
-    return Math.hypot(local.x - BELT_TOP.x, local.y - 0.1);
+    return Math.hypot(local.x - BELT_TOP.x, local.y - 0);
+}
+
+/** Just in front of the belly (the body's front is at z −0.4; a hand ~0.15 thick). */
+export const BELLY_Z = -0.58;
+
+/**
+ * How much a hand (hero's space) is low in front of the belly: 1 well inside, fading to 0
+ * at the edges (no jump as it comes or goes). Out at the sides (a hanging arm, a hip) 0.
+ */
+export function bellyWeight(local) {
+    if (local.z > -0.3) return 0;
+    const fade = (v, lo, hi, m) => Math.max(0, Math.min(1, (v - lo) / m, (hi - v) / m));
+    return fade(local.x, -0.62, 0.5, 0.15) * fade(local.y, -0.75, 0.65, 0.2);
 }
 
 export class WandBelt {
@@ -61,10 +74,11 @@ export class WandBelt {
         if (!ch || !items || !inv) return;
         this._show();
         if (!g.currentPose || g.combat?.immobile || g.combat?.dead || ch.flying) return;
-        const now = performance.now();
-        if (now - this._at < 900) return; // (just done: not at once back)
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
+        this._reachBelly();
+        const now = performance.now();
+        if (now - this._at < 900) return; // (just done: not at once back)
         for (const side of ['right', 'left']) {
             const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
             const near = atBelt(local) < Infinity;
@@ -92,6 +106,27 @@ export class WandBelt {
                 this._take(side);
                 return;
             }
+        }
+    }
+
+    /**
+     * A real hand brought to one's own belly is AT the belly: the camera can't see how far
+     * in front of the body it is, and the hero's arm guessed it far ahead (it could never
+     * reach the wand on the belt). An empty hand or one holding the wand, low in front of
+     * the belly, is shown close to it (just in front of the body, never through it) —
+     * how the hero looks this frame (Character.reachHand: tracking keeps the real arm).
+     */
+    _reachBelly() {
+        const g = this.game, ch = g.character;
+        if (!ch.reachHand) return;
+        for (const side of ['right', 'left']) {
+            const h = g.items.held[side];
+            if ((h && h.item.kind !== 'wand') || g.weapons?.hands?.[side]?.held) continue;
+            const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
+            const w = bellyWeight(local);
+            if (!(w > 0) || local.z >= BELLY_Z) continue;
+            ch.reachHand(side, _w.set(local.x, local.y, BELLY_Z).applyMatrix4(ch.group.matrixWorld), w);
+            ch.group.updateMatrixWorld(true);
         }
     }
 
