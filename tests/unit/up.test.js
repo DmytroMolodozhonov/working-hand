@@ -16,7 +16,8 @@ test('«Up» is heard as the whole phrase only', () => {
 test('«Up»: lying or swimming, a hand up; not stunned or frozen; 7 mana', () => {
     assert.equal(upAction({ down: true, swimming: false, armUp: true }), 'rise');
     assert.equal(upAction({ down: false, swimming: true, armUp: true }), 'leap');
-    assert.match(upAction({ down: true, swimming: false, armUp: false }), /Поднимите руку/);
+    assert.match(upAction({ down: true, swimming: false, armUp: false }), /Вытяните руку/);
+    assert.match(upAction({ down: false, swimming: true, armUp: false }), /Поднимите руку/);
     assert.match(upAction({ down: false, swimming: false, armUp: true }), /лежите|плаваете/);
     assert.equal(upAction({ down: true, swimming: false, armUp: true, stunned: true }), null);
     assert.equal(upAction({ down: false, swimming: true, armUp: true, frozen: true }), null);
@@ -30,4 +31,13 @@ test('«Up» leap: up, and sideways where the raised arm points', () => {
     assert.ok(v.x > 5 && Math.abs(v.z) < 1e-9, `towards +x (${v.x})`);
     const w = leapVelocity({ x: 0, y: 2, z: -0.5 });
     assert.ok(w.z < 0 && w.z > -v.x, 'a steeper arm: less far');
+});
+
+test('«Up» heard as it really is said: again and again, «Stand up», the short sounds — never inside a sentence', async () => {
+    const { isUpWord } = await import('../../src/game/UpSpell.js');
+    const { matchSpell } = await import('../../src/fx/SpellManager.js');
+    for (const t of ['ап', 'ап ап ап', 'Ап! Ап! Ап! Ап!', 'up', 'аб', 'оп', 'stand up', 'Стенд ап', 'стэнд ап', 'стендап']) assert.ok(isUpWord(t), t);
+    for (const t of ['стенд', 'стоп', 'ап ап ап ап ап', 'поднимись наверх', 'оп ля', 'встану потом']) assert.ok(!isUpWord(t), t);
+    assert.equal(matchSpell('стенд ап'), 'Up');
+    assert.equal(matchSpell('стенд'), 'Stand');
 });

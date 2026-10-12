@@ -12,17 +12,24 @@
 
 import * as THREE from 'three';
 
-/** The words the recognizer writes for «Up». */
-const UP_WORDS = new Set(['up', 'upp', 'ap', 'app', 'ап', 'апп', 'аап', 'ааап', 'эп', 'апъ', 'апь']);
+/** The words the recognizer writes for «Up» (a short word: often heard as «аб», «оп»…). */
+const UP_WORDS = new Set(['up', 'upp', 'ap', 'app', 'ab', 'op', 'ап', 'апп', 'аап', 'ааап', 'эп', 'апъ', 'апь', 'аб', 'оп', 'уп']);
+/** «Stand up» («стенд ап»): the first word… */
+const STAND_WORDS = new Set(['stand', 'stend', 'стенд', 'стэнд', 'стент', 'стэнт', 'стен', 'стань']);
+/** …or the two said as one. */
+const UP_ONE = new Set(['standup', 'стендап', 'стэндап', 'стенап', 'стендапп']);
 
-/** Is the whole phrase «Up» (once or twice: «ап ап»)? Never a word inside a sentence. */
+/** Is the whole phrase «Up» (said again and again: «ап ап ап») or «Stand up»? Never a word inside a sentence. */
 export function isUpWord(text) {
     const w = String(text || '').toLowerCase().replace(/[^a-zа-яё\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
-    return w.length >= 1 && w.length <= 2 && w.every((x) => UP_WORDS.has(x));
+    if (w.length < 1 || w.length > 4) return false;
+    if (w.length === 1 && UP_ONE.has(w[0])) return true;
+    if (w.length === 2 && STAND_WORDS.has(w[0]) && UP_WORDS.has(w[1])) return true;
+    return w.every((x) => UP_WORDS.has(x));
 }
 
 /** The leap: up speed and the most sideways speed (hero m/s). */
-export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
+export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOWN: 0.85, LIFT_UP: 1.6 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
 
 /**
  * What «Up» does now. `armUp`: a hand raised up. → 'rise' | 'leap' | a hint (string) | null (nothing to do).
@@ -31,7 +38,7 @@ export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35 }; // (VY
 export function upAction({ down, swimming, armUp, stunned = false, frozen = false }) {
     if (stunned || frozen) return null;
     if (!down && !swimming) return '⬆️ «Up» работает, только когда вы лежите на земле или плаваете в воде';
-    if (!armUp) return '⬆️ Поднимите руку вверх и скажите «Up»';
+    if (!armUp) return down ? '⬆️ Вытяните руку вперёд или поднимите её и скажите «Up»' : '⬆️ Поднимите руку вверх и скажите «Up»';
     return down ? 'rise' : 'leap';
 }
 
@@ -83,7 +90,12 @@ export class UpSpell {
         const down = g.knock.state === 'falling' || g.knock.state === 'down';
         const swimming = !!g.swim?.swimming && !this.leap;
         const arm = this.raisedArm();
-        const what = upAction({ down, swimming, armUp: !!arm });
+        // the real arm on the camera (armLift: 0 hanging, 1 out level, 2 straight up): lying, the hero's
+        // «up» along his body is not the real «up» — an arm held out straight or raised counts
+        const lift = g.currentPose?.armLift;
+        const real = lift ? Math.max(lift.left || 0, lift.right || 0) : 0;
+        const armUp = !!arm || real >= (down ? UP.LIFT_DOWN : UP.LIFT_UP);
+        const what = upAction({ down, swimming, armUp });
         if (what !== 'rise' && what !== 'leap') { if (what && isFinal) g.hud.setVoice(what, true); return null; }
         const tired = g.combat.check('Up');
         if (tired) { g.hud.setVoice(tired, true); return null; }
@@ -92,7 +104,7 @@ export class UpSpell {
             g.knock.standNow();
             g.hud.setVoice('⬆️ <span style="color:#7fe3ff">Up!</span> Вы встаёте', true);
         } else {
-            const v = leapVelocity(arm);
+            const v = leapVelocity(arm || { x: 0, y: 1, z: 0 }); // (the real arm straight up: straight up)
             this.leap = { vx: v.x, vz: v.z, t: 0 };
             ch.swimY = null; ch.onGround = false; ch.airTop = null;
             ch.verticalVelocity = v.y;
