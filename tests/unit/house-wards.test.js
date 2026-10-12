@@ -146,6 +146,16 @@ test('«Protection House» aimed at the house: −20; «Максима» ×3 −
     assert.equal(w2.owner, 'pid-H');
 });
 
+test('not only a house: aimed at bare ground, the sphere stands round that spot', () => {
+    const g = fakeGame();
+    g.character.getHandDirection = (s, out) => out.set(0.3, -1, -0.2).normalize(); // (at the meadow by my feet)
+    const W = new HouseWards(g);
+    assert.equal(W.cast('ProtectionHouse'), 'ProtectionHouse');
+    const w = [...W.list.values()][0];
+    assert.ok(w && Math.hypot(w.c.x - 0.5, w.c.z - 1.6) < 2, 'round the spot shown');
+    assert.ok(/Сфера защиты/.test(g.voice.at(-1)), g.voice.at(-1));
+});
+
 test('refused: not aimed at a house, not enough mana — the hint says why', () => {
     const g = fakeGame();
     g.character.getHandDirection = (s, out) => out.set(-1, 0.3, 0).normalize(); // (at the sky / the meadow)

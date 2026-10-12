@@ -75,7 +75,7 @@ export function refusal(code, d = {}) {
         // «Защита дома» (HouseWards.js)
         case 'wardUnknown': return `📘 ${name} — из книги защиты. Сбейте тёмно-синюю книгу-птицу с серебряным щитом огнём («Инферно») или ледяным шаром и прочитайте её`;
         case 'wardNoHand': return `✋ Не сработало ${name}: поднимите руку (или палочку) и направьте её на дом`;
-        case 'wardNoHouse': return '🏠 «Protection House»: направьте руку на дом — на его стену, крышу или пол (не дальше 40 м)';
+        case 'wardNoHouse': return '🛡️ «Protection House»: направьте руку на то, что хотите защитить, — на дом, сундук, дерево или землю (не дальше 40 м)';
         case 'wardNotYours': return `🛡️ Это не ваш дом — его защита принадлежит игроку ${d.owner || 'другому'}`;
         case 'wardMax': return `🛡️ Сфера уже самая большая (${d.r} м) — скажите «стоп»`;
         case 'wardNoMana': return `😮‍💨 Мана кончилась — сфера осталась ${d.r} м`;

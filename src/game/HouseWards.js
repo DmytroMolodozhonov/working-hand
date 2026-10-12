@@ -3,7 +3,9 @@
  * dark-blue book-bird — BookBirds.js; in Creative everybody knows it).
  *
  *   «Protection House»        point the hand (the wand) at a house and say it: −20 mana, a faint
- *                             sphere of protection appears round the house (2.5 m). Now every
+ *                             sphere of protection appears round the house (2.5 m) — a house is
+ *                             what it is mostly for, but aimed at anything else (a chest, a camp,
+ *                             a tree, a piece of land) it stands round that spot. Now every
  *                             «Максима» (−5 mana) makes it 1.5 m wider — the wizard watches it take
  *                             in the whole house and says «стоп» (free). No mana left: it stays as
  *                             big as it grew. One sphere per house; its owner is the caster.
@@ -375,14 +377,18 @@ export class HouseWards {
             return 'ProtectionHouse';
         }
         const aim = this._aimHouse(h.o, h.d);
-        if (!aim.house) return this._no('wardNoHouse');
+        // a house is what it is mostly for, but it guards anything the hand shows (a chest, a camp,
+        // a tree, a piece of land): then the sphere stands round that spot, 1 m above it
+        const spot = aim.house || (aim.at && { c: { x: aim.at.x, y: aim.at.y + 1, z: aim.at.z }, r: 0 });
+        if (!spot) return this._no('wardNoHouse');
         if (!this._pay('ProtectionHouse')) return null;
-        const c = aim.house.c;
+        const c = spot.c;
         const id = (g.localId || 'L') + '-' + Date.now().toString(36) + '-' + (this._nextId++);
         this._op({ op: 'new', id, c: [r2(c.x), r2(c.y), r2(c.z)], name: g.net?.name || 'Игрок' });
         this.setting = { id, idle: 0 };
-        const need = maximaFor(aim.house.r);
-        g.hud?.setVoice?.(`🛡️ Защита дома поставлена. Кричите «Максима» (−${WARD.MAXIMA} маны каждая), пока сфера не накроет весь дом${need ? ` (примерно ${need} ${need % 10 >= 2 && need % 10 <= 4 && (need % 100 < 12 || need % 100 > 14) ? 'раза' : 'раз'})` : ''}, потом скажите «стоп»`, true);
+        const need = maximaFor(spot.r);
+        const what = aim.house ? 'весь дом' : 'всё, что нужно защитить';
+        g.hud?.setVoice?.(`🛡️ ${aim.house ? 'Защита дома' : 'Сфера защиты'} поставлена. Кричите «Максима» (−${WARD.MAXIMA} маны каждая), пока сфера не накроет ${what}${need ? ` (примерно ${need} ${need % 10 >= 2 && need % 10 <= 4 && (need % 100 < 12 || need % 100 > 14) ? 'раза' : 'раз'})` : ''}, потом скажите «стоп»`, true);
         g.fx?.lightFlash?.(_v1.set(c.x, c.y, c.z), 0x8fc8ff, 2, 0.5, 20);
         this.log.push({ ev: 'new', id, need });
         return 'ProtectionHouse';
@@ -415,7 +421,7 @@ export class HouseWards {
         const w = this.list.get(s.id);
         if (!w) return false;
         this._op({ op: 'set', id: w.id, on: false });
-        this.game.hud?.toast?.(`🛡️ Защита дома готова: сфера ${w.r.toFixed(1)} м`, 3000);
+        this.game.hud?.toast?.(`🛡️ Защита готова: сфера ${w.r.toFixed(1)} м`, 3000);
         this.log.push({ ev: 'fix', id: w.id, r: w.r });
         return true;
     }
