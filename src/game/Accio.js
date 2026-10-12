@@ -40,6 +40,7 @@ export class Accio {
         if (s.w) { s.w.release(); g.sync?._localRelease?.(s.w); }
         else if (s.L) { s.L.accio = false; s.L.vel?.set(0, 0, 0); }
         else if (s.bk) { s.bk.accio = false; g.books?.dropBook(s.bk, null); }
+        else if (s.board) g.boards?.accioStop();
         // (a crystal is tiny and already broken off: it still comes to the hand)
         return true;
     }
@@ -51,7 +52,7 @@ export class Accio {
         let best = null;
         // the thing comes into a free hand: the pointing one, or the other (a wand in the
         // pointing hand: the other hand catches — before, things lying about were not even looked at)
-        const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd];
+        const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.boards?.handBusy(sd);
         // (an arm only ~20° from hanging counts too: a thing lying right by the feet is pointed at low)
         const lift = g.currentPose?.armLift;
         for (const side of ['right', 'left']) {
@@ -94,6 +95,16 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { body: a, side, score, hand };
             }
+            // a surfboard (big: into both free hands, under the one free arm, or down in front of the feet)
+            for (const { id, pos } of g.boards?.accioTargets() || []) {
+                const to = _v1.subVectors(pos, hand);
+                const d = to.length();
+                if (d > ACCIO.RANGE || d < 0.3) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang > ACCIO.CONE + Math.atan2(1.1, d)) continue;
+                const score = ang * 5 + d * 0.05;
+                if (!best || score < best.score) best = { board: id, score };
+            }
             // any other thing lying about (a bow, a shield, a wand, a scroll, food, coins…)
             if (!catcher) continue;
             for (const L of g.items?.loose.values() || []) {
@@ -131,7 +142,7 @@ export class Accio {
             const rb = this._runnerHint();
             if (rb) return rb;
             const busy = !free('left') && !free('right');
-            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку…) не дальше 30 м — и скажите «Акцио»';
+            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 30 м — и скажите «Акцио»';
         }
         if (best.rb) {
             if (g.sound) g.sound.playWhoosh?.();
@@ -142,6 +153,13 @@ export class Accio {
             return null;
         }
         if (best.body) { g.runner?.accio(best.body, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
+        if (best.board) {
+            if (!g.boards.accioStart(best.board)) return '🪄 Эту доску уже кто-то держит';
+            this.state = { board: best.board, t: 0 };
+            if (g.sound) g.sound.playWhoosh?.();
+            if (!free('left') && !free('right')) g.hud?.setVoice?.('🪄 Обе руки заняты — доска ляжет у ваших ног', true);
+            return null;
+        }
         if (best.L) return this._castItem(best.L, best.side);
         if (best.mc) {
             const f = g.crystals.accio(best.mc, best.side);
@@ -255,6 +273,15 @@ export class Accio {
         if (s.mc) { if (s.mc.done) this.state = null; return; } // (ManaCrystals flies it)
         if (s.bk) { this._updateBook(dt); return; }
         const g = this.game;
+        if (s.board) {
+            // the board: into the hands that are free when it gets here
+            const free = ['left', 'right'].filter((sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.books?.reading?.handBusy?.(sd) && g.scrolls?.readingSide !== sd);
+            const r = g.boards ? g.boards.accioStep(dt, free) : 'gone';
+            if (r === 'fly') return;
+            this.state = null;
+            if (r === 'caught' || r === 'landed') g.mana?.success('Accio');
+            return;
+        }
         const w = s.w;
         s.t += dt;
         if (w.holder?.levitate !== true || !g.weapons.byId.has(w.id)) { this.state = null; return; }

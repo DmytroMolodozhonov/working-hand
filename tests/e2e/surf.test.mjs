@@ -290,3 +290,82 @@ test('a board is let go for real: both hands opened drop it anywhere; a real thr
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('a real camera: «Акцио» brings the board into both hands; getting on with a shaking camera, far away and seen only to the hips', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    // ---- «Акцио»: the board lying 6 m ahead, the arms pointing at it, the hands open
+    await page.evaluate(() => {
+        const g = window.__zns.game, B = g.boards, THREE = window.__zns.THREE;
+        g.cameraBaseRotation = 0; g.smoothBody = 0; g.character.setBodyRotation(0);
+        // (away from the pedestals' things)
+        g.character.group.position.set(40, g.collision.groundY(40, 12) + 2, 12);
+        const b = B.reg.map.get('cboard0'), m = B.models.get('cboard0');
+        m.model.position.set(40, g.collision.groundY(40, 6) + 0.8, 6);
+        m.model.quaternion.copy(new THREE.Quaternion().fromArray(B._standQuat(0, 'stand')));
+        b.st = 'stand'; b.owner = null; B._setBox(b, m);
+    });
+    await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0, jitter: 0.004 }, 12);
+    const r = await page.evaluate(() => { const g = window.__zns.game, r = g.castLocalSpell('Accio', true); const st = g.accio.state; return { r, st: st && Object.keys(st).filter((k) => st[k]), hand: g.character.getHandWorldPosition('right', new window.__zns.THREE.Vector3()).toArray(), dir: g.character.getHandDirection('right', new window.__zns.THREE.Vector3()).toArray() }; });
+    assert.equal(r.r, 'Accio');
+    assert.ok(r.st && r.st.includes('board'), JSON.stringify(r));
+    let s;
+    for (let i = 0; i < 30 && !(s = await surf(page)).hold; i++) await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0, jitter: 0.004 }, 3);
+    assert.ok(s.hold && s.hold.left && s.hold.right, `in both hands ${JSON.stringify(s)}`);
+    // held naturally: the real hands are on its rail (not pulled away from it), the deck flat, across the body
+    await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0, jitter: 0.004 }, 6);
+    const held = await page.evaluate(() => {
+        const g = window.__zns.game, m = g.boards.models.get('cboard0').model, THREE = window.__zns.THREE;
+        const H = g.boards.hold;
+        const rail = ['left', 'right'].map((side) => { const l = m.worldToLocal(g.weapons.palmFrame(side, {}).G.clone()); return +l.distanceTo(H.grips[side]).toFixed(2); });
+        return { rail, up: new THREE.Vector3(0, 1, 0).applyQuaternion(m.quaternion).y, held: !!g.boards.hold };
+    });
+    assert.ok(held.held && held.up > 0.7, JSON.stringify(held));
+    assert.ok(held.rail.every((d) => d < 0.35), `the hands at the rail ${JSON.stringify(held)}`);
+    await page.evaluate(() => window.__zns.game.boards._dropHold(false));
+
+    // ---- getting on from the water, the camera shaking: far away (small, whole body) and close (seen to the hips)
+    for (const cam of [{ scale: 0.6, jitter: 0.006 }, { scale: 1.35, jitter: 0.006 }]) {
+        await page.evaluate(() => {
+            const g = window.__zns.game, B = g.boards, S = g.terrain.data.seas, sea = S.nearest(0, 0), THREE = window.__zns.THREE;
+            let a = 0.7;
+            for (; a < 7; a += 0.2) { const q = S.pointAt(sea, a, 40); if (S.signedDist(q.x, q.z) > 30 && !g.terrain.data.castles.landAt(Math.round(q.x), Math.round(q.z))) break; }
+            const p = S.pointAt(sea, a, 40);
+            g.world.terrain.flushAround(p.x, p.z);
+            B.water.sea = { time: null, sample: () => null }; // (calm water)
+            const b = B.reg.map.get('cboard0'), m = B.models.get('cboard0');
+            b.owner = null; b.st = 'float'; m.body = null;
+            m.model.position.set(p.x, -0.4, p.z);
+            m.model.quaternion.identity(); // (the nose to −Z)
+            B._floatBody(b, m);
+            // the person across the board (facing +X), beside it
+            const yaw = -Math.PI / 2;
+            g.cameraBaseRotation = yaw; g.smoothBody = yaw; g.character.setBodyRotation(yaw);
+            g.character.group.position.set(p.x - 1.2, -1.4, p.z + 0.5);
+            B.log.length = 0;
+        });
+        const legs = (l, r) => ({ arms: 'hang', ...cam, legs: { left: l, right: r } });
+        await feed(page, legs('stand', 'stand'), 12);
+        await feed(page, legs('up', 'stand'), 8);
+        await feed(page, legs('stand', 'stand'), 10);
+        s = await surf(page);
+        if (!s.ride) console.log('MOUNT', JSON.stringify(cam), JSON.stringify(await page.evaluate(() => { const g = window.__zns.game, B = g.boards; return { log: B.log, legs: g.currentPose?.legs, near: !!B._mountable(), voice: g.hud.lastVoice }; })));
+        assert.ok(s.ride && s.ride.foot === 'left', `on the board ${JSON.stringify(cam)} ${JSON.stringify(s.ride)}`);
+        assert.ok(Math.abs(Math.sin(s.ride.yaw + Math.PI / 2)) < 0.5, `the board turned under the foot ${s.ride.yaw}`);
+        // paddle with the right leg
+        const x0 = await page.evaluate(() => window.__zns.game.boards.ride.body.x);
+        for (let i = 0; i < 8; i++) { await feed(page, legs('stand', 'up'), 4); await feed(page, legs('stand', 'stand'), 4); }
+        const moved = await page.evaluate((x0) => window.__zns.game.boards.ride.body.x - x0, x0);
+        assert.ok(moved > 1, `paddled forward ${JSON.stringify(cam)} ${moved}`);
+        // on a wave (held there): the paddling leg comes up onto the board — standing
+        await page.evaluate(() => { const b = window.__zns.game.boards.ride.body; b.riding = true; b.offT = -1e3; });
+        await feed(page, legs('stand', 'up'), 5);
+        await feed(page, legs('stand', 'stand'), 3);
+        s = await surf(page);
+        assert.ok(s.ride && s.ride.foot === null, `standing ${JSON.stringify(cam)} ${JSON.stringify(s.ride)}`);
+        await page.evaluate(() => window.__zns.game.boards.dismount('water'));
+    }
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

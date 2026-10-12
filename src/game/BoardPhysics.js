@@ -29,7 +29,7 @@ export const SURF = {
     CROUCH_TAU: 1.6, ARMS_TAU: 1.4, ONE_FOOT_TAU: 0.6,
     PEARL_SLOPE: 0.55, PEARL_TRIM: 0.6, STALL_DRAG: 1.5,
     GROUND_DEPTH: 0.35, THROW_U: 4, FREE_SLIDE: 0.6,
-    GRAB_REACH: 0.35, SLIP: 0.45, MOUNT_REACH: 1.2,
+    GRAB_REACH: 0.35, SLIP: 0.45, MOUNT_REACH: 1.8,
 };
 
 export class BoardBody {

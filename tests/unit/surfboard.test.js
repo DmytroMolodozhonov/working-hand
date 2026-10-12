@@ -8,13 +8,13 @@ import { nearestRail, solveTwoHands, solveOneHand, RAIL, halfWidth } from '../..
 import { BoardRegistry } from '../../src/game/BoardRegistry.js';
 
 // ---------------------------------------------------------------- legs
-function lm({ left = 'stand', right = 'stand', lVis = 0.95, rVis = 0.95 } = {}) {
+function lm({ left = 'stand', right = 'stand', lVis = 0.95, rVis = 0.95, hipVis = 0.95, knee = 0.5, noise = 0 } = {}) {
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.95 }));
     p[11] = { x: 0.57, y: 0.42 }; p[12] = { x: 0.43, y: 0.42 };
-    p[23] = { x: 0.57, y: 0.8 }; p[24] = { x: 0.43, y: 0.8 };
+    p[23] = { x: 0.57, y: 0.8, visibility: hipVis }; p[24] = { x: 0.43, y: 0.8, visibility: hipVis };
     const T = 0.38;
     for (const [st, k, a, vis] of [[left, 25, 27, lVis], [right, 26, 28, rVis]]) {
-        const ky = st === 'up' ? 0.8 + 0.05 * T : 0.8 + 0.5 * T;
+        const ky = (st === 'up' ? 0.8 + (knee - 0.45) * T : 0.8 + knee * T) + (Math.random() - 0.5) * 2 * noise;
         p[k] = { x: 0.5, y: ky, visibility: vis };
         p[a] = { x: 0.5, y: st === 'heel' ? ky + 0.12 * T : ky + 0.5 * T, visibility: vis };
     }
@@ -35,9 +35,27 @@ test('legs: a knee lifted and put down is one stroke; repeated frames count noth
     const same = lm({ left: 'up' });
     for (let i = 0; i < 5; i++) { t += 33; o = r.read(same, t); }
     assert.equal(o.left.lifts, 2);
-    // knees not seen for 600 ms
-    for (let i = 0; i < 20; i++) { t += 33; o = r.read(lm({ lVis: 0.2, rVis: 0.2 }), t); }
+    // knees not seen for 600 ms (the hips not either)
+    for (let i = 0; i < 20; i++) { t += 33; o = r.read(lm({ lVis: 0.2, rVis: 0.2, hipVis: 0.2 }), t); }
     assert.equal(o.seen, false);
+});
+
+test('legs: real proportions (the standing knee a whole torso below the hip), a jittering camera, seen only to the hips', () => {
+    // a long thigh: standing at 0.9 torso, a knee lifted over a board comes up to ~0.45 — the old fixed 0.26 never saw it
+    let r = new LegReader(), t = 0, o;
+    const run = (opts, n) => { for (let i = 0; i < n; i++) { t += 33; o = r.read(lm(opts), t); } };
+    run({ knee: 0.9, noise: 0.012 }, 20);
+    assert.equal(o.left.lifts + o.right.lifts, 0, 'jitter alone lifts nothing');
+    run({ knee: 0.9, left: 'up', noise: 0.012 }, 8); run({ knee: 0.9, noise: 0.012 }, 10);
+    assert.equal(o.left.lifts, 1); assert.equal(o.left.plants, 1); assert.equal(o.right.lifts, 0);
+    // seen to the hips: the knees below the picture are down, a knee lifted into it is a lift
+    r = new LegReader(); t = 0;
+    const cut = (opts) => { const p = lm(opts); for (const i of [25, 26, 27, 28]) if (p[i].y > 1) p[i] = { ...p[i], visibility: 0.1 }; return p; };
+    const runCut = (opts, n) => { for (let i = 0; i < n; i++) { t += 33; o = r.read(cut(opts), t); } };
+    runCut({ knee: 0.9 }, 10);
+    assert.ok(o.seen && o.hipsOnly, 'seen to the hips');
+    runCut({ knee: 0.9, right: 'up' }, 6); runCut({ knee: 0.9 }, 8);
+    assert.equal(o.right.lifts, 1); assert.equal(o.right.plants, 1); assert.equal(o.left.lifts, 0);
 });
 
 // ---------------------------------------------------------------- water

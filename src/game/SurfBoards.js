@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { SurfWater } from './SurfWater.js';
 import { BoardBody, SURF, riderInput } from './BoardPhysics.js';
-import { nearestRail, solveTwoHands, solveOneHand } from './BoardHold.js';
+import { nearestRail, solveTwoHands, solveOneHand, halfWidth } from './BoardHold.js';
 import { BoardRegistry } from './BoardRegistry.js';
 import { boardModel, disposeBoard } from '../entities/BoardModel.js';
 import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
@@ -38,7 +38,7 @@ const ST_CODE = { stand: 0, rest: 1, float: 2, fall: 3 };
 const ST_NAME = ['stand', 'rest', 'float', 'fall'];
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _e = new THREE.Euler();
+const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _m4 = new THREE.Matrix4();
 const _pf = {};
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
@@ -50,6 +50,7 @@ export class SurfBoards {
         this.models = new Map(); // id -> {model, body, boxId, rest}
         this.hold = null; // {id, grips: {left, right}, theta, gate: {left, right}, openSince: {left, right}}
         this.ride = null; // {id, body, foot, neutral, nT, legs0, since, cool}
+        this.fly = null; // {id, t}: flying to me by «Акцио»
         this._open = { left: -1e9, right: -1e9 };
         this._openF = { left: -1e9, right: -1e9 };
         this._frame = 0;
@@ -214,6 +215,121 @@ export class SurfBoards {
         this._net(dt);
     }
 
+    // ---------------------------------------------------------------- «Акцио»
+    /** Boards «Акцио» can pull: standing, lying, floating — not in somebody's hands or under their feet. */
+    accioTargets() {
+        const out = [];
+        if (this.hold || this.ride || this.fly) return out;
+        for (const b of this.reg.map.values()) {
+            if (b.owner || b.st === 'ridden' || b.st === 'held') continue;
+            const m = this.models.get(b.id);
+            if (m) out.push({ id: b.id, pos: m.model.position });
+        }
+        return out;
+    }
+
+    /** «Акцио» on a board: mine while it flies (the others see it fly with my pose). */
+    accioStart(id) {
+        const b = this.reg.map.get(id), m = this.models.get(id);
+        if (!b || !m || b.owner || this.hold || this.ride || this.fly) return false;
+        if (this.auth) { if (!this.reg.take(id, this.me, 1)) return false; this._broadcastOwner(id, this.me, 1); }
+        else { b.owner = this.me; b.st = 'held'; b.mode = 1; this.game.sync?.net?.send({ t: 'bdtake', id, mode: 1 }); }
+        m.body = null; m.spin = 0;
+        this._setBox(b, m);
+        this.fly = { id, t: 0 };
+        for (let i = 0; i < 16; i++) this.game.fx?.spark(m.model.position, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
+        return true;
+    }
+
+    /** «Стоп» (or it could not get here): it falls where it is. */
+    accioStop() {
+        const F = this.fly;
+        if (!F) return;
+        this.fly = null;
+        const b = this.reg.map.get(F.id);
+        if (b && b.owner === this.me) this._free(b, 'fall', [0, 0, 0]);
+    }
+
+    /**
+     * Where the flying board goes, by the hands that are free:
+     *  two — across in front of the chest, deck up, its near rail in both hands;
+     *  one — under that arm, on edge along the body, the hand on the middle of the rail;
+     *  none — down in front of the feet.
+     */
+    _accioAim(free) {
+        const ch = this.game.character, torso = this._torso(), p = ch.group.position;
+        const A = this._aim || (this._aim = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), grip: null, mode: 'none', side: null });
+        const hw = halfWidth(0);
+        if (free.length === 2) {
+            const L = this._grip('left').clone(), R = this._grip('right').clone();
+            // the long axis across the body (the tail to the right), its −X rail towards the body
+            _m4.makeBasis(torso.fwd, torso.up, torso.right);
+            A.quat.setFromRotationMatrix(_m4);
+            A.pos.addVectors(L, R).multiplyScalar(0.5).addScaledVector(torso.fwd, hw).addScaledVector(torso.up, -0.03);
+            A.mode = 'two'; A.side = null; A.grip = null;
+            return A;
+        }
+        if (free.length === 1) {
+            const side = free[0], h = this._grip(side).clone();
+            const out = torso.right.clone().multiplyScalar(side === 'left' ? -1 : 1);
+            const g = new THREE.Vector3(side === 'left' ? -hw : hw, 0, 0);
+            const res = solveOneHand({ g, h, tuck: { out, fwd: torso.fwd, up: torso.up, hipCenter: new THREE.Vector3(p.x, h.y, p.z), halfX: 0.55 }, floorY: this._floorY(), surfaceY: this._surfaceY(), torso });
+            A.pos.copy(res.pos); A.quat.copy(res.quat);
+            A.mode = 'one'; A.side = side; A.grip = g;
+            return A;
+        }
+        A.pos.copy(p).addScaledVector(torso.fwd, 1.6);
+        A.pos.y = this.game.collision.groundY(A.pos.x, A.pos.z) + 0.6;
+        _e.set(0, ch.group.rotation.y, 0, 'YXZ');
+        A.quat.setFromEuler(_e);
+        A.mode = 'none'; A.side = null; A.grip = null;
+        return A;
+    }
+
+    /**
+     * The flying board, one frame. free: my free hands now. Returns 'fly', 'caught', 'landed' or 'gone'.
+     */
+    accioStep(dt, free) {
+        const F = this.fly;
+        if (!F) return 'gone';
+        const b = this.reg.map.get(F.id), m = this.models.get(F.id);
+        if (!b || !m || b.owner !== this.me) { this.fly = null; return 'gone'; }
+        F.t += dt;
+        const A = this._accioAim(free);
+        const p = m.model.position;
+        const to = _v.subVectors(A.pos, p);
+        const d = to.length();
+        if (d > 1e-3) p.addScaledVector(to, Math.min(1, (14 * dt) / d));
+        // it turns as it comes: lined up with the hands by the time it is there
+        m.model.quaternion.slerp(A.quat, Math.min(1, dt * (d < 4 ? 9 : 2.5)));
+        b.p = p.toArray(); b.q = m.model.quaternion.toArray();
+        if (Math.random() < 0.5) this.game.fx?.spark(p, 0xfff2a8, 0.07, _v2.set(0, 0.4, 0), 0.3);
+        if (d < 0.35) {
+            this.fly = null;
+            p.copy(A.pos); m.model.quaternion.copy(A.quat);
+            if (A.mode === 'none') { this._free(b, 'fall', [0, 0, 0]); return 'landed'; }
+            // caught: the fingers close on the rail (it stays in the open hand until that closes once)
+            const H = this.hold = this._newHold(b.id);
+            H.fresh = true;
+            const sides = A.mode === 'two' ? ['left', 'right'] : [A.side];
+            for (const side of sides) {
+                const local = m.model.worldToLocal(this._grip(side).clone());
+                const r = nearestRail(local);
+                H.grips[side] = A.mode === 'one' ? A.grip.clone() : new THREE.Vector3(r.x, 0, r.z);
+                H.gate[side].reset(true);
+                H.waitClose[side] = true;
+                const hand = this.game.character.getActiveHands?.()[side];
+                if (hand?.setGrip) hand.setGrip(0.62);
+            }
+            H.tucked = A.mode === 'one';
+            b.st = 'held'; b.mode = A.mode === 'two' ? 1 : 2;
+            this._say(A.mode === 'two' ? '🏄 Доска в руках. Положите её на воду и разожмите руки' : '🏄 Доска под мышкой. Вторую руку — на край, чтобы держать двумя', 'grab', 4000);
+            return 'caught';
+        }
+        if (F.t > 5) { this.accioStop(); return 'landed'; }
+        return 'fly';
+    }
+
     // ---------------------------------------------------------------- hands
     _torso() {
         const ch = this.game.character, p = ch.group.position, yaw = ch.group.rotation.y;
@@ -271,12 +387,13 @@ export class SurfBoards {
         }
         if (!best) return;
         const { b, m } = best;
+        if (this.fly?.id === b.id) this.fly = null; // (caught by hand on its way)
         if (!this.hold) {
             if (this.auth) { if (!this.reg.take(b.id, this.me, 1)) return; this._broadcastOwner(b.id, this.me, 1); }
             else { b.owner = this.me; b.st = 'held'; this.game.sync?.net?.send({ t: 'bdtake', id: b.id, mode: 1 }); }
             this._setBox(b, m);
             if (m.body) m.body = null;
-            this.hold = { id: b.id, grips: { left: null, right: null }, theta: 0, gate: { left: new DropGate(), right: new DropGate() }, thr: { left: new ThrowDetector(), right: new ThrowDetector() }, openSince: { left: 0, right: 0 }, prevHand: null };
+            this.hold = this._newHold(b.id);
             if (b.st !== 'held') b.st = 'held';
         }
         this.hold.grips[side] = best.grip;
@@ -286,6 +403,10 @@ export class SurfBoards {
         if (hand?.setGrip) hand.setGrip(0.62);
         const both = this.hold.grips.left && this.hold.grips.right;
         this._say(both ? '🏄 Доска в руках. Положите её на воду и разожмите руки' : '🏄 Держите доску: вторую руку на другой край, или несите под мышкой (рука опущена у бока)', 'grab', 4000);
+    }
+
+    _newHold(id) {
+        return { id, grips: { left: null, right: null }, theta: 0, gate: { left: new DropGate(), right: new DropGate() }, thr: { left: new ThrowDetector(), right: new ThrowDetector() }, openSince: { left: 0, right: 0 }, waitClose: { left: false, right: false }, tucked: false, prevHand: null };
     }
 
     /**
@@ -312,8 +433,10 @@ export class SurfBoards {
                 return;
             }
         }
+        // («Акцио» put it into an open hand: it stays until the hand has closed on it once)
+        if (H.waitClose[side]) { if (curl > CLOSE_CURL) H.waitClose[side] = false; else { H.openSince[side] = 0; return; } }
         if (curl < LET_GO_CURL) { if (!H.openSince[side]) H.openSince[side] = gt; } else H.openSince[side] = 0;
-        const openFor = (s) => (H.openSince[s] ? gt - H.openSince[s] : 0);
+        const openFor = (s) => (H.openSince[s] && !H.waitClose[s] ? gt - H.openSince[s] : 0);
         if (H.grips[other]) {
             // both hands opened (together): the board is let go
             if (openFor(side) > 250 && openFor(other) > 150) { this._dropHold(true); return; }
@@ -418,16 +541,24 @@ export class SurfBoards {
             const h = this._grip(side).clone();
             const sh = (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_v2);
             const lat = _v.subVectors(h, ch.group.position).dot(torso.right);
-            const down = sh.y - h.y > 0.9 && Math.abs(lat) > 0.45;
-            const tuck = down ? { out: torso.right.clone().multiplyScalar(Math.sign(lat) || 1), fwd: torso.fwd, up: torso.up, hipCenter: _v3.set(ch.group.position.x, h.y, ch.group.position.z).clone(), halfX: 0.55 } : null;
+            // under the arm: the hand on the middle of the rail, the arm down by the side (it stays there until the arm comes up)
+            const drop = sh.y - h.y;
+            if (Math.abs(H.grips[side].z) > SURF.L * 0.28 || drop < 0.25) H.tucked = false;
+            else if (drop > 0.6 && Math.abs(lat) > 0.3) H.tucked = true;
+            if (Math.abs(lat) < 0.05) _v.copy(torso.right).multiplyScalar(side === 'left' ? -1 : 1); else _v.copy(torso.right).multiplyScalar(Math.sign(lat));
+            const tuck = H.tucked ? { out: _v.clone(), fwd: torso.fwd, up: torso.up, hipCenter: _v3.set(ch.group.position.x, h.y, ch.group.position.z).clone(), halfX: 0.55 } : null;
             const trail = ch.handVelocity?.[side] ? ch.handVelocity[side].clone().negate() : null;
             res = solveOneHand({ g: H.grips[side], h, tuck, trail, floorY, surfaceY, torso });
             H.mode = res.mode;
             ch.reachHand(side, res.draw, 1, 0.13);
         }
-        m.model.position.copy(res.pos);
-        m.model.quaternion.copy(res.quat);
-        b.p = res.pos.toArray(); b.q = res.quat.toArray();
+        // (the camera's hands shake: the board follows them a little smoothed, never lagging far)
+        const k = H.fresh ? 1 : 1 - Math.exp(-dt * 22);
+        H.fresh = false;
+        m.model.position.lerp(res.pos, k);
+        if (m.model.position.distanceTo(res.pos) > 0.3) m.model.position.copy(res.pos);
+        m.model.quaternion.slerp(res.quat, k);
+        b.p = m.model.position.toArray(); b.q = m.model.quaternion.toArray();
         b.mode = H.grips.left && H.grips.right ? 1 : 2;
     }
 
@@ -438,47 +569,68 @@ export class SurfBoards {
         const legs = pose?.legs || null;
         if (legs?.seen) this._legsSeenAt = performance.now();
         if (this.ride) { this._riding(dt, pose, legs); return; }
-        if (this.hold || !legs || g.flight?.active || g.animals?.riding || g.levitation?.lifted || g.combat?.dead || g.isDeadLocal) { this._mountArm.left = this._mountArm.right = null; return; }
-        // a floating board next to me?
+        const reset = () => { this._mountArm.left = this._mountArm.right = null; this._march = 0; };
+        if (this.fly || !pose || g.flight?.active || g.animals?.riding || g.levitation?.lifted || g.combat?.dead || g.isDeadLocal) { reset(); return; }
+        // a floating board next to me (or the one in my hands, put on the water)?
         const near = this._mountable();
-        if (!near) { this._mountArm.left = this._mountArm.right = null; return; }
-        if (!legs.seen) { this._say('🦵 Камера не видит ваших ног — отойдите от камеры, чтобы были видны колени', 'legs', 6000); return; }
-        if (near.wrongWay) { this._say('🏄 Встаньте так, чтобы нос доски был впереди', 'way', 5000); return; }
-        // a knee lifted over it and the foot put down: one foot on the board
+        if (!near) { reset(); return; }
         const now = this.simT * 1000;
+        if (!legs?.seen) {
+            // the camera sees no legs at all: stepping in place by the board (a real march, not the camera's shake) gets on
+            this._march = pose.isRunning && (pose.runIntensity || 0) > 0.35 ? (this._march || 0) + dt : Math.max(0, (this._march || 0) - dt * 0.5);
+            if (this._march > 0.7) { this._march = 0; this.mount(near.b, 'left'); return; }
+            this._say('🦵 Камера не видит ваших ног — отойдите, чтобы были видны хотя бы бёдра, или шагайте на месте у доски, чтобы встать на неё', 'legs', 7000);
+            return;
+        }
+        // a knee lifted over it and the foot put down: one foot on the board
+        let best = 0;
         for (const side of ['left', 'right']) {
             const L = legs[side], arm = this._mountArm[side];
-            if (!arm) { this._mountArm[side] = { lifts: L.lifts, plants: L.plants, at: 0 }; continue; }
+            best = Math.max(best, L.raise || 0);
+            if (!arm) { this._mountArm[side] = { lifts: L.lifts, plants: L.plants, at: 0, peak: 0 }; continue; }
             if (L.lifts > arm.lifts) { arm.lifts = L.lifts; arm.at = now; arm.plantsAtLift = L.plants; }
             if (arm.at && L.plants > (arm.plantsAtLift ?? arm.plants) && now - arm.at < 3000) { this.mount(near.b, side); return; }
             if (arm.at && now - arm.at > 3000) arm.at = 0;
             arm.plants = L.plants;
+            // a knee that came up a little but not enough: say so
+            arm.peak = Math.max(arm.peak * Math.exp(-dt / 2), L.up ? 0 : L.raise || 0);
+            if (arm.peak > 0.4 && arm.peak < 0.95 && !L.up) this._say(legs.hipsOnly ? '🦵 Поднимите колено выше — до пояса (камера видит вас только до бёдер)' : '🦵 Поднимите колено выше, над доской, и поставьте ногу', 'knee', 4000);
         }
+        if (this.hold && !near.held) return;
+        if (best < 0.2) this._say(near.held ? '🏄 Доска на воде. Поднимите колено над доской и поставьте ногу — руки отпустят её сами' : '🏄 Чтобы встать на доску: поднимите колено над ней и поставьте ногу', 'howmount', 9000);
     }
 
-    /** A floating board I could step on: {b, m, wrongWay}. */
+    /** A board on the water I could step on: {b, m, yaw, held}. Facing it any way: it is turned under the foot. */
     _mountable() {
         const ch = this.game.character, p = ch.group.position;
         let best = null;
         for (const b of this.reg.map.values()) {
-            if (b.st !== 'float' || (b.owner && b.owner !== this.me)) continue;
+            const held = this.hold?.id === b.id;
+            if (held ? !this._onWater() : b.st !== 'float' || (b.owner && b.owner !== this.me)) continue;
+            if (this.hold && !held) continue;
             const m = this.models.get(b.id);
             if (!m) continue;
             const bp = m.model.position;
-            if (Math.abs(bp.x - p.x) > 5 || Math.abs(bp.z - p.z) > 5) continue;
+            if (Math.abs(bp.x - p.x) > 6 || Math.abs(bp.z - p.z) > 6) continue;
             const feet = p.y - OFFSET;
-            if (feet > bp.y + 0.9) continue; // (not from a cliff above it)
+            if (feet > bp.y + 1.2) continue; // (not from a cliff above it)
             const local = m.model.worldToLocal(_v.set(p.x, bp.y, p.z));
             const dx = Math.max(0, Math.abs(local.x) - SURF.W / 2), dz = Math.max(0, Math.abs(local.z) - SURF.L / 2);
-            if (Math.hypot(dx, dz) > SURF.MOUNT_REACH) continue;
+            const d = Math.hypot(dx, dz);
+            if (d > SURF.MOUNT_REACH) continue;
             const nose = _v2.set(0, 0, -1).applyQuaternion(m.model.quaternion);
             const yaw = Math.atan2(-nose.x, -nose.z);
-            let d = yaw - ch.group.rotation.y;
-            d = Math.atan2(Math.sin(d), Math.cos(d));
-            const cand = { b, m, wrongWay: Math.abs(d) > 1.22, yaw };
-            if (!best || cand.wrongWay < best.wrongWay) best = cand;
+            if (!best || d < best.d) best = { b, m, yaw, d, held };
         }
         return best;
+    }
+
+    /** The board in my hands lies on the water (deep enough to float it). */
+    _onWater() {
+        const m = this.models.get(this.hold?.id);
+        if (!m) return false;
+        const p = m.model.position, s = this.water.sample(p.x, p.z);
+        return s.kind !== 'land' && (s.depth || 0) > SURF.GROUND_DEPTH && p.y - (s.surface + s.h) < SURF.T + 0.5;
     }
 
     /** One foot onto the board (the other leg paddles). */
@@ -486,10 +638,22 @@ export class SurfBoards {
         if (typeof b === 'string') b = this.reg.map.get(b);
         if (!b) return false;
         const m = this._ensureModel(b);
+        if (this.hold?.id === b.id) {
+            // (the board in the hands, on the water: the hands let it go as the foot goes on)
+            const H = this.hold;
+            this.hold = null;
+            for (const side of ['left', 'right']) if (H.grips[side]) { const hand = this.game.character.getActiveHands?.()[side]; if (hand?.setGrip) hand.setGrip(null); }
+            b.owner = null; b.st = 'float';
+            m.body = null;
+            this._floatBody(b, m);
+        }
         if (this.auth) { if (!this.reg.take(b.id, this.me, foot === 'left' ? 3 : 4)) return false; this._broadcastOwner(b.id, this.me, foot === 'left' ? 3 : 4); }
         else { b.owner = this.me; b.st = 'ridden'; this.game.sync?.net?.send({ t: 'bdtake', id: b.id, mode: foot === 'left' ? 3 : 4 }); }
         const body = m.body || this._floatBody(b, m);
         m.body = null;
+        // the foot goes on as the person faces: the board is turned under it (from across or backwards too)
+        const hy = this.game.character.group.rotation.y;
+        if (Math.abs(Math.atan2(Math.sin(hy - body.yaw), Math.cos(hy - body.yaw))) > 0.6) { body.yaw = hy; body.w = 0; }
         const pose = this.game.currentPose;
         this.ride = { id: b.id, body, foot, neutral: pose?.torso ? { ...pose.torso } : null, nT: 0, legs0: this._legCounts(pose?.legs), since: performance.now(), runAcc: 0 };
         b.st = 'ridden';
@@ -525,7 +689,10 @@ export class SurfBoards {
         // the camera lost the legs: paddling by running in place instead
         if (R.foot && (!legs?.seen) && now - (this._legsSeenAt || 0) > 1500) {
             if (pose?.isRunning) { R.runAcc += dt * 1.6 * (pose.runIntensity || 0.5); if (R.runAcc >= 1) { strokes += Math.floor(R.runAcc); R.runAcc %= 1; } }
-            this._say('🦵 Камера не видит ваших ног — гребите бегом на месте или отойдите от камеры', 'legsride', 8000);
+            this._say(body.riding ? '🦵 Камера не видит ваших ног — чтобы встать на доску, присядьте и выпрямитесь' : '🦵 Камера не видит ваших ног — гребите бегом на месте или отойдите от камеры', 'legsride', 8000);
+            // standing up without seen legs: a crouch and up again (the pop-up) on a wave
+            if (pose?.isCrouching) R.crouched = true;
+            else if (R.crouched && body.riding) { R.crouched = false; R.foot = null; this._say('🏄 Держите равновесие наклоном: влево-вправо — поворот, присесть и руки в стороны — устойчивее'); }
         }
         // the lean's neutral: learned in the first 0.8 s, then slowly while not riding a wave
         if (pose?.torso) {
@@ -554,7 +721,7 @@ export class SurfBoards {
         b.p = m.model.position.toArray(); b.q = m.model.quaternion.toArray();
         b.mode = R.foot ? (R.foot === 'left' ? 3 : 4) : 5;
         // walking off onto the sand
-        if (body.grounded && pose?.isRunning) this.dismount('shore');
+        if (body.grounded && pose?.isRunning && (pose.runIntensity || 0) > 0.35) this.dismount('shore'); // (a real walk, not the camera's shake)
     }
 
     _placeBoard(m, body) {
@@ -765,7 +932,7 @@ export class SurfBoards {
 
     /** [id, x,y,z, qx,qy,qz,qw, mode] of the board I hold or ride (sent with my pose). */
     netMine() {
-        const id = this.ride?.id || this.hold?.id;
+        const id = this.ride?.id || this.hold?.id || this.fly?.id;
         if (!id) return undefined;
         const m = this.models.get(id), b = this.reg.map.get(id);
         if (!m || !b) return undefined;
