@@ -6,6 +6,7 @@
 
 import { mouthOpenness } from '../game/VoiceGate.js';
 import { LegReader } from './LegReader.js';
+import { HeadFromBody } from './HeadFromBody.js';
 
 /**
  * The head tilted back: a real head goes back ~40–45° before the camera loses the
@@ -150,6 +151,7 @@ export class PoseInterpreter {
         this.lastHead = { yaw: 0, pitch: 0 };
         // the head's turn: still → small jitter smoothed away; a real turn passes at once
         this.headFilter = { yaw: new OneEuro(0.2, 0.5), pitch: new OneEuro(0.2, 0.5) };
+        this.headBody = new HeadFromBody(); // (no face found — farther from the camera: the nose and the ears)
         // «Earthquake» stomp: a knee lifted, then put down hard
         this.legs = { left: { liftedAt: 0 }, right: { liftedAt: 0 } };
         this.stompAt = 0;
@@ -294,19 +296,31 @@ export class PoseInterpreter {
 
         // the mouth (is it me who speaks? — VoiceGate)
         data.mouth = mouthOpenness(results.faceLandmarks);
+        const body = data.hasPose ? this.headBody.read(lm, data.aspect || 4 / 3) : null;
+        let head = null;
         if (results.faceLandmarks && this.faceSolver) {
             try {
                 const faceRig = this.faceSolver.solve(results.faceLandmarks, { runtime: 'mediapipe', video, smooth: true });
-                if (faceRig && faceRig.head) {
-                    const t = performance.now() / 1000;
-                    this.lastHead.yaw = this.headFilter.yaw.filter(-(faceRig.head.y || 0), t);
-                    this.lastHead.pitch = this.headFilter.pitch.filter(faceRig.head.x || 0, t);
-                    data.headRotation.yaw = this.lastHead.yaw;
-                    data.headRotation.pitch = this.lastHead.pitch;
+                if (faceRig && faceRig.head && Number.isFinite(faceRig.head.y) && Number.isFinite(faceRig.head.x)) {
+                    head = { yaw: -faceRig.head.y, pitch: faceRig.head.x };
+                    this.headBody.learn(body, head.yaw, head.pitch); // (how the nose and the ears map onto it, for later)
                 }
             } catch (e) {
                 // A broken face frame must never stop the game
             }
+        }
+        // the face is too small for the face net (a step farther from the camera): the body's nose and ears
+        if (!head && body) {
+            const t = performance.now() / 1000;
+            head = this.headBody.estimate(body, this._headT ? Math.min(0.5, t - this._headT) : 1 / 20);
+        }
+        if (head) {
+            const t = performance.now() / 1000;
+            this._headT = t;
+            this.lastHead.yaw = this.headFilter.yaw.filter(head.yaw, t);
+            this.lastHead.pitch = this.headFilter.pitch.filter(head.pitch, t);
+            data.headRotation.yaw = this.lastHead.yaw;
+            data.headRotation.pitch = this.lastHead.pitch;
         }
         return data;
     }
