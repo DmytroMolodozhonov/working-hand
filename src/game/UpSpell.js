@@ -22,7 +22,7 @@ export function isUpWord(text) {
 }
 
 /** The leap: up speed and the most sideways speed (hero m/s). */
-export const UP = { VY: 15, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35 };
+export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
 
 /**
  * What «Up» does now. `armUp`: a hand raised up. → 'rise' | 'leap' | a hint (string) | null (nothing to do).
@@ -112,6 +112,9 @@ export class UpSpell {
             || (L.t >= UP.MIN_T && (ch.onGround || ch.swimY != null))) { this.leap = null; return; }
         ch.group.position.x += L.vx * dt;
         ch.group.position.z += L.vz * dt;
+        // the water's throw sets you down softly (on the shore, on a deck) — no fall-over landing
+        const imp = this.game.impact;
+        if (imp) imp.gentleUntil = Math.max(imp.gentleUntil || 0, performance.now() + 250);
     }
 
     reset() { this.leap = null; }
