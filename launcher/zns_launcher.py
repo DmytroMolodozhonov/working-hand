@@ -931,6 +931,8 @@ class Launcher:
         self.game_dir = game
         if hasattr(mod, "ensure_pose_native"):
             threading.Thread(target=mod.ensure_pose_native, daemon=True).start()
+        if hasattr(mod, "ensure_voice_native"):
+            threading.Thread(target=mod.ensure_voice_native, daemon=True).start()
         self.httpd.RequestHandlerClass = make_game_handler(self, mod.GameRequestHandler)
         log(f"Игра запущена: http://localhost:{self.port}")
         st.step("start", "ok", "", title="Открываю игру…", done=True, progress=1)

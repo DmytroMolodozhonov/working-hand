@@ -8,7 +8,7 @@
  */
 
 /** The settings shown in the pause menu (ids of the controls in «Настройки → Звук»). */
-export const PAUSE_AUDIO_IDS = ['music-vol', 'zombie-vol', 'spell-vol', 'talk-vol', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'voice-filter'];
+export const PAUSE_AUDIO_IDS = ['music-vol', 'zombie-vol', 'spell-vol', 'talk-vol', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'voice-engine', 'voice-filter'];
 /** The «🖥 Графика» tab: the same, for «Настройки → Графика». */
 export const PAUSE_GRAPHICS_IDS = ['view-distance', 'graphics-quality', 'fps-limit', 'antialias'];
 

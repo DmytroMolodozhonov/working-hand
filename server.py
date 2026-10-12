@@ -18,6 +18,8 @@ API:
   GET    /api/pose/status     — нейросеть камеры вне браузера (pose_native.py): есть ли, работает ли
   GET    /api/pose/stream     — её точки тела, рук и лица (Server-Sent Events)
   GET    /api/pose/snap       — её последний кадр камеры (JPEG; для записи руки)
+  GET    /api/voice/status    — нейросеть голоса вне браузера (voice_native.py): есть ли, скачана ли, работает ли
+  GET    /api/voice/stream    — что она услышала (Server-Sent Events)
   POST   /api/record          — запись руки (F9 в игре) → папка recordings/
 """
 
@@ -264,7 +266,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
-        if any(p in (self.path or "") for p in ("/api/perflog", "/api/pose/", "/api/alive", "/api/logs")):
+        if any(p in (self.path or "") for p in ("/api/perflog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
             return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
@@ -355,6 +357,48 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             POSE.clients -= 1
             POSE.last_client = time.time()
 
+    # ---------- the voice network outside the browser ----------
+    def _voice_status(self):
+        try:
+            from voice_native import VOICE
+        except Exception as e:  # noqa: BLE001
+            return self._json(200, {"available": False, "state": "unavailable", "error": str(e)})
+        return self._json(200, VOICE.status())
+
+    def _voice_stream(self):
+        """Server-Sent Events: every phrase heard (and the microphone's level) as one 'data:' line each."""
+        from voice_native import VOICE
+        if not VOICE.start():
+            return self._json(503, VOICE.status())
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        VOICE.clients += 1
+        seen = VOICE.seq
+        try:
+            while True:
+                with VOICE.cond:
+                    VOICE.cond.wait_for(lambda: VOICE.seq != seen or VOICE.state in ("error", "idle"), timeout=2)
+                    seq, state = VOICE.seq, VOICE.state
+                    new = list(VOICE.events)[-(seq - seen):] if seq - seen <= len(VOICE.events) else list(VOICE.events)
+                if state == "error":
+                    self.wfile.write(("event: fail\ndata: " + json.dumps({"error": VOICE.error}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                    self.wfile.flush()
+                    return
+                if seq != seen:
+                    seen = seq
+                    self.wfile.write("".join("data: " + e + "\n\n" for e in new).encode("utf-8"))
+                else:
+                    self.wfile.write(b": keep-alive\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            return
+        finally:
+            VOICE.clients -= 1
+            VOICE.last_client = time.time()
+
     def _alive(self):
         """The game page holds this open while its window lives (the app launcher
         quits when no window is left; here it only keeps the line open)."""
@@ -377,6 +421,10 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_status()
         if path == "/api/pose/stream":
             return self._pose_stream(urlparse(self.path).query)
+        if path == "/api/voice/status":
+            return self._voice_status()
+        if path == "/api/voice/stream":
+            return self._voice_stream()
         if path == "/api/pose/snap":
             return self._pose_snap()
         if path == "/api/version":
@@ -679,10 +727,79 @@ def ensure_pose_native():
         print("  Нейросеть камеры: не удалось установить MediaPipe (игра работает как раньше): " + " ".join(tail))
 
 
+VOICE_PACKAGES = ["numpy", "onnxruntime", "livekit", "PyAudioWPatch" if sys.platform.startswith("win") else "sounddevice"]
+
+
+def ensure_voice_native():
+    """The voice network as a program of its own (voice_native.py): its Python packages and the
+    network itself (GigaAM v3, ≈165 MB to download). Missing: get them once, in the background —
+    the game meanwhile uses the browser's recognizer; the voice switches over by itself when ready
+    (from the next game start)."""
+    try:
+        from voice_native import VOICE
+    except Exception as e:  # noqa: BLE001
+        print("  Нейросеть голоса: недоступна:", e)
+        return
+    if VOICE.available():
+        print("  Нейросеть голоса: готова (распознавание на компьютере, голос друга из колонок убирается)")
+        return
+    if os.environ.get("ZNS_NO_PIP"):
+        return
+    import subprocess
+    import importlib
+    import site
+    if not VOICE._deps():
+        VOICE.state = "installing"
+        VOICE.detail = "Нейросеть голоса: ставлю программы (один раз)…"
+        print("  Нейросеть голоса: ставлю программы для неё (один раз) — игра пока слушает через браузер.")
+        pkgs = list(VOICE_PACKAGES)
+        # (an old MediaPipe wants protobuf below 5, LiveKit 5 and up: then MediaPipe is brought up to
+        # date with it — its new versions want no particular protobuf — so the camera keeps working)
+        try:
+            from importlib import metadata
+            if any(r.replace(" ", "").startswith("protobuf") and "<5" in r.replace(" ", "") for r in (metadata.requires("mediapipe") or [])):
+                pkgs += ["-U", "mediapipe"]
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            r = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", "-q", *pkgs],
+                capture_output=True, text=True, timeout=1800,
+            )
+            ok = r.returncode == 0
+            tail = (r.stderr or r.stdout or "").strip().splitlines()[-1:] if not ok else []
+        except Exception as e:  # noqa: BLE001
+            ok, tail = False, [str(e)]
+        try:
+            site.addsitedir(site.getusersitepackages())
+        except Exception:  # noqa: BLE001
+            pass
+        importlib.invalidate_caches()
+        if not ok or not VOICE._deps():
+            VOICE.state = "unavailable"
+            VOICE.error = "не удалось поставить программы: " + " ".join(tail)
+            print("  Нейросеть голоса: не удалось поставить программы (игра слушает через браузер):", " ".join(tail))
+            return
+    try:
+        print("  Нейросеть голоса: скачиваю (≈165 МБ, один раз)…")
+        VOICE.download_models()
+    except Exception as e:  # noqa: BLE001
+        VOICE.state = "unavailable"
+        VOICE.error = f"не удалось скачать нейросеть: {e}"
+        print("  Нейросеть голоса: не удалось скачать (игра слушает через браузер):", e)
+        return
+    VOICE.state = "idle"
+    VOICE.detail = ""
+    VOICE._ready = None
+    if VOICE.available():
+        print("  Нейросеть голоса: готова. Со следующего входа в игру голос слышит она.")
+
+
 def main():
     no_browser = "--no-browser" in sys.argv or os.environ.get("ZNS_NO_BROWSER")
     start_server_log()
     threading.Thread(target=ensure_pose_native, daemon=True).start()
+    threading.Thread(target=ensure_voice_native, daemon=True).start()
     update_desktop_launcher()
     adopt_app_launcher()
     httpd, port = open_server()

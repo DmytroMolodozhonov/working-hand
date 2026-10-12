@@ -1,7 +1,15 @@
 /**
- * VoiceService.js — Russian speech recognition (Web Speech API) for spells.
- * Same behaviour as the original: interim results, auto-restart while wanted.
+ * VoiceService.js — the voice: what the player says (spells, talk to villagers).
+ *
+ * Two ways to hear, one result: onResult(text, isFinal, meta).
+ *   - «native» (the default where it is installed): voice_native.py — the speech network on this
+ *     computer (GigaAM v3), the speakers' sound taken out of the microphone (a friend over Discord
+ *     never casts here), the spell found by its sound (SpellSpotter.js). NativeVoice.js.
+ *   - «browser»: the browser's recognizer (Web Speech, Google's, ru-RU) as before: while the native
+ *     voice is being installed / downloaded, if it fails, or when chosen in the settings.
  */
+
+import { NativeVoice } from './NativeVoice.js';
 
 export class VoiceService {
     constructor() {
@@ -9,7 +17,23 @@ export class VoiceService {
         this.isListening = false;
         this.shouldListen = false;
         this.onResult = null;
+        this.onEcho = null; // (spell words, meta) a spell heard only from the speakers (native)
         this.supported = false;
+        this.engine = 'browser'; // 'native' | 'browser' — which one hears now
+        this.prefer = 'auto';    // 'auto' (native where it is installed) | 'browser'
+        this._levels = [];
+        this.noiseFloor = -60;
+        this.ownLevel = null;
+        this.native = new NativeVoice();
+        this.native.onResult = (text, isFinal, meta) => this.onResult?.(text, isFinal, false, meta);
+        this.native.onEcho = (words, meta) => this.onEcho?.(words, meta);
+        this.native.onLevel = (d) => this._nativeLevel(d);
+        this.native.onFail = () => {
+            if (this.engine !== 'native') return;
+            console.warn('[Voice] the native voice stopped — the browser\'s recognizer takes over');
+            this.engine = 'browser';
+            if (this.shouldListen) this._startBrowser();
+        };
         const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
         if (!SR) {
             console.warn('Web Speech API not supported in this browser.');
@@ -24,6 +48,7 @@ export class VoiceService {
         this.recognition.maxAlternatives = 1;
 
         this.recognition.onresult = (event) => {
+            if (this.engine !== 'browser') return;
             const res = event.results[event.resultIndex] || event.results[0];
             const transcript = res[0].transcript.toLowerCase().trim();
             if (this.onResult) this.onResult(transcript, !!res.isFinal);
@@ -34,9 +59,9 @@ export class VoiceService {
         };
         this.recognition.onend = () => {
             this.isListening = false;
-            if (!this.shouldListen) return;
+            if (!this.shouldListen || this.engine !== 'browser') return;
             setTimeout(() => {
-                if (!this.shouldListen || this.isListening) return;
+                if (!this.shouldListen || this.isListening || this.engine !== 'browser') return;
                 try { this.recognition.start(); this.isListening = true; } catch (e) { /* already started */ }
             }, 100);
         };
@@ -46,6 +71,18 @@ export class VoiceService {
     // In multiplayer a friend's voice (same room, or from the speakers) reaches
     // this microphone too. Your own voice is much louder in your own microphone,
     // so the level while a spell was said tells whose voice it was.
+
+    /** The native voice's levels (10 ms each, the echo already out) → the same list as the browser's meter. */
+    _nativeLevel(d) {
+        const now = performance.now();
+        const n = d.db?.length || 0;
+        for (let j = 0; j < n; j++) {
+            const db = d.db[j];
+            this._levels.push([now - 70 - (n - 1 - j) * 10, db]);
+            this.noiseFloor += (db - this.noiseFloor) * (db < this.noiseFloor ? 0.3 : 0.004);
+        }
+        while (this._levels.length && now - this._levels[0][0] > 4000) this._levels.shift();
+    }
 
     /** Starts measuring the microphone level (a separate light stream). */
     async startLevelMeter() {
@@ -63,6 +100,7 @@ export class VoiceService {
             this.noiseFloor = -60;
             this.ownLevel = null; // learned loudness of the player's own spells
             const tick = () => {
+                if (this.engine !== 'browser') return; // (the native voice gives the levels)
                 if (ctx.state === 'suspended') ctx.resume().catch(() => {});
                 an.getFloatTimeDomainData(buf);
                 let sum = 0;
@@ -83,7 +121,7 @@ export class VoiceService {
 
     /** Loudest moment of the last `ms` milliseconds (dB), or null without a meter. */
     recentPeak(ms = 2500) {
-        if (!this._meter || !this._levels?.length) return null;
+        if (!this._levels?.length || (!this._meter && this.engine !== 'native')) return null;
         const t = performance.now() - ms;
         let peak = -Infinity;
         for (const [time, db] of this._levels) if (time >= t && db > peak) peak = db;
@@ -109,6 +147,9 @@ export class VoiceService {
         this.ownLevel = this.ownLevel === null ? peak : this.ownLevel * 0.8 + peak * 0.2;
     }
 
+    /** The speakers' sound is taken out of the microphone now (native, with the speakers' copy). */
+    get aec() { return this.engine === 'native' && !!this.native.status?.aec; }
+
     /** Listen in another language ('en-US' / 'ru-RU'): the recognizer starts again with it. */
     setLang(lang) {
         if (!this.recognition || lang === this.lang) return;
@@ -118,9 +159,36 @@ export class VoiceService {
         if (this.isListening) { try { this.recognition.abort(); } catch (e) { /* ignore */ } }
     }
 
+    /** 'auto' | 'browser' (the settings) — takes effect at once while listening. */
+    setPreference(p) {
+        const want = p === 'browser' ? 'browser' : 'auto';
+        if (want === this.prefer) return;
+        this.prefer = want;
+        if (this.shouldListen) { this.stop(); this.start(); }
+    }
+
     start() {
-        this.startLevelMeter();
         this.shouldListen = true;
+        if (this._starting) return;
+        if (this.prefer === 'browser') { this._startBrowser(); return; }
+        this._starting = true;
+        this.native.check().then((st) => {
+            this._starting = false;
+            if (!this.shouldListen) return;
+            if (st?.available) {
+                this.engine = 'native';
+                this._stopBrowser();
+                this.native.start();
+            } else {
+                this._startBrowser();
+            }
+        });
+    }
+
+    _startBrowser() {
+        this.engine = 'browser';
+        this.native.stop();
+        this.startLevelMeter();
         if (!this.recognition || this.isListening) return;
         try {
             this.recognition.start();
@@ -128,11 +196,16 @@ export class VoiceService {
         } catch (e) { /* already started */ }
     }
 
-    stop() {
-        this.shouldListen = false;
+    _stopBrowser() {
         if (this.recognition && this.isListening) {
             try { this.recognition.stop(); } catch (e) { /* ignore */ }
             this.isListening = false;
         }
+    }
+
+    stop() {
+        this.shouldListen = false;
+        this.native.stop();
+        this._stopBrowser();
     }
 }

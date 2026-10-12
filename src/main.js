@@ -430,7 +430,7 @@ function earlyTalk(command) {
     }, TALK_STILL);
 }
 
-voice.onResult = (command, isFinal = true, held = false) => {
+voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (!command) return;
     // (the words go on / are final: the early answer waits for them, or is already given)
     if (talkWait) { clearTimeout(talkWait); talkWait = null; }
@@ -464,8 +464,26 @@ voice.onResult = (command, isFinal = true, held = false) => {
         if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
             return;
         }
-        // Multiplayer: a friend's voice heard by this microphone must not cast here
+        // The native voice with the speakers' sound taken out of the microphone (voice_native.py): a
+        // friend's voice from Discord / the speakers never got here at all, and a spell heard in the
+        // speakers' sound too was already let go (voice.onEcho). Nothing more to check — the lips, the
+        // loudness and the network's echo only ever guessed that, and sometimes ate my own spells.
+        if (meta?.native && meta.aec) {
+            const said = matchSpell(command);
+            const name = game.castLocalSpell(command, isFinal);
+            if (name) {
+                if (game.remotes?.size > 0) game.sync?.say?.(said);
+                voice.learnOwnVoice();
+                hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span>`);
+                if (voiceTestText && isMenuVoiceActive) voiceTestText.innerHTML = `✨ ${name.toUpperCase()} ✨`;
+            } else if (isFinal && (!said || said === 'Stand')) {
+                if (sailorFirst) game.ships.crew.hear(command) || game.castleLife?.talk?.hear(command);
+                else game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command);
+            }
+            return;
+        }
         const margin = parseInt($('voice-filter')?.value ?? '9', 10);
+        // Multiplayer: a friend's voice heard by this microphone must not cast here
         if (margin > 0 && game.remotes?.size > 0 && matchSpell(command) && !voice.isOwnVoice(margin)) {
             hud.setVoice(`🔇 Тихо — похоже, это голос другого игрока: «${escapeHtml(lastWords(command))}»`);
             return;
@@ -503,6 +521,31 @@ voice.onResult = (command, isFinal = true, held = false) => {
         }
     }
 };
+
+// The native voice heard a spell only as the speakers' echo (a friend over Discord, the game itself)
+voice.onEcho = (words) => {
+    if (!game?.active) return;
+    hud.setVoice(`🔇 «${escapeHtml(words)}» — это голос из колонок (друг в Discord или сама игра), а не ваш`);
+    netLog(`заклинание «${words}» не моё: оно звучало из колонок`);
+};
+
+// «Распознавание голоса»: the speech network on this computer (where it is installed) or the browser's
+$('voice-engine')?.addEventListener('change', (e) => voice.setPreference(e.target.value));
+async function showVoiceEngine() {
+    const el = $('voice-engine-status');
+    if (!el) return;
+    const st = await voice.native.check();
+    let t;
+    if (!st) t = 'Нейросеть на компьютере не отвечает — работает распознавание браузера.';
+    else if (st.state === 'installing') t = '⏳ Нейросеть голоса ставится (один раз). Пока работает распознавание браузера.';
+    else if (st.state === 'downloading') t = `⏳ ${st.detail || 'Нейросеть голоса скачивается'} (${Math.round((st.progress || 0) * 100)}%). Пока работает распознавание браузера.`;
+    else if (!st.available) t = `Нейросеть на компьютере недоступна${st.error ? ` (${escapeHtml(st.error)})` : ''} — работает распознавание браузера.`;
+    else if (voice.engine === 'native' && st.state === 'running') t = `✅ Работает нейросеть на компьютере. Микрофон: ${escapeHtml(st.mic || '—')}. ${st.aec ? 'Звук колонок (Discord, игра) убирается из микрофона: голос друга не колдует у вас.' : 'Звук колонок недоступен — лучше играть в наушниках.'}`;
+    else t = '✅ Нейросеть на компьютере готова — включится, когда начнётся игра.';
+    if ($('voice-engine')?.value === 'browser') t = 'Выбрано распознавание браузера (Google). ' + (st?.available ? 'Нейросеть на компьютере готова, если захотите вернуться.' : '');
+    el.innerHTML = t;
+}
+setInterval(() => { if ($('voice-engine-status')?.offsetParent) showVoiceEngine(); }, 2000);
 
 // ------------------------------------------------------------------ hand recording (F9)
 let handRecorder = null;
@@ -1076,7 +1119,7 @@ function escapeHtml(s) {
 // Volumes, graphics, camera… are kept in this browser between launches.
 (function rememberSettings() {
     const KEY = 'zns-settings';
-    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
     let saved = {};

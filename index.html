@@ -397,6 +397,14 @@
                         <input type="range" id="talk-vol" min="0" max="100" value="40">
                     </div>
                     <div class="settings-group">
+                        <label>Распознавание голоса:</label>
+                        <select id="voice-engine">
+                            <option value="auto" selected>Нейросеть на компьютере (точнее; голос друга из колонок не колдует)</option>
+                            <option value="browser">Браузер (Google, как раньше)</option>
+                        </select>
+                        <div id="voice-engine-status" class="setting-hint"></div>
+                    </div>
+                    <div class="settings-group">
                         <label>Чужие голоса (мультиплеер):</label>
                         <select id="voice-filter">
                             <option value="9" selected>Не слушать (обычно)</option>
