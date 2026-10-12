@@ -48,7 +48,7 @@ export class WandBelt {
         this._open = { left: false, right: false }; // (the fingers opened at the handle before closing on it)
         this._at = 0;
         this._left = { left: true, right: true };
-        this._from = { left: { t: 0, dy: 0, u: 0 }, right: { t: 0, dy: 0, u: 0 } }; // (where the real hand was just before it came to the belt)
+        this._from = { left: [], right: [] }; // (where the real hand was just before it came to the belt)
         this._pushed = { left: false, right: false };
         this._in = { left: false, right: false };
         this._calm = { left: 0, right: 0 }; // (s the arm has been calm)
@@ -83,10 +83,15 @@ export class WandBelt {
             // a deliberate tuck: the hand was BROUGHT there — it came into the place from ≥ 0.15
             // of the torso away, within the last 3 s — a hand resting there or drifting in over
             // the edge never tucks it in
-            const from = this._from[side];
-            if (rb && !near) { from.dy = rb.dy; from.u = rb.u; from.t = now; }
+            const from = this._from[side]; // (the real wrist's places outside it lately)
+            if (rb && !near) { from.push({ dy: rb.dy, u: rb.u, t: now }); if (from.length > 60) from.shift(); }
             if (!rb?.near) this._pushed[side] = false;
-            else if (!this._pushed[side] && near && from.t && now - from.t < 3000 && Math.hypot(from.dy - rb.dy, from.u - rb.u) > 0.15) this._pushed[side] = true;
+            else if (!this._pushed[side] && near) {
+                // (the camera's points glide in over a few pictures: the farthest of the last ones counts)
+                const recent = from.filter((e, i) => now - e.t < 3000 || i >= from.length - 8);
+                if (recent.some((e) => Math.hypot(e.dy - rb.dy, e.u - rb.u) > 0.15)) this._pushed[side] = true;
+            }
+            if (this._pushed[side] && near) from.length = 0;
             // (after taking it or tucking it in, the hand must leave the belt first: a wand just
             // taken, still at the waistband pointing down, went straight back)
             if (!near) this._left[side] = true;
@@ -97,7 +102,7 @@ export class WandBelt {
                 const down = h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.2 : false; // (pointing down at all)
                 // ...and the arm otherwise still: a wind-up or a flick (throwing Lumos, a spell)
                 // passing the hip never tucks it in — the hand and the real wrist must be calm
-                const fast = (ch.handVelocity?.[side]?.length() || 0) > 2.0 || this._wristSpeed(side, rb, now) > 0.8;
+                const fast = (ch.handVelocity?.[side]?.length() || 0) > 3.0 || this._wristSpeed(side, rb, now) > 1.6; // (a swing moves a torso in ~0.2 s: 5 a second; the camera's jitter well under 1)
                 this._calm[side] = fast ? 0 : this._calm[side] + dt;
                 this._tuck[side] = near && down && this._pushed[side] && this._calm[side] > CALM_S ? this._tuck[side] + dt : 0;
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
