@@ -31,6 +31,7 @@ const KINDS = {
     'the giant spider': /spiders/,
     'living trees': /livingTrees/,
     'book-birds': /books/,
+    dragons: /dragons/,
 };
 
 const check = (where, text, kinds) => {
@@ -42,15 +43,18 @@ const ALL = Object.keys(KINDS);
 test('duel charges («Авада Кедавра», «Остолбеней», «Сапира»…) can touch every creature', () => {
     const d = src('src/game/Duel.js');
     check('Duel._bodies (what a charge can hit)', body(d, '    _bodies(skip = null) {'), ALL);
-    check('Duel._creature (a hit creature found again)', body(d, '    _creature(kind, id) {'), ALL.filter((k) => !/zombies|spider/.test(k)));
+    check('Duel._creature (a hit creature found again)', body(d, '    _creature(kind, id) {'), ALL.filter((k) => !/zombies|spider|dragons/.test(k)));
+    // (a dragon is found again as its own kind 'D', like the spider 's')
+    assert.match(body(d, '    _bodyOf(kind, id, e) {'), /dragons\?\.byId/);
 });
 
 test('blasts, rays and lightning reach every creature', () => {
     const g = src('src/game/Game.js');
     const blast = g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode(')));
-    check('Game.explode (Bombardo and other blasts)', blast, ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds']);
-    check('the «birdRay» hook (Sapira, Thunderwave, Ice… rays)', body(g, 'birdRay: (o, d, len, width, name) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds']);
-    check('the «lightningAt» hook', body(g, 'lightningAt: (point, casterId) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds']);
+    check('Game.explode (Bombardo and other blasts)', blast, ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons']);
+    check('the «birdRay» hook (Sapira, Thunderwave, Ice… rays)', body(g, 'birdRay: (o, d, len, width, name) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons']);
+    check('the «lightningAt» hook', body(g, 'lightningAt: (point, casterId) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons']);
+    check('the «Инферно» stream (Game._burnRay)', body(g, '    _burnRay(o, d, len, casterId) {'), ['the giant spider', 'dragons']);
 });
 
 test('pushes, knockdowns and gusts («Вайнд», blasts, blows) know every creature (CreatureImpact kinds)', async () => {
@@ -59,12 +63,15 @@ test('pushes, knockdowns and gusts («Вайнд», blasts, blows) know every cr
     const { KINDS: K } = await import('../../src/game/CreatureImpact.js');
     const names = Object.values(K).map((k) => k.name);
     for (const n of ['zombie', 'villager', 'animal', 'tree', 'sailor']) assert.ok(names.includes(n), `CreatureImpact has no «${n}» kind (spells would not push it)`);
+    // dragons are not a CreatureImpact kind (never knocked down): spellArea sways them itself
+    const ci = src('src/game/CreatureImpact.js');
+    assert.match(ci.slice(ci.indexOf('    spellArea('), ci.indexOf('    spellHit(')), /dragons\?\.push/);
 });
 
 test('a house\'s sphere of protection («Protection House») keeps every creature out and stops spells everywhere they look for targets', () => {
     const w = src('src/game/HouseWards.js');
     // creatures: every CreatureImpact kind (zombies, villagers, animals, living trees, sailors…) and the spider
-    check('HouseWards._creatures (who is pushed back out)', body(w, '    _creatures(dt) {'), ['the giant spider']);
+    check('HouseWards._creatures (who is pushed back out)', body(w, '    _creatures(dt) {'), ['the giant spider', 'dragons']);
     assert.match(body(w, '    _creatures(dt) {'), /Object\.keys\(KINDS\)/, 'every CreatureImpact kind is pushed out');
     // the places spells look for their targets know the sphere
     const g = src('src/game/Game.js');
@@ -93,15 +100,33 @@ test('«Раскрой свои секреты» and «Акцио» see the runn
 test('«Алохомора» decides every creature and every lock (Alohomora.js TARGETS — «не действует» is written too, with why)', async () => {
     const { TARGETS } = await import('../../src/game/Alohomora.js');
     // (the creatures of KINDS, as TARGETS names them; and the players themselves)
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon' };
     for (const k of ALL) assert.ok(TARGETS[names[k]]?.why, `Alohomora forgets: ${k}`);
     for (const k of ['players', 'settlementChest', 'caveChest', 'shipChest', 'villagerDoor', 'throneGate', 'playerDoor', 'world']) assert.ok(TARGETS[k]?.why, k);
 });
 
 test('«Джолт» decides every creature and thing (Duel.JOLT_TARGETS — «не действует» is written too, with why)', async () => {
     const { JOLT_TARGETS } = await import('../../src/game/Duel.js');
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon' };
     for (const k of ALL) assert.ok(JOLT_TARGETS[names[k]], `«Джолт» forgets: ${k}`);
     for (const k of ['me', 'players', 'servants', 'looseThings', 'heldThings', 'world']) assert.ok(JOLT_TARGETS[k], k);
     assert.match(src('src/game/Spider.js'), /spell === 'Jolt'/, 'the spider answers «Джолт» itself');
+    assert.match(src('src/game/Dragons.js'), /spell === 'Jolt'/, 'a dragon answers «Джолт» itself');
+});
+
+test('dragons: every other place spells and blows look for targets knows them (CLAUDE.md «на кого и на что»)', () => {
+    const has = (f, re, why) => assert.match(src(f), re, `${f}: ${why}`);
+    has('src/game/Gear.js', /dragons\?\.targets\(\)/, 'arrows hit a dragon');
+    has('src/game/Game.js', /z\.isDragon\) \{ this\.dragons\.hit/, 'swords, axes, fists hit a dragon');
+    has('src/game/Game.js', /this\.dragons\.targets\(\)/, 'blades look for dragons');
+    has('src/game/Game.js', /best\?\.k === 'D'/, '«Брейнрот» refuses a dragon');
+    has('src/game/Levitation.js', /kind: 'dragon'/, '«Левиоса» can\'t lift a dragon');
+    has('src/game/WaterVortex.js', /b\.kind === 'D'\) \{ this\._endFlight/, 'the vortex\'s water only splashes on a dragon');
+    has('src/game/WaterVortex.js', /b\.kind === 'D'\) \{ g\.dragons/, '«Fire Maxima» — fire: nothing');
+    has('src/game/Hellfire.js', /b\.kind === 'D'/, 'the Hellfire — fire: nothing');
+    has('src/game/Servants.js', /dragons/, 'servants fight dragons');
+    has('src/game/TotalDestruction.js', /dragons\?\.hitAt/, '«Total Destruction»');
+    has('src/game/Cauldrons.js', /dragons\?\.hitAt/, 'a cauldron\'s blast');
+    has('src/game/WaveAttack.js', /dragons\?\.list/, 'a wave splashes on it');
+    has('src/game/Accio.js', /dragon/, '«Акцио» (written: no)');
 });

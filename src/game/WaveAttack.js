@@ -821,6 +821,11 @@ export class WaveAttacks {
             if (s.dead || w.hit.has(s) || !s.group) continue;
             if (waveTouch(w, s.group.position)) { w.hit.add(s); this._splash(s.group.position, w); }
         }
+        // (a dragon: far too heavy for a wave — it only splashes on it: DragonKinds.ON_DRAGON.WaveAttack)
+        for (const dr of g.dragons?.list || []) {
+            if (dr.dead || w.hit.has(dr) || !dr.group) continue;
+            if (waveTouch(w, dr.group.position)) { w.hit.add(dr); this._splash(dr.group.position, w); }
+        }
         // weapons and things lying there: dragged along (where they are simulated)
         for (const it of g.weapons?.weapons || []) {
             if (it.holder || it.remoteTarget || w.hit.has(it)) continue;

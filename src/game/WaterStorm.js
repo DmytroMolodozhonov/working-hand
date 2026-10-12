@@ -438,7 +438,7 @@ export class WaterStorm {
         if (ring) for (let i = 0; i < 6; i++) { const a = f.ang + i * (TAU / 6); douse(_a.set(body.x + Math.cos(a) * f.rr, body.y - 1, body.z + Math.sin(a) * f.rr), STORM.RING_W); }
         // creatures
         for (const b of g.duel?._bodies?.(null) || []) {
-            if (b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 's') continue;
+            if (b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 's' || b.kind === 'D') continue; // (a dragon: far too heavy to be carried)
             const mid = _c.copy(b.a).add(b.b).multiplyScalar(0.5);
             let dir = null;
             if (mass && (segDist(f.c, b.a, b.b) < f.R * 0.95 + b.r || inBlaze(f.c, f.R, mid, b.r))) {
@@ -534,7 +534,7 @@ export class WaterStorm {
             g.fire?.douse?.(fl.c, r);
             const knock = (pos) => Math.abs(Math.hypot(pos.x - fl.c.x, pos.z - fl.c.z) - r) < 1.4 && pos.y < fl.c.y + 3.5;
             if (g.authority) for (const b of g.duel?._bodies?.(null) || []) {
-                if (b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 's' || fl.hit.has(b.kind + b.id)) continue;
+                if (b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 's' || b.kind === 'D' || fl.hit.has(b.kind + b.id)) continue;
                 if (!knock(b.a)) continue;
                 fl.hit.add(b.kind + b.id);
                 const dir = new THREE.Vector3(b.a.x - fl.c.x, 0, b.a.z - fl.c.z);

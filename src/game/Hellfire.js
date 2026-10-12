@@ -524,7 +524,8 @@ export class Hellfire {
         // — the brave back off behind their shields step by step, the rest run; its surge throws them back
         const bodies = g.duel?._bodies?.(null) || [];
         const auth = !!g.authority;
-        const D = HELLFIRE.CREATURE_DMG;
+        const K = g.fireBoost?.(by) ?? 1; // (the dragon's wand in the caster's hand: 60% hotter)
+        const D = HELLFIRE.CREATURE_DMG * K;
         const W = f.rw || HELLFIRE.RING_W;
         const heatR = HELLFIRE.HEAT_R + f.R * HELLFIRE.HEAT_PER_R;
         const fear = heatR + HELLFIRE.FEAR_R;
@@ -556,8 +557,8 @@ export class Hellfire {
             if (dir.lengthSq() < 1e-4) dir.set(1, 0, 0);
             dir.normalize();
             // the burn: in the fire, or the heat by how close (0 beyond the heat's reach: only the fear)
-            const dmg = inside ? D : heat > 0 ? HELLFIRE.HEAT_DMG * heat : 0;
-            const cr = b.kind === 'z' || b.kind === 's' ? null : g.duel?._creature?.(b.kind, b.id);
+            const dmg = inside ? D : heat > 0 ? HELLFIRE.HEAT_DMG * heat * K : 0;
+            const cr = b.kind === 'z' || b.kind === 's' || b.kind === 'D' ? null : g.duel?._creature?.(b.kind, b.id);
             if (dmg > 0) {
                 if (b.kind === 'z') {
                     const z = g.zombieById?.get(b.id);
@@ -565,6 +566,8 @@ export class Hellfire {
                 } else if (b.kind === 's') {
                     const sp = g.spiders?.byId?.(b.id);
                     if (sp) g.spiders.hit(sp, dmg * 2, HELLFIRE.NAME, by);
+                } else if (b.kind === 'D') {
+                    g.dragons?.hit?.(g.dragons.byId(b.id), dmg, HELLFIRE.NAME, by); // (even the hellfire: a dragon does not care — DragonKinds.FIRE_KINDS)
                 } else if (cr) {
                     if (b.kind === 'a') { cr.damageCooldown = 0; g.animals?.hit?.(cr, dmg, dir, by, true); }
                     else if (b.kind === 'v') g.castleLife?.hit?.(cr, dmg, dir, by, { spell: true, magic: true, fire: true });
@@ -612,7 +615,7 @@ export class Hellfire {
         for (const s of g._flameWaters?.() || []) if (Math.hypot(me.x - s.x, me.y - s.y, me.z - s.z) < s.r) return;
         f.meT = near ? HELLFIRE.PLAYER_TICK * 2 : HELLFIRE.PLAYER_TICK;
         const from = blaze || near ? f.c : body;
-        let dmg = near ? HELLFIRE.PLAYER_HEAT_DMG : HELLFIRE.PLAYER_DMG;
+        let dmg = (near ? HELLFIRE.PLAYER_HEAT_DMG : HELLFIRE.PLAYER_DMG) * (g.fireBoost?.(f === this.state ? this.me : f.by) ?? 1); // (the dragon's wand: 60% hotter)
         if ((c.shield && c.shield.left > 0) || c.shieldFactor?.(from) >= 1) dmg *= HELLFIRE.SHIELD; // (fire goes round a shield)
         if (c.frozen) c.frozenLeft = 0; // (the ice on me melts)
         const by = f === this.state || f.by === this.me ? null : f.by;

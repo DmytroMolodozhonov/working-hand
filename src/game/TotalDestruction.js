@@ -301,6 +301,7 @@ export class TotalDestruction {
         const at = new THREE.Vector3(p.x, p.y, p.z);
         g.animals?.hitAt(at, R, 6 * P, by);
         g.spiders?.hitAt(at, R, 12 * P, d.name, by);
+        g.dragons?.hitAt(at, R, 12 * P, 'TotalDestruction', by);
         g.castleLife?.hitAt(at, R, 8 * P, by);
         g.ships?.blast?.(at, R, P, by);
         g.ships?.crew?.hitAt(at, R, 8 * P, by);

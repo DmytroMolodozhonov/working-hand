@@ -50,6 +50,7 @@ export class Accio {
         const g = this.game;
         const ch = g.character;
         let best = null;
+        // (a dragon is no thing: «Акцио» does not act on it — DragonKinds.ON_DRAGON.Accio; its egg is a thing: it flies)
         // the thing comes into a free hand: the pointing one, or the other (a wand in the
         // pointing hand: the other hand catches — before, things lying about were not even looked at)
         const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.boards?.handBusy(sd);

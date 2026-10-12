@@ -25,6 +25,7 @@
 
 import * as THREE from 'three';
 import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
+import { FIRE_SPELLS, DRAGON_WAND_FIRE } from './DragonKinds.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -104,6 +105,8 @@ export function wandPower(wand, spell) {
     if (wand.dir && (WAND_DIRS[wand.dir]?.spells.includes(spell) || WAND_DIRS[wand.dir]?.spells.includes(b))) m *= 1.25;
     if (wand.fav && (wand.fav === b || wand.fav === spell)) m *= 1.4;
     m *= 1 + (wand.power || 0) / 100;
+    // the dragon's wand: every fire spell 60% stronger (DragonKinds.FIRE_SPELLS; its mana the same)
+    if (wand.dragon && (FIRE_SPELLS.has(spell) || FIRE_SPELLS.has(b))) m *= DRAGON_WAND_FIRE;
     return m;
 }
 

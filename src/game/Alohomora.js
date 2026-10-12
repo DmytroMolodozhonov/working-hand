@@ -55,6 +55,7 @@ export const TARGETS = {
     animals: { plain: 'none', maxima: 'none', why: 'животные — не действует' },
     sailors: { plain: 'none', maxima: 'none', why: 'моряки (ships.crew) — не действует' },
     spider: { plain: 'none', maxima: 'none', why: 'гигантский паук — не действует' },
+    dragon: { plain: 'none', maxima: 'none', why: 'дракон — отпирать нечего, не действует' },
     livingTrees: { plain: 'none', maxima: 'none', why: 'ожившие деревья — не действует' },
     bookBirds: { plain: 'none', maxima: 'none', why: 'книги-птицы — не действует (книга не заперта)' },
     // ---- the world

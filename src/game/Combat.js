@@ -466,7 +466,8 @@ export class Combat {
             if (this.infernoCooldown > 0) return true;
             this.infernoCooldown = PVP.INFERNO_TICK;
         }
-        this.damage(PLAYER_DAMAGE[kind] ?? 2, byId, kind);
+        // (fire from a wizard holding the dragon's wand burns 60% harder: Game.fireBoost)
+        this.damage((PLAYER_DAMAGE[kind] ?? 2) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind);
         // its physical effect: a push, a stagger, off the feet (BodyImpact; SPELL_PHYSICS when no push is given)
         if (this.game.impact) this.game.impact.spellHit(kind, from, byId, push);
         else if (push) this.game.knockback.add(push);

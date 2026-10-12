@@ -42,6 +42,7 @@ import { PVP, PLAYER_DAMAGE } from './Combat.js';
 import { SLOW } from './Slow.js';
 import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
+import { dragonBody, dragonCenter } from './Dragons.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { IceLook, ICE } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
@@ -97,6 +98,7 @@ export const JOLT_TARGETS = {
     sailors: 'on a ship: shoved across the deck in the ship\'s frame — a hard one goes over the side (Sailors.shove)',
     spider: 'too big and too many legs: it only reels back a little and is dazed for a moment (no damage)',
     livingTrees: 'rooted: it only reels (never falls — its own fall is its death); no damage',
+    dragon: 'a great heavy body: it only sways a little, the jolt wakes and angers it (no damage) — Dragons.boltHit',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
     looseThings: 'shoved along the charge as it passes (where their physics runs)',
@@ -390,6 +392,8 @@ export class Duel {
         for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall') this._roundBody('b', bd, put('b', bd.id));
         // the giant spider: its whole (big) body, nose to tail
         for (const sp of g.spiders?.targets() || []) spiderBody(sp, put('s', sp.id));
+        // dragons: their great bodies (DragonKinds.ON_DRAGON: «Авада» only wounds them…)
+        for (const dr of g.dragons?.targets() || []) dragonBody(dr, put('D', dr.id));
         return out;
     }
 
@@ -407,6 +411,7 @@ export class Duel {
             return z && !z.isDead ? this._zombieBody(z, e) : null;
         }
         if (kind === 's') { const sp = g.spiders?.byId(id); return sp ? spiderBody(sp, e) : null; }
+        if (kind === 'D') { const dr = g.dragons?.byId(id); return dr ? dragonBody(dr, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
         return kind === 'v' || kind === 'c' ? this._villagerBody(c, e) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
@@ -507,6 +512,7 @@ export class Duel {
         const g = this.game;
         if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
+        if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
             const r = g.remotes.get(b.tid);
@@ -656,6 +662,7 @@ export class Duel {
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
         if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
         if (isJolt(b.spell)) this._joltThings(b, from);
+        if (g.authority && g.dragons?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
         // it hits the first body it really touches on its way (along the whole step: at a
         // low FPS a charge moves a metre and more per frame) — its target or anybody else
         const hit = firstTouched(from, b.front, this._bodies(b.by));
@@ -680,6 +687,7 @@ export class Duel {
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c') && this._referee()) { this._arriveAtCreature(b); return; }
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by); return; }
+        if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
         if (b.waitT > 2) this._end(b, 'fizzle', false);

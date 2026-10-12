@@ -235,6 +235,7 @@ export class WorldKeeper {
             castles: g.castleLife?.snapshot() || {},
             bodies: g.death?.snapshot() || [],
             crystals: g.crystals?.snapshot() || [],
+            dragons: g.dragons?.snapshot() || {}, // dragons' lairs: the gold left, their dragons' health (Dragons.js)
             ships: g.ships?.snapshot() || [], // ships that moved, burnt, sank, were captured…
             guns: g.ships?.cannons.snapshot() || [],
             players: this.players,
@@ -285,6 +286,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.castles) g.castleLife?.restore(save.castles);
     if (save.bodies) g.death?.restore(save.bodies);
     if (save.crystals) g.crystals?.restore(save.crystals);
+    if (save.dragons) g.dragons?.restore(save.dragons);
     if (save.ships) g.ships?.restore(save.ships);
     if (save.guns) g.ships?.cannons.restore(save.guns);
     if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);

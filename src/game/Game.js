@@ -61,6 +61,8 @@ import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
+import { Dragons } from './Dragons.js';
+import { DRAGON_WAND_FIRE } from './DragonKinds.js';
 import { LivingTrees } from './LivingTrees.js';
 import { Servants } from './Servants.js';
 import { Duel } from './Duel.js';
@@ -231,19 +233,21 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
+            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 len = this.wards?.clipRay(o, d, len) ?? len; // (a house's sphere stops it from outside)
                 this.books?.hitRay(o, d, len, width);
                 this.houses?.hitRay(o, d, len, width);
                 this.animals?.hitRay(o, d, len, width, 3, this.localId, name);
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
+                if (this.authority) { this.dragons?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); if (name === 'Thunderwave') this.dragons?.noise(o); } // (dragons: fire does nothing — DragonKinds.ON_DRAGON)
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
                 if (this.authority) this.ships?.crew.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId); // (the ships' crews)
             },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); if (this.authority) this.livingTrees?.burnAlong(o, d, len); },
             // «Инферно» (src/fx/InfernoStream.js): what its stream burns, what stops it, its mana
             burn: (o, d, len, casterId) => this._burnRay(o, d, len, casterId),
+            fireBoost: (casterId) => this.fireBoost(casterId), // (the dragon's wand: fire spells +60%)
             waters: () => this._flameWaters(),
             blockAt: (x, y, z) => this._flameBlock(x, y, z),
             // a house's sphere of protection (HouseWards.js): spells from outside stop at it
@@ -326,6 +330,7 @@ export class Game {
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
+        this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
         this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
         this.lightning = null; // my «Lightning Strike» in progress
@@ -547,6 +552,7 @@ export class Game {
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon, hard: !!hit?.hard }); return; }
         if (z.isSailor) { this.ships.crew.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon }); return; }
+        if (z.isDragon) { this.dragons.hit(z, dmg, isWeapon ? 'melee' : 'fist'); return; } // (its scales: a third of a blade's damage)
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         if (z.isLivingTree) { this.livingTrees.hit(z, dmg, 'melee'); return; } // (only fire hurts it)
         this.punchCount++;
@@ -631,7 +637,7 @@ export class Game {
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
-        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId); }
+        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId); }
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -1207,7 +1213,7 @@ export class Game {
      */
     /** The night boss (the lightning can be aimed at it too). */
     get bosses() {
-        return this.spiders ? this.spiders.list : [];
+        return (this.spiders ? this.spiders.list : []).concat(this.dragons ? this.dragons.list : []); // (and the dragons)
     }
 
     _castBreakthrough(name, isFinal) {
@@ -1393,6 +1399,9 @@ export class Game {
         for (const a of this.animals?.targets() || []) if (a.servantOf !== this.localId) consider('a', a.id, a.group.position, 1);
         for (const v of this.castleLife?.targets() || []) if (v.servantOf !== this.localId) consider('v', v.id, new THREE.Vector3(v.x, v.y, v.z), 2.4);
         for (const t of this.livingTrees?.targets() || []) if (t.master !== this.localId) consider('t', t.id, t.model.position, 5);
+        // a dragon: «Брейнрот» does not work on it (its mind is far too strong — DragonKinds.ON_DRAGON)
+        for (const d of this.dragons?.targets() || []) consider('D', d.id, d.model.position, 3 * d.size);
+        if (best?.k === 'D') { if (isFinal) this.hud.setVoice('🐉 Разум дракона слишком силён — «Брейнрот» на него не действует', true); return null; }
         if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на существо (зомби, животное, жителя, рыцаря, живое дерево — не дальше 30 м) и скажите «Брейнрот»', true); return null; }
         const tired = this.combat.check('Brainrot');
         if (tired) { this.hud.setVoice(tired, true); return null; }
@@ -1775,6 +1784,16 @@ export class Game {
         return 'Levitation';
     }
 
+    /**
+     * How much stronger a FIRE spell of `casterId` is (DragonKinds.FIRE_SPELLS): 1.6 with the dragon's
+     * wand in their hand, else 1 (the wand's +15% and the rest go through wandPower / _lastSpell).
+     * Its mana stays the same.
+     */
+    fireBoost(casterId) {
+        if (casterId == null || casterId === 'local' || casterId === this.localId) return this.items?.wand?.dragon ? DRAGON_WAND_FIRE : 1;
+        return this.remotes?.get(casterId)?.dragonWand ? DRAGON_WAND_FIRE : 1;
+    }
+
     /** Targets for spells cast by `casterId` (players hit each other only in the free world). */
     /** «Инферно»: the stream burns what it reaches. True if something burnt. */
     _burnRay(o, d, len, casterId) {
@@ -1785,6 +1804,7 @@ export class Game {
         this.houses?.hitRay(o, d, len, 0.6); // (glass breaks)
         if (this.authority) {
             if (this.spiders?.hitRay(o, d, len, 0.6, 2, 'Inferno')) hit = true;
+            this.dragons?.hitRay(o, d, len, 0.6, 2, 'Inferno', casterId); // (a dragon does not care about fire: no burn, nothing «worked»)
             if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId)) hit = true; // villagers, knights, wizards
             if (this.livingTrees?.burnAlong(o, d, len, casterId)) hit = true; // (fire is what kills a living tree)
         }
@@ -2250,6 +2270,7 @@ export class Game {
         this.beds.update(dt);
         this.houses.update(dt);
         this.spiders.update(dt);
+        this.dragons.update(dt);
         this.livingTrees.update(dt);
         this.servants.update(dt);
         this._updateCaves(dt);
@@ -2273,7 +2294,7 @@ export class Game {
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         this._updateZombies(dt);
         this.creatureImpact.update(dt); // (after every creature moved: their falls and staggers are drawn on top)
-        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.castleLife.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : []), dt);
+        this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.dragons.targets(), this.castleLife.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : []), dt);
         this.dismember.update(dt);
         mark('зомби');
 
@@ -2980,6 +3001,7 @@ export class Game {
         this.houses?.dispose();
         this.beds?.dispose();
         this.spiders?.dispose();
+        this.dragons?.dispose();
         this.livingTrees?.dispose();
         this.servants?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }

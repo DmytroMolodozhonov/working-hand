@@ -694,6 +694,8 @@ export class WaterVortex {
             const mine = b.kind === 'p' ? b.id === this.me : referee;
             if (!mine) continue;
             if (segDist(f.pos, b.a, b.b) > b.r + rf) continue;
+            // a dragon: the water can't hold such a great body — it only splashes on it (DragonKinds.ON_DRAGON.WaterVortex)
+            if (b.kind === 'D') { this._endFlight(f, 'wall'); return true; }
             if (b.kind === 'p') {
                 // my own computer knows my shield
                 const from = _a.copy(f.pos).addScaledVector(f.dir, -3);
@@ -1261,14 +1263,17 @@ export class WaterVortex {
             if (c.shieldFactor(e.o) >= 1) c._blocked(e.o, 'FireMaxima');
             else {
                 if (c.frozen) c.frozenLeft = 0; // (the ice on me melts too)
-                if (c.enabled) c.damage(FIRE_MAXIMA.PLAYER_DMG, e.by, 'Inferno');
-                else g.damageLocalPlayer?.(FIRE_MAXIMA.PLAYER_DMG);
+                const dmg = FIRE_MAXIMA.PLAYER_DMG * (g.fireBoost?.(e.by) ?? 1); // (the dragon's wand: 60% hotter)
+                if (c.enabled) c.damage(dmg, e.by, 'Inferno');
+                else g.damageLocalPlayer?.(dmg);
             }
         } else if (rescued.has(`p:${this.me}`) && c.frozen) c.frozenLeft = 0;
         // creatures (the host decides)
         if (g.authority) {
+            const CD = FIRE_MAXIMA.CREATURE_DMG * (g.fireBoost?.(e.by) ?? 1); // (the dragon's wand: 60% hotter)
             for (const b of g.duel?._bodies?.(e.by) || []) {
                 if (b.kind === 'p' || b.kind === 'b' || rescued.has(`${b.kind}:${b.id}`)) continue;
+                if (b.kind === 'D') { g.dragons?.hit?.(g.dragons.byId(b.id), CD, 'FireMaxima', e.by); continue; } // (fire: a dragon does not care)
                 const mid = _b.copy(b.a).add(b.b).multiplyScalar(0.5);
                 if (segDist(e.p, b.a, b.b) > R + b.r * 0.5 && mid.distanceTo(e.p) > R + b.r) continue;
                 const dir = _c.subVectors(mid, e.p).setY(0);
@@ -1276,14 +1281,14 @@ export class WaterVortex {
                 dir.normalize();
                 if (b.kind === 'z') {
                     const z = g.zombieById?.get(b.id);
-                    if (z && !z.isDead) { if (z.isFrozen) z.unfreeze?.(); g.damageZombie(z, FIRE_MAXIMA.CREATURE_DMG, false, dir.clone(), e.by); }
+                    if (z && !z.isDead) { if (z.isFrozen) z.unfreeze?.(); g.damageZombie(z, CD, false, dir.clone(), e.by); }
                 } else {
                     const cr = g.duel?._creature?.(b.kind, b.id);
                     if (!cr) continue;
-                    if (b.kind === 'a') g.animals?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, true);
-                    else if (b.kind === 'v') g.castleLife?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, { spell: true, magic: true });
-                    else if (b.kind === 'c') g.ships?.crew.hit(cr, FIRE_MAXIMA.CREATURE_DMG, dir.clone(), e.by, { spell: true, magic: true });
-                    else if (b.kind === 't') g.livingTrees?.hit?.(cr, FIRE_MAXIMA.CREATURE_DMG, 'FireMaxima'); // (a living tree: fire is the only thing that hurts it)
+                    if (b.kind === 'a') g.animals?.hit?.(cr, CD, dir.clone(), e.by, true);
+                    else if (b.kind === 'v') g.castleLife?.hit?.(cr, CD, dir.clone(), e.by, { spell: true, magic: true });
+                    else if (b.kind === 'c') g.ships?.crew.hit(cr, CD, dir.clone(), e.by, { spell: true, magic: true });
+                    else if (b.kind === 't') g.livingTrees?.hit?.(cr, CD, 'FireMaxima'); // (a living tree: fire is the only thing that hurts it)
                 }
             }
         }

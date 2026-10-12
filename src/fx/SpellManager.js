@@ -422,7 +422,7 @@ export class SpellManager {
                 // trees, dry blocks, animals, villagers, knights, spiders, living trees…
                 flame.burnT -= dt;
                 if (flame.burnT <= 0) {
-                    flame.burnT = INFERNO.BURN_TICK;
+                    flame.burnT = INFERNO.BURN_TICK / (this.hooks.fireBoost?.(casterId) || 1); // (the dragon's wand: it burns 60% more)
                     if (this.hooks.burn && this.hooks.burn(o, d, flame.len, casterId)) hit = true;
                     else if (!this.hooks.burn && this.hooks.ignite) this.hooks.ignite(o, d, flame.len);
                 }

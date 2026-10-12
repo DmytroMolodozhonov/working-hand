@@ -28,6 +28,7 @@ import { TowerIndex } from './WizardTowers.js';
 import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
+import { LAIR, lairOf } from './DragonLairs.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -427,6 +428,7 @@ export class TerrainData {
             this.heightAt = fn;
         } else this.heightAt = raw;
         this._caves = new Map();
+        this._lairs = new Map(); // (dragons' lairs high in the mountains: DragonLairs.js)
         this.chunks.clear();
         this._last = null;
         this.version++;
@@ -634,6 +636,37 @@ export class TerrainData {
         return null;
     }
 
+    /**
+     * Generation 4: the dragons' lair of a lair cell (or null) — a huge cave high in a big mountain,
+     * with a huge mouth in its side (DragonLairs.js).
+     */
+    lairOf(gx, gz) {
+        if (!this.deepCaves) return null;
+        const key = gx * 100003 + gz;
+        const m = this._lairs || (this._lairs = new Map());
+        if (m.has(key)) return m.get(key);
+        const H = this.heightAt;
+        const top = (x, z) => H(Math.round(x), Math.round(z));
+        const blocked = (x, z) => { const ix = Math.round(x), iz = Math.round(z); H(ix, iz); return !!(H.water || H.sea || this.sites?.landAt(ix, iz)); };
+        const s = lairOf(gx, gz, this.seed, top, blocked);
+        m.set(key, s);
+        return s;
+    }
+
+    /** The dragons' lairs whose hall or mouth is within `r` of a point (their systems; `.lair` is the lair). */
+    lairsNear(x, z, r) {
+        const out = [];
+        if (!this.deepCaves) return out;
+        const C = LAIR.CELL;
+        for (let gz = Math.floor((z - r) / C); gz <= Math.floor((z + r) / C); gz++) {
+            for (let gx = Math.floor((x - r) / C); gx <= Math.floor((x + r) / C); gx++) {
+                const s = this.lairOf(gx, gz);
+                if (s && Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1)) <= r) out.push(s);
+            }
+        }
+        return out;
+    }
+
     /** Caves whose chamber (generation 4: any part of the system) is within `r` of a point. */
     cavesNear(x, z, r) {
         const out = [];
@@ -665,6 +698,10 @@ export class TerrainData {
                 const s = this.caveOf(gx, gz);
                 if (s && s.x1 >= x0 - 1 && s.x0 <= x0 + CHUNK && s.z1 >= z0 - 1 && s.z0 <= z0 + CHUNK) sys.push(systemIn(s, x0, z0, x0 + CHUNK - 1, z0 + CHUNK - 1));
             }
+        }
+        // (the dragons' lairs reaching into it: a great hall and its huge mouth)
+        for (const s of this.lairsNear(x0 + CHUNK / 2, z0 + CHUNK / 2, CHUNK)) {
+            if (s.x1 >= x0 - 1 && s.x0 <= x0 + CHUNK && s.z1 >= z0 - 1 && s.z0 <= z0 + CHUNK) sys.push(systemIn(s, x0, z0, x0 + CHUNK - 1, z0 + CHUNK - 1));
         }
         if (!sys.length) return;
         const H = this.heightAt;

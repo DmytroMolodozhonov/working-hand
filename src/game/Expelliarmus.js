@@ -16,7 +16,7 @@
  *     he fights with his fists (half the damage) and drops no sword when he falls.
  *   - zombies, animals, sailors, villagers with tools: nothing to disarm — a small push.
  *   - a book-bird: knocked out of the air like by any charge (it falls as a book).
- *   - a living tree, the giant spider: no effect (nothing in their «hands» to knock out).
+ *   - a living tree, the giant spider, a dragon: no effect (nothing in their «hands» to knock out).
  * The host owns loose things and the castle people; everybody sees the same flying wand.
  */
 

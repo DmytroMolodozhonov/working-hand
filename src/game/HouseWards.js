@@ -816,6 +816,21 @@ export class HouseWards {
                     this.log.push({ ev: 'shove', who: 's', id: w.id });
                 }
             }
+            // dragons (on their feet: a flying one is far above any house's sphere — or pushed out the same)
+            for (const dr of g.dragons?.list || []) {
+                if (dr.dead) continue;
+                const p = dr.model.position;
+                const push = bodyPush(w, p.x, p.y, p.y + 5 * dr.size, p.z, 3 * dr.size);
+                if (!push) continue;
+                const k = push.depth < 1.5 ? 1 : Math.min(1, (5 * dt) / push.depth);
+                p.x += push.x * k; p.z += push.z * k;
+                if (push.depth < 1.5 && this._pressing('D|' + dr.id, dt > 0 ? push.depth / dt : 0, dt)) {
+                    const dir = _v2.set(push.x, 0, push.z);
+                    if (dir.lengthSq() > 1e-8) p.addScaledVector(dir.normalize(), 1.5);
+                    g.dragons.hit?.(dr, WARD.SHOVE_HP, 'Ward', null);
+                    this.log.push({ ev: 'shove', who: 'D', id: w.id });
+                }
+            }
         }
     }
 
@@ -853,6 +868,7 @@ export class HouseWards {
             }
             if (done) continue;
             for (const s of g.spiders?.list || []) if (!s.dead && wake(_v1.copy(s.model.position).setY(s.model.position.y + 1.5))) break;
+            for (const dr of g.dragons?.list || []) if (!dr.dead && wake(_v1.copy(dr.model.position).setY(dr.model.position.y + 2.5 * dr.size))) break;
         }
         return pts;
     }

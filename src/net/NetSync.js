@@ -249,6 +249,7 @@ export class NetSync {
                 sh: g.ships?.myNet(), // (standing on a ship: my place on its deck)
                 bd: g.boards?.netMine(), // (the surfboard I carry or ride)
                 bw: g.gear?.netBow(), // (an arrow on my bow's string, and how far it is drawn)
+                dw: g.items?.wand?.dragon ? 1 : undefined, // (the dragon's wand in my hand: my fire spells are 60% stronger)
             }, true);
         }
         // Water ball in my hand
@@ -558,6 +559,8 @@ export class NetSync {
     bossGrab(id, to) { if (this.net.isHost) this.net.send({ t: 'bgrab', id, to }, true); }
     bossFree(id) { this.net.send({ t: 'bfree', id }, true); }
     bossNotice() { if (this.net.isHost) this.net.send({ t: 'bnote' }, true); }
+    /** Dragons (Dragons.js): the host's state; a guest's blow, scoop; the host's word to a player. */
+    dragon(m) { this.net.send({ t: 'drg', ...m }); }
 
     // ---- «Alive»: living trees (the host moves them), servants of «Брейнрот»
     livingTrees(list, servants) { if (this.net.isHost) this.net.send({ t: 'ltree', l: list, sv: servants }); }
@@ -782,6 +785,7 @@ export class NetSync {
             case 'bgrab': if (m.to === this.me) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) { sp.holding = this.me; g.spiders._seized(sp); } } break;
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
             case 'bnote': g.hud.notify?.('🕷️ Из темноты выходит гигантская паучиха...'); break;
+            case 'drg': g.dragons?.onNet(m, m.from); break;
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;

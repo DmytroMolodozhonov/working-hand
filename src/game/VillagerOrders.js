@@ -167,6 +167,7 @@ export class VillagerOrders {
         const out = [];
         if (what === 'zombies' || what === 'enemies') for (const z of g.zombies || []) if (!z.isDead && !z.isDying) out.push({ kind: 'z', obj: z });
         if (what === 'spider' || what === 'enemies') for (const s of g.spiders?.targets?.() || []) out.push({ kind: 's', obj: s });
+        if (what === 'dragon' || what === 'enemies') for (const d of g.dragons?.targets?.() || []) out.push({ kind: 'D', obj: d });
         if (what === 'animals') for (const a of g.animals?.targets?.() || []) out.push({ kind: 'a', obj: a });
         return out;
     }
@@ -292,5 +293,6 @@ export class VillagerOrders {
             g.damageZombie?.(c.obj, dmg, true, THREE_dir, o.by);
         } else if (c.kind === 'a') g.animals?.hit?.(c.obj, dmg, p.clone ? p.clone().set(dir.x, 0, dir.z) : null, o.by);
         else if (c.kind === 's') g.spiders?.hit?.(c.obj, dmg * 2, 'melee');
+        else if (c.kind === 'D') g.dragons?.hit?.(c.obj, dmg * 2, 'melee', o.by);
     }
 }

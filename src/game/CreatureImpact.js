@@ -364,6 +364,8 @@ export class CreatureImpact {
                 opts.each?.(c, ck, res);
             }
         }
+        // dragons: a great heavy body — it only sways a little, never knocked off its feet (Dragons.push)
+        if (!opts.kinds) n += this.game.dragons?.push?.(name, casterId, pushAt, opts) || 0;
         return n;
     }
 

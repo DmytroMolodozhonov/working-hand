@@ -154,7 +154,10 @@ export class Levitation {
         for (const side of ['right', 'left']) {
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
-            for (const c of this._candidates()) {
+            // (a dragon is pointed at too — only to say it can't be lifted: DragonKinds.ON_DRAGON.Levitation)
+            const cands = this._candidates();
+            for (const dr of this.game.dragons?.targets() || []) cands.push({ kind: 'dragon', obj: dr, pos: dr.model.position.clone().add(new THREE.Vector3(0, 3 * dr.size, 0)), r: 3 * dr.size });
+            for (const c of cands) {
                 const to = _v1.subVectors(c.pos, hand);
                 const d = to.length();
                 if (d > LEVITATE.RANGE || d < 0.3) continue;
@@ -166,6 +169,7 @@ export class Levitation {
                 if (!best || score < best.score) best = { ...c, side, score, d };
             }
         }
+        if (best?.kind === 'dragon') return '🐉 Дракона «Левиоса» не поднимет — он слишком тяжёлый';
         if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар) или на животное, зомби, жителя — не дальше 30 м — и скажите «Вингардиум Левиоса»';
         const s = {
             kind: best.kind,

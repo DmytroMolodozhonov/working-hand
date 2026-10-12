@@ -85,7 +85,7 @@ export function pocketStrike(hist, local, sx) {
 export const POCKET_DWELL = 0.3;
 
 /** Things that go on the back (over the shoulder) rather than into a pocket. */
-export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield']);
+export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield', 'dragonEgg']); // (a dragon's egg is too big for a pocket)
 
 /** The hand is over the shoulder, behind the head, and keeps still there. */
 export function behindBack(local, speed) {

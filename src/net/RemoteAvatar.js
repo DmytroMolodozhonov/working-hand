@@ -82,6 +82,8 @@ export class RemoteAvatar {
         this.lastUpdate = performance.now();
         if (s.hp !== undefined) this.hp = s.hp;
         if (s.ft !== undefined) this.fatigue = s.ft;
+        this.dragonWand = !!s.dw; // (the dragon's wand in their hand: their fire spells are 60% stronger)
+        this.lumos = !!s.lm; // (their wand's tip shines: a sleeping dragon sees it from farther)
         this.duelContact = s.dc ? s.dc[0] : 1;
         this.duelJerk = s.dc ? s.dc[1] : 0;
         if (s.c) {

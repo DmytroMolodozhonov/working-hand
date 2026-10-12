@@ -31,6 +31,7 @@ import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
 import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
+import { dragonDist } from './Dragons.js';
 import { BowDraw, drawProgress } from './BowDraw.js';
 
 const _v = new THREE.Vector3();
@@ -464,6 +465,13 @@ export class Gear {
                     a.hit.add(sp);
                     g.spiders.hit(sp, a.dmg, 'arrow');
                     this._stick(a, sp.model);
+                }
+                // a dragon: the arrows almost bounce off its scales (DragonKinds.ON_DRAGON.arrow)
+                if (g.authority) for (const dr of g.dragons?.targets() || []) {
+                    if (a.hit.has(dr) || dragonDist(dr, p) > 0.3) continue;
+                    a.hit.add(dr);
+                    g.dragons.hit(dr, a.dmg, 'arrow', a.by);
+                    this._stick(a, dr.model);
                 }
                 if (g.authority) for (const bd of g.books?.birds?.values() || []) {
                     if (bd.state === 'fall' || a.hit.has(bd) || bd.model.position.distanceTo(p) > 1.2) continue;

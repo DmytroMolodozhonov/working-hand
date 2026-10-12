@@ -30,6 +30,7 @@ import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_T
 import { crystalItemModel } from './CrystalModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
+import { DRAGON_KINDS } from './DragonKinds.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Expelliarmus', 'Jolt'] },
@@ -93,6 +94,8 @@ export const ITEM_INFO = {
     // ingredients of the invisibility potion: the giant spider's web (Spider.js), glass of a broken window (Houses.js)
     web: { name: 'Связка паутины', icon: '🕸️', weight: 0.3, stack: 5 },
     glass: { name: 'Осколки стекла', icon: '🔷', weight: 0.3, stack: 10 },
+    // the dragons' lairs (Dragons.js): one egg per dragon on its hoard — for potions later (no hatching)
+    dragonEgg: { name: 'Яйцо дракона', icon: '🥚', weight: 4 },
 };
 
 /**
@@ -102,7 +105,8 @@ export const ITEM_INFO = {
 export function itemValue(it) {
     if (!it) return 0;
     switch (it.kind) {
-        case 'wand': return it.plain ? 20 : 150 + 2 * (it.power || 0);
+        case 'wand': return it.plain ? 20 : it.dragon ? 900 : 150 + 2 * (it.power || 0);
+        case 'dragonEgg': return 700;
         case 'weapon': return it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
         case 'scroll': return it.stat === 'flight' || it.stat === 'spell' ? 220 : 60;
@@ -301,6 +305,7 @@ export function describeItem(it) {
     switch (it.kind) {
         case 'wand': {
             if (it.plain) return { title: '🪄 Обычная деревянная палочка', color: it.color, lines: ['Все заклинания на <b>15%</b> сильнее, чем голой рукой', 'Других свойств нет'] };
+            if (it.dragon) return { title: '🐉 Палочка дракона', color: 0xc0141c, lines: ['Тёмно-алое дерево, светится, как угли', 'Все огненные заклинания на <b>60%</b> сильнее: «Инферно», «Fire», «Fire Maxima», «Let the Hellfire Come»', 'Маны — как обычно', 'Остальные заклинания — на <b>15%</b> сильнее, как с любой палочкой'] };
             const lines = ['Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше маны'];
             if (it.dir) lines.push(`Направление: <b>${WAND_DIRS[it.dir].name}</b> (+25%${it.dir === 'build' ? ', ресурсов на 40% меньше' : ''})`);
             else lines.push('Направление: нет');
@@ -345,6 +350,7 @@ export function describeItem(it) {
             return { title: `🧪 ${r ? r.name : 'Зелье'}`, color: it.color ?? 0x9fd8ff, lines: [r ? r.desc : 'Неизвестное зелье', r?.effect ? 'Поднесите ко рту и подержите — выпьете (колба останется)' : 'Пока его не выпить'] };
         }
         case 'web': return { title: '🕸️ Связка паутины', color: 0xf2f2ff, lines: ['Осталась от гигантской паучихи', 'Ингредиент зелья невидимости: бросьте в кипящий котёл'] };
+        case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
@@ -399,6 +405,57 @@ function wandModel(it) {
     else if (m === 6) { const f1 = cyl(0.008, 0.012, 0.08, wood, 0.02, 0.65); f1.rotation.z = -0.4; const f2 = f1.clone(); f2.position.x = -0.02; f2.rotation.z = 0.4; g.add(f1, f2); }
     else g.add(new THREE.Mesh(new THREE.SphereGeometry(0.017, 6, 5), glow)).position.set(0, 0.625, 0);
     g.userData.tipY = 0.65;
+    return g;
+}
+
+/**
+ * The dragon's wand: deep crimson wood, dark-red scales spiralling up its shaft, a claw of black horn
+ * holding a glowing ember at its tip (along +Y, the tip at y≈0.66).
+ */
+function dragonWandModel() {
+    const g = new THREE.Group();
+    const wood = mat(0x5a0a0e), deep = mat(0x8a0f14), horn = mat(0x1c1214);
+    const ember = new THREE.MeshBasicMaterial({ color: 0xff5a1e });
+    const core = new THREE.MeshBasicMaterial({ color: 0xffc070 });
+    g.add(cyl(0.036, 0.042, 0.2, horn, 0, 0.1)); // (a handle of black horn)
+    g.add(cyl(0.047, 0.047, 0.025, deep, 0, 0.205));
+    g.add(cyl(0.015, 0.031, 0.42, wood, 0, 0.42));
+    // scales up the shaft, like the dragon's own (glowing seams between them)
+    for (let i = 0; i < 7; i++) {
+        const sc = new THREE.Mesh(new THREE.OctahedronGeometry(0.02), i % 2 ? deep : ember);
+        sc.position.set(Math.cos(i * 1.7) * (0.03 - i * 0.002), 0.26 + i * 0.05, Math.sin(i * 1.7) * (0.03 - i * 0.002));
+        sc.scale.set(1, 1.6, 0.6);
+        g.add(sc);
+    }
+    for (let i = 0; i < 3; i++) { // (the claw)
+        const c = cyl(0.004, 0.009, 0.07, horn, Math.cos(i * 2.1) * 0.017, 0.645, Math.sin(i * 2.1) * 0.017);
+        c.rotation.set(Math.sin(i * 2.1) * 0.5, 0, -Math.cos(i * 2.1) * 0.5);
+        g.add(c);
+    }
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), ember)).position.set(0, 0.66, 0);
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.011, 6, 5), core)).position.set(0, 0.66, 0);
+    g.userData.tipY = 0.67;
+    return g;
+}
+
+/** A dragon's egg: big (≈0.45 m), scaled like its dragon, a little warm glow between the scales. */
+function dragonEggModel(kind) {
+    const K = DRAGON_KINDS[kind] || DRAGON_KINDS.emerald;
+    const g = new THREE.Group();
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(K.body));
+    shell.scale.set(1, 1.3, 1);
+    g.add(shell);
+    // rows of scale plates round it
+    const plate = mat(new THREE.Color(K.body).lerp(new THREE.Color(K.belly), 0.45).getHex());
+    for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2 + r * 0.5, y = -0.12 + r * 0.12, rad = 0.2 * Math.sqrt(1 - (y / 0.26) ** 2);
+        const b = box(0.07, 0.06, 0.02, plate, Math.cos(a) * rad, y, Math.sin(a) * rad);
+        b.rotation.y = -a + Math.PI / 2;
+        g.add(b);
+    }
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.205, 10, 8), new THREE.MeshBasicMaterial({ color: K.fire?.[1] ?? 0xff8a1e, transparent: true, opacity: 0.12, depthWrite: false }));
+    glow.scale.set(1, 1.3, 1);
+    g.add(glow);
     return g;
 }
 
@@ -636,7 +693,8 @@ export function makeItemModel(it) {
 
 function buildItemModel(it) {
     switch (it.kind) {
-        case 'wand': return wandModel(it);
+        case 'wand': return it.dragon ? dragonWandModel() : wandModel(it);
+        case 'dragonEgg': return dragonEggModel(it.of);
         case 'scroll': return scrollModel(it);
         case 'shield': return shieldModel(it);
         case 'backpack': return backpackModel(it);

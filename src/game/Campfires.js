@@ -247,8 +247,10 @@ export class Campfires {
             g.fx?.spark(p, i % 2 ? 0xffb347 : 0xff6a00, 0.1, new THREE.Vector3((Math.random() - 0.5), Math.random(), (Math.random() - 0.5)), 0.5);
         }
         g.sound?.playInferno?.();
-        if (this.auth) this.kindle(spot.x, spot.y, spot.z);
-        else g.sync?.campfire?.({ t: 'cfask', p: [r2(spot.x), r2(spot.y), r2(spot.z)] });
+        // (the dragon's wand: a fire spell 60% stronger — the fire burns 60% longer)
+        const k = g.fireBoost?.(g.localId) ?? 1;
+        if (this.auth) this.kindle(spot.x, spot.y, spot.z, CAMPFIRE.BURN * k);
+        else g.sync?.campfire?.({ t: 'cfask', p: [r2(spot.x), r2(spot.y), r2(spot.z)], k });
         g.hud.setVoice('🔥 Костёр горит! Подержите у огня руку с деревом — будет гореть дольше. Мясо в огне пожарится', true);
         return 'Fire';
     }
@@ -560,7 +562,7 @@ export class Campfires {
             const [x, y, z] = m.p.map(Number);
             if (![x, y, z].every(Number.isFinite)) return;
             for (const f of this.list.values()) if (Math.hypot(f.x - x, f.z - z) < 2.2 && Math.abs(f.y - y) < 2) return;
-            this.kindle(x, y, z);
+            this.kindle(x, y, z, CAMPFIRE.BURN * Math.max(1, Math.min(1.6, +m.k || 1)));
         } else if (m.t === 'cfwood') {
             if (g.authority) this.addWood(this.list.get(m.id));
         }
