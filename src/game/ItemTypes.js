@@ -329,7 +329,7 @@ export function describeItem(it) {
         case 'meat': return { title: '🥩 Сырое мясо', color: 0xd9534f, lines: ['Поднесите ко рту: +2 HP', 'Пожарьте на костре («Fire») — будет +4'] };
         case 'steak': return { title: '🍖 Стейк', color: 0xb5651d, lines: ['Поднесите ко рту: +4 HP'] };
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
-        case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу справа: кулак с мешочком на правый бок', 'Платите ими на рынке замка'] };
+        case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу справа: руку с мешочком к правому бедру', 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
         case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмитесь за него <b>обеими руками</b> и разломите (разведите руки или поверните) — мана +<b>5</b> к максимуму'] };
         case 'flask': return { title: '⚗️ Пустая колба', color: 0xcfe9f2, lines: [`Колб: <b>${it.count || 1}</b>`, 'Окуните её в котёл с готовым зельем — она наполнится'] };

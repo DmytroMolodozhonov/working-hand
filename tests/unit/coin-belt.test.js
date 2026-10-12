@@ -18,10 +18,12 @@ test('pouches: up to 100 coins each, then a second and a third beside it (300 at
     assert.ok(pouchSize(100) > pouchSize(50) && pouchSize(50) > pouchSize(5), 'the pouch grows with its coins');
 });
 
-test('the hand put on the right side of the belt is seen; hanging, lowered, raised arms, the pocket, the wand\'s belt — not', () => {
+test('the hand put on the right hip (or the left one across) is seen; hanging, lowered, raised arms, the wand\'s belt — not', () => {
     const lm = (f) => frame(f).poseLandmarks;
-    assert.equal(purseHand(lm({ arms: 'hang', purse: 'right', rightCurl: 0.9 }), 'right'), true);
-    for (const f of [{ arms: 'hang' }, { arms: 'down' }, { arms: 'forward' }, { arms: 'up' }, { arms: 'hang', pocket: 'right' }, { arms: 'hang', belt: 'right' }, { raise: 30 }, { raise: 70 }]) {
+    for (const purse of ['right', 'hip']) assert.equal(purseHand(lm({ arms: 'hang', purse, rightCurl: 0.9 }), 'right'), true, purse);
+    assert.equal(purseHand(lm({ arms: 'hang', purse: 'cross', leftCurl: 0.9 }), 'left', 4 / 3, 'right'), true, 'the left hand across to the right hip');
+    for (const f of [{ arms: 'hang' }, { arms: 'down' }, { arms: 'forward' }, { arms: 'up' }, { arms: 'hang', belt: 'right' }, { raise: 15 }, { raise: 30 }, { raise: 70 }, { arms: 'hang', lean: 0.05 }, { arms: 'hang', lean: -0.05 }]) {
         assert.notEqual(purseHand(lm(f), 'right'), true, JSON.stringify(f));
+        assert.notEqual(purseHand(lm(f), 'left', 4 / 3, 'right'), true, 'across ' + JSON.stringify(f));
     }
 });

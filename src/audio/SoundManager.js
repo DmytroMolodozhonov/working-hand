@@ -305,6 +305,30 @@ export class SoundManager {
         this._play(this._clangBuf, 0.45 + 0.6 * Math.min(1, power), 0.85 + Math.random() * 0.35);
     }
 
+    /** Coins jingling in a pouch (tied onto the belt): a few small clinks (made here). */
+    playCoins() {
+        if (!this.enabled) return;
+        if (!this._coinBuf) {
+            const ctx = this.context;
+            if (!ctx) return;
+            const rate = ctx.sampleRate, len = Math.floor(rate * 0.5);
+            const buf = ctx.createBuffer(1, len, rate);
+            const d = buf.getChannelData(0);
+            let seed = 11;
+            const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+            for (let k = 0; k < 7; k++) { // (each clink: a small coin's ring, quickly gone)
+                const at = Math.floor(rate * (0.01 + rnd() * 0.3)), f = 3200 + rnd() * 2600, a = 0.25 + rnd() * 0.3;
+                for (let i = at; i < len; i++) {
+                    const t = (i - at) / rate;
+                    d[i] += a * Math.exp(-t / 0.045) * (Math.sin(2 * Math.PI * f * t) + 0.5 * Math.sin(2 * Math.PI * f * 2.31 * t));
+                }
+            }
+            for (let i = 0; i < len; i++) d[i] = Math.tanh(d[i]) * 0.7;
+            this._coinBuf = buf;
+        }
+        this._play(this._coinBuf, 0.5, 0.9 + Math.random() * 0.2);
+    }
+
     /** A bow being drawn: a short creak of wood and string (made here). `k` 0..1: how hard. */
     playBowDraw(k = 0.5) {
         if (!this.enabled) return;

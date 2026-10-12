@@ -59,30 +59,33 @@ export function pocketPose(lm, hand, side, aspect = 4 / 3, hipSide = side) {
 }
 
 /**
- * Is this hand at the coin pouches' place — on its side of the belt, beside the hip
- * (CoinBelt.js)? The wrist at the waist, a little out beside the hip (not in front of it,
- * where the pocket is), the elbow bent and further out than the wrist (a hand put on the
- * side). An arm hanging or just lowered has a straight elbow, its wrist at or under the
- * hip — never this.
+ * Is this hand at the coin pouches' place — at its own hip, on the belt (CoinBelt.js)? As a
+ * real camera sees a hand brought there: the wrist from the waist down to just under the
+ * hip joint, beside the hip or a little in front of it (a low hand by the body is often
+ * seen poorly: a weak wrist point still counts), and the elbow BENT. An arm hanging or
+ * just lowered is straight — never this; a hand reaching across to the other side
+ * (the wand's belt) is not at its own hip.
  */
-export function purseHand(lm, side, aspect = 4 / 3) {
-    const [s, e, w, h] = side === 'left' ? [11, 13, 15, 23] : [12, 14, 16, 24];
+export function purseHand(lm, side, aspect = 4 / 3, hipSide = side) {
+    const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
+    const h = hipSide === 'left' ? 23 : 24; // (the left hand can reach across to the RIGHT hip)
+    const cross = hipSide !== side;
     const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], hip = lm?.[h];
     if (!sh || !el || !wr || !hip) return null;
-    if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5 || (wr.visibility ?? 1) < 0.5) return null;
+    if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5 || (wr.visibility ?? 1) < 0.3) return null;
     const T = hip.y - sh.y;
     if (T < 0.05) return null;
-    const out = side === 'left' ? 1 : -1; // (the person's left is the picture's right)
+    const out = hipSide === 'left' ? 1 : -1; // (the person's left is the picture's right)
     const outOf = (p) => ((p.x - hip.x) * out * aspect) / T;
     const dy = (wr.y - hip.y) / T;
-    if (dy < -0.6 || dy > -0.08) return false; // (at the waist: not the chest, not the hip / the thigh)
+    if (dy < -0.6 || dy > 0.25) return false; // (the belt: not the chest, not the thigh)
     const wOut = outOf(wr);
-    if (wOut < 0.12 || wOut > 0.75) return false; // (beside the hip, not in front of it)
-    if (outOf(el) - wOut < 0.06) return false; // (the elbow out to the side)
+    if (wOut < -0.15 || wOut > (cross ? 0.4 : 0.8)) return false; // (at the hip: beside it or a little in front)
+    if (!cross && outOf(el) < wOut - 0.05) return false; // (the elbow not tucked inside: a hand put on the hip)
     const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
     const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
     if (nu < 1e-4 || nf < 1e-4) return false;
-    return Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) > 0.6; // (~35°: bent)
+    return Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) > 0.45; // (~26°: bent)
 }
 
 /**
@@ -221,7 +224,7 @@ export class PoseInterpreter {
                 right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect),
                 cross: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect, 'left'), // (the right hand in the LEFT pocket)
             };
-            data.purse = { left: purseHand(lm, 'left', data.aspect), right: purseHand(lm, 'right', data.aspect) }; // (CoinBelt)
+            data.purse = { right: purseHand(lm, 'right', data.aspect), cross: purseHand(lm, 'left', data.aspect, 'right') }; // (CoinBelt: the right hip; the left hand across)
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);

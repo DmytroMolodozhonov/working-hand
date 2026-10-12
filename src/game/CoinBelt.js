@@ -2,15 +2,15 @@
  * CoinBelt.js — the coin pouches' place on the body: tied to the belt on the right side,
  * beside the hip (the wand's place is in front, on the left: WandBelt.js). Seen on the hero.
  *
- *   - Tie a pouch on: the right hand holding a coin pouch is put on the right side of the
- *     belt (the fist at the waist beside the hip, the elbow out to the side) and kept there
- *     a moment. The first pouch is tied there; the next ones are emptied into it — the
+ *   - Tie a pouch on: the hand holding a coin pouch is brought to the right hip, at the
+ *     belt, and kept there a moment — or its fingers opened there (the left hand may reach
+ *     across); the coins jingle. The first pouch is tied there; the next ones are emptied into it — the
  *     pouch grows with its coins. A pouch holds 100 coins: more, and a second pouch hangs
  *     beside it, then a third (300 coins on the belt at most). What does not fit stays in
  *     the pouch in the hand.
  *   - Take one off: look down at it, bring the open right hand to it and close the
  *     fingers — the last pouch comes into the hand (to give, to pay, to throw).
- * A hanging or lowered arm never does it (its elbow is straight, its wrist at the hip).
+ * A hanging, lowered or swinging arm never does it (its elbow is straight: PoseInterpreter.purseHand).
  *
  * The coins on the belt are the player's (Inventory.coins(): paying at the market, the
  * save, death — they drop as pouches); other players see the pouches.
@@ -24,6 +24,8 @@ export const POUCH_MAX = 100;
 export const POUCHES = 3;
 export const BELT_MAX = POUCH_MAX * POUCHES;
 const TIE_S = 0.35; // s the hand is kept at the side to tie the pouch on
+const OPEN_S = 0.12; // s at the side before opening the fingers ties it on at once
+const AWAY_S = 0.25; // s the camera may lose the hand at the side (a real camera's points jump)
 
 /** The pouches for `n` coins on the belt: [100, 100, 37]. */
 export function purseBags(n) {
@@ -71,6 +73,8 @@ export class CoinBelt {
         this.model = null;
         this._shown = -1;
         this._tie = 0;
+        this._away = 1;
+        this._side = null;
         this._open = false;
         this._left = true;
         this._at = 0;
@@ -97,19 +101,26 @@ export class CoinBelt {
         this._show();
         const pose = g.currentPose;
         if (!pose || g.combat?.immobile || g.combat?.dead || ch.flying) return;
-        const at = pose.purse?.right === true;
-        if (!at) { this._left = true; this._open = false; this._tie = 0; return; }
+        if (ch.isRunning) { this._away = 1; this._left = true; this._tie = 0; return; } // (arms swinging: never)
+        // which hand is at the right hip: the right one, or the left one reaching across with a pouch
+        const coinsIn = (s) => items.held[s]?.item.kind === 'coins';
+        const side = pose.purse?.right === true ? 'right' : pose.purse?.cross === true && coinsIn('left') && !coinsIn('right') ? 'left' : null;
+        if (side) { this._away = 0; this._side = side; } else this._away += dt;
+        if (this._away > AWAY_S) { this._left = true; this._open = false; this._tie = 0; return; }
+        if (!side) return; // (lost for a moment: wait)
         // (after tying one on or taking one, the hand must leave the side first)
         if (!this._left || performance.now() - this._at < 700) return;
-        const h = items.held.right;
+        const h = items.held[side];
+        const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1;
         if (h && h.item.kind === 'coins') {
+            // tied on: kept at the hip a moment, or the fingers opened there (letting go of it onto the belt)
             this._tie += dt;
-            if (this._tie > TIE_S) { this._tie = 0; this._tieOn('right'); }
+            if (this._tie > TIE_S || (this._tie > OPEN_S && curl < 0.35)) { this._tie = 0; this._tieOn(side); }
             return;
         }
         this._tie = 0;
+        if (side !== 'right') return;
         // taking one: looking down at it, the empty hand came open and closes on it
-        const curl = ch.getGripCurl ? ch.getGripCurl('right') : 0;
         if (curl < 0.4) this._open = true;
         const free = !h && !g.weapons?.hands?.right?.held;
         if (free && this.count > 0 && this._open && curl > 0.45 && g.inventory?.belt?.lookingDown()) this._take('right');
@@ -132,6 +143,7 @@ export class CoinBelt {
             if (inv?.inHand?.item === it) inv.inHand = null;
         }
         inv?._render?.();
+        g.sound?.playCoins?.();
         const what = first ? '💰 Мешочек привязан к поясу' : `💰 +${n - rest} монет в мешочки на поясе`;
         inv?._fx?.(rest > 0 ? `${what} — ${rest} не влезли, остались в руке` : what, side);
     }
