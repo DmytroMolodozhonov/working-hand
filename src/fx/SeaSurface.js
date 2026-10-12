@@ -49,7 +49,7 @@ export class SeaSurface {
         this.mesh = new THREE.Mesh(this._geometry(Math.max(400, (game.world?.terrain?.viewDistance || 112) * 1.2)), this._material());
         this.mesh.name = 'sea';
         this.mesh.frustumCulled = false;
-        this.mesh.renderOrder = 1;
+        this.mesh.renderOrder = 0.9; // (before every other see-through thing: a steady order, no flicker against sails, glass, lakes)
         this.mesh.visible = false;
         this.mesh.position.y = WATER_LEVEL_Y;
         game.scene.add(this.mesh);
@@ -125,21 +125,28 @@ float seaH(vec2 p) { return seaWave(p, uTime, seaShoreAt(p).x, uStorm); }
 uniform vec3 uShallow;
 uniform vec3 uDeep;
 uniform float uTime;
+uniform vec2 uOrigin;
+uniform float uTexSize;
+uniform sampler2D uShore;
 varying float vSeaS;
 varying float vSeaDepth;
 varying vec3 vSeaWorld;`)
                 .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-                if (vSeaS < -3.0) discard;`)
+                // where the sea ends: looked up for THIS point (not interpolated across a big far triangle,
+                // whose corners move as the surface follows the camera — that made the shore line jump and flicker)
+                vec4 seaTex = texture2D(uShore, (vSeaWorld.xz - uOrigin) / uTexSize + 0.5);
+                float seaS = seaTex.r * 255.0 - 32.0, seaDepth = seaTex.g * 17.0;
+                if (seaS < -3.0) discard;`)
                 .replace('#include <color_fragment>', `#include <color_fragment>
-                float seaK = clamp((vSeaDepth - 1.0) / 10.0, 0.0, 1.0);
+                float seaK = clamp((seaDepth - 1.0) / 10.0, 0.0, 1.0);
                 diffuseColor.rgb = mix(uShallow, uDeep, seaK);
                 // foam: the little waves breaking on the sand, white caps on high crests out at sea
-                float seaFoam = (1.0 - smoothstep(0.0, 6.0, vSeaS)) * smoothstep(0.35, 0.9, sin(${WAVES.shore.k.toFixed(4)} * vSeaS + ${WAVES.shore.omega.toFixed(7)} * uTime));
+                float seaFoam = (1.0 - smoothstep(0.0, 6.0, seaS)) * smoothstep(0.35, 0.9, sin(${WAVES.shore.k.toFixed(4)} * seaS + ${WAVES.shore.omega.toFixed(7)} * uTime));
                 seaFoam = max(seaFoam, smoothstep(0.55, 0.95, vSeaWorld.y - ${WATER_LEVEL_Y.toFixed(2)}) * 0.6);
                 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.98, 1.0), seaFoam * 0.8);
                 diffuseColor.a = mix(diffuseColor.a, 0.95, seaFoam * 0.6 + seaK * 0.12);`);
         };
-        mat.customProgramCacheKey = () => 'sea-surface-v1';
+        mat.customProgramCacheKey = () => 'sea-surface-v2';
         return mat;
     }
 
@@ -187,6 +194,8 @@ varying vec3 vSeaWorld;`)
         const o = this.uniforms.uOrigin.value;
         if (!this._job && (!this.ready || Math.hypot(focus.x - o.x, focus.z - o.y) > 128)) this._startJob(focus.x, focus.z);
         // the first time synchronously in big slices (the sea comes into view far away, fog hides it)
+        // (a jump far away — a teleport, a respawn: the old texture does not reach here, build it now, never a gap)
+        if (this._job && this.ready && Math.hypot(focus.x - o.x, focus.z - o.y) > TEX * TEXEL / 2 - 200) this._runJob(TEX * TEX);
         if (this._job) this._runJob(this.ready ? SLICE : SLICE * 4);
         this.mesh.visible = this.ready;
         const cam = g.camera ? g.camera.getWorldPosition(_v) : focus;

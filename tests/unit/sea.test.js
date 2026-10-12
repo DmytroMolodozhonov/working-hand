@@ -181,3 +181,18 @@ test('the flat block top of the sea is not drawn when the wave surface draws it'
     d.skipSeaTop = true;
     assert.equal(tops(d.buildChunkArrays(cx, cz)), 0, 'the waves draw it');
 });
+
+test('no water ever stands above the sea level (the creative test ground too)', () => {
+    const d = new TerrainData();
+    d.generate({ seed: 777, mountains: true, seas: true, test: true, deepCaves: true });
+    const S = d.seas, sea = S.nearest(0, 0);
+    let deep = 0;
+    for (let i = 0; i < 120; i++) {
+        const p = i < 100 ? S.pointAt(sea, i * 0.063, (i % 10) * 40 + 3) : { x: (i - 100) * 7 - 70, z: 40 + (i % 3) * 3 }; // the sea, then near the start (the river)
+        const ix = Math.round(p.x), iz = Math.round(p.z);
+        d.heightAt(ix, iz);
+        for (let L = 1; L <= 20; L++) assert.notEqual(d.get(ix, L, iz), BLOCK.WATER, `water above the sea level at ${ix},${iz} layer ${L}`);
+        if (d.topLayer(ix, iz) <= -12) deep++;
+    }
+    assert.ok(deep > 30, `the test sea is deep (${deep})`);
+});

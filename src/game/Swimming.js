@@ -383,7 +383,19 @@ export class Swimming {
                 this.hudEl.innerHTML = (this.bubble ? '<span class="air-txt">🫧 пузырь</span>' : '') + Array.from({ length: 10 }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
             }
         }
-        this.overlay.style.opacity = this.underwater ? (this.bubble ? '0.35' : '0.6') : '0';
+        // the blue haze is about where the CAMERA is: a wave passing over it is under water, a trough over it is air
+        // (judged at the body, the view and the haze disagreed when the sea's waves rose and fell around the head)
+        const eyeUnder = this._cameraUnderwater();
+        this.overlay.style.opacity = eyeUnder ? (this.bubble ? '0.35' : '0.6') : '0';
+    }
+
+    /** Is the camera itself under the water's top (a wave counted where the camera is)? */
+    _cameraUnderwater() {
+        const g = this.game, cam = g.camera;
+        if (!cam) return this.underwater;
+        const p = cam.getWorldPosition(_v);
+        const w = this.waterAt(p.x, p.z);
+        return !!w && p.y < w.surface - (w.sea ? 0.03 : 0.15) && p.y > w.bottom; // (a lake's top is drawn a little lower)
     }
 
     dispose() {

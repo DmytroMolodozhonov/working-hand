@@ -202,7 +202,8 @@ export class Game {
         this.terrain = this.world.terrain;
         // the sea (generation-2 worlds): its waves, the same on every computer (src/world/Sea.js)
         const seas = this.terrain?.data?.seas;
-        this.sea = seas ? new SeaWaves(seas, () => this.seaTime(), (ix, iz) => { const h = this.terrain.data.heightAt; h(ix, iz); return !!h.sea; }) : null;
+        // (what the terrain made of a column: land, sea, or a castle's harbour — calm behind its breakwater)
+        this.sea = seas ? new SeaWaves(seas, () => this.seaTime(), (ix, iz) => { const d = this.terrain.data, h = d.heightAt; h(ix, iz); if (!h.sea) return false; return d.castles?.landAt?.(ix, iz)?.harbour ? 'harbour' : true; }) : null;
         this.seaSurface = this.sea && !isTest ? new SeaSurface(this) : null; // the moving sea surface (drawn)
         this.hud.setTerrain(this.terrain);
 

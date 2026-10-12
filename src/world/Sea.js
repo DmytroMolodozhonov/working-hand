@@ -269,7 +269,8 @@ export class SeaWaves {
     /**
      * @param {SeaIndex} index
      * @param {() => number} timeFn  wave clock (s)
-     * @param {(ix, iz) => boolean|null} [column] what the terrain made of a column: true sea water, false land
+     * @param {(ix, iz) => boolean|string|null} [column] what the terrain made of a column: true sea water,
+     *   'harbour' a castle's harbour (calm), false land
      */
     constructor(index, timeFn, column = null) {
         this.index = index;
@@ -284,7 +285,8 @@ export class SeaWaves {
         let s = this.index.signedDist(x, z);
         if (this.column && s > -SEA.TAPER) {
             const c = this.column(Math.round(x), Math.round(z));
-            if (c === true && s < 2) s = 2; // a dug harbour: sea water
+            if (c === 'harbour') s = Math.min(Math.max(s, 2), 5); // a castle's harbour: calm water behind the breakwater
+            else if (c === true && s < 2) s = 2; // a dug harbour: sea water
             else if (c === false && s > -3.5) s = -3.5; // a quay / castle land over the sea
         }
         return s;

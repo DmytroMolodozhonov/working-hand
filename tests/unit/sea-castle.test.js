@@ -167,3 +167,18 @@ test('sea castle village: houses on dry land, every path can be walked, the quay
         }
     }
 });
+
+test('the harbour is calm behind its breakwater (small waves, not the open swell)', async () => {
+    const { SeaWaves } = await import('../../src/world/Sea.js');
+    for (const seed of [12345, 4242]) {
+        const t = world(seed);
+        const waves = new SeaWaves(t.seas, () => 0, (ix, iz) => { t.heightAt(ix, iz); if (!t.heightAt.sea) return false; return t.castles.landAt(ix, iz)?.harbour ? 'harbour' : true; });
+        for (const c of seaCastles(t)) {
+            for (const b of c.port.berths) {
+                let mx = 0;
+                for (let tt = 0; tt < 60; tt += 0.5) mx = Math.max(mx, Math.abs(waves.height(b.x, b.z, tt)));
+                assert.ok(mx < 0.25, `${c.id} berth ${b.cls}: waves ${mx.toFixed(2)}`);
+            }
+        }
+    }
+});
