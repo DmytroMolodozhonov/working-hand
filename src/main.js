@@ -20,7 +20,8 @@ import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
-import { setupPauseAudio } from './ui/PauseAudio.js';
+import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
+import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/WindowControls.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
@@ -40,7 +41,15 @@ const graphicsLevel = (() => {
         return Number.isFinite(last) ? last : 2;
     } catch (e) { return 2; }
 })();
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: graphicsLevel >= 3, powerPreference: 'high-performance' });
+// («Сглаживание краёв» in the settings can turn it on or off for good: the next start)
+const antialias = (() => {
+    try {
+        const a = (JSON.parse(localStorage.getItem('zns-settings') || '{}') || {}).antialias;
+        if (a === 'on' || a === 'off') return a === 'on';
+    } catch (e) { /* not remembered */ }
+    return graphicsLevel >= 3;
+})();
+const renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;
@@ -234,6 +243,7 @@ function readConfig() {
         delegate: $('vision-delegate')?.value || 'auto',
         engine: $('vision-engine')?.value || 'classic',
         graphics: $('graphics-quality')?.value || 'auto',
+        viewDistance: $('view-distance')?.value || 'medium',
         resolution: $('camera-res').value,
         cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
         showHands: showHandsToggle ? showHandsToggle.checked : false,
@@ -776,11 +786,18 @@ if (!window.__ZNS_NO_FULLSCREEN__) becomeAppWindow({ bar: document.querySelector
 // (in a game with others the world goes on; alone it waits)
 // «🔊 Звук» in the pause menu: the sound settings without leaving the game
 const pauseAudio = setupPauseAudio($('pause-audio'));
+// «🖥 Графика» in the pause menu: the same graphics settings, applied at once
+const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
+// the graphics settings change the running game at once (no restart of the world)
+$('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.world.viewDistance = viewDistanceScale(e.target.value); });
+$('graphics-quality')?.addEventListener('change', (e) => { game?.quality?.setSetting(e.target.value); });
+$('fps-limit')?.addEventListener('change', (e) => { if (game?.config) game.config.fpsLimit = parseInt(e.target.value, 10) || 0; });
 function showPauseTab(id) {
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
     $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells'); // (the spell book needs room)
     if (id === 'pause-audio') pauseAudio.sync();
+    if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid');
 }
 document.querySelectorAll('.pause-tab').forEach((b) => { b.onclick = () => showPauseTab(b.dataset.pauseTab); });
@@ -789,6 +806,7 @@ function togglePauseMenu(show) {
     const open = show ?? el.classList.contains('hidden');
     if (open) {
         pauseAudio.sync();
+        pauseGraphics.sync();
         // «✨ Заклинания» — only in Creative (not on a map)
         const creative = game?.config?.mode === 'creative' && !game?.config?.map;
         document.querySelector('[data-pause-tab="pause-spells"]').hidden = !creative;
@@ -1052,7 +1070,7 @@ function escapeHtml(s) {
 (function rememberSettings() {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
-        'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
+        'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }

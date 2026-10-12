@@ -21,6 +21,25 @@ export const QUALITY_LEVELS = [
     { name: 'высокая', pixelRatio: 1.5, shadowSize: 2048, shadowEvery: 1, view: 1.0, shadows: true, soft: true, clouds: true },
 ];
 
+/**
+ * How far the world is drawn (settings → «Прорисовка мира»). The fog, the
+ * loaded terrain chunks and the sea all follow this one number: the fog's
+ * distances are multiplied by it, and the chunks load one chunk beyond the fog,
+ * so far land melts into the haze instead of ending in a hole. «Низкая» is the
+ * old distance (fog 90 m in the day). Only this computer: nothing goes over the net.
+ */
+export const VIEW_DISTANCES = {
+    low: { name: 'низкая', scale: 1 },
+    medium: { name: 'средняя', scale: 1.6 },
+    high: { name: 'высокая', scale: 2.2 },
+    max: { name: 'максимальная', scale: 3 },
+};
+export const DEFAULT_VIEW_DISTANCE = 'medium';
+
+export function viewDistanceScale(key) {
+    return (VIEW_DISTANCES[key] || VIEW_DISTANCES[DEFAULT_VIEW_DISTANCE]).scale;
+}
+
 export class QualityManager {
     /**
      * @param {THREE.WebGLRenderer} renderer
@@ -42,6 +61,20 @@ export class QualityManager {
         this._drops = 0;
         this.fps = 60;
         this._shadowsFixed = null; // shadows on/off and their kind are decided once (a change recompiles every shader)
+    }
+
+    /** A new choice in the settings during the game ('auto' or a level index). */
+    setSetting(setting) {
+        const auto = setting === 'auto' || setting === undefined || setting === null;
+        const fixed = parseInt(setting, 10);
+        this.auto = auto && !(typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__);
+        if (!auto) this.level = Math.max(0, Math.min(3, Number.isFinite(fixed) ? fixed : 2));
+        this.maxLevel = 3;
+        this._drops = 0;
+        this._bad = 0;
+        this._goodFor = 0;
+        this._sinceChange = 0;
+        this.apply();
     }
 
     /** The level auto mode settled on last time (so a weak computer doesn't start with stutters). */

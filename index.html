@@ -44,6 +44,7 @@
             <div class="pause-tabs" role="tablist">
                 <button class="pause-tab active" data-pause-tab="pause-main" role="tab">⏸ Меню</button>
                 <button class="pause-tab" data-pause-tab="pause-audio" role="tab">🔊 Звук</button>
+                <button class="pause-tab" data-pause-tab="pause-graphics" role="tab">🖥 Графика</button>
                 <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Заклинания</button>
             </div>
             <div id="pause-main" class="pause-pane active">
@@ -51,6 +52,7 @@
                 <button id="pause-exit-btn">🏠 Выйти в главное меню</button>
             </div>
             <div id="pause-audio" class="pause-pane"></div>
+            <div id="pause-graphics" class="pause-pane"></div>
             <!-- Creative only: the whole spell book without leaving the game -->
             <div id="pause-spells" class="pause-pane">
                 <div id="pause-spell-cats" class="sub-tabs"></div>
@@ -306,6 +308,16 @@
                     </div>
                     <div id="set-graphics" class="sub-pane">
                     <div class="settings-group">
+                        <label>Прорисовка мира:</label>
+                        <select id="view-distance">
+                            <option value="low">Низкая (≈90 м)</option>
+                            <option value="medium" selected>Средняя (≈145 м)</option>
+                            <option value="high">Высокая (≈200 м)</option>
+                            <option value="max">Максимальная (≈270 м)</option>
+                        </select>
+                        <div class="setting-hint">Как далеко видно землю, замки и море. Дальше — красивее, но нужен компьютер мощнее.</div>
+                    </div>
+                    <div class="settings-group">
                         <label>Графика:</label>
                         <select id="graphics-quality">
                             <option value="auto" selected>Авто (держит FPS сама)</option>
@@ -314,6 +326,7 @@
                             <option value="1">Низкая</option>
                             <option value="0">Очень низкая</option>
                         </select>
+                        <div class="setting-hint">Чёткость картинки и тени. «Авто» сама снижает, если игра тормозит.</div>
                     </div>
                     <div class="settings-group">
                         <label>Лимит FPS:</label>
@@ -322,6 +335,16 @@
                             <option value="60">60 FPS</option>
                             <option value="0" selected>Максимум</option>
                         </select>
+                        <div class="setting-hint">30 или 60 — ноутбук меньше греется, а камере остаётся больше сил.</div>
+                    </div>
+                    <div class="settings-group">
+                        <label>Сглаживание краёв:</label>
+                        <select id="antialias">
+                            <option value="auto" selected>Авто (только на высокой графике)</option>
+                            <option value="on">Включено</option>
+                            <option value="off">Выключено</option>
+                        </select>
+                        <div class="setting-hint">Убирает «лесенки» на краях. Включится после перезапуска игры.</div>
                     </div>
                     </div>
                     <div id="set-vision" class="sub-pane">

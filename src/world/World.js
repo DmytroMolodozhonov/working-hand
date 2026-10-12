@@ -718,10 +718,12 @@ export class VoxelWorld {
         if (this.pedestals) this._animatePedestals(Math.min(0.1, (now - (this._lastUpdate || now)) / 1000));
         this._lastUpdate = now;
         if (this.scene.fog && this.fogFar) {
-            // In flight the view opens up so the land below is visible
-            const far = this.fogFar * (this.viewScale ?? 1) * (1 + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0));
+            // How far is drawn (settings) × what the graphics level allows; in flight the
+            // view opens up by the same metres at every distance, so the land below is visible
+            const q = this.viewScale ?? 1, d = this.viewDistance ?? 1;
+            const far = this.fogFar * q * (d + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0));
             this.scene.fog.far = far;
-            this.scene.fog.near = Math.min(this.fogNear + viewBoost * 40, far * 0.5);
+            this.scene.fog.near = Math.min(this.fogNear * d + viewBoost * 40, far * 0.5);
             if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
         }
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);

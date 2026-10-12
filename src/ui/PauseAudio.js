@@ -9,6 +9,8 @@
 
 /** The settings shown in the pause menu (ids of the controls in «Настройки → Звук»). */
 export const PAUSE_AUDIO_IDS = ['music-vol', 'zombie-vol', 'spell-vol', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'voice-filter'];
+/** The «🖥 Графика» tab: the same, for «Настройки → Графика». */
+export const PAUSE_GRAPHICS_IDS = ['view-distance', 'graphics-quality', 'fps-limit', 'antialias'];
 
 function labelOf(src) {
     const lab = src.closest('.settings-group')?.querySelector('label');
@@ -61,6 +63,13 @@ export function setupPauseAudio(box, ids = PAUSE_AUDIO_IDS, doc = document) {
         line.appendChild(ctl);
         if (val) line.appendChild(val);
         row.appendChild(line);
+        const hint = src.closest('.settings-group')?.querySelector('.setting-hint');
+        if (hint) {
+            const h = doc.createElement('div');
+            h.className = 'pause-audio-hint';
+            h.textContent = hint.textContent;
+            row.appendChild(h);
+        }
         box.appendChild(row);
         rows.push({ src, ctl, val });
     }

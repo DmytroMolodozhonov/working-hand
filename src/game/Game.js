@@ -63,7 +63,7 @@ import { Spiders, spiderModel } from './Spider.js';
 import { LivingTrees } from './LivingTrees.js';
 import { Servants } from './Servants.js';
 import { Duel } from './Duel.js';
-import { QualityManager } from './Quality.js';
+import { QualityManager, viewDistanceScale } from './Quality.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
@@ -192,6 +192,7 @@ export class Game {
             deepCaves: this.gen >= 4, // (caves as in Minecraft: winding, branching, deep)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
+        this.world.viewDistance = viewDistanceScale(config.viewDistance); // «Прорисовка мира» (this computer only)
         // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
         // Everyone in a game shares the host's clock (sent in the welcome message).
         this.dayCycle = !config.map && !isTest && (config.mode === 'creative' || config.mode === 'freeworld');
