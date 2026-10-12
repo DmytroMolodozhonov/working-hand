@@ -18,9 +18,13 @@
  *
  * The market (every castle has one, before the gate): food lies on the stall
  * counters (sometimes arrows or a plain shield / bow; never magic).
- *  - Buy: take a thing from the counter — the merchant names the price;
- *    say «да» and the coins are paid, «нет» — put it back. Walk away with it
- *    unpaid and the merchant shouts «Вор!» (the guard comes).
+ *  - Buy: every good has a little card with its price beside it, and lies
+ *    on the counter until it is paid for (the hand can't take it before).
+ *    Put a pouch of coins on the counter — the merchant asks what you want;
+ *    name the good («щит», «хлеб»): its price is taken from the pouch (all
+ *    of it — he takes the pouch with his hand; more — the rest stays there
+ *    for you), the price card goes and the good is yours to take. Not
+ *    enough coins in the pouch — he says so: choose something else.
  *  - Sell: put a thing (or a sword / an axe) on the counter — the merchant
  *    names a price (magic things are dear); say «да»: the thing is taken and
  *    a pouch of coins lies there — take it by hand. Up to 500 coins in a slot.
@@ -61,6 +65,17 @@ export function restAfter(reply, head) {
     }
     if (k < letters.length) return '';
     return r.slice(i).replace(/^[\s.,!?…;:—–]+/, '').trim();
+}
+
+/** Words a good is called by (its name's words, and what people say for it). */
+const ALIAS = { steak: ['мяс', 'стейк'], flask: ['колб', 'фляг', 'бутыл', 'склян'], crystal: ['кристал'], apple: ['яблок'], arrows: ['стрел'], bow: ['лук'], shield: ['щит'], cheese: ['сыр'], bread: ['хлеб'], pie: ['пирог', 'пирож'] };
+const normWords = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+/** Does this text name this good? */
+export function namesGood(text, item) {
+    const words = normWords(text);
+    const stems = ALIAS[item.kind] || normWords(ITEM_INFO[item.kind]?.name || '').filter((w) => w.length >= 3).map((w) => w.slice(0, Math.max(3, w.length - 2)));
+    if (item.kind === 'weapon') stems.push(item.type === 'axe' ? 'топор' : 'меч');
+    return words.some((w) => stems.some((st) => w.startsWith(st) && (st.length > 3 || w.length <= st.length + 2)));
 }
 
 const nameOf = (it) => (it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
@@ -259,6 +274,8 @@ export class CastleTalk {
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
         const v = this._listener();
         if (!v) return false;
+        // (a coin pouch on his counter and a good named: the purchase — VillagerBrain is not asked)
+        if (this._trader(v) && this._payByName(v, text)) { v.talking = 4; v.talkTo = g.localId; return true; }
         const b = this.brain(v);
         const ctx = this._ctx(v);
         v.talking = 4;
@@ -353,9 +370,14 @@ export class CastleTalk {
 
     /** A villager hears me and these are words of a talk (an order, a greeting, a question…), not a spell. */
     claims(text) {
-        if (!this.life.enabled || !this._listener()) return false;
+        const L = this.life.enabled ? this._listener() : null;
+        if (!L) return false;
         const spell = matchSpell(text);
         if (spell === 'Stand') return false; // («стоп» stops my spells first; with nothing to stop the villager hears it)
+        // (paying: a good named to the merchant with my coins on his counter)
+        if (this._trader(L) && this._pursePay(L) && this._goodsOf(L).some((x) => namesGood(text, x.item))) return true;
+        // (in a talk with him, the hand down: what I say is to him — not a spell, unless it is one)
+        if (!spell && this.inTalk() && this._partner === L && !this.game.isMagicActive) return true;
         if (detectOrder(text, this._players())) return true;
         const intent = detectIntent(text).intent;
         // («Бомбардо», «Инферно» said alone are spells, even if villagers like to talk about magic)
@@ -369,6 +391,17 @@ export class CastleTalk {
         const heard = norm(text);
         if (!heard) return false;
         const hw = heard.split(' ');
+        // a villager's voice is in the air right now (or was a moment ago) and my mouth did not move:
+        // the microphone heard him, not me (the camera sees the lips — as for spells, VoiceGate)
+        const now0 = performance.now();
+        const last = (this._spoken || []).at(-1);
+        const airborne = this.speech.speaking || (last && now0 - last.at < 1500 + String(last.text).length * 75);
+        if (airborne) {
+            const lips = this.game.voiceGate?.lipsMoved?.(now0);
+            if (lips === false) return true;
+            // (the mouth unseen: half of the words his — it is him)
+            if (lips == null && last) { const sw = new Set(norm(last.text).split(' ')); if (hw.filter((w) => sw.has(w)).length >= Math.max(1, hw.length * 0.5)) return true; }
+        }
         // (the lines said in the last seconds: the neural voice speaks a little after the bubble, the microphone hears it later still)
         // Only a real echo: the heard words are a piece of what the villager said, in the same order —
         // never my own answer that repeats some of his words («Меня зовут Мария» → «меня зовут Дима»)
@@ -448,7 +481,7 @@ export class CastleTalk {
         const out = [];
         for (const uid of s.goods) {
             const L = this.game.items.loose.get(uid);
-            if (L && L.item.shop) out.push({ name: nameOf(L.item), price: L.item.shop.price, uid });
+            if (L && L.item.shop && !L.item.shop.paid) out.push({ name: nameOf(L.item), price: L.item.shop.price, uid, item: L.item });
         }
         return out;
     }
@@ -523,7 +556,7 @@ export class CastleTalk {
 
     /** I took a good from a counter: the merchant names its price. */
     tookGood(item) {
-        if (this.prepaid.delete(item.uid)) { delete item.shop; return; }
+        if (this.prepaid.delete(item.uid) || item.shop?.paid) { delete item.shop; return; } // (paid for: mine)
         const key = item.shop.stall;
         const [cid, s] = key.split(':s');
         const cs = this.life.castles.get(cid);
@@ -574,19 +607,79 @@ export class CastleTalk {
 
     /** «да» to what the merchant offered by word: the good comes off the counter into my hand. */
     _buyByWord(v, offer) {
-        const g = this.game;
         const want = String(offer.item?.name || offer.item || '').toLowerCase();
-        const good = this._goodsOf(v).find((x) => x.name === want || want.includes(x.name.slice(0, 4))) || null;
-        if (!good) { this._sayReply(v, 'Ой, это уже разобрали...', 4); return; }
-        if (!g.inventory.spendCoins(good.price)) { this._sayReply(v, this.brain(v).noMoneyLine(this._ctx(v))); return; }
-        this.prepaid.add(good.uid);
-        const side = g.items.held.right ? 'left' : 'right';
-        if (g.authority) {
-            const L = g.items.loose.get(good.uid);
-            if (L) delete L.item.shop;
-            g.items.pickUp(good.uid, g.localId, side);
-        } else g.sync?.itemTake?.(good.uid, side);
-        g.hud.setVoice?.(`💰 Куплено: ${good.name} за ${good.price} (осталось ${g.inventory.coins()})`, true);
+        if (this._payByName(v, want)) return;
+        this._sayReply(v, 'Клади монеты на прилавок — и скажи, что берёшь.', 4);
+        this.game.hud.setVoice?.('💰 Положите мешочек с монетами на прилавок и назовите товар', true);
+    }
+
+    /** A pouch of coins lying still on this merchant's counter (the loose thing), or null. */
+    _pursePay(v) {
+        const P = this.purse;
+        if (!P || P.v !== v) return null;
+        const L = this.game.items.loose.get(P.uid);
+        return L && L.item.kind === 'coins' ? L : null;
+    }
+
+    /** I named a good with my coins on the counter: pay for it from the pouch (the host decides). */
+    _payByName(v, text) {
+        const C = this._pursePay(v);
+        if (!C) return false;
+        const good = this._goodsOf(v).find((x) => namesGood(text, x.item));
+        if (!good) return false;
+        const g = this.game;
+        if (g.authority) this.pay(C.item.uid, good.uid, g.localId);
+        else g.sync?.tradePay?.(C.item.uid, good.uid);
+        return true;
+    }
+
+    /**
+     * (host) The price of a good taken from a pouch lying on the counter: the merchant takes the pouch
+     * (all of it spent) or what it costs (the rest stays lying there); the good is free to take.
+     */
+    pay(coinUid, goodUid, by) {
+        const g = this.game, I = g.items;
+        const C = I.loose.get(coinUid), G = I.loose.get(goodUid);
+        if (!C || !G || C.item.kind !== 'coins' || !G.item.shop || G.item.shop.paid) return;
+        const [cid, s] = G.item.shop.stall.split(':s');
+        const cs = this.life.castles.get(cid);
+        const v = cs ? this._merchantOf(cs.def, +s) : null;
+        if (!v || v.dead || v.foe) return;
+        const price = G.item.shop.price, have = C.item.count || 0, name = nameOf(G.item);
+        v.yaw = Math.atan2(-(C.model.position.x - v.x), -(C.model.position.z - v.z));
+        if (have < price) {
+            this._sayForGuestOrMe(v, by, `${name[0].toUpperCase() + name.slice(1)} стоит ${price}, а тут только ${have}. Не хватает — выбери что-нибудь другое.`);
+            this._tradeNote(by, `💰 Не хватает монет: ${name} — ${price}, в мешочке ${have}. Выберите другой товар`);
+            return;
+        }
+        // he takes the money with his hand (the whole pouch — or what it costs, the rest left lying)
+        const at = C.model.position.clone();
+        I.pickUp(coinUid, '#merchant', 'right');
+        const rest = have - price;
+        if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
+        v.giveT = 1.2;
+        G.item.shop.paid = true;
+        g.sync?.tradePaid?.(goodUid);
+        this._sayForGuestOrMe(v, by, rest > 0 ? `Беру ${price}. Остаток твой — забирай. И ${name} забирай, он твой!` : `Беру ${price}. Забирай, ${name} твой!`);
+        this._tradeNote(by, `💰 Списано ${price} монет за: ${name}${rest > 0 ? ` (в мешочке осталось ${rest} — заберите его)` : ''}. Товар можно забрать`);
+        if (this.purse?.uid === coinUid) this.purse = null;
+    }
+
+    /** (everybody) a good was paid for: its price card goes, the hand may take it. */
+    paidGood(uid) {
+        const L = this.game.items.loose.get(uid);
+        if (L?.item.shop) L.item.shop.paid = true;
+    }
+
+    _sayForGuestOrMe(v, by, text) {
+        if (by === this.game.localId) this._sayReply(v, text, 6);
+        else this._sayForGuest(v, text);
+    }
+
+    _tradeNote(by, text) {
+        const g = this.game;
+        if (by === g.localId) g.hud.setVoice?.(text, true);
+        else g.sync?.tradeNote?.(by, text);
     }
 
     /** (host) the sale happens: the thing is gone, coins lie on the counter. */
@@ -627,6 +720,18 @@ export class CastleTalk {
                 if (!v || v.foe || cs.hostile.get(g.localId) > Date.now()) return;
                 const on = (p) => p.x >= c.x0 - 0.7 && p.x <= c.x1 + 0.7 && p.z >= c.z0 - 0.7 && p.z <= c.z1 + 0.7 && p.y > c.top - 0.3 && p.y < c.top + 1.2;
                 let found = null;
+                // my pouch of coins put down on the counter: «what do you want?»
+                for (const L of g.items.loose.values()) {
+                    if (L.item.kind !== 'coins' || L.hover || !on(L.model.position) || L.vel.lengthSq() > 0.05) continue;
+                    if (this.purse?.uid !== L.item.uid) {
+                        this.purse = { uid: L.item.uid, v };
+                        if (performance.now() - (v.talkedAt || -1e9) < 6000) break; // (the change he just left: no new question)
+                        v.talking = 4;
+                        this._sayReply(v, `Вижу монеты — ${L.item.count}. Что желаешь купить?`, 6);
+                        g.hud.setVoice?.(`💰 На прилавке ${L.item.count} монет — назовите товар (цена — на карточке рядом с ним)`, true);
+                    }
+                    break;
+                }
                 for (const L of g.items.loose.values()) {
                     if (L.item.shop || L.item.kind === 'coins' || L.hover) continue;
                     const sp = L.model.position;
@@ -667,6 +772,41 @@ export class CastleTalk {
                 g.hud.setVoice?.('🚨 Вы ушли, не заплатив! Торговец зовёт стражу', true);
             }
         }
+    }
+
+    /** A little card with the price beside every unpaid good on a counter near me. */
+    _tags() {
+        const g = this.game;
+        if (typeof document === 'undefined' || !g.scene) return;
+        const T = this._tagMap || (this._tagMap = new Map());
+        const me = g.character.group.position;
+        const want = new Set();
+        for (const L of g.items.loose.values()) {
+            const sh = L.item.shop;
+            if (!sh || sh.paid || L.hover) continue;
+            const p = L.model.position;
+            if (Math.abs(p.x - me.x) > 30 || Math.abs(p.z - me.z) > 30) continue;
+            want.add(L.item.uid);
+            let t = T.get(L.item.uid);
+            if (!t) {
+                const c = document.createElement('canvas');
+                c.width = 128; c.height = 72;
+                const x = c.getContext('2d');
+                x.fillStyle = '#e6d3a3'; x.fillRect(0, 0, 128, 72);
+                x.strokeStyle = '#7a5a2e'; x.lineWidth = 5; x.strokeRect(3, 3, 122, 66);
+                x.fillStyle = '#3a2410'; x.textAlign = 'center';
+                x.font = 'bold 40px sans-serif'; x.fillText(String(sh.price), 64, 42);
+                x.font = '16px sans-serif'; x.fillText('монет', 64, 63);
+                const tex = new THREE.CanvasTexture(c);
+                const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+                sp.scale.set(0.42, 0.24, 1);
+                g.scene.add(sp);
+                t = { sp, tex };
+                T.set(L.item.uid, t);
+            }
+            t.sp.position.set(p.x, p.y + 0.42, p.z);
+        }
+        for (const [uid, t] of T) if (!want.has(uid)) { g.scene.remove(t.sp); t.tex.dispose(); t.sp.material.dispose(); T.delete(uid); }
     }
 
     // ---------------------------------------------------------- greetings
@@ -724,6 +864,7 @@ export class CastleTalk {
             if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;
+        this._tags();
         // (my partner stays with me for the whole talk — also while the net thinks — not only 4 s)
         if (this.inTalk() && this._partner.talking < 1 && !this._partner.foe) { this._partner.talking = 1; this._partner.talkTo = g.localId; }
         for (const [id] of this.brains) if (!this.life.byId.has(id)) this.forget({ id });

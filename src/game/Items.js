@@ -549,7 +549,9 @@ export class ItemSystem {
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
                 if (L.model.position.distanceToSquared(G) > 9) continue;
-                // a good on a market counter: only taken by really closing the fingers on it (a brush of the hand takes nothing)
+                // a good on a market counter: not before it is paid for (coins on the counter, its name said — CastleTalk);
+                // then only taken by really closing the fingers on it (a brush of the hand takes nothing)
+                if (L.item.shop && !L.item.shop.paid) { this._shopHint(L, G); continue; }
                 if (L.item.shop && !((ch.isHandTracked ? ch.isHandTracked(side) : false) && (ch.getGripCurl ? ch.getGripCurl(side) : 0) > SHOP_GRIP)) continue;
                 const d = this._reachTo(L, G);
                 if (d < bestD) { bestD = d; best = L; }
@@ -681,11 +683,20 @@ export class ItemSystem {
     pickUp(uid, toId, side) {
         const L = this.loose.get(uid);
         if (!L) return;
+        if (L.item.shop && !L.item.shop.paid && toId && toId[0] !== '#') return; // (a good not paid for stays on the counter)
         const item = this.removeLoose(uid);
         // (a thing of a house chest: taken by this player — the theft is theirs, if anybody of the house sees it)
         if (item.home) { const home = item.home; delete item.home; if (toId && toId[0] !== '#') this.game.castleLife?.tookFromHome?.(home, toId); }
         if (this.game.sync) this.game.sync.itemGone?.(uid, toId, side);
         if (toId === this.game.localId) this._gotItem(item, side);
+    }
+
+    /** The hand at an unpaid good: how to buy it (now and then). */
+    _shopHint(L, G) {
+        const now = performance.now();
+        if (now - (this._shopHintT || -1e9) < 6000 || L.model.position.distanceToSquared(G) > 0.5) return;
+        this._shopHintT = now;
+        this.game.hud.setVoice?.(`💰 ${L.item.shop.price} монет. Сначала заплатите: положите мешочек с монетами на прилавок и назовите товар`, true);
     }
 
     _gotItem(item, side) {

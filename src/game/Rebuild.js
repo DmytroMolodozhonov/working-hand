@@ -207,7 +207,7 @@ export class Rebuild {
     /** Is it quiet enough at this castle to work? */
     _quiet(s) {
         const cs = this.life.castles.get(s.def.id);
-        const q = Math.min(this._t - s.at, cs ? this.life.fear.quietFor(cs) : Infinity);
+        const q = Math.min(this._t - s.at, cs ? this.life.fright.quietFor(cs) : Infinity);
         return q >= REBUILD.CALM;
     }
 

@@ -200,7 +200,7 @@ test('talk: the villager answers as soon as my words stop changing (not after th
     await page.close();
 });
 
-test('market: a brush of the open hand takes nothing from the counter — only closed fingers do; the villager\'s own voice in the microphone is not an answer', async () => {
+test('market: an unpaid good is not taken even by closed fingers — paid for, only closed fingers take it; the villager\'s own voice in the microphone is not an answer', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -242,12 +242,19 @@ test('market: a brush of the open hand takes nothing from the counter — only c
         const brushed = g.items.loose.has(uid);
         curl = 1;
         await frames(15);
+        const unpaidStays = g.items.loose.has(uid);
+        curl = 0; await frames(5);
+        L.item.shop.paid = true; // (paid for: coins on the counter, the good named — CastleTalk.pay)
+        curl = 1;
+        await frames(15);
         const took = !g.items.loose.has(uid) && (g.items.held.right?.item.uid === uid || g.items.held.left?.item.uid === uid);
         ch.getHandWorldPosition = origPos; ch.getGripCurl = origCurl; if (origTr) ch.isHandTracked = origTr; g.weapons.palmFrame = origPF;
-        const unpaid = !!(g.items.held.right?.item.shop || g.items.held.left?.item.shop);
+        const mine = !(g.items.held.right?.item.shop || g.items.held.left?.item.shop);
         // the merchant's line comes back through the microphone: nobody answers it
         const T2 = g.castleLife.talk;
-        const m = T2.offer?.v;
+        const me0 = ch.group.position;
+        const m = [...g.castleLife.byId.values()].filter((v) => v.role === 'merchant' && !v.dead).sort((a, b) => Math.hypot(a.x - me0.x, a.z - me0.z) - Math.hypot(b.x - me0.x, b.z - me0.z))[0];
+        if (m) T2._sayReply(m, 'Хлеб свежий, сыр душистый, бери!');
         const said = (T2._spoken || []).slice(-1)[0]?.text || m?.bubble?.text || '';
         const echo = said ? T2.hear(said) : null;
         // my own answer that repeats some of his words is not an echo; words a villager understands are talk, not a spell
@@ -276,10 +283,11 @@ test('market: a brush of the open hand takes nothing from the counter — only c
             m.damageCooldown = 0; g.onLocalHit(m, 1, null, false);
             bump = { first, second, third: st() };
         }
-        return { brushed, took, unpaid, offered: T2.offer?.kind === 'buy', said, echo, face, bump, notEcho, claims };
+        return { brushed, unpaidStays, took, mine, said, echo, face, bump, notEcho, claims };
     }, uid);
     assert.ok(r.brushed, 'an open hand on the good takes nothing');
-    assert.ok(r.took && r.unpaid && r.offered, `closed fingers take it, the merchant names the price: ${JSON.stringify(r)}`);
+    assert.ok(r.unpaidStays, 'not paid for: it stays on the counter');
+    assert.ok(r.took && r.mine, `paid for: closed fingers take it, and it is mine: ${JSON.stringify(r)}`);
     assert.equal(r.echo, false, 'the merchant\'s own words from the speakers are not an answer');
     assert.ok(r.notEcho, 'my answer repeating his words is heard; his own line is not');
     assert.deepEqual(r.claims, { order: true, thanks: true, spell: false }, '«собери войско» / «спасибо» go to the villager, «бомбардо» stays a spell');

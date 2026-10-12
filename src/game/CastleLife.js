@@ -209,7 +209,7 @@ export class CastleLife {
         this.talk = new CastleTalk(game, this); // conversations and the market
         this.wizards = new WizardLife(this); // the wizards' towers and the wandering wizards
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
-        this.fear = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
+        this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
         this.brainLine = (v) => this.talk.ambientLine(v);
     }
@@ -415,7 +415,7 @@ export class CastleLife {
         cs.spawnT = 0.7;
         const players = this._players().filter((pl) => this._inLand(def, pl.p, 40));
         if (!players.length) return;
-        if (this.fear.quietFor(cs) < 40) return; // (danger about: nobody comes out of the houses now)
+        if (this.fright.quietFor(cs) < 40) return; // (danger about: nobody comes out of the houses now)
         // (a weaker computer — fewer people round you; fewer at night)
         const q = [0.45, 0.65, 0.85, 1][this.game.quality?.level ?? 3] ?? 1;
         const want = Math.round(Math.min(22, 7 + def.population / 55) * (this.game.isNight ? 0.35 : 1) * q);
@@ -695,7 +695,7 @@ export class CastleLife {
         if (v.foe) { this._fight(v, dt); return; }
         if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)
         if (v.investigate && this._investigate(v, dt)) return;
-        if (this.fear.step(v, dt)) return; // (danger near: hiding, running away, looking out, buckets)
+        if (this.fright.step(v, dt)) return; // (danger near: hiding, running away, looking out, buckets)
         if (v.job === 'rebuild' && this.rebuild.work(v, dt)) return; // (a builder at the repairs)
         if (v.fleeT > 0) {
             v.fleeT -= dt;
@@ -735,6 +735,7 @@ export class CastleLife {
         }
         v.bowT -= dt;
         if (v.bowing > 0) { v.bowing -= dt; v.mode = 'bow'; v.speed = 0; return; }
+        if (v.giveT > 0) { v.giveT -= dt; v.mode = 'offer'; v.speed = 0; this._ground(v); return; } // (a merchant's hand out for the coins)
         // talking with a player: stops and looks at them (the king keeps his seat)
         if (v.talking > 0 && v.job !== 'king') {
             const tp = this._playerPos(v.talkTo || g.localId);
@@ -954,8 +955,8 @@ export class CastleLife {
             const step = cur + Math.sign(da) * 0.6, rr = Math.max(R, Math.min(d, R + 1.5));
             tx = fp.x + Math.cos(step) * rr; tz = fp.z + Math.sin(step) * rr;
         }
-        // (never right on top of them)
-        if (d < 1.6 && d > 1e-3) { const k = (1.6 - d) * 0.5; const nx = v.x + (v.x - fp.x) / d * k, nz = v.z + (v.z - fp.z) / d * k; if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; } }
+        // (never right on top of them: a sword's length away at least)
+        if (d < 1.9 && d > 1e-3) { const k = (1.9 - d) * 0.7; const nx = v.x + (v.x - fp.x) / d * k, nz = v.z + (v.z - fp.z) / d * k; if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; } }
         if (toSlot > 0.8) {
             this._steer(v, tx, tz, toSlot > 3 ? RUSH : WALK * 1.3, dt, 0.3);
             v.mode = v.tac?.role === 'shield' ? 'block' : v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : (engaged ? 'attack' : 'block');
@@ -1821,7 +1822,7 @@ export class CastleLife {
         const kingHit = victim && victim.role === 'king';
         for (const w of witnesses) {
             if (this._fights(w)) { w.foe = by; if (Math.random() < 0.6) this._say(w, pick(w.wizard ? WIZ_SHOUT.fight : w.role === 'king' ? SHOUT.king : SHOUT.knight)); }
-            else { const bp = this._playerPos(by); this.fear.scare(w, 'attacker', bp ? { x: bp.x, y: bp.y - 1.95, z: bp.z } : pos, by); if (Math.random() < 0.5) this._say(w, pick(SHOUT.help)); }
+            else { const bp = this._playerPos(by); this.fright.scare(w, 'attacker', bp ? { x: bp.x, y: bp.y - 1.95, z: bp.z } : pos, by); if (Math.random() < 0.5) this._say(w, pick(SHOUT.help)); }
         }
         // the alarm: knights near any witness come too; for the king — every knight
         for (const k of cs.active.values()) {
@@ -1879,7 +1880,7 @@ export class CastleLife {
     alarm(pos, kind, by = null, r = null) {
         if (!this.enabled || !pos) return;
         if (!this.auth) { this.game.sync?.villagerDanger?.([Math.round(pos.x), Math.round(pos.y ?? 0), Math.round(pos.z)], kind, r); return; }
-        this.fear.add(kind, pos, { by, r });
+        this.fright.add(kind, pos, { by, r });
     }
 
     /**
@@ -1896,7 +1897,7 @@ export class CastleLife {
         const g = this.game;
         if (!this.auth) { if (by === g.localId) g.sync?.villagerVandal?.([Math.round(pos.x), Math.round(pos.y), Math.round(pos.z)], blocks, loud ? 1 : 0, r); return; }
         // (a blast: the people near take fright — VillagerFear; whatever broke is put back later — Rebuild)
-        if (loud) this.fear.add(kind || 'blast', pos, { r: r ?? 4, by });
+        if (loud) this.fright.add(kind || 'blast', pos, { r: r ?? 4, by });
         if (blocks > 0 || loud) this.rebuild.damaged(pos, r ?? (loud ? 6 : 2), by, loud); // (a crater in the street too)
         const isPlayer = !!by && (by === g.localId || g.remotes.has(by));
         for (const def of this.index.near(pos.x, pos.z, 0)) {
@@ -2003,7 +2004,7 @@ export class CastleLife {
         }
         const d = Math.hypot(I.x - v.x, I.z - v.z);
         // (never into a fire or a castle coming down: they look from its edge)
-        const keep = this.fear.keepOut(I);
+        const keep = this.fright.keepOut(I);
         if (keep && d < keep + 5) { v.speed = 0; v.path = null; v.yaw = turn(v.yaw, Math.atan2(-(I.x - v.x), -(I.z - v.z)), dt * 4); v.mode = 'idle'; this._ground(v); return true; }
         if (d > 6) {
             v.chaseT = (v.chaseT || 0) - dt;
@@ -2198,7 +2199,7 @@ export class CastleLife {
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
             for (const cs of this.castles.values()) if (cs.awake) { if (isWizSite(cs.def)) this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
-            this.fear.update(dt);
+            this.fright.update(dt);
             this.rebuild.update(dt);
             this._squads(dt);
             this._assignSlots();
@@ -2333,7 +2334,7 @@ export class CastleLife {
             if (hp < v.hp || armor < v.armor) v.barT = 8;
             v.hp = hp; v.armor = armor; v.seated = !!seated; v.speed = speed;
             if (v.role === 'knight') { v.fx = fx ?? 0; v.aimPitch = pitch ?? 0; } // (a bow in his hands, where it aims)
-            else if (!v.wizard) this.fear.applyFx(v, fx | 0); // (a bucket of water in the hands)
+            else if (!v.wizard) this.fright.applyFx(v, fx | 0); // (a bucket of water in the hands)
             if (v.wizard) {
                 // (a wizard's small magic, and where the wand aims; a blink: there at once, in a puff of smoke)
                 if ((fx & 128) && !(v.fx & 128)) { this.wizards.fx.smoke(v); v.x = x; v.y = y; v.z = z; this.wizards.fx.smoke(v); }
@@ -2387,7 +2388,7 @@ export class CastleLife {
 
     dispose() {
         this.talk.dispose();
-        this.fear.clear();
+        this.fright.clear();
         this.rebuild.dispose();
         for (const v of [...this.byId.values()]) this._deactivate(v);
         this.castles.clear();

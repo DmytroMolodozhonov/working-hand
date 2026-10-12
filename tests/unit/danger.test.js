@@ -94,3 +94,19 @@ test('a rebuilt block stands after a reload, unless a later blast took it again'
     // nothing after them: all stand
     assert.equal(stillStanding(log, explosions.slice(0, 1)).length, 3);
 });
+
+test('the market: a good is named the way people call it («щит», «стейк» / «мясо», «яблоко»), not by a word that only looks alike', async () => {
+    const { namesGood } = await import('../../src/game/CastleTalk.js');
+    assert.ok(namesGood('дайте щит', { kind: 'shield' }));
+    assert.ok(namesGood('хочу мясо', { kind: 'steak' }) && namesGood('стейк', { kind: 'steak' }));
+    assert.ok(namesGood('золотое яблоко пожалуйста', { kind: 'apple' }));
+    assert.ok(namesGood('лук', { kind: 'bow' }) && !namesGood('лучше хлеб', { kind: 'bow' }));
+    assert.ok(namesGood('лучше хлеб', { kind: 'bread' }) && !namesGood('сыр', { kind: 'bread' }));
+});
+
+test('the people\'s fright (VillagerFear) never hides CastleLife.fear() — the Hellfire calls that (a knight then walked through the fire)', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(new URL('../../src/game/CastleLife.js', import.meta.url), 'utf8');
+    assert.ok(/\n {4}fear\(v, x, z/.test(src), 'CastleLife.fear(v, x, z, …) is there');
+    assert.ok(!/this\.fear\s*=/.test(src), 'no field named «fear» over the method');
+});

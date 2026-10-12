@@ -593,7 +593,9 @@ export class Hellfire {
             if (ring) {
                 const ox = mid.x - body.x, oz = mid.z - body.z, L = Math.hypot(ox, oz) || 1;
                 const d = Math.abs(L - f.rr) - W / 2 - b.r;
-                if (d < gap && mid.y > body.y - 3 && mid.y < body.y + (f.rh || HELLFIRE.RING_H) + 1) { gap = d; fx = body.x + ox / L * f.rr; fz = body.z + oz / L * f.rr; }
+                // (inside the ring — between it and the caster — «away from the flames» must not mean onto the caster:
+                // the fire is then reckoned from the caster's side, and its heat and surge send them out, not in)
+                if (d < gap && mid.y > body.y - 3 && mid.y < body.y + (f.rh || HELLFIRE.RING_H) + 1) { gap = d; const k = L < f.rr ? Math.min(L, f.rr) - 1.5 : f.rr; fx = body.x + ox / L * k; fz = body.z + oz / L * k; }
             }
             if (!(gap < fear)) continue;
             if (g.wards?.shields(blaze ? f.c : body, mid)) continue; // (in a protected house)

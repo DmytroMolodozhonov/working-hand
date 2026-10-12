@@ -549,6 +549,12 @@ export class NetSync {
     villagerAnswer(to, id, res) { if (this.net.isHost) this.net.send({ t: 'vans', to, id, res }); }
     villagerAI(on) { if (this.net.isHost) this.net.send({ t: 'vai', on: !!on }); }
     tradeSell(uid, wid, price, p) { this.net.send({ t: 'tsell', uid, wid, price, p }); }
+    /** I named a good with my coins on the counter (a guest): the host takes the price from the pouch. */
+    tradePay(coin, good) { this.net.send({ t: 'tpay', coin, good }); }
+    /** (host) a good was paid for: everybody lets the hand take it, its price card goes. */
+    tradePaid(uid) { if (this.net.isHost) this.net.send({ t: 'tpaid', uid }, true); }
+    /** (host) what the payment did, for the guest who paid. */
+    tradeNote(to, text) { if (this.net.isHost) this.net.send({ t: 'tnote', to, text: String(text).slice(0, 200) }); }
     animalHit(id, dmg, dir, fire) { this.net.send({ t: 'ahit', id, dmg, d: dir ? [r3(dir.x), r3(dir.y), r3(dir.z)] : null, f: fire ? 1 : 0, by: this.me }); }
     animalMeat(id, side) { this.net.send({ t: 'ameat', id, side }); }
     animalMeatTo(to, item, side) { this.net.send({ t: 'agive', to, item, side }, true); }
@@ -820,13 +826,16 @@ export class NetSync {
             case 'vtalk': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v && !v.foe) { v.talking = 5; v.talkTo = m.from; } } break;
             case 'vvand': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.damaged({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, m.from, Math.min(500, +m.n || 0), !!m.l, { r: Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null }); break;
             case 'vdng': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.alarm({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, String(m.k || ''), m.from, Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null); break;
-            case 'vdouse': if (!this.net.isHost && Array.isArray(m.p)) g.castleLife?.fear.splash({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, Math.min(4, +m.r || 2)); break;
+            case 'vdouse': if (!this.net.isHost && Array.isArray(m.p)) g.castleLife?.fright.splash({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, Math.min(4, +m.r || 2)); break;
             case 'vbuild': if (!this.net.isHost) g.castleLife?.rebuild.applyNet(m.id, m.s, m.c); break;
             case 'vcrime': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.reportCrime(v, m.from, String(m.kind || '')); } break;
             case 'vord': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.orders.run(v, String(m.name || ''), m.args && typeof m.args === 'object' ? m.args : {}, m.from); } break;
             case 'vask': if (this.net.isHost) g.castleLife?.talk.answerGuest(m.from, m.id, String(m.text || '').slice(0, 300), m.ctx && typeof m.ctx === 'object' ? m.ctx : {}); break;
             case 'vans': if (m.to === this.me) g.castleLife?.talk.answered(m.id, m.res || {}); break;
             case 'vai': if (!this.net.isHost && g.castleLife) g.castleLife.talk.hostSmart = !!m.on; break;
+            case 'tpay': if (this.net.isHost) g.castleLife?.talk.pay(String(m.coin || ''), String(m.good || ''), m.from); break;
+            case 'tpaid': if (!this.net.isHost) g.castleLife?.talk.paidGood(String(m.uid || '')); break;
+            case 'tnote': if (m.to === this.me) g.hud.setVoice?.(String(m.text || ''), true); break;
             case 'tsell': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.talk.sellNow(m.uid || null, m.wid || null, Math.min(2000, +m.price || 1), vec(m.p)); break;
             case 'ahit': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals.hit(a, Math.min(30, m.dmg || 1), m.d ? vec(m.d) : null, m.from || m.by, !!m.f); } break;
             case 'ameat': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals._takeMeat(a, m.from, m.side); } break;

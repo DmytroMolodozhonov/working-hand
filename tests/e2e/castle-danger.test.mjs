@@ -68,7 +68,7 @@ test('a blast in a village: people hide away from it, then builders put back wha
     const work = await page.evaluate(async () => {
         const g = window.__zns.game, L = g.castleLife, R = L.rebuild;
         g.fire.burningBlocks.clear(); g.fire.burningTrees.length = 0; // (the fire it lit burnt out)
-        R._t += 1000; L.fear._t += 1000;
+        R._t += 1000; L.fright._t += 1000;
         for (const v of L.byId.values()) if (v.fear) v.fear.lastT -= 1000;
         const s = [...R.sites.values()][0];
         await new Promise((r) => { const t = setInterval(() => { if (s.plan || !R.sites.size) { clearInterval(t); r(); } }, 100); setTimeout(r, 15000); });
