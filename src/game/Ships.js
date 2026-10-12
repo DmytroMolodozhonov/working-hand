@@ -469,12 +469,20 @@ export class Ships {
         const wx = _l.x, wz = _l.z;
         const w2 = wx * wx + wz * wz;
         const blowing = this.auth ? !!s.blow : !!s.net?.blowing;
+        // a wind cast into the sails bellies them its own way at once (its push builds up slowly,
+        // and till then the sea's own wind — often from ahead in a port — must not show them aback)
+        let bx = 0, bz = 0;
+        if (blowing) {
+            const B = this.auth && s.blow ? s.blow : null;
+            const dx = B ? B.dx : s.st.spellWind?.x || 0, dz = B ? B.dz : s.st.spellWind?.z || 0;
+            if (Math.hypot(dx, dz) > 1e-3) { s.pose.dirToLocal(dx, dz, _o); bx = _o.x; bz = _o.z; }
+        }
         for (const sl of s.sails) {
             if (blowing && sl.open > 0.5 && sl.burnt < 1) sl.gust = Math.max(sl.gust, 0.9);
             const want = sl.burnt >= 1 ? sl.open : sl.target;
             if (sl.open < want) sl.open = Math.min(want, sl.open + UNFURL_RATE * dt);
             else if (sl.open > want) sl.open = Math.max(want, sl.open - UNFURL_RATE * dt);
-            const dot = wx * sl.normal.x + wz * sl.normal.z;
+            const dot = bx || bz ? bx * sl.normal.x + bz * sl.normal.z : wx * sl.normal.x + wz * sl.normal.z;
             let ft;
             if (sl.kind === 'square') {
                 // braced yards: a wind from astern or the quarter fills them; from ahead — aback

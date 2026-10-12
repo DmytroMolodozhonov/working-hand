@@ -198,7 +198,11 @@ function makeLayout(C) {
 
     // -------------------------------------------------------------- the wheel
     const helmZ = C.id === 'pinnace' ? Q.z0 + 5 : Q.z0 + 3;
-    const helm = { x: 0, y: Q.y + 1.9, z: helmZ, rimR: 1.45, handleR: 1.85, spokes: 8, stand: { x: 0, y: Q.y, z: helmZ + 1.1 } };
+    const helm = { x: 0, y: Q.y + 1.9, z: helmZ, rimR: 1.45, handleR: 1.85, spokes: 8, stand: { x: 0, y: Q.y, z: helmZ + 1.5 } };
+    // the helmsman's room: the body stops an arm's length behind the wheel (never pressed against
+    // it: the hands reach the spokes in front of the chest, the wand at the belt stays clear of the
+    // rim) — it stops bodies only, not hands, blades or blows (ShipCollision skips it for those)
+    solids.push({ x0: -1.9, x1: 1.9, y0: Q.y + 0.3, y1: Q.y + 3.9, z0: helmZ + 0.3, z1: helmZ + 0.8, kind: 'helmspace' });
     solids.push({ x0: -1.9, x1: 1.9, y0: Q.y + 0.3, y1: Q.y + 3.9, z0: helmZ - 0.3, z1: helmZ + 0.3, kind: 'wheel' });
     solids.push({ x0: -0.45, x1: 0.45, y0: Q.y, y1: Q.y + 1.9, z0: helmZ - 0.5, z1: helmZ + 0.5, kind: 'wheel' });
 
