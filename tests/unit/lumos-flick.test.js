@@ -14,11 +14,14 @@ const trailOf = (fn, ms = 400, step = 16) => {
 };
 const FWD = new THREE.Vector3(0, 0.2, 1).normalize(); // (the wand points ahead, a little up)
 
-test('Lumos flick: a quick steady flick where the wand points throws the light', () => {
-    // the tip goes 0.8 m ahead in the last 0.15 s
-    const { trail, now } = trailOf((s) => new THREE.Vector3(0, 1.4, 0.3 + Math.max(0, s - 0.25) * 5.3));
+test('Lumos throw: a wind-up, then a quick steady throw where the wand points — the light flies', () => {
+    // drawn back 0.35 m (0.15–0.45 s), then the tip goes 1 m ahead in the last 0.16 s
+    const { trail, now } = trailOf((s) => new THREE.Vector3(0, 1.4, s < 0.15 ? 0.4 : s < 0.45 ? 0.4 - (s - 0.15) * 1.17 : s < 0.64 ? 0.05 : 0.05 + (s - 0.64) * 6.25), 800);
     const d = lumosFlick(trail, now, FWD);
     assert.ok(d && d.z > 0.9, 'thrown ahead');
+    // the same fast move with no wind-up (a jerk of the hand): the light stays on the wand
+    const jerk = trailOf((s) => new THREE.Vector3(0, 1.4, 0.05 + Math.max(0, s - 0.64) * 6.25), 800);
+    assert.equal(lumosFlick(jerk.trail, jerk.now, FWD), null, 'a jerk with no wind-up');
 });
 
 test('Lumos flick: never by walking (the arm swings), a jumpy frame, a slow move or a flick down', () => {

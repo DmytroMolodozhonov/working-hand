@@ -42,26 +42,39 @@ export const LUMOS = {
     LIFE: 15, // s from the throw: then it is gone (time to see where it went — down a cave tunnel)
     FADE: 3, // s of fading out at the end
     AGAIN: 1500, // ms: the same word heard again (the speech's final result) is not a second cast
-    FLICK: 0.6, // m the wand's tip goes in 0.15 s against the body, steadily one way: a flick throws the light
+    FLICK: 0.85, // m the wand's tip goes in 0.16 s against the body, steadily one way: a throw
+    WINDUP: 0.2, // m the tip was drawn back first (against the throw) — a real throw has a wind-up
+    WINDUP_T: 900, // ms before the throw that wind-up may be
     STILL: 1200, // ms standing still before a flick counts (walking swings the arms: never a throw)
 };
 
 /**
- * A flick of the wand (or null): its tip — against the body — went fast and steadily one way in
- * the last 0.15 s (two halves of the move both long and in one direction: one jumpy frame of the
+ * A throw of the light (or null): a wind-up (the tip drawn back) and then its tip — against the body —
+ * went fast and steadily one way in the last 0.16 s (two halves of the move both long and in one direction: one jumpy frame of the
  * camera is not a flick, nor an arm swinging as you walk), roughly where the wand points, not down.
  * `trail`: [{t (ms), p (Vector3, the tip in the body's frame)}], oldest first. Returns the move's
  * direction in the body's frame.
  */
 export function lumosFlick(trail, now, wandDir) {
     const at = (ms) => { for (let i = trail.length - 1; i >= 0; i--) if (now - trail[i].t >= ms) return trail[i].p; return null; };
-    const a = at(150), b = at(75), c = trail[trail.length - 1]?.p;
-    if (!a || !b || !c || now - trail[0].t > 600) return null;
+    const a = at(160), b = at(80), c = trail[trail.length - 1]?.p;
+    if (!a || !b || !c) return null;
+    // (the camera saw the hand all along: no gap in the throw)
+    for (let i = 1; i < trail.length; i++) if (now - trail[i].t < 400 && trail[i].t - trail[i - 1].t > 150) return null;
     const d1 = new THREE.Vector3().subVectors(b, a), d2 = new THREE.Vector3().subVectors(c, b);
     const l1 = d1.length(), l2 = d2.length();
     if (l1 < LUMOS.FLICK * 0.35 || l2 < LUMOS.FLICK * 0.35 || l1 + l2 < LUMOS.FLICK || d1.dot(d2) < 0.6 * l1 * l2) return null;
     const dir = d1.add(d2).normalize();
     if (dir.y < -0.6 || (wandDir && dir.dot(wandDir) < 0.3)) return null;
+    // a real throw has a wind-up: before it the tip was drawn back (it was further along the throw
+    // a moment ago) — a twitch, a jerk of the hand or a camera jump has none
+    let back = 0;
+    for (const s of trail) {
+        const age = now - s.t;
+        if (age <= 160 || age > LUMOS.WINDUP_T) continue;
+        back = Math.max(back, (s.p.x - a.x) * dir.x + (s.p.y - a.y) * dir.y + (s.p.z - a.z) * dir.z);
+    }
+    if (back < LUMOS.WINDUP) return null;
     return dir;
 }
 
@@ -476,7 +489,7 @@ export class WandMagic {
             if (ch.isRunning || ch.stepping > 0 || ch.flying) this._movedAt = now;
             const trail = this._trail || (this._trail = []);
             trail.push({ t: now, p: ch.group.worldToLocal(tip.clone()) });
-            while (trail.length > 2 && now - trail[1].t > 400) trail.shift();
+            while (trail.length > 2 && now - trail[1].t > LUMOS.WINDUP_T + 100) trail.shift(); // (long enough to see the wind-up)
             ch.group.getWorldQuaternion(_q);
             const wandDir = _v2.clone().applyQuaternion(_q.clone().invert());
             const flick = now - (this._movedAt || 0) > LUMOS.STILL && now - (this._flickAt || 0) > 900 && (ch.isArmRaised?.(side) ?? true) ? lumosFlick(trail, now, wandDir) : null;
