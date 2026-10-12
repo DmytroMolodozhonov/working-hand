@@ -178,11 +178,13 @@ export function wardWords(s) {
 // «Let the Hellfire Come» as the Russian recognizer writes it: «лет зе хеллфаер кам», «хелфайр кам»,
 // «come hellfire», «хелл фаер»… The word «hellfire» (whole, or «hell» + «fire» side by side) AND «come»
 // or «let» as words of their own: talk about fire, a «камин» or «5 лет» never casts it.
-const HELL_W = /^(?:х[еэ]лл?|hell?)$/;
-const FIRE_W = /^(?:ф[аэ][йи]?[еэя]?р|fire|fier|fyre|fair|faer|fayer)$/;
-const HELLFIRE_W = /^(?:х[еэ]лл?|hell?)(?:ф[аэ][йи]?[еэя]?р|fire|fier|fyre|fair|faer|fayer)$/;
-const COME_W = /^(?:кам|кем|кум|камм|ком|камон|комон|come|comes|cum|cam|kam|kum|cmon)$/;
-const LET_W = /^(?:лет|лэт|let)$/;
+const HELL_W = /^(?:х[еэи]лл?ь?|hell?)$/; // («хел», «хелл», «хель», «хэл», «хил»…)
+const FIRE_W = /^(?:ф[аэ][йи]?[еэя]?р|фер|файа|fire|fier|fyre|fair|faer|fayer|fer)$/;
+const HELLFIRE_W = /^(?:х[еэи]лл?ь?|hell?)(?:ф[аэ][йи]?[еэя]?р|фер|файа|fire|fier|fyre|fair|faer|fayer|fer)$/;
+const COME_W = /^(?:кам|кем|кум|камм|ком|камэ|каме|камон|комон|come|comes|cum|cam|kam|kum|cmon)$/;
+const LET_W = /^(?:лет|лэт|летс|лэтс|лец|лед|летзе|лэтзе|let|lets)$/;
+// («the»: as the recognizer writes it between «Let» and «Hellfire»)
+const THE_W = /^(?:зе|зэ|дзе|the|ze)$/;
 
 /**
  * «Let the Hellfire Come» (or «Hellfire come», «Come, hellfire», «Да придёт адский огонь»)?
@@ -193,6 +195,9 @@ export function hellfireWords(text) {
     let fire = false;
     for (let i = 0; i < w.length && !fire; i++) fire = HELLFIRE_W.test(w[i]) || (HELL_W.test(w[i]) && i + 1 < w.length && FIRE_W.test(w[i + 1]));
     if (fire) return w.some((x) => COME_W.test(x) || LET_W.test(x)) ? 2 : 1;
+    // «Hell» lost by the recognizer («лет зе фаер кам»): «let / the» + «fire» is never a campfire —
+    // with «come» it is the spell, without it wait for the rest of the phrase
+    if (w.some((x) => FIRE_W.test(x)) && w.some((x) => LET_W.test(x) || THE_W.test(x))) return w.some((x) => COME_W.test(x)) ? 2 : 1;
     // the Russian words: «Да придёт адский огонь» (the whole phrase)
     const t = w.join(' ');
     return /(^| )адск[а-я]* (огон|огн|пламя)/.test(t) && /(^| )(прид[а-я]*|приди|явись|гряди)( |$)/.test(t) ? 2 : 0;

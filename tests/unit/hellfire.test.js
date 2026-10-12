@@ -8,7 +8,9 @@ import { matchSpell } from '../../src/fx/SpellManager.js';
 
 test('Hellfire: the words (English, and as the Russian recognizer writes them)', () => {
     for (const t of ['Let the Hellfire Come', 'let the hellfire come', 'Hellfire come', 'Come, hellfire', 'лет зе хеллфаер кам',
-        'лет зе хелфайр кам', 'хэлфайр кам', 'хеллфайер кам', 'лет зэ хелл фаер кам', 'кам хелфаир', 'лет зе хеллфаер', 'Да придёт адский огонь']) {
+        'лет зе хелфайр кам', 'хэлфайр кам', 'хеллфайер кам', 'лет зэ хелл фаер кам', 'кам хелфаир', 'лет зе хеллфаер', 'Да придёт адский огонь',
+        // (as a real recognizer also writes it: «hell» softened or lost, «let's», «fer»)
+        'лец зе хель фаер кам', 'летс зе хил файр кам', 'лет зе хелфер кам', 'лет зе фаер кам', 'лед зе хелл фаер камэ', 'зе хелфаер кам']) {
         assert.equal(matchSpell(t), 'Hellfire', t);
     }
     // its short sounds still mean what they meant
@@ -24,6 +26,8 @@ test('Hellfire: ordinary talk never casts it', () => {
         assert.notEqual(matchSpell(t), 'Hellfire', t);
     }
     assert.equal(matchSpell('хеллфаер'), null, '«hellfire» alone waits for «come» — never a campfire');
+    assert.equal(matchSpell('лет зе фаер'), null, '«let the fire…» waits for «come» — never a campfire');
+    assert.equal(matchSpell('лед'), 'Ice');
 });
 
 test('Hellfire: mana — a maximum of 100+, 80 at once, 2 a second; Creative has no mana rules', () => {
