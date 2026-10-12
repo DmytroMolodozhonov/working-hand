@@ -97,7 +97,7 @@ export class CastleTalk {
             const life = this.life;
             b = new VillagerBrain(
                 { id: v.id, name: v.name, role: this._trader(v) ? 'merchant' : v.role, female: v.entry.female, castleName: def.name, kingName: def.king, seed: v.entry.seed },
-                () => ({ castleName: def.name, kingName: life.state(def.id).kingDead ? (life.state(def.id).ownerName || def.king) : def.king, playerIsKing: life.state(def.id).owner === this.game.localId, timeOfDay: this.game.isNight ? 'night' : 'day', danger: v.cs.hostile.size > 0 }),
+                () => ({ castleName: def.name, kingName: life.state(def.id).kingDead ? (life.state(def.id).ownerName || def.king) : def.king, playerIsKing: life.state(def.id).owner === this.game.localId, kingDead: !!life.state(def.id).kingDead, timeOfDay: this.game.isNight ? 'night' : 'day', danger: v.cs.hostile.size > 0 }),
                 { memory: this.memories.get(v.id) },
             );
             this.brains.set(v.id, b);
@@ -287,7 +287,7 @@ export class CastleTalk {
             // (too slow on this computer: say so now and then — the answer came from the rules)
             if (this.mind.lastTimedOut) {
                 this._slow = (this._slow || 0) + 1;
-                if (this._slow >= 2 && performance.now() - (this._slowT || -1e9) > 180000) { this._slowT = performance.now(); g.hud.notify?.('🧠 Нейросеть жителей не успевает отвечать на этом компьютере — отвечают готовыми фразами'); }
+                if (this._slow >= 2 && performance.now() - (this._slowT || -1e9) > 180000) { this._slowT = performance.now(); console.info('[CastleTalk] the net is too slow on this computer: the rules answered'); }
             } else this._slow = 0;
             console.info(`[CastleTalk] ${res.smart ? 'net' : 'rules'} ${Math.round(performance.now() - t0)} ms: «${text}» → «${res.reply}»${res.action ? ` [${res.action}]` : ''}`);
             done(res);
@@ -715,12 +715,13 @@ export class CastleTalk {
             if (L && this._llmWasReady && !L.ready && !L.loading && (this._llmRestarts || 0) < 3) {
                 this._llmRestarts = (this._llmRestarts || 0) + 1;
                 this.llmState = { state: 'loading', text: 'перезапускается' };
-                g.hud.notify?.('🧠 Нейросеть жителей сбилась — перезапускаю (из памяти браузера, без скачивания)');
-                L.load().then(() => { this.llmState = { state: 'ready', text: 'готова' }; g.hud.notify?.('🧠 Нейросеть жителей снова готова'); }, (e) => { console.warn('[CastleTalk] LLM restart failed:', e?.message || e); this.llmState = { state: 'failed', text: 'не перезапустилась' }; });
+                console.info('[CastleTalk] the net crashed: restarting it');
+                L.load().then(() => { this.llmState = { state: 'ready', text: 'готова' }; }, (e) => { console.warn('[CastleTalk] LLM restart failed:', e?.message || e); this.llmState = { state: 'failed', text: 'не перезапустилась' }; });
             }
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
             if (this.voiceOn && this.life.castles.size) this.speech.preload?.();
-            if (g.config.villagerAI && g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.castles.size) { this._llmTried = true; this._loadLLM(g.config.villagerAI); }
+            // (always on — loaded in the background from the start of the game; meanwhile the rules answer)
+            if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;
         // (my partner stays with me for the whole talk — also while the net thinks — not only 4 s)
@@ -743,12 +744,12 @@ export class CastleTalk {
         // ('auto': a real graphics adapter, not only the word WebGPU in the browser)
         if (setting === 'auto') { try { gpu = !!(await navigator.gpu?.requestAdapter?.()); } catch (e) { gpu = false; } }
         let key = LocalLLM.pick(setting, gpu);
-        if (!key) { this.llmState = { state: 'nogpu', text: 'не включилась: браузер не видит видеокарту (в настройках звука можно включить её вручную)' }; return; }
+        if (!key) { this.llmState = { state: 'failed', text: 'не загрузилась' }; return; }
         while (key) {
             const llm = new LocalLLM({ model: key });
             this.llm = llm;
             const m = LocalLLM.MODELS[key];
-            g.hud.notify?.(`🧠 Загружаю нейросеть жителей (${m.label}, один раз)...`);
+            console.info('[CastleTalk]', `🧠 Загружаю нейросеть жителей (${m.label}, один раз)...`);
             let last = 0;
             try {
                 await llm.load((f, text) => {
@@ -756,13 +757,12 @@ export class CastleTalk {
                     if (now - last < 1500 && f !== 1) return;
                     last = now;
                     this.llmState = { state: 'loading', text: `ещё скачивается${f != null ? ` (${Math.round(f * 100)}%)` : ''}` };
-                    g.hud.setVoice?.(`🧠 ${text || 'Нейросеть жителей'}${f != null ? ` ${Math.round(f * 100)}%` : ''}`, true);
                 });
                 if (this.llm !== llm) return; // (disposed meanwhile)
                 this.llmState = { state: 'ready', text: `готова (${m.label}, ${llm.device === 'webgpu' ? 'видеокарта' : 'процессор'})` };
                 this._llmWasReady = true;
                 this._warmLLM(llm);
-                g.hud.notify?.('🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
+                console.info('[CastleTalk]', '🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
                 g.sync?.villagerAI?.(true);
                 return;
             } catch (e) {
@@ -773,7 +773,7 @@ export class CastleTalk {
             }
         }
         this.llmState = { state: 'failed', text: 'не загрузилась' };
-        g.hud.notify?.('🧠 Нейросеть не загрузилась — жители говорят готовыми фразами (приказы всё равно понимают)');
+        console.info('[CastleTalk]', '🧠 Нейросеть не загрузилась — жители говорят готовыми фразами (приказы всё равно понимают)');
     }
 
     /**
@@ -794,16 +794,8 @@ export class CastleTalk {
         }).then(() => console.info(`[CastleTalk] the net warmed up in ${Math.round(performance.now() - t0)} ms`), () => {});
     }
 
-    /** I talk to a villager without the net: say once in a while why (still downloading, no graphics card, failed, off). */
-    _whyNoNet() {
-        const g = this.game;
-        if (this.llm?.ready || this.hostSmart) return;
-        const now = performance.now();
-        if (now - (this._whyT || -1e9) < 120000) return;
-        this._whyT = now;
-        const st = g.config.villagerAI === 'off' ? { text: 'выключена в настройках звука' } : this.llmState || { text: 'ещё не начала загружаться (подойдите к замку)' };
-        g.hud.notify?.(`🧠 Нейросеть жителей ${st.text} — пока они отвечают готовыми фразами`);
-    }
+    /** I talk to a villager without the net (still loading): the rules answer — nothing is written about it. */
+    _whyNoNet() {}
 
     dispose() {
         this.speech.cancel();

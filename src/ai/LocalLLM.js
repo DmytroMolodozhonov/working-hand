@@ -54,7 +54,8 @@ export class LocalLLM {
     /** The setting value → the model key ('auto': the conversation net when the computer has a GPU for the browser). */
     static pick(setting, hasGPU = LocalLLM.hasWebGPU) {
         if (!setting || setting === 'off') return null;
-        if (setting === 'auto') return hasGPU ? 'qwen35' : null;
+        // (always on: with a graphics card the conversation net; without one the light net, quick on the processor)
+        if (setting === 'auto') return hasGPU ? 'qwen35' : 'light';
         return LocalLLM.MODELS[setting] ? setting : 'qwen35';
     }
 
