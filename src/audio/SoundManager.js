@@ -491,6 +491,25 @@ export class SoundManager {
         this._playAt(this.sounds.crack, position, volume, 8);
     }
 
+    /** A builder's hammer on stone / wood (the castle being repaired — Rebuild.js). */
+    playHammer(position, volume = 1) {
+        if (!this.context) return;
+        if (!this.sounds.hammer) {
+            const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * 0.22);
+            const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+            let lp = 0;
+            for (let i = 0; i < len; i++) {
+                const t = i / sr;
+                lp += ((Math.random() * 2 - 1) - lp) * 0.5;
+                // a sharp knock: a click, a short ring of iron, a dull wooden body
+                const s = lp * Math.exp(-t * 90) * 1.2 + Math.sin(2 * Math.PI * 1650 * t) * Math.exp(-t * 40) * 0.35 + Math.sin(2 * Math.PI * 210 * t) * Math.exp(-t * 28) * 0.6;
+                d[i] = Math.max(-1, Math.min(1, s * Math.min(1, t * 4000)));
+            }
+            this.sounds.hammer = buf;
+        }
+        this._playAt(this.sounds.hammer, position, volume, 6, 0.9 + Math.random() * 0.25);
+    }
+
     /** Water rising out of a river into the ball. */
     playWaterRise() {
         if (!this.context) return;

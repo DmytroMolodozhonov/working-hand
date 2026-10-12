@@ -176,7 +176,7 @@ export class TotalDestruction {
         if (authoritative) {
             let wrecked = 0;
             for (const b of out.removed) if (isCastleBlock(b[3])) wrecked++;
-            g.castleLife?.damaged(p, d.by, wrecked, true);
+            g.castleLife?.damaged(p, d.by, wrecked, true, { r: R, kind: 'ruin' });
         }
         // the blocks are seen falling down to where the ruins lie
         this._startFall(d, out);

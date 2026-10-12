@@ -231,11 +231,11 @@ export class Game {
             scatterCrew: (origin, pushAt, casterId) => this.ships?.crew.scatter?.(origin, pushAt, casterId),
             quakeMe: (casterId, origin, reached, power, dir) => this._quakeMe(casterId, origin, reached, power, dir),
             quakeGround: (x, z, power, side) => this.quake.breakGround(x, z, power, side), // (Quake.js: the ground breaks along the crack)
-            quakeShake: (front, power) => this.quake.shake(front, power), // (…and shakes under whoever is near the wave)
+            quakeShake: (front, power) => { this.quake.shake(front, power); if (this.authority && (this._quakeAlarmT || 0) < performance.now() - 500) { this._quakeAlarmT = performance.now(); this.castleLife?.alarm(front, 'quake', null, power > 1 ? 9 : 6); } }, // (…and shakes under whoever is near the wave; the people near take fright)
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
+            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
             birdRay: (o, d, len, width, name) => {
                 len = this.wards?.clipRay(o, d, len) ?? len; // (a house's sphere stops it from outside)
                 this.books?.hitRay(o, d, len, width);
@@ -639,7 +639,7 @@ export class Game {
         if (authoritative) {
             let wrecked = 0;
             for (const b of out.blocks) if (isCastleBlock(b.type)) wrecked++;
-            this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true);
+            this.castleLife?.damaged(pos, casterId === 'local' || !casterId ? this.localId : casterId, wrecked, true, { r: radius });
         }
         const debris = [];
         for (const b of out.blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: BLOCK_COLORS[b.type] ?? BASE_COLORS[b.type] ?? 0x7a5230 });
@@ -1302,6 +1302,7 @@ export class Game {
         const width = max ? 9 : 5, height = max ? 5 : 3;
         const dist = max ? 4 : 3.5;
         const cx = ch.group.position.x + fx * dist, cz = ch.group.position.z + fz * dist;
+        this.castleLife?.alarm({ x: cx, y: ch.group.position.y - 1.95, z: cz }, 'quake', this.localId, width / 2); // (earth rising out of the ground: the people near run)
         const cols = [];
         const seen = new Set();
         for (let i = 0; i < width; i++) {
@@ -2687,7 +2688,7 @@ export class Game {
         this._burnNoteAt = now;
         const f = this._fireBy;
         const by = f && now - f.at < 120000 ? f.by : null;
-        this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false);
+        this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false, { r: 8 }); // (a house burning: its whole place)
     }
 
     /** Lightning at a protected house from outside: it strikes the top of its sphere (and wears it down). */

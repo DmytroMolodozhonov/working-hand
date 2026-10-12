@@ -359,6 +359,7 @@ export class Builder {
 
     _sendEdits(list) {
         if (!list.length) return;
+        this.game.castleLife?.rebuild?.forget(list); // (a cell the castle's builders put back is the player's now)
         this.game.blockEdits = this.game.blockEdits || [];
         for (const e of list) this.game.blockEdits.push(e);
         if (this.game.blockEdits.length > 30000) this.game.blockEdits.splice(0, this.game.blockEdits.length - 30000);
@@ -375,5 +376,6 @@ export class Builder {
             if ((e[3] | 0) === BLOCK.ICE) this.ice.push({ x: e[0] | 0, L: e[1] | 0, z: e[2] | 0, until: performance.now() + ICE_LIFE * 1000 });
         }
         this.game.blockEdits = (this.game.blockEdits || []).concat(list);
+        if (this.game.authority) this.game.castleLife?.rebuild?.forget(list);
     }
 }

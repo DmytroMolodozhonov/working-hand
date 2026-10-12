@@ -233,6 +233,7 @@ export class WorldKeeper {
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
+            rebuild: g.castleLife?.rebuild.snapshot() || null, // what the builders put back (Rebuild.js)
             bodies: g.death?.snapshot() || [],
             crystals: g.crystals?.snapshot() || [],
             dragons: g.dragons?.snapshot() || {}, // dragons' lairs: the gold left, their dragons' health (Dragons.js)
@@ -271,6 +272,7 @@ export function restoreWorld(game, save, THREE) {
         else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k));
         g.explosions.push(e);
     }
+    if (save.rebuild) g.castleLife?.rebuild.restore(save.rebuild); // (after the blasts: what the builders put back since)
     if (save.ice && save.ice.length) g.applyIce(save.ice);
     for (const id of save.chests || []) { (g._openedChests = g._openedChests || new Set()).add(id); const c = g.chests?.find((x) => x.id === id); if (c) c.setOpenInstant(); }
     for (const e of save.items || []) g.items?.spawnLoose(e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });

@@ -24,7 +24,7 @@ import { SKIN_TONES } from './Appearance.js';
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
-export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow'];
+export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket'];
 export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot'];
 /** How far up the tool the tip of a wand / a staff is (tool-local y). */
 export const TIP_Y = { wand: 1.05, staff: 2.45 };
@@ -116,7 +116,7 @@ const STEEL = 0xb8c2cc, STEEL_LIGHT = 0xdde3ea, STEEL_DARK = 0x7d8794;
 const GOLD = 0xe2b33c, GOLD_DARK = 0xb8862a;
 const RUBY = 0xd0182a, WOOD = 0x8b5a2b, IRON = 0x6f7780, LEATHER = 0x5a3a1e;
 const HAIR_COLORS = [0x2b1d14, 0x4a3728, 0x8b5a2b, 0xd9b46c, 0xa83e2a, 0x111111, 0x6b4a2b];
-const GREY_HAIR = 0xd8d6cf;
+export const GREY_HAIR = 0xd8d6cf;
 const EYE_COLORS = [0x3b6ea5, 0x5a3a1e, 0x2f6b3a, 0x444444];
 
 function rng(seed) {
@@ -618,6 +618,13 @@ function toolBoxes(kind) {
             b(B, 0.06, 1.7, 0.07, 0, 1.25, 0, 0xb8c2cc);
             b(B, 0.12, 0.18, 0.06, 0, 2.46, 0, 0xeef2f6);
             break;
+        case 'bucket': // a wooden bucket of water, hanging from the hand by its bail (see HANGING)
+            b(B, 0.05, 0.05, 0.5, 0, 0.02, 0, IRON);
+            b(B, 0.05, 0.36, 0.05, 0, -0.16, -0.24, IRON); b(B, 0.05, 0.36, 0.05, 0, -0.16, 0.24, IRON);
+            b(B, 0.5, 0.48, 0.5, 0, -0.56, 0, 0x8a5a2b);
+            b(B, 0.54, 0.06, 0.54, 0, -0.42, 0, IRON); b(B, 0.54, 0.06, 0.54, 0, -0.72, 0, IRON);
+            b(B, 0.42, 0.04, 0.42, 0, -0.34, 0, 0x6fb7e8);
+            break;
         case 'basket': // hangs from the hand (see HANGING)
             b(B, 0.06, 0.06, 0.48, 0, 0.02, 0, WOOD);
             b(B, 0.06, 0.32, 0.06, 0, -0.14, -0.21, WOOD); b(B, 0.06, 0.32, 0.06, 0, -0.14, 0.21, WOOD);
@@ -668,7 +675,7 @@ function toolBoxes(kind) {
     }
     return B;
 }
-const HANGING = new Set(['basket', 'pouch']);
+const HANGING = new Set(['basket', 'pouch', 'bucket']);
 
 // ==================================================================== model
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);

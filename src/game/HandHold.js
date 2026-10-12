@@ -404,7 +404,7 @@ export class HandHold {
             if (this.mine[side] || this.onMe[side] || !this._handFree(side) || ch.getGripCurl(side) > HAND.OPEN || !ch.isArmExtended(side)) continue;
             const p = this.palm(ch, side, _a);
             for (const v of vs.values()) {
-                if (v.dead || v.foe || v.fleeT > 0 || v.seated || v.handLink || !v.group.visible || v.mode === 'attack') continue;
+                if (v.dead || v.foe || v.fleeT > 0 || v.fear?.level >= 2 || v.seated || v.handLink || !v.group.visible || v.mode === 'attack') continue;
                 const d = Math.hypot(v.x - p.x, v.z - p.z);
                 if (d > OFFER_R || Math.abs(p.y - (v.y + 3)) > 2.2) continue;
                 // (held out to them: the hand in front of me, towards them)
@@ -689,7 +689,7 @@ export class HandHold {
             let H = this.vHolds.get(m.id);
             if (H && H.by !== m.by) return; // (one hand at a time)
             if (!H) {
-                if (v.foe || v.fleeT > 0) { g.castleLife?._say?.(v, pick(NO), 2.5); g.sync?.villagerFree?.(m.id, m.by); return; }
+                if (v.foe || v.fleeT > 0 || v.fear?.level >= 2) { g.castleLife?._say?.(v, pick(NO), 2.5); g.sync?.villagerFree?.(m.id, m.by); return; }
                 H = { by: m.by, t: 0, hp: v.hp, patience: v.role === 'knight' || v.role === 'king' ? 3 + Math.random() * 2 : 7 + Math.random() * 5, side: 'right' };
                 this.vHolds.set(m.id, H);
             }

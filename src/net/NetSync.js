@@ -156,6 +156,7 @@ export class NetSync {
             wards: g.wards?.netList() || [], // houses' spheres of protection
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
+            rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
             bodies: g.death?.snapshot() || [],
             vai: !!g.castleLife?.talk?.llm?.ready, // (the host's villager net answers the guests too)
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
@@ -195,6 +196,7 @@ export class NetSync {
             else g.world.explode(vec(e.p), e.r, keepIn(e.k)); // (k: houses' spheres it could not eat into)
             g.explosions.push(e);
         }
+        if (msg.rebuild) g.castleLife?.rebuild.restore(msg.rebuild); // (after the blasts: what was put back since)
         if (msg.ice && msg.ice.length) g.applyIce(msg.ice);
         for (const id of msg.chests || []) {
             (g._openedChests = g._openedChests || new Set()).add(id);
@@ -533,7 +535,13 @@ export class NetSync {
     villagerCrime(id, kind) { this.net.send({ t: 'vcrime', id, kind }); }
     /** A window pane broke (Houses.js): everybody's glass breaks. */
     glass(id) { this.net.send({ t: 'glass', id }, true); }
-    villagerVandal(p, n, loud) { this.net.send({ t: 'vvand', p, n, l: loud }); }
+    villagerVandal(p, n, loud, r = null) { this.net.send({ t: 'vvand', p, n, l: loud, r }); }
+    /** Something dangerous a guest did near a castle (a quake, «Breakthrough»): the host frightens its people. */
+    villagerDanger(p, kind, r = null) { this.net.send({ t: 'vdng', p, k: kind, r }); }
+    /** A villager's bucket of water on a fire (host): it goes out everywhere. */
+    villagerDouse(p, r) { if (this.net.isHost) this.net.send({ t: 'vdouse', p, r }); }
+    /** A castle's scaffolding and the builders' cart (host). */
+    rebuildSite(id, s, c) { if (this.net.isHost) this.net.send({ t: 'vbuild', id, s, c }, true); }
     villagerTalk(id) { this.net.send({ t: 'vtalk', id }); }
     // villagers really talk (TalkMind): a guest's orders and questions go to the host
     villagerOrder(id, name, args) { this.net.send({ t: 'vord', id, name: String(name).slice(0, 30), args: args || {} }); }
@@ -810,7 +818,10 @@ export class NetSync {
             case 'valarm': if (m.to === this.me) g.hud.setVoice('⚔️ Вас заметили! Стража замка идёт за вами', true); break;
             case 'cst': if (!this.net.isHost && m.s) g.castleLife?.applyState(m.id, m.s); break;
             case 'vtalk': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v && !v.foe) { v.talking = 5; v.talkTo = m.from; } } break;
-            case 'vvand': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.damaged({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, m.from, Math.min(500, +m.n || 0), !!m.l); break;
+            case 'vvand': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.damaged({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, m.from, Math.min(500, +m.n || 0), !!m.l, { r: Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null }); break;
+            case 'vdng': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.alarm({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, String(m.k || ''), m.from, Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null); break;
+            case 'vdouse': if (!this.net.isHost && Array.isArray(m.p)) g.castleLife?.fear.splash({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, Math.min(4, +m.r || 2)); break;
+            case 'vbuild': if (!this.net.isHost) g.castleLife?.rebuild.applyNet(m.id, m.s, m.c); break;
             case 'vcrime': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.reportCrime(v, m.from, String(m.kind || '')); } break;
             case 'vord': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.orders.run(v, String(m.name || ''), m.args && typeof m.args === 'object' ? m.args : {}, m.from); } break;
             case 'vask': if (this.net.isHost) g.castleLife?.talk.answerGuest(m.from, m.id, String(m.text || '').slice(0, 300), m.ctx && typeof m.ctx === 'object' ? m.ctx : {}); break;
