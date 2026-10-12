@@ -326,13 +326,33 @@ export function furnish(p0, room, s, chests, aisles = []) {
         case 'bedroom':
         case 'king': {
             const big = kind === 'king';
-            const bw = big ? 2 : 1;
-            p.box(fu - bw, fu + bw, l, l, v1 - 5, v1, BLOCK.PLANKS_DARK);
-            p.box(fu - bw, fu + bw, l + 1, l + 1, v1 - 5, v1 - 1, big ? s.carpet : BLOCK.CLOTH_WHITE);
-            p.box(fu - bw, fu + bw, l + 1, l + 1, v1, v1, BLOCK.CLOTH_WHITE);
-            if (big) { p.box(fu - bw, fu + bw, l + 2, l + 4, v1, v1, BLOCK.GOLD); chest(fu + bw + 2, v1 - 1); }
+            // (the bed off the way through the room: on the far side, else the other side; the king's
+            // wide bed narrower where the room is small)
+            const otherU = Math.round((cu + (farU === u0 ? u1 : u0)) / 2);
+            const tries = big ? [[fu, 2], [otherU, 2], [fu, 1], [otherU, 1], [farU === u0 ? u0 + 1 : u1 - 1, 1]] : [[fu, 1], [otherU, 1]];
+            const fit = tries.find(([u, w]) => !hits(u - w, u + w, v1 - 5, v1) && u - w >= u0 && u + w <= u1);
+            // (no room along the room: across it, by a wall the way through does not touch, the pillow to the side wall)
+            const across = !fit && [v0 + 1, v1 - 1].map((cv2) => [cv2, !hits(u0, u0 + 5, cv2 - 1, cv2 + 1) ? u0 : !hits(u1 - 5, u1, cv2 - 1, cv2 + 1) ? u1 : null]).find(([, pu]) => pu != null);
+            let sleep = null; // [middle u, v, pillow u, v]
+            if (across) {
+                const [bv, pu] = across, du = pu === u0 ? 1 : -1;
+                p.box(Math.min(pu, pu + du * 5), Math.max(pu, pu + du * 5), l, l, bv - 1, bv + 1, BLOCK.PLANKS_DARK);
+                p.box(Math.min(pu + du, pu + du * 5), Math.max(pu + du, pu + du * 5), l + 1, l + 1, bv - 1, bv + 1, big ? s.carpet : BLOCK.CLOTH_WHITE);
+                p.box(pu, pu, l + 1, l + 1, bv - 1, bv + 1, BLOCK.CLOTH_WHITE);
+                if (big) p.box(pu, pu, l + 2, l + 4, bv - 1, bv + 1, BLOCK.GOLD);
+                sleep = [pu + du * 2.4, bv, pu, bv];
+            } else {
+                const [bu, bw] = fit || tries[0];
+                p.box(bu - bw, bu + bw, l, l, v1 - 5, v1, BLOCK.PLANKS_DARK);
+                p.box(bu - bw, bu + bw, l + 1, l + 1, v1 - 5, v1 - 1, big ? s.carpet : BLOCK.CLOTH_WHITE);
+                p.box(bu - bw, bu + bw, l + 1, l + 1, v1, v1, BLOCK.CLOTH_WHITE);
+                if (big) { p.box(bu - bw, bu + bw, l + 2, l + 4, v1, v1, BLOCK.GOLD); chest(fu + bw + 2, v1 - 1); }
+                if (fit) sleep = [bu, v1 - 2.4, bu, v1];
+            }
             p.box(cu - 2, cu + 2, l - 1, l - 1, v0 + 1, v1 - 7, s.carpet);
             lantern(cu, v0);
+            // (where somebody sleeps in it at night — src/game/NightLife.js: the middle of the body, the head to the pillow)
+            if (room.beds && sleep) { const a = p.pt(sleep[0], sleep[1], l + 2), h = p.pt(sleep[2], sleep[3], l + 2); room.beds.push({ x: a.x, y: a.y, z: a.z, yaw: Math.atan2(h.x - a.x, h.z - a.z), room: kind }); }
             break;
         }
         default: break;
@@ -564,7 +584,7 @@ function buildKeep(p, s, rng, out) {
         const aisles = [];
         for (let k = 1; k < pts.length; k++) aisles.push(leg(pts[k - 1], pts[k]));
         if (!isStairRoom) {
-            furnish(p, { kind, u0: r.ru0, u1: r.ru1, v0: r.r0, v1: r.rv1, l: upl, doorSide: 'v0' }, s, out.chests, aisles);
+            furnish(p, { kind, u0: r.ru0, u1: r.ru1, v0: r.r0, v1: r.rv1, l: upl, doorSide: 'v0', beds: out.beds }, s, out.chests, aisles);
             out.rooms.push({ kind, name: ROOM_NAMES[kind], ...p.rect(r.ru0, r.ru1, r.r0, r.rv1), y: p.L(upl) - 1.5, l: upl });
         }
         // windows over the throne room from the side rooms (a gallery)
@@ -677,6 +697,13 @@ function buildCastle(p, s, rng, out) {
         for (let k = 8; k <= 11; k++) p.box(bu0 - 1 + (k - 8), bu1 + 1 - (k - 8), k, k, bv0 - 1, bv1 + 1, s.roof);
         for (let v = bv0 + 2; v <= bv1 - 2; v += 3) { if (v >= bv0 + 7 && v <= bv0 + 11) continue; p.box(bu1 - 4, bu1 - 1, 0, 0, v, v, BLOCK.PLANKS_DARK); p.box(bu1 - 4, bu1 - 2, 1, 1, v, v, BLOCK.CLOTH_WHITE); }
         p.box(bu0 + 2, bu0 + 2, 5, 5, bv0 + 4, bv0 + 4, BLOCK.LANTERN);
+        // the knights' bunks (head to the wall) and straw mats on the floor by the door side (NightLife.js)
+        for (let v = bv0 + 2; v <= bv1 - 2; v += 3) {
+            if (v >= bv0 + 7 && v <= bv0 + 11) continue;
+            const a = p.pt(bu1 - 2.6, v, 2), h = p.pt(bu1, v, 2), m = p.pt(bu0 + 3.3, v, 0), mh = p.pt(bu0 + 6, v, 0);
+            out.beds.push({ x: a.x, y: a.y, z: a.z, yaw: Math.atan2(h.x - a.x, h.z - a.z), room: 'barracks' });
+            out.beds.push({ x: m.x, y: m.y, z: m.z, yaw: Math.atan2(mh.x - m.x, mh.z - m.z), room: 'barracks', mat: true });
+        }
         out.rooms.push({ kind: 'barracks', name: ROOM_NAMES.barracks, ...p.rect(bu0 + 1, bu1 - 1, bv0 + 1, bv1 - 1), y: p.L(0) - 1.5, l: 0 });
         const bOut = p.node(bu0 - 3, bv0 + 9, 0, 'barracksDoor');
         const bIn = p.node(bu0 + 4, bv0 + 9, 0, 'room:barracks');
@@ -1609,7 +1636,7 @@ export class CastleIndex {
     _buildCastle(gx, gz, X, Z, F, s, rng, zone, seaOpts = null) {
         const rot = seaOpts ? seaOpts.rot : Math.floor(rng() * 4);
         const p = new Plan(X, Z, F, rot);
-        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [], cannons: [] };
+        const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [], cannons: [], beds: [] };
         s.sea = seaOpts;
         buildVillage(p, s, rng, out);
         buildCastle(p, s, rng, out);
@@ -1630,7 +1657,7 @@ export class CastleIndex {
             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
             throne: out.throne, throneFront: out.throneFront, throneGate: out.throneGate || null, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
             houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),
-            stalls: out.stalls, fields: out.fields, market: out.market, posts: out.posts,
+            stalls: out.stalls, fields: out.fields, market: out.market, posts: out.posts, beds: out.beds,
             nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk,
             parts: p.parts,
             topL: F + 1 + s.H + s.towerExtra + 30,

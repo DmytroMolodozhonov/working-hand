@@ -274,6 +274,7 @@ export class CastleTalk {
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
         const v = this._listener();
         if (!v) return false;
+        if (this.life.night?.heard(v, text)) return true; // (asleep: a mumble; a merchant at night: «come in the morning»)
         // (a coin pouch on his counter and a good named: the purchase — VillagerBrain is not asked)
         if (this._trader(v) && this._payByName(v, text)) { v.talking = 4; v.talkTo = g.localId; return true; }
         const b = this.brain(v);
@@ -499,6 +500,7 @@ export class CastleTalk {
     /** (host) keep goods on the counters of the markets near players. */
     _restock(now) {
         const g = this.game;
+        if (this.life.night?.closed()) return; // (the market is shut from an hour before the night till the morning)
         for (const cs of this.life.castles.values()) {
             if (!cs.awake) continue;
             cs.def.stalls.forEach((stall, i) => {

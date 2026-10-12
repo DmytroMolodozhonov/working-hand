@@ -25,7 +25,11 @@ import { SKIN_TONES } from './Appearance.js';
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp'];
+/** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
+export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
+/** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
+export const SLEEP_HALF = 2.05;
 /** How far up the tool the tip of a wand / a staff is (tool-local y). */
 export const TIP_Y = { wand: 1.05, staff: 2.45 };
 /** group.position.y = ground surface + this (feet at local −1.95). */
@@ -45,6 +49,15 @@ const DEFAULT_SPEED = { walk: 1.6, run: 5, flee: 5.5 };
 const MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
 MAT.name = 'villager';
 const HIT_MAT = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0xff6060, emissive: 0x8a1010 });
+// the night: a blanket over a sleeper, a straw mat under one on the floor, a watchman's torch (shared)
+const WOOL = [0x8a2b2b, 0x2e4a7a, 0x6b5a3a, 0x3f6b3a, 0x7a6a5a, 0x5a3a6b, 0xb8a888].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const STRAW_MAT = new THREE.MeshLambertMaterial({ color: 0xc8a85a });
+const BLANKET_GEO = new THREE.BoxGeometry(2.15, 3.0, 0.24);
+const STRAW_GEO = new THREE.BoxGeometry(2.3, 0.12, 4.6);
+const TORCH_STICK = new THREE.BoxGeometry(0.14, 1.1, 0.14);
+const TORCH_FLAME = new THREE.BoxGeometry(0.3, 0.42, 0.3);
+const STICK_MAT = new THREE.MeshLambertMaterial({ color: 0x5a3a1e });
+const FLAME_MAT = new THREE.MeshBasicMaterial({ color: 0xffb030 });
 HIT_MAT.name = 'villager-hit';
 const HL_MAT = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x303030 });
 HL_MAT.name = 'villager-highlight';
@@ -813,6 +826,23 @@ export class VillagerModel {
         for (const k of POSE_KEYS) { this._p[k] = 0; this._tg[k] = 0; }
         this._p.wrist = REST_WRIST;
         this._p.cape = -0.1;
+        // asleep: how far lain down (0…1), the turn onto a side, when the next turn over comes
+        this._lie = 0; this._roll = 0; this._rollTo = 0; this._rollT = 12 + ((look.seed >>> 3) % 30);
+        this.blanket = null; this.mat = null; this.torch = null;
+    }
+
+    /** A burning torch in the left hand (the night watch). */
+    setTorch(on) {
+        if (!!this.torch === !!on) return;
+        if (!on) { this.leftArm.remove(this.torch); this.torch = null; return; }
+        const t = this.torch = new THREE.Group();
+        const stick = new THREE.Mesh(TORCH_STICK, STICK_MAT);
+        const flame = new THREE.Mesh(TORCH_FLAME, FLAME_MAT);
+        flame.position.y = 0.7;
+        t.add(stick, flame);
+        t.position.set(0, -1.15, -0.25);
+        t.rotation.x = -1.2; // (held up and forward when the arm is raised a little)
+        this.leftArm.add(t);
     }
 
     _mesh(parent, boxes, shadow = true) {
@@ -904,6 +934,7 @@ export class VillagerModel {
         if (mode === 'attack') { this._atkT = 0; this.attackPhase = 0; }
         if (mode === 'work') this._workT = 0;
         if (mode === 'dead') { this._deadT = 0; this._deadDone = false; }
+        if (SLEEP_MODES.has(prev) && !SLEEP_MODES.has(mode)) this._leaveSleep();
         if (prev === 'dead') {
             this._deadDone = false;
             this.root.rotation.set(0, 0, 0);
@@ -925,6 +956,7 @@ export class VillagerModel {
         if (mode !== this.mode) this._enterMode(mode);
         if (this._flashT > 0) { this._flashT -= dt; if (this._flashT <= 0) { this._flashT = 0; this._applyMaterial(); } }
         if (mode === 'dead') { this._updateDead(dt); return; }
+        if (SLEEP_MODES.has(mode)) { this._updateSleep(dt, mode === 'sleepMat'); return; }
 
         this._t += dt;
         const t = this._t;
@@ -1083,6 +1115,13 @@ export class VillagerModel {
                 T.headX = 0.1;
                 rate = 12;
                 break;
+            case 'situp':
+                // sat up on the bed, legs over its side: a stretch, a yawn, rubbing the eyes
+                T.lL = T.lR = Math.PI / 2; T.kL = T.kR = -Math.PI / 2;
+                T.hx = 0.18; T.headX = -0.15 + Math.sin(t * 1.4) * 0.1;
+                T.aLX = 2.4 + Math.sin(t * 2) * 0.2; T.aRX = 1.6; T.aLZ = -0.2; T.aRZ = 0.3; T.wrist = -1.6;
+                rate = 6;
+                break;
             case 'sit':
                 T.lL = T.lR = Math.PI / 2; T.kL = T.kR = -Math.PI / 2;
                 T.hx = 0.08;
@@ -1108,7 +1147,68 @@ export class VillagerModel {
         const k = 1 - Math.exp(-rate * dt);
         const kh = 1 - Math.exp(-8 * dt); // the head turns at its own pace
         for (const key of POSE_KEYS) P[key] += (T[key] - P[key]) * (key === 'headY' ? kh : k);
-        this._apply(t, breathe, mode === 'sit');
+        this._apply(t, breathe, mode === 'sit' || mode === 'situp');
+    }
+
+    // ------------------------------------------------------------- asleep
+    _sleepProps(onMat) {
+        if (!this.blanket) {
+            this.blanket = new THREE.Mesh(BLANKET_GEO, WOOL[(this.look.seed >>> 9) % WOOL.length]);
+            this.blanket.position.set(0, 1.55, -0.6); // (over the front of the body, the feet to the chest)
+            this.blanket.castShadow = this._shadow;
+            this.root.add(this.blanket);
+            this.mat = new THREE.Mesh(STRAW_GEO, STRAW_MAT);
+            this.mat.receiveShadow = true;
+            this.group.add(this.mat);
+        }
+        this.blanket.visible = true;
+        this.mat.visible = onMat;
+        this.mat.position.set(0, -VILLAGER_FOOT_OFFSET + 0.06, 0);
+        if (this.tool) this.tool.visible = false;
+        if (this.shield) this.shield.visible = false;
+        if (this.torch) this.torch.visible = false;
+    }
+
+    _leaveSleep() {
+        this._lie = 0; this._roll = 0; this._rollTo = 0;
+        this.root.rotation.set(0, 0, 0);
+        this.root.position.set(0, -VILLAGER_FOOT_OFFSET, 0);
+        if (this.blanket) { this.blanket.visible = false; this.mat.visible = false; this.blanket.scale.z = 1; }
+        if (this.tool) this.tool.visible = true;
+        if (this.shield) this.shield.visible = true;
+        if (this.torch) this.torch.visible = true;
+    }
+
+    /**
+     * Asleep: on the back under the blanket (the head at local +Z, the middle of the body at the
+     * group's place), slow breathing; now and then turned over onto a side, the knees drawn up.
+     */
+    _updateSleep(dt, onMat) {
+        this._sleepProps(onMat);
+        this._t += dt;
+        const t = this._t;
+        this._lie = Math.min(1, this._lie + dt / 0.9);
+        this._rollT -= dt;
+        if (this._rollT <= 0) {
+            this._rollT = 18 + Math.random() * 35;
+            this._rollTo = this._rollTo !== 0 ? 0 : (Math.random() < 0.5 ? -1.2 : 1.2);
+        }
+        this._roll += (this._rollTo - this._roll) * (1 - Math.exp(-2.5 * dt));
+        const e = this._lie * this._lie * (3 - 2 * this._lie);
+        const side = Math.abs(Math.sin(this._roll));
+        this.root.rotation.set(e * Math.PI / 2, this._roll * e, 0);
+        this.root.position.set(0, -VILLAGER_FOOT_OFFSET + (0.45 + 0.3 * side) * e + (onMat ? 0.12 : 0), -SLEEP_HALF * e);
+        const P = this._p;
+        const f = 1 - Math.exp(-6 * dt);
+        const to = (key, v) => { P[key] += (v - P[key]) * f; };
+        to('hx', 0.1 * side); to('hy', 0); to('headX', 0.15); to('headY', this._roll * 0.15); to('headZ', 0);
+        to('aLX', 0.25 + 0.5 * side); to('aLZ', -0.12); to('aRX', 0.25 + 0.5 * side); to('aRY', 0); to('aRZ', 0.12); to('wrist', REST_WRIST);
+        to('lL', 0.55 * side); to('lR', 0.45 * side); to('kL', -0.8 * side); to('kR', -0.7 * side); to('block', 0); to('cape', -0.05); to('bounce', 0);
+        const br = Math.sin(t * 1.25 + (this.look.seed % 7)); // (slow, deep breaths)
+        this._apply(t, 0.025 * br, true);
+        this.pelvis.position.y = VILLAGER_FOOT_OFFSET;
+        this.torso.position.y = 0.75 + 0.03 * br;
+        this.blanket.scale.z = 1 + 0.12 * br;
     }
 
     _apply(t, breathe, sitting) {

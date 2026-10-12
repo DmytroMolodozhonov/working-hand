@@ -43,6 +43,7 @@ import { slowFactor, tickSlow } from './Slow.js';
 import { creditKill } from './Mana.js';
 import { VillagerFear } from './VillagerFear.js';
 import { Rebuild } from './Rebuild.js';
+import { NightLife } from './NightLife.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -211,6 +212,7 @@ export class CastleLife {
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
+        this.night = new NightLife(this); // the night: everybody home asleep, only the watch out (NightLife.js)
         this.brainLine = (v) => this.talk.ambientLine(v);
     }
 
@@ -328,6 +330,13 @@ export class CastleLife {
         if (!this.auth) return;
         const def = cs.def;
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
+        if (this.night?.staffNight(cs)) return; // (at night: only the watch is out — NightLife.js)
+        this._staffDay(cs);
+    }
+
+    /** (host) The castle's people at their day places (those not out already). */
+    _staffDay(cs) {
+        const def = cs.def;
         const st = this.state(def.id);
         let k = 1; // knights by number
         const knight = (at, job, post) => { while (k <= def.knights && (st.killed.has(k) || cs.active.has(k))) k++; if (k > def.knights) return null; return this._activate(cs, k++, at, job, { post }); };
@@ -419,7 +428,7 @@ export class CastleLife {
         if (this.fright.quietFor(cs) < 40) return; // (danger about: nobody comes out of the houses now)
         // (a weaker computer — fewer people round you; fewer at night)
         const q = [0.45, 0.65, 0.85, 1][this.game.quality?.level ?? 3] ?? 1;
-        const want = Math.round(Math.min(22, 7 + def.population / 55) * (this.game.isNight ? 0.35 : 1) * q);
+        const want = Math.round(Math.min(22, 7 + def.population / 55) * (this.night?.crowdK() ?? 1) * q); // (at night nobody: NightLife.js)
         let count = 0;
         for (const v of cs.active.values()) if (v.job === 'wander' && !v.dead) count++;
         // too far from everyone: goes home (disappears)
@@ -664,6 +673,7 @@ export class CastleLife {
         v.sayT -= dt;
         tickSlow(v, dt); // («Даст»: slowed for a while)
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.vy) this._fallStep(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
+        if (v.sleep && this.night?.step(v, dt)) return; // (going to bed, asleep, getting up — NightLife.js)
         // held up by «Вингардиум Левиоса»: Levitation carries the body
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; }
         // stunned / frozen / thrown up by a spell
@@ -698,6 +708,7 @@ export class CastleLife {
         if (v.investigate && this._investigate(v, dt)) return;
         if (this.fright.step(v, dt)) return; // (danger near: hiding, running away, looking out, buckets)
         if (v.job === 'rebuild' && this.rebuild.work(v, dt)) return; // (a builder at the repairs)
+        if ((v.pack > 0 || v.rounds) && this.night?.duty(v, dt)) return; // (a merchant packing up, the watch's rounds)
         if (v.fleeT > 0) {
             v.fleeT -= dt;
             const fp = v.fleeFrom ? this._playerPos(v.fleeFrom) : null;
@@ -852,7 +863,7 @@ export class CastleLife {
                 if (!v.path) { this._nextTrip(v); if (!v.path) { v.waitT = 3; break; } }
                 if (this._followPath(v, dt, v.walk || WALK)) {
                     v.path = null;
-                    if (v.goingHome) { this._deactivate(v); return; } // went into the house
+                    if (v.goingHome) { if (!this.night?.arriveHome(v)) this._deactivate(v); return; } // went into the house (at night: to bed)
                     // they stay a good while where they came (shopping, chatting, working)
                     v.waitT = v.purpose === 'chat' ? 15 + Math.random() * 30 : 10 + Math.random() * 35;
                     if (v.purpose === 'chat' && v.chatWith && !v.chatWith.dead) v.chatWith.waitT = Math.max(v.chatWith.waitT, 12);
@@ -1651,6 +1662,8 @@ export class CastleLife {
     hit(v, dmg, dir, by, opts = {}) {
         if (!v || v.dead) return;
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
+        if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
+        this.night?.noise(v, 9);
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
         if (v.wizard) v.hurtAt = Date.now();
@@ -1812,7 +1825,7 @@ export class CastleLife {
         if (!isPlayer) return;
         const witnesses = [];
         for (const w of cs.active.values()) {
-            if (w.dead || w === victim) continue;
+            if (w.dead || w === victim || w.sleep?.phase === 'lie') continue; // (asleep: saw nothing)
             if (Math.hypot(w.x - pos.x, w.z - pos.z) > SEE) continue;
             if (this._sees(w, { x: pos.x, y: pos.y + 1.5, z: pos.z })) witnesses.push(w);
         }
@@ -1897,6 +1910,7 @@ export class CastleLife {
         if (!this.enabled || !this.index) return;
         const g = this.game;
         if (!this.auth) { if (by === g.localId) g.sync?.villagerVandal?.([Math.round(pos.x), Math.round(pos.y), Math.round(pos.z)], blocks, loud ? 1 : 0, r); return; }
+        this.night?.noise(pos, loud ? 40 : 14); // (a pane breaking, a wall coming down: the sleepers near wake)
         // (a blast: the people near take fright — VillagerFear; whatever broke is put back later — Rebuild)
         if (loud) this.fright.add(kind || 'blast', pos, { r: r ?? 4, by });
         if (blocks > 0 || loud) this.rebuild.damaged(pos, r ?? (loud ? 6 : 2), by, loud); // (a crater in the street too)
@@ -2046,6 +2060,7 @@ export class CastleLife {
         const cs = this._runtime(def);
         if (!cs.awake) return [];
         const house = def.houses[hIdx];
+        if (this.night?.asleepTime()) return this.night.familyAsleep(cs, def, hIdx); // (at night: in bed asleep)
         const st = this.state(def.id);
         const out = [];
         const want = house.rich ? 2 : 1 + (strHash(house.id) % 2);
@@ -2109,6 +2124,7 @@ export class CastleLife {
         if (!this.enabled || !this.auth || !by || !pos) return;
         const cs = this.castles.get(id) || this._runtimeById(id);
         if (!cs) return;
+        this.night?.noise(pos, 16); // (a lock forced: heard)
         this._offence(cs, by, null, false, { x: pos.x, y: pos.y ?? cs.def.F, z: pos.z });
     }
 
@@ -2161,6 +2177,7 @@ export class CastleLife {
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         // a cry in a fight, a call for help, an alarm: shouted (seen and heard far)
         const shout = /!$/.test(text) && (!!v.foe || !!v.investigate || v.fleeT > 0 || v.fear?.level >= 2 || v.role === 'knight' || v.role === 'king');
+        if (shout && !v.sleep && this.auth) this.night?.noise(v, 16); // (a shout wakes the sleepers near)
         // (heard aloud → no words over the head: the talk is by voice; the words only when there is no voice)
         if (this.talk.voiceCarries?.(v, shout)) v.bubble.hide?.();
         else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.wizard ? '#5b2d8e' : v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
@@ -2185,7 +2202,7 @@ export class CastleLife {
         const me = this.game.character.group.position;
         const now = performance.now();
         // (not one talking with somebody: no line of their own over the answer)
-        const near = [...this.byId.values()].filter((v) => !v.dead && !v.foe && !(v.talking > 0) && now - (v.talkedAt || -1e9) > 30000 && Math.hypot(v.x - me.x, v.z - me.z) < 22);
+        const near = [...this.byId.values()].filter((v) => !v.dead && !v.foe && !v.sleep && !v.pack && !(v.talking > 0) && now - (v.talkedAt || -1e9) > 30000 && Math.hypot(v.x - me.x, v.z - me.z) < 22);
         if (!near.length) return;
         const v = near[Math.floor(Math.random() * near.length)];
         const line = this.brainLine?.(v) || pick(SHOUT.ambient[v.role] || WIZ_SHOUT.ambient[v.role] || SHOUT.hurt);
@@ -2202,6 +2219,7 @@ export class CastleLife {
             for (const cs of this.castles.values()) if (cs.awake) { if (isWizSite(cs.def)) this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
             this.fright.update(dt);
             this.rebuild.update(dt);
+            this.night?.update(dt);
             this._squads(dt);
             this._assignSlots();
             for (const v of [...this.byId.values()]) if (!v.handLink) this._think(v, dt); // (held by the hand: HandHold leads them)
@@ -2247,6 +2265,7 @@ export class CastleLife {
                 me.x += (me.x - v.x) / d * o * 0.7; me.z += (me.z - v.z) / d * o * 0.7;
             }
         }
+        this.night?.visuals(dt); // (blankets, «z-z-z», the watch's torches; a hand on a sleeper)
         this.wizards.update(dt);
         this._chatter(dt);
         this.talk.update(dt);
@@ -2391,6 +2410,7 @@ export class CastleLife {
         this.talk.dispose();
         this.fright.clear();
         this.rebuild.dispose();
+        this.night?.dispose();
         for (const v of [...this.byId.values()]) this._deactivate(v);
         this.castles.clear();
     }

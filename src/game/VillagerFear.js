@@ -157,7 +157,7 @@ export class VillagerFear {
 
     /** Can this person be frightened (and run by this system)? */
     _fearful(v) {
-        if (v.dead || v.wizard || v.servantOf != null || v.handLink || v.lev) return false;
+        if (v.dead || v.wizard || v.servantOf != null || v.handLink || v.lev || v.sleep) return false; // (asleep: NightLife wakes them first)
         if (v.foe || v.order) return false; // (in a fight / under the king's orders)
         return v.role !== 'knight';
     }
@@ -181,7 +181,7 @@ export class VillagerFear {
                 if (v.dead) continue;
                 const w = worst(v, here, (d) => this._sees(v, d));
                 if (!w) continue;
-                if (v.role === 'knight') { this._knight(v, w); continue; }
+                if (v.role === 'knight') { if (!v.sleep) this._knight(v, w); continue; }
                 if (!this._fearful(v)) continue;
                 this._feel(v, w, here);
             }

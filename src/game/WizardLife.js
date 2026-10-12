@@ -96,10 +96,10 @@ export class WizardLife {
             if (st.killed.has(idx)) return null;
             return L._activate(cs, idx, at, job, { post: at });
         };
-        // the Master: in the study by day, at the telescope by night
+        // the Master: in the study by day, asleep in the tower at night (NightLife.js)
         if (!st.kingDead) {
-            const tel = this._spots(def, 'telescope')[0];
-            put(0, night && tel ? tel : def.throne, night && tel ? 'star' : 'sit');
+            if (night) L.night.towerRest(cs, 0);
+            else put(0, def.throne, 'sit');
         }
         // the scroll sellers: behind the counter by day; gone home at night
         def.stalls.forEach((s, i) => {
@@ -112,8 +112,10 @@ export class WizardLife {
         const lect = this._spots(def, 'lectern')[0], caul = this._spots(def, 'cauldron');
         for (let k = 0; k < Math.min(2, def.teachers || 0); k++) {
             const idx = T0 + k;
-            if (night) put(idx, def.posts[k], 'watch');
-            else put(idx, k === 0 ? lect : caul[0], k === 0 ? 'teach' : 'brew');
+            // (at night one of them walks the rounds through the tower; the other sleeps — NightLife.js)
+            if (night && k === 0) L.night.towerWatch(put(idx, def.posts[k], 'watch'));
+            else if (night) L.night.towerRest(cs, idx);
+            else { const v = put(idx, k === 0 ? lect : caul[0], k === 0 ? 'teach' : 'brew'); if (v) { v.watch = false; v.rounds = null; } }
         }
         // students practising at the desks by day
         if (!night) {
@@ -139,7 +141,7 @@ export class WizardLife {
         const players = L._players().filter((pl) => L._inLand(def, pl.p, 40));
         if (!players.length) return;
         const q = [0.45, 0.65, 0.85, 1][this.game.quality?.level ?? 3] ?? 1;
-        const want = Math.round(Math.min(6, 2 + def.population / 12) * (this.game.isNight ? 0.3 : 1) * q);
+        const want = Math.round(Math.min(6, 2 + def.population / 12) * (this.game.isNight ? 0 : 1) * q); // (at night they sleep — NightLife.js)
         let count = 0;
         for (const v of cs.active.values()) if (v.job === 'wander' && !v.dead) count++;
         for (const v of [...cs.active.values()]) {
@@ -259,7 +261,7 @@ export class WizardLife {
             this._dayT -= dt;
             if (this._dayT <= 0) {
                 this._dayT = 5;
-                for (const cs of L.castles.values()) if (cs.awake && cs.def.kind === 'tower' && cs.wizNight !== g.isNight) { cs.wizNight = g.isNight; this._staff(cs); }
+                for (const cs of L.castles.values()) if (cs.awake && cs.def.kind === 'tower' && cs.wizNight !== g.isNight && !(cs.wizAlarmUntil > Date.now())) { cs.wizNight = g.isNight; this._staff(cs); }
             }
             this._practice(dt, wizards);
             this.fight.update(dt); // (the circles after a foe: plans and roles)

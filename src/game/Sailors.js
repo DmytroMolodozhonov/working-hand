@@ -56,7 +56,7 @@ const SHOUT = {
 };
 const WALK = 2.2, RUN = 5.2;
 const HOSTILE_MS = 180000;
-const MODE_CODE = ['idle', 'walk', 'run', 'attack', 'dead', 'work', 'swim', 'block', 'cheer'];
+const MODE_CODE = ['idle', 'walk', 'run', 'attack', 'dead', 'work', 'swim', 'block', 'cheer', 'sleepMat', 'situp']; // (asleep below at night: NightLife.js)
 const GUARD = 2.6; // m/s: stepping in and out with the blade up
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const _v = new THREE.Vector3();
@@ -213,6 +213,7 @@ export class Sailors {
         s.hostile.set(by, performance.now() + HOSTILE_MS);
         if (was) return;
         const g = this.game;
+        g.castleLife?.night?.crewAlarm(s); // (the sleepers below jump up)
         if (by === g.localId && text) g.hud.setVoice(text, true);
         else if (by !== g.localId) g.sync?.net.send({ t: 'shipev', id: s.id, k: 'hostile', p: by });
         const list = this.crews.get(s.id) || [];
@@ -276,6 +277,7 @@ export class Sailors {
             v.l.x += _o.x * 0.3; v.l.z += _o.z * 0.3;
         }
         const s = v.ship;
+        g.castleLife?.night?.wakeSailor(v, 'hit');
         if (by) this.provoke(s, by === 'local' ? g.localId : by, '⚔️ Вы напали на матроса — команда к бою!');
         if (v.hp <= 0) this._die(v, by === 'local' ? g.localId : by);
         else if (Math.random() < 0.5) this._say(v, pick(SHOUT.hurt));
@@ -491,6 +493,7 @@ export class Sailors {
         }
         if (foe) {
             // (where he goes and when he swings: the crew's tactics, all of them together — _tactics)
+            v.nsleep = null; // (asleep: up at once)
             v.foe = foe.id;
             v.fp = foe;
             v.path = null;
@@ -506,6 +509,8 @@ export class Sailors {
             if (v.sayT <= 0 && Math.random() < dt * 0.2) this._say(v, pick(SHOUT.gang));
             return;
         }
+        // the night: below asleep (the watch walks the deck) — NightLife.js
+        if (g.castleLife?.night?.sailor(v, s, dt)) return;
         // talking to somebody: stand and face them
         if (v.talking > 0) {
             v.talking -= dt;
@@ -1023,6 +1028,8 @@ export class Sailors {
         // «привет, моряки!» — the crew round me answers together
         if (greetsCrew(text) && this._greetAll(v, talk)) return true;
         if (!v) return false;
+        // asleep: a mumble first (a second word wakes him) — NightLife.js
+        if (v.mode === 'sleepMat' || v.nsleep) { if (this.auth) g.castleLife?.night?.rouseSailor(v, g.localId); else g.sync?.net.send({ t: 'screw', talk: 1, id: v.id }); return true; }
         const s = v.ship;
         const ctx = {
             playerName: g.net?.active ? g.net.name : null, playerIsKing: s.owner === g.localId,
@@ -1162,6 +1169,7 @@ export class Sailors {
     /** (host) a guest talks to a sailor: he stops and faces them. */
     remoteTalk(m) {
         const v = this.byId.get(m.id);
+        if (v && !v.dead && this.game.castleLife?.night?.rouseSailor(v, m.from)) return; // (asleep: a mumble first)
         if (v && !v.dead) { v.talking = 6; v.talkTo = m.from; v.path = null; }
     }
 

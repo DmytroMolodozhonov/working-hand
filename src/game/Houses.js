@@ -169,9 +169,9 @@ export class Houses {
             if (!this.broken.has(id)) this.panes.push({ id, ...w, house: rec });
         });
         this._dirty = true;
-        // the people at home
-        if (this.auth) rec.family = g.castleLife?.spawnFamily(def, i)?.length ? true : null;
+        // the people at home (the house is listed first: at night they lie in its beds — NightLife.js)
         this.active.set(h.id, rec);
+        if (this.auth) rec.family = g.castleLife?.spawnFamily(def, i)?.length ? true : null;
     }
 
     _deactivate(rec) {

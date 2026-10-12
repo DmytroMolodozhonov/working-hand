@@ -823,7 +823,7 @@ export class NetSync {
             case 'vsay': if (m.by !== this.me) g.castleLife?.heard(m.id, String(m.text || '').slice(0, 200)); break;
             case 'valarm': if (m.to === this.me) g.hud.setVoice('⚔️ Вас заметили! Стража замка идёт за вами', true); break;
             case 'cst': if (!this.net.isHost && m.s) g.castleLife?.applyState(m.id, m.s); break;
-            case 'vtalk': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v && !v.foe) { v.talking = 5; v.talkTo = m.from; } } break;
+            case 'vtalk': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v && g.castleLife.night?.rouse(v, m.from)) break; if (v && !v.foe) { v.talking = 5; v.talkTo = m.from; } } break;
             case 'vvand': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.damaged({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, m.from, Math.min(500, +m.n || 0), !!m.l, { r: Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null }); break;
             case 'vdng': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.alarm({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, String(m.k || ''), m.from, Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null); break;
             case 'vdouse': if (!this.net.isHost && Array.isArray(m.p)) g.castleLife?.fright.splash({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, Math.min(4, +m.r || 2)); break;
