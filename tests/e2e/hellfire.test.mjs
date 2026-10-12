@@ -95,7 +95,7 @@ test('Hellfire (free world): a mana maximum under 100 cannot cast it; turned ont
     await waitHudVisible(page);
     await feed(page, still, 20, 33);
     const r = await page.evaluate(async () => {
-        const g = window.__zns.game, c = g.combat, T = window.__zns.THREE;
+        const g = window.__zns.game, c = g.combat, T = window.__zns.THREE; g.bonus = g.bonus || {}; g.bonus.spells = { ...(g.bonus.spells || {}), Hellfire: true }; // (Survival: learnt from its scroll)
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
         g.items.takeIntoHand({ kind: 'wand', uid: 'hf-wand2', type: 0 }, 'right');
         await frames(10);
@@ -134,7 +134,7 @@ test('Hellfire on castle knights (free world): those in it burn down even behind
     });
     await feed(page, still, 60, 33);
     const r0 = await page.evaluate(() => {
-        const g = window.__zns.game, L = g.castleLife, c = g.combat;
+        const g = window.__zns.game, L = g.castleLife, c = g.combat; g.bonus = g.bonus || {}; g.bonus.spells = { ...(g.bonus.spells || {}), Hellfire: true }; // (Survival: learnt from its scroll)
         const me = g.character.group.position;
         const knights = [...L.byId.values()].filter((v) => !v.dead && v.role === 'knight').sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z));
         const k = knights[0];
