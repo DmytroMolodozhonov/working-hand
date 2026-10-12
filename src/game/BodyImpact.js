@@ -31,7 +31,8 @@ export class BodyImpact {
      * Something hits my body.
      * o: {v: Vector3 world impulse (hero m/s), from: Vector3|null (null: no shield check), by, spell|kind,
      *     toss, head: {lp, dir, speed}|null (an exact blow on the head), jolt: rad/s away from `from`,
-     *     always: {down}|null (knocks down by its nature), blast, noShield, down}
+     *     always: {down}|null (knocks down by its nature), blast, noShield, down,
+     *     fly (thrown through the air: no ground slows it until it lands), tumble (flips over in the air)}
      * @returns 'none'|'stagger'|'knockdown'|'shatter'|'blocked'
      */
     apply(o) {
@@ -69,7 +70,8 @@ export class BodyImpact {
         const dir = fallDir(o.v.x, o.v.z, ch.group.rotation.y);
         if (res === 'knockdown') {
             if (g.flight?.busy) g.flight.land?.('blown');
-            g.knock.knock({ dir, down: o.always?.down ?? o.down ?? undefined, by: o.by, kind: o.spell || o.kind, cause: o.cause || null, toss: o.toss || 0, strength: Math.max(fallStrength({ v: v * k }), 0.15) });
+            g.knock.knock({ dir, down: o.always?.down ?? o.down ?? undefined, by: o.by, kind: o.spell || o.kind, cause: o.cause || null, toss: o.toss || 0, strength: Math.max(fallStrength({ v: v * k }), 0.15),
+                fly: !!o.fly && k >= 1, tumble: o.tumble || 0 }); // («Джолт»: thrown through the air, tumbling over)
         } else if (res === 'stagger') g.knock.stagger({ dir, v: v * k });
         if (facing) this._recoil(o);
         return (facing || dome) && res === 'none' ? 'blocked' : res;

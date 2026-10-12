@@ -16,7 +16,10 @@
  * a drop ≥ 5 or landing at ≥ 13 (hero m/s). Never in water; never after a gentle release.
  * Nothing in the hands is dropped (things fall only when the hand opens).
  * Afterwards the head spins (`dizzy`) for 5 … 10 s, the harder the fall the longer and stronger —
- * on my own screen only (Game sways the camera, Hud blurs it); not after a stun's or the ice's fall.
+ * on my own screen only (Game sways the camera, Hud blurs it, the walk wavers); not after a stun's
+ * or the ice's fall.
+ * Thrown (`fly`, «Джолт»): no ground slows the body until it lands (Game's knockback), and it
+ * tumbles over in the air (`tumble` turns: `tumbleAng`, drawn by Character, sent to the others).
  */
 
 import { KD, fallDir, IMPACT } from './Impact.js';
@@ -28,7 +31,8 @@ export const KNOCK = { MIN_DOWN: 1.5, FALL_T: 0.45, RISE_T: 0.7, SQUAT_T: 0.14, 
     // (picture heights) is a squat, back within UP_DROP is straight; a frame or two of jitter (GAP_T s) breaks nothing;
     // a squat finished up to EARLY s before the lying time is up still counts once it is
     LOW_DROP: 0.17, UP_DROP: 0.12, CROUCH_DROP: 0.08, GAP_T: 0.12, EARLY: 0.5, BASE_RISE: 8, BASE_DRIFT: 0.03,
-    DIZZY_MIN: 5, DIZZY_MAX: 10 }; // (the head spins after a fall: s, the lightest … the hardest)
+    DIZZY_MIN: 5, DIZZY_MAX: 10, // (the head spins after a fall: s, the lightest … the hardest)
+    FLY_MAX: 3 }; // (s: thrown through the air at most this long before the ground slows it again)
 
 /** The person's upright nose height (picture y, down = more): the highest it has been lately (slowly forgotten). */
 export function trackStand(st, pose, dt) {
@@ -88,6 +92,7 @@ export class Knockdown {
         this.state = 'up'; this.dir = 'back'; this.t = 0; this.minDown = 0; this.by = null; this.kind = null; this.cause = null;
         this.squatT = 0; this.bowT = 0; this.squatted = false; this.bowed = false; this.pending = false; this.noPoseT = 0; this.staggerT = 0;
         this.lift = 0; this.liftWant = 0;
+        this.flyT = 0; this.tumble = null;
         this.dizzyLeft = 0; this.dizzyDur = 0; this.dizzyS = 0;
         this._seenLanding = performance.now();
         const ch = this.game.character;
@@ -96,6 +101,7 @@ export class Knockdown {
             // (respawn / a fresh start: upright at once, not slowly getting up)
             if (ch._pitchOwned) { ch._fallPitch = 0; ch._pitchOwned = false; if (ch.group) ch.group.rotation.x = 0; }
             if (ch._fallRoll) { ch._fallRoll = 0; if (ch.group) ch.group.rotation.z = 0; }
+            ch.tumbleAng = 0;
         }
     }
 
@@ -103,9 +109,12 @@ export class Knockdown {
     netCode() { return this.state === 'falling' || this.state === 'down' ? KD[this.dir] : 0; }
 
     /** Off the feet: falls `dir`, lies at least `down` s, then gets up by the player's own movement. */
-    knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', cause = null, toss = 0, strength = 0.3 } = {}) {
+    knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', cause = null, toss = 0, strength = 0.3, fly = false, tumble = 0 } = {}) {
         const g = this.game, ch = g.character;
         if (kind !== 'Stupefy' && !g.combat?.stunned && !g.combat?.frozen) this.daze(strength); // (not the stun's or the ice's stiff fall)
+        // thrown through the air: until the feet… the back touches the ground again (it may already be lying)
+        if (fly) this.flyT = KNOCK.FLY_MAX;
+        if (tumble > 0 && toss > 2) this.tumble = { turns: tumble, t: 0, dur: Math.max(0.55, (2 * toss / 20 + 0.1) * 0.9), dir: null };
         if (this.state === 'falling' || this.state === 'down') {
             this.minDown = Math.max(this.minDown, (this.state === 'down' ? this.t : 0) + down);
             return false;
@@ -118,6 +127,7 @@ export class Knockdown {
         this.squatT = this.bowT = 0; this.squatted = this.bowed = this.pending = false; this.noPoseT = 0; this.lift = this.liftWant = 0; ch.liftUp = 0;
         ch.knockedDown = true; ch.fallDir = this.dir; ch.stepping = 0; ch.staggerLean = 0;
         if (toss > 2) { ch.group.position.y += 0.7; ch.verticalVelocity = Math.max(ch.verticalVelocity || 0, toss); ch.onGround = false; }
+        if (this.tumble) this.tumble.dir = this.dir;
         // (why I am on the ground: «вас отбросило взрывом…», «вас сбил рыцарь (Имя)»…)
         const who = by && by !== g.localId ? g.remotes?.get?.(by)?.name || '' : '';
         g.hud?.setVoice?.(knockMessage(this.cause, { by: who, down }), true);
@@ -137,6 +147,17 @@ export class Knockdown {
         if (!(this.dizzyLeft > 0)) return 0;
         const f = this.dizzyLeft / this.dizzyDur, k = Math.min(1, f / 0.5);
         return (0.35 + 0.65 * this.dizzyS) * k * k * (3 - 2 * k);
+    }
+
+    /** Flipping over in the air (a whole number of turns, eased: it ends lying as it began falling). */
+    _tumbleStep(dt) {
+        const ch = this.game.character, T = this.tumble;
+        if (!T) { if (ch.tumbleAng) ch.tumbleAng = 0; return; }
+        T.t += dt;
+        const k = Math.min(1, T.t / T.dur);
+        ch.tumbleAng = T.turns * Math.PI * 2 * k * k * (3 - 2 * k);
+        ch.tumbleDir = T.dir || this.dir;
+        if (k >= 1 || !this.down) { this.tumble = null; ch.tumbleAng = 0; }
     }
 
     /** «Up» (UpSpell.js): back on the feet now, lying or still falling. */
@@ -191,6 +212,8 @@ export class Knockdown {
         this._landing();
         this.t += dt;
         if (this.dizzyLeft > 0) this.dizzyLeft = Math.max(0, this.dizzyLeft - dt);
+        if (this.flyT > 0) { this.flyT -= dt; if ((ch.onGround && this.t > 0.15) || ch.swimY != null) this.flyT = 0; }
+        this._tumbleStep(dt);
         if (this.state !== 'down') trackStand(this, g.currentPose, dt); // (knows the person's upright height before a fall)
         switch (this.state) {
             case 'stagger':

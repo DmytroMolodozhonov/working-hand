@@ -12,6 +12,10 @@
  *              long as the spell says), then gets up BY ITSELF (its AI resumes after rising).
  *   head jolt  a blow on the head snaps it the way it was hit (a damped spring, as a player's).
  * A fall from a height after Leviosa knocks it over too (Levitation counts the damage).
+ *   tumble     thrown by «Джолт»: the body flips over in the air (whole turns, round its middle)
+ *              while it flies, and lands lying.
+ *   daze       afterwards (once it is up again) it is dizzy for a while: it sways, and now and then
+ *              it stumbles a step aside and can do nothing for a moment (`c.dazeT`: a wizard aims badly).
  *
  * Who decides: the host (it runs the creatures' bodies and minds). It moves the body and tells every
  * computer what happened (`cimp` events), so everybody sees the same fall. A guest's hands hitting a
@@ -218,8 +222,12 @@ export class CreatureImpact {
         if (kick) { s.jolt.kick(kick); this._emit(ck, c, 'j', [r2(kick.pitch), r2(kick.yaw), r2(kick.roll)]); }
         const yaw = this._yaw(K, c);
         const dir = K.quadFall ? quadFallDir(o.v.x, o.v.z, yaw, -1, (c.id | 0) % 2 ? 1 : -1) : fallDir(o.v.x, o.v.z, yaw, -1);
-        if (res === 'knockdown') this._knock(ck, c, e, dir, o.always?.down ?? o.down ?? CREATURE.MIN_DOWN);
+        // thrown and tumbling over in the air («Джолт»): as long as it is in the air (at least a moment)
+        const tumble = res === 'knockdown' && o.tumble > 0 && toss > 2 && !o.noSlide ? { turns: o.tumble | 0 || 1, dur: Math.max(0.5, 2 * toss / CREATURE.G + 0.15) } : null;
+        if (res === 'knockdown') this._knock(ck, c, e, dir, o.always?.down ?? o.down ?? CREATURE.MIN_DOWN, true, tumble);
         else if (res === 'stagger') this._stagger(ck, c, e, dir, v / B.mass);
+        // dizzy once it is up again (a heavy body less)
+        if (o.daze > 0 && res !== 'none') this._daze(ck, c, e, o.daze / Math.sqrt(B.mass));
         return res;
     }
 
@@ -242,13 +250,45 @@ export class CreatureImpact {
         return headKick([-d.x * 0.6, -d.y * 0.6, -d.z * 0.6], [d.x, d.y, d.z], o.jolt / (IMPACT.JOLT_GAIN * 0.7));
     }
 
-    _knock(ck, c, e, dir, down, emit = true) {
+    _knock(ck, c, e, dir, down, emit = true, tumble = null) {
         const s = e.s, K = KINDS[ck];
-        if (s.state === 'falling' || s.state === 'down') { s.minDown = Math.max(s.minDown, (s.state === 'down' ? s.t : 0) + down); if (emit) this._emit(ck, c, 'k', [KD[s.dir], down === Infinity ? -1 : r2(s.minDown - (s.state === 'down' ? s.t : 0))]); return; }
+        const tum = tumble ? [tumble.turns, r2(tumble.dur)] : [];
+        if (s.state === 'falling' || s.state === 'down') {
+            s.minDown = Math.max(s.minDown, (s.state === 'down' ? s.t : 0) + down);
+            if (tumble && !s.tum) this._tumble(K, c, s, tumble);
+            if (emit) this._emit(ck, c, 'k', [KD[s.dir], down === Infinity ? -1 : r2(s.minDown - (s.state === 'down' ? s.t : 0)), ...tum]);
+            return;
+        }
         s.state = 'falling'; s.dir = dir; s.t = 0; s.minDown = down;
         s.riseDelay = 0.15 + ((typeof c.id === 'number' ? c.id : String(c.id).length) % 5) * 0.08;
-        if (this.auth) K.hold(this.game, c, CREATURE.FALL_T + Math.min(down, 60) + CREATURE.RISE_T + 1);
-        if (emit) this._emit(ck, c, 'k', [KD[dir], down === Infinity ? -1 : r2(down)]);
+        if (tumble) this._tumble(K, c, s, tumble);
+        if (this.auth) K.hold(this.game, c, (tumble ? tumble.dur : 0) + CREATURE.FALL_T + Math.min(down, 60) + CREATURE.RISE_T + 1);
+        if (emit) this._emit(ck, c, 'k', [KD[dir], down === Infinity ? -1 : r2(down), ...tum]);
+    }
+
+    /** It flips over in the air: whole turns round its middle (how high the middle is above the tilt's pivot). */
+    _tumble(K, c, s, { turns, dur }) {
+        let h = 1;
+        try {
+            const P = K.pivot(c), piv = P.obj;
+            if (piv?.parent) {
+                piv.parent.updateWorldMatrix?.(true, false);
+                const base = piv.parent.localToWorld(_w.set(piv.position.x, P.base, piv.position.z));
+                const sc = piv.parent.getWorldScale ? piv.parent.getWorldScale(new THREE.Vector3()).y || 1 : 1;
+                h = (K.centre(c, _v).y - base.y) / sc;
+            }
+        } catch (e) { /* (no model yet) */ }
+        s.tum = { turns: Math.max(1, Math.min(3, turns | 0)), dur: Math.max(0.3, Math.min(3, dur)), t: 0, h: Math.max(0.3, Math.min(4, h || 1)) };
+    }
+
+    /** Dizzy for `t` s once it is back on its feet (the longer one wins). */
+    _daze(ck, c, e, t, emit = true) {
+        const s = e.s;
+        if (!(t > 0)) return;
+        s.daze = Math.max(s.daze || 0, t);
+        s.stumble = 0.8 + Math.random() * 0.6;
+        if (this.auth) c.dazeT = Math.max(c.dazeT || 0, t + (['falling', 'down', 'rising'].includes(s.state) ? s.minDown + CREATURE.RISE_T + 1 : 0));
+        if (emit) this._emit(ck, c, 'd', [r2(t)]);
     }
 
     _stagger(ck, c, e, dir, v, emit = true) {
@@ -261,7 +301,7 @@ export class CreatureImpact {
         if (emit) this._emit(ck, c, 's', [KD[dir], r2(v)]);
     }
 
-    _busy(s) { return s.state !== 'up' || s.jolt.busy || Math.abs(s.vx) + Math.abs(s.vz) > 0.05; }
+    _busy(s) { return s.state !== 'up' || s.jolt.busy || Math.abs(s.vx) + Math.abs(s.vz) > 0.05 || s.daze > 0 || !!s.tum; }
 
     _emit(ck, c, ev, args) {
         if (!this.auth || !this.game.sync) return;
@@ -273,12 +313,13 @@ export class CreatureImpact {
         if (this.auth || !Array.isArray(list)) return;
         for (const it of list.slice(0, 200)) {
             if (!Array.isArray(it)) continue;
-            const [ck, id, ev, a, b, c3] = it;
+            const [ck, id, ev, a, b, c3, c4] = it;
             const K = KINDS[ck];
             const c = K?.get(this.game, id);
             if (!c || !c.group) continue;
             const e = this._state(ck, c);
-            if (ev === 'k') this._knock(ck, c, e, KD_NAME[a] || 'back', b < 0 ? Infinity : Math.max(0.3, +b || 1.5) + 0.5, false);
+            if (ev === 'k') this._knock(ck, c, e, KD_NAME[a] || 'back', b < 0 ? Infinity : Math.max(0.3, +b || 1.5) + 0.5, false, c3 > 0 ? { turns: +c3, dur: +c4 || 0.8 } : null);
+            else if (ev === 'd') this._daze(ck, c, e, Math.min(30, +a || 0), false);
             else if (ev === 's') this._stagger(ck, c, e, KD_NAME[a] || 'back', +b || 4, false);
             else if (ev === 'r') { if (e.s.state === 'down' || e.s.state === 'falling') { e.s.state = 'rising'; e.s.t = 0; } }
             else if (ev === 'j') e.s.jolt.kick({ pitch: +a || 0, yaw: +b || 0, roll: +c3 || 0 });
@@ -363,10 +404,26 @@ export class CreatureImpact {
                 if (Math.abs(s.vx) + Math.abs(s.vz) < 0.05) s.vx = s.vz = 0;
             }
             this._step(ck, K, c, s, dt);
+            if (s.daze > 0 && s.state === 'up') this._dazed(K, c, s, dt);
             this._draw(K, c, s, dt);
             if (!this._busy(s)) { this._release(K, c, s, false); this.active.delete(key); }
         }
         if (this._out.length && g.sync) { g.sync.creatureImpacts?.(this._out.splice(0, 200)); this._out.length = 0; }
+    }
+
+    /** Dizzy on its feet: it sways; now and then (host) a stumble a step aside — and a moment of nothing. */
+    _dazed(K, c, s, dt) {
+        s.daze -= dt;
+        s.dazeT2 = (s.dazeT2 || 0) + dt;
+        if (s.daze <= 0) { s.daze = 0; if (this.auth) c.dazeT = 0; return; }
+        if (this.auth) c.dazeT = s.daze;
+        s.stumble = (s.stumble ?? 1) - dt;
+        if (s.stumble > 0 || !this.auth) return;
+        s.stumble = 0.9 + Math.random() * 1.1;
+        const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 1.5;
+        s.vx += Math.cos(a) * sp; s.vz += Math.sin(a) * sp;
+        K.hold(this.game, c, 0.45);
+        if (c.isAttacking) c.isAttacking = false;
     }
 
     _step(ck, K, c, s, dt) {
@@ -404,13 +461,35 @@ export class CreatureImpact {
         else if (s.state === 'stagger') ang = s.lean * Math.sin(Math.PI * Math.min(1, s.t / s.staggerT));
         if (s.state === 'falling') lift = ease(s.t / CREATURE.FALL_T);
         s.angle = ang;
+        // tumbling over in the air: whole turns on top of the fall (eased: it ends as the fall does)
+        let spin = 0;
+        if (s.tum) {
+            s.tum.t += dt;
+            const k = Math.min(1, s.tum.t / s.tum.dur);
+            spin = s.tum.turns * Math.PI * 2 * smooth(k);
+            if (k >= 1) spin = 0;
+        }
+        // dizzy on its feet: a slow sway from side to side
+        let sway = 0;
+        if (s.daze > 0 && s.state === 'up') sway = Math.min(1, s.daze / 1.5) * (0.13 * Math.sin((s.dazeT2 || 0) * 2.3) + 0.05 * Math.sin((s.dazeT2 || 0) * 5.1));
         if (piv) {
             const f = K.faces;
-            let rx = 0, rz = 0;
-            if (dir === 'back') rx = -f * ang; else if (dir === 'front') rx = f * ang;
-            else if (dir === 'right') rz = f * ang; else rz = -f * ang;
-            piv.rotation.x = rx; piv.rotation.z = rz;
+            const turn = (a) => { let x = 0, z = 0; if (dir === 'back') x = -f * a; else if (dir === 'front') x = f * a; else if (dir === 'right') z = f * a; else z = -f * a; return [x, z]; };
+            const [rx, rz] = turn(ang);
+            piv.rotation.x = rx; piv.rotation.z = rz + sway;
             piv.position.y = P.base + (P.lie || 0) * lift * Math.sin(ang);
+            if (s.tum) {
+                // round its middle, not its feet: the pivot moves so that the middle stays put
+                if (s.tum.x0 == null) { s.tum.x0 = piv.position.x; s.tum.z0 = piv.position.z; }
+                const [sx, sz] = turn(ang + spin), h = s.tum.h;
+                piv.rotation.x = sx; piv.rotation.z = sz;
+                // (0, h, 0) turned by x: (0, h cos, h sin); by z: (−h sin, h cos, 0)
+                const dy = h * (Math.cos(rx) * Math.cos(rz) - Math.cos(sx) * Math.cos(sz));
+                piv.position.x = s.tum.x0 + h * (Math.sin(sz) - Math.sin(rz));
+                piv.position.y += dy;
+                piv.position.z = s.tum.z0 + h * (Math.sin(rx) - Math.sin(sx));
+                if (spin === 0) { piv.position.x = s.tum.x0; piv.position.z = s.tum.z0; s.tum = null; }
+            }
         }
         // the head snaps and comes back
         const J = s.jolt.step(dt);
@@ -434,6 +513,8 @@ export class CreatureImpact {
             // (a villager's own death fall turns the same root: only the sideways tilt is taken back)
             if (P.obj && dead && P.obj === c.model?.root) P.obj.rotation.z = 0;
             else if (P.obj) { P.obj.rotation.x = 0; P.obj.rotation.z = 0; P.obj.position.y = P.base; }
+            if (P.obj && s.tum?.x0 != null) { P.obj.position.x = s.tum.x0; P.obj.position.z = s.tum.z0; }
+            s.tum = null;
         } catch (e) { /* (a model already gone) */ }
         const head = K.head(c);
         if (head) { overlay(head, 'x', 0); overlay(head, 'y', 0); overlay(head, 'z', 0); }

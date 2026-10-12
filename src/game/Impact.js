@@ -137,6 +137,9 @@ export const SPELL_PHYSICS = {
     Thunderwave: { push: 20, thunder: true, jolt: 3 },
     Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 },
     Expelliarmus: { push: 3, jolt: 2 }, // (a jolt; what it really does is knock the wand out: Expelliarmus.js)
+    // («Джолт»: a bolt of air — off the feet, thrown back and up, a tumble in the air (Duel.JOLT);
+    //  the toss stays under a hurting fall's height on flat ground: only a real drop hurts)
+    Jolt: { push: 20, always: true, down: 2.5, toss: 7, jolt: 3 }, JoltMaxima: { push: 60, always: true, down: 4, toss: 11, jolt: 5 },
     Stupefy: { push: 4, always: true, down: 1.5 }, AvadaKedavra: { push: 3, always: true, down: 1.5 },
     Bombardo: { blast: true, jolt: 3, down: 1.5 }, BombardoMaxima: { blast: true, jolt: 4, down: 2.5 },
     Earthquake: { push: 3, always: true, down: 1.5, toss: 4 }, EarthquakeMaxima: { push: 5, always: true, down: 2.5, toss: 6 },

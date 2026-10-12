@@ -78,6 +78,8 @@ export const SPELL_COST = {
     OvergrownMaxima: 20,
     Stupefy: 12,
     Expelliarmus: 12, // the wand flies out of the target's hand (Expelliarmus.js)
+    Jolt: 5, // a bolt of air: the target is thrown back and falls (Duel.JOLT)
+    JoltMaxima: 15, // … three times as strong (and three times the cost)
     ProtectionHouse: 20, // a house's sphere of protection (HouseWards.js)
     WardGrow: 5, // … each «Максима» while it is being set: 1.5 m wider
     ProtectionInvisible: 15, // the protected house is not seen from far

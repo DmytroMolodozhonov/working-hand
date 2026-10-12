@@ -336,7 +336,7 @@ export class WizardFight {
         const body = duel._bodyOf?.('p', foeId, duel._tmpBody());
         if (body) _d.copy(body.a).lerp(body.b, 0.55); else _d.set(fp.x, fp.y, fp.z);
         _d.sub(_o).normalize();
-        const err = 0.06 / (v.W.skill || 1); // (not a perfect hand)
+        const err = 0.06 / (v.W.skill || 1) * (v.dazeT > 0 ? 6 : 1); // (not a perfect hand; dizzy after a «Джолт»: far off)
         _d.x += (Math.random() - 0.5) * 2 * err; _d.y += (Math.random() - 0.5) * err; _d.z += (Math.random() - 0.5) * 2 * err;
         _d.normalize();
         const b = duel._addBolt({ id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: 'p', tid: foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true });
@@ -347,7 +347,7 @@ export class WizardFight {
         v.model.castNow = true;
         duel._burst?.(_o, duel.colors(spell, v.id).glow, 12);
         const me = g.character.group.position;
-        if (Math.hypot(me.x - v.x, me.z - v.z) < 40) { if (spell === 'IceDuel') g.sound?.playIce?.(); else g.sound?.playSapira?.(); }
+        if (Math.hypot(me.x - v.x, me.z - v.z) < 40) { if (spell === 'IceDuel') g.sound?.playIce?.(); else if (spell === 'Jolt' || spell === 'JoltMaxima') g.sound?.playJolt?.(spell === 'JoltMaxima', false); else g.sound?.playSapira?.(); }
         return true;
     }
 

@@ -434,6 +434,37 @@ export class SoundManager {
     }
 
     playIce() { this._spell(this.sounds.ice, 1.4); }
+
+    /**
+     * «Джолт»: a short, sharp whoosh of shoved air (cast), or a deep thump on the body (impact)
+     * — made here, no file needed; «Максима» louder and deeper.
+     */
+    playJolt(maxima = false, impact = false) {
+        if (!this.enabled || !this.context) return;
+        const key = impact ? '_joltThump' : '_joltWhoosh';
+        if (!this[key]) {
+            const ctx = this.context, rate = ctx.sampleRate, len = Math.floor(rate * (impact ? 0.45 : 0.32));
+            const buf = ctx.createBuffer(1, len, rate), d = buf.getChannelData(0);
+            let seed = impact ? 11 : 5, lp = 0, ph = 0;
+            const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+            for (let i = 0; i < len; i++) {
+                const t = i / rate;
+                if (impact) {
+                    // a falling low thud and a puff of air
+                    ph += 2 * Math.PI * (40 + 110 * Math.exp(-t / 0.05)) / rate;
+                    lp += (rnd() - lp) * 0.08;
+                    d[i] = Math.tanh((Math.sin(ph) * Math.exp(-t / 0.12) * 1.3 + lp * 2.2 * Math.exp(-t / 0.04)) * 1.2) * 0.85;
+                } else {
+                    // filtered noise rushing past: swells fast, cuts off
+                    lp += (rnd() - lp) * (0.05 + 0.25 * Math.min(1, t / 0.12));
+                    const env = Math.min(1, t / 0.03) * Math.exp(-Math.max(0, t - 0.05) / 0.07);
+                    d[i] = lp * env * 2.2;
+                }
+            }
+            this[key] = buf;
+        }
+        this._spell(this[key], (impact ? 1.0 : 0.8) * (maxima ? 1.5 : 1), (maxima ? 0.75 : 1) * (0.95 + Math.random() * 0.1));
+    }
     playBombardoCast() { this._spell(this.sounds.cast, 0.9); }
 
     playExplosion(position, listenerPos, power = 1) {

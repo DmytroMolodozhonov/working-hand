@@ -8,6 +8,9 @@
  *   Вингардиум Левиоса        on a creature: throws it up into the air
  *   Сапира                    a slow, heavy violet charge: 4 HP to a wizard, 10 to a zombie
  *   Экспеллиармус             a crimson charge: the wand (or the sword) flies out of the hand (Expelliarmus.js)
+ *   Джолт (Jolt)              a bolt of invisible air: a hard shove straight away from the caster — the
+ *                             body flies back, tumbles over in the air, falls, lies a few seconds and
+ *                             gets up dizzy (JOLT, JOLT_TARGETS); «Джолт Максима» three times as strong
  *
  * A duel spell is not an instant beam: a crackling, jagged charge flies from
  * the hand (fast, ~0.7 s over 10 m) and acts only when it touches. It flies
@@ -43,6 +46,9 @@ import { DUEL_SPELL_NAME } from './Mana.js';
 import { IceLook, ICE } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
 import { starterWand, rollWand } from './ItemTypes.js';
+import { JoltLook } from '../fx/JoltLook.js';
+import { SPELL_PHYSICS } from './Impact.js';
+import { kindOf } from './CreatureImpact.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -57,6 +63,45 @@ export const DUEL_SPELLS = {
     SandsDuel: { color: 0xd2b48c, name: 'Даст', speed: 13, coreColor: 0xfff1cf },
     // «Экспеллиармус»: a deep crimson bolt with a white-hot core (Остолбеней is a lighter red)
     Expelliarmus: { color: 0xc8102e, name: 'Экспеллиармус', speed: 16, core: 0.045, glow: 0.2, coreColor: 0xffffff },
+    // «Джолт»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
+    Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 21, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
+    JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 21, core: 0.026, glow: 0.11, coreColor: 0xffffff },
+};
+
+/**
+ * «Джолт» / «Джолт Максима» (3× the push): only a shove — no damage of its own (a fall from up
+ * high — a cliff, a wall, over a ship's side — hurts as any such fall does).
+ *   push / toss  hero m/s away from the caster along the charge / up (Impact.SPELL_PHYSICS):
+ *                the body flies several metres back (Maxima: much farther and higher)
+ *   down         s it lies at least (creatures then get up by themselves; a player squats and straightens)
+ *   turns        how many times the body tumbles over in the air before it lands
+ *   daze         s a creature is dizzy afterwards: it reels and staggers about, a wizard aims badly
+ *                (a player: the head spins — Knockdown.daze, by how hard the blow was)
+ *   things       m/s a loose thing on the charge's way is shoved along it
+ */
+export const JOLT = {
+    Jolt: { ...SPELL_PHYSICS.Jolt, turns: 1, daze: 6, things: 7 },
+    JoltMaxima: { ...SPELL_PHYSICS.JoltMaxima, turns: 2, daze: 12, things: 21 },
+};
+export const isJolt = (spell) => spell === 'Jolt' || spell === 'JoltMaxima';
+
+/**
+ * Who / what «Джолт» acts on and how (CLAUDE.md: every creature and thing decided — «no effect» too).
+ */
+export const JOLT_TARGETS = {
+    me: 'my own computer decides (it knows my shield): thrown back, a flip in the air, down; up by a squat; the head spins afterwards',
+    players: 'another player: the charge is seen by all, the hit is applied on his own computer (as above)',
+    zombies: 'thrown back, tumble, lie, get up by themselves, then stagger about dizzy (host)',
+    castlePeople: 'villagers, knights (heavier: fly less), the king, merchants, wizards (a dazed wizard aims badly); a raised shield / the Master\'s dome stops it',
+    animals: 'heavy cows and horses fly less; pigs, sheep further; a flying pig / Pegasus is knocked out of the air; a horse with a rider only reels (the rider holds it)',
+    sailors: 'on a ship: shoved across the deck in the ship\'s frame — a hard one goes over the side (Sailors.shove)',
+    spider: 'too big and too many legs: it only reels back a little and is dazed for a moment (no damage)',
+    livingTrees: 'rooted: it only reels (never falls — its own fall is its death); no damage',
+    bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
+    servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
+    looseThings: 'shoved along the charge as it passes (where their physics runs)',
+    heldThings: 'stay in the hand: a hand opens only when the person opens it',
+    world: 'no effect on ships, houses, walls, trees, water, the ground: the charge bursts on the rock / a house\'s sphere',
 };
 
 export const DUEL = {
@@ -255,6 +300,7 @@ export class Duel {
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
         this.log = []; // last duel events (for testing / debugging)
         this.ice = new IceLook(game); // how «Айс» looks
+        this.jolt = new JoltLook(game); // how «Джолт» looks
     }
 
     /** 0..3: this wizard's colour signature (same on every computer). */
@@ -514,6 +560,7 @@ export class Duel {
         const g = this.game;
         if (g.sync) g.sync.duelCast(b);
         if (spell === 'IceDuel') { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
+        if (isJolt(spell)) { g.sound?.playJolt?.(spell === 'JoltMaxima', false); this.jolt.hit(origin, dir, false); return b; }
         if (g.sound) g.sound.playSapira?.();
         // the spell leaves the hand with a flash
         const col = this.colors(spell, this.me).glow;
@@ -607,6 +654,7 @@ export class Duel {
         if (ward) { b.front.copy(ward); this._end(b, 'blocked'); return false; }
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
         if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
+        if (isJolt(b.spell)) this._joltThings(b, from);
         // it hits the first body it really touches on its way (along the whole step: at a
         // low FPS a charge moves a metre and more per frame) — its target or anybody else
         const hit = firstTouched(from, b.front, this._bodies(b.by));
@@ -682,7 +730,9 @@ export class Duel {
         if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
         // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
-        if (c.isLivingTree) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }
+        // («Джолт»: no damage — a rooted tree only reels from the shove: below)
+        if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }
+        if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
@@ -783,6 +833,15 @@ export class Duel {
                 : out === 'weapon' ? '🪄 Экспеллиармус! Оружие вылетело из руки — подберите его'
                     : '🪄 Экспеллиармус! В руке ничего не было — вас только толкнуло', true);
             g.impact?.apply({ v: push(3), from, by: byId, spell: 'Expelliarmus', jolt: 2, noShield: true });
+        } else if (isJolt(spell)) {
+            // thrown back off the feet, a flip in the air, down; the head spins afterwards (Knockdown.daze)
+            const J = JOLT[spell];
+            g.hud.flashColor?.('rgba(200, 230, 255, 0.45)');
+            g.fx.shake = Math.max(g.fx.shake || 0, spell === 'JoltMaxima' ? 1 : 0.6);
+            g.impact?.apply({ v: push(J.push), from, by: byId, spell, jolt: J.jolt, always: { down: J.down }, toss: J.toss, fly: true, tumble: J.turns, noShield: true });
+            // (thrown off a cliff / a wall / overboard: that fall hurts — not the throw's own arc,
+            //  lifted 0.7, up toss²/40 and landing lying 1.45 lower: Knockdown / Character)
+            g.levitation?.watchMyFall?.(byId, 0.7 + J.toss * J.toss / 40 + 1.45);
         }
     }
 
@@ -818,6 +877,43 @@ export class Duel {
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'SandsDuel', src, byId);
         } else if (spell === 'Expelliarmus') {
             g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon: a small push)
+        } else if (isJolt(spell)) {
+            this._joltCreature(z, spell, src, byId);
+        }
+    }
+
+    /**
+     * (host) «Джолт» on a creature: shoved straight away from the caster, thrown up, a tumble in
+     * the air, down for a while, then up by itself and dizzy (CreatureImpact: tumble, daze).
+     */
+    _joltCreature(c, spell, src, byId) {
+        const g = this.game, J = JOLT[spell];
+        const ck = kindOf(c);
+        const p = c.group ? _v3.copy(c.group.position) : this._creaturePoint(c, _v3);
+        const v = new THREE.Vector3(p.x - src.x, 0, p.z - src.z);
+        if (v.lengthSq() < 1e-6) v.set(0, 0, 1);
+        v.normalize().multiplyScalar(J.push);
+        g.creatureImpact?.apply(c, { v, by: byId, spell, jolt: J.jolt, from: src, always: { down: J.down }, toss: J.toss, fly: true, tumble: J.turns, daze: J.daze });
+        if (ck) g.levitation?.watchFall?.(ck, c, byId); // (thrown off a cliff / a wall: that fall hurts)
+    }
+
+    /** «Джолт» flying past loose things: the air shoves them along (where their physics runs). */
+    _joltThings(b, from) {
+        const list = this.game.spells?.hooks?.weapons?.() || [];
+        if (!list.length) return;
+        const J = JOLT[b.spell];
+        const seen = b.shoved || (b.shoved = new Set());
+        for (const w of list) {
+            if (w.holder || w.remoteTarget || seen.has(w) || !w.position || !w.velocity) continue;
+            // (the closest point of the charge's step to the thing)
+            const seg = _v1.subVectors(b.front, from), L2 = seg.lengthSq();
+            const k = L2 > 1e-9 ? Math.max(0, Math.min(1, _v2.subVectors(w.position, from).dot(seg) / L2)) : 0;
+            if (_v2.copy(from).addScaledVector(seg, k).distanceTo(w.position) > 0.9) continue;
+            seen.add(w);
+            w.hover = null;
+            w.wake?.();
+            w.velocity.addScaledVector(b.dir, J.things).y += J.things * 0.25;
+            w.angularVelocity?.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
         }
     }
 
@@ -1159,6 +1255,7 @@ export class Duel {
     _drawBolt(spell, from, to, by, core = null) {
         if (!DUEL_SPELLS[spell]) return;
         if (spell === 'IceDuel') { this._drawIce(from, to, by, core); return; }
+        if (isJolt(spell)) { this._drawJolt(spell, from, to, by, core); return; }
         const pool = this._pool(spell, by);
         const col = this.colors(spell, by).glow;
         // own copies: the caller may pass the shared temp vectors
@@ -1212,8 +1309,33 @@ export class Duel {
         this.ice?.beam(a, b, this._segLife || 0.05, !core);
     }
 
-    /** Where a charge hits / bursts: «Айс» shatters into ice, the others spark. */
+    /** «Джолт»: a pale, nearly straight line of trembling air; the rings of shoved air are JoltLook's. */
+    _drawJolt(spell, from, to, by, core = null) {
+        const pool = this._pool(spell, by);
+        const a = _da.copy(from), b = _db.copy(to);
+        const len = a.distanceTo(b);
+        if (len < 0.05) return;
+        const n = Math.max(2, Math.min(12, Math.round(len * 0.8)));
+        const dir = _dd.subVectors(b, a).divideScalar(len);
+        const side = _ds.set(-dir.z, 0, dir.x);
+        if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
+        side.normalize();
+        const up = _du.crossVectors(dir, side).normalize();
+        const prev = _v3.copy(a), p = _v2;
+        for (let i = 1; i <= n; i++) {
+            p.copy(a).lerp(b, i / n);
+            // (the air trembles: a fine ripple, not a crackle)
+            if (i < n) p.addScaledVector(side, Math.sin(this._t * 60 + i * 2.1) * 0.025).addScaledVector(up, Math.cos(this._t * 47 + i * 1.7) * 0.025);
+            (core || pool.core).add(prev, p, this._segLife || 0.05);
+            if (i > n - 3) pool.glow.add(prev, p, this._segLife || 0.05); // (only the head is a little brighter)
+            prev.copy(p);
+        }
+        if (!core) this.jolt.trail(b, dir, spell === 'JoltMaxima', this._dt || 1 / 60);
+    }
+
+    /** Where a charge hits / bursts: «Айс» shatters into ice, «Джолт» rings of air, the others spark. */
     _hitBurst(spell, p, n) {
+        if (isJolt(spell)) { this.jolt.hit(p, _v1.set(0, 0, 1), spell === 'JoltMaxima'); if (n >= 30) this.game.sound?.playJolt?.(spell === 'JoltMaxima', true); return; }
         if (spell === 'IceDuel') this.ice?.shatter(p, n / 30);
         else this._burst(p, DUEL_SPELLS[spell].color, n);
     }
@@ -1306,6 +1428,7 @@ export class Duel {
     updateVisuals(dt) {
         for (const p of Object.values(this.pools)) { p.core.update(dt); p.glow.update(dt); }
         this.ice?.update(dt);
+        this.jolt?.update(dt);
         for (const p of Object.values(this.markPools)) p.update(dt);
         // markers of duels that ended this frame disappear
         for (let i = this._orbsUsed; i < this._orbs.length; i++) { const o = this._orbs[i]; o.a.visible = o.b.visible = o.core.visible = false; for (const r of o.rings) r.visible = false; }

@@ -212,7 +212,23 @@ export class Spiders {
     /** A duel charge touched this spider's body. */
     boltHit(s, spell, by = undefined) {
         if (spell === 'Expelliarmus') return; // (no wand, no weapon in its legs: nothing to knock out — no effect)
+        if (spell === 'Jolt' || spell === 'JoltMaxima') { this.jolt(s, spell, by); return; }
         this.hit(s, spell === 'AvadaKedavra' ? 25 : spell === 'SapiraDuel' ? 10 : 4, spell, by);
+    }
+
+    /**
+     * (host) «Джолт» on the spider: too big and too many legs to be thrown over — it only reels back
+     * a little (Maxima: further) and is dazed for a moment (no tricks); no damage.
+     */
+    jolt(s, spell, by = undefined) {
+        const g = this.game, max = spell === 'JoltMaxima';
+        const p = s.model.position;
+        const from = by != null ? g.duel?._casterAt?.(by, { group: s.model }) : null;
+        const d = _v.set(from ? p.x - from.x : -Math.sin(s.model.rotation.y), 0, from ? p.z - from.z : -Math.cos(s.model.rotation.y));
+        if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
+        d.normalize().multiplyScalar(max ? 9 : 3);
+        s.reel = { vx: d.x, vz: d.z, t: max ? 1.2 : 0.6, T: max ? 1.2 : 0.6 };
+        s.nextAny = Math.max(s.nextAny || 0, max ? 4 : 2);
     }
 
     byId(id) { return this.list.find((s) => s.id === id && !s.dead) || null; }
@@ -352,6 +368,14 @@ export class Spiders {
             // holding someone: stands still, the victim's computer takes the bites
             const hp = this._playerPos(s.holding);
             if (!hp) s.holding = null;
+        } else if (s.reel) {
+            // reeling back from a «Джолт»: the legs scramble, it slides back and sways
+            p.x += s.reel.vx * dt; p.z += s.reel.vz * dt;
+            s.reel.vx *= Math.max(0, 1 - 3 * dt); s.reel.vz *= Math.max(0, 1 - 3 * dt);
+            s.reel.t -= dt;
+            s.model.rotation.z = 0.12 * Math.sin((s.reel.T - s.reel.t) * 14) * Math.max(0, s.reel.t / s.reel.T);
+            if (s.reel.t <= 0) { s.reel = null; s.model.rotation.z = 0; }
+            moving = true;
         } else if (tp && near.d > STOP * SIZE) {
             const to = _v.set(tp.x - p.x, 0, tp.z - p.z).normalize();
             p.addScaledVector(to, SPEED * (s.legK ?? 1) * dt); // (legs cut off: slower)

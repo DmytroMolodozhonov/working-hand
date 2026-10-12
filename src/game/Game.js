@@ -92,7 +92,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus']);
+const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -988,7 +988,9 @@ export class Game {
             if (performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
             ice = true;
         }
-        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus') ? name : null;
+        // («Джолт» alone, still being spoken: wait — it may yet be «Джолт Максима»)
+        if (name === 'Jolt' && !isFinal) return null;
+        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : (this.wandSide() || ['right', 'left'].find((s) => this.character.isArmRaised(s))));
@@ -2054,7 +2056,7 @@ export class Game {
             if (this.sync) this.sync.spell(name, origin, dir, 'right');
             return name;
         }
-        if (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
+        if (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Jolt' || name === 'JoltMaxima') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
         if (name === 'Sands') { this._lastDuelCast = 0; return this._castDuel('Sands', 'SandsDuel', true); }
         if (name === 'Ice' || name === 'Frozen') { this._lastDuelCast = 0; return this._castDuel('Ice', 'IceDuel', true); }
@@ -2397,7 +2399,15 @@ export class Game {
                 this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0), 3.5);
                 if (this._bodyInRock(ch.group.position)) { ch.group.position.copy(was); this.knockback.set(0, 0, 0); break; } // (against the rock: it stops there)
             }
-            this.knockback.multiplyScalar(Math.max(0, 1 - (this.knock.down ? 8 : 4) * dt));
+            // (thrown through the air — «Джолт»: only the air slows it until it lands)
+            this.knockback.multiplyScalar(Math.max(0, 1 - (this.knock.flyT > 0 ? 1 : this.knock.down ? 8 : 4) * dt));
+        }
+        // dizzy after a fall: the walk wavers from side to side (the view sways too: below)
+        const dizzy = this.knock?.dizzy || 0;
+        if (dizzy > 0.05 && ch.isRunning && !this.knock.down && !flight.active && ch.swimY == null) {
+            const t = performance.now() / 1000, yaw = ch.group.rotation.y;
+            const w = (Math.sin(t * 1.7) * 0.8 + Math.sin(t * 0.9 + 1) * 0.5) * 1.8 * dizzy * dt;
+            ch.group.position.x += Math.cos(yaw) * w; ch.group.position.z -= Math.sin(yaw) * w; // (the body's right)
         }
 
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)

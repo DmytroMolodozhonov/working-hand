@@ -593,9 +593,13 @@ export class Levitation {
         this.falls.push({ ck, c, top: _h1.y - up, by, t: 0, v: null, track: true });
     }
 
-    /** I was thrown by a spell («Overgrown»): my next landing from up high hurts. */
-    watchMyFall(by) {
-        this.myWatch = { by, since: performance.now() };
+    /**
+     * I was thrown by a spell («Overgrown», «Джолт»): my next landing from up high hurts.
+     * `slack`: metres of the drop that are the throw itself (thrown up from flat ground and
+     * landing lying down: that is no fall from a height — only a real drop below hurts).
+     */
+    watchMyFall(by, slack = 0) {
+        this.myWatch = { by, since: performance.now(), slack };
     }
 
     _myWatchLanding() {
@@ -603,7 +607,7 @@ export class Levitation {
         if (L && L.at > W.since) {
             this.myWatch = null;
             if (ch.swimY != null || now < (g.impact?.gentleUntil || 0)) return;
-            const d = fallDamage(L.drop);
+            const d = fallDamage(L.drop - (W.slack || 0));
             if (!d) return;
             if (g.combat.enabled) g.combat.damage(d, W.by, 'fall');
             else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d);

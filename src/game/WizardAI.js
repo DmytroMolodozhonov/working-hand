@@ -23,10 +23,10 @@ export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer
  */
 export const WIZ = {
     student: { hp: 12, ward: 0, mana: 30, regen: 1.0, skill: 0.8, cast: 3.2, react: 0.35, reactT: 0.7, stunK: 1.0, range: [7, 14], spells: { Stupefy: 0.5, SapiraDuel: 0.5 } },
-    teacher: { hp: 16, ward: 10, mana: 40, regen: 1.5, skill: 1.0, cast: 2.2, react: 0.6, reactT: 0.45, stunK: 0.7, range: [8, 16], spells: { Stupefy: 0.3, SapiraDuel: 0.35, IceDuel: 0.2, LevitateDuel: 0.15 } },
+    teacher: { hp: 16, ward: 10, mana: 40, regen: 1.5, skill: 1.0, cast: 2.2, react: 0.6, reactT: 0.45, stunK: 0.7, range: [8, 16], spells: { Stupefy: 0.25, SapiraDuel: 0.3, IceDuel: 0.2, LevitateDuel: 0.15, Jolt: 0.1 } },
     master: {
         hp: 32, ward: 20, mana: 80, regen: 3.0, skill: 2.0, cast: 1.1, react: 0.9, reactT: 0.25, stunK: 0.4, range: [10, 20],
-        spells: { Stupefy: 0.25, SapiraDuel: 0.4, IceDuel: 0.2, LevitateDuel: 0.15 },
+        spells: { Stupefy: 0.2, SapiraDuel: 0.35, IceDuel: 0.2, LevitateDuel: 0.15, JoltMaxima: 0.1 }, // (the Master's «Джолт» is a «Максима»)
         dome: { hits: 3, t: 6, cd: 25 }, wind: { r: 4.5, cd: 6 }, blink: { cd: 20 }, heal: 0.25,
     },
 };
@@ -34,7 +34,7 @@ WIZ.seller = WIZ.teacher;
 WIZ.wanderer = { ...WIZ.teacher, range: [8, 18] };
 
 /** Mana a spell costs a wizard (the same as a player's base spell). */
-export const NPC_COST = { Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
+export const NPC_COST = { Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
 
 export const WIZ_ROLE_RU = {
     student: ['Ученик', 'Ученица'], teacher: ['Наставник', 'Наставница'], seller: ['Торговец свитками', 'Торговка свитками'],
