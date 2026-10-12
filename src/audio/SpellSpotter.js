@@ -1,7 +1,7 @@
 /**
  * SpellSpotter.js — which spell was said, found by its sound.
  *
- * The speech network (GigaAM v3, voice_native.py) tells for every 40 ms of sound how likely each
+ * The speech network (voice_native.py) tells for every 40 ms of sound how likely each
  * Russian letter is (CTC: 33 letters + space + «nothing new»). Writing that out as words loses the
  * spells: they are not Russian words, and «Бомбардо» comes out «ломбарды», «Протекшн» «против же».
  * So here every way of saying every spell is laid over the sound itself: how far from what the
@@ -220,14 +220,18 @@ const within = (long, short) => ` ${long} `.includes(` ${short} `);
  * phrase holding the best one («вайнд максима» round «максима», «лет зе хеллфаер кам» round «фаер»)
  * wins when it fits well enough itself: the short one was only its clearest part.
  */
-export function bestSpell(P, far = 0, open = {}, vocab = VOCAB) {
+export function bestSpell(P, far = 0, open = {}, vocab = VOCAB, snr = Infinity) {
     const all = scoreAll(P, vocab, open);
     let best = null;
     for (const c of all) if (!best || c.score > best.score) best = c;
     if (!best) return null;
     let up = null;
     for (const c of all) {
-        if (c.w.len <= best.w.len || !within(c.w.phrase, best.w.phrase) || c.avg < threshold(c.w.len, far)) continue;
+        if (c.w.len <= best.w.len || c.avg < threshold(c.w.len, far, snr)) continue;
+        // (the longer phrase holds the best one's words — or, for a short word, at least its time:
+        // «…э бед» heard as «лёд» is part of «Криейт э бед»)
+        const holds = within(c.w.phrase, best.w.phrase) || (best.w.len <= 4 && c.w.len >= 2 * best.w.len && c.a <= best.a && c.b >= best.b);
+        if (!holds) continue;
         if (!up || c.score > up.score) up = c;
     }
     const c = up || best;
@@ -238,10 +242,12 @@ export function bestSpell(P, far = 0, open = {}, vocab = VOCAB) {
  * How well a spell must fit to count: short words need to fit very well («ап», «айс», «стоп» hide
  * inside many words); while the speakers play (a friend over Discord) a little better still.
  */
-export function threshold(len, far = 0) {
+export function threshold(len, far = 0, snr = Infinity) {
     // (tuned on 2600 recordings: no everyday phrase or piece of one reached these; −0.2…−0.5 to spare)
     const base = len <= 3 ? -1.8 : len <= 5 ? -2.0 : len <= 8 ? -2.4 : -2.8;
-    return base + (far >= 0.25 ? (len <= 4 ? 0.5 : 0.3) : 0);
+    // (a voice barely above the noise — a loud sea, the wind, music — makes noise look like short words)
+    const noisy = snr < 10 ? (len <= 5 ? 0.6 : 0.3) : snr < 16 ? (len <= 5 ? 0.3 : 0.15) : 0;
+    return base + (far >= 0.25 ? (len <= 4 ? 0.5 : 0.3) : 0) + noisy;
 }
 
 /** A spell this well heard in the speakers' sound too came from the speakers (a friend, the game)… */
@@ -259,9 +265,10 @@ const WORDY = new Set(['ChangeColor']);
  * What the microphone heard, made into what the game should hear.
  * @param {Float32Array} lp  the microphone's rows (after the echo was taken out)
  * @param {number} T
- * @param {{ref?: Float32Array, refT?: number, refLead?: number, far?: number, final?: boolean, cut?: boolean}} [o]
+ * @param {{ref?: Float32Array, refT?: number, refLead?: number, far?: number, final?: boolean, cut?: boolean, snr?: number}} [o]
  *   ref/refT/far: the speakers' rows of the same time (starting refLead s earlier) and how much of it they played;
- *   final: the phrase is over (else a look at it while it is said); cut: the look starts inside it
+ *   final: the phrase is over (else a look at it while it is said); cut: the look starts inside it;
+ *   snr: dB the voice stands above the background (noisy: short spells must fit better)
  * @returns {{text: string, written: string, spell: object|null, sure: boolean, echo: boolean}}
  *   text: the spell's own words when one was heard well enough, else the words as written;
  *   echo: that spell is in the speakers' sound too — a friend's voice (or the game's), not mine.
@@ -270,9 +277,10 @@ export function hear(lp, T, o = {}) {
     const P = prepare(lp, T);
     const written = greedy(P);
     const far = o.far || 0;
+    const snr = Number.isFinite(o.snr) ? o.snr : Infinity;
     const open = { openStart: !o.cut, openEnd: o.final !== false };
-    const best = bestSpell(P, far, open);
-    if (!best || best.avg < threshold(best.len, far)) return { text: written, written, spell: null, sure: false, echo: false, far, best };
+    const best = bestSpell(P, far, open, VOCAB, snr);
+    if (!best || best.avg < threshold(best.len, far, snr)) return { text: written, written, spell: null, sure: false, echo: false, far, best };
     let echo = false;
     if (o.ref && o.refT) {
         const R = prepare(o.ref, o.refT);

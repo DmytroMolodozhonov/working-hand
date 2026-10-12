@@ -1,5 +1,5 @@
 // The spell is found by its sound (SpellSpotter.js) in what the speech network on this computer heard
-// (voice_native.py, GigaAM v3). The fixture holds the network's real output for spells and everyday
+// (voice_native.py). The fixture holds the network's real output for spells and everyday
 // phrases said by two Russian voices; a friend's voice from the speakers never casts (NativeVoice.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';

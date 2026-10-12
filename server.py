@@ -732,7 +732,7 @@ VOICE_PACKAGES = ["numpy", "onnxruntime", "livekit", "PyAudioWPatch" if sys.plat
 
 def ensure_voice_native():
     """The voice network as a program of its own (voice_native.py): its Python packages and the
-    network itself (GigaAM v3, ≈165 MB to download). Missing: get them once, in the background —
+    network itself (≈165 MB to download). Missing: get them once, in the background —
     the game meanwhile uses the browser's recognizer; the voice switches over by itself when ready
     (from the next game start)."""
     try:

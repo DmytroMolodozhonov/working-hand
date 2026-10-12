@@ -3,7 +3,7 @@
  *
  * Two ways to hear, one result: onResult(text, isFinal, meta).
  *   - «native» (the default where it is installed): voice_native.py — the speech network on this
- *     computer (GigaAM v3), the speakers' sound taken out of the microphone (a friend over Discord
+ *     computer, the speakers' sound taken out of the microphone (a friend over Discord
  *     never casts here), the spell found by its sound (SpellSpotter.js). NativeVoice.js.
  *   - «browser»: the browser's recognizer (Web Speech, Google's, ru-RU) as before: while the native
  *     voice is being installed / downloaded, if it fails, or when chosen in the settings.

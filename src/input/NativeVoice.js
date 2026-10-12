@@ -19,8 +19,10 @@
 import { unpack, hear } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
 
-/** A spell this clear is cast from one look at the phrase (avg cost per letter). */
+/** A spell this clear is cast from one look at the phrase (avg cost per letter)… */
 export const SURE_AT_ONCE = -0.6;
+/** …if it is long enough: a short one («гром», «вайнд») hides in the start of a longer word still being said. */
+export const AT_ONCE_LEN = 6;
 
 /**
  * What one look at a phrase gives the game (pure: tests).
@@ -32,7 +34,7 @@ export const SURE_AT_ONCE = -0.6;
 export function lookAt(d, seg = {}) {
     const lp = unpack(d.lp, d.T);
     const ref = d.ref ? unpack(d.ref, d.refT) : null;
-    const h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut });
+    const h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut, snr: d.snr });
     const next = { ...seg };
     let say = null, echo = null;
     if (h.sure && h.echo) {
@@ -42,7 +44,7 @@ export function lookAt(d, seg = {}) {
         if (d.final) {
             say = { text: h.text, isFinal: true };
             next.fired = name;
-        } else if ((next.last === name || h.spell.avg >= SURE_AT_ONCE) && ((d.far || 0) < 0.25 || d.ref)) {
+        } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN)) && ((d.far || 0) < 0.25 || d.ref)) {
             // (while the speakers play, only a look that has their sound too may cast: it can tell an echo)
             if (next.fired !== name) { say = { text: h.text, isFinal: false }; next.fired = name; }
         }
@@ -53,7 +55,7 @@ export function lookAt(d, seg = {}) {
         // while the speakers play: there the written words may be the friend's)
         const loose = matchSpell(h.written);
         // (while the speakers play, a faint phrase is what the echo canceller left of them: not words of mine)
-        const faint = (d.far || 0) >= 0.25 && Number.isFinite(d.peak) && Number.isFinite(d.floor) && d.peak < d.floor + 15;
+        const faint = (d.far || 0) >= 0.25 && Number.isFinite(d.peak) && Number.isFinite(d.floor) && d.peak < d.floor + ((d.far || 0) >= 0.5 ? 22 : 15);
         // (and a look at a phrase still being said while the speakers play: its end will tell)
         const early = !d.final && (d.far || 0) >= 0.25;
         if (h.written && !faint && !early && (!loose || (d.final && (d.far || 0) < 0.25))) say = { text: h.written, isFinal: !!d.final };

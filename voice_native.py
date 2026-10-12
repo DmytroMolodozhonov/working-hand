@@ -10,8 +10,8 @@ What it does here:
      Discord, the game itself, music). WebRTC's echo canceller (the one inside Chrome, Discord and
      Zoom) takes out of the microphone all that the speakers played: a friend's voice from Discord
      never reaches the recognizer, nor do the villagers' voices of the game.
-  2. A speech network — GigaAM v3 by Sber, the most accurate open one for Russian — tells for every
-     40 ms of sound how likely each Russian letter is. The game (src/audio/SpellSpotter.js) lays
+  2. An open speech network for Russian (CTC, MIT license) tells for every 40 ms of sound how
+     likely each Russian letter is. The game (src/audio/SpellSpotter.js) lays
      every spell's sound over that and finds the one that was said, instead of guessing it from a
      word written down wrong.
   3. The same network on the speakers' sound: what is heard there too came from the speakers.
@@ -39,13 +39,16 @@ import urllib.request
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SR = 16000
 FRAME = SR // 100  # 10 ms: the echo canceller's step
-LETTERS = 34  # GigaAM v3: space, а…я, blank
+LETTERS = 34  # the network's letters: space, а…я, blank
 LEAD = 0.03  # s the speakers' sound is given to the echo canceller ahead of the microphone's
 
-GIGAAM_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
-              "sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16.tar.bz2")
-GIGAAM_DIR = "sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16"
-GIGAAM_SIZE = 224721476  # model.int8.onnx
+# the network (an open model, MIT license) as the sherpa-onnx project publishes it on GitHub: the file's
+# address there is theirs; here it is kept in a folder of our own («speech-ru»)
+MODEL_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
+             "sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16.tar.bz2")
+MODEL_DIR = "speech-ru"
+MODEL_OLD_DIR = "sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16"  # (where the first version kept it)
+MODEL_SIZE = 224721476  # model.int8.onnx
 VAD_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
 
 # Speech segments: how they start and end (silero's probability of speech per 32 ms)
@@ -74,7 +77,7 @@ def models_dir():
 
 # ---------------------------------------------------------------- the networks
 class CtcNet:
-    """GigaAM v3 CTC: 16 kHz sound → log-probabilities of the 34 letters, one row per 40 ms."""
+    """The speech network (CTC): 16 kHz sound → log-probabilities of the 34 letters, one row per 40 ms."""
 
     def __init__(self, folder, threads=2):
         import numpy as np
@@ -403,12 +406,18 @@ class NativeVoice:
 
     def model_paths(self):
         d = models_dir()
-        return os.path.join(d, GIGAAM_DIR), os.path.join(d, "silero_vad.onnx")
+        new, old = os.path.join(d, MODEL_DIR), os.path.join(d, MODEL_OLD_DIR)
+        if not os.path.isdir(new) and os.path.isdir(old):
+            try:
+                os.replace(old, new)  # (downloaded by the first version: moved, not downloaded again)
+            except OSError:
+                return old, os.path.join(d, "silero_vad.onnx")
+        return new, os.path.join(d, "silero_vad.onnx")
 
     def models_ready(self):
         ctc, vad = self.model_paths()
         m = os.path.join(ctc, "model.int8.onnx")
-        return os.path.isfile(m) and os.path.getsize(m) == GIGAAM_SIZE and os.path.isfile(os.path.join(ctc, "tokens.txt")) and os.path.isfile(vad)
+        return os.path.isfile(m) and os.path.getsize(m) == MODEL_SIZE and os.path.isfile(os.path.join(ctc, "tokens.txt")) and os.path.isfile(vad)
 
     def available(self):
         if self._ready is None or (not self._ready and self.state not in ("installing", "downloading")):
@@ -429,7 +438,7 @@ class NativeVoice:
         }
 
     def download_models(self):
-        """Once: GigaAM v3 (≈225 MB, from a ≈165 MB archive) and silero VAD, into the user's folder."""
+        """Once: the speech network (≈225 MB, from a ≈165 MB archive) and silero VAD, into the user's folder."""
         ctc_dir, vad_path = self.model_paths()
         os.makedirs(os.path.dirname(vad_path), exist_ok=True)
         if not os.path.isfile(vad_path):
@@ -441,7 +450,7 @@ class NativeVoice:
         if self.models_ready():
             return True
         self.state = "downloading"
-        req = urllib.request.Request(GIGAAM_URL, headers={"User-Agent": "Volshebstvo"})
+        req = urllib.request.Request(MODEL_URL, headers={"User-Agent": "Volshebstvo"})
         with urllib.request.urlopen(req, timeout=60) as r:
             total = int(r.headers.get("Content-Length") or 163286197)
             voice = self
@@ -559,7 +568,8 @@ class NativeVoice:
         self.state = "idle"
 
     def _loop(self, np, rtc, ctc, vad, apm, mic, ref, cap):
-        pipe = Pipeline(np, rtc, ctc, vad, apm, self.aec, self._emit)
+        pipe = Pipeline(np, rtc, ctc, vad, apm, self.aec, vad_far=Vad(self.model_paths()[1]) if ref is not None else None,
+                        vad_raw=Vad(self.model_paths()[1]))
         jobs = collections.deque()
         busy = threading.Event()
         lag = 0.06 + LEAD  # s a microphone sample waits: the speakers' copy of that moment has come by then
@@ -625,12 +635,22 @@ class Pipeline:
     """The work on every 10 ms of sound: the echo out, the level, speech or not, the phrases; and the
     look at a phrase (the network). The live loop and the tests (offline) drive it the same way."""
 
-    def __init__(self, np, rtc, ctc, vad, apm, aec, emit=None):
+    def __init__(self, np, rtc, ctc, vad, apm, aec, vad_far=None, vad_raw=None):
         self.np, self.rtc, self.ctc, self.vad, self.apm, self.aec = np, rtc, ctc, vad, apm, aec
+        # speech or not in the plain microphone too (read when no voice plays in the speakers)
+        self.vad_raw = vad_raw
+        self.raw_buf = np.zeros(0, np.float32)
+        self.floor_raw = -70.0
+        # speech in what the speakers play — a friend's voice, the villagers' — and not the sea, the wind
+        # or the music: only speech there can be taken for mine
+        self.vad_far = vad_far
+        self.far_buf = np.zeros(0, np.float32)
+        self.far_at = 0
+        self.far_sp = collections.deque(maxlen=1000)  # (index, speech?) of the speakers per 32 ms
         self.L = SR * 30
         self.clean = np.zeros(self.L, np.float32)  # the microphone after the echo canceller (a ring)
+        self.raw = np.zeros(self.L, np.float32)    # the microphone as it is (the same ring)
         self.refl = np.zeros(self.L, np.float32)   # the speakers' sound, on the microphone's clock
-        self.far_db = collections.deque(maxlen=3000)  # (index, dB) of the speakers per 10 ms
         self.n = 0
         self.vad_buf = np.zeros(0, np.float32)
         self.vad_at = 0
@@ -638,7 +658,8 @@ class Pipeline:
         self.seg_id = 0
         self.quiet = 0.0
         self.floor = -70.0  # the microphone's background after the echo canceller (dB)
-        self.recent = collections.deque(maxlen=31)  # (clean dB, speakers loud?) of the last ~1 s, per 32 ms
+        self.recent = collections.deque(maxlen=31)  # (clean dB, the speakers speak?) of the last ~1 s, per 32 ms
+        self.far_now = False
         self.lv, self.lv_raw, self.lv_far = [], [], []
 
     def frame(self, m, r):
@@ -653,33 +674,51 @@ class Pipeline:
         c = np.frombuffer(bytes(fm.data), dtype=np.int16).astype(np.float32) / 32768.0
         i = self.n % self.L
         self.clean[i:i + FRAME] = c
+        self.raw[i:i + FRAME] = m
         self.refl[i:i + FRAME] = r
         f_db = db(r)
-        self.far_db.append((self.n, f_db))
         self.n += FRAME
         self.lv.append(round(float(db(c)), 1))
         self.lv_raw.append(round(float(db(m)), 1))
         self.lv_far.append(round(float(f_db), 1))
         jobs = []
+        if self.vad_far is not None:
+            self.far_buf = np.concatenate([self.far_buf, r])
+            while len(self.far_buf) >= 512:
+                chunk = self.far_buf[:512]
+                self.far_buf = self.far_buf[512:]
+                sp = float(db(chunk)) > -55 and self.vad_far(chunk) >= 0.5
+                self.far_sp.append((self.far_at, sp))
+                self.far_at += 512
+                self.far_now = sp
         self.vad_buf = np.concatenate([self.vad_buf, c])
+        self.raw_buf = np.concatenate([self.raw_buf, m])
         while len(self.vad_buf) >= 512:
             chunk = self.vad_buf[:512]
-            p = self.vad(chunk)
+            rchunk = self.raw_buf[:512]
+            pc = self.vad(chunk)
+            pm = self.vad_raw(rchunk) if self.vad_raw is not None else pc
             self.vad_buf = self.vad_buf[512:]
+            self.raw_buf = self.raw_buf[512:]
             self.vad_at += 512
             # the background: follows quiet moments quickly, loud ones very slowly
-            cdb = float(db(chunk))
+            cdb, mdb = float(db(chunk)), float(db(rchunk))
             self.floor += (cdb - self.floor) * (0.2 if cdb < self.floor else 0.002)
-            self.recent.append((cdb, f_db > -50))
+            self.floor_raw += (mdb - self.floor_raw) * (0.2 if mdb < self.floor_raw else 0.002)
+            # a voice in the speakers: the cleaned sound decides (and only louder than the trace the
+            # canceller leaves of them); else the plain microphone (the canceller squeezes my voice
+            # while the sea, the wind or music play)
+            cleaned = self.aec and self.far_now
+            p = pc if cleaned else pm
+            self.recent.append((cdb, self.far_now))
             if self.seg is None:
-                # (a voice, and louder than a trace of the speakers the echo canceller left)
-                if p >= SEG["on"] and cdb >= max(-58.0, self.floor + 8):
+                if p >= SEG["on"] and (cdb >= max(-58.0, self.floor + 8) if cleaned else mdb >= -62.0):
                     self.seg_id += 1
                     self.seg = {"id": self.seg_id, "a": max(0, self.vad_at - 512 - int(SEG["pre"] * SR)), "next": 0.0}
                     self.quiet = 0.0
             else:
                 # (only a faint trace left — the echo canceller's leftover of the speakers — is quiet too)
-                faint = cdb < max(-62.0, self.floor + 6)
+                faint = cleaned and cdb < max(-62.0, self.floor + 6)
                 self.quiet = self.quiet + 512 / SR if p < SEG["off"] or faint else 0.0
                 if self.quiet >= SEG["end"] or self.vad_at - self.seg["a"] >= SEG["max"] * SR:
                     jobs.append({"id": self.seg["id"], "a": self.seg["a"], "b": self.vad_at, "final": True})
@@ -710,23 +749,32 @@ class Pipeline:
         np = self.np
         a, b = job["a"], job["b"]
         t = time.perf_counter()
-        lp = self.ctc.logprobs(self.clean[np.arange(a, b) % self.L])
-        ev = {"type": "seg", "id": job["id"], "final": job["final"], "cut": bool(job.get("cut")), "t0": to_ms(a), "t1": to_ms(b),
-              "T": int(lp.shape[0]), "lp": _pack(np, lp)}
-        # the speakers played something meanwhile (a little before too: the echo comes after its sound)
+        # the speakers spoke meanwhile (a little before too: the echo comes after its sound)
         lo = a - int(0.6 * SR)
-        far = [d for (i, d) in list(self.far_db) if lo <= i < b]
-        loud = sum(1 for d in far if d > -50)
-        ev["far"] = round(loud / max(1, len(far)), 2)
-        x = self.clean[np.arange(a, b) % self.L]
+        far = [sp for (i, sp) in list(self.far_sp) if lo <= i < b]
+        loud = sum(1 for sp in far if sp)
+        share = loud / max(1, len(far))
+        # Which sound to read: with a voice in the speakers (a friend, a villager) the one the echo
+        # canceller cleaned; with only the sea, the wind or music there the microphone as it is — the
+        # canceller, busy with that sound all the time, squeezes my own voice too (tested: on a loud
+        # sea 2 of 8 spells heard through it, 5 of 8 without; with music 5 and 8)
+        use_clean = self.aec and share >= 0.1
+        src = self.clean if use_clean else self.raw
+        lp = self.ctc.logprobs(src[np.arange(a, b) % self.L])
+        ev = {"type": "seg", "id": job["id"], "final": job["final"], "cut": bool(job.get("cut")), "t0": to_ms(a), "t1": to_ms(b),
+              "T": int(lp.shape[0]), "lp": _pack(np, lp), "src": "aec" if use_clean else "mic"}
+        ev["far"] = round(share, 2)
+        x = src[np.arange(a, b) % self.L]
         k = len(x) // FRAME
+        floor = self.floor if use_clean else self.floor_raw
         if k:
             fr = x[:k * FRAME].reshape(k, FRAME)
             ev["peak"] = round(float(20 * np.log10(np.sqrt((fr * fr).mean(axis=1)).max() + 1e-9)), 1)
-        ev["floor"] = round(float(self.floor), 1)
+            ev["snr"] = round(ev["peak"] - floor, 1)  # how far my voice stands above the noise
+        ev["floor"] = round(float(floor), 1)
         # (a look at a phrase still being said while the speakers play gets none: the page then waits
         # for the phrase's end, which gets them — half the work while a friend talks over Discord)
-        if loud >= 5 and (job["final"] or ev["far"] < 0.25):
+        if loud >= 3 and (job["final"] or ev["far"] < 0.25):
             rl = self.ctc.logprobs(self.refl[np.arange(max(0, lo), b) % self.L])
             ev["refT"] = int(rl.shape[0])
             ev["ref"] = _pack(np, rl)
@@ -743,7 +791,7 @@ def offline(mic, ref=None, aec=True, partial_every=SEG["partial"], threads=2):
     ctc = CtcNet(ctc_dir, threads=threads)
     vad = Vad(vad_path)
     apm = rtc.AudioProcessingModule(echo_cancellation=aec and ref is not None, noise_suppression=False, high_pass_filter=True)
-    pipe = Pipeline(np, rtc, ctc, vad, apm, aec and ref is not None)
+    pipe = Pipeline(np, rtc, ctc, vad, apm, aec and ref is not None, vad_far=Vad(vad_path) if ref is not None else None, vad_raw=Vad(vad_path))
     ref = np.zeros(len(mic), np.float32) if ref is None else np.concatenate([ref, np.zeros(max(0, len(mic) - len(ref)), np.float32)])
     mic = np.concatenate([mic, np.zeros(SR, np.float32)])
     ref = np.concatenate([ref, np.zeros(len(mic) - len(ref), np.float32)])
