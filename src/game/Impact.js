@@ -17,7 +17,7 @@ export const IMPACT = {
     TOUCH_V: 1.5, PUSH_V: 2, SLAP_V: 3, PUNCH_V: 4,
     FIST_CURL: 0.6, PALM_CURL: 0.35, FIST_R: 0.22, KNUCKLES: 0.3,
     PUSH_GAIN: 0.9, ONE_HAND: 0.6, BODY_GAIN: 0.8, PUNCH_BODY: 0.35, PUNCH_HEAD_BODY: 0.25, SLAP_BODY: 0.15, GUARD_GAIN: 0.2,
-    BOTH_WINDOW: 0.15, HAND_COOLDOWN: 0.35, MAX_IMPULSE: 30, REACH_SLACK: 1.5, RATE: 0.12,
+    BOTH_WINDOW: 0.15, HAND_COOLDOWN: 0.35, MAX_IMPULSE: 80, REACH_SLACK: 1.5, RATE: 0.12,
     // head jolt
     NECK: 0.6, JOLT_GAIN: 0.9, JOLT_W_MAX: 8, JOLT_MAX: 0.7, JOLT_K: 90, JOLT_ZETA: 0.45, JOLT_TURN: 0.3,
     // falls
@@ -129,7 +129,7 @@ export const SPELL_PHYSICS = {
     Ward: { push: 7, jolt: 1.5 }, // (a house's barrier shoves back the one who pushes on it: HouseWards.js)
     Hellfire: { push: 0, jolt: 0.8 }, // (it burns, it does not push: Hellfire.js)
     Sands: { push: 5, jolt: 2.5 }, SandsDuel: { push: 5, jolt: 2.5 }, // («Даст»: a light puff — the head jolts, the legs slow down: Slow.js)
-    Wind: { push: 13, range: 14, jolt: 1 }, WindMaxima: { push: 39, range: 24, jolt: 2 },
+    Wind: { push: 26, range: 14, jolt: 1 }, WindMaxima: { push: 78, range: 24, jolt: 2 }, // (on bodies: twice its push on things — SpellManager.castWind)
     // («Overgrown»: thrown apart to the sides and up — never hurts by itself; Overgrown.js)
     Overgrown: { push: 16, range: 16, toss: 5, jolt: 1 }, OvergrownMaxima: { push: 32, range: 24, toss: 10, jolt: 2 },
     // (a real wave: it sweeps a body off its feet and carries it — WaveAttack.js; a heavy cow only staggers)

@@ -34,6 +34,9 @@ export function bombardoRadius(power = 1) {
 /** Recognise a spell name in a voice transcript. Exported for tests. */
 const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Overgrown', 'OvergrownMaxima', 'Sands', 'Ice', 'Bombardo', 'BombardoMaxima']);
 
+/** «Вайнд» on creatures and players: this many times its push on loose things. */
+export const WIND_BODY_K = 2;
+
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
@@ -758,7 +761,10 @@ export class SpellManager {
         this._sound('playWhoosh');
         const range = power > 1 ? 24 : 14;
         const cone = 0.65;
-        const strength = 13 * power; // m/s at the hand
+        const strength = 13 * power; // m/s at the hand (loose things)
+        // creatures and players get twice that (the author: twice as strong on everyone it blows at) —
+        // along the ground; the lift only a little more, so nobody is thrown up into the sky
+        const body = (v) => v && v.clone().multiplyScalar(WIND_BODY_K).setY(v.y * 1.25);
         // Visible gust: pale swirling streaks flying out in a cone
         const n = power > 1 ? 70 : 35;
         for (let i = 0; i < n; i++) {
@@ -778,11 +784,11 @@ export class SpellManager {
             return _b.copy(direction).lerp(dirTo, 0.5).setY(0).normalize().multiplyScalar(k).setY(k * 0.35);
         };
         // Creatures (moved where they are simulated): a stagger across the cone, off the feet point-blank
-        if (this.auth && this.hooks.creatures) this.hooks.creatures(power > 1 ? 'WindMaxima' : 'Wind', casterId, (pos) => { const v = push(pos); return v && v.clone(); }, { from: origin });
+        if (this.auth && this.hooks.creatures) this.hooks.creatures(power > 1 ? 'WindMaxima' : 'Wind', casterId, (pos) => body(push(pos)), { from: origin });
         else if (this.auth) {
             for (const z of this.zombies) {
                 if (z.isDead) continue;
-                const v = push(_c.copy(z.group.position).add(UP));
+                const v = body(push(_c.copy(z.group.position).add(UP)));
                 if (!v) continue;
                 z.windVel = (z.windVel || new THREE.Vector3()).add(v.clone().setY(0));
                 z.vy = Math.max(z.vy || 0, v.y);
@@ -799,7 +805,7 @@ export class SpellManager {
             w.angularVelocity.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
         }
         // Me, if another wizard blew at me (every machine moves its own player)
-        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos), power > 1 ? 'WindMaxima' : 'Wind');
+        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => body(push(pos)), power > 1 ? 'WindMaxima' : 'Wind');
         // Ships: the wind fills the sails it reaches (src/game/Ships.js)
         this.hooks.windShips?.(origin, direction, power, casterId);
     }
