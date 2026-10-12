@@ -90,9 +90,11 @@ export const CLASH = {
 
 /** Where a charge goes: along the hand; a target only right on that line, and only a small correction towards it. */
 export const AIM = {
-    CONE: 0.07, // rad (4°): how far beside a body the hand may point and still mean it
-    BEND: 0.12, // rad (~7°): the most a charge ever turns off the line it was cast along
-    TURN: 2.0, // rad/s: how fast it turns while correcting
+    // (a real camera hand is never exactly on a small, moving target — a flying book, a running
+    //  animal: the help is noticeable, but a hand pointing well beside it still misses)
+    CONE: 0.12, // rad (~7°): how far beside a body the hand may point and still mean it
+    BEND: 0.21, // rad (~12°): the most a charge ever turns off the line it was cast along
+    TURN: 3.2, // rad/s: how fast it turns while correcting (it finds the target quickly)
 };
 
 /** Body sizes (metres) as a charge touches them: a line a–b and a radius around it. */
@@ -100,7 +102,7 @@ export const BODY = {
     HERO: { DOWN: 1.3, UP: 2.15, R: 0.7 }, // a wizard: from the soles (2.0 below the body origin) to the hair (2.85 above), along the body
     ZOMBIE: { DOWN: -0.1, UP: 2.0, R: 0.7 },
     VILLAGER: { DOWN: 1.25, UP: 2.0, R: 0.7 },
-    BIRD: 0.6,
+    BIRD: 0.8, // (a flapping book: its wings reach out further than its covers)
 };
 
 const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _bx = new THREE.Vector3();

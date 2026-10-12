@@ -34,13 +34,15 @@ test('the closest points of a line and a segment, and of two segments', () => {
     assert.ok(Math.abs(far.dist - 1) < 1e-9, 'the move ends before the body');
 });
 
-test('the target is only a body right on the line of the hand: on it — yes; 10–15° off — no; a few degrees beside it — yes; the nearest one along the line', () => {
+test('the target is only a body right on the line of the hand: on it — yes; 14–20° off — no; a few degrees beside it — yes; the nearest one along the line', () => {
     const o = V(0, 0, 0), d = V(0, 0, -1);
     assert.equal(pickBody(o, d, [bodyAt(0, 12)])?.body.id, 'x', 'on the line');
-    for (const deg of [10, 12, 15]) assert.equal(pickBody(o, d, [bodyAt(deg * DEG, 12)]), null, `${deg}° off is not pointed at`);
-    for (const dist of [8, 12, 25]) assert.equal(pickBody(o, d, [bodyAt(12 * DEG, dist)]), null, `12° off at ${dist} m`);
+    for (const deg of [14, 16, 20]) assert.equal(pickBody(o, d, [bodyAt(deg * DEG, 12)]), null, `${deg}° off is not pointed at`);
+    for (const dist of [8, 12, 25]) assert.equal(pickBody(o, d, [bodyAt(16 * DEG, dist)]), null, `16° off at ${dist} m`);
+    // (the help is there: 9° off a body 12 m away is still meant)
+    assert.equal(pickBody(o, d, [bodyAt(9 * DEG, 12)])?.body.id, 'x', '9° off at 12 m');
     // (very near, a body fills more of the view: 4 m away 12° off its middle is just beside it — 20° is not)
-    assert.equal(pickBody(o, d, [bodyAt(20 * DEG, 4)]), null, '20° off at 4 m');
+    assert.equal(pickBody(o, d, [bodyAt(22 * DEG, 4)]), null, '22° off at 4 m');
     // the line passes 0.3 m beside a body 12 m away (~1.4°): still meant
     const near = { kind: 'z', id: 'n', a: V(1.0, -1, -12), b: V(1.0, 1, -12), r: 0.7 };
     const p = pickBody(o, d, [near]);
@@ -48,15 +50,15 @@ test('the target is only a body right on the line of the hand: on it — yes; 10
     // two bodies on the line: the nearer one
     assert.equal(pickBody(o, d, [bodyAt(0, 20, 0.7, 'far'), bodyAt(0.01, 9, 0.7, 'close')]).body.id, 'close');
     // a big body is easier to point at than a small one (its own angular size counts)
-    assert.ok(pickBody(o, d, [bodyAt(8 * DEG, 10, 1.6)]), 'a big body 8° off at 10 m');
-    assert.equal(pickBody(o, d, [bodyAt(8 * DEG, 10, 0.6)]), null, 'a small one 8° off at 10 m');
+    assert.ok(pickBody(o, d, [bodyAt(12 * DEG, 10, 1.6)]), 'a big body 12° off at 10 m');
+    assert.equal(pickBody(o, d, [bodyAt(12 * DEG, 10, 0.6)]), null, 'a small one 12° off at 10 m');
     // behind, too far, too close
     assert.equal(pickBody(o, d, [bodyAt(Math.PI, 8)]), null, 'behind');
     assert.equal(pickBody(o, d, [bodyAt(0, DUEL.RANGE + 5)]), null, 'out of range');
 });
 
-test('the charge corrects its way at most AIM.BEND (~7°) in all, a little at a time', () => {
-    assert.ok(AIM.BEND <= 8 * DEG && AIM.BEND >= 5 * DEG);
+test('the charge corrects its way at most AIM.BEND (~12°) in all, a little at a time', () => {
+    assert.ok(AIM.BEND <= 13 * DEG && AIM.BEND >= 10 * DEG);
     const d0 = V(0, 0, -1);
     const dir = d0.clone();
     const want = V(Math.sin(30 * DEG), 0, -Math.cos(30 * DEG));
@@ -127,8 +129,8 @@ test('a zombie right where the hand points is hit; the charge keeps to the line'
     for (const f of fronts) assert.ok(lineDist(hand.o, hand.d, f.p) < 0.05, 'on the line of the hand');
 });
 
-test('a zombie 12° off the line is not the target and is not hit: the charge flies straight past it', () => {
-    const off = 12 * DEG;
+test('a zombie 16° off the line is not the target and is not hit: the charge flies straight past it', () => {
+    const off = 16 * DEG;
     const { d, z, hand } = world({ zombies: [['z1', Math.sin(off) * 12, -1, -Math.cos(off) * 12]] });
     assert.equal(d.pickSide(false), null, 'nothing pointed at');
     const b = d.cast('Stupefy', null, 'right');
@@ -147,9 +149,9 @@ test('a charge given a target far off the hand\'s line turns only a little and m
     const fronts = run(d, 3);
     assert.equal(z[0].stunTimer, 0, 'not hit');
     for (const f of fronts) {
-        assert.ok(f.dir.angleTo(f.d0) <= AIM.BEND + 1e-6, 'never more than ~7° off');
+        assert.ok(f.dir.angleTo(f.d0) <= AIM.BEND + 1e-6, 'never more than ~12° off');
         const along = f.p.clone().sub(hand.o).dot(hand.d);
-        assert.ok(lineDist(hand.o, hand.d, f.p) <= along * Math.sin(AIM.BEND) + 1e-6, 'within the narrow cone round the hand\'s line');
+        assert.ok(lineDist(hand.o, hand.d, f.p) <= along * Math.tan(AIM.BEND) + 1e-6, 'within the narrow cone round the hand\'s line');
     }
 });
 
@@ -165,7 +167,7 @@ test('a zombie a few degrees beside the line: the charge corrects its way a litt
     assert.ok(maxOff > 0 && maxOff <= AIM.BEND + 1e-6, `a small correction (${(maxOff / DEG).toFixed(2)}°)`);
     for (const f of fronts) {
         const along = f.p.clone().sub(hand.o).dot(hand.d);
-        assert.ok(lineDist(hand.o, hand.d, f.p) <= along * Math.sin(AIM.BEND) + 1e-6 && lineDist(hand.o, hand.d, f.p) < 1.0, 'close to the line of the hand');
+        assert.ok(lineDist(hand.o, hand.d, f.p) <= along * Math.tan(AIM.BEND) + 1e-6 && lineDist(hand.o, hand.d, f.p) < 1.0, 'close to the line of the hand');
     }
 });
 
