@@ -263,3 +263,53 @@ test('sailors: a Bombardo at the side leaves a real hole — torn wood, the sea 
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('sailors: «привет, моряки» — several answer, each his own line; a sailor walking my way goes round me', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await shipAtSea(page, 'galleon', 'hello-ship');
+    await standAt(page, 0, -2, 0);
+    // the crew round me on the main deck
+    await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship;
+        const l = [...g.ships.crew.byId.values()].filter((x) => x.ship === s && x.role !== 'captain');
+        l.slice(0, 4).forEach((v, i) => { v.l.x = -3 + i * 2; v.l.z = -7; v.l.y = s.layout.deck; v.path = null; v.talking = 0; v.waitT = 99; });
+        g.ships.crew._place(s);
+    });
+    const r = await page.evaluate(() => {
+        const g = window.__zns.game, crew = g.ships.crew;
+        window.__said = [];
+        const orig = crew._say.bind(crew);
+        crew._say = (who, text, ...a) => { window.__said.push([who.id, text]); return orig(who, text, ...a); };
+        return { claims: crew.claims('привет, моряки'), heard: crew.hear('привет, моряки') };
+    });
+    assert.ok(r.claims && r.heard, JSON.stringify(r));
+    await page.waitForTimeout(6500); // (one after another, ~1.3 s apart)
+    const said = await page.evaluate(() => window.__said);
+    const who = new Set(said.map((x) => x[0]));
+    assert.ok(who.size >= 3, `several answer ${JSON.stringify(said)}`);
+    assert.equal(new Set(said.map((x) => x[1])).size, said.length, 'each his own line');
+
+    // a sailor sent along the deck straight through where I stand: he goes round me
+    // (off the middle line: the masts stand there)
+    await standAt(page, 3, -8, 0);
+    await frames(page, 4);
+    const pass = await page.evaluate(async () => {
+        const g = window.__zns.game, s = window.__ship, crew = g.ships.crew;
+        const v = [...crew.byId.values()].find((x) => x.ship === s && x.role === 'sailor' && !x.dead);
+        for (const o of crew.byId.values()) if (o !== v && o.ship === s) { o.l.x = 6; o.l.z = 20 + o.idx; } // (the others out of the way)
+        v.l.x = 3.2; v.l.z = 4; v.l.y = s.layout.deck; v.talking = 0; v.waitT = 0;
+        const me = g.ships.me.l;
+        let min = Infinity;
+        for (let i = 0; i < 360; i++) {
+            crew._steer(v, s, 3, -18, 2.2, 1 / 30);
+            min = Math.min(min, Math.hypot(v.l.x - me.x, v.l.z - me.z));
+        }
+        return { min, z: v.l.z, mez: me.z };
+    });
+    assert.ok(pass.min > 1.0, `he went round me (closest ${pass.min.toFixed(2)} m)`);
+    assert.ok(pass.z < pass.mez - 1, `and on his way (${pass.z.toFixed(1)})`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

@@ -23,6 +23,7 @@
  */
 
 import { shareFoes } from './CrewTactics.js';
+import { avoidStep } from './Avoid.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
 import { BLOCK } from '../world/Terrain.js';
 import * as THREE from 'three';
@@ -533,7 +534,19 @@ export class CastleLife {
         const s = Math.min(d - stopAt, speed * slowFactor(v) * dt);
         // a ledge right ahead (half a body high): climb it rather than inch at it
         if (!this._walkable(v.x + dx / d * 0.75, v.z + dz / d * 0.75, v.y) && this._tryClimb(v, dx / d, dz / d)) { v.speed = 0; return d; }
-        const nx = v.x + dx / d * s, nz = v.z + dz / d * s;
+        // somebody in the way (a player, another person, an animal): round them on the side with room;
+        // in a narrow spot wait a moment for them to move (then squeeze past)
+        let ux = dx / d, uz = dz / d;
+        if (speed > 0) {
+            const others = this._othersNear(v);
+            if (others.length) {
+                const a = avoidStep(v, { x: ux, z: uz }, others, { maxF: d - stopAt - 0.2, room: (x, z) => this._walkable(x, z, v.y) });
+                if (a.wait && (v.waitT = (v.waitT || 0) + dt) < 1.6) { v.speed = 0; return d; }
+                if (!a.wait) v.waitT = 0;
+                ux = a.x; uz = a.z;
+            }
+        }
+        const nx = v.x + ux * s, nz = v.z + uz * s;
         if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; v.speed = speed; }
         else if (this._walkable(nx, v.z, v.y)) { v.x = nx; v.speed = speed; }
         else if (this._walkable(v.x, nz, v.y)) { v.z = nz; v.speed = speed; }
@@ -549,6 +562,27 @@ export class CastleLife {
             }
         }
         return d;
+    }
+
+    /** Bodies near this walker it must not walk into: people, players, animals (once a frame, then filtered). */
+    _othersNear(v) {
+        const g = this.game;
+        const f = g.frameCount ?? 0;
+        if (this._bodiesF !== f || !this._bodies) {
+            this._bodiesF = f;
+            const B = this._bodies = [];
+            for (const o of this.byId.values()) if (!o.dead && !o.seated && !o.climb && o.group?.visible !== false) B.push({ x: o.x, y: o.y, z: o.z, r: o.role === 'knight' || o.role === 'king' ? 0.7 : 0.5, ref: o });
+            const me = g.character?.group.position;
+            if (me && !g.isDeadLocal) B.push({ x: me.x, y: me.y - 1.95, z: me.z, r: 0.6, ref: null });
+            for (const [, r] of g.remotes || []) if (!r.dead) B.push({ x: r.position.x, y: r.position.y - 1.95, z: r.position.z, r: 0.6, ref: null });
+            for (const a of g.animals?.list || []) if (!a.dead) B.push({ x: a.group.position.x, y: a.group.position.y, z: a.group.position.z, r: 0.9 * (a.group.scale.x || 1), ref: a });
+        }
+        const out = [];
+        for (const b of this._bodies) {
+            if (b.ref === v || Math.abs(b.x - v.x) > 3.5 || Math.abs(b.z - v.z) > 3.5 || Math.abs(b.y - v.y) > 2.5) continue;
+            out.push(b);
+        }
+        return out;
     }
 
     /**
