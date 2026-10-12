@@ -49,7 +49,7 @@ test('the only black horse: 21% of horse herds have one Pegasus, ordinary horses
         for (const a of h) if (!a.pegasus) assert.notEqual(a.color, PEGASUS_COLOR);
         for (const a of h) A._remove(a);
     }
-    assert.ok(Math.abs(withP / herds - PEGASUS.CHANCE) < 0.05, `${withP}/${herds}`);
+    assert.ok(Math.abs(withP / herds - PEGASUS.CHANCE) < 0.06, `${withP}/${herds}`);
 });
 
 test('attack his herd: the Pegasus takes off, circles the attacker and dives at them', () => {

@@ -589,7 +589,7 @@ export class Animals {
             const l = last[i];
             if (l) {
                 const v = h.distanceTo(l) / dt;
-                if (h.distanceTo(hp) < 0.3 * size && v > PEGASUS.SLAP_V && now - (this._slapAt || 0) > 900) hit = true;
+                if (h.distanceTo(hp) < 0.3 * size && v > PEGASUS.SLAP_V && now - (this._slapAt ?? -Infinity) > 900) hit = true;
             }
             last[i] = h.clone();
         });
