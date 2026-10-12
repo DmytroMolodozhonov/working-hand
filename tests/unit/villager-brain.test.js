@@ -104,7 +104,8 @@ test('every role has a big pool of small talk (≥15 distinct lines)', () => {
         for (let s = 1; s <= 25; s++) {
             for (const mood of [-0.5, 0, 0.5]) {
                 const b = make(role, { mood, seed: s });
-                for (let i = 0; i < 12; i++) { seen.add(b.hear('ну и вот так оно', {}).reply); b.mood = mood; }
+                // (their own small talk — words they have nothing to add to are answered by «Вот как.», not by a line about something else)
+                for (let i = 0; i < 12; i++) { seen.add(b._small({})); b.mood = mood; }
             }
         }
         assert.ok(seen.size >= 15, `${role}: only ${seen.size} small-talk lines`);

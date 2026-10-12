@@ -321,6 +321,9 @@ const P = {
         greetKnown: ['А, {player}! Снова ты.', 'Здравствуй, {player}!', '{Player}, привет! Как ты?', 'О, {player}! Давно не виделись.', '{Player}! Хорошо, что ты тут.'],
         greetDanger: ['Не до разговоров! Зомби рядом!', 'Прячься за стены, {player}!', 'Беги, пока цел!'],
         mumble: ['Мм?', 'А?', 'Ась?', 'Чего-чего?', 'Э-э...', 'Хм.', 'Угу.', 'Ну...'],
+        dontKnow: ['Не знаю, {player}, честно.', 'Вот этого не скажу, {player}.', 'Хм, не слыхал{|а} о таком.', 'Мудрёный вопрос, {player}. Не знаю я.', 'Эх, кабы я знал{|а}...'],
+        dontKnowTail: ['Я человек простой, моё дело — своё.', 'Спроси кого поучёнее.', 'Может, кто в замке знает.', 'Тут я тебе не помощник.'],
+        heardYou: ['Вот как.', 'Понимаю, {player}.', 'Ну, тебе виднее.', 'Интересно говоришь.', 'Вот оно что.', 'Ясно, {player}.'],
         unknownQ: ['Не знаю, {player}, честно.', 'Хм... Вот этого не знаю.', 'Об этом лучше спроси кого-нибудь другого.', 'Мудрёный вопрос. Не знаю я.', 'Не слыхал{|а} о таком.', 'Кто ж его знает...', 'Спроси что попроще, {player}.'],
         dontUnderstand: ['Не понял{|а} я тебя, {player}.', 'Чего? Говори проще.', 'Ась? Не расслышал{|а}.', 'Ты это о чём?', 'Мудрёно говоришь. Я человек простой.', 'Не разберу никак, что ты говоришь.', 'Повтори-ка, не понял{|а}.'],
         refuseTalk: ['Не буду я с тобой разговаривать.', 'Отстань.', 'Иди-иди отсюда.', 'Не о чем нам говорить.', 'Знать тебя не хочу.', 'Отвяжись.'],
@@ -853,6 +856,20 @@ export class VillagerBrain {
     }
 
     /** Small talk: mixes band lines with neutral ones, plus night/king/danger variants. */
+    /** «Не знаю…» on the very question — and who in this world would know it. */
+    _dontKnow(text, ctx = {}) {
+        const t = String(text || '');
+        const who =
+            /(маг|волшеб|заклин|колдов|чар|зель|палочк|башн)/.test(t) ? 'Про это лучше спроси у магов в башне волшебников.'
+            : /(корол|войск|войн|рыцар|армия|армии|казн|закон|налог|замок|замка|замке)/.test(t) ? (this.role === 'advisor' || this.role === 'king' ? '' : 'Про это лучше спроси советника короля в тронном зале.')
+            : /(цен|купить|продать|товар|рынок|рынк|монет|деньг|торг)/.test(t) ? (this.role === 'merchant' ? '' : 'Про это спроси торговцев на рынке у ворот.')
+            : /(дорог|путь|пройти|дойти|далеко|город|деревн|море|корабл|порт|пещер|гор[аые])/.test(t) ? 'Про дороги лучше знают стражники у ворот.'
+            : /(зомби|мертвец|мертвяк|нежит|паук|чудовищ)/.test(t) ? (this.role === 'knight' ? '' : 'Про это лучше спроси рыцарей — они с ними бьются.')
+            : '';
+        const head = this._fill(this._pick(P.common.dontKnow), {}, ctx);
+        return who ? `${head} ${who}` : `${head} ${this._fill(this._pick(P.common.dontKnowTail), {}, ctx)}`;
+    }
+
     _small(ctx = {}) {
         if (this._playerIsKing(ctx) && this.role !== 'king') {
             const own = P[this.role]?.kingSmall || [];
@@ -978,6 +995,13 @@ export class VillagerBrain {
             else if (role === 'king') { out.reply = say('witnessHarm'); out.action = 'call_guards'; }
             else { out.reply = this._pick(this.traits.brave > 0.6 ? P.common.threatScared : P.common.threatFlee); out.reply = this._fill(out.reply, {}, ctx); out.action = this.traits.brave > 0.6 ? 'call_guards' : 'flee'; }
             out.moodDelta -= 0.05;
+            return out;
+        }
+        // a long «why / how / who» question that only touched a topic («почему в этой башне живут волшебники»):
+        // a ready line about the topic would not answer it — an honest «не знаю» on it, and who would know
+        if (['about_castle', 'about_king', 'magic', 'zombies', 'money', 'family', 'quest', 'food'].includes(intent)
+            && det.text.split(' ').length >= 5 && /(^|\s)(почему|зачем|отчего|кто|когда|как так|каким образом|откуда)(?![а-я])/.test(det.text)) {
+            out.reply = this._royal(this._dontKnow(det.text, ctx), ctx);
             return out;
         }
 
@@ -1129,12 +1153,13 @@ export class VillagerBrain {
                 }
                 return out;
             }
-            default: { // unknown → small talk / mumble
-                if (this.traits.smart < 0.45 && this.rng() < 0.35) out.reply = this._fill(this._pick(P.common.mumble), {}, ctx);
-                else if (det.text.split(' ').length <= 1 && this.rng() < 0.5) out.reply = say('dontUnderstand');
-                // a question it has no answer to: an honest «не знаю», not a line about something else
-                else if (QUESTION_RE.test(det.text) && this.rng() < 0.7) out.reply = this._royal(say('unknownQ'), ctx);
-                else out.reply = this._small(ctx);
+            default: { // unknown: never a line about something else — stay on what was said
+                const words = det.text.split(' ').filter(Boolean).length;
+                if (words <= 1) out.reply = say('dontUnderstand');
+                // a question it has no answer to: an honest «не знаю», and who would know
+                else if (QUESTION_RE.test(det.text)) out.reply = this._royal(this._dontKnow(det.text, ctx), ctx);
+                // words it has nothing to add to: it takes them in
+                else out.reply = this._royal(this._fill(this._pick(P.common.heardYou), {}, ctx), ctx);
                 return out;
             }
         }

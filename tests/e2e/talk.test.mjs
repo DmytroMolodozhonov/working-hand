@@ -151,7 +151,7 @@ test('talk: the neural net (a fake one) understands free words — «Хм…» f
         await new Promise((res) => setTimeout(res, 800));
         return { thinking, strangerDefends, defenders, said, plain: T.brain(k).memory.lastReply || '', tools: asked[0]?.tools?.map((t) => t.function.name) || [], system: asked[1]?.system || '' };
     });
-    assert.match(r.thinking, /^(Так|Хм)/, `thinking: ${r.thinking}`);
+    assert.match(r.thinking, /…$/, `his own thinking words first: ${r.thinking}`);
     assert.equal(r.strangerDefends, 0, 'the game refuses a stranger');
     assert.ok(r.defenders >= 4, `defenders: ${r.defenders}`);
     assert.equal(r.said, 'Будет исполнено, Ваше Величество!');

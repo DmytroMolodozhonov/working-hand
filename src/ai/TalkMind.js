@@ -53,6 +53,36 @@ export function orderLine(kind, role, rng = Math.random) {
 }
 
 /** What the net answers (the rules know these only roughly); everything else the rules answer at once. */
+/** What the rules always answer themselves, however long the words (the market, orders, yes / no, manners). */
+const RULES_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'haggle', 'insult', 'threat', 'claim_king', 'bow', 'follow', 'stop_follow', 'thanks', 'bye', 'tell_name', 'ask_my_name']);
+
+/**
+ * The words a villager says at once while thinking — by role, by a woman's voice, by the kind of question;
+ * never the same as the last one (`last`).
+ */
+const FILLERS = {
+    common: ['Дай-ка подумать…', 'Хороший вопрос…', 'Так-так…', 'Ммм… ну смотри…', 'Эх, как тебе сказать…', 'Погоди…', 'Хм… сейчас…', 'Дай вспомнить…', 'Ну-у…'],
+    female: ['Ой, дай-ка подумать…', 'Ох, даже не знаю, как сказать…', 'Погоди-ка…', 'Ой, сейчас…', 'Ммм… дай вспомнить…'],
+    knight: ['Так…', 'Хм. Слушай…', 'Погоди-ка…', 'Значит, так…', 'Скажу так…'],
+    king: ['Гм… Изволь…', 'Что ж…', 'Хм… Слушай же…'],
+    advisor: ['Позвольте… минутку…', 'Хм… если позволите…', 'Видите ли…', 'Дайте подумать…'],
+    merchant: ['Так-так, дай прикину…', 'Ммм… ну смотри…', 'Слушай…', 'Эх, как тебе сказать…'],
+    wizard: ['Хм… любопытно…', 'Дай-ка подумать…', 'Мм… видишь ли…', 'Любопытный вопрос…'],
+    why: ['Почему? Хм…', 'Хороший вопрос…', 'Эх, как тебе сказать…'],
+    how: ['Как бы тебе объяснить…', 'Ммм… ну смотри…'],
+    who: ['Дай вспомнить…', 'Погоди, сейчас вспомню…'],
+};
+
+export function fillerLine({ role = 'farmer', female = false, wizard = false, text = '', last = '' } = {}, rng = Math.random) {
+    const t = String(text).toLowerCase();
+    const kind = /(почему|зачем|отчего)/.test(t) ? 'why' : /(^|\s)как(?![а-я])/.test(t) ? 'how' : /(кто|где|когда|куда)(?![а-я])/.test(t) ? 'who' : null;
+    let pool = wizard ? FILLERS.wizard : FILLERS[role] || (female ? [...FILLERS.female, ...FILLERS.common] : FILLERS.common);
+    if (female && !FILLERS[role] && !wizard) pool = [...FILLERS.female, ...FILLERS.common];
+    if (kind && role !== 'king' && rng() < 0.5) pool = [...FILLERS[kind], ...pool];
+    const fresh = pool.filter((l) => l !== last);
+    return pickFrom(fresh.length ? fresh : pool, rng);
+}
+
 export const OPEN_TOPICS = new Set(['unknown', 'news', 'about_castle', 'about_king', 'zombies', 'magic', 'weather', 'money', 'family', 'flirt', 'quest', 'joke']);
 
 export class TalkMind {
@@ -90,8 +120,11 @@ export class TalkMind {
             m.talks ? `Вы уже говорили ${m.talks} раз.${m.insults ? ' Он тебя оскорблял.' : ''}${m.trades ? ' Вы торговали.' : ''}${m.lastOrder ? ` Последний приказ: ${m.lastOrder}.` : ''}` : '',
             ctx.following ? 'Сейчас ты идёшь следом за собеседником.' : '',
             ctx.lastOffer ? `Ты сейчас предлагаешь сделку: ${ctx.lastOffer.item?.name || 'вещь'} за ${ctx.lastOffer.price} монет.` : '',
+            // what this villager knows of the world: answers come from it, not from nowhere
+            'Что ты знаешь: в замке есть король, его советник у трона, рыцари стражи, рынок у ворот с хлебом, сыром, мясом, яблоками и стрелами, дома жителей. По ночам из-под земли лезут зомби. В пещерах живёт гигантский паук. В Башне волшебников учатся маги. У моря есть порт с кораблями и моряками.',
+            'Отвечай ПО СУТИ того, что спросил собеседник, и не меняй тему. Если не знаешь ответа — так и скажи просто, по-своему, и подскажи, у кого спросить (маги в башне, советник короля, торговцы на рынке, стражники у ворот).',
             'Если собеседник просит или приказывает что-то сделать и ты согласен — вызови подходящую функцию. Если не согласен — не вызывай, просто откажи словами.',
-            'Отвечай по-русски, одной-двумя короткими фразами, от первого лица, без кавычек и пояснений.',
+            'Отвечай по-русски, одной-двумя короткими фразами, от первого лица, без кавычек, без чисел и без пояснений.',
         ];
         return lines.filter(Boolean).join('\n');
     }
@@ -142,7 +175,11 @@ export class TalkMind {
         // 2) what the rules clearly understood is answered at once (a talk by voice must be quick);
         //    the net takes what they did not (and the open topics, where its own words are better)
         //    — never the market: prices are the game's
-        const quick = !OPEN_TOPICS.has(res.intent);
+        // (a long, «complex» question that merely touched a known word — «а почему маги не любят рыцарей короля» —
+        // is the net's: a canned line about the king would not answer it)
+        const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
+        const complex = words >= 6 && !RULES_ONLY.has(res.intent) && !res.intent.startsWith('where_');
+        const quick = !OPEN_TOPICS.has(res.intent) && !complex;
         const done = !this.smart || !res.reply || quick || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
         return { res, perm, done };
     }

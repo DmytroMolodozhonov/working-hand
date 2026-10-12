@@ -4,7 +4,7 @@ import { createRng } from '../../src/core/math.js';
 import { VillagerBrain } from '../../src/game/VillagerBrain.js';
 import { TOOLS, TOOL_NAMES, toolsFor, parseToolCalls, validateCall, detectOrder, resolveTarget } from '../../src/ai/TalkActions.js';
 import { restAfter } from '../../src/game/CastleTalk.js';
-import { TalkMind, ROLE_PROMPTS, thinkingLine } from '../../src/ai/TalkMind.js';
+import { TalkMind, ROLE_PROMPTS, thinkingLine, fillerLine } from '../../src/ai/TalkMind.js';
 
 const PLAYERS = [{ id: 'p1', name: 'Олег' }, { id: 'p2', name: 'Маша' }];
 
@@ -281,4 +281,35 @@ test('the answer is said while written: a long enough first clause at once, then
     const said2 = [];
     await new TalkMind({ llm: llm2, rng: createRng(3) }).hear(brain('farmer', { seed: 4 }), 'а что у вас тут творится вообще', {}, { onSentence: (s) => said2.push(s) });
     assert.ok(said2.every((x) => !/[<{]/.test(x)), 'no tool call said aloud');
+});
+
+test('a complex question goes to the net even if it touches a known word; an unknown question is a «не знаю» on it, never a line about something else', async () => {
+    const llm = fakeLLM(() => 'Маги держатся особняком, а рыцари им не доверяют.');
+    const mind = new TalkMind({ llm, rng: createRng(5) });
+    const b = brain('farmer', { seed: 5 });
+    const r = await mind.hear(b, 'а скажи мне почему маги в башне не любят рыцарей короля', {});
+    assert.equal(llm.asked.length, 1, 'the net is asked');
+    assert.match(r.reply, /Маги держатся особняком/);
+    await mind.hear(b, 'сколько стоит хлеб', {});
+    assert.equal(llm.asked.length, 1, 'the market stays the rules\' (prices are the game\'s)');
+    // no net: the rules answer on the question
+    const plain = brain('builder', { seed: 2 });
+    const a = plain.hear('почему в этой башне живут волшебники', {}).reply;
+    assert.match(a, /(не знаю|не скажу|не слыхал|кабы я знал).*(башн|маг)/i, a);
+    assert.match(plain.hear('далеко ли отсюда до моря', {}).reply, /(не знаю|не скажу|не слыхал|кабы я знал|Мудрёный)/i);
+    const said = plain.hear('я вчера видел странный свет над лесом', {}).reply;
+    assert.match(said, /^(Вот как|Понимаю|Ну, тебе виднее|Интересно говоришь|Вот оно что|Ясно)/, said);
+});
+
+test('thinking words: his own, by role and by a woman\'s voice, never the same twice running', () => {
+    const rng = createRng(11);
+    let last = '';
+    for (let i = 0; i < 40; i++) {
+        const l = fillerLine({ role: i % 3 ? 'farmer' : 'knight', female: i % 2 === 0, text: 'почему так', last }, rng);
+        assert.notEqual(l, last);
+        assert.match(l, /…$/);
+        last = l;
+    }
+    const seen = new Set(Array.from({ length: 60 }, () => fillerLine({ role: 'farmer' }, rng)));
+    assert.ok(seen.size >= 6, `varied: ${[...seen].join(' | ')}`);
 });

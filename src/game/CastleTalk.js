@@ -30,7 +30,7 @@ import * as THREE from 'three';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
-import { TalkMind, thinkingLine } from '../ai/TalkMind.js';
+import { TalkMind, fillerLine } from '../ai/TalkMind.js';
 import { detectOrder, toolsFor } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
 
@@ -192,17 +192,28 @@ export class CastleTalk {
     hostAnswer(v, text) {
         const a = this._asks.get(v.id);
         if (!a || !text) return false;
-        if (!a.got) { a.got = true; this._sayReply(v, text, 5, false); } else this._sayMore(v, text, false);
+        if (!a.got) { a.got = true; this._sayAnswer(v, text, false); } else this._sayMore(v, text, false);
         if (a.t0 && !a.logged) { a.logged = true; console.info(`[CastleTalk] host answered in ${Math.round(performance.now() - a.t0)} ms: «${text}»`); }
         return true;
     }
 
     /** «Хм…» while the net thinks: over the head only. */
-    _sayThinking(v) {
+    _sayThinking(v, text = '') {
         v.talkedAt = performance.now();
         this._partner = v;
-        this._urgent = true; // (a short «Хм…» aloud; the answer cuts it)
-        try { this.life._say(v, thinkingLine(v.role), 3); } finally { this._urgent = false; }
+        // (his own words while he thinks — by role, a woman's own, by the question; never the same twice running)
+        const line = fillerLine({ role: v.role, female: !!v.entry?.female, wizard: !!v.wizard, text, last: v.lastFiller || this._lastFiller }, Math.random);
+        v.lastFiller = line; this._lastFiller = line;
+        this._filler = { v, at: performance.now() };
+        this._urgent = true; // (said at once, cutting other talk; the answer follows it)
+        try { this.life._say(v, line, 3); } finally { this._urgent = false; }
+    }
+
+    /** The answer's first words: right after his «Дай-ка подумать…» (no cut, no gap) — or at once. */
+    _sayAnswer(v, text, broadcast = true) {
+        const F = this._filler;
+        if (F && F.v === v && performance.now() - F.at < 5000) { this._filler = null; this._sayMore(v, text, broadcast); }
+        else this._sayReply(v, text, 5, broadcast);
     }
 
     /** Am I in a talk with somebody right now (the last 15 s)? */
@@ -258,7 +269,7 @@ export class CastleTalk {
         if (!g.authority && this.hostSmart && !this.llm?.ready && g.sync?.villagerAsk && this.offer?.v !== v) {
             const ask = { t0: performance.now(), got: false };
             this._asks.set(v.id, ask);
-            this._sayThinking(v);
+            this._sayThinking(v, text);
             g.sync.villagerAsk(v.id, text, { coins: ctx.coins, heldItem: ctx.heldItem, hostile: ctx.hostile });
             // (no answer in time: my own rules answer; the host already speaking: just stop waiting)
             setTimeout(() => { if (this._asks.get(v.id) !== ask) return; this._asks.delete(v.id); if (!ask.got) done(b.hear(text, ctx)); }, 12000);
@@ -268,10 +279,10 @@ export class CastleTalk {
         if (!this.mind.llm) this._whyNoNet();
         const first = this.mind.first(b, text, ctx);
         if (first.done) { done(first.res); return true; } // (the rules: at once)
-        const thinking = () => this._sayThinking(v);
+        const thinking = () => this._sayThinking(v, text);
         const t0 = performance.now();
         // (the first sentence of the net's answer is said as soon as it is written)
-        const onSentence = (line, i) => (i > 0 ? this._sayMore(v, line) : this._sayReply(v, line));
+        const onSentence = (line, i) => (i > 0 ? this._sayMore(v, line) : this._sayAnswer(v, line));
         this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence }).then((res) => {
             // (too slow on this computer: say so now and then — the answer came from the rules)
             if (this.mind.lastTimedOut) {
@@ -400,7 +411,7 @@ export class CastleTalk {
             // (the start was said already while the net wrote: only the rest now, after it)
             const head = res.spoken;
             if (head) { const rest = restAfter(res.reply, head); if (rest) this._sayMore(v, rest); }
-            else this._sayReply(v, res.reply);
+            else this._sayAnswer(v, res.reply);
         }
         if ((res.offer && res.action !== 'trade_yes') || res.action === 'offer_goods') this._pitch = { v, at: performance.now() };
         const me = g.character.group.position;
