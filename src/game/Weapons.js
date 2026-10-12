@@ -28,7 +28,7 @@ const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
 const CLOSE_CURL = 0.55; // fingers closed
 const OPEN_CURL = 0.35; // fingers open
 const CLOSE_WINDOW_MS = 900; // hand must have been open this recently to count as "closing on" the handle
-const GRIP_DIAGONAL = 0.75; // rad: the handle across the palm slants this much towards the fingers (~43°)
+const GRIP_DIAGONAL = 0.2; // rad: the handle across the palm slants a little towards the fingers; the rest is the wrist's bend (SimplifiedHand.wristBend)
 const SETTLE_TIME = 0.18; // seconds for the handle to settle into the grip
 const MIN_SWING_SPEED = 3.2; // m/s at the tip to count as a strike
 const STAB_SPEED = 4.5; // m/s of the point along the blade: a thrust that goes into the body
@@ -484,10 +484,10 @@ export class WeaponSystem {
         const qRel0 = _qPalm.clone().invert().multiply(w.quaternion);
         const wY = _a.set(0, 1, 0).applyQuaternion(w.quaternion);
         const wX = _b.set(1, 0, 0).applyQuaternion(w.quaternion);
-        // The handle lies DIAGONALLY in the closed hand (a real sword grip: from the index
-        // finger's base knuckle to the heel of the hand), so the blade leaves the fist
-        // tilted towards where the fingers point — with the arm stretched out it goes
-        // forward and can be thrust point first, not only stand across the forearm.
+        // The handle lies a little diagonally in the closed hand (a real sword grip: from the
+        // index finger's base knuckle to the heel of the hand). Pointing the blade forward for a
+        // thrust is the wrist's work: bent to the little finger's side, the fist carries the
+        // blade towards where the arm points (SimplifiedHand.wristBend) — every pose in between.
         // Out of the thumb side or the little finger's: as it was grabbed (default: thumb).
         let thumbS = side === 'left' ? -1 : 1;
         const thumb = ch.getActiveHands()[side]?.fingerMeshes?.thumb?.[0]?.pivot;
@@ -520,6 +520,7 @@ export class WeaponSystem {
         w.attach({ playerId: this.game.localId || 'local', side });
         const hand = ch.getActiveHands()[side];
         if (hand && hand.setGrip) hand.setGrip(0.62);
+        if (hand) hand.bladeGrip = true; // (its wrist's bend is read for the blade)
         if (this.onGrab) this.onGrab(w, side);
         return true;
     }
@@ -632,6 +633,7 @@ export class WeaponSystem {
         hs.waitClose = false;
         hs.rel0 = hs.relC = null;
         if (hand && hand.setGrip) hand.setGrip(null);
+        if (hand) hand.bladeGrip = false;
     }
 
     releaseAll() {

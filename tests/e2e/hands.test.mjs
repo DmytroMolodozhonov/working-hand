@@ -511,3 +511,51 @@ test('the wand never flies off from flicks, jitter or a wand raised to cast; a r
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('the sword follows the wrist smoothly (V3 hands): turned, it stands up / sideways / down as before; the wrist bent to the little finger carries the point forward for a thrust', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        g.character.setHandVersion('v3');
+        g.character.rightSimplifiedHand.aspect = 1; // (the synthetic hands are drawn in a square picture)
+    });
+    await feedF(page, { arms: 'forward', rightCurl: 0.95 }, 6);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const w = g.weapons.byId.get('tS'); w.hover = null;
+        g.weapons.grab(w, 'right', 0.5);
+    });
+    const rots = [-1.4, -0.7, 0, 0.7, 1.4], bends = [-0.3, 0, 0.3, 0.6];
+    const res = {};
+    for (const rot of rots) for (const bend of bends) {
+        await feedF(page, { arms: 'forward', rightCurl: 0.95, rightRot: rot, rightBend: bend }, 8);
+        res[rot + '|' + bend] = await page.evaluate(() => {
+            const g = window.__zns.game, T = window.__zns.THREE;
+            const [b, t] = g.weapons.hands.right.held.getBladeSegment();
+            const d = t.sub(b).normalize();
+            return { d: d.toArray(), fore: d.dot(g.character.getForearmDirection('right', new T.Vector3())) };
+        });
+    }
+    const at = (r, b) => res[r + '|' + b];
+    const show = () => rots.map((r) => `rot ${r}: ` + bends.map((b) => `${b}→${at(r, b).fore.toFixed(2)} (up ${at(r, b).d[1].toFixed(2)})`).join('  ')).join('\n');
+    // a straight wrist: across the forearm, as before — turning it stands the blade up … down
+    for (const r of rots) assert.ok(Math.abs(at(r, 0).fore) < 0.4, `straight wrist: the blade across the arm\n${show()}`);
+    const ups = rots.map((r) => at(r, 0).d[1]);
+    assert.ok(Math.max(...ups) > 0.85 && Math.min(...ups) < -0.6, `turned, it goes from up to down\n${show()}`);
+    // the wrist bent to the little finger: the point goes forward (a thrust), more the more it bends
+    for (const r of rots) {
+        const f = bends.map((b) => at(r, b).fore);
+        for (let i = 1; i < f.length; i++) assert.ok(f[i] > f[i - 1] - 0.03, `bending more, the point goes more forward (rot ${r})\n${show()}`);
+        assert.ok(at(r, 0.6).fore > 0.7, `bent: the point forward for a thrust (rot ${r})\n${show()}`);
+    }
+    // smooth: neighbouring wrist poses never jump the blade around
+    for (const b of bends) for (let i = 1; i < rots.length; i++) {
+        const a1 = at(rots[i - 1], b).d, a2 = at(rots[i], b).d;
+        const ang = Math.acos(Math.max(-1, Math.min(1, a1[0] * a2[0] + a1[1] * a2[1] + a1[2] * a2[2])));
+        assert.ok(ang < 1.2, `no jump between rot ${rots[i - 1]} and ${rots[i]} (bend ${b}): ${ang.toFixed(2)} rad\n${show()}`);
+    }
+    console.log(show());
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

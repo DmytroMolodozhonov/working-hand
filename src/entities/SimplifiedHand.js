@@ -16,6 +16,28 @@ import * as THREE from 'three';
 import { lerpAngle } from '../core/math.js';
 import { handFrame, fingerJoints } from './HandPose.js';
 
+/**
+ * How far the wrist is bent to the little finger's side (+) or the thumb's (−), rad, from
+ * the picture: bending it carries the knuckles along the knuckle line (index → little
+ * finger) away from the wrist, whichever way the hand is turned, and seen from any side
+ * (with the arm pointing at the camera too); the palm's length is ~1.1 knuckle widths.
+ * null: the knuckle line is not seen well enough.
+ */
+export function wristBend(lm, aspect = 1) {
+    const w = lm[0], i = lm[5], m = lm[9], p = lm[17];
+    const ux = (p.x - i.x) * aspect, uy = p.y - i.y;
+    const span = Math.hypot(ux, uy);
+    if (span < 0.012) return null;
+    const hx = (m.x - w.x) * aspect, hy = m.y - w.y;
+    // (the knuckle line slants: the little finger's knuckle is nearer the wrist — a straight
+    // wrist still shows the knuckles ~0.18 of the hand's length towards the index side)
+    const along = (hx * ux + hy * uy) / span + 0.18 * Math.hypot(hx, hy);
+    return Math.asin(Math.max(-1, Math.min(1, along / (1.1 * span))));
+}
+/** A hand on a blade: the bend read from the picture is shown this much stronger (the camera
+ * sees a fist's bend short), up to these limits (to the little finger's side / to the thumb's). */
+export const BLADE_BEND_GAIN = 1.6, BLADE_BEND_ULNAR = 1.25, BLADE_BEND_RADIAL = 0.45;
+
 /** The fingers bend at most this far from the forearm at the wrist (a real wrist's range). */
 const MAX_WRIST_BEND = 1.4; // rad (~80°)
 const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4();
@@ -458,7 +480,14 @@ export class SimplifiedHand {
         ts.wristTilt += (targetTilt - ts.wristTilt) * 0.6;
 
         const rawRoll = ((pinkyB.z || 0) - (indexB.z || 0)) * 6;
-        const targetRoll = Math.max(-0.8, Math.min(0.8, rawRoll));
+        let targetRoll = Math.max(-0.8, Math.min(0.8, rawRoll));
+        // A fist on a sword's handle: the wrist bent to the little finger's side (as for pointing
+        // the blade forward, a thrust) or to the thumb's — read from the picture, see wristBend()
+        if (this.bladeGrip) {
+            const bend = wristBend(landmarks, this.aspect);
+            if (bend != null) this._bladeBend = this._bladeBend == null ? bend : this._bladeBend + (bend - this._bladeBend) * 0.5;
+            targetRoll = -Math.max(-BLADE_BEND_RADIAL, Math.min(BLADE_BEND_ULNAR, (this._bladeBend || 0) * BLADE_BEND_GAIN));
+        } else this._bladeBend = null;
         ts.wristRoll += (targetRoll - ts.wristRoll) * 0.45;
 
         if (this.fullPose) this._fullPose(landmarks);

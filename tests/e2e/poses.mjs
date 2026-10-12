@@ -5,7 +5,7 @@
  * so the person's LEFT side appears on the image RIGHT.
  */
 
-export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror = false, back = false } = {}) {
+export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, bend = 0, mirror = false, back = false } = {}) {
     const lm = [{ x: wx, y: wy, z: 0 }];
     // (a left hand, its palm to the camera: the thumb on the picture's left; `mirror` — a right hand)
     const bases = [[-0.35, -0.25], [-0.2, -0.85], [0, -0.9], [0.18, -0.85], [0.33, -0.75]].map(([x, y]) => [mirror ? -x : x, y]);
@@ -26,6 +26,13 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
     if (tilt) {
         const c = Math.cos(tilt), s = Math.sin(tilt);
         for (const p of lm) { const y = p.y - wy, z = p.z; p.y = wy + y * c - z * s; p.z = z * c + y * s; }
+    }
+    // the wrist bent to the little finger's side (+) / the thumb's (−), bend rad: as the camera sees
+    // it with the arm pointing at it, the whole hand slides along the knuckle line from the wrist
+    if (bend) {
+        const ix = lm[5].x, iy = lm[5].y, px = lm[17].x, py = lm[17].y, L = Math.hypot(px - ix, py - iy);
+        const d = 1.1 * L * Math.sin(bend);
+        for (let k = 1; k < lm.length; k++) { lm[k].x += (px - ix) / L * d; lm[k].y += (py - iy) / L * d; }
     }
     // the hand bent aside at the wrist (in the picture's plane): rot rad round the wrist
     if (rot) {
@@ -49,7 +56,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, mirror 
  *   bob: shoulder vertical offset (for running animation)
  *   legs: {left, right}: 'stand' | 'up' | 'heel' | 'off' (opt-in; see below)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -142,8 +149,8 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
         }
     }
     const hands = [];
-    if (leftCurl != null) hands.push({ landmarks: hand(p[15].x, p[15].y, { curl: leftCurl, rot: leftRot, tilt: leftTilt, mirror: palmsIn, back: palmsIn }), label: 'Right', score: 0.95 });
-    if (rightCurl != null) hands.push({ landmarks: hand(p[16].x, p[16].y, { curl: rightCurl, rot: rightRot, tilt: rightTilt, mirror: !palmsIn, back: palmsIn }), label: 'Left', score: 0.95 });
+    if (leftCurl != null) hands.push({ landmarks: hand(p[15].x, p[15].y, { curl: leftCurl, rot: leftRot, tilt: leftTilt, bend: leftBend, mirror: palmsIn, back: palmsIn }), label: 'Right', score: 0.95 });
+    if (rightCurl != null) hands.push({ landmarks: hand(p[16].x, p[16].y, { curl: rightCurl, rot: rightRot, tilt: rightTilt, bend: rightBend, mirror: !palmsIn, back: palmsIn }), label: 'Left', score: 0.95 });
     // a real stick held in the hand, as the camera program finds it (stick_detect.py):
     // `rightStick` / `leftStick`: its angle in the picture (rad, 0 = up, + = towards the picture's right)
     // or {angle, out, conf}
