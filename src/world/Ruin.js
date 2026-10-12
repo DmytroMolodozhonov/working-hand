@@ -49,6 +49,15 @@ function groundTop(data, x, z, from, floor) {
     return null;
 }
 
+/** Water in this column or within 2 columns of it, at the ground's level or just above it. */
+function nearWater(data, x, z, g) {
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+        if (dx * dx + dz * dz > 5) continue;
+        for (let L = g - 1; L <= g + 2; L++) if (data.get(x + dx, L, z + dz) === BLOCK.WATER) return true;
+    }
+    return false;
+}
+
 /**
  * The hollows of a column between layers L0 and its top: caves, tunnels, the space under
  * an overhang — air with rock (or anything solid) both under and over it.
@@ -134,8 +143,9 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null) {
             removed.push([x, L, z, t]);
             if (!light(t)) { n++; heavy.push(t); }
         }
-        // the ground sinks a little (not under water, never down to the bedrock)
-        if (g != null && g - 2 > floor && data.get(x, g + 1, z) !== BLOCK.WATER) {
+        // the ground sinks a little (not under water, never down to the bedrock; a river's or a
+        // lake's bank holds: the water keeps its shape instead of spilling over the sunk grass)
+        if (g != null && g - 2 > floor && !nearWater(data, x, z, g)) {
             const s = e < 0.85 ? 1 + (e < 0.45 && hash01(x, 3, z, 13) < 0.4 ? 1 : 0) : 0;
             if (s > 0) {
                 const hi = Math.max(g, data.topLayer(x, z));

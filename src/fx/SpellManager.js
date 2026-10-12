@@ -288,8 +288,8 @@ export class SpellManager {
             case 'EarthquakeMaxima': this.castEarthquake(o, d, casterId, 3); break;
             case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
             case 'Overgrown': case 'OvergrownMaxima': this.castOvergrown(name, o, d, casterId); break;
-            case 'WaveAttack': this.castWave(o, direction.clone(), casterId, 1); break; // (its length = the distance)
-            case 'WaveAttackMaxima': this.castWave(o, direction.clone(), casterId, 2.2); break;
+            // («Wave Attack»: raised, aimed, sent — WaveAttack.js; an old one-shot: d's length = the distance)
+            case 'WaveAttack': case 'WaveAttackMaxima': this.hooks.wave?.(name, o.clone(), direction.clone(), handSide, casterId); break;
             case 'Inferno': this.castInferno(o, d, casterId, handSide || 'right'); break;
             case 'Sands': this.castSands(o, d, casterId); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
@@ -842,90 +842,6 @@ export class SpellManager {
         }
         // Me, if another wizard pointed it at me (every machine moves its own player)
         if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos), name);
-    }
-
-    // ----------------------------------------------------------- Wave Attack
-    /**
-     * A wave rises from the water (origin) and rolls to the target point
-     * (origin + vec): a curved wall of water, foam on top. Whoever it reaches is
-     * washed away (pushed hard along the wave) — it never hurts.
-     */
-    castWave(origin, vec, casterId, power = 1) {
-        const dist = Math.max(4, Math.min(40, vec.length()));
-        const dir = vec.setY(0).normalize();
-        if (!Number.isFinite(dir.x)) return;
-        const side = new THREE.Vector3(-dir.z, 0, dir.x);
-        const width = 3.2 * power, height = 1.6 + 1.1 * power;
-        const speed = 11;
-        this._sound('playWhoosh');
-        this.hooks.waveMade?.({ x: origin.x, z: origin.z, dirX: dir.x, dirZ: dir.z, speed, height, width, dist }); // (a surfboard can ride it)
-        const geo = new THREE.CylinderGeometry(width / 2, width / 2, 1, 20, 1, true, -Math.PI / 2, Math.PI);
-        geo.rotateZ(Math.PI / 2);
-        const mat = new THREE.MeshPhongMaterial({ color: 0x2f8fd0, transparent: true, opacity: 0.75, shininess: 90, specular: 0xffffff, side: THREE.DoubleSide, depthWrite: false });
-        const wave = new THREE.Mesh(geo, mat);
-        this.scene.add(wave);
-        const ground = (x, z) => (this.hooks.collision ? this.hooks.collision.surfaceY(x, z) : 0);
-        const pos = origin.clone();
-        const hit = new Set();
-        let travelled = 0;
-        const total = dist + 3;
-        const push = (p) => {
-            const to = _a.subVectors(p, pos);
-            const along = to.dot(dir), across = Math.abs(to.dot(side));
-            if (along < -1.2 || along > 1.6 || across > width / 2 + 0.6 || Math.abs(to.y) > height + 2.5) return null;
-            const k = 4 + 6 * power; // (carried and staggered; the Maxima throws off the feet)
-            return _b.copy(dir).multiplyScalar(k).setY(2.5 + power);
-        };
-        this.spells.push({
-            life: total / speed + 0.6,
-            onUpdate: (spell, dt) => {
-                travelled += speed * dt;
-                const k = Math.min(1, travelled / total);
-                pos.copy(origin).addScaledVector(dir, Math.min(travelled, total));
-                pos.y = Math.max(ground(pos.x, pos.z), origin.y - 0.5); // rides on the water, climbs the shore
-                // rises out of the water, grows, then breaks at the end
-                const rise = Math.min(1, travelled / 3), fall = k > 0.85 ? 1 - (k - 0.85) / 0.15 : 1;
-                const h = height * rise * Math.max(0.05, fall);
-                wave.position.copy(pos).setY(pos.y + h / 2 - 0.3);
-                wave.scale.set(1, h, 1.4);
-                wave.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI / 2;
-                mat.opacity = 0.75 * Math.max(0.1, fall);
-                // spray and foam
-                for (let i = 0; i < 6 * power; i++) {
-                    _c.copy(pos).addScaledVector(side, (Math.random() - 0.5) * width).setY(pos.y + h * (0.7 + Math.random() * 0.4));
-                    this.fx.spark(_c, Math.random() < 0.5 ? 0xffffff : 0x9fd8ff, 0.12 + Math.random() * 0.15, _b.copy(dir).multiplyScalar(3 + Math.random() * 3).setY(1 + Math.random() * 2), 0.6);
-                }
-                // zombies (where they are simulated), things, and me
-                if (this.auth && this.hooks.creatures) {
-                    this.hooks.creatures(power > 1 ? 'WaveAttackMaxima' : 'WaveAttack', casterId, (p) => { const v = push(p); return v && v.clone(); },
-                        { skip: (c) => hit.has(c), each: (c) => hit.add(c) });
-                } else if (this.auth) {
-                    for (const z of this.zombies) {
-                        if (z.isDead || hit.has(z)) continue;
-                        const v = push(_c.copy(z.group.position));
-                        if (!v) continue;
-                        hit.add(z);
-                        z.windVel = (z.windVel || new THREE.Vector3()).add(v.clone().setY(0));
-                        z.vy = Math.max(z.vy || 0, v.y);
-                    }
-                }
-                for (const w of this.hooks.weapons ? this.hooks.weapons() : []) {
-                    if (w.holder || w.remoteTarget || hit.has(w)) continue;
-                    const v = push(w.position);
-                    if (!v) continue;
-                    hit.add(w);
-                    w.hover = null;
-                    w.wake();
-                    w.velocity.add(v);
-                }
-                if (this.hooks.blowMe && !hit.has('me')) {
-                    let got = false;
-                    this.hooks.blowMe(casterId, pos, (p) => { const v = push(p); if (v) got = true; return v; }, power > 1 ? 'WaveAttackMaxima' : 'WaveAttack');
-                    if (got) hit.add('me');
-                }
-            },
-            onEnd: () => { this.scene.remove(wave); geo.dispose(); mat.dispose(); },
-        });
     }
 
     // --------------------------------------------------------------- Sands

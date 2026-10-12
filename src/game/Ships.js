@@ -940,6 +940,34 @@ export class Ships {
         }
     }
 
+    /**
+     * (host) «Wave Attack» runs into a ship (its front at x, z, running along dx, dz): the ship
+     * is rocked (it heels and heaves) and pushed along — a heavy ship less. Once per wave (`seen`).
+     */
+    waveHit(x, z, dx, dz, width, height, power, seen) {
+        if (!this.auth) return false;
+        let any = false;
+        for (const s of this.awake) {
+            if (s.state === 'wreck' || seen?.has(s)) continue;
+            const st = s.st, L = s.cls.L || 20, B = s.cls.B || 6;
+            const rx = st.x - x, rz = st.z - z;
+            const along = rx * dx + rz * dz, across = Math.abs(-rx * dz + rz * dx);
+            if (Math.abs(along) > B / 2 + 2 || across > width / 2 + L / 2) continue;
+            seen?.add(s);
+            const k = power * Math.min(1, height / 2.4) * Math.min(1.5, 20 / L);
+            const fx = -Math.sin(st.yaw), fz = -Math.cos(st.yaw), sx = Math.cos(st.yaw), sz = -Math.sin(st.yaw);
+            st.u += (dx * fx + dz * fz) * 2.5 * k;
+            st.v += (dx * sx + dz * sz) * 2.5 * k;
+            const side = dx * sx + dz * sz; // (hit from the side: it heels over; from the bow: it pitches)
+            st.roll = (st.roll || 0) - side * 0.22 * k;
+            st.pitch = (st.pitch || 0) + (dx * fx + dz * fz) * 0.1 * k;
+            st.heave = (st.heave || 0) + 0.4 * height * 0.5;
+            s.changed = true;
+            any = true;
+        }
+        return any;
+    }
+
     /** Rain / a wave / a water ball put fires out (within r of a world point, or the whole ship). */
     douse(p, r) {
         if (!this.auth) return;

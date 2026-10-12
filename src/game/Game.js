@@ -51,6 +51,7 @@ import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
 import { Wreck } from './Wreck.js';
+import { WaveAttacks } from './WaveAttack.js';
 import { TotalDestruction } from './TotalDestruction.js';
 import { Hellfire } from './Hellfire.js';
 import { WaterStorm } from './WaterStorm.js';
@@ -212,7 +213,7 @@ export class Game {
             sand: (z) => this.sandZombie(z),
             chill: (z, amt) => z.applyChill(amt),
             explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
-            waveMade: (w) => this.boards?.water.addTransient(w), // («Wave Attack» can be ridden on a surfboard)
+            wave: (name, o, d, ph, by) => this.waves.onNet(name, o, d, ph, by), // («Wave Attack»: WaveAttack.js)
             success: (casterId, name) => { if (casterId === this.localId || casterId === 'local') this.mana?.success(name); }, // (mana: my spell worked)
             handPose: (casterId, side) => this.handPose(casterId, side),
             players: (casterId) => this._spellPlayers(casterId),
@@ -315,6 +316,7 @@ export class Game {
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
+        this.waves = new WaveAttacks(this); // «Wave Attack»: a real wave raised from the water, aimed by the hand
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
@@ -894,7 +896,7 @@ export class Game {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
         // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
         if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
-        return !!(this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this._wave || this.lightning || this.wandMagic?.drawing);
+        return !!(this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
     }
 
     _castLocalSpell(text, isFinal = true) {
@@ -1155,7 +1157,7 @@ export class Game {
         const ws = this.waterStorm?.sayStop(); // (and 50 for the water storm)
         if (ws === true) done.push('водяная буря');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
-        if (this._wave) { this._wave = null; done.push('волна'); }
+        if (this.waves?.stop()) done.push('волна');
         if (W?._nox(false)) done.push('Люмос'); // (the tip and the thrown light)
         if (W?.drawing && W.drawing.until > performance.now()) { W.drawing.until = 0; done.push('рисование'); }
         if (W?.holo) { W._closeHolo(); done.push('тайны'); }
@@ -1300,13 +1302,13 @@ export class Game {
     }
 
     /**
-     * «Wave Attack»: stand by the water and point the hand AT the water, say it;
-     * the water rises — then turn the hand to the one you want to wash away
-     * (and hold it there a moment): the wave rolls to them. Harmless.
+     * «Wave Attack»: stand by the water and point the hand AT the water, say it: the water
+     * rises there into a wave (WaveAttack.js) — then show it where to go with the hand and
+     * push it (or hold the hand still on the place a moment).
      */
     _castWave(name, isFinal) {
         if (!isFinal && name === 'WaveAttack') return null; // (wait for a possible «Максима»)
-        if (this._wave) return null;
+        if (this.waves.busy) return null;
         const ch = this.character;
         const side = (this.wandSide() || ['right', 'left'].find((s) => ch.isArmRaised(s))) || this.magicHand || 'right';
         const o = this.castOrigin(side);
@@ -1323,37 +1325,13 @@ export class Game {
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay(name);
-        this._wave = { name, side, src, t: 0, still: 0, last: d.clone() };
-        this.hud.setVoice('🌊 Вода поднимается… наведите руку на цель и задержите', true);
+        // it faces away from me at first
+        const me = ch.group.position;
+        let lx = src.x - me.x, lz = src.z - me.z;
+        if (Math.hypot(lx, lz) < 0.3) { lx = d.x; lz = d.z; }
+        this.waves.raise(name, side, src, new THREE.Vector3(lx, 0, lz), d);
+        this.hud.setVoice('🌊 Вода поднимается в волну… покажите рукой, куда ей идти, и толкните её рукой (или задержите руку)', true);
         return name;
-    }
-
-    _updateWave(dt) {
-        const W = this._wave;
-        if (!W) return;
-        const ch = this.character;
-        W.t += dt;
-        // the water bulges where it will start
-        if (Math.random() < 0.7) this.fx.spark(W.src, 0x9fd8ff, 0.18, new THREE.Vector3((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.6);
-        const d = ch.getHandDirection(W.side);
-        const moved = d.angleTo(W.last);
-        W.last.copy(d);
-        W.still = moved < 0.6 * dt * 2 ? W.still + dt : 0;
-        const awayFromWater = W.t > 0.6;
-        if (!(awayFromWater && (W.still > 0.45 || W.t > 4))) return;
-        // the target: the creature the hand points at, or the ground the hand points to
-        const o = ch.getHandWorldPosition(W.side);
-        const aim = this.duel.pickSide(false);
-        let target = aim ? this.duel._targetPos({ tk: aim.t.kind, tid: aim.t.id }, new THREE.Vector3()) : null;
-        if (!target) {
-            target = o.clone().addScaledVector(d, 18);
-            target.y = this.collision.groundY(target.x, target.z);
-        }
-        const vec = target.clone().sub(W.src);
-        this.spells.cast(W.name, W.src, vec, W.side, this.localId);
-        if (this.sync) this.sync.spell(W.name, W.src, vec, W.side);
-        this.hud.setVoice('🌊 Волна!', true);
-        this._wave = null;
     }
 
     _castWind(name, isFinal) {
@@ -2269,7 +2247,7 @@ export class Game {
         this.storm.update(dt);
         this.sun.update(dt);
         this._updateLightning(dt);
-        this._updateWave(dt);
+        this.waves.update(dt);
         this._updateBreakthrough(dt);
         this.duel.update(dt);
         this.duel.updateVisuals(dt);

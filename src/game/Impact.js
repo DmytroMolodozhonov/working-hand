@@ -132,7 +132,8 @@ export const SPELL_PHYSICS = {
     Wind: { push: 13, range: 14, jolt: 1 }, WindMaxima: { push: 39, range: 24, jolt: 2 },
     // («Overgrown»: thrown apart to the sides and up — never hurts by itself; Overgrown.js)
     Overgrown: { push: 16, range: 16, toss: 5, jolt: 1 }, OvergrownMaxima: { push: 32, range: 24, toss: 10, jolt: 2 },
-    WaveAttack: { push: 10, toss: 3.5, wet: true }, WaveAttackMaxima: { push: 17.2, toss: 4.7, wet: true },
+    // (a real wave: it sweeps a body off its feet and carries it — WaveAttack.js; a heavy cow only staggers)
+    WaveAttack: { push: 13, toss: 3.5, wet: true }, WaveAttackMaxima: { push: 20, toss: 4.7, wet: true },
     Thunderwave: { push: 20, thunder: true, jolt: 3 },
     Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 },
     Expelliarmus: { push: 3, jolt: 2 }, // (a jolt; what it really does is knock the wand out: Expelliarmus.js)

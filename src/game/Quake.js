@@ -45,6 +45,9 @@ export class Quake {
             if (CRACKS.has(data.get(sx, SL, sz)) && data.get(sx, SL + 1, sz) === BLOCK.AIR) edits.push([sx, SL + 1, sz, data.get(sx, SL, sz)]);
         }
         for (const e of edits) data.set(e[0], e[1], e[2], e[3]);
+        // a crack beside a river or a lake fills with its water (sent too: the same on every computer)
+        const holes = edits.filter((e) => e[3] === BLOCK.AIR).map((e) => ({ x: e[0], y: e[1] - 1, z: e[2] }));
+        for (const [x, L, z] of data._flood?.(holes) || []) edits.push([x, L, z, BLOCK.WATER]);
         g.builder._sendEdits(edits);
         return edits;
     }

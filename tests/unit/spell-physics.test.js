@@ -26,7 +26,7 @@ test('each spell pushes by its strength: a stagger or off the feet', () => {
     const want = [
         ['Inferno', 5, 'none'], ['Sands', 5, 'stagger'],
         ['Wind', 8, 'stagger'], ['Wind', 2, 'knockdown'], ['WindMaxima', 10, 'knockdown'],
-        ['WaveAttack', 0, 'stagger'], ['WaveAttackMaxima', 0, 'knockdown'],
+        ['WaveAttack', 0, 'knockdown'], ['WaveAttackMaxima', 0, 'knockdown'],
         ['Thunderwave', 10, 'knockdown'], ['Thunderwave', 30, 'stagger'],
         ['Bombardo', 2, 'knockdown'], ['Bombardo', 5, 'stagger'], ['Bombardo', 6.5, 'none'], ['BombardoMaxima', 7, 'knockdown'],
         ['SapiraDuel', 0, 'knockdown'], ['Sapira', 0, 'knockdown'],

@@ -124,6 +124,8 @@ export class Builder {
         amount = Math.min(amount, room);
         const edits = [];
         for (const c of cells) { data.set(c.x, c.L, c.z, BLOCK.AIR); edits.push([c.x, c.L, c.z, BLOCK.AIR]); }
+        // (a hole taken beside a river or a lake fills with its water — sent too: the same everywhere)
+        for (const [x, L, z] of data._flood?.(cells.map((c) => ({ x: c.x, y: c.L - 1, z: c.z }))) || []) edits.push([x, L, z, BLOCK.WATER]);
         this._sendEdits(edits);
         // pulling a castle / a house apart: whoever sees it calls the guard
         if (isCastleBlock(cell.type)) g.castleLife?.damaged({ x: cell.x, y: cell.L - 1, z: cell.z }, g.localId, cells.length, false);

@@ -347,7 +347,7 @@ export function createHeightField(seed, mountains, seas = null, test = false) {
     const hill = (ix, iz) => {
         let h = fn(ix, iz);
         hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach;
-        const m = fn.water ? -1 : testHillHeight(ix, iz);
+        const m = fn.water ? -Infinity : testHillHeight(ix, iz); // (the river keeps its bed: its water's top stays level, no raised channel)
         if (m > h) h = m;
         return h;
     };
@@ -1062,10 +1062,13 @@ export class TerrainData {
         return removed;
     }
 
-    /** Holes dug next to / under water fill with water (up to the water level). */
+    /**
+     * Holes dug next to / under water fill with water (up to the water level), all the way
+     * through the hole (not only its cells beside the water). Returns the cells filled.
+     */
     _flood(cells) {
-        const W = BLOCK.WATER;
-        for (let pass = 0; pass < 8; pass++) {
+        const W = BLOCK.WATER, filled = [];
+        for (let pass = 0; pass < 64; pass++) {
             let changed = false;
             for (const b of cells) {
                 const L = Math.round(b.y + 1);
@@ -1077,11 +1080,13 @@ export class TerrainData {
                     const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
                     c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = W;
                     this._markDirty(ix, iz);
+                    filled.push([ix, L, iz]);
                     changed = true;
                 }
             }
             if (!changed) break;
         }
+        return filled;
     }
 
     /**

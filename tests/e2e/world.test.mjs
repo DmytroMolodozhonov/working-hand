@@ -421,7 +421,8 @@ test('deep lakes: afloat without strokes, air runs out under water, «Air Bubble
         const zx0 = z.group.position.x;
         g.spells.cast('WaveAttack', new window.__zns.THREE.Vector3(spot.x, spot.w.surface, spot.z), new window.__zns.THREE.Vector3(8, 0, 0), 'right', g.localId);
         let zMoved = -99;
-        for (let i = 0; i < 40; i++) { await frames(1); zMoved = Math.max(zMoved, z.group.position.x - zx0); }
+        // (a real wave: it rolls at ~6.5 m/s, not at once)
+        for (let i = 0; i < 160 && zMoved <= 2; i++) { await frames(1); zMoved = Math.max(zMoved, z.group.position.x - zx0); }
         return { sank, swimming, afloat, air0, rose, bubble, hasBubble, zMoved, hp: g.playerHP };
     });
     if (r.noLake) { assert.fail('no deep lake found near spawn'); }
