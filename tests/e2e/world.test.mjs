@@ -596,7 +596,7 @@ test('«Даст»: a sandy duel charge flies at the zombie the raised hand poin
     await page.close();
 });
 
-test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «Раскрой свои секреты», Люмос, eating', async () => {
+test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «Reveal», Люмос, eating', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -1091,13 +1091,13 @@ test('Авада Кедавра in Survival: refused with the hint about its scr
     assert.equal(r.knewBefore, false, 'in Survival it is not known at first');
     assert.equal(r.locked, null, 'without the scroll it is refused');
     assert.match(r.hint, /только в Творческом режиме/);
-    assert.match(r.hint, /свиток «Авада Кедавра»/, 'the hint names the scroll: ' + r.hint);
+    assert.match(r.hint, /свиток «Avada Kedavra»/, 'the hint names the scroll: ' + r.hint);
     assert.match(r.hint, /зелёная лента/);
     assert.equal(r.boltsLocked, 0, 'no charge flew');
     assert.ok(r.z1Alive, 'the zombie is still alive');
     assert.equal(r.burnt, 'Inferno');
     assert.ok(r.scrollGone, 'the scroll burnt away');
-    assert.match(r.learntMsg, /знаете заклинание «Авада Кедавра»/);
+    assert.match(r.learntMsg, /знаете заклинание «Avada Kedavra»/);
     assert.ok(r.knows && r.saved, 'learnt for good');
     assert.equal(r.cast, 'AvadaKedavra', 'after the scroll it works');
     assert.deepEqual(r.bolts, ['AvadaKedavra'], 'the green charge flies');

@@ -1,10 +1,10 @@
 /**
  * Bleeding.js — a blade stuck in a body, blood, and «Rescue».
  *
- * A sword / axe that sticks into a creature («Вингардиум Левиоса» + «Атак»,
+ * A sword / axe that sticks into a creature («Wingardium Leviosa» + «Attack»,
  * or a thrust) makes it bleed: −1 HP every second, blood drips, the screen of
  * the wounded player pulses red. Pull the blade out (by hand — your own or
- * someone else's; by «Акцио» / «Левиоса») — it still bleeds, half as fast.
+ * someone else's; by «Accio» / «Левиоса») — it still bleeds, half as fast.
  * «Rescue» stops the bleeding: point the fingers at your own wound (the hand
  * at your body), or point the hand at the wounded player. If the blade is
  * still in, «Rescue» takes it out too.

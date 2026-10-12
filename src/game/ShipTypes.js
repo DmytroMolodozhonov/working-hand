@@ -43,7 +43,7 @@ export const SHIP_CLASSES = {
 };
 
 export const RAIL = 2.4; // the bulwark above every deck
-export const HELM_LOCK = 2.5 * Math.PI; // the wheel turns ±1.25 turns
+export const HELM_LOCK = 1.25 * Math.PI; // the wheel turns ±⅝ of a turn (hard over in one long sweep of the hand)
 
 export const SHIP_NAMES = [
     'Золотая Лань', 'Морская Звезда', 'Буревестник', 'Святая Анна', 'Северный Ветер', 'Чёрный Лебедь',

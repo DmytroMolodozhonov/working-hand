@@ -8,15 +8,15 @@ import { knockCause, knockMessage, lyingMessage, refusal, HintGate } from '../..
 import { SPELL_PHYSICS } from '../../src/game/Impact.js';
 
 test('hints: every kind of fall has its own cause', () => {
-    assert.match(knockCause('Bombardo'), /взрывом «Бомбардо»/);
-    assert.match(knockCause('BombardoMaxima'), /Бомбардо Максима/);
+    assert.match(knockCause('Bombardo'), /взрывом «Bombardo»/);
+    assert.match(knockCause('BombardoMaxima'), /Bombardo Maxima/);
     assert.match(knockCause('cannon'), /пушечного ядра/);
-    assert.match(knockCause('SapiraDuel'), /Сапира/);
+    assert.match(knockCause('SapiraDuel'), /Sapira/);
     assert.match(knockCause('knight'), /рыцарь/);
     assert.match(knockCause('fall'), /упали с высоты/);
     assert.match(knockCause('EarthquakeMaxima'), /землетрясением/);
     assert.match(knockCause('vortex'), /водоворотом/);
-    assert.match(knockCause('WindMaxima'), /Вайнд/);
+    assert.match(knockCause('WindMaxima'), /Wind/);
     assert.match(knockCause('punch'), /ударом/);
     assert.match(knockCause('avada'), /Авадой/);
     assert.match(knockCause('???'), /сбили с ног/);
@@ -27,14 +27,14 @@ test('hints: every kind of fall has its own cause', () => {
 });
 
 test('hints: the fall line names who did it and how long; the lying line tells how to get up', () => {
-    assert.equal(knockMessage('Bombardo', { by: 'Петя', down: 2.5 }), '💥 Вас отбросило взрывом «Бомбардо» (Петя) — лежите ещё 3 с');
+    assert.equal(knockMessage('Bombardo', { by: 'Петя', down: 2.5 }), '💥 Вас отбросило взрывом «Bombardo» (Петя) — лежите ещё 3 с');
     assert.equal(knockMessage('fall', { by: 'Петя' }), '🦵 Вы упали с высоты');
     assert.equal(knockMessage('knight', { down: 1.5 }), '⚔️ Вас сбил с ног рыцарь');
-    assert.match(lyingMessage('Bombardo'), /^🧍 Вас отбросило взрывом «Бомбардо»\. Чтобы встать — присядьте и выпрямитесь$/);
+    assert.match(lyingMessage('Bombardo'), /^🧍 Вас отбросило взрывом «Bombardo»\. Чтобы встать — присядьте и выпрямитесь$/);
 });
 
 test('hints: why a recognized spell did not work', () => {
-    assert.match(refusal('handDown', { name: 'Бомбардо' }), /«Бомбардо».*рука опущена.*Поднимите руку/);
+    assert.match(refusal('handDown', { name: 'Bombardo' }), /«Bombardo».*рука опущена.*Поднимите руку/);
     assert.match(refusal('cooldown'), /Слишком быстро/);
     assert.match(refusal('maximaAlone'), /вместе с заклинанием/);
     assert.match(refusal('busy', { name: 'Адский огонь' }), /Уже действует «Адский огонь».*Стоп/);

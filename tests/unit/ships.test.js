@@ -134,11 +134,11 @@ test('the wheel by hand: angles, unwrap, steering speed, the lock, rim distance'
     assert.ok(Math.abs(unwrap(3.1, -3.1) - (2 * Math.PI - 3.1)) < 1e-9);
     let w = 0;
     for (let i = 0; i < 10; i++) w = steer(w, [{ a0: 0, w0: 0, a: 0.5 }], 0.1, 0);
-    assert.ok(Math.abs(w - 1) < 1e-9);
+    assert.ok(Math.abs(w - 0.5 * HELM.GAIN) < 1e-9); // (the wheel goes round with the hand)
     const fast = steer(0, [{ a0: 0, w0: 0, a: 5 }], 1, 8);
     assert.ok(fast <= 2.4 + 1e-9);
     assert.ok(steer(0, [{ a0: 0, w0: 0, a: 100 }], 100, 0) <= HELM.LOCK + 1e-9);
-    assert.ok(Math.abs(steer(0, [{ a0: 0, w0: 0, a: 0.4 }, { a0: 0, w0: 0, a: 0.2 }], 10, 0) - 0.6) < 1e-9);
+    assert.ok(Math.abs(steer(0, [{ a0: 0, w0: 0, a: 0.4 }, { a0: 0, w0: 0, a: 0.2 }], 10, 0) - 0.3 * HELM.GAIN) < 1e-9);
     assert.ok(Math.abs(steer(1, [], 1, 4)) < 1);
     assert.equal(rimDist(0, 1.45, 0, 1.45, 1.85), 0);
     assert.ok(Math.abs(rimDist(0, 1.45, 0.3, 1.45, 1.85) - 0.3) < 1e-9);
@@ -172,10 +172,42 @@ test('ships on the network and in chests; the sail spells', () => {
     for (const t of ['фёрл', 'убрать паруса', 'furl']) assert.equal(matchSpell(t), 'Furl', t);
     assert.equal(matchSpell('вайнд'), 'Wind');
     assert.equal(matchSpell('бомбардо максима'), 'BombardoMaxima');
-    assert.equal(matchSpell('раскрой свои секреты'), 'Reveal');
+    assert.equal(matchSpell('reveal'), 'Reveal');
     assert.ok(SPELL_COST.Unfurl && SPELL_COST.UnfurlMaxima && SPELL_COST.Furl);
     let seed = 7;
     const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const loot = rollShipLoot(r, true);
     assert.ok(loot.length >= 2 && loot.every((it) => it.kind && it.uid));
+});
+
+test('ships: every crew path can be walked (never in under a stair, never through a wall)', () => {
+    for (const cls of ['pinnace', 'fluyt', 'galleon']) {
+        const L = buildLayout(cls);
+        for (const [a, b] of L.edges) for (const [p, q] of [[a, b], [b, a]]) {
+            const A = L.nodes[p], B = L.nodes[q], v = { x: A.x, y: A.y, z: A.z };
+            let ok = false;
+            for (let i = 0; i < 600 && !ok; i++) {
+                const dt = 1 / 30, dx = B.x - v.x, dz = B.z - v.z, d = Math.hypot(dx, dz);
+                if (d < 0.6) { ok = true; break; }
+                const step = Math.min(d, 1.6 * dt), nx = v.x + (dx / d) * step, nz = v.z + (dz / d) * step;
+                const f = floorAt(L, nx, nz, v.y + 1.1);
+                if (f === null || f <= v.y - 3) continue;
+                v.x = nx; v.z = nz; v.y += (f - v.y) * Math.min(1, dt * 10);
+                const half = hullHalfWidth(L, v.z, Math.max(0.2, v.y)) - 0.9;
+                if (Math.abs(v.x) > half) v.x = Math.sign(v.x) * half;
+                for (const s of L.solids) {
+                    if (s.y1 <= v.y + 0.6 || s.y0 >= v.y + 3.5) continue;
+                    const cx = Math.max(s.x0, Math.min(s.x1, v.x)), cz = Math.max(s.z0, Math.min(s.z1, v.z));
+                    const ex = v.x - cx, ez = v.z - cz, ed = Math.hypot(ex, ez);
+                    if (ed < 0.5 && ed > 1e-4) { v.x = cx + (ex / ed) * 0.5; v.z = cz + (ez / ed) * 0.5; }
+                }
+            }
+            assert.ok(ok, `${cls}: ${p} → ${q} gets stuck`);
+        }
+        // nobody stands on the deck inside a stair: under every stair higher than a step it is solid
+        for (const r of L.ramps) {
+            const z = r.az + (r.bz - r.az) * 0.7, y = r.ay + (r.by - r.ay) * 0.7, lo = Math.min(r.ay, r.by);
+            assert.ok(L.solids.some((s) => s.kind === 'stair' && r.ax >= s.x0 && r.ax <= s.x1 && z >= s.z0 && z <= s.z1 && s.y0 <= lo && s.y1 > y - 0.4), `${cls} ${r.id}`);
+        }
+    }
 });

@@ -12,7 +12,7 @@
  *              long as the spell says), then gets up BY ITSELF (its AI resumes after rising).
  *   head jolt  a blow on the head snaps it the way it was hit (a damped spring, as a player's).
  * A fall from a height after Leviosa knocks it over too (Levitation counts the damage).
- *   tumble     thrown by «Джолт»: the body flips over in the air (whole turns, round its middle)
+ *   tumble     thrown by «Jolt»: the body flips over in the air (whole turns, round its middle)
  *              while it flies, and lands lying.
  *   daze       afterwards (once it is up again) it is dizzy for a while: it sways, and now and then
  *              it stumbles a step aside and can do nothing for a moment (`c.dazeT`: a wizard aims badly).
@@ -223,7 +223,7 @@ export class CreatureImpact {
         if (kick) { s.jolt.kick(kick); this._emit(ck, c, 'j', [r2(kick.pitch), r2(kick.yaw), r2(kick.roll)]); }
         const yaw = this._yaw(K, c);
         const dir = K.quadFall ? quadFallDir(o.v.x, o.v.z, yaw, -1, (c.id | 0) % 2 ? 1 : -1) : fallDir(o.v.x, o.v.z, yaw, -1);
-        // thrown and tumbling over in the air («Джолт»): as long as it is in the air (at least a moment)
+        // thrown and tumbling over in the air («Jolt»): as long as it is in the air (at least a moment)
         const tumble = res === 'knockdown' && o.tumble > 0 && toss > 2 && !o.noSlide ? { turns: o.tumble | 0 || 1, dur: Math.max(0.5, 2 * toss / CREATURE.G + 0.15) } : null;
         if (res === 'knockdown') this._knock(ck, c, e, dir, o.always?.down ?? o.down ?? CREATURE.MIN_DOWN, true, tumble);
         else if (res === 'stagger') this._stagger(ck, c, e, dir, v / B.mass);

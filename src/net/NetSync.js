@@ -148,7 +148,7 @@ export class NetSync {
             players: this.net.playerList(),
             dayStart: g.dayStart,
             doors: g.doors?.snapshot() || [],
-            locks: g.locks?.snapshot() || null, // («Алохомора»: unlocked chests, doors, gates; the doors locked now)
+            locks: g.locks?.snapshot() || null, // («Alohomora»: unlocked chests, doors, gates; the doors locked now)
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
@@ -340,7 +340,7 @@ export class NetSync {
         this.net.send({ t: 'wnew', w: w.id, type: w.type, s: w.serialize(), owner: this.me }, true);
     }
 
-    /** «Брейнрот» from a guest: the host makes the zombie a servant. */
+    /** «Brainrot» from a guest: the host makes the zombie a servant. */
     birds(list, books) {
         if (this.net.isHost) this.net.send({ t: 'birds', l: list, b: books });
     }
@@ -354,7 +354,7 @@ export class NetSync {
         this.net.send({ t: 'lum', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], l: level }, true);
     }
 
-    /** My thrown light put out («Нокс» / «стоп»). */
+    /** My thrown light put out («Nox» / «стоп»). */
     lumosOut() { this.net.send({ t: 'lumx', by: this.me }, true); }
 
     /** A guest's «Левиоса» caught a book-bird (on) / let it go; where its hand holds it. */
@@ -397,7 +397,7 @@ export class NetSync {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
     }
 
-    /** «Вингардиум Левиоса» on a living body (k 'z' / 'a' / 'v') or on a wizard (k 'p'): held / let go. */
+    /** «Wingardium Leviosa» on a living body (k 'z' / 'a' / 'v') or on a wizard (k 'p'): held / let go. */
     lev(k, id, side, hold, on, gentle = false) {
         this.net.send({ t: 'lev', by: this.me, k, id, side, h: r3(hold), on: on ? 1 : 0, g: gentle ? 1 : 0 }, true);
     }
@@ -452,7 +452,7 @@ export class NetSync {
         if (this.net.isHost) this.net.send({ t: 'clash', a, b, p: Math.round(p * 1000) / 1000, v: Math.round(v * 1000) / 1000, k });
     }
 
-    /** I shouted «Максима» in this clash (the host counts it in the push maths; all see it). */
+    /** I shouted «Maxima» in this clash (the host counts it in the push maths; all see it). */
     duelMaxima(a, b) {
         this.net.send({ t: 'dmax', a, b, by: this.me }, true);
     }
@@ -576,13 +576,13 @@ export class NetSync {
     /** Dragons (Dragons.js): the host's state; a guest's blow, scoop; the host's word to a player. */
     dragon(m) { this.net.send({ t: 'drg', ...m }); }
 
-    // ---- «Alive»: living trees (the host moves them), servants of «Брейнрот»
+    // ---- «Alive»: living trees (the host moves them), servants of «Brainrot»
     livingTrees(list, servants) { if (this.net.isHost) this.net.send({ t: 'ltree', l: list, sv: servants }); }
     /** (guest) my «Alive» took this tree: the host makes it a monster. */
     aliveCast(d) { this.net.send({ t: 'alive', d: { x: r3(d.x), y: r3(d.y), z: r3(d.z), ry: r3(d.ry || 0), kind: d.kind | 0, trunk: d.trunk | 0, leaf: d.leaf | 0, h: d.h | 0 } }, true); }
     /** (guest) my living tree ends (my mana is gone / «стоп»). */
     aliveEnd(id, why) { this.net.send({ t: 'aliveend', id, why }, true); }
-    /** (guest) «Атак»: my servants go for this one. */
+    /** (guest) «Attack»: my servants go for this one. */
     servantAttack(k, id) { this.net.send({ t: 'svatk', k, id }, true); }
     /** (host) A servant's blow (a living tree's branch) lands on player `to`. */
     servantHit(to, dmg, dir, by, kind) { this.net.send({ t: 'svhit', to, dmg, d: [Math.round(dir.x * 100) / 100, Math.round(dir.z * 100) / 100], by, k: kind }, true); }
@@ -804,7 +804,7 @@ export class NetSync {
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
-            case 'lock': case 'dlk': g.locks?.applyNet(m); break; // («Алохомора» — Alohomora.js)
+            case 'lock': case 'dlk': g.locks?.applyNet(m); break; // («Alohomora» — Alohomora.js)
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
             case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
@@ -937,7 +937,7 @@ export class NetSync {
             case 'vx': if (m.by !== this.me) g.vortex?.onNet(m); break;
             case 'hf': if (m.by !== this.me) g.hellfire?.onNet(m); break;
             case 'ws': if (m.by !== this.me) g.waterStorm?.onNet(m); break;
-            case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Инферно» burnt a scroll / a book lying at the host's)
+            case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Inferno» burnt a scroll / a book lying at the host's)
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
             case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now()); g.duel.remoteCast(m); } break;
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;

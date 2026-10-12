@@ -63,6 +63,8 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _l = { x: 0, y: 0, z: 0 };
 const _o = { x: 0, y: 0, z: 0 };
+const _set = function (x, y, z) { this.x = x; this.y = y; this.z = z; return this; };
+const _m1 = { x: 0, y: 0, z: 0, set: _set }, _m2 = { x: 0, y: 0, z: 0, set: _set };
 
 /** Words about the sea and the ship a sailor understands (a castle person's brain wouldn't): its topic or null. */
 export function seaTalk(text) {
@@ -326,7 +328,7 @@ export class Sailors {
     }
 
     /**
-     * (host) The body is shoved (CreatureImpact: a blow, a gust of «Вайнд», a blast) by dx, dz world metres.
+     * (host) The body is shoved (CreatureImpact: a blow, a gust of «Wind», a blast) by dx, dz world metres.
      * It slides along the deck; hard against the rail — or thrown up over it — it goes over the side.
      */
     shove(v, dx, dz) {
@@ -517,11 +519,22 @@ export class Sailors {
         if (v.path) {
             const n = s.layout.nodes[v.path[v.pathI]];
             if (!n) { v.path = null; return; }
+            // he got lost going round something: the way again from where he stands — and if even
+            // that fails, he gives that job up and finds another
+            if ((v.lostT || 0) >= 3) {
+                const goal = v.path[v.path.length - 1];
+                v.lostT = 0; v.stuckT = 0;
+                v.reroutes = (v.reroutes || 0) + 1;
+                const p = v.reroutes <= 2 && this._route(s, this._nearestNode(s, v.l), goal);
+                if (p) { v.path = p; v.pathI = 0; }
+                else { v.path = null; v.reroutes = 0; v.node = this._nearestNode(s, v.l); v.waitT = 0.5 + Math.random(); v.mode = 'idle'; v.speed = 0; }
+                return;
+            }
             if (Math.hypot(n.x - v.l.x, n.z - v.l.z) < 0.6) {
                 v.node = n.id;
                 v.pathI++;
-                if (v.pathI >= v.path.length) { v.path = null; v.waitT = 4 + Math.random() * 10; v.mode = n.tag?.startsWith('rig') || n.tag === 'capstan' ? 'work' : 'idle'; v.speed = 0; }
-            } else { this._steer(v, s, n.x, n.z, WALK, dt, n.y); v.mode = 'walk'; }
+                if (v.pathI >= v.path.length) { v.path = null; v.reroutes = 0; v.waitT = 4 + Math.random() * 10; v.mode = n.tag?.startsWith('rig') || n.tag === 'capstan' ? 'work' : 'idle'; v.speed = 0; }
+            } else { this._steer(v, s, n.x, n.z, WALK, dt); v.mode = 'walk'; }
             return;
         }
         v.waitT -= dt;
@@ -567,7 +580,7 @@ export class Sailors {
     }
 
     /** Walk towards a ship-local point on the decks (never through the rails or masts). */
-    _steer(v, s, tx, tz, speed, dt, ty = null) {
+    _steer(v, s, tx, tz, speed, dt) {
         const dx = tx - v.l.x, dz = tz - v.l.z;
         const d = Math.hypot(dx, dz);
         if (d < 1e-3) { v.speed = 0; return; }
@@ -584,24 +597,62 @@ export class Sailors {
             if (!a.wait) v.waitT = 0;
             ux = a.x; uz = a.z;
         }
-        const nx = v.l.x + ux * step, nz = v.l.z + uz * step;
-        const reach = (ty != null ? Math.max(ty, v.l.y) : v.l.y) + 1.1;
-        const f = floorAt(L, nx, nz, reach);
-        if (f !== null && f > v.l.y - 3) {
-            v.l.x = nx; v.l.z = nz;
-            v.l.y += (f - v.l.y) * Math.min(1, dt * 10);
-            const half = hullHalfWidth(L, v.l.z, Math.max(0.2, v.l.y)) - 0.9;
-            if (Math.abs(v.l.x) > half) v.l.x = Math.sign(v.l.x) * half;
-            // masts, guns, the wheel…
-            for (const b of L.solids) {
-                if (b.y1 <= v.l.y + 0.6 || b.y0 >= v.l.y + 3.5) continue;
-                const cx = Math.max(b.x0, Math.min(b.x1, v.l.x)), cz = Math.max(b.z0, Math.min(b.z1, v.l.z));
-                const ex = v.l.x - cx, ez = v.l.z - cz, ed = Math.hypot(ex, ez);
-                if (ed < 0.5 && ed > 1e-4) { v.l.x = cx + (ex / ed) * 0.5; v.l.z = cz + (ez / ed) * 0.5; }
-            }
+        // stuck against something (a bulkhead, the stair's side, a gun) and getting nowhere: he notices,
+        // and goes round it — the way that frees him, keeping to it for a moment; still stuck — lost
+        if (v.detourT > 0) {
+            v.detourT -= dt;
+            const c = Math.cos(v.detourA), sn = Math.sin(v.detourA);
+            const rx = ux * c - uz * sn, rz = ux * sn + uz * c;
+            ux = rx; uz = rz;
         }
+        const ox = v.l.x, oz = v.l.z;
+        this._dt = dt;
+        let mv = this._tryMove(v, L, ux, uz, step, _m1);
+        const made = mv ? Math.hypot(mv.x - ox, mv.z - oz) : 0;
+        if (step > 1e-3 && made < step * 0.3) v.stuckT = (v.stuckT || 0) + dt;
+        else if (made >= step * 0.6) { v.stuckT = Math.max(0, (v.stuckT || 0) - dt * 2); if (v.stuckT === 0) v.lostT = 0; }
+        if ((v.stuckT || 0) > 0.35 && !(v.detourT > 0)) {
+            const first = v.detourSide || (v.idx % 2 ? 1 : -1);
+            const bx = dx / d, bz = dz / d;
+            for (const a of [0.8, 1.6, 2.3]) {
+                let found = false;
+                for (const sd of [first, -first]) {
+                    const ang = a * sd, c = Math.cos(ang), sn = Math.sin(ang);
+                    const t = this._tryMove(v, L, bx * c - bz * sn, bx * sn + bz * c, step, _m2);
+                    if (t && Math.hypot(t.x - ox, t.z - oz) > step * 0.6) {
+                        v.detourA = ang; v.detourT = 0.5 + a * 0.4; v.detourSide = sd; found = true;
+                        mv = _m1.set(t.x, t.y, t.z);
+                        break;
+                    }
+                }
+                if (found) break;
+            }
+            v.stuckT = 0.2;
+            v.lostT = (v.lostT || 0) + 1;
+        }
+        if (mv) { v.l.x = mv.x; v.l.y = mv.y; v.l.z = mv.z; }
         v.speed = speed;
         v.lyaw = Math.atan2(-dx, -dz);
+    }
+
+    /** Where one step (ux, uz) of `step` metres would put him (the floor, the rails, the solids), or null. */
+    _tryMove(v, L, ux, uz, step, out) {
+        const nx = v.l.x + ux * step, nz = v.l.z + uz * step;
+        const f = floorAt(L, nx, nz, v.l.y + 1.1);
+        if (f === null || f <= v.l.y - 3) return null;
+        let x = nx, z = nz;
+        const y = v.l.y + (f - v.l.y) * Math.min(1, this._dt * 10);
+        const half = hullHalfWidth(L, z, Math.max(0.2, y)) - 0.9;
+        if (Math.abs(x) > half) x = Math.sign(x) * half;
+        // masts, guns, the wheel, the stairs' sides…
+        for (const b of L.solids) {
+            if (b.y1 <= y + 0.6 || b.y0 >= y + 3.5) continue;
+            const cx = Math.max(b.x0, Math.min(b.x1, x)), cz = Math.max(b.z0, Math.min(b.z1, z));
+            const ex = x - cx, ez = z - cz, ed = Math.hypot(ex, ez);
+            if (ed < 0.5 && ed > 1e-4) { x = cx + (ex / ed) * 0.5; z = cz + (ez / ed) * 0.5; }
+            else if (ed <= 1e-4) { x = v.l.x; z = v.l.z; } // (right inside it: no step)
+        }
+        return out.set(x, y, z);
     }
 
     // ---------------------------------------------------------- fighting
@@ -680,8 +731,10 @@ export class Sailors {
         fs.t += dt; fs.cd -= dt;
         const d = Math.hypot(foe.x - v.l.x, foe.z - v.l.z);
         const face = () => { v.lyaw = Math.atan2(-(foe.x - v.l.x), -(foe.z - v.l.z)); };
-        // he is on another deck: down / up the ladders first
-        if (Math.abs(foe.y - v.l.y) > 2) { if (fs.st !== 'swing') { fs.st = 'close'; this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; } }
+        // he is on another deck (or can't get round something to him): by the walking graph first
+        if ((v.lostT || 0) >= 3) { v.graphT = 3; v.lostT = 0; }
+        if (v.graphT > 0) v.graphT -= dt;
+        if (Math.abs(foe.y - v.l.y) > 2 || (v.graphT > 0 && d > 2.5)) { if (fs.st !== 'swing') { fs.st = 'close'; this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; } }
         else v.fpath = null;
         switch (fs.st) {
             case 'close': {
@@ -721,7 +774,9 @@ export class Sailors {
     /** One waiting his turn: in the ring round the foe, blade up, facing him (the captain a little further). */
     _ring(v, s, foe, dt, engage) {
         v.fs = null; v.busy = false;
-        if (Math.abs(foe.y - v.l.y) > 2) { this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; }
+        if ((v.lostT || 0) >= 3) { v.graphT = 3; v.lostT = 0; }
+        if (v.graphT > 0) v.graphT -= dt;
+        if (Math.abs(foe.y - v.l.y) > 2 || (v.graphT > 0 && Math.hypot(foe.x - v.l.x, foe.z - v.l.z) > v.tac.r + 1)) { this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; }
         v.fpath = null;
         let p = spotAt(foe, v.tac.slot, v.tac.r);
         // his place is on the other side: round the foe along the ring, never past his blade
@@ -749,7 +804,7 @@ export class Sailors {
         let n = N[v.fpath[v.fpathI]];
         if (n && Math.hypot(n.x - v.l.x, n.z - v.l.z) < 0.7 && Math.abs(n.y - v.l.y) < 1.5 && v.fpathI < v.fpath.length - 1) n = N[v.fpath[++v.fpathI]];
         if (!n) { this._steer(v, s, foe.x, foe.z, speed, dt); return; }
-        this._steer(v, s, n.x, n.z, speed, dt, n.y);
+        this._steer(v, s, n.x, n.z, speed, dt);
     }
 
     _nearestNode(s, p) {
@@ -1128,7 +1183,7 @@ export class Sailors {
 
 void _w;
 
-// a sailor is a creature like any other: blows, gusts of «Вайнд», blasts and spells shove him, he
+// a sailor is a creature like any other: blows, gusts of «Wind», blasts and spells shove him, he
 // reels, falls, gets up by himself (CreatureImpact.js) — on his ship's deck, in its own frame
 registerKind('c', {
     name: 'sailor', faces: -1,

@@ -6,7 +6,7 @@
  *                             sphere of protection appears round the house (2.5 m) — a house is
  *                             what it is mostly for, but aimed at anything else (a chest, a camp,
  *                             a tree, a piece of land) it stands round that spot. Now every
- *                             «Максима» (−5 mana) makes it 1.5 m wider — the wizard watches it take
+ *                             «Maxima» (−5 mana) makes it 1.5 m wider — the wizard watches it take
  *                             in the whole house and says «стоп» (free). No mana left: it stays as
  *                             big as it grew. One sphere per house; its owner is the caster.
  *   «Protection Invisible»    on a house that already has its sphere (aimed at it, −15 mana): from
@@ -31,8 +31,8 @@
  *     Сапира, Айс, Даст, Экспеллиармус…), rays, the Инферно flame, lightning, arrows, water / ice balls
  *     bounce, pushes don't reach inside, blasts don't eat into the blocks inside, fire doesn't catch
  *     inside, an earthquake's crack stops at it; what is cast from inside goes out freely;
- *   - only four spells break it (from outside): «Total Destruction» at once, «Бомбардо Максима» — one
- *     blast on it, «Бомбардо» — about three (each cracks it; the cracks heal slowly if it is left
+ *   - only four spells break it (from outside): «Total Destruction» at once, «Bombardo Maxima» — one
+ *     blast on it, «Bombardo» — about three (each cracks it; the cracks heal slowly if it is left
  *     alone for a minute), «Let the Hellfire Come» held against it for ~7 s (it glows red first).
  *     Broken: it falls apart in shards, «🛡️ Защита дома разрушена!» to the owner and to the one who
  *     broke it; the house is unprotected (and seen again); the owner may cast it anew.
@@ -48,12 +48,12 @@ import { refusal } from './Hints.js';
 
 export const WARD = {
     COST: 20, // «Protection House»
-    MAXIMA: 5, // each «Максима» while it is being set
+    MAXIMA: 5, // each «Maxima» while it is being set
     START_R: 2.5, // m
-    STEP: 1.5, // m a «Максима»
+    STEP: 1.5, // m a «Maxima»
     MAX_R: 24, // m
     AIM: 40, // m: how far a house may be aimed at
-    SET_IDLE: 30, // s without «Максима»: it is set by itself
+    SET_IDLE: 30, // s without «Maxima»: it is set by itself
     INVIS_COST: 15,
     GRANT_COST: 5,
     GRANT_NEAR: 5, // m from the sphere: near enough to grant
@@ -79,11 +79,11 @@ export const WARD_SPELLS = ['ProtectionHouse', 'ProtectionInvisible', 'Protectio
 export const WARD_NAMES = { ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant' };
 export const isWardSpell = (n) => WARD_SPELLS.includes(n);
 
-/** Mana of a sphere set with `n` «Максима». */
+/** Mana of a sphere set with `n` «Maxima». */
 export const wardCost = (n) => WARD.COST + WARD.MAXIMA * Math.max(0, n);
-/** Its radius after `n` «Максима». */
+/** Its radius after `n` «Maxima». */
 export const wardRadius = (n) => Math.min(WARD.MAX_R, WARD.START_R + WARD.STEP * Math.max(0, n));
-/** «Максима» needed for a sphere of radius `r`. */
+/** «Maxima» needed for a sphere of radius `r`. */
 export const maximaFor = (r) => Math.max(0, Math.ceil((r - WARD.START_R) / WARD.STEP - 1e-9));
 
 /** May the one with this key (lasting id) pass through the sphere? The owner and the granted. */
@@ -373,7 +373,7 @@ export class HouseWards {
             if (on.w.owner !== this.myKey) return this._no('wardNotYours', { owner: on.w.ownerName });
             this.setting = { id: on.w.id, idle: 0 };
             this._op({ op: 'set', id: on.w.id, on: true });
-            g.hud?.setVoice?.('🛡️ Дом уже под защитой. Кричите «Максима», чтобы расширить сферу, и «стоп», когда хватит', true);
+            g.hud?.setVoice?.('🛡️ Дом уже под защитой. Кричите «Maxima», чтобы расширить сферу, и «стоп», когда хватит', true);
             return 'ProtectionHouse';
         }
         const aim = this._aimHouse(h.o, h.d);
@@ -388,13 +388,13 @@ export class HouseWards {
         this.setting = { id, idle: 0 };
         const need = maximaFor(spot.r);
         const what = aim.house ? 'весь дом' : 'всё, что нужно защитить';
-        g.hud?.setVoice?.(`🛡️ ${aim.house ? 'Защита дома' : 'Сфера защиты'} поставлена. Кричите «Максима» (−${WARD.MAXIMA} маны каждая), пока сфера не накроет ${what}${need ? ` (примерно ${need} ${need % 10 >= 2 && need % 10 <= 4 && (need % 100 < 12 || need % 100 > 14) ? 'раза' : 'раз'})` : ''}, потом скажите «стоп»`, true);
+        g.hud?.setVoice?.(`🛡️ ${aim.house ? 'Защита дома' : 'Сфера защиты'} поставлена. Кричите «Maxima» (−${WARD.MAXIMA} маны каждая), пока сфера не накроет ${what}${need ? ` (примерно ${need} ${need % 10 >= 2 && need % 10 <= 4 && (need % 100 < 12 || need % 100 > 14) ? 'раза' : 'раз'})` : ''}, потом скажите «стоп»`, true);
         g.fx?.lightFlash?.(_v1.set(c.x, c.y, c.z), 0x8fc8ff, 2, 0.5, 20);
         this.log.push({ ev: 'new', id, need });
         return 'ProtectionHouse';
     }
 
-    /** «Максима» while my house's sphere is being set: −5 mana, 1.5 m wider. */
+    /** «Maxima» while my house's sphere is being set: −5 mana, 1.5 m wider. */
     maxima() {
         const s = this.setting;
         const w = s && this.list.get(s.id);
@@ -659,8 +659,8 @@ export class HouseWards {
     }
 
     /**
-     * Magic at `p` (radius `r`) hit the spheres from outside: they flash there. Only «Бомбардо»
-     * (cracks it: ~3 break it), «Бомбардо Максима» and «Total Destruction» (at once), and «Let the
+     * Magic at `p` (radius `r`) hit the spheres from outside: they flash there. Only «Bombardo»
+     * (cracks it: ~3 break it), «Bombardo Maxima» and «Total Destruction» (at once), and «Let the
      * Hellfire Come» held on it ~7 s break it (the host decides). Nothing else harms it.
      */
     struck(p, r, spell, by = null) {

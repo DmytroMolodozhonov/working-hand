@@ -18,7 +18,9 @@ test('«Up»: lying or swimming, a hand up; not stunned or frozen; 7 mana', () =
     assert.equal(upAction({ down: false, swimming: true, armUp: true }), 'leap');
     assert.match(upAction({ down: true, swimming: false, armUp: false }), /Вытяните руку/);
     assert.match(upAction({ down: false, swimming: true, armUp: false }), /Поднимите руку/);
-    assert.match(upAction({ down: false, swimming: false, armUp: true }), /лежите|плаваете/);
+    assert.match(upAction({ down: false, swimming: false, armUp: true }), /в воздухе/);
+    assert.equal(upAction({ down: false, swimming: false, standing: true, armUp: true }), 'leap'); // (on the ground, a deck…)
+    assert.match(upAction({ down: false, swimming: false, standing: true, armUp: false }), /Поднимите руку/);
     assert.equal(upAction({ down: true, swimming: false, armUp: true, stunned: true }), null);
     assert.equal(upAction({ down: false, swimming: true, armUp: true, frozen: true }), null);
     assert.equal(SPELL_COST.Up, 7);

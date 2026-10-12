@@ -4,7 +4,7 @@
  *   «Waterbollow»  hand close to a river/lake: water rises smoothly out of it
  *                  into a ball that floats in front of the palm and follows
  *                  the hand while it moves calmly.
- *   «Максима»      (said on its own, as many times as you like) the ball pulls
+ *   «Maxima»      (said on its own, as many times as you like) the ball pulls
  *                  in more water and grows, up to a maximum.
  *   second hand    an open second hand next to the ball feeds it with water
  *                  from the nearest river/lake, no words needed.
@@ -198,7 +198,7 @@ export class WaterMagic {
         return null;
     }
 
-    /** «Максима»: more water into the ball (only liquid). */
+    /** «Maxima»: more water into the ball (only liquid). */
     maxima() {
         const s = this.state;
         if (!s) return 'Сначала поднимите воду: «Waterbollow»';
@@ -354,7 +354,7 @@ export class WaterMagic {
             s.pos.lerp(target, 1 - Math.exp(-dt * (s.frozen ? 10 : 9 / (1 + radiusOf(s.shown) * 0.9))));
             if (this._jerked(dt)) { this.drop(); return; }
 
-            // Growing: «Максима» stream or the second hand feeding
+            // Growing: «Maxima» stream or the second hand feeding
             let feedFrom = null;
             if (s.streamT > 0) {
                 s.streamT -= dt;
@@ -729,7 +729,7 @@ export class WaterMagic {
 
     // ============================================================= network
     /** Compact state of the ball in hand for other players (null = none). */
-    /** The water that stops an «Инферно» flame: {x, y, z, r} of every ball (mine, others', flying, lying). */
+    /** The water that stops an «Inferno» flame: {x, y, z, r} of every ball (mine, others', flying, lying). */
     spheres(out = []) {
         const s = this.state;
         if (s && s.volume >= 0.05) {

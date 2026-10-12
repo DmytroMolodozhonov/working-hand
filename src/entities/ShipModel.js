@@ -517,7 +517,7 @@ export class ShipModel {
                 case 'barrel':
                     for (let k = 0; k < 2; k++) near.cyl(0.8, 0.8, b.y1 - b.y0, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.z0 + 0.5 + k * 1.0, 0x7b5230, 0, 0, 0, 10);
                     break;
-                case 'stair': break;
+                case 'stair': near.box(b.x0 + 0.04, b.x1 - 0.04, b.y0, b.y1, b.z0, b.z1, 0x6e4a2a); break; // (boarded in under the steps)
                 default: break;
             }
         }

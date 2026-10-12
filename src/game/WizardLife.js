@@ -9,7 +9,7 @@
  * Now and then somebody practises a simple spell for real to see: «Левиоса» on a
  * book or an apple (sometimes it only jerks and drops: «Не Левиоса́, а Леви́оса!»),
  * sparks, a glowing line in the air. Night: the students stay in the dormitory,
- * two teachers keep watch at the door with «Люмос» on their wands, the Master
+ * two teachers keep watch at the door with «Lumos» on their wands, the Master
  * looks at the stars, the shop is closed.
  *
  * The host decides (like all the castle people); what is seen goes to everyone
@@ -202,9 +202,9 @@ export class WizardLife {
     }
 
     /**
-     * (host) «Экспеллиармус» knocked the wand out: once it lies still, the wizard runs to it and
+     * (host) «Expelliarmus» knocked the wand out: once it lies still, the wizard runs to it and
      * takes it back. Somebody was quicker (a player took it): it is theirs, the wizard stays
-     * without a wand. Can't get there for long (a wall, water): he calls it back — «Акцио!».
+     * without a wand. Can't get there for long (a wall, water): he calls it back — «Accio!».
      */
     _fetchWand(v, dt) {
         const L = this.life, g = this.game, lw = v.lostWand;
@@ -281,7 +281,7 @@ export class WizardLife {
         if (hats) this._hatT = 0.25;
         for (const v of wizards) {
             v.model.setAim(v.aimPitch || 0);
-            // the wand in the hand, or knocked out by «Экспеллиармус» (FX.NOWAND)
+            // the wand in the hand, or knocked out by «Expelliarmus» (FX.NOWAND)
             if (!v.dead && v.model.look?.tool === 'wand' && v.model.limbs?.rightArm == null) { const want = (v.fx & FX.NOWAND) ? 'none' : 'wand'; if (v.model.toolKind !== want) v.model.setHeldTool(want); }
             if (hats && t && v.group.visible && !v.dead) {
                 // (the hat's tip reaches into the 6th layer over the feet: a 5-high doorway folds it)

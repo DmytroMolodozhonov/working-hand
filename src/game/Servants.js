@@ -1,11 +1,11 @@
 /**
  * Servants.js — creatures that obey a wizard.
  *
- *  - «Брейнрот» makes ANY creature a servant for a while: a zombie, an animal,
+ *  - «Brainrot» makes ANY creature a servant for a while: a zombie, an animal,
  *    a villager / a knight, a wizard of the castles, somebody's living tree.
  *  - The living tree of «Alive» is its caster's servant for as long as it lives.
  *  - A servant follows its master at a distance, guards them and fights their
- *    enemies (zombies near, and whoever attacks the master); «Атак» with the hand
+ *    enemies (zombies near, and whoever attacks the master); «Attack» with the hand
  *    pointing at someone sends all the master's servants at that one.
  *
  * Creatures are named as in the duel: {k, id} with k 'z' zombie, 'a' animal,
@@ -17,12 +17,12 @@
 import * as THREE from 'three';
 
 export const SERVANT = {
-    TIME: 45000, // ms a «Брейнрот» lasts
+    TIME: 45000, // ms a «Brainrot» lasts
     FOLLOW: 4.5, // m: it keeps this far from its master
     FAR: 9, // m: farther than this it runs back
     SEEK: 22, // m: enemies this near (to it or to its master) are fought
-    ORDER: 70, // m: an «Атак» target farther than this is given up
-    ORDER_TIME: 60000, // ms an «Атак» order stands
+    ORDER: 70, // m: an «Attack» target farther than this is given up
+    ORDER_TIME: 60000, // ms an «Attack» order stands
 };
 
 const _v = new THREE.Vector3();
@@ -68,7 +68,7 @@ export class Servants {
         if (k === 'v') { const v = g.castleLife?.byId.get(id); return v && !v.dead ? v : null; }
         if (k === 't') { const t = g.livingTrees?.byId.get(id); return t && !t.isDead ? t : null; }
         if (k === 's') { const s = g.spiders?.list.find((x) => x.id === id); return s && !s.dead ? s : null; }
-        if (k === 'D') return g.dragons?.byId(id) || null; // (a dragon: servants fight it — «Брейнрот» never makes it one)
+        if (k === 'D') return g.dragons?.byId(id) || null; // (a dragon: servants fight it — «Brainrot» never makes it one)
         if (k === 'p') {
             if (id === g.localId) return g.combat?.dead || g.isDeadLocal ? null : { isPlayer: true, local: true, position: g.character.group.position };
             const r = g.remotes?.get(id);
@@ -120,7 +120,7 @@ export class Servants {
         return this._netSv.some((s) => s[2] === master) || !!this.game.livingTrees?.mine().length;
     }
 
-    // ------------------------------------------------------------ «Брейнрот»
+    // ------------------------------------------------------------ «Brainrot»
     /** (authority) The creature becomes `by`'s servant for SERVANT.TIME. */
     make(k, id, by) {
         const g = this.game;
@@ -146,7 +146,7 @@ export class Servants {
         if (k === 'a') { c.state = 'graze'; c.target?.copy(c.group.position); }
     }
 
-    /** «Атак»: all `master`'s servants go for this one. */
+    /** «Attack»: all `master`'s servants go for this one. */
     command(master, target) {
         if (!target || target.k == null) return false;
         this.orders.set(master, { k: target.k, id: target.id, until: performance.now() + SERVANT.ORDER_TIME });
@@ -155,7 +155,7 @@ export class Servants {
 
     // ------------------------------------------------------------- enemies
     /**
-     * Whom a servant fights: its master's «Атак» target, else the nearest enemy
+     * Whom a servant fights: its master's «Attack» target, else the nearest enemy
      * (a zombie that isn't anybody's servant, an animal / a villager / the spider
      * going for the master). {k, id, x, z} | null
      */
@@ -252,7 +252,7 @@ export class Servants {
     update(dt) {
         const g = this.game;
         this._t += dt;
-        // purple rings over the servants (as over a zombie of «Брейнрот»)
+        // purple rings over the servants (as over a zombie of «Brainrot»)
         const now = new Set();
         const mark = (c, pos, h) => {
             now.add(c);

@@ -16,7 +16,7 @@ import { collapseAfter } from './Collapse.js';
 
 export const RUIN = {
     DEEP: 28, // blocks: how deep under the place the caves cave in
-    RADIUS: 20, // m: 5× «Бомбардо Максима» (its crater is ~6 m): a castle's whole keep
+    RADIUS: 20, // m: 5× «Bombardo Maxima» (its crater is ~6 m): a castle's whole keep
     EDGE: 0.18, // the edge of the circle is ragged by this share of the radius
     RUBBLE: 0.3, // share of the fallen heavy blocks that lies as rubble
     RUBBLE_MAX: 3, // blocks: the highest heap in one column

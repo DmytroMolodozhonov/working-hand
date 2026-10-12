@@ -15,6 +15,8 @@ const DROPS = 700;
 const BOX = { x: 44, y: 30, z: 44 };
 /** «Let it rain»: 2 game hours (a game day is 24 minutes: an hour is a minute). */
 export const RAIN_SECONDS = 120;
+/** The weather's storm: the clouds gather for 1.5 game hours (a minute and a half) before it rains. */
+export const GATHER_SECONDS = 90;
 /** «Let it rain» needs the hand / wand pointed up to the sky: at least ~45° above the horizon. */
 export const SKY_AIM = 0.7;
 export function aimedAtSky(dir) {
@@ -30,6 +32,10 @@ export class Storm {
         this.k = 0;
         this.until = 0; // a thunderstorm (with lightning) until then
         this.rainUntil = 0; // «Let it rain» (a thunderstorm too, the whole world) until then
+        // the weather's own storm comes slowly: the clouds gather first (no rain), then the first
+        // drops, then the downpour
+        this.gatherFrom = 0; this.gatherTo = 0;
+        this.slowRain = false;
         this._flashT = 0;
         this._splashT = 0;
         const pos = new Float32Array(DROPS * 6);
@@ -50,7 +56,7 @@ export class Storm {
     /** It rains (a thunderstorm or «Let it rain»). */
     get raining() {
         const now = performance.now();
-        return now < this.until || now < this.rainUntil;
+        return (now < this.until && !(now < this.gatherTo)) || now < this.rainUntil;
     }
 
     /** A thunderstorm (lightning): «Lightning Strike», the weather or «Let it rain». */
@@ -73,6 +79,7 @@ export class Storm {
         const now = performance.now();
         this.until = Math.min(this.until, now);
         this.rainUntil = Math.min(this.rainUntil, now);
+        this.gatherTo = Math.min(this.gatherTo, now);
     }
 
     /** A storm over `origin` for `seconds` (ignored when far away). */
@@ -82,6 +89,27 @@ export class Storm {
         this.until = Math.max(this.until, performance.now() + seconds * 1000);
     }
 
+    /**
+     * The weather's thunderstorm: the clouds gather for `gather` s (a game hour is a real minute)
+     * and darken the sky with no rain yet; then it starts to drizzle and grows into a downpour.
+     */
+    gatherThenRain(seconds, gather = GATHER_SECONDS) {
+        const now = performance.now();
+        if (now < this.until) { this.until = Math.max(this.until, now + seconds * 1000); return; }
+        this.gatherFrom = now;
+        this.gatherTo = now + gather * 1000;
+        this.until = this.gatherTo + seconds * 1000;
+        this.slowRain = true;
+    }
+
+    /** Gathering clouds (0..1) before the weather's rain; 0 when none are gathering. */
+    get gathering() {
+        const now = performance.now();
+        if (now >= this.until) return 0;
+        if (now >= this.gatherTo) return this.slowRain ? 1 : 0; // (raining now: the sky stays overcast)
+        return Math.max(0, Math.min(1, (now - this.gatherFrom) / Math.max(1, this.gatherTo - this.gatherFrom)));
+    }
+
     /** Clears up a little sooner (the lightning has struck). */
     endIn(seconds) {
         this.until = Math.min(this.until, performance.now() + seconds * 1000);
@@ -89,11 +117,18 @@ export class Storm {
 
     update(dt) {
         const now = performance.now();
-        const want = now < this.until || now < this.rainUntil ? 1 : 0;
-        if (want === 0 && this.k <= 0) { if (this._sound) { this._sound = false; this.game.sound?.setRain?.(0); } return; }
-        // darkens over ~5 s, clears over ~3 s
-        this.k = this.k < want ? Math.min(want, this.k + dt / 5) : Math.max(want, this.k - dt / 3);
-        this.game.world.setStorm(this.k);
+        const want = this.raining ? 1 : 0;
+        const cloud = this.gathering;
+        if (want === 0 && this.k <= 0 && cloud <= 0 && !(this._dark > 0)) { if (this._sound) { this._sound = false; this.game.sound?.setRain?.(0); } return; }
+        // darkens over ~5 s (a spell's storm) or slowly — the weather's rain grows from a drizzle
+        // over ~40 s after the clouds have gathered; clears over ~3 s
+        const slow = this.slowRain && now >= this.gatherTo && now < this.until && now >= this.rainUntil;
+        if (!slow && now >= this.until) this.slowRain = false;
+        this.k = this.k < want ? Math.min(want, this.k + dt / (slow ? 40 : 5)) : Math.max(want, this.k - dt / 3);
+        // the sky: the gathering clouds darken it (up to an overcast grey) before a drop falls
+        const dark = cloud > 0 ? Math.max(this.k, 0.55 * cloud) : this.k;
+        this._dark = dark;
+        this.game.world.setStorm(dark);
         // under a roof / deep in a cave no rain falls on you (it is heard, more softly)
         const w = this.game.world;
         const open = 1 - Math.max(w.cave || 0, w.indoor || 0);

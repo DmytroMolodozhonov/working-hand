@@ -27,7 +27,7 @@ const duelOf = (g) => Object.assign(Object.create(Duel.prototype), { game: g, lo
 
 test('«Даст» is a duel charge (cost of «Sands»), sandy coloured', () => {
     assert.ok(DUEL_SPELLS.SandsDuel);
-    assert.equal(DUEL_SPELLS.SandsDuel.name, 'Даст');
+    assert.equal(DUEL_SPELLS.SandsDuel.name, 'Dust');
     assert.equal(DUEL_SPELL_NAME.SandsDuel, 'Sands');
 });
 

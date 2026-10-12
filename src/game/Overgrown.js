@@ -1,5 +1,5 @@
 /**
- * Overgrown.js — «Overgrown» («Овергроун»): the raised hand points at one creature or a crowd
+ * Overgrown.js — «Overgrown» («Overgrown»): the raised hand points at one creature or a crowd
  * and they are thrown apart — away from the line of the spell, to both sides and up.
  * «Overgrown Максима» is twice as strong (further and higher).
  *

@@ -430,6 +430,24 @@ function earlyTalk(command) {
     }, TALK_STILL);
 }
 
+// The language the microphone listens in: spells are English words — so English; somebody who can
+// talk near (a villager, a merchant, a wizard, a wanderer, a sailor…) — Russian, their language. Back
+// to English a moment after nobody is near any more.
+let talkNearT = 0;
+setInterval(() => {
+    if (!game?.active) { voice.setLang('en-US'); return; }
+    // (in a fight — a knight, sailors, a zombie at me, a duel — it is spells, not talk: English at once)
+    const fight = !!game.inFight?.();
+    const near = !fight && (!!(game.castleLife?.enabled !== false && game.castleLife?.talk?._listener?.()) || !!game.ships?.crew?._listener?.());
+    if (near) talkNearT = performance.now();
+    if (fight) talkNearT = 0;
+    const want = near || performance.now() - talkNearT < 2500 ? 'ru-RU' : 'en-US';
+    if (want !== voice.lang) {
+        voice.setLang(want);
+        hud.setVoice(want === 'ru-RU' ? '🗣️ Рядом есть с кем поговорить — слушаю по-русски' : fight ? '⚔️ Бой — слушаю заклинания по-английски' : '✨ Рядом никого — слушаю заклинания по-английски', true);
+    }
+}, 400);
+
 voice.onResult = (command, isFinal = true, held = false) => {
     if (!command) return;
     // (the words go on / are final: the early answer waits for them, or is already given)

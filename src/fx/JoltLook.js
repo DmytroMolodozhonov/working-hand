@@ -1,11 +1,11 @@
 /**
- * JoltLook.js — how «Джолт» looks: a short, sharp bolt of invisible air.
+ * JoltLook.js — how «Jolt» looks: a short, sharp bolt of invisible air.
  *
  *   flight   almost nothing is seen of the charge itself (a pale, thin line of trembling air);
  *            translucent white-blue rings of rippling air are shed from its head as it flies,
  *            each widening and fading behind it (the air shoved aside)
  *   hit      a shock ring bursts round the body it struck (wide and flat, rolling outwards)
- *            and a puff of air; «Джолт Максима»: bigger, brighter rings
+ *            and a puff of air; «Jolt Maxima»: bigger, brighter rings
  * Visual only: what the spell does is decided in Duel.js (applyJolt).
  */
 

@@ -198,7 +198,7 @@ test('running book: «Акцио» flies it into the free hand (caught as by han
     assert.equal(spawned.length, 1, 'a running book again');
 });
 
-test('running book: «Раскрой свои секреты» tells its secret', () => {
+test('running book: «Reveal» tells its secret', () => {
     const { rb } = world();
     const s = rb.secret();
     assert.match(s.title, /Бегущая книга/);

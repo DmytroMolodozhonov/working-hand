@@ -18,7 +18,7 @@
  * Afterwards the head spins (`dizzy`) for 5 … 10 s, the harder the fall the longer and stronger —
  * on my own screen only (Game sways the camera, Hud blurs it, the walk wavers); not after a stun's
  * or the ice's fall.
- * Thrown (`fly`, «Джолт»): no ground slows the body until it lands (Game's knockback), and it
+ * Thrown (`fly`, «Jolt»): no ground slows the body until it lands (Game's knockback), and it
  * tumbles over in the air (`tumble` turns: `tumbleAng`, drawn by Character, sent to the others).
  */
 

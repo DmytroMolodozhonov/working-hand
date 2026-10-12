@@ -492,7 +492,7 @@ export class Campfires {
     }
 
     /**
-     * A spell's fire reaches things («Инферно»'s stream, «Адский огонь», a fire-breath…): meat / fish
+     * A spell's fire reaches things («Inferno»'s stream, «Адский огонь», a fire-breath…): meat / fish
      * held in it or lying in it roast in about a second of flame. `inFire(p)` → true where it burns.
      */
     roastIn(inFire) {

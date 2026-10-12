@@ -2,10 +2,10 @@
  * Hints.js — the player is always told WHAT happened and WHY, in one short line.
  *
  * Only words: nothing here changes a rule of the game, it only explains it.
- *   knockCause(kind)    why I am lying on the ground (a blast, a push, «Сапира», a knight, a fall…)
+ *   knockCause(kind)    why I am lying on the ground (a blast, a push, «Sapira», a knight, a fall…)
  *   knockMessage(…)     the line shown when I am thrown off my feet
  *   lyingMessage(…)     the line while I lie and may get up
- *   refusal(code, d)    why a recognized spell did not work (hand down, too fast, «Максима» alone…)
+ *   refusal(code, d)    why a recognized spell did not work (hand down, too fast, «Maxima» alone…)
  *   HintGate            the same hint at most once every couple of seconds (the recognizer
  *                       repeats an unfinished phrase many times)
  */
@@ -13,11 +13,11 @@
 /** Why I fell, by the kind of the blow (BodyImpact / Knockdown `kind`). */
 const CAUSES = [
     [/^cannon$/, '💣 Вас отбросило взрывом пушечного ядра'],
-    [/^BombardoMaxima$/, '💥 Вас отбросило взрывом «Бомбардо Максима»'],
-    [/^Bombardo$/, '💥 Вас отбросило взрывом «Бомбардо»'],
-    [/^Sapira/, '💨 Вас сбило заклинанием «Сапира»'],
-    [/^Sands/, '🏜️ Вас сбило песком «Даст»'],
-    [/^Wind/, '🌬️ Вас сдуло ветром «Вайнд»'],
+    [/^BombardoMaxima$/, '💥 Вас отбросило взрывом «Bombardo Maxima»'],
+    [/^Bombardo$/, '💥 Вас отбросило взрывом «Bombardo»'],
+    [/^Sapira/, '💨 Вас сбило заклинанием «Sapira»'],
+    [/^Sands/, '🏜️ Вас сбило песком «Dust»'],
+    [/^Wind/, '🌬️ Вас сдуло ветром «Wind»'],
     [/^Overgrown/, '🌿 Вас отбросило заклинанием «Overgrown»'],
     [/^WaveAttack/, '🌊 Вас сбило волной'],
     [/^(WaterHit|Waterball)/, '💧 Вас сбило ударом воды'],
@@ -25,15 +25,15 @@ const CAUSES = [
     [/^Thunderwave/, '⚡ Вас сбило громовой волной'],
     [/^(Lightning|LightningStrike)$/, '⚡ Вас сбило молнией'],
     [/^Ward$/, '🛡️ Вас отбросил барьер защиты дома'],
-    [/^Expelliarmus$/, '🪄 Вас толкнуло заклинанием «Экспеллиармус»'],
-    [/^JoltMaxima$/, '💨 Вас отбросило заклинанием «Джолт Максима»'],
-    [/^Jolt$/, '💨 Вас отбросило заклинанием «Джолт»'],
-    [/^Stupefy$/, '💫 Вас сбило заклинанием «Остолбеней»'],
+    [/^Expelliarmus$/, '🪄 Вас толкнуло заклинанием «Expelliarmus»'],
+    [/^JoltMaxima$/, '💨 Вас отбросило заклинанием «Jolt Maxima»'],
+    [/^Jolt$/, '💨 Вас отбросило заклинанием «Jolt»'],
+    [/^Stupefy$/, '💫 Вас сбило заклинанием «Stupefy»'],
     [/^(avada|AvadaKedavra)$/i, '💚 Вас отбросило «Авадой Кедаврой»'],
     [/^Earthquake/, '🌋 Вас сбило землетрясением — земля ушла из-под ног'],
     [/^TotalDestruction/, '🏚️ Вас сбило «Total Destruction» — земля ушла из-под ног'],
     [/^(Breakthrough|WallRise)/, '🪨 Вас подбросило каменной стеной'],
-    [/^Attack$/, '🗡️ Вас сбил летящий предмет («Атак»)'],
+    [/^Attack$/, '🗡️ Вас сбил летящий предмет («Attack»)'],
     [/^(IceBall|IceBallBig)$/, '🧊 Вас сбило ледяным шаром'],
     [/^(Inferno|Fire|Hellfire)$/, '🔥 Вас сбило огнём'],
     [/^phoenix$/, '🔥 Вас сбил огненный феникс'],
@@ -73,10 +73,10 @@ export function refusal(code, d = {}) {
     switch (code) {
         case 'handDown': return `✋ Не сработало ${name}: рука опущена. Поднимите руку и направьте её на цель`;
         case 'cooldown': return '⏳ Слишком быстро — подождите секунду и скажите ещё раз';
-        case 'maximaAlone': return '✨ «Максима» говорится вместе с заклинанием, например «Бомбардо Максима»';
+        case 'maximaAlone': return '✨ «Maxima» говорится вместе с заклинанием, например «Bombardo Maxima»';
         case 'busy': return `⏳ Уже действует ${name} — сначала скажите «Стоп»`;
         // «Защита дома» (HouseWards.js)
-        case 'wardUnknown': return `📘 ${name} — из книги защиты. Сбейте тёмно-синюю книгу-птицу с серебряным щитом огнём («Инферно») или ледяным шаром и прочитайте её`;
+        case 'wardUnknown': return `📘 ${name} — из книги защиты. Сбейте тёмно-синюю книгу-птицу с серебряным щитом огнём («Inferno») или ледяным шаром и прочитайте её`;
         case 'wardNoHand': return `✋ Не сработало ${name}: поднимите руку (или палочку) и направьте её на дом`;
         case 'wardNoHouse': return '🛡️ «Protection House»: направьте руку на то, что хотите защитить, — на дом, сундук, дерево или землю (не дальше 40 м)';
         case 'wardNotYours': return `🛡️ Это не ваш дом — его защита принадлежит игроку ${d.owner || 'другому'}`;

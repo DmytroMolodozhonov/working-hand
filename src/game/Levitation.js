@@ -1,5 +1,5 @@
 /**
- * Levitation.js — «Вингардиум Левиоса».
+ * Levitation.js — «Wingardium Leviosa».
  *
  * Point a hand at a loose object a few metres away (a sword, an axe, an ice
  * ball, a wand, a book, a book-bird in the air…) and say the words: the object rises and floats in front of the
@@ -172,7 +172,7 @@ export class Levitation {
             }
         }
         if (best?.kind === 'dragon') return '🐉 Дракона «Левиоса» не поднимет — он слишком тяжёлый';
-        if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар) или на животное, зомби, жителя — не дальше 30 м — и скажите «Вингардиум Левиоса»';
+        if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар) или на животное, зомби, жителя — не дальше 30 м — и скажите «Wingardium Leviosa»';
         const s = {
             kind: best.kind,
             obj: best.obj,
@@ -294,12 +294,12 @@ export class Levitation {
     }
 
     /**
-     * «Атак» while a sword / axe floats: it flies at the nearest living
+     * «Attack» while a sword / axe floats: it flies at the nearest living
      * creature (or on, along the hand, if there is none) and sticks into it.
      */
     attack() {
         const s = this.state;
-        if (!s || s.kind !== 'weapon') return '🪶 Сначала поднимите меч или топор «Вингардиум Левиоса», потом — «Атак»';
+        if (!s || s.kind !== 'weapon') return '🪶 Сначала поднимите меч или топор «Wingardium Leviosa», потом — «Attack»';
         const g = this.game;
         const w = s.obj;
         let best = null;
@@ -606,7 +606,7 @@ export class Levitation {
     }
 
     /**
-     * I was thrown by a spell («Overgrown», «Джолт»): my next landing from up high hurts.
+     * I was thrown by a spell («Overgrown», «Jolt»): my next landing from up high hurts.
      * `slack`: metres of the drop that are the throw itself (thrown up from flat ground and
      * landing lying down: that is no fall from a height — only a real drop below hurts).
      */

@@ -7,9 +7,9 @@
  * bulkheads stop bodies, and everyone standing on it is carried along when it
  * moves, turns and rides the waves (players, zombies, animals, things, weapons).
  *
- * Sails are furled by default: «Анфёрл» (point at the sails) lets a mast's sails
- * down, «Анфёрл Максима» all of them, «Фёрл» rolls them up again. A ship only
- * moves when wind fills its sails: «Вайнд» / «Вайнд Максима» at the sails (they
+ * Sails are furled by default: «Unfurl» (point at the sails) lets a mast's sails
+ * down, «Unfurl Maxima» all of them, «Furl» rolls them up again. A ship only
+ * moves when wind fills its sails: «Wind» / «Wind Maxima» at the sails (they
  * bulge at once), and that wind dies down; now and then a natural breeze blows.
  * A ship is heavy: slow to gather way, slow to turn, it coasts for a long time.
  * The wheel is turned by a real hand on its spokes (Helm.js); the crew (Sailors.js)
@@ -43,8 +43,8 @@ const WAKE = 320; // m: a ship near any player is awake (moves, has its model)
 const SLEEP = 420;
 const SCAN = 650; // m: ports this far are looked at
 const UNFURL_RATE = 1 / 3; // sails unroll in 3 s
-const WIND_PLAIN = 21; // m/s into the sails while «Вайнд» blows (3× the old gust)
-const WIND_MAXIMA = 42; // «Вайнд Максима» (6× the old «Вайнд»)
+const WIND_PLAIN = 21; // m/s into the sails while «Wind» blows (3× the old gust)
+const WIND_MAXIMA = 42; // «Wind Maxima» (6× the old «Wind»)
 const BLOW_MANA = 1; // a second, while the wind blows into the sails
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -81,6 +81,7 @@ export class Ships {
         this.list = new Map(); // id → ship
         this.awake = new Set();
         this.riders = new Map(); // entity key → {ent, ship, l: {x,y,z}}
+        this.pins = []; // spells' effects left aboard (a beam, lines drawn in the air…): {obj, ship, alive}
         this.me = null; // my rider record (who I stand on)
         this.wind = { x: 0, z: 0 }; // the natural wind (host decides)
         this.calm = false; // (tests) no waves, no weather
@@ -545,12 +546,23 @@ export class Ships {
     // ============================================================ carrying riders
     /** Everyone standing on the ship goes with it (moves, turns, rides the waves). */
     _carry(s, px, py, pz, pyaw, proll, ppitch) {
-        if (!this.riders.size) return;
+        if (!this.riders.size && !this.pins.length) return;
         const dyaw = angleDiff(s.pose.yaw, pyaw);
         const moved = px !== s.pose.x || py !== s.pose.y || pz !== s.pose.z || dyaw !== 0 || proll !== s.pose.roll || ppitch !== s.pose.pitch;
         if (!moved) return;
         const prev = this._prevPose || (this._prevPose = new ShipPose());
         prev.set(px, py, pz, pyaw, proll, ppitch);
+        // a spell's effect made aboard stays where it was made on the ship (its own motion kept)
+        for (let i = this.pins.length - 1; i >= 0; i--) {
+            const pin = this.pins[i];
+            if (pin.ship !== s) continue;
+            if (!pin.alive() || !s.awake) { this.pins.splice(i, 1); continue; }
+            const p = pin.obj.isObject3D ? pin.obj.position : pin.obj;
+            prev.toLocal(p.x, p.y, p.z, _o);
+            s.pose.toWorld(_o.x, _o.y, _o.z, _o);
+            p.x = _o.x; p.y = _o.y; p.z = _o.z;
+            if (dyaw && pin.obj.isObject3D) { _q.setFromAxisAngle(_UP, dyaw); pin.obj.quaternion.premultiply(_q); }
+        }
         for (const r of this.riders.values()) {
             if (r.ship !== s) continue;
             const p = r.ent.pos();
@@ -642,6 +654,20 @@ export class Ships {
         return null;
     }
 
+    /**
+     * A spell's effect (an Object3D or a point) made on a ship's deck goes with the ship while
+     * alive() — the beam of «To the Sun», lines drawn in the air, a hologram… → was it pinned?
+     */
+    pin(obj, alive) {
+        if (!obj || !this.awake.size) return false;
+        const p = obj.isObject3D ? obj.position : obj;
+        const s = this.shipAt(p.x, p.y, p.z) || this.shipAt(p.x, p.y - 2.5, p.z);
+        if (!s) return false;
+        this.pins.push({ obj, ship: s, alive });
+        if (this.pins.length > 2000) this.pins.shift();
+        return true;
+    }
+
     // ================================================================ queries
     /** The ship whose hull (or deck) is at a world point (or null). */
     shipAt(x, y, z) {
@@ -704,13 +730,13 @@ export class Ships {
         return best;
     }
 
-    /** «Анфёрл» / «Анфёрл Максима» / «Фёрл» said with the hand at the sails. */
+    /** «Unfurl» / «Unfurl Maxima» / «Furl» said with the hand at the sails. */
     castSails(name, text, isFinal) {
         const g = this.game, ch = g.character;
         const pref = g.magicHand || g.lastMagicHand || 'right';
         const side = g.wandSide?.() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((sd) => ch.isArmRaised(sd))); // (a wand: its hand only)
         const say = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
-        if (!side) return say('⛵ Поднимите руку к парусам и скажите «Анфёрл»');
+        if (!side) return say('⛵ Поднимите руку к парусам и скажите «Unfurl»');
         const tired = g.combat.check(name);
         if (tired) { g.hud.setVoice(tired, true); return null; }
         const o = g.castOrigin(side, new THREE.Vector3());
@@ -729,7 +755,7 @@ export class Ships {
         if (this.auth) this.setSails(hit.ship, ids, open, g.localId);
         else g.sync?.net.send({ t: 'sunf', id: hit.ship.id, s: ids, o: open });
         g.spellSucceeded?.(name);
-        if (isFinal) g.hud.setVoice(open ? '⛵ Паруса разворачиваются… Теперь нужен ветер: «Вайнд» в паруса' : '⛵ Паруса сворачиваются', true);
+        if (isFinal) g.hud.setVoice(open ? '⛵ Паруса разворачиваются… Теперь нужен ветер: «Wind» в паруса' : '⛵ Паруса сворачиваются', true);
         return name;
     }
 
@@ -772,7 +798,7 @@ export class Ships {
                 sl.gust = 1;
             }
             if (!hitA) {
-                if (furled && mine) g.hud.setVoice('🌬️ Паруса свёрнуты — ветру не во что дуть. Скажите «Анфёрл»', true);
+                if (furled && mine) g.hud.setVoice('🌬️ Паруса свёрнуты — ветру не во что дуть. Скажите «Unfurl»', true);
                 continue;
             }
             // the wind keeps blowing into the sails while its caster has mana (−1 a second), until «стоп»

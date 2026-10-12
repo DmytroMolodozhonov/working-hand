@@ -24,7 +24,7 @@
  *   (no big move of the body, no fast hand — a swing of a weapon is one — no hand raised above
  *   the shoulders to cast) it walks up and touches him with its head while its wing opens over
  *   him: golden light, a soft song — and he is FULLY healed: full HP, bleeding stopped, blades in
- *   him out, light cuts gone, every lost arm / leg grown back, ice / stun / «Даст» slowness /
+ *   him out, light cuts gone, every lost arm / leg grown back, ice / stun / «Dust» slowness /
  *   dizziness gone. A threat makes it start back (wings half open); SCARES of them, or waiting
  *   PATIENCE s, or being attacked — it flies off. The host decides everything; the healed
  *   player's own computer applies the healing ('phx' heal), everybody sees the light.
@@ -69,7 +69,7 @@ export const PHOENIX = {
     ALT: [40, 62], RADIUS: [28, 46], // soaring: m above the ground, circle radius
     SPEED: 11, FAST: 22, DIVE: 30, WALK: 1.3, // m/s
     REGEN: 0.2, // HP/s while it is left alone
-    STUN_T: 6, // s on the ground after «Остолбеней»
+    STUN_T: 6, // s on the ground after «Stupefy»
 };
 
 /** Kinds of harm that are FIRE (a phoenix is born of fire: no harm, but it is an attack). */
@@ -90,29 +90,29 @@ export const TARGETS = {
     // ---- spells (rays, blasts, charges, gusts, water)
     AvadaKedavra: { does: 'hit', why: '−25 HP, как у всех существ' },
     Stupefy: { does: 'down', why: 'падает на землю и лежит STUN_T с, потом улетает' },
-    IceDuel: { does: 'none', why: '«Айс»: лёд тает на нём сразу (огненная птица) — но это нападение' },
+    IceDuel: { does: 'none', why: '«Ice»: лёд тает на нём сразу (огненная птица) — но это нападение' },
     LevitateDuel: { does: 'push', why: 'подбрасывает вверх, без урона; нападение' },
     Expelliarmus: { does: 'push', why: 'в когтях ничего нет — только толчок; нападение' },
-    Jolt: { does: 'push', why: '«Джолт»: лёгкую птицу отбрасывает по воздуху, кувырком, без урона; нападение' },
+    Jolt: { does: 'push', why: '«Jolt»: лёгкую птицу отбрасывает по воздуху, кувырком, без урона; нападение' },
     Firefighting: { does: 'push', why: '«Firefighting»: лёгкий толчок, пылающий феникс гаснет и бросает атаку; без урона' },
     SapiraDuel: { does: 'hit', why: '−10' },
-    SandsDuel: { does: 'hit', why: '«Даст»: −4, песок с перьев слетает' },
-    Sapira: { does: 'hit', why: 'луч «Сапира»: −5' },
+    SandsDuel: { does: 'hit', why: '«Dust»: −4, песок с перьев слетает' },
+    Sapira: { does: 'hit', why: 'луч «Sapira»: −5' },
     Thunderwave: { does: 'hit', why: 'громовая волна: −8' },
     Ice: { does: 'none', why: 'ледяной луч / «Frozen»: тает (огненная птица); нападение' },
-    Inferno: { does: 'none', why: 'огонь «Инферно» его не берёт (рождён из огня) — но это нападение' },
+    Inferno: { does: 'none', why: 'огонь «Inferno» его не берёт (рождён из огня) — но это нападение' },
     Hellfire: { does: 'none', why: '«Let the Hellfire Come»: огонь не берёт; нападение' },
     FireMaxima: { does: 'none', why: '«Fire Maxima»: огонь не берёт; нападение' },
     Bombardo: { does: 'hit', why: 'взрывы (Бомбардо, пушки, Total Destruction): урон 10 × сила, отбрасывает' },
     Lightning: { does: 'hit', why: 'молния: −20 (это не огонь)' },
-    Wind: { does: 'push', why: '«Вайнд», «Вайнд Максима»: лёгкую птицу сдувает далеко (CreatureImpact, масса 0.4), без урона; нападение' },
+    Wind: { does: 'push', why: '«Wind», «Wind Maxima»: лёгкую птицу сдувает далеко (CreatureImpact, масса 0.4), без урона; нападение' },
     Earthquake: { does: 'push', why: 'землетрясение: только если стоит на земле — шатается и взлетает' },
-    Levitation: { does: 'hold', why: '«Вингардиум Левиоса»: поймана, висит и бьёт крыльями, где держит рука; отпустили — улетает' },
+    Levitation: { does: 'hold', why: '«Wingardium Leviosa»: поймана, висит и бьёт крыльями, где держит рука; отпустили — улетает' },
     WaterVortex: { does: 'push', why: '«Water Vortex», «Bubble»: толкает / держит в пузыре без урона; холод льда его не берёт; вода гасит его пламя' },
     WaterStorm: { does: 'push', why: 'водяная буря, волна, водяной шар: толкает, гасит пламя, без урона' },
-    Brainrot: { does: 'none', why: '«Брейнрот»: феникс никому не подчиняется' },
+    Brainrot: { does: 'none', why: '«Brainrot»: феникс никому не подчиняется' },
     Alohomora: { does: 'none', why: 'живое существо без замков' },
-    Accio: { does: 'none', why: 'живое существо не притянуть; его ПЕРО — обычная вещь, «Акцио» его притягивает' },
+    Accio: { does: 'none', why: 'живое существо не притянуть; его ПЕРО — обычная вещь, «Accio» его притягивает' },
     Rescue: { does: 'none', why: '«Rescue»: у него нет ран, которые надо останавливать' },
     ProtectionHouse: { does: 'push', why: 'сфера защиты дома не пускает его внутрь (вытесняет), не ранит — он улетает' },
     Protection: { does: 'block', why: 'поднятый «Protection» к нему лицом и купол держат его огненный удар' },
@@ -777,7 +777,7 @@ export class Phoenixes {
         else this.hit(f, 4, spell, by);
     }
 
-    /** «Остолбеней»: it drops to the ground and lies a while. */
+    /** «Stupefy»: it drops to the ground and lies a while. */
     _down(f) {
         if (f.lev) return;
         this._setState(f, 'down');
@@ -1193,7 +1193,7 @@ export class Phoenixes {
         g.hud?.setVoice?.(`🔥 Феникс ударил вас огнём: −${dmg}`, true);
     }
 
-    // ------------------------------------------------------------ «Вингардиум Левиоса»
+    // ------------------------------------------------------------ «Wingardium Leviosa»
     /** Caught (on) — it hangs and beats its wings where the hand holds it — or let go: it flies off. */
     hold(f, on, by = null) {
         if (!f || f.dead) return;

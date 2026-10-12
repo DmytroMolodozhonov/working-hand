@@ -1,5 +1,5 @@
 /**
- * Alohomora.js — «Алохомора» (5 маны) and «Алохомора Максима» (25): locks.
+ * Alohomora.js — «Alohomora» (5 маны) and «Alohomora Maxima» (25): locks.
  *
  * Point the hand (or the wand in it) at a lock a few metres away and say the word:
  *  - a locked chest of a village or a castle: a click, a little light, the lid springs up
@@ -7,7 +7,7 @@
  *    by just walking up to it any more);
  *  - a locked door of a villager's house: it unlocks and swings open a crack — the hand
  *    takes the handle and opens it (Doors.js);
- *  - the gates of a throne room: too strong for the plain word — only «Максима» (or a
+ *  - the gates of a throne room: too strong for the plain word — only «Maxima» (or a
  *    blast) opens them for a stranger; the castle's own people pass through freely.
  * Whoever of the village sees the lock forced (and later the things taken) goes for the
  * thief: the family of the house, the castle's guards for the castle's chests and gates.
@@ -27,13 +27,13 @@ import * as THREE from 'three';
 export const ALOHOMORA = {
     RANGE: 5.5, // m from the hand to the lock
     CONE: 0.5, // rad round the pointing hand (a lock right by the hand: more, see _pick)
-    GATE_HITS: 2, // blasts to break the gates: «Бомбардо» counts 1, «Бомбардо Максима» 3, «Total Destruction» breaks them at once
+    GATE_HITS: 2, // blasts to break the gates: «Bombardo» counts 1, «Bombardo Maxima» 3, «Total Destruction» breaks them at once
     LOCK_SHARE: 0.55, // of the houses of a village lock their doors (at night / nobody home)
     NEAR: 70, // m: the gates of a castle this near are put up
 };
 
 /**
- * Who and what «Алохомора» / «Алохомора Максима» acts on (and why not). `plain` / `maxima`:
+ * Who and what «Alohomora» / «Alohomora Maxima» acts on (and why not). `plain` / `maxima`:
  * what each word does to it.
  */
 export const TARGETS = {
@@ -82,7 +82,7 @@ export function doorKind(d) {
 }
 
 /**
- * «Алохомора» in what the recognizer heard: 0 — no, 1 — «Алохомора», 2 — «Алохомора Максима».
+ * «Alohomora» in what the recognizer heard: 0 — no, 1 — «Alohomora», 2 — «Alohomora Maxima».
  * The heart of the word «…хомор…» / «…хамор…» (with «ло» / «ла» before it, or on its own as the
  * beginning of a word) — as a word of its own, or two neighbouring words written apart
  * («алло хомора»). Talk never casts it: «Аллах», «хомяк», «хамон», «мора» alone are no spell.
@@ -152,7 +152,7 @@ export class Alohomora {
         const now = performance.now();
         if (now - this._hintT < 3500) return;
         this._hintT = now;
-        this.game.hud?.setVoice(d.gate ? '🔒 Ворота тронного зала заперты. Простая «Алохомора» их не возьмёт — нужна «Алохомора Максима» (или взрыв)' : '🔒 Заперто — скажите «Алохомора», показав рукой на замок', true);
+        this.game.hud?.setVoice(d.gate ? '🔒 Ворота тронного зала заперты. Простая «Alohomora» их не возьмёт — нужна «Alohomora Maxima» (или взрыв)' : '🔒 Заперто — скажите «Alohomora», показав рукой на замок', true);
     }
 
     // ---------------------------------------------------------------- the spell
@@ -164,12 +164,12 @@ export class Alohomora {
         const now = performance.now();
         if (now - (this._castAt || -1e9) < (isFinal && this._interim ? 3000 : 900)) { this._interim = false; return null; }
         const t = this._pick();
-        if (!t) { if (isFinal) g.hud.setVoice('🗝️ Покажите рукой на замок (сундук, дверь, ворота) рядом — до 5 м — и скажите «Алохомора»', true); return null; }
+        if (!t) { if (isFinal) g.hud.setVoice('🗝️ Покажите рукой на замок (сундук, дверь, ворота) рядом — до 5 м — и скажите «Alohomora»', true); return null; }
         const kind = t.chest ? chestKind(t.chest) : doorKind(t.door);
         const rule = TARGETS[kind]?.[maxima ? 'maxima' : 'plain'];
-        if (rule === 'refuse') { if (isFinal) g.hud.setVoice('🔒 Слишком сильный замок — нужна «Алохомора Максима»', true); return null; }
+        if (rule === 'refuse') { if (isFinal) g.hud.setVoice('🔒 Слишком сильный замок — нужна «Alohomora Maxima»', true); return null; }
         if (rule !== 'unlock' || !this._isLocked(t)) {
-            if (isFinal) g.hud.setVoice(kind === 'towerChest' ? '🔮 Сундук академии заперт чарами Мастера — «Алохомора» тут бессильна' : t.chest ? '🔓 Этот сундук не заперт' : '🔓 Не заперто — возьмитесь за ручку', true);
+            if (isFinal) g.hud.setVoice(kind === 'towerChest' ? '🔮 Сундук академии заперт чарами Мастера — «Alohomora» тут бессильна' : t.chest ? '🔓 Этот сундук не заперт' : '🔓 Не заперто — возьмитесь за ручку', true);
             return null;
         }
         const tired = g.combat.check(name);
@@ -440,7 +440,7 @@ export class Alohomora {
         if (now - this._hintT < 3500) return;
         this._hintT = now;
         const k = chestKind(c);
-        this.game.hud?.setVoice(k === 'towerChest' ? '🔒 Сундук академии заперт чарами. Откроется, когда падёт Мастер' : '🔒 Заперто — скажите «Алохомора»', true);
+        this.game.hud?.setVoice(k === 'towerChest' ? '🔒 Сундук академии заперт чарами. Откроется, когда падёт Мастер' : '🔒 Заперто — скажите «Alohomora»', true);
     }
 
     // ---------------------------------------------------------------- net / save

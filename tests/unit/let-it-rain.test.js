@@ -34,6 +34,18 @@ test('the rain is a thunderstorm of 2 game hours (2 minutes); «To the Sun» sto
     assert.equal(s.raining, false);
 });
 
+test('the weather\'s storm: the clouds gather first (no rain), only then it rains', () => {
+    const s = Object.create(Storm.prototype);
+    s.until = 0; s.rainUntil = 0; s.k = 0;
+    s.gatherThenRain(120, 90);
+    assert.equal(s.raining, false, 'clouds only');
+    assert.ok(s.gathering >= 0 && s.gathering < 0.05);
+    s.gatherFrom -= 100000; s.gatherTo -= 100000; // (an hour and a half later)
+    assert.equal(s.raining, true, 'now it rains');
+    s.clearSky();
+    assert.equal(s.raining, false);
+});
+
 test('«Let it rain» is learnt from a burnt scroll only (Creative knows it)', () => {
     const game = (mode, spells = {}) => Object.assign(Object.create(Game.prototype), { config: { mode }, bonus: { spells } });
     assert.equal(game('survival').knowsSpell('LetItRain'), false);

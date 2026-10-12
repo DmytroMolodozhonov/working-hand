@@ -142,20 +142,19 @@ function makeLayout(C) {
         rooms.push({ name: 'Кубрик', id: 'crew', x0: -hw(mid, lower.y), x1: hw(mid, lower.y), z0: lower.z0, z1: mid, y: lower.y, top: D });
         rooms.push({ name: 'Кладовая', id: 'store', x0: -hw(mid, lower.y), x1: hw(mid, lower.y), z0: mid, z1: lower.z1, y: lower.y, top: D });
     }
-    // under the stairs: a body on the deck below can't walk through them
+    // under the stairs (the hatch's too): solid right up to the steps — a body on the deck below can't
+    // walk in under a stair or poke its head through it; the low end (under 0.6 m) is just stepped onto
     for (const r of ramps) {
-        if (r.id === 'hatch') continue;
-        const lo = Math.min(r.ay, r.by), hi = Math.max(r.ay, r.by);
-        for (let k = 1; k <= 3; k++) {
-            // the high part of the stair (from 1.2 m up): a box under it
-            const t0 = (k - 1) / 3, t1 = k / 3;
+        const lo = Math.min(r.ay, r.by);
+        const N = 10;
+        for (let k = 0; k < N; k++) {
+            const t0 = k / N, t1 = (k + 1) / N;
             const ya = r.ay + (r.by - r.ay) * t0, yb = r.ay + (r.by - r.ay) * t1;
-            const top = Math.min(ya, yb) - 0.3;
-            if (top < lo + 1.2) continue;
+            const top = Math.min(ya, yb) - 0.05;
+            if (top < lo + 0.6) continue;
             const za = r.az + (r.bz - r.az) * t0, zb = r.az + (r.bz - r.az) * t1;
             solids.push({ x0: r.ax - r.half, x1: r.ax + r.half, y0: lo, y1: top, z0: Math.min(za, zb), z1: Math.max(za, zb), kind: 'stair' });
         }
-        void hi;
     }
     // handrails on the open side of every stair (both sides down the hatch): nobody falls off a stair by a slip
     for (const r of ramps) {
@@ -459,10 +458,13 @@ function buildGraph(L, C, P) {
         const ham1 = add(3, lo.y, hamZ, 'hammock');
         const ham2 = add(-3, lo.y, hamZ + 3, 'hammock');
         const store = add(laneX, lo.y, (lo.z1 + (lo.z0 + lo.z1) / 2) / 2, 'store');
+        // (round the stair, never in under it: along the starboard lane, across forward of the hatch)
         const lmid = add(laneX, lo.y, P.hatch.z1 + 2, null);
         link(bot, lmid); link(lmid, store);
-        const fwd = add(laneX, lo.y, hamZ + 1.5, null);
-        link(bot, fwd); link(fwd, ham1); link(fwd, ham2);
+        const fz = Math.min(hamZ + 1.5, P.hatch.z0 - 1.2);
+        const fwd = add(laneX, lo.y, fz, null);
+        const fwdP = add(-laneX, lo.y, fz, null);
+        link(lmid, fwd); link(fwd, ham1); link(fwd, fwdP); link(fwdP, ham2);
     }
     L.nodes = nodes;
     L.edges = edges;

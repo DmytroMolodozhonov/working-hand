@@ -2,7 +2,7 @@
  * The running book and the wand spells, as in real play: a jittering hand, the book running
  * off, the arm pointing roughly (~8° off) at it, the word heard early (interim) and then as the
  * final result. «Акцио» (wand in the right hand) brings it flying into the free left hand;
- * «Раскрой свои секреты» tells its secret; aimed far off it, a hint says why.
+ * «Reveal» tells its secret; aimed far off it, a hint says why.
  * Run: ZNS_TEST_PORT=8198 node --test tests/e2e/runner-accio.test.mjs
  */
 import test from 'node:test';
@@ -20,7 +20,7 @@ async function jitter(page, n = 6) {
     for (let i = 0; i < n; i++) await feed(page, { arms: 'forward', leftCurl: 0.1, rightCurl: 0.8, wristOffset: [(Math.random() - 0.5) * 0.04, (Math.random() - 0.5) * 0.04] }, 3, 33);
 }
 
-test('running book in real play: «Акцио» brings it running into the free hand; «Раскрой свои секреты» tells its secret', async () => {
+test('running book in real play: «Акцио» brings it running into the free hand; «Reveal» tells its secret', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -68,17 +68,17 @@ test('running book in real play: «Акцио» brings it running into the free 
     assert.ok(got.left?.runbook, 'the running book is in the left hand ' + JSON.stringify({ got, voices: voices.slice(-4) }));
     assert.equal(got.right, 'wand', 'the wand stays in the right hand');
 
-    // «Раскрой свои секреты» on a running one, the wand roughly at it
+    // «Reveal» on a running one, the wand roughly at it
     await place();
     await page.evaluate(() => { const w = window.__zns.game.wandMagic, orig = w._showHologram.bind(w); window.__shown = null; w._showHologram = (info, at) => { window.__shown = info; orig(info, at); }; });
-    await say('раскрой свои секреты');
+    await say('reveal');
     const shown = await page.evaluate(() => window.__shown);
     assert.match(shown?.title || '', /Бегущая книга/, 'Reveal shows its secret ' + JSON.stringify(voices.slice(-3)));
     assert.match((shown?.lines || []).join(' '), /30%/);
 
     // aimed well away from it: a hint says why (not the wand's own secrets)
     await page.evaluate(() => { const g = window.__zns.game, T = window.__zns.THREE; const a = g.runner.books()[0]; const me = g.character.group.position; const back = g.character.getHandDirection('right', new T.Vector3()).multiplyScalar(-10); a.group.position.set(me.x + back.x, a.group.position.y, me.z + back.z); a.stunT = 30; window.__shown = null; g.wandMagic._revealedAt = -1e9; g.items.releaseHand("left"); });
-    await say('раскрой свои секреты', false);
+    await say('reveal', false);
     const miss = await page.evaluate(() => window.__shown);
     assert.equal(miss, null, 'no hologram of something else');
     assert.ok(voices.some((t) => /Бегущая книга не там/.test(t)), 'a hint why');

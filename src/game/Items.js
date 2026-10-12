@@ -199,7 +199,7 @@ export class ItemSystem {
     /** A thing (from a slot / the ground / another player) into a hand. */
     takeIntoHand(item, side = 'right', { closed = false } = {}) {
         if (this.held[side]) return false;
-        // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
+        // (into an open hand — «Accio», a slot: kept until the fingers have closed on it once)
         this._drop[side].reset(closed);
         this._thr[side].reset();
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
@@ -605,7 +605,7 @@ export class ItemSystem {
             if (Math.random() < dt * 3) this.game.fx.spark(m.position, 0xffe9a8, 0.06, _v.set(0, 0.6, 0), 0.7);
             return;
         }
-        if (L.rest || L.accio || L.lev) return; // («Акцио» / «Левиоса» carries it)
+        if (L.rest || L.accio || L.lev) return; // («Accio» / «Левиоса» carries it)
         if (L.remote) { m.position.lerp(L.remote, Math.min(1, dt * 8)); return; }
         L.vel.y -= 14 * dt;
         // the air: quadratic drag by shape and weight (a book flutters, a hammer flies on)
@@ -745,12 +745,12 @@ export class ItemSystem {
             return;
         }
         // (a bow stays in the hand that closed on it: the other hand takes it across by itself — Gear)
-        // («Акцио» brings it into an open hand: kept until the fingers close on it; a hand that closed on it re-arms at once)
+        // («Accio» brings it into an open hand: kept until the fingers close on it; a hand that closed on it re-arms at once)
         if (!this.takeIntoHand(item, side) && !this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
             this.game.inventory.storeItem?.(item);
             return;
         }
-        this.game.hud.setVoice?.(`✋ ${ITEM_INFO[item.kind]?.name || 'Предмет'} в руке${item.kind === 'wand' ? ' — скажите «Раскрой свои секреты»' : ''}`, true);
+        this.game.hud.setVoice?.(`✋ ${ITEM_INFO[item.kind]?.name || 'Предмет'} в руке${item.kind === 'wand' ? ' — скажите «Reveal»' : ''}`, true);
     }
 
     // --------------------------------------------------------- eat / wear
@@ -863,7 +863,7 @@ export class ItemSystem {
         g.bonus = g.bonus || { hp: 0, fatigue: 0 };
         if (item.stat === 'flight') {
             g.bonus.flight = true;
-            g.hud.setVoice?.('📜🔥 Свиток полёта сгорел: теперь вы умеете летать! Поднимите обе руки и скажите «Флайн»', true);
+            g.hud.setVoice?.('📜🔥 Свиток полёта сгорел: теперь вы умеете летать! Поднимите обе руки и скажите «Fly»', true);
             const c = g.character.group.position;
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 6;

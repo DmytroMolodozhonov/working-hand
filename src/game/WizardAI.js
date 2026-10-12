@@ -26,7 +26,7 @@ export const WIZ = {
     teacher: { hp: 16, ward: 10, mana: 40, regen: 1.5, skill: 1.0, cast: 2.2, react: 0.6, reactT: 0.45, stunK: 0.7, range: [8, 16], spells: { Stupefy: 0.25, SapiraDuel: 0.3, IceDuel: 0.2, LevitateDuel: 0.15, Jolt: 0.1 } },
     master: {
         hp: 32, ward: 20, mana: 80, regen: 3.0, skill: 2.0, cast: 1.1, react: 0.9, reactT: 0.25, stunK: 0.4, range: [10, 20],
-        spells: { Stupefy: 0.2, SapiraDuel: 0.35, IceDuel: 0.2, LevitateDuel: 0.15, JoltMaxima: 0.1 }, // (the Master's «Джолт» is a «Максима»)
+        spells: { Stupefy: 0.2, SapiraDuel: 0.35, IceDuel: 0.2, LevitateDuel: 0.15, JoltMaxima: 0.1 }, // (the Master's «Jolt» is a «Maxima»)
         dome: { hits: 3, t: 6, cd: 25 }, wind: { r: 4.5, cd: 6 }, blink: { cd: 20 }, heal: 0.25,
     },
 };

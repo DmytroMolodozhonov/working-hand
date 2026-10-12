@@ -61,8 +61,8 @@ function distToSegment(p, a, b) {
     return Math.hypot(a.x + ab.x * t - p.x, a.y + ab.y * t - p.y, a.z + ab.z * t - p.z);
 }
 
-/** A spell's name for a book's pages («Флайн» is in the swift book-bird's book only). */
-export const bookSpellName = (sp) => (sp === 'Flight' ? 'Флайн' : BUILD_SPELLS[sp]?.name || WARD_NAMES[sp] || sp);
+/** A spell's name for a book's pages («Fly» is in the swift book-bird's book only). */
+export const bookSpellName = (sp) => (sp === 'Flight' ? 'Fly' : BUILD_SPELLS[sp]?.name || WARD_NAMES[sp] || sp);
 
 // ------------------------------------------------------------ page art
 function canvasPage(draw) {
@@ -632,10 +632,10 @@ export class BookReading {
             return;
         }
         const learned = this.books.learned;
-        // (the swift book's «Флайн» is not learned by reading: only by burning the book)
+        // (the swift book's «Fly» is not learned by reading: only by burning the book)
         if (spell === 'Flight' && s.readT > HOLD.LEARN_T && !s.toldBurn) {
             s.toldBurn = true;
-            if (!this.game.bonus?.flight) this.game.hud.setVoice?.('📘 «Флайн» выучит тот, кто сожжёт эту книгу: держите её в одной руке и скажите «Инферно» (или поднесите к огню)', true);
+            if (!this.game.bonus?.flight) this.game.hud.setVoice?.('📘 «Fly» выучит тот, кто сожжёт эту книгу: держите её в одной руке и скажите «Inferno» (или поднесите к огню)', true);
         }
         if (spell && spell !== 'Flight' && s.readT > HOLD.LEARN_T && !learned.has(spell)) {
             if (isWardSpell(spell)) {

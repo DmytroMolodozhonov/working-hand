@@ -32,6 +32,10 @@ export class Helm {
         this._open = { left: 0, right: 0 }; // when the hand was last open
         this._relT = { left: 0, right: 0 };
         this._pf = { left: {}, right: {} };
+        // the tracked hands' grip points, taken each frame before a holding hand is drawn on the rim:
+        // the wheel follows the real hand, never the drawn one (that one follows the wheel — a loop
+        // that spun the wheel round by itself)
+        this._real = { left: { G: new THREE.Vector3(), at: -1 }, right: { G: new THREE.Vector3(), at: -1 } };
         this._netT = 0;
         this.climbing = false;
         this.remote = new Map(); // (host) ship id → {by, w, at}
@@ -45,8 +49,9 @@ export class Helm {
     _hand(side) {
         if (this.input) return this.input(side);
         const g = this.game, ch = g.character;
-        const f = g.weapons.palmFrame(side, this._pf[side]);
-        return { G: f.G, curl: ch.getGripCurl(side), hand: ch.getActiveHands()[side] };
+        const r = this._real[side];
+        const G = g.frameCount - r.at <= 2 ? r.G : g.weapons.palmFrame(side, this._pf[side]).G;
+        return { G, curl: ch.getGripCurl(side), hand: ch.getActiveHands()[side] };
     }
 
     _free(side) {
@@ -181,6 +186,12 @@ export class Helm {
         if (this.input) return;
         const hands = ch.getActiveHands?.();
         if (!hands) return;
+        // the real hands first (the arms posed from the camera this frame, nothing drawn on them yet)
+        for (const side of ['left', 'right']) {
+            if (!hands[side]?.group?.visible) continue;
+            this._real[side].G.copy(g.weapons.palmFrame(side, this._pf[side]).G);
+            this._real[side].at = g.frameCount;
+        }
         for (const side of ['left', 'right']) {
             const hand = hands[side];
             if (!hand?.group?.visible || !hand.group.parent) continue;

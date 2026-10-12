@@ -1,6 +1,6 @@
 /**
  * WizardFight.js — the wizards of a tower (and the wanderers) fight: real duel spells from the
- * wand (src/game/Duel.js — the same charges a player casts: «Остолбеней», «Сапира», «Айс»), a hand
+ * wand (src/game/Duel.js — the same charges a player casts: «Stupefy», «Sapira», «Ice»), a hand
  * shield against a charge flying at them, the Master's dome and blink — and a plan for the circle
  * (WizardTactics.js), chosen, weighed and changed like the knights' (KnightTactics.js).
  *
@@ -215,7 +215,7 @@ export class WizardFight {
         if (v.shieldT <= 0) v.fx &= ~FX.SHIELD;
         if (v.domeT <= 0 || !(v.domeHits > 0)) v.fx &= ~FX.DOME;
         if (v.blinkFx <= 0) v.fx &= ~FX.BLINK;
-        // the wand knocked out of the hand («Экспеллиармус»): no magic — away from him
+        // the wand knocked out of the hand («Expelliarmus»): no magic — away from him
         if (v.noWand) {
             L._steer(v, v.x + (v.x - fp.x), v.z + (v.z - fp.z), RUN, dt);
             v.mode = v.speed > 0 ? 'flee' : 'idle';
@@ -336,7 +336,7 @@ export class WizardFight {
         const body = duel._bodyOf?.('p', foeId, duel._tmpBody());
         if (body) _d.copy(body.a).lerp(body.b, 0.55); else _d.set(fp.x, fp.y, fp.z);
         _d.sub(_o).normalize();
-        const err = 0.06 / (v.W.skill || 1) * (v.dazeT > 0 ? 6 : 1); // (not a perfect hand; dizzy after a «Джолт»: far off)
+        const err = 0.06 / (v.W.skill || 1) * (v.dazeT > 0 ? 6 : 1); // (not a perfect hand; dizzy after a «Jolt»: far off)
         _d.x += (Math.random() - 0.5) * 2 * err; _d.y += (Math.random() - 0.5) * err; _d.z += (Math.random() - 0.5) * 2 * err;
         _d.normalize();
         const b = duel._addBolt({ id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: 'p', tid: foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true });

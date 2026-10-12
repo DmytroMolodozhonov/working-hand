@@ -16,7 +16,7 @@
  *      burning trees go out, a ship is rocked and pushed;
  *   4. it BREAKS into foam and drains away, the ground it ran over stays wet for a moment.
  *
- * «Максима»: a bigger, longer, stronger wave. It never hurts (water): it knocks down.
+ * «Maxima»: a bigger, longer, stronger wave. It never hurts (water): it knocks down.
  *
  * Who and what it touches (CLAUDE.md, «на КОГО и на ЧТО»):
  *   - every CreatureImpact kind (zombies, villagers/knights/king/wizards, animals, living trees,

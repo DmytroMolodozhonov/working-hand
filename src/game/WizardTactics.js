@@ -8,7 +8,7 @@
  *   duel        — each at his range, spells in his own rhythm (the opening);
  *   crossfire   — spread round him, spells from all sides (a hand shield covers only one);
  *   volley      — all cast on one count («раз, два, три!»): one shield can't take them all;
- *   pin         — one binds him («Остолбеней», «Айс»), the others strike while he can't move;
+ *   pin         — one binds him («Stupefy», «Ice»), the others strike while he can't move;
  *   ground      — he flies / stands high: stun and freeze him so he falls;
  *   screen      — the students hold shields in front, the Master and teachers cast from behind;
  *   kite        — he comes with a blade: keep away (the Master blinks), strike from range;

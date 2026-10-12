@@ -3,7 +3,7 @@
  * SpellManager draws (how bodies fall when the ground runs away under them is
  * Impact.js / CreatureImpact.js, for every creature and the players):
  *  - the ground breaks for real: the top block along the crack falls in, and a
- *    «Максима» heaves the earth up beside it (real block edits, saved and sent
+ *    «Maxima» heaves the earth up beside it (real block edits, saved and sent
  *    to everybody);
  *  - the ground shakes for whoever is near the running wave front, not only the
  *    caster.
@@ -25,7 +25,7 @@ export class Quake {
 
     /**
      * The ground breaks where the crack runs (host only): the top block falls in;
-     * a «Максима» throws the earth up beside it. Returns the edits made.
+     * a «Maxima» throws the earth up beside it. Returns the edits made.
      */
     breakGround(x, z, power, side) {
         const g = this.game;

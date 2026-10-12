@@ -10,7 +10,7 @@
  *   Take:  - by hand: touch a crystal with an OPEN hand, then close the fingers on it —
  *            it breaks off into the hand;
  *          - «Gather» pointed at the cluster: all its crystals go into the slots;
- *          - «Акцио» pointed at a crystal: it breaks off and flies to the hand (one by one).
+ *          - «Accio» pointed at a crystal: it breaks off and flies to the hand (one by one).
  *   Use:   hold it in one hand, take hold of it with the other hand too (fingers
  *          closed on it), then pull the hands apart or twist them — it shatters into
  *          sparkles and the mana maximum grows by +5 (Mana.js).
@@ -33,7 +33,7 @@ export const CRYSTAL = {
     PULL: 0.22, // m the hands move apart (both still holding it): it breaks
     TWIST: 0.9, // rad the hands turn against each other: it breaks
     GATHER_RANGE: 10, // m
-    GATHER_CONE: 0.45, // rad (as «Акцио»)
+    GATHER_CONE: 0.45, // rad (as «Accio»)
     ACCIO_SPEED: 18, // m/s
 };
 
@@ -135,7 +135,7 @@ export class ManaCrystals {
         this.enabled = !game.config?.map && game.config?.mode !== 'test';
         this.clusters = new Map(); // cave id -> {data, group, list:[{id, mesh, base, tip, center, r}]} | null
         this.taken = new Set(); // crystal ids broken off (everybody's)
-        this.flying = []; // crystals flying to my hand («Акцио»)
+        this.flying = []; // crystals flying to my hand («Accio»)
         this._t = 0;
         this._time = 0;
         this._touch = { right: null, left: null }; // an open hand on a crystal: {id, at}
@@ -329,7 +329,7 @@ export class ManaCrystals {
         return !!hit && Math.hypot(hit.x - o.x, hit.y - o.y, hit.z - o.z) < dist - 0.6;
     }
 
-    /** «Акцио» at a crystal: it breaks off and flies to the hand. */
+    /** «Accio» at a crystal: it breaks off and flies to the hand. */
     accio(c, side) {
         if (!this.take([c.id]).length) return null;
         const model = crystalItemModel();

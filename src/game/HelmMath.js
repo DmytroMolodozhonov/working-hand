@@ -13,7 +13,7 @@ import { HELM_LOCK } from './ShipTypes.js';
 
 export const HELM = {
     GRAB_R: 0.45, CLOSE_CURL: 0.55, OPEN_CURL: 0.35, RELEASE_CURL: 0.28, RELEASE_MS: 160, CLOSE_WINDOW_MS: 900,
-    LOCK: HELM_LOCK, MAX_RATE: 4.8, SLIP: 0.9, RETURN: 0.04, GAIN: 2, // (the wheel turns twice as far as the hand goes round: not hard, not trivial)
+    LOCK: HELM_LOCK, MAX_RATE: 4.8, SLIP: 0.9, RETURN: 0.04, GAIN: 1, // (the wheel turns exactly as far as the hand goes round it: the hand stays where it holds)
 };
 
 /** The polar angle of a point in the wheel's plane (0 = top, + = clockwise for the helmsman). */

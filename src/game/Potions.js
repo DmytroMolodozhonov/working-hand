@@ -27,7 +27,7 @@ export const CAULDRON = {
     R_IN: 1.32, // the opening: a thing this near the axis falls in
     BOTTOM: 0.62, // the inside's floor above its feet (it stands on three short legs)
     TOP_IN: 2.45, // a full cauldron's water surface
-    FULL: 6, // m³ of water: one big ball («Waterbollow» + «Максима»); a small one fills a third
+    FULL: 6, // m³ of water: one big ball («Waterbollow» + «Maxima»); a small one fills a third
     BOIL_TIME: 15, // s over a burning fire before cold water boils
     COOL_TIME: 30, // s off the fire before boiling water is cold again
     WINDOW: 30, // s from the first ingredient to have them all in (a recipe may have its own)

@@ -26,7 +26,7 @@ test('the word: «Экспеллиармус» and how it is heard — whole wor
 test('a duel charge of its own: crimson with a white core, the cost of «Остолбеней», mana on success', () => {
     const s = DUEL_SPELLS.Expelliarmus;
     assert.ok(s);
-    assert.equal(s.name, 'Экспеллиармус');
+    assert.equal(s.name, 'Expelliarmus');
     assert.notEqual(s.color, DUEL_SPELLS.Stupefy.color);
     assert.equal(s.coreColor, 0xffffff);
     assert.equal(SPELL_COST.Expelliarmus, SPELL_COST.Stupefy);

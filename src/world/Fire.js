@@ -1,7 +1,7 @@
 /**
  * Fire.js — trees catch fire and the fire spreads.
  *
- * «Инферно» aimed at a tree, or a Bombardo blast next to one, sets it on fire.
+ * «Inferno» aimed at a tree, or a Bombardo blast next to one, sets it on fire.
  * A burning tree flames and smokes for a while, then its crown is gone and
  * the trunk is charred; before that the fire jumps to trees nearby. Both
  * kinds of trees burn: the instanced ones near spawn and the voxel trees of

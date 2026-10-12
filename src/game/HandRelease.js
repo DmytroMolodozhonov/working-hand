@@ -59,7 +59,7 @@ export const holdsFast = (ch) => !!(ch?.swimming || ch?.swimY != null);
 export class DropGate {
     constructor() { this.reset(true); }
 
-    /** armed=false: the thing came into an open hand («Акцио», a slot) — kept until the hand has closed once. */
+    /** armed=false: the thing came into an open hand («Accio», a slot) — kept until the hand has closed once. */
     reset(armed = true) { this.armed = armed; this.since = 0; }
 
     /**

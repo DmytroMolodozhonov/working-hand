@@ -559,8 +559,8 @@ export class Gear {
 
     startWeather(seconds) {
         const g = this.game;
-        g.storm?.start(null, seconds);
-        g.hud.notify?.('⛈️ Начинается гроза');
+        g.storm?.gatherThenRain(seconds);
+        g.hud.notify?.('☁️ Собираются тучи — скоро будет гроза');
     }
 
     // ================================================================= frame

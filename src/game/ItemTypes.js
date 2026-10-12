@@ -6,7 +6,7 @@
  * the save): {kind, uid, ...properties}.
  *
  * Magic items have their own advantages (rolled when found), revealed by the
- * wand spell «Раскрой свои секреты»:
+ * wand spell «Reveal»:
  *   wand    — every wand: spells +15% stronger and −15% fatigue; a direction
  *             (duel / destruction / gathering / building: +25% there, building
  *             spends 40% less material); one favourite spell (+40%; for
@@ -40,16 +40,16 @@ export const WAND_DIRS = {
 };
 /** Spells a wand can favour; a Maxima form goes with its base spell. */
 export const WAND_FAVOURITES = ['Inferno', 'Thunderwave', 'Sapira', 'Ice', 'Sands', 'Bombardo', 'Earthquake', 'Wind', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Accio', 'Protection', 'LightningStrike', 'WaveAttack', 'Lumos', 'Gather', 'Brainrot'];
-export const SPELL_RU = {
-    Inferno: 'Инферно', Thunderwave: 'Тандервейв', Sapira: 'Сапира', Ice: 'Айс', Sands: 'Даст', Bombardo: 'Бомбардо', Earthquake: 'Earthquake',
-    Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
-    LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
+export const SPELL_RU = { // (the names shown to the player: the English words that cast them)
+    Inferno: 'Inferno', Thunderwave: 'Thunderwave', Sapira: 'Sapira', Ice: 'Ice', Sands: 'Dust', Bombardo: 'Bombardo', Earthquake: 'Earthquake',
+    Wind: 'Wind', Stupefy: 'Stupefy', AvadaKedavra: 'Avada Kedavra', Levitation: 'Wingardium Leviosa', Accio: 'Accio', Protection: 'Protection',
+    LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Lumos', Gather: 'Gather', Brainrot: 'Brainrot', Alive: 'Alive',
     WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', LetItRain: 'Let it rain', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
-    Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Alohomora: 'Алохомора', AlohomoraMaxima: 'Алохомора Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
+    Unfurl: 'Unfurl', Furl: 'Furl', Overgrown: 'Overgrown', Expelliarmus: 'Expelliarmus', Alohomora: 'Alohomora', AlohomoraMaxima: 'Alohomora Maxima', BombardoMaxima: 'Bombardo Maxima', OvergrownMaxima: 'Overgrown Maxima', Jolt: 'Jolt', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Maxima',
     ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
-export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff }; // («Firefighting» itself is known too: only its Maxima hose comes from a scroll) // («Алохомора» itself is known; only its Maxima comes from a scroll)
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff }; // («Firefighting» itself is known too: only its Maxima hose comes from a scroll) // («Alohomora» itself is known; only its Maxima comes from a scroll)
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
 export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
@@ -263,9 +263,9 @@ export function rollKeyItem(r = Math.random) {
     if (x < 0.26) return rollWand(r);
     if (x < 0.52) {
         const y = r();
-        // (no scroll of flight any more: «Флайн» is learned only from the swift book-bird's book)
+        // (no scroll of flight any more: «Fly» is learned only from the swift book-bird's book)
         // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
-        //  «Авада Кедавра» too — its scroll is the rarest)
+        //  «Avada Kedavra» too — its scroll is the rarest)
         return y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
             : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
             : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
@@ -316,13 +316,13 @@ export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE } = {}
     return out;
 }
 
-/** «Раскрой свои секреты»: what the hologram says about an item. */
+/** «Reveal»: what the hologram says about an item. */
 export function describeItem(it) {
     if (!it) return null;
     switch (it.kind) {
         case 'wand': {
             if (it.plain) return { title: '🪄 Обычная деревянная палочка', color: it.color, lines: ['Все заклинания на <b>15%</b> сильнее, чем голой рукой', 'Других свойств нет'] };
-            if (it.dragon) return { title: '🐉 Палочка дракона', color: 0xc0141c, lines: ['Тёмно-алое дерево, светится, как угли', 'Все огненные заклинания на <b>60%</b> сильнее: «Инферно», «Fire», «Fire Maxima», «Let the Hellfire Come»', 'Маны — как обычно', 'Остальные заклинания — на <b>15%</b> сильнее, как с любой палочкой'] };
+            if (it.dragon) return { title: '🐉 Палочка дракона', color: 0xc0141c, lines: ['Тёмно-алое дерево, светится, как угли', 'Все огненные заклинания на <b>60%</b> сильнее: «Inferno», «Fire», «Fire Maxima», «Let the Hellfire Come»', 'Маны — как обычно', 'Остальные заклинания — на <b>15%</b> сильнее, как с любой палочкой'] };
             const lines = ['Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше маны'];
             if (it.dir) lines.push(`Направление: <b>${WAND_DIRS[it.dir].name}</b> (+25%${it.dir === 'build' ? ', ресурсов на 40% меньше' : ''})`);
             else lines.push('Направление: нет');
@@ -338,14 +338,14 @@ export function describeItem(it) {
         case 'shield':
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
-            if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b> навсегда'] };
-            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), it.spell === 'CreateBoard' ? 'Его можно выучить и из книги птицы-книги' : 'Без свитка оно есть только в Творческом режиме'] };
+            if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Inferno»): вы научитесь заклинанию <b>«Fly»</b> навсегда'] };
+            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Inferno»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b> навсегда`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), it.spell === 'CreateBoard' ? 'Его можно выучить и из книги птицы-книги' : 'Без свитка оно есть только в Творческом режиме'] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b> навсегда` : `Сожгите его: мана +<b>${it.amount}</b> навсегда`] };
         case 'book':
             if (it.runbook) return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Раскройте её двумя руками и прочитайте единственную страницу:', 'бег на <b>30%</b> быстрее, пока вы живы', 'Это не заклинание — только быстрота'] };
             if (it.ward || it.spells?.includes('ProtectionHouse')) return { title: '📘🛡️ Книга защиты', color: WARD_COVER, lines: ['Раскройте и прочитайте: в ней группа заклинаний <b>«Защита дома»</b> — Protection House, Protection Invisible, Protection House Grant', 'Прочитали одну страницу — выучили все три'] };
-            if (it.swift || it.spells?.includes('Flight')) return { title: '📘 Быстрая книга', color: SWIFT_COVER, lines: ['Сожгите её («Инферно» с книгой в руке или в огне): вы научитесь заклинанию <b>«Флайн»</b> (полёт) навсегда', 'Раскрыть и прочитать можно, но выучит «Флайн» только тот, кто её сожжёт'] };
-            return { title: '📖 Книга заклинаний', color: 0xffe9a8, lines: ['Раскройте и прочитайте (или сожгите «Инферно»): в ней заклинания для стройки'] };
+            if (it.swift || it.spells?.includes('Flight')) return { title: '📘 Быстрая книга', color: SWIFT_COVER, lines: ['Сожгите её («Inferno» с книгой в руке или в огне): вы научитесь заклинанию <b>«Fly»</b> (полёт) навсегда', 'Раскрыть и прочитать можно, но выучит «Fly» только тот, кто её сожжёт'] };
+            return { title: '📖 Книга заклинаний', color: 0xffe9a8, lines: ['Раскройте и прочитайте (или сожгите «Inferno»): в ней заклинания для стройки'] };
         case 'backpack':
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
         case 'bow':
@@ -355,7 +355,7 @@ export function describeItem(it) {
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 40% за золотое яблоко'] };
         case 'redApple': return { title: '🍎 Яблоко', color: 0xc8202a, lines: ['Поднесите ко рту: +2 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 9% за яблоко'] };
-        case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Инферно», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
+        case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Inferno», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
         case 'steak': return { title: `🍖 Жареное мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xb5651d, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`] };
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
         case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу справа: руку с мешочком к правому бедру', 'Платите ими на рынке замка'] };

@@ -118,6 +118,23 @@ test('ships: walk on the deck, carried as the ship moves and turns, the rails ho
     assert.equal(me.rider, 'test-ship', 'still aboard');
     assert.ok(Math.abs(me.x) < info.B / 2 - 0.3, `the rail stopped me (x ${me.x.toFixed(2)} of ${info.B / 2})`);
 
+    // beside the quarterdeck stair, walking at it from its outer side and along it aft: never in under it
+    const r = await page.evaluate(() => window.__ship.layout.ramps.find((x) => x.id === 'quarter:s'));
+    const inStair = (m) => {
+        const t = (m.z - r.az) / (r.bz - r.az);
+        if (t < 0 || t > 1 || Math.abs(m.x - r.ax) > r.half - 0.1) return false;
+        return m.y - 2.0 < r.ay + (r.by - r.ay) * t - 0.5; // (feet well below the steps right there)
+    };
+    for (const [lx, lz, face] of [[r.ax + r.half + 0.5, r.az + (r.bz - r.az) * 0.3, Math.PI], [r.ax + r.half + 0.5, r.az + (r.bz - r.az) * 0.6, Math.PI / 2]]) {
+        await standAt(page, lx, lz, face);
+        await feed(page, { arms: 'hang' }, 8, 40);
+        for (let k = 0; k < 6; k++) {
+            await feed(page, (i) => ({ arms: 'hang', bob: i % 2 ? 0.02 : -0.02 }), 10, 40);
+            me = await local(page);
+            assert.ok(!inStair(me), `walked in under the stair ${JSON.stringify(me)}`);
+        }
+    }
+
     // the captain's cabin: through the door under the quarterdeck
     const q = await page.evaluate(() => window.__ship.layout.floors.find((f) => f.id === 'quarter'));
     await standAt(page, 0.3, q.z0 - 3, Math.PI);

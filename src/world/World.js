@@ -208,7 +208,7 @@ export class VoxelWorld {
         const b = this._base;
         if (!b) return;
         // deep in a cave the daylight doesn't reach the player: their hands, the things by them are
-        // dark («Люмос» shows the way) — the land itself keeps the daylight that gets to each block
+        // dark («Lumos» shows the way) — the land itself keeps the daylight that gets to each block
         // (VoxelShading SKY_LIGHT: the cave's mouth lit, the meadow outside bright as ever)
         const cv = this.cave || 0, dim = 1 - 0.8 * cv;
         SKY_LIGHT.comp.value = 1 / dim;

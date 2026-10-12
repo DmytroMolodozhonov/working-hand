@@ -15,13 +15,13 @@
  * The swift book-bird: a sky-blue book with silver trim and a light-blue trail.
  * It flies the same way, only twice as fast (and its wings beat faster); it is
  * met four times more rarely than an ordinary one. Its book holds one spell
- * only — «Флайн»: burning it (not reading) is the one way to learn to fly (in «Выживание»).
+ * only — «Fly»: burning it (not reading) is the one way to learn to fly (in «Выживание»).
  * Its id tells it apart (≥ SWIFT_ID), so every computer knows it is the swift one.
  *
  * The book of protection: a deep-blue book with silver trim, a silver shield on each cover and a
  * faint blue aura round it; it is met as often as an ordinary one. It is protected by magic:
- * «Авада Кедавра», every duel charge, rays, blasts, arrows, wind, «Левиоса» — all bounce off its
- * aura with a spark. Only a direct hit of FIRE (the «Инферно» flame, «Let the Hellfire Come») or of
+ * «Avada Kedavra», every duel charge, rays, blasts, arrows, wind, «Левиоса» — all bounce off its
+ * aura with a spark. Only a direct hit of FIRE (the «Inferno» flame, «Let the Hellfire Come») or of
  * an ICE ball (a «Waterbollow» ball frozen with «Frozen», thrown or swung into it) brings it down —
  * singed, still readable. Its three spells are a group, «Защита дома» (HouseWards.js): reading any of
  * their pages teaches all three. Its id tells it apart (WARD_ID ≤ id < SWIFT_ID).
@@ -44,7 +44,7 @@ const BIRDS = 4;
 const SPEED = 7;
 const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];
 
-/** The swift book-bird (it teaches «Флайн»): twice as fast, four times rarer than an ordinary one. */
+/** The swift book-bird (it teaches «Fly»): twice as fast, four times rarer than an ordinary one. */
 export const SWIFT = {
     SPEED: SPEED * 2,
     CHANCE: 1 / 5, // of the birds that appear: one swift for four ordinary ones
@@ -84,10 +84,10 @@ const HOW = {
     CreateCeiling: { words: 'Create a Ceiling', hand: 'reach', text: 'Укажите рукой место — потолок появится на высоте трёх блоков. Тяните руку — он растёт над вами.' },
     BuildRoof: { words: 'Build a Roof', hand: 'reach', text: 'Укажите место и тяните руку: двускатная крыша растёт ступенями от краёв к коньку.' },
     CreateBoard: { words: 'Create a Board', hand: 'board', text: 'Поднимите руку, покажите на дерево и скажите заклинание — ствол станет доской для волн. Несите её двумя руками за края или под мышкой. Положите на воду и разожмите руки. Поднимите колено над доской и опустите ногу — вы на доске; другой ногой гребите. Волна подхватила — встаньте обеими ногами; наклон влево-вправо поворачивает.' },
-    ProtectionHouse: { words: 'Protection House', hand: 'house', text: 'Направьте руку на дом (или на всё, что хотите защитить) и скажите заклинание (20 маны): вокруг встанет сфера защиты. Кричите «Максима» (5 маны), и она растёт, пока не накроет всё, что нужно. Тогда скажите «стоп». Войти может только хозяин и те, кого он пустит; заклинания снаружи разбиваются о неё.' },
+    ProtectionHouse: { words: 'Protection House', hand: 'house', text: 'Направьте руку на дом (или на всё, что хотите защитить) и скажите заклинание (20 маны): вокруг встанет сфера защиты. Кричите «Maxima» (5 маны), и она растёт, пока не накроет всё, что нужно. Тогда скажите «стоп». Войти может только хозяин и те, кого он пустит; заклинания снаружи разбиваются о неё.' },
     ProtectionInvisible: { words: 'Protection Invisible', hand: 'invisible', text: 'Направьте руку на дом под защитой (15 маны). Издалека его больше не видно — только земля и трава, как вокруг. Ближе 3–4 м он медленно проступает.' },
     ProtectionHouseGrant: { words: 'Protection House Grant', hand: 'grant', text: 'Встаньте у своего защищённого дома, направьте руку на друга и скажите заклинание (5 маны): теперь и он свободно входит в дом и выходит из него.' },
-    Flight: { words: 'Флайн', hand: 'up', text: 'Поднимите обе руки вверх и скажите «Флайн» — вы взлетите. Рулите корпусом: наклон вперёд — вниз, назад — вверх, повороты плечами. «Паузин» — парить на месте. Приземление — направьте себя в землю. Полёт тратит ману.' },
+    Flight: { words: 'Fly', hand: 'up', text: 'Поднимите обе руки вверх и скажите «Fly» — вы взлетите. Рулите корпусом: наклон вперёд — вниз, назад — вверх, повороты плечами. «Паузин» — парить на месте. Приземление — направьте себя в землю. Полёт тратит ману.' },
     CreateDoor: { words: 'Create a Door', hand: 'door', text: 'Держите в руке дерево (не меньше 12). Скажите заклинание — кубик станет маленькой дверью. Отводите руку — дверь растёт; покажите, куда её поставить, и скажите «Stand».' },
 };
 
@@ -101,7 +101,7 @@ function rngFrom(seed) {
 
 /** Up to three spells, random but the same on every computer for this id. */
 export function bookSpells(id) {
-    if (isSwiftId(id)) return ['Flight']; // (the swift book: only «Флайн»)
+    if (isSwiftId(id)) return ['Flight']; // (the swift book: only «Fly»)
     if (isWardId(id)) return WARD_SPELLS.slice(); // (the book of protection: its group of three)
     const r = rngFrom(id * 7919 + 17);
     const n = 1 + Math.floor(r() * 3);
@@ -424,7 +424,7 @@ export class BookBirds {
             m.position.copy(p);
             if (k >= 1) { b.state = 'perch'; b.t = 0; b.wait = 3 + Math.random() * 6; b.support = b.toSupport || null; b.checkT = 0; }
         } else if (b.state === 'held') {
-            // caught by «Вингардиум Левиоса»: it hangs where the hand holds it, flapping to get free
+            // caught by «Wingardium Leviosa»: it hangs where the hand holds it, flapping to get free
             b.flapT += dt * 16;
             flap(m, b.flapT, 0.7);
             // (held by another player's hand that went silent: it gets free)
@@ -460,7 +460,7 @@ export class BookBirds {
     }
 
     /**
-     * «Вингардиум Левиоса» caught a bird (on) — it hangs and flaps where the hand holds it —
+     * «Wingardium Leviosa» caught a bird (on) — it hangs and flaps where the hand holds it —
      * or let it go: it flies off to a tree (it is not hurt).
      */
     holdBird(b, on, by = null) {
@@ -501,7 +501,7 @@ export class BookBirds {
         if (m.userData.aura) { m.remove(m.userData.aura); m.userData.aura = null; }
         if (b.singed) m.traverse((o) => { if (o.isMesh && o.material?.color && o !== glow) o.material.color.multiplyScalar(0.7); });
         this.books.set(b.id, { id: b.id, model: m, glow, t: 0, spells: bookSpells(b.id) });
-        this.game.hud.toast?.(isSwiftId(b.id) ? '📘 Быстрая книга упала на землю — возьмите её рукой: в ней «Флайн»!'
+        this.game.hud.toast?.(isSwiftId(b.id) ? '📘 Быстрая книга упала на землю — возьмите её рукой: в ней «Fly»!'
             : isWardId(b.id) ? '📘🛡️ Книга защиты упала на землю — возьмите и прочитайте её: в ней «Защита дома»' : '📖 Книга упала на землю — возьмите её рукой');
     }
 
@@ -523,7 +523,7 @@ export class BookBirds {
         this.books.set(id, { id, model: m, glow, t: 0, spells: bookSpells(id) });
     }
 
-    /** «Флайн» from the burnt swift book: flying is known for good (kept with the player's bonuses). */
+    /** «Fly» from the burnt swift book: flying is known for good (kept with the player's bonuses). */
     learnFlight() {
         const g = this.game;
         g.bonus = { ...(g.bonus || {}), flight: true };
@@ -531,8 +531,8 @@ export class BookBirds {
     }
 
     /**
-     * A spell book I burnt (my «Инферно», my hand in a fire): its spells are mine — like a burnt
-     * scroll. The swift book's «Флайн» is learned only so (reading it only shows the spell).
+     * A spell book I burnt (my «Inferno», my hand in a fire): its spells are mine — like a burnt
+     * scroll. The swift book's «Fly» is learned only so (reading it only shows the spell).
      * @returns {string[]} the spells newly learned
      */
     learnBurnt(item) {
@@ -541,7 +541,7 @@ export class BookBirds {
         const spells = Array.isArray(item.spells) ? item.spells : bookSpells(item.id);
         const fresh = spells.filter((sp) => (sp === 'Flight' ? !g.bonus?.flight : !this.learned.has(sp)));
         for (const sp of fresh) { if (sp === 'Flight') this.learnFlight(); else this.learned.add(sp); }
-        if (spells.includes('Flight')) g.hud?.setVoice?.('📘🔥 Быстрая книга сгорела: теперь вы умеете летать! Поднимите обе руки и скажите «Флайн»', true);
+        if (spells.includes('Flight')) g.hud?.setVoice?.('📘🔥 Быстрая книга сгорела: теперь вы умеете летать! Поднимите обе руки и скажите «Fly»', true);
         else if (fresh.length) g.hud?.setVoice?.(`📖🔥 Книга сгорела: теперь вы знаете ${fresh.map((sp) => '«' + bookSpellName(sp) + '»').join(', ')}`, true);
         else g.hud?.toast?.('📕🔥 Книга сгорела', 2000);
         return fresh;

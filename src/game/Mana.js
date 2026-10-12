@@ -5,7 +5,7 @@
  *   The MAXIMUM grows (the author's rules):
  *     • the FIRST time each spell really works — once per spell, by how strong it is
  *       (FIRST_SPELL below: Lumos +1 … Lightning Strike +12 … Hellfire +20). Every Maxima
- *       form is its own spell («Вайнд» +1, «Вайнд Максима» +3). Casting it again: nothing.
+ *       form is its own spell («Wind» +1, «Wind Maxima» +3). Casting it again: nothing.
  *     • a duel won AND the opponent wizard killed by it (a player, a tower's wizard, a wanderer):
  *       30% of (his maximum − 30), at least +1 (duelGain); won but he lives (lifted with Leviosa,
  *       stunned…): +1…+3 at random. Each opponent counts once (a win once, a kill once).
@@ -236,14 +236,14 @@ export class Mana {
 
 /** How a spell is said, for the hint. */
 const TITLES = {
-    Lumos: 'Люмос', Draw: 'Lightning Writing', Accio: 'Акцио', Gather: 'Gather', Levitation: 'Вингардиум Левиоса', Up: 'Up', Fire: 'Fire', Wind: 'Вайнд',
+    Lumos: 'Lumos', Draw: 'Lightning Writing', Accio: 'Accio', Gather: 'Gather', Levitation: 'Wingardium Leviosa', Up: 'Up', Fire: 'Fire', Wind: 'Wind',
     CreateFloor: 'Create a Floor', CreateCeiling: 'Create a Ceiling', CreateWall: 'Create a Wall', CreateDoor: 'Create a Door', BuildRoof: 'Build a Roof', CreateBed: 'Create a Bed', CreateBoard: 'Create a Board',
-    ChangeColor: 'Change a color', Unfurl: 'Анфёрл', Furl: 'Фёрл', Alohomora: 'Алохомора', Waterball: 'Waterbollow', WaterForming: 'Water forming', AirBubble: 'Air Bubble', VortexBubble: 'Бабл',
-    Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Брейнрот', Maxima: 'Максима в дуэли',
-    Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', Frozen: 'Frozen', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
-    Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
-    Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Тандервейв',
-    WaterVortex: 'Water Vortex', Alive: 'Alive', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction',
+    ChangeColor: 'Change a color', Unfurl: 'Unfurl', Furl: 'Furl', Alohomora: 'Alohomora', Waterball: 'Waterbollow', WaterForming: 'Water forming', AirBubble: 'Air Bubble', VortexBubble: 'Bubble',
+    Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Brainrot', Maxima: 'Maxima в дуэли',
+    Flight: 'Fly', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', Frozen: 'Frozen', Sapira: 'Sapira', Sands: 'Dust', Ice: 'Ice', Jolt: 'Jolt',
+    Bombardo: 'Bombardo', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
+    Inferno: 'Inferno', Stupefy: 'Stupefy', Expelliarmus: 'Expelliarmus', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Thunderwave',
+    WaterVortex: 'Water Vortex', Alive: 'Alive', AvadaKedavra: 'Avada Kedavra', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
 };
 

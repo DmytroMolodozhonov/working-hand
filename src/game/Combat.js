@@ -83,7 +83,7 @@ export const SPELL_COST = {
     Jolt: 5, // a bolt of air: the target is thrown back and falls (Duel.JOLT)
     JoltMaxima: 15, // … three times as strong (and three times the cost)
     ProtectionHouse: 20, // a house's sphere of protection (HouseWards.js)
-    WardGrow: 5, // … each «Максима» while it is being set: 1.5 m wider
+    WardGrow: 5, // … each «Maxima» while it is being set: 1.5 m wider
     ProtectionInvisible: 15, // the protected house is not seen from far
     ProtectionHouseGrant: 5, // a friend may come into the house
     AvadaKedavra: 25,
@@ -284,7 +284,7 @@ export class Combat {
         return this.frozenLeft > 0;
     }
 
-    /** Stunned by «Остолбеней»: can't move or cast (no ice, hits are normal). */
+    /** Stunned by «Stupefy»: can't move or cast (no ice, hits are normal). */
     get stunned() {
         return this.stunLeft > 0;
     }
@@ -303,7 +303,7 @@ export class Combat {
         if (this.game.levitation?.active) this.game.levitation.release(false);
     }
 
-    /** «Даст»: sand in the eyes and the joints — slowed for a while (every mode). */
+    /** «Dust»: sand in the eyes and the joints — slowed for a while (every mode). */
     slow(seconds = SLOW.TIME, byId = null) {
         this.slowLeft = Math.max(this.slowLeft || 0, seconds);
         this.slowBy = byId;
@@ -341,7 +341,7 @@ export class Combat {
     }
 
     /**
-     * A held spell (the «Инферно» flame) takes `amount` mana now; over its `dt` seconds no
+     * A held spell (the «Inferno» flame) takes `amount` mana now; over its `dt` seconds no
      * mana comes back either (like a held «Protection»).
      * @returns {boolean} false when there is no mana left (or I can't cast any more): it goes out
      */
@@ -560,6 +560,7 @@ export class Combat {
         // Any hit on a frozen player shatters them, whatever their HP
         if (this.frozen && kind !== 'Inferno') { this.die(byId, 'shatter'); return; }
         this.hp = Math.max(0, this.hp - amount);
+        this.hurtAt = performance.now(); // (in a fight: the microphone listens for spells — main.js)
         this.game.hud.damageFlash();
         if (this.game.sound) this.game.sound.playHit();
         if (this.hp <= 0) this.die(byId, kind);
@@ -602,7 +603,7 @@ export class Combat {
             if (this.stunLeft <= 0 && (this.stunKind === 'quake' || this.stunKind === 'water' || this.stunKind === 'fall')) this.game.character.knockedDown = false;
         }
         if (!this.enabled) {
-            // Other modes: only the shield and the ice of «Айс» (no HP / fatigue rules)
+            // Other modes: only the shield and the ice of «Ice» (no HP / fatigue rules)
             if (this.frozenLeft > 0) {
                 this.frozenLeft = Math.max(0, this.frozenLeft - dt);
                 const hud = this.game.hud;
@@ -633,7 +634,7 @@ export class Combat {
         if (this.chillTimer <= 0 && this.chill > 0) this.chill = Math.max(0, this.chill - dt * 0.3);
         this.infernoCooldown -= dt;
         for (const t of this.targets.values()) t.damageCooldown -= dt;
-        this.game.character.slowScale = this.frozen ? 0 : (1 - 0.6 * this.chill) * (this.slowLeft > 0 ? SLOW.SCALE : 1); // (the ice beam's cold slows the legs; «Даст»'s sand too)
+        this.game.character.slowScale = this.frozen ? 0 : (1 - 0.6 * this.chill) * (this.slowLeft > 0 ? SLOW.SCALE : 1); // (the ice beam's cold slows the legs; «Dust»'s sand too)
 
         this._updateVisuals(dt);
         this._hud();
@@ -676,7 +677,7 @@ export class Combat {
     }
 
     serialize() {
-        if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Айс» is seen in every mode)
+        if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Ice» is seen in every mode)
         const s = this.shield;
         return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft)];
     }

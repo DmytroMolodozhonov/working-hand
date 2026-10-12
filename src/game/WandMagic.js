@@ -3,17 +3,17 @@
  *
  *  - Spells are stronger (see ItemTypes: +15% always, +25% in the wand's
  *    direction, +40% for its favourite spell, + the wand's own power).
- *  - «Раскрой свои секреты» (Reveal your secrets): point the wand at a thing
+ *  - «Reveal» (Reveal your secrets): point the wand at a thing
  *    (or hold a thing in the other hand, or just look at the wand) — a
  *    glowing hologram tells what it is and its powers.
- *  - «Люмос»: the wand's tip shines — a real light that lights up everything
+ *  - «Lumos»: the wand's tip shines — a real light that lights up everything
  *    around (no glass ball: a glow at the tip), costs a little strength over
- *    time. «Люмос Максима»: brighter — say it again for even more light.
+ *    time. «Lumos Maxima»: brighter — say it again for even more light.
  *    A sharp flick of the wand throws the light: it leaves the tip (the tip goes
  *    dark) and flies where the wand was flicked — slowly enough to watch it go: it
  *    slows down by itself, bounces softly off walls, the ground and the cave's
  *    ceiling, then hangs in the air where it stopped — and fades out about 15 s
- *    after the throw. «Нокс» or «стоп» puts out all of it (the tip
+ *    after the throw. «Nox» or «стоп» puts out all of it (the tip
  *    and the thrown light). Everybody sees (and is lit by) everybody's Lumos.
  *  - «Lightning Writing» (drawing): the tip leaves glowing lines in the air while
  *    you move the wand; they fade in about 10 seconds.
@@ -172,7 +172,7 @@ export class WandMagic {
 
     power(spell) { return wandPower(this.wand, spell); }
 
-    /** Voice: «Люмос», «Люмос Максима», «Нокс», «Lightning Writing», «Раскрой свои секреты». Returns a hint or the name. */
+    /** Voice: «Lumos», «Lumos Maxima», «Nox», «Lightning Writing», «Reveal». Returns a hint or the name. */
     cast(name, isFinal) {
         const g = this.game;
         if (name === 'Reveal') {
@@ -186,7 +186,7 @@ export class WandMagic {
         if (!this.wand && !this._bare()) { if (isFinal) g.hud.setVoice('🪄 Это заклинание работает только с волшебной палочкой в руке', true); return null; }
         if (!this.wand) this._bareHand = ['right', 'left'].find((s) => g.character.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || 'right';
         if (name === 'Lumos' || name === 'LumosMaxima') {
-            // (lit at once — «Максима» said right after only makes it brighter; the same word
+            // (lit at once — «Maxima» said right after only makes it brighter; the same word
             // heard again as the speech's final result is not a second cast)
             const now = performance.now();
             if (name === 'Lumos' && this.light) return null;
@@ -217,10 +217,10 @@ export class WandMagic {
         }
         this.light.level = max ? Math.min(5, Math.max(2, this.light.level + 1)) : Math.max(1, this.light.level);
         const L = this.light.level;
-        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — кончик палочки светится («Нокс» — погасить; резкий взмах палочкой — бросить свет)', true);
+        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Nox» — погасить)` : '💡 Люмос — кончик палочки светится («Nox» — погасить; резкий взмах палочкой — бросить свет)', true);
     }
 
-    /** «Нокс» / «стоп»: all my Lumos goes out — the tip and the thrown light. True if something did. */
+    /** «Nox» / «стоп»: all my Lumos goes out — the tip and the thrown light. True if something did. */
     _nox(say = true) {
         const l = this.light;
         if (l) { this.game.scene.remove(l.glow); l.glow.material.dispose(); this.light = null; }
@@ -248,10 +248,10 @@ export class WandMagic {
         for (let i = 0; i < 6 && head && g.collision?.pointBlocked(p.x, p.y, p.z); i++) p.lerp(head, 0.3);
         this.addThrown(p, dir.clone().multiplyScalar(LUMOS.THROW_SPEED), Math.max(2, l.level + 1), true);
         g.sync?.lumosThrow?.(p, dir, Math.max(2, l.level + 1));
-        // the light has left the wand: its tip is dark (say «Люмос» to light it again)
+        // the light has left the wand: its tip is dark (say «Lumos» to light it again)
         g.scene.remove(l.glow); l.glow.material.dispose(); this.light = null;
         this._thrownAt = performance.now();
-        g.hud.setVoice('💫 Свет брошен — летит и гаснет; «Люмос» — зажечь палочку снова', true);
+        g.hud.setVoice('💫 Свет брошен — летит и гаснет; «Lumos» — зажечь палочку снова', true);
     }
 
     /** A thrown light (mine or another player's). */
@@ -346,7 +346,7 @@ export class WandMagic {
     }
 
     // ------------------------------------------------------------- Reveal
-    /** «Раскрой свои секреты»: a hologram about what the wand (or the bare hand) points at. */
+    /** «Reveal»: a hologram about what the wand (or the bare hand) points at. */
     reveal() {
         const g = this.game;
         let tip = this.wand ? this.tip(new THREE.Vector3(), _v2) : null;
@@ -414,7 +414,7 @@ export class WandMagic {
             }
             if (!target && this.wand) { target = this.wand; at = tip.clone(); }
         }
-        if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return false; }
+        if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Reveal»', true); return false; }
         this._showHologram(info || describeItem(target), at);
         return true;
     }
@@ -458,8 +458,9 @@ export class WandMagic {
         mesh.position.copy(at).add(_v.set(0, 1.1, 0));
         g.scene.add(mesh);
         this.holo = { mesh, until: performance.now() + 9000, t: 0, at: at.clone() };
+        g.ships?.pin(mesh, () => !!mesh.parent);
         for (let i = 0; i < 20; i++) g.fx.spark(at, 0x7fe3ff, 0.06, _v2.set((Math.random() - 0.5), 1 + Math.random() * 1.5, (Math.random() - 0.5)), 0.8);
-        g.hud.setVoice('🔮 Раскрой свои секреты…', true);
+        g.hud.setVoice('🔮 Reveal…', true);
     }
 
     _closeHolo() {
@@ -587,6 +588,7 @@ export class WandMagic {
         mesh.position.copy(a).add(b).multiplyScalar(0.5);
         mesh.quaternion.setFromUnitVectors(_v.set(0, 1, 0), _v2.subVectors(b, a).normalize());
         this.game.scene.add(mesh);
+        this.game.ships?.pin(mesh, () => !!mesh.parent); // (drawn on a ship's deck: the lines sail with it)
         d.lines.push({ mesh, born: performance.now() });
         if (d.lines.length > 600) { const s = d.lines.shift(); this.game.scene.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); }
     }

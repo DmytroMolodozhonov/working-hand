@@ -431,7 +431,7 @@ function buildKeep(p, s, rng, out) {
     out.throneFront = p.pt(0, hallV1 - 7, 0);
     out.rooms.push({ ...hall, name: ROOM_NAMES.throne, ...p.rect(hall.u0, hall.u1, hall.v0, hall.v1), y: p.L(0) - 1.5 });
     // the gates of the throne room in the front doorway (two leaves, opening inwards — src/game/Alohomora.js):
-    // the castle's people pass, a stranger needs «Алохомора Максима» or a blast
+    // the castle's people pass, a stranger needs «Alohomora Maxima» or a blast
     const gc = p.pt(0, v0 + 0.5, 0), gIn = p.pt(0, v0 + 1.5, 0);
     out.throneGate = { x: gc.x, y: gc.y, z: gc.z, ry: Math.atan2(-(gIn.x - gc.x), -(gIn.z - gc.z)), w: 2 * gd + 1, h: 7 };
 

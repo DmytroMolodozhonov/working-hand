@@ -50,7 +50,7 @@ export class SurfBoards {
         this.models = new Map(); // id -> {model, body, boxId, rest}
         this.hold = null; // {id, grips: {left, right}, theta, gate: {left, right}, openSince: {left, right}}
         this.ride = null; // {id, body, foot, neutral, nT, legs0, since, cool}
-        this.fly = null; // {id, t}: flying to me by «Акцио»
+        this.fly = null; // {id, t}: flying to me by «Accio»
         this._open = { left: -1e9, right: -1e9 };
         this._openF = { left: -1e9, right: -1e9 };
         this._frame = 0;
@@ -215,8 +215,8 @@ export class SurfBoards {
         this._net(dt);
     }
 
-    // ---------------------------------------------------------------- «Акцио»
-    /** Boards «Акцио» can pull: standing, lying, floating — not in somebody's hands or under their feet. */
+    // ---------------------------------------------------------------- «Accio»
+    /** Boards «Accio» can pull: standing, lying, floating — not in somebody's hands or under their feet. */
     accioTargets() {
         const out = [];
         if (this.hold || this.ride || this.fly) return out;
@@ -228,7 +228,7 @@ export class SurfBoards {
         return out;
     }
 
-    /** «Акцио» on a board: mine while it flies (the others see it fly with my pose). */
+    /** «Accio» on a board: mine while it flies (the others see it fly with my pose). */
     accioStart(id) {
         const b = this.reg.map.get(id), m = this.models.get(id);
         if (!b || !m || b.owner || this.hold || this.ride || this.fly) return false;
@@ -433,7 +433,7 @@ export class SurfBoards {
                 return;
             }
         }
-        // («Акцио» put it into an open hand: it stays until the hand has closed on it once)
+        // («Accio» put it into an open hand: it stays until the hand has closed on it once)
         if (H.waitClose[side]) { if (curl > CLOSE_CURL) H.waitClose[side] = false; else { H.openSince[side] = 0; return; } }
         if (curl < LET_GO_CURL) { if (!H.openSince[side]) H.openSince[side] = gt; } else H.openSince[side] = 0;
         const openFor = (s) => (H.openSince[s] && !H.waitClose[s] ? gt - H.openSince[s] : 0);

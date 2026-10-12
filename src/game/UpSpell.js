@@ -1,13 +1,15 @@
 /**
- * UpSpell.js — «Up» («Ап»): a raised hand and the word.
+ * UpSpell.js — «Up» («Up»): a raised hand and the word.
  *
  *   lying on the ground (knocked down)  → I get up at once (the usual 0.7 s back on the feet).
  *   swimming in deep water (lake, sea)  → the water throws me up and out: a real arc under
  *                                         gravity, towards where the raised hand points
  *                                         (its horizontal part; straight up = straight up).
- * 7 mana (Combat.SPELL_COST). Not while stunned («Остолбеней») or frozen — Game checks that first.
- * «Ап» is a short word: it counts only as the whole phrase, only with a hand raised up, and only
- * lying or in the water — ordinary speech never throws anyone out of a lake.
+ *   standing on anything (ground, a deck, a roof, a rock) → the same leap up from where I stand.
+ *   in the air (already falling or flying) → nothing: the spell needs something to push from.
+ * 7 mana (Combat.SPELL_COST). Not while stunned («Stupefy») or frozen — Game checks that first.
+ * «Up» is a short word: it counts only as the whole phrase and only with a hand raised up —
+ * ordinary speech never throws anyone into the air.
  */
 
 import * as THREE from 'three';
@@ -35,9 +37,9 @@ export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOW
  * What «Up» does now. `armUp`: a hand raised up. → 'rise' | 'leap' | a hint (string) | null (nothing to do).
  * (stunned / frozen are answered before: Combat.check)
  */
-export function upAction({ down, swimming, armUp, stunned = false, frozen = false }) {
+export function upAction({ down, swimming, armUp, standing = false, stunned = false, frozen = false }) {
     if (stunned || frozen) return null;
-    if (!down && !swimming) return '⬆️ «Up» работает, только когда вы лежите на земле или плаваете в воде';
+    if (!down && !swimming && !standing) return '⬆️ «Up» не работает в воздухе — нужно стоять, лежать или плавать';
     if (!armUp) return down ? '⬆️ Вытяните руку вперёд или поднимите её и скажите «Up»' : '⬆️ Поднимите руку вверх и скажите «Up»';
     return down ? 'rise' : 'leap';
 }
@@ -95,7 +97,10 @@ export class UpSpell {
         const lift = g.currentPose?.armLift;
         const real = lift ? Math.max(lift.left || 0, lift.right || 0) : 0;
         const armUp = !!arm || real >= (down ? UP.LIFT_DOWN : UP.LIFT_UP);
-        const what = upAction({ down, swimming, armUp });
+        // standing on anything solid: the ground, a ship's deck, a roof, a rope ladder's rung
+        const standing = !down && !swimming && !this.leap && !g.flight?.active
+            && (!!ch.onGround || !!g.ships?.rigging?.climbing);
+        const what = upAction({ down, swimming, armUp, standing });
         if (what !== 'rise' && what !== 'leap') { if (what && isFinal) g.hud.setVoice(what, true); return null; }
         const tired = g.combat.check('Up');
         if (tired) { g.hud.setVoice(tired, true); return null; }
@@ -106,11 +111,13 @@ export class UpSpell {
         } else {
             const v = leapVelocity(arm || { x: 0, y: 1, z: 0 }); // (the real arm straight up: straight up)
             this.leap = { vx: v.x, vz: v.z, t: 0 };
+            if (g.ships?.rigging?.climbing) g.ships.rigging.letGo?.();
             ch.swimY = null; ch.onGround = false; ch.airTop = null;
             ch.verticalVelocity = v.y;
-            g.hud.setVoice('⬆️ <span style="color:#7fe3ff">Up!</span> Вода выбрасывает вас вверх', true);
+            g.hud.setVoice(swimming ? '⬆️ <span style="color:#7fe3ff">Up!</span> Вода выбрасывает вас вверх'
+                : '⬆️ <span style="color:#7fe3ff">Up!</span> Вас подбрасывает вверх', true);
         }
-        try { g.sound?.playWhoosh?.(); if (what === 'leap') g.sound?.playSplash?.(); } catch { /* (no sound) */ }
+        try { g.sound?.playWhoosh?.(); if (what === 'leap' && swimming) g.sound?.playSplash?.(); } catch { /* (no sound) */ }
         return 'Up';
     }
 

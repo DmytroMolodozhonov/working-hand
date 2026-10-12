@@ -50,7 +50,7 @@ test('burning the swift book teaches flight for good; burning an ordinary book t
     assert.match(voices.at(-1), /летать/);
     assert.deepEqual(BookBirds.prototype.learnBurnt.call(B, { kind: 'book', id: 5, spells: ['CreateWall', 'Gather'] }), ['CreateWall', 'Gather']);
     assert.deepEqual(BookBirds.prototype.learnBurnt.call(B, { kind: 'book', id: 2, spells: [], runbook: true }), [], 'the running book teaches nothing');
-    assert.match(describeItem(swiftBook).lines.join(' '), /Флайн/);
+    assert.match(describeItem(swiftBook).lines.join(' '), /Fly/);
 });
 
 test('the running book gives only +30% run speed: no flight, no spells', () => {
@@ -64,5 +64,5 @@ test('the running book gives only +30% run speed: no flight, no spells', () => {
     const info = describeItem({ kind: 'book', id: 2, spells: [], runbook: true });
     const text = info.title + ' ' + info.lines.join(' ');
     assert.match(text, /30%/);
-    assert.doesNotMatch(text + toasts.join(' '), /Флайн|лета|полёт|Книга заклинаний/i);
+    assert.doesNotMatch(text + toasts.join(' '), /Fly»|лета|полёт|Книга заклинаний/i);
 });

@@ -167,9 +167,9 @@ export class Zombie {
         const ground = collision ? (collision.groundAt ? collision.groundAt(pos.x, pos.z, pos.y - 1.0 + 1.1) : collision.groundY(pos.x, pos.z)) : -0.5;
 
         if (this.damageCooldown > 0) this.damageCooldown -= dt;
-        tickSlow(this, dt); // («Даст»: slowed for a while)
+        tickSlow(this, dt); // («Dust»: slowed for a while)
         this._spinHalo(dt);
-        // Blown by «Вайнд»: slides away, slowing down (also when stunned or frozen)
+        // Blown by «Wind»: slides away, slowing down (also when stunned or frozen)
         if (this.windVel && !this.isDead && !this.isDying) {
             pos.addScaledVector(this.windVel, dt);
             this.windVel.multiplyScalar(Math.max(0, 1 - 1.8 * dt));
@@ -217,7 +217,7 @@ export class Zombie {
             if (this.frozenTimer <= 0) this.unfreeze();
             return;
         }
-        // «Остолбеней»: stands still
+        // «Stupefy»: stands still
         if (this.stunTimer > 0) {
             this.stunTimer -= dt;
             if (pos.y > ground + 1.0 + 0.01) { this.vy = (this.vy || 0) - 25 * dt; pos.y = Math.max(ground + 1.0, pos.y + this.vy * dt); }
@@ -502,7 +502,7 @@ export class Zombie {
         if (this.ctx.sound) this.ctx.sound.playFrozenHit();
     }
 
-    // ------------------------------------------------------------- «Брейнрот»
+    // ------------------------------------------------------------- «Brainrot»
     /** Under a wizard's spell: violet eyes and a hypnotic ring turning over the head. */
     setThrall(on) {
         if (!!on === !!this.isThrall) return;

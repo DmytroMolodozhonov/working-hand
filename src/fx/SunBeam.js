@@ -60,7 +60,10 @@ export class SunBeam {
         const g = this.game;
         this.t = 0;
         this.group.position.copy(origin);
+        this.group.quaternion.identity();
         this.group.visible = true;
+        // cast on a ship's deck: the beam stays on the deck as the ship sails on
+        g.ships?.pin(this.group, () => this.t >= 0 && this.group.visible);
         // the rain stops (the clouds part); the storm clears over ~3 s
         if (g.storm) g.storm.clearSky();
         g.fx?.lightFlash?.(origin, 0xffe08a, 6, 0.6, 60);

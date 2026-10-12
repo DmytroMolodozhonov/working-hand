@@ -69,9 +69,9 @@ export function matchSpell(text) {
     if (!has('абордаж', 'abordag', 'aborda') && (has('surfboard', 'surf board', 'серфборд', 'сёрфборд', 'серф борд', 'сёрф борд') ||
         (has('board', 'борд', 'bord', 'bored', 'доск') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк')))) return 'CreateBoard';
     // Wand spells
-    if (has('раскрой', 'раскрои', 'секрет', 'тайны', 'reveal', 'secret')) return 'Reveal';
+    if (has('reveal', 'reveel', 'revil', 'ревил', 'ривил', 'ревиал', 'равиал', 'ривиал', 'рэвил', 'ревеал', 'ревил', 'равил')) return 'Reveal'; // (an English word only: «раскрой…» is everyday talk)
     if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';
-    if (has('нокс', 'nox', 'нокса', 'knox')) return 'Nox';
+    if (has('нокс', 'nox', 'нокса', 'knox', 'knocks', 'nocks')) return 'Nox';
     // «Lightning Writing»: drawing in the air (before «Lightning Strike»: the same first word)
     if (has('райтинг', 'райтин', 'врайтин', 'райдинг', 'writing', 'writin', 'righting', 'латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
     // «Water Vortex» («вотер вортекс»): before everything that shares its sounds (water ball, Maxima…)
@@ -128,8 +128,8 @@ export function matchSpell(text) {
     if (has('атак', 'attack', 'аттак', 'атэк', 'этак', 'атака', 'в атаку', 'атек', 'аттек', 'эттек', 'этек', 'аттэк', 'эттэк', 'атык', 'attac', 'atack')) return 'Attack';
     if (has('earthquake', 'earth quake', 'earthcake', 'эрсквейк', 'эртквейк', 'ерсквейк', 'эрскейк', 'эрткейк', 'эрс квейк', 'квейк', 'quake', 'землетряс', 'эрскейп', 'escape', 'эскейп', 'искейп', 'ескейп', 'скейп', 'эскейт', 'skype', 'скайп')) return has('макс', 'max', 'мах') ? 'EarthquakeMaxima' : 'Earthquake';
     if (has('брейнрот', 'брейн рот', 'брейнрод', 'брэйнрот', 'brainrot', 'brain rot', 'брейн', 'брэйн', 'brain')) return 'Brainrot';
-    if (has('вайнд', 'винд', 'вайн', 'уинд', 'wind', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
-    if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
+    if (has('вайнд', 'винд', 'вайн', 'уинд', 'wind', 'wine', 'whined', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
+    if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
     // «Fire Maxima» (before the lone «Максима» and the campfire «Fire»)
     if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер') && has('макс', 'max', 'мах', 'maks')) return 'FireMaxima';
     // Water bending (before Ice/Sands: their short tokens would catch these words)
