@@ -8,11 +8,12 @@ import { Plan } from '../../src/world/Castles.js';
 
 const fnv = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(16); };
 
+// (castles: re-pinned when the king's bedchamber got its bed — NightLife.js; places, shapes, names, paths and houses the same, only 2–4 more parts per castle)
 // digests of the generator before the change (61 m grid over ±3 km, and castle cells −3…3)
 const GOLDEN = {
-    1: { raw: '6d727dfa', h: '35a17d29', castles: '19c3c971' },
-    4242: { raw: 'da5d04f5', h: '9e82edc', castles: 'fafc7a21' },
-    12345: { raw: '8804293b', h: '1e7d0263', castles: '6946be6c' },
+    1: { raw: '6d727dfa', h: '35a17d29', castles: 'daf750f5' },
+    4242: { raw: 'da5d04f5', h: '9e82edc', castles: 'adf4419e' },
+    12345: { raw: '8804293b', h: '1e7d0263', castles: '32d26f82' },
 };
 
 test('higher world: wild heights, mountains and castles of old worlds are unchanged', () => {
