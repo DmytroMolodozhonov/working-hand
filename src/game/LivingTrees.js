@@ -201,7 +201,7 @@ export class LivingTrees {
         const h = g.builder?._hand();
         if (!h) return say('🌳 Поднимите руку, направьте её на дерево и скажите «Alive»');
         const aim = this.aimAt(h.o, h.d);
-        if (aim?.golden) return say('🌳 Золотые деревья не оживают');
+        if (aim?.golden) return say(aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
         if (!aim) return say('🌳 Направьте руку на дерево (не дальше 14 м) и скажите «Alive»');
         // mana
         const c = g.combat;

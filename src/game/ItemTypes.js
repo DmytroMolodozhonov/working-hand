@@ -65,6 +65,7 @@ export const ITEM_INFO = {
     bow: { name: 'Лук', icon: '🏹', weight: 1 },
     hammer: { name: 'Молот Тора', icon: '🔨', weight: 4 },
     apple: { name: 'Золотое яблоко', icon: '🍏', weight: 0.2, stack: 10 },
+    redApple: { name: 'Яблоко', icon: '🍎', weight: 0.2, stack: 10, heal: 2 }, // (an ordinary apple from an apple tree)
     meat: { name: 'Сырое мясо', icon: '🥩', weight: 0.4, stack: 10 },
     steak: { name: 'Жареный стейк', icon: '🍖', weight: 0.4, stack: 10 },
     book: { name: 'Книга заклинаний', icon: '📖', weight: 0.6 },
@@ -110,6 +111,7 @@ export function itemValue(it) {
         case 'hammer': return 300;
         case 'book': return 50;
         case 'apple': return 12 * (it.count || 1);
+        case 'redApple': return 1 * (it.count || 1);
         case 'meat': return 1 * (it.count || 1);
         case 'steak': return 3 * (it.count || 1);
         case 'arrows': return Math.max(1, Math.round((it.count || 1) * 0.6));
@@ -325,7 +327,8 @@ export function describeItem(it) {
         case 'hammer':
             return { title: '🔨 Молот Тора', color: 0xbfe3ff, lines: ['В грозу поднимите его вверх — в него ударит молния', 'Наведите на цель: молния бьёт туда (до 3 раз)', `Заряды: <b>${it.charges || 0}</b>`] };
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
-        case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком'] };
+        case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 40% за золотое яблоко'] };
+        case 'redApple': return { title: '🍎 Яблоко', color: 0xc8202a, lines: ['Поднесите ко рту: +2 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 9% за яблоко'] };
         case 'meat': return { title: '🥩 Сырое мясо', color: 0xd9534f, lines: ['Поднесите ко рту: +2 HP', 'Пожарьте на костре («Fire») — будет +4'] };
         case 'steak': return { title: '🍖 Стейк', color: 0xb5651d, lines: ['Поднесите ко рту: +4 HP'] };
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
@@ -563,9 +566,9 @@ function hammerModel() {
     return g;
 }
 
-function appleModel() {
+function appleModel(it, red = false) {
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mat(0xffd700, { standard: true, metal: 0.7, rough: 0.3, emissive: 0x332200 })));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), red ? mat(0xc8202a) : mat(0xffd700, { standard: true, metal: 0.7, rough: 0.3, emissive: 0x332200 })));
     g.add(cyl(0.008, 0.008, 0.06, mat(0x5a3a1e), 0, 0.12));
     const leaf = box(0.06, 0.01, 0.03, mat(0x2e8b2e), 0.03, 0.13);
     g.add(leaf);
@@ -618,7 +621,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8 };
+export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -636,6 +639,7 @@ function buildItemModel(it) {
         case 'bow': return bowModel(it);
         case 'hammer': return hammerModel(it);
         case 'apple': return appleModel(it);
+        case 'redApple': return appleModel(it, true);
         case 'meat': return meatModel(false);
         case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.12, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);

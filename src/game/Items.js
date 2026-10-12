@@ -55,6 +55,7 @@ const GRIPPED = {
     scroll: { axis: 'x', handle: 0, curl: 0.5, pose: 'roll', at: [0.15, -0.194] },
     shield: { axis: 'y', handle: 0, face: 'back', pose: 'thin', at: [0.13, -0.115] },
     apple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (cupped, its stem out of the hand)
+    redApple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     flask: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (its belly in the cupped fingers, the neck up)
     potion: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     web: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a skein in the cupped hand)
@@ -86,7 +87,7 @@ const ARM_MASS = 1.2;
 /** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
 const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
-export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03 };
+export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03 };
 
 export class ItemSystem {
     constructor(game) {

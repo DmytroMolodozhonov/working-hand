@@ -75,12 +75,14 @@ test('golden apples: 9% each that he lets you on; he is never tamed, and after y
     // (where Animals._feed looks for a horse's head)
     const head = () => peg.group.position.clone().add(new THREE.Vector3(0, 1, 0)).add(new THREE.Vector3(0, 0, -1.2).applyAxisAngle(new THREE.Vector3(0, 1, 0), peg.group.rotation.y));
     for (const a of herd) if (a !== peg) A._remove(a);
-    const apple = { item: { count: 1e6 }, side: 'right', model: { position: new THREE.Vector3() } };
-    g.items = { heldOf: () => apple, releaseHand() {} };
-    let ok = 0;
-    const N = 3000;
-    for (let i = 0; i < N; i++) { peg.trustBy = null; apple.model.position.copy(head()); A._feedT = 0.7; A._feed(0.01); if (peg.trustBy === 'me') ok++; }
-    assert.ok(Math.abs(ok / N - PEGASUS.TRUST) < 0.02, `${ok}/${N}`);
+    const apple = { item: { kind: 'redApple', count: 1e6 }, side: 'right', model: { position: new THREE.Vector3() } };
+    g.items = { heldOf: (k) => (k === apple.item.kind ? apple : null), releaseHand() {} };
+    const feed = (N) => { let ok = 0; for (let i = 0; i < N; i++) { peg.trustBy = null; apple.model.position.copy(head()); A._feedT = 0.7; A._feed(0.01); if (peg.trustBy === 'me') ok++; } return ok / N; };
+    const red = feed(3000);
+    assert.ok(Math.abs(red - PEGASUS.TRUST) < 0.02, `an ordinary apple: ${red} (9%)`);
+    apple.item.kind = 'apple';
+    const gold = feed(2000);
+    assert.ok(Math.abs(gold - PEGASUS.TRUST_GOLD) < 0.04, `a golden apple: ${gold} (40%)`);
     // without his trust: no
     peg.trustBy = null;
     g.character.group.position.set(peg.group.position.x + 1, 1.5, peg.group.position.z);

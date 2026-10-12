@@ -12,15 +12,15 @@
  * steak +4 HP: burn the carcass (or the living animal) with «Инферно» and
  * the meat is cooked. When all the meat is taken only bones are left.
  *
- * Horses (several colours) can be tamed: hold a golden apple to the horse's
+ * Horses (several colours) can be tamed: hold an apple (red or golden) to the horse's
  * head — each apple gives a 30% chance (2 apples 60%, 3 apples 90%) that it
  * lets you up. Jump (or press J) next to it to get on. Ride as you walk:
  * walk / run in place — twice as fast as on foot, plus the horse's own
  * 1–40% bonus. A horse tires (its strength comes back when it rests). Jump
  * again or crouch to get off. A tamed horse is yours for good.
  *
- * Golden apple trees grow here and there: pick the apples by hand (or
- * «Gather»); they grow again in 5 minutes. A golden apple: +10 HP.
+ * Apple trees: ordinary ones with red apples are common (+2 HP), golden ones rare (+10 HP);
+ * pick the apples by hand (or «Gather»); they grow again in 5 minutes.
  *
  * Pigs have wings (PigFlight.js): frightened, they take off and fly away,
  * hop over rivers, and now and then a herd migrates high over the world to
@@ -53,11 +53,11 @@ export const SPECIES = {
 };
 /**
  * The Pegasus (one in 21% of horse herds, the only black horse): he defends his herd in the air;
- * a golden apple fed by hand makes him let that player on (9% per apple) — he is never anybody's;
+ * an apple fed by hand makes him let that player on (9% for an ordinary apple, 40% for a golden one) — he is never anybody's;
  * ridden, a slap on his head and he takes off with the rider.
  */
 export const PEGASUS = {
-    CHANCE: 0.21, TRUST: 0.09, TRUST_T: 10 * 60 * 1000, // ms: how long he stays friendly
+    CHANCE: 0.21, TRUST: 0.09, TRUST_GOLD: 0.4, TRUST_T: 10 * 60 * 1000, // ms: how long he stays friendly
     RIDE_MAX: 4 * 60, // s: then he has had enough and goes back to his herd
     CIRCLE_R: 9, CIRCLE_ALT: 7, DIVE_EVERY: 5, DMG: 3, DEFEND_T: 30,
     SLAP_V: 2.5, // m/s: the hand's speed into his head for a slap
@@ -125,10 +125,20 @@ export function bonesModel() {
     return g;
 }
 
-export function goldenTreeModel() {
+/** The odds of an apple tree in a 110 m cell: golden (rare), an ordinary apple tree with red apples (common). */
+export const APPLE_TREES = { CELL: 110, GOLDEN: 0.15, RED: 0.65 };
+/** What grows in the cell (gx, gz) of a world (seed): 'golden' | 'red' | null — the same on every computer. */
+export function appleTreeAt(gx, gz, seed) {
+    const h = (a, b) => { let x = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(seed, 1442695041)) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
+    const r = h(gx * 3 + 1, gz * 7 + 2);
+    return r < APPLE_TREES.GOLDEN ? 'golden' : r < APPLE_TREES.GOLDEN + APPLE_TREES.RED ? 'red' : null;
+}
+
+/** An apple tree: the golden one (gold bark and leaves, golden apples) or an ordinary one with red apples (red = true). */
+export function goldenTreeModel(red = false) {
     const g = new THREE.Group();
-    bx(g, 0.8, 4, 0.8, 0xb8860b, 0, 2, 0);
-    const leaf = new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x4a3a00 });
+    bx(g, 0.8, 4, 0.8, red ? 0x6b4a2a : 0xb8860b, 0, 2, 0);
+    const leaf = red ? new THREE.MeshLambertMaterial({ color: 0x3f8f3a }) : new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x4a3a00 });
     for (const [w, h, d, x, y, z] of [[4.4, 2.2, 4.4, 0, 4.8, 0], [3.2, 1.6, 3.2, 0.2, 6.4, -0.1], [1.8, 1.2, 1.8, -0.2, 7.6, 0.2]]) {
         const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), leaf);
         m.position.set(x, y, z);
@@ -136,7 +146,7 @@ export function goldenTreeModel() {
         g.add(m);
     }
     const apples = [];
-    const appleMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.75, roughness: 0.25, emissive: 0x332200 });
+    const appleMat = red ? new THREE.MeshLambertMaterial({ color: 0xc8202a }) : new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.75, roughness: 0.25, emissive: 0x332200 });
     const spots = [[1.9, 4.0, 0.8], [-1.6, 4.1, 1.3], [0.6, 3.9, -2.0], [-1.0, 4.0, -1.6], [2.0, 4.6, -1.0], [-2.0, 4.5, -0.3]];
     for (const [x, y, z] of spots) {
         const a = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), appleMat);
@@ -402,7 +412,7 @@ export class Animals {
         const g = this.game;
         if (side && !g.items.held[side] && !g.weapons.hands[side].held) g.items.takeIntoHand(item, side);
         else g.inventory.storeItem(item);
-        g.hud.setVoice?.(item.kind === 'steak' ? '🍖 Стейк взят' : '🥩 Мясо взято', true);
+        g.hud.setVoice?.({ steak: '🍖 Стейк взят', apple: '🍏 Золотое яблоко взято', redApple: '🍎 Яблоко взято' }[item.kind] || '🥩 Мясо взято', true);
     }
 
     _toBones(a) {
@@ -436,7 +446,7 @@ export class Animals {
             if (to.length() > 12 || d.angleTo(to.normalize()) > 0.35) continue;
             let n = 0;
             tr.apples.forEach((ap, i) => { if (ap.until <= Date.now()) { this._pickApple(tr, i, g.localId, null); n++; } });
-            return n ? `✨ Gather: ${n} золотых яблок` : '🍏 Яблок пока нет — вырастут через несколько минут';
+            return n ? `✨ Gather: ${n} ${tr.red ? 'яблок' : 'золотых яблок'}` : '🍏 Яблок пока нет — вырастут через несколько минут';
         }
         return null;
     }
@@ -453,17 +463,18 @@ export class Animals {
             const key = gx + ',' + gz;
             if (this.trees.has(key)) continue;
             const h = (a, b) => { let x = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(seed, 1442695041)) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
-            if (h(gx * 3 + 1, gz * 7 + 2) > 0.3) { this.trees.set(key, null); continue; }
+            const kind = appleTreeAt(gx, gz, seed); // (golden — rare; an ordinary apple tree — common)
+            if (!kind) { this.trees.set(key, null); continue; }
             const x = Math.round(gx * CELL + 15 + h(gx, gz) * (CELL - 30)), z = Math.round(gz * CELL + 15 + h(gz + 5, gx - 3) * (CELL - 30));
             if (Math.hypot(x, z) < 40) { this.trees.set(key, null); continue; }
             const top = t.topLayer(x, z);
             if (t.get(x, top, z) !== BLOCK.GRASS) { this.trees.set(key, null); continue; }
             const y = top - 0.5;
-            const model = goldenTreeModel();
+            const model = goldenTreeModel(kind === 'red');
             model.position.set(x, y, z);
             this.game.scene.add(model);
             const boxId = this.game.collision.addBox({ minX: x - 0.45, maxX: x + 0.45, minY: y, maxY: y + 4, minZ: z - 0.45, maxZ: z + 0.45, kind: 'tree', noSupport: true });
-            this.trees.set(key, { key, x, y, z, model, boxId, apples: model.userData.apples.map(() => ({ until: 0 })) });
+            this.trees.set(key, { key, x, y, z, model, boxId, red: kind === 'red', apples: model.userData.apples.map(() => ({ until: 0 })) });
         }
     }
 
@@ -473,7 +484,7 @@ export class Animals {
         ap.until = Date.now() + 5 * 60 * 1000; // grows again in 5 min
         tr.model.userData.apples[i].visible = false;
         if (this.game.sync && this.auth) this.game.sync.appleGone?.(tr.key, i, ap.until);
-        const item = { kind: 'apple', uid: newUid(), count: 1 };
+        const item = { kind: tr.red ? 'redApple' : 'apple', uid: newUid(), count: 1 };
         if (toId === this.game.localId) this._give(item, side);
         else this.game.sync?.animalMeatTo?.(toId, item, side);
     }
@@ -482,7 +493,8 @@ export class Animals {
     /** Golden apple held to the head of a horse: one apple more for it. */
     _feed(dt) {
         const g = this.game;
-        const ap = g.items.heldOf('apple');
+        const ap = g.items.heldOf('apple') || g.items.heldOf('redApple'); // (a golden apple or an ordinary red one)
+        const golden = ap?.item.kind === 'apple';
         if (!ap) { this._feedT = 0; return; }
         let horse = null;
         for (const a of this.list) {
@@ -497,12 +509,12 @@ export class Animals {
         ap.item.count = (ap.item.count || 1) - 1;
         if (ap.item.count <= 0) g.items.releaseHand(ap.side);
         if (horse.pegasus) {
-            // the Pegasus is nobody's: an apple only makes him kind to you — 9% that he lets you on
-            if (Math.random() < PEGASUS.TRUST) {
+            // the Pegasus is nobody's: an apple only makes him kind to you — he lets you on: 9% for an apple, 40% for a golden one
+            if (Math.random() < (golden ? PEGASUS.TRUST_GOLD : PEGASUS.TRUST)) {
                 horse.trustBy = g.localId; horse.trustUntil = Date.now() + PEGASUS.TRUST_T;
                 g.hud.setVoice('🐴 Пегас съел яблоко и подпускает вас — прыгните рядом, чтобы сесть на него', true);
                 g.fx?.lightFlash?.(horse.group.position.clone().setY(horse.group.position.y + 3), 0xfff2b0, 2, 0.5, 15);
-            } else g.hud.setVoice('🐴 Пегас съел яблоко, но пока не подпускает вас', true);
+            } else g.hud.setVoice(`🐴 Пегас съел ${golden ? 'золотое яблоко' : 'яблоко'}, но пока не подпускает вас (шанс ${golden ? 40 : 9}% за ${golden ? 'золотое яблоко' : 'яблоко'})`, true);
             return;
         }
         horse.apples = Math.min(3, horse.apples + 1);
@@ -653,7 +665,7 @@ export class Animals {
         if (a.pegasus) {
             // (only who fed him and whom he trusts; he is never tamed)
             const ok = a.trustBy === g.localId && Date.now() < (a.trustUntil || 0) && !a.defend && !a.fly;
-            if (!ok) { g.hud.setVoice('🐴 Пегас не подпускает вас — угостите его золотым яблоком', true); return; }
+            if (!ok) { g.hud.setVoice('🐴 Пегас не подпускает вас — угостите его яблоком (золотое — вернее)', true); return; }
             a.rider = g.localId; a.state = 'ridden'; a.rideT = 0; a.riderFly = false;
             this.riding = a;
             a.model.userData.saddle.visible = true;
@@ -662,7 +674,7 @@ export class Animals {
             return;
         }
         const ok = a.tamed === g.localId || Math.random() < Math.min(0.9, a.apples * 0.3);
-        if (!ok) { g.hud.setVoice(a.apples ? '🐴 Конь не дал запрыгнуть — дайте ещё золотое яблоко' : '🐴 Конь не даётся — сначала угостите его золотым яблоком', true); return; }
+        if (!ok) { g.hud.setVoice(a.apples ? '🐴 Конь не дал запрыгнуть — дайте ещё яблоко' : '🐴 Конь не даётся — сначала угостите его яблоком', true); return; }
         a.tamed = g.localId;
         a.rider = g.localId;
         a.state = 'ridden';
