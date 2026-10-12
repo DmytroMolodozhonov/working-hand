@@ -33,6 +33,7 @@ import { dragonModel, poseDragon, BODY, SCALE } from './DragonModel.js';
 import { LAIR } from '../world/DragonLairs.js';
 import { newUid } from './ItemTypes.js';
 import { createRng } from '../core/math.js';
+import { creditKill } from './Mana.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -286,6 +287,8 @@ export class Dragons {
         g.hud?.notify?.(`🐉 ${DRAGON_KINDS[d.kind].name} повержен!`);
         if (d.lair) { const st = this.state[d.lair]; if (st?.d[d.slot]) { st.d[d.slot].dead = true; st.d[d.slot].hp = 0; } }
         if (this.auth) {
+            // mana: a magical creature — the killer's maximum grows (once per kind; the host credits, Mana.creditKill)
+            creditKill(g, killer, { kind: 'dragon' });
             // its wand: deep crimson, glowing like embers — every fire spell 60% stronger
             const p = c.clone().add(_v2.set(0, 1.5, 0));
             g.items?.spawnLoose(dragonWand(newUid()), p, { hover: true });
