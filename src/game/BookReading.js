@@ -622,7 +622,7 @@ export class BookReading {
         const reading = !s.sheet && s.phi > 2.0 && facing > 0.6;
         s.readT = reading ? s.readT + dt : 0;
         // the running book: reading its page gives its quickness — then it is gone in golden sparks
-        if (s.item.runbook && s.readT > HOLD.LEARN_T && !s.item.used) {
+        if (s.item.runbook && !s.item.wild && s.readT > HOLD.LEARN_T && !s.item.used) { // (a wild one has nothing left to give)
             s.item.used = true;
             const g = this.game, side = s.owner, p = s.pos.clone();
             g.runner?.bless?.();

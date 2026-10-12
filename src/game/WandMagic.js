@@ -327,6 +327,23 @@ export class WandMagic {
             const ang = dir.angleTo(to.normalize());
             if (ang < best) { best = ang; target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); }
         }
+        // a running book (a creature and a book at once): its secret
+        let info = null;
+        for (const { pos } of g.runner?.accioTargets?.() || []) {
+            const to = _v.subVectors(pos, tip);
+            const d = to.length();
+            if (d > 20) continue;
+            const ang = dir.angleTo(to.normalize());
+            if (ang < best + Math.atan2(0.6, d)) { best = ang; info = g.runner.secret(); target = { kind: 'book', runbook: true }; at = pos.clone(); }
+        }
+        // a book-bird's book lying on the ground or on a pedestal
+        for (const bk of g.books?.books?.values() || []) {
+            const to = _v.subVectors(bk.model.position, tip);
+            const d = to.length();
+            if (d > 10) continue;
+            const ang = dir.angleTo(to.normalize());
+            if (ang < best) { best = ang; info = null; target = { kind: 'book', id: bk.id, spells: bk.spells, ...(bk.spells?.includes('Flight') ? { swift: true } : {}) }; at = bk.model.position.clone(); }
+        }
         // the thing in the other hand (or in this bare hand), else the wand itself
         if (!target) {
             for (const s of [side === 'right' ? 'left' : 'right', side]) {
@@ -337,7 +354,7 @@ export class WandMagic {
             if (!target && this.wand) { target = this.wand; at = tip.clone(); }
         }
         if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return; }
-        this._showHologram(describeItem(target), at);
+        this._showHologram(info || describeItem(target), at);
     }
 
     _showHologram(info, at) {

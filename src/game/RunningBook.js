@@ -17,7 +17,10 @@
  *
  * It is an animal of Animals.js (type 'runbook'), so blows, arrows, blasts,
  * «Левиоса», «Остолбеней» and the other spells work on it like on any
- * creature; «Акцио» pulls it to the caster (it lands dazed at their feet).
+ * creature; «Акцио» pulls it flying into the caster's free hand (the one without the wand;
+ * both free — the casting hand): the fingers take it — caught, as by hand. Already quick
+ * from one: it is held wriggling, and runs off once let go (or put into a pocket). No free
+ * hand: it lands dazed at the caster's feet. «Раскрой свои секреты» tells its secret.
  * Multiplayer: the host runs the book (Animals syncs it), decides catches;
  * the bonus is each player's own.
  */
@@ -42,6 +45,9 @@ export const RUNNER = {
 };
 const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];
 export const runBookColor = (id) => COVERS[Math.abs(id | 0) % COVERS.length];
+
+/** «Акцио» into the hand: how fast it flies (m/s), how near the hand it is taken (m). */
+const ACCIO_SPEED = 16, ACCIO_CATCH = 0.45;
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -400,7 +406,7 @@ export class RunningBook {
     caughtByMe(a, side = 'right') {
         const g = this.game;
         // (already has one in the hands or a slot, not read yet: the same as having its quickness)
-        const unread = ['left', 'right'].some((sd) => g.items?.held?.[sd]?.item?.runbook) || g.inventory?.slots?.some?.((it) => it?.runbook);
+        const unread = this._unread();
         if (this.bonus > 0 || unread) {
             // only once: it wriggles out of the fingers and runs on
             if (performance.now() - this._toldT > 3000) { this._toldT = performance.now(); g.hud?.toast?.('📕 Вы уже получили быстроту от бегущей книги — вторая больше не даёт. Она вырвалась!', 3000); }
@@ -413,6 +419,17 @@ export class RunningBook {
         if (performance.now() - t < 1500) return;
         this._asked.set(a.id, performance.now());
         g.sync?.net?.send({ t: 'rbcatch', id: a.id });
+    }
+
+    /** A caught running book not read yet (in a hand or a slot): it is as good as its quickness. */
+    _unread() {
+        const g = this.game, rb = (it) => it?.runbook && !it.wild && !it.used;
+        return ['left', 'right'].some((sd) => rb(g.items?.held?.[sd]?.item)) || !!g.inventory?.slots?.some?.(rb);
+    }
+
+    /** «Раскрой свои секреты» on a running book: what it is and what it gives. */
+    secret() {
+        return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Поймаешь — бегаешь на <b>30%</b> быстрее (до смерти)', 'Ловят руками или «Акцио» в свободную руку', 'Это не заклинание — только быстрота, и только один раз'] };
     }
 
     _wriggle(a) {
@@ -495,6 +512,89 @@ export class RunningBook {
         this._pull(a, handPos);
     }
 
+    /**
+     * «Акцио» with a free hand: the book flies to that hand (not a jump) and the fingers take it.
+     * The real one leaves the world at once (the host removes it; everybody sees it go).
+     */
+    accioToHand(a, side) {
+        const g = this.game;
+        if (!a || a.dead || this._fly || !g.items) return false;
+        const color = runBookColor(a.id);
+        const model = runningBookModel(color);
+        model.scale.setScalar(RUNNER.SIZE);
+        model.position.copy(a.group.position);
+        model.rotation.y = a.group.rotation.y;
+        g.scene.add(model);
+        a.group.visible = false; // (a guest: until the host's removal reaches it)
+        this._fly = { model, side, t: 0, id: Math.abs(a.id | 0) % COVERS.length, wild: this.bonus > 0 || this._unread() };
+        if (this.auth) this._takeAway(a);
+        else g.sync?.net?.send({ t: 'rbtake', id: a.id });
+        return true;
+    }
+
+    /** (host) The book leaves the world (summoned into somebody's hand). */
+    _takeAway(a) {
+        const g = this.game, A = g.animals;
+        if (!a || a.dead || !A?.byId.has(a.id)) return;
+        if (a.lev) { if (g.levitation?._endCarry) g.levitation._endCarry('a', a); else a.lev = null; }
+        A._remove(a);
+        this._checkT = RUNNER.CHECK * 3;
+    }
+
+    _updateFly(dt) {
+        const g = this.game, f = this._fly;
+        f.t += dt;
+        const hand = (g.character.getGripObject?.(f.side) || g.character.group).getWorldPosition(_v);
+        const m = f.model;
+        const to = _v2.subVectors(hand, m.position);
+        const d = to.length();
+        if (d > 1e-3) m.position.addScaledVector(to, Math.min(1, (ACCIO_SPEED * dt) / d));
+        m.scale.setScalar(Math.max(0.55, Math.min(RUNNER.SIZE, d * 0.4)));
+        m.rotation.y += dt * 4;
+        m.rotation.z = Math.sin(f.t * 30) * 0.3; // (kicking its little legs)
+        if (Math.random() < 0.5) g.fx?.spark(m.position, 0xfff2a8, 0.07, _v2.set(0, 0.4, 0), 0.3);
+        if (d > ACCIO_CATCH && f.t < 3) return;
+        this._fly = null;
+        g.scene.remove(m);
+        m.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose?.(); } });
+        const item = { kind: 'book', uid: 'rb' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), id: f.id, spells: [], runbook: true, ...(f.wild ? { wild: true } : {}) };
+        const free = !g.items.held[f.side] && !g.weapons?.hands?.[f.side]?.held;
+        if (free && g.items.takeIntoHand?.(item, f.side)) {
+            g.mana?.success?.('Accio');
+            g.hud?.toast?.(f.wild ? '📕 Бегущая книга у вас в руке, но вырывается: свою быстроту она вам уже отдала. Отпустите — убежит' : '📕 «Акцио»: бегущая книга у вас в руке! Раскройте её двумя руками — на её единственной странице её быстрота', 4000);
+            return;
+        }
+        // (the hand got busy on the way: it drops by the feet — and runs off, if it is a wild one)
+        const p = g.character.group.position;
+        g.items.spawnLoose(item, new THREE.Vector3(p.x + 0.6, p.y + 0.5, p.z));
+    }
+
+    /** A wild one (already quick from a book) let go or pocketed: it is a running book again. */
+    _escapes() {
+        const g = this.game, items = g.items;
+        if (!items) return;
+        const slots = g.inventory?.slots;
+        const k = slots ? slots.findIndex((it) => it?.runbook && it.wild) : -1;
+        if (k >= 0) {
+            const it = slots[k];
+            slots[k] = null;
+            g.inventory._render?.();
+            const p = g.character.group.position;
+            items.spawnLoose(it, new THREE.Vector3(p.x + 0.6, p.y + 0.5, p.z));
+            g.hud?.toast?.('📕 Бегущая книга вырвалась из кармана и убежала!', 2500);
+        }
+        if (!this.auth || !g.animals?.enabled || !items.loose?.size) return;
+        for (const L of [...items.loose.values()]) {
+            if (!L.item?.runbook || !L.item.wild || L.accio || L.lev) continue;
+            const at = L.model.position.clone();
+            items.removeLoose(L.item.uid);
+            g.sync?.itemGone?.(L.item.uid, null, null);
+            at.y = g.collision?.groundY?.(at.x, at.z) ?? at.y;
+            const a = g.animals._spawn('runbook', at);
+            if (a?.rb) { a.rb.mode = 'flee'; a.rb.dodgeT = 0; }
+        }
+    }
+
     _pull(a, to) {
         const g = this.game;
         if (!a) return; // (alive, or a dead body of any animal: «Акцио» pulls it all the same)
@@ -519,6 +619,9 @@ export class RunningBook {
         else if (m.t === 'rbaccio' && isHost && Array.isArray(m.p)) {
             const a = A?.byId.get(m.id);
             if (a && (a.type === 'runbook' || a.dead)) this._pull(a, new THREE.Vector3(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0));
+        } else if (m.t === 'rbtake' && isHost) {
+            const a = A?.byId.get(m.id);
+            if (a && a.type === 'runbook') this._takeAway(a); // (a guest's «Акцио» took it into the hand)
         }
     }
 
@@ -526,6 +629,8 @@ export class RunningBook {
     update(dt) {
         const g = this.game;
         this._apply();
+        if (this._fly) this._updateFly(dt);
+        this._escapes();
         if (!this.enabled) return;
         if (this.auth) {
             this._checkT -= dt;

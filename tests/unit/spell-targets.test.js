@@ -81,3 +81,11 @@ test('a house\'s sphere of protection («Protection House») keeps every creatur
     assert.match(src('src/game/Hellfire.js'), /hitAt\?\.\(f\.c, f\.R, by, 'fire'\)/, '«Let the Hellfire Come» is fire');
     assert.match(src('src/game/WaterMagic.js'), /books\?\.iceAt/, 'an ice ball');
 });
+
+test('«Раскрой свои секреты» and «Акцио» see the running book (a creature and a book at once) and lying books', () => {
+    const reveal = body(src('src/game/WandMagic.js'), '    reveal() {');
+    assert.match(reveal, /runner/, 'Reveal: the running book');
+    assert.match(reveal, /books\?\.books/, 'Reveal: book-birds\' books lying about');
+    const accio = body(src('src/game/Accio.js'), '    cast() {');
+    assert.match(accio, /accioToHand/, 'Accio: the running book into the free hand');
+});

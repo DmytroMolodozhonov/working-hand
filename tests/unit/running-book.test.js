@@ -156,3 +156,51 @@ test('running book: caught, it is a real book in the hand (one page); its quickn
     rb.bless();
     assert.equal(g.bonus.run, 0.3, 'read: its quickness');
 });
+
+test('running book: «Акцио» flies it into the free hand (caught as by hand); already quick — held wild, runs off when let go', () => {
+    const { g, rb, book, removed, toasts } = world();
+    const scene = new THREE.Group();
+    const hand = new THREE.Object3D();
+    hand.position.set(-0.4, 1.2, -0.5);
+    const loose = new Map();
+    Object.assign(g, { scene, fx: null, inventory: { slots: [null, null], _render() {} } });
+    g.character.getGripObject = () => hand;
+    g.items = {
+        held: { right: { item: { kind: 'wand' } } }, loose,
+        takeIntoHand(item, side) { this.held[side] = { item, model: new THREE.Object3D() }; return true; },
+        spawnLoose(item, pos) { const L = { item, model: new THREE.Object3D() }; L.model.position.copy(pos); loose.set(item.uid, L); return L; },
+        removeLoose(uid) { const L = loose.get(uid); loose.delete(uid); return L?.item; },
+    };
+    const spawned = [];
+    g.animals._spawn = (type, p) => { const a = { id: 9, type, rb: {}, group: new THREE.Group() }; a.group.position.copy(p); spawned.push(a); return a; };
+    assert.equal(rb.accioToHand(book, 'left'), true);
+    assert.deepEqual(removed, [5], 'the real one left the world');
+    // it flies (not a jump): a few frames on the way, then in the left hand
+    rb.update(0.05);
+    assert.ok(!g.items.held.left, 'still flying after one frame');
+    for (let i = 0; i < 40 && !g.items.held.left; i++) rb.update(0.05);
+    const it = g.items.held.left?.item;
+    assert.ok(it?.runbook && !it.wild, 'a running book in the left hand (the wand hand kept its wand)');
+    assert.match(toasts.at(-1), /в руке/);
+    // already quick: the next one is held wild and runs off when let go
+    rb.bless();
+    g.items.held.left = null;
+    const book2 = { id: 6, type: 'runbook', dead: false, group: new THREE.Group() };
+    g.animals.list.push(book2); g.animals.byId.set(6, book2);
+    rb.accioToHand(book2, 'left');
+    for (let i = 0; i < 60 && !g.items.held.left; i++) rb.update(0.05);
+    const wild = g.items.held.left.item;
+    assert.ok(wild.wild, 'held, wriggling');
+    g.items.held.left = null;
+    g.items.spawnLoose(wild, new THREE.Vector3(1, 1, 1)); // (let go)
+    rb.update(0.05);
+    assert.equal(loose.size, 0);
+    assert.equal(spawned.length, 1, 'a running book again');
+});
+
+test('running book: «Раскрой свои секреты» tells its secret', () => {
+    const { rb } = world();
+    const s = rb.secret();
+    assert.match(s.title, /Бегущая книга/);
+    assert.match(s.lines.join(' '), /30%.*быстрее.*смерти/);
+});
