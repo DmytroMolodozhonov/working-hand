@@ -77,11 +77,14 @@ export function matchSpell(text) {
     if (has('stand', 'стэнд', 'стенд', 'стоп', 'stop')) return 'Stand'; // («стоп» also stops every spell still going)
     // («Assemble» too: «Gather» is not always heard right)
     if (has('gather', 'гезер', 'гэзер', 'гатер', 'газер', 'гаазер', 'собери', 'собрать', 'assembl', 'ассембл', 'асембл', 'эссембл', 'эсембл', 'ассэмбл', 'асэмбл')) return 'Gather';
+    // (a Russian noun alone is everyday talk — «где стена замка», «покажи дорогу», «на крыше» — it
+    // builds only with «создай / построй / крейт…» in the same phrase)
+    const make = () => has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'постро', 'build', 'билд');
     if (has('floor', 'флор', 'флоор', 'флур')) return 'CreateFloor';
-    if (has('ceiling', 'силинг', 'сейлинг', 'силин', 'эсилин', 'потол')) return 'CreateCeiling';
-    if (has('roof', 'руф', 'крыш')) return 'BuildRoof';
-    if (has('wall', 'уолл', 'уол', 'стену', 'стена')) return 'CreateWall';
-    if (has('door', 'двер', ' дор', 'дорь')) return 'CreateDoor';
+    if (has('ceiling', 'силинг', 'сейлинг', 'силин', 'эсилин') || (has('потол') && make())) return 'CreateCeiling';
+    if (has('roof', 'руф') || (has('крыш') && make())) return 'BuildRoof';
+    if (has('wall', 'уолл', 'уол') || (has('стену', 'стена', 'стенк') && make())) return 'CreateWall';
+    if (has('door') || (has('двер', ' дор', 'дорь') && make())) return 'CreateDoor';
     // «To the Sun» (before «Даст»: «sun» is one of its words)
     if (has('to the sun', 'to the son', 'tothesun', 'ту зе сан', 'ту зэ сан', 'ту за сан', 'ту де сан', 'ту ze сан', 'тузесан', 'тузэсан', 'тузасан', 'к солнцу', 'солнц')) return 'ToTheSun';
     // New spell first: its words must never be mistaken for the short Sand/Ice tokens.

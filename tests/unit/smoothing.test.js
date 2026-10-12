@@ -118,3 +118,18 @@ test('«To the Sun»: its words, and «Даст» keeps its own', async () => {
     for (const w of ['to the sun', 'Ту зе сан', 'тузесан', 'к солнцу']) assert.equal(matchSpell(w), 'ToTheSun', w);
     for (const w of ['даст', 'санд']) assert.equal(matchSpell(w), 'Sands', w);
 });
+
+test('everyday talk builds nothing: a «стена», «дверь», «дорогу», «крыша», «потолок» in a phrase is not a spell', () => {
+    const BUILD = ['CreateWall', 'CreateDoor', 'BuildRoof', 'CreateCeiling', 'CreateFloor'];
+    for (const t of ['где стена замка', 'это стена', 'покажи дорогу', 'подскажи дорогу к рынку', 'у вас дверь открыта',
+        'кто-то на крыше', 'какой высокий потолок', 'стенка тут старая', 'дорогой друг']) {
+        assert.ok(!BUILD.includes(matchSpell(t)), `${t} → ${matchSpell(t)}`);
+    }
+    assert.equal(matchSpell('построй стену'), 'CreateWall');
+    assert.equal(matchSpell('создай стену'), 'CreateWall');
+    assert.equal(matchSpell('крейт э уол'), 'CreateWall');
+    assert.equal(matchSpell('криэйт э дор'), 'CreateDoor');
+    assert.equal(matchSpell('создай дверь'), 'CreateDoor');
+    assert.equal(matchSpell('построй крышу'), 'BuildRoof');
+    assert.equal(matchSpell('создай потолок'), 'CreateCeiling');
+});
