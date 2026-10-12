@@ -6,8 +6,9 @@
  *     • the FIRST time each spell really works — once per spell, by how strong it is
  *       (FIRST_SPELL below: Lumos +1 … Lightning Strike +12 … Hellfire +20). Every Maxima
  *       form is its own spell («Вайнд» +1, «Вайнд Максима» +3). Casting it again: nothing.
- *     • a duel won (the opponent wizard — a player or an NPC wizard — beaten in the clash and
- *       killed by it): 30% of (his maximum − 30), at least +1 (duelGain)
+ *     • a duel won AND the opponent wizard killed by it (a player, a tower's wizard, a wanderer):
+ *       30% of (his maximum − 30), at least +1 (duelGain); won but he lives (lifted with Leviosa,
+ *       stunned…): +1…+3 at random. Each opponent counts once (a win once, a kill once).
  *     • the first kill of each MAGICAL creature kind, to whoever struck the last blow
  *       (MAGIC_KILL: the winged pig +3 … the giant spider, a dragon +20). Ordinary creatures —
  *       horses, cows, sheep, villagers, knights, zombies, sailors — nothing.
@@ -124,6 +125,7 @@ export class Mana {
         this.growth = 0; // grown with practice (lost on death)
         this.spellsUsed = new Set(); // spells whose first success was already counted (this life)
         this.killsMade = new Set(); // magical creature kinds already counted (this life)
+        this.duelsWon = new Map(); // opponent id → 'win' | 'kill' already counted (this life)
         this.log = []; // (tests) the last few gains
     }
 
@@ -148,10 +150,22 @@ export class Mana {
         return n;
     }
 
-    /** A real duel won: the opponent (his mana maximum `oppMax`) beaten in the clash and killed. */
-    duelWon(oppMax = MANA.BASE) {
+    /** A real duel won: the opponent `id` (his mana maximum `oppMax`) beaten in the clash and killed. */
+    duelWon(oppMax = MANA.BASE, id = null) {
+        if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (this one already counted)
+        if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = duelGain(oppMax);
         this.grow(n, 'duel');
+        this._say(`🔷 Победа в дуэли, соперник повержен: +${n} к максимуму маны`);
+        return n;
+    }
+
+    /** The clash won but the opponent `id` lives (lifted, stunned…): +1…+3 at random, once per opponent. */
+    duelWonAlive(id = null, rng = Math.random) {
+        if (id != null && this.duelsWon.has(String(id))) return 0;
+        if (id != null) this.duelsWon.set(String(id), 'win');
+        const n = 1 + Math.min(2, Math.floor(rng() * 3));
+        this.grow(n, 'duelAlive');
         this._say(`🔷 Победа в дуэли: +${n} к максимуму маны`);
         return n;
     }
@@ -196,6 +210,7 @@ export class Mana {
         this.growth = 0;
         this.spellsUsed.clear();
         this.killsMade.clear();
+        this.duelsWon.clear();
     }
 
     /** Kept with the player (world save, multiplayer). */

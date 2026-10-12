@@ -65,7 +65,7 @@ test('mana: a duel won — 30% of (the opponent\'s maximum − 30), at least +1;
     assert.equal(duelGain(80), 15, 'the Master');
     const { g, toasts } = fakeGame();
     assert.equal(g.mana.duelWon(40), 3);
-    assert.ok(toasts.some((t) => t.includes('Победа в дуэли: +3')));
+    assert.ok(toasts.some((t) => t.includes('соперник повержен: +3')));
     assert.equal(g.mana.magicKill('spider'), 20);
     assert.equal(g.mana.magicKill('spider'), 0, 'the second spider: nothing');
     assert.equal(g.mana.magicKill('pegasus'), MAGIC_KILL.pegasus.n);
@@ -74,6 +74,18 @@ test('mana: a duel won — 30% of (the opponent\'s maximum − 30), at least +1;
     g.mana.crystal();
     assert.equal(g.mana.max, 30 + 3 + 20 + 8 + 5);
     assert.equal(g.combat.fatigue, g.mana.max, 'the mana in it grows too');
+});
+
+test('mana: a duel won without a kill +1…+3 at random; each opponent counts once (a win once, a kill once)', () => {
+    const { g } = fakeGame();
+    assert.equal(g.mana.duelWonAlive('w1', () => 0), 1);
+    assert.equal(g.mana.duelWonAlive('w1', () => 0.99), 0, 'the same one lifted again: nothing');
+    assert.equal(g.mana.duelWonAlive('w2', () => 0.99), 3);
+    assert.equal(g.mana.duelWon(80, 'w1'), 15, 'then killed in a duel: the kill still counts');
+    assert.equal(g.mana.duelWon(80, 'w1'), 0, 'killed again (a player came back): nothing');
+    assert.equal(g.mana.max, 30 + 1 + 3 + 15);
+    g.mana.onDeath();
+    assert.equal(g.mana.duelWonAlive('w1', () => 0), 1, 'after my death: earned again');
 });
 
 test('mana: which animals are magical', () => {
@@ -161,8 +173,13 @@ test('mana: a duel charge that hits counts (the first time); a clash won + the o
     assert.equal(g.mana.max, 42, 'Avada hit: its first time +10');
     assert.equal(duel.opponentDied('someone-else'), false);
     assert.equal(duel.opponentDied('enemy', 40), true);
+    assert.equal(g.mana.log.at(-1).why, 'duel');
     assert.equal(g.mana.max, 45, 'a real duel won against a maximum of 40: +3');
-    assert.equal(duel.opponentDied('enemy'), false, 'only once');
+    assert.equal(duel.opponentDied('enemy'), false, 'only once');    duel._won = { id: 'wiz7', at: performance.now() - 9000 }; // (a clash won 9 s ago, he still lives)
+    duel._wonAlive();
+    assert.equal(g.mana.log.at(-1).why, 'duelAlive');
+    assert.ok(g.mana.max >= 46 && g.mana.max <= 48);
+    assert.equal(duel._won, null);
 });
 
 test('mana: the giant spider gives +20 to whoever killed it — the first one only', () => {

@@ -31,7 +31,7 @@ export const WIZ = {
     },
 };
 WIZ.seller = WIZ.teacher;
-WIZ.wanderer = { ...WIZ.teacher, range: [8, 18] };
+WIZ.wanderer = { ...WIZ.teacher, mana: 50, range: [8, 18] }; // (a wanderer has seen more: a duel won against him is worth more)
 
 /** Mana a spell costs a wizard (the same as a player's base spell). */
 export const NPC_COST = { Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };

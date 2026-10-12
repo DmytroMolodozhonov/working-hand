@@ -611,6 +611,7 @@ export class Duel {
         for (const b of [...this.bolts.values()]) this._updateBolt(b, dt);
         if (this._referee()) this._detectClashes();
         for (const c of [...this.clashes]) this._updateClash(c, dt);
+        if (this._won) this._wonAlive();
     }
 
     /** Am I the one deciding zombies and duels? (host, or alone) */
@@ -1205,8 +1206,16 @@ export class Duel {
         const w = this._won;
         if (!w || w.id !== id || performance.now() - w.at > 8000) return false;
         this._won = null;
-        this.game.mana?.duelWon(oppMax);
+        this.game.mana?.duelWon(oppMax, id);
         return true;
+    }
+
+    /** A clash I won, and the opponent still alive 8 s later: a duel won without a kill (+1…+3). */
+    _wonAlive() {
+        const w = this._won;
+        if (!w || performance.now() - w.at <= 8000) return;
+        this._won = null;
+        this.game.mana?.duelWonAlive(w.id);
     }
 
     remoteClashEnd(m) {
