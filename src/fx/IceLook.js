@@ -1,5 +1,5 @@
 /**
- * IceLook.js — how «Ice» looks.
+ * IceLook.js — how «Айс» looks.
  *
  *   flight   a spinning ice crystal flies at the head of a frosty beam: two thin frost threads
  *            wind round the beam, snowflakes drift off it and fall, cold mist trails the crystal
@@ -60,7 +60,7 @@ export class IceLook {
     }
 
     /**
-     * One frame of a flying «Ice» from the hand to its head (`head`: draw the crystal there —
+     * One frame of a flying «Айс» from the hand to its head (`head`: draw the crystal there —
      * not where two charges push against each other: the duel's marker is there).
      * `life`: how long the drawn threads live (one frame).
      */

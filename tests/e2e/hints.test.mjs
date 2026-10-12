@@ -30,7 +30,7 @@ test('a blast: «Вас отбросило взрывом»; the hand down / no 
         g.explode(new window.__zns.THREE.Vector3(p.x + 1, p.y + 0.5, p.z), 4, 'someone', 1);
     });
     await page.waitForFunction(() => window.__zns.game.knock.down, null, { timeout: 10000, polling: 100 });
-    assert.match(await voice(page), /отбросило взрывом «Bombardo»/);
+    assert.match(await voice(page), /отбросило взрывом «Бомбардо»/);
     // big, at the top (not in the middle where spells are aimed), and it fades by itself after ~5 s
     const box = await page.evaluate(() => {
         const el = document.getElementById('voice-debug'), r = el.getBoundingClientRect(), cs = getComputedStyle(el);

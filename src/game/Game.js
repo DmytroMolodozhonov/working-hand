@@ -94,7 +94,7 @@ const SPELL_COOLDOWN = 1000;
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
 const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
-const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Bombardo»
+const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
 const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima']);
 const PLAYER_RADIUS = 0.48;
@@ -135,7 +135,7 @@ export class Game {
         this.lastSpellCastTime = 0;
         // death hooks (Death.js): push (info) => … to run when my player dies / comes back
         this.onDeath = [];
-        // «Inferno»'s stream burns: (o, d, len, casterId) => true if something caught fire (e.g. a living tree)
+        // «Инферно»'s stream burns: (o, d, len, casterId) => true if something caught fire (e.g. a living tree)
         this.onFlame = [];
         this.onRespawn = [];
         this.cameraBaseRotation = 0;
@@ -248,7 +248,7 @@ export class Game {
                 if (this.authority) this.ships?.crew.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId); // (the ships' crews)
             },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); if (this.authority) this.livingTrees?.burnAlong(o, d, len); },
-            // «Inferno» (src/fx/InfernoStream.js): what its stream burns, what stops it, its mana
+            // «Инферно» (src/fx/InfernoStream.js): what its stream burns, what stops it, its mana
             burn: (o, d, len, casterId) => this._burnRay(o, d, len, casterId),
             fireBoost: (casterId) => this.fireBoost(casterId), // (the dragon's wand: fire spells +60%)
             waters: () => this._flameWaters(),
@@ -263,7 +263,7 @@ export class Game {
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
             collision: this.collision,
             terrain: () => this.terrain,
-            leavesAt: (x, y, z) => !!this.world.leavesAt?.(x, y, z), // (the start-area trees' crowns stop a «Bombardo»)
+            leavesAt: (x, y, z) => !!this.world.leavesAt?.(x, y, z), // (the start-area trees' crowns stop a «Бомбардо»)
         });
         if (this.sound) {
             this.sound.setScene(this.scene);
@@ -293,8 +293,8 @@ export class Game {
         this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
         this._headBase = { yaw: 0, pitch: 0 };
         this.quake = new Quake(this); // «Earthquake»: creatures thrown, the ground breaking, shaking (Quake.js)
-        this.levitation = new Levitation(this); // «Wingardium Leviosa»
-        this.accio = new Accio(this); // «Accio»: a thing flies into the hand
+        this.levitation = new Levitation(this); // «Вингардиум Левиоса»
+        this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
         this.inventory = new Inventory(this); // five slots under the fatigue bar
@@ -307,18 +307,18 @@ export class Game {
         this.scrolls = new ScrollReading(this); // a scroll opened with both hands and read
         this.swim = new Swimming(this); // deep water: swimming, air, «Air Bubble»
         this.items = new ItemSystem(this); // wands, scrolls, shields, backpacks, bows, food… in the world and the hands
-        this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Lumos», drawing, «Reveal»
+        this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
         this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
         this.dismember = new Dismemberment(this); // a blade's edge cuts off arms, legs, heads (any creature)
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
         this.ships = new Ships(this); // the ships of the sea castles: decks, sails, the wheel, crews, cannons
-        this.onFlame.push((o, d, len, casterId) => this.ships.igniteAlong(o, d, len, casterId)); // («Inferno» sets sails and decks on fire)
+        this.onFlame.push((o, d, len, casterId) => this.ships.igniteAlong(o, d, len, casterId)); // («Инферно» sets sails and decks on fire)
         this.onFlame.push((o, d, len, casterId) => this._flameBurnsPaper(o, d, len, casterId)); // (scrolls and books in it burn)
         this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
         this.doors = new Doors(this); // «Create a Door», opening by the handle
-        this.locks = new Alohomora(this); // «Alohomora»: locked chests, house doors, the gates of throne rooms
+        this.locks = new Alohomora(this); // «Алохомора»: locked chests, house doors, the gates of throne rooms
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
@@ -337,7 +337,7 @@ export class Game {
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
-        this.servants = new Servants(this); // «Brainrot» servants of any kind: follow their master, fight for them
+        this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
         this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
@@ -460,7 +460,7 @@ export class Game {
                     const top = this.world.createPedestal(x, z);
                     this.items.spawnLoose(it, new THREE.Vector3(x, top + 0.9, z), { hover: true, broadcast: false }); // (at the shoulder of one standing at its foot)
                 });
-                // …and a wand, scrolls (the spell scrolls, health), the swift book of «Fly» and a book of building spells
+                // …and a wand, scrolls (the spell scrolls, health), the swift book of «Флайн» and a book of building spells
                 const magic = [
                     { kind: 'wand', uid: 'cw0', color: 0x8e5bd8, model: 4, fav: 'Inferno', power: 30, dir: 'destroy' },
                     { kind: 'scroll', uid: 'cr1', stat: 'spell', spell: 'LightningStrike' },
@@ -477,7 +477,7 @@ export class Game {
                 const btop = this.world.createPedestal(bx, bz);
                 this.books?.placeBook(new THREE.Vector3(bx, btop + 1.0, bz), 777001);
                 const sx = bx + 5, stop = this.world.createPedestal(sx, bz);
-                this.books?.placeBook(new THREE.Vector3(sx, stop + 1.0, bz), SWIFT_PEDESTAL_ID); // (the swift book: «Fly»)
+                this.books?.placeBook(new THREE.Vector3(sx, stop + 1.0, bz), SWIFT_PEDESTAL_ID); // (the swift book: «Флайн»)
                 const wx = sx + 5, wtop = this.world.createPedestal(wx, bz);
                 this.books?.placeBook(new THREE.Vector3(wx, wtop + 1.0, bz), WARD_PEDESTAL_ID); // (the book of protection: «Защита дома»)
                 // potions: a cauldron to try (water from the lake with «Waterbollow»), flasks and the
@@ -593,7 +593,7 @@ export class Game {
         const keep = this.wards?.keepFor(pos, radius) || [];
         this.applyExplosion(pos, radius, true, power, casterId, keep);
         this.explosions.push({ p: [pos.x, pos.y, pos.z], r: radius, ...(keep.length ? { k: keep } : {}) }); // (k: the houses' spheres it could not eat into)
-        // («Bombardo» cracks a house's sphere — three break it —, «Bombardo Maxima» breaks it at once)
+        // («Бомбардо» cracks a house's sphere — three break it —, «Бомбардо Максима» breaks it at once)
         if (power >= 1) this.wards?.struck(pos, radius, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId === 'local' ? this.localId : casterId);
         if (this.sync) this.sync.explosion(pos, radius, power, casterId);
     }
@@ -933,7 +933,7 @@ export class Game {
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
             const base = SCROLL_SPELL_COLOR[name] ? name : baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
-            if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творческом режиме. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Inferno»`, true);
+            if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творческом режиме. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
         // «Water Vortex», its «Bubble» / «Frozen», «Fire Maxima» (and nothing else from inside its ice)
@@ -954,18 +954,18 @@ export class Game {
             const stopped = (!placed || /стоп|stop/i.test(text)) && this.stopSpells();
             return placed ? 'Stand' : stopped ? 'Stop' : null;
         }
-        // «Паузин» in the air: hover; «Fly» while hovering: fly on (no new take-off)
+        // «Паузин» in the air: hover; «Флайн» while hovering: fly on (no new take-off)
         if (name === 'Pause') {
-            if (this.flight.pause()) { this.hud.setVoice('🛑 Паузин — вы парите на месте. Скажите «Fly», чтобы лететь дальше', true); return 'Pause'; }
+            if (this.flight.pause()) { this.hud.setVoice('🛑 Паузин — вы парите на месте. Скажите «Флайн», чтобы лететь дальше', true); return 'Pause'; }
             if (isFinal) this.hud.setVoice('«Паузин» работает только в полёте', true);
             return null;
         }
         if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
-        // «Maxima» while my house's sphere is being set: −5 mana, 1.5 m wider (before the water's / the duel's)
+        // «Максима» while my house's sphere is being set: −5 mana, 1.5 m wider (before the water's / the duel's)
         if (name === 'Maxima' && this.wards?.setting && !this._inDuel()) return this._castWard('WardGrow', isFinal);
-        // «Maxima» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
+        // «Максима» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
         if (name === 'Maxima' && this._inDuel() && !this.water?.active) return this.duel.maxima(isFinal);
         // In a duel nothing else can be cast (only the shield, with the other hand)
         if (this._inDuel()) { if (isFinal) this.hud.setVoice('⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)', true); return null; }
@@ -982,7 +982,7 @@ export class Game {
         if (name === 'Rescue') return this.bleeding.rescue(isFinal);
         if (name === 'Breakthrough' || name === 'BreakthroughMaxima') return this._castBreakthrough(name, isFinal);
         if (name === 'Attack') {
-            // my servants (a living tree, «Brainrot») go for the one the hand points at
+            // my servants (a living tree, «Брейнрот») go for the one the hand points at
             if (this.levitation.state?.kind !== 'weapon' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal);
             const hint = this.levitation.attack();
             if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
@@ -1000,14 +1000,14 @@ export class Game {
         // Duel magic: a charge flies at the creature the hand points at
         // Duel spells need a raised, pointing hand: the word alone (e.g. a friend's voice
         // reaching this microphone) never fires them while the arms hang down
-        // «Ice» is a duel spell too («Frozen» without a water ball as well) — but with a water ball it
+        // «Айс» is a duel spell too («Frozen» without a water ball as well) — but with a water ball it
         // freezes the water, and right after freezing water the ice words belong to the water
         let ice = false;
         if ((name === 'Ice' || name === 'Frozen') && !this.water.active) {
             if (performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
             ice = true;
         }
-        // («Jolt» alone, still being spoken: wait — it may yet be «Jolt Maxima»)
+        // («Джолт» alone, still being spoken: wait — it may yet be «Джолт Максима»)
         if (name === 'Jolt' && !isFinal) return null;
         // («Firefighting» alone, still being spoken: it may yet be «Firefighting Maxima»)
         if (name === 'Firefighting' && !isFinal) return null;
@@ -1019,7 +1019,7 @@ export class Game {
                 if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
                 return null;
             }
-            return this._castDuel(ice ? 'Ice' : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Ice» costs)
+            return this._castDuel(ice ? 'Ice' : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Айс» costs)
         }
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Alohomora' || name === 'AlohomoraMaxima') return this.locks.cast(name, isFinal); // (a lock the hand points at — Alohomora.js)
@@ -1064,7 +1064,7 @@ export class Game {
         if (!recent && name !== 'Flight') { if (isFinal) this._why('handDown', name); return null; }
         const now = Date.now();
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
-        // the player may be saying «Bombardo Maxima».
+        // the player may be saying «Бомбардо Максима».
         if (name === 'Bombardo' && !isFinal) {
             if (!this._pendingBombardo && now - this.lastSpellCastTime >= SPELL_COOLDOWN) {
                 this._pendingBombardo = { at: now };
@@ -1141,8 +1141,8 @@ export class Game {
     }
 
     /**
-     * «Protection House», its «Maxima», «Protection Invisible», «Protection House Grant»: once per
-     * phrase (the recognizer repeats an unfinished phrase; each «Maxima» shout costs mana).
+     * «Protection House», its «Максима», «Protection Invisible», «Protection House Grant»: once per
+     * phrase (the recognizer repeats an unfinished phrase; each «Максима» shout costs mana).
      */
     _castWard(name, isFinal) {
         const now = Date.now();
@@ -1186,10 +1186,10 @@ export class Game {
         if (ws === true) done.push('водяная буря');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
         if (this.waves?.stop()) done.push('волна');
-        if (W?._nox(false)) done.push('Lumos'); // (the tip and the thrown light)
+        if (W?._nox(false)) done.push('Люмос'); // (the tip and the thrown light)
         if (W?.drawing && W.drawing.until > performance.now()) { W.drawing.until = 0; done.push('рисование'); }
         if (W?.holo) { W._closeHolo(); done.push('тайны'); }
-        if (this.accio?.stop()) done.push('Accio');
+        if (this.accio?.stop()) done.push('Акцио');
         if (this.flight?.busy && this.flight.state !== 'landing') { this.flight.land('stop'); done.push('полёт'); }
         if (this.lightning) { if (this.lightning.hammer) this.gear?.hammerResult(false); this.lightning = null; this.hud.setTimer?.(null); done.push('молния'); }
         if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
@@ -1219,7 +1219,7 @@ export class Game {
         return costName;
     }
 
-    /** «Wind» / «Wind Maxima»: from the raised hand, where it points. */
+    /** «Вайнд» / «Вайнд Максима»: from the raised hand, where it points. */
     /**
      * «Breakthrough»: both arms a little below the horizon in front of you,
      * then raise them together (within 3 s) while saying the word — a wall of
@@ -1232,7 +1232,7 @@ export class Game {
     }
 
     _castBreakthrough(name, isFinal) {
-        if (!isFinal && name === 'Breakthrough') return null; // (wait for «Maxima»)
+        if (!isFinal && name === 'Breakthrough') return null; // (wait for «Максима»)
         if (this._bt?.pending) return null;
         const now = performance.now();
         const B = this._bt || (this._bt = {});
@@ -1354,7 +1354,7 @@ export class Game {
      * push it (or hold the hand still on the place a moment).
      */
     _castWave(name, isFinal) {
-        if (!isFinal && name === 'WaveAttack') return null; // (wait for a possible «Maxima»)
+        if (!isFinal && name === 'WaveAttack') return null; // (wait for a possible «Максима»)
         if (this.waves.busy) return null;
         const ch = this.character;
         const side = (this.wandSide() || ['right', 'left'].find((s) => ch.isArmRaised(s))) || this.magicHand || 'right';
@@ -1385,7 +1385,7 @@ export class Game {
         const now = Date.now();
         const early = this._interimCast;
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
-        // «Вайнд…» / «Overgrown…» heard while the phrase goes on: wait for a possible «Maxima»
+        // «Вайнд…» / «Overgrown…» heard while the phrase goes on: wait for a possible «Максима»
         if ((name === 'Wind' || name === 'Overgrown') && !isFinal) return null;
         const over = name.startsWith('Overgrown'); // (the same hand and the same way of aiming: «Overgrown» throws apart)
         const key = over ? '_lastOvergrown' : '_lastWind';
@@ -1393,7 +1393,7 @@ export class Game {
         const ch = this.character;
         const pref = this.magicHand || this.lastMagicHand || 'right';
         const side = this.wandSide() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s)));
-        if (!side) { if (isFinal) this.hud.setVoice(over ? '🌿 Поднимите руку и направьте её на тех, кого разбросать, — и скажите «Overgrown»' : '🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Wind»', true); return null; }
+        if (!side) { if (isFinal) this.hud.setVoice(over ? '🌿 Поднимите руку и направьте её на тех, кого разбросать, — и скажите «Overgrown»' : '🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         const origin = this.castOrigin(side);
@@ -1407,9 +1407,9 @@ export class Game {
     }
 
     /**
-     * «Brainrot»: no hand needed — the creature you look at (or the nearest one): a zombie,
+     * «Брейнрот»: no hand needed — the creature you look at (or the nearest one): a zombie,
      * an animal, a villager / a knight, somebody else's living tree — becomes your servant
-     * for a while: it follows you, fights your enemies and goes for whom «Attack» points at.
+     * for a while: it follows you, fights your enemies and goes for whom «Атак» points at.
      */
     _castBrainrot(isFinal) {
         const now = Date.now();
@@ -1432,13 +1432,13 @@ export class Game {
         for (const a of this.animals?.targets() || []) if (a.servantOf !== this.localId) consider('a', a.id, a.group.position, 1);
         for (const v of this.castleLife?.targets() || []) if (v.servantOf !== this.localId) consider('v', v.id, new THREE.Vector3(v.x, v.y, v.z), 2.4);
         for (const t of this.livingTrees?.targets() || []) if (t.master !== this.localId) consider('t', t.id, t.model.position, 5);
-        // a dragon: «Brainrot» does not work on it (its mind is far too strong — DragonKinds.ON_DRAGON)
+        // a dragon: «Брейнрот» does not work on it (its mind is far too strong — DragonKinds.ON_DRAGON)
         for (const d of this.dragons?.targets() || []) consider('D', d.id, d.model.position, 3 * d.size);
-        if (best?.k === 'D') { if (isFinal) this.hud.setVoice('🐉 Разум дракона слишком силён — «Brainrot» на него не действует', true); return null; }
-        // (a phoenix obeys nobody: «Brainrot» does not act on it — Phoenixes.TARGETS)
+        if (best?.k === 'D') { if (isFinal) this.hud.setVoice('🐉 Разум дракона слишком силён — «Брейнрот» на него не действует', true); return null; }
+        // (a phoenix obeys nobody: «Брейнрот» does not act on it — Phoenixes.TARGETS)
         for (const f of this.phoenixes?.targets() || []) consider('f', f.id, f.model.position, 1.2);
-        if (best?.k === 'f') { if (isFinal) this.hud.setVoice('🔥 Феникс никому не подчиняется — «Brainrot» на него не действует', true); return null; }
-        if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на существо (зомби, животное, жителя, рыцаря, живое дерево — не дальше 30 м) и скажите «Brainrot»', true); return null; }
+        if (best?.k === 'f') { if (isFinal) this.hud.setVoice('🔥 Феникс никому не подчиняется — «Брейнрот» на него не действует', true); return null; }
+        if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на существо (зомби, животное, жителя, рыцаря, живое дерево — не дальше 30 м) и скажите «Брейнрот»', true); return null; }
         const tired = this.combat.check('Brainrot');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('Brainrot');
@@ -1458,11 +1458,11 @@ export class Game {
         return 'Brainrot';
     }
 
-    /** «Attack» with servants: the hand points at someone — all my servants go for them. */
+    /** «Атак» with servants: the hand points at someone — all my servants go for them. */
     _commandAttack(isFinal) {
         const aim = this.duel.pickSide(false);
         const t = aim?.t;
-        if (!t || t.kind === 'b') { if (isFinal) this.hud.setVoice('✋ Направьте руку на того, кого атаковать, и скажите «Attack»', true); return null; }
+        if (!t || t.kind === 'b') { if (isFinal) this.hud.setVoice('✋ Направьте руку на того, кого атаковать, и скажите «Атак»', true); return null; }
         const target = { k: t.kind, id: t.id };
         if (this.authority) this.servants.command(this.localId, target);
         else this.sync?.servantAttack?.(target.k, target.id);
@@ -1747,7 +1747,7 @@ export class Game {
         const zp = z.group.position;
         if (z.isThrall) {
             if (performance.now() > z.thrallUntil) { z.setThrall(false); return this._zombieTarget(z); }
-            // its master's «Attack» target, else another zombie, else whoever attacks the master
+            // its master's «Атак» target, else another zombie, else whoever attacks the master
             const e = this.servants.enemyFor({ k: 'z', id: z.id }, z.thrallOwner, zp, 40);
             const ep = e ? this.servants.find(e.k, e.id) : null;
             if (ep && e.k === 'z') return { pos: ep.group.position, zombie: ep, distSq: zp.distanceToSquared(ep.group.position) };
@@ -1768,7 +1768,7 @@ export class Game {
         return player;
     }
 
-    /** Another wizard's «Wind» reached me: blown away (no harm; a shield stops it). */
+    /** Another wizard's «Вайнд» reached me: blown away (no harm; a shield stops it). */
     _blowMe(casterId, origin, pushAt, name = 'Wind') {
         if (casterId === 'local' || casterId === this.localId || this.combat.dead) return;
         if (this.wards?.shields(origin, this.combat.center(_v3))) return; // (in a protected house)
@@ -1831,7 +1831,7 @@ export class Game {
     }
 
     /** Targets for spells cast by `casterId` (players hit each other only in the free world). */
-    /** «Inferno»: the stream burns what it reaches. True if something burnt. */
+    /** «Инферно»: the stream burns what it reaches. True if something burnt. */
     _burnRay(o, d, len, casterId) {
         let hit = false;
         if (this.fire?.igniteAlong(o, d, len)) hit = true; // trees, dry blocks
@@ -1850,7 +1850,7 @@ export class Game {
     }
 
     /**
-     * «Inferno» reaches a scroll or a book — in my hands (every computer: its own player's hands) or
+     * «Инферно» reaches a scroll or a book — in my hands (every computer: its own player's hands) or
      * lying in the world (the host): it burns. A scroll burnt by my own flame gives me its power.
      */
     _flameBurnsPaper(o, d, len, casterId) {
@@ -1897,7 +1897,7 @@ export class Game {
 
     /**
      * A scroll or a book burnt at `p`: fire, ash; burnt by me (`mine`) — its power is mine
-     * (a scroll's bonus, a book's spells: the swift book's «Fly» is learned only so).
+     * (a scroll's bonus, a book's spells: the swift book's «Флайн» is learned only so).
      */
     _paperBurnt(p, it, mine) {
         for (let i = 0; i < 30; i++) this.fx.spark(p, i % 3 ? 0xff8a1a : 0xffe066, 0.12, _v2.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3), 0.9);
@@ -1909,7 +1909,7 @@ export class Game {
         else this.hud.toast?.('📜🔥 Свиток сгорел', 2000);
     }
 
-    /** «Inferno» said with a spell book in the hand: it burns there, its spells are mine. */
+    /** «Инферно» said with a spell book in the hand: it burns there, its spells are mine. */
     burnHeldBook() {
         const h = this.items?.heldOf('book');
         if (!h || h.item.runbook) return false;
@@ -2086,7 +2086,7 @@ export class Game {
         for (const b of shapes) this.iceCells.push(b);
     }
 
-    /** A «Bombardo» that was not followed by «Maxima» goes off now. */
+    /** A «Бомбардо» that was not followed by «Максима» goes off now. */
     _updatePendingSpell() {
         const p = this._pendingBombardo;
         if (!p || !this.active || Date.now() - p.at < BOMBARDO_WAIT) return;
@@ -2465,7 +2465,7 @@ export class Game {
                 this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0), 3.5);
                 if (this._bodyInRock(ch.group.position)) { ch.group.position.copy(was); this.knockback.set(0, 0, 0); break; } // (against the rock: it stops there)
             }
-            // (thrown through the air — «Jolt»: only the air slows it until it lands)
+            // (thrown through the air — «Джолт»: only the air slows it until it lands)
             this.knockback.multiplyScalar(Math.max(0, 1 - (this.knock.flyT > 0 ? 1 : this.knock.down ? 8 : 4) * dt));
         }
         // dizzy after a fall: the walk wavers from side to side (the view sways too: below)
@@ -2597,7 +2597,7 @@ export class Game {
         return this.dayCycle ? this.world.nightAmount > 0.6 : this.config.mode === 'survival';
     }
 
-    /** «Fly»: Superman flight steered by the torso. */
+    /** «Флайн»: Superman flight steered by the torso. */
     _updateFlight(dt, pose) {
         const ch = this.character;
         const flight = this.flight;
@@ -2693,7 +2693,7 @@ export class Game {
     }
 
     /** Start the flight spell (arms must be up). Returns true when it started. */
-    /** «Fly» is known: everywhere but «Выживание», where only the swift book-bird's book teaches it (an old scroll of flight too). */
+    /** «Флайн» is known: everywhere but «Выживание», where only the swift book-bird's book teaches it (an old scroll of flight too). */
     knowsFlight() {
         return this.config.mode !== 'freeworld' || !!this.bonus?.flight || !!this.books?.learned?.has('Flight');
     }
@@ -2729,13 +2729,13 @@ export class Game {
         return point;
     }
 
-    /** Outside Creative «Lightning Strike», «Thunderwave», «To the Sun», «Let it rain» and «Avada Kedavra» are learnt from a burnt scroll only. */
+    /** Outside Creative «Lightning Strike», «Thunderwave», «To the Sun», «Let it rain» and «Авада Кедавра» are learnt from a burnt scroll only. */
     knowsSpell(name) {
         const base = baseSpell(name);
         const m = this.config.mode;
         // «Защита дома»: only from the book of protection (the dark-blue book-bird) — everybody knows it in Creative
         if (isWardSpell(base)) return m === 'creative' || m === 'test' || !!this.books?.learned?.has(base);
-        const key = SCROLL_SPELL_COLOR[name] ? name : base; // («Alohomora Maxima»: its own scroll — the plain one is known)
+        const key = SCROLL_SPELL_COLOR[name] ? name : base; // («Алохомора Максима»: its own scroll — the plain one is known)
         if (!SCROLL_SPELL_COLOR[key]) return true;
         return m === 'creative' || m === 'test' || !!this.bonus?.spells?.[key];
     }
@@ -2745,18 +2745,18 @@ export class Game {
         if (this.knock?.down) return false; // (get up first)
         if (this.levitation.lifted) return false; // (held up by another wizard's Leviosa)
         if (!force && !this.knowsFlight()) {
-            this.hud.setVoice('📘 В «Выживании» летать нельзя, пока не сожжёте <b>быструю летающую книгу</b> (голубую, с серебром): собьёте её, возьмите и скажите «Inferno»', true);
+            this.hud.setVoice('📘 В «Выживании» летать нельзя, пока не сожжёте <b>быструю летающую книгу</b> (голубую, с серебром): собьёте её, возьмите и скажите «Инферно»', true);
             return false;
         }
         this.boards?.dropAll('fly'); // (off the board first; the board stays where it is)
         // Maps (labyrinths etc.) are meant to be walked: no flying over the walls
         if (this.world.isMap) {
-            this.hud.setVoice('🚫 На картах «Fly» не работает — только в режимах «Творческий», «Хардкор» и «Выживание»', true);
+            this.hud.setVoice('🚫 На картах «Флайн» не работает — только в режимах «Творческий», «Хардкор» и «Выживание»', true);
             return false;
         }
         const armsUp = this.character.areBothHandsUp() || Date.now() - (this._armsUpAt || 0) < 1500;
         if (!force && !armsUp) {
-            this.hud.setVoice('🦸 Для полёта поднимите <b>обе руки вверх</b> и скажите «Fly»', true);
+            this.hud.setVoice('🦸 Для полёта поднимите <b>обе руки вверх</b> и скажите «Флайн»', true);
             return false;
         }
         this.flight.start();
@@ -2804,7 +2804,7 @@ export class Game {
                 if (z.isDead && z.removable) { this.removeZombie(z); continue; }
                 continue; // (my fists: BodyStrikes — only a real blow that reaches the body)
             }
-            // held up by «Wingardium Leviosa»: Levitation carries it (it can't walk or bite)
+            // held up by «Вингардиум Левиоса»: Levitation carries it (it can't walk or bite)
             if (z.lev) { z._spinHalo?.(dt); continue; }
             const target = this._zombieTarget(z);
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
@@ -2825,7 +2825,7 @@ export class Game {
             }
 
 
-            // Zombie against zombie («Brainrot»: the servant and the others fight)
+            // Zombie against zombie («Брейнрот»: the servant and the others fight)
             if (target && target.zombie && target.distSq < 5.3) {
                 const now = Date.now();
                 if (now - (z.lastAttackTime || 0) > 900) {

@@ -15,10 +15,10 @@
  *
  * A locked door (a villager's house at night / with nobody home, the gates of a
  * throne room — src/game/Alohomora.js) doesn't give: the handle held, the leaf
- * only rattles in its frame. «Alohomora» unlocks it and it opens a crack; the
+ * only rattles in its frame. «Алохомора» unlocks it and it opens a crack; the
  * hand opens it the rest of the way.
  *
- * «Wingardium Leviosa» pointed at a door lifts it: carry it and say the
+ * «Вингардиум Левиоса» pointed at a door lifts it: carry it and say the
  * words again to put it down somewhere else.
  *
  * Doors are saved with the world and shared with the other players.
@@ -394,7 +394,7 @@ export class Doors {
 
     releaseAll() { this.release('left'); this.release('right'); }
 
-    /** «Wingardium Leviosa» pointed at a door. */
+    /** «Вингардиум Левиоса» pointed at a door. */
     tryLift(side) {
         const g = this.game;
         const ch = g.character;
@@ -412,7 +412,7 @@ export class Doors {
         best.door.lifted = true;
         this._setAngle(best.door, 0);
         this.carried = { door: best.door, side };
-        g.hud.setVoice('🪶 Дверь парит — скажите «Wingardium Leviosa» или «Stand», чтобы поставить', true);
+        g.hud.setVoice('🪶 Дверь парит — скажите «Вингардиум Левиоса» или «Stand», чтобы поставить', true);
         return true;
     }
 

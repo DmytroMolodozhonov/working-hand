@@ -189,7 +189,7 @@ export class ScrollReading {
         } else this.readCam = null;
         if (k > 0.6 && !R.told) {
             R.told = true;
-            g.hud.setVoice?.('📜 Свиток раскрыт. Чтобы выучить — сожгите его («Inferno»); разожмите вторую руку — свернётся', true);
+            g.hud.setVoice?.('📜 Свиток раскрыт. Чтобы выучить — сожгите его («Инферно»); разожмите вторую руку — свернётся', true);
         }
     }
 

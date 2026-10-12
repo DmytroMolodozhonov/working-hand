@@ -388,7 +388,7 @@ export class CastleLife {
             chest.room = c.room;
             g.chests.push(chest);
             if (g._openedChests?.has(c.id)) chest.setOpenInstant();
-            else g.locks?.restoreChest(chest); // (unlocked by «Alohomora» before)
+            else g.locks?.restoreChest(chest); // (unlocked by «Алохомора» before)
             cs.chests.push(chest);
         }
     }
@@ -662,9 +662,9 @@ export class CastleLife {
         const cs = v.cs;
         v.damageCooldown -= dt;
         v.sayT -= dt;
-        tickSlow(v, dt); // («Dust»: slowed for a while)
+        tickSlow(v, dt); // («Даст»: slowed for a while)
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.vy) this._fallStep(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
-        // held up by «Wingardium Leviosa»: Levitation carries the body
+        // held up by «Вингардиум Левиоса»: Levitation carries the body
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; }
         // stunned / frozen / thrown up by a spell
         if (v.stunT > 0 || v.vy) {
@@ -676,7 +676,7 @@ export class CastleLife {
         if (v.climb) { this._climbStep(v, dt); return; }
         // a great fire close by (the Hellfire): back off from it behind the shield, or run (fear())
         if (v.fireT > 0 && this._fireStep(v, dt)) return;
-        // «Brainrot»: a servant follows its master and fights for them
+        // «Брейнрот»: a servant follows its master and fights for them
         if (v.servantOf != null && this._serve(v, dt)) return;
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
         // a hostile player in sight: knights go for them
@@ -863,7 +863,7 @@ export class CastleLife {
         this._ground(v);
     }
 
-    /** A servant of «Brainrot»: after its master, at the master's enemies. */
+    /** A servant of «Брейнрот»: after its master, at the master's enemies. */
     _serve(v, dt) {
         const g = this.game;
         const sv = g.servants?.plan('v', v, _v.set(v.x, v.y, v.z), 2.6);
@@ -1620,7 +1620,7 @@ export class CastleLife {
         if (Math.abs(fp.y - 1.95 - v.y) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
         const sq = v.cs?.squads?.get(v.foe);
         if (sq) sq.blows++;
-        // (its sword knocked out by «Expelliarmus»: fists)
+        // (its sword knocked out by «Экспеллиармус»: fists)
         const dmg = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : STATS[v.role].dmg;
         if (v.foe === this.game.localId) this.struck(dmg, v.x, v.z, v.title);
         else this.game.sync?.villagerStrike?.(v.foe, dmg, v.x, v.z, v.title);
@@ -1654,10 +1654,10 @@ export class CastleLife {
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
         if (v.wizard) v.hurtAt = Date.now();
-        // the Master's dome: nothing gets through while it holds (but «Avada Kedavra»)
+        // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
         if (v.wizard && (v.fx & FX.DOME) && !opts.pierce) { v.domeHits = (v.domeHits || 1) - 1; if (v.domeHits <= 0) v.fx &= ~FX.DOME; this._flash(v); return; }
         // a shield held up (the shield wall, the ones holding a place, a wizard's hand shield) takes a blow
-        // or a spell from the front: little gets through. «Avada Kedavra» passes any shield.
+        // or a spell from the front: little gets through. «Авада Кедавра» passes any shield.
         if (dir && !opts.pierce && v.foe && this._shieldUp(v)) {
             if (dir.x * -Math.sin(v.yaw) + dir.z * -Math.cos(v.yaw) < -0.35) {
                 dmg *= opts.fire ? 0.5 : 0.25; // (fire goes round a shield: it only halves it)
@@ -1666,7 +1666,7 @@ export class CastleLife {
             }
         }
         // armour takes most of the blow: the hearts go down many times slower
-        if (opts.pierce) v.hp = 0; // («Avada Kedavra»: no armour stops it)
+        if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
         else if (v.armor > 0 && opts.fire) {
             // fire heats the armour through: it takes half, and burns less — but the hearts still go down
             const a = Math.min(v.armor, dmg * 0.5);
@@ -2294,7 +2294,7 @@ export class CastleLife {
                 if (!c.locked || c.isOpen || c.picked) continue;
                 const p = c.getPosition();
                 if (Math.hypot(p.x - me.x, p.z - me.z) < 5) {
-                    g.hud.setVoice(cs.def.kind === 'tower' ? '🔒 Сундук заперт. Сундуки академии откроются, когда падёт Мастер' : '🔒 Сундук заперт — покажите на замок и скажите «Alohomora» (если стража увидит — это кража)', true);
+                    g.hud.setVoice(cs.def.kind === 'tower' ? '🔒 Сундук заперт. Сундуки академии откроются, когда падёт Мастер' : '🔒 Сундук заперт — покажите на замок и скажите «Алохомора» (если стража увидит — это кража)', true);
                     this._lockMsgT = 6;
                     return;
                 }
@@ -2341,7 +2341,7 @@ export class CastleLife {
                 if ((fx & 128) && !(v.fx & 128)) { this.wizards.fx.smoke(v); v.x = x; v.y = y; v.z = z; this.wizards.fx.smoke(v); }
                 v.fx = fx ?? 0; v.aimPitch = pitch ?? 0;
             }
-            // («Expelliarmus» knocked its sword out: the sword flies / lies about as a weapon of its own)
+            // («Экспеллиармус» knocked its sword out: the sword flies / lies about as a weapon of its own)
             if (disarmed && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead') v.dead = true;

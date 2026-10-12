@@ -1,8 +1,8 @@
 /**
- * Accio.js — «Accio»: summon a thing into your hand.
+ * Accio.js — «Акцио»: summon a thing into your hand.
  *
  * Raise a hand, point it at a loose object (a sword, an axe…) up to 30 m away
- * and say «Accio»: the object flies to the hand and lands in it, held. It
+ * and say «Акцио»: the object flies to the hand and lands in it, held. It
  * stays in the hand even though the hand was open when it arrived — opening
  * the hand drops it only after it has been closed around it once.
  */
@@ -50,7 +50,7 @@ export class Accio {
         const g = this.game;
         const ch = g.character;
         let best = null;
-        // (a dragon is no thing: «Accio» does not act on it — DragonKinds.ON_DRAGON.Accio; its egg is a thing: it flies)
+        // (a dragon is no thing: «Акцио» does not act on it — DragonKinds.ON_DRAGON.Accio; its egg is a thing: it flies)
         // the thing comes into a free hand: the pointing one, or the other (a wand in the
         // pointing hand: the other hand catches — before, things lying about were not even looked at)
         const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.boards?.handBusy(sd);
@@ -143,14 +143,14 @@ export class Accio {
             const rb = this._runnerHint();
             if (rb) return rb;
             const busy = !free('left') && !free('right');
-            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 30 м — и скажите «Accio»';
+            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 30 м — и скажите «Акцио»';
         }
         if (best.rb) {
             if (g.sound) g.sound.playWhoosh?.();
             if (best.catcher && g.runner.accioToHand?.(best.rb, best.catcher)) return null;
             g.runner.accio(best.rb, best.hand);
             // (a toast: the voice line is taken by «✨ ACCIO» right after)
-            if (!best.catcher) g.hud?.toast?.('🪄 Обе руки заняты — бегущая книга упала у ваших ног. Освободите руку, и «Accio» принесёт её прямо в неё', 4000);
+            if (!best.catcher) g.hud?.toast?.('🪄 Обе руки заняты — бегущая книга упала у ваших ног. Освободите руку, и «Акцио» принесёт её прямо в неё', 4000);
             return null;
         }
         if (best.body) { g.runner?.accio(best.body, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
@@ -198,9 +198,9 @@ export class Accio {
         if (!books.length) return null;
         const me = ch.group.position;
         const near = Math.min(...books.map((b) => b.pos.distanceTo(me)));
-        if (near > ACCIO.RANGE) return `🪄 Бегущая книга слишком далеко (${Math.round(near)} м) — «Accio» достаёт до ${ACCIO.RANGE} м`;
+        if (near > ACCIO.RANGE) return `🪄 Бегущая книга слишком далеко (${Math.round(near)} м) — «Акцио» достаёт до ${ACCIO.RANGE} м`;
         const lift = g.currentPose?.armLift;
-        if (!['left', 'right'].some((s) => ch.isArmRaised(s) || (lift && lift[s] > ACCIO.LIFT))) return '🪄 Поднимите руку (или палочку) и покажите на бегущую книгу — и скажите «Accio»';
+        if (!['left', 'right'].some((s) => ch.isArmRaised(s) || (lift && lift[s] > ACCIO.LIFT))) return '🪄 Поднимите руку (или палочку) и покажите на бегущую книгу — и скажите «Акцио»';
         return '🪄 Бегущая книга не там, куда показывает рука — направьте руку (палочку) прямо на неё';
     }
 

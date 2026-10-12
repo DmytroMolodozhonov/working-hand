@@ -7,8 +7,8 @@
  *    handle drag it any way. One hand barely rocks it. A fast shove high on it with both hands
  *    knocks it over; so does a blast nearby. Overturned, it pours out everything inside.
  *    To stand it up: both hands on the rim / the handles, lift — it rises as far as the hands
- *    lift it; let go before it balances and it falls back. «Wingardium Leviosa» lifts it too
- *    (and tilted in the air it pours out). «Accio» does not work on it: it is far too heavy to
+ *    lift it; let go before it balances and it falls back. «Вингардиум Левиоса» lifts it too
+ *    (and tilted in the air it pours out). «Акцио» does not work on it: it is far too heavy to
  *    fly into a hand (and would not fit in one) — Accio looks only at things and weapons.
  *  - Water: a «Waterbollow» ball thrown or dropped into its opening pours in (a small ball fills
  *    a third, one big ball fills it). Ice does not pour: a frozen ball lies on it like on any
@@ -21,13 +21,13 @@
  *    and a forgotten, rusty one lies now and then in a cave chamber, often overturned.
  *
  * What acts on it (and what does not, and why):
- *   blasts («Bombardo», cannon balls, …) — thrown aside, a near one knocked over (Game.applyExplosion → blast);
- *   «Wingardium Leviosa» — lifted, carried slowly, pours out tilted, falls when let go (and hurts
+ *   blasts («Бомбардо», cannon balls, …) — thrown aside, a near one knocked over (Game.applyExplosion → blast);
+ *   «Вингардиум Левиоса» — lifted, carried slowly, pours out tilted, falls when let go (and hurts
  *     whoever it falls on: zombies, animals, people of the castles and the ships, the spider, me);
  *   a «Waterbollow» ball — pours in; ice, «Water Vortex», waves — no (a vortex / a wave does not
  *     fill a pot: only water brought and poured in by hand counts);
- *   «Accio», «Wind», punches, blades, arrows — no: far too heavy (a blade or an arrow just rings on the iron);
- *   fire, «Inferno», lightning — no: iron does not burn;
+ *   «Акцио», «Вайнд», punches, blades, arrows — no: far too heavy (a blade or an arrow just rings on the iron);
+ *   fire, «Инферно», lightning — no: iron does not burn;
  *   creatures — they bump into it like into a chest (its box); it does not chase or hurt them by itself;
  *   ships — it can stand on a deck, but it does not sail with the ship (left where it was put).
  *
@@ -738,7 +738,7 @@ export class Cauldrons {
     }
 
     // ================================================================= magic, blasts
-    /** (host) «Wingardium Leviosa» takes it. */
+    /** (host) «Вингардиум Левиоса» takes it. */
     levStart(c) {
         c.lev = true;
         c.fall = null;

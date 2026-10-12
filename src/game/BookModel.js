@@ -13,7 +13,7 @@ import * as THREE from 'three';
 export const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];
 export const BOOK = { W: 0.42, H: 0.6, T: 0.06, B: 0.025 }; // half width, height, pages' thickness, board
 
-/** The swift book-bird's book («Fly»): sky blue with silver trim. */
+/** The swift book-bird's book («Флайн»): sky blue with silver trim. */
 export const SWIFT_COVER = 0x7fc8f0, SWIFT_TRIM = 0xd8e4ec;
 /** The book of protection («Защита дома», HouseWards.js): deep blue with silver trim and a silver shield. */
 export const WARD_COVER = 0x1b2f7a, WARD_TRIM = 0xd8e4ec;

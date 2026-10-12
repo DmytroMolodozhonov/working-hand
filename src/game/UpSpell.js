@@ -1,5 +1,5 @@
 /**
- * UpSpell.js — «Up» («Up»): a raised hand and the word.
+ * UpSpell.js — «Up» («Ап»): a raised hand and the word.
  *
  *   lying on the ground (knocked down)  → I get up at once (the usual 0.7 s back on the feet).
  *   swimming in deep water (lake, sea)  → the water throws me up and out: a real arc under
@@ -7,7 +7,7 @@
  *                                         (its horizontal part; straight up = straight up).
  *   standing on anything (ground, a deck, a roof, a rock) → the same leap up from where I stand.
  *   in the air (already falling or flying) → nothing: the spell needs something to push from.
- * 7 mana (Combat.SPELL_COST). Not while stunned («Stupefy») or frozen — Game checks that first.
+ * 7 mana (Combat.SPELL_COST). Not while stunned («Остолбеней») or frozen — Game checks that first.
  * «Up» is a short word: it counts only as the whole phrase and only with a hand raised up —
  * ordinary speech never throws anyone into the air.
  */

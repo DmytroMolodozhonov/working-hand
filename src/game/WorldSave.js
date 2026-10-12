@@ -226,7 +226,7 @@ export class WorldKeeper {
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
             doors: g.doors?.snapshot() || [],
-            locks: g.locks?.snapshot() || null, // («Alohomora»: what was unlocked, the gates)
+            locks: g.locks?.snapshot() || null, // («Алохомора»: what was unlocked, the gates)
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,

@@ -70,7 +70,7 @@ export const DRAGON = {
     GUARD: 10, // m beyond the hall's wall: an intruder there is chased
     HEAR: 60, // m: a blast, a spell's thunder this near wakes it
     SLEEP_SEE: 9, // m: it wakes when somebody comes this near while it sleeps…
-    SLEEP_SEE_LIGHT: 24, // …a light («Lumos», a torch) this near…
+    SLEEP_SEE_LIGHT: 24, // …a light («Люмос», a torch) this near…
     SLEEP_SEE_RUN: 16, // …somebody running this near
     CALM: 40, // s with nobody near: it settles down to sleep again
 };
@@ -81,7 +81,7 @@ export const flameReach = (flame) => DRAGON.FLAME_REACH + DRAGON.FLAME_PER * fla
 // ============================================================ «на кого и на что»
 /**
  * EVERY fire there is — a dragon does not care about any of it (the author: «как ни жги, даже
- * адским огнём, ему всё равно»): «Inferno» (and its Максима), «Fire» (a campfire, burning ground),
+ * адским огнём, ему всё равно»): «Инферно» (and its Максима), «Fire» (a campfire, burning ground),
  * «Fire Maxima» (the fire flower), «Let the Hellfire Come», burning trees and ground, a dragon's
  * own flame (its own kind's and any other's), lava (none in the game yet: written so it stays so).
  */
@@ -115,16 +115,16 @@ export const ON_DRAGON = {
     melee: { mult: 0.35, why: 'меч и топор: чешуя толстая — треть урона, отрубить ничего нельзя' },
     arrow: { mult: 0.3, why: 'стрелы почти отскакивают от чешуи — треть урона' },
     fist: { mult: 0.05, why: 'кулаком дракона не пробить' },
-    servant: { mult: 0.5, why: 'слуги («Brainrot», живое дерево) бьют вполсилы' },
+    servant: { mult: 0.5, why: 'слуги («Брейнрот», живое дерево) бьют вполсилы' },
     Ward: { mult: 1, why: 'сфера защиты дома отталкивает и его' },
     bleed: { mult: 0, why: 'не истекает кровью: ничего не отрублено' },
     // the rest (Dragons.js says it where it happens)
-    Wind: { dmg: 0, why: '«Wind» и толчки: дракон чуть качнётся — сдуть или свалить такого великана нельзя' },
-    Jolt: { dmg: 0, why: '«Jolt»: дракон только качнётся и разозлится — отбросить такого великана нельзя' },
-    JoltMaxima: { dmg: 0, why: '«Jolt Maxima»: тоже только качнётся' },
+    Wind: { dmg: 0, why: '«Вайнд» и толчки: дракон чуть качнётся — сдуть или свалить такого великана нельзя' },
+    Jolt: { dmg: 0, why: '«Джолт»: дракон только качнётся и разозлится — отбросить такого великана нельзя' },
+    JoltMaxima: { dmg: 0, why: '«Джолт Максима»: тоже только качнётся' },
     Levitation: { dmg: 0, why: '«Левиоса» не поднимет — слишком тяжёлый' },
-    Accio: { dmg: 0, why: '«Accio» — для вещей, не для существ' },
-    Brainrot: { dmg: 0, why: '«Brainrot» не действует: разум дракона слишком силён' },
+    Accio: { dmg: 0, why: '«Акцио» — для вещей, не для существ' },
+    Brainrot: { dmg: 0, why: '«Брейнрот» не действует: разум дракона слишком силён' },
     Alohomora: { dmg: 0, why: 'нечего отпирать — не действует' },
     WaterVortex: { dmg: 0, why: 'водяной шар не вмещает его: вода только окатывает — дракон слишком большой' },
     WaveAttack: { dmg: 0, why: 'волна только окатывает — дракон слишком тяжёлый' },
@@ -202,10 +202,10 @@ export { POUCH as POUCH_MAX_COINS };
  * The dragon's wand (a killed dragon drops one): deep crimson, dark-red wood glowing like embers.
  * Every fire spell is 60% stronger with it; its mana is the same (the author: «за эти 60% мана не
  * тратится»). Which spells are fire (exactly):
- *   «Inferno» (Inferno, and «Inferno Максима»), «Fire» (the campfire: it burns 60% longer),
+ *   «Инферно» (Inferno, and «Инферно Максима»), «Fire» (the campfire: it burns 60% longer),
  *   «Fire Maxima» (the fire flower), «Let the Hellfire Come» (Hellfire).
- * Not fire: «Bombardo» (a blast — its fire on trees is a side effect, the blast is its power),
- * «Lightning Strike», «Thunderwave», «Sapira»… — like any wand for them (+15%).
+ * Not fire: «Бомбардо» (a blast — its fire on trees is a side effect, the blast is its power),
+ * «Lightning Strike», «Thunderwave», «Сапира»… — like any wand for them (+15%).
  */
 export const FIRE_SPELLS = new Set(['Inferno', 'InfernoMaxima', 'Fire', 'FireMaxima', 'Hellfire']);
 export const DRAGON_WAND_FIRE = 1.6;

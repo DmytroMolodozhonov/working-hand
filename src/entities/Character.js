@@ -114,7 +114,7 @@ export class VoxelCharacter {
         this.fallDir = 'left';
         this._fallRoll = 0;
         this._fallPitch = 0;
-        this.tumbleAng = 0; // (thrown by «Jolt»: how far the body has flipped over in the air, rad)
+        this.tumbleAng = 0; // (thrown by «Джолт»: how far the body has flipped over in the air, rad)
         this.tumbleDir = null;
         this._pitchOwned = false;
         this.staggerLean = 0; // reeling: the body leans back (+) / forward (−)…
@@ -623,7 +623,7 @@ export class VoxelCharacter {
         this._fallPitch += (px - this._fallPitch) * kf;
         this._fallRoll += (rz - this._fallRoll) * kf;
         if (Math.abs(this._fallRoll) < 0.002 && rz === 0) this._fallRoll = 0;
-        // thrown by «Jolt»: the whole body flips over in the air the way it falls (Knockdown.tumbleAng)
+        // thrown by «Джолт»: the whole body flips over in the air the way it falls (Knockdown.tumbleAng)
         const [tx, tz] = this.tumbleAng ? (FALL[this.tumbleDir || this.fallDir] || FALL.back).map((a) => Math.sign(a) * this.tumbleAng) : [0, 0];
         if (Math.abs(this._fallRoll) > 0.002 || tz || this.boardRoll || this.group.rotation.z !== 0) this.group.rotation.z = this._fallRoll + tz + (this.boardRoll || 0); // (+ tilted with a surfboard)
         // (x is shared with flight and the bed: owned only while falling, lying, rising or reeling — those exclude flight and bed)
@@ -884,7 +884,7 @@ export class VoxelCharacter {
             run: this.isRunning || this.stepping > 0 ? r2(this.isRunning ? this.runIntensity : 0.6) : -1,
             cr: this.isCrouching ? 1 : 0,
             kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
-            tb: this.knockedDown && this.tumbleAng ? r3(this.tumbleAng) : undefined, // (flipping over in the air: «Jolt»)
+            tb: this.knockedDown && this.tumbleAng ? r3(this.tumbleAng) : undefined, // (flipping over in the air: «Джолт»)
             ku: this.knockedDown && this.liftUp > 0 ? r2(this.liftUp) : undefined,
             sg: this.stepping > 0 ? [r2(this.staggerLean || 0), r2(this.staggerRoll || 0)] : undefined,
             lg: this.legPose ? [r3(this.legPose.left?.hip || 0), r3(this.legPose.right?.hip || 0)] : undefined, // (on a surfboard)

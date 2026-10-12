@@ -335,7 +335,7 @@ export class WeaponSystem {
             const w = hs.held;
             // Weapon got taken by the network (another player / host reset)
             if (w.holder == null || w.holder.side !== side) { this._forget(side, hand); return; }
-            // Summoned into an open hand («Accio», a slot): kept until the hand has closed on it once
+            // Summoned into an open hand («Акцио», a slot): kept until the hand has closed on it once
             if (hs.waitClose) { hs.waitClose = false; hs.drop.reset(false); }
             if (w.stuckIn) { this._holdStuck(side, hs, w, dt, ch, curl, tracked); return; }
             if (holdsFast(ch)) { hs.thr.reset(); hs.drop.since = 0; } // (swimming: the strokes never throw or drop it)
@@ -656,7 +656,7 @@ export class WeaponSystem {
     // ----------------------------------------------------------------- combat
     /**
      * Blade vs zombie hits for the local player's held weapons — and the one
-     * floating by «Wingardium Leviosa» (it is swung with the wrist).
+     * floating by «Вингардиум Левиоса» (it is swung with the wrist).
      * @param {Zombie[]} zombies
      */
     checkHits(zombies, dt) {

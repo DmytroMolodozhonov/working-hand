@@ -7,7 +7,7 @@
  *     audio node for every hit and never released it),
  *   - positional sounds are actually placed in the scene (death sounds were
  *     always played at the world origin before),
- *   - the explosion / cast sounds for «Bombardo» are synthesised in code,
+ *   - the explosion / cast sounds for «Бомбардо» are synthesised in code,
  *   - a missing or broken file no longer disables all sound.
  */
 
@@ -436,8 +436,8 @@ export class SoundManager {
     playIce() { this._spell(this.sounds.ice, 1.4); }
 
     /**
-     * «Jolt»: a short, sharp whoosh of shoved air (cast), or a deep thump on the body (impact)
-     * — made here, no file needed; «Maxima» louder and deeper.
+     * «Джолт»: a short, sharp whoosh of shoved air (cast), or a deep thump on the body (impact)
+     * — made here, no file needed; «Максима» louder and deeper.
      */
     playJolt(maxima = false, impact = false) {
         if (!this.enabled || !this.context) return;

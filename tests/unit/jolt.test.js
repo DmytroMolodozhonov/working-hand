@@ -27,7 +27,7 @@ test('«Джолт» costs 5, «Джолт Максима» 15 (a strong spell) 
     assert.equal(JOLT.JoltMaxima.push, 3 * JOLT.Jolt.push);
     assert.ok(DUEL_SPELLS.Jolt && DUEL_SPELLS.JoltMaxima);
     assert.equal(DUEL_SPELL_NAME.JoltMaxima, 'JoltMaxima');
-    for (const n of ['Jolt', 'Jolt Maxima']) assert.equal(SPELLS.find((s) => s.name === n)?.cat, 'duel', n);
+    for (const n of ['Джолт', 'Джолт Максима']) assert.equal(SPELLS.find((s) => s.name === n)?.cat, 'duel', n);
 });
 
 test('«Джолт» on me: thrown back off the feet, through the air, tumbling (Maxima: 3× the push)', () => {

@@ -266,9 +266,7 @@ test('voice: «Атак» and «Rescue»; wand words', () => {
     for (const w of ['rescue', 'Рескью']) assert.equal(matchSpell(w), 'Rescue', w);
     assert.equal(matchSpell('wave attack'), 'WaveAttack');
     assert.equal(matchSpell('люмос максима'), 'LumosMaxima');
-    assert.equal(matchSpell('reveal'), 'Reveal');
-    assert.equal(matchSpell('равиал'), 'Reveal');
-    assert.notEqual(matchSpell('раскрой свои секреты'), 'Reveal'); // (only the English word now: «раскрой» is talk)
+    assert.equal(matchSpell('раскрой свои секреты'), 'Reveal');
     assert.equal(matchSpell('латин вратин'), 'Draw');
     // «Lightning Writing» is the drawing — not «Lightning Strike» (the same first word)
     for (const w of ['лайтнинг райтинг', 'lightning writing', 'лайтинг райтинг', 'лайтнин врайтин']) assert.equal(matchSpell(w), 'Draw', w);

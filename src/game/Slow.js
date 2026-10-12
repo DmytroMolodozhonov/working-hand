@@ -1,5 +1,5 @@
 /**
- * Slow.js — «Dust» (Dust): sand in the eyes and the joints slows any creature
+ * Slow.js — «Даст» (Dust): sand in the eyes and the joints slows any creature
  * down for a while. Every creature (zombies, animals, villagers, knights…)
  * keeps `slowT` (seconds left); the player's own is in Combat.slowLeft.
  */

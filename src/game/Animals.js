@@ -9,7 +9,7 @@
  *
  * A killed animal falls on its side and stays: take its meat by hand (or
  * «Gather» it all at once), up to 10 pieces in a slot. Raw meat +2 HP, a
- * steak +4 HP: burn the carcass (or the living animal) with «Inferno» and
+ * steak +4 HP: burn the carcass (or the living animal) with «Инферно» and
  * the meat is cooked. When all the meat is taken only bones are left.
  *
  * Horses (several colours) can be tamed: hold an apple (red or golden) to the horse's
@@ -767,7 +767,7 @@ export class Animals {
         const p = a.group.position;
         a.t += dt;
         if (a.damageCooldown > 0) a.damageCooldown -= dt;
-        tickSlow(a, dt); // («Dust»: slowed for a while)
+        tickSlow(a, dt); // («Даст»: slowed for a while)
         if (a.fly && a.stunT > 0) this._dropFromSky(a, a.stunT); // (stunned, frozen… in the air: it falls)
         if (a.stunT > 0) {
             // stunned / thrown by a spell or a blast: no walking until it comes to itself
@@ -784,7 +784,7 @@ export class Animals {
         if (a.form && this.guards.think(a, dt)) return; // (the bronze bull / the minotaur: HerdGuards.js)
         if (a.type === 'runbook' && g.runner) { g.runner.think(a, dt); return; } // (runs, dodges, hides: RunningBook.js)
         let speed = 0, bunch = false;
-        // «Brainrot»: a servant follows its master and fights for them
+        // «Брейнрот»: a servant follows its master and fights for them
         const sv = a.servantOf != null ? g.servants?.plan('a', a, p, 1.6 * S.size + 0.8) : null;
         if (sv && a.type === 'pig' && sv.mode !== 'strike' && sv.d > 24 && this._canFly(a)) {
             // a servant pig far from its master flies after them
@@ -1478,7 +1478,7 @@ export class Animals {
                 const ap = a.group.position;
                 if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && outOfSight(me, look, ap.x, ap.z, 1.2)) { this._remove(a); continue; }
                 if (a.dead) {
-                    if (a.lev?.body) continue; // (a body held up by «Wingardium Leviosa»: Levitation carries it)
+                    if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)
                     this._body(a, dt); // (carcasses fall into craters too)
                     if (a.bonesAt && performance.now() - a.bonesAt > 120000) this._remove(a);
@@ -1488,7 +1488,7 @@ export class Animals {
                 if (a.rider && a.rider !== g.localId) { if (a.model.userData.wings) this._pigBody(a, dt); continue; } // a guest rides it: their computer moves it (a Pegasus' wings beat here too)
                 if (a === this.riding) continue;
                 if (a.lev) {
-                    // (held up by «Wingardium Leviosa»: Levitation carries it — a pig beats its wings in vain)
+                    // (held up by «Вингардиум Левиоса»: Levitation carries it — a pig beats its wings in vain)
                     if (a.fly) { a.fly = null; a.airborne = false; }
                     if (a.type === 'pig') a.flyCode = 1;
                     continue;

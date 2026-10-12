@@ -3,12 +3,12 @@
  *
  *   Words        «Firefighting» as the Russian recognizer writes it: «файрфайтинг», «фаерфайтинг»,
  *                «файр файтинг», «фаер файтинг», «файрфайтин», «firefighting», «fire fighting»…
- *                (the fire word AND the fighting word: «Fire», «Fire Maxima», «Inferno» and «Let the
- *                Hellfire Come» never contain «файтинг»); with «Maxima» — «Firefighting Maxima».
- *   Casting      a raised hand (or the wand), like «Wind»: the water comes from the hand / the wand's tip.
+ *                (the fire word AND the fighting word: «Fire», «Fire Maxima», «Инферно» and «Let the
+ *                Hellfire Come» never contain «файтинг»); with «Максима» — «Firefighting Maxima».
+ *   Casting      a raised hand (or the wand), like «Вайнд»: the water comes from the hand / the wand's tip.
  *   Plain        5 mana: one burst — a cone of cold blue-white water and mist, up to 15 m (it stops at
  *                walls). Whatever fire it reaches goes out at once: campfires, burning trees, grass,
- *                houses, a burning living tree, ships' fires, an «Inferno» stream, a «Fire Maxima»
+ *                houses, a burning living tree, ships' fires, an «Инферно» stream, a «Fire Maxima»
  *                flying or blooming. «Let the Hellfire Come» is stronger: a burst only knocks its blaze
  *                back (smaller, and it can't grow for a moment) and puts out the small fires it left on
  *                the ground (the ring's sections) — only «Firefighting Maxima» drowns the blaze.
@@ -65,7 +65,7 @@ export const FIREFIGHT_TARGETS = {
     campfires: { does: 'костёр («Fire») гаснет совсем', why: 'вода' },
     trees: { does: 'горящие деревья гаснут (что сгорело — сгорело)', why: 'вода' },
     blocks: { does: 'горящая трава, листья, дерево, дома и стены замков гаснут', why: 'вода' },
-    inferno: { does: 'поток «Inferno», на который попала вода, гаснет сразу (у любого волшебника)', why: 'вода гасит пламя' },
+    inferno: { does: 'поток «Инферно», на который попала вода, гаснет сразу (у любого волшебника)', why: 'вода гасит пламя' },
     fireMaxima: { does: 'огненная спираль «Fire Maxima» гаснет в полёте и не распускается; цветок гаснет', why: 'вода' },
     hellfire: { does: 'обычный всплеск только сбивает его (меньше и не растёт пару секунд); Maxima, пока на нём, заливает: он уменьшается и гаснет (и кольцо тоже)', why: 'адский огонь сильнее обычной воды' },
     hellfireLeft: { does: 'брошенные огни адского огня: маленькие (части кольца) гаснут от всплеска, большой — уменьшается; Maxima гасит все', why: 'вода' },
@@ -161,7 +161,7 @@ export class Firefighting {
         return want;
     }
 
-    /** Fires, the «Inferno», «Fire Maxima», burning living trees, creatures, me. @returns true: a fire went out */
+    /** Fires, the «Инферно», «Fire Maxima», burning living trees, creatures, me. @returns true: a fire went out */
     _douse(sp, reach, half, hit) {
         const g = this.game, o = sp.o, d = sp.d;
         const auth = !!g.authority;
@@ -191,7 +191,7 @@ export class Firefighting {
                 did = true;
             }
         }
-        // «Inferno» streams (anyone's): water on the flame puts it out
+        // «Инферно» streams (anyone's): water on the flame puts it out
         for (const s of g.spells?.spells || []) {
             if (s.kind !== 'Inferno' || !s.flame || !(s.life > 0) || !(s.flame.len > 0)) continue;
             const f = s.flame;
@@ -202,7 +202,7 @@ export class Firefighting {
             did = true;
             this._steam(_b, 1.2);
             this._note({ ev: 'inferno', by: s.by });
-            if (s.by === g.localId || s.by === 'local') g.hud?.setVoice?.('💨 Ваше пламя «Inferno» залили водой', true);
+            if (s.by === g.localId || s.by === 'local') g.hud?.setVoice?.('💨 Ваше пламя «Инферно» залили водой', true);
         }
         // «Fire Maxima» (every computer keeps its own): in flight it goes out, the flower too
         const fx = g.vortex?.effects;

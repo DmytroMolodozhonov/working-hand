@@ -128,7 +128,7 @@ export const SPELL_PHYSICS = {
     Inferno: { push: 1.5, jolt: 0.6 },
     Ward: { push: 7, jolt: 1.5 }, // (a house's barrier shoves back the one who pushes on it: HouseWards.js)
     Hellfire: { push: 0, jolt: 0.8 }, // (it burns, it does not push: Hellfire.js)
-    Sands: { push: 5, jolt: 2.5 }, SandsDuel: { push: 5, jolt: 2.5 }, // («Dust»: a light puff — the head jolts, the legs slow down: Slow.js)
+    Sands: { push: 5, jolt: 2.5 }, SandsDuel: { push: 5, jolt: 2.5 }, // («Даст»: a light puff — the head jolts, the legs slow down: Slow.js)
     Wind: { push: 26, range: 14, jolt: 1 }, WindMaxima: { push: 78, range: 24, jolt: 2 }, // (on bodies: twice its push on things — SpellManager.castWind)
     // («Overgrown»: thrown apart to the sides and up — never hurts by itself; Overgrown.js)
     Overgrown: { push: 16, range: 16, toss: 5, jolt: 1 }, OvergrownMaxima: { push: 32, range: 24, toss: 10, jolt: 2 },
@@ -137,7 +137,7 @@ export const SPELL_PHYSICS = {
     Thunderwave: { push: 20, thunder: true, jolt: 3 },
     Sapira: { push: 12, jolt: 3 }, SapiraDuel: { push: 12, jolt: 3 },
     Expelliarmus: { push: 3, jolt: 2 }, // (a jolt; what it really does is knock the wand out: Expelliarmus.js)
-    // («Jolt»: a bolt of air — off the feet, thrown back and up, a tumble in the air (Duel.JOLT);
+    // («Джолт»: a bolt of air — off the feet, thrown back and up, a tumble in the air (Duel.JOLT);
     //  the toss stays under a hurting fall's height on flat ground: only a real drop hurts)
     Jolt: { push: 20, always: true, down: 2.5, toss: 7, jolt: 3 }, JoltMaxima: { push: 60, always: true, down: 4, toss: 11, jolt: 5 },
     Stupefy: { push: 4, always: true, down: 1.5 }, AvadaKedavra: { push: 3, always: true, down: 1.5 },

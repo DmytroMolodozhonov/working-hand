@@ -1,5 +1,5 @@
 /**
- * Expelliarmus.js — «Expelliarmus»: a duel spell that knocks the wand out of the hand.
+ * Expelliarmus.js — «Экспеллиармус»: a duel spell that knocks the wand out of the hand.
  *
  * A scarlet charge with a white core (Duel.js) flies where the raised hand points; it can
  * be blocked by «Protection» or met by another duel charge (a clash) like every duel spell.
@@ -9,8 +9,8 @@
  *     can pick up (the attacker too). No wand, but a sword in the hand: the sword flies.
  *     Neither: a small push. (The victim's own computer throws it — Duel.applyToMe.)
  *   - a wizard of a tower (a wand in the hand): the same; until the wizard gets it back he
- *     has no wand (no «Lumos», no practising). He runs to fetch it; if a player was quicker,
- *     the wand is the player's. Stuck on the way for long — he calls it back with «Accio».
+ *     has no wand (no «Люмос», no practising). He runs to fetch it; if a player was quicker,
+ *     the wand is the player's. Stuck on the way for long — he calls it back with «Акцио».
  *     A wanderer's staff (≈2.5 m, heavy) is not knocked out: he is only pushed back.
  *   - a knight / the king: the sword flies off (a real weapon, anyone can take it); without it
  *     he fights with his fists (half the damage) and drops no sword when he falls.
@@ -28,11 +28,11 @@ export const EXPELLIARMUS = {
     MAX: 10, // … and at most
     G: 14, // the loose things' gravity (Items.js)
     TRIES: 10, // random directions looked at (the first good one wins)
-    FETCH_GIVE_UP: 20, // s: a wizard who can't reach his wand calls it back («Accio»)
+    FETCH_GIVE_UP: 20, // s: a wizard who can't reach his wand calls it back («Акцио»)
     FIST: 0.5, // a disarmed knight's blows: this part of his sword's
 };
 
-/** «Expelliarmus» (and how the recognizer hears it) — only as the whole word, never inside talk. */
+/** «Экспеллиармус» (and how the recognizer hears it) — only as the whole word, never inside talk. */
 const EXP_RU = /^(?:э|е|и)кс?п[еэи]л{1,2}[иіыея]?[аяэе]?р?м[уаоы][сз]а?$/;
 const EXP_EN = /^(?:ex|eks|ecs|ix)pp?ell?[iey]?[ae]?r?m[uoa][sz]$/;
 const EXP_SPLIT = [/^(?:э|е|и)кс?п[еэи]л{1,2}[иіыея]?$/, /^[ая]?р?м[уаоы][сз]а?$/]; // «экспелли армус»
@@ -135,7 +135,7 @@ export function wizardWand(v, roll) {
 }
 
 /**
- * (host) «Expelliarmus» reached a castle person `v`: a wizard's wand / a knight's sword flies off.
+ * (host) «Экспеллиармус» reached a castle person `v`: a wizard's wand / a knight's sword flies off.
  * → 'wand' | 'sword' | null (nothing knocked out: only the push).
  */
 export function disarmVillager(game, v, makeWand) {

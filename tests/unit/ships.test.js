@@ -172,7 +172,7 @@ test('ships on the network and in chests; the sail spells', () => {
     for (const t of ['фёрл', 'убрать паруса', 'furl']) assert.equal(matchSpell(t), 'Furl', t);
     assert.equal(matchSpell('вайнд'), 'Wind');
     assert.equal(matchSpell('бомбардо максима'), 'BombardoMaxima');
-    assert.equal(matchSpell('reveal'), 'Reveal');
+    assert.equal(matchSpell('раскрой свои секреты'), 'Reveal');
     assert.ok(SPELL_COST.Unfurl && SPELL_COST.UnfurlMaxima && SPELL_COST.Furl);
     let seed = 7;
     const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);

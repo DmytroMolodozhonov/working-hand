@@ -6,7 +6,7 @@
  *  - A player's things ALL drop at the body: the slots (the backpack's slots
  *    too), what the hands hold, the backpack itself, coins, scrolls, wands,
  *    shields, weapons, the gathered blocks. Anybody can take them: by hand,
- *    with «Gather» (everything around the body into the slots), with «Accio».
+ *    with «Gather» (everything around the body into the slots), with «Акцио».
  *    The player comes back with only the plain wooden wand (Inventory
  *    ensureStarterWand on respawn). Learned spells stay — they are not things.
  *  - Knights and the king (the armed people of the castles): their sword,
@@ -231,7 +231,7 @@ export class DeathSystem {
     villagerDied(v) {
         const g = this.game;
         const y = this._ground(v.x, v.z, v.y + 1.5);
-        // (a sword knocked out by «Expelliarmus» already lies somewhere: not a second one)
+        // (a sword knocked out by «Экспеллиармус» already lies somewhere: not a second one)
         const drops = lootOfVillager(v.role, { shield: !!v.model?.shield }).filter((d) => !(v.disarmed && d.kind === 'weapon'));
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });

@@ -45,9 +45,9 @@ test('Авада Кедавра said without the scroll: refused, and the hint n
     g.hud = { setVoice: (t) => said.push(t) };
     assert.equal(g.castLocalSpell('авада кедавра', true), null);
     assert.equal(said.length, 1);
-    assert.match(said[0], /свиток «Avada Kedavra»/);
+    assert.match(said[0], /свиток «Авада Кедавра»/);
     assert.match(said[0], /зелёная лента/);
-    assert.match(said[0], /Inferno/);
+    assert.match(said[0], /Инферно/);
     // an unfinished phrase is refused quietly
     assert.equal(g.castLocalSpell('авада', false), null);
     assert.equal(said.length, 1);
@@ -75,7 +75,7 @@ test('the Авада Кедавра scroll: rare chest loot with its own green r
     assert.equal(SCROLL_RIBBON_RU.AvadaKedavra, 'зелёная');
     const g = (col >> 8) & 0xff, red = col >> 16, b = col & 0xff;
     assert.ok(g > red && g > b, 'green');
-    // the model's ribbon and «Reveal» use it
+    // the model's ribbon and «Раскрой свои секреты» use it
     const scroll = { kind: 'scroll', uid: 's', stat: 'spell', spell: 'AvadaKedavra' };
     const model = makeItemModel(scroll);
     const colours = [];
@@ -83,5 +83,5 @@ test('the Авада Кедавра scroll: rare chest loot with its own green r
     assert.ok(colours.includes(col), 'the ribbon on the scroll is green');
     const info = describeItem(scroll);
     assert.equal(info.color, col);
-    assert.match(info.title, /Avada Kedavra/);
+    assert.match(info.title, /Авада Кедавра/);
 });

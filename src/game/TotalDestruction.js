@@ -6,7 +6,7 @@
  * stones jump, the walls crack and crumble — and then everything built in the area
  * (castles, houses, walls, towers, trees) falls apart by itself and lies as ruins.
  * The ground sinks a little; no crater. Every creature in the area is thrown off
- * its feet and crushed — 5× «Bombardo Maxima».
+ * its feet and crushed — 5× «Бомбардо Максима».
  *
  *   - only for one whose mana MAXIMUM is 100 or more (in «Выживание»); 80 mana a cast;
  *   - outside Creative only from its scroll (a dark red ribbon, very rare);
@@ -31,7 +31,7 @@ export const TOTAL = {
     NAME: 'TotalDestruction',
     MIN_MAX_MANA: 100, // the mana maximum one must have
     COST: 80,
-    POWER: 5 * MAXIMA_POWER, // 5× «Bombardo Maxima»
+    POWER: 5 * MAXIMA_POWER, // 5× «Бомбардо Максима»
     RADIUS: RUIN.RADIUS,
     SHAKE: 3.4, // s the ground shakes before it all comes down
     FALL: 2.6, // s the blocks are seen falling
@@ -270,7 +270,7 @@ export class TotalDestruction {
             if (_v.lengthSq() < 1e-6) _v.set(0, 0, 1);
             g.impact?.apply({ v: _v.normalize().multiplyScalar(3 + 6 * k), from: null, by: d.by, spell: d.name, always: { down: 3 * harm }, toss: (3 + 5 * k) * Math.sqrt(harm), jolt: 3 * k, down: 3 * harm });
         }
-        // 5× «Bombardo Maxima» (a shield takes part of it)
+        // 5× «Бомбардо Максима» (a shield takes part of it)
         let dmg = 5 * harm * bombardoDamage(dist, R, MAXIMA_POWER); // (Maxima: twice)
         const c = g.combat, s = c?.shield;
         if (s && s.left > 0) dmg *= s.type === 2 ? 0.25 : 0.5;

@@ -33,7 +33,7 @@ export function mouthOpenness(face) {
     return Math.hypot(up.x - lo.x, up.y - lo.y) / w;
 }
 
-/** The base spell («Bombardo Maxima» is still «Bombardo» for the echo). */
+/** The base spell («Бомбардо Максима» is still «Бомбардо» for the echo). */
 const ALIAS = { Levitate: 'Levitation', Frozen: 'Ice' };
 const baseOf = (name) => { const b = String(name || '').replace(/Maxima$/, '').replace(/Duel$/, ''); return ALIAS[b] || b; };
 

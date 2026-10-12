@@ -258,7 +258,7 @@ export class Effects {
         this.lightFlash(center, 0xffaa55, big ? 12 : 6, big ? 0.6 : 0.35, radius * 8);
     }
 
-    /** «Bombardo Maxima»: the magic bursting out of the hand. */
+    /** «Бомбардо Максима»: the magic bursting out of the hand. */
     castBurst(origin, direction) {
         // Side vectors around the cast direction for the ring
         const d = _bd.copy(direction).normalize();

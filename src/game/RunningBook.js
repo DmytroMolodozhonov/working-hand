@@ -16,11 +16,11 @@
  * lost on death.
  *
  * It is an animal of Animals.js (type 'runbook'), so blows, arrows, blasts,
- * «Левиоса», «Stupefy» and the other spells work on it like on any
- * creature; «Accio» pulls it flying into the caster's free hand (the one without the wand;
+ * «Левиоса», «Остолбеней» and the other spells work on it like on any
+ * creature; «Акцио» pulls it flying into the caster's free hand (the one without the wand;
  * both free — the casting hand): the fingers take it — caught, as by hand. Already quick
  * from one: it is held wriggling, and runs off once let go (or put into a pocket). No free
- * hand: it lands dazed at the caster's feet. «Reveal» tells its secret.
+ * hand: it lands dazed at the caster's feet. «Раскрой свои секреты» tells its secret.
  * Multiplayer: the host runs the book (Animals syncs it), decides catches;
  * the bonus is each player's own.
  */
@@ -46,7 +46,7 @@ export const RUNNER = {
 const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];
 export const runBookColor = (id) => COVERS[Math.abs(id | 0) % COVERS.length];
 
-/** «Accio» into the hand: how fast it flies (m/s), how near the hand it is taken (m). */
+/** «Акцио» into the hand: how fast it flies (m/s), how near the hand it is taken (m). */
 const ACCIO_SPEED = 16, ACCIO_CATCH = 0.45;
 
 const _v = new THREE.Vector3();
@@ -427,9 +427,9 @@ export class RunningBook {
         return ['left', 'right'].some((sd) => rb(g.items?.held?.[sd]?.item)) || !!g.inventory?.slots?.some?.(rb);
     }
 
-    /** «Reveal» on a running book: what it is and what it gives. */
+    /** «Раскрой свои секреты» on a running book: what it is and what it gives. */
     secret() {
-        return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Поймаешь — бегаешь на <b>30%</b> быстрее (до смерти)', 'Ловят руками или «Accio» в свободную руку', 'Это не заклинание — только быстрота, и только один раз'] };
+        return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Поймаешь — бегаешь на <b>30%</b> быстрее (до смерти)', 'Ловят руками или «Акцио» в свободную руку', 'Это не заклинание — только быстрота, и только один раз'] };
     }
 
     _wriggle(a) {
@@ -499,13 +499,13 @@ export class RunningBook {
         if (ch) ch.runBonus = 1 + this.bonus;
     }
 
-    // ------------------------------------------------------------ «Accio»
+    // ------------------------------------------------------------ «Акцио»
     /** Running books a raised hand can summon (for Accio.js). */
     accioTargets() {
         return this.books().map((a) => ({ a, pos: _centre(a) }));
     }
 
-    /** «Accio» on a running book: it is pulled through the air to the caster's feet, dazed. */
+    /** «Акцио» on a running book: it is pulled through the air to the caster's feet, dazed. */
     accio(a, handPos) {
         const g = this.game;
         if (!this.auth) { g.sync?.net?.send({ t: 'rbaccio', id: a.id, p: [handPos.x, handPos.y, handPos.z] }); return; }
@@ -513,7 +513,7 @@ export class RunningBook {
     }
 
     /**
-     * «Accio» with a free hand: the book flies to that hand (not a jump) and the fingers take it.
+     * «Акцио» with a free hand: the book flies to that hand (not a jump) and the fingers take it.
      * The real one leaves the world at once (the host removes it; everybody sees it go).
      */
     accioToHand(a, side) {
@@ -561,7 +561,7 @@ export class RunningBook {
         const free = !g.items.held[f.side] && !g.weapons?.hands?.[f.side]?.held;
         if (free && g.items.takeIntoHand?.(item, f.side)) {
             g.mana?.success?.('Accio');
-            g.hud?.toast?.(f.wild ? '📕 Бегущая книга у вас в руке, но вырывается: свою быстроту она вам уже отдала. Отпустите — убежит' : '📕 «Accio»: бегущая книга у вас в руке! Раскройте её двумя руками — на её единственной странице её быстрота', 4000);
+            g.hud?.toast?.(f.wild ? '📕 Бегущая книга у вас в руке, но вырывается: свою быстроту она вам уже отдала. Отпустите — убежит' : '📕 «Акцио»: бегущая книга у вас в руке! Раскройте её двумя руками — на её единственной странице её быстрота', 4000);
             return;
         }
         // (the hand got busy on the way: it drops by the feet — and runs off, if it is a wild one)
@@ -597,7 +597,7 @@ export class RunningBook {
 
     _pull(a, to) {
         const g = this.game;
-        if (!a) return; // (alive, or a dead body of any animal: «Accio» pulls it all the same)
+        if (!a) return; // (alive, or a dead body of any animal: «Акцио» pulls it all the same)
         const p = a.group.position;
         const d = _v.set(to.x - p.x, 0, to.z - p.z);
         const L = d.length();
@@ -621,7 +621,7 @@ export class RunningBook {
             if (a && (a.type === 'runbook' || a.dead)) this._pull(a, new THREE.Vector3(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0));
         } else if (m.t === 'rbtake' && isHost) {
             const a = A?.byId.get(m.id);
-            if (a && a.type === 'runbook') this._takeAway(a); // (a guest's «Accio» took it into the hand)
+            if (a && a.type === 'runbook') this._takeAway(a); // (a guest's «Акцио» took it into the hand)
         }
     }
 

@@ -8,7 +8,7 @@
  *    fangs and bite: −5 HP, and again every 5 s. Only «Protection Maxima»
  *    frees you.
  *  - Between two of its tricks at least 3 seconds pass.
- *  - Wind can't move it, freezing doesn't work on it, «Avada Kedavra» only
+ *  - Wind can't move it, freezing doesn't work on it, «Авада Кедавра» only
  *    takes 20 HP. Swords, axes, arrows, fire, Bombardo, lightning hurt it.
  *  - When it dies it leaves treasure (always a wand).
  *
@@ -217,7 +217,7 @@ export class Spiders {
     }
 
     /**
-     * (host) «Jolt» on the spider: too big and too many legs to be thrown over — it only reels back
+     * (host) «Джолт» on the spider: too big and too many legs to be thrown over — it only reels back
      * a little (Maxima: further) and is dazed for a moment (no tricks); no damage.
      */
     jolt(s, spell, by = undefined) {
@@ -369,7 +369,7 @@ export class Spiders {
             const hp = this._playerPos(s.holding);
             if (!hp) s.holding = null;
         } else if (s.reel) {
-            // reeling back from a «Jolt»: the legs scramble, it slides back and sways
+            // reeling back from a «Джолт»: the legs scramble, it slides back and sways
             p.x += s.reel.vx * dt; p.z += s.reel.vz * dt;
             s.reel.vx *= Math.max(0, 1 - 3 * dt); s.reel.vz *= Math.max(0, 1 - 3 * dt);
             s.reel.t -= dt;

@@ -1,5 +1,5 @@
 /**
- * InfernoStream.js — the «Inferno» flame stream: its rules (pure, Node-testable)
+ * InfernoStream.js — the «Инферно» flame stream: its rules (pure, Node-testable)
  * and its look.
  *
  *   The stream    comes out of the caster's hand and FOLLOWS that hand every

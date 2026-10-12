@@ -7,12 +7,12 @@
  *  - a real door in the doorway (src/game/Doors.js — take the handle and open
  *    it, or push the leaf with the hand; the people of the house open it
  *    themselves). About half the houses lock their door at night or while
- *    nobody is home (src/game/Alohomora.js: «Alohomora» opens it a crack);
+ *    nobody is home (src/game/Alohomora.js: «Алохомора» opens it a crack);
  *  - glass in the windows (one instanced mesh for all panes): a real blow of a
  *    fist or a blade into it (not a touch, not walking past), an arrow, a thrown
  *    thing, a blast or a strong spell breaks it — for good;
  *  - beds (src/game/Beds.js — you can lie in them) and chests: mostly food,
- *    seldom something precious. A house's chest is locked («Alohomora» opens it);
+ *    seldom something precious. A house's chest is locked («Алохомора» opens it);
  *    forcing it or taking a thing out of it while the family sees it makes them
  *    attack the thief (src/game/CastleLife.js theft); coming in — no theft (the
  *    people of the house greet a visitor);
@@ -156,7 +156,7 @@ export class Houses {
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
             chest.house = { def, i, rich: h.rich };
-            chest.locked = true; // (somebody's chest: «Alohomora» — src/game/Alohomora.js)
+            chest.locked = true; // (somebody's chest: «Алохомора» — src/game/Alohomora.js)
             if (g._openedChests?.has(id)) chest.setOpenInstant();
             else g.locks?.restoreChest(chest);
             g.chests.push(chest);

@@ -328,7 +328,7 @@ export class Sailors {
     }
 
     /**
-     * (host) The body is shoved (CreatureImpact: a blow, a gust of «Wind», a blast) by dx, dz world metres.
+     * (host) The body is shoved (CreatureImpact: a blow, a gust of «Вайнд», a blast) by dx, dz world metres.
      * It slides along the deck; hard against the rail — or thrown up over it — it goes over the side.
      */
     shove(v, dx, dz) {
@@ -1183,7 +1183,7 @@ export class Sailors {
 
 void _w;
 
-// a sailor is a creature like any other: blows, gusts of «Wind», blasts and spells shove him, he
+// a sailor is a creature like any other: blows, gusts of «Вайнд», blasts and spells shove him, he
 // reels, falls, gets up by himself (CreatureImpact.js) — on his ship's deck, in its own frame
 registerKind('c', {
     name: 'sailor', faces: -1,

@@ -39,7 +39,7 @@ test('mana: base 30; only the FIRST success of each spell grows the maximum, by 
     assert.equal(g.mana.success('Wind'), 1);
     assert.equal(g.mana.success('WindMaxima'), 3, 'a Maxima form is its own spell');
     assert.equal(g.mana.max, 35);
-    assert.ok(toasts.some((t) => t.includes('Первое «Wind Maxima»') && t.includes('+3')), toasts.join('|'));
+    assert.ok(toasts.some((t) => t.includes('Первое «Вайнд Максима»') && t.includes('+3')), toasts.join('|'));
     assert.equal(g.mana.success('Stop'), 0, 'not a spell');
     assert.equal(g.mana.success('WallRise'), 2, 'Breakthrough reported by its wall');
     assert.equal(g.mana.success('Breakthrough'), 0, 'the same spell');

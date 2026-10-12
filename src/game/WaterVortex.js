@@ -1355,7 +1355,7 @@ export class WaterVortex {
     // ============================================================= drawing
     /** Every vortex (mine, other wizards', flying, clinging) as rings of living water blobs. */
     /**
-     * The water that stops an «Inferno» flame: a gathering vortex (round its caster: its
+     * The water that stops an «Инферно» flame: a gathering vortex (round its caster: its
      * rings), a flying one, a bubble. {x, y, z, r}
      */
     spheres(out = []) {

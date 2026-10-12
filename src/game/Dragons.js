@@ -215,7 +215,7 @@ export class Dragons {
     }
 
     boltHit(d, spell, by = undefined) {
-        // «Jolt»: a great heavy body only sways a little — it wakes and turns on the caster (no damage)
+        // «Джолт»: a great heavy body only sways a little — it wakes and turns on the caster (no damage)
         if (spell === 'Jolt' || spell === 'JoltMaxima') {
             d.sweep = (Math.random() < 0.5 ? -1 : 1);
             const who = by === undefined || by === 'local' ? this.me : by;
@@ -226,7 +226,7 @@ export class Dragons {
         this.hit(d, 4, spell, by);
     }
 
-    /** (CreatureImpact.spellArea: «Wind», a blast's push, an earthquake…) it only sways a little. */
+    /** (CreatureImpact.spellArea: «Вайнд», a blast's push, an earthquake…) it only sways a little. */
     push(name, casterId, pushAt, opts = {}) {
         if (!this.auth) return 0;
         let n = 0;

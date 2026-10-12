@@ -380,7 +380,7 @@ export class CastleTalk {
         if (!spell && this.inTalk() && this._partner === L && !this.game.isMagicActive) return true;
         if (detectOrder(text, this._players())) return true;
         const intent = detectIntent(text).intent;
-        // («Bombardo», «Inferno» said alone are spells, even if villagers like to talk about magic)
+        // («Бомбардо», «Инферно» said alone are spells, even if villagers like to talk about magic)
         if (spell && (intent === 'magic' || intent === 'unknown')) return false;
         return intent !== 'unknown';
     }

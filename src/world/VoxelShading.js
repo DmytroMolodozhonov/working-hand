@@ -76,7 +76,7 @@ export function applyVoxelDetail(material) {
             .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;')
             .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
         // a cave's dark: the sun and the sky's light (ambient, hemisphere) reach a face only as far as
-        // the daylight gets in; a lamp, «Lumos», a fire light it fully
+        // the daylight gets in; a lamp, «Люмос», a fire light it fully
         const lightsBegin = THREE.ShaderChunk.lights_fragment_begin.replace(
             'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );',
             'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );\n\t\tdirectLight.color *= vVoxSky * uSkyComp;');

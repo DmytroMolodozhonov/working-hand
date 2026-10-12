@@ -1,5 +1,5 @@
 /**
- * Flight.js — the «Fly» spell: fly like Superman.
+ * Flight.js — the «Флайн» spell: fly like Superman.
  *
  *   1. Take-off: both arms up + say «флайн». The hero rises straight up,
  *      faster and faster. During the first second the arms must stay up —
@@ -11,7 +11,7 @@
  *      back to climb (looking down/up helps as well).
  *   3. Landing: point yourself at the ground; touching it ends the flight.
  *   «Паузин» in the air: slow down and hover on the spot (upright, gently
- *   bobbing). «Fly» again flies on.
+ *   bobbing). «Флайн» again flies on.
  *   In the free world flying costs strength: at 0 fatigue the hero falls.
  *
  * Pure logic (no THREE): Game.js feeds inputs and applies the outputs.
@@ -64,7 +64,7 @@ export class FlightController {
         return true;
     }
 
-    /** «Fly» while hovering: fly on. */
+    /** «Флайн» while hovering: fly on. */
     resume() {
         if (!this.hovering) return false;
         this.hovering = false;

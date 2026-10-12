@@ -1,8 +1,6 @@
 /**
- * VoiceService.js — speech recognition (Web Speech API) for spells and talk.
- * Spells are English words, so it listens in English; with somebody who talks near
- * (a villager, a merchant, a wizard, a sailor…) it listens in Russian — their language
- * (setLang). Interim results, auto-restart while wanted.
+ * VoiceService.js — Russian speech recognition (Web Speech API) for spells.
+ * Same behaviour as the original: interim results, auto-restart while wanted.
  */
 
 export class VoiceService {
@@ -20,7 +18,7 @@ export class VoiceService {
         this.supported = true;
         this.recognition = new SR();
         this.recognition.continuous = false;
-        this.lang = 'en-US';
+        this.lang = 'ru-RU';
         this.recognition.lang = this.lang;
         this.recognition.interimResults = true;
         this.recognition.maxAlternatives = 1;

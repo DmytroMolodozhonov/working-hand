@@ -11,7 +11,7 @@
  *     little bounce and a sound.
  *
  * Locks (src/game/Alohomora.js): a chest of a village or a castle is locked —
- * the lid only rattles under the hand. «Alohomora» unlocks it: the lid springs
+ * the lid only rattles under the hand. «Алохомора» unlocks it: the lid springs
  * up a crack (`picked`), and the hand lifts it (liftTo) the rest of the way.
  */
 
@@ -25,7 +25,7 @@ const HINGE_Y = 0.7, HINGE_Z = -0.425, LID_LEN = 0.85;
 const _lp = new THREE.Vector3();
 const OPEN_ANGLE = Math.PI * 0.62; // ~110°
 const OPEN_TIME = 0.9; // seconds
-/** The crack a lid springs open to when «Alohomora» unlocks it (rad). */
+/** The crack a lid springs open to when «Алохомора» unlocks it (rad). */
 export const AJAR_ANGLE = 0.16;
 /** Lifted by the hand past this angle the lid falls open by itself (rad). */
 export const LIFT_OPEN = OPEN_ANGLE * 0.38;
@@ -34,7 +34,7 @@ let SHARED = null;
 function shared() {
     if (SHARED) return SHARED;
     SHARED = {
-        // (lit per pixel, each light with its own shadow: a Lambert chest lit by «Lumos» in a cave
+        // (lit per pixel, each light with its own shadow: a Lambert chest lit by «Люмос» in a cave
         // caught the sun's shadow map — black blots — and lit its big faces only at their corners)
         wood: new THREE.MeshPhongMaterial({ color: 0x8B4513, shininess: 6, specular: 0x111111 }),
         lidWood: new THREE.MeshPhongMaterial({ color: 0x6D3410, shininess: 6, specular: 0x111111 }),
@@ -75,7 +75,7 @@ export class Chest {
         this.itemSpawned = false;
         this.locked = false; // (a settlement's chest: src/game/Alohomora.js)
         this.openMax = OPEN_ANGLE; // (against a wall: the lid stops on it — setWallGap)
-        this.picked = false; // unlocked by «Alohomora»: the lid stands open a crack, the hand lifts it
+        this.picked = false; // unlocked by «Алохомора»: the lid stands open a crack, the hand lifts it
         this.fromAngle = 0; // where the opening starts (a lid already lifted by the hand)
         this.shakeT = 0;
         this.mesh = new THREE.Group();
@@ -164,7 +164,7 @@ export class Chest {
         return true;
     }
 
-    /** «Alohomora»: the lock clicks open, the lid springs up a crack. */
+    /** «Алохомора»: the lock clicks open, the lid springs up a crack. */
     setAjar() {
         this.picked = true;
         if (!this.isOpen && -this.lidGroup.rotation.x < AJAR_ANGLE) this.lidGroup.rotation.x = -AJAR_ANGLE;

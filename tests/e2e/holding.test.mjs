@@ -304,7 +304,7 @@ test('the wand: held like a pen along the arm, the spell leaves its tip the way 
     await page.close();
 });
 
-test('a scroll: the other hand opens it by closing on a roller, it unrolls between the hands and is read; an opened hand lets it go; «Reveal» with a bare hand', async () => {
+test('a scroll: the other hand opens it by closing on a roller, it unrolls between the hands and is read; an opened hand lets it go; «Раскрой свои секреты» with a bare hand', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -352,7 +352,7 @@ test('a scroll: the other hand opens it by closing on a roller, it unrolls betwe
     await feed(page, P({ wristOffset: [0.06, 0], leftCurl: 0 }), 20, 40);
     const closed = await look();
     assert.ok(!closed.r && closed.visible && closed.held === 'sc1', 'an opened hand let it go; rolled up in the right fist ' + JSON.stringify(closed));
-    // «Reveal» with no wand: a shield lying 6 m where the bare hand points
+    // «Раскрой свои секреты» with no wand: a shield lying 6 m where the bare hand points
     const rv = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
@@ -362,7 +362,7 @@ test('a scroll: the other hand opens it by closing on a roller, it unrolls betwe
         const at = tip.addScaledVector(dir, 6);
         g.items.spawnLoose({ kind: 'shield', uid: 'rsh', type: 1 }, at, { hover: true, broadcast: false });
         g.lastSpellCastTime = 0;
-        const said = g.castLocalSpell('reveal', true);
+        const said = g.castLocalSpell('раскрой свои секреты', true);
         await frames(2);
         return { said, wand: !!g.wandMagic.wand, holo: g.wandMagic.holo ? g.wandMagic.holo.at.distanceTo(at) : null };
     });

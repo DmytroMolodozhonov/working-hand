@@ -10,7 +10,7 @@
  *   Экспеллиармус             a crimson charge: the wand (or the sword) flies out of the hand (Expelliarmus.js)
  *   Джолт (Jolt)              a bolt of invisible air: a hard shove straight away from the caster — the
  *                             body flies back, tumbles over in the air, falls, lies a few seconds and
- *                             gets up dizzy (JOLT, JOLT_TARGETS); «Jolt Maxima» three times as strong
+ *                             gets up dizzy (JOLT, JOLT_TARGETS); «Джолт Максима» three times as strong
  *
  * A duel spell is not an instant beam: a crackling, jagged charge flies from
  * the hand (fast, ~0.7 s over 10 m) and acts only when it touches. It flies
@@ -54,24 +54,24 @@ import { kindOf } from './CreatureImpact.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
-    Stupefy: { color: 0xff3b3b, name: 'Stupefy' },
-    AvadaKedavra: { color: 0x2dff5a, name: 'Avada Kedavra' },
-    // «Ice»: a thin frosty beam (no crackling) with a spinning ice crystal at its head (IceLook.js)
-    IceDuel: { color: 0x8fdcff, name: 'Ice', speed: 17, core: 0.035, glow: 0.15, coreColor: 0xf2fbff },
-    LevitateDuel: { color: 0xffd36e, name: 'Wingardium Leviosa' },
+    Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
+    AvadaKedavra: { color: 0x2dff5a, name: 'Авада Кедавра' },
+    // «Айс»: a thin frosty beam (no crackling) with a spinning ice crystal at its head (IceLook.js)
+    IceDuel: { color: 0x8fdcff, name: 'Айс', speed: 17, core: 0.035, glow: 0.15, coreColor: 0xf2fbff },
+    LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса' },
     // Slower and thicker: a dark-violet ball of force rolling through the air
-    SapiraDuel: { color: 0x8e2de2, name: 'Sapira', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
-    // «Dust»: a sandy charge — whoever it hits is slowed for 5 s
-    SandsDuel: { color: 0xd2b48c, name: 'Dust', speed: 13, coreColor: 0xfff1cf },
-    // «Expelliarmus»: a deep crimson bolt with a white-hot core (Остолбеней is a lighter red)
-    Expelliarmus: { color: 0xc8102e, name: 'Expelliarmus', speed: 16, core: 0.045, glow: 0.2, coreColor: 0xffffff },
-    // «Jolt»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
-    Jolt: { color: 0xa9d6ff, name: 'Jolt', speed: 21, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
-    JoltMaxima: { color: 0xc4e4ff, name: 'Jolt Maxima', speed: 21, core: 0.026, glow: 0.11, coreColor: 0xffffff },
+    SapiraDuel: { color: 0x8e2de2, name: 'Сапира', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
+    // «Даст»: a sandy charge — whoever it hits is slowed for 5 s
+    SandsDuel: { color: 0xd2b48c, name: 'Даст', speed: 13, coreColor: 0xfff1cf },
+    // «Экспеллиармус»: a deep crimson bolt with a white-hot core (Остолбеней is a lighter red)
+    Expelliarmus: { color: 0xc8102e, name: 'Экспеллиармус', speed: 16, core: 0.045, glow: 0.2, coreColor: 0xffffff },
+    // «Джолт»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
+    Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 21, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
+    JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 21, core: 0.026, glow: 0.11, coreColor: 0xffffff },
 };
 
 /**
- * «Jolt» / «Jolt Maxima» (3× the push): only a shove — no damage of its own (a fall from up
+ * «Джолт» / «Джолт Максима» (3× the push): only a shove — no damage of its own (a fall from up
  * high — a cliff, a wall, over a ship's side — hurts as any such fall does).
  *   push / toss  hero m/s away from the caster along the charge / up (Impact.SPELL_PHYSICS):
  *                the body flies several metres back (Maxima: much farther and higher)
@@ -88,7 +88,7 @@ export const JOLT = {
 export const isJolt = (spell) => spell === 'Jolt' || spell === 'JoltMaxima';
 
 /**
- * Who / what «Jolt» acts on and how (CLAUDE.md: every creature and thing decided — «no effect» too).
+ * Who / what «Джолт» acts on and how (CLAUDE.md: every creature and thing decided — «no effect» too).
  */
 export const JOLT_TARGETS = {
     me: 'my own computer decides (it knows my shield): thrown back, a flip in the air, down; up by a squat; the head spins afterwards',
@@ -117,13 +117,13 @@ export const DUEL = {
     LUCK: 0.1, // ±10 % random
     STUN_TIME: 15,
     CLASH_FATIGUE: 1, // mana per second while pushing (free world), each side
-    MAXIMA_BOOST: 0.05, // «Maxima» shouted in a clash: the meeting point goes 5 % of the way a second faster to the opponent (they add up)
+    MAXIMA_BOOST: 0.05, // «Максима» shouted in a clash: the meeting point goes 5 % of the way a second faster to the opponent (they add up)
     MAXIMA_COST: 5, // mana, at once
     MAXIMA_EVERY: 3, // s: at most once every 3 seconds
 };
 
 /**
- * The extra push of «Maxima» shouts in a clash (a's shouts minus b's; only a hand still on the
+ * The extra push of «Максима» shouts in a clash (a's shouts minus b's; only a hand still on the
  * opponent pushes): +5 % of the way a second towards the opponent for each shout.
  */
 export function maximaPush(boostA = 0, boostB = 0) {
@@ -303,8 +303,8 @@ export class Duel {
         this.markPools = {}; // the thin core of each wizard's beam, in their marker colour
         this.jerk = { left: [], right: [] }; // hand history for "giving up"
         this.log = []; // last duel events (for testing / debugging)
-        this.ice = new IceLook(game); // how «Ice» looks
-        this.jolt = new JoltLook(game); // how «Jolt» looks
+        this.ice = new IceLook(game); // how «Айс» looks
+        this.jolt = new JoltLook(game); // how «Джолт» looks
     }
 
     /** 0..3: this wizard's colour signature (same on every computer). */
@@ -744,11 +744,11 @@ export class Duel {
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
         if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
-        // a phoenix: each charge as Phoenixes.TARGETS says («Авада» −25, «Stupefy» drops it, «Ice» melts…)
+        // a phoenix: each charge as Phoenixes.TARGETS says («Авада» −25, «Остолбеней» drops it, «Айс» melts…)
         if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
-        // a living tree: no duel spell hurts it (only fire does) — «Avada Kedavra» neither
-        // («Expelliarmus»: it has nothing in its hands to knock out — no effect)
-        // («Jolt»: no damage — a rooted tree only reels from the shove: below)
+        // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
+        // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
+        // («Джолт»: no damage — a rooted tree only reels from the shove: below)
         if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell, byId); return; }
         if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
@@ -824,7 +824,7 @@ export class Duel {
             // in a shell of ice (everyone sees it): 20 s in the free world (any hit shatters), 5 s in other modes
             c.freeze(byId, c.enabled ? PVP.FREEZE_TIME : ICE.CREATIVE_T);
             g.hud.flashColor?.('rgba(150, 220, 255, 0.6)');
-            if (!c.enabled) g.hud.setVoice('🧊 «Ice» попал в вас — вы во льду', true);
+            if (!c.enabled) g.hud.setVoice('🧊 «Айс» попал в вас — вы во льду', true);
         } else if (spell === 'LevitateDuel') {
             // Lifted like a thing: my body hangs in front of the caster's hand and follows it
             // (until they let go — a fall from up there hurts — or my «Protection» breaks it)
@@ -901,7 +901,7 @@ export class Duel {
     }
 
     /**
-     * (host) «Jolt» on a creature: shoved straight away from the caster, thrown up, a tumble in
+     * (host) «Джолт» on a creature: shoved straight away from the caster, thrown up, a tumble in
      * the air, down for a while, then up by itself and dizzy (CreatureImpact: tumble, daze).
      */
     _joltCreature(c, spell, src, byId) {
@@ -915,7 +915,7 @@ export class Duel {
         if (ck) g.levitation?.watchFall?.(ck, c, byId); // (thrown off a cliff / a wall: that fall hurts)
     }
 
-    /** «Jolt» flying past loose things: the air shoves them along (where their physics runs). */
+    /** «Джолт» flying past loose things: the air shoves them along (where their physics runs). */
     _joltThings(b, from) {
         const list = this.game.spells?.hooks?.weapons?.() || [];
         if (!list.length) return;
@@ -935,7 +935,7 @@ export class Duel {
         }
     }
 
-    /** A puff of sand where «Dust» hit. */
+    /** A puff of sand where «Даст» hit. */
     _sand(p) {
         const g = this.game;
         for (let i = 0; i < 24; i++) g.fx.spark(p, i % 3 ? 0xd2b48c : 0xf3e2b3, 0.14, _v2.set((Math.random() - 0.5) * 4, Math.random() * 2.5, (Math.random() - 0.5) * 4), 1.0);
@@ -1142,9 +1142,9 @@ export class Duel {
         }
     }
 
-    // ============================================================ «Maxima»
+    // ============================================================ «Максима»
     /**
-     * «Maxima» shouted alone during my clash: −5 mana at once, +5 % to my push in this
+     * «Максима» shouted alone during my clash: −5 mana at once, +5 % to my push in this
      * clash (it adds up), at most once every 3 s. The host does the push maths: a guest tells it.
      * @returns {string|null} 'Maxima' when it worked
      */
@@ -1154,7 +1154,7 @@ export class Duel {
         if (!c) return null;
         const now = performance.now();
         if (now - (this._maximaAt || -1e9) < DUEL.MAXIMA_EVERY * 1000) {
-            if (isFinal) g.hud.setVoice(`⚡ «Maxima» — не чаще раза в ${DUEL.MAXIMA_EVERY} секунды`, true);
+            if (isFinal) g.hud.setVoice(`⚡ «Максима» — не чаще раза в ${DUEL.MAXIMA_EVERY} секунды`, true);
             return null;
         }
         const cm = g.combat;
@@ -1170,7 +1170,7 @@ export class Duel {
         return 'Maxima';
     }
 
-    /** (everybody) a wizard shouted «Maxima» in this clash: the host counts it; all see the pulse. */
+    /** (everybody) a wizard shouted «Максима» in this clash: the host counts it; all see the pulse. */
     applyMaxima(aId, bId, by) {
         const c = this.clashes.find((x) => x.a.id === aId && x.b.id === bId);
         if (!c || (by !== c.a.by && by !== c.b.by)) return false;
@@ -1187,7 +1187,7 @@ export class Duel {
         const g = this.game;
         if (g.sound) g.sound.playThunder?.();
         if (by === this.me) g.hud.setVoice('⚡ <b>МАКСИМА!</b> Ваш напор сильнее', true);
-        else if (c.a.by === this.me || c.b.by === this.me) g.hud.setVoice('⚡ Соперник крикнул «Maxima» — держитесь!', true);
+        else if (c.a.by === this.me || c.b.by === this.me) g.hud.setVoice('⚡ Соперник крикнул «Максима» — держитесь!', true);
         return true;
     }
 
@@ -1315,7 +1315,7 @@ export class Duel {
         if (Math.random() < 0.5) this.game.fx.spark(a, col, 0.12, _v1.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5), 0.2);
     }
 
-    /** «Ice»: a thin, nearly straight frosty beam (no crackling); IceLook adds the threads, the snow and the crystal. */
+    /** «Айс»: a thin, nearly straight frosty beam (no crackling); IceLook adds the threads, the snow and the crystal. */
     _drawIce(from, to, by, core = null) {
         const pool = this._pool('IceDuel', by);
         const a = _da.copy(from), b = _db.copy(to);
@@ -1338,7 +1338,7 @@ export class Duel {
         this.ice?.beam(a, b, this._segLife || 0.05, !core);
     }
 
-    /** «Jolt»: a pale, nearly straight line of trembling air; the rings of shoved air are JoltLook's. */
+    /** «Джолт»: a pale, nearly straight line of trembling air; the rings of shoved air are JoltLook's. */
     _drawJolt(spell, from, to, by, core = null) {
         const pool = this._pool(spell, by);
         const a = _da.copy(from), b = _db.copy(to);
@@ -1362,7 +1362,7 @@ export class Duel {
         if (!core) this.jolt.trail(b, dir, spell === 'JoltMaxima', this._dt || 1 / 60);
     }
 
-    /** Where a charge hits / bursts: «Ice» shatters into ice, «Jolt» rings of air, the others spark. */
+    /** Where a charge hits / bursts: «Айс» shatters into ice, «Джолт» rings of air, the others spark. */
     _hitBurst(spell, p, n) {
         if (isJolt(spell)) { this.jolt.hit(p, _v1.set(0, 0, 1), spell === 'JoltMaxima'); if (n >= 30) this.game.sound?.playJolt?.(spell === 'JoltMaxima', true); return; }
         if (spell === 'IceDuel') this.ice?.shatter(p, n / 30);
@@ -1407,7 +1407,7 @@ export class Duel {
         const { lead, push } = clashLead(c.p, c.v);
         const toB = _mB.subVectors(hb, ha).normalize(), toA = _mA.copy(toB).negate();
         let pulse = 1 + Math.sin(c.t * 18) * 0.12;
-        // «Maxima»: the shouter's half flares up for half a second
+        // «Максима»: the shouter's half flares up for half a second
         let flareA = 0, flareB = 0;
         if (c.pulse) {
             c.pulse.t += dt;

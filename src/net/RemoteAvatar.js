@@ -125,7 +125,7 @@ export class RemoteAvatar {
         const kd = s.s.kd | 0, sg = Array.isArray(s.s.sg) ? s.s.sg : null;
         ch.knockedDown = kd > 0;
         ch.fallDir = KD_NAME[kd] || ch.fallDir;
-        ch.tumbleAng = kd && Number.isFinite(+s.s.tb) ? +s.s.tb : 0; // (flipping over in the air: «Jolt»)
+        ch.tumbleAng = kd && Number.isFinite(+s.s.tb) ? +s.s.tb : 0; // (flipping over in the air: «Джолт»)
         ch.tumbleDir = null;
         ch.liftUp = kd ? Math.max(0, Math.min(1, +s.s.ku || 0)) : 0; // (pulled up by a hand)
         ch.staggerLean = sg ? +sg[0] || 0 : 0;

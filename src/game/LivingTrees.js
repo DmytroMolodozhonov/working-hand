@@ -6,7 +6,7 @@
  *    its branches grow out into arms with twig fingers, glowing eyes and a jagged
  *    mouth open in the bark, its roots pull out of the ground as legs and it stands up.
  *  - It is its caster's servant: it walks after them, guards them, and beats their
- *    enemies with its branches (the ones «Attack» points at first).
+ *    enemies with its branches (the ones «Атак» points at first).
  *  - It lives only while its caster has mana: while it is alive their mana does not
  *    come back but drains (ALIVE.DRAIN a second). When the mana is gone — or the
  *    caster goes farther than 50 m, or says «стоп» — it turns back into a tree in a
@@ -14,7 +14,7 @@
  *    tree lies there, made of its own wood and leaves, and can be gathered.
  *    (In Creative mana doesn't limit: it lives until «стоп» or the 50 m rule.)
  *  - 15 HP, and only fire hurts it (Инферно, Fire Maxima, a campfire, burning).
- *    Swords, fists, Бомбардо, lightning, «Avada Kedavra» do nothing. Burnt, it
+ *    Swords, fists, Бомбардо, lightning, «Авада Кедавра» do nothing. Burnt, it
  *    blackens and collapses.
  *  - A golden apple tree doesn't come alive.
  *
@@ -354,7 +354,7 @@ export class LivingTrees {
             for (let i = 0; i < 6; i++) g.fx?.spark(_v.set(p.x, p.y + 3, p.z), t.model.userData.trunk.getHex(), 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.5);
             if (performance.now() - this._saidAt > 4000) {
                 this._saidAt = performance.now();
-                g.hud?.setVoice?.(kind === 'AvadaKedavra' ? '🌳 «Avada Kedavra» не берёт живое дерево — его убивает только огонь' : '🌳 Живому дереву это не вредит — только огонь', true);
+                g.hud?.setVoice?.(kind === 'AvadaKedavra' ? '🌳 «Авада Кедавра» не берёт живое дерево — его убивает только огонь' : '🌳 Живому дереву это не вредит — только огонь', true);
             }
             return;
         }
