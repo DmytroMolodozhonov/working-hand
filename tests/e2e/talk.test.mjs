@@ -229,6 +229,13 @@ test('market: a brush of the open hand takes nothing from the counter — only c
         let curl = 0;
         ch.getHandWorldPosition = (side, out = new T.Vector3()) => (side === 'right' ? out.copy(L.model.position) : origPos(side, out));
         ch.getGripCurl = (side) => (side === 'right' ? curl : 0);
+        // (the hand is AT the good: the fingers close where it lies — the grip point in the palm on it)
+        const origPF = g.weapons.palmFrame.bind(g.weapons);
+        g.weapons.palmFrame = (side, out) => {
+            const f = origPF(side, out);
+            if (side === 'right' && g.items.loose.has(uid)) f.G.copy(L.model.localToWorld(L.shape.c.clone()));
+            return f;
+        };
         ch.isHandTracked = () => true;
         g.currentPose = g.currentPose || {};
         await frames(15);
@@ -236,7 +243,7 @@ test('market: a brush of the open hand takes nothing from the counter — only c
         curl = 1;
         await frames(15);
         const took = !g.items.loose.has(uid) && (g.items.held.right?.item.uid === uid || g.items.held.left?.item.uid === uid);
-        ch.getHandWorldPosition = origPos; ch.getGripCurl = origCurl; if (origTr) ch.isHandTracked = origTr;
+        ch.getHandWorldPosition = origPos; ch.getGripCurl = origCurl; if (origTr) ch.isHandTracked = origTr; g.weapons.palmFrame = origPF;
         const unpaid = !!(g.items.held.right?.item.shop || g.items.held.left?.item.shop);
         // the merchant's line comes back through the microphone: nobody answers it
         const T2 = g.castleLife.talk;
