@@ -913,7 +913,7 @@ export class Game {
         if (this.combat.dead) return null;
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
-            const base = baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
+            const base = SCROLL_SPELL_COLOR[name] ? name : baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
             if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творческом режиме. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
@@ -2670,8 +2670,9 @@ export class Game {
         const m = this.config.mode;
         // «Защита дома»: only from the book of protection (the dark-blue book-bird) — everybody knows it in Creative
         if (isWardSpell(base)) return m === 'creative' || m === 'test' || !!this.books?.learned?.has(base);
-        if (!SCROLL_SPELL_COLOR[base]) return true;
-        return m === 'creative' || m === 'test' || !!this.bonus?.spells?.[base];
+        const key = SCROLL_SPELL_COLOR[name] ? name : base; // («Алохомора Максима»: its own scroll — the plain one is known)
+        if (!SCROLL_SPELL_COLOR[key]) return true;
+        return m === 'creative' || m === 'test' || !!this.bonus?.spells?.[key];
     }
 
     startFlight(force = false) {
