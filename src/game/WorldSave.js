@@ -118,6 +118,7 @@ export function playerSnapshot(game) {
 /** Give a player their things back. */
 export function applyPlayerSnapshot(game, s) {
     if (!s) return;
+    game._playerRestored = true; // (a player of this world before: their own things, no starting gifts)
     const inv = game.inventory;
     if (inv && Array.isArray(s.slots)) {
         if (s.extraSlots && inv.setExtraSlots) inv.setExtraSlots(s.extraSlots);

@@ -2166,6 +2166,11 @@ export class Game {
         this.active = true;
         this.lastTime = performance.now();
         this.inventory?.ensureStarterWand(); // (every wizard has a wand — the plain wooden one at least)
+        // Creative: a pouch of 100 coins on the belt to start with (once; a world played before keeps its own coins)
+        if (this.config.mode === 'creative' && !this._playerRestored && !this._startCoins && this.inventory?.purse && this.inventory.coins() === 0) {
+            this._startCoins = true;
+            this.inventory.purse.add(100);
+        }
         this.prewarm();
         // The microphone listens all game long: shield (arm forward), water
         // (hand towards a river) and flight (arms up) don't raise a hand to
