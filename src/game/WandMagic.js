@@ -159,7 +159,14 @@ export class WandMagic {
     /** Voice: «Люмос», «Люмос Максима», «Нокс», «Lightning Writing», «Раскрой свои секреты». Returns a hint or the name. */
     cast(name, isFinal) {
         const g = this.game;
-        if (name === 'Reveal') { this.reveal(); return name; } // (a wand, or a bare hand)
+        if (name === 'Reveal') {
+            // (the words heard early and then again as the final result: one hologram — the
+            // running book has run off by the final words)
+            if (performance.now() - (this._revealedAt || -1e9) < 3000) return null;
+            if (!this.reveal()) return null; // (its hint stays on the screen)
+            this._revealedAt = performance.now();
+            return name;
+        } // (a wand, or a bare hand)
         if (!this.wand && !this._bare()) { if (isFinal) g.hud.setVoice('🪄 Это заклинание работает только с волшебной палочкой в руке', true); return null; }
         if (!this.wand) this._bareHand = ['right', 'left'].find((s) => g.character.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || 'right';
         if (name === 'Lumos' || name === 'LumosMaxima') {
@@ -354,13 +361,18 @@ export class WandMagic {
             if (ang < best) { best = ang; target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); }
         }
         // a running book (a creature and a book at once): its secret
+        // (small and running: where the wand OR the arm points, a wide cone, up to 30 m — and it
+        // wins over the things about: that is what the hand is after)
         let info = null;
+        const arm = side ? g.character.getForearmDirection?.(side, new THREE.Vector3()) : null;
+        let rbBest = Infinity;
         for (const { pos } of g.runner?.accioTargets?.() || []) {
             const to = _v.subVectors(pos, tip);
             const d = to.length();
-            if (d > 20) continue;
-            const ang = dir.angleTo(to.normalize());
-            if (ang < best + Math.atan2(0.6, d)) { best = ang; info = g.runner.secret(); target = { kind: 'book', runbook: true }; at = pos.clone(); }
+            if (d > 30) continue;
+            to.normalize();
+            const ang = Math.min(dir.angleTo(to), arm ? arm.angleTo(to) : Infinity);
+            if (ang < 0.45 + Math.atan2(1.5, d) && ang < rbBest) { rbBest = ang; best = 0; info = g.runner.secret(); target = { kind: 'book', runbook: true }; at = pos.clone(); }
         }
         // a book-bird's book lying on the ground or on a pedestal
         for (const bk of g.books?.books?.values() || []) {
@@ -377,10 +389,18 @@ export class WandMagic {
                 if (it && it.item.kind !== 'wand') { target = it.item; at = it.model.position.clone(); break; }
                 if (w) { target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); break; }
             }
+            // (a running book about but the wand not on it: say so — not the wand's own secrets)
+            const rb = g.runner?.accioTargets?.() || [];
+            if (!target && rb.length) {
+                const near = Math.min(...rb.map((r) => r.pos.distanceTo(tip)));
+                g.hud.setVoice(near > 30 ? `🔮 Бегущая книга слишком далеко (${Math.round(near)} м) — подойдите ближе` : '🔮 Бегущая книга не там, куда показывает палочка (рука) — наведите прямо на неё и скажите ещё раз', true);
+                return false;
+            }
             if (!target && this.wand) { target = this.wand; at = tip.clone(); }
         }
-        if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return; }
+        if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return false; }
         this._showHologram(info || describeItem(target), at);
+        return true;
     }
 
     _showHologram(info, at) {
