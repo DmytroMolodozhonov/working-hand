@@ -129,6 +129,8 @@ export class Levitation {
         if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked) out.push({ kind: 'item', obj: L, pos: L.model.position });
         if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
         for (const b of g.books?.birds.values() || []) if (b.state !== 'fall' && !b.ward) out.push({ kind: 'bird', obj: b, pos: b.model.position }); // (the book of protection: Leviosa bounces off it)
+        // a phoenix: caught, it hangs where the hand holds it, beating its wings (let go: it flies off)
+        for (const f of g.phoenixes?.targets() || []) if (!f.lev) out.push({ kind: 'phoenix', obj: f, pos: f.model.position, r: 1 });
         // living bodies (not wizards: a charge flies at them — see Game)
         for (const z of g.zombies || []) if (!z.isDead && !z.isDying && !z.isFrozen && !z.lev) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 });
         for (const a of g.animals?.targets() || []) if (!a.rider && !a.lev && g.animals.riding !== a) out.push({ kind: 'creature', ck: 'a', obj: a, pos: this._centreOf('a', a), r: g.duel?._animalBody(a).r || 1 });
@@ -140,7 +142,7 @@ export class Levitation {
 
     /** The object's own model (for things, books and birds). */
     _model(s) {
-        return s.kind === 'item' || s.kind === 'book' || s.kind === 'bird' ? s.obj.model : null;
+        return s.kind === 'item' || s.kind === 'book' || s.kind === 'bird' || s.kind === 'phoenix' ? s.obj.model : null;
     }
 
     /**
@@ -205,6 +207,8 @@ export class Levitation {
             s.obj.lev = true;
         } else if (s.kind === 'bird') {
             this.game.books.holdBird(s.obj, true); // (caught: it hangs in the air, flapping)
+        } else if (s.kind === 'phoenix') {
+            this.game.phoenixes.hold(s.obj, true);
         } else if (s.kind === 'cauldron') {
             this.game.cauldrons.levStart(s.obj);
         } else if (s.kind === 'weapon') {
@@ -241,6 +245,7 @@ export class Levitation {
         if (s.kind === 'item' && !this.game.items.loose.has(s.obj.item.uid)) { this.state = null; return; }
         if (s.kind === 'book' && !this.game.books.books.has(s.obj.id)) { this.state = null; return; }
         if (s.kind === 'bird' && (s.obj.state !== 'held' || !this.game.books.birds.has(s.obj.id))) { this.state = null; return; }
+        if (s.kind === 'phoenix' && (s.obj.dead || s.obj.state !== 'held' || !this.game.phoenixes?.list.includes(s.obj))) { this.state = null; return; }
         if (s.kind === 'cauldron' && (!s.obj.lev || !this.game.cauldrons?.list.has(s.obj.id))) { this.state = null; return; }
         if (s.attack) { this._updateAttack(s, dt); return; }
 
@@ -271,6 +276,7 @@ export class Levitation {
             s.vel.lerp(_v1.multiplyScalar(4), Math.min(1, dt * 6));
             m.position.addScaledVector(s.vel, dt);
             if (s.kind === 'bird') this.game.books.heldAt(s.obj, m.position);
+            else if (s.kind === 'phoenix') this.game.phoenixes.heldAt(s.obj, m.position);
             else m.quaternion.slerp(_q2.copy(turn).multiply(s.objQ0), Math.min(1, dt * 10));
         } else {
             const b = s.obj;
@@ -415,6 +421,8 @@ export class Levitation {
             this.game.books.dropBook(s.obj, vel);
         } else if (s.kind === 'bird') {
             this.game.books.holdBird(s.obj, false); // free: it flies off
+        } else if (s.kind === 'phoenix') {
+            this.game.phoenixes.hold(s.obj, false); // free: it flies off
         } else if (s.kind === 'cauldron') {
             this.game.cauldrons?.levDrop(s.obj, vel, gentle); // (it falls; let down gently it comes down slowly)
         } else {

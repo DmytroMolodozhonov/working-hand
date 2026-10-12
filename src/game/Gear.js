@@ -32,6 +32,7 @@ import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes
 import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
+import { phoenixDist } from './Phoenixes.js';
 import { BowDraw, drawProgress } from './BowDraw.js';
 
 const _v = new THREE.Vector3();
@@ -472,6 +473,13 @@ export class Gear {
                     a.hit.add(dr);
                     g.dragons.hit(dr, a.dmg, 'arrow', a.by);
                     this._stick(a, dr.model);
+                }
+                // a phoenix (Phoenixes.js): the arrow goes in, it is hurt (and mostly flies off)
+                if (g.authority) for (const f of g.phoenixes?.targets() || []) {
+                    if (a.hit.has(f) || phoenixDist(f, p) > 0.2) continue;
+                    a.hit.add(f);
+                    g.phoenixes.hit(f, a.dmg, 'arrow', a.by);
+                    if (!f.dead) this._stick(a, f.model);
                 }
                 if (g.authority) for (const bd of g.books?.birds?.values() || []) {
                     if (bd.state === 'fall' || a.hit.has(bd) || bd.model.position.distanceTo(p) > 1.2) continue;

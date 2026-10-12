@@ -17,6 +17,7 @@
  *   - zombies, animals, sailors, villagers with tools: nothing to disarm — a small push.
  *   - a book-bird: knocked out of the air like by any charge (it falls as a book).
  *   - a living tree, the giant spider, a dragon: no effect (nothing in their «hands» to knock out).
+ *   - a phoenix: nothing in its claws — only a push (and it is an attack: Phoenixes.TARGETS).
  * The host owns loose things and the castle people; everybody sees the same flying wand.
  */
 

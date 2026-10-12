@@ -60,7 +60,7 @@ export const FIREFIGHT_TARGETS = {
     bookBirds: { does: 'струя Maxima сбивает книгу-птицу (мокрые страницы); обычный всплеск — нет; книга защиты отскакивает', why: 'бумага тяжелеет от воды; защиту берёт только огонь и лёд' },
     servants: { does: 'как их вид (живое дерево, Брейнрот-зомби)', why: 'слуги — те же существа' },
     dragon: { does: 'гасит огонь, которым дракон дышит (струя на пламени или на пасти): пламя обрывается, дракон 2 с не может дохнуть снова и злится на того, кто облил; сам дракон не ранен и не сдвинут', why: 'вода гасит огонь, а такого великана водой не сдвинуть' },
-    phoenix: { does: 'фениксов в игре пока нет', why: 'появятся — дописать сюда (гасит его огненную атаку)' },
+    phoenix: { does: 'лёгкий толчок; пылающий феникс гаснет и бросает свою огненную атаку (улетает); без урона', why: 'вода против его огня (Phoenixes.watered)' },
     // ---- things and the world
     campfires: { does: 'костёр («Fire») гаснет совсем', why: 'вода' },
     trees: { does: 'горящие деревья гаснут (что сгорело — сгорело)', why: 'вода' },
@@ -257,6 +257,7 @@ export class Firefighting {
             if (v.lengthSq() < 1e-4) v.set(sp.d.x, 0, sp.d.z);
             v.normalize().multiplyScalar(sp.max ? FIREFIGHT.MAX_PUSH : FIREFIGHT.PUSH);
             g.creatureImpact.apply(body, { v: v.clone(), by: sp.by, spell: 'Firefighting', kind: 'Firefighting', from: sp.o.clone() });
+            if (b.kind === 'f') g.phoenixes?.watered?.(body, null, sp.by); // (a phoenix: its fire goes out — it gives up its attack)
         }
         if (this._pushed.size > 200) this._pushed.clear();
     }

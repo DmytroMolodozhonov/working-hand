@@ -189,5 +189,6 @@ export const CREATURE_BODY = {
     person: { mass: 1 }, knight: { mass: 1.4 }, king: { mass: 1.3 }, wizard: { mass: 1 },
     cow: { mass: 2.2, quad: true }, horse: { mass: 2.4, quad: true }, pig: { mass: 1.1, quad: true }, sheep: { mass: 1, quad: true },
     tree: { mass: 3.5 },
+    phoenix: { mass: 0.4 }, // (a bird half a hero tall, hollow bones: a gust throws it far)
 };
 export const bodyOf = (kind) => CREATURE_BODY[kind] || CREATURE_BODY.person;

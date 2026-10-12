@@ -462,6 +462,7 @@ export class WaterStorm {
                 const cr = g.duel?._creature?.(b.kind, b.id);
                 if (b.kind === 'a' && cr) { cr.damageCooldown = 0; g.animals?.hit?.(cr, STORM.CREATURE_DMG, null, by); }
                 else if (b.kind === 'v' && cr) g.castleLife?.hit?.(cr, STORM.CREATURE_DMG, null, by, { spell: true });
+                // (a phoenix: swept by the water's push above — no harm, its flame put out: Phoenixes.watered)
             }
             this._note({ ev: 'sweep', kind: b.kind, id: b.id, by });
         }

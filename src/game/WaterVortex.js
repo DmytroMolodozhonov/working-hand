@@ -773,7 +773,7 @@ export class WaterVortex {
             cr.vz = (cr.vz || 0) + dir.z * speed * 0.7;
             cr.vy = Math.max(cr.vy || 0, knock ? 6 : 3.5);
             cr.stunT = Math.max(cr.stunT || 0, knock ? 2.5 : 0.8);
-        }
+        } else if (tk === 'f') g.phoenixes?.watered?.(cr, _b.copy(dir).multiplyScalar(speed * 0.6).setY(knock ? 5 : 3), by); // (a phoenix: thrown, its flame put out — no harm)
         // reeling or off its feet, drawn the same for every creature (CreatureImpact)
         g.creatureImpact?.apply(cr, { v: dir.clone().multiplyScalar(speed), by, kind: 'WaterVortex', noSlide: true, always: knock ? { down: 1.5 } : null });
     }
@@ -917,7 +917,8 @@ export class WaterVortex {
         if (b.tk && b.tk !== 'p' && g.authority) {
             const c = b.tk === 'z' ? g.zombieById?.get(b.tid) : g.duel?._creature?.(b.tk, b.tid);
             // let go up there: it falls (and a long fall hurts, as after «Левиоса»)
-            if (c?.lev?.vortex === b.id) {
+            if (c?.lev?.vortex === b.id && b.tk === 'f') { c.lev = null; g.phoenixes?.freed?.(c); } // (a phoenix flies off)
+            else if (c?.lev?.vortex === b.id) {
                 if (g.levitation?.letGo) g.levitation.letGo(b.tk, c, false);
                 else c.lev = null;
             }
@@ -1109,6 +1110,7 @@ export class WaterVortex {
         if (b.tk === 'a') g.animals?.hit?.(c, dmg, null, b.by);
         else if (b.tk === 'v') g.castleLife?.hit?.(c, dmg, null, b.by, { spell: true });
         else if (b.tk === 'c') g.ships?.crew.hit(c, dmg, null, b.by, { spell: true });
+        // (a phoenix: the cold of the ice doesn't harm a fire bird — it waits inside for the bubble to end)
     }
 
     _meltStep(b, dt) {
@@ -1289,6 +1291,7 @@ export class WaterVortex {
                     else if (b.kind === 'v') g.castleLife?.hit?.(cr, CD, dir.clone(), e.by, { spell: true, magic: true });
                     else if (b.kind === 'c') g.ships?.crew.hit(cr, CD, dir.clone(), e.by, { spell: true, magic: true });
                     else if (b.kind === 't') g.livingTrees?.hit?.(cr, CD, 'FireMaxima'); // (a living tree: fire is the only thing that hurts it)
+                    else if (b.kind === 'f') g.phoenixes?.hit?.(cr, 0, 'FireMaxima', e.by); // (a phoenix: fire doesn't harm it — an attack)
                 }
             }
         }

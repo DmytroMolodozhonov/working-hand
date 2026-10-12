@@ -109,6 +109,8 @@ export const ITEM_INFO = {
     glass: { name: 'Осколки стекла', icon: '🔷', weight: 0.3, stack: 10 },
     // the dragons' lairs (Dragons.js): one egg per dragon on its hoard — for potions later (no hatching)
     dragonEgg: { name: 'Яйцо дракона', icon: '🥚', weight: 4 },
+    // the phoenix (Phoenixes.js): what it leaves when it is killed — for potions later (no effect yet)
+    phoenixFeather: { name: 'Перо феникса', icon: '🪶', weight: 0.05, stack: 10 },
 };
 
 /**
@@ -141,6 +143,7 @@ export function itemValue(it) {
         case 'potion': return 60;
         case 'web': return 120 * (it.count || 1);
         case 'glass': return 2 * (it.count || 1);
+        case 'phoenixFeather': return 250 * (it.count || 1);
         default: return 0;
     }
 }
@@ -366,6 +369,7 @@ export function describeItem(it) {
         case 'web': return { title: '🕸️ Связка паутины', color: 0xf2f2ff, lines: ['Осталась от гигантской паучихи', 'Ингредиент зелья невидимости: бросьте в кипящий котёл'] };
         case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
+        case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Пригодится для зелий (позже)'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
 }
@@ -696,7 +700,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8 };
+export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -732,6 +736,7 @@ function buildItemModel(it) {
         case 'potion': return flaskModel(it.color ?? 0x9fd8ff);
         case 'web': return webModel();
         case 'glass': return glassModel();
+        case 'phoenixFeather': return phoenixFeatherModel();
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);
         case 'book': return it.ward || it.spells?.includes('ProtectionHouse') ? makeSpellBookModel(WARD_COVER, WARD_TRIM) : it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
@@ -775,6 +780,42 @@ function webModel() {
         g.add(t);
     }
     g.add(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), m));
+    return g;
+}
+
+/**
+ * A phoenix feather: a long quill (its handle: model y from 0, held in the fist like a thin
+ * stick) and a vane that runs from deep crimson through orange into a glowing gold tip.
+ */
+function phoenixFeatherModel() {
+    const g = new THREE.Group();
+    const quill = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.014, 0.46, 6), new THREE.MeshStandardMaterial({ color: 0xffe3a0, emissive: 0x7a4a10, emissiveIntensity: 0.5, roughness: 0.4 }));
+    quill.position.y = 0.23;
+    g.add(quill);
+    // the vane: two halves along the quill, a strip of quads with colours from the base to the tip
+    const pos = [], col = [], idx = [];
+    const N = 12, L = 0.38, y0 = 0.08;
+    const c0 = new THREE.Color(0xa0101a), c1 = new THREE.Color(0xff6a1a), c2 = new THREE.Color(0xffd45a), c = new THREE.Color();
+    for (let i = 0; i <= N; i++) {
+        const t = i / N, y = y0 + t * L;
+        const w = 0.075 * Math.pow(Math.sin(Math.PI * (0.12 + 0.8 * t)), 0.8);
+        if (t < 0.55) c.copy(c0).lerp(c1, t / 0.55); else c.copy(c1).lerp(c2, (t - 0.55) / 0.45);
+        const bend = 0.03 * t * t; // (the vane curves a little)
+        pos.push(-w, y, bend, 0, y + 0.012, 0, w * 0.85, y, bend);
+        for (let k = 0; k < 3; k++) col.push(c.r, c.g, c.b);
+        if (i) { const a = (i - 1) * 3, b = i * 3; idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2); }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const vane = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, emissive: 0xff5a10, emissiveIntensity: 0.55, roughness: 0.55, side: THREE.DoubleSide }));
+    g.add(vane);
+    // a soft golden glow round the tip
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.position.y = y0 + L * 0.85;
+    g.add(glow);
     return g;
 }
 

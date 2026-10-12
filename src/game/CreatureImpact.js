@@ -197,6 +197,7 @@ export class CreatureImpact {
         if (!K || !c.group || !K.alive(c)) return 'none';
         if (!this.auth) return 'none';
         if (c.lev) return 'none'; // (held up by Leviosa: the magic holds the body)
+        if (K.immune?.(this.game, c, o)) return 'none'; // (the kind's own «не действует»: a phoenix in the air and an earthquake)
         // in a house's sphere of protection: a push / a spell from outside doesn't reach it (HouseWards.js)
         const src = o.from || (o.by != null ? this.game.wards?.casterAt?.(o.by) : null);
         if (src && this.game.wards?.shields(src, K.centre(c, _v))) return 'none';

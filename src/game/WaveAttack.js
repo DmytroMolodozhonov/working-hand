@@ -23,6 +23,7 @@
  *     sailors — on a deck too, if the wave reaches that high): knocked down and carried (host);
  *   - me (every computer for its own player, the caster included): knocked down and carried;
  *   - book-birds flying in the wave: struck (host; the book of protection shrugs it off);
+ *   - a phoenix (a CreatureImpact kind too): thrown, its flame put out, no harm (Phoenixes.js);
  *   - the giant spider: NOT moved — far too big and heavy for a wave (it only splashes on it);
  *   - weapons and things on the ground: dragged along (where they are simulated);
  *   - campfires (host) and burning trees / blocks (every computer): put out; ships: rocked and
@@ -790,6 +791,7 @@ export class WaveAttacks {
                 if (!auth || !g.creatureImpact) continue;
                 const res = g.creatureImpact.apply(c, { v: wavePush(w, k, new THREE.Vector3()), by: w.by, spell: w.name, jolt: P.jolt || 0, from: front.clone(), down: P.down, toss: P.toss || 0 });
                 if (res !== 'none') any = true;
+                if (c.isPhoenix) g.phoenixes?.watered?.(c, null, w.by); // (a phoenix: drenched — its flame goes out; no harm)
             }
         }
         // me (every computer: its own player — the caster too, if he stands in front of it)

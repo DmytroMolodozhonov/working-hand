@@ -786,6 +786,7 @@ export class NetSync {
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
             case 'bnote': g.hud.notify?.('🕷️ Из темноты выходит гигантская паучиха...'); break;
             case 'drg': g.dragons?.onNet(m, m.from); break;
+            case 'phx': g.phoenixes?.onNet(m, this.net.isHost); break; // (phoenixes: Phoenixes.js)
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;

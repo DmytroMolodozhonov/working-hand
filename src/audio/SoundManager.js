@@ -605,6 +605,42 @@ export class SoundManager {
         this._playAt(this.sounds.oink[Math.floor(Math.random() * 2)], position, volume, refDistance, rate);
     }
 
+    /** The phoenix's soft healing song (a few warm, clear notes rising) at a place. */
+    playPhoenixSong(position) {
+        if (!this.enabled || !this.context) return;
+        if (!this._phxSong) this._phxSong = this._synthPhoenix(true);
+        this._playAt(this._phxSong, position, 1.1, 14, 1);
+    }
+
+    /** The phoenix's cry: a high clear call sliding up (startled, flying off, diving). */
+    playPhoenixCry(position, rate = 1) {
+        if (!this.enabled || !this.context) return;
+        if (!this._phxCry) this._phxCry = this._synthPhoenix(false);
+        this._playAt(this._phxCry, position, 1.2, 20, rate);
+    }
+
+    /** song: five notes of a pentatonic tune, each a pure tone with a soft vibrato and a ring; cry: one bright glide. */
+    _synthPhoenix(song) {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, dur = song ? 2.6 : 0.9, len = Math.floor(sr * dur);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        const notes = song ? [[0, 587.3], [0.38, 659.3], [0.76, 784.0], [1.14, 880.0], [1.6, 1174.7]] : [[0, 1250]];
+        for (const [at, f] of notes) {
+            const i0 = Math.floor(at * sr), nd = song ? 1.0 : dur;
+            let ph = 0;
+            for (let i = i0; i < Math.min(len, i0 + Math.floor(nd * sr)); i++) {
+                const t = (i - i0) / sr;
+                const env = Math.min(1, t * (song ? 18 : 30)) * Math.exp(-t * (song ? 2.6 : 3.5));
+                const fr = song ? f * (1 + 0.006 * Math.sin(2 * Math.PI * 5.5 * t)) : f * (1 + 0.9 * Math.min(1, t / 0.35)) * (1 + 0.02 * Math.sin(2 * Math.PI * 9 * t));
+                ph += fr / sr;
+                d[i] += env * (0.5 * Math.sin(2 * Math.PI * ph) + 0.18 * Math.sin(4 * Math.PI * ph) + 0.07 * Math.sin(6 * Math.PI * ph));
+            }
+        }
+        for (let i = 0; i < len; i++) d[i] = Math.tanh(d[i] * 1.1) * 0.6;
+        return buf;
+    }
+
     /** A nasal grunt: a buzzing low voice through the snout, two or three short pulses. */
     _synthOink(kind) {
         const ctx = this.context;

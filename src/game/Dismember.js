@@ -532,6 +532,18 @@ export class Dismemberment {
         this._sendMine(true);
     }
 
+    /** A phoenix's touch (Phoenixes.js): every lost arm and leg grows back — the same life goes on. */
+    healLocal() {
+        const g = this.game, ch = g.character;
+        if (!anyLost(ch.limbs)) return false;
+        restoreAll(ch);
+        ch.limbs = {};
+        ch.limbSpeed = 1; ch.canRun = true; ch.legDrop = 0;
+        ch.setShowHands(ch.handsVisible);
+        this._sendMine(true);
+        return true;
+    }
+
     /** For the save. */
     snapshot() {
         const st = this.game.character.limbs;

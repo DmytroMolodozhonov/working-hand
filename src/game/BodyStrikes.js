@@ -141,6 +141,8 @@ export class BodyStrikes {
         for (const v of g.castleLife?.byId?.values?.() || []) if (!v.dead && v.group?.visible && near(v.group.position)) out.push({ key: 'v:' + v.id, creature: v, owner: v, parts: creatureParts(v), centre: v.group.position });
         for (const a of g.animals?.list || []) if (!a.dead && a.rider !== g.localId && near(a.group.position)) out.push({ key: 'a:' + a.id, creature: a, owner: a, parts: creatureParts(a), centre: a.group.position });
         for (const t of g.livingTrees?.list || []) if (!t.isDead && near(t.model.position)) out.push({ key: 'T:' + t.id, creature: t, owner: t, parts: creatureParts(t), centre: t.model.position });
+        // a phoenix within reach (on the ground by me, or flying low): a fist hurts it, a hand rests on it
+        for (const f of g.phoenixes?.list || []) if (!f.dead && near(f.model.position)) out.push({ key: 'F:' + f.id, creature: f, owner: f, parts: creatureParts(f), centre: f.model.position, vel: f.vel });
         return out;
     }
 

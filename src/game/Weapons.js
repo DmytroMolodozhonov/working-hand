@@ -735,7 +735,7 @@ export class WeaponSystem {
                     // A thrust (the blade moving along itself, point first) sticks it into the body
                     _e.subVectors(tip, base).normalize();
                     const along = tipVel.dot(_e);
-                    const stab = !cut && z.group && !z.isBird && along > STAB_SPEED && along > 0.6 * speed && hs !== this._levSlot && hy > -0.6 && hy < 2.6;
+                    const stab = !cut && z.group && !z.isBird && !z.isPhoenix && along > STAB_SPEED && along > 0.6 * speed && hs !== this._levSlot && hy > -0.6 && hy < 2.6;
                     const factor = clamp(speed / 9, 0.7, 1.6);
                     const damage = Math.max(1, Math.round(w.spec.damage * factor));
                     const dir = tipVel.clone().setY(0);

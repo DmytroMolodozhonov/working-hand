@@ -810,6 +810,7 @@ export class Cauldrons {
         g.ships?.crew?.hitAt?.(at, r, dmg, null);
         g.spiders?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.dragons?.hitAt?.(at, r, dmg, 'Cauldron', null);
+        g.phoenixes?.hitAt?.(at, r, dmg, 'Cauldron', null); // (a phoenix standing there; in the air it is not under it)
         // (a living tree: not hurt — only fire hurts it; book-birds are in the air, it falls past them)
         const me = g.character.group.position;
         if (Math.hypot(me.x - at.x, me.z - at.z) < r + 0.5 && Math.abs(me.y - 2 - c.y) < 3 && !g.isDeadLocal) {
