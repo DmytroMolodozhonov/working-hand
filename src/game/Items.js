@@ -22,7 +22,7 @@
 
 import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { PEN_POINTS, Steady } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
@@ -765,10 +765,15 @@ export class ItemSystem {
         this._eatT = 0;
         if (food.h.item.shop) { g.hud.setVoice?.('💰 Сначала заплатите торговцу (скажите «да»)', true); return; }
         if (food.h.item.kind === 'potion') { this._drink(food.side, food.h, mouth); return; }
-        const heal = { apple: 10, meat: 2, steak: 4 }[food.h.item.kind] ?? ITEM_INFO[food.h.item.kind]?.heal ?? 1;
-        g.playerHP = Math.min(g.maxHP, g.playerHP + heal);
-        g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
-        g.hud.setVoice?.(`😋 +${heal} HP`, true);
+        const heal = foodHeal(food.h.item);
+        // (Survival: the real health is the combat bar; elsewhere the old counter) — never above the maximum
+        const pvp = g.combat?.enabled && !g.combat.dead;
+        const full = pvp ? g.combat.hp >= (g.combat.maxHp || 20) : g.playerHP >= g.maxHP;
+        if (full) { g.hud.setVoice?.('😌 Вы сыты — здоровье и так полное', true); return; }
+        let got;
+        if (pvp) { got = g.combat.heal(heal); g.hud.update(g.combat.hp, g.combat.maxHp || 20, g.killCount, g.punchCount); }
+        else { const was = g.playerHP; g.playerHP = Math.min(g.maxHP, g.playerHP + heal); got = g.playerHP - was; g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
+        g.hud.setVoice?.(`😋 +${Math.round(got)} HP`, true);
         for (let i = 0; i < 10; i++) g.fx.spark(mouth, food.h.item.kind === 'apple' ? 0xffd700 : 0xd9534f, 0.07, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.5);
         food.h.item.count = (food.h.item.count || 1) - 1;
         if (food.h.item.count <= 0) this.releaseHand(food.side);

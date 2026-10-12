@@ -24,6 +24,9 @@ import * as THREE from 'three';
 import { isWood } from '../world/Terrain.js';
 import { FX_RENDER_ORDER } from '../fx/Particles.js';
 
+/** Seconds in a spell's flame that roast meat / fish (a campfire takes CAMPFIRE.COOK_TIME). */
+export const ROAST_T = 1;
+
 export const CAMPFIRE = {
     BURN: 180, // s a fresh campfire burns
     WOOD: 60, // s one block of wood adds
@@ -199,6 +202,7 @@ export class Campfires {
         this._feedCool = 0;
         this._hurtT = 0;
         this._heldCook = { right: 0, left: 0 };
+        this._roast = new Map(); // (a spell's fire: what roasts in it, and for how long)
         this._looseT = 0;
         // ONE light for the nearest fire at night: made now, before the shaders are compiled
         this.light = new THREE.PointLight(0xff9a40, 0, 24, 2);
@@ -484,6 +488,48 @@ export class Campfires {
             cookItem(item);
             items.takeIntoHand(item, side);
             g.hud.setVoice(this._cooked(item, pos), true);
+        }
+    }
+
+    /**
+     * A spell's fire reaches things («Инферно»'s stream, «Адский огонь», a fire-breath…): meat / fish
+     * held in it or lying in it roast in about a second of flame. `inFire(p)` → true where it burns.
+     */
+    roastIn(inFire) {
+        const g = this.game, items = g.items;
+        if (!items) return;
+        const now = performance.now();
+        const step = (key) => {
+            const r = this._roast.get(key);
+            const t = (r && now - r.at < 1500 ? r.t + Math.min(0.3, (now - r.at) / 1000) : 0.1);
+            this._roast.set(key, { t, at: now });
+            return t >= ROAST_T;
+        };
+        for (const side of ['right', 'left']) {
+            const h = items.held[side];
+            if (!h || !h.model || !canCook(h.item)) continue;
+            const p = h.model.getWorldPosition(_v2);
+            if (!inFire(p) || !step('h:' + side)) continue;
+            this._roast.delete('h:' + side);
+            const pos = p.clone();
+            const item = items.releaseHand(side);
+            cookItem(item);
+            items.takeIntoHand(item, side);
+            g.hud.setVoice(this._cooked(item, pos), true);
+        }
+        if (!this.auth || !items.loose.size) return;
+        for (const [uid, L] of [...items.loose]) {
+            if (L.hover || !canCook(L.item)) continue;
+            const p = L.model.position;
+            if (!inFire(p) || !step('l:' + uid)) continue;
+            this._roast.delete('l:' + uid);
+            const pos = p.clone();
+            const item = items.removeLoose(uid);
+            g.sync?.itemGone?.(uid, null, null);
+            if (!item) continue;
+            cookItem(item);
+            items.spawnLoose(item, pos);
+            if (g.character.group.position.distanceTo(pos) < 15) g.hud.setVoice(this._cooked(item, pos), true);
         }
     }
 

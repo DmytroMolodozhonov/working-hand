@@ -337,6 +337,12 @@ export class Game {
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.handHold = new HandHold(this); // handshakes, holding and leading by the hand
         this.fire = new FireSystem(this); // burning trees
+        {
+            // every spell's fire (the Inferno stream, Hellfire's blaze and ring, a fire-breath) roasts the meat in it
+            const F = this.fire, ig = F.ignite.bind(F), al = F.igniteAlong.bind(F);
+            F.ignite = (p, r = 1.5) => { this.campfires?.roastIn((q) => q.distanceTo(p) <= r + 0.4); return ig(p, r); };
+            F.igniteAlong = (o, d, len) => { this.campfires?.roastIn((q) => inStream(o, d, len, q, 0.5)); return al(o, d, len); };
+        }
         this.fire.onCastleBurn = (x, L, z) => this._castleBurnt(x, L, z);
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');

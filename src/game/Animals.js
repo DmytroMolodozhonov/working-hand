@@ -414,7 +414,7 @@ export class Animals {
     _takeMeat(a, toId, side) {
         if (!a.dead || a.meat <= 0) return;
         a.meat--;
-        const item = { kind: a.cooked ? 'steak' : 'meat', uid: newUid(), count: 1 };
+        const item = { kind: a.cooked ? 'steak' : 'meat', uid: newUid(), count: 1, from: a.pegasus ? 'pegasus' : a.type }; // (the animal: how much it heals — ItemTypes.foodHeal)
         if (a.meat <= 0) this._toBones(a);
         if (toId === this.game.localId) this._give(item, side);
         else this.game.sync?.animalMeatTo?.(toId, item, side);

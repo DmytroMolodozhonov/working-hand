@@ -357,6 +357,16 @@ export class Combat {
         this.fatigue = Math.min(this.maxFatigue, this.fatigue + n);
     }
 
+    /** Food, a bed…: healed by n, never above the maximum. @returns how much it really healed */
+    heal(n) {
+        if (this.dead || !(n > 0)) return 0;
+        const max = this.maxHp || PVP.MAX_HP;
+        const was = this.hp;
+        this.hp = Math.min(max, this.hp + n);
+        this._hudKey = '';
+        return this.hp - was;
+    }
+
     /** A burnt health scroll: more health for good (and that much healed at once). */
     addMaxHp(n) {
         this.maxHp = (this.maxHp || PVP.MAX_HP) + n;

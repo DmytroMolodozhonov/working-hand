@@ -58,6 +58,19 @@ const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
 
+/** Raw meat by the animal it came from (HP when eaten raw); roasted on a fire it gives twice as much. */
+export const MEAT_HP = { cow: 8, horse: 8, pig: 7, sheep: 6, ram: 6, bull: 9, minotaur: 10, pegasus: 9 };
+export const MEAT_RU = { cow: 'говядина', horse: 'конина', pig: 'свинина', sheep: 'баранина', ram: 'баранина', bull: 'говядина', minotaur: 'мясо минотавра', pegasus: 'мясо пегаса' };
+/** How much health this food gives (golden apple 10, apple 3, raw meat 5–10 by the animal, roasted ×2, the rest its own `heal`). */
+export function foodHeal(it) {
+    if (!it) return 0;
+    if (it.kind === 'apple') return 10;
+    if (it.kind === 'meat') return MEAT_HP[it.from] ?? 6;
+    if (it.kind === 'steak') return 2 * (MEAT_HP[it.from] ?? 6);
+    if (it.kind === 'fish') return it.cooked ? 10 : 5;
+    return ITEM_INFO[it.kind]?.heal ?? 1;
+}
+
 export const ITEM_INFO = {
     wand: { name: 'Волшебная палочка', icon: '🪄', weight: 0.15 },
     scroll: { name: 'Свиток', icon: '📜', weight: 0.2 },
@@ -66,7 +79,7 @@ export const ITEM_INFO = {
     bow: { name: 'Лук', icon: '🏹', weight: 1 },
     hammer: { name: 'Молот Тора', icon: '🔨', weight: 4 },
     apple: { name: 'Золотое яблоко', icon: '🍏', weight: 0.2, stack: 10 },
-    redApple: { name: 'Яблоко', icon: '🍎', weight: 0.2, stack: 10, heal: 2 }, // (an ordinary apple from an apple tree)
+    redApple: { name: 'Яблоко', icon: '🍎', weight: 0.2, stack: 10, heal: 3 }, // (an ordinary apple from an apple tree)
     meat: { name: 'Сырое мясо', icon: '🥩', weight: 0.4, stack: 10 },
     steak: { name: 'Жареный стейк', icon: '🍖', weight: 0.4, stack: 10 },
     book: { name: 'Книга заклинаний', icon: '📖', weight: 0.6 },
@@ -338,8 +351,8 @@ export function describeItem(it) {
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 40% за золотое яблоко'] };
         case 'redApple': return { title: '🍎 Яблоко', color: 0xc8202a, lines: ['Поднесите ко рту: +2 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 9% за яблоко'] };
-        case 'meat': return { title: '🥩 Сырое мясо', color: 0xd9534f, lines: ['Поднесите ко рту: +2 HP', 'Пожарьте на костре («Fire») — будет +4'] };
-        case 'steak': return { title: '🍖 Стейк', color: 0xb5651d, lines: ['Поднесите ко рту: +4 HP'] };
+        case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Инферно», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
+        case 'steak': return { title: `🍖 Жареное мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xb5651d, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`] };
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
         case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу справа: руку с мешочком к правому бедру', 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
