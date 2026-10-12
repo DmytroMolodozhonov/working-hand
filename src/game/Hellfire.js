@@ -33,6 +33,9 @@
  *                blaze, the ring's wall) that burn on for 30 s more, then die down — still
  *                burning anyone who walks in (the caster too). What caught fire (trees, plants,
  *                wood) burns on till it has burnt out (Fire.js). Water puts the fires out.
+ *   Firefighting a plain burst only knocks the blaze back (smaller, no growth for a moment) and puts
+ *                out the small fires left on the ground it reaches; «Firefighting Maxima» held on the
+ *                blaze or the ring drowns it (Firefighting.js → douse).
  *   Network      the caster's fire is sent ~10×/s ('hf'); every computer draws it, sets its
  *                trees on fire and burns its own player; the host burns the creatures.
  */
@@ -86,6 +89,10 @@ export const HELLFIRE = {
     LEFT_LIFE: 30, // s the fires left on the ground (after «стоп» / no mana) burn at full strength…
     LEFT_FADE: 6, // …then die down over this long
     LEFT_MAX: 18, // fires left at once (all wizards)
+    DOUSE_KNOCK: 1.3, // m off the blaze's radius by one «Firefighting» burst (it only knocks it back)…
+    DOUSE_HOLD: 1.5, // …and it can't grow again for this long
+    DOUSE_RATE: 2, // m a second off it while «Firefighting Maxima» is held on it (it drowns)
+    LEFT_KNOCK: 1.6, // m off a fire left on the ground by a burst (the ring's sections go out)
     SEND: 0.1, // s between network updates
     STALE: 1.5, // s without news: another computer's fire is gone
 };
@@ -372,8 +379,9 @@ export class Hellfire {
         // water drowns it: it hisses and shrinks there (the blaze, and the ring round the caster)
         s.wet = this._wet(s.c, s.R) * (1 - s.k);
         const rw = s.k > 0.2 ? this._ringWet(ch.group.position, s.rr, s.rw, s.rh) * s.k : 0;
+        if (s.dousedT > 0) s.dousedT -= dt; // («Firefighting» on it: it can't grow back yet)
         if (s.wet > 0 || rw > 0) s.R = Math.max(0, s.R - HELLFIRE.QUENCH * (s.wet + rw) * dt);
-        else s.R += (want - s.R) * Math.min(1, dt * (s.t < 0.4 ? 6 : 1.6));
+        else if (!(s.dousedT > 0)) s.R += (want - s.R) * Math.min(1, dt * (s.t < 0.4 ? 6 : 1.6));
         if (s.R < HELLFIRE.R_MIN && s.t > 0.6) { this.stop('water'); return; }
         // the blaze flows after the wand (a heavy mass: it lags a little, never jumps)
         this._aim(s.o, s.d, reach, s.R, s.target);
@@ -484,6 +492,46 @@ export class Hellfire {
             if (Math.abs(d - rr) < s.r + W / 2 && s.y > body.y - 3 && s.y < body.y + H + s.r) w = Math.max(w, 1.5);
         }
         return w;
+    }
+
+    /**
+     * «Firefighting» (Firefighting.js) sprays the fires this computer keeps: `hit(c, r)` = the water
+     * reaches a fire of radius r at c. A burst (`dt` 0) knocks my blaze back (−DOUSE_KNOCK, no growth
+     * for DOUSE_HOLD s) and puts out the small fires left on the ground (a big one only shrinks);
+     * «Firefighting Maxima» held on it (`dt` s) drowns it: −DOUSE_RATE a second — it goes out.
+     * Another wizard's fire is drowned on its own computer (it sends the smaller fire on).
+     * @returns true when the water reached some of the fire
+     */
+    douse(hit, dt = 0) {
+        const burst = !(dt > 0);
+        let any = false;
+        const s = this.state;
+        if (s) {
+            const body = this.game.character.group.position;
+            let on = 1 - s.k > 0.2 && hit(s.c, s.R);
+            if (!on && s.k > 0.2) {
+                for (let i = 0; i < 12 && !on; i++) {
+                    const a = s.ang + i * (TAU / 12);
+                    on = hit(_a.set(body.x + Math.cos(a) * s.rr, body.y - 0.5, body.z + Math.sin(a) * s.rr), (s.rw || HELLFIRE.RING_W) / 2);
+                }
+            }
+            if (on) {
+                any = true;
+                s.R = Math.max(0, s.R - (burst ? HELLFIRE.DOUSE_KNOCK : HELLFIRE.DOUSE_RATE * dt));
+                s.dousedT = Math.max(s.dousedT || 0, burst ? HELLFIRE.DOUSE_HOLD : 0.3);
+                if (burst) this._note({ ev: 'doused', R: r2(s.R) });
+                if (s.R < HELLFIRE.R_MIN) this.stop('water');
+            }
+        }
+        for (const f of this.remote.values()) if ((1 - f.k > 0.2 && hit(f.c, f.R)) || (f.k > 0.2 && hit(f.body, f.rr + 1))) any = true;
+        for (let i = this.left.length - 1; i >= 0; i--) {
+            const f = this.left[i];
+            if (!hit(f.c, f.R)) continue;
+            any = true;
+            f.R0 = Math.max(0, f.R0 - (burst ? HELLFIRE.LEFT_KNOCK : HELLFIRE.DOUSE_RATE * 1.5 * dt));
+            if (f.R0 * leftStrength(f.t) < 0.25) { this._dieDown(f.c, Math.max(0.5, f.R0)); this.left.splice(i, 1); this._note({ ev: 'leftOut' }); }
+        }
+        return any;
     }
 
     /** It really burnt something: mana (the first time: its bonus — Mana.js FIRST_SPELL). */
@@ -611,8 +659,9 @@ export class Hellfire {
             near = Math.min(gb, gr) < HELLFIRE.PLAYER_HEAT_R;
             if (!near) return;
         }
-        // water magic round me keeps the fire off
+        // water magic round me keeps the fire off (soaked by «Firefighting» too)
         for (const s of g._flameWaters?.() || []) if (Math.hypot(me.x - s.x, me.y - s.y, me.z - s.z) < s.r) return;
+        if (g.firefighting?.wetMe?.()) return;
         f.meT = near ? HELLFIRE.PLAYER_TICK * 2 : HELLFIRE.PLAYER_TICK;
         const from = blaze || near ? f.c : body;
         let dmg = (near ? HELLFIRE.PLAYER_HEAT_DMG : HELLFIRE.PLAYER_DMG) * (g.fireBoost?.(f === this.state ? this.me : f.by) ?? 1); // (the dragon's wand: 60% hotter)

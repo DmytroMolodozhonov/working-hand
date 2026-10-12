@@ -55,6 +55,7 @@ import { Wreck } from './Wreck.js';
 import { WaveAttacks } from './WaveAttack.js';
 import { TotalDestruction } from './TotalDestruction.js';
 import { Hellfire } from './Hellfire.js';
+import { Firefighting } from './Firefighting.js';
 import { WaterStorm } from './WaterStorm.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
@@ -94,7 +95,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima']);
+const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -249,6 +250,7 @@ export class Game {
             burn: (o, d, len, casterId) => this._burnRay(o, d, len, casterId),
             fireBoost: (casterId) => this.fireBoost(casterId), // (the dragon's wand: fire spells +60%)
             waters: () => this._flameWaters(),
+            firefight: (sp, dt) => this.firefighting?.act(sp, dt), // («Firefighting»: the spray puts fire out — Firefighting.js)
             blockAt: (x, y, z) => this._flameBlock(x, y, z),
             // a house's sphere of protection (HouseWards.js): spells from outside stop at it
             wardClip: (o, d, len) => this.wards?.clipRay(o, d, len) ?? len,
@@ -327,6 +329,7 @@ export class Game {
         this.waves = new WaveAttacks(this); // «Wave Attack»: a real wave raised from the water, aimed by the hand
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
+        this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
@@ -1002,6 +1005,8 @@ export class Game {
         }
         // («Джолт» alone, still being spoken: wait — it may yet be «Джолт Максима»)
         if (name === 'Jolt' && !isFinal) return null;
+        // («Firefighting» alone, still being spoken: it may yet be «Firefighting Maxima»)
+        if (name === 'Firefighting' && !isFinal) return null;
         const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);

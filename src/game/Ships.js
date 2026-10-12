@@ -1018,7 +1018,8 @@ export class Ships {
 
     /** Rain / a wave / a water ball put fires out (within r of a world point, or the whole ship). */
     douse(p, r) {
-        if (!this.auth) return;
+        if (!this.auth) return 0;
+        let n = 0;
         for (const s of this.awake) {
             if (!s.fires.length) continue;
             const before = s.fires.length;
@@ -1026,8 +1027,9 @@ export class Ships {
                 s.pose.toWorld(f.lx, f.ly, f.lz, _o);
                 return Math.hypot(_o.x - p.x, _o.y - p.y, _o.z - p.z) > r;
             });
-            if (s.fires.length !== before) { s.changed = true; this._event(s, { k: 'fireout', f: s.fires.map((f) => [r2(f.lx), r2(f.ly), r2(f.lz), f.sail || 0]) }); }
+            if (s.fires.length !== before) { n += before - s.fires.length; s.changed = true; this._event(s, { k: 'fireout', f: s.fires.map((f) => [r2(f.lx), r2(f.ly), r2(f.lz), f.sail || 0]) }); }
         }
+        return n; // (how many fires went out)
     }
 
     /** (host) Fire, leaks, sinking. */

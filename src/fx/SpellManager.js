@@ -17,6 +17,7 @@ import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop 
 import { thunderPush } from '../game/Impact.js';
 import { isUpWord } from '../game/UpSpell.js';
 import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
+import { FIREFIGHT, firefightWords } from '../game/Firefighting.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -41,6 +42,9 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Firefighting» («файрфайтинг», «фаер файтинг»…): the fire word AND «fighting» — before Hellfire, Fire, Fire Maxima
+    const ff = firefightWords(s);
+    if (ff) return ff;
     // «Let the Hellfire Come» (whole words only): before «fire» / «файр» (Fire, Fire Maxima), «лет» (Let it rain)…
     const hell = hellfireWords(s);
     if (hell === 2) return 'Hellfire';
@@ -320,6 +324,7 @@ export class SpellManager {
             // («Wave Attack»: raised, aimed, sent — WaveAttack.js; an old one-shot: d's length = the distance)
             case 'WaveAttack': case 'WaveAttackMaxima': this.hooks.wave?.(name, o.clone(), direction.clone(), handSide, casterId); break;
             case 'Inferno': this.castInferno(o, d, casterId, handSide || 'right'); break;
+            case 'Firefighting': case 'FirefightingMaxima': this.castFirefighting(name === 'FirefightingMaxima', o, d, casterId, handSide || 'right'); break;
             case 'Sands': this.castSands(o, d, casterId); break;
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
             case 'Bombardo': this.castBombardo(o, d, casterId); break;
@@ -430,6 +435,30 @@ export class SpellManager {
                 if (hit && !flame.worked) { flame.worked = true; this.hooks.success?.(casterId, 'Inferno'); }
             },
             onEnd: () => { if (flame.noMana) this.hooks.flameOut?.(casterId); }, // (it went out everywhere)
+        });
+    }
+
+    // --------------------------------------------------------- Firefighting
+    /**
+     * «Firefighting»: a burst of cold water from the hand that puts fire out; «… Maxima»: a hose held
+     * for 5 s that follows the caster's live hand («стоп» ends it). What it does: Firefighting.js.
+     */
+    castFirefighting(max, origin, direction, casterId, handSide = 'right') {
+        const name = max ? 'FirefightingMaxima' : 'Firefighting';
+        const sp = { o: origin.clone(), d: direction.clone().normalize(), max, t: 0, by: casterId, side: handSide, done: false, worked: false };
+        this.spells.push({
+            life: max ? FIREFIGHT.MAX_LIFE : FIREFIGHT.BURST,
+            held: max, by: casterId, kind: name, spray: sp, // (the hose: «стоп» ends it)
+            onUpdate: (spell, dt) => {
+                if (max) {
+                    const live = this.hooks.handPose ? this.hooks.handPose(casterId, handSide) : null;
+                    if (live && live.dir && live.dir.lengthSq() > 1e-6) { sp.o.copy(live.origin); sp.d.copy(live.dir).normalize(); }
+                }
+                sp.t += dt;
+                this._from = sp.o;
+                // mana: it really put a fire out
+                if (this.hooks.firefight?.(sp, dt) && !sp.worked) { sp.worked = true; this.hooks.success?.(casterId, name); }
+            },
         });
     }
 

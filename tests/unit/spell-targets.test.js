@@ -130,3 +130,10 @@ test('dragons: every other place spells and blows look for targets knows them (C
     has('src/game/WaveAttack.js', /dragons\?\.list/, 'a wave splashes on it');
     has('src/game/Accio.js', /dragon/, '«Акцио» (written: no)');
 });
+
+test('«Firefighting» decides every creature and thing (Firefighting.FIREFIGHT_TARGETS — «не действует» is written too, with why)', async () => {
+    const { FIREFIGHT_TARGETS: T } = await import('../../src/game/Firefighting.js');
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds' };
+    for (const k of ALL) assert.ok(T[names[k]]?.why, `«Firefighting» forgets: ${k}`);
+    for (const k of ['me', 'players', 'servants', 'campfires', 'trees', 'blocks', 'inferno', 'fireMaxima', 'hellfire', 'hellfireLeft', 'ships', 'items', 'water', 'ground']) assert.ok(T[k]?.why, k);
+});

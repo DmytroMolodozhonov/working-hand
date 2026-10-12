@@ -51,6 +51,8 @@ export const SPELL_COST = {
     Sapira: 20,
     Inferno: 10,
     Fire: 4, // a campfire
+    Firefighting: 5, // a burst of water: puts fire out (Firefighting.js)
+    FirefightingMaxima: 20, // … a hose held 5 s: it drowns even the Hellfire
     Unfurl: 6, // a ship's sails let down (one mast)
     UnfurlMaxima: 14, // all the sails
     Furl: 3, // rolled up
