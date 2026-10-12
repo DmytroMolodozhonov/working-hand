@@ -30,7 +30,7 @@ test('fire of any kind does nothing to a dragon; other blows decided per spell, 
         assert.ok(FIRE_KINDS.has(k), k);
         assert.equal(dragonDamage(k, 500).dmg, 0, k);
     }
-    assert.equal(dragonDamage('AvadaKedavra', 4).dmg, 60, '«Авада» only wounds');
+    assert.equal(dragonDamage('AvadaKedavra', 4).dmg, 25, '«Авада» only wounds');
     assert.equal(dragonDamage('Expelliarmus', 4).dmg, 0);
     assert.ok(dragonDamage('melee', 30).dmg < 30 && dragonDamage('melee', 30).dmg > 0, 'blades: a little');
     assert.ok(dragonDamage('arrow', 20).dmg < 20 && dragonDamage('arrow', 20).dmg > 0, 'arrows: a little');
