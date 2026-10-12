@@ -56,7 +56,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, bend = 
  *   bob: shoulder vertical offset (for running animation)
  *   legs: {left, right}: 'stand' | 'up' | 'heel' | 'off' (opt-in; see below)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null, lowLeft = false } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -92,6 +92,8 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
     if (pocket === 'right' || pocket === 'both') { rElbow = [0.33, sh + 0.18]; rWrist = [0.42, sh + 0.37]; rightCurl = null; }
     // a hand at the wand's place on the waistband: in front, at the person's left of the middle
     // (the right hand reaching across; the left one just in front of its hip), in front of the body
+    // the right arm lowered and relaxed, a little to the left (in front of the body, straight)
+    if (lowLeft) { rElbow = [0.42, sh + 0.2]; rWrist = [0.47, sh + 0.42]; }
     if (belt === 'right') { rElbow = [0.43, sh + 0.2]; rWrist = [0.525, sh + 0.31]; }
     if (belt === 'left') { lElbow = [0.62, sh + 0.2]; lWrist = [0.54, sh + 0.31]; }
     // the right hand at the coin pouches' place: on the right side of the belt, the elbow bent

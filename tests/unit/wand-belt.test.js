@@ -6,20 +6,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { atBelt } from '../../src/game/WandBelt.js';
 
-const at = (x, y, z) => atBelt(new THREE.Vector3(x, y, z));
 
-test('wand belt: only a hand in front of the belly is at the belt', () => {
-    assert.ok(at(0.18, -0.08, -1.14) < Infinity, 'the right hand reaching across to it');
-    assert.ok(at(-0.46, -0.08, -1.18) < Infinity, 'the left hand in front of its hip');
-    assert.equal(at(0.95, -0.39, -0.89), Infinity, 'the right arm hanging');
-    assert.equal(at(-0.95, -0.39, -0.89), Infinity, 'the left arm hanging');
-    assert.equal(at(0.66, -0.28, -0.91), Infinity, 'in the right trouser pocket');
-    assert.equal(at(-0.66, -0.28, -0.91), Infinity, 'in the left trouser pocket');
-    assert.equal(at(0.92, -0.06, -1.36), Infinity, 'arms down in front, apart');
-    assert.equal(at(0, 1.1, -1.2), Infinity, 'at the chest');
-    assert.equal(at(0, -1.2, -0.8), Infinity, 'at the knees');
+test('wand belt: the REAL hand at the waistband (the camera\'s skeleton) — not a lowered, hanging or resting arm, not a pocket', async () => {
+    const { beltPose } = await import('../../src/input/PoseInterpreter.js');
+    const { frame } = await import('../e2e/poses.mjs');
+    const at = (o, side) => beltPose(frame(o).poseLandmarks, side).at;
+    assert.equal(at({ arms: 'hang', belt: 'right' }, 'right'), true, 'the right hand reaching across to it');
+    assert.equal(at({ arms: 'hang', belt: 'left' }, 'left'), true, 'the left hand in front of its hip');
+    for (const o of [{ arms: 'hang' }, { arms: 'down' }, { arms: 'forward' }, { arms: 'hang', lowLeft: true }, { arms: 'hang', pocket: 'right' }, { arms: 'hang', pocket: 'left' }]) {
+        assert.equal(at(o, 'right'), false, 'right: ' + JSON.stringify(o));
+        assert.equal(at(o, 'left'), false, 'left: ' + JSON.stringify(o));
+    }
 });
 
 test('wand belt: a hand low in front of the belly is drawn close to it (fading in at the edges), the sides never', async () => {

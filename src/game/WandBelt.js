@@ -3,10 +3,10 @@
  * a little to the left (its handle up, for the right hand to take across), seen on the
  * hero (look down and it is there).
  *
- *   - Put it away: the hand holding the wand brings it to the waistband in front, its
- *     tip down (tucking it in), and keeps it there a moment. Lowering the arm, a hand
- *     hanging at the side, a hand on the hip never do it (the hand must be IN FRONT of
- *     the body, at the waist, the wand pointing down).
+ *   - Put it away: the hand holding the wand is brought to the waistband in front, its
+ *     tip down (tucking it in), and keeps it there a moment. Judged from the camera's
+ *     real skeleton (the real wrist at the real waist, the elbow bent): lowering the arm,
+ *     a hand hanging or resting a little to the left, a hand on the hip never do it.
  *   - Take it: look down at it, bring the empty right hand to its handle and close the
  *     fingers on it (the left hand when the right is busy).
  *
@@ -24,19 +24,6 @@ export const BELT_TIP = new THREE.Vector3(-0.3, -0.85, -0.24);
 const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
-
-/**
- * Is the hand (hero's space) at the waistband in front? In front of the belly, near the
- * middle (the camera's guess of depth is poor, so across the body is what tells: an arm
- * hanging at the side is ~0.95 out, a hand on the hip / in a trouser pocket ~0.65 out,
- * a hand at the belt in front ~0.2–0.45). Returns how far from the wand's place, or Infinity.
- */
-export function atBelt(local) {
-    if (local.z > -0.3) return Infinity; // (beside or behind the body)
-    if (local.x < -0.62 || local.x > 0.5) return Infinity; // (at the side: a hanging arm, a hip)
-    if (local.y > 0.65 || local.y < -0.75) return Infinity; // (the waist, not the chest or the knees)
-    return Math.hypot(local.x - BELT_TOP.x, local.y - 0);
-}
 
 /** Just in front of the belly (the body's front is at z −0.4; a hand ~0.15 thick). */
 export const BELLY_Z = -0.58;
@@ -60,6 +47,9 @@ export class WandBelt {
         this._open = { left: false, right: false }; // (the fingers opened at the handle before closing on it)
         this._at = 0;
         this._left = { left: true, right: true };
+        this._from = { left: { t: 0, dy: 0, u: 0 }, right: { t: 0, dy: 0, u: 0 } }; // (where the real hand was just before it came to the belt)
+        this._pushed = { left: false, right: false };
+        this._in = { left: false, right: false };
         this.log = []; // (what it did: tests / the hand recording)
     }
 
@@ -80,8 +70,20 @@ export class WandBelt {
         const now = performance.now();
         if (now - this._at < 900) return; // (just done: not at once back)
         for (const side of ['right', 'left']) {
-            const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
-            const near = atBelt(local) < Infinity;
+            // at the belt as the CAMERA sees the real hand (the wrist at the real waistband, the
+            // elbow bent: PoseInterpreter.beltPose) — not where the hero's arm happens to be
+            const rb = g.currentPose.belt?.[side];
+            // (in once, it stays in until it leaves a wider zone: the camera's jitter at the edge
+            // must not throw it in and out)
+            this._in[side] = !!rb?.at || (this._in[side] && !!rb?.near);
+            const near = this._in[side];
+            // a deliberate tuck: the hand was BROUGHT there — it came into the place from ≥ 0.15
+            // of the torso away, within the last 3 s — a hand resting there or drifting in over
+            // the edge never tucks it in
+            const from = this._from[side];
+            if (rb && !near) { from.dy = rb.dy; from.u = rb.u; from.t = now; }
+            if (!rb?.near) this._pushed[side] = false;
+            else if (!this._pushed[side] && near && from.t && now - from.t < 3000 && Math.hypot(from.dy - rb.dy, from.u - rb.u) > 0.15) this._pushed[side] = true;
             // (after taking it or tucking it in, the hand must leave the belt first: a wand just
             // taken, still at the waistband pointing down, went straight back)
             if (!near) this._left[side] = true;
@@ -90,7 +92,7 @@ export class WandBelt {
             if (h && h.item.kind === 'wand') {
                 // tucking it in: at the waistband, the tip down
                 const down = h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.2 : false; // (pointing down at all)
-                this._tuck[side] = near && down ? this._tuck[side] + dt : 0;
+                this._tuck[side] = near && down && this._pushed[side] ? this._tuck[side] + dt : 0;
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
                 continue;
             }
@@ -122,6 +124,7 @@ export class WandBelt {
         for (const side of ['right', 'left']) {
             const h = g.items.held[side];
             if ((h && h.item.kind !== 'wand') || g.weapons?.hands?.[side]?.held) continue;
+            if (!g.currentPose?.belt?.[side]?.near) continue; // (the real hand is by the waist)
             const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
             const w = bellyWeight(local);
             if (!(w > 0) || local.z >= BELLY_Z) continue;

@@ -69,3 +69,31 @@ test('the wand\'s belt with a jittering camera: the hand reaches the wand at the
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('the wand is tucked in only on purpose: lowered, resting a little to the left, hanging — never (a jittering camera); pushed down into the waistband — yes', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.inventory.slots.fill(null);
+        g.items.takeIntoHand({ kind: 'wand', uid: 'wb2', type: 0 }, 'right');
+    });
+    const held = () => page.evaluate(() => window.__zns.game.items.held.right?.item.kind || null);
+    await feedNoisy(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0 }, 10);
+    // the wand lowered: down, a little to the left, the tip down — and resting there
+    await feedNoisy(page, { arms: 'hang', lowLeft: true, rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 50);
+    assert.equal(await held(), 'wand', 'lowered a little to the left: still in the hand');
+    await feedNoisy(page, { arms: 'hang', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 40);
+    assert.equal(await held(), 'wand', 'hanging: still in the hand');
+    await feedNoisy(page, { arms: 'down', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 30);
+    assert.equal(await held(), 'wand', 'arms down: still in the hand');
+    // tucked in on purpose: from in front, pushed down into the waistband, the tip down
+    await feedNoisy(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0 }, 10);
+    await feedNoisy(page, { arms: 'hang', belt: 'right', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 25);
+    const r = await page.evaluate(() => ({ r: window.__zns.game.items.held.right?.item.kind || null, belt: !!window.__zns.game.inventory.belt.model, log: window.__zns.game.inventory.belt.log.join(',') }));
+    assert.ok(!r.r && r.belt, 'pushed into the waistband: tucked in ' + JSON.stringify(r));
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

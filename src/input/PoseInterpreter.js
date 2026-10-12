@@ -66,6 +66,32 @@ export function pocketPose(lm, hand, side, aspect = 4 / 3, hipSide = side) {
  * just lowered is straight — never this; a hand reaching across to the other side
  * (the wand's belt) is not at its own hip.
  */
+/**
+ * The REAL hand at the wand's place on the waistband (WandBelt.js), from the camera's
+ * skeleton: the wrist at the waist (between the waist and the hip line), in front of the
+ * body from just right of its middle to the person's left hip, the elbow bent (a lowered
+ * or hanging arm is straight and its wrist is at or below the hips, beside the thigh).
+ * Returns {at, near, dy, u, bend}: dy — the wrist below the hip line in torso heights
+ * (negative: above), u — towards the person's left from the hips' middle; or null.
+ */
+export function beltPose(lm, side, aspect = 4 / 3) {
+    const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
+    const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], lh = lm?.[23], rh = lm?.[24];
+    if (!sh || !el || !wr || !lh || !rh) return null;
+    if ((lh.visibility ?? 1) < 0.5 || (rh.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5) return null;
+    const hx = (lh.x + rh.x) / 2, hy = (lh.y + rh.y) / 2;
+    const T = hy - sh.y;
+    if (T < 0.05) return null;
+    const dy = (wr.y - hy) / T;
+    const u = ((wr.x - hx) * aspect) / T; // (the person's left is the picture's right: +x)
+    const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
+    const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
+    const bend = nu > 1e-4 && nf > 1e-4 ? Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) : 0;
+    const at = dy > -0.45 && dy < 0.1 && u > -0.15 && u < 0.21 && bend > 0.55; // (u ~0.25: the left hip, its trouser pocket)
+    const near = dy > -0.6 && dy < 0.25 && u > -0.3 && u < 0.6 && bend > 0.35;
+    return { at, near, dy, u, bend };
+}
+
 export function purseHand(lm, side, aspect = 4 / 3, hipSide = side) {
     const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
     const h = hipSide === 'left' ? 23 : 24; // (the left hand can reach across to the RIGHT hip)
@@ -224,6 +250,7 @@ export class PoseInterpreter {
                 right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect),
                 cross: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect, 'left'), // (the right hand in the LEFT pocket)
             };
+            data.belt = { left: beltPose(lm, 'left', data.aspect), right: beltPose(lm, 'right', data.aspect) }; // (WandBelt)
             data.purse = { right: purseHand(lm, 'right', data.aspect), cross: purseHand(lm, 'left', data.aspect, 'right') }; // (CoinBelt: the right hip; the left hand across)
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
 
