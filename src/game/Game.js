@@ -46,6 +46,7 @@ import { refusal, HintGate } from './Hints.js';
 import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
+import { Alohomora } from './Alohomora.js';
 import { Campfires } from './Campfires.js';
 import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
@@ -309,6 +310,7 @@ export class Game {
         this.onFlame.push((o, d, len, casterId) => this._flameBurnsPaper(o, d, len, casterId)); // (scrolls and books in it burn)
         this.death = new DeathSystem(this); // bodies → bones; everything drops at the body
         this.doors = new Doors(this); // «Create a Door», opening by the handle
+        this.locks = new Alohomora(this); // «Алохомора»: locked chests, house doors, the gates of throne rooms
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
@@ -613,7 +615,7 @@ export class Game {
         const out = this.world.explode(pos, radius, keepIn(keep ?? this.wards?.keepFor(pos, radius)));
         const meSafe = !!this.wards?.shields(pos, this.combat.center(_v3));
         for (const f of out.falls || []) this.falling?.add(f); // (a roof without walls comes down)
-        this.wreck?.afterBlast(pos, radius);
+        this.wreck?.afterBlast(pos, radius, power);
         // a blast in a castle or a village: the guards hear it (and want to know who)
         if (authoritative) {
             let wrecked = 0;
@@ -997,6 +999,7 @@ export class Game {
             return this._castDuel(ice ? 'Ice' : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Айс» costs)
         }
         if (name === 'Accio') return this._castAccio(isFinal);
+        if (name === 'Alohomora' || name === 'AlohomoraMaxima') return this.locks.cast(name, isFinal); // (a lock the hand points at — Alohomora.js)
         if (name === 'Unfurl' || name === 'UnfurlMaxima' || name === 'Furl') return this.ships ? this.ships.castSails(name, text, isFinal) : null; // (a ship's sails)
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') return this._castWind(name, isFinal);
@@ -2235,6 +2238,7 @@ export class Game {
         this.runner.update(dt);
         this.castleLife.update(dt);
         this.doors.update(dt);
+        this.locks.update(dt);
         this.campfires.update(dt);
         this.cauldrons?.update(dt);
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)

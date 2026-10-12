@@ -4,15 +4,18 @@
  * The world generator (src/world/Castles.js) builds the houses of stone and
  * planks and leaves records of what belongs inside. Here, for every house a
  * player comes near (and taken away again when everybody has gone):
- *  - a real door in the doorway (src/game/Doors.js — open it by the handle or
- *    push it with the hand; the people of the house open it themselves);
+ *  - a real door in the doorway (src/game/Doors.js — take the handle and open
+ *    it, or push the leaf with the hand; the people of the house open it
+ *    themselves). About half the houses lock their door at night or while
+ *    nobody is home (src/game/Alohomora.js: «Алохомора» opens it a crack);
  *  - glass in the windows (one instanced mesh for all panes): a real blow of a
  *    fist or a blade into it (not a touch, not walking past), an arrow, a thrown
  *    thing, a blast or a strong spell breaks it — for good;
  *  - beds (src/game/Beds.js — you can lie in them) and chests: mostly food,
- *    seldom something precious. Taking a thing out of a chest while the family
- *    sees it makes them attack the thief (src/game/CastleLife.js theft); opening
- *    it, coming in — no theft (the people of the house greet a visitor);
+ *    seldom something precious. A house's chest is locked («Алохомора» opens it);
+ *    forcing it or taking a thing out of it while the family sees it makes them
+ *    attack the thief (src/game/CastleLife.js theft); coming in — no theft (the
+ *    people of the house greet a visitor);
  *  - the family at home, and the animals in the pens and the barns.
  *
  * Multiplayer: every computer makes the doors, panes, beds and chests of the
@@ -130,7 +133,7 @@ export class Houses {
         if (h.doorRec && g.doors) {
             const id = h.id + 'd';
             // (a blown-up wall leaves no door: it has nothing to hang on — src/game/Wreck.js)
-            if (!g.doors.list.has(id) && doorHeld(g.world?.terrain?.data, h.doorRec)) g.doors._place({ id, ...h.doorRec, color: DOOR_COLOR, a: 0, gen: true });
+            if (!g.doors.list.has(id) && doorHeld(g.world?.terrain?.data, h.doorRec)) g.doors._place({ id, ...h.doorRec, color: DOOR_COLOR, a: 0, gen: true, ...(def.kind === 'tower' ? { tower: true } : {}) });
             rec.doorId = g.doors.list.has(id) ? id : null;
         }
         // the beds
@@ -152,8 +155,9 @@ export class Houses {
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
             chest.house = { def, i, rich: h.rich };
-            chest.locked = false;
+            chest.locked = true; // (somebody's chest: «Алохомора» — src/game/Alohomora.js)
             if (g._openedChests?.has(id)) chest.setOpenInstant();
+            else g.locks?.restoreChest(chest);
             g.chests.push(chest);
             rec.chests.push(chest);
         });
@@ -313,7 +317,7 @@ export class Houses {
     // ------------------------------------------------------------------- doors
     /**
      * The people of the house open the door when they come to it (and close it
-     * after them); a hand pushed against a closed door opens it too.
+     * after them) — they have the key. A player opens it with the hand (Doors.js).
      */
     _updateDoors(dt) {
         const g = this.game;
@@ -326,23 +330,10 @@ export class Houses {
             if (!d || d.holdSide || d.lifted) continue;
             let someone = false;
             for (const v of people) if (!v.dead && Math.abs(v.x - d.x) < 3.6 && Math.abs(v.z - d.z) < 3.6) { someone = true; break; }
-            // my hand pushes the leaf (near the door, a hand out in front at the door's height)
-            let push = false;
-            if (!someone && g.currentPose && Math.abs(me.x - d.x) < 3.2 && Math.abs(me.z - d.z) < 3.2) {
-                for (const side of ['left', 'right']) {
-                    const hp = g.character.getHandWorldPosition(side, _v);
-                    if (Math.hypot(hp.x - d.x, hp.z - d.z) < 1.4 && hp.y > d.y + 0.8 && hp.y < d.y + (d.h || 3.6)) { push = true; break; }
-                }
-            }
-            rec.pushT = push ? rec.pushT + dt : 0;
-            if (someone || rec.pushT > 0.35) {
+            if (someone) {
                 rec.auto = true;
                 rec.doorOpenT = 0;
-                if (d.a < 1.45) {
-                    const a = Math.min(1.45, d.a + dt * 2.5);
-                    D.swing(rec.doorId, a);
-                    if (rec.pushT > 0.35 && Math.abs(a - (d._sentA ?? 0)) > 0.1) { d._sentA = a; g.sync?.doorAngle?.(d.id, a); }
-                }
+                if (d.a < 1.45) D.swing(rec.doorId, Math.min(1.45, d.a + dt * 2.5));
             } else if (rec.auto) {
                 // nobody in the doorway for a while: it closes behind them
                 const clear = Math.abs(me.x - d.x) > 3.5 || Math.abs(me.z - d.z) > 3.5;

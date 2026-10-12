@@ -43,15 +43,19 @@ export class Wreck {
 
     get data() { return this.game.world?.terrain?.data || null; }
 
-    /** After a blast (and what fell after it): doors, beds, chests, glass round it. */
-    afterBlast(pos, radius) {
+    /**
+     * After a blast (and what fell after it): doors, beds, chests, glass round it. `power`: the
+     * blast's strength (a falling roof: 0) — the gates of a throne room hold one (src/game/Alohomora.js).
+     */
+    afterBlast(pos, radius, power = 0) {
         const g = this.game, t = this.data;
+        if (power > 0) g.locks?.blast(pos, radius, power);
         if (!t) return;
         const R = radius + 24; // (a fallen roof may leave things hanging a little further)
         const near = (x, z) => Math.abs(x - pos.x) < R && Math.abs(z - pos.z) < R;
         // doors
         for (const d of [...(g.doors?.list.values() || [])]) {
-            if (!near(d.x, d.z) || d.lifted || g.doors.carried?.door === d) continue;
+            if (!near(d.x, d.z) || d.lifted || g.doors.carried?.door === d || d.gate) continue; // (the gates: Alohomora.blast)
             const hit = Math.hypot(d.x - pos.x, d.y + 1.8 - pos.y, d.z - pos.z) < radius + 0.8;
             if (d.gen ? !doorHeld(t, d) : hit) this._breakDoor(d);
         }

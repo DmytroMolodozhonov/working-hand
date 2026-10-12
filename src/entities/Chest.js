@@ -9,13 +9,22 @@
  *     wall, and its collision box rotates with it,
  *   - the lid opens with a smooth eased animation (hinge at the back), with a
  *     little bounce and a sound.
+ *
+ * Locks (src/game/Alohomora.js): a chest of a village or a castle is locked —
+ * the lid only rattles under the hand. «Алохомора» unlocks it: the lid springs
+ * up a crack (`picked`), and the hand lifts it (liftTo) the rest of the way.
  */
 
 import * as THREE from 'three';
 
 const SCALE = 3;
+const _lp = new THREE.Vector3();
 const OPEN_ANGLE = Math.PI * 0.62; // ~110°
 const OPEN_TIME = 0.9; // seconds
+/** The crack a lid springs open to when «Алохомора» unlocks it (rad). */
+export const AJAR_ANGLE = 0.16;
+/** Lifted by the hand past this angle the lid falls open by itself (rad). */
+export const LIFT_OPEN = OPEN_ANGLE * 0.38;
 
 let SHARED = null;
 function shared() {
@@ -58,6 +67,10 @@ export class Chest {
         this.openProgress = 0;
         this.animating = false;
         this.itemSpawned = false;
+        this.locked = false; // (a settlement's chest: src/game/Alohomora.js)
+        this.picked = false; // unlocked by «Алохомора»: the lid stands open a crack, the hand lifts it
+        this.fromAngle = 0; // where the opening starts (a lid already lifted by the hand)
+        this.shakeT = 0;
         this.mesh = new THREE.Group();
         this.mesh.position.copy(position);
         this.mesh.rotation.y = facing;
@@ -129,13 +142,48 @@ export class Chest {
         if (this.isOpen) return false;
         this.isOpen = true;
         this.animating = true;
-        this.openProgress = 0;
+        this.fromAngle = -this.lidGroup.rotation.x;
+        this.openProgress = this.fromAngle > 0.05 ? 0.15 : 0; // (lifted by the hand / unlocked: no unlock shake)
         return true;
+    }
+
+    /** «Алохомора»: the lock clicks open, the lid springs up a crack. */
+    setAjar() {
+        this.picked = true;
+        if (!this.isOpen && -this.lidGroup.rotation.x < AJAR_ANGLE) this.lidGroup.rotation.x = -AJAR_ANGLE;
+    }
+
+    /** The hand lifts (or lowers) the lid of an unlocked chest; true when it is up far enough to fall open. */
+    liftTo(angle) {
+        if (this.isOpen) return false;
+        const a = Math.max(AJAR_ANGLE, Math.min(OPEN_ANGLE, angle));
+        this.lidGroup.rotation.x = -a;
+        return a >= LIFT_OPEN;
+    }
+
+    /** The lid of a locked chest tried by the hand: it rattles. */
+    rattle() { this.shakeT = 0.3; }
+
+    /** The angle round the lid's hinge (chest-local y, z from the hinge) of a world point, and its distance. */
+    hingeOf(p, out = {}) {
+        const l = this.mesh.worldToLocal(_lp.copy(p));
+        const dy = l.y - 0.5, dz = l.z + 0.4;
+        out.angle = Math.atan2(dy, dz);
+        out.r = Math.hypot(dy, dz) * SCALE;
+        out.x = l.x * SCALE;
+        return out;
+    }
+
+    /** The world point of the lid's front edge (where the fingers go under it). */
+    lidEdge(out = new THREE.Vector3()) {
+        this.lid.updateWorldMatrix(true, false);
+        return out.set(0, 0, 0.42).applyMatrix4(this.lid.matrixWorld);
     }
 
     /** Shut it again (the creative test chest refills): the lid comes down. */
     close() {
         this.isOpen = false;
+        this.fromAngle = 0;
         this.animating = false;
         this.openProgress = 0;
         this.lidGroup.rotation.x = 0;
@@ -150,6 +198,10 @@ export class Chest {
     }
 
     update(dt) {
+        if (this.shakeT > 0) {
+            this.shakeT -= dt;
+            this.lidGroup.rotation.x = this.shakeT > 0 ? -Math.abs(Math.sin(this.shakeT * 70)) * 0.03 : 0;
+        }
         if (!this.animating) return;
         this.openProgress = Math.min(1, this.openProgress + dt / OPEN_TIME);
         const t = this.openProgress;
@@ -158,7 +210,8 @@ export class Chest {
             this.lidGroup.rotation.x = -0.04 * Math.sin(t * 120);
         } else {
             const k = (t - 0.15) / 0.85;
-            this.lidGroup.rotation.x = -OPEN_ANGLE * easeOutBack(k);
+            const a0 = this.fromAngle || 0;
+            this.lidGroup.rotation.x = -(a0 + (OPEN_ANGLE - a0) * easeOutBack(k));
         }
         if (t >= 1) {
             this.lidGroup.rotation.x = -OPEN_ANGLE;

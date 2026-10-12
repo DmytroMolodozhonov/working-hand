@@ -158,6 +158,7 @@ export class ItemSystem {
             } else {
                 // (a house's things belong to the house: taking one while its people see it is a theft)
                 if (house?.def?.id != null) it.home = { c: house.def.id, h: house.i };
+                else if (chest?.castle?.id != null && chest.locked) it.home = { c: chest.castle.id, h: -1 }; // (a castle's chest, forced open)
                 this.spawnLoose(it, p, { hover: true, rise: true });
             }
         });

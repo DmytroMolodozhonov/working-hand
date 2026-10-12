@@ -382,6 +382,7 @@ export class CastleLife {
             chest.room = c.room;
             g.chests.push(chest);
             if (g._openedChests?.has(c.id)) chest.setOpenInstant();
+            else g.locks?.restoreChest(chest); // (unlocked by «Алохомора» before)
             cs.chests.push(chest);
         }
     }
@@ -2031,10 +2032,23 @@ export class CastleLife {
         return true;
     }
 
+    /**
+     * (host) A player forced a lock of the castle (a chest in its rooms, the gates of the throne room
+     * — src/game/Alohomora.js) or took a thing out of such a chest: whoever sees it raises the alarm,
+     * the guards come. Nobody sees — nothing happens.
+     */
+    forced(id, by, pos) {
+        if (!this.enabled || !this.auth || !by || !pos) return;
+        const cs = this.castles.get(id) || this._runtimeById(id);
+        if (!cs) return;
+        this._offence(cs, by, null, false, { x: pos.x, y: pos.y ?? cs.def.F, z: pos.z });
+    }
+
     /** (host) A player took a thing that lay in a house chest: a theft, if anybody sees it. */
     tookFromHome(home, by) {
         if (!home || !by || !this.enabled || !this.auth) return false;
         const cs = this.castles.get(home.c) || this._runtimeById(home.c);
+        if (cs && home.h < 0) { this.forced(cs.def.id, by, this._playerPos(by)); return true; } // (a chest of the castle itself)
         if (!cs || !cs.def.houses?.[home.h]) return false;
         return this.theft(cs.def, home.h, by, this._playerPos(by) || cs.def.houses[home.h].inside);
     }
@@ -2205,10 +2219,10 @@ export class CastleLife {
         const me = g.character.group.position;
         for (const cs of this.castles.values()) {
             for (const c of cs.chests) {
-                if (!c.locked || c.isOpen) continue;
+                if (!c.locked || c.isOpen || c.picked) continue;
                 const p = c.getPosition();
                 if (Math.hypot(p.x - me.x, p.z - me.z) < 5) {
-                    g.hud.setVoice(cs.def.kind === 'tower' ? '🔒 Сундук заперт. Сундуки академии откроются, когда падёт Мастер' : '🔒 Сундук заперт. Сундуки замка откроются, когда падёт король', true);
+                    g.hud.setVoice(cs.def.kind === 'tower' ? '🔒 Сундук заперт. Сундуки академии откроются, когда падёт Мастер' : '🔒 Сундук заперт — покажите на замок и скажите «Алохомора» (если стража увидит — это кража)', true);
                     this._lockMsgT = 6;
                     return;
                 }

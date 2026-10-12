@@ -430,6 +430,10 @@ function buildKeep(p, s, rng, out) {
     out.throne = { ...p.pt(0, hallV1 - 1, 2), yaw: p.yaw(0) };
     out.throneFront = p.pt(0, hallV1 - 7, 0);
     out.rooms.push({ ...hall, name: ROOM_NAMES.throne, ...p.rect(hall.u0, hall.u1, hall.v0, hall.v1), y: p.L(0) - 1.5 });
+    // the gates of the throne room in the front doorway (two leaves, opening inwards — src/game/Alohomora.js):
+    // the castle's people pass, a stranger needs «Алохомора Максима» or a blast
+    const gc = p.pt(0, v0 + 0.5, 0), gIn = p.pt(0, v0 + 1.5, 0);
+    out.throneGate = { x: gc.x, y: gc.y, z: gc.z, ry: Math.atan2(-(gIn.x - gc.x), -(gIn.z - gc.z)), w: 2 * gd + 1, h: 7 };
 
     // ---- walking graph inside
     const doorOut = p.node(0, v0 - 5, 0, 'keepDoor');
@@ -1512,7 +1516,7 @@ export class CastleIndex {
             zone, walls, inner: p.rect(-s.W + s.T, s.W - s.T, -s.D + s.T, s.D - s.T),
             keep: p.rect(-s.KW, s.KW, s.kv - s.KD, s.kv + s.KD),
             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
-            throne: out.throne, throneFront: out.throneFront, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
+            throne: out.throne, throneFront: out.throneFront, throneGate: out.throneGate || null, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
             houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),
             stalls: out.stalls, fields: out.fields, market: out.market, posts: out.posts,
             nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk,

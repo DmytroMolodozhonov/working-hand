@@ -225,6 +225,7 @@ export class WorldKeeper {
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
             doors: g.doors?.snapshot() || [],
+            locks: g.locks?.snapshot() || null, // («Алохомора»: what was unlocked, the gates)
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
@@ -274,6 +275,7 @@ export function restoreWorld(game, save, THREE) {
     for (const e of save.items || []) g.items?.spawnLoose(e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (save.animals) g.animals?.restore(save.animals);
     if (save.doors) g.doors?.restore(save.doors);
+    if (save.locks) g.locks?.restore(save.locks);
     if (save.boards) g.boards?.restore(save.boards);
     if (save.campfires) g.campfires?.restore(save.campfires);
     if (save.cauldrons) g.cauldrons?.restore(save.cauldrons);

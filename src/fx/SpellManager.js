@@ -11,6 +11,7 @@
  */
 
 import { isExpelliarmus } from '../game/Expelliarmus.js';
+import { alohomoraWords } from '../game/Alohomora.js';
 import * as THREE from 'three';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 import { thunderPush } from '../game/Impact.js';
@@ -43,6 +44,9 @@ export function matchSpell(text) {
     if (hell === 1) return null; // («hellfire» alone: wait for «come» — never a campfire)
     // «Экспеллиармус»: the whole word only (before every short token that might sit inside it)
     if (isExpelliarmus(s)) return 'Expelliarmus';
+    // «Алохомора» («…Максима»): whole words round «хомор» / «хамор» — before «Максима» alone, «мах»…
+    const alo = alohomoraWords(s);
+    if (alo) return alo === 2 ? 'AlohomoraMaxima' : 'Alohomora';
     // «Up» («Ап»): a short word — only the whole phrase (UpSpell.js)
     if (isUpWord(s)) return 'Up';
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)

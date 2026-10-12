@@ -146,6 +146,7 @@ export class NetSync {
             players: this.net.playerList(),
             dayStart: g.dayStart,
             doors: g.doors?.snapshot() || [],
+            locks: g.locks?.snapshot() || null, // («Алохомора»: unlocked chests, doors, gates; the doors locked now)
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
@@ -175,6 +176,7 @@ export class NetSync {
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         if (msg.rain > 0) g.storm?.startRain(msg.rain);
         if (msg.doors) g.doors?.restore(msg.doors);
+        if (msg.locks) g.locks?.restore(msg.locks);
         if (msg.boards) g.boards?.restore(msg.boards);
         if (msg.campfires) g.campfires?.restore(msg.campfires);
         if (msg.cauldrons) g.cauldrons?.restore(msg.cauldrons);
@@ -776,6 +778,7 @@ export class NetSync {
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
+            case 'lock': case 'dlk': g.locks?.applyNet(m); break; // («Алохомора» — Alohomora.js)
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
             case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;

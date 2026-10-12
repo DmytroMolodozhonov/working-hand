@@ -89,3 +89,11 @@ test('«Раскрой свои секреты» and «Акцио» see the runn
     const accio = body(src('src/game/Accio.js'), '    cast() {');
     assert.match(accio, /accioToHand/, 'Accio: the running book into the free hand');
 });
+
+test('«Алохомора» decides every creature and every lock (Alohomora.js TARGETS — «не действует» is written too, with why)', async () => {
+    const { TARGETS } = await import('../../src/game/Alohomora.js');
+    // (the creatures of KINDS, as TARGETS names them; and the players themselves)
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds' };
+    for (const k of ALL) assert.ok(TARGETS[names[k]]?.why, `Alohomora forgets: ${k}`);
+    for (const k of ['players', 'settlementChest', 'caveChest', 'shipChest', 'villagerDoor', 'throneGate', 'playerDoor', 'world']) assert.ok(TARGETS[k]?.why, k);
+});

@@ -64,6 +64,8 @@ export const SPELL_COST = {
     Frozen: 5,
     Levitation: 6,
     Accio: 5,
+    Alohomora: 5, // a lock opens (Alohomora.js)
+    AlohomoraMaxima: 25, // … a strong lock: the gates of a throne room
     Wind: 8,
     Brainrot: 15,
     LightningStrike: 25,
