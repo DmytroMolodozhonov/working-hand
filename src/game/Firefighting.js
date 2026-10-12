@@ -59,7 +59,7 @@ export const FIREFIGHT_TARGETS = {
     livingTrees: { does: 'горящее живое дерево гаснет (перестаёт гореть); не толкает', why: 'оно укоренено, а огонь на нём — вода гасит' },
     bookBirds: { does: 'струя Maxima сбивает книгу-птицу (мокрые страницы); обычный всплеск — нет; книга защиты отскакивает', why: 'бумага тяжелеет от воды; защиту берёт только огонь и лёд' },
     servants: { does: 'как их вид (живое дерево, Брейнрот-зомби)', why: 'слуги — те же существа' },
-    dragon: { does: 'драконов в игре пока нет', why: 'появятся — дописать сюда (огонь дракона гаснет, сам он не ранен)' },
+    dragon: { does: 'гасит огонь, которым дракон дышит (струя на пламени или на пасти): пламя обрывается, дракон 2 с не может дохнуть снова и злится на того, кто облил; сам дракон не ранен и не сдвинут', why: 'вода гасит огонь, а такого великана водой не сдвинуть' },
     phoenix: { does: 'фениксов в игре пока нет', why: 'появятся — дописать сюда (гасит его огненную атаку)' },
     // ---- things and the world
     campfires: { does: 'костёр («Fire») гаснет совсем', why: 'вода' },
@@ -215,6 +215,21 @@ export class Firefighting {
             fx.splice(i, 1);
             did = true;
             this._note({ ev: 'fireMaxima', by: e.by, bloomed: !!e.bloomed });
+        }
+        // dragons: their breath goes out (the water on the flame or on the mouth); the dragon itself is not hurt
+        for (const dr of g.dragons?.list || []) {
+            const b = dr.breath;
+            if (!b || dr.dead || !g.dragons._mouth) continue;
+            const m = g.dragons._mouth(dr, _b.clone());
+            let on = hit(m, 1);
+            for (let j = 1; j <= (b.len ?? 0) && !on; j += 1.5) on = hit(_c.copy(m).addScaledVector(b.dir, j), 0.8);
+            if (!on) continue;
+            dr.breath = null;
+            dr.breathCd = Math.max(dr.breathCd || 0, 2);
+            this._steam(m, 1.5);
+            did = true;
+            this._note({ ev: 'dragonFire', id: dr.id });
+            if (auth) g.dragons.hit?.(dr, 0, 'Firefighting', sp.by); // (no harm — it only angers it: ON_DRAGON.Firefighting)
         }
         // creatures: no damage — a light shove (the host); my own player: soaked (every computer: its own)
         this._creatures(sp, hit);

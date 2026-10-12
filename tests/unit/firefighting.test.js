@@ -7,6 +7,7 @@ import { matchSpell } from '../../src/fx/SpellManager.js';
 import { Firefighting, inCone, FIREFIGHT } from '../../src/game/Firefighting.js';
 import { Hellfire, HELLFIRE } from '../../src/game/Hellfire.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
+import { SCROLL_SPELL_COLOR, rollKeyItem } from '../../src/game/ItemTypes.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -94,4 +95,12 @@ test('the Hellfire\'s fires left on the ground: a burst puts out the small ones 
     assert.ok(H.douse(hit, 0));
     assert.equal(H.left.length, 1);
     assert.ok(Math.abs(H.left[0].R0 - (5 - HELLFIRE.LEFT_KNOCK)) < 1e-9);
+});
+
+test('learning: plain «Firefighting» is known by everyone; «Firefighting Maxima» only from its scroll (outside Creative), found in chests', () => {
+    assert.ok(!SCROLL_SPELL_COLOR.Firefighting);
+    assert.ok(SCROLL_SPELL_COLOR.FirefightingMaxima);
+    let found = false;
+    for (let i = 0; i < 4000 && !found; i++) found = rollKeyItem()?.spell === 'FirefightingMaxima';
+    assert.ok(found, 'a chest can hold its scroll');
 });
