@@ -1779,13 +1779,13 @@ export class Game {
     _burnRay(o, d, len, casterId) {
         let hit = false;
         if (this.fire?.igniteAlong(o, d, len)) hit = true; // trees, dry blocks
-        if (this.animals?.burnAlong(o, d, len)) hit = true;
+        if (this.animals?.burnAlong(o, d, len, casterId)) hit = true;
         this.books?.hitRay(o, d, len, 0.8, 'fire'); // (book-birds fall — the book of protection too: fire)
         this.houses?.hitRay(o, d, len, 0.6); // (glass breaks)
         if (this.authority) {
             if (this.spiders?.hitRay(o, d, len, 0.6, 2, 'Inferno')) hit = true;
             if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId)) hit = true; // villagers, knights, wizards
-            if (this.livingTrees?.burnAlong(o, d, len)) hit = true; // (fire is what kills a living tree)
+            if (this.livingTrees?.burnAlong(o, d, len, casterId)) hit = true; // (fire is what kills a living tree)
         }
         for (const f of this.onFlame) { try { if (f(o, d, len, casterId)) hit = true; } catch (e) { console.warn('onFlame', e); } }
         return hit;
@@ -1954,10 +1954,11 @@ export class Game {
      * game goes on (a host's death never closes the room for the others).
      */
     onLocalDeath(text, byId) {
+        const manaMax = this.mana?.max; // (told to the others: a duel won against me is worth this much)
         this.mana?.onDeath(); // all the mana grown with practice is lost
         this.runner?.onDeath(); // (the running book's quickness is lost)
         this.death?.playerDied(byId, text); // the body stays, everything drops (Death.js); game.onDeath hooks
-        if (this.sync) this.sync.died(byId);
+        if (this.sync) this.sync.died(byId, manaMax);
         this.castleLife?.playerDied(this.localId);
         this.ships?.onLocalDeath(); // (lets go of a ship's wheel)
         this.hud.setStatus('');

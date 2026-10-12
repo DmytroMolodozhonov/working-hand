@@ -169,7 +169,7 @@ export class Spiders {
         if (kind === 'Ice' || kind === 'Frozen' || kind === 'Wind') return; // it doesn't care
         if (kind === 'AvadaKedavra') dmg = 25;
         if (!this.auth) { this.game.sync?.bossHit?.(s.id, dmg, kind); return; }
-        s.lastBy = by === undefined ? this.game.localId : by; // (who struck: the killer gets +20 mana)
+        s.lastBy = by === undefined ? this.game.localId : by; // (who struck: the killer gets the mana)
         s.hp = Math.max(0, s.hp - dmg);
         const c = spiderCenter(s, new THREE.Vector3());
         for (let i = 0; i < 10; i++) this.game.fx.spark(c, 0x6bff6b, 0.15 * SIZE, _v2.set((Math.random() - 0.5) * 5 * SIZE, Math.random() * 4 * SIZE, (Math.random() - 0.5) * 5 * SIZE), 0.6);
@@ -237,7 +237,7 @@ export class Spiders {
         s.dead = true;
         const g = this.game;
         s.killer = killer || null;
-        if (killer && (killer === g.localId || killer === 'local')) g.mana?.spiderKilled(); // +20 to the mana maximum
+        if (killer && (killer === g.localId || killer === 'local')) g.mana?.magicKill('spider'); // (mana: the first one, to whoever struck the last blow — every computer knows the killer)
         if (this.held?.spider === s) this._free();
         const c = spiderCenter(s, new THREE.Vector3());
         for (let i = 0; i < 80; i++) g.fx.spark(c, i % 2 ? 0x6bff6b : 0x222222, 0.25 * SIZE, _v2.set((Math.random() - 0.5) * 12 * SIZE, Math.random() * 8 * SIZE, (Math.random() - 0.5) * 12 * SIZE), 1.4);

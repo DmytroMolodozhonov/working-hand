@@ -28,7 +28,8 @@
  *   ppush    player→all   my hands pushed / slapped / shoved player `to` (no harm: their body moves)
  *   cimp     host→all     creatures' bodies: fell (k), reeled (s), rose (r), head jolted (j) — CreatureImpact
  *   cstrike  client→host  my hands hit a creature: the host applies the push
- *   pdead    player→all   I was killed (by `killer`)
+ *   pdead    player→all   I was killed (by `killer`; `mm` my mana maximum: a duel won against me is worth it)
+ *   mcred    host→player  your last blow killed a magical creature (kind) / a wizard you beat in a duel (wiz, mm): Mana.js
  *   dbody    any→all      a body stays where somebody died (Death.js; the host keeps the list)
  *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
  *   clash    host→all     two charges are pushing (meeting point p); clashend: result
@@ -40,6 +41,7 @@ import { RemoteAvatar } from './RemoteAvatar.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 import { keepIn } from '../game/HouseWards.js';
 import { LUMOS } from '../game/WandMagic.js';
+import { applyCredit } from '../game/Mana.js';
 
 const _v = new THREE.Vector3();
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -489,8 +491,13 @@ export class NetSync {
         this.net.send({ t: 'cut', by: this.me, h }, true);
     }
 
-    died(killer) {
-        this.net.send({ t: 'pdead', by: this.me, killer: killer || null }, true);
+    died(killer, mm = null) {
+        this.net.send({ t: 'pdead', by: this.me, killer: killer || null, mm }, true);
+    }
+
+    /** (host) Mana for player `to`: his last blow killed a magical creature / a wizard he beat in a duel. */
+    manaCredit(to, m) {
+        if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null });
     }
 
     /** A body stays where somebody died (Death.js). */
@@ -935,7 +942,7 @@ export class NetSync {
                 const who = r ? r.name : 'Игрок';
                 const killer = m.killer === this.me ? 'вы' : (g.remotes.get(m.killer)?.name || null);
                 if (m.killer === this.me) g.killCount++;
-                if (m.killer === this.me) g.duel?.opponentDied?.(m.by); // (mana: a duel won for real)
+                if (m.killer === this.me) g.duel?.opponentDied?.(m.by, Number(m.mm) || 30); // (mana: a duel won for real)
                 g.hud.setVoice(killer ? `💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})` : `💀 ${escapeHtml(who)} погиб`, true);
                 break;
             }
@@ -945,6 +952,7 @@ export class NetSync {
                 break;
             }
             case 'bite': g.damageLocalPlayer(m.dmg || 1); break;
+            case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm }); break; // (mana: my kill, the host decided)
             case 'win': g.victory(g.killCount * 100 + g.playerHP * 50); break;
             default: break;
         }

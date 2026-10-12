@@ -9,7 +9,7 @@
  *                tree; no mana comes back meanwhile). No mana left or «стоп» → it goes out.
  *                Creative: no mana rules.
  *   Reward       the first time it really burns something (a tree, a creature, anything that
- *                burns) the caster's mana maximum grows by 10 — once, for good (world save).
+ *                burns) the caster's mana maximum grows (Mana.js FIRST_SPELL: +20, once).
  *   The blaze    a huge, pulsing mass of fire bursts out of the wand and stays where the wand
  *                points; it flows after the wand (a heavy mass: it lags a little). The hand
  *                controls it: an arm bent close to the body keeps it near, a stretched arm
@@ -46,7 +46,6 @@ export const HELLFIRE = {
     MIN_MAX_MANA: 100, // the mana maximum one must have (free world)
     COST: 80, // mana at once
     DRAIN: 2, // mana a second while it is held
-    REWARD: 10, // to the mana maximum, the first time it really burns something
     REACH_MIN: 3, // m: the blaze from the wand's tip, the arm bent…
     REACH_MAX: 18, // …the arm stretched out
     R0: 1.7, // m: the blaze's radius when it bursts out
@@ -120,17 +119,6 @@ export function leftStrength(t) {
 /** Mana the held fire takes in `dt` seconds. */
 export function hellfireDrain(dt) {
     return HELLFIRE.DRAIN * Math.max(0, dt);
-}
-
-/**
- * The first real burn: +10 to the mana maximum, once. Mutates `bonus` (the player's lasting
- * bonuses, kept in the world save) and returns how much the maximum grows (0: already given).
- */
-export function hellfireReward(bonus) {
-    if (!bonus || bonus.hellfire) return 0;
-    bonus.hellfire = true;
-    bonus.fatigue = (bonus.fatigue || 0) + HELLFIRE.REWARD;
-    return HELLFIRE.REWARD;
 }
 
 /** How far the blaze stands from the wand: the arm's stretch (0 bent … 1 stretched out). */
@@ -498,22 +486,14 @@ export class Hellfire {
         return w;
     }
 
-    /** It really burnt something: mana (the first time: +10 to the maximum, for good). */
+    /** It really burnt something: mana (the first time: its bonus — Mana.js FIRST_SPELL). */
     _worked(s) {
         if (s.worked) return;
         s.worked = true;
         const g = this.game;
         this._note({ ev: 'worked' });
-        g.mana?.success?.(HELLFIRE.NAME);
-        if (!g.combat?.enabled) return; // (no mana rules outside the free world)
-        g.bonus = g.bonus || { hp: 0, fatigue: 0 };
-        const n = hellfireReward(g.bonus);
-        if (!n) return;
-        g.combat.addMaxFatigue?.(n);
-        g.combat._hudKey = '';
-        this._note({ ev: 'reward', n });
-        const t = `🔥 Адский огонь покорился вам! Мана <b>+${n}</b> к максимуму навсегда`;
-        if (g.hud?.toast) g.hud.toast(t); else g.hud?.setVoice?.(t, true);
+        const n = g.mana?.success?.(HELLFIRE.NAME);
+        if (n) this._note({ ev: 'reward', n });
     }
 
     // ============================================================ burning

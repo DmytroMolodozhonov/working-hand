@@ -40,6 +40,7 @@ import { WIZ, wizardRoster } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { slowFactor, tickSlow } from './Slow.js';
+import { creditKill } from './Mana.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -1733,6 +1734,7 @@ export class CastleLife {
         const st = this.state(v.cs.def.id);
         st.killed.add(v.idx);
         this.game.death?.villagerDied(v); // the body stays; a knight's sword, shield and coins drop
+        if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30 }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
         this._sendState(v.cs);
     }

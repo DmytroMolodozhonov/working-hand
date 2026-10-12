@@ -731,7 +731,7 @@ export class Duel {
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
         // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
         // («Джолт»: no damage — a rooted tree only reels from the shove: below)
-        if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell); return; }
+        if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell, byId); return; }
         if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
@@ -1188,21 +1188,24 @@ export class Duel {
         else if (winnerBolt.by === this.me) {
             this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);
             this._manaHit(winnerBolt.spell); // (my charge reached them)
-            this._won = { id: loser, at: performance.now() }; // +5 mana if it kills them
+            this._won = { id: loser, at: performance.now() }; // (mana if it kills them: a duel won)
         }
     }
 
-    /** Mana: my duel charge hit (+1 to the maximum, Mana.js). */
+    /** Mana: my duel charge hit (the first time for this spell: its bonus, Mana.js). */
     _manaHit(spell) {
         this.game.mana?.success(DUEL_SPELL_NAME[spell] || spell);
     }
 
-    /** Someone I killed died: a clash I just won against them = a real duel won (+5 mana). */
-    opponentDied(id) {
+    /**
+     * Someone I killed died (a player, or an NPC wizard — the host tells me): a clash I just won
+     * against them = a real duel won (mana: 30% of their maximum above 30, at least +1).
+     */
+    opponentDied(id, oppMax = 30) {
         const w = this._won;
         if (!w || w.id !== id || performance.now() - w.at > 8000) return false;
         this._won = null;
-        this.game.mana?.duelWon();
+        this.game.mana?.duelWon(oppMax);
         return true;
     }
 

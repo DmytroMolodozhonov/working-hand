@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { HELLFIRE, Hellfire, hellfireBlock, hellfireCanStop, leftStrength, hellfireDrain, hellfireReward, blazeReach, blazeRadius, inBlaze, inRing, ringRadius, ringSize } from '../../src/game/Hellfire.js';
+import { HELLFIRE, Hellfire, hellfireBlock, hellfireCanStop, leftStrength, hellfireDrain, blazeReach, blazeRadius, inBlaze, inRing, ringRadius, ringSize } from '../../src/game/Hellfire.js';
 import { SPELL_COST, Combat } from '../../src/game/Combat.js';
 import { Mana } from '../../src/game/Mana.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -43,13 +43,6 @@ test('Hellfire: mana — a maximum of 100+, 80 at once, 2 a second; Creative has
     assert.equal(hellfireBlock({ enabled: false, max: 30, mana: 0 }), null, 'Creative: it just works');
 });
 
-test('Hellfire: +10 to the mana maximum only the first time', () => {
-    const bonus = { hp: 0, fatigue: 3 };
-    assert.equal(hellfireReward(bonus), 10);
-    assert.deepEqual(bonus, { hp: 0, fatigue: 13, hellfire: true });
-    assert.equal(hellfireReward(bonus), 0);
-    assert.equal(bonus.fatigue, 13);
-});
 
 test('Hellfire: the hand controls it — reach by the stretched arm, size by time and the spread hands', () => {
     assert.equal(blazeReach(0), HELLFIRE.REACH_MIN);
@@ -127,7 +120,7 @@ test('Hellfire: «стоп» puts it out; Creative casts it with no mana at all'
     assert.equal(g.hellfire.busy, false);
 });
 
-test('Hellfire: the first real burn gives +10 to the mana maximum — only once, kept in the bonuses', () => {
+test('Hellfire: the first real burn gives +20 to the mana maximum — only once', () => {
     const g = fakeGame();
     const c = g.combat;
     c.maxFatigue = 100; c.fatigue = 100;
@@ -136,18 +129,15 @@ test('Hellfire: the first real burn gives +10 to the mana maximum — only once,
     assert.equal(c.maxFatigue, 100, 'nothing burnt yet: no reward');
     g.fire.lit = 1; // (a tree catches fire)
     run(g, 0.5);
-    assert.equal(g.bonus.hellfire, true);
-    assert.equal(g.bonus.fatigue, 10);
     const after = c.maxFatigue;
-    assert.ok(after >= 110, `+10 (and the strong spell's first success): ${after}`);
+    assert.equal(after, 120, '+20 the first time');
     g.hellfire.stop();
     g.hellfire._endAt = -99;
     c.fatigue = 100;
     g.hellfire.cast(true);
     g.fire.lit = 1;
     run(g, 0.5);
-    assert.equal(g.bonus.fatigue, 10, 'no second +10');
-    assert.ok(c.maxFatigue - after <= 1, 'only the ordinary +1 for a spell that worked');
+    assert.equal(c.maxFatigue, after, 'the second time: nothing');
 });
 
 test('Hellfire: the caster is not immune — the blaze on him burns him (a shield only halves it)', () => {

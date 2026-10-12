@@ -24,6 +24,7 @@
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, BASE_COLORS } from '../world/Terrain.js';
+import { creditKill } from './Mana.js';
 
 export const ALIVE = {
     COST: 25, // mana at once
@@ -345,7 +346,7 @@ export class LivingTrees {
 
     // ============================================================= damage
     /** A blow / a spell reached it: only fire counts. */
-    hit(t, dmg, kind = null) {
+    hit(t, dmg, kind = null, by = null) {
         if (!t || t.isDead) return;
         const g = this.game;
         const p = t.model.position;
@@ -358,6 +359,7 @@ export class LivingTrees {
             return;
         }
         if (!this.auth) return; // (the host replays the fire too and decides)
+        if (by != null) t.lastBy = by; // (who set it burning: the mana for it, if it burns down)
         t.hp = Math.max(0, t.hp - dmg);
         this.ignite(t);
         if (t.hp <= 0) this._burnDown(t);
@@ -370,7 +372,7 @@ export class LivingTrees {
     }
 
     /** The Inferno stream along a ray. */
-    burnAlong(o, d, len) {
+    burnAlong(o, d, len, by = null) {
         let burnt = false;
         for (const t of this.list) {
             if (t.isDead || t.fireCd > 0) continue;
@@ -380,7 +382,7 @@ export class LivingTrees {
                 const q = _v.copy(o).addScaledVector(d, a);
                 if (Math.hypot(q.x - p.x, q.z - p.z) > 2.2 * s || q.y < p.y - 1 || q.y > p.y + 10 * s) continue;
                 t.fireCd = 0.6;
-                this.hit(t, 3, 'Inferno');
+                this.hit(t, 3, 'Inferno', by);
                 burnt = true;
                 break;
             }
@@ -399,6 +401,7 @@ export class LivingTrees {
     }
 
     _burnDown(t) {
+        if (t.phase !== 'burn' && t.lastBy != null) creditKill(this.game, t.lastBy, { kind: 'livingTree' }); // (mana: a magical creature)
         t.phase = 'burn';
         t.pt = 0;
         t.burnT = ALIVE.COLLAPSE;

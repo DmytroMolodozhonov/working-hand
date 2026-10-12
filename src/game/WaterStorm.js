@@ -41,7 +41,6 @@ export const STORM = {
     COST: 80,
     DRAIN: 2,
     STOP_COST: 50,
-    REWARD: 10,
     MIN_WATER: 150, // m³ (water blocks) in reach of the place pointed at
     SRC_R: 12, // m round the place pointed at: the water it may take…
     SRC_DEPTH: 7, // …down to this many blocks
@@ -92,14 +91,6 @@ export const stormCanStop = ({ enabled, mana }) => !enabled || (mana ?? 0) >= ST
 
 /** Mana the held storm takes in `dt` s. */
 export const stormDrain = (dt) => STORM.DRAIN * Math.max(0, dt);
-
-/** The first time it really worked: +10 to the mana maximum, once (mutates `bonus`). */
-export function stormReward(bonus) {
-    if (!bonus || bonus.waterStorm) return 0;
-    bonus.waterStorm = true;
-    bonus.fatigue = (bonus.fatigue || 0) + STORM.REWARD;
-    return STORM.REWARD;
-}
 
 /** Is there water enough here? */
 export const enoughWater = (count) => count >= STORM.MIN_WATER;
@@ -414,22 +405,14 @@ export class WaterStorm {
         return out;
     }
 
-    /** It really did something: mana (the first time: +10 to the maximum, for good). */
+    /** It really did something: mana (the first time: its bonus — Mana.js FIRST_SPELL). */
     _worked(s) {
         if (s.worked) return;
         s.worked = true;
         const g = this.game;
         this._note({ ev: 'worked' });
-        g.mana?.success?.(STORM.NAME);
-        if (!g.combat?.enabled) return;
-        g.bonus = g.bonus || { hp: 0, fatigue: 0 };
-        const n = stormReward(g.bonus);
-        if (!n) return;
-        g.combat.addMaxFatigue?.(n);
-        g.combat._hudKey = '';
-        this._note({ ev: 'reward', n });
-        const t = `🌊 Водяная буря покорилась вам! Мана <b>+${n}</b> к максимуму навсегда`;
-        if (g.hud?.toast) g.hud.toast(t); else g.hud?.setVoice?.(t, true);
+        const n = g.mana?.success?.(STORM.NAME);
+        if (n) this._note({ ev: 'reward', n });
     }
 
     // ============================================================ what it does

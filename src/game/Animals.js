@@ -32,6 +32,7 @@
 
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
+import { animalMagicKind, creditKill } from './Mana.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
 import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS, PEGASUS_COLOR } from './AnimalModels.js';
@@ -293,7 +294,7 @@ export class Animals {
         if (a.type === 'horse') this._pegasusDefends(a, by); // (the herd's Pegasus flies at the attacker)
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.copy(a.group.position).add(_v2.set(0, 1, 0)), 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.6);
         if (dir) this.push(a, _v.copy(dir).setY(0).normalize().multiplyScalar(4).setY(1.5), 0.35); // a blow knocks it back
-        if (a.hp <= 0) { this._die(a, fire); return; }
+        if (a.hp <= 0) { this._die(a, fire, by); return; }
         if (a.form || a.defend) return; // (the bull / the minotaur / the Pegasus doesn't run: they fight)
         // defend (65%) or run away; sheep stand up for each other
         const attacker = by;
@@ -318,12 +319,14 @@ export class Animals {
         }
     }
 
-    _die(a, cooked) {
+    _die(a, cooked, by = null) {
+        const magic = animalMagicKind(a); // (before it lies down: the bull / the minotaur still in its form)
         a.dead = true;
         a.state = 'dead';
         a.fly = null; a.flyCode = 0; a.riderFly = false; a.defend = null;
         a.cooked = a.cooked || cooked;
         if (this.auth) this.guards.died(a); // (the bronze bull's horn, the minotaur's horn)
+        if (this.auth && magic && by != null) creditKill(this.game, by, { kind: magic }); // (mana: a magical creature, to whoever struck last)
         a.deadAt = performance.now();
         if (a.rider === this.game.localId) this.dismount();
         this._layDown(a);
@@ -389,7 +392,7 @@ export class Animals {
     }
 
     /** Inferno: living animals burn (and die cooked), carcasses get cooked. */
-    burnAlong(o, d, len) {
+    burnAlong(o, d, len, by = this.game.localId) {
         let burnt = false;
         for (const a of this.list) {
             const to = _v.subVectors(a.group.position, o);
@@ -397,7 +400,7 @@ export class Animals {
             if (along < 0 || along > len) continue;
             if (to.addScaledVector(d, -along).length() > 2.2) continue;
             if (a.dead) { if (!a.cooked && a.meat > 0) { a.cooked = true; this._tintCooked(a); this.game.hud.setVoice?.('🔥 Мясо поджарилось', true); } continue; }
-            if (a.damageCooldown <= 0) { a.cooked = true; this.hit(a, 2, d, this.game.localId, true); a.damageCooldown = 0.6; if (!a.dead) a.cooked = false; burnt = true; }
+            if (a.damageCooldown <= 0) { a.cooked = true; this.hit(a, 2, d, by, true); a.damageCooldown = 0.6; if (!a.dead) a.cooked = false; burnt = true; }
         }
         return burnt;
     }

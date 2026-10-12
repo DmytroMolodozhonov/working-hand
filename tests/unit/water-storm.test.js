@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { STORM, WaterStorm, stormBlock, stormCanStop, stormDrain, stormReward, enoughWater, massRadius, inStorm, stormRadius, waterInReach } from '../../src/game/WaterStorm.js';
+import { STORM, WaterStorm, stormBlock, stormCanStop, stormDrain, enoughWater, massRadius, inStorm, stormRadius, waterInReach } from '../../src/game/WaterStorm.js';
 import { Hellfire } from '../../src/game/Hellfire.js';
 import { SPELL_COST, Combat } from '../../src/game/Combat.js';
 import { Mana } from '../../src/game/Mana.js';
@@ -17,7 +17,7 @@ test('Water Vortex Super Maxima: the words — before «Water Vortex» and «М�
     assert.notEqual(matchSpell('это было супер'), 'WaterVortexSuperMaxima');
 });
 
-test('Water Vortex Super Maxima: the same mana rules as the Hellfire (100 max, 80, 2/s, «стоп» 50, +10 once)', () => {
+test('Water Vortex Super Maxima: the same mana rules as the Hellfire (100 max, 80, 2/s, «стоп» 50)', () => {
     assert.equal(SPELL_COST.WaterVortexSuperMaxima, 80);
     assert.equal(stormBlock({ enabled: true, max: 99, mana: 99 }), 'max');
     assert.equal(stormBlock({ enabled: true, max: 120, mana: 79 }), 'mana');
@@ -26,10 +26,6 @@ test('Water Vortex Super Maxima: the same mana rules as the Hellfire (100 max, 8
     assert.equal(stormDrain(1), 2);
     assert.equal(stormCanStop({ enabled: true, mana: 49 }), false);
     assert.equal(stormCanStop({ enabled: true, mana: 50 }), true);
-    const bonus = { hp: 0, fatigue: 0, hellfire: true };
-    assert.equal(stormReward(bonus), 10, 'its own +10 (the Hellfire\'s is separate)');
-    assert.equal(stormReward(bonus), 0);
-    assert.equal(bonus.fatigue, 10);
 });
 
 test('Water Vortex Super Maxima: only where there is a lot of water; the mass grows with it and with the spread hands', () => {
@@ -151,6 +147,5 @@ test('Water Vortex Super Maxima: it puts out the Hellfire — the first time it 
     run(g, 3);
     assert.equal(g.hellfire.busy, false, 'the Hellfire hissed out');
     assert.ok(g.hellfire.log.some((e) => e.ev === 'out' && e.why === 'water'));
-    assert.equal(g.bonus?.waterStorm, true);
-    assert.ok(g.waterStorm.log.some((e) => e.ev === 'reward' && e.n === 10));
+    assert.ok(g.waterStorm.log.some((e) => e.ev === 'reward' && e.n === 20), 'its first time: +20 to the mana maximum');
 });

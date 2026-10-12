@@ -219,7 +219,7 @@ export class Servants {
         if (target.k === 'z') g.damageZombie(c, dmg, false, d.clone(), by);
         else if (target.k === 'a') g.animals.hit(c, dmg, d.clone(), by);
         else if (target.k === 'v') g.castleLife.hit(c, dmg, d.clone(), by);
-        else if (target.k === 't') g.livingTrees.hit(c, dmg, kind);
+        else if (target.k === 't') g.livingTrees.hit(c, dmg, kind, by);
         else if (target.k === 's') g.spiders.hit(c, dmg, 'melee');
         else if (target.k === 'p') {
             if (c.local) this.hitMe(dmg, d, by, kind);

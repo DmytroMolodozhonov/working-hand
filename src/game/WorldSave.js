@@ -107,7 +107,7 @@ export function playerSnapshot(game) {
         hp: game.playerHP,
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
-        mana: game.mana?.snapshot() || null, // the mana maximum grown with practice, strong spells already counted
+        mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
         limbs: game.dismember?.snapshot() || null, // cut off (until death): no healing by leaving
         bleed: game.bleeding?.rate || 0,
         ship: game.ships?.playerSnap() || null, // standing on a ship: [ship id, place on its deck]

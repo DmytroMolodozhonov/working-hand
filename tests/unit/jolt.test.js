@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { Duel, DUEL_SPELLS, JOLT } from '../../src/game/Duel.js';
-import { DUEL_SPELL_NAME, isStrongSpell } from '../../src/game/Mana.js';
+import { DUEL_SPELL_NAME, firstSpellGain } from '../../src/game/Mana.js';
 import { NPC_COST } from '../../src/game/WizardAI.js';
 import { CreatureImpact } from '../../src/game/CreatureImpact.js';
 import { SPELLS } from '../../src/ui/Codex.js';
@@ -23,7 +23,7 @@ test('«Джолт» costs 5, «Джолт Максима» 15 (a strong spell) 
     assert.equal(SPELL_COST.Jolt, 5);
     assert.equal(SPELL_COST.JoltMaxima, 15);
     assert.equal(NPC_COST.Jolt, 5);
-    assert.ok(isStrongSpell('JoltMaxima') && !isStrongSpell('Jolt'));
+    assert.ok(firstSpellGain('JoltMaxima') > firstSpellGain('Jolt'));
     assert.equal(JOLT.JoltMaxima.push, 3 * JOLT.Jolt.push);
     assert.ok(DUEL_SPELLS.Jolt && DUEL_SPELLS.JoltMaxima);
     assert.equal(DUEL_SPELL_NAME.JoltMaxima, 'JoltMaxima');
