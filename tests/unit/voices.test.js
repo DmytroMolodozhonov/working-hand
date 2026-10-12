@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { castNeural, isFemale, pickSystemVoice, systemVoiceGender, systemVoiceParams, VOICE_F0, MALE_MAX_F0, FEMALE_MIN_F0 } from '../../src/audio/VoiceCast.js';
 import { numberToWords, speakable } from '../../src/audio/ruText.js';
 import { preprocessText, chunkText, parseVoiceBin, parseIndexer, textToIds, synthesize, VOICE_NAMES } from '../../src/audio/supertonic.js';
-import { Speech } from '../../src/audio/Speech.js';
+import { Speech, loudness } from '../../src/audio/Speech.js';
 import { VOICE_SOURCES } from '../../src/audio/NeuralVoice.js';
 
 const ROLES = ['farmer', 'merchant', 'builder', 'knight', 'king', 'advisor', 'wizard', 'sailor', 'villager', 'someone-new'];
@@ -343,4 +343,36 @@ test('Speech: a long line plays sentence after sentence as they are synthesized,
     played[2].onended();
     assert.equal(ended, true);
     assert.equal(s.speaking, false);
+});
+
+test('Speech: the next piece of an answer (append) is made at once and played right after — nothing dropped; every voice equally loud', async () => {
+    const { ctx, played } = fakeAudio();
+    const nv = fakeNeural();
+    const s = new Speech({ neural: nv, audioContext: () => ctx, master: () => 1 });
+    s.say('Король у нас строгий,', { voiceKey: 'f1', female: true });
+    s.say('но добрый.', { voiceKey: 'f1', female: true, append: true });
+    s.say('Его все уважают.', { voiceKey: 'f1', female: true, append: true });
+    await tick();
+    assert.deepEqual(nv.calls.map((c) => c.text), ['Король у нас строгий,', 'но добрый.', 'Его все уважают.'], 'all three made, none waits for the one before to end');
+    assert.equal(played.length, 3);
+    assert.ok(played[1].at > played[0].at && played[2].at > played[1].at, 'one after another');
+    // (the breath after a comma is shorter than after a full stop)
+    const d1 = played[1].at - played[0].at, d2 = played[2].at - played[1].at;
+    assert.ok(d1 < d2, `${d1} < ${d2}`);
+    for (const p of played) p.onended();
+    assert.equal(s.speaking, false);
+    // a quiet sentence is brought up, a loud one is not clipped
+    const quiet = new Float32Array(1000).map((_, i) => 0.02 * Math.sin(i / 5));
+    const loud = new Float32Array(1000).map((_, i) => 0.9 * Math.sin(i / 5));
+    assert.ok(loudness(quiet) > 3, `quiet ×${loudness(quiet)}`);
+    assert.ok(loudness(loud) * 0.9 <= 0.98 + 1e-9, 'no clipping');
+    // a short line said often is made once per voice
+    const n0 = nv.calls.length;
+    s.say('Хм…', { voiceKey: 'f1', female: true });
+    await tick();
+    played[played.length - 1].onended();
+    s.say('Хм…', { voiceKey: 'f1', female: true });
+    await tick(); await tick();
+    assert.equal(nv.calls.length, n0 + 1, '«Хм…» synthesized once');
+    assert.equal(played.length, 5);
 });

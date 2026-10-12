@@ -150,18 +150,35 @@ export class TalkMind {
     /** The net's part: «Хм…», then its answer and its game action (checked). */
     async ask(brain, text, ctx, { res, perm }, opts = {}) {
         let raw = '';
-        // the first sentence is said as soon as it is written (opts.onSentence), the rest comes after
-        let partial = '', spoken = '';
+        // the answer is said while the net still writes it (opts.onSentence(piece, i)): the first piece
+        // as soon as a clause of it is written («Король у нас строгий,»), then every sentence as it ends
+        let partial = '', spoken = '', stopped = false, n = 0, ends = 0;
         const onPartial = typeof opts.onSentence === 'function' ? (piece) => {
-            if (spoken) return;
+            if (stopped) return;
             partial += piece;
-            if (/[<{]/.test(partial)) { spoken = '\u0000'; return; } // (a game action is coming: wait for the whole answer)
-            const m = /^[\s\S]*?[.!?…](?=\s|$)/.exec(partial);
-            if (!m || m[0].trim().length < 4) return;
-            const first = this._clean(m[0], text, brain);
-            if (!first) { spoken = '\u0000'; return; }
-            spoken = first;
-            try { opts.onSentence(first); } catch (_) { /* ignore */ }
+            for (;;) {
+                if (/[<{]/.test(partial)) { stopped = true; return; } // (a game action is coming: the rest waits for the whole answer)
+                const sm = /^[\s\S]*?[.!?…](?=\s|$)/.exec(partial);
+                let take = null;
+                if (n === 0) {
+                    // (the first clause long enough to be said alone, before the sentence ends)
+                    const lim = sm ? sm[0].length : partial.length;
+                    for (const c of partial.matchAll(/[,;:—–](?=\s)/g)) {
+                        if (c.index >= lim) break;
+                        const head = partial.slice(0, c.index + 1);
+                        if (head.trim().length >= 14 && head.trim().split(/\s+/).length >= 3) { take = head; break; }
+                    }
+                }
+                if (!take && sm && sm[0].trim().length >= 4) take = sm[0];
+                if (!take) return;
+                partial = partial.slice(take.length);
+                const line = n === 0 ? this._clean(take, text, brain) : (this._acceptText(sanitizeReply(take, brain.villager?.name), text) ? sanitizeReply(take, brain.villager?.name) : null);
+                if (!line) { stopped = true; return; }
+                spoken = spoken ? `${spoken} ${line}` : line;
+                try { opts.onSentence(line, n); } catch (_) { /* ignore */ }
+                n++;
+                if (/[.!?…]$/.test(line) && ++ends >= 2) { stopped = true; return; } // (an answer is at most two sentences)
+            }
         } : null;
         try {
             opts.onThinking?.();
@@ -180,7 +197,7 @@ export class TalkMind {
             clearTimeout(timer);
         } catch (e) { this.lastTimedOut = false; return res; }
         this.lastTimedOut = !raw; // (the net said nothing in time: the rules answered)
-        if (spoken && spoken !== '\u0000') res.spoken = spoken; // (already said: CastleTalk says only the rest)
+        if (spoken) res.spoken = spoken; // (already said: CastleTalk says only the rest)
         if (!raw && res.spoken) { this._setReply(brain, res, res.spoken); res.smart = true; return res; }
         const { text: said, calls } = parseToolCalls(raw);
         const clean = this._clean(said, text, brain) || '';

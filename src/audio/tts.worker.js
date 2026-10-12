@@ -112,7 +112,7 @@ async function load(msg) {
         try {
             model = await loadSource(src, cache);
             // (the first run of a network is slow: warm up before the first villager speaks)
-            try { await synthesize(ort, model.s, model.cfg, model.indexer, model.voices[Object.keys(model.voices)[0]], 'Да.', { steps: 2 }); } catch (e) { /* ignore */ }
+            try { await synthesize(ort, model.s, model.cfg, model.indexer, model.voices[Object.keys(model.voices)[0]], 'Да, конечно.', { steps: 5 }); } catch (e) { /* ignore */ } // (as a real line is made)
             post({ type: 'ready', source: src.id, voices: Object.keys(model.voices) });
             return;
         } catch (e) {

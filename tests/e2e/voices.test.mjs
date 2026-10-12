@@ -51,7 +51,7 @@ function fakeSpeechInit() {
     window.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; } };
 }
 
-test('voices: every villager — women, men, knights, the king, merchants — speaks with a voice of their own gender; volume follows the game sound', async () => {
+test('voices: every villager — women, men, knights, the king, merchants — speaks with a voice of their own gender; volume follows the voices slider', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     // no voice model reachable: the neural voices fail → the system voices speak
     let hf = 0;
@@ -80,7 +80,7 @@ test('voices: every villager — women, men, knights, the king, merchants — sp
     assert.ok(n >= 5, 'villagers around');
     const res = await page.evaluate(async () => {
         const g = window.__zns.game, T = g.castleLife.talk;
-        g.sound.globalVolume = 0.5;
+        g.sound.talkVolume = 0.5; // (the voices' own slider)
         const out = [];
         for (const v of g.castleLife.byId.values()) {
             if (v.dead) continue;
@@ -102,7 +102,7 @@ test('voices: every villager — women, men, knights, the king, merchants — sp
     for (const r of res.out) {
         assert.ok(r.voice, `${r.role} spoke`);
         if (r.female) { women++; assert.match(r.voice, FEMALE, JSON.stringify(r)); assert.ok(r.pitch >= 1); } else { men++; assert.match(r.voice, MALE, JSON.stringify(r)); assert.ok(r.pitch <= 1.05); }
-        assert.ok(r.volume > 0.3 && r.volume <= 0.5 + 1e-9, `volume follows the game sound: ${r.volume}`);
+        assert.ok(r.volume > 0.3 && r.volume <= 0.5 + 1e-9, `volume follows the voices slider: ${r.volume}`);
         assert.match(r.text, /пять монет/);
     }
     assert.ok(women >= 1 && men >= 2, `${women} women, ${men} men`);
@@ -114,7 +114,7 @@ test('voices: every villager — women, men, knights, the king, merchants — sp
     // sound off → silent
     const silent = await page.evaluate(() => {
         const g = window.__zns.game, T = g.castleLife.talk;
-        g.sound.globalVolume = 0;
+        g.sound.talkVolume = 0;
         T.speech.cancel();
         const v = [...g.castleLife.byId.values()][0];
         return T.speech.say('Тишина', { voiceKey: v.id, role: v.role, female: v.entry.female, volume: 1 });

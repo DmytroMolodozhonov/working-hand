@@ -178,6 +178,11 @@ spellVolInput?.addEventListener('input', (e) => {
     spellVolVal.textContent = e.target.value + '%';
     if (sound) sound.setSpellVolume(parseInt(e.target.value, 10));
 });
+const talkVolInput = $('talk-vol');
+talkVolInput?.addEventListener('input', (e) => {
+    $('talk-vol-val').textContent = e.target.value + '%';
+    if (sound) sound.setTalkVolume(parseInt(e.target.value, 10));
+});
 ambientToggle?.addEventListener('change', () => {
     if (sound) sound.ambientEnabled = ambientToggle.value === '1';
 });
@@ -397,8 +402,34 @@ function holdSpell(command, isFinal) {
     setTimeout(() => { const h = heldSpell; heldSpell = null; if (h) voice.onResult(h.command, h.isFinal, true); }, GATE.HOLD);
 }
 
+// Talking to a villager: the browser marks the words «final» only a good while after you stop. When the
+// words being caught stop changing for a moment (no spell's sound in them), the villager answers now;
+// the browser's own final of the same words later is not a second question.
+const TALK_STILL = 700; // ms
+let talkWait = null, talkEarly = null;
+const talkKey = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim();
+function earlyTalk(command) {
+    clearTimeout(talkWait);
+    talkWait = setTimeout(() => {
+        talkWait = null;
+        const T = game?.castleLife?.talk;
+        if (!game?.active || !T || game.isMagicActive || Date.now() - game.lastMagicTime < 1500 || matchSpell(command)) return;
+        if (!T._listener?.() || !T.hear(command)) return;
+        talkEarly = { key: talkKey(command), at: performance.now() };
+        hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
+    }, TALK_STILL);
+}
+
 voice.onResult = (command, isFinal = true, held = false) => {
     if (!command) return;
+    // (the words go on / are final: the early answer waits for them, or is already given)
+    if (talkWait) { clearTimeout(talkWait); talkWait = null; }
+    if (talkEarly && performance.now() - talkEarly.at < 5000) {
+        const k = talkKey(command);
+        if (k === talkEarly.key || talkEarly.key.startsWith(k)) { if (isFinal) talkEarly = null; return; }
+        talkEarly = null; // (more words after the answer: a new question)
+    }
+    if (!isFinal && !held && game?.active && !matchSpell(command) && game.castleLife?.talk?._listener?.()) earlyTalk(command);
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
         voiceTestText.style.color = '#55efc4';
@@ -583,6 +614,7 @@ async function startGameInner(config, welcome) {
         sound.setVolume(parseInt(volInput.value, 10));
         if (musicVolInput) sound.setMusicVolume(parseInt(musicVolInput.value, 10));
         if (spellVolInput) sound.setSpellVolume(parseInt(spellVolInput.value, 10));
+        if (talkVolInput) sound.setTalkVolume(parseInt(talkVolInput.value, 10));
         sound.ambientEnabled = ambientToggle ? ambientToggle.value === '1' : true;
 
         if (game) game.dispose();
@@ -1019,7 +1051,7 @@ function escapeHtml(s) {
 // Volumes, graphics, camera… are kept in this browser between launches.
 (function rememberSettings() {
     const KEY = 'zns-settings';
-    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
     let saved = {};

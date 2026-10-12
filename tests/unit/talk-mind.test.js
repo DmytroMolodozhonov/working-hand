@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRng } from '../../src/core/math.js';
 import { VillagerBrain } from '../../src/game/VillagerBrain.js';
 import { TOOLS, TOOL_NAMES, toolsFor, parseToolCalls, validateCall, detectOrder, resolveTarget } from '../../src/ai/TalkActions.js';
+import { restAfter } from '../../src/game/CastleTalk.js';
 import { TalkMind, ROLE_PROMPTS, thinkingLine } from '../../src/ai/TalkMind.js';
 
 const PLAYERS = [{ id: 'p1', name: 'Олег' }, { id: 'p2', name: 'Маша' }];
@@ -255,7 +256,29 @@ test('a quick talk: what the rules clearly understood is answered at once (the n
     const said = [];
     const r = await mind.hear(b, 'а что у вас тут творится вообще', {}, { onSentence: (s) => said.push(s) });
     assert.equal(llm.asked.length, 1);
-    assert.deepEqual(said, ['Ох, по ночам мертвецы лезут.']);
-    assert.equal(r.spoken, 'Ох, по ночам мертвецы лезут.');
+    // («Ох,» is too short to be said alone: the first piece is the sentence; then the next one as it ends)
+    assert.deepEqual(said, ['Ох, по ночам мертвецы лезут.', 'А днём тихо.']);
+    assert.equal(r.spoken, 'Ох, по ночам мертвецы лезут. А днём тихо.');
     assert.equal(r.reply, 'Ох, по ночам мертвецы лезут. А днём тихо.');
+});
+
+test('the answer is said while written: a long enough first clause at once, then each sentence; a game action stops it', async () => {
+    const llm = fakeLLM((req) => {
+        if (req.onPartial) for (const p of ['Король у нас ', 'строгий, ', 'но добрый. ', 'Его все ', 'уважают.']) req.onPartial(p);
+        return 'Король у нас строгий, но добрый. Его все уважают.';
+    });
+    const mind = new TalkMind({ llm, rng: createRng(3) });
+    const said = [];
+    const r = await mind.hear(brain('farmer', { seed: 3 }), 'а что у вас тут творится вообще', {}, { onSentence: (s, i) => said.push([i, s]) });
+    assert.deepEqual(said, [[0, 'Король у нас строгий,'], [1, 'но добрый.'], [2, 'Его все уважают.']]);
+    assert.equal(restAfter(r.reply, r.spoken), '');
+    assert.equal(restAfter('Король у нас строгий, но добрый. Его все уважают.', 'Король у нас строгий,'), 'но добрый. Его все уважают.');
+    assert.equal(restAfter('Совсем другое.', 'Король у нас строгий,'), '', 'never said twice');
+    const llm2 = fakeLLM((req) => {
+        if (req.onPartial) for (const p of ['Хорошо, ', 'пойдём. <tool_call>{"name": "follow_me", "arguments": {}}</tool_call>']) req.onPartial(p);
+        return 'Хорошо, пойдём. <tool_call>{"name": "follow_me", "arguments": {}}</tool_call>';
+    });
+    const said2 = [];
+    await new TalkMind({ llm: llm2, rng: createRng(3) }).hear(brain('farmer', { seed: 4 }), 'а что у вас тут творится вообще', {}, { onSentence: (s) => said2.push(s) });
+    assert.ok(said2.every((x) => !/[<{]/.test(x)), 'no tool call said aloud');
 });

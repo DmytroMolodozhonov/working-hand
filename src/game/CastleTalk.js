@@ -31,7 +31,7 @@ import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { TalkMind, thinkingLine } from '../ai/TalkMind.js';
-import { detectOrder } from '../ai/TalkActions.js';
+import { detectOrder, toolsFor } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -45,6 +45,24 @@ const GOODS = [
 ];
 const _v = new THREE.Vector3();
 
+/**
+ * What is left of the whole answer after the part already said while the net wrote it
+ * (compared by letters: the tidying may change a quote or a space). '' when it does not match — never said twice.
+ */
+export function restAfter(reply, head) {
+    const key = (c) => c.toLowerCase().replace('ё', 'е');
+    const letters = [...String(head)].filter((c) => /[\p{L}\p{N}]/u.test(c)).map(key);
+    let k = 0, i = 0;
+    const r = String(reply);
+    for (; i < r.length && k < letters.length; i++) {
+        if (!/[\p{L}\p{N}]/u.test(r[i])) continue;
+        if (key(r[i]) !== letters[k]) return '';
+        k++;
+    }
+    if (k < letters.length) return '';
+    return r.slice(i).replace(/^[\s.,!?…;:—–]+/, '').trim();
+}
+
 const nameOf = (it) => (it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
 
 export class CastleTalk {
@@ -53,7 +71,7 @@ export class CastleTalk {
         this.life = life;
         this.speech = new Speech({
             engine: game.config?.villagerVoiceEngine === 'system' ? 'system' : 'neural',
-            master: () => this.game.sound?.globalVolume ?? 1, // (the sounds volume: voices too)
+            master: () => this.game.sound?.talkVolume ?? 1, // (their own slider: «Громкость голосов жителей»)
             onStatus: (st) => this._voiceStatus(st),
         });
         this.brains = new Map(); // villager id -> brain (lives while the villager is out)
@@ -138,7 +156,7 @@ export class CastleTalk {
         this._spoken = (this._spoken || []).filter((l) => now - l.at < 12000);
         this._spoken.push({ text, at: now });
         // (× the game's sound volume inside Speech; a woman always with a female voice, a man with a male one)
-        this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout });
+        this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout, append: !!this._more });
     }
 
     /** A line of the conversation with me: said at once (cutting what was being said), no chatter over it. */
@@ -152,16 +170,19 @@ export class CastleTalk {
 
     /** The rest of an answer: after what the villager is saying now (not cutting it). */
     _sayMore(v, text, broadcast = true) {
+        if (!text) return;
         v.talkedAt = performance.now();
         this._partner = v;
-        this.life._say(v, text, 5, broadcast, true);
+        this._more = true; // (said right after the line before it, nothing dropped)
+        try { this.life._say(v, text, 5, broadcast, true); } finally { this._more = false; }
     }
 
     /** (host) a line of the answer to a guest: everybody near hears it; my own talk is not touched. */
-    _sayForGuest(v, text) {
+    _sayForGuest(v, text, more = false) {
         if (!text) return;
         v.talkedAt = performance.now();
-        this.life._say(v, text, 5, true, true);
+        this._more = more;
+        try { this.life._say(v, text, 5, true, true); } finally { this._more = false; }
     }
 
     /**
@@ -250,7 +271,7 @@ export class CastleTalk {
         const thinking = () => this._sayThinking(v);
         const t0 = performance.now();
         // (the first sentence of the net's answer is said as soon as it is written)
-        const onSentence = (line) => this._sayReply(v, line);
+        const onSentence = (line, i) => (i > 0 ? this._sayMore(v, line) : this._sayReply(v, line));
         this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence }).then((res) => {
             // (too slow on this computer: say so now and then — the answer came from the rules)
             if (this.mind.lastTimedOut) {
@@ -297,7 +318,7 @@ export class CastleTalk {
             if (res.reply) {
                 // (the start went to the guest already while the net wrote: only the rest now)
                 const head = res.spoken;
-                if (head && res.reply.startsWith(head)) this._sayForGuest(v, res.reply.slice(head.length).trim());
+                if (head) this._sayForGuest(v, restAfter(res.reply, head), true);
                 else this._sayForGuest(v, res.reply);
             }
             if (res.action) this._act(v, res, from);
@@ -306,7 +327,7 @@ export class CastleTalk {
         const first = this.mind.first(b, text, ctx);
         if (first.done) send(first.res);
         // (the first sentence goes to the guest as soon as the net has written it — not after the whole answer)
-        else this.mind.ask(b, text, ctx, first, { onSentence: (line) => this._sayForGuest(v, line) }).then(send, () => send(first.res));
+        else this.mind.ask(b, text, ctx, first, { onSentence: (line, i) => this._sayForGuest(v, line, i > 0) }).then(send, () => send(first.res));
     }
 
     /** (a guest) the host's net answered: the line is already said; the market part is mine. */
@@ -378,7 +399,7 @@ export class CastleTalk {
         if (res.reply) {
             // (the start was said already while the net wrote: only the rest now, after it)
             const head = res.spoken;
-            if (head && res.reply.startsWith(head)) { const rest = res.reply.slice(head.length).trim(); if (rest) this._sayMore(v, rest); }
+            if (head) { const rest = restAfter(res.reply, head); if (rest) this._sayMore(v, rest); }
             else this._sayReply(v, res.reply);
         }
         if ((res.offer && res.action !== 'trade_yes') || res.action === 'offer_goods') this._pitch = { v, at: performance.now() };
@@ -729,6 +750,7 @@ export class CastleTalk {
                 if (this.llm !== llm) return; // (disposed meanwhile)
                 this.llmState = { state: 'ready', text: `готова (${m.label}, ${llm.device === 'webgpu' ? 'видеокарта' : 'процессор'})` };
                 this._llmWasReady = true;
+                this._warmLLM(llm);
                 g.hud.notify?.('🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
                 g.sync?.villagerAI?.(true);
                 return;
@@ -741,6 +763,24 @@ export class CastleTalk {
         }
         this.llmState = { state: 'failed', text: 'не загрузилась' };
         g.hud.notify?.('🧠 Нейросеть не загрузилась — жители говорят готовыми фразами (приказы всё равно понимают)');
+    }
+
+    /**
+     * The first real question is slow (the graphics card prepares its work for a prompt of this size):
+     * ask one in the background now, before anybody talks — a villager near, its role, the game actions.
+     */
+    _warmLLM(llm) {
+        const v = [...this.life.byId.values()].find((x) => !x.dead);
+        const b = v ? this.brain(v) : null;
+        const ctx = v ? this._ctx(v) : {};
+        const t0 = performance.now();
+        llm.chat({
+            system: b ? this.mind.systemPrompt(b, ctx) : 'Ты житель средневекового замка. Отвечай по-русски, коротко.',
+            history: [],
+            user: 'Привет, как дела?',
+            tools: toolsFor(b?.role || 'farmer', ctx),
+            maxTokens: 3,
+        }).then(() => console.info(`[CastleTalk] the net warmed up in ${Math.round(performance.now() - t0)} ms`), () => {});
     }
 
     /** I talk to a villager without the net: say once in a while why (still downloading, no graphics card, failed, off). */

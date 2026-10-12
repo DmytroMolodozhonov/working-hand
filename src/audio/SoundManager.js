@@ -44,6 +44,7 @@ export class SoundManager {
         this.enabled = true;
         this.ambientEnabled = true; // "Звуки рычания" setting (zombie growls only)
         this.globalVolume = 0.2; // (all sounds start at 20%: the settings sliders)
+        this.talkVolume = 0.4; // the villagers' voices: their own slider («Громкость голосов жителей», 40% — twice the old loudness)
         this.audioLoader = new THREE.AudioLoader();
         this.voices = [];
         this.posVoices = [];
@@ -116,6 +117,11 @@ export class SoundManager {
         const gain = val / 100;
         for (const item of this.ambientPool) item.sound.setVolume(gain);
         this.globalVolume = gain;
+    }
+
+    /** The voices of the people (villagers, sailors, the advisor…), 0..100. */
+    setTalkVolume(val) {
+        this.talkVolume = Math.max(0, Math.min(100, Number(val) || 0)) / 100;
     }
 
     setMusicVolume(val) {

@@ -162,6 +162,44 @@ test('talk: the neural net (a fake one) understands free words — «Хм…» f
     await page.close();
 });
 
+test('talk: the villager answers as soon as my words stop changing (not after the browser\'s late «final»), and the final of the same words is no second question', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await toCastle(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, T = g.castleLife.talk, V = window.__zns.voice;
+        const k = window.__knights().find((v) => v.job === 'guard');
+        window.__standBy(k);
+        g.lastMagicTime = 0;
+        const asked = [];
+        const hear = T.hear.bind(T);
+        T.hear = (text) => { asked.push([Math.round(performance.now()), text]); return hear(text); };
+        const t0 = performance.now();
+        V.onResult('как тебя', false);
+        await new Promise((res) => setTimeout(res, 300));
+        V.onResult('как тебя зовут', false);
+        await new Promise((res) => setTimeout(res, 500));
+        const early = asked.length; // (0.5 s after the last change: not yet)
+        await new Promise((res) => setTimeout(res, 500));
+        const after = asked.map((a) => a[1]);
+        const ms = asked.length ? asked[0][0] - t0 - 300 : null;
+        V.onResult('как тебя зовут', true); // (the browser's final, late)
+        await new Promise((res) => setTimeout(res, 900));
+        const finalAgain = asked.length;
+        V.onResult('а что у вас нового', true); // (a new question)
+        await new Promise((res) => setTimeout(res, 300));
+        return { early, after, ms, finalAgain, total: asked.length };
+    });
+    assert.equal(r.early, 0, 'not while I may still be saying it');
+    assert.deepEqual(r.after, ['как тебя зовут'], 'answered after the words stopped changing');
+    assert.ok(r.ms < 1000, `${r.ms} ms after my last word`);
+    assert.equal(r.finalAgain, 1, 'the late final of the same words is not asked again');
+    assert.equal(r.total, 2, 'a new question is heard');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
 test('market: a brush of the open hand takes nothing from the counter — only closed fingers do; the villager\'s own voice in the microphone is not an answer', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');

@@ -27,6 +27,15 @@ import { NeuralVoice } from './NeuralVoice.js';
 import { castNeural, isFemale, pickSystemVoice, systemVoiceParams } from './VoiceCast.js';
 import { speakable } from './ruText.js';
 
+/** A gain that brings a sentence to the same loudness as the others (RMS ≈ −20 dBFS, peaks kept under 1). */
+export function loudness(pcm) {
+    let sum = 0, peak = 0;
+    for (let i = 0; i < pcm.length; i++) { const x = pcm[i]; sum += x * x; const a = x < 0 ? -x : x; if (a > peak) peak = a; }
+    const rms = Math.sqrt(sum / Math.max(1, pcm.length));
+    if (rms < 1e-4) return 1;
+    return Math.max(Math.min(0.8, 0.98 / Math.max(peak, 1e-4)), Math.min(4, 0.1 / rms, 0.98 / Math.max(peak, 1e-4)));
+}
+
 export class Speech {
     /**
      * @param {{lang?:string, engine?:'neural'|'system', master?:Function, neural?:object|null,
@@ -49,6 +58,7 @@ export class Speech {
         this._voices = [];
         this._current = null; // { voiceKey, opts, stop() }
         this._pending = null; // { text, opts }
+        this._cache = new Map(); // short lines already made: voice|speed|pitch|text -> {pcm, sr}
         this.history = []; // the last lines: { engine, voice, female, pitch, speed, text }
         if (!this.systemSupported) return;
         this._refreshVoices();
@@ -128,6 +138,10 @@ export class Speech {
         const o = { ...opts, volume, voiceKey: key, female: isFemale(opts) };
         if (this._current) {
             if (this._current.voiceKey === key) {
+                // the next piece of the same answer (opts.append): made at once and played right after,
+                // in the same voice — nothing dropped, no wait for the line before to end
+                if (opts.append && this._current.add) { this._current.add(clean); return true; }
+                if (opts.append && this._pending) { this._pending.text += ' ' + clean; return true; }
                 // same villager: wait for the current line, keep only the newest pending one
                 if (this._pending?.opts.onEnd) this._safeCall(this._pending.opts.onEnd, false);
                 this._pending = { text: clean, opts: o };
@@ -178,53 +192,72 @@ export class Speech {
 
     _speakNeural(text, opts) {
         const cast = castNeural(opts);
-        const entry = { voiceKey: opts.voiceKey, opts, stop: null, sources: [], started: false };
+        const entry = { voiceKey: opts.voiceKey, opts, stop: null, sources: [], started: false, add: null };
         this._current = entry;
-        this._remember({ engine: 'neural', voice: cast.voice, female: cast.female, pitch: cast.pitch, speed: cast.speed, f0: cast.f0, text });
         entry.stop = () => {
             for (const src of entry.sources) { try { src.onended = null; src.stop(); } catch (e) { /* ignore */ } }
             entry.sources.length = 0;
         };
-        let nextAt = 0; // when the next sentence starts (AudioContext time)
-        let playing = 0;
-        let lastQueued = false;
-        const ended = () => { if (--playing <= 0 && lastQueued) this._finish(entry, true); };
-        // each sentence plays as soon as it is ready, right after the previous one
-        const onChunk = (pcm, sampleRate, last) => {
-            if (this._current !== entry) return;
-            if (last) lastQueued = true;
+        let nextAt = 0; // when the next sound starts (AudioContext time)
+        let playing = 0; // sounds queued and not ended yet
+        let open = 0; // pieces still being made
+        let pause = 0.15; // (after a clause ending with a comma: a shorter breath)
+        const maybeDone = () => { if (playing <= 0 && open <= 0) this._finish(entry, !!entry.started); };
+        const ended = () => { playing--; maybeDone(); };
+        const play = (pcm, sampleRate, piece) => {
             const ctx = this._audio();
-            if (!ctx || !pcm?.length) { if (last && playing <= 0) this._finish(entry, !!entry.started); return; }
+            if (!ctx || !pcm?.length) return;
             const buf = ctx.createBuffer(1, pcm.length, sampleRate);
             if (buf.copyToChannel) buf.copyToChannel(pcm, 0); else buf.getChannelData(0).set(pcm);
             const src = ctx.createBufferSource();
             src.buffer = buf;
             src.playbackRate.value = cast.pitch; // played `pitch` times faster…
             const gain = ctx.createGain();
-            gain.gain.value = opts.volume;
+            gain.gain.value = opts.volume * loudness(pcm); // (every voice equally loud: a soft woman's voice too)
             src.connect(gain);
             gain.connect(ctx.destination);
             src.onended = ended;
             if (ctx.state === 'suspended') ctx.resume?.()?.catch?.(() => {});
             const now = ctx.currentTime || 0;
             const at = Math.max(now, nextAt);
-            nextAt = at + pcm.length / sampleRate / cast.pitch + 0.15;
+            nextAt = at + pcm.length / sampleRate / cast.pitch + (/[,;:—–]$/.test(piece) ? 0.06 : pause);
             entry.sources.push(src);
             entry.started = true;
             playing++;
             src.start(at);
         };
-        // …so it is synthesized that much slower: the pace stays `speed`
-        this.neural.synth(text, { voice: cast.voice, speed: cast.speed / cast.pitch, onChunk }).catch(() => {
-            // the neural voice failed on this line: the system voice says it (if nothing was heard yet)
+        // one piece of the answer: each sentence plays as soon as it is ready, right after the one before
+        entry.add = (piece) => {
             if (this._current !== entry) return;
-            if (entry.started) { lastQueued = true; if (playing <= 0) this._finish(entry, true); return; }
-            this._current = null;
-            if (this._speakSystem(text, opts)) return;
-            const next = this._pending; // (onEnd(false) was called by _speakSystem)
-            this._pending = null;
-            if (next) this._speak(next.text, next.opts);
-        });
+            open++;
+            let closed = false;
+            const close = () => { if (!closed) { closed = true; open--; } };
+            this._remember({ engine: 'neural', voice: cast.voice, female: cast.female, pitch: cast.pitch, speed: cast.speed, f0: cast.f0, text: piece });
+            // (a short line said often — «Хм…», «Так…» — is made once per voice and kept)
+            const ck = piece.length <= 12 ? `${cast.voice}|${cast.speed.toFixed(3)}|${cast.pitch.toFixed(3)}|${piece}` : null;
+            const hit = ck && this._cache.get(ck);
+            if (hit) { Promise.resolve().then(() => { if (this._current !== entry) return; close(); play(hit.pcm, hit.sr, piece); maybeDone(); }); return; }
+            const onChunk = (pcm, sampleRate, last) => {
+                if (this._current !== entry) return;
+                if (last) close();
+                if (ck && last && pcm?.length) { this._cache.set(ck, { pcm, sr: sampleRate }); if (this._cache.size > 120) this._cache.delete(this._cache.keys().next().value); }
+                play(pcm, sampleRate, piece);
+                maybeDone();
+            };
+            // …so it is synthesized that much slower: the pace stays `speed`
+            this.neural.synth(piece, { voice: cast.voice, speed: cast.speed / cast.pitch, onChunk }).catch(() => {
+                // the neural voice failed on this line: the system voice says it (if nothing was heard yet)
+                if (this._current !== entry) return;
+                close();
+                if (entry.started || open > 0) { maybeDone(); return; }
+                this._current = null;
+                if (this._speakSystem(piece, opts)) return;
+                const next = this._pending; // (onEnd(false) was called by _speakSystem)
+                this._pending = null;
+                if (next) this._speak(next.text, next.opts);
+            });
+        };
+        entry.add(text);
         return true;
     }
 
