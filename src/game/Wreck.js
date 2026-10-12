@@ -69,9 +69,9 @@ export class Wreck {
         for (const c of g.chests || []) {
             const p = c.getPosition();
             if (!near(p.x, p.z)) continue;
-            const y = floorUnder(t, p.x, p.y - 0.5, p.z);
-            if (y == null || y >= p.y - 0.5 - 0.3) continue;
-            c.mesh.position.y = y + 0.5;
+            const y = floorUnder(t, p.x, p.y - 0.25, p.z); // (a chest stands on its floor: its mesh's y)
+            if (y == null || y >= p.y - 0.3 - 0.5) continue;
+            c.mesh.position.y = y;
             c.mesh.updateMatrixWorld(true);
             if (c.boxId != null) { g.collision.removeBox(c.boxId); c.boxId = g.collision.addBox(c.getCollisionBox()); }
         }

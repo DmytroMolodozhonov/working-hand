@@ -379,7 +379,8 @@ export class CastleLife {
         for (const c of cs.def.chests) {
             if (g.chests.some((x) => x.id === c.id)) continue;
             const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y); // (its floor blown away: lower)
-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy + 0.5, c.z), 'loot', c.yaw, c.id);
+            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw, c.id, { scale: c.scale });
+            if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
             chest.locked = !st.kingDead;

@@ -244,14 +244,17 @@ export function furnish(p0, room, s, chests, aisles = []) {
     const { u0, u1, v0, v1, kind } = room;
     // furniture never stands in the way of the walking paths (aisles) through the room
     const hits = (a0, a1, b0, b1) => aisles.some((r) => a1 >= r.u0 && a0 <= r.u1 && b1 >= r.v0 && b0 <= r.v1);
+    const filled = new Set(); // (what stands on the floor — placeChests)
+    const box = floorCells((...a) => p0.box(...a), room.l, filled);
     const p = {
         box: (a0, a1, l0, l1, b0, b1, t) => {
             if (l1 >= room.l && l0 <= room.l + 5 && hits(Math.min(a0, a1), Math.max(a0, a1), Math.min(b0, b1), Math.max(b0, b1))) return;
-            p0.box(a0, a1, l0, l1, b0, b1, t);
+            box(a0, a1, l0, l1, b0, b1, t);
         },
         pt: (...a) => p0.pt(...a), yaw: (a) => p0.yaw(a),
     };
-    const chest = (u, v, yaw) => { if (!hits(u, u, v, v)) chests.push({ ...p0.pt(u, v, room.l), yaw, room: kind }); };
+    const wants = []; // the chests: where each one is wanted (placed at the end, against a wall)
+    const chest = (u, v) => wants.push([u, v]);
     const l = room.l;
     const W = u1 - u0 + 1, D = v1 - v0 + 1;
     const cu = Math.round((u0 + u1) / 2), cv = Math.round((v0 + v1) / 2);
@@ -282,14 +285,14 @@ export function furnish(p0, room, s, chests, aisles = []) {
         case 'armoury': {
             for (let v = v0 + 1; v <= v1 - 1; v += 2) p.box(farU, farU, l + 1, l + 3, v, v, BLOCK.PLANKS_DARK);
             p.box(fu, fu + 1, l, l, cv, cv, BLOCK.CS_DARK);
-            chest(fu, v1 - 1, p.yaw(0));
+            chest(fu, v1 - 1);
             lantern(farU, cv);
             break;
         }
         case 'treasury': {
             for (let i = 0; i < 4; i++) {
                 const v = v0 + 1 + Math.round((D - 3) * i / 3);
-                chest(farU === u1 ? u1 - 1 : u0 + 1, v, p.yaw(farU === u1 ? -Math.PI / 2 : Math.PI / 2));
+                chest(farU === u1 ? u1 - 1 : u0 + 1, v);
             }
             p.box(fu - 1, fu, l, l, cv - 1, cv, BLOCK.GOLD);
             p.box(fu - 1, fu - 1, l + 1, l + 1, cv, cv, BLOCK.GOLD);
@@ -301,7 +304,7 @@ export function furnish(p0, room, s, chests, aisles = []) {
                 p.box(farU === u1 ? u1 - 1 : u0, farU === u1 ? u1 : u0 + 1, l, l + 1, v, v + 1, BLOCK.PLANKS);
                 p.box(farU, farU, l + 2, l + 2, v, v, BLOCK.HAY);
             }
-            chest(fu, v0 + 1, p.yaw(0));
+            chest(fu, v0 + 1);
             break;
         }
         case 'chapel': {
@@ -327,13 +330,23 @@ export function furnish(p0, room, s, chests, aisles = []) {
             p.box(fu - bw, fu + bw, l, l, v1 - 5, v1, BLOCK.PLANKS_DARK);
             p.box(fu - bw, fu + bw, l + 1, l + 1, v1 - 5, v1 - 1, big ? s.carpet : BLOCK.CLOTH_WHITE);
             p.box(fu - bw, fu + bw, l + 1, l + 1, v1, v1, BLOCK.CLOTH_WHITE);
-            if (big) { p.box(fu - bw, fu + bw, l + 2, l + 4, v1, v1, BLOCK.GOLD); chest(fu + bw + 2, v1 - 1, p.yaw(0)); }
+            if (big) { p.box(fu - bw, fu + bw, l + 2, l + 4, v1, v1, BLOCK.GOLD); chest(fu + bw + 2, v1 - 1); }
             p.box(cu - 2, cu + 2, l - 1, l - 1, v0 + 1, v1 - 7, s.carpet);
             lantern(cu, v0);
             break;
         }
         default: break;
     }
+    // the chests: against a wall, their lids to the room, off the ways through it and the door side
+    const keep = aisles.map((r) => [r.u0 - 0.5, r.u1 + 0.5, r.v0 - 0.5, r.v1 + 0.5]);
+    const ds = { u0: [u0 - 0.5, u0 + 1.5, v0 - 0.5, v1 + 0.5], u1: [u1 - 1.5, u1 + 0.5, v0 - 0.5, v1 + 0.5], v0: [u0 - 0.5, u1 + 0.5, v0 - 0.5, v0 + 1.5], v1: [u0 - 0.5, u1 + 0.5, v1 - 1.5, v1 + 0.5] }[along];
+    if (ds) keep.push(ds);
+    const o = p0.pt(0, 0);
+    // (a treasure chest; where none fits, a smaller one)
+    placeChests({ a0: u0 - 0.5, a1: u1 + 0.5, b0: v0 - 0.5, b1: v1 + 0.5, filled, keep, wants, scales: [3, 2.5, HOUSE_CHEST_SCALE] }, (u, v, fu0, fv0, scale) => {
+        const q = p0.pt(fu0, fv0); // (the chest's front, +Z, looks along local (fu0, fv0))
+        chests.push({ ...p0.pt(u, v, l), yaw: Math.atan2(q.x - o.x, q.z - o.z), gap: CHEST_GAP, scale, room: kind });
+    });
 }
 
 // ------------------------------------------------------------------ keep
@@ -785,6 +798,8 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     };
     const T = HOUSE_KINDS[kind];
     const { w, d, h, rich } = T;
+    const filled = new Set(); // (what stands on the floor inside — placeChests)
+    P.box = floorCells(P.box, 0, filled);
     const wall = kind === 'brick' ? BLOCK.BRICK : kind === 'stone' || kind === 'towerhouse' ? s.houseStone : rich ? BLOCK.PLASTER : kind === 'longhouse' ? BLOCK.PLANKS_DARK : s.poorWall;
     const base = rich ? s.houseStone : kind === 'cottage' ? BLOCK.COBBLE : BLOCK.PLANKS_DARK;
     const roof = kind === 'towerhouse' ? s.roof : rich ? s.villageRoof : kind === 'barn' ? BLOCK.ROOF_RED : s.poorRoof;
@@ -842,7 +857,7 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
         if (rng() < 0.75) win(fa, fa, -d, -d, wl0, wl1);
         win(-w, -w, -2, -2, wl0, wl1);
         if (rng() < 0.5) win(w, w, -2, -2, wl0, wl1);
-        if (kind === 'towerhouse') { win(0, 0, -d, -d, 7, 8); win(0, 0, d, d, 7, 8); win(-w, -w, 1, 1, 7, 8); win(w, w, 1, 1, 7, 8); }
+        if (kind === 'towerhouse') { win(0, 0, -d, -d, 7, 8); win(0, 0, d, d, 7, 8); win(-w, -w, -1, -1, 7, 8); win(w, w, 1, 1, 7, 8); } // (the left: beside the chimney)
         if (rng() < 0.3) P.box(-fa, -fa, 1, 1, -d - 1, -d - 1, BLOCK.FLOWERS);
     }
     // ---- the roof (a gable along a; a towerhouse: a pyramid)
@@ -862,11 +877,14 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     // ---- inside
     const L0 = 0;
     const lantern = (a, b, l) => P.box(a, a, l, l, b, b, BLOCK.LANTERN);
-    const chest = (a, b, fa, fb) => { const q = P.pt(a, b, L0); house.chests.push({ ...q, yaw: P.yaw(fa, fb) }); };
+    const wants = []; // the chests: the corner each one is wanted in (placed at the end — placeChests)
+    const chest = (a, b) => wants.push([a, b]);
+    const beds = [], keep = []; // floor kept free of chests (lot rects a0, a1, b0, b1): the beds, the way in
     // a bed against the back wall, pillow to the wall (Beds: 2.5 × 5.5 m)
     const bed = (a) => {
         const q = P.pt(a, d - 0.5 - 2.85, L0);
         house.bedSpots.push({ ...q, yaw: P.yaw(0, 1) });
+        beds.push([a - BED_W / 2, a + BED_W / 2, d - 0.5 - 2.85 - BED_L / 2, d - 0.5 - 2.85 + BED_L / 2]);
     };
     const hearth = (a, b) => {
         // a stone hearth on the side wall with a glowing fire, the chimney above the roof
@@ -875,6 +893,7 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
         P.box(a, a, 0, 0, b, b, BLOCK.LANTERN);
         P.box(a + sx, a + sx, 0, top + 2, b, b, BLOCK.COBBLE);
     };
+    let table, cauldron; // (where a wizard's crystal ball and cauldron go — s.decorate)
     const bedColour = rich ? s.bedRich : (rng() < 0.5 ? 'white' : rng() < 0.5 ? 'brown' : 'gray');
     if (T.barn) {
         P.box(-w + 1, -w + 2, 0, 1, d - 2, d - 1, BLOCK.HAY); P.box(w - 2, w - 1, 0, 2, d - 2, d - 1, BLOCK.HAY);
@@ -889,24 +908,34 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
         P.box(-4, 0, -1, -1, -3, 1, s.carpet); // a rug
         hearth(-w + 1, 1);
         P.box(-3, -2, 0, 1, 2, 3, BLOCK.PLANKS); // the table, benches
+        table = [-3, 2]; cauldron = [-w + 2, 1];
         P.box(-4, -4, 0, 0, 2, 3, timber); P.box(-1, -1, 0, 0, 2, 3, timber);
         P.box(-2, 0, 0, 3, d - 1, d - 1, BLOCK.BOOKS); // shelves
         lantern(-2, 0, h - 1); lantern(3, -1, h - 1);
         bed(w - 1.85);
-        chest(2, d - 1, 0, -1);
-        chest(-w + 1, -d + 1, 1, 0);
+        chest(2, d - 1);
+        chest(-w + 1, -d + 1);
         P.box(w - 1, w - 1, 0, 3, -d + 1, -d + 2, BLOCK.PLANKS_DARK); // a wardrobe
         if (rng() < 0.5) P.box(w - 1, w - 1, 0, 0, -2, -2, BLOCK.GOLD); // something precious
         house.beds = 2;
     } else {
-        hearth(-w + 1, 0);
-        const ta = -w + 3;
-        P.box(ta, ta + 1, 0, 1, 1, 2, BLOCK.PLANKS); // a table and a bench
-        P.box(ta - 1, ta - 1, 0, 0, 1, 2, timber);
+        // the back wall: a chest (houseChests). A towerhouse: two chests in a hut's room — the
+        // hearth further back, the left front corner for the second chest, a small table
+        const tower = kind === 'towerhouse';
+        hearth(-w + 1, tower ? 1 : 0);
+        if (tower) {
+            P.box(-1, 0, 0, 1, 0, 0, BLOCK.PLANKS); // a table and a stool
+            P.box(-2, -2, 0, 0, 0, 0, timber);
+            table = [-1, 0]; cauldron = [-w + 2, 0];
+        } else { // a table and a bench in the front corner
+            P.box(-w + 1, -w + 2, 0, 1, -d + 1, -d + 1, BLOCK.PLANKS);
+            P.box(-w + 1, -w + 2, 0, 0, -d + 2, -d + 2, timber);
+            table = [-w + 1, -d + 1]; cauldron = [-w + 2, 0];
+        }
         lantern(0, -1, h - 1);
         bed(w - 1.85);
-        chest(-w + 1, d - 1, 0, -1);
-        if (rich) chest(w - 1, -d + 1, -1, 0); // (a towerhouse: the rich have more)
+        chest(-w + 1, d - 1);
+        if (rich) chest(w - 1, -d + 1); // (a towerhouse: the rich have more)
         house.beds = kind === 'longhouse' ? 4 : 2;
     }
     // a woodpile by a poor house
@@ -920,9 +949,88 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     house.inside = P.pt(da, -1, 0);
     house.doorNode = door; house.homeNode = inside;
     house.bedColour = bedColour;
-    s.decorate?.(P, { kind, w, d, h, rich, da, top, house });
+    s.decorate?.(P, { kind, w, d, h, rich, da, top, house, table, cauldron });
+    // the way in stays free: the door's swing, the walk to the middle (and through to the bedroom)
+    keep.push([da - dw - 0.5, da + dw + 0.5, -d + 0.5, -0.5]);
+    if (rich && kind !== 'towerhouse') keep.push([da - 1.5, 3.5, -2.5, 0.5]);
+    placeChests({ a0: -w + 0.5, a1: w - 0.5, b0: -d + 0.5, b1: d - 0.5, filled, beds, keep, wants, inner: rich && kind !== 'towerhouse' ? [1] : [], scales: [HOUSE_CHEST_SCALE] },
+        (a, b, fa, fb) => house.chests.push({ ...P.pt(a, b, L0), yaw: P.yaw(fa, fb), gap: CHEST_GAP, scale: HOUSE_CHEST_SCALE }));
     out.houses.push(house);
     return door;
+}
+
+/** The bed's footprint (src/game/Beds.js): across, along. */
+const BED_W = 2.5, BED_L = 5.5;
+/**
+ * A household chest: smaller than a castle's treasure chest (src/entities/Chest.js — its size
+ * per unit of scale CHEST_W × CHEST_D; tests/unit/house-chests.test.js keeps them equal).
+ */
+export const HOUSE_CHEST_SCALE = 2;
+const CHEST_W = 1.25, CHEST_D = 0.85;
+/** A chest stands this far from its wall (the lid leans on it — Chest.setWallGap). */
+export const CHEST_GAP = 0.15;
+/** Floor kept free in front of a chest (of furniture and beds): room to kneel and lift the lid. */
+const CHEST_FRONT = 0.75;
+
+/** Cells (lot / plan a, b) with something standing on layers l0..l0 + 2 — chests go where nothing is. */
+function floorCells(box, l0, filled) {
+    return (a0, a1, l1, l2, b0, b1, t) => {
+        box(a0, a1, l1, l2, b0, b1, t);
+        const lo = Math.min(l1, l2) - l0, hi = Math.max(l1, l2) - l0;
+        if (hi < 0 || lo > 2 || (!t && (lo > 0 || hi < 2))) return;
+        for (let a = Math.min(a0, a1); a <= Math.max(a0, a1); a++) for (let b = Math.min(b0, b1); b <= Math.max(b0, b1); b++) {
+            if (t) filled.add(a + ',' + b); else filled.delete(a + ',' + b);
+        }
+    };
+}
+
+/**
+ * Put chests (`wants`: the spot each is wanted at) against the walls of a room (its floor
+ * a0..a1 × b0..b1, cell edges; `inner`: a of inside walls): the whole chest (CHEST_W × CHEST_D
+ * × `scale`) inside the room, its back CHEST_GAP from a wall, its front (the lid) to the room,
+ * on no furniture (`filled` cells), on no bed (`beds` rects a0, a1, b0, b1), not in the way
+ * (`keep` rects: the chest itself; the room in front of it may be), and room in front to open
+ * it. Each one the nearest such place to its spot, of the first size (`scales`) that has one;
+ * none fits — no chest. put(a, b, fa, fb, scale): the chest's middle, the way its front looks.
+ */
+function placeChests({ a0, a1, b0, b1, filled, beds = [], keep, wants, inner = [], scales }, put) {
+    const eps = 1e-6;
+    const free = (r0, r1, s0, s1, way = true) => {
+        if (r0 < a0 - eps || r1 > a1 + eps || s0 < b0 - eps || s1 > b1 + eps) return false;
+        for (const r of way ? [...beds, ...keep] : beds) if (r1 > r[0] + eps && r0 < r[1] - eps && s1 > r[2] + eps && s0 < r[3] - eps) return false;
+        for (let a = Math.ceil(r0 - 0.5 + eps); a <= Math.floor(r1 + 0.5 - eps); a++) {
+            for (let b = Math.ceil(s0 - 0.5 + eps); b <= Math.floor(s1 + 0.5 - eps); b++) if (filled.has(a + ',' + b)) return false;
+        }
+        return true;
+    };
+    // the walls: [along a?, where the face is, which way the room is from it]
+    const walls = [[false, a0, 1], [false, a1, -1], [true, b0, 1], [true, b1, -1]];
+    for (const a of inner) walls.push([false, a - 0.5, -1], [false, a + 0.5, 1]);
+    for (const [pa, pb] of wants) {
+        let best = null;
+        for (const scale of scales) {
+            if (best) break;
+            const W = CHEST_W * scale, D = CHEST_D * scale, span = CHEST_GAP + D;
+            for (const [alongA, face, into] of walls) {
+                const lo = alongA ? a0 : b0, hi = alongA ? a1 : b1;
+                for (let c = lo + W / 2; c <= hi - W / 2 + eps; c += 0.25) {
+                    const rect = (f0, f1) => {
+                        const n0 = Math.min(face + into * f0, face + into * f1), n1 = Math.max(face + into * f0, face + into * f1);
+                        return alongA ? [c - W / 2, c + W / 2, n0, n1] : [n0, n1, c - W / 2, c + W / 2];
+                    };
+                    const r = rect(0, span);
+                    if (!free(...r) || !free(...rect(span, span + CHEST_FRONT), false)) continue;
+                    const n = face + into * (CHEST_GAP + D / 2);
+                    const ca = alongA ? c : n, cb = alongA ? n : c;
+                    const dist = Math.hypot(ca - pa, cb - pb);
+                    if (!best || dist < best.dist - eps) best = { dist, ca, cb, r, f: alongA ? [0, into] : [into, 0], scale };
+                }
+            }
+        }
+        if (!best) continue;
+        keep.push(best.r);
+        put(best.ca, best.cb, best.f[0], best.f[1], best.scale);
+    }
 }
 
 /** A fenced garden (vegetable rows, flowers) or a pen with animals on a free lot. */

@@ -518,11 +518,10 @@ function buildWizardHouses(p, rng, out) {
     for (let i = lots.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [lots[i], lots[j]] = [lots[j], lots[i]]; }
     const n = 4 + Math.floor(rng() * 3);
     const kinds = ['cottage', 'manor', 'towerhouse', 'cottage', 'stone'];
-    const decorate = (P, { w, d, h, rich, da, top, house }) => {
+    const decorate = (P, { w, d, da, top, house, table, cauldron }) => {
         // a cauldron at the hearth, a crystal ball on the table, herbs under the window, lamps
-        const hb = rich ? 1 : 0;
-        P.box(-w + 2, -w + 2, 0, 0, hb, hb, B.POTION);
-        P.box(rich ? -3 : -w + 3, rich ? -3 : -w + 3, 2, 2, rich ? 2 : 1, rich ? 2 : 1, B.ARCANE_LAMP);
+        if (cauldron) P.box(cauldron[0], cauldron[0], 0, 0, cauldron[1], cauldron[1], B.POTION);
+        if (table) P.box(table[0], table[0], 2, 2, table[1], table[1], B.ARCANE_LAMP);
         P.box(w - 2, w - 2, 0, 0, -d - 1, -d - 1, B.FLOWERS);
         P.box(0, 0, top, top, 0, 0, B.ARCANE_LAMP_VIOLET);
         P.box(da + 2, da + 2, 4, 4, -d - 1, -d - 1, B.ARCANE_LAMP);

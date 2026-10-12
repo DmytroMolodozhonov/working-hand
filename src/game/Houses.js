@@ -151,7 +151,8 @@ export class Houses {
             const id = h.id + 'c' + k;
             if (g.chests.some((x) => x.id === id)) return;
             const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y);
-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy + 0.5, c.z), 'loot', c.yaw + Math.PI, id);
+            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw + Math.PI, id, { scale: c.scale });
+            if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
             chest.house = { def, i, rich: h.rich };

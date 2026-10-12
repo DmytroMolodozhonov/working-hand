@@ -17,7 +17,11 @@
 
 import * as THREE from 'three';
 
-const SCALE = 3;
+const SCALE = 3; // (a treasure chest; a household one in a villager's house is smaller — opts.scale)
+/** The chest's size in metres per unit of scale: across (its local X), deep (Z), high with the lid shut. */
+export const CHEST_W = 1.25, CHEST_D = 0.85, CHEST_H = 0.7;
+/** Lid: hinged on its own top-back edge (chest-local y, z), and how far it reaches from there. */
+const HINGE_Y = 0.7, HINGE_Z = -0.425, LID_LEN = 0.85;
 const _lp = new THREE.Vector3();
 const OPEN_ANGLE = Math.PI * 0.62; // ~110°
 const OPEN_TIME = 0.9; // seconds
@@ -58,8 +62,10 @@ export class Chest {
      * @param {string} itemType  'sword' | 'axe'
      * @param {number} facing  rotation.y so the front (+Z) faces open space
      * @param {string|number} id
+     * @param {{scale?: number}} [opts]  scale: its size (3 — a treasure chest)
      */
-    constructor(scene, position, itemType, facing = 0, id = 0) {
+    constructor(scene, position, itemType, facing = 0, id = 0, opts = {}) {
+        this.scale = opts.scale || SCALE;
         this.scene = scene;
         this.id = id;
         this.itemType = itemType || 'sword';
@@ -68,13 +74,14 @@ export class Chest {
         this.animating = false;
         this.itemSpawned = false;
         this.locked = false; // (a settlement's chest: src/game/Alohomora.js)
+        this.openMax = OPEN_ANGLE; // (against a wall: the lid stops on it — setWallGap)
         this.picked = false; // unlocked by «Alohomora»: the lid stands open a crack, the hand lifts it
         this.fromAngle = 0; // where the opening starts (a lid already lifted by the hand)
         this.shakeT = 0;
         this.mesh = new THREE.Group();
         this.mesh.position.copy(position);
         this.mesh.rotation.y = facing;
-        this.mesh.scale.setScalar(SCALE);
+        this.mesh.scale.setScalar(this.scale);
         this.createModel();
         scene.add(this.mesh);
     }
@@ -92,15 +99,16 @@ export class Chest {
         hollow.position.y = 0.505;
         this.mesh.add(hollow);
 
-        // Lid pivots on the back edge (hinge)
+        // Lid pivots on its top-back edge (the hinges): opened, it goes no further back than
+        // the chest's back, so a chest standing at a wall opens without going into it
         this.lidGroup = new THREE.Group();
-        this.lidGroup.position.set(0, 0.5, -0.4);
+        this.lidGroup.position.set(0, HINGE_Y, HINGE_Z);
         this.lid = new THREE.Mesh(s.lid, s.lidWood);
-        this.lid.position.set(0, 0.1, 0.4);
+        this.lid.position.set(0, -0.1, LID_LEN / 2);
         this.lid.castShadow = true;
         this.lidGroup.add(this.lid);
         const lidLock = new THREE.Mesh(s.lock, s.gold);
-        lidLock.position.set(0, 0.05, 0.83);
+        lidLock.position.set(0, -0.15, LID_LEN - 0.02);
         lidLock.scale.set(1, 0.6, 1);
         this.lidGroup.add(lidLock);
         this.mesh.add(this.lidGroup);
@@ -118,14 +126,23 @@ export class Chest {
         }
     }
 
+    /**
+     * The chest stands `gap` metres in front of a wall: the lid opens until it leans on it
+     * (a thrown-back lid would go into the wall).
+     */
+    setWallGap(gap) {
+        const c = -gap / this.scale / LID_LEN; // (cos of the angle past which the lid's front edge reaches the wall)
+        this.openMax = Math.min(OPEN_ANGLE, Math.PI / 2 + Math.asin(Math.max(0, Math.min(1, -c))));
+    }
+
     /** Axis-aligned collision box (rotates with the chest). */
     getCollisionBox() {
-        const w = 1.25 * SCALE / 2, d = 0.85 * SCALE / 2;
+        const w = CHEST_W * this.scale / 2, d = CHEST_D * this.scale / 2;
         const quarter = Math.round(this.mesh.rotation.y / (Math.PI / 2));
         const swap = Math.abs(quarter) % 2 === 1;
         const hx = swap ? d : w, hz = swap ? w : d;
         const p = this.mesh.position;
-        return { minX: p.x - hx, maxX: p.x + hx, minY: p.y - 0.5, maxY: p.y + 0.75 * SCALE, minZ: p.z - hz, maxZ: p.z + hz, kind: 'chest' };
+        return { minX: p.x - hx, maxX: p.x + hx, minY: p.y - 0.5, maxY: p.y + 0.75 * this.scale, minZ: p.z - hz, maxZ: p.z + hz, kind: 'chest' };
     }
 
     /** World position where the reward appears (just above the opening). */
@@ -156,7 +173,7 @@ export class Chest {
     /** The hand lifts (or lowers) the lid of an unlocked chest; true when it is up far enough to fall open. */
     liftTo(angle) {
         if (this.isOpen) return false;
-        const a = Math.max(AJAR_ANGLE, Math.min(OPEN_ANGLE, angle));
+        const a = Math.max(AJAR_ANGLE, Math.min(this.openMax, angle));
         this.lidGroup.rotation.x = -a;
         return a >= LIFT_OPEN;
     }
@@ -167,10 +184,10 @@ export class Chest {
     /** The angle round the lid's hinge (chest-local y, z from the hinge) of a world point, and its distance. */
     hingeOf(p, out = {}) {
         const l = this.mesh.worldToLocal(_lp.copy(p));
-        const dy = l.y - 0.5, dz = l.z + 0.4;
+        const dy = l.y - HINGE_Y, dz = l.z - HINGE_Z;
         out.angle = Math.atan2(dy, dz);
-        out.r = Math.hypot(dy, dz) * SCALE;
-        out.x = l.x * SCALE;
+        out.r = Math.hypot(dy, dz) * this.scale;
+        out.x = l.x * this.scale;
         return out;
     }
 
@@ -194,7 +211,7 @@ export class Chest {
         this.isOpen = true;
         this.animating = false;
         this.openProgress = 1;
-        this.lidGroup.rotation.x = -OPEN_ANGLE;
+        this.lidGroup.rotation.x = -this.openMax;
     }
 
     update(dt) {
@@ -211,10 +228,10 @@ export class Chest {
         } else {
             const k = (t - 0.15) / 0.85;
             const a0 = this.fromAngle || 0;
-            this.lidGroup.rotation.x = -(a0 + (OPEN_ANGLE - a0) * easeOutBack(k));
+            this.lidGroup.rotation.x = -(a0 + (this.openMax - a0) * easeOutBack(k));
         }
         if (t >= 1) {
-            this.lidGroup.rotation.x = -OPEN_ANGLE;
+            this.lidGroup.rotation.x = -this.openMax;
             this.animating = false;
         }
     }
