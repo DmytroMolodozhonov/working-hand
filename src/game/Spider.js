@@ -20,7 +20,7 @@
  */
 
 import * as THREE from 'three';
-import { rollWand, rollLoot } from './ItemTypes.js';
+import { rollWand, rollLoot, newUid } from './ItemTypes.js';
 
 const HP = 200;
 /** How big it is against the first (smaller) spider: everything below scales with it. */
@@ -229,7 +229,8 @@ export class Spiders {
         // treasure: always a wand, and more
         if (this.auth) {
             const p = s.model.position.clone().add(_v.set(0, 2.2 * SIZE, 0));
-            [rollWand(), ...rollLoot(Math.random, { key: 0 })].forEach((it, i) => { // (its wand is the precious thing)
+            // (and its web: a skein of it — an ingredient of the invisibility potion, Potions.js)
+            [rollWand(), { kind: 'web', uid: newUid(), count: 1 }, ...rollLoot(Math.random, { key: 0 })].forEach((it, i) => { // (its wand is the precious thing)
                 if (it.kind === 'weapon') return;
                 g.items.spawnLoose(it, p.clone().add(_v2.set((i - 1) * 0.9 * SIZE, 0, 0)), { hover: true });
             });

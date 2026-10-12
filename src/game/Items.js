@@ -57,6 +57,8 @@ const GRIPPED = {
     apple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (cupped, its stem out of the hand)
     flask: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (its belly in the cupped fingers, the neck up)
     potion: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    web: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a skein in the cupped hand)
+    glass: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
     wool: { axis: 'body', pose: 'wool', at: [0.22, -0.374] },
     bread: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
     cheese: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
@@ -84,7 +86,7 @@ const ARM_MASS = 1.2;
 /** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
 const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
-export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01 };
+export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03 };
 
 export class ItemSystem {
     constructor(game) {
@@ -769,6 +771,7 @@ export class ItemSystem {
     _drink(side, h, mouth) {
         const g = this.game;
         const r = recipeById(h.item.rec);
+        if (r && !r.effect) { g.hud.setVoice?.(`🧪 ${r.name}: что оно делает, автор скоро расскажет — пока его не выпить`, true); return; }
         const fx = r?.effect || {};
         const said = [];
         if (fx.hp) {

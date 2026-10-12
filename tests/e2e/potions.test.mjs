@@ -71,12 +71,26 @@ test('potions: push the cauldron with both hands, water ball in, ingredients in,
     assert.ok(Math.abs(pushed.one) < 0.05, `one hand: it does not budge (${pushed.one})`);
     assert.ok(pushed.two > 0.3, `two hands push it (${pushed.two.toFixed(2)} m)`);
 
+    // a campfire («Fire») next to it, the cauldron pushed onto it: it hangs in a holder over the flames
+    const fire = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 20)); };
+        const c = g.cauldrons.list.get('ccaul0');
+        const f = g.campfires.kindle(c.x + 1.1, g.collision.groundY(c.x + 1.1, c.z), c.z);
+        await frames(20);
+        const fid = f?.id ?? [...g.campfires.list.values()].pop()?.id;
+        return { on: c.fire === fid, tripod: !!c.tripod?.visible, feet: g.cauldrons.fy(c) - c.y, at: Math.hypot(c.x - c.x, 0) };
+    });
+    assert.ok(fire.on, 'on the campfire');
+    assert.ok(fire.tripod, 'a tripod holds it');
+    assert.ok(fire.feet > 0.5, `hung over the flames (${fire.feet})`);
+
     // a «Waterbollow» ball falls over its opening: it pours in; a small one fills a third, a big one fills it
     const water = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 20)); };
         const c = g.cauldrons.list.get('ccaul0');
-        const ball = (vol) => g.water._spawnFalling({ pos: new T.Vector3(c.x, c.y + 4.5, c.z), vel: new T.Vector3(0, 0, 0), r: Math.cbrt((3 * vol) / (4 * Math.PI)), frozen: false, local: true });
+        const ball = (vol) => g.water._spawnFalling({ pos: new T.Vector3(c.x, g.cauldrons.fy(c) + 4.5, c.z), vel: new T.Vector3(0, 0, 0), r: Math.cbrt((3 * vol) / (4 * Math.PI)), frozen: false, local: true });
         ball(2);
         await frames(40);
         const third = c.st.water;
@@ -90,21 +104,36 @@ test('potions: push the cauldron with both hands, water ball in, ingredients in,
     assert.equal(water.left, 0, 'the balls went into it');
     assert.ok(water.liquid, 'the water is seen inside');
 
-    // an apple and a mana crystal dropped over it: they dissolve; it settles, then brews
+    // into cold water an apple just sinks; once it boils, an apple dropped and a crystal brought by «Левиоса» dissolve — it brews at once
     const brew = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 20)); };
-        const c = g.cauldrons.list.get('ccaul0');
-        g.items.spawnLoose({ kind: 'apple', uid: 'pa1', count: 1 }, new T.Vector3(c.x + 0.3, c.y + 4, c.z), { vel: new T.Vector3(0, -1, 0) });
-        g.items.spawnLoose({ kind: 'crystal', uid: 'pc1', count: 1 }, new T.Vector3(c.x - 0.3, c.y + 4, c.z + 0.2), { vel: new T.Vector3(0, -1, 0) });
+        const c = g.cauldrons.list.get('ccaul0'), top = g.cauldrons.fy(c);
+        g.items.spawnLoose({ kind: 'apple', uid: 'pa0', count: 1 }, new T.Vector3(c.x + 0.3, top + 4, c.z), { vel: new T.Vector3(0, -1, 0) });
         await frames(60);
-        const ings = { ...c.st.ings }, gone = !g.items.loose.has('pa1') && !g.items.loose.has('pc1');
-        const t0 = performance.now();
-        while (c.st.phase !== 'brewing' && performance.now() - t0 < 12000) await frames(5);
-        return { ings, gone, phase: c.st.phase, dur: c.st.dur };
+        const cold = { ings: Object.keys(c.st.ings).length, onBottom: g.items.loose.get('pa0')?.inCaul === c.id, heat: c.st.heat };
+        const said = [];
+        const n0 = g.hud.notify.bind(g.hud);
+        g.hud.notify = (t, ms) => { said.push(t); return n0(t, ms); };
+        c.st.heat = 0.97; // (sped up: the fire has been heating it)
+        await frames(60);
+        g.hud.notify = n0;
+        const boiled = c.st.heat >= 1;
+        g.items.spawnLoose({ kind: 'apple', uid: 'pa1', count: 1 }, new T.Vector3(c.x + 0.3, top + 4, c.z), { vel: new T.Vector3(0, -1, 0) });
+        await frames(60);
+        const win = c.st.win;
+        // the crystal carried by «Вингардиум Левиоса» over the opening
+        const L = g.items.spawnLoose({ kind: 'crystal', uid: 'pc1', count: 1 }, new T.Vector3(c.x - 0.3, top + 3.2, c.z + 0.2));
+        L.lev = true;
+        g.levitation.state = { kind: 'item', obj: L, side: 'right', hold: 3, target: L.model.position.clone(), age: 1, history: [], vel: new T.Vector3(), handQ0: g.levitation._handQuat('right', new T.Quaternion()), objQ0: L.model.quaternion.clone() };
+        await frames(60);
+        return { cold, said, boiled, win, ings: { ...c.st.ings }, gone: !g.items.loose.has('pa1') && !g.items.loose.has('pc1'), phase: c.st.phase, dur: c.st.dur };
     });
-    assert.deepEqual(brew.ings, { apple: 1, crystal: 1 });
-    assert.ok(brew.gone, 'dissolved in the water');
+    assert.equal(brew.cold.ings, 0, 'cold water: it does not count');
+    assert.ok(brew.cold.onBottom, 'it lies on the bottom');
+    assert.ok(brew.boiled && brew.said.some((t) => /закипела/.test(t)), `boils (${brew.said.join(' | ')})`);
+    assert.ok(brew.win > 20, `the countdown runs (${brew.win})`);
+    assert.ok(brew.gone, 'dissolved in the boiling water (the levitated one too)');
     assert.equal(brew.phase, 'brewing');
     assert.ok(brew.dur >= 30 && brew.dur <= 60, `30–60 s (${brew.dur.toFixed(1)})`);
 
@@ -123,7 +152,7 @@ test('potions: push the cauldron with both hands, water ball in, ingredients in,
     });
     assert.equal(ready.phase, 'ready');
     assert.equal(ready.rec, 'heal');
-    assert.equal(ready.por, 3);
+    assert.equal(ready.por, 10);
     assert.ok(ready.said.some((t) => /Зелье готово/.test(t)), `said: ${ready.said.join(' | ')}`);
 
     // an empty flask (two in the hand) dipped into it: one fills, the other goes to a slot
@@ -134,15 +163,21 @@ test('potions: push the cauldron with both hands, water ball in, ingredients in,
         g.inventory.slots = g.inventory.slots.map(() => null);
         g.items.takeIntoHand({ kind: 'flask', uid: 'pf1', count: 2 }, 'right');
         const h = g.items.held.right;
-        // (the hand down in the potion)
-        for (let i = 0; i < 4; i++) { h.model.position.set(c.x, c.y + 2.2, c.z); g.cauldrons._dipFlask(0.15); }
+        const feet = g.cauldrons.fy(c), w0 = c.st.water;
+        const surface = (await import('/src/game/Potions.js')).surfaceY(c.st);
+        // (above the potion: nothing; really down in it: it fills)
+        for (let i = 0; i < 4; i++) { h.model.position.set(c.x, feet + surface + 0.15, c.z); g.cauldrons._dipFlask(0.15); }
+        const above = g.items.held.right?.item.kind;
+        for (let i = 0; i < 4; i++) { h.model.position.set(c.x, feet + surface - 0.3, c.z); g.cauldrons._dipFlask(0.15); }
         const held = g.items.held.right?.item;
-        return { kind: held?.kind, rec: held?.rec, color: held?.color, por: c.st.por, slot: g.inventory.slots.find((s) => s?.kind === 'flask')?.count || 0 };
+        return { above, kind: held?.kind, rec: held?.rec, color: held?.color, por: c.st.por, lower: c.st.water < w0, slot: g.inventory.slots.find((s) => s?.kind === 'flask')?.count || 0 };
     });
+    assert.equal(fill.above, 'flask', 'held over the potion: still empty');
     assert.equal(fill.kind, 'potion');
+    assert.ok(fill.lower, 'the level went down');
     assert.equal(fill.rec, 'heal');
     assert.equal(fill.color, ready.color, 'the cauldron\'s colour');
-    assert.equal(fill.por, 2, 'one portion taken');
+    assert.equal(fill.por, 9, 'one of ten taken');
     assert.equal(fill.slot, 1, 'the other empty flask in a slot');
 
     // drink: brought to the mouth (+HP), the empty flask stays in the hand

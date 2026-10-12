@@ -39,7 +39,7 @@
 import * as THREE from 'three';
 import { makeCauldronModel } from './CauldronModel.js';
 import { disposeModel, newUid, ITEM_INFO, makeItemModel } from './ItemTypes.js';
-import { CAULDRON, newBrew, addWater, addIngredient, stepBrew, takePortion, spill, fullness, ingCount, surfaceY, innerRadius, wallRadius, recipeById, rollCaveCauldron, SLUDGE, INGREDIENT_RU } from './Potions.js';
+import { CAULDRON, boiling, newBrew, addWater, addIngredient, stepBrew, takePortion, spill, fullness, ingCount, surfaceY, innerRadius, wallRadius, recipeById, rollCaveCauldron, SLUDGE, INGREDIENT_RU } from './Potions.js';
 import { createRng, hashString } from '../core/math.js';
 
 const H = CAULDRON.H;
@@ -54,6 +54,10 @@ const WATER_COLOR = 0x3a6fa8;
 const GRIP = 0.55; // fingers this closed hold the rim / a handle
 const BALANCE = 0.55; // rad: lifted past this, it stands up by itself
 const r2 = (v) => Math.round(v * 100) / 100;
+/** Hung over a campfire: its feet this high over the ground (the flames lick its bottom, not its legs). */
+const HANG = 0.75;
+/** The holder over a campfire: a tripod of three poles, its top this high over the ground, its feet this far out. */
+const TRIPOD = { TOP: HANG + H + 3.6, FOOT: 3.4 };
 
 export const CAULDRON_HANDS = { WALL_IN: 0.35, WALL_OUT: 0.5, RIM: 0.42, HANDLE: 0.45, TIP_SPEED: 3.2, MAX_STEP: 0.35 };
 
@@ -129,6 +133,7 @@ export class Cauldrons {
     _apply(c, rec) {
         for (const k of ['x', 'y', 'z', 'yaw', 'tilt', 'tdir']) if (Number.isFinite(+rec[k])) c[k] = +rec[k];
         if ('shop' in rec) c.shop = rec.shop ? { stall: String(rec.shop.stall), price: Math.max(1, +rec.shop.price || CAULDRON.PRICE) } : null;
+        if ('fire' in rec) c.fire = rec.fire ?? null;
         if ('home' in rec) c.home = rec.home && Number.isFinite(+rec.home.x) ? { x: +rec.home.x, z: +rec.home.z } : null;
         if (rec.st) c.st = { ...newBrew(), ...rec.st, ings: { ...(rec.st.ings || {}) } };
         if (Array.isArray(rec.q) && Array.isArray(rec.c)) {
@@ -157,7 +162,7 @@ export class Cauldrons {
         _q2.setFromAxisAngle(UP, c.yaw);
         quat.copy(_q).multiply(_q2);
         const R = CAULDRON.R_BODY;
-        const pivot = _v3.set(c.x + dir.x * R, c.y, c.z + dir.z * R);
+        const pivot = _v3.set(c.x + dir.x * R, this.fy(c), c.z + dir.z * R);
         const off = _v2.set(-dir.x * R, 0, -dir.z * R).applyQuaternion(_q);
         pos.copy(pivot).add(off);
     }
@@ -198,6 +203,8 @@ export class Cauldrons {
         c.boxId = null;
         if (!c.lev && !c.fall) {
             _box.copy(LOCAL_BOX).applyMatrix4(g.matrixWorld);
+            // (hung over a fire: the box from the ground up, so nobody walks into the fire under it)
+            if (c.fire) _box.min.y = Math.min(_box.min.y, c.y);
             c.boxId = col.addBox({ minX: _box.min.x + 0.12, maxX: _box.max.x - 0.12, minY: _box.min.y, maxY: _box.max.y, minZ: _box.min.z + 0.12, maxZ: _box.max.z - 0.12, kind: 'cauldron' });
         }
         // things lying on its bottom go with it
@@ -205,6 +212,9 @@ export class Cauldrons {
         if (d && d.lengthSq() > 1e-8 && this.game.items) for (const L of this.game.items.loose.values()) if (L.inCaul === c.id) L.model.position.add(d);
         (c._last || (c._last = new THREE.Vector3())).copy(c.pos);
     }
+
+    /** Its feet's height: on the ground — or hung in its holder over a campfire. */
+    fy(c) { return c.y + (c.fire ? HANG : 0); }
 
     /** Is it standing on its feet (open side up)? */
     upright(c) { return !c.lev && !c.fall && c.tilt < 0.2; }
@@ -226,8 +236,27 @@ export class Cauldrons {
         const now = performance.now();
         for (const c of this.list.values()) {
             if (this.auth) this._hostStep(c, dt, now);
-            else if (c.st.phase === 'brewing') c.st.t += dt; // (the host's clock comes now and then)
+            else {
+                // (the host's clock comes now and then; in between, the same clock here)
+                const st = c.st, f = c.fire ? g.campfires?.list.get(c.fire) : null;
+                st.heat = f && f.left > 0 && st.water >= 0.3 ? Math.min(1, (st.heat || 0) + dt / CAULDRON.BOIL_TIME) : Math.max(0, (st.heat || 0) - dt / CAULDRON.COOL_TIME);
+                if (st.phase === 'brewing') st.t += dt;
+                if (st.phase === 'water' && st.win > 0) st.win = Math.max(0, st.win - dt);
+            }
+            this._holder(c);
             if (c.pos.distanceToSquared(me) < 90 * 90) this._visual(c, dt, me);
+            // the countdown: all the ingredients in before it runs out
+            if (c.st.phase === 'water' && c.st.win > 0 && ingCount(c.st) && this._near(c, 20)) this._hint(c, `⏳ ${Math.ceil(c.st.win)} с — бросьте остальные ингредиенты`, 'win', 900);
+        }
+        // a thing carried by «Левиоса» over the opening: let go there, it falls in (like one dropped by hand)
+        const ls = this.auth ? g.levitation?.state : null;
+        if (ls?.kind === 'item' && ls.obj?.model) {
+            const p = ls.obj.model.position;
+            for (const c of this.list.values()) {
+                if (!this.upright(c)) continue;
+                const y = p.y - this.fy(c);
+                if (Math.hypot(p.x - c.x, p.z - c.z) < CAULDRON.R_IN - 0.2 && y < H + 1.0 && y > CAULDRON.BOTTOM) { g.levitation.release(true); break; }
+            }
         }
         if (this.auth) {
             this._sendT -= dt;
@@ -241,9 +270,11 @@ export class Cauldrons {
     /** (host) brewing, rain, gravity, magic, the shop's watch. */
     _hostStep(c, dt, now) {
         const g = this.game;
-        const ev = stepBrew(c.st, dt);
+        const f = this._fireUnder(c);
+        const ev = stepBrew(c.st, dt, Math.random, !!(f && f.left > 0));
         if (ev) { this._event(c, ev); this._send(c, ev); }
-        if (c.st.phase === 'brewing' && (c._syncT = (c._syncT || 0) + dt) > 5) { c._syncT = 0; this._send(c); }
+        const st = c.st;
+        if ((st.phase === 'brewing' || st.win > 0 || (c.fire && st.water > 0.3 && st.heat < 1)) && (c._syncT = (c._syncT || 0) + dt) > 4) { c._syncT = 0; this._send(c); }
         // rain falling into its opening
         if (g.storm?.raining && this.upright(c) && (c.st.phase === 'empty' || c.st.phase === 'water') && c.st.water < CAULDRON.FULL) {
             const sky = g.terrain?.data?.skyAt ? g.terrain.data.skyAt(c.x, c.y + H + 1, c.z) : 1;
@@ -262,6 +293,71 @@ export class Cauldrons {
             c.moved = true;
         }
         if (c.tilt > CAULDRON.SPILL_TILT) this._spill(c);
+    }
+
+    /**
+     * (host) The campfire it stands on. Pushed / carried onto a burning one, it is hung in a holder
+     * over it (a tripod, chains to its handles); pulled off it (or knocked over, lifted), it is down
+     * on the ground again — and it has to go well away before it hangs there again.
+     */
+    _fireUnder(c) {
+        const camp = this.game.campfires;
+        if (!camp?.list) return null;
+        const free = this.upright(c);
+        if (c.fire) {
+            const f = camp.list.get(c.fire);
+            if (f && free && Math.hypot(c.x - f.x, c.z - f.z) < 1.0) return f;
+            c.leftFire = c.fire;
+            c.fire = null;
+            if (!c.lev && !c.fall) this._place(c);
+            c.moved = true;
+            return null;
+        }
+        if (!free) return null;
+        for (const f of camp.list.values()) {
+            const d = Math.hypot(c.x - f.x, c.z - f.z);
+            if (c.leftFire === f.id) { if (d > 2.6) c.leftFire = null; else continue; }
+            if (f.left <= 0 || d > 1.4 || Math.abs(c.y - f.y) > 1.6) continue;
+            c.fire = f.id;
+            c.x = f.x; c.z = f.z;
+            this._place(c);
+            this._clang(c, 0.4);
+            this._hint(c, c.st.water > 0.3 ? '🔥 Котёл над костром — вода греется, скоро закипит' : '🔥 Котёл над костром — теперь налейте воды («Waterbollow»)', 'fire');
+            c.moved = true;
+            return f;
+        }
+        return null;
+    }
+
+    /** The holder over a campfire (every computer): three poles lashed at the top, two chains down to the handles. */
+    _holder(c) {
+        if (!c.fire) { if (c.tripod) c.tripod.visible = false; return; }
+        if (!c.tripod) {
+            const t = new THREE.Group();
+            const wood = new THREE.MeshLambertMaterial({ color: 0x5a3c22 }), iron = new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.6, metalness: 0.6 });
+            t.userData.poles = [0, 1, 2].map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1, 7), wood); m.castShadow = true; t.add(m); return m; });
+            t.userData.chains = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 5), iron); t.add(m); return m; });
+            t.userData.lash = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.35, 8), new THREE.MeshLambertMaterial({ color: 0x8a6a3a }));
+            t.add(t.userData.lash);
+            this.game.scene.add(t);
+            c.tripod = t;
+        }
+        const t = c.tripod;
+        t.visible = true;
+        const top = _v.set(c.x, c.y + TRIPOD.TOP, c.z);
+        t.userData.lash.position.copy(top);
+        const seg = (m, a, b) => {
+            _v3.subVectors(b, a);
+            m.position.copy(a).addScaledVector(_v3, 0.5);
+            m.scale.set(1, _v3.length(), 1);
+            m.quaternion.setFromUnitVectors(UP, _v3.normalize());
+        };
+        t.userData.poles.forEach((m, i) => {
+            const a = c.yaw + Math.PI / 2 + (i * 2 * Math.PI) / 3; // (clear of the handles)
+            seg(m, _v2.set(c.x + Math.sin(a) * TRIPOD.FOOT, c.y, c.z + Math.cos(a) * TRIPOD.FOOT), top);
+        });
+        c.group.updateMatrixWorld(true);
+        t.userData.chains.forEach((m, i) => seg(m, top, _v2.set((i ? -1 : 1) * (CAULDRON.R_RIM + 0.28), H - 0.15, 0).applyMatrix4(c.group.matrixWorld)));
     }
 
     /**
@@ -526,17 +622,17 @@ export class Cauldrons {
             if (!this.upright(c)) continue;
             const dx = b.pos.x - c.x, dz = b.pos.z - c.z;
             if (Math.hypot(dx, dz) > CAULDRON.R_IN + b.r * 0.4) continue;
-            const y = b.pos.y - c.y;
+            const y = b.pos.y - this.fy(c);
             if (y - b.r > H + 0.3 || y < CAULDRON.BOTTOM - 0.3 || b.vel.y > 1) continue; // (its bottom at the rim: in it goes)
             const g = this.game;
             const vol = (4 / 3) * Math.PI * b.r ** 3;
-            g.water?._splash?.(_v.set(b.pos.x, c.y + surfaceY(c.st) + 0.1, b.pos.z), 1 + b.r * 0.6, 20 + b.r * 12);
+            g.water?._splash?.(_v.set(b.pos.x, this.fy(c) + surfaceY(c.st) + 0.1, b.pos.z), 1 + b.r * 0.6, 20 + b.r * 12);
             if (this._near(c, 30)) g.sound?.playSplash?.();
             c.splashT = 1;
             if (this.auth) {
                 const before = c.st.water;
                 const over = addWater(c.st, vol);
-                if (over > 0.3) g.water?._splash?.(_v.set(c.x, c.y + H, c.z), 2.4, 30); // (runs over the rim)
+                if (over > 0.3) g.water?._splash?.(_v.set(c.x, this.fy(c) + H, c.z), 2.4, 30); // (runs over the rim)
                 if (c.st.water > before) { this._event(c, 'water'); this._send(c, 'water'); }
             }
             return true;
@@ -555,29 +651,31 @@ export class Cauldrons {
             if (!this.upright(c)) continue;
             const dx = p.x - c.x, dz = p.z - c.z;
             if (dx * dx + dz * dz > (CAULDRON.R_IN - 0.15) ** 2) continue;
-            const y = p.y - c.y;
+            const y = p.y - this.fy(c);
             if (y > H + 0.35 || y < CAULDRON.BOTTOM - 0.6) continue;
             const wet = c.st.water > 0.3;
             const top = wet ? surfaceY(c.st) : CAULDRON.BOTTOM + 0.12;
             if (y > top + 0.05) return 'in';
             const g = this.game;
-            if (!this.auth) { L.model.position.set(p.x, c.y + top, p.z); L.vel.set(0, 0, 0); return 'stop'; }
+            if (!this.auth) { L.model.position.set(p.x, this.fy(c) + top, p.z); L.vel.set(0, 0, 0); return 'stop'; }
             const kind = L.item.kind;
             const res = addIngredient(c.st, kind, L.item.count || 1);
             if (res === 'in' || res === 'spoil') {
                 g.items.removeLoose(L.item.uid);
                 g.sync?.itemGone?.(L.item.uid, null, null);
-                g.water?._splash?.(_v.set(p.x, c.y + top, p.z), 0.8, 14);
+                g.water?._splash?.(_v.set(p.x, this.fy(c) + top, p.z), 0.8, 14);
                 if (this._near(c, 25)) g.sound?.playSplash?.();
                 this._event(c, res === 'spoil' ? 'spoil' : 'ing', kind);
                 this._send(c, res === 'spoil' ? 'spoil' : 'ing', kind);
                 return 'stop';
             }
             // dry, or a thing that never dissolves: it lies on the bottom
-            L.model.position.set(p.x, c.y + CAULDRON.BOTTOM + 0.15, p.z);
+            L.model.position.set(p.x, this.fy(c) + CAULDRON.BOTTOM + 0.15, p.z);
             L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true; L.inCaul = c.id;
             if (res === 'dry') this._hint(c, '🫕 Котёл сухой — сначала налейте воды («Waterbollow» у реки, принесите шар и плесните в котёл). Вещь лежит на дне', 'dry', 6000);
-            else if (wet) g.water?._splash?.(_v.set(p.x, c.y + top, p.z), 0.6, 8);
+            else if (res === 'cold') this._send(c, 'cold');
+            if (res === 'cold') this._event(c, 'cold');
+            if (wet) g.water?._splash?.(_v.set(p.x, this.fy(c) + top, p.z), 0.6, 8);
             return 'stop';
         }
         return null;
@@ -594,8 +692,9 @@ export class Cauldrons {
             const p = h.model.position;
             for (const c of this.list.values()) {
                 if (!this.upright(c) || c.st.water < 0.3) continue;
-                const dx = p.x - c.x, dz = p.z - c.z, y = p.y - c.y;
-                if (y < CAULDRON.BOTTOM || y > surfaceY(c.st) + 0.2 || Math.hypot(dx, dz) > innerRadius(y) - 0.05) continue;
+                const dx = p.x - c.x, dz = p.z - c.z, y = p.y - this.fy(c);
+                // (the flask really in the liquid: under its surface — a low level needs the hand deeper)
+                if (y < CAULDRON.BOTTOM || y > surfaceY(c.st) - 0.05 || Math.hypot(dx, dz) > innerRadius(y) - 0.05) continue;
                 found = { side, c };
             }
         }
@@ -753,7 +852,11 @@ export class Cauldrons {
         if (st.phase === 'water') {
             _col.setHex(WATER_COLOR);
             if (ingCount(st)) _col.lerp(_col2.setHSL((c.seed * 0.1 + c.churn * 0.03) % 1, 0.4, 0.4), 0.3);
-            bubbles = ingCount(st) ? 3 : 0;
+            // heating: first steam, then small bubbles, then a rolling boil
+            const heat = st.heat || 0;
+            bubbles = heat > 0.55 ? Math.round(4 + 14 * (heat - 0.55) / 0.45) : 0;
+            if (heat > 0.3 && Math.random() < dt * 10 * heat) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r * 1.4, this.fy(c) + sy + 0.2, c.z + (Math.random() - 0.5) * r * 1.4), 0xeeeeee, 0.12, _v2.set((Math.random() - 0.5) * 0.5, 1.2 + Math.random(), (Math.random() - 0.5) * 0.5), 1.3);
+            if (boiling(st) && me && c.pos.distanceTo(me) < 22 && (c._bubT = (c._bubT || 0) - dt) <= 0) { c._bubT = 2.5 + Math.random() * 1.5; g.sound?.playWaterRise?.(); }
         } else if (st.phase === 'brewing') {
             // magic: colours swirl, it churns, steam and sparks rise
             const k = Math.min(1, st.t / 4);
@@ -761,18 +864,18 @@ export class Cauldrons {
             _col.lerp(_col2.setHex(WATER_COLOR), 1 - k);
             bubbles = 10 + Math.round(12 * k);
             glow = 0.45 * k + 0.15 * Math.sin(c.churn * 5);
-            if (Math.random() < dt * 14) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r * 1.6, c.y + sy + 0.2, c.z + (Math.random() - 0.5) * r * 1.6), Math.random() < 0.6 ? 0xeeeeee : _col.getHex(), 0.12, _v2.set((Math.random() - 0.5) * 0.6, 1.4 + Math.random(), (Math.random() - 0.5) * 0.6), 1.2);
-            if (Math.random() < dt * 2) g.fx?.spark(_v.set(c.x, c.y + sy + 0.3, c.z), _col2.setHSL(Math.random(), 1, 0.6).getHex(), 0.08, _v2.set((Math.random() - 0.5) * 3, 3 + Math.random() * 2, (Math.random() - 0.5) * 3), 0.9);
+            if (Math.random() < dt * 14) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r * 1.6, this.fy(c) + sy + 0.2, c.z + (Math.random() - 0.5) * r * 1.6), Math.random() < 0.6 ? 0xeeeeee : _col.getHex(), 0.12, _v2.set((Math.random() - 0.5) * 0.6, 1.4 + Math.random(), (Math.random() - 0.5) * 0.6), 1.2);
+            if (Math.random() < dt * 2) g.fx?.spark(_v.set(c.x, this.fy(c) + sy + 0.3, c.z), _col2.setHSL(Math.random(), 1, 0.6).getHex(), 0.08, _v2.set((Math.random() - 0.5) * 3, 3 + Math.random() * 2, (Math.random() - 0.5) * 3), 0.9);
             if (me && c.pos.distanceTo(me) < 22 && (c._bubT = (c._bubT || 0) - dt) <= 0) { c._bubT = 2.2 + Math.random() * 1.5; g.sound?.playWaterRise?.(); }
         } else if (st.phase === 'ready') {
             _col.setHex(st.color || 0x9fd8ff);
             bubbles = 2;
             glow = 0.35 + 0.1 * Math.sin(c.churn * 2);
-            if (Math.random() < dt * 3) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r, c.y + sy + 0.15, c.z + (Math.random() - 0.5) * r), st.color || 0x9fd8ff, 0.07, _v2.set(0, 0.8, 0), 0.9);
+            if (Math.random() < dt * 3) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r, this.fy(c) + sy + 0.15, c.z + (Math.random() - 0.5) * r), st.color || 0x9fd8ff, 0.07, _v2.set(0, 0.8, 0), 0.9);
         } else if (st.phase === 'sludge') {
             _col.setHex(SLUDGE);
             bubbles = 4;
-            if (Math.random() < dt * 2) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r, c.y + sy + 0.3, c.z + (Math.random() - 0.5) * r), 0x8a9a5a, 0.15, _v2.set(0, 0.7, 0), 1.6);
+            if (Math.random() < dt * 2) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r, this.fy(c) + sy + 0.3, c.z + (Math.random() - 0.5) * r), 0x8a9a5a, 0.15, _v2.set(0, 0.7, 0), 1.6);
         } else _col.setHex(WATER_COLOR);
         m.color.lerp(_col, Math.min(1, dt * 3));
         m.emissive.copy(m.color).multiplyScalar(Math.max(0, glow));
@@ -818,17 +921,21 @@ export class Cauldrons {
             }
             case 'ing': {
                 const name = INGREDIENT_RU[kind] || (ITEM_INFO[kind]?.name || 'вещь').toLowerCase();
-                this._hint(c, st.water < CAULDRON.FULL * 0.98 ? `🫕 ${name} в котле — но воды мало: долейте` : `🫕 ${name} в котле (всего: ${ingCount(st)})`, 'ing', 300);
+                this._hint(c, `🫕 ${name} в котле (всего: ${ingCount(st)})`, 'ing', 300);
                 break;
             }
             case 'brew': g.hud?.notify?.('🫧 Котёл закипает — зелье варится (подождите, от 30 секунд до минуты)'); break;
             case 'ready': {
                 const r = recipeById(st.rec);
                 g.hud?.notify?.(`🧪 Зелье готово! (${r ? r.name : 'зелье'}) — окуните пустую колбу в котёл`);
-                for (let i = 0; i < 40; i++) g.fx?.spark(_v.set(c.x, c.y + H, c.z), st.color || 0xffffff, 0.1, _v2.set((Math.random() - 0.5) * 4, 2 + Math.random() * 4, (Math.random() - 0.5) * 4), 1.2);
+                for (let i = 0; i < 40; i++) g.fx?.spark(_v.set(c.x, this.fy(c) + H, c.z), st.color || 0xffffff, 0.1, _v2.set((Math.random() - 0.5) * 4, 2 + Math.random() * 4, (Math.random() - 0.5) * 4), 1.2);
                 g.sound?.playWaterRise?.();
                 break;
             }
+            case 'boil': g.hud?.notify?.(`🫧 Вода закипела — бросайте ингредиенты: на все у вас ${CAULDRON.WINDOW} секунд с первого`); break;
+            case 'cold': this._hint(c, c.fire ? '🫕 Вода ещё не кипит — подождите (эта вещь утонула и не считается)' : '🫕 Котёл не на костре — разожгите «Fire», поставьте котёл на огонь и дождитесь кипения', 'cold', 3000); break;
+            case 'late': g.hud?.notify?.('⌛ Не успели — зелье испорчено: серая жижа. Опрокиньте котёл, чтобы вылить, и начните заново'); break;
+            case 'out': g.hud?.notify?.('🔥 Огонь погас (или котёл сняли с костра) — зелье испорчено. Опрокиньте котёл и начните заново'); break;
             case 'sludge': g.hud?.notify?.('💨 Фу… Ничего не вышло — серая вонючая жижа. Опрокиньте котёл руками, чтобы вылить, и налейте воды заново'); break;
             case 'spoil': this._hint(c, '💨 Зелье испорчено — в котле жижа', 'spoil'); break;
             case 'spill': this._hint(c, '💦 Всё вылилось из котла', 'spill'); break;
@@ -838,7 +945,7 @@ export class Cauldrons {
 
     // ================================================================= network / save
     _rec(c) {
-        const d = { id: c.id, x: r2(c.x), y: r2(c.y), z: r2(c.z), yaw: r2(c.yaw), tilt: r2(c.tilt), tdir: r2(c.tdir), old: c.old ? 1 : 0, shop: c.shop, home: c.home, st: { ...c.st, t: r2(c.st.t), dur: r2(c.st.dur), water: r2(c.st.water) } };
+        const d = { id: c.id, x: r2(c.x), y: r2(c.y), z: r2(c.z), yaw: r2(c.yaw), tilt: r2(c.tilt), tdir: r2(c.tdir), old: c.old ? 1 : 0, shop: c.shop, home: c.home, fire: c.fire || null, st: { ...c.st, t: r2(c.st.t), dur: r2(c.st.dur), water: r2(c.st.water) } };
         if ((c.lev || c.fall) && c.q) { d.q = c.q.toArray().map(r2); d.c = c.pos.toArray().map(r2); d.lev = c.lev ? 1 : 0; }
         return d;
     }
@@ -924,6 +1031,7 @@ export class Cauldrons {
     dispose() {
         for (const c of this.list.values()) {
             if (c.boxId != null) this.game.collision.removeBox(c.boxId);
+            if (c.tripod) { this.game.scene.remove(c.tripod); disposeModel(c.tripod); }
             this.game.scene.remove(c.group);
             disposeModel(c.group);
         }

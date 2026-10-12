@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { Chest } from '../entities/Chest.js';
 import { doorHeld, floorUnder } from './Wreck.js';
 import { setNearShadow } from '../core/Shadows.js';
+import { newUid } from './ItemTypes.js';
 
 const NEAR = 75; // m: a house near a player comes to life
 const FAR = 100; // m: … and goes back to stone when nobody is this near
@@ -246,6 +247,8 @@ export class Houses {
                     _v2.set(s * (Math.random() - 0.5) * 6, Math.random() * 2, c * (Math.random() - 0.5) * 6), 0.9);
             }
             g.sound?.playFrozenHit?.();
+            // its glass falls out under the window: a piece to pick up (an ingredient of the invisibility potion)
+            if (g.authority && g.items) g.items.spawnLoose({ kind: 'glass', uid: newUid(), count: 1 }, _v.set(p.x + s * 0.6, p.y - p.h / 2, p.z + c * 0.6), { vel: _v2.set(s * 1.5, 1, c * 1.5) });
         }
         if (send) g.sync?.glass?.(id);
         // a broken window is wrecking: the people of the village don't like it

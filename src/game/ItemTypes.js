@@ -89,6 +89,9 @@ export const ITEM_INFO = {
     // potions (Cauldrons.js): an empty flask is dipped into a ready cauldron; a full one is drunk
     flask: { name: 'Пустая колба', icon: '⚗️', weight: 0.2, stack: 5 },
     potion: { name: 'Зелье', icon: '🧪', weight: 0.3 },
+    // ingredients of the invisibility potion: the giant spider's web (Spider.js), glass of a broken window (Houses.js)
+    web: { name: 'Связка паутины', icon: '🕸️', weight: 0.3, stack: 5 },
+    glass: { name: 'Осколки стекла', icon: '🔷', weight: 0.3, stack: 10 },
 };
 
 /**
@@ -117,6 +120,8 @@ export function itemValue(it) {
         case 'minotaurHorn': return 200;
         case 'flask': return 3 * (it.count || 1);
         case 'potion': return 60;
+        case 'web': return 120 * (it.count || 1);
+        case 'glass': return 2 * (it.count || 1);
         default: return 0;
     }
 }
@@ -330,8 +335,10 @@ export function describeItem(it) {
         case 'flask': return { title: '⚗️ Пустая колба', color: 0xcfe9f2, lines: [`Колб: <b>${it.count || 1}</b>`, 'Окуните её в котёл с готовым зельем — она наполнится'] };
         case 'potion': {
             const r = recipeById(it.rec);
-            return { title: `🧪 ${r ? r.name : 'Зелье'}`, color: it.color ?? 0x9fd8ff, lines: [r ? r.desc : 'Неизвестное зелье', 'Поднесите ко рту и подержите — выпьете (колба останется)'] };
+            return { title: `🧪 ${r ? r.name : 'Зелье'}`, color: it.color ?? 0x9fd8ff, lines: [r ? r.desc : 'Неизвестное зелье', r?.effect ? 'Поднесите ко рту и подержите — выпьете (колба останется)' : 'Пока его не выпить'] };
         }
+        case 'web': return { title: '🕸️ Связка паутины', color: 0xf2f2ff, lines: ['Осталась от гигантской паучихи', 'Ингредиент зелья невидимости: бросьте в кипящий котёл'] };
+        case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
 }
@@ -611,7 +618,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8 };
+export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -643,6 +650,8 @@ function buildItemModel(it) {
         case 'crystal': return crystalItemModel();
         case 'flask': return flaskModel(null);
         case 'potion': return flaskModel(it.color ?? 0x9fd8ff);
+        case 'web': return webModel();
+        case 'glass': return glassModel();
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);
         case 'book': return it.ward || it.spells?.includes('ProtectionHouse') ? makeSpellBookModel(WARD_COVER, WARD_TRIM) : it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
@@ -673,6 +682,34 @@ function hornModel(color, bronze) {
     const mesh = new THREE.Mesh(geo, m);
     mesh.castShadow = true;
     g.add(mesh);
+    return g;
+}
+
+/** A skein of the giant spider's web: silvery-white sticky strands wound round and round, a faint glow. */
+function webModel() {
+    const g = new THREE.Group();
+    const m = new THREE.MeshStandardMaterial({ color: 0xf4f4ff, emissive: 0x6670a0, emissiveIntensity: 0.35, roughness: 0.6, transparent: true, opacity: 0.85 });
+    for (let i = 0; i < 7; i++) {
+        const t = new THREE.Mesh(new THREE.TorusGeometry(0.09 + (i % 3) * 0.012, 0.012, 5, 18), m);
+        t.rotation.set(i * 0.9, i * 0.45, i * 1.3);
+        g.add(t);
+    }
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), m));
+    return g;
+}
+
+/** A few shards of window glass (pale, see-through). */
+function glassModel() {
+    const g = new THREE.Group();
+    const m = new THREE.MeshStandardMaterial({ color: 0xdff3ff, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+    for (let i = 0; i < 4; i++) {
+        const sh = new THREE.Shape();
+        sh.moveTo(0, 0); sh.lineTo(0.12 + i * 0.02, 0.02); sh.lineTo(0.05, 0.14 - i * 0.015);
+        const p = new THREE.Mesh(new THREE.ShapeGeometry(sh), m);
+        p.position.set((i - 1.5) * 0.04, 0, (i % 2) * 0.03);
+        p.rotation.set(-1.2 + i * 0.3, i * 0.8, i * 0.4);
+        g.add(p);
+    }
     return g;
 }
 
