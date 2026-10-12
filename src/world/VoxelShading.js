@@ -112,6 +112,14 @@ float cobbleEdge(vec2 p, float layer) {
     vec2 uv = n.y > 0.5 ? q.xz : (n.x > 0.5 ? q.zy : q.xy);
     vec2 cell = floor(uv);
     vec2 f = fract(uv);
+    // How many metres of the face one screen pixel covers. Far away the small pattern gets
+    // smaller than a pixel and would flicker at the slightest move of the camera: it fades
+    // into its average colour instead (fine pixels first, then stones / planks / bricks).
+    vec2 fw = fwidth(uv);
+    float fp = max(fw.x, fw.y);
+    float kFine = 1.0 - smoothstep(0.05, 0.14, fp);
+    float kCoarse = 1.0 - smoothstep(0.07, 0.22, fp);
+    vec3 voxBase = diffuseColor.rgb;
     // 8x8 pixels per face
     vec2 px = floor(f * 8.0);
     float r = vhash(vec3(cell * 8.0 + px, floor(dot(q, n))));
@@ -121,7 +129,7 @@ float cobbleEdge(vec2 p, float layer) {
     float detail = pat > 0.5 ? 0.0 : (r - 0.5) * 0.08;
     if (pat < 0.5 && green && n.y > 0.5) detail += (r > 0.9 ? 0.07 : 0.0) - (r < 0.08 ? 0.06 : 0.0); // grass speckles
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides
-    diffuseColor.rgb *= 1.0 + detail;
+    diffuseColor.rgb *= 1.0 + detail * kFine;
     float layerId = floor(dot(q, n));
     if (pat == 1.0) {
         // cut stone: blocks half a metre high, every row shifted by half
@@ -202,7 +210,9 @@ float cobbleEdge(vec2 p, float layer) {
     float edge = smoothstep(0.0, 0.09, min(e.x, e.y));
     // (very light on flat grass so a meadow doesn't look like tiles)
     float edgeAmt = green && n.y > 0.5 ? 0.05 : 0.14;
-    diffuseColor.rgb *= 1.0 - edgeAmt + edgeAmt * edge;
+    diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
+    // far: the patterned blocks (stone, planks, bricks…) take their average tone
+    if (pat > 0.5) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);
 }`)
             .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
@@ -217,6 +227,7 @@ float cobbleEdge(vec2 p, float layer) {
     }
 }`);
     };
+    material.extensions = { ...(material.extensions || {}), derivatives: true }; // (fwidth on WebGL1)
     material.customProgramCacheKey = () => 'voxel-detail';
     return material;
 }
@@ -240,6 +251,9 @@ float thash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758
 {
     vec3 n = abs(vTreeNormal);
     vec2 uv = n.y > 0.5 ? vTreePos.xz : (n.x > 0.5 ? vTreePos.zy : vTreePos.xy);
+    // (far away the leaf / bark pixels are smaller than a screen pixel: their average, no flicker)
+    vec2 fw = fwidth(uv);
+    float kFine = 1.0 - smoothstep(0.08, 0.22, max(fw.x, fw.y));
     ${kind === 'bark' ? `
     // bark: 6 px per metre across, long vertical grooves, darker knots
     vec2 px = floor(vec2(uv.x * 6.0, uv.y * 3.0));
@@ -248,7 +262,7 @@ float thash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758
     float knot = thash(vec3(px, 7.0)) > 0.96 ? -0.25 : 0.0;
     float d = (r - 0.5) * 0.18 + groove + knot;
     if (n.y > 0.5) { vec2 c = uv; float ring = fract(length(c) * 3.0); d = ring < 0.2 ? -0.18 : 0.05; }
-    diffuseColor.rgb *= 1.0 + d;` : `
+    diffuseColor.rgb *= 1.0 + mix(-0.07, d, kFine);` : `
     // leaves: 5 px per metre, clusters of light / dark leaves and small dark gaps
     vec2 px = floor(uv * 5.0);
     float r = thash(vec3(px, floor(dot(vTreePos, n) * 2.0)));
@@ -256,9 +270,10 @@ float thash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758
     float d = (r - 0.5) * 0.3 + (big - 0.5) * 0.18;
     if (r > 0.93) d += 0.22;
     if (r < 0.06) d -= 0.35;
-    diffuseColor.rgb *= 1.0 + d;`}
+    diffuseColor.rgb *= 1.0 + mix((big - 0.5) * 0.18, d, kFine);`}
 }`);
     };
+    material.extensions = { ...(material.extensions || {}), derivatives: true }; // (fwidth on WebGL1)
     material.customProgramCacheKey = () => 'tree-detail-' + kind;
     return material;
 }
