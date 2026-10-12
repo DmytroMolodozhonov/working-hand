@@ -27,7 +27,7 @@ function gauss(seed) {
  * at t = 0), the index finger bends from `b0` to `b1`; `noise`: the jitter of every
  * point (picture units). Returns a row per drawn frame: {t, q (the palm's world turn), ix (index bend)}.
  */
-export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 0, b1 = 0, noise = 0, side = 'right', cam = 1000 / 30, draw = 1000 / 60, until = 800 } = {}) {
+export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 0, b1 = 0, noise = 0, zNoise = null, poseNoise = 0, size = 0.1, side = 'right', cam = 1000 / 30, draw = 1000 / 60, until = 800 } = {}) {
     const guard = new PoseStabilizer();
     const hg = new HandStabilizer();
     const interp = new PoseInterpreter();
@@ -44,8 +44,8 @@ export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 
         const k = moveMs ? Math.max(0, Math.min(1, t / moveMs)) : (t >= 0 ? 1 : 0);
         const q = qa.clone().slerp(qb, k);
         const b = b0 + (b1 - b0) * k;
-        const lm = synthHand(new THREE.Matrix4().makeRotationFromQuaternion(q), { side, at: [wr.x, wr.y], size: 0.1, bends: { index: [b, b, b * 0.7] } });
-        if (noise) for (const p of lm) { p.x += g() * noise; p.y += g() * noise; p.z += g() * noise; }
+        const lm = synthHand(new THREE.Matrix4().makeRotationFromQuaternion(q), { side, at: [wr.x, wr.y], size, bends: { index: [b, b, b * 0.7] } });
+        if (noise) for (const p of lm) { p.x += g() * noise; p.y += g() * noise; p.z += g() * (zNoise ?? noise); }
         return lm;
     };
     const rows = [];
@@ -56,7 +56,8 @@ export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 
         if (t >= nextCam) {
             nextCam += cam;
             const lm = hg.process(lmAt(t), t);
-            smoother.push(interp.process({ poseLandmarks: guard.process(pose, t), [key]: lm }, video), t);
+            const pz = poseNoise ? pose.map((p) => ({ ...p, x: p.x + g() * poseNoise, y: p.y + g() * poseNoise, z: (p.z || 0) + g() * poseNoise * 2 })) : pose;
+            smoother.push(interp.process({ poseLandmarks: guard.process(pz, t), [key]: lm }, video), t);
         }
         const p = smoother.sample(t);
         if (p) ch.updateArmsLookAt(p, draw / 1000);

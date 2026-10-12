@@ -111,7 +111,7 @@ export function assignHands(hands, pose) {
 /** Per-hand validator + filter. */
 export class HandStabilizer {
     /** The hand filter's strength (see HandFilter; tuned in tests/unit/hand-latency.test.js). */
-    static params = { minCutoff: 0.6, beta: 8, dCutoff: 4, floorK: 1.5, floorT: 3 };
+    static params = { minCutoff: 0.6, beta: 8, dCutoff: 4, floorK: 1.5, floorT: 3, zK: 0.5, zBeta: 2 };
 
     constructor() {
         this.signature = null; // running average of bone signature
@@ -206,7 +206,9 @@ export class HandStabilizer {
  * joints are measured from differences between the points).
  */
 export class HandFilter {
-    constructor({ minCutoff = 0.8, beta = 8, dCutoff = 4, floorK = 1.5, floorT = 3 } = {}) {
+    constructor({ minCutoff = 0.8, beta = 8, dCutoff = 4, floorK = 1.5, floorT = 3, zK = 1, zBeta = 1 } = {}) {
+        this.zK = zK; // (the depth's cut-off at rest: zK of the picture's; when moving: zBeta of it)
+        this.zBeta = zBeta;
         this.minCutoff = minCutoff;
         this.beta = beta;
         this.dCutoff = dCutoff;
@@ -250,10 +252,13 @@ export class HandFilter {
             const raw = Math.max(0, seen - this.floorK * this.floor);
             this.speed += HandFilter.alpha(this.dCutoff, dt) * (raw - this.speed);
             const a = HandFilter.alpha(this.minCutoff + this.beta * this.speed, dt);
+            // the depth is the network's guess, several times noisier than the picture's x, y:
+            // steadied harder (zK of the cut-off) — a real move opens it as well
+            const az = HandFilter.alpha(this.minCutoff * this.zK + this.beta * this.zBeta * this.speed, dt);
             for (let i = 0; i < 21; i++) {
                 P[i].x += a * (lm[i].x - P[i].x);
                 P[i].y += a * (lm[i].y - P[i].y);
-                P[i].z += a * ((lm[i].z || 0) - P[i].z);
+                P[i].z += az * ((lm[i].z || 0) - P[i].z);
             }
         }
         this.lastTime = tSec;

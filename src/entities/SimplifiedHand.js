@@ -142,6 +142,30 @@ export const BOOK_POINTS = { edgeX: -0.12, edgeY: 0.05, face: -0.075 };
 
 const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 
+/**
+ * A speed-adaptive easing (One-Euro-like) for the drawn hand: the speed above the
+ * camera's own jitter (its floor: dropping at once, rising over `floorT` s) opens it —
+ * a real move passes at once, a still hand's tremble is smoothed away.
+ */
+export class Steady {
+    constructor({ minCutoff = 0.8, beta = 6, dCutoff = 5, floorK = 2, floorT = 2 } = {}) {
+        Object.assign(this, { minCutoff, beta, dCutoff, floorK, floorT });
+        this.speed = 0; this.floor = null;
+    }
+
+    static a(cutoff, dt) { return 1 / (1 + 1 / (2 * Math.PI * cutoff * dt)); }
+
+    /** The easing (0…1) for this drawn frame; `seen`: how fast it moves (per second). */
+    alpha(seen, dt) {
+        if (!(dt > 0)) return 1;
+        if (this.floor == null) this.floor = seen;
+        this.floor += (seen < this.floor ? 0.3 : Math.min(1, dt / this.floorT)) * (seen - this.floor);
+        const raw = Math.max(0, seen - this.floorK * this.floor);
+        this.speed += Steady.a(this.dCutoff, dt) * (raw - this.speed);
+        return Steady.a(this.minCutoff + this.beta * this.speed, dt);
+    }
+}
+
 export class SimplifiedHand {
     constructor(side = 'right') {
         this.side = side;
@@ -305,6 +329,7 @@ export class SimplifiedHand {
     update(landmarks, bodyRotation = 0, now = Date.now()) {
         const timeGap = now - this.lastTrackingTime;
 
+        this._dt = this._now ? Math.max(0.001, Math.min(0.1, (now - this._now) / 1000)) : 1 / 60;
         this._now = now;
         this._lost = !(landmarks && landmarks.length >= 21);
         if (!this._lost) {
@@ -369,9 +394,16 @@ export class SimplifiedHand {
         cs.wristTilt = lerpAngle(cs.wristTilt, ts.wristTilt, kr);
         cs.wristRoll = lerpAngle(cs.wristRoll, ts.wristRoll, kr);
         if (this._jointsT) {
+            // our own V4 hand: every joint steadied by how fast the fingers really move
+            let kj = k;
+            if (k === this.FOLLOW && this.fullPose) {
+                let sp = 0;
+                for (const n of JOINT_FINGERS) for (let i = 0; i < 4; i++) sp = Math.max(sp, Math.abs(this._jointsT[n][i] - this._jointsC[n][i]));
+                kj = (this._jointSteady || (this._jointSteady = new Steady({ minCutoff: 1.5, beta: 5 }))).alpha(sp / (this._dt || 1 / 60), this._dt || 1 / 60);
+            }
             for (const n of JOINT_FINGERS) {
                 const t = this._jointsT[n], c = this._jointsC[n];
-                for (let i = 0; i < 4; i++) c[i] += (t[i] - c[i]) * k;
+                for (let i = 0; i < 4; i++) c[i] += (t[i] - c[i]) * kj;
             }
         }
     }
@@ -565,7 +597,11 @@ export class SimplifiedHand {
                 else { this._pend = null; this._pendN = 0; }
             } else this._pendN = 0;
             (this._qShown || (this._qShown = new THREE.Quaternion())).copy(q);
-            this.palm.quaternion.slerp(q, this._kr);
+            // (our own V4 hand: the palm's turn steadied by how fast it really turns — a still
+            // hand doesn't tremble with the camera's noise, a real turn passes at once)
+            let kr = this._kr;
+            if (kr === this.FOLLOW && !this.netPalm) kr = (this._palmSteady || (this._palmSteady = new Steady())).alpha(this.palm.quaternion.angleTo(q) / (this._dt || 1 / 60), this._dt || 1 / 60);
+            this.palm.quaternion.slerp(q, kr);
         } else {
             this.palm.rotation.y = cs.wristTwist;
             this.palm.rotation.x = cs.wristTilt;

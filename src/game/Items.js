@@ -24,7 +24,7 @@ import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
-import { PEN_POINTS } from '../entities/SimplifiedHand.js';
+import { PEN_POINTS, Steady } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 import { makePurseModel } from './CoinBelt.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
@@ -269,7 +269,7 @@ export class ItemSystem {
             const ch = g.character;
             // (the arm's continuation, bent by the wrist: V4's hand follows the real wrist in
             // every direction, so its turn leads the wand more — up, down, aside — V3: a little)
-            const wrist = v4 ? 0.7 : 0.4;
+            const wrist = v4 ? 0.85 : 0.4; // (V4: the palm is steadied, so it can lead the wand almost alone)
             y = pen ? _a.copy(pen.dir) : ch.getForearmDirection(side, _a).multiplyScalar(1 - wrist).addScaledVector(f.Y, wrist).normalize();
             // a real stick in the real hand (a pen, a brush): the wand goes the way it goes
             const hand = ch.getActiveHands()[side];
@@ -293,7 +293,11 @@ export class ItemSystem {
         // trail the hand). A wand's tip is far from the hand and shows every tremble: it is
         // steadied by its own speed — a still wand stays still, a quick turn passes at once
         if (!h.q) h.q = _q.clone();
-        else if (!v4 || (h.item.kind === 'wand' && !penWand)) h.q.slerp(_q, Math.min(1, dt * 28)); // (V3, and the wand: as it was)
+        else if (v4 && h.item.kind === 'wand') {
+            // V4: steadied by its own speed (a still wand doesn't tremble, a turn passes at once)
+            const st = (this._wandSteady || (this._wandSteady = {}))[side] || (this._wandSteady[side] = new Steady({ minCutoff: 1.2, beta: 5 }));
+            h.q.slerp(_q, st.alpha(h.q.angleTo(_q) / Math.max(1e-3, dt), dt));
+        } else if (!v4 || (h.item.kind === 'wand' && !penWand)) h.q.slerp(_q, Math.min(1, dt * 28)); // (V3, and the wand: as it was)
         else if (h.item.kind === 'wand') h.q.slerp(_q, Math.min(1, dt * 14 + h.q.angleTo(_q) * 4));
         else h.q.copy(_q);
         h.model.quaternion.copy(h.q);

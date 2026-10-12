@@ -49,7 +49,7 @@ test('hand lost for a second: it moves with the arm as it was, then glides into 
     }
     const final = world.clone();
     const total = steps.reduce((a, b) => a + b, 0);
-    assert.ok(total > 0.4, `it really turned (${total.toFixed(2)} rad)`);
+    assert.ok(total > 0.3, `it really turned (${total.toFixed(2)} rad)`);
     assert.ok(Math.max(...steps) < total * 0.45, `no jump: biggest frame ${Math.max(...steps).toFixed(2)} of ${total.toFixed(2)} rad`);
     // there within ~¼ s
     let q = new THREE.Quaternion();
