@@ -1471,6 +1471,31 @@ export class Terrain {
     }
 
     /**
+     * The same as flushAround, for the loading screen: every chunk within the view
+     * distance, nearest first, giving the page a breath every ~40 ms so the
+     * progress bar moves (the game starts with the whole visible world built,
+     * not streaming hundreds of far chunks during the first seconds of play).
+     * @param {(done:number)=>void} [onProgress] 0..1
+     */
+    async flushAroundAsync(x, z, onProgress = () => {}) {
+        this._center = null;
+        this._plan(x, z);
+        const total = this._queue.length || 1;
+        let t0 = performance.now();
+        while (this._queue.length) {
+            const job = this._queue.pop();
+            if (!this.meshes.has(job.key)) this._load(job);
+            if (performance.now() - t0 > 40) {
+                onProgress(1 - this._queue.length / total);
+                await new Promise((r) => setTimeout(r, 0));
+                t0 = performance.now();
+            }
+        }
+        this.data.dirtyChunks.clear();
+        onProgress(1);
+    }
+
+    /**
      * @param {{x:number, z:number}} [focus] player position (default: spawn)
      */
     update(focus) {

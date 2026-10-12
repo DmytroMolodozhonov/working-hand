@@ -635,6 +635,8 @@ async function startGameInner(config, welcome) {
         game.settings.drifting = config.drifting !== false;
         await game.init(config, updateProgress);
         if (welcome && game.sync) game.sync.applyWelcome(welcome);
+        // the whole visible world is built on the loading screen (the first seconds of play stay smooth)
+        await game.loadNearby((f) => updateProgress(66 + Math.round(f * 4), `Прорисовка мира... ${Math.round(f * 100)}%`));
 
         const preview = $('webcam-preview');
         if (preview) preview.style.display = config.showHands ? 'block' : 'none';
@@ -667,8 +669,13 @@ async function startGameInner(config, welcome) {
             loadingScreen.style.display = 'none';
             hud.show(true);
         };
-        const started = performance.now();
+        const started = performance.now(), frame0 = game.frameCount;
         const waitPose = setInterval(() => {
+            // (and a few frames drawn behind this screen first: what the first frames compile and send
+            // to the graphics card — new models, the sea's waves — happens here, not in the first seconds of play)
+            // (automated tests draw in software, a frame a second: they don't wait)
+            const warm = game.frameCount - frame0 >= 20 || performance.now() - started > 4000 || window.__ZNS_FIXED_QUALITY__;
+            if (!warm) return;
             if (game.firstPoseReceived || !cameraOk || performance.now() - started > 10000 || window.__ZNS_NO_CAMERA__) {
                 clearInterval(waitPose);
                 reveal();

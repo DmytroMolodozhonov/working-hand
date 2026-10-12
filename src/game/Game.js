@@ -2171,12 +2171,39 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
         this.scene.add(zoo);
         this.renderer.compile(this.scene, this.camera);
+        // draw once to each side (behind the loading screen): every chunk's and model's buffers and
+        // textures go to the graphics card now, not in the first seconds of play
+        const q = this.camera.quaternion.clone(), cp = this.camera.position.clone();
+        this.camera.position.copy(this.character.group.position).y += 1.7;
+        for (let k = 0; k < 4; k++) {
+            this.camera.quaternion.setFromEuler(new THREE.Euler(-0.15, k * Math.PI / 2, 0, 'YXZ'));
+            this.camera.updateMatrixWorld(true);
+            this.renderer.render(this.scene, this.camera);
+        }
+        this.camera.quaternion.copy(q);
+        this.camera.position.copy(cp);
+        this.camera.updateMatrixWorld(true);
         this.scene.remove(zoo);
         // (geometries only: many of these materials are shared caches used later — disposing them would recompile)
         zoo.traverse((o) => { if (o.isMesh && !o.geometry.userData?.keep) o.geometry.dispose(); });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.prewarmedPrograms = this.renderer.info.programs.length;
+    }
+
+    /**
+     * Loading screen: build the whole world within the chosen draw distance around
+     * the player now (with progress), so the first seconds of play are smooth.
+     */
+    async loadNearby(progress = () => {}) {
+        const t = this.world?.terrain;
+        if (!t) return;
+        const p = this.character.group.position;
+        this.world.update(p, 0); // (the fog and the chunk radius from the settings)
+        // a world with day and night starts in the morning haze, which clears in the first minute:
+        // build as far as the full day shows now (the extra ring is kept: no streaming then)
+        if (this.dayCycle) t.viewDistance = Math.max(t.viewDistance, 90 * (this.world.viewScale ?? 1) * (this.world.viewDistance ?? 1) + 32);
+        await t.flushAroundAsync(p.x, p.z, (f) => progress(f));
     }
 
     start() {

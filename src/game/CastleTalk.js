@@ -860,10 +860,15 @@ export class CastleTalk {
                 console.info('[CastleTalk] the net crashed: restarting it');
                 L.load().then(() => { this.llmState = { state: 'ready', text: 'готова' }; }, (e) => { console.warn('[CastleTalk] LLM restart failed:', e?.message || e); this.llmState = { state: 'failed', text: 'не перезапустилась' }; });
             }
+            // The heavy nets wait for the first seconds of play (their loading competes with the
+            // game for the graphics card and the processor exactly when the world appears) —
+            // unless somebody is already close enough to talk to.
+            this._age = (this._age || 0) + 0.5;
+            const close = this._age < 20 && this.life.targets().some((v) => Math.hypot(v.x - g.character.group.position.x, v.z - g.character.group.position.z) < 25);
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
-            if (this.voiceOn && this.life.castles.size) this.speech.preload?.();
-            // (always on — loaded in the background from the start of the game; meanwhile the rules answer)
-            if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
+            if (this.voiceOn && this.life.castles.size && (this._age >= 8 || close)) this.speech.preload?.();
+            // (always on — loaded in the background soon after the start; meanwhile the rules answer)
+            if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled && (this._age >= 15 || close)) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;
         this._tags();

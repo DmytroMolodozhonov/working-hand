@@ -385,6 +385,8 @@ test('«Бомбардо Максима»: 3× stronger — bigger crater, burst
 
 test('endless world: flying far away streams terrain in and out, no edge, no stalls', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    // (the old draw distance — «Низкая»: the numbers below are for it; software drawing in tests is slow)
+    await page.evaluate(() => { const el = document.getElementById('view-distance'); el.value = 'low'; el.dispatchEvent(new Event('change')); });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
     const r = await page.evaluate(async () => {
@@ -402,7 +404,7 @@ test('endless world: flying far away streams terrain in and out, no edge, no sta
             await new Promise((res) => setTimeout(res, 120));
         }
         // Let the last chunks load
-        for (let i = 0; i < 100 && t._queue.length; i++) await new Promise((res) => setTimeout(res, 100));
+        for (let i = 0; i < 300 && t._queue.length; i++) await new Promise((res) => setTimeout(res, 100));
         const p = ch.group.position;
         let near = 0;
         for (const e of t.meshes.values()) if (Math.hypot(e.cx * 32 + 16 - p.x, e.cz * 32 + 16 - p.z) < 100) near++;
