@@ -158,3 +158,13 @@ test('ThrowDetector: a hand only a little over the shoulder is no wind-up', () =
 test('ThrowDetector (the wand): raised high to cast and then pointed forward with the fingers open is no throw', () => {
     assert.equal(overhand(new ThrowDetector(), { strict: true, start: V(0.8, 2.3, -0.8), vRel: V(0, -4, -10), n: 5 }), null);
 });
+
+import { holdsFast } from '../../src/game/HandRelease.js';
+test('swimming: a stroke (a reach up behind the head and a fast pull, the hand opening) would look like a throw — a swimmer\'s hand holds fast', () => {
+    // the stroke really looks like a throw to the detector…
+    assert.ok(overhand(new ThrowDetector(), { strict: true, behind: true, start: V(0.8, 1.75, 0.3), vRel: V(0, -3, -12), n: 5 }), 'a stroke is shaped like a wand throw');
+    // …so nothing is let go while swimming (Items / Weapons / the wood skip their throw and drop checks)
+    assert.equal(holdsFast({ swimming: true }), true);
+    assert.equal(holdsFast({ swimY: 1.2 }), true, '(the body held up by the water)');
+    assert.equal(holdsFast({ swimming: false, swimY: null }), false, 'on land: throws as usual');
+});

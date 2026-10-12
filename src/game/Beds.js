@@ -46,7 +46,7 @@ import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
 import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS, bedSpawnSpot, homeBed } from './BedRules.js';
 import { floorUnder } from './Wreck.js';
-import { ThrowDetector, poseBehind } from './HandRelease.js';
+import { ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 
 const DAY_MS = 24 * 60 * 1000; // (Game.DAY_CYCLE_MS)
 const LIE_AFTER = 1.5; // s of crouching at a bed
@@ -332,7 +332,7 @@ export class Beds {
         const s = inv?.inHand?.kind === 'res' ? inv.inHand.stack : null;
         const now = performance.now();
         const thrower = this._thrower || (this._thrower = new ThrowDetector());
-        if (!s || !isWood(s.block) || s.count <= 0 || !inv.slots.includes(s) || !g.currentPose || g.combat.dead || this.lying || !ch.armState) { thrower.reset(); return; }
+        if (!s || !isWood(s.block) || s.count <= 0 || !inv.slots.includes(s) || !g.currentPose || g.combat.dead || this.lying || !ch.armState || holdsFast(ch)) { thrower.reset(); return; }
         if (now - this._throwAt < 600) return;
         const arm = ch.armState('right', this._arm || (this._arm = {}));
         const thr = thrower.update({ now: this._clock = (this._clock || 0) + dt * 1000, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl: ch.getGripCurl('right'), tracked: ch.isHandTracked('right'), behind: poseBehind(g.currentPose, 'right'), weight: 1.2 });

@@ -50,6 +50,12 @@ export const poseBehind = (pose, side) => {
     return !!(w && s && (w.z || 0) - (s.z || 0) > THROW.DEPTH);
 };
 
+/**
+ * While swimming the arms stroke (a reach up and back, a fast pull): that is no throw and no
+ * letting go — nothing leaves a swimmer's hand (the wand above all).
+ */
+export const holdsFast = (ch) => !!(ch?.swimming || ch?.swimY != null);
+
 export class DropGate {
     constructor() { this.reset(true); }
 

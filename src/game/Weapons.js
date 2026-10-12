@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { Weapon } from '../entities/Weapon.js';
 import { segmentSegmentDistSq, clamp } from '../core/math.js';
 import { bladePower, overpowers, sweptBladeContact } from './BladeClash.js';
-import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
+import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 import { boneLines } from './CutBodies.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
@@ -338,7 +338,8 @@ export class WeaponSystem {
             // Summoned into an open hand («Акцио», a slot): kept until the hand has closed on it once
             if (hs.waitClose) { hs.waitClose = false; hs.drop.reset(false); }
             if (w.stuckIn) { this._holdStuck(side, hs, w, dt, ch, curl, tracked); return; }
-            if (ch.armState) {
+            if (holdsFast(ch)) { hs.thr.reset(); hs.drop.since = 0; } // (swimming: the strokes never throw or drop it)
+            else if (ch.armState) {
                 const arm = ch.armState(side, hs.arm);
                 const gt = hs.clock = (hs.clock || 0) + dt * 1000; // (the game's clock: a stalled frame must not cut a swing in two)
                 // a real throw: wind-up, a fast swing, the fingers let go — it flies with the hand's speed

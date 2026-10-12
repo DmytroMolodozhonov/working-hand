@@ -25,7 +25,7 @@ import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { PEN_POINTS } from '../entities/SimplifiedHand.js';
-import { DropGate, ThrowDetector, poseBehind } from './HandRelease.js';
+import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 import { makePurseModel } from './CoinBelt.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
 
@@ -561,9 +561,9 @@ export class ItemSystem {
             const h = this.held[side];
             if (!h) continue;
             const kind = h.item.kind;
-            // (never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
+            // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
             // (nor a wand while a spell is going — swinging it to cast never throws it)
-            if ((kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            if (holdsFast(ch) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
             const arm = ch.armState(side, this._arm[side]);
