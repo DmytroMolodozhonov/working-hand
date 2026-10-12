@@ -32,7 +32,7 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
         const B = g.books;
         const hand = ch.getHandWorldPosition('right', new T.Vector3());
         const dir = ch.getHandDirection('right', new T.Vector3());
-        const b = B._spawnBird(null, hand.clone().addScaledVector(dir, 4));
+        const b = B._spawnBird(B._nextId++, hand.clone().addScaledVector(dir, 4)); // (an ordinary bird: the book of protection would bounce «Левиоса»)
         b.state = 'perch'; b.wait = 99;
         const books0 = B.books.size; // (creative: a book lies on a pedestal)
         const hint = g.levitation.cast();
@@ -336,7 +336,7 @@ test('duel spells fly where the hand points — standing and hovering after «Ф
         const o = g.castOrigin('right', new T.Vector3());
         const d = ch.getPointingDirection('right', new T.Vector3());
         const at = o.clone().addScaledVector(d.clone().applyAxisAngle(new T.Vector3(0, 1, 0), -deg * Math.PI / 180), dist); // (to the right: away from the left hand)
-        const bird = B._spawnBird(null, at);
+        const bird = B._spawnBird(B._nextId++, at); // (an ordinary bird — a random one may be the book of protection, which bounces duel charges)
         bird.state = 'perch'; bird.wait = 99; bird.t = 0;
         await frames(2);
         g._lastDuelCast = 0; g._interimCast = null;
