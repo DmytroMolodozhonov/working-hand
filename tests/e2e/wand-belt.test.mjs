@@ -51,11 +51,11 @@ test('the wand\'s belt with a jittering camera: the hand reaches the wand at the
         const local = ch.getHandWorldPosition('right', new T.Vector3()).applyMatrix4(new T.Matrix4().copy(ch.group.matrixWorld).invert());
         // the nearest point of the wand on the belt (its handle → its tip, the hero's space)
         const near = new T.Line3(BELT_TOP.clone(), BELT_TIP.clone()).closestPointToPoint(local, true, new T.Vector3());
-        return { d: near.distanceTo(local), z: local.z, cam: g.camera.layers.mask, body: ch.body.layers.mask, head: ch.head.layers.mask, seen: !!g.inventory.belt.model };
+        const belly = ch.torso.getObjectByName('fpv-belly'); return { d: near.distanceTo(local), z: local.z, cam: g.camera.layers.mask, body: belly && belly.visible ? belly.layers.mask : 0, head: ch.head.layers.mask, seen: !!g.inventory.belt.model };
     });
     assert.ok(reach.z > -0.75 && reach.z < -0.4, `the hand at the belly, not far ahead (z ${reach.z.toFixed(2)})`);
     assert.ok(reach.seen && reach.d < 0.45, `the hand by the wand (${reach.d.toFixed(2)})`);
-    assert.ok((reach.cam & reach.body) !== 0, 'first person: the torso is seen');
+    assert.ok((reach.cam & reach.body) !== 0, 'first person: the waist (the torso below the eyes) is seen');
     assert.equal(reach.cam & reach.head, 0, 'first person: the head is not (the eyes are in it)');
     // the fingers close on it
     await feedNoisy(page, { arms: 'hang', belt: 'right', rightCurl: 0.9, leftCurl: 0 }, 15);
@@ -70,7 +70,7 @@ test('the wand\'s belt with a jittering camera: the hand reaches the wand at the
     await page.close();
 });
 
-test('the wand is tucked in only on purpose: lowered, resting a little to the left, hanging — never (a jittering camera); pushed down into the waistband — yes', async () => {
+test('the wand is tucked in only on purpose: lowered, resting a little to the left, hanging, wind-ups and flicks past the hip — never (a jittering camera); brought to the waistband and held — yes', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -89,6 +89,15 @@ test('the wand is tucked in only on purpose: lowered, resting a little to the le
     assert.equal(await held(), 'wand', 'hanging: still in the hand');
     await feedNoisy(page, { arms: 'down', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 30);
     assert.equal(await held(), 'wand', 'arms down: still in the hand');
+    // wind-ups and flicks (throwing Lumos): the arm swings back past the hip, the tip down,
+    // and forward again — never tucked in
+    for (let k = 0; k < 6; k++) {
+        await feedNoisy(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0 }, 2, 30);
+        await feedNoisy(page, { arms: 'hang', belt: 'right', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 3, 30);
+        await feedNoisy(page, { arms: 'hang', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 2, 30);
+        await feedNoisy(page, { arms: 'up', rightCurl: 0.9, leftCurl: 0 }, 2, 30);
+    }
+    assert.equal(await held(), 'wand', 'wind-ups and flicks past the hip: still in the hand');
     // tucked in on purpose: from in front, pushed down into the waistband, the tip down
     await feedNoisy(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0 }, 10);
     await feedNoisy(page, { arms: 'hang', belt: 'right', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 25);

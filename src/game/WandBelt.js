@@ -22,6 +22,7 @@ export const BELT_TOP = new THREE.Vector3(-0.12, 0.22, -0.52);
 /** Where its tip goes (into the trousers, against the left thigh). */
 export const BELT_TIP = new THREE.Vector3(-0.3, -0.85, -0.24);
 const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
+const CALM_S = 0.25; // s the arm must be calm first (no wind-up, no flick)
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
@@ -50,6 +51,8 @@ export class WandBelt {
         this._from = { left: { t: 0, dy: 0, u: 0 }, right: { t: 0, dy: 0, u: 0 } }; // (where the real hand was just before it came to the belt)
         this._pushed = { left: false, right: false };
         this._in = { left: false, right: false };
+        this._calm = { left: 0, right: 0 }; // (s the arm has been calm)
+        this._last = { left: null, right: null }; // (the real wrist a picture ago)
         this.log = []; // (what it did: tests / the hand recording)
     }
 
@@ -92,15 +95,21 @@ export class WandBelt {
             if (h && h.item.kind === 'wand') {
                 // tucking it in: at the waistband, the tip down
                 const down = h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.2 : false; // (pointing down at all)
-                this._tuck[side] = near && down && this._pushed[side] ? this._tuck[side] + dt : 0;
+                // ...and the arm otherwise still: a wind-up or a flick (throwing Lumos, a spell)
+                // passing the hip never tucks it in — the hand and the real wrist must be calm
+                const fast = (ch.handVelocity?.[side]?.length() || 0) > 2.0 || this._wristSpeed(side, rb, now) > 0.8;
+                this._calm[side] = fast ? 0 : this._calm[side] + dt;
+                this._tuck[side] = near && down && this._pushed[side] && this._calm[side] > CALM_S ? this._tuck[side] + dt : 0;
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
                 continue;
             }
             this._tuck[side] = 0;
             // taking it: looking down at it, the empty hand at the handle, the fingers closing on it
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 0;
-            // (the hand came to it open and closes on it — however long that takes)
-            if (!near) { this._open[side] = false; continue; }
+            // (the hand came to it open and closes on it — however long that takes; taking is
+            // as easy as in reality: anywhere by the waist, looking down)
+            const reach = near || !!rb?.near;
+            if (!reach) { this._open[side] = false; continue; }
             if (curl < 0.4) this._open[side] = true;
             const free = !h && !g.weapons?.hands?.[side]?.held;
             const rightFirst = side === 'left' && !items.held.right && !g.weapons?.hands?.right?.held; // (the right hand takes it when it can)
@@ -131,6 +140,17 @@ export class WandBelt {
             ch.reachHand(side, _w.set(local.x, local.y, BELLY_Z).applyMatrix4(ch.group.matrixWorld), w);
             ch.group.updateMatrixWorld(true);
         }
+    }
+
+    /** How fast the REAL wrist moves (torso heights a second), from the camera's skeleton. */
+    _wristSpeed(side, rb, now) {
+        const l = this._last[side];
+        if (!rb) return 0;
+        let v = l?.v || 0;
+        if (l && (rb.dy !== l.dy || rb.u !== l.u) && now > l.t) v = Math.hypot(rb.dy - l.dy, rb.u - l.u) / ((now - l.t) / 1000);
+        else if (l && now - l.t > 150) { v = 0; l.v = 0; } // (the very same place for a while: still)
+        if (!l || rb.dy !== l.dy || rb.u !== l.u) this._last[side] = { dy: rb.dy, u: rb.u, t: now, v };
+        return v;
     }
 
     /** The head turned down towards the belt. */

@@ -32,16 +32,38 @@ test('wand belt: a hand low in front of the belly is drawn close to it (fading i
     assert.ok(edge > 0 && edge < 1, 'fades at the edge');
 });
 
-test('first person: the torso stays seen (looking down one sees one\'s body); the hidden head still casts its shadow', async () => {
+test('first person: the torso is never before the eyes looking ahead or about (head turned, tilted a little); looking down one sees the belly; the hidden head and torso still cast shadows', async () => {
     const { VoxelCharacter } = await import('../../src/entities/Character.js');
     const ch = new VoxelCharacter(new THREE.Scene());
     ch.setFirstPerson(true);
-    const cam = new THREE.Layers(); // (the camera sees layer 0)
-    assert.ok(ch.body.layers.test(cam), 'the torso is seen');
-    assert.ok(!ch.head.layers.test(cam), 'the head (the eyes are in it) is not');
-    const shadow = ch.head.getObjectByName('head-shadow');
-    assert.ok(shadow && shadow.visible && shadow.castShadow && shadow.layers.test(cam), 'an unseen double of the head casts the shadow');
-    assert.equal(shadow.material.colorWrite, false, '(unseen)');
+    const cam = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);
+    const camLayers = new THREE.Layers();
+    const belly = ch.torso.getObjectByName('fpv-belly');
+    assert.ok(belly && belly.visible && belly.layers.test(camLayers), 'the belly is seen');
+    assert.ok(!ch.body.layers.test(camLayers) && !ch.head.layers.test(camLayers), 'the full torso and the head are not');
+    /** How much of the belly the camera sees (its corners in the view), the head turned (yaw, pitch). */
+    const seen = (yaw, pitch, aspect = 16 / 9) => {
+        cam.aspect = aspect; cam.updateProjectionMatrix();
+        ch.updateHeadRotation(yaw, pitch);
+        ch.group.updateMatrixWorld(true);
+        ch.getHeadPosition(cam.position);
+        ch.getHeadQuaternion(cam.quaternion);
+        cam.updateMatrixWorld(true);
+        const fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+        belly.geometry.computeBoundingBox();
+        const bb = belly.geometry.boundingBox;
+        let n = 0;
+        for (const x of [bb.min.x, 0, bb.max.x]) for (const y of [bb.min.y, bb.max.y]) for (const z of [bb.min.z, 0, bb.max.z]) if (fr.containsPoint(belly.localToWorld(new THREE.Vector3(x, y, z)))) n++;
+        return n;
+    };
+    for (const yaw of [0, 0.5, -0.5, 1.0, -1.0]) for (const pitch of [0, -0.15, 0.3]) for (const aspect of [16 / 9, 4 / 3, 21 / 9]) {
+        assert.equal(seen(yaw, pitch, aspect), 0, `looking ahead (yaw ${yaw}, pitch ${pitch}, ${aspect.toFixed(2)}): no torso before the eyes`);
+    }
+    assert.ok(seen(0, -0.9) > 0, 'looking down: the belly is seen');
+    for (const name of ['head-shadow', 'body-shadow']) {
+        const d = ch.group.getObjectByName(name);
+        assert.ok(d && d.visible && d.castShadow && d.layers.test(camLayers) && d.material.colorWrite === false, `${name}: an unseen double casts the shadow`);
+    }
     ch.setFirstPerson(false);
-    assert.ok(ch.head.layers.test(cam) && !shadow.visible, 'from outside: the head itself, no double');
+    assert.ok(ch.body.layers.test(camLayers) && ch.head.layers.test(camLayers) && !belly.visible, 'from outside: the hero as it is');
 });

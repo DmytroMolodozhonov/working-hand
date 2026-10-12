@@ -9,6 +9,9 @@
 import * as THREE from 'three';
 import { applyLook } from './Appearance.js';
 import { SimplifiedHand } from './SimplifiedHand.js';
+
+/** In first person the torso is seen only up to here (torso space; the eyes ~0.85 high, and looking down they go back over the body): the waist and the belt, looking down. */
+export const FPV_BELLY_TOP = -0.35;
 import { DetailedHand } from './DetailedHand.js';
 import { stumpEnd } from './LimbSurgery.js';
 import { KD } from '../game/Impact.js';
@@ -754,24 +757,38 @@ export class VoxelCharacter {
     setFirstPerson(isFPV) {
         this._fpv = isFPV;
         const layer = isFPV ? 1 : 0;
-        // only the head (the eyes are in it) is hidden from one's own view: the body stays —
-        // looking down one sees one's torso, belt and hands (it vanished before)
+        // the eyes are just above the top of the torso: in first person the head and the
+        // upper torso are hidden from one's own view (the torso stood right before the eyes
+        // when the head turned) — the belly and the belt, well below the eyes, are seen
+        // looking down (FPV_BELLY_TOP)
         this.head.traverse((c) => c.layers.set(layer));
-        this.body.traverse((c) => c.layers.set(0));
-        for (const p of this._lookParts || []) if (p.parent === this.head) p.traverse((c) => c.layers.set(layer));
-        for (const p of this._lookParts || []) if (p.parent === this.torso) p.traverse((c) => c.layers.set(0));
-        // a hidden head still casts its shadow (the renderer casts shadows only of what the
-        // camera's layers show: the shadow was a body without a head): an unseen double of it
-        if (!this._headShadow) {
-            const m = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.45, 1.25), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
-            m.position.y = 0.1; // (the hair on top)
-            m.castShadow = true;
-            m.name = 'head-shadow';
-            this.head.add(m);
-            this._headShadow = m;
+        this.body.traverse((c) => c.layers.set(layer));
+        for (const p of this._lookParts || []) if (p.parent === this.torso || p.parent === this.head) p.traverse((c) => c.layers.set(layer));
+        if (!this._belly) {
+            // the belly: the torso from its bottom up to FPV_BELLY_TOP (torso space), seen in first person only
+            const bottom = -0.75, top = FPV_BELLY_TOP;
+            const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, top - bottom, 0.8), this.body.material);
+            m.position.y = (top + bottom) / 2;
+            m.name = 'fpv-belly';
+            this.torso.add(m);
+            this._belly = m;
+            // the hidden head and torso still cast their shadows (the renderer casts shadows only of
+            // what the camera's layers show): unseen doubles of them
+            const unseen = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+            const hs = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.45, 1.25), unseen);
+            hs.position.y = 0.1; // (the hair on top)
+            hs.name = 'head-shadow';
+            this.head.add(hs);
+            const bs = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.8), unseen);
+            bs.name = 'body-shadow';
+            this.torso.add(bs);
+            this._shadowDoubles = [hs, bs];
+            for (const d of this._shadowDoubles) d.castShadow = true;
         }
-        this._headShadow.layers.set(0);
-        this._headShadow.visible = !!isFPV;
+        this._belly.material = this.body.material; // (the shirt as dressed)
+        this._belly.visible = !!isFPV;
+        this._belly.layers.set(0);
+        for (const d of this._shadowDoubles) { d.layers.set(0); d.visible = !!isFPV; }
     }
 
     /** Dress the hero (face, hair, clothes — see Appearance.js). */
