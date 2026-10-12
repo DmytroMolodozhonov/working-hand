@@ -83,6 +83,7 @@ export class ShipCollider {
         this.aabb = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
         this.flooded = false;
         this.enabled = true;
+        this.gangwayOpen = false;
         this._side = new WeakMap(); // body position object → 'in' | 'out' (no tunnelling through the rail)
         // the bow and stern ends at deck level where a body still fits
         this._ends = new Map();
@@ -135,7 +136,8 @@ export class ShipCollider {
 
     _inOpening(lz, ly) {
         const L = this.L;
-        if (Math.abs(ly - L.deck) > 0.8) return false;
+        // the gangway's gap in the rail is open only while the gangplank lies there (else a rope across it)
+        if (!this.gangwayOpen || Math.abs(ly - L.deck) > 0.8) return false;
         for (const o of L.openings) if (lz > o.z0 && lz < o.z1) return true;
         return false;
     }

@@ -186,25 +186,24 @@ export class Helm {
             if (!hand?.group?.visible || !hand.group.parent) continue;
             const held = this.held[side];
             if (held) {
+                // the arm reaches the spoke where the hand holds it (the hand never leaves the arm);
+                // a spoke gone out of the arm's reach is let go
                 const s = held.ship, H = s.layout.helm;
                 const ang = s.wheel + (held.a0 - held.w0);
                 s.pose.toWorld(H.x + Math.sin(ang) * H.rimR, H.y + Math.cos(ang) * H.rimR, H.z + 0.05, _o);
-                const f = g.weapons.palmFrame(side, this._pf[side]);
-                _v.set(_o.x - f.G.x, _o.y - f.G.y, _o.z - f.G.z).clampLength(0, 0.45);
-                hand.group.parent.getWorldQuaternion(_q).invert();
-                _v.applyQuaternion(_q);
-                hand.group.position.add(_v);
-                hand.group.updateMatrixWorld(true);
+                _w.set(_o.x, _o.y, _o.z);
+                (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_v);
+                if (_v.distanceTo(_w) > ch.BONE_LENGTH_UPPER + ch.BONE_LENGTH_LOWER + 0.55) { this.release(side); continue; }
+                ch.reachHand(side, _w, 1, 0.35);
                 continue;
             }
             const s = this._wheelNear(ch.getHandWorldPosition(side, _w));
             if (!s) continue;
             const pen = this._penetration(s, hand, _v);
             if (pen <= 0) continue;
-            hand.group.parent.getWorldQuaternion(_q).invert();
-            _v.applyQuaternion(_q);
-            hand.group.position.add(_v.clampLength(0, 0.6));
-            hand.group.updateMatrixWorld(true);
+            // a free hand against the wheel: the arm stops at it (the hand pushed back with the arm)
+            ch.getHandWorldPosition(side, _w).add(_v.clampLength(0, 0.6));
+            ch.reachHand(side, _w, 1, 0);
         }
     }
 

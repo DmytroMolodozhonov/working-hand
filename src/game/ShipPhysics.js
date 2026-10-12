@@ -160,7 +160,10 @@ export function stepShip(st, cls, env, dt) {
         const F = sailForce(cls, env.openFrac || 0, along, across);
         const M = mooringForces(st, cls, env.moorings, h);
         const delta = RUDDER_MAX * (st.wheel || 0) / HELM_LOCK;
-        st.u += (F.Fu + M.u - cls.c1 * st.u - cls.c2 * st.u * Math.abs(st.u)) * h;
+        // above its hull speed a ship drags its own bow wave: it can't be driven much faster, however hard the wind
+        const uh = 0.9 * Math.sqrt(cls.L), over = Math.abs(st.u) - uh;
+        const wave = over > 0 ? 0.02 * over * over * Math.sign(st.u) : 0;
+        st.u += (F.Fu + M.u - cls.c1 * st.u - cls.c2 * st.u * Math.abs(st.u) - wave) * h;
         st.v += (F.Fv + M.v - 10 * (cls.c1 * st.v + cls.c2 * st.v * Math.abs(st.v))) * h;
         // wheel > 0 (clockwise) → the bow goes to starboard → yaw decreases
         st.r += (-cls.kRud * delta * st.u * Math.abs(st.u) + F.N + M.r - cls.yawD1 * st.r) * h;

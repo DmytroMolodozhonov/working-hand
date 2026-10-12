@@ -24,7 +24,7 @@ import { WATER_LEVEL_Y } from '../world/Terrain.js';
 
 const EYE_R = 0.55; // m: fingers closing this near the loop take it
 const LIFT = 0.6; // m: the hand lifted this much takes the loop off
-const RUNG_R = 0.5; // m: fingers closing this near a rung hold it
+const RUNG_R = 0.6; // m: fingers closing this near a rung hold it (easy to catch, going down too)
 const CLIMB_RATE = 1.5; // m/s at most
 const CUT_SPEED = 3.2; // m/s: a blade this fast through a rope cuts it
 const _v = new THREE.Vector3();
@@ -285,11 +285,7 @@ export class Rigging {
             if (!hand?.group?.visible || !hand.group.parent) continue;
             const lx = c.ld.side * (hullHalfWidth(L, c.ld.z, L.deck) + 0.35);
             s.pose.toWorld(lx, c.holds[side].ly, c.ld.z + (side === 'left' ? -0.35 : 0.35), _o);
-            const f = g.weapons.palmFrame(side, this._pf[side]);
-            _v.set(_o.x - f.G.x, _o.y - f.G.y, _o.z - f.G.z).clampLength(0, 0.45);
-            hand.group.parent.getWorldQuaternion(_q).invert();
-            hand.group.position.add(_v.applyQuaternion(_q));
-            hand.group.updateMatrixWorld(true);
+            ch.reachHand(side, _v.set(_o.x, _o.y, _o.z), 1, 0.35); // (the arm reaches the rung: the hand stays on the arm)
         }
     }
 

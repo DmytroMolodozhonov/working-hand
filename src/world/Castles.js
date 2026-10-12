@@ -1305,7 +1305,11 @@ function pickStyle(rng) {
 export function testSeaCastleSpot(seed) {
     const rng = createRng((seed * 7919 + 424242) >>> 0);
     const s = pickStyle(rng);
-    const ships = portShips(s, rng);
+    const own = portShips(s, rng);
+    // (the test ground's port always shows all three kinds of ship — galleon, fluyt, pinnace — when they fit)
+    const all = ['galleon', 'fluyt', 'pinnace'];
+    const fits = (sh) => { const L = portLayout(s, sh); const vr0 = s.villageR + 8; const u1 = Math.max(vr0, L.u1 + 8); return 24 + u1 + vr0 + 2 * (BLEND + 10) <= CASTLE_CELL && vr0 + L.vShore + L.len + 12 + 24 + 2 * (BLEND + 10) <= CASTLE_CELL; };
+    const ships = fits(all) ? all : own;
     const P = portLayout(s, ships);
     const vr = s.villageR + 8;
     const rect = { u0: -vr, u1: Math.max(vr, P.u1 + 8), v0: -vr, v1: P.vShore + P.len + 12 };

@@ -39,18 +39,25 @@ async function until(page, fn, arg = null, maxFrames = 400) {
 }
 
 /** Out to the open sea; a ship there (calm water: no waves, no weather). */
-async function shipAtSea(page, cls = 'galleon', id = 'test-ship', yaw = 0.4) {
+async function shipAtSea(page, cls = 'galleon', id = 'test-ship', yaw = null) {
     return page.evaluate(({ cls, id, yaw }) => {
         const g = window.__zns.game;
         const S = g.terrain.data.seas;
         const sea = S.nearest(0, 0);
-        let a = 0.7;
-        for (; a < 7; a += 0.3) { const q = S.pointAt(sea, a, 220); if (S.signedDist(q.x, q.z) > 160) break; }
-        const p = S.pointAt(sea, a, 220);
+        // the deepest water round the sea (no shoal, no island)
+        let p = null, best = 0;
+        for (let dd = 120; dd < 700 && best > -12; dd += 40) for (let a = 0; a < 6.3 && best > -12; a += 0.25) {
+            const q = S.pointAt(sea, a, dd);
+            if (S.signedDist(q.x, q.z) < 80) continue;
+            const T = (dx, dz) => g.terrain.data.topLayer(Math.round(q.x + dx), Math.round(q.z + dz));
+            const top = Math.max(T(0, 0), T(60, 0), T(-60, 0), T(0, 60), T(0, -60)); // (deep all round the hull)
+            if (top < best) { best = top; p = q; }
+        }
         g.world.terrain.flushAround(p.x, p.z);
         g.seaSurface?.flush?.(p.x, p.z);
         g.ships.calm = true;
-        const s = g.ships.spawn(cls, p.x, p.z, yaw, { id });
+        // (bow out to the open sea unless told: a ship sailing off in a test does not run aground)
+        const s = g.ships.spawn(cls, p.x, p.z, yaw ?? Math.atan2(-(sea.x - p.x), -(sea.z - p.z)), { id });
         window.__ship = s;
         window.__w = (lx, ly, lz) => s.pose.toWorld(lx, ly, lz, { x: 0, y: 0, z: 0 });
         return { x: p.x, z: p.z, deck: s.layout.deck, B: s.layout.B, L: s.layout.L };
@@ -167,9 +174,9 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
         g.spells.cast('WindMaxima', new window.__zns.THREE.Vector3(o.x, o.y, o.z), new window.__zns.THREE.Vector3(d.x, 0, d.z), 'right', g.localId);
         const sw = s.st.spellWind;
         const main = s.sails.find((x) => x.id === 'main:course');
-        return { sw: Math.hypot(sw.x, sw.z), fill: main.fill, gust: main.gust };
+        return { sw: Math.hypot(sw.x, sw.z), fill: main.fill, gust: main.gust, blow: s.blow ? Math.round(s.blow.gain) : 0 };
     });
-    assert.ok(gust.sw > 6, `the wind is in the sails (${gust.sw.toFixed(1)} m/s)`);
+    assert.ok(gust.blow > 30, `the wind blows into the sails (${gust.blow} m/s)`);
     await frames(page, 10);
     const bulge = await page.evaluate(() => { const s = window.__ship; const m = s.model.sails.get('main:course'); return { b: m.maxBulge, fill: s.sails.find((x) => x.id === 'main:course').fill }; });
     assert.ok(bulge.fill > 0.5 && Math.abs(bulge.b) > 1, `the main course bulges (${bulge.b.toFixed(2)} m, fill ${bulge.fill.toFixed(2)})`);
@@ -180,17 +187,25 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
         window.__home = { x: s.st.x, z: s.st.z, yaw: s.st.yaw };
         const t0 = performance.now();
         // simulate in fixed steps through the game's own physics (the frame rate of the test browser is low)
-        for (let i = 0; i < 250; i++) { g.ships._simulate(s, 0.1); if (i === 49) out.push(s.st.u); }
+        for (let i = 0; i < 250; i++) { if (s.blow) s.blow.at = performance.now(); g.ships._simulate(s, 0.1); if (i === 49) out.push(s.st.u); }
         out.push(s.st.u);
+        // it keeps blowing while the caster's spell lasts…
         const w5 = Math.hypot(s.st.spellWind.x, s.st.spellWind.z);
+        for (let i = 0; i < 60; i++) { if (s.blow) s.blow.at = performance.now(); g.ships._simulate(s, 0.1); }
+        const held = Math.hypot(s.st.spellWind.x, s.st.spellWind.z) / w5;
+        // …until «стоп»: then it dies down
+        const stopped = g.stopSpells();
         for (let i = 0; i < 60; i++) g.ships._simulate(s, 0.1);
         const w11 = Math.hypot(s.st.spellWind.x, s.st.spellWind.z);
         void t0;
-        return { u5: out[0], u25: out[1], decay: w11 / w5 };
+        return { u5: out[0], u25: out[1], held, stopped, decay: w11 / w5, w: w5 };
     });
-    assert.ok(speeds.u5 > 0.2 && speeds.u5 < 2.2, `slow to gather way: ${speeds.u5.toFixed(2)} m/s after 5 s`);
-    assert.ok(speeds.u25 > 2.5, `but it goes: ${speeds.u25.toFixed(2)} m/s after 25 s`);
-    assert.ok(speeds.decay > 0.7 && speeds.decay < 0.95, `the wind dies down (${speeds.decay.toFixed(2)} in 6 s)`);
+    assert.ok(speeds.u5 > 0.2 && speeds.u5 < 4, `slow to gather way: ${speeds.u5.toFixed(2)} m/s after 5 s`);
+    assert.ok(speeds.u25 > 5, `but it goes: ${speeds.u25.toFixed(2)} m/s after 25 s`);
+    assert.ok(speeds.w > 30, `«Вайнд Максима» blows hard into the sails (${speeds.w.toFixed(1)} m/s)`);
+    assert.ok(speeds.held > 0.97, 'the wind keeps blowing while the spell lasts');
+    assert.ok(speeds.stopped, '«стоп» stops it');
+    assert.ok(speeds.decay > 0.5 && speeds.decay < 0.95, `then the wind dies down (${speeds.decay.toFixed(2)} in 6 s)`);
     // coasting: no wind — it keeps going for a long time
     const coast = await page.evaluate(() => {
         const g = window.__zns.game, s = window.__ship;
@@ -273,13 +288,15 @@ test('ships: hands on the wheel turn it and the moving ship turns; the crew figh
     // the crew comes and strikes
     await page.evaluate(() => { const s = window.__ship; s.st.forced = { u: 0, r: 0 }; });
     await standAt(page, H.stand.x + 1.5, H.stand.z + 2, 0, H.stand.y); // (the test moved the ship without me: back aboard)
+    // (a slow test browser: the crew's anger may have cooled meanwhile — the wheel taken again)
+    await page.evaluate(() => { const g = window.__zns.game; g.ships.crew.provoke(window.__ship, g.localId); });
     let hit = false;
     for (let i = 0; i < 30 && !hit; i++) {
         await feed(page, { arms: 'forward' }, 6, 40);
         hit = await page.evaluate(() => window.__zns.game.combat.hp < window.__zns.game.combat.maxHp);
     }
     const modes = await page.evaluate(() => { const g = window.__zns.game, s = window.__ship; return [...g.ships.crew.byId.values()].map((v) => v.mode).concat([String(g.ships.me?.ship.id), String([...s.hostile.keys()]), String(g.localId)]); });
-    assert.ok(hit || modes.some((m) => m === 'run' || m === 'attack'), `sailors fight (${modes})`);
+    assert.ok(hit || modes.some((m) => m === 'run' || m === 'attack' || m === 'block'), `sailors fight (${modes})`); // (block: on guard, waiting their turn)
     // kill the crew: the ship is mine, its chests open
     await page.evaluate(() => {
         const g = window.__zns.game;

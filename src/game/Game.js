@@ -1173,6 +1173,7 @@ export class Game {
         if (this.lightning) { if (this.lightning.hammer) this.gear?.hammerResult(false); this.lightning = null; this.hud.setTimer?.(null); done.push('молния'); }
         if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
+        if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (!done.length) return false;
         this.sync?.stopSpells?.();
         if ((hf === true || ws === true) && done.length === 1) return true; // (its own words: the fire left / the water fallen)

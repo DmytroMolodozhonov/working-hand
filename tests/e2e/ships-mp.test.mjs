@@ -48,9 +48,15 @@ const ev = (page, fn, arg) => page.evaluate(fn, arg);
 const toSea = (page, z) => ev(page, (z) => {
     const g = window.__zns.game;
     const S = g.terrain.data.seas, sea = S.nearest(0, 0);
-    let a = 0.7;
-    for (; a < 7; a += 0.3) { const q = S.pointAt(sea, a, 220); if (S.signedDist(q.x, q.z) > 160) break; }
-    const p = S.pointAt(sea, a, 220);
+    // the deepest water round the sea (no shoal, no island)
+    let p = null, best = 0;
+    for (let dd = 120; dd < 700 && best > -12; dd += 40) for (let a = 0; a < 6.3 && best > -12; a += 0.25) {
+        const q = S.pointAt(sea, a, dd);
+        if (S.signedDist(q.x, q.z) < 80) continue;
+        const T = (dx, dz) => g.terrain.data.topLayer(Math.round(q.x + dx), Math.round(q.z + dz));
+        const top = Math.max(T(0, 0), T(60, 0), T(-60, 0), T(0, 60), T(0, -60)); // (deep all round the hull)
+        if (top < best) { best = top; p = q; }
+    }
     g.world.terrain.flushAround(p.x, p.z);
     g.ships.calm = true;
     const s = g.ships.spawn('galleon', Math.round(p.x), Math.round(p.z), 0.3, { id: 'mp-ship' });

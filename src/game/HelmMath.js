@@ -13,7 +13,7 @@ import { HELM_LOCK } from './ShipTypes.js';
 
 export const HELM = {
     GRAB_R: 0.45, CLOSE_CURL: 0.55, OPEN_CURL: 0.35, RELEASE_CURL: 0.28, RELEASE_MS: 160, CLOSE_WINDOW_MS: 900,
-    LOCK: HELM_LOCK, MAX_RATE: 2.4, SLIP: 0.9, RETURN: 0.04,
+    LOCK: HELM_LOCK, MAX_RATE: 4.8, SLIP: 0.9, RETURN: 0.04, GAIN: 2, // (the wheel turns twice as far as the hand goes round: not hard, not trivial)
 };
 
 /** The polar angle of a point in the wheel's plane (0 = top, + = clockwise for the helmsman). */
@@ -40,9 +40,9 @@ export function rimDist(x, y, z, rimR, handleR) {
 export function steer(wheel, holds, dt, speed) {
     if (!holds.length) return wheel - Math.sign(wheel) * Math.min(Math.abs(wheel), HELM.RETURN * Math.abs(speed) * dt);
     let want = 0;
-    for (const h of holds) want += h.w0 + (h.a - h.a0);
+    for (const h of holds) want += h.w0 + HELM.GAIN * (h.a - h.a0);
     want /= holds.length;
-    const rate = HELM.MAX_RATE / (1 + Math.abs(speed) / 4);
+    const rate = HELM.MAX_RATE / (1 + Math.abs(speed) / 8);
     const next = wheel + Math.max(-rate * dt, Math.min(rate * dt, want - wheel));
     return Math.max(-HELM.LOCK, Math.min(HELM.LOCK, next));
 }

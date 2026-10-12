@@ -43,6 +43,9 @@ const WAKE = 320; // m: a ship near any player is awake (moves, has its model)
 const SLEEP = 420;
 const SCAN = 650; // m: ports this far are looked at
 const UNFURL_RATE = 1 / 3; // sails unroll in 3 s
+const WIND_PLAIN = 21; // m/s into the sails while «Вайнд» blows (3× the old gust)
+const WIND_MAXIMA = 42; // «Вайнд Максима» (6× the old «Вайнд»)
+const BLOW_MANA = 1; // a second, while the wind blows into the sails
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
@@ -57,7 +60,7 @@ const r3 = (v) => Math.round(v * 1000) / 1000;
 /** A ship's state for the network: [id, x, z, yaw, u, v, r, wheel, sinkY, flags, hp, flood100, roll, pitch]. */
 export function packShip(s) {
     const st = s.st;
-    const flags = (s.state === 'moored' ? 1 : 0) | (s.state === 'sinking' ? 2 : 0) | (s.state === 'wreck' ? 4 : 0) | (s.plank?.state === 'laid' ? 8 : 0) | (s.plank?.state === 'fallen' ? 16 : 0) | (s.flooded ? 32 : 0);
+    const flags = (s.state === 'moored' ? 1 : 0) | (s.state === 'sinking' ? 2 : 0) | (s.state === 'wreck' ? 4 : 0) | (s.plank?.state === 'laid' ? 8 : 0) | (s.plank?.state === 'fallen' ? 16 : 0) | (s.flooded ? 32 : 0) | (s.blow ? 64 : 0);
     return [s.id, r2(st.x), r2(st.z), r3(st.yaw), r2(st.u), r2(st.v), r3(st.r), r2(st.wheel), r2(s.sinkY || 0), flags, Math.round(s.hp), Math.round((s.flood || 0) * 100), r3(s.sinkRoll || 0), r3(s.sinkPitch || 0)];
 }
 
@@ -66,7 +69,7 @@ export function unpackShip(a) {
     return {
         id: a[0], x: a[1], z: a[2], yaw: a[3], u: a[4], v: a[5], r: a[6], wheel: a[7], sinkY: a[8],
         state: f & 4 ? 'wreck' : f & 2 ? 'sinking' : f & 1 ? 'moored' : 'free',
-        plank: f & 8 ? 'laid' : f & 16 ? 'fallen' : 'aboard', flooded: !!(f & 32),
+        plank: f & 8 ? 'laid' : f & 16 ? 'fallen' : 'aboard', flooded: !!(f & 32), blowing: !!(f & 64),
         hp: a[10], flood: a[11] / 100, sinkRoll: a[12] || 0, sinkPitch: a[13] || 0,
     };
 }
@@ -137,6 +140,7 @@ export class Ships {
         s.pose.set(st.x, WATER_LEVEL_Y + (st.heave || 0) - (s.sinkY || 0), st.z, st.yaw, (st.roll || 0) + (s.sinkRoll || 0), (st.pitch || 0) + (s.sinkPitch || 0));
         s.collider.setPose(s.pose);
         s.collider.flooded = s.flooded;
+        s.collider.gangwayOpen = s.plank?.state === 'laid';
     }
 
     wake(s) {
@@ -360,6 +364,7 @@ export class Ships {
         const g = this.game;
         if ((this._scanT -= dt) <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth && !this.calm) this._weather(dt);
+        this._blowing(dt);
         const t = g.seaTime ? g.seaTime() : performance.now() / 1000;
         // (its own vector: the effects below use _w for their sparks)
         const cam = g.camera?.getWorldPosition ? g.camera.getWorldPosition(_cam) : g.character.group.position;
@@ -413,6 +418,7 @@ export class Ships {
             onHit: (dmg) => this._grounded(s, dmg),
         };
         st.y0 = WATER_LEVEL_Y - (s.sinkY || 0);
+        this._applyBlow(s, dt);
         const before = s.lines.map((l) => l.state);
         stepShip(st, s.cls, env, dt);
         s.lines.forEach((l, i) => {
@@ -461,7 +467,9 @@ export class Ships {
         s.pose.dirToLocal(W.x, W.z, _l);
         const wx = _l.x, wz = _l.z;
         const w2 = wx * wx + wz * wz;
+        const blowing = this.auth ? !!s.blow : !!s.net?.blowing;
         for (const sl of s.sails) {
+            if (blowing && sl.open > 0.5 && sl.burnt < 1) sl.gust = Math.max(sl.gust, 0.9);
             const want = sl.burnt >= 1 ? sl.open : sl.target;
             if (sl.open < want) sl.open = Math.min(want, sl.open + UNFURL_RATE * dt);
             else if (sl.open > want) sl.open = Math.max(want, sl.open - UNFURL_RATE * dt);
@@ -541,10 +549,15 @@ export class Ships {
         const dyaw = angleDiff(s.pose.yaw, pyaw);
         const moved = px !== s.pose.x || py !== s.pose.y || pz !== s.pose.z || dyaw !== 0 || proll !== s.pose.roll || ppitch !== s.pose.pitch;
         if (!moved) return;
+        const prev = this._prevPose || (this._prevPose = new ShipPose());
+        prev.set(px, py, pz, pyaw, proll, ppitch);
         for (const r of this.riders.values()) {
             if (r.ship !== s) continue;
             const p = r.ent.pos();
             if (!p) continue;
+            // (somebody put elsewhere since — a teleport, a respawn: not pulled back)
+            prev.toWorld(r.l.x, r.l.y, r.l.z, _o);
+            if (Math.abs(_o.x - p.x) + Math.abs(_o.z - p.z) > 1.5 || Math.abs(_o.y - p.y) > 3) continue;
             s.pose.toWorld(r.l.x, r.l.y, r.l.z, _o);
             p.x = _o.x; p.y = _o.y; p.z = _o.z;
             if (dyaw) r.ent.turn(dyaw);
@@ -762,24 +775,59 @@ export class Ships {
                 if (furled && mine) g.hud.setVoice('🌬️ Паруса свёрнуты — ветру не во что дуть. Скажите «Анфёрл»', true);
                 continue;
             }
+            // the wind keeps blowing into the sails while its caster has mana (−1 a second), until «стоп»
+            const gain = (power > 1 ? WIND_MAXIMA : WIND_PLAIN) * Math.min(1, hitA / (0.5 * s.layout.sailArea));
             if (this.auth) {
-                const gain = (power > 1 ? 14 : 7) * Math.min(1, hitA / (0.5 * s.layout.sailArea));
-                const sw = s.st.spellWind;
-                sw.x += (dir.x / hl) * gain;
-                sw.z += (dir.z / hl) * gain;
-                const len = Math.hypot(sw.x, sw.z);
-                if (len > 16) { sw.x *= 16 / len; sw.z *= 16 / len; }
-                s.st.tau = power > 1 ? 45 : 25;
-                s.changed = true;
                 const by = mine ? g.localId : casterId;
+                s.blow = { by, power, gain, dx: dir.x / hl, dz: dir.z / hl, at: performance.now() };
+                s.st.tau = Infinity;
+                s.changed = true;
                 if (!this.loyalTo(s, by)) this.crew.provoke(s, by, '🏴 Вы дуете в паруса чужого корабля — матросы к бою!');
             }
             if (mine) {
+                this.blowing = { id: s.id, power, dx: dir.x / hl, dz: dir.z / hl, netT: 0 };
                 g.spellSucceeded?.(power > 1 ? 'WindMaxima' : 'Wind');
-                g.hud.setVoice(power > 1 ? '🌬️ Паруса наполнились! Корабль тяжёлый — разгоняется медленно. Ветер стихнет — повторите' : '🌬️ Ветер в парусах! Он скоро стихнет — повторите «Вайнд»', true);
+                g.hud.setVoice('🌬️ Ветер дует в паруса, пока есть мана (−1 в секунду). Корабль тяжёлый — разгоняется медленно. «Стоп» — перестать дуть', true);
             }
         }
         // (the wind on the crew: CreatureImpact blows them like any creature — Sailors.js shove)
+    }
+
+    /** My wind into a ship's sails: mana every second, the host told now and then; ends with the mana or «стоп». */
+    _blowing(dt) {
+        const g = this.game, b = this.blowing;
+        if (!b) return;
+        const s = this.list.get(b.id);
+        if (!s || !s.awake || g.isDeadLocal || g.combat?.dead || s.state === 'sinking' || s.state === 'wreck') { this.stopWind(); return; }
+        if (g.config.mode !== 'creative' && g.combat?.drain && g.combat.drain(BLOW_MANA * dt, dt) === false) {
+            this.stopWind();
+            g.hud.setVoice('🌬️ Мана кончилась — ветер в парусах стихает', true);
+            return;
+        }
+        if (this.auth) { if (s.blow) s.blow.at = performance.now(); return; }
+        if ((b.netT -= dt) <= 0) { b.netT = 1; g.sync?.net.send({ t: 'sblow', id: s.id, on: 1, p: b.power, d: [r3(b.dx), r3(b.dz)] }); }
+    }
+
+    /** «Стоп»: my wind into the sails stops (it dies down slowly). Returns true if it was blowing. */
+    stopWind() {
+        const b = this.blowing;
+        if (!b) return false;
+        this.blowing = null;
+        const s = this.list.get(b.id);
+        if (this.auth) { if (s) { s.blow = null; s.st.tau = 20; } } else this.game.sync?.net.send({ t: 'sblow', id: b.id, on: 0 });
+        return true;
+    }
+
+    /** (host) A ship's sails under a blowing spell: the wind there rises to it and holds. */
+    _applyBlow(s, dt) {
+        const b = s.blow;
+        if (!b) return;
+        if (performance.now() - b.at > 3000) { s.blow = null; s.st.tau = 20; return; } // (the caster went quiet)
+        const sw = s.st.spellWind;
+        const k = Math.min(1, dt / 6); // (the wind in the sails builds up over several seconds)
+        sw.x += (b.dx * b.gain - sw.x) * k;
+        sw.z += (b.dz * b.gain - sw.z) * k;
+        s.st.tau = Infinity;
     }
 
     /** (host) A natural breeze now and then; a storm blows hard. */
@@ -1194,6 +1242,7 @@ export class Ships {
     onLocalDeath() {
         this.helm.releaseAll();
         this.rigging.letGo();
+        this.stopWind();
         this.riders.delete('me');
         this.me = null;
     }
@@ -1241,6 +1290,14 @@ export class Ships {
             case 'screw': if (m.talk) { if (isHost) this.crew.remoteTalk(m); } else if (!isHost) this.crew.applyNet(m); return;
             case 'shelm': if (isHost) this.helm.applyRemote(m); return;
             case 'smoor': if (isHost) this.rigging.applyRemote(m); return;
+            case 'sblow': {
+                if (!isHost) return;
+                const s = this.list.get(m.id);
+                if (!s) return;
+                if (!m.on) { if (s.blow?.by === m.from) { s.blow = null; s.st.tau = 20; } return; }
+                if (s.blow?.by === m.from) { s.blow.at = performance.now(); if (Array.isArray(m.d)) { s.blow.dx = +m.d[0] || 0; s.blow.dz = +m.d[1] || 0; } }
+                return;
+            }
             case 'sunf': {
                 if (!isHost) return;
                 const s = this.list.get(m.id);

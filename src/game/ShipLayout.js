@@ -106,6 +106,9 @@ function makeLayout(C) {
         hatch = { z0: hz, z1: hz + run, half: 1.4 };
         ramps.push({ id: 'hatch', ax: 0, ay: D, az: hz, bx: 0, by: lower.y, bz: hz + run, half: 1.4 });
         main.holes.push({ x0: -1.6, x1: 1.6, z0: hz + 0.6, z1: hz + run + 0.3 });
+        // the hatch's coaming round the hole (open only where the stair comes up)
+        for (const sd of [-1, 1]) solids.push({ x0: sd > 0 ? 1.6 : -1.85, x1: sd > 0 ? 1.85 : -1.6, y0: D, y1: D + 0.9, z0: hz + 0.6, z1: hz + run + 0.55, kind: 'coaming' });
+        solids.push({ x0: -1.85, x1: 1.85, y0: D, y1: D + 0.9, z0: hz + run + 0.3, z1: hz + run + 0.55, kind: 'coaming' });
     }
 
     // -------------------------------------------------- bulkheads and rails
@@ -153,6 +156,19 @@ function makeLayout(C) {
             solids.push({ x0: r.ax - r.half, x1: r.ax + r.half, y0: lo, y1: top, z0: Math.min(za, zb), z1: Math.max(za, zb), kind: 'stair' });
         }
         void hi;
+    }
+    // handrails on the open side of every stair (both sides down the hatch): nobody falls off a stair by a slip
+    for (const r of ramps) {
+        const sides = r.id === 'hatch' ? [-1, 1] : [r.ax > 0 ? -1 : 1];
+        for (const sd of sides) {
+            const x = r.ax + sd * (r.half + 0.08);
+            for (let k = 0; k < 4; k++) {
+                const t0 = k / 4, t1 = (k + 1) / 4;
+                const ya = r.ay + (r.by - r.ay) * t0, yb = r.ay + (r.by - r.ay) * t1;
+                const za = r.az + (r.bz - r.az) * t0, zb = r.az + (r.bz - r.az) * t1;
+                solids.push({ x0: x - 0.08, x1: x + 0.08, y0: Math.min(ya, yb) - 0.3, y1: Math.max(ya, yb) + 1.2, z0: Math.min(za, zb), z1: Math.max(za, zb), kind: 'handrail' });
+            }
+        }
     }
 
     // -------------------------------------------------------------- masts

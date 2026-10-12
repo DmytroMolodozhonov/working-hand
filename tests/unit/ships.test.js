@@ -133,12 +133,12 @@ test('the wheel by hand: angles, unwrap, steering speed, the lock, rim distance'
     assert.ok(Math.abs(polar(1, 0) - Math.PI / 2) < 1e-12);
     assert.ok(Math.abs(unwrap(3.1, -3.1) - (2 * Math.PI - 3.1)) < 1e-9);
     let w = 0;
-    for (let i = 0; i < 10; i++) w = steer(w, [{ a0: 0, w0: 0, a: 1 }], 0.1, 0);
+    for (let i = 0; i < 10; i++) w = steer(w, [{ a0: 0, w0: 0, a: 0.5 }], 0.1, 0);
     assert.ok(Math.abs(w - 1) < 1e-9);
     const fast = steer(0, [{ a0: 0, w0: 0, a: 5 }], 1, 8);
-    assert.ok(fast <= 0.8 + 1e-9);
+    assert.ok(fast <= 2.4 + 1e-9);
     assert.ok(steer(0, [{ a0: 0, w0: 0, a: 100 }], 100, 0) <= HELM.LOCK + 1e-9);
-    assert.ok(Math.abs(steer(0, [{ a0: 0, w0: 0, a: 0.4 }, { a0: 0, w0: 0, a: 0.2 }], 10, 0) - 0.3) < 1e-9);
+    assert.ok(Math.abs(steer(0, [{ a0: 0, w0: 0, a: 0.4 }, { a0: 0, w0: 0, a: 0.2 }], 10, 0) - 0.6) < 1e-9);
     assert.ok(Math.abs(steer(1, [], 1, 4)) < 1);
     assert.equal(rimDist(0, 1.45, 0, 1.45, 1.85), 0);
     assert.ok(Math.abs(rimDist(0, 1.45, 0.3, 1.45, 1.85) - 0.3) < 1e-9);

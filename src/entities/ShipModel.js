@@ -84,34 +84,139 @@ class Batch {
         g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
         g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
         g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+        // texture coordinates by the face's direction: planks run along the ship (z) on the sides,
+        // along the ship on the decks, up the masts (a box projection, 1 texture = WOOD_M metres)
+        const P = this.pos, N = this.nor, uv = new Float32Array((P.length / 3) * 2);
+        for (let i = 0, j = 0; i < P.length; i += 3, j += 2) {
+            const ax = Math.abs(N[i]), ay = Math.abs(N[i + 1]), az = Math.abs(N[i + 2]);
+            let u, v;
+            if (ay >= ax && ay >= az) { u = P[i + 2]; v = P[i]; } // decks, tops: along z, across x
+            else if (ax >= az) { u = P[i + 2]; v = P[i + 1]; } // the sides: along z, up y
+            else { u = P[i]; v = P[i + 1]; } // ends, bulkheads: across x, up y
+            uv[j] = u / WOOD_M; uv[j + 1] = v / WOOD_M;
+        }
+        g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
         g.computeBoundingSphere();
         return g;
     }
 }
 
+const WOOD_M = 4; // metres of hull per wood texture
+
+/** Seeded noise for the textures (the same look every time). */
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }; }
+
+/**
+ * Weathered planking (grey-scale, multiplied into the vertex colours): strakes 0.45 m wide with
+ * tarred seams, butt joints with iron nail heads, wavy grain, knots, darker stains and paler wear.
+ * planksAcross: deck planks run along u (seams across v).
+ */
+function woodCanvas(size = 512, seed = 7, { strakes = 9, nails = true, light = 222 } = {}) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    const x = cv.getContext('2d');
+    const r = rng(seed);
+    x.fillStyle = `rgb(${light},${light},${light})`;
+    x.fillRect(0, 0, size, size);
+    const h = size / strakes;
+    for (let i = 0; i < strakes; i++) {
+        const y0 = i * h;
+        // each plank a little different; butt joints at random places along it
+        let u = -r() * size;
+        while (u < size) {
+            const len = size * (0.45 + r() * 0.5);
+            const shade = light - 18 + Math.floor(r() * 30);
+            x.fillStyle = `rgb(${shade},${shade - 2},${shade - 6})`;
+            x.fillRect(u, y0, len, h);
+            // grain: long wavy lines
+            for (let k = 0; k < 9; k++) {
+                const gy = y0 + 2 + r() * (h - 4), amp = 0.6 + r() * 1.8, ph = r() * 6;
+                x.strokeStyle = `rgba(60,40,20,${0.10 + r() * 0.14})`;
+                x.lineWidth = 0.6 + r() * 0.8;
+                x.beginPath();
+                for (let t = 0; t <= len; t += 8) x.lineTo(u + t, gy + Math.sin(t / (18 + k * 3) + ph) * amp);
+                x.stroke();
+            }
+            // a knot now and then
+            if (r() < 0.35) {
+                const kx = u + r() * len, ky = y0 + h * (0.3 + r() * 0.4);
+                const g = x.createRadialGradient(kx, ky, 0.5, kx, ky, h * 0.22);
+                g.addColorStop(0, 'rgba(50,30,15,0.65)'); g.addColorStop(1, 'rgba(50,30,15,0)');
+                x.fillStyle = g; x.beginPath(); x.ellipse(kx, ky, h * 0.32, h * 0.18, 0, 0, Math.PI * 2); x.fill();
+            }
+            // the butt joint and its nails
+            x.fillStyle = 'rgba(30,20,12,0.85)';
+            x.fillRect(u + len - 1, y0, 2, h);
+            if (nails) {
+                x.fillStyle = 'rgba(25,25,28,0.9)';
+                for (const ny of [0.3, 0.7]) { x.beginPath(); x.arc(u + len - 6, y0 + h * ny, 1.6, 0, Math.PI * 2); x.fill(); x.beginPath(); x.arc(u + len + 6, y0 + h * ny, 1.6, 0, Math.PI * 2); x.fill(); }
+            }
+            u += len;
+        }
+        // the tarred seam between strakes
+        x.fillStyle = 'rgba(20,14,8,0.9)';
+        x.fillRect(0, y0, size, 2);
+        x.fillStyle = 'rgba(255,255,255,0.08)';
+        x.fillRect(0, y0 + 2, size, 1);
+    }
+    // weathering: stains and paler worn patches
+    for (let k = 0; k < 40; k++) {
+        const wx = r() * size, wy = r() * size, wr = 8 + r() * 40;
+        const g = x.createRadialGradient(wx, wy, 0, wx, wy, wr);
+        const dark = r() < 0.6;
+        g.addColorStop(0, dark ? 'rgba(40,35,25,0.12)' : 'rgba(255,250,235,0.10)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = g; x.fillRect(wx - wr, wy - wr, wr * 2, wr * 2);
+    }
+    // fine noise
+    const img = x.getImageData(0, 0, size, size), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const n = (r() - 0.5) * 14; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+    x.putImageData(img, 0, 0);
+    return cv;
+}
+
+/** Sailcloth: vertical cloths sewn together, a little dirty towards the foot. */
+function sailCanvas() {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 256;
+    const x = cv.getContext('2d');
+    const r = rng(11);
+    x.fillStyle = '#f4efe2'; x.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 8; i++) {
+        const s = 236 + Math.floor(r() * 16);
+        x.fillStyle = `rgb(${s},${s - 4},${s - 14})`;
+        x.fillRect(i * 32, 0, 32, 256);
+        x.fillStyle = 'rgba(120,100,70,0.45)'; x.fillRect(i * 32, 0, 1.5, 256); // the seam
+        x.fillStyle = 'rgba(120,100,70,0.18)'; x.fillRect(i * 32 + 4, 0, 1, 256);
+    }
+    const g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(90,80,60,0.18)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    // reef points: a row of little ties
+    x.fillStyle = 'rgba(110,90,60,0.6)';
+    for (let i = 4; i < 256; i += 12) x.fillRect(i, 40, 1.5, 6);
+    return cv;
+}
+
+function canvasTex(cv) {
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 4;
+    return t;
+}
+
 let SHARED = null;
 function shared() {
     if (SHARED) return SHARED;
-    // plank deck texture
-    const cv = typeof document !== 'undefined' ? document.createElement('canvas') : null;
-    let deckTex = null;
-    if (cv) {
-        cv.width = 64; cv.height = 256;
-        const x = cv.getContext('2d');
-        x.fillStyle = '#b48a55'; x.fillRect(0, 0, 64, 256);
-        for (let i = 0; i < 8; i++) {
-            x.fillStyle = i % 2 ? '#a77f4c' : '#bc935d';
-            x.fillRect(i * 8, 0, 8, 256);
-            x.fillStyle = '#6b4a2a'; x.fillRect(i * 8, 0, 1, 256);
-            x.fillRect(i * 8, ((i * 97) % 256), 8, 1);
-        }
-        deckTex = new THREE.CanvasTexture(cv);
-        deckTex.wrapS = deckTex.wrapT = THREE.RepeatWrapping;
-    }
+    const dom = typeof document !== 'undefined';
+    const hullTex = dom ? canvasTex(woodCanvas(512, 7)) : null;
+    const deckTex = dom ? canvasTex(woodCanvas(512, 19, { strakes: 9, light: 236 })) : null;
+    const sailTex = dom ? canvasTex(sailCanvas()) : null;
+    // (matte: Lambert, no shine — wood and cloth, not plastic)
     SHARED = {
-        solid: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }),
-        deck: new THREE.MeshLambertMaterial({ map: deckTex, color: deckTex ? 0xffffff : 0xb48a55, side: THREE.DoubleSide }),
-        sail: new THREE.MeshLambertMaterial({ color: 0xf1e8d2, side: THREE.DoubleSide, vertexColors: true }),
+        solid: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, map: hullTex }),
+        deck: new THREE.MeshLambertMaterial({ map: deckTex, color: 0xc49a66, side: THREE.DoubleSide }),
+        sail: new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, vertexColors: true, map: sailTex }),
         rope: new THREE.LineBasicMaterial({ color: 0x3a2a1a }),
         glass: new THREE.MeshBasicMaterial({ color: 0x2a2416 }),
         lit: new THREE.MeshBasicMaterial({ color: 0xffc860 }),
@@ -149,6 +254,9 @@ export class SailMesh {
         g.setIndex(idx);
         g.setAttribute('position', new THREE.BufferAttribute(this.posArr, 3));
         g.setAttribute('color', new THREE.BufferAttribute(this.colArr, 3));
+        const uv = new Float32Array(n * 2);
+        for (let j = 0; j <= this.rows; j++) for (let i = 0; i <= this.cols; i++) { const k = (j * (this.cols + 1) + i) * 2; uv[k] = (i / this.cols) * spec.w / 12; uv[k + 1] = 1 - j / this.rows; }
+        g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
         this.geometry = g;
         this.mesh = new THREE.Mesh(g, shared().sail);
         this.mesh.castShadow = true;
@@ -384,12 +492,7 @@ export class ShipModel {
                 hull.box(-w, w, f.y - 0.4, f.y, zEdge - 0.05, zEdge + 0.05, DARK);
             }
         }
-        const dg = deckGeo.build();
-        // uv: planks along z
-        const pa = dg.attributes.position;
-        const uv = new Float32Array(pa.count * 2);
-        for (let i = 0; i < pa.count; i++) { uv[i * 2] = pa.getX(i) / 4; uv[i * 2 + 1] = pa.getZ(i) / 16; }
-        dg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        const dg = deckGeo.build(); // (its planks run along the ship: Batch.build's texture coordinates)
         const deck = new THREE.Mesh(dg, S.deck);
         deck.receiveShadow = true;
         this.group.add(deck);
@@ -428,6 +531,20 @@ export class ShipModel {
                 const za = r.az + (r.bz - r.az) * t0, zb = r.az + (r.bz - r.az) * t1;
                 near.box(r.ax - r.half, r.ax + r.half, y - 0.12, y, Math.min(za, zb), Math.max(za, zb), 0x9c6c3c);
             }
+            // the handrail on the open side(s): posts and a rail along the slope
+            {
+                const len = Math.hypot(r.bz - r.az, r.by - r.ay);
+                const tilt = -Math.atan2(r.by - r.ay, r.bz - r.az);
+                for (const sd of (r.id === 'hatch' ? [-1, 1] : [r.ax > 0 ? -1 : 1])) {
+                    const x = r.ax + sd * (r.half + 0.08);
+                    near.boxAt(x, (r.ay + r.by) / 2 + 1.15, (r.az + r.bz) / 2, 0.14, 0.14, len, 0x5a3a20, tilt);
+                    const nPost = Math.max(2, Math.round(len / 1.6));
+                    for (let k = 0; k <= nPost; k++) {
+                        const t = k / nPost;
+                        near.box(x - 0.06, x + 0.06, r.ay + (r.by - r.ay) * t, r.ay + (r.by - r.ay) * t + 1.15, r.az + (r.bz - r.az) * t - 0.06, r.az + (r.bz - r.az) * t + 0.06, DARK);
+                    }
+                }
+            }
             for (const s of [-1, 1]) {
                 const len = Math.hypot(r.bz - r.az, r.by - r.ay);
                 near.boxAt(r.ax + s * (r.half + 0.08), (r.ay + r.by) / 2 + 0.4, (r.az + r.bz) / 2, 0.16, 0.5, len, DARK, -Math.atan2(r.by - r.ay, r.bz - r.az) * Math.sign(r.bz - r.az) * Math.sign(r.bz - r.az));
@@ -436,8 +553,7 @@ export class ShipModel {
         // the hatch coaming
         if (L.hatch) {
             const h = L.floors[0].holes[0];
-            near.box(h.x0 - 0.2, h.x0, D, D + 0.4, h.z0, h.z1, DARK);
-            near.box(h.x1, h.x1 + 0.2, D, D + 0.4, h.z0, h.z1, DARK);
+            for (const b of L.solids) if (b.kind === 'coaming') near.box(b.x0, b.x1, b.y0, b.y1, b.z0, b.z1, DARK);
         }
         // hammocks below
         for (const n of L.nodes) {
