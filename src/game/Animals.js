@@ -363,6 +363,15 @@ export class Animals {
         }
     }
 
+    /** (host) A great fire (the Hellfire) at (x, z): the animal runs from it, the herd with it. */
+    fear(a, x, z) {
+        if (!a || a.dead || a.servantOf != null || a.rider) return;
+        a.fireFrom = (a.fireFrom || new THREE.Vector3()).set(x, a.group.position.y, z);
+        a.fireUntil = performance.now() + 3000;
+        if (a.state !== 'flee') { a.state = 'flee'; a.stateT = Math.max(a.stateT || 0, 4); }
+        if (a.type === 'pig') a.scareFrom = { x, z };
+    }
+
     /** Ray spells (Тандервейв throws them back, they lie stunned for a moment). */
     hitRay(o, d, len, width, dmg = 3, by = null, name = null) {
         for (const a of this.list) {
@@ -792,7 +801,7 @@ export class Animals {
         } else if (a.state === 'attack' || a.state === 'flee') {
             a.stateT -= dt;
             a.pose = POSE.stand;
-            const tp = this._playerPos(a.attacker);
+            const tp = a.fireUntil > performance.now() ? a.fireFrom : this._playerPos(a.attacker); // (a great fire: away from it)
             if (!tp || a.stateT <= 0) { a.state = 'graze'; a.target.copy(p); this._setIdle(a, 'look'); }
             else if (a.state === 'flee') {
                 // away from the one who frightened it, together with the herd mates that run too

@@ -262,3 +262,51 @@ test('Hellfire: the real hand going round — the ring grows turn after turn, ma
     assert.ok(sizes[sizes.length - 1] > sizes[1] + 4, `metres wider: ${sizes.map((x) => x.toFixed(1)).join(' → ')}`);
     assert.ok(Math.abs((500 - 80 - 2 * 9) - c.fatigue) < 0.2, `2 a second while held: ${c.fatigue}`);
 });
+
+test('Hellfire on castle knights: a raised shield and armour only slow the burn — the hearts still go down fast', async () => {
+    const { CastleLife } = await import('../../src/game/CastleLife.js');
+    const cl = Object.create(CastleLife.prototype);
+    const noop = () => {};
+    Object.assign(cl, { game: { authority: true, fx: { spark: noop } }, _flash: noop, _die: noop, _say: noop, _offence: noop });
+    const knight = () => ({ id: 1, role: 'knight', hp: 20, armor: 50, x: 0, z: 0, yaw: 0, foe: 'p1', mode: 'block', model: { shield: {} }, damageCooldown: 0 });
+    // (yaw 0 faces −z: the fire is in front of him, at z = −3; the burn comes from there: dir +z)
+    const dir = new THREE.Vector3(0, 0, 1);
+    const k = knight();
+    for (let i = 0; i < 16; i++) cl.hit(k, HELLFIRE.CREATURE_DMG, dir, 'p1', { spell: true, magic: true, fire: true }); // (4 s in the fire)
+    assert.ok(k.hp <= 0, `a shielded knight in armour burns to death in ~4 s: ${k.hp} HP, armour ${k.armor}`);
+    const old = knight();
+    for (let i = 0; i < 16; i++) cl.hit(old, HELLFIRE.CREATURE_DMG, dir, 'p1', { spell: true, magic: true });
+    assert.ok(old.hp > 15, '(an ordinary blow still mostly stops on the shield and the armour)');
+    assert.ok(k.shieldHeat > 2.5, 'the shield got hot');
+});
+
+test('Hellfire: its heat burns creatures near it (not only in it), they fear it, its breath pushes them back', () => {
+    const g = fakeGame('creative');
+    const hits = [], fears = [], pushes = [];
+    const v = { id: 7 };
+    g.duel = {
+        _bodies: () => [{ kind: 'v', id: 7, a: new THREE.Vector3(0, 0, -11), b: new THREE.Vector3(0, 2, -11), r: 0.4 }],
+        _creature: () => v,
+    };
+    g.castleLife = { hit: (cr, dmg, dir, by, opts) => hits.push({ dmg, opts }), fear: (cr, x, z, heat) => fears.push(heat) };
+    g.creatureImpact = { apply: (c, o) => pushes.push(o) };
+    g.hellfire.cast(true);
+    const s = g.hellfire.state;
+    run(g, 0.1);
+    // the blaze a little way from the knight: he is outside it, but in its heat
+    s.c.set(0, 1, -6); s.R = 3; s.k = 0;
+    hits.length = 0;
+    g.hellfire._burn('me', s, g.character.group.position);
+    assert.equal(hits.length, 1, 'the heat reaches him');
+    assert.ok(hits[0].dmg > 0 && hits[0].dmg < HELLFIRE.CREATURE_DMG && hits[0].opts.fire, `less than in it: ${hits[0].dmg}`);
+    assert.ok(fears.length >= 1, 'he fears the fire');
+    // in it: the full burn and a push away
+    s.c.set(0, 1, -10); hits.length = 0; s.pushT = 0;
+    g.hellfire._burn('me', s, g.character.group.position);
+    assert.equal(hits[0].dmg, HELLFIRE.CREATURE_DMG);
+    assert.ok(pushes.length >= 1 && pushes[pushes.length - 1].v.z < 0, 'thrown back, away from the fire');
+    // far away: nothing
+    s.c.set(0, 1, 40); hits.length = 0; fears.length = 0;
+    g.hellfire._burn('me', s, g.character.group.position);
+    assert.equal(hits.length + fears.length, 0);
+});

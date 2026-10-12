@@ -667,6 +667,8 @@ export class CastleLife {
             return;
         }
         if (v.climb) { this._climbStep(v, dt); return; }
+        // a great fire close by (the Hellfire): back off from it behind the shield, or run (fear())
+        if (v.fireT > 0 && this._fireStep(v, dt)) return;
         // «Брейнрот»: a servant follows its master and fights for them
         if (v.servantOf != null && this._serve(v, dt)) return;
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
@@ -1648,13 +1650,19 @@ export class CastleLife {
         // or a spell from the front: little gets through. «Авада Кедавра» passes any shield.
         if (dir && !opts.pierce && v.foe && this._shieldUp(v)) {
             if (dir.x * -Math.sin(v.yaw) + dir.z * -Math.cos(v.yaw) < -0.35) {
-                dmg *= 0.25;
+                dmg *= opts.fire ? 0.5 : 0.25; // (fire goes round a shield: it only halves it)
+                if (opts.fire) v.shieldHeat = (v.shieldHeat || 0) + 0.25; // (and the shield gets hot)
                 for (let i = 0; i < 5; i++) this.game.fx.spark(_v.set(v.x - Math.sin(v.yaw) * 0.8, v.y + 2.6, v.z - Math.cos(v.yaw) * 0.8), 0xffe9a0, 0.08, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
             }
         }
         // armour takes most of the blow: the hearts go down many times slower
         if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
-        else if (v.armor > 0) {
+        else if (v.armor > 0 && opts.fire) {
+            // fire heats the armour through: it takes half, and burns less — but the hearts still go down
+            const a = Math.min(v.armor, dmg * 0.5);
+            v.armor -= a;
+            v.hp -= a * 0.5 + (dmg - a);
+        } else if (v.armor > 0) {
             const a = Math.min(v.armor, dmg);
             v.armor -= a;
             v.hp -= a * 0.2 + (dmg - a);
@@ -1733,6 +1741,42 @@ export class CastleLife {
     _fights(v) { return v.role === 'knight' || v.role === 'king' || (!!v.wizard && WizardFight.fights(v)); }
 
     /** A shield up: a knight's in the shield wall / holding a place, a wizard's hand shield. */
+    /**
+     * (host) A great fire (the Hellfire) at (x, z), `heat` 0…1 how close: people fear it. The brave —
+     * knights, the king, wizards — back off step by step facing it behind their shields (some panic and
+     * run; a shield gone hot in it makes them drop back); everyone else runs from it.
+     */
+    fear(v, x, z, heat = 0, dt = 0.25) {
+        if (!v || v.dead || v.lev || v.servantOf != null) return;
+        const brave = v.role === 'knight' || v.role === 'king' || !!v.wizard;
+        if (!(v.fireT > 0)) {
+            v.firePanic = !brave || Math.random() < 0.15 + 0.35 * heat;
+            if (v.firePanic) this._say(v, pick(SHOUT.help));
+        }
+        if (brave && !v.firePanic && (v.shieldHeat || 0) > 2.5) { v.firePanic = true; v.shieldHeat = 0; } // (the shield too hot to hold)
+        v.fireAt = { x, z };
+        v.fireT = Math.max(v.fireT || 0, v.firePanic ? 3 : 0.7);
+    }
+
+    /** One step away from the fire (see fear()). */
+    _fireStep(v, dt) {
+        v.fireT -= dt;
+        const f = v.fireAt;
+        if (!f) return false;
+        const dx = v.x - f.x, dz = v.z - f.z, d = Math.hypot(dx, dz) || 1;
+        if (v.firePanic) {
+            this._steer(v, v.x + dx / d * 6, v.z + dz / d * 6, RUN, dt);
+            v.mode = v.speed > 0 ? 'flee' : 'idle';
+        } else {
+            this._steer(v, v.x + dx / d * 3, v.z + dz / d * 3, WALK * 0.6, dt);
+            v.yaw = Math.atan2(dx, dz); // (facing the fire, the shield to it)
+            v.mode = v.model?.shield ? 'block' : v.speed > 0 ? 'walk' : 'idle';
+        }
+        this._ground(v);
+        if (v.fireT <= 0) { v.fireAt = null; v.firePanic = false; v.shieldHeat = Math.max(0, (v.shieldHeat || 0) - 1); }
+        return true;
+    }
+
     _shieldUp(v) { return (!!v.model.shield && (v.mode === 'block' || v.tac?.role === 'shield')) || (!!v.wizard && !!(v.fx & FX.SHIELD)); }
 
     /**

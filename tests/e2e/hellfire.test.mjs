@@ -120,3 +120,54 @@ test('Hellfire (free world): a mana maximum under 100 cannot cast it; turned ont
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('Hellfire on castle knights (free world): those in it burn down even behind shields and armour, the heat burns the ones near, they back off from it', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { viewport: { width: 480, height: 300 } });
+    await startFromMenu(page, 'freeworld');
+    await waitHudVisible(page);
+    await feed(page, still, 10, 33);
+    await page.evaluate(() => {
+        const g = window.__zns.game;
+        const c = g.world.terrain.data.castles.near(0, 0, 2500).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+        g.character.group.position.set(c.gate.x, c.gate.y + 2.2, c.gate.z);
+        g.world.terrain.flushAround(c.gate.x, c.gate.z);
+    });
+    await feed(page, still, 60, 33);
+    const r0 = await page.evaluate(() => {
+        const g = window.__zns.game, L = g.castleLife, c = g.combat;
+        const me = g.character.group.position;
+        const knights = [...L.byId.values()].filter((v) => !v.dead && v.role === 'knight').sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z));
+        const k = knights[0];
+        if (!k) return null;
+        // the castle is at war with me: the knights come with their shields
+        k.cs.hostile.set(g.localId, Date.now() + 120000);
+        for (const v of knights.slice(0, 6)) { v.foe = g.localId; v.mode = 'block'; }
+        g.items.takeIntoHand({ kind: 'wand', uid: 'hf-k', type: 0 }, 'right');
+        c.maxFatigue = 400; c.fatigue = 400; c.maxHp = 1000; c.hp = 1000; // (the test watches the knights, not me)
+        g.castLocalSpell('лет зе хеллфаер кам', true);
+        // (the wand aimed at that knight all along — a synthetic camera can't point at one man)
+        const H = g.hellfire;
+        H._aim = (o, d, reach, R, out) => out.set(k.x, k.y + 1, k.z);
+        H.state.c.set(k.x, k.y + 1, k.z);
+        H.state.t = 4; // (a big fire already)
+        window.__k = k;
+        const near = knights.slice(1).filter((v) => Math.hypot(v.x - k.x, v.z - k.z) < 9);
+        window.__near = near.map((v) => ({ v, x: v.x, z: v.z, hp: v.hp, armor: v.armor }));
+        return { id: k.id, hp: k.hp, armor: k.armor, shield: !!k.model?.shield, near: near.length };
+    });
+    assert.ok(r0, 'castle knights');
+    await feed(page, still, 120, 33);
+    const r = await page.evaluate(() => {
+        const g = window.__zns.game, H = g.hellfire, k = window.__k;
+        const notes = H.log.filter((e) => e.kind === 'v');
+        const near = window.__near.map((n) => ({ moved: Math.hypot(n.v.x - n.x, n.v.z - n.z), lost: (n.hp - n.v.hp) + (n.armor - n.v.armor), dead: n.v.dead, fire: n.v.fireT > 0 || !!n.v.firePanic }));
+        return { dead: k.dead, hp: k.hp, armor: k.armor, burns: notes.filter((e) => e.ev === 'burn' && e.id === k.id).length, heats: notes.filter((e) => e.ev === 'heat').length, near, t: H.state?.t };
+    });
+    assert.ok(r.dead || r.hp < r0.hp - 10, `the knight in the fire burns down, shield and armour or not: ${JSON.stringify(r0)} → ${JSON.stringify(r)}`);
+    if (r0.near) {
+        assert.ok(r.heats > 0 || r.near.some((n) => n.lost > 0), `the heat burns the knights near it: ${JSON.stringify(r.near)}`);
+        assert.ok(r.near.some((n) => n.moved > 1 || n.dead), `they back off from the fire: ${JSON.stringify(r.near)}`);
+    }
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

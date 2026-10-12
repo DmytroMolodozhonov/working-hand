@@ -67,10 +67,20 @@ export const HELLFIRE = {
     TURN_TALL: 0.25, // …and this much taller
     TURNS_MAX: 12, // (it grows for this many turns: a ring ~20 m wide)
     TICK: 0.25, // s between burns
+    HEAT_R: 2.5, // m beyond the fire's edge its heat still burns (+ HEAT_PER_R × the blaze's radius)…
+    HEAT_PER_R: 0.6,
+    HEAT_DMG: 2, // …this much a tick right at the edge, less further out (through shields and armour too)
+    FEAR_R: 6, // m beyond the heat: people and animals already back off from such a fire
+    PUSH: 3, // m/s: the fire's breath throws bodies back from it (every PUSH_EVERY s)…
+    SURGE_PUSH: 9, // …a surge (the blaze swung fast, the ring spreading out) throws hard, off the feet
+    SURGE_SPEED: 6, // m/s of the blaze that make a surge
+    PUSH_EVERY: 0.5,
     CREATURE_DMG: 4, // a burn (a tick) to a creature
     PLAYER_TICK: 0.5, // s between burns of a player
     PLAYER_DMG: 2, // HP a burn (4 HP a second: a 20-HP wizard lasts 5 s in it)
     SHIELD: 0.5, // what a shield lets through
+    PLAYER_HEAT_R: 1.5, // m from the fire's edge its heat burns a player…
+    PLAYER_HEAT_DMG: 1, // …1 HP a second (a shield: half)
     QUENCH: 2.2, // m a second of the blaze's radius lost in water
     MAX_LIFE: 90, // s at most (the mana runs out much sooner in the free world)
     STOP_COST: 50, // mana «стоп» takes to put it out (without it: it burns on until the mana runs out)
@@ -383,6 +393,7 @@ export class Hellfire {
         const step = HELLFIRE.SPEED * dt;
         if (_a.length() > step) _a.setLength(step);
         s.c.add(_a);
+        (s.vel || (s.vel = new THREE.Vector3())).copy(_a).divideScalar(dt); // (a fast swing of the wand: a surge)
         // the hand going round: the fire is drawn into a ring round the caster
         const body = ch.group.position;
         const hand = ch.getHandWorldPosition(side, _b).sub(body);
@@ -398,7 +409,7 @@ export class Hellfire {
         if (s.ringT > 0 && s.k > 0.3) s.turns += this.meter.last;
         else if (s.k <= 0) s.turns = 0; // (back in the wand's blaze: a new ring starts small)
         const size = ringSize(s.R, s.turns);
-        if (size.turns > (s.shownTurns || 0)) { this._note({ ev: 'grow', turns: size.turns, rr: r2(size.rr) }); this.game.fx && (this.game.fx.shake = Math.max(this.game.fx.shake || 0, 0.3)); }
+        if (size.turns > (s.shownTurns || 0)) { s.surgeT = 0.6; this._note({ ev: 'grow', turns: size.turns, rr: r2(size.rr) }); this.game.fx && (this.game.fx.shake = Math.max(this.game.fx.shake || 0, 0.3)); }
         s.shownTurns = size.turns;
         const target = Math.max(1.2, rate * TAU * 1.15);
         s.spin += (target - s.spin) * Math.min(1, dt * 2.5);
@@ -528,41 +539,72 @@ export class Hellfire {
         if (blaze) { g.books?.hitAt?.(f.c, f.R, by, 'fire'); g.houses?.hitAt?.(f.c, f.R * 0.5); }
         // a house's sphere of protection holds the fire out — and wears down (HouseWards.js)
         if (blaze) g.wards?.struck?.(f.c, f.R, HELLFIRE.NAME, by); // (held on it ~7 s: burnt through)
-        // creatures of every kind (players: every computer burns its own — _burnMe)
+        // creatures of every kind (players: every computer burns its own — _burnMe): in the fire they
+        // burn hard; near it the heat burns them too (through a shield, through armour); they fear it
+        // — the brave back off behind their shields step by step, the rest run; its surge throws them back
         const bodies = g.duel?._bodies?.(null) || [];
         const auth = !!g.authority;
         const D = HELLFIRE.CREATURE_DMG;
+        const W = f.rw || HELLFIRE.RING_W;
+        const heatR = HELLFIRE.HEAT_R + f.R * HELLFIRE.HEAT_PER_R;
+        const fear = heatR + HELLFIRE.FEAR_R;
+        f.pushT = (f.pushT || 0) - HELLFIRE.TICK;
+        const pushNow = f.pushT <= 0;
+        if (pushNow) f.pushT = HELLFIRE.PUSH_EVERY;
+        const surge = (f.vel ? Math.hypot(f.vel.x, f.vel.z) : 0) > HELLFIRE.SURGE_SPEED || f.surgeT > 0;
         for (const b of bodies) {
             if (b.kind === 'p' || b.kind === 'b') continue;
             const mid = _c.copy(b.a).add(b.b).multiplyScalar(0.5);
-            let inside = false;
-            if (blaze && (segDist(f.c, b.a, b.b) < f.R * 0.95 + b.r || inBlaze(f.c, f.R, mid, b.r))) inside = true;
-            if (!inside && ring && inRing(body, f.rr, mid, b.r, f.rw, f.rh)) inside = true;
-            if (!inside) continue;
+            // how far the body is from the fire's edge (≤ 0: in it), and where the fire is for it
+            let gap = Infinity, fx = 0, fz = 0;
+            if (blaze) {
+                const d = Math.min(segDist(f.c, b.a, b.b), mid.distanceTo(f.c)) - f.R - b.r;
+                if (d < gap) { gap = d; fx = f.c.x; fz = f.c.z; }
+            }
+            if (ring) {
+                const ox = mid.x - body.x, oz = mid.z - body.z, L = Math.hypot(ox, oz) || 1;
+                const d = Math.abs(L - f.rr) - W / 2 - b.r;
+                if (d < gap && mid.y > body.y - 3 && mid.y < body.y + (f.rh || HELLFIRE.RING_H) + 1) { gap = d; fx = body.x + ox / L * f.rr; fz = body.z + oz / L * f.rr; }
+            }
+            if (!(gap < fear)) continue;
             if (g.wards?.shields(blaze ? f.c : body, mid)) continue; // (in a protected house)
-            hit = true;
+            const inside = gap <= 0;
+            const heat = inside ? 1 : Math.max(0, 1 - gap / heatR);
+            if (inside) hit = true;
             if (!auth) continue; // (the host decides)
-            const from = blaze && inBlaze(f.c, f.R, mid, b.r) ? f.c : body;
-            const dir = new THREE.Vector3(mid.x - from.x, 0, mid.z - from.z);
+            const dir = new THREE.Vector3(mid.x - fx, 0, mid.z - fz);
             if (dir.lengthSq() < 1e-4) dir.set(1, 0, 0);
             dir.normalize();
-            if (b.kind === 'z') {
-                const z = g.zombieById?.get(b.id);
-                if (z && !z.isDead) { if (z.isFrozen) z.unfreeze?.(); z.damageCooldown = 0; g.damageZombie(z, D, false, dir, by); }
-            } else if (b.kind === 's') {
-                const sp = g.spiders?.byId?.(b.id);
-                if (sp) g.spiders.hit(sp, D * 2, HELLFIRE.NAME, by);
-            } else {
-                const cr = g.duel?._creature?.(b.kind, b.id);
-                if (!cr) continue;
-                if (b.kind === 'a') { cr.damageCooldown = 0; g.animals?.hit?.(cr, D, dir, by, true); }
-                else if (b.kind === 'v') g.castleLife?.hit?.(cr, D, dir, by, { spell: true, magic: true });
-                else if (b.kind === 't') g.livingTrees?.hit?.(cr, D, HELLFIRE.NAME); // (fire: the only thing that kills a living tree)
+            // the burn: in the fire, or the heat by how close (0 beyond the heat's reach: only the fear)
+            const dmg = inside ? D : heat > 0 ? HELLFIRE.HEAT_DMG * heat : 0;
+            const cr = b.kind === 'z' || b.kind === 's' ? null : g.duel?._creature?.(b.kind, b.id);
+            if (dmg > 0) {
+                if (b.kind === 'z') {
+                    const z = g.zombieById?.get(b.id);
+                    if (z && !z.isDead) { if (z.isFrozen) z.unfreeze?.(); z.damageCooldown = 0; g.damageZombie(z, dmg, false, dir, by); }
+                } else if (b.kind === 's') {
+                    const sp = g.spiders?.byId?.(b.id);
+                    if (sp) g.spiders.hit(sp, dmg * 2, HELLFIRE.NAME, by);
+                } else if (cr) {
+                    if (b.kind === 'a') { cr.damageCooldown = 0; g.animals?.hit?.(cr, dmg, dir, by, true); }
+                    else if (b.kind === 'v') g.castleLife?.hit?.(cr, dmg, dir, by, { spell: true, magic: true, fire: true });
+                    else if (b.kind === 't') g.livingTrees?.hit?.(cr, dmg, HELLFIRE.NAME); // (fire: the only thing that kills a living tree)
+                }
+                this._note({ ev: inside ? 'burn' : 'heat', kind: b.kind, id: b.id, by, dmg: Math.round(dmg * 100) / 100 });
             }
-            this._note({ ev: 'burn', kind: b.kind, id: b.id, by });
+            // the fear: people and animals back off or run (zombies, the spider, living trees know no fear)
+            if (cr && b.kind === 'v') g.castleLife?.fear?.(cr, fx, fz, heat, HELLFIRE.TICK);
+            else if (cr && b.kind === 'a') g.animals?.fear?.(cr, fx, fz);
+            // its surge throws them back (CreatureImpact: a hard surge knocks down)
+            if (pushNow && (inside || heat > 0.5)) {
+                const sp = (surge ? HELLFIRE.SURGE_PUSH : HELLFIRE.PUSH) * (inside ? 1 : heat);
+                const body2 = b.kind === 'z' ? g.zombieById?.get(b.id) : b.kind === 's' ? null : cr;
+                if (body2 && sp > 0.5) g.creatureImpact?.apply?.(body2, { v: dir.clone().multiplyScalar(sp).setY(surge ? 2 : 0.5), by, spell: HELLFIRE.NAME, kind: HELLFIRE.NAME, jolt: 0.8, from: new THREE.Vector3(fx, mid.y, fz), always: surge && inside ? { down: 1.2 } : null });
+            }
         }
         // the ships' crews
-        if (auth && blaze && g.ships?.crew?.hitAt) g.ships.crew.hitAt(f.c, f.R, D, by);
+        if (auth && blaze && g.ships?.crew?.hitAt) { g.ships.crew.hitAt(f.c, f.R, D, by); g.ships.crew.hitAt(f.c, f.R + heatR * 0.5, HELLFIRE.HEAT_DMG * 0.5, by); } // (in it, and its heat)
+        if (f.surgeT > 0) f.surgeT -= HELLFIRE.TICK;
         // dead animals in it get cooked
         if (blaze) for (const a of g.animals?.list || []) if (a.dead && !a.cooked && a.meat > 0 && inBlaze(f.c, f.R, a.group.position, 0.8)) { a.cooked = true; g.animals._tintCooked?.(a); }
         return hit;
@@ -578,20 +620,27 @@ export class Hellfire {
         const blaze = 1 - f.k > 0.2 && inBlaze(f.c, f.R, me, 0.45);
         // (the ring of another wizard; my own ring goes round me)
         const ring = f.k > 0.2 && f !== this.state && inRing(body, f.rr, me, 0.45, f.rw, f.rh);
-        if (!blaze && !ring) return;
+        // the heat right beside it burns too (less, and slower): from the blaze, or another wizard's ring
+        let near = false;
+        if (!blaze && !ring) {
+            const gb = 1 - f.k > 0.2 ? me.distanceTo(f.c) - f.R - 0.45 : Infinity;
+            const gr = f.k > 0.2 && f !== this.state ? Math.abs(Math.hypot(me.x - body.x, me.z - body.z) - f.rr) - (f.rw || HELLFIRE.RING_W) / 2 - 0.45 : Infinity;
+            near = Math.min(gb, gr) < HELLFIRE.PLAYER_HEAT_R;
+            if (!near) return;
+        }
         // water magic round me keeps the fire off
         for (const s of g._flameWaters?.() || []) if (Math.hypot(me.x - s.x, me.y - s.y, me.z - s.z) < s.r) return;
-        f.meT = HELLFIRE.PLAYER_TICK;
-        const from = blaze ? f.c : body;
-        let dmg = HELLFIRE.PLAYER_DMG;
+        f.meT = near ? HELLFIRE.PLAYER_TICK * 2 : HELLFIRE.PLAYER_TICK;
+        const from = blaze || near ? f.c : body;
+        let dmg = near ? HELLFIRE.PLAYER_HEAT_DMG : HELLFIRE.PLAYER_DMG;
         if ((c.shield && c.shield.left > 0) || c.shieldFactor?.(from) >= 1) dmg *= HELLFIRE.SHIELD; // (fire goes round a shield)
         if (c.frozen) c.frozenLeft = 0; // (the ice on me melts)
         const by = f === this.state || f.by === this.me ? null : f.by;
-        this._note({ ev: 'hurtMe', dmg, by: by || 'self' });
+        this._note({ ev: 'hurtMe', dmg, by: by || 'self', heat: near });
         if (c.enabled) c.damage(dmg, by, HELLFIRE.NAME);
         else g.damageLocalPlayer?.(dmg);
         // flames on my body
-        if (this.pool) for (let i = 0; i < 14; i++) this.pool.spawn(me.x + (Math.random() - 0.5) * 0.7, me.y - 0.8 + Math.random() * 1.6, me.z + (Math.random() - 0.5) * 0.7, (Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5), pick(FLAME), 0.3 + Math.random() * 0.3, 0.5, { shrink: 0.3, spin: 6 });
+        if (this.pool && !near) for (let i = 0; i < 14; i++) this.pool.spawn(me.x + (Math.random() - 0.5) * 0.7, me.y - 0.8 + Math.random() * 1.6, me.z + (Math.random() - 0.5) * 0.7, (Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5), pick(FLAME), 0.3 + Math.random() * 0.3, 0.5, { shrink: 0.3, spin: 6 });
     }
 
     // ============================================================= network
@@ -629,7 +678,11 @@ export class Hellfire {
     _updateRemote(f, dt) {
         const g = this.game;
         const q = 1 - Math.exp(-dt * 8);
+        const px = f.c.x, pz = f.c.z, prr = f.rr0 ?? f.rr;
         f.c.lerp(f.tc, q);
+        (f.vel || (f.vel = new THREE.Vector3())).set((f.c.x - px) / dt, 0, (f.c.z - pz) / dt);
+        if (f.rr > prr + 0.2) f.surgeT = 0.6; // (the ring spread out: a surge)
+        f.rr0 = f.rr;
         f.R += ((f.tR ?? f.R) - f.R) * q;
         f.k += ((f.tk ?? f.k) - f.k) * q;
         f.ang += f.spin * dt;
