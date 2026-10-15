@@ -548,7 +548,30 @@ export class Game {
                 chest.boxId = this.collision.addBox(chest.getCollisionBox());
                 chest.refill = true;
                 this.chests.push(chest);
+                // a training dummy: a plain zombie that only stands (see _updateDummy)
+                if (this.authority) this.dummyHome = { x: 0, z: -10 };
             }
+        }
+    }
+
+    /** Creative training dummy: a normal zombie (same hits, same cuts) that never walks, bites or leaves; a new whole one stands up a few seconds after it falls. */
+    _updateDummy(dt) {
+        const h = this.dummyHome;
+        if (!h || !this.authority || this.config.mode !== 'creative') return;
+        let d = this.dummy;
+        if (d && !this.zombieById.has(d.id)) d = this.dummy = null;
+        if (d && d.isDead) {
+            this._dummyGone = (this._dummyGone || 0) + dt;
+            if (this._dummyGone < 4) return;
+            this.removeZombie(d);
+            d = this.dummy = null;
+        }
+        if (!d) {
+            this._dummyGone = 0;
+            const y = (this.collision?.groundY ? this.collision.groundY(h.x, h.z) : -0.5) + 1.0;
+            d = this.dummy = this._createZombie(new THREE.Vector3(h.x, y, h.z));
+            d.dummy = true;
+            d.group.rotation.y = 0;
         }
     }
 
@@ -1459,7 +1482,7 @@ export class Game {
             for (const v of cs.active?.values?.() || []) if (!v.dead && v.foe === me && Math.hypot(v.x - p.x, v.z - p.z) < 30) return true;
         }
         for (const s of this.ships?.awake || []) if (s.hostile?.get(me) > now && Math.hypot(s.pose.x - p.x, s.pose.z - p.z) < 80) return true;
-        for (const z of this.zombies || []) if (!z.isDead && z.group.position.distanceTo(p) < 12) return true;
+        for (const z of this.zombies || []) if (!z.isDead && !z.dummy && z.group.position.distanceTo(p) < 12) return true;
         return false;
     }
 
@@ -3027,8 +3050,14 @@ export class Game {
             }
             // held up by «Вингардиум Левиоса»: Levitation carries it (it can't walk or bite)
             if (z.lev) { z._spinHalo?.(dt); continue; }
-            const target = this._zombieTarget(z);
+            const target = z.dummy ? null : this._zombieTarget(z);
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
+            if (z.dummy && !z.isDead && !z.isFrozen && !z.isStunned && !(z.stunTimer > 0)) {
+                // pushed by a blow, it steps back to its place (stands on the spot)
+                const hm = this.dummyHome, k = Math.min(1, dt * 4);
+                z.group.position.x += (hm.x - z.group.position.x) * k;
+                z.group.position.z += (hm.z - z.group.position.z) * k;
+            }
             if (z.removable) { this.removeZombie(z); continue; }
             if (z.isDead || z.isSleeping) continue;
 
@@ -3106,11 +3135,12 @@ export class Game {
 
     _spawnWaves(dt) {
         if (!this.authority || this.config.map) return;
+        this._updateDummy(dt);
         this.zombieSpawn?.update(dt); // (zombies out of the dark: caves, the night — ZombieSpawn.js)
         if (this.config.mode === 'creative') {
             const desired = this.config.zombieCount || 0;
             let live = 0;
-            for (const z of this.zombies) if (!z.isDead) live++;
+            for (const z of this.zombies) if (!z.isDead && !z.dummy) live++;
             if (live < desired && Math.random() < 0.02) this.spawnZombieWave();
         } else if (this.config.mode === 'survival') {
             let live = 0;

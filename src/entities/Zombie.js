@@ -267,6 +267,7 @@ export class Zombie {
         this.group.rotation.z += this.rotVelocity.z * dt;
         this.group.rotation.x += this.rotVelocity.x * dt;
         this.rotVelocity.multiplyScalar(0.9);
+        if (this.dummy && !this.isFrozen && this.velocity.lengthSq() < 0.25) this._sway();
         if (this.velocity.lengthSq() < 0.01) {
             this.group.rotation.z *= 0.9;
             this.group.rotation.x *= 0.9;
@@ -303,6 +304,15 @@ export class Zombie {
         }
 
         if (this.isAttacking) this._animateAttack(dt, targetPos);
+    }
+
+    /** Training dummy: a slight sway so that it looks alive. */
+    _sway() {
+        const t = performance.now() * 0.001 + this.animVariation;
+        this.head.rotation.y = Math.sin(t * 0.7) * 0.12;
+        this.leftArm.rotation.x = -Math.PI / 2 + Math.sin(t * 0.9) * 0.06;
+        this.rightArm.rotation.x = -Math.PI / 2 + Math.cos(t * 0.8) * 0.06;
+        this.leftLeg.rotation.x *= 0.9; this.rightLeg.rotation.x *= 0.9;
     }
 
     /** Stand on the ground, or fly/fall with gravity when thrown or stepping off a ledge. */
@@ -544,6 +554,7 @@ export class Zombie {
         if (this.isAttacking) flags |= 16;
         if (!this.group.visible) flags |= 32;
         if (this.isThrall) flags |= 64;
+        if (this.dummy) flags |= 128;
         return [this.id, r(p.x), r(p.y), r(p.z), r(this.group.rotation.y), flags, this.limbMask, r(this.freezeProgress), r(this.group.rotation.x)];
     }
 
@@ -557,6 +568,7 @@ export class Zombie {
         if ((flags & 16) && !this.isAttacking) this.triggerAttack();
         if ((flags & 32) && this.group.visible) this.group.visible = false;
         this.setThrall(!!(flags & 64));
+        this.dummy = !!(flags & 128);
         const frozen = !!(flags & 2);
         if (frozen && !this.isFrozen) { this.freezeProgress = 1; this.freeze(); this._restoreColor(); }
         else if (!frozen && this.isFrozen) this.unfreeze();
@@ -587,7 +599,8 @@ export class Zombie {
         this.group.rotation.x += (this.netRotX - this.group.rotation.x) * k;
         if (this.isDead || this.isFrozen) return;
         if (this.isStunned) { this.head.rotation.y += dt * 15; return; }
-        if (moved > 0.02) { this.walkCycle += dt * 10; this._animateWalk(); }
+        if (this.dummy && moved < 0.02) this._sway();
+        else if (moved > 0.02) { this.walkCycle += dt * 10; this._animateWalk(); }
         if (this.isAttacking) this._animateAttack(dt, null);
         if (camera) {
             this.head.getWorldPosition(_v2);
