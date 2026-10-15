@@ -125,6 +125,7 @@ export class NetSync {
         }
         this.game.water?.applyRemote(id, null);
         this.game.levitation?.onLeave(id); // (what they held falls; if they held me, I fall)
+        this.game.levMax?.onLeave(id);
         this.game.handHold?.onLeave(id); // (hands they held or that held mine: let go)
         this.game.boards?.onLeave(id); // (the surfboard they held or rode stays where it was)
         // Drop weapons they were holding
@@ -407,8 +408,18 @@ export class NetSync {
     }
 
     /** My body is held up by `by` (or let go / I broke free). */
-    lift(by, side, hold, on, free = false, why = null) {
-        this.net.send({ t: 'lift', by, to: this.me, side, h: r3(hold), on: on ? 1 : 0, f: free ? 1 : 0, ...(why ? { r: why } : {}) }, true);
+    lift(by, side, hold, on, free = false, why = null, mx = false) {
+        this.net.send({ t: 'lift', by, to: this.me, side, h: r3(hold), on: on ? 1 : 0, f: free ? 1 : 0, ...(why ? { r: why } : {}), ...(mx ? { mx: 1 } : {}) }, true);
+    }
+
+    /** «Левиоса Максима» (LevitationMaxima.onNet): on / off / a player lifted / the host's big things. */
+    levMax(m) {
+        this.net.send({ t: 'lmx', by: this.me, ...m }, true);
+    }
+
+    /** (host) The houses and trees in the air (~10×/s). */
+    levMaxState(l) {
+        this.net.send({ t: 'lmxs', l });
     }
 
     /** (host) That body is held by someone else already. */
@@ -786,6 +797,8 @@ export class NetSync {
             case 'lev': if (m.by !== this.me) g.levitation?.onNetLev(m); break;
             case 'lift': if (m.to !== this.me) g.levitation?.onNetLift(m); break;
             case 'levno': if (m.to === this.me) g.levitation?.onNetRefused(m); break;
+            case 'lmx': if (m.from !== this.me) g.levMax?.onNet(m, this.net.isHost); break;
+            case 'lmxs': if (!this.net.isHost) g.levMax?.onNetState(m.l); break;
             case 'stop':
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)

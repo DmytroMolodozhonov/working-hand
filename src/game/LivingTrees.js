@@ -578,7 +578,7 @@ export class LivingTrees {
             const op = t.owner === g.localId ? g.character.group.position : g.remotes?.get(t.owner)?.position;
             if (!op || Math.hypot(op.x - p.x, op.z - p.z) > ALIVE.RANGE) this.end(t, 'far');
         }
-        if (t.phase !== 'alive') { t.speed = 0; return; }
+        if (t.phase !== 'alive' || t.lev) { t.speed = 0; return; } // (held up by «Левиоса Максима»: it carries the tree)
         this._think(t, dt);
     }
 

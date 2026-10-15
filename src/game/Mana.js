@@ -49,7 +49,7 @@ export const FIRST_SPELL = {
     OvergrownMaxima: 4, WaveAttackMaxima: 4, BreakthroughMaxima: 4, ProtectionMaxima: 4, ProtectionHouse: 4, Thunderwave: 4,
     EarthquakeMaxima: 5, BombardoMaxima: 5, JoltMaxima: 5, FireMaxima: 5, FirefightingMaxima: 5,
     // strong: up to +20
-    WaterVortex: 8, Alive: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
+    WaterVortex: 8, Alive: 8, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8,
 };
@@ -237,7 +237,7 @@ export class Mana {
 
 /** How a spell is said, for the hint. */
 const TITLES = {
-    Lumos: 'Люмос', Draw: 'Lightning Writing', Accio: 'Акцио', Gather: 'Gather', Levitation: 'Вингардиум Левиоса', Up: 'Up', Fire: 'Fire', Wind: 'Вайнд',
+    Lumos: 'Люмос', Draw: 'Lightning Writing', Accio: 'Акцио', Gather: 'Gather', Levitation: 'Вингардиум Левиоса', LevitationMaxima: 'Вингардиум Левиоса Максима', Up: 'Up', Fire: 'Fire', Wind: 'Вайнд',
     CreateFloor: 'Create a Floor', CreateCeiling: 'Create a Ceiling', CreateWall: 'Create a Wall', CreateDoor: 'Create a Door', BuildRoof: 'Build a Roof', CreateBed: 'Create a Bed', CreateBoard: 'Create a Board',
     ChangeColor: 'Change a color', Unfurl: 'Анфёрл', Furl: 'Фёрл', Alohomora: 'Алохомора', Waterball: 'Waterbollow', WaterForming: 'Water forming', AirBubble: 'Air Bubble', VortexBubble: 'Бабл',
     Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Брейнрот', Maxima: 'Максима в дуэли',

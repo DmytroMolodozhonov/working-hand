@@ -123,7 +123,7 @@ export const SPELL_PHYSICS = {
     Brainrot: null, ToTheSun: null, LetItRain: null, Storm: null, LightningCatch: null, LightningHold: null, Rescue: null, Pause: null, Flight: null, Up: null,
     AirBubble: null, AirBubbleMaxima: null, Waterball: null, Maxima: null, WaterForming: null, Frozen: null,
     Protection: null, ProtectionMaxima: null, ProtectionHouse: null, ProtectionInvisible: null, ProtectionHouseGrant: null, WardGrow: null, // (a house's sphere pushes only who walks into it: HouseWards.js)
-    Levitation: null, LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,
+    Levitation: null, LevitationMaxima: null, /* (lifts — no push: LevitationMaxima.js) */ LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,
     Fire: { push: 0, jolt: 0.6 },
     Inferno: { push: 1.5, jolt: 0.6 },
     Ward: { push: 7, jolt: 1.5 }, // (a house's barrier shoves back the one who pushes on it: HouseWards.js)

@@ -426,7 +426,7 @@ export class Spiders {
                 this._nightDone = false;
                 for (const s of [...this.list]) if (!s.dead) this._remove(s); // hides at dawn
             }
-            for (const s of this.list) if (!s.dead) this._think(s, dt);
+            for (const s of this.list) if (!s.dead && !s.lev) this._think(s, dt); // (held up by «Левиоса Максима»: it carries her)
         } else {
             for (const s of this.list) if (s.net) { s.model.position.lerp(s.net, Math.min(1, dt * 6)); this._animate(s, s.netMoving ? 1 : 0, dt); }
         }

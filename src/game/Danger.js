@@ -31,6 +31,7 @@ export const DANGERS = {
     spider: { r: 6, hear: 30, see: 45, near: 22, fear: 60, ru: 'гигантский паук' },
     zombie: { r: 2, hear: 12, see: 24, near: 14, fear: 35, ru: 'зомби ночью' },
     attacker: { r: 3, hear: 18, see: 32, near: 18, fear: 40, ru: 'игрок, который бьёт и убивает людей' },
+    uproot: { r: 8, hear: 60, see: 90, near: 25, fear: 50, ru: '«Вингардиум Левиоса Максима»: вырванный дом, дерево или корабль в воздухе (и то, что падает с высоты)' },
     fight: { r: 3, hear: 22, see: 26, near: 7, fear: 20, ru: 'драка рядом (рыцари бьются)' },
     housemagic: { r: 10, hear: 40, see: 70, near: 12, fear: 25, ru: 'магия дома («Create a House», «Improve a House»): вспышки, вихрь деревьев и пыли' },
 };

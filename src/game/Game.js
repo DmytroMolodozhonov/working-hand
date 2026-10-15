@@ -22,6 +22,7 @@ import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage } from './Combat.js';
 import { Levitation } from './Levitation.js';
+import { LevitationMaxima } from './LevitationMaxima.js';
 import { Accio } from './Accio.js';
 import { Storm, aimedAtSky } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
@@ -308,6 +309,7 @@ export class Game {
         this._headBase = { yaw: 0, pitch: 0 };
         this.quake = new Quake(this); // «Earthquake»: creatures thrown, the ground breaking, shaking (Quake.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
+        this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
@@ -988,7 +990,7 @@ export class Game {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
         // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
         if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
-        return !!(this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
+        return !!(this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
     }
 
     _castLocalSpell(text, isFinal = true) {
@@ -1108,6 +1110,8 @@ export class Game {
         if (name === 'LetItRain') return this._castRain(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
+        // «Вингардиум Левиоса Максима»: a group, a tree, a house, a ship (LevitationMaxima.js)
+        if (name === 'LevitationMaxima') return this.levMax.cast(isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
             // The same phrase heard again — the microphone repeats an unfinished phrase many times
@@ -1253,6 +1257,7 @@ export class Game {
         const W = this.wandMagic;
         if (this.combat.dropShield('🛑 Стоп — щит снят')) done.push('щит');
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
+        if (this.levMax?.stop()) done.push('Левиоса Максима'); // (what it holds falls)
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
         const hf = this.hellfire?.sayStop(); // («стоп» costs 50 mana for it)
@@ -2388,6 +2393,7 @@ export class Game {
         mark('игрок');
 
         this.levitation.update(dt);
+        this.levMax?.update(dt);
         this.accio.update(dt);
         this.inventory.update(dt);
         this.builder.update(dt);

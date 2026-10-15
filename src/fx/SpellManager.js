@@ -122,7 +122,7 @@ export function matchSpell(text) {
     // «Alive»: a tree comes alive (its sounds before the short Ice / Sands / Flight tokens)
     if (has('alive', 'a live', 'alife', 'алайв', 'алаив', 'алайф', 'элайв', 'элаив', 'элайф', 'эллайв', 'аллайв', 'олайв', 'алив', 'элив', 'алайве', 'оживи', 'оживай', 'оживл')) return 'Alive';
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
-    if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return 'Levitation';
+    if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return has('макс', 'max', 'мах', 'maks', 'мекс', 'мэкс') ? 'LevitationMaxima' : 'Levitation'; // («…Максима»: LevitationMaxima.js)
     if (has('паузин', 'паузен', 'паузи', 'пауза', 'паузу', 'pausin', 'pauzin', 'pause', 'повзин')) return 'Pause';
     // Ships' sails: «Анфёрл» (unfurl) lets them down, «Фёрл» (furl) rolls them up (before Wind: «Вайнд» goes into the sails after)
     if (has('убрать парус', 'убери парус', 'уберите парус', 'свернуть парус', 'сверни парус', 'сверните парус', 'спусти парус', 'furl the sail')) return 'Furl';

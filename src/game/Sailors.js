@@ -31,6 +31,9 @@ import { registerKind } from './CreatureImpact.js';
 import { avoidStep } from './Avoid.js';
 import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics.js';
 
+/** Damage of a drop from `h` m onto a deck (as Levitation.fallDamage). */
+const fallDrop = (h) => (h > 3.5 ? Math.round((h - 3.5) * 2) : 0);
+
 const HEAR = 7; // m: a sailor hears you this far (like a villager)
 /** What sailors say by themselves now and then, and to each other. */
 const CHAT = {
@@ -782,6 +785,7 @@ export class Sailors {
     _think(v, s, dt) {
         const g = this.game;
         if (v.dead) { v.mode = 'dead'; v.speed = 0; return; }
+        if (v.lev) { v.mode = 'idle'; v.speed = 0; return; } // (held up in the air by «Левиоса Максима»: it carries him)
         if (v.overboard) { this._swim(v, s, dt); return; }
         if (s.flooded) { this._overboard(v, Math.random() < 0.5 ? -1 : 1); return; }
         // knocked down, reeling, thrown up into the air: the body, not the mind
@@ -1207,6 +1211,20 @@ export class Sailors {
         const o = v.overboard;
         o.t += dt;
         o.vy -= 14 * dt;
+        // (let go by «Левиоса Максима» over his ship: he lands on its deck, not through it)
+        if (o.top != null && !o.wet && o.vy < 0 && s.collider.hasXZ(o.x, o.z)) {
+            const f = s.collider.floorAt(o.x, o.z, o.y + 0.5);
+            if (f !== null && o.y + o.vy * dt <= f) {
+                s.pose.toLocal(o.x, f, o.z, _o);
+                v.l.x = _o.x; v.l.y = _o.y; v.l.z = _o.z;
+                const d = o.gentle ? 0 : fallDrop(o.top - f);
+                v.overboard = null;
+                v.mode = 'idle';
+                v.path = null;
+                if (d) this.hit(v, d, null, o.by);
+                return;
+            }
+        }
         o.y = Math.max(WATER_LEVEL_Y - 1.8, o.y + o.vy * dt);
         // (still flying off the side; the water stops him fast)
         if (o.vx || o.vz) {

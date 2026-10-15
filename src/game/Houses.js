@@ -96,7 +96,7 @@ export class Houses {
         const pens = new Map();
         for (const p of pts) {
             for (const def of idx.near(p.x, p.z, NEAR)) {
-                def.houses.forEach((h, i) => { if (Math.hypot(h.c.x - p.x, h.c.z - p.z) < NEAR) seen.set(h.id, { def, i }); });
+                def.houses.forEach((h, i) => { if (!h.lifted && Math.hypot(h.c.x - p.x, h.c.z - p.z) < NEAR) seen.set(h.id, { def, i }); }); // (a house torn off by «Левиоса Максима» is not lived in)
                 for (const pen of def.pens || []) if (Math.hypot(pen.x - p.x, pen.z - p.z) < NEAR) pens.set(pen.id, { def, pen });
             }
         }
@@ -195,6 +195,19 @@ export class Houses {
         this._dirty = true;
         if (this.auth) g.castleLife?.releaseFamily(rec.def, rec.i);
         this.active.delete(rec.h.id);
+    }
+
+    /**
+     * «Левиоса Максима» tore the house off the ground (LevitationMaxima.js): its door, beds, chests and
+     * glass break with it (nothing hangs on in the air); the family is no longer at home there.
+     */
+    liftedAway(h) {
+        const rec = this.active.get(h.id);
+        if (!rec) return;
+        for (const id of rec.paneIds) this.broken.add(id);
+        if (rec.doorId) this.game.doors?.remove(rec.doorId);
+        rec.doorId = null;
+        this._deactivate(rec);
     }
 
     /** (host) The animals of a pen / a barn (those that are not out already). */

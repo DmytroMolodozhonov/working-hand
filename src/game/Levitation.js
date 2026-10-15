@@ -77,6 +77,11 @@ export function applyAimOffset(dir, off, out) {
     return out.set(Math.sin(yy) * c, Math.sin(pp), Math.cos(yy) * c);
 }
 
+/** Magic armour stops the plain «Левиоса», never «Левиоса Максима» (`maxima`). */
+export function levBlocked(o, maxima = false) {
+    return !maxima && !!(o && (o.magicArmor || o.armor?.magic));
+}
+
 /** Strength a second it costs to hold a living body (free world): light, heavy (a cow, a knight), a wizard. */
 export const HOLD_FATIGUE = { light: 2, heavy: 3, wizard: 4 };
 
@@ -784,20 +789,25 @@ export class Levitation {
     }
 
     // ---------------------------------------------------------------- a wizard held up
-    /** (my computer) A Leviosa charge landed on me: my body hangs at `by`'s hand. */
-    liftMe(by, side = 'right') {
+    /**
+     * (my computer) A Leviosa charge landed on me: my body hangs at `by`'s hand.
+     * `mx`: «Левиоса Максима» (LevitationMaxima.js) — it goes through magic armour, holds as long as
+     * its caster's mana lasts, and I hang where I was against the caster's hand line (one of a group).
+     */
+    liftMe(by, side = 'right', { mx = false } = {}) {
         const g = this.game;
         if (this.lifted?.by === by || g.combat.dead) return;
         if (this.lifted) { g.sync?.lift?.(by, side, 0, false, false, 'levHeld'); return; } // (another holds me: tell the caster why)
+        if (levBlocked(g.combat, mx)) { g.hud.setVoice('🛡️ Магические доспехи не дали «Левиосе» вас поднять', true); return; }
         const c = g.combat.center(new THREE.Vector3());
         if (!g.duel?._handOf(by, side, _h1, _h2)) return;
         if (this.state) this.release(false);
         if (g.flight?.busy) g.flight.land('levitate');
         if (g.animals?.riding) g.animals.dismount();
         const hold = Math.min(LEVITATE.MAX_HOLD, Math.max(LEVITATE.MIN_HOLD + 0.5, c.distanceTo(_h1)));
-        this.lifted = { by, side, hold, target: c.clone(), vel: new THREE.Vector3(), top: g.character.group.position.y, age: 0 };
+        this.lifted = { by, side, hold, target: c.clone(), vel: new THREE.Vector3(), top: g.character.group.position.y, age: 0, mx, off: mx ? aimOffset(_h2, _h3.subVectors(c, _h1)) : null };
         this.fallTop = null;
-        g.sync?.lift?.(by, side, hold, true);
+        g.sync?.lift?.(by, side, hold, true, false, null, mx);
         g.hud.setVoice(`🪶 ${g.playerName?.(by) || 'Волшебник'} поднял вас в воздух! Направьте на него «Protection», чтобы вырваться`, true);
     }
 
@@ -807,8 +817,8 @@ export class Levitation {
         const ch = g.character;
         L.age += dt;
         const up = 0.6 + 2.0; // (my middle above my feet)
-        const want = this.holdPoint(L.by, L.side, L.hold, up, _h2);
-        if (!want || g.combat.dead || (!g.combat.enabled && L.age > LEVITATE.WIZARD_T + 3)) { this.dropMe(false); return; }
+        const want = this.holdPoint(L.by, L.side, L.hold, up, _h2, L.off);
+        if (!want || g.combat.dead || (!L.mx && !g.combat.enabled && L.age > LEVITATE.WIZARD_T + 3)) { this.dropMe(false); return; }
         // «Protection» towards the caster: the magic breaks on it
         if (g.duel._handOf(L.by, L.side, _h3, _h4) && g.combat.shield && g.combat.shieldFactor(_h3) >= 1 && g.combat._blocked(_h3, 'Levitation')) {
             this.dropMe(false, true);
@@ -836,7 +846,7 @@ export class Levitation {
         if (!gentle) g.knockback.copy(L.vel).setY(0).multiplyScalar(1.5);
         this.fallTop = gentle ? null : L.top;
         this.fallBy = L.by;
-        g.sync?.lift?.(L.by, L.side, L.hold, false, free);
+        g.sync?.lift?.(L.by, L.side, L.hold, false, free, null, L.mx);
         if (free) g.hud.setVoice('🛡️ Вы вырвались из Левиосы!', true);
     }
 
@@ -888,7 +898,7 @@ export class Levitation {
     /** A wizard tells everyone: «I am held up by `by`» (or let go / broke free; `r`: why not lifted). */
     onNetLift(m) {
         const g = this.game;
-        if (m.by !== g.localId) return;
+        if (m.by !== g.localId || m.mx) return; // («Левиоса Максима» keeps its own count — LevitationMaxima.js)
         if (m.r) { if (m.r === 'levHeld') { this.missed(m.to, 'levHeld'); if (this.miss) this.miss.at = 0; } return; } // (he is held by another already)
         if (m.on) {
             this.miss = null;

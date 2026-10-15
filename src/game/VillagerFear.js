@@ -151,7 +151,7 @@ export class VillagerFear {
 
     _sees(v, d) {
         // (a blast, a rumble, a scream are heard through walls; a fire, a spider, a fight must be seen)
-        if (d.kind === 'blast' || d.kind === 'ruin' || d.kind === 'quake' || d.kind === 'fall' || d.kind === 'circle' || d.kind === 'inspirius') return true;
+        if (d.kind === 'blast' || d.kind === 'ruin' || d.kind === 'quake' || d.kind === 'fall' || d.kind === 'circle' || d.kind === 'inspirius' || d.kind === 'uproot') return true;
         const D = DANGERS[d.kind];
         const dist = Math.hypot(d.x - v.x, d.z - v.z);
         if (dist < D.hear + d.r) return true;

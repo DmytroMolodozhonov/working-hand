@@ -77,6 +77,7 @@ export const SPELL_COST = {
     WaterForming: 5,
     Frozen: 5,
     Levitation: 6,
+    LevitationMaxima: 50, // «Вингардиум Левиоса Максима»: 50 at once, then 2 a second while it holds (LevitationMaxima.js)
     Accio: 5,
     Alohomora: 5, // a lock opens (Alohomora.js)
     AlohomoraMaxima: 25, // … a strong lock: the gates of a throne room
@@ -429,7 +430,7 @@ export class Combat {
     costOf(name) {
         const base = SPELL_COST[name] ?? 5;
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Hellfire|WaterVortexSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Hellfire|WaterVortexSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name) {

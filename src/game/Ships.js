@@ -60,11 +60,11 @@ const angleDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.P
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
-/** A ship's state for the network: [id, x, z, yaw, u, v, r, wheel, sinkY, flags, hp, flood100, roll, pitch]. */
+/** A ship's state for the network: [id, x, z, yaw, u, v, r, wheel, sinkY, flags, hp, flood100, roll, pitch, liftY]. */
 export function packShip(s) {
     const st = s.st;
     const flags = (s.state === 'moored' ? 1 : 0) | (s.state === 'sinking' ? 2 : 0) | (s.state === 'wreck' ? 4 : 0) | (s.plank?.state === 'laid' ? 8 : 0) | (s.plank?.state === 'fallen' ? 16 : 0) | (s.flooded ? 32 : 0) | (s.blow ? 64 : 0);
-    return [s.id, r2(st.x), r2(st.z), r3(st.yaw), r2(st.u), r2(st.v), r3(st.r), r2(st.wheel), r2(s.sinkY || 0), flags, Math.round(s.hp), Math.round((s.flood || 0) * 100), r3(s.sinkRoll || 0), r3(s.sinkPitch || 0)];
+    return [s.id, r2(st.x), r2(st.z), r3(st.yaw), r2(st.u), r2(st.v), r3(st.r), r2(st.wheel), r2(s.sinkY || 0), flags, Math.round(s.hp), Math.round((s.flood || 0) * 100), r3(s.sinkRoll || 0), r3(s.sinkPitch || 0), r2(s.liftY || 0)];
 }
 
 export function unpackShip(a) {
@@ -73,7 +73,7 @@ export function unpackShip(a) {
         id: a[0], x: a[1], z: a[2], yaw: a[3], u: a[4], v: a[5], r: a[6], wheel: a[7], sinkY: a[8],
         state: f & 4 ? 'wreck' : f & 2 ? 'sinking' : f & 1 ? 'moored' : 'free',
         plank: f & 8 ? 'laid' : f & 16 ? 'fallen' : 'aboard', flooded: !!(f & 32), blowing: !!(f & 64),
-        hp: a[10], flood: a[11] / 100, sinkRoll: a[12] || 0, sinkPitch: a[13] || 0,
+        hp: a[10], flood: a[11] / 100, sinkRoll: a[12] || 0, sinkPitch: a[13] || 0, liftY: +a[14] || 0,
     };
 }
 
@@ -141,7 +141,8 @@ export class Ships {
     /** Where the ship is now (pose from the physics state). */
     _place(s) {
         const st = s.st;
-        s.pose.set(st.x, WATER_LEVEL_Y + (st.heave || 0) - (s.sinkY || 0), st.z, st.yaw, (st.roll || 0) + (s.sinkRoll || 0), (st.pitch || 0) + (s.sinkPitch || 0));
+        // (liftY: held up in the air by «Левиоса Максима», or left on land by it — LevitationMaxima.js)
+        s.pose.set(st.x, WATER_LEVEL_Y + (st.heave || 0) - (s.sinkY || 0) + (s.liftY || 0), st.z, st.yaw, (st.roll || 0) + (s.sinkRoll || 0), (st.pitch || 0) + (s.sinkPitch || 0));
         s.collider.setPose(s.pose);
         s.collider.flooded = s.flooded;
         s.collider.gangwayOpen = s.plank?.state === 'laid';
@@ -411,7 +412,7 @@ export class Ships {
     _simulate(s, dt) {
         const st = s.st;
         const g = this.game;
-        if (s.state === 'wreck') { st.u = st.v = st.r = 0; return; }
+        if (s.state === 'wreck' || s.lifted) { st.u = st.v = st.r = 0; return; } // (in the air: «Левиоса Максима» carries it)
         const open = this._openFrac(s);
         const data = g.terrain?.data;
         const env = {
@@ -507,7 +508,7 @@ export class Ships {
     _waves(s, t, dt) {
         const st = s.st;
         const sea = this.game.sea;
-        const wave = !this.calm && sea ? (x, z, tt) => sea.height(x, z, tt) : null;
+        const wave = !this.calm && sea && !(s.liftY > 0.05) ? (x, z, tt) => sea.height(x, z, tt) : null; // (out of the water: no waves)
         if (!wave) {
             waveResponse(st, s.cls, null, dt, this._heel(s));
             return;
@@ -548,6 +549,7 @@ export class Ships {
         s.sinkY += ((n.sinkY || 0) - s.sinkY) * k;
         s.sinkRoll += ((n.sinkRoll || 0) - s.sinkRoll) * k;
         s.sinkPitch += ((n.sinkPitch || 0) - s.sinkPitch) * k;
+        s.liftY = (s.liftY || 0) + ((n.liftY || 0) - (s.liftY || 0)) * Math.min(1, dt * 10);
     }
 
     // ============================================================ carrying riders
@@ -1445,6 +1447,7 @@ export class Ships {
             fires: s.fires.filter((f) => !f.sail).slice(0, 12).map((f) => [r2(f.lx), r2(f.ly), r2(f.lz), r2(f.k)]),
             guns: [...s.guns].filter(([, gn]) => gn.loaded).map(([k]) => k), racks: [...s.racks].filter(([k, n]) => n !== s.layout.racks.find((r) => r.id === k)?.balls).map(([k, n]) => [k, n]),
             spawn: s.berth ? null : { cls: s.cls.id },
+            ...(s.liftY > 0.05 && !s.lifted ? { lift: r2(s.liftY) } : {}), // (left on land by «Левиоса Максима»)
         };
     }
 
@@ -1475,6 +1478,7 @@ export class Ships {
         if (Array.isArray(sv.lines)) sv.lines.forEach((v, i) => { if (s.lines[i]) s.lines[i].state = v; });
         if (sv.plank && sv.plank !== 'laid') s.plank = { state: sv.plank === 'fallen' ? 'gone' : sv.plank, collider: new PlankCollider(), mesh: null, side: s.berth?.side || 1 };
         s.state = sv.state || s.state;
+        s.liftY = +sv.lift || 0;
         if (sv.sink) { s.sinkY = sv.sink.y; s.sinkRoll = sv.sink.roll; s.sinkPitch = sv.sink.pitch; s.sinkT = sv.sink.t || 0; s.listSide = sv.sink.side || 1; s.flooded = s.state === 'wreck' || s.sinkY > s.cls.deck; }
         s.fires = (sv.fires || []).map(([lx, ly, lz, k]) => ({ lx, ly, lz, k, age: 0 }));
         for (const k of sv.guns || []) { const gn = s.guns.get(k); if (gn) gn.loaded = true; }
