@@ -6,6 +6,7 @@
 
 import { mouthOpenness } from '../game/VoiceGate.js';
 import { LegReader } from './LegReader.js';
+import { StepReader } from './StepReader.js';
 import { HeadFromBody } from './HeadFromBody.js';
 
 /**
@@ -273,7 +274,7 @@ export class PoseInterpreter {
      */
     constructor(faceSolver = null) {
         this.faceSolver = faceSolver;
-        this.shoulderHistory = [];
+        this.steps = new StepReader(); // (walking: steps on the spot)
         this.prevWrists = null;
         this.wasCrouching = false;
         this.lastHead = { yaw: 0, pitch: 0 };
@@ -385,16 +386,6 @@ export class PoseInterpreter {
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));
             data.torso = torsoMetrics(lm);
 
-            // Run intensity from shoulder bobbing (8-frame window)
-            this.shoulderHistory.push((lm[11].y + lm[12].y) / 2);
-            if (this.shoulderHistory.length > 8) this.shoulderHistory.shift();
-            if (this.shoulderHistory.length >= 3) {
-                let total = 0;
-                for (let i = 1; i < this.shoulderHistory.length; i++) total += Math.abs(this.shoulderHistory[i] - this.shoulderHistory[i - 1]);
-                data.runIntensity = Math.max(0, Math.min(1, (total - 0.02) / 0.13));
-                data.isRunning = data.runIntensity > 0.1;
-            }
-
             // Punch: wrist moved fast since last frame
             if (!this.prevWrists) this.prevWrists = { left: { ...data.leftWrist }, right: { ...data.rightWrist } };
             const leftDist = Math.hypot(data.leftWrist.x - this.prevWrists.left.x, data.leftWrist.y - this.prevWrists.left.y);
@@ -412,6 +403,11 @@ export class PoseInterpreter {
             if (!this.wasCrouching) { if (noseY > 0.5) this.wasCrouching = true; }
             else if (noseY < 0.45) this.wasCrouching = false;
             data.isCrouching = this.wasCrouching;
+
+            // Walking and running: steps on the spot, from the legs (the body's bob only without legs to read)
+            const walk = this.steps.read(data.legs, (lm[11].y + lm[12].y) / 2, data.isCrouching);
+            data.isRunning = walk.isRunning;
+            data.runIntensity = walk.runIntensity;
         }
 
         data.stompAt = this.stompAt;

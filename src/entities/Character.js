@@ -649,7 +649,7 @@ export class VoxelCharacter {
         if (move) {
             // Movement (original speeds)
             if (this.isRunning) {
-                const walkSpeed = 2.5, runSpeed = 7.5;
+                const walkSpeed = 2.5, runSpeed = 9.75; // (the run: 30% faster than the first 7.5, as the author asked)
                 // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book)
                 const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1);
                 const moveDistance = speed * dt;

@@ -2857,8 +2857,21 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
+        const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
+        // a fast run on a slow frame: the step is walked in short pieces against the walls, so a
+        // thin wall or a door is never jumped over between two frames (the push-out below decides the rest)
+        const walkDX = ch.group.position.x - walkFromX, walkDZ = ch.group.position.z - walkFromZ;
+        const walkD = Math.hypot(walkDX, walkDZ);
+        if (walkD > 0.25 && walkD < 5 && !flight.active && !this.beds?.lying && !this.boards?.mounted) {
+            const n = Math.ceil(walkD / 0.25);
+            ch.group.position.x = walkFromX; ch.group.position.z = walkFromZ;
+            for (let i = 0; i < n; i++) {
+                ch.group.position.x += walkDX / n; ch.group.position.z += walkDZ / n;
+                this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
+            }
+        }
 
         // Explosion knockback (decays; a body lying on the ground slides less far) — in short steps
         // against the walls: a blast throws the body at the rock, never into it (a cave, a house)
