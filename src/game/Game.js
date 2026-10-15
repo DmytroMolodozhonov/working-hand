@@ -2733,6 +2733,8 @@ export class Game {
             // (a step up to one block high is walked onto by itself: the feet are on the floor they
             // stand on, even while the body still eases up the last step — _feetY)
             this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
+            // a market counter: the body stays a little before it, where the hands reach its top (CastleTalk)
+            if (this.castleLife?.talk?.keepOffCounters?.(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position))) this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
             // never inside the rock (tossed up under an overhang, the walls' push would carry the body
             // on through the stone, block by block): back where it last stood free
             if (this._bodyInRock(ch.group.position)) {

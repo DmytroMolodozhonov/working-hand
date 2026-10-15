@@ -76,7 +76,7 @@ export class HandBlocks {
     constructor(game) {
         this.game = game;
         this.pushed = { left: 0, right: 0 }; // m the hand was held back this frame (tests, other systems)
-        this._pts = Array.from({ length: 7 }, () => new THREE.Vector3());
+        this._pts = Array.from({ length: 8 }, () => new THREE.Vector3());
         this.solid = (x, y, z) => this._solid(x, y, z);
     }
 
@@ -112,6 +112,10 @@ export class HandBlocks {
             }
         }
         if (n === 1) { out[1].copy(out[0]).addScaledVector(ch.getForearmDirection(side, _e), 0.35); n = 2; } // (no hand drawn: its length past the wrist)
+        // what the hand holds (a pouch hanging from the fist, bread in the fingers): its lowest point
+        // never goes into the counter either — the hand stops so that the thing lies on it
+        const low = ch === this.game.character ? this.game.items?.held?.[side]?.low : null;
+        if (low) { out[n] = out[n] || new THREE.Vector3(); out[n].copy(out[0]).add(low); n++; }
         return out.slice(0, n);
     }
 

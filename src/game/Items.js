@@ -30,6 +30,17 @@ import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js
 import { makePurseModel } from './CoinBelt.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
 
+/**
+ * A thing just let go of (put on a counter, dropped) is not taken back by the same moment's
+ * fingers: only by a new grip after the hand has moved this far off it (m), or after this long (ms).
+ */
+export const REGRAB = { AWAY: 0.3, MS: 2500 };
+/** Is a thing just let go of free to be taken again? (`d` m from the nearest hand now; `entry` its record.) */
+export function regrabFree(entry, d, now) {
+    if (!entry) return true;
+    if (d > REGRAB.AWAY) entry.away = true;
+    return entry.away || now - entry.at > REGRAB.MS;
+}
 const SHOP_GRIP = 0.5; // fingers this closed (tracked curl) to take a good from a market counter
 /** The fingers close on a thing this near (from the grip point in the fingers to its surface / handle). */
 const PICK_REACH = 0.35;
@@ -113,6 +124,7 @@ export class ItemSystem {
         this._arm = { right: {}, left: {} };
         this._giveT = 0;
         this.remoteHeld = new Map(); // playerId -> {right, left, backpack}: models on other players
+        this.justLet = new Map(); // uid -> {at, away}: let go of by my hand a moment ago (REGRAB)
     }
 
     get auth() { return this.game.authority; }
@@ -522,6 +534,8 @@ export class ItemSystem {
         const pos = h.model.position.clone();
         const quat = h.model.quaternion.clone();
         this.releaseHand(side);
+        this._outOfSolid(pos);
+        this.justLet.set(item.uid, { at: performance.now(), away: false });
         const v = vel.clone();
         const w = spin ? spin.clone() : null;
         if (this.auth) {
@@ -529,6 +543,36 @@ export class ItemSystem {
             L.thrower = this.game.localId;
         } else this.game.sync?.itemThrow?.(item, pos, v, quat, w);
         this.game.hud.setVoice?.(`✋ ${ITEM_INFO[item.kind]?.name || 'Предмет'} ${v.length() > 3 ? 'брошен' : 'выпал из руки'}`, true);
+    }
+
+    /**
+     * A thing let go of inside a counter, a table, a step (the hand or a hanging pouch reached into
+     * it): it comes out on top of it — it lies on the counter, never falls through it to the floor.
+     */
+    _outOfSolid(pos) {
+        const col = this.game.collision, hb = this.game.handBlocks;
+        if (!col) return pos;
+        const inside = (y) => (hb ? hb.solid(pos.x, y, pos.z) : false) || (col.pointBlocked ? col.pointBlocked(pos.x, y, pos.z) : false);
+        if (!inside(pos.y)) return pos;
+        // the top of what it is in (up to a block above: a hand never puts a thing deeper)
+        for (let up = 0.05; up <= 1.2; up += 0.05) {
+            if (!inside(pos.y + up)) { pos.y += up + 0.12; return pos; }
+        }
+        return pos;
+    }
+
+    /** May my hands take this thing again (REGRAB)? Forgets it once they may. */
+    _regrabOk(L, now) {
+        const e = this.justLet.get(L.item.uid);
+        if (!e) return true;
+        let d = Infinity;
+        for (const side of ['right', 'left']) {
+            const G = this.game.weapons?.palmFrame?.(side, this._pfr || (this._pfr = {}))?.G;
+            if (G) d = Math.min(d, this._reachTo(L, G));
+        }
+        if (!regrabFree(e, d, now)) return false;
+        this.justLet.delete(L.item.uid);
+        return true;
     }
 
     /**
@@ -589,7 +633,15 @@ export class ItemSystem {
                 grip.getWorldQuaternion(_q);
                 h.model.quaternion.copy(_q);
             }
+            // (its lowest point from the hand: HandBlocks keeps it out of a counter with the hand — a pouch
+            // hanging from the fist lies on the counter, never goes into it)
+            const S = h.shape;
+            if (S && ch.getHandWorldPosition) {
+                const low = GRIPPED[kind]?.axis === 'hang' ? h.model.localToWorld(_a.set(S.c.x, S.y0, S.c.z)) : h.model.localToWorld(_a.copy(S.c)).setY(_a.y - S.rh);
+                (h.low || (h.low = new THREE.Vector3())).copy(low).sub(ch.getHandWorldPosition(side, _b));
+            }
         }
+        if (this.justLet.size) { const t = performance.now(); for (const [uid, e] of this.justLet) if (t - e.at > REGRAB.MS) this.justLet.delete(uid); }
         if (this.worn.backpack) this._placeBackpack(this.worn.backpack.model, ch);
         if (!g.currentPose || g.combat.dead) { this._netSend(dt); return; }
         const now = performance.now();
@@ -600,6 +652,7 @@ export class ItemSystem {
             let best = null, bestD = 0.8;
             for (const L of this.loose.values()) {
                 if (now < L.noPick || L.asked) continue;
+                if (this.justLet.size && !this._regrabOk(L, now)) continue; // (just put down: not back into the same fingers)
                 if (L.model.position.distanceToSquared(G) > 9) continue;
                 // a good on a market counter: not before it is paid for (coins on the counter, its name said — CastleTalk);
                 // then only taken by really closing the fingers on it (a brush of the hand takes nothing)

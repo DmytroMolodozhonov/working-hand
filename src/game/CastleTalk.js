@@ -39,6 +39,8 @@ import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.
 import { detectOrder, toolsFor } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
+import { stallTrade, counterZone } from './MarketGoods.js';
+import { pushOutOfRect } from '../world/Collision.js';
 
 export const HEAR = 7; // m: a villager hears you this far
 const VOICE = 18; // m: a villager's voice carries this far
@@ -47,10 +49,6 @@ const SHOUT_RANGE = 55; // m: a battle cry / a call for help carries much farthe
 const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', price: 35 }, { kind: 'crystal', price: 70 }];
 /** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, or a piece of magic armour (ArmorTypes). */
 const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }];
-const GOODS = [
-    { kind: 'bread', price: 3 }, { kind: 'cheese', price: 4 }, { kind: 'pie', price: 6 }, { kind: 'steak', price: 6 },
-    { kind: 'apple', price: 30 }, { kind: 'arrows', price: 8, count: 10 }, { kind: 'shield', price: 25, type: 0 }, { kind: 'bow', price: 30, type: 0 },
-];
 const _v = new THREE.Vector3();
 const GOOD_IN = 0.35, PAID_IN = 0.2; // m from the counter's front edge: a good lying there; a paid one pushed to the buyer
 
@@ -61,6 +59,12 @@ export function frontEdge(stall, inset) {
     const lo = along ? c.z0 : c.x0, hi = along ? c.z1 : c.x1;
     const mid = (lo + hi) / 2, f = along ? stall.front.z : stall.front.x;
     return f >= mid ? hi + 0.5 - inset : lo - 0.5 + inset;
+}
+
+/** Is this point lying on (just above) the stall's counter top? */
+export function onCounter(stall, p) {
+    const c = stall.counter;
+    return p.x >= c.x0 - 0.7 && p.x <= c.x1 + 0.7 && p.z >= c.z0 - 0.7 && p.z <= c.z1 + 0.7 && p.y > c.top - 0.3 && p.y < c.top + 1.2;
 }
 
 /**
@@ -82,14 +86,27 @@ export function restAfter(reply, head) {
 }
 
 /** Words a good is called by (its name's words, and what people say for it). */
-const ALIAS = { steak: ['мяс', 'стейк'], flask: ['колб', 'фляг', 'бутыл', 'склян'], crystal: ['кристал'], apple: ['яблок'], arrows: ['стрел'], bow: ['лук'], shield: ['щит'], cheese: ['сыр'], bread: ['хлеб'], pie: ['пирог', 'пирож'] };
+const ALIAS = { steak: ['мяс', 'стейк', 'жарен'], meat: ['сыро'], redApple: ['яблок', 'красн'], wool: ['шерст', 'пряж'], glass: ['стекл', 'осколк'], flask: ['колб', 'фляг', 'бутыл', 'склян'], crystal: ['кристал'], apple: ['яблок', 'золот'], arrows: ['стрел'], bow: ['лук'], shield: ['щит'], cheese: ['сыр'], bread: ['хлеб'], pie: ['пирог', 'пирож'] };
 const normWords = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
-/** Does this text name this good? */
-export function namesGood(text, item) {
+/** How well this text names this good: the letters of its words matched (0 — not named). */
+export function nameScore(text, item) {
     const words = normWords(text);
-    const stems = ALIAS[item.kind] || normWords(ITEM_INFO[item.kind]?.name || '').filter((w) => w.length >= 3).map((w) => w.slice(0, Math.max(3, w.length - 2)));
+    const stems = [...(ALIAS[item.kind] || normWords(ITEM_INFO[item.kind]?.name || '').filter((w) => w.length >= 3).map((w) => w.slice(0, Math.max(3, w.length - 2))))];
     if (item.kind === 'weapon') stems.push(item.type === 'axe' ? 'топор' : 'меч');
-    return words.some((w) => stems.some((st) => w.startsWith(st) && (st.length > 3 || w.length <= st.length + 2)));
+    let n = 0;
+    for (const st of stems) if (words.some((w) => w.startsWith(st) && (st.length > 3 || w.length <= st.length + 2))) n += st.length;
+    return n;
+}
+/** Does this text name this good? */
+export const namesGood = (text, item) => nameScore(text, item) > 0;
+/** The good this text names best ({item, price}…); a tie — the cheaper (a plain apple, not the golden one). */
+export function namedGood(text, goods) {
+    let best = null, bs = 0;
+    for (const g of goods) {
+        const sc = nameScore(text, g.item);
+        if (sc > bs || (sc === bs && sc > 0 && g.price < best.price)) { bs = sc; best = g; }
+    }
+    return best;
 }
 
 const nameOf = (it) => (it.kind === 'armor' || it.kind === 'robe' ? armorName(it).toLowerCase() : it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
@@ -146,7 +163,7 @@ export class CastleTalk {
             playerName: g.net?.active ? g.net.name : null,
             playerIsKing: st.owner === g.localId,
             hostile: v.cs.hostile.get(g.localId) > Date.now(),
-            coins: g.inventory?.coins?.() ?? 0,
+            coins: (g.inventory?.coins?.() ?? 0) + (this._trader(v) ? this._counterCoins(v.cs.def, v.entry.stall).reduce((n, L) => n + (L.item.count || 0), 0) : 0), // (a pouch on his counter pays too)
             nearbyGoods: this._trader(v) ? this._goodsOf(v) : [],
             heldItem: null,
             players: this._players(),
@@ -477,7 +494,10 @@ export class CastleTalk {
     _apply(v, res) {
         if (!res || v.dead) return;
         const g = this.game;
-        if (res.reply) {
+        // («да» to buy at a stall: the merchant says «держи» only when the deal really happens — _tradeYes
+        // says what came of it; never «да-да» and nothing given)
+        const deal = res.action === 'trade_yes' && res.offer?.kind === 'buy' && this._trader(v) && !(this.offer?.v === v && this.offer.kind === 'sell');
+        if (res.reply && !deal) {
             // (the start was said already while the net wrote: only the rest now, after it)
             const head = res.spoken;
             if (head) { const rest = restAfter(res.reply, head); if (rest) this._sayMore(v, rest); }
@@ -523,6 +543,36 @@ export class CastleTalk {
         return out;
     }
 
+    /** Pouches of coins lying still on this stall's counter (the loose things). */
+    _counterCoins(def, i) {
+        const st = def.stalls?.[i], out = [];
+        if (!st?.counter) return out;
+        for (const L of this.game.items.loose.values()) {
+            if (L.item.kind === 'coins' && !L.hover && !L.accio && onCounter(st, L.model.position) && L.vel.lengthSq() <= 0.05) out.push(L);
+        }
+        return out;
+    }
+
+    /**
+     * The buyer's body stays a little before every counter near it (MarketGoods.counterZone): the
+     * arms reach the counter top, the body doesn't press against it. Only a body standing on the
+     * market's floor (not one on top of the counter, flying, or up on a roof). → moved?
+     */
+    keepOffCounters(pos, r, feetY) {
+        let moved = false;
+        for (const cs of this.life.castles.values()) {
+            if (!cs.awake) continue;
+            for (const st of cs.def.stalls || []) {
+                const c = st.counter;
+                if (!c || Math.abs((c.x0 + c.x1) / 2 - pos.x) > 8 || Math.abs((c.z0 + c.z1) / 2 - pos.z) > 8) continue;
+                if (feetY >= c.top - 0.2 || feetY < c.top - 3) continue;
+                const z = counterZone(st);
+                if (pushOutOfRect(pos, r, z.minX, z.maxX, z.minZ, z.maxZ)) moved = true;
+            }
+        }
+        return moved;
+    }
+
     _merchantOf(def, i) {
         for (const v of this.life.byId.values()) if (v.cs.def === def && this._trader(v) && v.entry.stall === i && !v.dead) return v;
         return null;
@@ -551,13 +601,14 @@ export class CastleTalk {
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
-                    const pick = stall.potions ? (k === 2 ? WIZARD_RARE[((n % 3) + 3) % 3] : POTION_GOODS[k % POTION_GOODS.length]) : GOODS[((n % GOODS.length) + GOODS.length) % GOODS.length];
+                    // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
+                    const pick = stall.potions ? (k === 2 ? WIZARD_RARE[((n % 3) + 3) % 3] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
                     const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
                     const item = pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
                         : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
                             : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
-                    if (pick.kind === 'shield') { item.type = pick.type; item.magic = false; item.max = 0; delete item.count; }
+                    if (pick.kind === 'shield') { item.type = pick.type || 0; item.magic = false; item.max = 0; delete item.count; }
                     if (pick.kind === 'bow') { item.type = 0; item.magic = false; item.bonus = 0; item.arrows = 5; delete item.count; }
                     const f = (k + 0.5) / 3;
                     // (by the buyer's edge of the counter, not in its middle: a hand reaches it from the front)
@@ -614,15 +665,20 @@ export class CastleTalk {
     _tradeYes(v, res = null) {
         const g = this.game;
         const o = this.offer;
-        // «да» right after the merchant named a good and its price (not to an old offer, not by chance)
+        const yes = res?.reply || 'Держи!';
+        // «да» to what the merchant named by word: paid from the pouch on the counter (its own words then)
         if ((!o || o.v !== v) && res?.offer?.kind === 'buy') {
-            if (this._pitch?.v === v && performance.now() - this._pitch.at < 30000) { this._pitch = null; this._buyByWord(v, res.offer); }
+            const fresh = this._pitch?.v === v && performance.now() - this._pitch.at < 30000;
+            this._pitch = null;
+            if (fresh || this._pursePay(v)) this._buyByWord(v, res.offer);
+            else this._sayReply(v, 'Что именно берёшь? Положи монеты на прилавок и назови товар.', 4);
             return;
         }
         if (!o || o.v !== v) return;
         if (o.kind === 'buy' && o.cauldron) {
             // the big cauldron I am moving away from the master's stall
             if (!g.inventory.spendCoins(o.price)) { this._sayReply(v, this.brain(v).noMoneyLine(this._ctx(v))); return; }
+            this._sayReply(v, yes, 4);
             g.cauldrons?.paid(o.cauldron);
             g.inventory._render?.();
             g.hud.setVoice?.(`💰 Котёл куплен за ${o.price} (осталось ${g.inventory.coins()}) — он ваш, тащите его домой`, true);
@@ -633,6 +689,7 @@ export class CastleTalk {
             const item = this._findMine(o.uid);
             if (!item) { this.offer = null; return; }
             if (!g.inventory.spendCoins(o.price)) { this._sayReply(v, this.brain(v).noMoneyLine(this._ctx(v))); return; }
+            this._sayReply(v, yes, 4);
             delete item.shop;
             g.inventory._render?.();
             g.hud.setVoice?.(`💰 Куплено: ${nameOf(item)} за ${o.price} (осталось ${g.inventory.coins()})`, true);
@@ -651,6 +708,7 @@ export class CastleTalk {
     _buyByWord(v, offer) {
         const want = String(offer.item?.name || offer.item || '').toLowerCase();
         if (this._payByName(v, want)) return;
+        if (this._pursePay(v)) { this._sayReply(v, 'Такого у меня на прилавке нет. Назови, что лежит, — цена на карточке.', 4); return; }
         this._sayReply(v, 'Клади монеты на прилавок — и скажи, что берёшь.', 4);
         this.game.hud.setVoice?.('💰 Положите мешочек с монетами на прилавок и назовите товар', true);
     }
@@ -658,16 +716,17 @@ export class CastleTalk {
     /** A pouch of coins lying still on this merchant's counter (the loose thing), or null. */
     _pursePay(v) {
         const P = this.purse;
-        if (!P || P.v !== v) return null;
-        const L = this.game.items.loose.get(P.uid);
-        return L && L.item.kind === 'coins' ? L : null;
+        const L = P && P.v === v ? this.game.items.loose.get(P.uid) : null;
+        if (L && L.item.kind === 'coins') return L;
+        // (any pouch lying still on his counter: the one he greeted may have been taken back, another put)
+        return this._trader(v) ? this._counterCoins(v.cs.def, v.entry.stall)[0] || null : null;
     }
 
     /** I named a good with my coins on the counter: pay for it from the pouch (the host decides). */
     _payByName(v, text) {
         const C = this._pursePay(v);
         if (!C) return false;
-        const good = this._goodsOf(v).find((x) => namesGood(text, x.item));
+        const good = namedGood(text, this._goodsOf(v));
         if (!good) return false;
         const g = this.game;
         if (g.authority) this.pay(C.item.uid, good.uid, g.localId);
@@ -687,16 +746,18 @@ export class CastleTalk {
         const cs = this.life.castles.get(cid);
         const v = cs ? this._merchantOf(cs.def, +s) : null;
         if (!v || v.dead || v.foe) return;
-        const price = G.item.shop.price, have = C.item.count || 0, name = nameOf(G.item);
+        // (all the pouches lying on his counter count: a second one put to add what was missing)
+        const purses = [C, ...this._counterCoins(cs.def, +s).filter((L) => L !== C)];
+        const price = G.item.shop.price, have = purses.reduce((n, L) => n + (L.item.count || 0), 0), name = nameOf(G.item);
         v.yaw = Math.atan2(-(C.model.position.x - v.x), -(C.model.position.z - v.z));
         if (have < price) {
-            this._sayForGuestOrMe(v, by, `${name[0].toUpperCase() + name.slice(1)} стоит ${price}, а тут только ${have}. Не хватает — выбери что-нибудь другое.`);
-            this._tradeNote(by, `💰 Не хватает монет: ${name} — ${price}, в мешочке ${have}. Выберите другой товар`);
+            this._sayForGuestOrMe(v, by, `${name[0].toUpperCase() + name.slice(1)} стоит ${price}, а тут только ${have}. Добавь ещё ${price - have} — или выбери что-нибудь другое.`);
+            this._tradeNote(by, `💰 Не хватает ${price - have} монет: ${name} — ${price}, в мешочке ${have}`);
             return;
         }
         // he takes the money with his hand (the whole pouch — or what it costs, the rest left lying)
         const at = C.model.position.clone();
-        I.pickUp(coinUid, '#merchant', 'right');
+        for (const L of purses) I.pickUp(L.item.uid, '#merchant', 'right');
         const rest = have - price;
         if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
         v.giveT = 1.2;
@@ -769,7 +830,7 @@ export class CastleTalk {
                 if (Math.hypot((c.x0 + c.x1) / 2 - me.x, (c.z0 + c.z1) / 2 - me.z) > 9) return;
                 const v = this._merchantOf(cs.def, i);
                 if (!v || v.foe || cs.hostile.get(g.localId) > Date.now()) return;
-                const on = (p) => p.x >= c.x0 - 0.7 && p.x <= c.x1 + 0.7 && p.z >= c.z0 - 0.7 && p.z <= c.z1 + 0.7 && p.y > c.top - 0.3 && p.y < c.top + 1.2;
+                const on = (p) => onCounter(stall, p);
                 let found = null;
                 // my pouch of coins put down on the counter: «what do you want?»
                 for (const L of g.items.loose.values()) {
