@@ -10,7 +10,7 @@
  *  - Between two of its tricks at least 3 seconds pass.
  *  - Wind can't move it, freezing doesn't work on it, «Авада Кедавра» only
  *    takes 20 HP. Swords, axes, arrows, fire, Bombardo, lightning hurt it.
- *  - When it dies it leaves treasure (always a wand) and a chest (web, travellers' things).
+ *  - When it dies it leaves treasure (always a wand).
  *
  * Size: twice the old one (SIZE = 2) — the body, its legs and steps, its speed,
  * the reach of the bite / grab / spit and the body weapons and spells hit are all
@@ -23,7 +23,6 @@ import { crowdStep } from './CrowdSources.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { rollWand, rollLoot, newUid } from './ItemTypes.js';
-import { Chest } from '../entities/Chest.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 
 const HP = 200;
@@ -258,16 +257,6 @@ export class Spiders {
                 if (it.kind === 'weapon') return;
                 g.items.spawnLoose(it, p.clone().add(_v2.set((i - 1) * 0.9 * SIZE, 0, 0)), { hover: true });
             });
-        }
-        // her chest (cocoons of her prey; on every computer — the same id): web, travellers' things (Items.lootChest, room 'spider')
-        const cid = 'spider:' + s.id;
-        if (!g.chests.some((x) => x.id === cid)) {
-            const px = s.model.position.x, pz = s.model.position.z;
-            const chest = new Chest(g.scene, new THREE.Vector3(px, g.collision.groundY(px, pz), pz), 'loot', s.model.rotation.y, cid);
-            chest.room = 'spider';
-            chest.mesh.updateMatrixWorld(true);
-            chest.boxId = g.collision.addBox(chest.getCollisionBox());
-            g.chests.push(chest);
         }
         setTimeout(() => this._remove(s), 1500);
         s.model.rotation.z = Math.PI;

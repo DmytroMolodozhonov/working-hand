@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TerrainData } from '../../src/world/Terrain.js';
-import { rollDragonLoot, rollSpiderLoot } from '../../src/game/ItemTypes.js';
+import { rollDragonLoot } from '../../src/game/ItemTypes.js';
 
 const t = new TerrainData();
 t.generate({ seed: 12345, mountains: true });
@@ -41,10 +41,6 @@ test('castle king: chests in the treasury and the king\'s rooms', () => {
     assert.ok(n > 0);
 });
 
-test('boss loot: dragon — precious things; spider — web and travellers\' things', () => {
-    for (let i = 0; i < 20; i++) {
-        assert.ok(rollDragonLoot().length >= 2);
-        const s = rollSpiderLoot();
-        assert.ok(s.some((x) => x.kind === 'web') && s.length >= 3);
-    }
+test('boss loot: dragon — precious things (the giant spider has no chest)', () => {
+    for (let i = 0; i < 20; i++) assert.ok(rollDragonLoot().length >= 2);
 });
