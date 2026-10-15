@@ -531,7 +531,9 @@ export class Space {
         this.realm = realmAt(p.x, p.y, p.z, this.planets);
         g.character.gravityK = 1;
         this._ovKind = this._entryAir ? 'white' : 'black'; this._ovK = 1; // (out of the burning air: it clears)
-        if (g.castleLife) g.castleLife._scanT = 0; // (the castles left far behind fall asleep at once: nobody of theirs asks for land long gone)
+        // (the castles and ships left far behind fall asleep at once: nobody of theirs asks for land long gone)
+        if (g.castleLife) g.castleLife._scanT = 0;
+        if (g.ships) g.ships._scanT = 0;
         const fl = g.flight;
         if (!fl.active) fl.float();
         fl.hovering = false;
