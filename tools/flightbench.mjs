@@ -246,8 +246,8 @@ async function runLevel(browser, url, level) {
     // (Circle Attack and Inspirius compile their looks a couple of game seconds after the start, on the
     // ground; here the frames are slow, so wait for that before taking off — in a real game it is long done)
     for (let i = 0; i < 240; i++) {
-        const st = await page.evaluate(() => { const g = window.__zns.game; return { ok: !!(g.circleAttack?._warmed ?? true) && !!(g.inspirius?._warmed ?? true), sound: !!(g.circleAttack?._soundReady ?? true) && !!(g.inspirius?._soundsReady ?? true), frames: g.frameCount }; });
-        if (st.ok && st.sound) break;
+        const st = await page.evaluate(() => { const g = window.__zns.game; const c = typeof g.circleAttack?._warm === 'function' ? g.circleAttack : null, n = typeof g.inspirius?._warm === 'function' ? g.inspirius : null; /* (an older game has no warm-up) */ return { ok: (!c || !!c._warmed) && (!n || !!n._warmed), sound: (!c || !!c._soundReady) && (!n || !!n._soundsReady), frames: g.frameCount }; });
+        if (st.ok && (st.sound || i > 30)) break; // (their sounds: in a few seconds; with no sound card here, never)
         if (i % 20 === 19) console.log('  (ждём прогрев эффектов…)', JSON.stringify(st));
         await sleep(500);
     }

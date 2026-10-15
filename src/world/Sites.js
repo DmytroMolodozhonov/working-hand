@@ -12,6 +12,25 @@ export class SiteIndex {
         return b.length ? a.concat(b) : a;
     }
 
+    /**
+     * Make, a little at a time, the castles and towers within `r` that nobody asked for yet (cells of
+     * `cell` m): a flight comes to them fast, and the minimap and the people ask for all of them at
+     * once — a row of new castles made in one frame was a long one. The same castles either way.
+     */
+    warm(x, z, r, cell, ms = 1.5) {
+        const t0 = performance.now();
+        const g0x = Math.floor((x - r) / cell) - 1, g1x = Math.floor((x + r) / cell) + 1;
+        const g0z = Math.floor((z - r) / cell) - 1, g1z = Math.floor((z + r) / cell) + 1;
+        for (const idx of [this.castles, this.towers]) {
+            for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {
+                if (idx.cells.has(idx._key(gx, gz))) continue;
+                idx.cellOf(gx, gz);
+                if (performance.now() - t0 > ms) return false;
+            }
+        }
+        return true;
+    }
+
     landAt(ix, iz) { return this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz); }
 
     partsForChunk(cx, cz, C) {

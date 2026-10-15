@@ -21,6 +21,16 @@ const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _c = new THREE.Color();
 const _e = new THREE.Euler();
+const _Y = new THREE.Vector3(0, 1, 0);
+const _nm = new THREE.Matrix3(), _v3 = new THREE.Vector3();
+/** Unit primitives (made once, without an index): a ship's boxes and posts are these, scaled — a new
+ *  geometry for each of its hundreds of parts made a harbour's ship a long frame to build. */
+const _unit = new Map();
+function unitGeo(key, make) {
+    let g = _unit.get(key);
+    if (!g) { const m = make(); g = m.toNonIndexed(); m.dispose(); _unit.set(key, g); }
+    return g;
+}
 
 /** Many coloured primitives merged into one geometry (vertex colours). */
 class Batch {
@@ -29,9 +39,9 @@ class Batch {
     add(geo, matrix, color) {
         const g = geo.index ? geo.toNonIndexed() : geo;
         const p = g.attributes.position, n = g.attributes.normal;
-        const nm = new THREE.Matrix3().getNormalMatrix(matrix);
+        const nm = _nm.getNormalMatrix(matrix);
         _c.set(color);
-        const v = new THREE.Vector3();
+        const v = _v3;
         for (let i = 0; i < p.count; i++) {
             v.fromBufferAttribute(p, i).applyMatrix4(matrix);
             this.pos.push(v.x, v.y, v.z);
@@ -43,27 +53,22 @@ class Batch {
     }
 
     box(x0, x1, y0, y1, z0, z1, color, rotY = 0) {
-        const g = new THREE.BoxGeometry(Math.max(0.01, x1 - x0), Math.max(0.01, y1 - y0), Math.max(0.01, z1 - z0));
-        _m.makeRotationY(rotY).setPosition((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-        this.add(g, _m, color);
-        g.dispose();
+        _q.setFromAxisAngle(_Y, rotY);
+        _m.compose(_p.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), _q, _s.set(Math.max(0.01, x1 - x0), Math.max(0.01, y1 - y0), Math.max(0.01, z1 - z0)));
+        this.add(unitGeo('box', () => new THREE.BoxGeometry(1, 1, 1)), _m, color);
     }
 
     /** A box of size (sx, sy, sz) at p turned by the Euler angles. */
     boxAt(px, py, pz, sx, sy, sz, color, rx = 0, ry = 0, rz = 0) {
-        const g = new THREE.BoxGeometry(sx, sy, sz);
         _q.setFromEuler(_e.set(rx, ry, rz, 'YXZ'));
-        _m.compose(_p.set(px, py, pz), _q, _s.set(1, 1, 1));
-        this.add(g, _m, color);
-        g.dispose();
+        _m.compose(_p.set(px, py, pz), _q, _s.set(sx, sy, sz));
+        this.add(unitGeo('box', () => new THREE.BoxGeometry(1, 1, 1)), _m, color);
     }
 
     cyl(r0, r1, len, px, py, pz, color, rx = 0, ry = 0, rz = 0, seg = 8) {
-        const g = new THREE.CylinderGeometry(r1, r0, len, seg);
         _q.setFromEuler(_e.set(rx, ry, rz, 'YXZ'));
-        _m.compose(_p.set(px, py, pz), _q, _s.set(1, 1, 1));
-        this.add(g, _m, color);
-        g.dispose();
+        _m.compose(_p.set(px, py, pz), _q, _s.set(1, len, 1));
+        this.add(unitGeo(`cyl${r0},${r1},${seg}`, () => new THREE.CylinderGeometry(r1, r0, 1, seg)), _m, color);
     }
 
     /** Raw triangles (already in local space): flat list of [x,y,z] triples, with a colour per triangle. */

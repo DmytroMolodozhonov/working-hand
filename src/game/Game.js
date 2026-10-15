@@ -69,6 +69,7 @@ import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Dragons } from './Dragons.js';
 import { Carriages, cartModel } from './Carriages.js';
+import { CASTLE_CELL } from '../world/Castles.js';
 import { ShipModel } from '../entities/ShipModel.js';
 import { buildLayout } from './ShipLayout.js';
 import { SHIP_CLASSES } from './ShipTypes.js';
@@ -2615,6 +2616,8 @@ export class Game {
         mark('мир');
         this._updateCamera(dt);
 
+        // (the castles and towers ahead: made a little a frame before the minimap and the people want them)
+        if (this.frameCount % 3 === 1) this.world.terrain?.data?.sites?.warm?.(this.character.group.position.x, this.character.group.position.z, 900 + CASTLE_CELL, CASTLE_CELL);
         if (this.frameCount % 5 === 0) {
             const cp = this.character.group.position;
             const others = [...this.remotes].filter(([id, r]) => !r.dead && !this.invis?.hidden(id)).map(([, r]) => r).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
