@@ -192,6 +192,9 @@ function sailorLook(e, color) {
     return L;
 }
 
+/** Captain Black Moustache (a boss — made in another work): his achievement as soon as he is a sailor flagged so. */
+const isBlackbeard = (v) => !!(v?.blackbeard || v?.boss === 'blackbeard' || v?.role === 'blackbeard');
+
 export class Sailors {
     constructor(game, ships) {
         this.game = game;
@@ -361,6 +364,7 @@ export class Sailors {
         } else v.hp -= dmg;
         v.hp = Math.max(0, Math.round(v.hp * 10) / 10);
         if (by) v.hitBy = { id: by === 'local' ? g.localId : by, t: performance.now() };
+        if (by) { if (isBlackbeard(v)) g.achievements?.hit('blackbeard', v.id, by); else g.achievements?.fought(by); } // (the achievement: Achievements.js)
         v.model.flashHit?.(0.15);
         g.sound?.playHit?.();
         if (dir && !v.overboard) {
@@ -797,6 +801,7 @@ export class Sailors {
     }
 
     _die(v, by) {
+        if (!v.dead && isBlackbeard(v)) this.game.achievements?.killed('blackbeard', v.id, by, v.model?.group?.getWorldPosition?.(v.model.group.position.clone()) || null); // (the captain: everyone who fought him)
         v.dead = true;
         v.hp = 0;
         v.mode = 'dead';

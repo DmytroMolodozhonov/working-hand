@@ -1,20 +1,21 @@
 /**
  * Achievements.js — the player's achievements («ачивки») and the status «Высший маг».
  *
- * Five deeds (ACHIEVEMENTS): kill a castle's king, the Ice Queen, the giant spider, a dragon,
- * and destroy a wizards' tower (its Master killed AND the tower itself really pulled down —
+ * Six deeds (ACHIEVEMENTS): kill a castle's king, the Ice Queen, the giant spider, a dragon,
+ * Captain Black Moustache (the pirate on his black ship), and destroy a wizards' tower (its Master killed AND the tower itself really pulled down —
  * TOWER.LEFT: no more than a third of its walls still standing).
  *   • Each one: + to the mana maximum by its own number (ACHIEVEMENTS `mana` — the author: the king
- *     +50, the Ice Queen +100, the spider +100, a dragon +150, a tower +200) and +15 % to how fast
+ *     +50, the Ice Queen +100, the spider +100, a dragon +150, a tower +200, Captain Black Moustache
+ *     +75) and +15 % to how fast
  *     the mana comes back (ACH.REGEN).
- *   • All five: the status «Высший маг» — +300 more to the maximum, +100 % more to the speed,
+ *   • All of them: the status «Высший маг» — +300 more to the maximum, +100 % more to the speed,
  *     and the High Mage's suit (ArmorTypes.makeArchmageSuit): it comes into a slot (or at the
  *     feet) with a golden flash; put on by hand like any robe; every spell does 40 % less harm.
  *   • Kept for good: death takes the mana grown with practice (Mana.onDeath), never these.
  *     They live with the player (WorldSave.playerSnapshot → `ach`), as the mana and the things do.
  *
  * Who gets it (the author: «убийство Королевы можно втроём, и будет считаться всем» — the same
- * rule for all five): every player who took part — struck it / hit it with a spell in the last
+ * rule for all of them): every player who took part — struck it / hit it with a spell in the last
  * ACH.WINDOW (60 s) before its death, struck the last blow, or was near (ACH.NEAR m) and
  * fighting there (struck any castle person / boss in the last 60 s). For a tower: whoever pulled
  * down its blocks (in the last TOWER.WINDOW) and whoever took part in killing its Master.
@@ -24,9 +25,10 @@
  * blocks via `towerWrecked(def, by)` (CastleLife.damaged). A guest is told by 'achc'; each player's
  * own computer counts it and tells the others ('ach' {a: 'got'}) — «X получил ачивку».
  *
- * The Ice Queen (a creature being made in another work): she counts as soon as her code calls
- * `game.achievements.hit('iceQueen', id, by)` on blows and `killed('iceQueen', id, by, pos)` on her
- * death — or if she is a castle person with role 'iceQueen' / flag `iceQueen` (CastleLife does it).
+ * The Ice Queen: IceQueen.js calls `hit('iceQueen', …)` / `killed('iceQueen', …)`. Captain Black
+ * Moustache (made in another work): counted as soon as he is a sailor with `blackbeard: true` (or
+ * `boss: 'blackbeard'`) — Sailors.js — or his own code calls `hit/killed('blackbeard', id, by, pos)`.
+ * Every new boss: a line in ACHIEVEMENTS (CLAUDE.md: every boss is an achievement).
  */
 
 import { makeArchmageSuit } from './ArmorTypes.js';
@@ -50,6 +52,7 @@ export const ACHIEVEMENTS = [
     { id: 'iceQueen', mana: 100, icon: '❄️', title: 'Убить Ледяную Королеву', desc: 'Победить Снежную (Ледяную) Королеву в её ледяном замке' },
     { id: 'spider', mana: 100, icon: '🕷️', title: 'Убить паучиху', desc: 'Победить гигантскую паучиху' },
     { id: 'dragon', mana: 150, icon: '🐉', title: 'Убить дракона', desc: 'Победить любого дракона' },
+    { id: 'blackbeard', mana: 75, icon: '🏴‍☠️', title: 'Убить капитана Чёрные Усы', desc: 'Победить пирата капитана Чёрные Усы на его чёрном корабле' },
     { id: 'tower', mana: 200, icon: '🏚️', title: 'Уничтожить башню волшебников', desc: 'Убить Мастера башни и по-настоящему разрушить саму башню (снести не меньше двух третей её стен)' },
 ];
 export const ACH_IDS = ACHIEVEMENTS.map((a) => a.id);
@@ -257,7 +260,7 @@ export class Achievements {
     // ------------------------------------------------------------ mine
     /**
      * An achievement is mine (on my own computer): the bonus, a golden banner, a sound; the
-     * others are told. All five: «Высший маг».
+     * others are told. All of them: «Высший маг».
      * @returns {boolean} new
      */
     gain(kind, { quiet = false } = {}) {
@@ -417,5 +420,5 @@ export function achievementsHtml(done = new Set(), { world = '' } = {}) {
     return `<div class="ach-head">🏆 Ачивки: <b>${n} из ${ACH_IDS.length}</b>${world ? ` <span class="ach-world">(мир «${world}»)</span>` : ''}</div>`
         + `<div class="ach-sum">Сейчас дают: +${b.mana} к максимуму маны, восстановление ×${b.regen.toFixed(2).replace(/\.?0+$/, '')}. Смерть их не отнимает.</div>`
         + rows
-        + `<div class="ach-row high${high ? ' done' : ''}"><span class="ach-ic">${high ? '🌟' : '✨'}</span><div class="ach-body"><b>Высший маг</b><span>Все пять ачивок: ещё +${ACH.HIGH_MANA} к максимуму маны, восстановление ещё на ${Math.round(ACH.HIGH_REGEN * 100)}% быстрее и костюм Высшего мага (любое заклинание ранит на 40% слабее)</span><span class="ach-gift">${high ? '✅ Получено' : 'Нужны все пять'}</span></div></div>`;
+        + `<div class="ach-row high${high ? ' done' : ''}"><span class="ach-ic">${high ? '🌟' : '✨'}</span><div class="ach-body"><b>Высший маг</b><span>Все ачивки: ещё +${ACH.HIGH_MANA} к максимуму маны, восстановление ещё на ${Math.round(ACH.HIGH_REGEN * 100)}% быстрее и костюм Высшего мага (любое заклинание ранит на 40% слабее)</span><span class="ach-gift">${high ? '✅ Получено' : 'Нужны все'}</span></div></div>`;
 }

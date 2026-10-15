@@ -223,6 +223,7 @@ export class IceCastleLife {
         if (!this.auth) { if (dmg > 0) g.sync?.ice?.({ e: 'hit', id: c.id, dmg: r2(dmg), kind, by: who }); this._flash(c, n > 0); return n; }
         this._flash(c, n > 0);
         if (who != null) c.lastBy = who;
+        if (c.type === 'queen') g.achievements?.hit('iceQueen', c.id, who); else g.achievements?.fought(who); // (the achievement: everyone who took part)
         // (struck: it turns on whoever did it — a creature of the castle defends itself)
         if (who != null && (who === g.localId || g.remotes?.has(who))) c.foe = who;
         if (n <= 0) { if (c.type === 'queen' && (c.mockT || 0) <= 0) { c.mockT = 8; this._say(c, 'Твоя магия здесь бессильна!'); } return 0; }
@@ -311,6 +312,7 @@ export class IceCastleLife {
             g.hud?.notify?.('❄️ Ледяная Королева побеждена! Её Ледяной Жезл упал на пол');
             if (this.auth) {
                 creditKill(g, killer, { kind: 'iceQueen' });
+                g.achievements?.killed('iceQueen', c.id, killer, p); // (the achievement: to all who fought her)
                 // her rod falls where she stood (one in the world: she never comes back)
                 const at = c.model.position.clone().add(_v.set(0, 2.5, 0));
                 g.items?.spawnLoose({ kind: 'iceRod', uid: newUid() }, at, { hover: true });

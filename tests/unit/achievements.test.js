@@ -1,5 +1,5 @@
 // Achievements (Achievements.js): everyone who took part gets it, the bonus (+50 mana, +15 %),
-// a wizards' tower needs both its Master dead and the tower down, all five → «Высший маг»
+// a wizards' tower needs both its Master dead and the tower down, all six → «Высший маг»
 // (+300, +100 %, the suit), the suit's −40 % from spells on top of a magic robe, kept on death.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -113,15 +113,15 @@ test('how much of a tower stands: whole ≈ 1, two thirds of the walls gone → 
     assert.equal(towerLeft(def, get(() => false), () => false), null, 'not loaded: unknown');
 });
 
-test('all five → «Высший маг»: +300 more, +100 % more, the suit comes into a slot', () => {
+test('all six (Captain Black Moustache too) → «Высший маг»: +300 more, +100 % more, the suit comes into a slot', () => {
     const { g, a } = fakeGame();
     for (const k of ACH_IDS) a.gain(k);
     assert.ok(a.high);
-    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + ACH.HIGH_MANA);
-    assert.ok(Math.abs(a.regenK - (1 + 5 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
+    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + ACH.HIGH_MANA);
+    assert.ok(Math.abs(a.regenK - (1 + 6 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
     const suit = g.inventory.slots.find((it) => it?.archmage);
     assert.ok(suit && suit.kind === 'robe' && suit.magic, 'the suit is mine');
-    assert.deepEqual(achBonus(ACH_IDS), { mana: 900, regen: 2.75, high: true });
+    assert.deepEqual(achBonus(ACH_IDS), { mana: 975, regen: 2.9, high: true });
     assert.deepEqual(achBonus(['tower']), { mana: 200, regen: 1.15, high: false });
 });
 
@@ -154,4 +154,16 @@ test('death keeps the achievements: the practice-grown mana goes, the achievemen
     a2.restore(a.snapshot());
     a2.restore(a.snapshot());
     assert.equal(g2.combat.maxFatigue, 80);
+});
+
+test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; five of six is no High Mage', () => {
+    const { g, a, credits } = fakeGame({ remotes: ['p2'] });
+    for (const k of ['king', 'iceQueen', 'spider', 'dragon', 'tower']) a.gain(k);
+    assert.equal(a.high, false, 'five of six: not yet');
+    const before = g.combat.maxFatigue;
+    a.hit('blackbeard', 'bb', 'p2');
+    a.killed('blackbeard', 'bb', 'me', pos(0, 0, 0));
+    assert.equal(g.combat.maxFatigue, before + 75 + ACH.HIGH_MANA);
+    assert.ok(a.high);
+    assert.deepEqual(credits, [['p2', 'blackbeard']]);
 });

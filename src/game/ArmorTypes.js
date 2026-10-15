@@ -158,7 +158,7 @@ export function armorValue(it) {
 export function describeArmor(it) {
     if (it.archmage) {
         return { title: '🌟 Костюм Высшего мага', color: 0xffd36e, lines: [
-            'Даётся только за статус «Высший маг» — за все пять ачивок',
+            'Даётся только за статус «Высший маг» — за все ачивки',
             'Любое заклинание ранит на 40% слабее — поверх обычной защиты волшебной мантии',
             'Как волшебная мантия: холод не берёт, простейшие заклинания («Инферно», «Остолбеней», «Левиоса», «Айс», «Сапира», «Даст», «Экспеллиармус») не действуют',
             'Не слетает от «Disarmor» и остаётся с вами после смерти',
@@ -301,7 +301,7 @@ export const DISARMOR_TARGETS = {
 
 // ================================================================ the High Mage's suit
 /**
- * The High Mage's suit (Achievements.js: all five achievements, the status «Высший маг»): a
+ * The High Mage's suit (Achievements.js: all the achievements, the status «Высший маг»): a
  * robe of midnight blue with gold patterns, glowing runes and a cloak. Only for the status —
  * never in chests, at the market or in the character editor; it stays with its owner on death.
  * Worn as a robe (in the robe's place): every standard protection of a magic robe (ROBE_BLOCKS,
