@@ -474,7 +474,7 @@ button, input, select, textarea { font-family: inherit; }
 .pause-box .pause-tab.active { color: #fff; background: var(--ui-grad-magic); }
 .pause-pane { display: none; }
 .pause-pane.active { display: block; }
-#pause-audio, #pause-graphics { text-align: left; max-height: min(52vh, 420px); overflow-y: auto; padding-right: 4px; }
+#pause-audio, #pause-graphics, #pause-creative { text-align: left; max-height: min(52vh, 420px); overflow-y: auto; padding-right: 4px; }
 .pause-audio-row { padding: 9px 2px; border-bottom: 1px solid var(--ui-border); }
 .pause-audio-row:last-child { border-bottom: none; }
 .pause-audio-label { display: block; color: var(--ui-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 6px; }
@@ -503,3 +503,7 @@ button, input, select, textarea { font-family: inherit; }
 .pause-box .pause-tabs .pause-tab[hidden] { display: none; }
 #pause-spells .sub-tab { display: inline-flex; width: auto; margin: 0; font-size: 0.85rem; padding: 6px 12px; }
 #pause-menu.pause-wide { backdrop-filter: none; -webkit-backdrop-filter: none; background: radial-gradient(circle at 50% 40%, rgba(36, 23, 94, 0.75), rgba(5, 3, 18, 0.9)); } /* (a blur behind a scrolling book draws seams) */
+
+.pause-audio-ctl.pause-radios { flex-wrap: wrap; gap: 6px 14px; }
+.pause-audio-ctl.pause-radios label, .pause-audio-ctl .pause-check { color: var(--ui-text); font-size: 0.92rem; cursor: pointer; }
+.pause-audio-ctl input[type="radio"], .pause-audio-ctl input[type="checkbox"] { accent-color: var(--ui-violet); width: 17px; height: 17px; vertical-align: -3px; margin-right: 6px; }

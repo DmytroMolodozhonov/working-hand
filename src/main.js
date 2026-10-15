@@ -465,7 +465,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     }
     if (game && game.active) {
         // the words being caught: a big short line, only in Creative (partly a developer mode)
-        hud.heard(command, game.config?.mode === 'creative');
+        hud.heard(command, game.config?.mode === 'creative' && !!$('show-heard-toggle')?.checked); // (off by default; switched in the settings or the pause menu)
         // talking to a villager near me, the hand not raised to cast: words they understand are words,
         // not a spell («собери войско» is not «Gather», «спасибо» is not «Rescue», «в атаку» is an order)
         // (first: they cast nothing, so the checks below that a spell is really mine — loudness, lips,
@@ -915,12 +915,74 @@ const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
 $('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.world.viewDistance = viewDistanceScale(e.target.value); });
 $('graphics-quality')?.addEventListener('change', (e) => { game?.quality?.setSetting(e.target.value); });
 $('fps-limit')?.addEventListener('change', (e) => { if (game?.config) game.config.fpsLimit = parseInt(e.target.value, 10) || 0; });
+// «🛠 Творческий» in the pause menu: hand version and «show what I said», changed on the go.
+// Each control mirrors the one in the settings (same value, same saving).
+const pauseCreative = (() => {
+    const box = $('pause-creative');
+    const row = (title, ctl, hint) => {
+        const r = document.createElement('div'); r.className = 'pause-audio-row';
+        const l = document.createElement('label'); l.className = 'pause-audio-label'; l.textContent = title;
+        const c = document.createElement('div'); c.className = 'pause-audio-ctl'; c.appendChild(ctl);
+        r.append(l, c);
+        let h = null;
+        if (hint !== undefined) { h = document.createElement('div'); h.className = 'pause-audio-hint'; r.appendChild(h); }
+        box.appendChild(r);
+        return h;
+    };
+    const radios = document.createElement('div'); radios.className = 'pause-radios'; radios.style.display = 'contents';
+    const names = { v2: 'V2 (Точная)', v3: 'V3 (Стабильная)', v4: 'V4 (Новая)', v5: 'V5 (Новая)' };
+    const rs = {};
+    for (const v of Object.keys(names)) {
+        const lab = document.createElement('label'); const r = document.createElement('input');
+        r.type = 'radio'; r.name = 'pause-hand-version'; r.value = v;
+        r.addEventListener('change', () => {
+            const src = document.querySelector(`input[name="hand-version"][value="${v}"]`);
+            if (src) { src.checked = true; src.dispatchEvent(new Event('change', { bubbles: true })); }
+            sync();
+        });
+        r.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
+        lab.append(r, names[v]); radios.appendChild(lab); rs[v] = r;
+    }
+    const hHint = row('Версия кистей рук', radios, '');
+    box.firstChild.querySelector('.pause-audio-ctl').classList.add('pause-radios');
+    const chk = document.createElement('input'); chk.type = 'checkbox';
+    const lab = document.createElement('label'); lab.className = 'pause-check'; lab.append(chk, 'Показывать, что вы сказали');
+    chk.addEventListener('change', () => {
+        const src = $('show-heard-toggle');
+        if (src) { src.checked = chk.checked; src.dispatchEvent(new Event('change', { bubbles: true })); }
+        if (!chk.checked) hud.heard('', false);
+    });
+    chk.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
+    const cHint = row('Сказанное', lab, '');
+    cHint.textContent = 'На экране видно, что услышал микрофон (а что нет — не видно).';
+    function sync() {
+        const cur = document.querySelector('input[name="hand-version"]:checked')?.value || 'v3';
+        for (const v in rs) rs[v].checked = v === cur;
+        chk.checked = !!$('show-heard-toggle')?.checked;
+        // V5 needs the camera program: if it can't start, say why (the same words as the game's notice)
+        const why = cur === 'v5' ? poseService._noticed : '';
+        hHint.textContent = why && !why.startsWith('Кисти V5 включились') ? why : (cur === 'v5' ? 'Кисти V5: ищутся с отдельной программой камеры.' : '');
+    }
+    sync();
+    return { sync };
+})();
+// the hand version changes the running game at once (settings or pause menu)
+for (const r of document.querySelectorAll('input[name="hand-version"]')) {
+    r.addEventListener('change', () => {
+        if (!r.checked || !game?.character) return;
+        game.character.setHandVersion(r.value);
+        if (game.config) game.config.handVersion = r.value;
+        poseService._setHands?.(r.value === 'v5' ? 'v5' : '');
+        pauseCreative.sync();
+    });
+}
 function showPauseTab(id) {
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
     $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells'); // (the spell book needs room)
     if (id === 'pause-audio') pauseAudio.sync();
     if (id === 'pause-graphics') pauseGraphics.sync();
+    if (id === 'pause-creative') pauseCreative.sync();
     if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid');
 }
 document.querySelectorAll('.pause-tab').forEach((b) => { b.onclick = () => showPauseTab(b.dataset.pauseTab); });
@@ -933,6 +995,7 @@ function togglePauseMenu(show) {
         // «✨ Заклинания» — only in Creative (not on a map)
         const creative = game?.config?.mode === 'creative' && !game?.config?.map;
         document.querySelector('[data-pause-tab="pause-spells"]').hidden = !creative;
+        document.querySelector('[data-pause-tab="pause-creative"]').hidden = game?.config?.mode !== 'creative';
         showPauseTab('pause-main');
     }
     el.classList.toggle('hidden', !open);
@@ -1194,7 +1257,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-hands-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
+        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)

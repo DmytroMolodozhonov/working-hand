@@ -45,6 +45,7 @@
                 <button class="pause-tab active" data-pause-tab="pause-main" role="tab">⏸ Меню</button>
                 <button class="pause-tab" data-pause-tab="pause-audio" role="tab">🔊 Звук</button>
                 <button class="pause-tab" data-pause-tab="pause-graphics" role="tab">🖥 Графика</button>
+                <button class="pause-tab" data-pause-tab="pause-creative" role="tab" hidden>🛠 Творческий</button>
                 <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Заклинания</button>
             </div>
             <div id="pause-main" class="pause-pane active">
@@ -53,6 +54,8 @@
             </div>
             <div id="pause-audio" class="pause-pane"></div>
             <div id="pause-graphics" class="pause-pane"></div>
+            <!-- Creative only: hand version and the «what you said» line, changed on the go -->
+            <div id="pause-creative" class="pause-pane"></div>
             <!-- Creative only: the whole spell book without leaving the game -->
             <div id="pause-spells" class="pause-pane">
                 <div id="pause-spell-cats" class="sub-tabs"></div>
@@ -257,6 +260,13 @@
                             <input type="checkbox" id="show-hands-toggle" checked>
                             Показывать Кисти Рук
                         </label>
+                    </div>
+                    <div class="settings-group">
+                        <label>
+                            <input type="checkbox" id="show-heard-toggle">
+                            Показывать, что вы сказали
+                        </label>
+                        <div class="setting-hint">Только в Творческом режиме: на экране видно, что услышал микрофон. Можно переключить и в игре (Escape).</div>
                     </div>
                     <div class="settings-group">
                         <label>Версия Кистей Рук:</label>
