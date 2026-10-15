@@ -749,6 +749,7 @@ export class CastleLife {
         v.damageCooldown -= dt;
         v.sayT -= dt;
         tickSlow(v, dt); // («Даст»: slowed for a while)
+        if (v.wizard && v.fx) this.wizards?.fight?.lostFocus(v); // (stunned / lifted / dead: his concentration is gone)
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; this._deadFall(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
         if (v.sleep && this.night?.step(v, dt)) return; // (going to bed, asleep, getting up — NightLife.js)
         // held up by «Вингардиум Левиоса»: Levitation carries the body

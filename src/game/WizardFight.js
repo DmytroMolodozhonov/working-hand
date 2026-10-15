@@ -579,6 +579,18 @@ export class WizardFight {
         return false;
     }
 
+    /**
+     * (host) The rule of concentration for a wizard of the game (Concentration.js): stunned, frozen, lifted,
+     * thrown or dead, he holds nothing — the shield in his hand falls apart (dead: the dome too). His own
+     * fight never casts a second spell while one is held: in a clash only the clash (WizardAI.decide), the
+     * shield in the free hand and the dome are the author's exceptions (as a player's).
+     */
+    lostFocus(v) {
+        if (!v?.fx) return;
+        if (v.dead) this._shatter(v, FX.SHIELD | FX.DOME);
+        else if (v.stunT > 0 || v.lev || v.vy) this._shatter(v, FX.SHIELD);
+    }
+
     /** The wizard's shield / dome breaks: its light flies apart in pieces. */
     _shatter(v, bits) {
         if (!(v.fx & bits)) return;

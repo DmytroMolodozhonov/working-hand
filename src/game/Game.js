@@ -111,6 +111,7 @@ import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
 import { Invisibility } from './Invisibility.js';
 import { LedgeClimb } from './LedgeClimb.js';
+import { Concentration } from './Concentration.js';
 import { castingHand, aimedUpOrSelf } from './WandAim.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -386,6 +387,7 @@ export class Game {
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
         this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
         this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
+        this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
         this.handHold = new HandHold(this); // handshakes, holding and leading by the hand
@@ -1061,6 +1063,9 @@ export class Game {
             if (isFinal) this.hud.setVoice(`📜 «${ru}» вы ещё не знаете. Найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
+        // the rule of concentration: while a spell is held no other works — first «стоп» (Concentration.js;
+        // the held spell's own words, Lumos, Nox, «стоп», the shield are free; Creative too)
+        if (this.focus.gate(name, isFinal, !!BUILD_SPELLS[name])) return null;
         // «Water Vortex», its «Bubble» / «Frozen», «Fire Maxima» (and nothing else from inside its ice)
         const vx = this.vortex.voice(name, text, isFinal);
         if (vx !== undefined) return vx;
@@ -2551,6 +2556,7 @@ export class Game {
         this.dragons.update(dt);
         this.phoenixes.update(dt);
         this.livingTrees.update(dt);
+        this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this.servants.update(dt);
         this.invis?.update(dt);
         this._updateCaves(dt);

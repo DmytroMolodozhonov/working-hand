@@ -431,6 +431,15 @@ export class HouseMagic {
         }
     }
 
+    /** My concentration is lost (Concentration.js): my magic of a house breaks now (the place catches fire). */
+    breakMine() {
+        const m = this.magic, g = this.game;
+        if (!m || m.by !== g.localId) return false;
+        this._focusLost = true;
+        this._casterHold(m, 0);
+        return true;
+    }
+
     /** The caster keeps the wand in the hand and pays a little mana every second — or the magic breaks. */
     _casterHold(m, dt) {
         const g = this.game;
@@ -438,8 +447,9 @@ export class HouseMagic {
         this._noWand = held ? 0 : this._noWand + dt;
         let why = null;
         if (this._noWand > HOUSE_MAGIC.GRACE) why = '🔥 Палочка выпала из руки — магия сорвалась, начался пожар!';
-        else if (g.combat?.dead) why = '🔥 Магия сорвалась';
+        else if (g.combat?.dead || this._focusLost) why = '🔥 Концентрация сорвалась — магия дома сорвалась, начался пожар!';
         else if (g.combat?.drain && !g.combat.drain(HOUSE_LEVELS[m.level].drain * dt, dt)) why = '🔥 Мана кончилась — магия сорвалась, начался пожар!';
+        this._focusLost = false;
         if (why) {
             g.hud?.setVoice?.(why, true);
             if (this.auth) this._break(m);

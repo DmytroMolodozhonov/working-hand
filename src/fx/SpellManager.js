@@ -391,6 +391,12 @@ export class SpellManager {
         }
     }
 
+    /** A spell this caster holds now (flames, ice beams, the ground sinking — Concentration.js), or null. */
+    heldBy(casterId) {
+        for (const sp of this.spells) if (sp.held && sp.by === casterId && sp.life > 0) return sp;
+        return null;
+    }
+
     /** «Стоп»: the spells this caster holds (flames, ice beams, the storm in the hands) end now. */
     stopBy(casterId) {
         let n = 0;

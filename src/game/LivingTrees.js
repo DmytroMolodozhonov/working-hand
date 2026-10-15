@@ -90,7 +90,7 @@ export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has
 export const aliveDrain = (mana, dt, creative = false) => (creative ? mana : Math.max(0, mana - ALIVE.DRAIN * dt));
 
 const PHASES = ['rise', 'alive', 'stiff', 'fall', 'burn'];
-const WHY = ['', 'mana', 'far', 'stop'];
+const WHY = ['', 'mana', 'far', 'stop', 'focus'];
 const LEG = 2.6; // m: the root legs (s = 1)
 const CHAR = new THREE.Color(0x2a2420);
 const _v = new THREE.Vector3();
@@ -477,6 +477,7 @@ export class LivingTrees {
         const g = this.game;
         g.hud?.setVoice?.(why === 'mana' ? '🌳 Мана кончилась — дерево деревенеет и падает'
             : why === 'far' ? '🌳 Вы ушли дальше 50 м — дерево деревенеет и падает'
+            : why === 'focus' ? '🌳 Концентрация сорвалась — дерево деревенеет и падает'
             : '🛑 Стоп — живое дерево снова становится деревом и падает', true);
     }
 
@@ -489,10 +490,10 @@ export class LivingTrees {
         return true;
     }
 
-    /** «стоп»: my living trees let go. */
-    stopMine() {
+    /** «стоп» (or my concentration lost — 'focus', Concentration.js): my living trees let go. */
+    stopMine(why = 'stop') {
         let n = 0;
-        for (const t of this.mine()) if (this.requestEnd(t, 'stop')) n++;
+        for (const t of this.mine()) if (this.requestEnd(t, why)) n++;
         return n > 0;
     }
 
@@ -602,10 +603,13 @@ export class LivingTrees {
             if (t.burnT <= 0) this._remove(t);
             return;
         }
-        // the 50 m rule (and a caster who left the game)
+        // the 50 m rule (and a caster who left the game); a dead caster's concentration is gone: the tree
+        // lives for it (Concentration.js — the host ends it even if the caster's computer never asked)
         if (t.phase === 'rise' || t.phase === 'alive') {
-            const op = t.owner === g.localId ? g.character.group.position : g.remotes?.get(t.owner)?.position;
-            if (!op || Math.hypot(op.x - p.x, op.z - p.z) > ALIVE.RANGE) this.end(t, 'far');
+            const rp = t.owner === g.localId ? null : g.remotes?.get(t.owner);
+            const op = t.owner === g.localId ? g.character.group.position : rp?.position;
+            if (t.owner === g.localId ? (g.isDeadLocal || g.combat?.dead) : rp?.dead) this.end(t, 'focus');
+            else if (!op || Math.hypot(op.x - p.x, op.z - p.z) > ALIVE.RANGE) this.end(t, 'far');
         }
         if (t.phase !== 'alive' || t.lev) { t.speed = 0; return; } // (held up by «Левиоса Максима»: it carries the tree)
         this._think(t, dt);
