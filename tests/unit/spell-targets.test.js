@@ -183,6 +183,7 @@ test('«Circle Attack» and «Inspirius»: their waves reach every creature; the
     const net = src('src/net/NetSync.js');
     assert.match(net, /case 'circ'/);
     assert.match(net, /case 'insp'/);
+});
 
 test('carts on the roads (Carriages.js, Travelers.js): blasts, rays, lightning, «Инферно», water, «Алохомора», «Джолт» know them', async () => {
     const g = src('src/game/Game.js');
