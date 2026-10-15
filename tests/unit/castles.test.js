@@ -135,3 +135,20 @@ test('houses: rich and poor, each with a door, glass windows, a bed and a chest 
     assert.ok(rich >= 5 && poor >= 10, `rich ${rich}, poor ${poor}`);
     assert.ok(pens >= 1, 'pens with animals');
 });
+
+test('every village has a small graveyard: earth plots with a stone or a post at their head, a fence round it', () => {
+    const t = world(4242);
+    for (const c of castlesOf(t, 4)) {
+        assert.equal(c.graveyards.length, 1, c.id);
+        assert.equal(c.graves.length, 8, c.id);
+        const ids = new Set(c.graves.map((q) => q.id));
+        assert.equal(ids.size, 8);
+        for (const g of c.graves) {
+            t.ensureArea?.(g.x, g.z, 8);
+            for (const [x, z] of g.cells) assert.equal(t.get(x, g.L, z), BLOCK.DIRT, `${g.id}: the plot is earth`);
+            const st = t.get(g.stone.x, g.L + 1, g.stone.z);
+            assert.ok(st === BLOCK.CS_MOSSY || st === BLOCK.CS_GREY || st === BLOCK.FENCE, `${g.id}: a headstone (${st})`);
+            assert.equal(t.get(g.exit.x, g.L + 1, g.exit.z), BLOCK.AIR, `${g.id}: room at its foot`);
+        }
+    }
+});

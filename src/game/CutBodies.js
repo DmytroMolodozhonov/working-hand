@@ -248,14 +248,14 @@ export function livingTreeCutBody(model) {
     const limbs = (ud.arms || []).map((a, i) => ({
         name: 'branch' + i, kind: 'branch', side: a.side < 0 ? 'left' : 'right',
         segs: [
-            { obj: a.sh, o: [0, 0, 0], ax: [0, -1, 0], len: 2.6, part: 'branch' },
-            { obj: a.elbow, o: [0, 0, 0], ax: [0, -1, 0], len: 3.2, part: 'branch' }, // (the forearm and the twig fingers)
+            { obj: a.sh, o: [0, 0, 0], ax: [0, -1, 0], len: ud.armLen?.[0] ?? 2.6, part: 'branch' },
+            { obj: a.elbow, o: [0, 0, 0], ax: [0, -1, 0], len: ud.armLen?.[1] ?? 3.2, part: 'branch' }, // (the forearm and the twig fingers; a skeleton's: its bones)
         ],
     }));
     const blockers = [];
     const trunk = ud.body?.children.find((o) => o.isMesh);
-    if (trunk) blockers.push({ obj: trunk, c: [0, 0, 0], half: [0.8, 2.1, 0.7] });
-    model._cutBody = { root: model, kind: 'tree', limbs, blockers, wood: true };
+    if (trunk) blockers.push({ obj: trunk, c: [0, 0, 0], half: ud.trunkHalf || [0.8, 2.1, 0.7] });
+    model._cutBody = { root: model, kind: 'tree', limbs, blockers, wood: true }; // (a skeleton: bones — no blood either)
     return model._cutBody;
 }
 

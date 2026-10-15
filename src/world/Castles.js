@@ -1098,6 +1098,53 @@ function buildYard(p, cu, cv, face, rng, s, out, pen) {
     }
 }
 
+/**
+ * A small village graveyard on a lot (11 × 11, a fence with a gate towards the road): two rows of
+ * graves — an earth plot (1 × 2) with a headstone or a wooden post at its head. Every grave goes
+ * into out.graves: «Alive» said at one raises its dead (LivingTrees.js — a skeleton), and that
+ * grave stays dug open (block edits, saved with the world).
+ */
+export const GRAVE_COLS = [-3, -1, 1, 3];
+export const GRAVE_ROWS = [-2, 2]; // (the plot's first b; it is 2 long, the stone just behind it)
+function buildGraveyard(p, cu, cv, face, s, out) {
+    const P = {
+        box: (a0, a1, l0, l1, b0, b1, t) => {
+            const [x0, z0] = rotLot(a0, b0, face), [x1, z1] = rotLot(a1, b1, face);
+            p.box(cu + x0, cu + x1, l0, l1, cv + z0, cv + z1, t);
+        },
+        pt: (a, b, l = 0) => { const [x, z] = rotLot(a, b, face); return p.pt(cu + x, cv + z, l); },
+    };
+    const R = 5;
+    // the fence (rails one high, posts two high every 2), a gate towards the road
+    P.box(-R, R, 0, 0, -R, -R, BLOCK.FENCE); P.box(-R, R, 0, 0, R, R, BLOCK.FENCE);
+    P.box(-R, -R, 0, 0, -R, R, BLOCK.FENCE); P.box(R, R, 0, 0, -R, R, BLOCK.FENCE);
+    for (let k = -R; k <= R; k += 2) for (const [a, b] of [[k, -R], [k, R], [-R, k], [R, k]]) P.box(a, a, 1, 1, b, b, BLOCK.FENCE);
+    P.box(-1, 1, 0, 1, -R, -R, 0);
+    P.box(0, 0, -1, -1, -R, -R + 2, BLOCK.PATH); // (a path in from the gate)
+    const graves = out.graves || (out.graves = []);
+    let i = 0;
+    for (const b0 of GRAVE_ROWS) {
+        for (const a of GRAVE_COLS) {
+            P.box(a, a, -1, -1, b0, b0 + 1, BLOCK.DIRT); // the plot
+            const h = hash01(cu * 7 + a, cv * 13 + b0, i++);
+            if (h < 0.3) P.box(a, a, 0, 1, b0 + 2, b0 + 2, BLOCK.FENCE); // a wooden grave post
+            else P.box(a, a, 0, 0, b0 + 2, b0 + 2, h < 0.65 ? BLOCK.CS_MOSSY : BLOCK.CS_GREY); // a headstone
+            const c = P.pt(a, b0 + 0.5), ex = P.pt(a, b0 - 1), st = P.pt(a, b0 + 2);
+            const [x0, z0] = rotLot(a, b0, face), [x1, z1] = rotLot(a, b0 + 1, face);
+            graves.push({
+                x: c.x, y: c.y, z: c.z, // the middle of the plot, on the ground
+                exit: { x: ex.x, z: ex.z }, // where the dead climbs out to (the foot of the grave)
+                stone: { x: st.x, z: st.z },
+                cells: [[p.wx(cu + x0, cv + z0), p.wz(cu + x0, cv + z0)], [p.wx(cu + x1, cv + z1), p.wz(cu + x1, cv + z1)]],
+                L: p.L(-1), // the plot's layer
+                yaw: Math.atan2(-(ex.x - st.x), -(ex.z - st.z)), // (the dead faces away from its stone)
+            });
+        }
+    }
+    const q = P.pt(0, 0);
+    out.graveyards = (out.graveyards || []).concat([{ x: q.x, y: q.y, z: q.z, r: R }]);
+}
+
 /** Rotate lot-local (a, b) so that −b (the door side) points to `face`. */
 export function rotLot(a, b, face) {
     if (face === 0) return [a, b];
@@ -1217,6 +1264,8 @@ function buildVillage(p, s, rng, out) {
             p.link(fnode, roadNode());
             continue;
         }
+        // one small graveyard a village, on the first outer lot (not drawing on rng: the rest stays as it was)
+        if (outer && !out.graves) { buildGraveyard(p, lot.u, lot.v, lot.face, s, out); continue; }
         // gardens and pens between the houses
         const y = rng();
         if (y < 0.16) { buildYard(p, lot.u, lot.v, lot.face, rng, s, out, rng() < 0.5); continue; }
@@ -1670,7 +1719,7 @@ export class CastleIndex {
             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
             throne: out.throne, throneFront: out.throneFront, throneGate: out.throneGate || null, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
             houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),
-            stalls: out.stalls, fields: out.fields, market: out.market, posts: out.posts, beds: out.beds,
+            stalls: out.stalls, fields: out.fields, market: out.market, graveyards: out.graveyards || [], graves: (out.graves || []).map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_g' + i })), posts: out.posts, beds: out.beds,
             nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk,
             parts: p.parts,
             topL: F + 1 + s.H + s.towerExtra + 30,

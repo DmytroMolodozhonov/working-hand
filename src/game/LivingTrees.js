@@ -18,6 +18,9 @@
  *    Swords, fists, Бомбардо, lightning, «Авада Кедавра» do nothing. Burnt, it
  *    blackens and collapses.
  *  - A golden apple tree doesn't come alive.
+ *  - Said at a grave of a village graveyard, «Alive» raises its dead: a skeleton (Skeletons.js) —
+ *    a living tree in principle (`t.skel`, the same servant, concentration, mana, 15 HP), but it
+ *    rises out of the grave, and blades and fists break its bones too («Авада» still doesn't).
  *
  * Multiplayer: the host moves the trees and decides; the caster's own computer
  * counts their mana and asks the host to end the tree when it runs out.
@@ -28,6 +31,7 @@ import { BLOCK, TREE_KINDS, BASE_COLORS } from '../world/Terrain.js';
 import { creditKill } from './Mana.js';
 import { avoidStep } from './Avoid.js';
 import { FACE, facesTarget } from './FaceTarget.js';
+import { skeletonModel, skeletonDamage, graveOnRay, graveClosed, SKEL } from './Skeletons.js';
 
 export const ALIVE = {
     COST: 25, // mana at once
@@ -63,8 +67,7 @@ const PLAYER_R = 0.48; // (Game's PLAYER_RADIUS)
  * back from them when they come too near, and nowhere while it is about right.
  * me, master: {x, z}; s: the tree's size. → {mode: 'follow'|'chase'|'back'|'stay', x, z, d}
  */
-export function treeFollowPlan(me, master, s = 1) {
-    const keep = ALIVE.KEEP + ALIVE.CROWN * s;
+export function treeFollowPlan(me, master, s = 1, keep = ALIVE.KEEP + ALIVE.CROWN * s) {
     const dx = master.x - me.x, dz = master.z - me.z, d = Math.hypot(dx, dz);
     if (d < 1e-4) return { mode: 'back', x: me.x + keep, z: me.z, d };
     const k = (d - keep) / d; // (< 0: away from them)
@@ -241,9 +244,19 @@ export class LivingTrees {
         if (isFinal && early && early.name === 'Alive' && now - early.at < 3000) { g._interimCast = null; return null; }
         if (now - this._last < 1500) return null;
         const say = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
-        if (this.mine().length) return say('🌳 Ваше живое дерево уже ходит за вами. Скажите «стоп», чтобы отпустить его');
+        if (this.mine().length) return say(this.mine()[0].skel ? '💀 Ваш скелет уже ходит за вами. Скажите «стоп», чтобы отпустить его' : '🌳 Ваше живое дерево уже ходит за вами. Скажите «стоп», чтобы отпустить его');
         const h = g.builder?._hand();
         if (!h) return say('🌳 Поднимите руку, направьте её на дерево и скажите «Alive»');
+        // a grave pointed at (nearer than any tree on the line): its dead rises
+        const grave = graveOnRay(g.castleLife?.index, h.o, h.d);
+        if (grave && grave.grave && (graveClosed(g.terrain?.data || g.builder?.data, grave.grave) || this.list.some((t) => t.d.gid === grave.grave.id))) {
+            const tree = this.aimAt(h.o, h.d);
+            if (!tree || tree.dist > grave.dist) {
+                if (this.list.some((t) => t.d.gid === grave.grave.id)) return say('💀 Эта могила уже разрыта');
+                return this._raise(grave.grave, h, isFinal, now, say);
+            }
+        }
+        if (grave && !this.aimAt(h.o, h.d)) return say('💀 Эта могила уже разрыта — в ней никого нет');
         const aim = this.aimAt(h.o, h.d);
         if (aim?.golden) return say(aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
         if (!aim) return say('🌳 Направьте руку на дерево (не дальше 14 м) и скажите «Alive»');
@@ -273,6 +286,35 @@ export class LivingTrees {
         else g.sync?.aliveCast?.(d);
         g.mana?.success?.('Alive'); // (mana: the tree really came alive)
         g.hud.setVoice('🌳 <b>Alive!</b> Дерево оживает… Оно живёт, пока у вас есть мана', true);
+        return 'Alive';
+    }
+
+    /** «Alive» at a closed grave: the mana, then the dead begins to rise (the host decides). */
+    _raise(q, h, isFinal, now, say) {
+        const g = this.game;
+        const c = g.combat;
+        const cost = c?.costOf ? c.costOf('Alive') : ALIVE.COST;
+        if (!this.creative) {
+            if (c?.frozen || c?.stunned) return say(c.check('Alive'));
+            if ((c?.fatigue ?? 0) < cost) {
+                const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(c?.fatigue ?? 0)}`;
+                g.hud.toast?.(msg);
+                return say(msg);
+            }
+            c.fatigue = Math.max(0, c.fatigue - cost);
+        }
+        this._last = now;
+        g._interimCast = isFinal ? null : { name: 'Alive', at: now };
+        const d = { skel: 1, gid: q.id, x: q.x, y: q.y, z: q.z, ry: q.yaw, ex: q.exit.x, ez: q.exit.z, kind: 0, trunk: SKEL.BONE, leaf: 0, h: 2 };
+        // the magic flies from the hand into the grave
+        for (let i = 0; i < 30; i++) {
+            const p = _v.copy(h.o).lerp(_v2.set(d.x, d.y + 0.3, d.z), Math.random());
+            g.fx?.spark(p, i % 2 ? 0x7dff9a : 0xb06bff, 0.12, new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
+        }
+        if (this.auth) this.spawn(d, g.localId);
+        else g.sync?.aliveCast?.(d);
+        g.mana?.success?.('Alive');
+        g.hud.setVoice('💀 <b>Alive!</b> Могила дрожит… Мертвец встаёт и живёт, пока у вас есть мана', true);
         return 'Alive';
     }
 
@@ -360,13 +402,15 @@ export class LivingTrees {
     /** (authority, or a guest copying the host) A tree monster comes into being. */
     spawn(d, owner, id = null) {
         const g = this.game;
-        const model = livingTreeModel(d);
+        const skel = !!d.skel;
+        const model = skel ? skeletonModel() : livingTreeModel(d);
         model.position.set(d.x, d.y, d.z);
         model.rotation.y = d.ry || 0;
         g.scene.add(model);
         const t = {
             id: id ?? (g.localId || 'h') + ':' + (++this._seq), owner, master: owner, masterUntil: 0, isLivingTree: true,
-            model, group: model, d: { x: d.x, y: d.y, z: d.z, kind: d.kind | 0, trunk: d.trunk, leaf: d.leaf, h: d.h || 10 },
+            model, group: model, d: { x: d.x, y: d.y, z: d.z, kind: d.kind | 0, trunk: d.trunk, leaf: d.leaf, h: d.h || 10, skel: skel ? 1 : 0, gid: d.gid || '', ex: d.ex ?? d.x, ez: d.ez ?? d.z, ry: d.ry || 0 },
+            skel, // (a skeleton raised from a grave: Skeletons.js)
             hp: ALIVE.HP, phase: 'rise', form: 0, theta: 0, omega: 0, pt: 0, why: '',
             walkT: 0, speed: 0, swing: null, swingSide: 0, nextSwing: 0.5, burnT: 0, fireCd: 0, damageCooldown: 0,
             get isDead() { return this.phase === 'fall' || this.phase === 'burn' || this.gone; },
@@ -376,6 +420,8 @@ export class LivingTrees {
         this.byId.set(t.id, t);
         // (host, a new tree: who of the people saw its caster wake it — only they will know it is his, Blame.js)
         if (this.auth && id == null) g.castleLife?.witnessCast?.(owner, 'Alive');
+        // (host: the dead rising in a graveyard frightens the village — Danger.js «undead»)
+        if (this.auth && id == null && skel) g.castleLife?.alarm?.({ x: d.x, y: d.y, z: d.z }, 'undead', owner, 8);
         return t;
     }
 
@@ -393,6 +439,7 @@ export class LivingTrees {
     /** A blow / a spell reached it: only fire, lightning and the mightiest spells count (aliveDamage). */
     hit(t, dmg, kind = null, by = null) {
         if (!t || t.isDead) return;
+        if (t.skel) return this._hitSkel(t, dmg, kind, by);
         const g = this.game;
         const p = t.model.position;
         if (!aliveDamage(kind, dmg)) {
@@ -418,13 +465,42 @@ export class LivingTrees {
         if (t.hp <= 0) this._burnDown(t);
     }
 
+    /**
+     * A blow / a spell reached a skeleton (Skeletons.js): fire burns it as a tree, bursts / lightning /
+     * the mightiest spells and blades, fists, servants' blows break it; duel charges do nothing
+     * (SKEL_DUEL_IMMUNE: it is not quite alive — «Авада Кедавра» doesn't kill it).
+     */
+    _hitSkel(t, dmg, kind, by) {
+        const g = this.game;
+        const p = t.model.position;
+        const got = skeletonDamage(kind, dmg);
+        if (!got) {
+            for (let i = 0; i < 5; i++) g.fx?.spark(_v.set(p.x, p.y + 1.2, p.z), 0x7dff9a, 0.08, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.5);
+            if (performance.now() - this._saidAt > 4000) {
+                this._saidAt = performance.now();
+                g.hud?.setVoice?.(kind === 'AvadaKedavra' ? '💀 «Авада Кедавра» не берёт скелета — он не совсем живой' : '💀 Скелету это не вредит — его разрушают огонь, «Бомбардо», молния и удары оружием', true);
+            }
+            return; // (SKEL_DUEL_IMMUNE)
+        }
+        // (a blow of mine on a guest's screen: the host decides)
+        if (!this.auth) { if (!isFireDamage(kind) && by === g.localId) g.sync?.aliveHit?.(t.id, got, kind); return; }
+        if (by != null) t.lastBy = by;
+        t.hp = Math.max(0, t.hp - got);
+        if (isFireDamage(kind) || kind === 'Lightning' || kind === 'LightningStrike') { this.ignite(t); if (t.hp <= 0) this._burnDown(t); return; }
+        // bones crack: chips fly
+        for (let i = 0; i < 6; i++) g.fx?.debris?.spawn(p.x + (Math.random() - 0.5) * 0.4, p.y + 0.6 + Math.random() * 1.0, p.z + (Math.random() - 0.5) * 0.4,
+            (Math.random() - 0.5) * 4, 1 + Math.random() * 3, (Math.random() - 0.5) * 4, SKEL.BONE, 0.04 + Math.random() * 0.05, 1.5, { shrink: 0.1, fade: false, spin: 10 });
+        if (t.hp <= 0) this._tornApart(t);
+    }
+
     /** (authority) A burst killed it: torn apart, it topples like a felled trunk (no fire). */
     _tornApart(t) {
         if (t.lastBy != null) creditKill(this.game, t.lastBy, { kind: 'livingTree' }); // (mana: a magical creature)
         t.form = 0;
         t.swing = null;
         t.phase = 'fall'; t.pt = 0; t.theta = 0.12; t.omega = 0.6;
-        if (t.owner === this.game.localId) this.game.hud?.setVoice?.('💥 Ваше живое дерево разорвало', true);
+        if (t.skel) { t.theta = 0.35; t.broken = true; } // (a skeleton: knocked apart — it falls into its bones)
+        if (t.owner === this.game.localId) this.game.hud?.setVoice?.(t.skel ? '💥 Ваш скелет разбит на кости' : '💥 Ваше живое дерево разорвало', true);
     }
 
     /** Fire touched it: it burns for a while. */
@@ -467,7 +543,7 @@ export class LivingTrees {
         t.phase = 'burn';
         t.pt = 0;
         t.burnT = ALIVE.COLLAPSE;
-        if (t.owner === this.game.localId) this.game.hud?.setVoice?.('🔥 Ваше живое дерево сгорело', true);
+        if (t.owner === this.game.localId) this.game.hud?.setVoice?.(t.skel ? '🔥 Ваш скелет сгорел' : '🔥 Ваше живое дерево сгорело', true);
     }
 
     // ================================================================= end
@@ -478,12 +554,19 @@ export class LivingTrees {
         t.pt = 0;
         t.why = why;
         t.swing = null;
-        if (t.owner === this.game.localId) this._sayEnd(why);
+        if (t.owner === this.game.localId) this._sayEnd(why, t.skel);
         return true;
     }
 
-    _sayEnd(why) {
+    _sayEnd(why, skel = false) {
         const g = this.game;
+        if (skel) {
+            g.hud?.setVoice?.(why === 'mana' ? '💀 Мана кончилась — магия уходит, скелет рассыпается'
+                : why === 'far' ? '💀 Вы ушли дальше 50 м — скелет рассыпается'
+                : why === 'focus' ? '💀 Концентрация сорвалась — скелет рассыпается'
+                : '🛑 Стоп — магия уходит, скелет рассыпается на кости', true);
+            return;
+        }
         g.hud?.setVoice?.(why === 'mana' ? '🌳 Мана кончилась — дерево деревенеет и падает'
             : why === 'far' ? '🌳 Вы ушли дальше 50 м — дерево деревенеет и падает'
             : why === 'focus' ? '🌳 Концентрация сорвалась — дерево деревенеет и падает'
@@ -594,9 +677,25 @@ export class LivingTrees {
             t.hp = Math.max(0, t.hp - ALIVE.BURN_DPS * dt);
             if (t.hp <= 0) this._burnDown(t);
         }
-        if (t.phase === 'rise') {
+        if (t.phase === 'rise' && t.skel) {
+            // out of the grave: shaking, a hand, the earth bursts (the grave is dug), it climbs out
+            t.form = Math.min(1, t.form + dt / SKEL.RISE);
+            if (t.form >= SKEL.OPEN && !t.dug) this._digGrave(t);
+            const k = smooth(SKEL.CLIMB + 0.15, 1, t.form);
+            p.x = t.d.x + (t.d.ex - t.d.x) * k; p.z = t.d.z + (t.d.ez - t.d.z) * k;
+            p.y = t.d.y;
+            if (t.form >= 1) { t.phase = 'alive'; t.pt = 0; }
+        } else if (t.phase === 'rise') {
             t.form = Math.min(1, t.form + dt / ALIVE.GROW);
             if (t.form >= 1) { t.phase = 'alive'; t.pt = 0; }
+        } else if (t.phase === 'fall' && t.skel) {
+            // it falls into a heap of bones, and the bones lie a while and are gone
+            t.theta = Math.min(1, t.theta + dt / SKEL.COLLAPSE);
+            if (t.theta >= 1) this._remove(t);
+            return;
+        } else if (t.phase === 'stiff' && t.skel) {
+            t.form = Math.max(0, t.form - dt / (ALIVE.STIFFEN * 0.6));
+            if (t.form <= 0) { t.phase = 'fall'; t.pt = 0; t.theta = 0; }
         } else if (t.phase === 'stiff') {
             t.form = Math.max(0, t.form - dt / ALIVE.STIFFEN);
             if (t.form <= 0) { t.phase = 'fall'; t.pt = 0; t.theta = 0.04; t.omega = 0; }
@@ -628,11 +727,11 @@ export class LivingTrees {
         const g = this.game;
         const p = t.model.position;
         const s = t.model.userData.s;
-        const reach = ALIVE.REACH * s;
+        const reach = t.skel ? SKEL.REACH : ALIVE.REACH * s;
         let plan = g.servants?.plan('t', t, p, reach) || { mode: 'stay', x: p.x, z: p.z };
         // (no enemy: a big tree keeps a comfortable distance from its master — never comes up close)
         const mp = g.servants?._masterPos?.(t.master);
-        if (!plan.enemy && mp) plan = treeFollowPlan(p, mp, s);
+        if (!plan.enemy && mp) plan = treeFollowPlan(p, mp, s, t.skel ? SKEL.KEEP : undefined);
         t.nextSwing -= dt;
         let speed = 0, face = null;
         if (plan.mode === 'strike') {
@@ -647,7 +746,7 @@ export class LivingTrees {
                 t.nextSwing = ALIVE.SWING_GAP;
             }
         } else if (plan.mode === 'chase' || plan.mode === 'follow') {
-            speed = plan.mode === 'chase' ? ALIVE.RUN : ALIVE.SPEED;
+            speed = plan.mode === 'chase' ? (t.skel ? SKEL.RUN : ALIVE.RUN) : (t.skel ? SKEL.SPEED : ALIVE.SPEED);
             face = plan;
         } else if (plan.mode === 'back') {
             speed = ALIVE.SPEED * 0.7; // (it steps back, still facing its master)
@@ -690,8 +789,8 @@ export class LivingTrees {
                 const tp = g.servants?.pos(t.swing.target.k, t.swing.target.id);
                 if (tp && Math.hypot(tp.x - p.x, tp.z - p.z) < reach * 1.3) {
                     const dir = new THREE.Vector3(tp.x - p.x, 0, tp.z - p.z).normalize();
-                    g.servants.damage(t.swing.target, ALIVE.DMG, dir, t.master, 'tree', { x: p.x, z: p.z, ref: { k: 't', id: t.id } });
-                    for (let i = 0; i < 10; i++) g.fx?.spark(_v.set(tp.x, tp.y + 1.2, tp.z), 0x9a7040, 0.12, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.6);
+                    g.servants.damage(t.swing.target, ALIVE.DMG, dir, t.master, t.skel ? 'skeleton' : 'tree', { x: p.x, z: p.z, ref: { k: 't', id: t.id } });
+                    for (let i = 0; i < 10; i++) g.fx?.spark(_v.set(tp.x, tp.y + 1.2, tp.z), t.skel ? SKEL.BONE : 0x9a7040, 0.12, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.6);
                 }
             }
             if (t.swing.t >= 1) t.swing = null;
@@ -700,6 +799,7 @@ export class LivingTrees {
 
     /** The body as the phase and the moment say (every computer). */
     _pose(t, dt) {
+        if (t.skel) return this._poseSkel(t, dt);
         const u = t.model.userData;
         const k = t.form;
         // the roots come out of the ground: the body rises by the legs' height
@@ -752,6 +852,142 @@ export class LivingTrees {
         }
     }
 
+    /**
+     * (authority) The earth over the grave bursts open: its plot is dug out (a hole a metre deep), the
+     * earth heaped beside it — block edits, sent to everyone and saved with the world (a grave once
+     * opened stays open; nobody raises its dead twice).
+     */
+    _digGrave(t) {
+        t.dug = true;
+        const g = this.game;
+        const data = g.terrain?.data || g.builder?.data;
+        if (!data || !t.d.gid) return;
+        const q = this._grave(t.d.gid, t.d);
+        if (!q) return;
+        const edits = [];
+        for (const [x, z] of q.cells) if (data.get(x, q.L, z) !== BLOCK.AIR) { data.set(x, q.L, z, BLOCK.AIR); edits.push([x, q.L, z, BLOCK.AIR]); }
+        // the heap: beside the plot (the side away from the next grave's row), one block of earth
+        const [a, b] = q.cells;
+        const sx = Math.sign(Math.round(b[1] - a[1])), sz = -Math.sign(Math.round(b[0] - a[0])); // (across the plot)
+        const hx = a[0] + sx, hz = a[1] + sz;
+        if (data.get(hx, q.L + 1, hz) === BLOCK.AIR) { data.set(hx, q.L + 1, hz, BLOCK.DIRT); edits.push([hx, q.L + 1, hz, BLOCK.DIRT]); }
+        if (edits.length) g.builder?._sendEdits(edits);
+    }
+
+    /** A grave by its id, near where it lies (CastleIndex: the graveyards of the villages near). */
+    _grave(id, at) {
+        const m = /^(cs-?\d+_-?\d+)_g(\d+)$/.exec(id || '');
+        if (!m || !at) return null;
+        for (const c of this.game.castleLife?.index?.near?.(at.x, at.z, 20) || []) if (c.id === m[1]) return c.graves?.[+m[2]] || null;
+        return null;
+    }
+
+    /** A skeleton's body as the phase and the moment say (every computer): out of the grave, walking, striking, falling apart. */
+    _poseSkel(t, dt) {
+        const g = this.game;
+        const u = t.model.userData;
+        const k = t.form;
+        const now = performance.now();
+        const p = t.model.position;
+        const R = t.phase === 'rise';
+        // ---- out of the grave
+        const hand = smooth(SKEL.HAND, SKEL.OPEN, k); // a hand comes up
+        const climb = smooth(SKEL.CLIMB, 1, k); // it climbs out
+        let y = 0, lean = 0;
+        if (R) {
+            y = k < SKEL.CLIMB ? -2.25 + 0.7 * hand : -1.55 + 1.55 * climb;
+            lean = k < SKEL.CLIMB ? 0 : Math.sin(climb * Math.PI) * 0.6; // (bent over the edge, then up)
+        }
+        // the grave shakes before (the ground over it — the model is still down there)
+        const shake = R && k < SKEL.OPEN ? Math.sin(now / 35) * 0.03 * (1 - hand * 0.5) : 0;
+        u.rig.position.y = y;
+        u.rig.position.x = shake;
+        u.body.rotation.x = -lean;
+        u.head.rotation.x = -lean * 0.4;
+        const walk = t.speed > 0.1 ? Math.min(1, t.speed / 2.5) : 0;
+        t.walkT += dt * t.speed * 3.2;
+        u.arms.forEach((a, i) => {
+            const swingIt = t.swing && (a.side > 0 ? 1 : 0) === t.swingSide ? t.swing.t : -1;
+            let rx = Math.sin(t.walkT + (i ? Math.PI : 0)) * 0.5 * walk, rz = a.side * 0.12, el = -0.3;
+            if (R) {
+                // the right hand first (straight up, fingers clawing), then both, then they grip the edge
+                const up = i === 1 ? 1 : smooth(SKEL.OPEN - 0.05, SKEL.CLIMB, k);
+                rx = -Math.PI * up * (1 - climb) - 1.3 * climb;
+                el = -0.2 - 0.5 * climb;
+                a.hand.rotation.x = Math.sin(now / 90 + i) * 0.4 * (1 - climb);
+            }
+            if (swingIt >= 0) { rx = swingIt < 0.4 ? -2.6 * smooth(0, 0.4, swingIt) : swingIt < 0.6 ? -2.6 + 2.2 * smooth(0.4, 0.6, swingIt) : -0.4 * (1 - smooth(0.6, 1, swingIt)); el = -0.6; }
+            if (t.phase === 'stiff') { rx *= k; rz = a.side * (0.12 + 0.3 * (1 - k)); }
+            a.sh.rotation.x = rx;
+            a.sh.rotation.z = rz;
+            a.elbow.rotation.x = el;
+        });
+        u.legs.forEach((l, i) => {
+            const sw = Math.sin(t.walkT + i * Math.PI);
+            l.rotation.x = R ? -0.5 * Math.sin(climb * Math.PI) * (i ? 1 : 0.3) : sw * 0.55 * walk;
+            u.knees[i].rotation.x = R ? 0.9 * Math.sin(climb * Math.PI) : Math.max(0, -sw) * 0.7 * walk;
+        });
+        // the jaw chatters; it opens wide on a blow
+        u.mouth.rotation.x = t.swing ? 0.5 : (0.05 + 0.08 * (0.5 + 0.5 * Math.sin(now / 80))) * (R ? climb : 1);
+        // the eyes: a green fire in the sockets
+        const eye = R ? smooth(SKEL.CLIMB, 0.8, k) : t.phase === 'stiff' ? k : t.phase === 'alive' ? 1 : 0;
+        u.eyeMat.color.set(0x1a1a14).lerp(_c.set(0x9bffb0), eye);
+        u.glow.opacity = 0.8 * eye * (0.75 + 0.25 * Math.sin(now / 120));
+        if (t.phase === 'stiff') { u.rig.rotation.z = Math.sin(now / 60) * 0.04 * (1 - k); u.body.rotation.x = -0.25 * (1 - k); }
+        // ---- falling into its bones
+        if (t.phase === 'fall') {
+            const c = t.theta;
+            u.legs.forEach((l, i) => { l.rotation.x = -1.4 * c * (i ? 1 : 0.8); u.knees[i].rotation.x = 2.2 * c; });
+            u.rig.position.y = -0.85 * smooth(0, 0.8, c);
+            u.body.rotation.x = 0.9 * c;
+            u.head.position.y = 1.55 - 1.2 * smooth(0.3, 1, c);
+            u.head.rotation.z = 1.2 * c;
+            u.arms.forEach((a) => { a.sh.rotation.x = 0.6 * c; a.sh.rotation.z = a.side * 1.4 * c; });
+            u.eyeMat.color.set(0x1a1a14); u.glow.opacity = 0;
+            if (!t._bones && (c > 0.6 || t.broken)) {
+                t._bones = true;
+                for (let i = 0; i < (t.broken ? 22 : 12); i++) g.fx?.debris?.spawn(p.x + (Math.random() - 0.5) * 0.5, p.y + 0.3 + Math.random() * (t.broken ? 1.4 : 0.6), p.z + (Math.random() - 0.5) * 0.5,
+                    (Math.random() - 0.5) * (t.broken ? 6 : 2), 0.5 + Math.random() * (t.broken ? 4 : 1.5), (Math.random() - 0.5) * (t.broken ? 6 : 2), i % 4 ? SKEL.BONE : 0xb3a682, 0.05 + Math.random() * 0.08, 6, { shrink: 0.05, fade: false, spin: 8 });
+            }
+        }
+        // ---- the magic: clods and green / violet light out of the grave while it rises
+        if (R && g.fx) {
+            const q0 = t.d;
+            if (k < SKEL.CLIMB + 0.1 && Math.random() < (k < SKEL.HAND ? 0.5 : 0.9)) g.fx.debris?.spawn(q0.x + (Math.random() - 0.5) * 0.9, q0.y + 0.05, q0.z + (Math.random() - 0.5) * 0.9,
+                (Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 1.5, Math.random() < 0.7 ? 0x5a3f28 : 0x3e2b1a, 0.06 + Math.random() * 0.1, 1.5, { shrink: 0.2, fade: false, spin: 6 });
+            if (!t._burst && k >= SKEL.OPEN) {
+                // the earth bursts open
+                t._burst = true;
+                for (let i = 0; i < 40; i++) g.fx.debris?.spawn(q0.x + (Math.random() - 0.5) * 1.2, q0.y + 0.1, q0.z + (Math.random() - 0.5) * 1.6,
+                    (Math.random() - 0.5) * 6, 3 + Math.random() * 5, (Math.random() - 0.5) * 6, Math.random() < 0.75 ? 0x5a3f28 : 0x3e2b1a, 0.1 + Math.random() * 0.18, 2.5, { shrink: 0.15, fade: false, spin: 8 });
+                for (let i = 0; i < 30; i++) g.fx.spark?.(_v.set(q0.x, q0.y + 0.2, q0.z), i % 2 ? 0x7dff9a : 0xb06bff, 0.14, _v2.set((Math.random() - 0.5) * 5, 2 + Math.random() * 4, (Math.random() - 0.5) * 5), 1.0);
+            }
+            const a = now / 300;
+            for (let n = 0; n < 2; n++) {
+                const ang = a + n * Math.PI + Math.random() * 0.3, r = 0.9 + 0.3 * Math.sin(now / 500);
+                g.fx.spark?.(_v.set(q0.x + Math.cos(ang) * r, q0.y + 0.1 + Math.random() * 1.6 * k, q0.z + Math.sin(ang) * r), n ? 0xb06bff : 0x7dff9a, 0.07, _v2.set(-Math.sin(ang) * 1.2, 0.8 + Math.random(), Math.cos(ang) * 1.2), 0.7);
+            }
+        }
+        // ---- fire: it blackens and its bones crumble
+        const burning = t.burnT > 0 || t.phase === 'burn';
+        const black = t.phase === 'burn' ? smooth(0, 0.6, t.pt / ALIVE.COLLAPSE) : 0;
+        u.mats.forEach((m, i) => {
+            m.color.copy(u.base[i]).lerp(CHAR, black);
+            if (m.emissive) m.emissive.setHex(burning ? (Math.random() < 0.5 ? 0x3a1000 : 0x5a1800) : 0x000000);
+        });
+        if (t.phase === 'burn') {
+            const c = smooth(0.3, 1, t.pt / ALIVE.COLLAPSE);
+            u.rig.scale.set(u.s * (1 + c * 0.3), u.s * (1 - c * 0.85), u.s * (1 + c * 0.3));
+            u.glow.opacity *= 1 - c;
+        }
+        if (burning && g.fx?.glow) {
+            for (let n = 0; n < 2; n++) {
+                g.fx.glow.spawn(p.x + (Math.random() - 0.5) * 0.6, p.y + Math.random() * 1.8 * (t.phase === 'burn' ? 0.5 : 1), p.z + (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.5, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 0.5,
+                    [0xffe08a, 0xffa020, 0xff5a00, 0xd02000][(Math.random() * 4) | 0], 0.25 + Math.random() * 0.3, 0.5 + Math.random() * 0.3, { shrink: 1.2 });
+            }
+        }
+    }
+
     /** The players near a tree as round bodies {x, z, r} (its master's with a margin: it never comes up close). */
     _people(t, mp) {
         const g = this.game, out = this._ppl || (this._ppl = []);
@@ -789,7 +1025,8 @@ export class LivingTrees {
         this._netT = 0.1;
         const r = (v) => Math.round(v * 100) / 100;
         const list = this.list.map((t) => [t.id, r(t.model.position.x), r(t.model.position.y), r(t.model.position.z), r(t.model.rotation.y), PHASES.indexOf(t.phase), r(t.form), r(t.theta), r(t.hp), t.owner, t.master,
-            t.d.trunk, t.d.leaf, t.d.h, t.d.kind, t.swing ? r(t.swing.t) : -1, t.swingSide, t.burnT > 0 ? 1 : 0, WHY.indexOf(t.why), r(t.speed), r(t.pt)]);
+            t.d.trunk, t.d.leaf, t.d.h, t.d.kind, t.swing ? r(t.swing.t) : -1, t.swingSide, t.burnT > 0 ? 1 : 0, WHY.indexOf(t.why), r(t.speed), r(t.pt),
+            t.skel ? 1 : 0, t.d.gid, r(t.d.x), r(t.d.y), r(t.d.z), r(t.d.ex), r(t.d.ez), t.broken ? 1 : 0]);
         if (!list.length && !this._sentSome && !g.servants?.netList?.length) return;
         this._sentSome = list.length > 0;
         g.sync.livingTrees(list, g.servants?.netList || []);
@@ -801,15 +1038,16 @@ export class LivingTrees {
         const me = this.game.localId;
         for (const e of list || []) {
             if (!Array.isArray(e) || e.length < 21) continue;
-            const [id, x, y, z, ry, ph, form, theta, hp, owner, master, trunk, leaf, h, kind, sw, side, burning, why, speed, pt] = e;
+            const [id, x, y, z, ry, ph, form, theta, hp, owner, master, trunk, leaf, h, kind, sw, side, burning, why, speed, pt, skel, gid, gx, gy, gz, ex, ez, broken] = e;
             seen.add(id);
             let t = this.byId.get(id);
-            if (!t) { t = this.spawn({ x, y, z, ry, trunk, leaf, h, kind }, owner, id); t.model.position.set(x, y, z); }
+            if (!t) { t = this.spawn(skel ? { skel: 1, gid, x: gx, y: gy, z: gz, ex, ez, ry, trunk, leaf, h, kind } : { x, y, z, ry, trunk, leaf, h, kind }, owner, id); t.model.position.set(x, y, z); }
+            t.broken = !!broken;
             t.net = (t.net || new THREE.Vector3()).set(x, y, z);
             t.model.rotation.y = ry;
             const phase = PHASES[ph] || 'alive';
-            if (phase === 'stiff' && t.phase !== 'stiff' && owner === me) this._sayEnd(WHY[why] || 'stop');
-            if (phase === 'burn' && t.phase !== 'burn' && owner === me) this.game.hud?.setVoice?.('🔥 Ваше живое дерево сгорело', true);
+            if (phase === 'stiff' && t.phase !== 'stiff' && owner === me) this._sayEnd(WHY[why] || 'stop', t.skel);
+            if (phase === 'burn' && t.phase !== 'burn' && owner === me) this.game.hud?.setVoice?.(t.skel ? '🔥 Ваш скелет сгорел' : '🔥 Ваше живое дерево сгорело', true);
             t.phase = phase;
             t.form = form; t.theta = theta; t.hp = hp; t.master = master; t.pt = pt;
             t.swing = sw >= 0 ? { t: sw } : null;

@@ -658,7 +658,7 @@ export class Game {
         if (z.isDragon) { this.dragons.hit(z, dmg, isWeapon ? 'melee' : 'fist'); return; } // (its scales: a third of a blade's damage)
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         if (z.isPhoenix) { this.phoenixes.hit(z, dmg, isWeapon ? 'melee' : 'punch', this.localId); return; }
-        if (z.isLivingTree) { this.livingTrees.hit(z, dmg, 'melee'); return; } // (only fire hurts it)
+        if (z.isLivingTree) { this.livingTrees.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (a tree: only fire hurts it; a skeleton's bones break)
         this.punchCount++;
         if (this.authority) {
             this.damageZombie(z, dmg, isWeapon, dir, this.localId, hit);
