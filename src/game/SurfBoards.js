@@ -59,6 +59,7 @@ export class SurfBoards {
         this._legs = null;
         this._mountArm = { left: null, right: null };
         this._hintAt = {};
+        this._mineAt = new Map(); // board id -> when (simT) I last made / held / rode / fell off it: only then the «how to get on» hints
         this.remote = new Map(); // playerId -> board id they carry/ride
         this.log = []; // (tests) what happened: mount, off, fall:cause, caught…
     }
@@ -196,6 +197,7 @@ export class SurfBoards {
         const st = onWater ? 'float' : 'stand';
         const p = onWater ? [at.x, w.surface + w.h + SURF.T / 2, at.z] : [at.x, at.y + SURF.L * 0.38, at.z];
         this.spawn({ id, wood, st, p, yaw: onWater ? ch.group.rotation.y : yaw }, true);
+        this._mineAt.set(id, this.simT || 0);
         for (let i = 0; i < 26; i++) g.fx?.spark(_v.set(at.x + (Math.random() - 0.5), at.y + Math.random() * 3, at.z + (Math.random() - 0.5)), i % 2 ? 0xffe2a8 : 0x9fe6ff, 0.1, _v2.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
         g.hud?.setVoice?.('🏄 Доска готова! Возьмите её двумя руками за края или одной рукой под мышку', true);
         return null;
@@ -498,6 +500,7 @@ export class SurfBoards {
 
     _free(b, st, v = [0, 0, 0]) {
         const m = this.models.get(b.id);
+        if (b.owner === this.me) this._mineAt.set(b.id, this.simT || 0); // (I just let go of it / got off it)
         const p = m.model.position.toArray().map(r3), q = m.model.quaternion.toArray().map(r3);
         if (this.auth || b.owner === this.me) this.reg.free(b.id, b.owner || this.me, { p, q, v, st });
         b.owner = null; b.mode = 0; b.st = st; b.p = p; b.q = q; b.v = v;
@@ -575,11 +578,14 @@ export class SurfBoards {
         const near = this._mountable();
         if (!near) { reset(); return; }
         const now = this.simT * 1000;
+        // the «how to get on» hints only for a board I am really using (in my hands on the water, or one I made /
+        // let go of / fell off a moment ago) — never just for swimming past somebody's floating board
+        const busy = near.held || (this.simT || 0) - (this._mineAt.get(near.b.id) ?? -1e9) < 20;
         if (!legs?.seen) {
             // the camera sees no legs at all: stepping in place by the board (a real march, not the camera's shake) gets on
             this._march = pose.isRunning && (pose.runIntensity || 0) > 0.35 ? (this._march || 0) + dt : Math.max(0, (this._march || 0) - dt * 0.5);
             if (this._march > 0.7) { this._march = 0; this.mount(near.b, 'left'); return; }
-            this._say('🦵 Камера не видит ваших ног — отойдите, чтобы были видны хотя бы бёдра, или шагайте на месте у доски, чтобы встать на неё', 'legs', 7000);
+            if (busy) this._say('🦵 Камера не видит ваших ног — отойдите, чтобы были видны хотя бы бёдра, или шагайте на месте у доски, чтобы встать на неё', 'legs', 7000);
             return;
         }
         // a knee lifted over it and the foot put down: one foot on the board
@@ -597,7 +603,7 @@ export class SurfBoards {
             if (arm.peak > 0.4 && arm.peak < 0.95 && !L.up) this._say(legs.hipsOnly ? '🦵 Поднимите колено выше — до пояса (камера видит вас только до бёдер)' : '🦵 Поднимите колено выше, над доской, и поставьте ногу', 'knee', 4000);
         }
         if (this.hold && !near.held) return;
-        if (best < 0.2) this._say(near.held ? '🏄 Доска на воде. Поднимите колено над доской и поставьте ногу — руки отпустят её сами' : '🏄 Чтобы встать на доску: поднимите колено над ней и поставьте ногу', 'howmount', 9000);
+        if (best < 0.2 && busy) this._say(near.held ? '🏄 Доска на воде. Поднимите колено над доской и поставьте ногу — руки отпустят её сами' : '🏄 Чтобы встать на доску: поднимите колено над ней и поставьте ногу', 'howmount', 9000);
     }
 
     /** A board on the water I could step on: {b, m, yaw, held}. Facing it any way: it is turned under the foot. */

@@ -440,7 +440,10 @@ export class Alohomora {
         if (now - this._hintT < 3500) return;
         this._hintT = now;
         const k = chestKind(c);
-        this.game.hud?.setVoice(k === 'towerChest' ? '🔒 Сундук академии заперт чарами. Откроется, когда падёт Мастер' : '🔒 Заперто — скажите «Алохомора»', true);
+        // (only when the hand really tries the lid — never just for walking past a chest)
+        this.game.hud?.setVoice(k === 'towerChest' ? '🔒 Сундук академии заперт чарами. Откроется, когда падёт Мастер'
+            : k === 'settlementChest' ? '🔒 Сундук заперт — покажите на замок и скажите «Алохомора» (если стража увидит — это кража)'
+                : '🔒 Заперто — покажите на замок и скажите «Алохомора»', true);
     }
 
     // ---------------------------------------------------------------- net / save

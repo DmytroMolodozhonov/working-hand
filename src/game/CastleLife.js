@@ -205,7 +205,6 @@ export class CastleLife {
         this._scanT = 0;
         this._netT = 0;
         this._chatT = 4;
-        this._lockMsgT = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test';
         this.talk = new CastleTalk(game, this); // conversations and the market
         this.wizards = new WizardLife(this); // the wizards' towers and the wandering wizards
@@ -2273,7 +2272,6 @@ export class CastleLife {
         this.wizards.update(dt);
         this._chatter(dt);
         this.talk.update(dt);
-        this._lockHint(dt);
         this._netSend(dt);
     }
 
@@ -2305,24 +2303,6 @@ export class CastleLife {
         }
         v.bar.sprite.visible = true;
         v.bar.sprite.position.set(v.x, v.y + (v.role === 'master' ? 6.3 : v.wizard ? 6.0 : v.role === 'king' ? 5.9 : 5.5), v.z);
-    }
-
-    _lockHint(dt) {
-        this._lockMsgT -= dt;
-        if (this._lockMsgT > 0) return;
-        const g = this.game;
-        const me = g.character.group.position;
-        for (const cs of this.castles.values()) {
-            for (const c of cs.chests) {
-                if (!c.locked || c.isOpen || c.picked) continue;
-                const p = c.getPosition();
-                if (Math.hypot(p.x - me.x, p.z - me.z) < 5) {
-                    g.hud.setVoice(cs.def.kind === 'tower' ? '🔒 Сундук заперт. Сундуки академии откроются, когда падёт Мастер' : '🔒 Сундук заперт — покажите на замок и скажите «Алохомора» (если стража увидит — это кража)', true);
-                    this._lockMsgT = 6;
-                    return;
-                }
-            }
-        }
     }
 
     // ------------------------------------------------------------ network
