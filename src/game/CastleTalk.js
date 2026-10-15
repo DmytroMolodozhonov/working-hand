@@ -297,17 +297,9 @@ export class CastleTalk {
 
     /** The neural voices download once: show its progress, then that they are ready. */
     _voiceStatus(st) {
-        const hud = this.game.hud;
-        const now = performance.now();
-        if (st.state === 'loading') {
-            if (now - (this._voiceNoteT || -1e9) < 4000) return;
-            this._voiceNoteT = now;
-            hud?.setVoice?.(`🗣️ ${st.text}${st.fraction != null ? ` (${Math.round(st.fraction * 100)}%)` : ''}`, true);
-        } else if (st.state === 'ready') hud?.notify?.('🗣️ Голоса жителей готовы — у каждого свой голос');
-        else if (st.state === 'failed') {
-            console.warn('[CastleTalk]', st.text);
-            hud?.notify?.('🗣️ Голоса жителей не загрузились — говорят голоса компьютера');
-        }
+        // (the voices load quietly in the background: nothing for the player to read in the game — the author)
+        if (st.state === 'failed') console.warn('[CastleTalk]', st.text);
+        else if (st.state === 'ready') console.info('[CastleTalk]', st.text);
     }
 
     /** The microphone heard a sentence (not a spell). Returns true if a villager heard it. */

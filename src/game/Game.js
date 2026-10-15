@@ -1027,7 +1027,7 @@ export class Game {
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
             const base = SCROLL_SPELL_COLOR[name] ? name : baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
-            if (isFinal) this.hud.setVoice(`📜 «${ru}» есть только в Творческом режиме. Здесь его нужно выучить: найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
+            if (isFinal) this.hud.setVoice(`📜 «${ru}» вы ещё не знаете. Найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
         // «Water Vortex», its «Bubble» / «Frozen», «Fire Maxima» (and nothing else from inside its ice)

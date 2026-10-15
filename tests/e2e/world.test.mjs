@@ -1090,7 +1090,7 @@ test('Авада Кедавра in Survival: refused with the hint about its scr
     await page.evaluate(() => clearInterval(window.__avadaPose));
     assert.equal(r.knewBefore, false, 'in Survival it is not known at first');
     assert.equal(r.locked, null, 'without the scroll it is refused');
-    assert.match(r.hint, /только в Творческом режиме/);
+    assert.match(r.hint, /вы ещё не знаете/);
     assert.match(r.hint, /свиток «Авада Кедавра»/, 'the hint names the scroll: ' + r.hint);
     assert.match(r.hint, /зелёная лента/);
     assert.equal(r.boltsLocked, 0, 'no charge flew');
