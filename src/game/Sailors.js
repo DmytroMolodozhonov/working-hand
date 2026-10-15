@@ -8,8 +8,12 @@
  * behind. Take their wheel, touch their sails, open their chests, damage their
  * ship or hurt one of them — and they fight (cutlasses). Kill the whole crew and
  * the ship is yours: its wheel obeys you, its chests open.
- * A Wind spell can throw a sailor near the rail overboard: he swims back to the
- * ship and climbs aboard, or drowns if the ship has sailed away.
+ * A Wind spell can throw a sailor near the rail overboard: «Человек за бортом!» — a mate
+ * throws him the lifebuoy on its line and hauls him in to the rope ladder (even under way),
+ * others call to him from the rail; whoever threw him is the ship's foe (aboard they fight
+ * him, off the ship they shout at him from the rail). Alone he swims to the ladder, or drowns.
+ * Feet always on the deck (_ground): never sunk into a stair, never inside a mast or a gun; a
+ * wedged one squeezes out by himself. Not fighting, a sailor keeps out of a player's reach.
  *
  * Multiplayer: the host runs the crews ('screw'); guests draw them and send hits.
  */
@@ -53,6 +57,9 @@ const SHOUT = {
     // the ones waiting their turn
     cheer: ['Давай, {n}!', 'Руби его, {n}!', 'Я следующий!', 'Держись, {n}!'],
     parry: ['Ха! Мимо!', 'Не так быстро!', 'Отбил!'],
+    // the foe off the ship (he threw a mate overboard from the shore, the water, another deck)
+    rail: ['Эй, ты! Мы всё видели!', 'Только сунься к нам на борт!', 'Ты за это ответишь!', 'Вон он! Не упускай его!', 'Поднимись на палубу, если смелый!'],
+    rally: ['Все к борту! Вон он!', 'Не спускать с него глаз!', 'К оружию! Он рядом!'],
 };
 const WALK = 2.2, RUN = 5.2;
 const HOSTILE_MS = 180000;
@@ -108,6 +115,58 @@ export function crewRoster(ship) {
     return out;
 }
 const pick2 = (rng, a) => a[Math.floor(rng() * a.length) % a.length];
+
+/**
+ * A body (radius 0.5, standing at p in the ship's frame) out of the masts, guns, bulkheads, stair
+ * sides: to 0.5 m off the nearest face — even when it got right inside one (pushed in by a blow or a
+ * mate's shoulder), out through the nearest side. True: it was moved.
+ */
+export function pushOut(L, p) {
+    let moved = false;
+    for (const b of L.solids) {
+        if (b.y1 <= p.y + 0.6 || b.y0 >= p.y + 3.5) continue;
+        const cx = Math.max(b.x0, Math.min(b.x1, p.x)), cz = Math.max(b.z0, Math.min(b.z1, p.z));
+        const ex = p.x - cx, ez = p.z - cz, ed = Math.hypot(ex, ez);
+        if (ed >= 0.5) continue;
+        if (ed > 1e-4) { p.x = cx + (ex / ed) * 0.5; p.z = cz + (ez / ed) * 0.5; }
+        else {
+            const m = Math.min(p.x - b.x0, b.x1 - p.x, p.z - b.z0, b.z1 - p.z);
+            if (m === p.x - b.x0) p.x = b.x0 - 0.5;
+            else if (m === b.x1 - p.x) p.x = b.x1 + 0.5;
+            else if (m === p.z - b.z0) p.z = b.z0 - 0.5;
+            else p.z = b.z1 + 0.5;
+        }
+        moved = true;
+    }
+    return moved;
+}
+
+/**
+ * Places at the main deck's rail (open sky above, nothing solid there) where a sailor can stand and
+ * look over the side — to call to a man in the water, throw him the buoy, shout at one on the shore.
+ */
+export function railSpots(L) {
+    if (L._rail) return L._rail;
+    const D = L.deck, out = [];
+    const main = L.floors.find((f) => f.id === 'main');
+    for (let z = main.z0 + 1; z <= main.z1 - 1; z += 0.8) {
+        for (const side of [-1, 1]) {
+            const x = side * (hullHalfWidth(L, z, D) - 1.0);
+            if (floorAt(L, x, z, D + 0.5) !== D || floorAt(L, x, z, D + 40) !== D) continue; // (a deck above: a cabin, no view)
+            if (L.solids.some((b) => b.y1 > D + 0.6 && b.y0 < D + 3.5 && x > b.x0 - 0.55 && x < b.x1 + 0.55 && z > b.z0 - 0.55 && z < b.z1 + 0.55)) continue;
+            out.push({ x, y: D, z, side });
+        }
+    }
+    L._rail = out;
+    return out;
+}
+
+/** The rail spot on `side` nearest to ship-local z (or null). */
+function railNear(L, side, z) {
+    let best = null, bd = Infinity;
+    for (const r of railSpots(L)) { if (r.side !== side) continue; const d = Math.abs(r.z - z); if (d < bd) { bd = d; best = r; } }
+    return best;
+}
 
 function sailorLook(e, color) {
     const L = villagerLook(e.seed, e.role === 'captain' ? 'merchant' : 'builder', false, { castleColor: color });
@@ -178,8 +237,9 @@ export class Sailors {
     sleep(s) {
         const list = this.crews.get(s.id);
         if (!list) return;
-        for (const v of list) { v.model.dispose(); v.bubble?.dispose(); this.byId.delete(v.id); v.removable = true; this.brains?.delete(v.id); }
+        for (const v of list) { v.model.dispose(); v.bubble?.dispose(); this._dropBuoy(v); this.byId.delete(v.id); v.removable = true; this.brains?.delete(v.id); }
         this.crews.delete(s.id);
+        s.mob = null;
     }
 
     alive(s) {
@@ -269,6 +329,7 @@ export class Sailors {
             v.hp -= a * 0.2 + (dmg - a);
         } else v.hp -= dmg;
         v.hp = Math.max(0, Math.round(v.hp * 10) / 10);
+        if (by) v.hitBy = { id: by === 'local' ? g.localId : by, t: performance.now() };
         v.model.flashHit?.(0.15);
         g.sound?.playHit?.();
         if (dir && !v.overboard) {
@@ -384,24 +445,56 @@ export class Sailors {
             v.l.x += (_o.x / ol) * push * 0.3;
             v.l.z += (_o.z / ol) * push * 0.3;
             const half = hullHalfWidth(s.layout, v.l.z, s.layout.deck);
-            if (Math.abs(v.l.x) > half - 1) { if (push > 6) this._overboard(v, _o.x > 0 ? 1 : -1); else v.l.x = Math.sign(v.l.x) * (half - 1); }
+            if (Math.abs(v.l.x) > half - 1) { if (push > 6) this._overboard(v, _o.x > 0 ? 1 : -1, null, by); else v.l.x = Math.sign(v.l.x) * (half - 1); }
             this.provoke(s, by, null);
         }
     }
 
     /** Masts, guns, the wheel: never inside them. */
-    _solids(v, L) {
-        for (const b of L.solids) {
-            if (b.y1 <= v.l.y + 0.6 || b.y0 >= v.l.y + 3.5) continue;
-            const cx = Math.max(b.x0, Math.min(b.x1, v.l.x)), cz = Math.max(b.z0, Math.min(b.z1, v.l.z));
-            const ex = v.l.x - cx, ez = v.l.z - cz, ed = Math.hypot(ex, ez);
-            if (ed < 0.5 && ed > 1e-4) { v.l.x = cx + (ex / ed) * 0.5; v.l.z = cz + (ez / ed) * 0.5; }
+    _solids(v, L) { pushOut(L, v.l); }
+
+    /**
+     * (host) Feet on the deck, every frame, whatever moved him (a step, a blow, a mate's shoulder, a
+     * gust, the ship's rolling): inside the bulwarks, out of anything solid, standing on the floor or
+     * the stair under him — never sunk into it, never on air (off an edge he drops; over nothing at
+     * all — back onto the nearest walkway).
+     */
+    _ground(v, s) {
+        if (v.dead || v.overboard || v.vy || v.nsleep || v.mode === 'sleepMat' || v.mode === 'situp') return;
+        const L = s.layout, p = v.l;
+        const half = hullHalfWidth(L, p.z, Math.max(0.2, p.y)) - 0.9;
+        if (Math.abs(p.x) > half) p.x = Math.sign(p.x) * Math.max(0, half);
+        // (sunk into a stair: up onto its step first — not pushed out of the stair from inside it)
+        const f0 = floorAt(L, p.x, p.z, p.y + 1.1);
+        if (f0 !== null && f0 > p.y) p.y = f0;
+        pushOut(L, p);
+        const f = floorAt(L, p.x, p.z, p.y + 1.1);
+        if (f === null) { this._toNode(v, s); return; }
+        if (f < p.y - 0.3) v.vy = -0.01; // (an edge: he drops to the floor below)
+        else p.y = f; // (sunk into a stair or pushed onto a step: up onto it)
+    }
+
+    /** Wedged where he can't get out (or over nothing): he squeezes out onto the nearest free walkway. */
+    _toNode(v, s, notHere = false) {
+        const N = s.layout.nodes;
+        let best = null, bd = Infinity;
+        for (const n of N) {
+            const d = Math.hypot(n.x - v.l.x, (n.y - v.l.y) * 2, n.z - v.l.z);
+            if (notHere && d < 0.4) continue;
+            if (d < bd) { bd = d; best = n; }
         }
+        if (!best) return;
+        v.l.x = best.x; v.l.y = best.y; v.l.z = best.z;
+        v.node = best.id; v.path = null; v.fpath = null; v.vy = 0; v.stuckT = 0; v.lostT = 0; v.jamT = 0;
     }
 
     /** Over the side into the sea (vel: the world speed it flew off with, m/s). */
-    _overboard(v, side, vel = null) {
+    _overboard(v, side, vel = null, by = null) {
         const s = v.ship;
+        const g = this.game;
+        // who threw him (a blow, a gust, a blast a moment ago) — that one attacked the ship
+        if (!by && v.hitBy && performance.now() - v.hitBy.t < 4000) by = v.hitBy.id;
+        if (by === 'local') by = g.localId;
         const half = hullHalfWidth(s.layout, v.l.z, s.layout.deck);
         s.pose.toWorld(side * (half + 1.5), Math.max(v.l.y, s.layout.deck), v.l.z, _o);
         // (it keeps flying outwards a little: off the ship's side, never back into it)
@@ -410,8 +503,225 @@ export class Sailors {
         if (vx * out.x + vz * out.z < 2) { vx += out.x * 2; vz += out.z * 2; }
         v.overboard = { x: _o.x, y: _o.y, z: _o.z, vy: 3, vx, vz, t: 0, wet: false };
         v.mode = 'run';
-        v.fs = null; v.busy = false; v.stunT = 0; v.vy = 0;
-        this._say(v, 'А-а-а! Человек за бортом!');
+        v.fs = null; v.busy = false; v.stunT = 0; v.vy = 0; v.rescue = null; v.alert = null;
+        this._say(v, pick(['А-а-а-а!', 'Полундра-а-а!', 'Спаси-и-ите!']));
+        // the crew sees it: a man overboard (_overboardWatch: one throws him the buoy, others call to him)
+        (s.mob || (s.mob = [])).push({ v, by, t: 0, side });
+        g.castleLife?.night?.crewAlarm(s, false); // (the sleepers below jump up)
+        if (by && (by === g.localId || g.remotes?.has?.(by))) {
+            // a person did it: that one attacked the ship — the crew goes for him (CrewTactics) or at
+            // least to the rail, shouting at him; the people on the shore see a man thrown into the sea
+            this.provoke(s, by, '🏴 Вы выбросили матроса за борт — команда в ярости!');
+            g.castleLife?.alarm?.({ x: v.overboard.x, y: v.overboard.y, z: v.overboard.z }, 'attacker', by);
+        }
+    }
+
+    // ---------------------------------------------------------- a man overboard
+    /**
+     * (host) Somebody of the crew is in the water: the nearest free hand runs to the rail on his
+     * side, shouts «Человек за бортом!» and throws him the lifebuoy on its line (and throws it again
+     * if it falls short); one or two more come to the rail and call to him. He swims to the buoy (or
+     * straight to the rope ladder), and holding it is hauled in along the ship's side to the ladder
+     * — even when the ship is under way. Back aboard (or drowned) — they go back to their work.
+     */
+    _overboardWatch(s, list, dt) {
+        if (!s.mob?.length) return;
+        for (const m of [...s.mob]) {
+            m.t += dt;
+            const w = m.v;
+            if (w.dead || !w.overboard || !list.includes(w)) {
+                for (const o of list) {
+                    if (o.rescue?.m !== m) continue;
+                    if (o.rescue.job === 'buoy') this._say(o, w.dead ? 'Эх... Не успели.' : pick(['Вытащили! Живой!', 'Ну и напугал ты нас!', 'Живой, чертяка!']));
+                    this._endRescue(o, s);
+                }
+                s.mob.splice(s.mob.indexOf(m), 1);
+                if (!w.dead) setTimeout(() => { if (!w.dead && !w.overboard) this._say(w, pick(['Спасибо, братцы!', 'Тьфу... Солёная!', 'Жив я, жив!'])); }, 1500);
+                continue;
+            }
+            const free = (o) => o !== w && !o.dead && !o.overboard && !o.rescue && !(o.stunT > 0) && !o.vy && o.mode !== 'sleepMat';
+            const wl = s.pose.toLocal(w.overboard.x, w.overboard.y, w.overboard.z, {});
+            const far = (o) => Math.hypot(o.l.x - wl.x, o.l.z - wl.z) + Math.abs(o.l.y - s.layout.deck) * 3;
+            if (!list.some((o) => o.rescue?.m === m && o.rescue.job === 'buoy')) {
+                // (the captain only when nobody else is left; one fighting only when nobody is free)
+                const c = list.filter(free).sort((a, b) => (far(a) + (a.role === 'captain' ? 60 : 0) + (a.foe ? 25 : 0)) - (far(b) + (b.role === 'captain' ? 60 : 0) + (b.foe ? 25 : 0)))[0];
+                if (c) {
+                    c.rescue = { m, job: 'buoy', t: 0 }; c.path = null; c.talking = 0;
+                    if (!m.called) { m.called = true; this._say(c, 'Человек за бортом!', 4); }
+                }
+            }
+            if (list.filter((o) => o.rescue?.m === m && o.rescue.job === 'call').length < 2 && m.t < 30) {
+                const c = list.filter((o) => free(o) && !o.foe && o.role !== 'captain').sort((a, b) => far(a) - far(b))[0];
+                if (c) { c.rescue = { m, job: 'call', t: 0 }; c.path = null; c.talking = 0; }
+            }
+        }
+    }
+
+    _endRescue(v, s) {
+        v.rescue = null; v.path = null; v.fpath = null; v.mode = 'idle'; v.speed = 0;
+        v.node = this._nearestNode(s, v.l); v.waitT = 1 + Math.random() * 2;
+    }
+
+    /** (host) One sent to save the man in the water: to the rail, the buoy on its line, haul him in. */
+    _rescueStep(v, s, dt) {
+        const R = v.rescue, w = R.m.v, o = w.overboard;
+        if (!o || w.dead) { this._endRescue(v, s); return; }
+        R.t += dt;
+        const q = s.pose.toLocal(o.x, o.y, o.z, _l);
+        const wx = q.x, wz = q.z;
+        const side = wx >= 0 ? 1 : -1;
+        const face = () => { v.lyaw = Math.atan2(-(wx - v.l.x), -(wz - v.l.z)); };
+        const spot = railNear(s.layout, side, wz + (R.job === 'call' ? (v.idx % 2 ? 2.4 : -2.4) : 0));
+        if (!spot) { v.mode = 'cheer'; v.speed = 0; face(); return; }
+        if (!this._toSpot(v, s, spot, RUN, dt)) {
+            if (R.job === 'call' && v.sayT <= 0 && Math.random() < dt * 0.3) this._say(v, 'Человек за бортом!');
+            return;
+        }
+        face();
+        v.speed = 0;
+        const dist = Math.hypot(wx - v.l.x, wz - v.l.z);
+        if (R.job === 'call') {
+            v.mode = 'cheer'; // (waving to him over the rail)
+            if (v.sayT <= 0 && Math.random() < dt * 0.25) this._say(v, pick(['Держись!', 'Плыви к трапу!', 'Сюда, к борту!', 'Держись, браток!']));
+            if (R.t > 40) this._endRescue(v, s);
+            return;
+        }
+        const b = R.buoy;
+        if (!b) {
+            if (!o.wet || dist > 20) {
+                v.mode = 'cheer';
+                if (v.sayT <= 0 && Math.random() < dt * 0.3) this._say(v, dist > 20 ? 'Плыви к нам! Держись!' : 'Держись! Сейчас!');
+                return;
+            }
+            // a swing of the arm — and the ring flies out on its line to him
+            v.mode = 'attack';
+            R.wind = (R.wind || 0) + dt;
+            if (R.wind < 0.35) return;
+            R.wind = 0;
+            const h = s.pose.toWorld(v.l.x + side * 0.6, v.l.y + 2.6, v.l.z, _o);
+            const tx = o.x + (Math.random() - 0.5) * 1.5, tz = o.z + (Math.random() - 0.5) * 1.5, ty = WATER_LEVEL_Y + 0.05;
+            const T = 0.9 + dist * 0.03;
+            R.buoy = { x: h.x, y: h.y, z: h.z, vx: (tx - h.x) / T, vz: (tz - h.z) / T, vy: (ty - h.y) / T + 0.5 * 14 * T, fly: true, t: 0, lx: 0, lz: 0 };
+            this._say(v, pick(['Лови круг!', 'Хватай конец!', 'Держи!']));
+            return;
+        }
+        b.t += dt;
+        if (b.fly) {
+            v.mode = 'idle';
+            b.vy -= 14 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+            if (b.y <= WATER_LEVEL_Y + 0.05) {
+                b.y = WATER_LEVEL_Y + 0.05; b.fly = false;
+                const l = s.pose.toLocal(b.x, b.y, b.z, _l); b.lx = l.x; b.lz = l.z; // (on its line: it goes with the ship)
+                this.game.sound?.playSplash?.();
+            }
+            return;
+        }
+        if (o.rope) { v.mode = 'work'; b.x = o.x; b.y = WATER_LEVEL_Y + 0.05; b.z = o.z; return; } // (hauling the line in)
+        const p = s.pose.toWorld(b.lx, 0, b.lz, _o);
+        b.x = p.x; b.y = WATER_LEVEL_Y + 0.05; b.z = p.z;
+        v.mode = 'idle';
+        // (fell short, or he drifted off: the line pulled in and thrown again)
+        if (Math.hypot(b.x - o.x, b.z - o.z) > 7 || b.t > 12) { R.buoy = null; this._say(v, 'Мимо! Ещё раз!', 2); }
+    }
+
+    /** The buoy thrown to this man in the water (landed, on its line), or null. */
+    _buoyFor(w, s) {
+        for (const o of this.crews.get(s.id) || []) {
+            const b = o.rescue?.m.v === w && o.rescue.job === 'buoy' && !o.dead ? o.rescue.buoy : null;
+            if (b && !b.fly) return b;
+        }
+        return null;
+    }
+
+    /** Walk/run to a spot on the decks (by the walking graph to another deck); true: he is there. */
+    _toSpot(v, s, spot, speed, dt) {
+        if (Math.abs(spot.y - v.l.y) > 1) { this._goTo(v, s, spot, speed, dt); v.mode = 'run'; return false; }
+        v.fpath = null;
+        const d = Math.hypot(spot.x - v.l.x, spot.z - v.l.z);
+        if (d <= 0.6) return true;
+        this._steer(v, s, spot.x, spot.z, d > 3 ? speed : WALK, dt);
+        v.mode = d > 3 && speed >= RUN ? 'run' : 'walk';
+        return false;
+    }
+
+    /** (host) The ship's foe off the ship: to the rail on his side, blades up, shouting at him. */
+    _threaten(v, s, far, dt) {
+        v.alert = v.alert || { t: 0 };
+        v.alert.t += dt;
+        v.fs = null; v.busy = false;
+        const face = () => { v.lyaw = Math.atan2(-(far.x - v.l.x), -(far.z - v.l.z)); };
+        if (v.role === 'captain') {
+            v.mode = 'idle'; v.speed = 0; face();
+            if (v.sayT <= 0 && (!s.alertT || performance.now() - s.alertT > 12000)) { s.alertT = performance.now(); this._say(v, pick(SHOUT.rally)); }
+            return;
+        }
+        const side = far.x >= 0 ? 1 : -1;
+        const spot = railNear(s.layout, side, far.z + ((v.idx % 6) - 2.5) * 1.8);
+        if (spot && !this._toSpot(v, s, spot, RUN, dt)) return;
+        v.mode = 'block'; v.speed = 0; face();
+        if (v.sayT <= 0 && Math.random() < dt * 0.12) this._say(v, pick(SHOUT.rail));
+    }
+
+    /** The players standing on this ship (ship frame, at the feet). */
+    _playersOn(s) {
+        const g = this.game, out = [];
+        if (this.ships.me?.ship === s && !g.isDeadLocal) { const m = this.ships.me.l; out.push({ id: g.localId, x: m.x, y: m.y - 2, z: m.z }); }
+        for (const [id, r] of g.remotes || []) {
+            if (r.ship !== s.id) continue;
+            const q = s.pose.toLocal(r.position.x, r.position.y - 2, r.position.z, {});
+            out.push({ id, x: q.x, y: q.y, z: q.z });
+        }
+        return out;
+    }
+
+    /**
+     * A player right next to a sailor who isn't fighting him: the sailor steps back out of the reach
+     * of the hands (never in the way of a spell being cast, never bumping the arm), facing him.
+     */
+    _makeRoom(v, s, dt) {
+        const want = v.talking > 0 || v.path ? 1.5 : 1.8;
+        for (const p of this._playersOn(s)) {
+            if (Math.abs(p.y - v.l.y) > 2) continue;
+            const dx = v.l.x - p.x, dz = v.l.z - p.z, d = Math.hypot(dx, dz);
+            if (d >= want) continue;
+            const ux = d > 1e-3 ? dx / d : (v.idx % 2 ? 1 : -1), uz = d > 1e-3 ? dz / d : 0;
+            this._steer(v, s, p.x + ux * (want + 0.5), p.z + uz * (want + 0.5), WALK, dt);
+            v.mode = 'walk';
+            v.lyaw = Math.atan2(-(p.x - v.l.x), -(p.z - v.l.z)); // (backing off, facing him)
+            return true;
+        }
+        return false;
+    }
+
+    /** The lifebuoys on their lines (the host's own and the ones it reports to the guests). */
+    _drawBuoys(list) {
+        const g = this.game;
+        for (const v of list) {
+            const b = this.auth ? v.rescue?.buoy : v.buoyNet;
+            if (!b || v.dead || !g.scene?.add) { this._dropBuoy(v); continue; }
+            if (!v.buoyMesh) {
+                const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.2, 8, 18), new THREE.MeshLambertMaterial({ color: 0xe8541e }));
+                ring.rotation.x = Math.PI / 2;
+                const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xd8c8a0 }));
+                line.frustumCulled = false;
+                g.scene.add(ring); g.scene.add(line);
+                v.buoyMesh = { ring, line };
+            }
+            const { ring, line } = v.buoyMesh;
+            ring.position.set(b.x, b.y, b.z);
+            const yaw = v.ship.st.yaw + v.lyaw;
+            const pos = line.geometry.attributes.position;
+            pos.setXYZ(0, v.x - Math.sin(yaw) * 0.6, v.y + 2.6, v.z - Math.cos(yaw) * 0.6);
+            pos.setXYZ(1, b.x, b.y + 0.1, b.z);
+            pos.needsUpdate = true;
+        }
+    }
+
+    _dropBuoy(v) {
+        const M = v.buoyMesh;
+        if (!M) return;
+        for (const o of [M.ring, M.line]) { o.parent?.remove(o); o.geometry.dispose(); o.material.dispose(); }
+        v.buoyMesh = null;
     }
 
     _die(v, by) {
@@ -437,8 +747,13 @@ export class Sailors {
                 if (this.auth) this._think(v, s, dt);
                 else this._follow(v, dt);
             }
-            if (this.auth) { this._tactics(s, list, dt); this._separate(s, list); this._chatter(s, list, dt); }
+            if (this.auth) {
+                this._tactics(s, list, dt); this._separate(s, list, dt); this._chatter(s, list, dt);
+                this._overboardWatch(s, list, dt);
+                for (const v of list) this._ground(v, s);
+            }
             this._place(s);
+            this._drawBuoys(list);
             for (const v of list) {
                 v.model.update(dt, { mode: v.mode === 'swim' ? 'walk' : v.mode, speed: v.speed });
                 if (v.sayT > 0) v.sayT -= dt;
@@ -479,7 +794,17 @@ export class Sailors {
         }
         // the foe: a hostile player aboard (or on the pier near the gangway)
         const now = performance.now();
-        let foe = null, fd = Infinity, onPier = false;
+        // a mate in the water and he is the one sent to save him (_overboardWatch): that first — the
+        // fight can wait while a man drowns (unless the foe is right on him)
+        if (v.rescue && !v.nsleep) {
+            const fp = v.foe && this._playerLocal(s, v.foe, _l);
+            if (!(fp && this._aboard(s, v.foe) && Math.hypot(fp.x - v.l.x, fp.z - v.l.z) < 3)) {
+                if (v.foe) { v.foe = null; v.fp = null; v.fs = null; v.busy = false; v.tac = null; }
+                this._rescueStep(v, s, dt);
+                return;
+            }
+        }
+        let foe = null, fd = Infinity, onPier = false, far = null, farD = Infinity;
         for (const [id, until] of s.hostile) {
             if (until < now) { s.hostile.delete(id); continue; }
             const p = this._playerLocal(s, id, _l);
@@ -490,6 +815,7 @@ export class Sailors {
             const k = id === v.foe ? d - 1e6 : d;
             if (aboard && k < fd) { fd = k; foe = { id, x: p.x, y: p.y, z: p.z }; onPier = false; }
             else if (!aboard && !foe && Math.hypot(p.x, p.z - s.layout.gangZ) < 30 + s.layout.B) onPier = true;
+            if (!aboard && d < farD && Math.hypot(p.x, p.z) < 90) { farD = d; far = { id, x: p.x, y: p.y, z: p.z }; }
         }
         if (foe) {
             // (where he goes and when he swings: the crew's tactics, all of them together — _tactics)
@@ -509,8 +835,14 @@ export class Sailors {
             if (v.sayT <= 0 && Math.random() < dt * 0.2) this._say(v, pick(SHOUT.gang));
             return;
         }
+        // the foe off the ship (in the water, on another ship, on the shore — he threw a mate over
+        // the side, say): to the rail on his side, blades up, shouting at him; aboard — the fight
+        if (far && !v.nsleep) { this._threaten(v, s, far, dt); return; }
+        if (v.alert) { v.alert = null; v.path = null; v.fpath = null; v.node = this._nearestNode(s, v.l); }
         // the night: below asleep (the watch walks the deck) — NightLife.js
         if (g.castleLife?.night?.sailor(v, s, dt)) return;
+        // a player right next to him (casting, reaching out): he steps back out of the way of the hands
+        if (this._makeRoom(v, s, dt)) return;
         // talking to somebody: stand and face them
         if (v.talking > 0) {
             v.talking -= dt;
@@ -635,6 +967,10 @@ export class Sailors {
             v.stuckT = 0.2;
             v.lostT = (v.lostT || 0) + 1;
         }
+        // wedged for good (nothing above frees him for seconds): he squeezes out onto the nearest walkway
+        if (step > 1e-3 && made < step * 0.2 && d > 1) v.jamT = (v.jamT || 0) + dt;
+        else if (made >= step * 0.5) v.jamT = 0;
+        if (v.jamT > 4) { this._toNode(v, s, true); return; }
         if (mv) { v.l.x = mv.x; v.l.y = mv.y; v.l.z = mv.z; }
         v.speed = speed;
         v.lyaw = Math.atan2(-dx, -dz);
@@ -646,7 +982,9 @@ export class Sailors {
         const f = floorAt(L, nx, nz, v.l.y + 1.1);
         if (f === null || f <= v.l.y - 3) return null;
         let x = nx, z = nz;
-        const y = v.l.y + (f - v.l.y) * Math.min(1, this._dt * 10);
+        // (feet on the step he steps onto — up a stair at once, never wading through it; a drop off an
+        // edge: he keeps his height and _ground lets him fall)
+        const y = f >= v.l.y - 0.6 ? f : v.l.y;
         const half = hullHalfWidth(L, z, Math.max(0.2, y)) - 0.9;
         if (Math.abs(x) > half) x = Math.sign(x) * half;
         // masts, guns, the wheel, the stairs' sides…
@@ -842,11 +1180,11 @@ export class Sailors {
             out.push({ x: o.l.x, z: o.l.z, r: 0.5 });
         }
         const g = this.game;
-        if (this.ships.me?.ship === s) { const m = this.ships.me.l; if (Math.abs(m.y - 2 - v.l.y) < 2.5) out.push({ x: m.x, z: m.z, r: 0.6 }); }
+        if (this.ships.me?.ship === s) { const m = this.ships.me.l; if (Math.abs(m.y - 2 - v.l.y) < 2.5) out.push({ x: m.x, z: m.z, r: 1.1 }); } // (round a player wide: clear of his hands)
         for (const [, r] of g.remotes || []) {
             if (r.ship !== s.id) continue;
             const q = s.pose.toLocal(r.position.x, r.position.y - 2, r.position.z, _l);
-            if (Math.abs(q.y - v.l.y) < 2.5) out.push({ x: q.x, z: q.z, r: 0.6 });
+            if (Math.abs(q.y - v.l.y) < 2.5) out.push({ x: q.x, z: q.z, r: 1.1 });
         }
         // (and the masts, the guns, the wheel: round them, not stuck against them)
         for (const b of s.layout.solids) {
@@ -887,21 +1225,52 @@ export class Sailors {
             }
         }
         v.mode = 'swim';
-        const lad = s.layout.ladders[0];
-        s.pose.toWorld(lad.x * 1.1, 0, lad.z, _o);
+        // the rope ladder on his side of the ship
+        const ql = s.pose.toLocal(o.x, o.y, o.z, _l);
+        const side = ql.x >= 0 ? 1 : -1;
+        const lad = s.layout.ladders.find((l) => l.side === side) || s.layout.ladders[0];
+        const lx = lad.x * 1.1, lz = lad.z;
+        s.pose.toWorld(lx, 0, lz, _o);
         const dx = _o.x - o.x, dz = _o.z - o.z, d = Math.hypot(dx, dz);
-        const near = d < 25 && Math.abs(s.st.u) < 1.5;
-        if (near && d > 1.5) { o.x += (dx / d) * 1.4 * dt; o.z += (dz / d) * 1.4 * dt; v.speed = 1.4; }
+        const buoy = o.wet ? this._buoyFor(v, s) : null;
+        if (!buoy) { o.rope = false; o.lp = null; }
+        if (o.rope) {
+            // holding the buoy: hauled in on its line along the ship's side to the ladder (with the ship)
+            // (where he is held in the ship's own frame: the line drags him along as the ship sails)
+            const lp = o.lp || (o.lp = { x: ql.x, z: ql.z });
+            const step = Math.min(1, (1.8 * dt) / Math.max(1e-3, Math.hypot(lx - lp.x, lz - lp.z)));
+            lp.x += (lx - lp.x) * step; lp.z += (lz - lp.z) * step;
+            s.pose.toWorld(lp.x, 0, lp.z, _o);
+            o.x = _o.x; o.z = _o.z; v.speed = 1.8;
+            v.lyaw = Math.atan2(-(lx - lp.x), -(lz - lp.z));
+        } else if (buoy && Math.hypot(buoy.x - o.x, buoy.z - o.z) > 1.3) {
+            // to the buoy thrown to him
+            const bx = buoy.x - o.x, bz = buoy.z - o.z, bd = Math.hypot(bx, bz);
+            o.x += (bx / bd) * 1.6 * dt; o.z += (bz / bd) * 1.6 * dt; v.speed = 1.6;
+        } else if (buoy) o.rope = true;
+        else if (d > 1.5 && d < 40) { o.x += (dx / d) * 1.6 * dt; o.z += (dz / d) * 1.6 * dt; v.speed = 1.6; } // (straight to the ladder)
+        // (the hull is solid: in the water he goes along its side, never through it)
+        if (o.y < WATER_LEVEL_Y) {
+            const q = s.pose.toLocal(o.x, o.y, o.z, _l);
+            const hw = hullHalfWidth(s.layout, q.z, 0) + 0.7;
+            if (hw > 0.7 && Math.abs(q.x) < hw) {
+                const sx = q.x >= 0 ? 1 : -1;
+                if (o.lp) o.lp.x = sx * hw;
+                s.pose.toWorld(sx * hw, 0, q.z, _o);
+                o.x = _o.x; o.z = _o.z;
+            }
+        }
+        const near = d < 25 && (Math.abs(s.st.u) < 1.5 || o.rope);
         if (near && d <= 1.5 && o.t > 3) {
             // up the rope ladder and back aboard
-            const gw = s.layout.nodes.find((n) => n.tag && n.tag.startsWith('gangway')) || s.layout.nodes[0];
-            v.l.x = gw.x; v.l.y = gw.y; v.l.z = gw.z;
+            const gw = s.layout.nodes.find((n) => n.tag === 'gangway:' + (side > 0 ? '+1' : '-1')) || s.layout.nodes.find((n) => n.tag && n.tag.startsWith('gangway')) || s.layout.nodes[0];
+            v.l.x = gw.x; v.l.y = gw.y; v.l.z = gw.z; v.node = gw.id; v.vy = 0;
             v.overboard = null;
             v.mode = 'idle';
             v.path = null;
             return;
         }
-        if (!near && o.t > 20) { this._die(v, s.lastBy); v.overboard.y = WATER_LEVEL_Y - 3; }
+        if (!near && !o.rope && o.t > 25) { this._die(v, s.lastBy); v.overboard.y = WATER_LEVEL_Y - 3; }
     }
 
     _playerLocal(s, id, out) {
@@ -1115,11 +1484,8 @@ export class Sailors {
      * the one in the way is stepped round.
      */
     _separate(s, list) {
-        const R = 1.0;
         const bodies = [];
-        const me = this.ships.me?.ship === s ? this.ships.me.l : null;
-        if (me) bodies.push({ l: { x: me.x, y: me.y - 2, z: me.z }, fixed: true });
-        for (const [id, r] of this.game.remotes) if (r.ship === s.id) { const q = s.pose.toLocal(r.position.x, r.position.y - 2, r.position.z, {}); bodies.push({ l: q, fixed: true, id }); }
+        for (const p of this._playersOn(s)) bodies.push({ l: p, fixed: true, id: p.id });
         for (const v of list) if (!v.dead && !v.overboard) bodies.push({ l: v.l, v });
         for (let i = 0; i < bodies.length; i++) {
             for (let j = i + 1; j < bodies.length; j++) {
@@ -1128,6 +1494,8 @@ export class Sailors {
                 if (Math.abs(A.l.y - B.l.y) > 2.5) continue;
                 let dx = B.l.x - A.l.x, dz = B.l.z - A.l.z;
                 let d = Math.hypot(dx, dz);
+                // (a player's body with his arms out is wider than a mate's shoulder)
+                const R = A.fixed || B.fixed ? 1.2 : 1.0;
                 if (d >= R) continue;
                 if (d < 1e-4) { dx = (B.v?.idx || 1) % 2 ? 1 : -1; dz = 0; d = 1; }
                 const push = R - d;
@@ -1145,7 +1513,7 @@ export class Sailors {
         this._netT = (this._netT || 0) + 1;
         if (this._netT % 1 !== 0) return;
         for (const [sid, list] of this.crews) {
-            const l = list.map((v) => [v.idx, Math.round(v.l.x * 100) / 100, Math.round(v.l.y * 100) / 100, Math.round(v.l.z * 100) / 100, Math.round(v.lyaw * 100) / 100, Math.max(0, MODE_CODE.indexOf(v.mode)), v.hp, Math.round(v.armor), v.dead ? 1 : 0, v.overboard ? [Math.round(v.overboard.x * 10) / 10, Math.round(v.overboard.y * 10) / 10, Math.round(v.overboard.z * 10) / 10] : 0]);
+            const l = list.map((v) => [v.idx, Math.round(v.l.x * 100) / 100, Math.round(v.l.y * 100) / 100, Math.round(v.l.z * 100) / 100, Math.round(v.lyaw * 100) / 100, Math.max(0, MODE_CODE.indexOf(v.mode)), v.hp, Math.round(v.armor), v.dead ? 1 : 0, v.overboard ? [Math.round(v.overboard.x * 10) / 10, Math.round(v.overboard.y * 10) / 10, Math.round(v.overboard.z * 10) / 10] : 0, v.rescue?.buoy ? [Math.round(v.rescue.buoy.x * 10) / 10, Math.round(v.rescue.buoy.y * 10) / 10, Math.round(v.rescue.buoy.z * 10) / 10] : 0]);
             g.sync.net.send({ t: 'screw', id: sid, l });
         }
     }
@@ -1163,6 +1531,7 @@ export class Sailors {
             v.hp = a[6]; v.armor = a[7];
             if (a[8] && !v.dead) { v.dead = true; s?.crewKilled.add(v.idx); }
             v.overboard = Array.isArray(a[9]) ? { x: a[9][0], y: a[9][1], z: a[9][2], vy: 0, t: 0 } : null;
+            v.buoyNet = Array.isArray(a[10]) ? { x: +a[10][0] || 0, y: +a[10][1] || 0, z: +a[10][2] || 0 } : null; // (the lifebuoy he threw)
         }
     }
 
@@ -1206,5 +1575,5 @@ registerKind('c', {
     toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
     hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },
     frozen: () => false,
-    struck(g, c, o) { if (o.by) g.ships?.crew.provoke(c.ship, o.by === 'local' ? g.localId : o.by, '🏴 Вы напали на матроса — команда к бою!'); },
+    struck(g, c, o) { if (o.by) c.hitBy = { id: o.by === 'local' ? g.localId : o.by, t: performance.now() }; if (o.by) g.ships?.crew.provoke(c.ship, o.by === 'local' ? g.localId : o.by, '🏴 Вы напали на матроса — команда к бою!'); },
 });
