@@ -7,8 +7,8 @@
  *
  * The ideas (not the code) of the well-known Minecraft world mods: long mountain ranges with sharp
  * peaks, ridges, crags and deep valleys between them; high plateaus with cliffs; many kinds of land
- * melting into each other; fantastic places — scarlet canyons with striped walls, «shattered» land
- * of tall stone spires, moonlit groves, islands floating in the sky (TerrainData._floatIslands);
+ * melting into each other; fantastic places — scarlet canyons with striped walls, emerald hills,
+ * moonlit groves, islands floating in the sky (TerrainData._floatIslands);
  * the grass and the leaves change their colour from place to place.
  *
  *  - The height: rolling hills everywhere; mountain regions (long ranges, Tectonic-like) built of a
@@ -37,7 +37,7 @@ export const LUSH = {
 };
 
 /** Land kinds of a column (fn.kind of the height field). */
-export const KIND = { LAND: 0, SPIRE: 1, MESA: 2, CLIFF: 3 };
+export const KIND = { LAND: 0, MESA: 2, CLIFF: 3 }; // (1 was the stone spires — taken out: the author didn't like them)
 
 /**
  * The kinds of land. T, W: their warmth and wetness (−1…1); fant: a fantastic land (only where the
@@ -58,7 +58,7 @@ export const BIOMES = [
     // the fantastic lands (far from the spawn)
     { id: 'moon', name: 'Лунная роща', fant: 'moon', grass: 0x3a8a86, grass2: 0x6a66c0, leaf: [[0x8a57d6, 0x5a7fe0, 0x6f4ab8], 0.82], trees: 0.4, kinds: [4, 1, 0, 4], tall: [0.42, 0.4, 0.95], flowers: [0.1, 0x7ff9ff, 0xd08bff, 0x9fd0ff], glow: true },
     { id: 'mesa', name: 'Алые каньоны', fant: 'mesa', grass: 0x9a9a48, grass2: 0xb3a24f, leaf: [[0x8a9a3a], 0.4], trees: 0.03, kinds: [0, 4], tall: [0.12, 0.4, 0.8], flowers: [0.02, 0xff7a2a, 0xe8413c] },
-    { id: 'shattered', name: 'Расколотые скалы', fant: 'shattered', grass: 0x3e9a55, grass2: 0x62b06a, leaf: [[0x2f9a5a], 0.4], trees: 0.18, kinds: [2, 0, 1], tall: [0.3, 0.35, 0.8], flowers: [0.06, 0xf6f4ee, 0xffd84a, 0x7fd0ff] },
+    { id: 'emerald', name: 'Изумрудные холмы', fant: 'emerald', grass: 0x3e9a55, grass2: 0x62b06a, leaf: [[0x2f9a5a], 0.4], trees: 0.3, kinds: [2, 0, 1], tall: [0.3, 0.35, 0.8], flowers: [0.06, 0xf6f4ee, 0xffd84a, 0x7fd0ff] },
 ];
 export const BIOME = Object.fromEntries(BIOMES.map((b, i) => [b.id, i]));
 const N_PLAIN = BIOMES.findIndex((b) => b.fant);
@@ -100,7 +100,7 @@ export function createLandscape(seed) {
 
     const L = {
         /** Last height(): the kind of land (KIND), the fantastic lands' weights, the wonder share. */
-        kind: KIND.LAND, mesa: 0, shat: 0, moon: 0, fant: 0, spire: 0,
+        kind: KIND.LAND, mesa: 0, emer: 0, moon: 0, fant: 0,
     };
 
     /** Climate of a column: warmth, wetness, wonder (filled into `out`). */
@@ -112,17 +112,17 @@ export function createLandscape(seed) {
         return out;
     };
 
-    /** The fantastic lands' weights of a column (L.mesa, L.shat, L.moon; L.fant their sum). */
+    /** The fantastic lands' weights of a column (L.mesa, L.emer, L.moon; L.fant their sum). */
     const wonder = (x, z, dist) => {
         const far = smoothstep(LUSH.WONDER_NEAR, LUSH.WONDER_FAR, dist);
-        if (far <= 0) { L.fant = L.mesa = L.shat = L.moon = 0; return; }
+        if (far <= 0) { L.fant = L.mesa = L.emer = L.moon = 0; return; }
         const f = 1.25 * nF((x * 0.6 + z * 0.8) / 900, (z * 0.6 - x * 0.8) / 900) + 0.3 * nF(x / 240 + 77, z / 240 + 5);
         const fant = smoothstep(0.34, 0.58, f) * far;
         L.fant = fant;
-        if (fant <= 0) { L.mesa = L.shat = L.moon = 0; return; }
+        if (fant <= 0) { L.mesa = L.emer = L.moon = 0; return; }
         const k = nK(x / 520, z / 520);
-        const mesa = smoothstep(-0.06, -0.24, k), shat = smoothstep(0.06, 0.24, k);
-        L.mesa = fant * mesa; L.shat = fant * shat; L.moon = fant * (1 - mesa - shat);
+        const mesa = smoothstep(-0.06, -0.24, k), emer = smoothstep(0.06, 0.24, k);
+        L.mesa = fant * mesa; L.emer = fant * emer; L.moon = fant * (1 - mesa - emer);
     };
 
     /** Ridged multifractal: sharp crests, gullies between; ~0…1. */
@@ -151,10 +151,10 @@ export function createLandscape(seed) {
 
     /**
      * The far land's height at a column (a float, before rivers, lakes, seas), `dist` its distance
-     * from the spawn. Sets L.kind (a stone spire, the scarlet rock…) and the wonder weights.
+     * from the spawn. Sets L.kind (the scarlet rock, a cliff…) and the wonder weights.
      */
     L.height = (x, z, dist) => {
-        L.kind = KIND.LAND; L.spire = 0;
+        L.kind = KIND.LAND;
         wonder(x, z, dist);
         // the land's own big shapes
         const wx = x + 60 * nWarp(x / 400, z / 400), wz = z + 60 * nWarp(x / 400 + 31, z / 400 - 47);
@@ -194,28 +194,8 @@ export function createLandscape(seed) {
             h = h + (mh - h) * smoothstep(0, 0.6, L.mesa);
             if (L.mesa > 0.3) L.kind = KIND.MESA;
         }
-        // shattered land: tall stone spires out of broken ground
-        if (L.shat > 0) {
-            const C = 11, gx = Math.floor(x / C), gz = Math.floor(z / C);
-            // (spires stand in groups, with open glades between: no forest of stone pillars)
-            const group = smoothstep(-0.1, 0.45, nS(x / 70 + 33, z / 70 - 21)) * L.shat * 0.32;
-            let best = 0;
-            for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-                const cx = gx + dx, cz = gz + dz;
-                if (hashLand(cx, cz, s + 61) > group) continue;
-                const px = (cx + 0.2 + 0.6 * hashLand(cz, cx, s + 62)) * C, pz = (cz + 0.2 + 0.6 * hashLand(cx + 7, cz - 3, s + 63)) * C;
-                const r = 1.8 + 2.9 * hashLand(cx - 5, cz + 9, s + 64);
-                const ddx = x - px, ddz = z - pz, d2 = ddx * ddx + ddz * ddz;
-                if (d2 > r * r) continue;
-                const k = d2 / (r * r);
-                const q = hashLand(cx + 3, cz + 11, s + 65);
-                const tall = (9 + 34 * q * q) * (0.45 + 0.55 * L.shat);
-                const top = tall * (1 - 0.25 * k * k) - 2.5 * k + 1.5 * nS(x / 2.3, z / 2.3);
-                if (top > best) best = top;
-            }
-            h -= 2.5 * L.shat * (0.5 + 0.5 * nS(x / 9, z / 9)); // (the broken ground between)
-            if (best > 0) { const sp = h + best; if (sp > h + 2) { h = sp; L.kind = KIND.SPIRE; L.spire = 1; } }
-        }
+        // emerald hills: round green hills rolling one into another (the stone spires that stood here were taken out at the author's wish)
+        if (L.emer > 0) h += L.emer * (5 + 5 * nS(x / 46 + 33, z / 46 - 21) + 2.5 * nS(x / 15 - 8, z / 15 + 12));
         // no ceiling: the highest ground only rises less steeply (smoothly — a peak keeps its point)
         if (h > LUSH.SOFT) { const e = h - LUSH.SOFT, K = LUSH.TOP - LUSH.SOFT; h = LUSH.SOFT + (e * K) / (K + e * 0.85); } // (→ at most SOFT + K/0.85 ≈ 116)
         return h;
@@ -233,7 +213,7 @@ export function createLandscape(seed) {
 
     /**
      * The kinds of land at a column: their weights into `w` (Float32Array(BIOMES.length), summing
-     * to 1); returns the strongest kind. `fx`: the column's fantastic lands' weights ({mesa, shat,
+     * to 1); returns the strongest kind. `fx`: the column's fantastic lands' weights ({mesa, emer,
      * moon, fant} — the height field's flags); `spawn`: 0…1, near the spawn a fresh meadow.
      */
     L.biomes = (c, w, spawn, fx) => {
@@ -247,7 +227,7 @@ export function createLandscape(seed) {
             w[i] = k * plain + 1e-4;
         }
         w[BIOME.meadow] += 0.6 * spawn;
-        w[BIOME.moon] = fx.moon * 1.4; w[BIOME.mesa] = fx.mesa * 1.4; w[BIOME.shattered] = fx.shat * 1.4;
+        w[BIOME.moon] = fx.moon * 1.4; w[BIOME.mesa] = fx.mesa * 1.4; w[BIOME.emerald] = fx.emer * 1.4;
         let best = 0;
         for (let i = 0; i < NB; i++) { sum += w[i]; if (w[i] > w[best]) best = i; }
         for (let i = 0; i < NB; i++) w[i] /= sum;

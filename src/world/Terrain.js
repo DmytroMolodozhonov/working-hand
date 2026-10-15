@@ -190,7 +190,7 @@ export const OLD_BEDROCK = -9;
 export const WORLD_GEN = 5;
 // 5: the new landscape (src/world/Landscape.js): big mountain ranges with sharp snowy peaks, no flat
 //    tops (the world is 120 layers high), kinds of land with their own grass and leaves, scarlet
-//    canyons, stone spires, moonlit groves, floating islands; flowers and tall grass (Flora.js).
+//    canyons, emerald hills, moonlit groves, floating islands; flowers and tall grass (Flora.js).
 //    A world made before keeps its generation (its saved changes lie on the land they were made on).
 // 4: caves as in Minecraft (src/world/CaveSystems.js): winding, branching, deep, chests in their chambers.
 // 3: a creative world has a test ground — a river right past the pedestals and a castle close by.
@@ -291,7 +291,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     const land = lush ? createLandscape(seed) : null;
     const fn = (ix, iz) => {
         fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
-        fn.mesa = fn.shat = fn.moon = fn.fant = 0;
+        fn.mesa = fn.emer = fn.moon = fn.fant = 0;
         // the creative test ground's river: water just past the pedestals, a valley through the hills
         let rcap = Infinity;
         if (test) {
@@ -311,7 +311,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
             // (generation 5, far out: only the new landscape — the spawn's old hills not worked out)
             h = Math.round(land.height(ix, iz, dist));
             fn.kind = land.kind;
-            fn.mesa = land.mesa; fn.shat = land.shat; fn.moon = land.moon; fn.fant = land.fant;
+            fn.mesa = land.mesa; fn.emer = land.emer; fn.moon = land.moon; fn.fant = land.fant;
         } else {
             const n = 0.6 * noise(ix / 46, iz / 46) + 0.3 * noise2(ix / 17, iz / 17) + 0.1 * noise(ix / 6 + 31, iz / 6 - 17);
             const ridge = Math.max(0, (n + 0.05) / 0.65);
@@ -330,7 +330,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
                 if (lf > 0) {
                     h = Math.round(h + (land.height(ix, iz, dist) - h) * lf);
                     if (lf > 0.5) fn.kind = land.kind;
-                    fn.mesa = land.mesa; fn.shat = land.shat; fn.moon = land.moon; fn.fant = land.fant;
+                    fn.mesa = land.mesa; fn.emer = land.emer; fn.moon = land.moon; fn.fant = land.fant;
                 }
             }
         }
@@ -394,7 +394,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     const hill = (ix, iz) => {
         let h = fn(ix, iz);
         hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach; hill.kind = fn.kind;
-        hill.mesa = fn.mesa; hill.shat = fn.shat; hill.moon = fn.moon; hill.fant = fn.fant;
+        hill.mesa = fn.mesa; hill.emer = fn.emer; hill.moon = fn.moon; hill.fant = fn.fant;
         const m = fn.water ? -Infinity : testHillHeight(ix, iz); // (the river keeps its bed: its water's top stays level, no raised channel)
         if (m > h) h = m;
         return h;
@@ -461,10 +461,10 @@ export class TerrainData {
             const idx = this.sites = new SiteIndex(this.castles, this.towers);
             const fn = (ix, iz) => {
                 const h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach, kind = raw.kind; // (read before landAt: finding a site re-samples raw)
-                const mesa = raw.mesa, shat = raw.shat, moon = raw.moon, fant = raw.fant;
+                const mesa = raw.mesa, emer = raw.emer, moon = raw.moon, fant = raw.fant;
                 const land = idx.landAt(ix, iz);
                 fn.sea = sea; fn.beach = beach; fn.kind = kind;
-                fn.mesa = mesa; fn.shat = shat; fn.moon = moon; fn.fant = fant;
+                fn.mesa = mesa; fn.emer = emer; fn.moon = moon; fn.fant = fant;
                 if (land && land.side === 'sea') {
                     // beyond a sea castle's quay: the sea (dug deep in the harbour)
                     const k = land.castle.port;
@@ -479,7 +479,7 @@ export class TerrainData {
                 return land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w));
             };
             fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
-            fn.mesa = fn.shat = fn.moon = fn.fant = 0;
+            fn.mesa = fn.emer = fn.moon = fn.fant = 0;
             this.heightAt = fn;
         } else this.heightAt = raw;
         this._caves = new Map();
@@ -558,7 +558,7 @@ export class TerrainData {
     /**
      * Generation 5 (Landscape.js): the ground of a chunk by its slopes and heights — bare rock on
      * cliffs and steep slopes, snow above the snow line (lower in the cold), alpine grass high up,
-     * the scarlet canyons' sand and striped rock, stone spires; every column's colours (its grass,
+     * the scarlet canyons' sand and striped rock; every column's colours (its grass,
      * its leaves' tint, its rock) kept in the chunk for the mesher (faceColor).
      */
     _generateLush(cx, cz) {
@@ -586,7 +586,7 @@ export class TerrainData {
                 water[col] = H.water;
                 flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0);
                 kinds[col] = H.kind || 0;
-                fx.mesa = H.mesa || 0; fx.shat = H.shat || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
+                fx.mesa = H.mesa || 0; fx.emer = H.emer || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
                 land.climate(x, z, clim);
                 const spawn = 1 - smoothstep(60, 260, Math.sqrt(x * x + z * z));
                 bio[col] = land.biomes(clim, w, spawn, fx);
@@ -609,7 +609,6 @@ export class TerrainData {
                 const snow = land.snowLine(x, z, _lush.T[col]);
                 const m = mesa[col] / 255;
                 if (h >= snow + (slope >= 3 ? 7 : 0)) { surf = BLOCK.SNOW; soil = slope >= 2 ? BLOCK.STONE : BLOCK.DIRT; deep = 2; }
-                else if (kind === KIND.SPIRE) { surf = slope <= 1 && h - Math.min(hh[i0 + 1], hh[i0 - 1], hh[i0 + P], hh[i0 - P]) < 2 && r < 0.75 ? BLOCK.GRASS : BLOCK.STONE; soil = BLOCK.STONE; deep = 1; }
                 else if (kind === KIND.MESA && r < smoothstep(0.15, 0.5, m) * 1.1) { /* (at its edge the scarlet sand and the grass mingle) */ surf = slope >= 2 ? BLOCK.STONE : r < 0.12 * (1 - m) + 0.05 ? BLOCK.GRASS : BLOCK.SAND; soil = surf === BLOCK.SAND ? BLOCK.SAND : BLOCK.STONE; deep = 2; }
                 else if (slope >= 3 || (slope >= 2 && h > 24)) { surf = r < 0.12 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; deep = 0; }
                 else if (h > 36 && r < smoothstep(36, 60, h) * 0.55) { surf = r < 0.06 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; }
@@ -648,7 +647,7 @@ export class TerrainData {
         const H = this.heightAt, land = this.land;
         H(x, z);
         const fx = _lush.fx2;
-        fx.mesa = H.mesa || 0; fx.shat = H.shat || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
+        fx.mesa = H.mesa || 0; fx.emer = H.emer || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
         land.climate(x, z, _lush.clim2);
         return land.biomes(_lush.clim2, _lush.w2, 1 - smoothstep(60, 260, Math.sqrt(x * x + z * z)), fx);
     }
@@ -681,7 +680,7 @@ export class TerrainData {
                 const b = BIOMES[this.biomeAt(tx, tz)];
                 if (roll > b.trees * grove(tx, tz)) continue;
                 const h = H(tx, tz);
-                if (h < 1 || H.water || H.beach || H.kind === KIND.SPIRE || H.kind === KIND.MESA) continue;
+                if (h < 1 || H.water || H.beach || H.kind === KIND.MESA) continue;
                 const kind = b.kinds[Math.floor(hashLand(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * b.kinds.length)];
                 if (h > LUSH.TREE_LINE + (kind === 2 ? 8 : 0)) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
@@ -719,7 +718,7 @@ export class TerrainData {
         const x = Math.round((gx + 0.2 + 0.6 * hashLand(gx, gz, S + 301)) * C), z = Math.round((gz + 0.2 + 0.6 * hashLand(gz, gx, S + 302)) * C);
         if (x * x + z * z >= LUSH.ISLE_MIN * LUSH.ISLE_MIN) {
             H(x, z);
-            const chance = 0.025 + 0.55 * ((H.moon || 0) + (H.shat || 0)) + 0.15 * (H.mesa || 0);
+            const chance = 0.025 + 0.55 * ((H.moon || 0) + (H.emer || 0)) + 0.15 * (H.mesa || 0);
             const R = ISLE.R_MIN + Math.floor(hashLand(gx + 5, gz - 2, S + 303) * (ISLE.R_MAX - ISLE.R_MIN + 1));
             if (hashLand(gx - 9, gz + 4, S + 304) < chance && !(this.sites && this.sites.near(x, z, R * 2 + 40).length)) {
                 // the highest ground under it and round it
