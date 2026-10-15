@@ -699,12 +699,16 @@ export class CastleLife {
         const g = this.game;
         v.y += v.vy * dt; v.vy -= 22 * dt;
         if (v.vx || v.vz) {
-            v.x += (v.vx || 0) * dt; v.z += (v.vz || 0) * dt;
+            const nx = v.x + (v.vx || 0) * dt, nz = v.z + (v.vz || 0) * dt;
+            // a wall stops a flying body (it does not go through: it strikes it — Levitation counts the blow)
+            const t = g.terrain?.data;
+            if (t?.isSolidAt && (t.isSolidAt(nx, v.y + 1.2, nz) || t.isSolidAt(nx, v.y + 2.8, nz))) { v.vx = 0; v.vz = 0; }
+            else { v.x = nx; v.z = nz; }
             const k = Math.max(0, 1 - 0.6 * dt);
             v.vx = (v.vx || 0) * k; v.vz = (v.vz || 0) * k;
         }
         const gy = g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z);
-        if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; v.vx = 0; v.vz = 0; }
+        if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false; }
     }
 
     // ------------------------------------------------------------- think
@@ -722,7 +726,7 @@ export class CastleLife {
         if (v.stunT > 0 || v.vy) {
             v.stunT = (v.stunT || 0) - dt;
             if (v.vy) this._fallStep(v, dt);
-            v.mode = 'idle'; v.speed = 0;
+            v.mode = v.flyFlail ? 'flail' : 'idle'; v.speed = 0; // (thrown by «Левиоса»: arms and legs going as it flies)
             return;
         }
         if (v.climb) { this._climbStep(v, dt); return; }

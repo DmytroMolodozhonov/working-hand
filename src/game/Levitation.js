@@ -17,7 +17,7 @@
  */
 
 import * as THREE from 'three';
-import { rayToSegment, BODY } from './Duel.js';
+import { rayToSegment, segmentToSegment, BODY } from './Duel.js';
 import { refusal } from './Hints.js';
 
 export const LEVITATE = {
@@ -112,6 +112,22 @@ export function struggleKind(ck, c) {
     if (ck === 'z') return 'zombie';
     if (c.wizard) return 'wizard';
     return c.role === 'knight' || c.role === 'king' ? 'knight' : 'villager';
+}
+
+/**
+ * A body thrown by «Левиоса» (let go with a swing) flies by its own weight, kicking, until it
+ * strikes something — the ground, a wall, another creature. How hard decides everything:
+ *   below KNOCK_V m/s   it only lands (a light throw is harmless)
+ *   from KNOCK_V        it is knocked off its feet, rolls over and lies a while (as after «Джолт»)
+ *   above HURT_V        it is hurt: PER_MS hearts a m/s more (armour takes its share — CastleLife.hit)
+ *   from ROLL_V         it bounces and flips over, and is dizzy afterwards
+ * Thrown into another creature, it knocks that one down too (OTHER_K of the blow).
+ */
+export const THROW = { KNOCK_V: 6, HURT_V: 9, PER_MS: 0.9, ROLL_V: 13, WALL_DROP: 0.35, WALL_MIN: 5, HIT_R: 0.7, OTHER_K: 0.6, MIN_HIT_V: 4 };
+
+/** Hearts a body loses striking something at `v` m/s. */
+export function impactDamage(v) {
+    return v > THROW.HURT_V ? Math.round((v - THROW.HURT_V) * THROW.PER_MS) : 0;
 }
 
 /** Damage of a fall from `h` m (a short fall does nothing). */
@@ -305,6 +321,7 @@ export class Levitation {
         if (this.falls.length) this._landings(dt);
         if (this.bodyDrops.length) this._dropBodies(dt);
         if (this.lifted) this._updateLifted(dt);
+        if (this.myFly) this._myFlight(dt);
         if (this.fallTop != null) this._myLanding();
         if (this.myWatch) this._myWatchLanding();
         if (this.miss && performance.now() >= this.miss.at) this._sayMissed();
@@ -621,18 +638,23 @@ export class Levitation {
         if (ck !== 'v') g.collision.resolveCylinder(c.group.position, ck === 'z' ? 0.45 : 0.6, c.group.position.y - up + 0.1, 2.5, 1.05);
         this._centre(ck, c, _h3);
         L.top = Math.max(L.top, _h3.y - up);
-        // kicking in the air
-        if (ck === 'a' && !L.body) { c.walkT = (c.walkT || 0) + dt * 14; g.animals?._animate?.(c, 1); c.stunT = Math.max(c.stunT || 0, 0.5); } // (a dead body hangs limp)
-        if (ck === 'z' && !L.body) {
-            // legs kicking, the arms clawing at the air
+        // kicking in the air (a dead body hangs limp)
+        if (!L.body) this._kicking(ck, c, dt);
+        if (ck === 'v') { c.mode = L.body ? 'dead' : 'flail'; c.speed = 0; }
+        if (Math.random() < 0.5) this.game.fx?.spark(_h3.set(centre.x + (Math.random() - 0.5) * 1.4, centre.y + (Math.random() - 0.5) * 1.4, centre.z + (Math.random() - 0.5) * 1.4), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _h4.set(0, 0.6, 0), 0.6);
+    }
+
+    /** (host) A living body in the air (held, or thrown) kicks: legs running on nothing, arms clawing. */
+    _kicking(ck, c, dt) {
+        const g = this.game;
+        if (ck === 'a') { c.walkT = (c.walkT || 0) + dt * 14; g.animals?._animate?.(c, 1); c.stunT = Math.max(c.stunT || 0, 0.5); }
+        else if (ck === 'z') {
             const t = performance.now() * 0.001, k = Math.sin(t * 12) * 0.6;
             if (c.leftLeg) c.leftLeg.rotation.x = k;
             if (c.rightLeg) c.rightLeg.rotation.x = -k;
             if (c.leftArm) { c.leftArm.rotation.x = -Math.PI / 2 + Math.sin(t * 9) * 0.7; c.leftArm.rotation.z = Math.sin(t * 6) * 0.4; }
             if (c.rightArm) { c.rightArm.rotation.x = -Math.PI / 2 + Math.sin(t * 9 + 2) * 0.7; c.rightArm.rotation.z = -Math.sin(t * 6 + 1) * 0.4; }
-        }
-        if (ck === 'v') { c.mode = L.body ? 'dead' : 'flail'; c.speed = 0; }
-        if (Math.random() < 0.5) this.game.fx?.spark(_h3.set(centre.x + (Math.random() - 0.5) * 1.4, centre.y + (Math.random() - 0.5) * 1.4, centre.z + (Math.random() - 0.5) * 1.4), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _h4.set(0, 0.6, 0), 0.6);
+        } else if (ck === 'v') { c.mode = 'flail'; c.speed = 0; }
     }
 
     /**
@@ -683,7 +705,7 @@ export class Levitation {
         if (ck === 'a') { c.attacker = L.by; c.levFall = true; c.vel = new THREE.Vector3(); this.game.animals?.push(c, v, 1.5); c.airborne = true; }
         else if (ck === 'z' && c.isDead) this.bodyDrops.push({ c, vel: v });
         else if (ck === 'z') { c.vy = v.y || -0.1; c.windVel = new THREE.Vector3(v.x, 0, v.z); c.stunTimer = Math.max(c.stunTimer || 0, 0.6); }
-        else { c.vy = v.y || -0.1; c.vx = v.x; c.vz = v.z; c.stunT = Math.max(c.stunT || 0, 1); }
+        else { c.vy = v.y || -0.1; c.vx = v.x; c.vz = v.z; c.stunT = Math.max(c.stunT || 0, 1); c.flyFlail = true; } // (it waves its arms and legs as it flies: CastleLife)
     }
 
     /** (host) Dead zombies let go fall until they lie on the ground again. */
@@ -705,36 +727,138 @@ export class Levitation {
         return (this.game.swim?.waterAt?.(x, z)?.depth || 0) >= 1;
     }
 
-    /** (host) Bodies let go up high: when they land, the fall hurts. */
+    /**
+     * (host) Bodies let go / thrown: they fly by their own weight (each kind's own physics), kicking;
+     * the moment they strike the ground, a wall or another creature, the blow (THROW) knocks them
+     * down and hurts them by its speed — and knocks down whom they flew into.
+     */
     _landings(dt) {
         const g = this.game;
         for (let i = this.falls.length - 1; i >= 0; i--) {
             const f = this.falls[i];
             const { ck, c } = f;
             f.t += dt;
-            if (c.lev || c.dead || c.isDead || f.t > 12) { this.falls.splice(i, 1); if (ck === 'a') c.levFall = false; continue; }
+            if (c.lev || c.dead || c.isDead || f.t > 12) { this._landed(i, f); continue; }
             const up = this._centre(ck, c, _h1);
             const feet = _h1.y - up;
             if (f.track) f.top = Math.max(f.top, feet); // (thrown by «Overgrown»: the fall counts from the highest point)
-            const ground = g.collision.groundY(_h1.x, _h1.z);
-            const down = ck === 'a' ? !c.airborne : feet <= ground + 0.15 && !(c.vy > 0);
-            if (f.t < 0.1 || !down) continue;
-            this.falls.splice(i, 1);
-            if (ck === 'a') c.levFall = false;
-            if (ck === 'v') { c.vx = 0; c.vz = 0; }
-            const wet = this.wet(_h1.x, _h1.z);
-            const d = wet ? 0 : fallDamage(f.top - feet);
-            // dropped from up high: it falls over as it hits the ground (and gets up by itself)
-            if (!wet && f.top - feet >= 5 && g.creatureImpact) {
-                const fv = f.v ? new THREE.Vector3(f.v.x, 0, f.v.z) : new THREE.Vector3();
-                if (fv.lengthSq() < 0.25) fv.set(Math.random() - 0.5, 0, Math.random() - 0.5);
-                g.creatureImpact.apply(c, { v: fv.setLength(1), by: f.by, kind: 'fall', always: { down: 1.5 } });
+            // how fast it flies now (from where its middle was a frame ago)
+            const prev = f.prev || (f.prev = _h1.clone());
+            const vel = _h2.subVectors(_h1, prev).divideScalar(Math.max(dt, 1e-3));
+            const was = f.vel || (f.vel = vel.clone());
+            const hWas = Math.hypot(was.x, was.z), hNow = Math.hypot(vel.x, vel.z);
+            if (!f.track) this._kicking(ck, c, dt);
+            // into another creature on its way
+            const into = f.t > 0.1 && was.length() >= THROW.MIN_HIT_V ? this._flewInto(f, prev, _h1) : null;
+            if (into) {
+                this._strikeOther(f, into, was);
+                this._landed(i, f);
+                this._blow(f, was.length(), was, feet, _h1);
+                continue;
             }
-            if (!d) continue;
-            if (ck === 'z') g.damageZombie(c, d, false, _h2.set(0, -1, 0), f.by);
-            else if (ck === 'a') g.animals?.hit(c, d, null, f.by);
-            else g.castleLife?.hit(c, d, null, f.by, { spell: true });
+            // a wall: it was flying sideways fast, and something stopped it at once
+            if (f.t > 0.1 && hWas >= THROW.WALL_MIN && hNow < hWas * THROW.WALL_DROP && !this._down(ck, c, feet, _h1)) {
+                this._landed(i, f);
+                this._blow(f, hWas, was, feet, _h1);
+                continue;
+            }
+            prev.copy(_h1);
+            f.vel.copy(vel);
+            if (f.t < 0.1 || !this._down(ck, c, feet, _h1)) continue;
+            // the ground: the speed it came down with (this frame it is already stopped)
+            this._landed(i, f);
+            this._blow(f, Math.max(was.length(), vel.length()), was, feet, _h1);
         }
+    }
+
+    /** It is on the ground (an animal: its own physics says so). */
+    _down(ck, c, feet, centre) {
+        if (ck === 'a') return !c.airborne;
+        return feet <= this.game.collision.groundY(centre.x, centre.z) + 0.15 && !(c.vy > 0);
+    }
+
+    _landed(i, f) {
+        this.falls.splice(i, 1);
+        const { ck, c } = f;
+        if (ck === 'a') c.levFall = false;
+        if (ck === 'v') { c.flyFlail = false; }
+    }
+
+    /**
+     * (host) The thrown body struck something at `speed` m/s (moving along `vel`): knocked down
+     * (rolling over from a hard blow, dizzy after it), and hurt — by the speed, or by the height
+     * it fell from, whichever is worse. Deep water takes the blow.
+     */
+    _blow(f, speed, vel, feet, centre) {
+        const g = this.game;
+        const { ck, c } = f;
+        if (ck === 'v') { c.vx = 0; c.vz = 0; }
+        if (this.wet(centre.x, centre.z)) return;
+        const d = Math.max(impactDamage(speed), fallDamage(f.top - feet));
+        if (speed >= THROW.KNOCK_V && g.creatureImpact) {
+            const fv = _h3.set(vel.x, 0, vel.z);
+            if (fv.lengthSq() < 0.25) fv.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+            const hard = speed >= THROW.ROLL_V;
+            g.creatureImpact.apply(c, {
+                v: fv.clone().setLength(Math.min(6, 1 + speed * 0.25)), by: f.by, kind: 'fall', noShield: true,
+                always: { down: 1.5 + Math.min(3, (speed - THROW.KNOCK_V) * 0.2) },
+                ...(hard ? { toss: 3 + Math.min(4, (speed - THROW.ROLL_V) * 0.3), fly: true, tumble: 1, daze: 2 } : {}),
+            });
+        }
+        if (d) this._hurt(ck, c, d, f.by, vel);
+    }
+
+    _hurt(ck, c, d, by, vel) {
+        const g = this.game;
+        if (ck === 'z') g.damageZombie(c, d, false, _h4.set(vel.x, 0, vel.z).normalize(), by);
+        else if (ck === 'a') g.animals?.hit(c, d, null, by);
+        else if (ck === 'c') g.ships?.crew?.hit?.(c, d, null, by, { spell: true });
+        else g.castleLife?.hit(c, d, null, by, { spell: true }); // (a knight's armour takes most of it)
+    }
+
+    /** The creature its flight from `a` to `b` ran into (not itself, not one held up), or null: {kind, id, c|null}. */
+    _flewInto(f, a, b) {
+        const g = this.game;
+        const bodies = g.duel?._bodies?.(null);
+        if (!bodies) return null;
+        const me = f.ck === 'v' ? 'v' : f.ck, seg = {};
+        for (const body of bodies) {
+            if (body.kind === me && body.id === f.c.id) continue;
+            if (!['z', 'v', 'a', 'c', 'p'].includes(body.kind)) continue;
+            if (body.kind === 'p' && body.id !== g.localId) continue; // (another player's body is his own computer's: the host does not throw it about)
+            segmentToSegment(a, b, body.a, body.b, seg);
+            if (seg.dist > body.r + THROW.HIT_R) continue;
+            const c = body.kind === 'p' ? null : this._victim(body.kind, body.id);
+            if (body.kind !== 'p' && (!c || c.lev)) continue;
+            return { kind: body.kind, id: body.id, c };
+        }
+        return null;
+    }
+
+    _victim(kind, id) {
+        const g = this.game;
+        if (kind === 'z') { const z = g.zombieById?.get(id); return z && !z.isDead ? z : null; }
+        if (kind === 'a') { const a = g.animals?.byId.get(id); return a && !a.dead ? a : null; }
+        if (kind === 'v') { const v = g.castleLife?.byId.get(id); return v && !v.dead ? v : null; }
+        if (kind === 'c') { const v = g.ships?.crew?.byId.get(id); return v && !v.dead ? v : null; }
+        return null;
+    }
+
+    /** (host) The thrown body flew into another: it is knocked down (and hurt) by the blow, as by a thrown log. */
+    _strikeOther(f, o, vel) {
+        const g = this.game;
+        const speed = vel.length() * THROW.OTHER_K;
+        const d = impactDamage(speed + THROW.HURT_V * (1 - THROW.OTHER_K)); // (struck by a whole body: it hurts sooner than a fall)
+        const push = _h3.set(vel.x, 0, vel.z);
+        if (push.lengthSq() < 1e-4) push.set(0, 0, 1);
+        if (o.kind === 'p') {
+            // the host's own wizard: knocked off his feet (his own computer — this one)
+            if (speed >= THROW.KNOCK_V * 0.5) g.knock?.knock({ dir: 'back', down: 1.5, by: f.by, kind: 'thrown', strength: 0.4 });
+            if (d) { if (g.combat?.enabled) g.combat.damage(d, f.by, 'thrown'); else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d); }
+            return;
+        }
+        if (speed >= THROW.KNOCK_V * 0.5) g.creatureImpact?.apply(o.c, { v: push.clone().setLength(Math.min(8, 2 + speed * 0.4)), by: f.by, kind: 'thrown', always: { down: 1.5 + Math.min(2, speed * 0.1) } });
+        if (d) this._hurt(o.kind, o.c, d, f.by, vel);
     }
 
     /** (host) A body thrown by a spell («Overgrown»): if it comes down from up high, the fall hurts. */
@@ -846,8 +970,36 @@ export class Levitation {
         if (!gentle) g.knockback.copy(L.vel).setY(0).multiplyScalar(1.5);
         this.fallTop = gentle ? null : L.top;
         this.fallBy = L.by;
+        this.myFly = gentle ? null : { prev: null, vel: null, t: 0 }; // (thrown: the blow I strike is counted — _myFlight)
         g.sync?.lift?.(L.by, L.side, L.hold, false, free, null, L.mx);
         if (free) g.hud.setVoice('🛡️ Вы вырвались из Левиосы!', true);
+    }
+
+    /**
+     * Thrown by another wizard's «Левиоса»: I fly with the swing; striking the ground or a wall
+     * hard knocks me off my feet (rolling over from a hard one) and hurts by the speed (THROW).
+     */
+    _myFlight(dt) {
+        const g = this.game, ch = g.character, F = this.myFly;
+        F.t += dt;
+        const p = ch.group.position;
+        if (!F.prev) { F.prev = p.clone(); return; }
+        const vel = _h2.subVectors(p, F.prev).divideScalar(Math.max(dt, 1e-3));
+        const was = F.vel || (F.vel = vel.clone());
+        F.prev.copy(p);
+        if (this.lifted || g.combat.dead || ch.swimY != null || F.t > 12) { this.myFly = null; return; }
+        const hWas = Math.hypot(was.x, was.z), hNow = Math.hypot(vel.x, vel.z);
+        const wall = F.t > 0.1 && hWas >= THROW.WALL_MIN && hNow < hWas * THROW.WALL_DROP && !ch.onGround;
+        if (!wall && !(F.t > 0.1 && ch.onGround)) { F.vel.copy(vel); return; }
+        const speed = wall ? hWas : Math.max(was.length(), vel.length());
+        this.myFly = null;
+        if (speed < THROW.KNOCK_V) return;
+        const hard = speed >= THROW.ROLL_V;
+        g.knock?.knock({ dir: 'back', down: 1.5 + Math.min(3, (speed - THROW.KNOCK_V) * 0.2), by: this.fallBy, kind: 'fall', strength: Math.min(1, 0.3 + speed / 30), ...(hard ? { toss: 3, fly: true, tumble: 1 } : {}) });
+        const d = impactDamage(speed) - (wall ? 0 : fallDamage((this.fallTop ?? p.y) - p.y)); // (the height's own fall is counted by _myLanding)
+        if (d <= 0) return;
+        if (g.combat.enabled) g.combat.damage(d, this.fallBy, 'fall');
+        else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d);
     }
 
     /** I land after being let go up high: the fall hurts. */

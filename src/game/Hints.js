@@ -46,6 +46,7 @@ const CAUSES = [
     [/^(punch|slap)$/, '👊 Вас сбили с ног ударом'],
     [/^(guard|push)$/, '🤚 Вас толкнули — вы не удержались на ногах'],
     [/^fall$/, '🦵 Вы упали с высоты'],
+    [/^thrown$/, '🪶 В вас врезалось тело, брошенное «Левиосой»'],
 ];
 
 /** The cause of a fall in words (`kind` from the blow; unknown → a plain «сбили с ног»). */
