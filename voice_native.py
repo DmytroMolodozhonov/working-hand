@@ -333,6 +333,61 @@ def say_error(kind, e):
         print(f"  Голос: ошибка {kind} (раз {k}):", e)
 
 
+def pick_device(devices, key):
+    """The microphone to listen to: the one chosen in the settings (by its key) or the system's default.
+    → (device or None, fell_back): fell_back — the chosen one is not there now (unplugged), the default listens."""
+    default = next((d for d in devices if d.get("default")), devices[0] if devices else None)
+    if not key or key == "default":
+        return default, False
+    for d in devices:
+        if d.get("key") == key:
+            return d, False
+    return default, True
+
+
+def win_inputs(pa, pyaudio):
+    """Windows: the microphones (WASAPI inputs; the speakers' «loopback» copies are not microphones)."""
+    wasapi = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
+    out = []
+    for i in range(int(wasapi.get("deviceCount", 0))):
+        d = pa.get_device_info_by_host_api_device_index(wasapi["index"], i)
+        if int(d.get("maxInputChannels", 0)) > 0 and not d.get("isLoopbackDevice"):
+            out.append({"key": d.get("name", ""), "name": d.get("name", ""), "index": int(d["index"]),
+                        "default": int(d["index"]) == int(wasapi["defaultInputDevice"]), "info": d})
+    return out
+
+
+def sd_inputs(sd):
+    """macOS / Linux: the microphones of the system's own sound API (sounddevice)."""
+    try:
+        api, default = sd.default.hostapi, sd.query_devices(kind="input").get("name")
+    except Exception:  # noqa: BLE001
+        api, default = None, None
+    out = []
+    for i, d in enumerate(sd.query_devices()):
+        if int(d.get("max_input_channels", 0)) > 0 and (api is None or api < 0 or d.get("hostapi") == api):
+            out.append({"key": d.get("name", ""), "name": d.get("name", ""), "index": i, "default": d.get("name") == default, "info": d})
+    return out
+
+
+def list_inputs():
+    """The microphones on this computer (for the settings): [{key, name, default}]."""
+    if os.environ.get("ZNS_VOICE_FILE"):
+        name = os.path.basename(os.environ["ZNS_VOICE_FILE"])
+        return [{"key": name, "name": name, "default": True}]
+    if sys.platform.startswith("win"):
+        import pyaudiowpatch as pyaudio
+        pa = pyaudio.PyAudio()
+        try:
+            devs = win_inputs(pa, pyaudio)
+        finally:
+            pa.terminate()
+    else:
+        import sounddevice as sd
+        devs = sd_inputs(sd)
+    return [{"key": d["key"], "name": d["name"], "default": bool(d["default"])} for d in devs]
+
+
 def _mono16(data, channels, np):
     x = np.frombuffer(data, dtype=np.int16)
     if channels > 1:
@@ -343,18 +398,28 @@ def _mono16(data, channels, np):
 class WinCapture:
     """Windows: the microphone and the speakers' sound («loopback», WASAPI) — PyAudioWPatch."""
 
-    def __init__(self, on_mic, on_ref):
+    def __init__(self, on_mic, on_ref, mic_key=None):
         import numpy as np
         import pyaudiowpatch as pyaudio
         self.np = np
         self.pa = pyaudio.PyAudio()
         self.streams = []
-        wasapi = self.pa.get_host_api_info_by_type(pyaudio.paWASAPI)
-        mic = self.pa.get_device_info_by_index(wasapi["defaultInputDevice"])
-        self.mic_name = mic.get("name", "")
-        self.mic_rate = int(mic["defaultSampleRate"])
-        mch = max(1, int(mic["maxInputChannels"]))  # (shared mode: the device's own channels; mixed down here)
-        self.streams.append(self._open(pyaudio, mic, mch, self.mic_rate, on_mic))
+        devs = win_inputs(self.pa, pyaudio)
+        chosen, self.fell_back = pick_device(devs, mic_key)
+        tries = [chosen] + [d for d in devs if d.get("default") and d is not chosen]
+        for k, d in enumerate(t for t in tries if t):
+            mic = d["info"]
+            try:
+                self.mic_rate = int(mic["defaultSampleRate"])
+                mch = max(1, int(mic["maxInputChannels"]))  # (shared mode: the device's own channels; mixed down here)
+                self.streams.append(self._open(pyaudio, mic, mch, self.mic_rate, on_mic))
+                self.mic_name, self.mic_key = mic.get("name", ""), d["key"]
+                self.fell_back = self.fell_back or k > 0
+                break
+            except Exception as e:  # noqa: BLE001
+                print("  Голос: микрофон не открылся:", mic.get("name"), e)
+        else:
+            raise RuntimeError("микрофон не найден")
         self.ref_name, self.ref_rate = "", 0
         try:
             spk = self.pa.get_default_wasapi_loopback()
@@ -394,19 +459,31 @@ class WinCapture:
 class SdCapture:
     """macOS / Linux: the microphone only (sounddevice); the speakers' sound isn't there to have."""
 
-    def __init__(self, on_mic, on_ref):
+    def __init__(self, on_mic, on_ref, mic_key=None):
         import numpy as np
         import sounddevice as sd
-        dev = sd.query_devices(kind="input")
-        self.mic_name = dev.get("name", "")
-        self.mic_rate = int(dev.get("default_samplerate") or 48000)
         self.ref_name, self.ref_rate = "", 0
+        chosen, self.fell_back = pick_device(sd_inputs(sd), mic_key)
 
         def cb(indata, frames, info, status):
             on_mic(np.ascontiguousarray(indata[:, 0]).astype(np.int16), time.perf_counter())
 
-        self.stream = sd.InputStream(samplerate=self.mic_rate, channels=1, dtype="int16", blocksize=self.mic_rate // 100, callback=cb)
-        self.stream.start()
+        def open_(d):
+            dev = d["info"] if d else sd.query_devices(kind="input")
+            self.mic_name, self.mic_key = dev.get("name", ""), (d or {}).get("key", "")
+            self.mic_rate = int(dev.get("default_samplerate") or 48000)
+            self.stream = sd.InputStream(device=d["index"] if d else None, samplerate=self.mic_rate, channels=1, dtype="int16",
+                                         blocksize=self.mic_rate // 100, callback=cb)
+            self.stream.start()
+
+        try:
+            open_(chosen)
+        except Exception as e:  # noqa: BLE001
+            if chosen is None or chosen.get("default"):
+                raise
+            print("  Голос: микрофон не открылся:", chosen.get("name"), e)
+            self.fell_back = True
+            open_(None)
 
     def close(self):
         try:
@@ -431,6 +508,7 @@ class FileCapture:
                 x = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
             return _mono16(x.tobytes(), ch, np), rate
 
+        self.mic_key, self.fell_back = os.path.basename(mic_file), False
         mic, self.mic_rate = load(mic_file)
         ref, self.ref_rate = load(ref_file) if ref_file else (None, 0)
         self.mic_name, self.ref_name = os.path.basename(mic_file), os.path.basename(ref_file or "")
@@ -474,6 +552,10 @@ class NativeVoice:
         self.detail = ""
         self.mic_name = ""
         self.ref_name = ""
+        self.mic_key = ""      # the microphone listened to now
+        self.mic_wanted = ""   # the one chosen in the settings ("" — the system's default)
+        self.mic_fallback = False  # the chosen one is not there: the default listens
+        self._mic_change = threading.Event()
         self.aec = False
         self.cost = 0.0  # ms the last look at a phrase took
         self.events = collections.deque(maxlen=400)
@@ -530,6 +612,9 @@ class NativeVoice:
             "progress": round(self.progress, 3),
             "detail": self.detail,
             "mic": self.mic_name,
+            "micKey": self.mic_key,
+            "micWanted": self.mic_wanted,
+            "micFallback": self.mic_fallback,
             "speakers": self.ref_name,
             "aec": self.aec,
             "cost": round(self.cost, 1),
@@ -625,6 +710,17 @@ class NativeVoice:
     def stop(self):
         self._stop.set()
 
+    def set_mic(self, key):
+        """The microphone chosen in the settings ("" / "default" — the system's): taken at once, the
+        capture opens again on it (the networks stay loaded)."""
+        key = "" if not key or key == "default" else str(key)[:300]
+        if key == self.mic_wanted:
+            return False
+        self.mic_wanted = key
+        if self.state == "running":
+            self._mic_change.set()
+        return True
+
     def _emit(self, ev):
         with self.cond:
             self.seq += 1
@@ -656,27 +752,36 @@ class NativeVoice:
                 if s:
                     s.push(x, t)
 
-            if os.environ.get("ZNS_VOICE_FILE"):
-                cap = FileCapture(on_mic, on_ref, os.environ["ZNS_VOICE_FILE"], os.environ.get("ZNS_VOICE_REF_FILE"))
-            elif sys.platform.startswith("win"):
-                cap = WinCapture(on_mic, on_ref)
-            else:
-                cap = SdCapture(on_mic, on_ref)
-            try:  # (whatever happens from here on, the microphone is let go)
-                mic_box["s"] = Stream(cap.mic_rate, "mic")
-                if cap.ref_rate:
-                    ref_box["s"] = Stream(cap.ref_rate, "ref", continuous=False)
-                self.mic_name, self.ref_name = cap.mic_name, cap.ref_name
-                self.aec = bool(cap.ref_rate) and os.environ.get("ZNS_VOICE_AEC", "1") != "0"
-                apm = rtc.AudioProcessingModule(echo_cancellation=self.aec, noise_suppression=False, high_pass_filter=True)
-                self.state = "running"
-                self._emit({"type": "status", **self.status()})
-                print(f"  Голос: нейросеть на компьютере работает (микрофон: {self.mic_name or '?'}; "
-                      f"звук колонок: {self.ref_name or 'нет'}; эхо убирается: {'да' if self.aec else 'нет'})")
-                self._loop(np, rtc, ctc, vad, apm, mic_box["s"], ref_box.get("s"), cap)
-            finally:
-                cap.close()
-                print("  Голос: микрофон отпущен")
+            while True:
+                # (a microphone chosen in the settings: the capture opens again, the networks stay)
+                self._mic_change.clear()
+                mic_box.clear()
+                ref_box.clear()
+                if os.environ.get("ZNS_VOICE_FILE"):
+                    cap = FileCapture(on_mic, on_ref, os.environ["ZNS_VOICE_FILE"], os.environ.get("ZNS_VOICE_REF_FILE"))
+                elif sys.platform.startswith("win"):
+                    cap = WinCapture(on_mic, on_ref, self.mic_wanted)
+                else:
+                    cap = SdCapture(on_mic, on_ref, self.mic_wanted)
+                try:  # (whatever happens from here on, the microphone is let go)
+                    mic_box["s"] = Stream(cap.mic_rate, "mic")
+                    if cap.ref_rate:
+                        ref_box["s"] = Stream(cap.ref_rate, "ref", continuous=False)
+                    self.mic_name, self.ref_name = cap.mic_name, cap.ref_name
+                    self.mic_key, self.mic_fallback = cap.mic_key, bool(cap.fell_back)
+                    self.aec = bool(cap.ref_rate) and os.environ.get("ZNS_VOICE_AEC", "1") != "0"
+                    apm = rtc.AudioProcessingModule(echo_cancellation=self.aec, noise_suppression=False, high_pass_filter=True)
+                    self.state = "running"
+                    self._emit({"type": "status", **self.status()})
+                    print(f"  Голос: нейросеть на компьютере работает (микрофон: {self.mic_name or '?'}"
+                          f"{' — выбранного нет, слушается системный' if self.mic_fallback else ''}; "
+                          f"звук колонок: {self.ref_name or 'нет'}; эхо убирается: {'да' if self.aec else 'нет'})")
+                    self._loop(np, rtc, ctc, vad, apm, mic_box["s"], ref_box.get("s"), cap)
+                finally:
+                    cap.close()
+                    print("  Голос: микрофон отпущен")
+                if not self._mic_change.is_set() or self._stop.is_set():
+                    break
         except Exception as e:  # noqa: BLE001
             import traceback
             traceback.print_exc()
@@ -719,7 +824,7 @@ class NativeVoice:
         n = 0  # next microphone sample to process
         lv_t = time.perf_counter()
         idle_since = None
-        while not self._stop.is_set():
+        while not self._stop.is_set() and not self._mic_change.is_set():
             # nobody listens (the game closed): stop after a while
             if self.clients <= 0:
                 idle_since = idle_since or time.time()

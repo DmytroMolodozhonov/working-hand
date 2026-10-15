@@ -547,6 +547,48 @@ async function showVoiceEngine() {
 }
 setInterval(() => { if ($('voice-engine-status')?.offsetParent) showVoiceEngine(); }, 2000);
 
+// «Микрофон для заклинаний»: which microphone the speech network on this computer listens to
+const micSel = $('voice-mic');
+const MIC_HINT = 'Выбор работает для нейросети на компьютере. Распознавание браузера всегда слушает микрофон, выбранный по умолчанию в системе.';
+function micOption(key, text) {
+    let o = [...micSel.options].find((x) => x.value === key);
+    if (!o) { o = new Option(text, key); micSel.appendChild(o); }
+    o.textContent = text;
+    return o;
+}
+if (micSel) {
+    // (the remembered one stays chosen while the list is not here yet — the settings are restored before it comes)
+    try {
+        const k = JSON.parse(localStorage.getItem('zns-settings') || '{}')?.['voice-mic'];
+        if (k && k !== 'default') micOption(k, k);
+    } catch (e) { /* not remembered */ }
+    micSel.addEventListener('change', () => { voice.native.setMic(micSel.value); showVoiceMic(); });
+}
+async function showVoiceMic() {
+    const el = $('voice-mic-status');
+    if (!micSel || !el) return;
+    const d = await voice.native.devices();
+    const want = micSel.value;
+    if (d?.devices) {
+        const keys = new Set(['default', ...d.devices.map((x) => x.key)]);
+        for (const x of d.devices) micOption(x.key, x.name + (x.default ? ' (сейчас в системе по умолчанию)' : ''));
+        for (const o of [...micSel.options]) if (!keys.has(o.value) && o.value !== want) o.remove();
+        if (want !== 'default' && !d.devices.some((x) => x.key === want)) micOption(want, want + ' — не подключён');
+        micSel.value = want;
+    }
+    const st = voice.native.status;
+    let t = '';
+    if (want !== 'default' && d?.devices && !d.devices.some((x) => x.key === want)) t = `⚠️ «${escapeHtml(want)}» сейчас не подключён — слушается микрофон, выбранный в системе. Подключите его, и он заработает сам.`;
+    else if (st?.micFallback) t = '⚠️ Выбранный микрофон не открылся — слушается микрофон, выбранный в системе.';
+    if (voice.engine === 'native' && st?.state === 'running' && st.mic) t += (t ? ' ' : '') + `🎙 Сейчас слушается: ${escapeHtml(st.mic)}.`;
+    el.innerHTML = (t ? t + '<br>' : '') + MIC_HINT;
+}
+setInterval(() => {
+    const inPause = !!$('pause-audio')?.offsetParent;
+    if ($('voice-mic-status')?.offsetParent || inPause) showVoiceMic().then(() => { if (inPause) pauseAudio.sync(); });
+}, 3000);
+setTimeout(showVoiceMic, 1500);
+
 // ------------------------------------------------------------------ hand recording (F9)
 let handRecorder = null;
 function startHandRecording() {
@@ -1119,7 +1161,7 @@ function escapeHtml(s) {
 // Volumes, graphics, camera… are kept in this browser between launches.
 (function rememberSettings() {
     const KEY = 'zns-settings';
-    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
+    const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
         'show-hands-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
     let saved = {};

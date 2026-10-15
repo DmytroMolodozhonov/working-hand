@@ -73,6 +73,26 @@ export class NativeVoice {
         this.onFail = null;   // () the native voice stopped working (the browser's takes over)
         this.segs = new Map();
         this.errors = 0;
+        this.mic = ''; // the microphone chosen in the settings ('' — the system's default)
+    }
+
+    /** The microphones voice_native.py can listen to → {devices: [{key, name, default}], current, wanted, fallback} */
+    async devices() {
+        try {
+            const r = await fetch('/api/voice/devices', { cache: 'no-store' });
+            return r.ok ? await r.json() : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /** Listen to this microphone ('' / 'default' — the system's): taken at once, no restart of the game. */
+    async setMic(key) {
+        this.mic = !key || key === 'default' ? '' : String(key);
+        try {
+            const r = await fetch('/api/voice/mic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: this.mic }) });
+            if (r.ok) this.status = { ...(this.status || {}), ...(await r.json()) };
+        } catch (e) { /* the voice program isn't there: the browser listens */ }
     }
 
     /** Is the native voice there (installed, the network downloaded)? → the status from server.py */
@@ -92,7 +112,7 @@ export class NativeVoice {
     start() {
         if (this.es || typeof EventSource === 'undefined') return;
         this.errors = 0;
-        const es = new EventSource('/api/voice/stream');
+        const es = new EventSource('/api/voice/stream' + (this.mic ? '?mic=' + encodeURIComponent(this.mic) : ''));
         this.es = es;
         es.onmessage = (e) => {
             this.errors = 0;

@@ -20,6 +20,8 @@ API:
   GET    /api/pose/snap       — её последний кадр камеры (JPEG; для записи руки)
   GET    /api/voice/status    — нейросеть голоса вне браузера (voice_native.py): есть ли, скачана ли, работает ли
   GET    /api/voice/stream    — что она услышала (Server-Sent Events)
+  GET    /api/voice/devices   — микрофоны, которые она может слушать
+  POST   /api/voice/mic       — выбрать микрофон для заклинаний ({"key": …}; "" — как в системе)
   POST   /api/record          — запись руки (F9 в игре) → папка recordings/
 """
 
@@ -390,9 +392,21 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, {"available": False, "state": "unavailable", "error": str(e)})
         return self._json(200, VOICE.status())
 
+    def _voice_devices(self):
+        """The microphones voice_native.py can listen to (the settings' «Микрофон для заклинаний»)."""
+        try:
+            from voice_native import VOICE, list_inputs
+            devices = list_inputs()
+        except Exception as e:  # noqa: BLE001
+            return self._json(200, {"devices": [], "error": str(e)})
+        return self._json(200, {"devices": devices, "current": VOICE.mic_key, "wanted": VOICE.mic_wanted, "fallback": VOICE.mic_fallback})
+
     def _voice_stream(self):
         """Server-Sent Events: every phrase heard (and the microphone's level) as one 'data:' line each."""
         from voice_native import VOICE
+        mic = parse_qs(urlparse(self.path).query).get("mic")
+        if mic is not None:
+            VOICE.set_mic(mic[0])
         with VOICE.cond:
             VOICE.clients += 1  # (before start: a listener that stops for want of clients never misses this one)
         try:
@@ -456,6 +470,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._voice_status()
         if path == "/api/voice/stream":
             return self._voice_stream()
+        if path == "/api/voice/devices":
+            return self._voice_devices()
         if path == "/api/pose/snap":
             return self._pose_snap()
         if path == "/api/version":
@@ -500,6 +516,14 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 local = self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")  # (only this computer's own window)
                 ok = local and window_action(str(data.get("action", "")), data)
                 return self._json(200, {"ok": ok})
+
+            if path == "/api/voice/mic":
+                # the microphone for the spells, chosen in the settings: taken at once (this computer's game only)
+                if not is_own_page(self.client_address[0], self.headers):
+                    return self._json(403, {"status": "error", "message": "only the game on this computer"})
+                from voice_native import VOICE
+                VOICE.set_mic(str(self._read_json().get("key", "")))
+                return self._json(200, VOICE.status())
 
             if path == "/api/rig":
                 data = self._read_json()

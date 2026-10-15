@@ -172,3 +172,38 @@ class OnlyThisComputer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MicChoice(unittest.TestCase):
+    """«Микрофон для заклинаний»: the chosen one by its key; gone — the system's default listens."""
+    DEVS = [{"key": "Микрофон (Realtek)", "default": True}, {"key": "Гарнитура USB", "default": False}]
+
+    def test_default_when_nothing_chosen(self):
+        for key in (None, "", "default"):
+            d, fell = vn.pick_device(self.DEVS, key)
+            self.assertEqual(d["key"], "Микрофон (Realtek)")
+            self.assertFalse(fell)
+
+    def test_chosen_by_key(self):
+        d, fell = vn.pick_device(self.DEVS, "Гарнитура USB")
+        self.assertEqual(d["key"], "Гарнитура USB")
+        self.assertFalse(fell)
+
+    def test_unplugged_falls_back_to_default(self):
+        d, fell = vn.pick_device(self.DEVS, "Веб-камера")
+        self.assertEqual(d["key"], "Микрофон (Realtek)")
+        self.assertTrue(fell)
+
+    def test_no_devices(self):
+        self.assertEqual(vn.pick_device([], "x"), (None, True))
+
+    def test_set_mic_restarts_only_on_change(self):
+        v = vn.NativeVoice()
+        v.state = "running"
+        self.assertTrue(v.set_mic("Гарнитура USB"))
+        self.assertTrue(v._mic_change.is_set())
+        v._mic_change.clear()
+        self.assertFalse(v.set_mic("Гарнитура USB"))
+        self.assertFalse(v._mic_change.is_set())
+        self.assertTrue(v.set_mic("default"))
+        self.assertEqual(v.mic_wanted, "")
