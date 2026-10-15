@@ -52,6 +52,7 @@ import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
 import { Wreck } from './Wreck.js';
+import { BurnWreck, burnsInFire } from './BurnWreck.js';
 import { WaveAttacks } from './WaveAttack.js';
 import { TotalDestruction } from './TotalDestruction.js';
 import { Hellfire } from './Hellfire.js';
@@ -328,6 +329,7 @@ export class Game {
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
+        this.burnWreck = new BurnWreck(this); // a house burning down: what loses its support falls, chests burn (BurnWreck.js)
         this.waves = new WaveAttacks(this); // «Wave Attack»: a real wave raised from the water, aimed by the hand
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
@@ -350,6 +352,7 @@ export class Game {
             F.igniteAlong = (o, d, len) => { this.campfires?.roastIn((q) => inStream(o, d, len, q, 0.5)); return al(o, d, len); };
         }
         this.fire.onCastleBurn = (x, L, z) => this._castleBurnt(x, L, z);
+        this.fire.onBlockGone = (x, L, z) => this.burnWreck?.blockGone(x, L, z);
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
         this.perf = config.mode === 'test' ? null : new PerfLog(this); // the performance diary (zns-perf.log)
@@ -753,6 +756,33 @@ export class Game {
         }
     }
 
+    /** A chest's pouch of coins (a castle's treasury holds much more; a poor house — little or nothing). */
+    _chestPouch(chest) {
+        const coins = chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
+            : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
+            : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
+        return coins > 0 ? [{ kind: 'coins', uid: newUid(), count: coins }] : [];
+    }
+
+    /**
+     * (host) A chest that was never opened burnt down (BurnWreck.js): its things are rolled as on
+     * opening; what burns is gone, the rest (coins, steel, magic things…) lies in the ashes.
+     */
+    spillBurntChest(chest, rp) {
+        if (!this.authority || chest.itemType !== 'loot' || chest.ship) return;
+        const testing = this.config.mode === 'creative' && /^(cvtest|creative-test)/.test(String(chest.id));
+        const L0 = new Set(this.items.loose.keys()), W0 = new Set(this.weapons.weapons);
+        this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null, { chest, extra: this._chestPouch(chest), key: testing ? 1 : undefined });
+        for (const [uid, L] of [...this.items.loose]) {
+            if (L0.has(uid)) continue;
+            if (burnsInFire(L.item)) { this.items.removeLoose(uid); this.sync?.itemGone?.(uid, null, null); continue; }
+            L.hover = null; L.rise = null; // (it falls into the ashes)
+            L.model.position.y = rp.y + 0.2;
+            L.vel.set((Math.random() - 0.5) * 1.2, 0.5, (Math.random() - 0.5) * 1.2);
+        }
+        for (const w of this.weapons.weapons) if (!W0.has(w) && w.hover) { w.hover = null; w.position.y = rp.y + 0.3; w.wake?.(); }
+    }
+
     openChest(chest, rewardId = null, by = null) {
         if (!chest.open()) return;
         if (this.sound) this.sound.playChestOpen(chest.getPosition());
@@ -762,11 +792,7 @@ export class Game {
             if (this.authority) {
                 chest.mesh.updateMatrixWorld(true);
                 const rp = chest.getRewardPosition(new THREE.Vector3());
-                // a pouch of coins too (a castle's treasury holds much more; a poor house — little or nothing)
-                const coins = chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
-                    : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
-                    : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
-                const pouch = coins > 0 ? [{ kind: 'coins', uid: newUid(), count: coins }] : [];
+                const pouch = this._chestPouch(chest);
                 if (chest.ship) {
                     chest._openedBy = by; this.ships.lootChest(chest, rp); // (a ship's chest: often a fishing rod)
                     for (const it of pouch) this.items.spawnLoose(it, rp.clone().add(new THREE.Vector3(0, 1.1, 0)), { hover: true, rise: true }); // (within the hand's reach)
@@ -2353,6 +2379,7 @@ export class Game {
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);
+        this.burnWreck?.update(dt);
         this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal) }); // (the dead don't take things)
         this.water.update(dt);
         this.combat.update(dt);

@@ -386,7 +386,7 @@ export class CastleLife {
         cs.chestsMade = true;
         const st = this.state(cs.def.id);
         for (const c of cs.def.chests) {
-            if (g.chests.some((x) => x.id === c.id)) continue;
+            if (g.chests.some((x) => x.id === c.id) || g.burnWreck?.burnt.has(c.id)) continue; // (burnt down: BurnWreck.js)
             const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y); // (its floor blown away: lower)
             const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw, c.id, { scale: c.scale });
             if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)

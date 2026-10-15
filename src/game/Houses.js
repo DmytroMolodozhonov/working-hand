@@ -149,7 +149,7 @@ export class Houses {
         // the chests (front towards the room)
         h.chests.forEach((c, k) => {
             const id = h.id + 'c' + k;
-            if (g.chests.some((x) => x.id === id)) return;
+            if (g.chests.some((x) => x.id === id) || g.burnWreck?.burnt.has(id)) return; // (burnt down: until the builders put the house back)
             const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y);
             const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw + Math.PI, id, { scale: c.scale });
             if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)

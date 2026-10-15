@@ -949,6 +949,7 @@ export class ItemSystem {
             if (!L) continue;
             L.remote = (L.remote || new THREE.Vector3()).set(x, y, z);
             L.rest = false;
+            L.hover = null; // (the host moves it: it no longer floats — e.g. its chest burnt down)
         }
     }
 

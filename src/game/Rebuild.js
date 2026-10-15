@@ -490,6 +490,7 @@ export class Rebuild {
         s.cart = null;
         this._sendSite(s);
         this.sites.delete(s.def.id);
+        this.game.burnWreck?.rebuilt(s.def); // (its burnt chests stand in the houses again)
         const g = this.game, me = g.character?.group.position;
         if (me && this.life._inLand(s.def, me, 40)) g.hud?.toast?.(`🏗️ Строители закончили: ${s.def.name || 'замок'} снова как был`);
     }

@@ -71,6 +71,7 @@ export class Wreck {
             if (!near(p.x, p.z)) continue;
             const y = floorUnder(t, p.x, p.y - 0.25, p.z); // (a chest stands on its floor: its mesh's y)
             if (y == null || y >= p.y - 0.3 - 0.5) continue;
+            this._carryOver(p, y - p.y); // (what floats over an opened chest goes down with it)
             c.mesh.position.y = y;
             c.mesh.updateMatrixWorld(true);
             if (c.boxId != null) { g.collision.removeBox(c.boxId); c.boxId = g.collision.addBox(c.getCollisionBox()); }
@@ -82,6 +83,14 @@ export class Wreck {
             const top = Math.round(p.y + 1 + (p.h - 1) / 2) + 1;
             if (!isSolid(t.get(Math.round(p.x), top, Math.round(p.z)))) H.breakPane(p.id, null, false);
         }
+    }
+
+    /** Things floating over a chest at p go down by dy with it. */
+    _carryOver(p, dy) {
+        const g = this.game;
+        const over = (m) => Math.abs(m.x - p.x) < 2.2 && Math.abs(m.z - p.z) < 2.2 && m.y > p.y - 0.3 && m.y < p.y + 3.2;
+        for (const L of g.items?.loose.values() || []) if (L.hover && over(L.hover)) { L.hover.y += dy; L.model.position.y += dy; }
+        for (const w of g.weapons?.weapons || []) if (w.hover?.base && !w.holder && over(w.hover.base)) { w.hover.base.y += dy; w.position.y += dy; }
     }
 
     _breakDoor(d) {
