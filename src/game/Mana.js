@@ -40,14 +40,15 @@ export const FIRST_SPELL = {
     Lumos: 1, Draw: 1, Accio: 1, Gather: 1, Levitation: 1, Up: 1, Fire: 1, Wind: 1,
     CreateFloor: 1, CreateCeiling: 1, CreateWall: 1, CreateDoor: 1, BuildRoof: 1, CreateBed: 1, CreateBoard: 1,
     ChangeColor: 1, Unfurl: 1, Furl: 1, Alohomora: 1, Waterball: 1, WaterForming: 1, AirBubble: 1, VortexBubble: 1,
-    Protection: 1, Rescue: 1, Brainrot: 1, Firefighting: 1,
+    Protection: 1, Rescue: 1, Brainrot: 1, Firefighting: 1, Drawdown: 1, Stitching: 1,
     // medium: +2…+5
     LumosMaxima: 2, UnfurlMaxima: 2, AirBubbleMaxima: 2, AlohomoraMaxima: 2, Maxima: 2,
     Flight: 2, LetItRain: 2, ToTheSun: 2, Frozen: 2, Sapira: 2, Sands: 2, Ice: 2, Jolt: 2,
-    Bombardo: 2, Earthquake: 2, Overgrown: 2, Breakthrough: 2, WaveAttack: 2,
+    Bombardo: 2, Earthquake: 2, Overgrown: 2, Breakthrough: 2, WaveAttack: 2, WindImpulse: 2, Liquidation: 2,
     WindMaxima: 3, Inferno: 3, Stupefy: 3, Expelliarmus: 3, ProtectionInvisible: 3,
+    DrawdownMaxima: 3, Invisibility: 4, LiquidationMaxima: 4,
     OvergrownMaxima: 4, WaveAttackMaxima: 4, BreakthroughMaxima: 4, ProtectionMaxima: 4, ProtectionHouse: 4, Thunderwave: 4,
-    EarthquakeMaxima: 5, BombardoMaxima: 5, JoltMaxima: 5, FireMaxima: 5, FirefightingMaxima: 5,
+    EarthquakeMaxima: 5, WindImpulseMaxima: 5, BombardoMaxima: 5, JoltMaxima: 5, FireMaxima: 5, FirefightingMaxima: 5,
     // strong: up to +20
     WaterVortex: 8, Alive: 8, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
@@ -246,6 +247,7 @@ const TITLES = {
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Alive: 'Alive', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House',
+    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility',
 };
 
 export function spellTitle(name) {

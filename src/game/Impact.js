@@ -157,6 +157,12 @@ export const SPELL_PHYSICS = {
     Firefighting: { push: 1.5, wet: true }, FirefightingMaxima: { push: 3, wet: true }, // (water from the hand: a light shove, no harm — Firefighting.js)
     Alive: null, // (a tree comes alive: nobody is pushed by the spell itself)
     Unfurl: null, UnfurlMaxima: null, Furl: null, // (a ship's sails: they move the ship, not bodies)
+    // («Wind Impulse»: a ring of air from the caster, pushes straight away — WindImpulse.impulsePush gives the push)
+    WindImpulse: { push: 16, range: 3, jolt: 1.5 }, WindImpulseMaxima: { push: 30, range: 9, jolt: 2.5 },
+    // («Drawdown»: the ground sinks — bodies stand on it and go down with it, nobody is pushed;
+    //  «Stitching»: stones laid where nobody stands; «Invisibility»: nobody sees — Drawdown.js / Stitching.js / Invisibility.js)
+    Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null,
+    Liquidation: { push: 2, jolt: 1.5 }, LiquidationMaxima: { push: 2, jolt: 1.5 }, // (a splash: −3 HP, a little shove — Liquidation.js)
     IceBall: { push: 6, jolt: 1.5 }, IceBallBig: { push: 12, jolt: 2 }, WaterHit: { push: 4, wet: true },
 };
 

@@ -1455,9 +1455,10 @@ export class Animals {
 
     _playerPos(id) {
         const g = this.game;
-        if (id === g.localId || id === 'local') return g.isDeadLocal ? null : g.character.group.position;
+        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        if (id === g.localId || id === 'local') return g.isDeadLocal ? null : seen(g.character.group.position);
         const r = g.remotes.get(id);
-        return r && !r.dead ? r.position : null;
+        return r && !r.dead ? seen(r.position) : null;
     }
 
     /** A butt / a blow at a player. o: {dmg, k — how hard it throws (m/s), down — knocked down for s} (the bull, the minotaur). */

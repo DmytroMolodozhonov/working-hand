@@ -1293,7 +1293,8 @@ export class Sailors {
 
     _playerLocal(s, id, out) {
         const g = this.game;
-        const p = id === g.localId ? (g.isDeadLocal ? null : g.character.group.position) : g.remotes.get(id)?.position;
+        const p0 = id === g.localId ? (g.isDeadLocal ? null : g.character.group.position) : g.remotes.get(id)?.position;
+        const p = p0 && g.invis ? g.invis.aiPos(id, p0) : p0; // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
         if (!p) return null;
         return s.pose.toLocal(p.x, p.y - 2, p.z, out);
     }

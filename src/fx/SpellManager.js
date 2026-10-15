@@ -18,6 +18,7 @@ import { thunderPush } from '../game/Impact.js';
 import { isUpWord } from '../game/UpSpell.js';
 import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
 import { FIREFIGHT, firefightWords } from '../game/Firefighting.js';
+import { IMPULSE, impulsePush } from '../game/WindImpulse.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -69,6 +70,12 @@ export function matchSpell(text) {
     // «Create a House» / «Improve a House» (before the beds and «Protection House»: its own words)
     const house = houseWords(s);
     if (house) return house;
+    // the newer spells' long words (before every short token that may sit inside them: «вайнд», «сан», «лед»…)
+    const mx = () => has('макс', 'max', 'мах', 'maks', 'мекс', 'мэкс');
+    if (has('импульс', 'импулс', 'импалс', 'импэлс', 'импульз', 'импелс', 'импольс', 'impuls', 'impals', 'impulse')) return mx() ? 'WindImpulseMaxima' : 'WindImpulse';
+    if (has('drawdown', 'draw down', 'drowdown', 'drow down', 'дравдаун', 'драв даун', 'дродаун', 'дро даун', 'драудаун', 'драу даун', 'дровдаун', 'дров даун', 'драфдаун', 'дравдан', 'дродан', 'дравдаон', 'просядь')) return mx() ? 'DrawdownMaxima' : 'Drawdown';
+    if (has('ликвидейш', 'ликвидэйш', 'ликвидеш', 'ликвидайш', 'ликвидац', 'ликвидир', 'ликвидей', 'liquidat', 'liquidation', 'ликвидейтион')) return mx() ? 'LiquidationMaxima' : 'Liquidation';
+    if (has('стичинг', 'стичин', 'ститчинг', 'ститчин', 'стиччинг', 'стичен', 'стечинг', 'стичэнг', 'stitching', 'stitchin', 'stiching', 'stitch', 'сшив', 'сшей')) return 'Stitching';
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
     if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';
@@ -95,6 +102,8 @@ export function matchSpell(text) {
     // The shield magic of a house (HouseWards.js), whole phrases — before the plain «Protection»
     const ward = wardWords(s);
     if (ward) return ward;
+    // «Invisible» / «Invisibility» (after the house's «Protection Invisible»: there «protection» is said too)
+    if (!PROTECT_W.test(s) && has('инвизиб', 'инвизаб', 'инвизеб', 'инвисиб', 'энвизиб', 'инвизибл', 'invisib', 'невидим')) return 'Invisibility';
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
     if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)
@@ -354,6 +363,10 @@ export class SpellManager {
             case 'Ice': this.castIce(o, d, handSide, casterId); break;
             case 'Bombardo': this.castBombardo(o, d, casterId); break;
             case 'BombardoMaxima': this.castBombardo(o, d, casterId, MAXIMA_POWER); break;
+            case 'WindImpulse': case 'WindImpulseMaxima': this.castImpulse(name, o, casterId); break;
+            case 'Drawdown': case 'DrawdownMaxima': this.hooks.drawdown?.(name, o, casterId); break; // (Drawdown.js)
+            case 'Liquidation': case 'LiquidationMaxima': this.hooks.liquidation?.(name, o, d, casterId); break; // (Liquidation.js)
+            case 'Stitching': this.hooks.stitching?.(o, d, casterId); break; // (Stitching.js)
             case 'WallRise': case 'WallRiseMaxima': this.castWallRise(o, d, casterId, name === 'WallRiseMaxima'); break; // (Breakthrough's wall)
             case 'Flight': return false; // handled by the game (it moves the caster)
             default: return false;
@@ -376,7 +389,13 @@ export class SpellManager {
     /** «Стоп»: the spells this caster holds (flames, ice beams, the storm in the hands) end now. */
     stopBy(casterId) {
         let n = 0;
-        for (const sp of this.spells) if (sp.held && sp.by === casterId && sp.life > 0) { sp.life = 0; n++; }
+        for (const sp of this.spells) {
+            if (!sp.held || sp.by !== casterId || sp.life <= 0) continue;
+            // («Drawdown» holds at least 10 s: «стоп» before that ends it then)
+            if (sp.minT && (sp.t || 0) < sp.minT) sp.stopLater = true;
+            else sp.life = 0;
+            n++;
+        }
         return n > 0;
     }
 
@@ -883,6 +902,84 @@ export class SpellManager {
         this.hooks.windShips?.(origin, direction, power, casterId);
         // Doors: the gust swings the leaves it reaches (every computer the same — Doors.blow; a locked one only rattles)
         this.hooks.doors?.((p) => push(p), origin);
+    }
+
+    // ---------------------------------------------------------- Wind Impulse
+    /**
+     * «Wind Impulse» («… Maxima»): the wand raised up — a ring of air bursts out of the caster in
+     * every direction (no ball, no ray): everybody and everything within 3 m (9 m) is pushed away
+     * from them. Never hurts by itself. What it does to whom: WindImpulse.js (IMPULSE_TARGETS).
+     * `origin`: the caster's body.
+     */
+    castImpulse(name, origin, casterId) {
+        const P = IMPULSE[name];
+        const max = name === 'WindImpulseMaxima';
+        this._sound('playWhoosh');
+        // the visible wave of air: a pale shell and a ring on the ground rushing out, streaks of air
+        if (!this._impGeo) { this._impGeo = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true); this._impRing = new THREE.RingGeometry(0.86, 1, 48); }
+        const shellMat = new THREE.MeshBasicMaterial({ color: 0xe4f4ff, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const shell = new THREE.Mesh(this._impGeo, shellMat);
+        const ring = new THREE.Mesh(this._impRing, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        const ground = this.hooks.collision ? this.hooks.collision.surfaceY(origin.x, origin.z) : origin.y - 1.5;
+        shell.position.set(origin.x, (origin.y + ground) / 2 + 0.3, origin.z);
+        ring.position.set(origin.x, ground + 0.06, origin.z);
+        this.scene.add(shell); this.scene.add(ring);
+        const H = Math.max(1.6, origin.y - ground + 1.2) * (max ? 1.4 : 1);
+        const n = max ? 90 : 40;
+        for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2 + Math.random() * 0.2;
+            const v = _a.set(Math.cos(a), (Math.random() - 0.3) * 0.25, Math.sin(a)).multiplyScalar(P.r * (2.2 + Math.random()));
+            this.fx.spark(_c.set(origin.x, ground + 0.2 + Math.random() * H, origin.z), Math.random() < 0.5 ? 0xe8f6ff : 0xbfe3ff, 0.12 + Math.random() * 0.15, v, 0.4 + Math.random() * 0.15);
+        }
+        for (let i = 0; i < (max ? 18 : 8); i++) { // (dust thrown off the ground at the ring's edge)
+            const a = Math.random() * Math.PI * 2;
+            this.fx.glow?.spawn(origin.x + Math.cos(a) * 0.6, ground + 0.2, origin.z + Math.sin(a) * 0.6, Math.cos(a) * P.r * 1.6, 0.4, Math.sin(a) * P.r * 1.6, 0xd8cdb8, 0.5 + Math.random() * 0.4, 0.6, { shrink: -0.6 });
+        }
+        let t = 0;
+        const T = max ? 0.55 : 0.35;
+        this.spells.push({
+            life: T,
+            onUpdate: (spell, dt) => {
+                t += dt;
+                const k = Math.min(1, t / T), r = 0.4 + (P.r + 0.6) * Math.sqrt(k);
+                shell.scale.set(r, H * (1 - 0.4 * k), r);
+                ring.scale.setScalar(r);
+                shellMat.opacity = 0.32 * (1 - k);
+                ringMat.opacity = 0.55 * (1 - k);
+            },
+            onEnd: () => { this.scene.remove(shell); this.scene.remove(ring); shellMat.dispose(); ringMat.dispose(); },
+        });
+        const push = (pos) => impulsePush(name, origin, pos);
+        // creatures (where they are simulated): pushed away; whoever flies off a ledge is watched till it lands
+        if (this.auth && this.hooks.creatures) {
+            this.hooks.creatures(name, casterId, (pos) => { const v = push(pos); return v && v.clone(); },
+                { from: origin, fly: true, each: (c, ck, res) => { if (res !== 'none') this.hooks.fallWatch?.(ck, c, casterId); } });
+        } else if (this.auth) {
+            for (const z of this.zombies) {
+                if (z.isDead) continue;
+                const v = push(_c.copy(z.group.position).add(UP));
+                if (!v) continue;
+                z.windVel = (z.windVel || new THREE.Vector3()).add(v.clone().setY(0));
+                z.vy = Math.max(z.vy || 0, v.y);
+            }
+        }
+        // loose things (where their physics runs), book-birds, doors
+        for (const w of this.hooks.weapons ? this.hooks.weapons() : []) {
+            if (w.holder || w.remoteTarget) continue;
+            const v = push(w.position);
+            if (!v) continue;
+            w.hover = null;
+            w.wake();
+            w.velocity.addScaledVector(v, 0.7);
+            w.angularVelocity.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+        }
+        this.hooks.impulseWorld?.(name, origin, P.r, push, casterId);
+        // doors: the wave swings the leaves it reaches, away from the caster (Doors.blow; a locked one only rattles)
+        this.hooks.doors?.((p) => push(p), origin);
+        // me, if another wizard's wave reached me (every machine moves its own player)
+        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => { const v = push(pos); return v && v.clone(); }, name);
     }
 
     // ------------------------------------------------------------- Overgrown

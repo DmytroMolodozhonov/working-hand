@@ -300,9 +300,10 @@ export class Dragons {
     // ================================================================ players
     _playerPos(id) {
         const g = this.game;
-        if (id === this.me || id === 'local') return g.isDeadLocal || g.combat?.dead ? null : g.character.group.position;
+        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? this.me : id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        if (id === this.me || id === 'local') return g.isDeadLocal || g.combat?.dead ? null : seen(g.character.group.position);
         const r = g.remotes?.get(id);
-        return r && !r.dead ? r.position : null;
+        return r && !r.dead ? seen(r.position) : null;
     }
 
     _players() {
@@ -310,7 +311,7 @@ export class Dragons {
         const g = this.game;
         const me = this._playerPos(this.me);
         if (me) out.push({ id: this.me, p: me, local: true, run: !!g.character?.isRunning, light: !!g.wandMagic?.light });
-        for (const [id, r] of g.remotes || []) if (!r.dead && r.position) out.push({ id, p: r.position, local: false, run: false, light: !!r.lumos });
+        for (const [id, r] of g.remotes || []) { const p = !r.dead && r.position ? this._playerPos(id) : null; if (p) out.push({ id, p, local: false, run: false, light: !!r.lumos }); }
         return out;
     }
 

@@ -341,9 +341,10 @@ export class Spiders {
 
     _playerPos(id) {
         const g = this.game;
-        if (id === g.localId || id === 'local') return g.isDeadLocal || g.combat.dead ? null : g.character.group.position;
+        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        if (id === g.localId || id === 'local') return g.isDeadLocal || g.combat.dead ? null : seen(g.character.group.position);
         const r = g.remotes.get(id);
-        return r && !r.dead ? r.position : null;
+        return r && !r.dead ? seen(r.position) : null;
     }
 
     _nearestPlayer(p) {

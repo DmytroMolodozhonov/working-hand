@@ -115,6 +115,11 @@ export const TARGETS = {
     WaterVortex: { does: 'push', why: '«Water Vortex», «Bubble»: толкает / держит в пузыре без урона; холод льда его не берёт; вода гасит его пламя' },
     WaterStorm: { does: 'push', why: 'водяная буря, волна, водяной шар: толкает, гасит пламя, без урона' },
     Brainrot: { does: 'none', why: '«Брейнрот»: феникс никому не подчиняется' },
+    WindImpulse: { does: 'push', why: '«Wind Impulse»: лёгкую птицу отбрасывает волной воздуха (CreatureImpact), без урона; нападение' },
+    Liquidation: { does: 'hit', why: '«Liquidation»: живое — −3, не рассыпается' },
+    Drawdown: { does: 'none', why: '«Drawdown»: в воздухе не касается; на земле — опускается с ней' },
+    Stitching: { does: 'none', why: '«Stitching»: не касается' },
+    Invisibility: { does: 'none', why: 'невидимого игрока не видит: не лечит и не нападает' },
     Alohomora: { does: 'none', why: 'живое существо без замков' },
     Accio: { does: 'none', why: 'живое существо не притянуть; его ПЕРО — обычная вещь, «Акцио» его притягивает' },
     Rescue: { does: 'none', why: '«Rescue»: у него нет ран, которые надо останавливать' },
@@ -565,11 +570,13 @@ export class Phoenixes {
         if (id === g.localId || id === 'local') {
             if (g.isDeadLocal || g.combat?.dead) return null;
             const ch = g.character;
-            return { pos: ch.group.position, yaw: ch.group.rotation.y, swim: ch.swimY != null };
+            const pos = g.invis ? g.invis.aiPos(g.localId, ch.group.position) : ch.group.position; // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+            return pos ? { pos, yaw: ch.group.rotation.y, swim: ch.swimY != null } : null;
         }
         const r = g.remotes?.get(id);
         if (!r || r.dead) return null;
-        return { pos: r.position, yaw: r.character?.group.rotation.y ?? 0, swim: false };
+        const pos = g.invis ? g.invis.aiPos(id, r.position) : r.position;
+        return pos ? { pos, yaw: r.character?.group.rotation.y ?? 0, swim: false } : null;
     }
 
     _players() {

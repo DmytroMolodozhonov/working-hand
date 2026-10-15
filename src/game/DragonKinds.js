@@ -134,6 +134,13 @@ export const ON_DRAGON = {
     Firefighting: { dmg: 0, why: '«Firefighting»: вода гасит его пламя (Firefighting.js), самого дракона не ранит и не сдвигает' },
     FirefightingMaxima: { dmg: 0, why: '«Firefighting Максима»: тоже только гасит пламя' },
     Earthquake: { dmg: 10, why: 'земля трясётся — он спотыкается (−10), но не падает' },
+    WindImpulse: { dmg: 0, why: '«Wind Impulse»: волна воздуха — дракон только качнётся' },
+    WindImpulseMaxima: { dmg: 0, why: '«Wind Impulse Максима»: тоже только качнётся' },
+    Liquidation: { dmg: 3, why: '«Liquidation»: живое существо — −3, не рассыпается' },
+    LiquidationMaxima: { dmg: 3, why: '«Liquidation Максима»: тоже −3 (Максима сильнее только по волшебным вещам)' },
+    Drawdown: { dmg: 0, why: '«Drawdown»: земля под ним проседает — стоящий на ней дракон опускается вместе с ней, без урона' },
+    Stitching: { dmg: 0, why: '«Stitching»: камни в дракона не кладутся' },
+    Invisibility: { dmg: 0, why: 'невидимого игрока дракон не видит — теряет его' },
 };
 
 /**

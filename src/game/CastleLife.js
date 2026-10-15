@@ -245,16 +245,19 @@ export class CastleLife {
     _players() {
         const g = this.game;
         const out = [];
-        if (!g.isDeadLocal && !g.combat?.dead) out.push({ id: g.localId, p: g.character.group.position });
-        for (const [id, r] of g.remotes) if (!r.dead) out.push({ id, p: r.position });
+        const seen = (id, p) => (g.invis ? g.invis.aiPos(id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        const push = (id, p) => { const q = seen(id, p); if (q) out.push({ id, p: q }); };
+        if (!g.isDeadLocal && !g.combat?.dead) push(g.localId, g.character.group.position);
+        for (const [id, r] of g.remotes) if (!r.dead) push(id, r.position);
         return out;
     }
 
     _playerPos(id) {
         const g = this.game;
-        if (id === g.localId || id === 'local') return g.isDeadLocal || g.combat?.dead ? null : g.character.group.position;
+        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        if (id === g.localId || id === 'local') return g.isDeadLocal || g.combat?.dead ? null : seen(g.character.group.position);
         const r = g.remotes.get(id);
-        return r && !r.dead ? r.position : null;
+        return r && !r.dead ? seen(r.position) : null;
     }
 
     _inLand(def, p, extra = 0) {

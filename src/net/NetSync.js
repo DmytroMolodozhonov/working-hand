@@ -432,6 +432,11 @@ export class NetSync {
         this.net.send({ t: 'stop', by: this.me }, true);
     }
 
+    /** «Invisibility»: I am invisible now / seen again (Invisibility.js). */
+    invis(on) {
+        this.net.send({ t: 'invis', by: this.me, on: on ? 1 : 0 }, true);
+    }
+
     /** My «Let the Hellfire Come» fire (~10×/s; null: it went out) — see Hellfire.onNet. */
     hellfire(s, why = null) {
         this.net.send(why ? { t: 'hf', by: this.me, s, w: why } : { t: 'hf', by: this.me, s }, true);
@@ -804,6 +809,7 @@ export class NetSync {
                 g.voiceGate?.noteRemote('Stand', performance.now()); // (their «стоп» from my speakers stops nothing of mine)
                 g.spells.stopBy(m.by);
                 break;
+            case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
             case 'say': if (m.by !== this.me && typeof m.name === 'string') g.voiceGate?.noteRemote(m.name, performance.now()); break;
             case 'draw': if (m.by !== this.me) g.wandMagic?.remoteDraw(m.by, m.c, m.p); break;
             case 'spell': {

@@ -123,6 +123,14 @@ export const SPELL_COST = {
     CircleAttackMaxima: 160, // … much stronger (a mana maximum of 200+)
     Inspirius: 500, // the mightiest: 500 at once, only with the wand (Inspirius.js)
     WaterVortexSuperMaxima: 80, // the great water storm: 2 a second while held, «стоп» 50 (only with a mana maximum of 100+; WaterStorm.js)
+    WindImpulse: 10, // a ring of air: everybody within 3 m pushed away (only from a scroll — WindImpulse.js)
+    WindImpulseMaxima: 40, // … within 9 m
+    Drawdown: 5, // the ground sinks where the hand points; then 1 a second while it holds (Drawdown.js)
+    DrawdownMaxima: 20, // … a wider bowl; then 2 a second
+    Liquidation: 10, // a splash: a thing crumbles into dust, the living −3 HP (Liquidation.js)
+    LiquidationMaxima: 25, // … magic things too
+    Stitching: 7, // a passage sewn shut with stones of its walls (Stitching.js)
+    Invisibility: 20, // nobody sees me; then 1 a second (only from a scroll — Invisibility.js)
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
 };
 
@@ -136,6 +144,7 @@ export const PLAYER_DAMAGE = {
     IceBall: 3,
     Punch: 1,
     BombardoMax: 3, // at the centre of a Bombardo; × power for Bombardo Maxima
+    Liquidation: 3, // «Liquidation» on anything alive (Liquidation.js)
 };
 
 /**

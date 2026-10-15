@@ -100,6 +100,11 @@ import { ManaCrystals } from './ManaCrystals.js';
 import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
 import { ZombieSpawn, worldLights, litAt } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
+import { Drawdown } from './Drawdown.js';
+import { Liquidation } from './Liquidation.js';
+import { Stitching } from './Stitching.js';
+import { Invisibility } from './Invisibility.js';
+import { castingHand, aimedUpOrSelf } from './WandAim.js';
 
 const SPELL_COOLDOWN = 1000;
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
@@ -107,7 +112,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse']);
+const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'Liquidation', 'LiquidationMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -274,6 +279,10 @@ export class Game {
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
             doors: (vAt, from) => this.doors?.blow(vAt, from), // (a gust / a burst swings the doors' leaves: Doors.blow)
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
+            impulseWorld: (name, origin, r, pushAt, casterId) => this._impulseWorld(name, origin, r, pushAt, casterId), // («Wind Impulse»: things, book-birds)
+            drawdown: (name, at, casterId) => this.drawdown?.start(name, at, casterId),
+            liquidation: (name, o, d, casterId) => this.liquidation?.fly(name, o, d, casterId),
+            stitching: (o, d, casterId) => this.stitching?.sew(o, d, casterId),
             collision: this.collision,
             terrain: () => this.terrain,
             leavesAt: (x, y, z) => !!this.world.leavesAt?.(x, y, z), // (the start-area trees' crowns stop a «Бомбардо»)
@@ -308,6 +317,10 @@ export class Game {
         this.handBlocks = new HandBlocks(this); // hands never go into blocks: a counter, a wall, a table
         this._headBase = { yaw: 0, pitch: 0 };
         this.quake = new Quake(this); // «Earthquake»: creatures thrown, the ground breaking, shaking (Quake.js)
+        this.drawdown = new Drawdown(this); // «Drawdown»: the ground sinks where the wand points (Drawdown.js)
+        this.liquidation = new Liquidation(this); // «Liquidation»: a splash — a thing crumbles into dust (Liquidation.js)
+        this.stitching = new Stitching(this); // «Stitching»: a passage sewn shut with stones (Stitching.js)
+        this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
@@ -595,6 +608,7 @@ export class Game {
 
     /** The local player's weapon/fist hit something. */
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
+        this.invis?.noted(this.localId); // (a blow gives an invisible me away: about where)
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon, hard: !!hit?.hard }); return; }
@@ -922,12 +936,16 @@ export class Game {
 
     /** Nearest player position to a point (zombie AI target). Returns {pos, id}. */
     nearestPlayer(p) {
-        let best = this.character.group.position, bestId = this.localId, bestD = p.distanceToSquared(best);
+        // (an invisible player: where they were last noticed, for a few seconds — Invisibility.aiPos)
+        const seen = (id, pos) => (this.invis ? this.invis.aiPos(id, pos) : pos);
+        let best = seen(this.localId, this.character.group.position), bestId = this.localId, bestD = best ? p.distanceToSquared(best) : Infinity;
         if (this.isDeadLocal) { best = null; bestD = Infinity; }
         for (const [id, r] of this.remotes) {
             if (r.dead) continue;
-            const d = p.distanceToSquared(r.position);
-            if (d < bestD) { bestD = d; best = r.position; bestId = id; }
+            const rp = seen(id, r.position);
+            if (!rp) continue;
+            const d = p.distanceToSquared(rp);
+            if (d < bestD) { bestD = d; best = rp; bestId = id; }
         }
         return best ? { pos: best, id: bestId, distSq: bestD } : null;
     }
@@ -975,6 +993,7 @@ export class Game {
         if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
         // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom)
         if (name && name !== 'Protection' && name !== 'ProtectionMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
+        if (name && name !== 'Invisibility' && name !== 'Stand') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
         return name;
@@ -1112,6 +1131,11 @@ export class Game {
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
         // «Вингардиум Левиоса Максима»: a group, a tree, a house, a ship (LevitationMaxima.js)
         if (name === 'LevitationMaxima') return this.levMax.cast(isFinal);
+        if (name === 'WindImpulse' || name === 'WindImpulseMaxima') return this._castImpulse(name, isFinal);
+        if (name === 'Drawdown' || name === 'DrawdownMaxima') return this.drawdown.cast(name, isFinal);
+        if (name === 'Liquidation' || name === 'LiquidationMaxima') return this.liquidation.cast(name, isFinal);
+        if (name === 'Stitching') return this.stitching.cast(isFinal);
+        if (name === 'Invisibility') return this.invis.cast(isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
             // The same phrase heard again — the microphone repeats an unfinished phrase many times
@@ -1275,6 +1299,7 @@ export class Game {
         if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
+        if (this.invis?.stop()) done.push('невидимость');
         if (!done.length) return false;
         this.sync?.stopSpells?.();
         if ((hf === true || ws === true) && done.length === 1) return true; // (its own words: the fire left / the water fallen)
@@ -1581,6 +1606,45 @@ export class Game {
         this._lastQuake = now;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
+    }
+
+    /**
+     * «Wind Impulse» / «… Maxima» (only from a scroll): the wand (the hand) raised UP — or turned at
+     * oneself — and the words: a ring of air out of me in every direction (WindImpulse.js).
+     */
+    _castImpulse(name, isFinal) {
+        const now = Date.now();
+        const early = this._interimCast;
+        if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (name === 'WindImpulse' && !isFinal) return null; // (wait: maybe «… Максима»)
+        if (now - (this._lastImpulse || 0) < 1200) return null;
+        const hand = castingHand(this);
+        if (!hand || !aimedUpOrSelf(this, hand)) { if (isFinal) this.hud.setVoice('💨 Поднимите палочку (руку) <b>вверх</b> и скажите «Wind Impulse»', true); return null; }
+        const tired = this.combat.check(name);
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        const origin = this.combat.center(new THREE.Vector3());
+        this.spells.cast(name, origin, _v1.set(0, 1, 0), hand.side, this.localId);
+        if (this.sync) this.sync.spell(name, origin, _v1.set(0, 1, 0), hand.side);
+        this.combat.pay(name);
+        this._lastImpulse = now;
+        this._interimCast = isFinal ? null : { name, at: now };
+        return name;
+    }
+
+    /** «Wind Impulse» on the world round `origin` (every computer: SpellManager.castImpulse): book-birds, things. */
+    _impulseWorld(name, origin, r, pushAt, casterId) {
+        if (this.authority) {
+            // things lying about (the host owns their physics)
+            for (const L of this.items?.loose?.values() || []) {
+                if (L.hover && L.rise != null) continue; // (still rising out of a chest)
+                const v = pushAt(L.model.position);
+                if (!v) continue;
+                L.hover = null; L.rest = false; L.sentRest = false;
+                L.vel.addScaledVector(v, 0.7);
+                L.spin.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+            }
+            this.books?.hitAt?.(origin, r, casterId, 'wind'); // (a light book-bird in the gust falls; the book of protection doesn't)
+        }
     }
 
     /** Another wizard's quake ran under me: I fall for a few seconds and get hurt. */
@@ -2429,6 +2493,7 @@ export class Game {
         this.phoenixes.update(dt);
         this.livingTrees.update(dt);
         this.servants.update(dt);
+        this.invis?.update(dt);
         this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
@@ -2486,7 +2551,7 @@ export class Game {
 
         if (this.frameCount % 5 === 0) {
             const cp = this.character.group.position;
-            const others = [...this.remotes.values()].filter((r) => !r.dead).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
+            const others = [...this.remotes].filter(([id, r]) => !r.dead && !this.invis?.hidden(id)).map(([, r]) => r).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
             // on a server: its name on the map and a mark at its start point
             const online = this.net && this.net.active;
             const server = online ? { name: (this.net.isHost ? this.net.info?.name : this.net.serverName) || 'Сервер', players: this.remotes.size + 1, home: this.world.mapResult?.playerSpawn || { x: 0, z: 0 } } : null;
@@ -2818,6 +2883,7 @@ export class Game {
 
     /** Who last cast a fire / blast spell (a castle that catches fire blames them). */
     noteCaster(name, by) {
+        if (by != null && name !== 'Invisibility') this.invis?.noted(by); // (an invisible caster: the world knows about where)
         if (/^(Inferno|Fire|Bombardo|Lightning|Earthquake)/.test(name || '')) this._fireBy = { by, at: performance.now() };
     }
 
