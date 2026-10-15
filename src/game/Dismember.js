@@ -25,12 +25,13 @@
  *   dmcut   attacker → victim / host   {k, id, to?, sv:[l, d, nx, ny, nz, vx, vy, vz, lf], by}
  *   dmlimb  victim / host → all        {k, id, sv, by, att}       (a fresh cut: piece + blood)
  *   dmst    victim / host → all        {k, id, st, lf}            (the state: stumps, no piece)
- * k: 'p' player · 'v' villager · 'z' zombie · 'a' animal · 's' spider · other kinds registered.
+ * k: 'p' player · 'v' villager · 'c' a ship's crew (sailors) · 'z' zombie · 'a' animal · 's' spider ·
+ *    't' a living tree (its branch arms) · other kinds registered.
  */
 
 import * as THREE from 'three';
 import { cutLimb, restoreAll, applyState, anyLost, stumpEnd, segmentAt, limbLength, segObjs } from '../entities/LimbSurgery.js';
-import { characterBody, villagerBody, zombieBody, animalBody, spiderCutBody, boneLines, blockerBoxes, tissueAt } from './CutBodies.js';
+import { characterBody, villagerBody, zombieBody, animalBody, spiderCutBody, livingTreeCutBody, boneLines, blockerBoxes, tissueAt } from './CutBodies.js';
 import { SeveredPart } from './SeveredPart.js';
 
 // ============================================================ numbers
@@ -50,7 +51,7 @@ export const MOVE = { oneLeg: 0.4, noLegs: 0.2 };
 export const MAX_PROPS = 24;
 export const MAX_REACH = 9; // m: the attacker must be this near the victim
 export const SEVER_COOLDOWN = 0.3;
-export const LIMB_RU = { leftArm: 'левую руку', rightArm: 'правую руку', leftLeg: 'левую ногу', rightLeg: 'правую ногу', head: 'голову', neck: 'голову' };
+export const LIMB_RU = { leftArm: 'левую руку', rightArm: 'правую руку', leftLeg: 'левую ногу', rightLeg: 'правую ногу', head: 'голову', neck: 'голову', branch0: 'ветку', branch1: 'ветку' };
 /** The head (a person's neck cut) or an animal's neck: either way the head is off. */
 export const isHead = (limb) => limb === 'head' || limb === 'neck';
 
@@ -246,6 +247,13 @@ export function cutText(sv, both) {
     return both ? '🩸 Вам отрубили ногу — вы упали. Теперь можно только ползти. Скажите «Rescue», прижав руку к ране' : '🩸 Вам отрубили ногу — вы упали. Теперь можно только прыгать на одной ноге. Скажите «Rescue», прижав руку к ране';
 }
 
+/** A tree's cut: the stump and the piece show wood, not flesh and bone. */
+const WOOD_CUT = new THREE.MeshLambertMaterial({ color: 0xc8a06a });
+const WOOD_RING = new THREE.MeshLambertMaterial({ color: 0x8a6034 });
+export function woodCaps(...roots) {
+    for (const r of roots) r?.traverse((o) => { if (o.isMesh && o.userData.stump && o.material !== WOOD_CUT && o.material !== WOOD_RING) o.material = o.material?.name === 'stump-bone' ? WOOD_RING : WOOD_CUT; });
+}
+
 // ============================================================ the system
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion();
 const arr = (v) => [v.x, v.y, v.z];
@@ -278,7 +286,9 @@ export class Dismemberment {
         for (const [k, def] of this.kinds) if (def.match?.(t)) return { k, id: def.id(t), t, body: def.body(t) };
         if (typeof t.cutBody === 'function') { const body = t.cutBody(); return body ? { k: t.cutKind || 'x', id: t.cutId ?? t.id, t, body } : null; }
         if (t.isPlayer) { const r = this.game.remotes?.get(t.id); return r ? { k: 'p', id: t.id, t, body: characterBody(r.character), r } : null; }
+        if (t.isSailor) return t.model ? { k: 'c', id: t.id, t, body: villagerBody(t.model) } : null; // (a villager's body; a captain's «armour» is a coat, no steel: the blade cuts)
         if (t.isVillager) return t.model ? { k: 'v', id: t.id, t, body: villagerBody(t.model) } : null;
+        if (t.isLivingTree) return t.model ? { k: 't', id: t.id, t, body: livingTreeCutBody(t.model) } : null; // (its branch arms)
         if (t.isAnimal) return { k: 'a', id: t.id, t, body: animalBody(t.model) };
         if (t.isBoss) return { k: 's', id: t.id, t, body: spiderCutBody(t.model) };
         if (t.head && t.leftArm && t.leftLeg && t.limbMask != null) return { k: 'z', id: t.id, t, body: zombieBody(t) };
@@ -290,9 +300,11 @@ export class Dismemberment {
         const g = this.game;
         if (k === 'p') { const r = g.remotes?.get(id); return r ? { k, id, t: r, body: characterBody(r.character), r } : null; }
         if (k === 'v') { const v = g.castleLife?.byId.get(id); return v ? { k, id, t: v, body: villagerBody(v.model) } : null; }
+        if (k === 'c') { const c = g.ships?.crew?.byId?.get(id); return c ? { k, id, t: c, body: villagerBody(c.model) } : null; }
         if (k === 'a') { const a = g.animals?.byId.get(id); return a ? { k, id, t: a, body: animalBody(a.model) } : null; }
         if (k === 's') { const s = g.spiders?.list.find((x) => x.id === id); return s ? { k, id, t: s, body: spiderCutBody(s.model) } : null; }
         if (k === 'z') { const z = g.zombieById?.get(id); return z ? { k, id, t: z, body: zombieBody(z) } : null; }
+        if (k === 't') { const t = g.livingTrees?.byId?.get(id); return t ? { k, id, t, body: livingTreeCutBody(t.model) } : null; }
         const def = this.kinds.get(k);
         if (def) { const t = def.find(id); return t ? { k, id, t, body: def.body(t) } : null; }
         return null;
@@ -362,7 +374,8 @@ export class Dismemberment {
         const who = this.which(t);
         if (!who || !res?.sever) return;
         const sv = res.sever;
-        g.fx?.blood?.(_v.fromArray(res.point), 12); // (at once here; the cut itself comes with dmlimb)
+        if (who.body.wood) for (let i = 0; i < 8; i++) g.fx?.spark?.(_v.fromArray(res.point), 0x9a7040, 0.1, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.5); // (wood chips)
+        else g.fx?.blood?.(_v.fromArray(res.point), 12); // (at once here; the cut itself comes with dmlimb)
         const by = g.localId || 'local';
         if (who.k === 'p') {
             if (g.sync) this._send({ t: 'dmcut', k: 'p', id: who.id, to: who.id, sv: packSever(sv), by }, true);
@@ -387,7 +400,8 @@ export class Dismemberment {
         if (!r.changed) return false;
         sv.d = r.d;
         this.cutCount++;
-        if (r.piece) this._spawnPiece(r.piece, sv);
+        if (who.body.wood) woodCaps(root, r.piece);
+        if (r.piece) this._spawnPiece(r.piece, sv, who.body.wood);
         this.cutSet.set(who.k + ':' + who.id, { k: who.k, t: who.t, id: who.id });
         this._consequences(who, sv, by);
         if (g.sync) this._send({ t: 'dmlimb', k: who.k, id: who.id, sv: packSever(sv), by: g.localId, att: by, k1: fresh ? 1 : 0 }, false);
@@ -399,9 +413,13 @@ export class Dismemberment {
         const g = this.game, t = who.t;
         const head = isHead(sv.limb);
         const rate = bleedRate(sv.limb, sv.tissue);
-        if (who.k === 'v') {
+        if (who.k === 'v' || who.k === 'c') {
             const m = t.model;
-            if (head) { g.castleLife?.hit(t, 0, null, by, { pierce: true, spell: true }); return; } // (the castle sees who did it)
+            if (head) { // (the castle / the crew sees who did it)
+                if (who.k === 'c') g.ships?.crew?.hit(t, 0, null, by, { pierce: true, spell: true });
+                else g.castleLife?.hit(t, 0, null, by, { pierce: true, spell: true });
+                return;
+            }
             if (sv.limb === 'rightArm' && m.toolKind !== 'none') m.setHeldTool('none');
             if (sv.limb === 'leftArm' && m.shield) m.shield.visible = false;
             const mv = limbMotion(m.limbs);
@@ -436,6 +454,7 @@ export class Dismemberment {
             this._bleed(who, 0.5, by);
             return;
         }
+        if (who.k === 't') { g.livingTrees?.onCut?.(t, sv, by); return; } // (wood: no blood; the branch no longer strikes)
         const def = this.kinds.get(who.k);
         if (def?.onCut) def.onCut(t, sv, by, true);
         else if (typeof t.onCut === 'function') t.onCut(sv, by);
@@ -611,7 +630,8 @@ export class Dismemberment {
             const root = who.body.root;
             const r = cutLimb(root, who.body, sv.limb, sv.d, sv.n, { piece: !!m.k1 });
             if (!r.changed) return;
-            if (r.piece) this._spawnPiece(r.piece, sv);
+            if (who.body.wood) woodCaps(root, r.piece);
+            if (r.piece) this._spawnPiece(r.piece, sv, who.body.wood);
             this._mirror(who, sv);
             if (m.att === g.localId) g.hud?.setVoice?.(`🗡️ Вы отрубили ${LIMB_RU[sv.limb] || (/^leg/.test(sv.limb) ? 'ногу' : 'часть тела')}${who.r ? ' — ' + who.r.name : ''}`, true);
             return;
@@ -624,7 +644,7 @@ export class Dismemberment {
             const who = this.find(m.k, m.id);
             if (!who) return;
             const root = who.body.root;
-            if (applyState(root, who.body, stateFromNet(m.st))) this._mirror(who, null);
+            if (applyState(root, who.body, stateFromNet(m.st))) { if (who.body.wood) woodCaps(root); this._mirror(who, null); }
             return;
         }
         if (m.t === 'dmresc' && g.authority) {
@@ -637,7 +657,7 @@ export class Dismemberment {
     _mirror(who, sv) {
         if (who.k === 'p') { who.r.character.setShowHands(true); return; }
         const t = who.t;
-        if (who.k === 'v' && sv) {
+        if ((who.k === 'v' || who.k === 'c') && sv) {
             if (sv.limb === 'rightArm' && t.model.toolKind !== 'none') t.model.setHeldTool('none');
             if (sv.limb === 'leftArm' && t.model.shield) t.model.shield.visible = false;
         }
@@ -659,7 +679,8 @@ export class Dismemberment {
                 b.acc += b.rate * dt;
                 if (b.acc >= 1) {
                     b.acc -= 1;
-                    if (b.k === 'v') { t.hp = Math.max(0, Math.round((t.hp - 1) * 10) / 10); t.barT = 8; if (t.hp <= 0) { g.castleLife?._die?.(t, b.by); this.bleeders.delete(key); } }
+                    if (b.k === 'c') { t.hp = Math.max(0, Math.round((t.hp - 1) * 10) / 10); if (t.hp <= 0) { g.ships?.crew?._die?.(t, b.by); this.bleeders.delete(key); } }
+                    else if (b.k === 'v') { t.hp = Math.max(0, Math.round((t.hp - 1) * 10) / 10); t.barT = 8; if (t.hp <= 0) { g.castleLife?._die?.(t, b.by); this.bleeders.delete(key); } }
                     else if (b.k === 'a') { t.hp -= 1; if (t.hp <= 0) { g.animals?._die?.(t, false); this.bleeders.delete(key); } }
                     else if (b.k === 's') g.spiders?.hit?.(t, 1, 'bleed');
                 }
@@ -668,7 +689,7 @@ export class Dismemberment {
         // drops of blood from stumps; creatures without legs stay low
         for (const [key, c] of this.cutSet) {
             const t = c.t;
-            if (t.removable || (c.k === 'z' && !t.group?.parent)) { this.cutSet.delete(key); this.bleeders.delete(key); continue; }
+            if (t.removable || t.gone || (c.k === 'z' && !t.group?.parent)) { this.cutSet.delete(key); this.bleeders.delete(key); continue; }
             this._pose(c, dt);
             if (!(t.bleed > 0) || t.dead || t.isDead) continue;
             const root = c.k === 'z' ? t : c.t.model;
@@ -698,7 +719,7 @@ export class Dismemberment {
     /** A creature's body with legs missing: on one leg / lower on stumps; fallen for a moment. */
     _pose(c, dt) {
         const t = c.t;
-        if (c.k === 'v') {
+        if (c.k === 'v' || c.k === 'c') {
             const m = t.model;
             if (!m?.limbs) return;
             if (t.cutFallT > 0) { t.cutFallT -= dt; m.root.rotation.z += (1.35 - m.root.rotation.z) * Math.min(1, dt * 6); }
@@ -730,12 +751,12 @@ export class Dismemberment {
         this.game.fx?.spark?.(_v2.set(p.x + (Math.random() - 0.5) * 0.2, p.y, p.z + (Math.random() - 0.5) * 0.2), Math.random() < 0.5 ? 0xb3001b : 0x7a0010, 0.07, new THREE.Vector3((Math.random() - 0.5) * 0.4, -1.4, (Math.random() - 0.5) * 0.4), 0.9);
     }
 
-    _spawnPiece(piece, sv) {
+    _spawnPiece(piece, sv, wood = false) {
         const vel = new THREE.Vector3().fromArray(sv.v || [0, 0, 0]).multiplyScalar(0.35).clampLength(0, 7);
         vel.y += 2.5;
         if (this.props.length >= MAX_PROPS) this.props.shift().dispose();
         const spin = new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
-        this.props.push(new SeveredPart(this.game, piece, { vel, spin, blood: isHead(sv.limb) ? 40 : 25 }));
+        this.props.push(new SeveredPart(this.game, piece, { vel, spin, blood: wood ? 0 : isHead(sv.limb) ? 40 : 25 }));
     }
 
     dispose() {

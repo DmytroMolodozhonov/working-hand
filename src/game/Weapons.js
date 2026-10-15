@@ -711,14 +711,19 @@ export class WeaponSystem {
                     }
                     if (z.damageCooldown > 0) continue;
                     if (now(this) - (w.lastHitTime || 0) < 120) continue;
+                    let hit = cut?.kind === 'cut' || cut?.kind === 'armour' || cut?.kind === 'touch'; // (the edge reached a bone)
+                    // What the blade really touches: a body made for the blade (Dismember) is its trunk and
+                    // skull (an arm, a leg, the neck: reached at the bone, above) — not a fat cylinder round
+                    // it, which took the blow (knocked it away, bent it) before the edge got to a leg or the neck.
+                    const solids = !hit && this.game.dismember?.which?.(z) ? this._solidsOf(z, this._hitSolids || (this._hitSolids = [])).filter((S) => !S.bone) : null;
                     const zb = cap ? [cap.a.x, cap.a.y, cap.a.z] : [zp.x, zp.y - 0.6, zp.z], zt = cap ? [cap.b.x, cap.b.y, cap.b.z] : [zp.x, zp.y + 2.9, zp.z];
                     const r = (cap ? cap.r : 0.8) + 0.12;
-                    let hit = cut?.kind === 'cut' || cut?.kind === 'armour';
                     for (let k = 1; k <= steps && !hit; k++) {
                         const t = k / steps;
                         const bx = hs.basePrev.x + (base.x - hs.basePrev.x) * t, by = hs.basePrev.y + (base.y - hs.basePrev.y) * t, bz = hs.basePrev.z + (base.z - hs.basePrev.z) * t;
                         const tx = hs.tipPrev.x + (tip.x - hs.tipPrev.x) * t, ty = hs.tipPrev.y + (tip.y - hs.tipPrev.y) * t, tz = hs.tipPrev.z + (tip.z - hs.tipPrev.z) * t;
-                        hit = segmentSegmentDistSq([bx, by, bz], [tx, ty, tz], zb, zt) <= r * r;
+                        if (solids) { for (const S of solids) if (segmentSegmentDistSq([bx, by, bz], [tx, ty, tz], S.a, S.b) <= (S.r + 0.04) ** 2) { hit = true; break; } }
+                        else hit = segmentSegmentDistSq([bx, by, bz], [tx, ty, tz], zb, zt) <= r * r;
                     }
                     if (!hit) continue;
                     // Where the blade went through: the blade point closest to the body's axis

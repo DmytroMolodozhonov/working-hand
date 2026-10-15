@@ -167,19 +167,37 @@ export function animalBody(model) {
         const H = head.position.clone();
         const C = bb.getCenter(new THREE.Vector3());
         const dir = C.clone().sub(H).normalize();
-        // where the line head → body centre enters the body box
-        const ray = new THREE.Ray(H, dir);
-        const enter = ray.intersectBox(bb, new THREE.Vector3());
-        let o = enter && enter.distanceTo(H) > 0.15 ? enter : H.clone().addScaledVector(dir, 0.18);
-        o = o.clone().addScaledVector(dir, 0.05); // (a little inside the body: a chop right at the shoulders counts)
-        const ax = H.clone().sub(o);
-        const L = ax.length();
-        limbs.unshift({
-            name: 'neck', kind: 'neck', segs: [
-                { obj: neck, o: o.toArray(), ax: ax.normalize().toArray(), len: L, part: 'neck' },
-                { obj: head, o: [0, 0, 0], ax: ax.toArray(), len: 0.01, whole: true, part: 'neck', capW: 0.25 },
-            ],
-        });
+        // (the blade is stopped by the body's box shrunk to 0.84 — the blocker below)
+        const blk = bb.clone().expandByVector(bb.getSize(new THREE.Vector3()).multiplyScalar(-0.08));
+        if (bb.containsPoint(H)) {
+            // no neck to see (a pig, a sheep): the head sits on the body — its back is in it. The
+            // "neck" runs from a little inside the body, out through its front into the head: a
+            // chop right where the head meets the body takes it.
+            const fwd = dir.clone().negate();
+            const o = H.clone().addScaledVector(dir, 0.1);
+            const out = new THREE.Ray(o, fwd).intersectBox(blk, new THREE.Vector3()) || H.clone();
+            const L = out.distanceTo(o) + 0.14;
+            limbs.unshift({
+                name: 'neck', kind: 'neck', segs: [
+                    { obj: neck, o: o.toArray(), ax: fwd.toArray(), len: L, part: 'neck' },
+                    { obj: head, o: [0, 0, 0], ax: fwd.toArray(), len: 0.01, whole: true, part: 'neck', capW: 0.25 },
+                ],
+            });
+        } else {
+            // where the line head → body centre enters the body box
+            const ray = new THREE.Ray(H, dir);
+            const enter = ray.intersectBox(bb, new THREE.Vector3());
+            let o = enter && enter.distanceTo(H) > 0.15 ? enter : H.clone().addScaledVector(dir, 0.18);
+            o = o.clone().addScaledVector(dir, 0.05); // (a little inside the body: a chop right at the shoulders counts)
+            const ax = H.clone().sub(o);
+            const L = ax.length();
+            limbs.unshift({
+                name: 'neck', kind: 'neck', segs: [
+                    { obj: neck, o: o.toArray(), ax: ax.normalize().toArray(), len: L, part: 'neck' },
+                    { obj: head, o: [0, 0, 0], ax: ax.toArray(), len: 0.01, whole: true, part: 'neck', capW: 0.25 },
+                ],
+            });
+        }
     }
     const blockers = [];
     if (body) {
@@ -217,6 +235,27 @@ export function spiderCutBody(model) {
         blockers.push({ obj: m, c: [0, 0, 0], half: new THREE.Vector3().subVectors(m.geometry.boundingBox.max, m.geometry.boundingBox.min).multiplyScalar(0.48).toArray() });
     }
     model._cutBody = { root: model, kind: 'spider', limbs, blockers };
+    return model._cutBody;
+}
+
+/**
+ * A living tree (LivingTrees.livingTreeModel): its two branch arms (shoulder → elbow → twig
+ * fingers) can be cut off; the trunk stops the blade (it is not cut through), so do the roots.
+ */
+export function livingTreeCutBody(model) {
+    if (model._cutBody) return model._cutBody;
+    const ud = model.userData || {};
+    const limbs = (ud.arms || []).map((a, i) => ({
+        name: 'branch' + i, kind: 'branch', side: a.side < 0 ? 'left' : 'right',
+        segs: [
+            { obj: a.sh, o: [0, 0, 0], ax: [0, -1, 0], len: 2.6, part: 'branch' },
+            { obj: a.elbow, o: [0, 0, 0], ax: [0, -1, 0], len: 3.2, part: 'branch' }, // (the forearm and the twig fingers)
+        ],
+    }));
+    const blockers = [];
+    const trunk = ud.body?.children.find((o) => o.isMesh);
+    if (trunk) blockers.push({ obj: trunk, c: [0, 0, 0], half: [0.8, 2.1, 0.7] });
+    model._cutBody = { root: model, kind: 'tree', limbs, blockers, wood: true };
     return model._cutBody;
 }
 

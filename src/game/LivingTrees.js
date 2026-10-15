@@ -221,7 +221,15 @@ export class LivingTrees {
     /** Is my mana going into a living tree now (so it doesn't come back)? */
     get draining() { return !this.creative && this.mine().length > 0; }
 
-    /** Targets for weapons (a blade or a fist touches it — and does nothing). */
+    /**
+     * A sword's or an axe's edge took off a branch arm (Dismember.js, where the tree is decided):
+     * it is wood — no blood, no harm to its life (only fire kills it); that arm strikes no more.
+     */
+    onCut(t, sv) {
+        if (t.swing && sv.limb === 'branch' + t.swingSide) t.swing = null;
+    }
+
+    /** Targets for weapons (a fist touches it and does nothing; a blade can take off a branch arm — Dismember). */
     targets() { return this.list.filter((t) => t.phase === 'rise' || t.phase === 'alive' || t.phase === 'stiff'); }
 
     // ================================================================ cast
@@ -630,9 +638,12 @@ export class LivingTrees {
         if (plan.mode === 'strike') {
             face = plan.enemy;
             // («лицом к цели»: the branch comes down only on what is in front of it — first it turns)
-            if (!t.swing && t.nextSwing <= 0 && facesTarget(t.model.rotation.y, p.x, p.z, plan.enemy.x, plan.enemy.z, FACE.MELEE)) {
+            // (a branch arm cut off by a blade no longer strikes: the other one does — none, no blows)
+            const lost = t.model.limbs || {};
+            const has = (side) => lost['branch' + side] == null;
+            if (!t.swing && t.nextSwing <= 0 && (has(0) || has(1)) && facesTarget(t.model.rotation.y, p.x, p.z, plan.enemy.x, plan.enemy.z, FACE.MELEE)) {
                 t.swing = { t: 0, target: { k: plan.enemy.k, id: plan.enemy.id }, hit: false };
-                t.swingSide = 1 - t.swingSide;
+                t.swingSide = has(1 - t.swingSide) ? 1 - t.swingSide : t.swingSide;
                 t.nextSwing = ALIVE.SWING_GAP;
             }
         } else if (plan.mode === 'chase' || plan.mode === 'follow') {

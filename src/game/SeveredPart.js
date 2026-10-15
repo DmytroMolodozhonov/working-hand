@@ -49,7 +49,8 @@ export class SeveredPart {
         const size = _box.getSize(new THREE.Vector3());
         this.longAxis = size.x >= size.y && size.x >= size.z ? new THREE.Vector3(1, 0, 0) : size.y >= size.z ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
         this.cutEnd = piece.userData.cutEnd ? piece.userData.cutEnd.clone() : _box.getCenter(new THREE.Vector3());
-        if (game.fx?.blood) game.fx.blood(this.worldCutEnd(_v), blood);
+        this.bleeds = blood > 0; // (a tree's branch: no blood)
+        if (this.bleeds && game.fx?.blood) game.fx.blood(this.worldCutEnd(_v), blood);
     }
 
     get position() { return this.obj.position; }
@@ -89,7 +90,7 @@ export class SeveredPart {
         }
         o.updateMatrixWorld(true);
         // blood from the cut for a while
-        if (this.age < BLEED_TIME && this.game.fx?.spark && Math.random() < dt * 6) {
+        if (this.bleeds && this.age < BLEED_TIME && this.game.fx?.spark && Math.random() < dt * 6) {
             this.worldCutEnd(_v);
             this.game.fx.spark(_v, Math.random() < 0.5 ? 0xb3001b : 0x7a0010, 0.07, _w.set((Math.random() - 0.5) * 0.4, -1.2, (Math.random() - 0.5) * 0.4), 0.9);
         }

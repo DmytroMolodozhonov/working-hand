@@ -38,6 +38,7 @@ const _v2 = new THREE.Vector3();
 const _c = new THREE.Color();
 
 export const ZOMBIE_GROUND_OFFSET = 1.0; // original y=0.5 with ground at -0.5
+export const DUMMY_HEALTH = 60; // the training dummy (a plain zombie has 5): a head cut (999) still ends it
 export const CORPSE_LIFETIME = 25;
 
 export class Zombie {
@@ -165,6 +166,9 @@ export class Zombie {
      */
     update(dt, targetPos, camera, collision) {
         const pos = this.group.position;
+        // (the per-frame slowing down of a blow's push and sway, as it was at 60 frames a second — the same on a
+        // slow computer: at 20 frames a blow used to tip a zombie over flat, out of a blade's reach for long)
+        const decay = (f) => f ** (dt * 60);
         this.lastDistSq = targetPos ? pos.distanceToSquared(targetPos) : Infinity;
         const ground = collision ? (collision.groundAt ? collision.groundAt(pos.x, pos.z, pos.y - 1.0 + 1.1) : collision.groundY(pos.x, pos.z)) : -0.5;
 
@@ -194,7 +198,7 @@ export class Zombie {
                 pos.y = Math.max(restY, pos.y + Math.min(this.vy, -2) * dt);
             } else { pos.y = restY; this.vy = 0; }
             pos.addScaledVector(this.velocity, dt);
-            this.velocity.multiplyScalar(0.95);
+            this.velocity.multiplyScalar(decay(0.95));
             if (this.deathAnimTimer <= 0) {
                 this.isDying = false;
                 this.group.rotation.x = targetRot;
@@ -251,30 +255,30 @@ export class Zombie {
             } else {
                 this.head.rotation.y += dt * 15;
                 this.head.rotation.z = Math.sin(performance.now() * 0.01) * 0.3;
-                this.leftLeg.rotation.x *= 0.9;
-                this.rightLeg.rotation.x *= 0.9;
-                this.leftArm.rotation.x *= 0.9;
-                this.rightArm.rotation.x *= 0.9;
+                this.leftLeg.rotation.x *= decay(0.9);
+                this.rightLeg.rotation.x *= decay(0.9);
+                this.leftArm.rotation.x *= decay(0.9);
+                this.rightArm.rotation.x *= decay(0.9);
                 pos.addScaledVector(this.velocity, dt);
-                this.velocity.multiplyScalar(0.9);
+                this.velocity.multiplyScalar(decay(0.9));
                 this._settleY(dt, ground);
                 return;
             }
         }
 
         pos.addScaledVector(this.velocity, dt);
-        this.velocity.multiplyScalar(0.9);
+        this.velocity.multiplyScalar(decay(0.9));
         this._settleY(dt, ground);
 
         this.group.rotation.z += this.rotVelocity.z * dt;
         this.group.rotation.x += this.rotVelocity.x * dt;
-        this.rotVelocity.multiplyScalar(0.9);
+        this.rotVelocity.multiplyScalar(decay(0.9));
         if (this.dummy && !this.isFrozen && this.velocity.lengthSq() < 0.25) this._sway();
         if (this.velocity.lengthSq() < 0.01) {
-            this.group.rotation.z *= 0.9;
-            this.group.rotation.x *= 0.9;
-            this.head.rotation.x *= 0.9;
-            this.body.rotation.x *= 0.9;
+            this.group.rotation.z *= decay(0.9);
+            this.group.rotation.x *= decay(0.9);
+            this.head.rotation.x *= decay(0.9);
+            this.body.rotation.x *= decay(0.9);
         }
 
         if (targetPos && this.velocity.lengthSq() < 0.25) {
@@ -291,8 +295,8 @@ export class Zombie {
                     this.walkCycle += dt * 10;
                     this._animateWalk();
                 } else {
-                    this.leftLeg.rotation.x *= 0.9;
-                    this.rightLeg.rotation.x *= 0.9;
+                    this.leftLeg.rotation.x *= decay(0.9);
+                    this.rightLeg.rotation.x *= decay(0.9);
                 }
             }
         }
@@ -313,6 +317,9 @@ export class Zombie {
         if (this.dummy) return;
         this.dummy = true;
         this.sizeK = 1.25;
+        // it is there to practise on: blows don't fell it at once (two of them did — and then there was
+        // nothing left to cut); a blade still takes its arms, legs and head, the head ends it
+        this.health = DUMMY_HEALTH;
         this.group.scale.set(1.25, 1.12 * 1.25, 1.25);
         // the feet stay where they were relative to the ground: the origin rises with the legs' length
         this.gOff = ZOMBIE_GROUND_OFFSET - 0.6 * 1.12 + 0.6 * 1.12 * 1.25;
@@ -404,16 +411,18 @@ export class Zombie {
         // Knockback: backwards from facing (original), or along the physical blow.
         if (hitDir) _v.set(hitDir.x, 0, hitDir.z).normalize();
         else _v.set(0, 0, -1).applyQuaternion(this.group.quaternion);
-        this.velocity.addScaledVector(_v, 3.9);
+        // (the dummy stands its ground: a blow rocks it, it doesn't fly off out of the blade's reach)
+        const kb = this.dummy ? 0.25 : 1;
+        this.velocity.addScaledVector(_v, 3.9 * kb);
         this.isStunned = true;
-        this.stunTimer = 1.0;
-        this.rotVelocity.z = (rand() - 0.5) * 10;
-        this.rotVelocity.x = -(rand() * 5);
-        if (this.head.visible) this.head.rotation.x = -Math.PI / 4;
+        this.stunTimer = this.dummy ? 0.4 : 1.0;
+        this.rotVelocity.z = (rand() - 0.5) * 10 * kb;
+        this.rotVelocity.x = -(rand() * 5) * kb;
+        if (this.head.visible) this.head.rotation.x = -0.3; // (a jolt: the cube head bowed 45° sank its corner over the neck — no blade could get to it)
         this.body.rotation.x = -Math.PI / 6;
 
         if (this.health <= 0) {
-            this.velocity.addScaledVector(_v, isWeapon ? 8.0 : 5.0);
+            this.velocity.addScaledVector(_v, (isWeapon ? 8.0 : 5.0) * kb);
             this.die();
             result.died = true;
         }

@@ -933,6 +933,7 @@ export class Sailors {
 
     /** Walk towards a ship-local point on the decks (never through the rails or masts). */
     _steer(v, s, tx, tz, speed, dt) {
+        speed *= v.legK ?? 1; // (a leg cut off by a blade: hopping / crawling — Dismember.js)
         const dx = tx - v.l.x, dz = tz - v.l.z;
         const d = Math.hypot(dx, dz);
         if (d < 1e-3) { v.speed = 0; return; }
