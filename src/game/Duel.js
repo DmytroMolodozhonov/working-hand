@@ -112,6 +112,7 @@ export const JOLT_TARGETS = {
     livingTrees: 'rooted: it only reels (never falls — its own fall is its death); no damage',
     dragon: 'a great heavy body: it only sways a little, the jolt wakes and angers it (no damage) — Dragons.boltHit',
     iceCastle: 'a snowman is thrown back; the queen and her ice monsters only sway (no damage: a spell without a scroll) — IceCastleLife.boltHit',
+    blackship: 'Captain Black Moustache: thrown back as a man — unless his rapier beats the charge aside (Sailors.parryBolt); a skeleton: thrown back, no harm (no duel charge harms it — Sailors.pirateBoneDamage)',
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',

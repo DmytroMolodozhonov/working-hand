@@ -301,3 +301,16 @@ test('the Ice Castle\'s creatures: every place that finds targets knows them; th
     const { DANGERS } = await import('../../src/game/Danger.js');
     assert.ok(DANGERS.ice?.ru, 'the villagers fear the ice magic');
 });
+
+test('Captain Black Moustache and his skeletons (ships.crew): the parry, the skeletons\' bones, every blow says its kind', () => {
+    const d = src('src/game/Duel.js');
+    assert.match(body(d, '    _arriveAtCreature(b) {'), /parryBolt/, 'a duel charge at the captain: his rapier may beat it aside');
+    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null) {'), /role === 'skeleton'/, 'a duel charge at a skeleton: no harm');
+    const sl = src('src/game/Sailors.js');
+    assert.match(sl.slice(sl.indexOf('    hit(v, dmg, dir, by, opts = {}) {'), sl.indexOf('    remoteHit(m) {')), /pirateBoneDamage/);
+    const g = src('src/game/Game.js');
+    assert.match(body(g, 'lightningAt: (point, casterId) =>'), /crew\.hitAt\([^)]*'Lightning'\)/);
+    assert.match(body(g, 'birdRay: (o, d, len, width, name) =>'), /crew\.hitRay\([^)]*, name\)/);
+    assert.match(g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode('))), /crew\.hitAt\([^;]*Bombardo/);
+    for (const f of ['TotalDestruction', 'Hellfire', 'Cannons', 'MagicWave', 'LevitationMaxima', 'Cauldrons']) assert.match(src(`src/game/${f}.js`), /crew\??\.(hitAt|hit)\??\.?\([^;]*(kind|'|HELLFIRE|d\.name)/, `${f}: its kind to the crew`);
+});
