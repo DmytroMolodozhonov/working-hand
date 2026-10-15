@@ -24,10 +24,14 @@ export const ICE_CASTLE = {
     R: 30, BLEND: 24, // m: the levelled zone and the ring blending it into the mountain
     TEST_R: 26, TEST_BLEND: 12,
     // (the author: «где очень высоко… там, где много камня и где реально не может вырасти трава»)
-    PEAK_MIN: 86, // layers: the castle's floor is never lower — a lower summit is raised into a crag of rock
-    MASSIF: 42, // m beyond the plateau: the rocky massif falling steeply from it to the mountain round it
-    TEST_PEAK: 66, TEST_MASSIF: 20, // (the creative test ground: its mountain grows a peak of rock and snow)
-    ROCK: 10, // m beyond the massif: still no grass, no trees — bare rock, scree and snow
+    PEAK_MIN: 76, // layers: the castle's floor is never lower (above the snow line, high above the grass)
+    TOP_MAX: 114, // layers: the world's ceiling is 120 — the peak stays under it
+    // As in «Холодное сердце»: the palace stands on a shelf of a great jagged mountain — higher snowy peaks
+    // and a cliff behind it, a gorge in front of it, and over the gorge the ice staircase (a bridge) from a
+    // ledge on the other side up to the palace. (IceCastleSite.shapeAt; the stair: iceCastlePlan.)
+    MOUNT: { TOP: 38, BACK: 78, E: 1.15, JAG: 16, GORGE: [3, 14], DEEP: 38, LEDGE: [15, 24], LEDGE_U: 8, LEDGE_DROP: 10, SPAN: 48, ROCK: 175, SPUR_END: 90, SPUR_FALL: 0.9 },
+    TEST_PEAK: 40, // (the creative test ground: the castle on its mountain by the pedestals, a smaller peak behind)
+    TEST_MOUNT: { TOP: 34, BACK: 52, E: 1.15, JAG: 9, GORGE: [3, 11], DEEP: 18, LEDGE: [12, 15], LEDGE_U: 5, LEDGE_DROP: 8, SPAN: 30, ROCK: 80, SPUR_END: 20, SPUR_FALL: 2.5 },
     HALL_R: 15, // m: the round hall (outer radius)
     PODIUM: 3, // layers: the palace stands on a podium this high above the plateau
 };
@@ -104,15 +108,59 @@ export function iceCastleSpot(seed, raw, busy, test = null) {
     return null;
 }
 
-/** The castle's massif: how high the rock stands `d` m from its middle (−∞: beyond it). Crags by `n`. */
-export function massifHeight(S, d, n, spread = 1) {
-    const R = S.test ? ICE_CASTLE.TEST_R : ICE_CASTLE.R, M = (S.test ? ICE_CASTLE.TEST_MASSIF : ICE_CASTLE.MASSIF) * spread;
-    if (d > R + M) return -Infinity;
-    if (d <= R) return S.F;
-    const t = (d - R) / M; // 0 at the plateau's edge … 1 at the massif's foot
-    // steep crags: a cliff under the rim, ledges, buttresses and gullies, falling to nothing at the foot
-    const h = S.F * (1 - Math.pow(t, 1.25)) + 10 * n * Math.min(1, t * 4) * (1 - t) - 1;
-    return Math.round(t < 0.5 ? Math.round(h / 3) * 3 : h); // (its upper half in ledges: snow lies on them)
+/** World offset (dx, dz) from the castle → its local {u across, v toward the gates}. */
+export function iceUV(S, dx, dz) {
+    switch (S.rot) {
+        case 1: return { u: -dz, v: dx };
+        case 2: return { u: -dx, v: -dz };
+        case 3: return { u: dz, v: -dx };
+        default: return { u: dx, v: dz };
+    }
+}
+
+/**
+ * The mountain the castle stands on (its top layer at a column whose local place is u, v; `h` the land
+ * as it is there; `n`, `r` noises −1…1). A great peak behind the castle, falling past it on every side;
+ * the castle's shelf; a gorge across its front, and the ledge beyond the gorge the ice stair starts from.
+ * → {h, lifted} (lifted: the mountain's rock there — bare, no grass).
+ */
+export function mountainAt(S, u, v, h, n, r, spur = 0) {
+    const M = S.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT, R = S.R;
+    const top = Math.min(S.F + M.TOP, ICE_CASTLE.TOP_MAX);
+    const dp = Math.hypot(u * 0.85, v + M.BACK); // (the peak behind the castle; the mountain a little wider than deep)
+    // the peak falling away: convex, through the castle's floor at the castle
+    let m = top - (top - S.F) * Math.pow(dp / M.BACK, M.E);
+    // spurs running down from the summit with gullies between them, crags on them — none on the shelf itself
+    const d = Math.hypot(u, v);
+    const away = Math.min(1, Math.max(0, (d - R * 0.8) / 12));
+    const ridge = 1 - Math.abs(spur); // (1 on a spur's crest, 0 deep in a gully)
+    m += away * M.JAG * ((ridge * ridge - 0.45) * 1.6 + 0.35 * n + 0.25 * r);
+    // the shelf's rocky shoulder: steep crags and ledges falling from its edge to the mountain's flank (no wall)
+    const sh = S.F - Math.max(0, d - R * 0.84) * (1.35 + 0.5 * Math.abs(r)) + 3.5 * n;
+    if (sh > m) m = Math.round(sh / 2) * 2 + (n > 0.3 ? 1 : 0);
+    // beyond the gorge: a spur of the mountain rising to the ledge the ice stair starts from (the way up)
+    const [l0, l1] = M.LEDGE;
+    if (v > R + l0 - 2 && v < R + M.SPUR_END) {
+        const spur = S.F - M.LEDGE_DROP - Math.max(0, v - R - l1) * M.SPUR_FALL - Math.max(0, Math.abs(u) - M.LEDGE_U) * 1.1 + 2.5 * n;
+        if (spur > m) m = spur;
+    }
+    m = Math.min(ICE_CASTLE.TOP_MAX, Math.round(m));
+    let out = Math.max(h, m), lifted = m >= h;
+    // the gorge across the front: deep, steep-sided, its ends rising into the mountain's flanks
+    const [g0, g1] = M.GORGE;
+    const vg0 = R + g0 - 3 + 2 * n, vg1 = R + g1 + 3 - 2 * r; // (its rims ragged)
+    if (v > vg0 && v < vg1 && Math.abs(u) < M.SPAN) {
+        const across = Math.min(v - vg0, vg1 - v) / 5; // 0 at its rims … 1 inside: steep, in rough steps
+        const ends = Math.max(0, (Math.abs(u) - M.SPAN * 0.6) / (M.SPAN * 0.4));
+        const floor = S.F - M.DEEP * Math.round(Math.min(1, across) * 4) / 4 * (1 - ends) + 3 * n;
+        if (out > floor) { out = Math.round(floor); lifted = true; }
+    }
+    // the ledge beyond the gorge (where the ice stair starts): flat, a little below the castle
+    if (v >= R + l0 && v <= R + l1 && Math.abs(u) <= M.LEDGE_U + (v - R - l0) * 0.4) {
+        const lv = S.F - M.LEDGE_DROP;
+        if (out < lv || out > lv + 2) { out = lv; lifted = true; }
+    }
+    return { h: out, lifted };
 }
 
 /** Local (u across, v toward the gates) → world, for a castle turned by `rot`. */
@@ -144,7 +192,7 @@ export function iceCastlePlan(S) {
     const HV = -2, HR = ICE_CASTLE.HALL_R; // the hall's centre (v) and radius
     const { WALL, GLOW, FLOOR, DARK } = ICE_BLOCK;
     // the snowy plateau
-    cyl(0, 0, R, -1, F, F, SNOW);
+    cyl(0, 0, R * 0.8, -1, F, F, SNOW);
     // the podium and the hall's floor (the snowflake floor)
     cyl(0, HV, HR + 2, -1, F + 1, P, DARK);
     cyl(0, HV, HR - 1, -1, P, P, FLOOR);
@@ -225,9 +273,24 @@ export function iceCastlePlan(S) {
         for (let i = 0; i < 4; i++) cyl(u, v, 2.1 - i * 0.5, -1, top + 1 + i * 2, top + 2 + i * 2, WALL);
         cyl(u, v, 0.4, -1, top + 9, top + 11, GLOW);
     }
+    // the ice staircase over the gorge (as in the film): from the ledge beyond the gorge up to the castle's
+    // shelf — a deck of ice one block thick, a keel under it, lace railings of glowing ice
+    {
+        const MM = S.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT;
+        const end = MM.LEDGE[0], drop = MM.LEDGE_DROP;
+        for (let k = 0; k <= end; k++) {
+            const v = R + k, L = F - Math.round((k / end) * drop);
+            box(-2, 2, v, v, L, L, k % 3 === 0 ? FLOOR : WALL);
+            box(-1, 1, v, v, L - 2, L - 1, DARK);
+            for (const s of [-3, 3]) {
+                if (k % 2 === 0) box(s, s, v, v, L, L + 1, DARK);
+                box(s, s, v, v, L + 2, L + 2, GLOW);
+            }
+        }
+    }
     // crystals of ice standing in the snow round the palace (not on the way to the gates)
     for (let i = 0; i < 12; i++) {
-        const a = rng() * TAU, d = R * (0.7 + rng() * 0.25);
+        const a = rng() * TAU, d = R * (0.55 + rng() * 0.22);
         const u = Math.round(Math.sin(a) * d), v = Math.round(Math.cos(a) * d);
         if (Math.abs(u) < 7 && v > 0) continue;
         const h = 2 + Math.floor(rng() * 4);
@@ -276,32 +339,40 @@ export class IceCastleSite {
         // (only the plateau: round it the massif of rock falls away by itself — liftAt)
         const dx = ix - k.x, dz = iz - k.z;
         if (Math.abs(dx) > k.R || Math.abs(dz) > k.R || dx * dx + dz * dz > k.R * k.R) return null;
+        // (the shelf's edge ragged, not a drawn circle; the hall, the stair and the gates always on it)
+        const a = Math.atan2(dz, dx), rr = k.R * (0.84 + 0.16 * this._crag(Math.cos(a) * 1.8 - 21, Math.sin(a) * 1.8 + 33));
+        if (dx * dx + dz * dz > rr * rr && Math.hypot(dx, dz) > ICE_CASTLE.HALL_R + 10) return null;
         return { castle: k, w: 1, ice: true };
     }
 
-    /** The rock massif under the castle at a column (its top layer), or −∞ beyond it. */
-    liftAt(ix, iz) {
+    /**
+     * The land at a column as the castle's mountain makes it (`h` the land without it): its peak behind the
+     * castle, its crags, the gorge in front, the ledge beyond. Sets this.lifted (its own rock there).
+     */
+    shapeAt(ix, iz, h) {
         const k = this.plan;
-        if (!k) return -Infinity;
-        const M = k.R + (k.test ? ICE_CASTLE.TEST_MASSIF : ICE_CASTLE.MASSIF);
-        const dx = ix - k.x, dz = iz - k.z;
-        if (Math.abs(dx) > M || Math.abs(dz) > M) return -Infinity;
-        const d = Math.hypot(dx, dz);
-        if (d > M) return -Infinity;
-        // (not a drum: spurs and bays round it, crags and gullies down its sides)
-        const a = Math.atan2(dz, dx);
-        const spread = 0.6 + 0.5 * (0.5 + 0.5 * this._crag(Math.cos(a) * 2.2 + 30, Math.sin(a) * 2.2 - 12));
-        const n = 0.6 * this._crag(ix / 7, iz / 7) + 0.4 * Math.abs(this._crag(Math.cos(a) * 6 - 5, Math.sin(a) * 6 + 9)) * 2 - 0.4;
-        return massifHeight(k, d, n, spread);
+        this.lifted = false;
+        if (!k) return h;
+        const M = k.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT;
+        const dx = ix - k.x, dz = iz - k.z, L = M.BACK * 2.4;
+        if (Math.abs(dx) > L || Math.abs(dz) > L) return h;
+        const { u, v } = iceUV(k, dx, dz);
+        const n = this._crag(ix / 11, iz / 11) * 0.7 + this._crag(ix / 4, iz / 4 + 17) * 0.3;
+        const r = this._crag(ix / 26 + 40, iz / 26 - 40);
+        // (spurs radiating from the summit behind the castle: a noise round it, stretched along the slope)
+        const pu = u * 0.85, pv = v + M.BACK, a = Math.atan2(pv, pu), dp = Math.hypot(pu, pv);
+        const spur = this._crag(Math.cos(a) * 3.2 + dp / 70, Math.sin(a) * 3.2 - dp / 70);
+        const o = mountainAt(k, u, v, h, n, r, spur);
+        this.lifted = o.lifted;
+        return o.h;
     }
 
-    /** Bare rock and snow here — no grass, no trees (the massif and a ring round it)? */
+    /** Bare rock and snow here — no grass, no trees (near the castle; further only on its mountain's own rock)? */
     rocky(ix, iz) {
         const k = this.plan;
         if (!k) return false;
-        const M = k.R + (k.test ? ICE_CASTLE.TEST_MASSIF : ICE_CASTLE.MASSIF) + ICE_CASTLE.ROCK;
-        const dx = ix - k.x, dz = iz - k.z;
-        return Math.abs(dx) <= M && Math.abs(dz) <= M && dx * dx + dz * dz <= M * M;
+        const dx = ix - k.x, dz = iz - k.z, R = (k.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).ROCK * 0.45;
+        return dx * dx + dz * dz <= R * R;
     }
 
     partsForChunk(cx, cz, C) {

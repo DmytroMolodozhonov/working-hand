@@ -46,6 +46,9 @@ test('the Ice Castle: its queen, snowmen, monsters; the Ice Rod', async () => {
         I.hit(s, 1, 'snow');
         out.snowAfter = s.hp;
         // a snowflake on me: −1 HP (the free world's rule: Creative never hurts — for the test it does)
+        for (const c of I.list) c.stunT = 99; // (only the one snowflake: the castle's creatures stand still)
+        for (let i = I.shots.length - 1; i >= 0; i--) I._dropShot(i);
+        I.fxs.length = 0;
         const mode = g.config.mode;
         g.config.mode = 'survival';
         const hp0 = g.playerHP;
@@ -58,7 +61,7 @@ test('the Ice Castle: its queen, snowmen, monsters; the Ice Rod', async () => {
         const hurt = [];
         const orig = I._hurtMe.bind(I);
         I._hurtMe = (dmg, kind, from, push) => { hurt.push(kind); orig(dmg, kind, from, push); };
-        for (const c of I.list) if (c.type !== 'monster') c.stunT = 99; // (only the monsters this time)
+        for (const c of I.list) c.stunT = c.type === 'monster' ? 0 : 99; // (only the monsters this time)
         ch.group.position.set(P.gate.x + (P.gate.out.x - P.gate.x) * 0.3, P.gate.y + 2.2, P.gate.z + (P.gate.out.z - P.gate.z) * 0.3);
         const g0 = Math.hypot(ch.group.position.x - P.gate.x, ch.group.position.z - P.gate.z);
         await until(() => hurt.includes('punch'), 60000);

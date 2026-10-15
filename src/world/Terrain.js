@@ -518,8 +518,9 @@ export class TerrainData {
                 let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)
                 const kind = raw.kind;
                 const mesa = raw.mesa, emer = raw.emer, moon = raw.moon, fant = raw.fant;
-                // (the Ice Castle's peak of rock rises out of the mountain: IceCastle.liftAt)
-                if (ice) { const m = ice.liftAt(ix, iz); if (m > h) { h = m; wet = 0; sea = false; beach = false; } }
+                // (the Ice Castle's mountain: its peak, crags, the gorge, the ledge — IceCastle.shapeAt)
+                fn.iceRock = false;
+                if (ice) { const m = ice.shapeAt(ix, iz, h); if (ice.lifted) { h = m; wet = 0; sea = false; beach = false; fn.iceRock = true; } }
                 const land = idx.landAt(ix, iz);
                 fn.sea = sea; fn.beach = beach; fn.kind = kind;
                 fn.mesa = mesa; fn.emer = emer; fn.moon = moon; fn.fant = fant;
@@ -536,7 +537,7 @@ export class TerrainData {
                 const F = land.castle.F;
                 return land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w));
             };
-            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND; fn.iceRock = false;
             fn.mesa = fn.emer = fn.moon = fn.fant = 0;
             this.heightAt = fn;
         } else this.heightAt = raw;
@@ -678,6 +679,7 @@ export class TerrainData {
         const kinds = _lush.kinds || (_lush.kinds = new Uint8Array(cols));
         const fx = _lush.fx, clim = _lush.clim, w = _lush.w, col3 = _lush.col3;
         const water = _lush.water || (_lush.water = new Int16Array(cols));
+        const iceR = _lush.iceR || (_lush.iceR = new Uint8Array(cols)); // (the Ice Castle's mountain: bare rock)
         let seaMask = null;
         for (let pz = 0; pz < P; pz++) {
             for (let px = 0; px < P; px++) {
@@ -687,6 +689,7 @@ export class TerrainData {
                 if (px === 0 || pz === 0 || px === P - 1 || pz === P - 1) continue;
                 const col = (pz - 1) * CHUNK + (px - 1);
                 water[col] = H.water;
+                iceR[col] = H.iceRock ? 1 : 0;
                 flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0);
                 kinds[col] = H.kind || 0;
                 fx.mesa = H.mesa || 0; fx.emer = H.emer || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
@@ -712,10 +715,12 @@ export class TerrainData {
                 const snow = land.snowLine(x, z, _lush.T[col]);
                 snowL[col] = Math.round(snow);
                 const m = mesa[col] / 255;
-                if (this.iceCastle?.rocky(x, z)) {
+                if (iceR[col] || this.iceCastle?.rocky(x, z)) {
                     // the Ice Castle's peak: no grass up there — snow where it can lie, bare rock and scree on the crags
-                    if ((slope < 2 && (h >= snow - 12 || r < 0.6)) || (slope < 4 && r < (h >= snow - 16 ? 0.55 : 0.3))) { surf = BLOCK.SNOW; soil = BLOCK.STONE; deep = 1; }
-                    else { surf = r < 0.18 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; deep = 0; }
+                    // (snow in drifts, not speckles: clumps of 4 m, on the gentle ground; the crags bare)
+                    const patch = hashLand(x >> 2, z >> 2, this.seed + 91);
+                    if (slope <= 1 || (slope === 2 && patch < 0.6) || (slope === 3 && patch < 0.2)) { surf = BLOCK.SNOW; soil = BLOCK.STONE; deep = 1; }
+                    else { surf = patch > 0.85 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; deep = 0; }
                 } else if (h >= snow - SNOW_BAND - 6 && snowAt(h, snow, hh, i0, P, slope, land.snowPatch(x, z), r)) { surf = BLOCK.SNOW; soil = slope >= 2 ? BLOCK.STONE : BLOCK.DIRT; deep = 2; }
                 else if (kind === KIND.MESA && r < smoothstep(0.15, 0.5, m) * 1.1) { /* (at its edge the scarlet sand and the grass mingle) */ surf = slope >= 2 ? BLOCK.STONE : r < 0.12 * (1 - m) + 0.05 ? BLOCK.GRASS : BLOCK.SAND; soil = surf === BLOCK.SAND ? BLOCK.SAND : BLOCK.STONE; deep = 2; }
                 else if (slope >= 3 || (slope >= 2 && h > 24)) { surf = r < 0.12 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; deep = 0; }
@@ -788,7 +793,7 @@ export class TerrainData {
                 const b = BIOMES[this.biomeAt(tx, tz)];
                 if (roll > b.trees * grove(tx, tz)) continue;
                 const h = H(tx, tz);
-                if (h < 1 || H.water || H.beach || H.kind === KIND.MESA) continue;
+                if (h < 1 || H.water || H.beach || H.kind === KIND.MESA || H.iceRock) continue; // (the Ice Castle's mountain: bare rock)
                 const kind = b.kinds[Math.floor(hashLand(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * b.kinds.length)];
                 if (h > LUSH.TREE_LINE + (kind === 2 ? 8 : 0)) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
