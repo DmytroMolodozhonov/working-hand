@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Перенос сохранений</title>
+    <!-- Opened once by the server in the user's usual browser profile (off the screen): sends the
+         game's saves to the game's own window (src/core/ProfileTransfer.js) and closes itself. -->
+</head>
+<body>
+    <p>Переношу сохранения игры…</p>
+    <script type="module">
+        import { exportProfile } from './src/core/ProfileTransfer.js';
+        try {
+            const data = await exportProfile();
+            await fetch('/api/profile/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        } catch (e) { console.warn('[Профиль] не перенесено', e); }
+        window.close();
+    </script>
+</body>
+</html>

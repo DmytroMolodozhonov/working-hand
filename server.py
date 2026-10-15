@@ -570,6 +570,22 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 ok = local and window_action(str(data.get("action", "")), data)
                 return self._json(200, {"ok": ok})
 
+            if path.startswith("/api/profile/"):
+                # the saves carried over from the user's browser profile into the game's own window (zns_browser.py)
+                if not is_own_page(self.client_address[0], self.headers):
+                    return self._json(403, {"status": "error", "message": "only the game on this computer"})
+                tr = profile_transfer()
+                if tr is None:
+                    return self._json(200, {"state": "none"})
+                if path == "/api/profile/transfer":
+                    return self._json(200, tr.status(self.server.server_address[1]))
+                if path == "/api/profile/export":
+                    length = int(self.headers.get("Content-Length") or 0)
+                    if length <= 0 or length > PROFILE_MAX:
+                        raise ValueError("Bad request body size")
+                    return self._json(200, tr.receive(json.loads(self.rfile.read(length).decode("utf-8"))))
+                return self._json(404, {"status": "error"})
+
             if path.startswith("/api/tts/"):
                 # the villagers' neural voices as a program of its own (tts_native.py): this computer's game only
                 if not is_own_page(self.client_address[0], self.headers):
@@ -681,6 +697,25 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(500, {"status": "error", "message": str(e)})
 
 
+PROFILE_MAX = 400 * 1024 * 1024  # all the saved worlds of the old browser profile at once
+_transfer = {}
+
+
+def profile_transfer():
+    """The saves' transfer into the game's own browser profile (launcher/zns_browser.py), or None."""
+    if "t" not in _transfer:
+        try:
+            here = os.path.join(ROOT, "launcher")
+            if here not in sys.path:
+                sys.path.insert(0, here)
+            import zns_browser
+            _transfer["t"] = zns_browser.Transfer(browsers=_browser_candidates)
+        except Exception as e:  # noqa: BLE001
+            print(f"  (перенос сохранений недоступен: {e})")
+            _transfer["t"] = None
+    return _transfer["t"]
+
+
 def window_action(action, data=None):
     """The game's own window on Windows (no frame, minimise, close, move): launcher/zns_window.py."""
     try:
@@ -788,7 +823,7 @@ def open_game_window(url):
         import subprocess
         for exe in _browser_candidates():
             _prefer_strong_gpu(exe)
-            # (the usual browser profile: saved worlds, the hero and the settings live there)
+            # (the game's own browser profile; the saves come over from the usual one once — /api/profile/…)
             try:
                 zw, before = None, set()
                 try:
@@ -799,15 +834,21 @@ def open_game_window(url):
                     before = zw.app_windows_now()
                 except Exception:  # noqa: BLE001
                     zw = None
-                subprocess.Popen([
-                    # (off the screen first: the page cuts the frame away and brings it to the middle — /api/window)
-                    exe, f"--app={url}", "--window-size=1180,780", "--window-position=-6000,-6000",
-                    "--force_high_performance_gpu", "--ignore-gpu-blocklist",
-                    # the camera network's page (ai.html) gets a process of its own — it never stops the game
-                    "--site-per-process",
-                    "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
-                    "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
-                ])
+                try:
+                    # the game's own process of the engine: its flags always hold (launcher/zns_browser.py)
+                    import zns_browser
+                    cmd = zns_browser.window_cmd(exe, url)
+                except Exception:  # noqa: BLE001
+                    cmd = [
+                        # (off the screen first: the page cuts the frame away and brings it to the middle — /api/window)
+                        exe, f"--app={url}", "--window-size=1180,780", "--window-position=-6000,-6000",
+                        "--force_high_performance_gpu", "--ignore-gpu-blocklist",
+                        # the camera network's page (ai.html) gets a process of its own — it never stops the game
+                        "--site-per-process",
+                        "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+                        "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
+                    ]
+                subprocess.Popen(cmd)
                 print(f"  Игра открыта в отдельном окне ({os.path.basename(exe)}, мощная видеокарта)")
                 if zw:
                     # (the new window is hidden the moment it appears: seen only cut to its final look)

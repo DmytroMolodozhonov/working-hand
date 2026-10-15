@@ -48,7 +48,7 @@ REPO = "DmytroMolodozhonov/working-hand"
 BRANCH = "main-fbxy0j"
 HERE = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
-LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html", "zns_window.py")
+LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html", "zns_window.py", "zns_browser.py")
 LOGO_FILES = (("assets/logo/logo.ico", "logo.ico"), ("assets/logo/logo-256.png", "logo.png"))
 OLD_DESKTOP_BATS = ("Зомби не спят.bat", "Волшебство только начинается.bat")  # the old icons (a black window)
 NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: helper programs never flash a black window
@@ -460,7 +460,13 @@ def open_window(url):
                 before = zns_window.app_windows_now()
             except Exception:  # noqa: BLE001
                 zns_window, before = None, set()
-            subprocess.Popen(window_args(exe, url))
+            try:
+                # the game's own process of the engine (its flags always hold; zns_browser.py)
+                import zns_browser
+                cmd = zns_browser.window_cmd(exe, url)
+            except Exception:  # noqa: BLE001
+                cmd = window_args(exe, url)
+            subprocess.Popen(cmd)
             if zns_window:
                 # (the new window is hidden the moment it appears: seen only cut to its final look)
                 threading.Thread(target=zns_window.hide_new_window, args=(before,), daemon=True).start()

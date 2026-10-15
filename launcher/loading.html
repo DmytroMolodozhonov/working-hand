@@ -225,7 +225,7 @@
         if (s.done && !leaving) {
             leaving = true;
             // the game now answers on this same address: open it in this window
-            setTimeout(() => location.replace('/'), 400);
+            setTimeout(() => location.replace('/' + location.search), 400); // (?app=own: the game's own window)
         }
     }
 

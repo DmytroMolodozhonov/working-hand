@@ -16,3 +16,4 @@ Paths under `/tmp/...` mentioned inside were scratch experiments on another mach
 | `book-scrolls-menu-misc.md` | The book in the hands, scrolls, saved worlds menu, small fixes |
 | `talk.md` | Villagers really talk: a small neural net with game actions (tool calling), the king's orders, the advisor |
 | `voices.md` | Villager voices: Supertonic 3 neural TTS (5 female + 5 male), gender rules, the research behind it |
+| `desktop.md` | From the browser to a real desktop program: what eats the frame (measured), Electron/WebGPU/native/Godot compared, the staged plan (stage 1 — the game's own engine process — done) |
