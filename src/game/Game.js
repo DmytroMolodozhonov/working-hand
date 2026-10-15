@@ -71,6 +71,7 @@ import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
+import { captureLegacy, wipeHero } from './Legacy.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
 import { Blackbeard } from './Blackbeard.js';
@@ -2359,10 +2360,15 @@ export class Game {
      */
     onLocalDeath(text, byId) {
         const manaMax = this.mana?.max; // (told to the others: a duel won against me is worth this much)
+        // (the author: «умер — всё»: the hero starts anew in the same world; all they grew lies in the body — Legacy.js)
+        const legacy = this.config.mode !== 'creative' ? captureLegacy(this) : null;
         this.mana?.onDeath(); // all the mana grown with practice is lost
-        this.achievements?.onDeath(); // … and the achievements with their mana cells (the author: death takes them)
+        if (this.config.mode !== 'creative') {
+            this.achievements?.onDeath(); // … the achievements with their mana cells
+            wipeHero(this); // … the burnt scrolls and the books' spells
+        }
         this.runner?.onDeath(); // (the running book's quickness is lost)
-        this.death?.playerDied(byId, text); // the body stays, everything drops (Death.js); game.onDeath hooks
+        this.death?.playerDied(byId, text, legacy); // the body stays (with the legacy), everything drops (Death.js); game.onDeath hooks
         if (this.sync) this.sync.died(byId, manaMax);
         this.castleLife?.playerDied(this.localId);
         this.ships?.onLocalDeath(); // (lets go of a ship's wheel)

@@ -106,10 +106,10 @@ export class ArmorSystem {
         g.fx?.lightFlash?.(_v.set(c.x, c.y + 1.2, c.z), 0xffd36e, 2, 0.4, 12);
     }
 
-    /** Everything worn comes off (death: it drops with the rest — but the High Mage's suit stays on). */
-    takeOffAll() {
-        const out = SLOTS.map((s) => this.worn[s]).filter((it) => it && !it.archmage);
-        for (const s of SLOTS) if (!this.worn[s]?.archmage) this.worn[s] = null;
+    /** Everything worn comes off (the High Mage's suit only with `suit` — death: all of it drops with the rest). */
+    takeOffAll({ suit = false } = {}) {
+        const out = SLOTS.map((s) => this.worn[s]).filter((it) => it && (suit || !it.archmage));
+        for (const s of SLOTS) if (suit || !this.worn[s]?.archmage) this.worn[s] = null;
         this._changed();
         return out;
     }

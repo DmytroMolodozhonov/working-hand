@@ -5,10 +5,12 @@
  *    (a skeleton) are left (BONES_S, 20 minutes); then they crumble to dust.
  *  - A player's things ALL drop at the body: the slots (the backpack's slots
  *    too), what the hands hold, the backpack itself, coins, scrolls, wands,
- *    shields, weapons, the gathered blocks. Anybody can take them: by hand,
- *    with «Gather» (everything around the body into the slots), with «Акцио».
- *    The player comes back with only the plain wooden wand (Inventory
- *    ensureStarterWand on respawn). Learned spells stay — they are not things.
+ *    shields, weapons, the gathered blocks, the armour worn and the High Mage's suit. Anybody
+ *    can take them: by hand, with «Gather» (everything around the body into the slots), with «Акцио».
+ *    The player comes back with only the plain wooden wand (Inventory ensureStarterWand on
+ *    respawn) and as a new hero: all they grew (scrolls, spells, mana, achievements) lies in the
+ *    body as its legacy (`b.lg`, Legacy.js) — only they can take it back: a hand closed on their
+ *    own body, or «Gather» at it. Such a body never crumbles to dust (bones stay) until it is taken.
  *  - Knights and the king (the armed people of the castles): their sword,
  *    their shield and their coins drop the same way; their body stays, then bones.
  *  - Creative: nobody dies there (no damage), and if it ever happens the
@@ -30,6 +32,7 @@ import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET } from 
 import { rosterEntry } from './CastleLife.js';
 import { newUid } from './ItemTypes.js';
 import { VoxelCharacter } from '../entities/Character.js';
+import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 
 export const DEATH = {
     BODY_S: 300, // s the body lies (5 minutes)
@@ -150,7 +153,7 @@ export class DeathSystem {
 
     // ------------------------------------------------------------ players
     /** My player was killed: the body stays, everything drops (not in creative), the hooks run. */
-    playerDied(byId = null, text = '') {
+    playerDied(byId = null, text = '', legacy = null) {
         const g = this.game;
         const ch = g.character;
         const p = ch.group.position;
@@ -161,6 +164,7 @@ export class DeathSystem {
             const drops = this.takeEverything();
             this.scatter(drops, { x: p.x, y, z: p.z });
             const b = { id: 'p' + (g.localId || 'me') + '_' + Date.now().toString(36), k: 'p', who: g.localId || 'local', name: g.net?.name || null, x: p.x, y, z: p.z, yaw, age: 0, look: g.config?.look || null };
+            if (legacy) b.lg = legacy; // (all the hero grew: theirs to take back — Legacy.js)
             this.addBody(b, ch.group);
             g.sync?.deathBody?.(this._wire(b));
         }
@@ -176,13 +180,13 @@ export class DeathSystem {
     takeEverything() {
         const g = this.game, inv = g.inventory, it = g.items;
         const held = [];
-        const keep = []; // (the High Mage's suit stays with its owner: Achievements.js)
-        if (it) for (const side of ['right', 'left']) if (it.held[side]) { const x = it.releaseHand(side); (x?.archmage ? keep : held).push(x); }
+        // (everything — the High Mage's suit too: the author, «умер — всё»; it lies by the body for the taking)
+        if (it) for (const side of ['right', 'left']) if (it.held[side]) held.push(it.releaseHand(side));
         // the coin pouches on the belt drop too, each as it was (CoinBelt)
         // (the magic pouch drops whole, with all its coins in it)
         if (inv?.purse?.any) held.push(...inv.purse.takeAll());
-        const slots = inv ? inv.slots.map((x) => (x?.archmage ? (keep.push(x), null) : x)) : [];
-        held.push(...(g.armor?.takeOffAll() || [])); // (the armour and the robe worn drop too)
+        const slots = inv ? [...inv.slots] : [];
+        held.push(...(g.armor?.takeOffAll({ suit: true }) || [])); // (the armour, the robe and the suit worn drop too)
         let backpack = null;
         if (it?.worn.backpack) {
             const bp = it.worn.backpack;
@@ -197,7 +201,6 @@ export class DeathSystem {
             inv.inHand = null;
             inv.selected = -1;
             if (backpack) inv.setExtraSlots(0);
-            for (const x of keep) inv.storeItem?.(x);
             inv._render?.();
         }
         return lootOfPlayer({ slots, held, backpack });
@@ -372,12 +375,17 @@ export class DeathSystem {
         // (a long war leaves many: the oldest beyond MAX_BODIES go — each is a whole model in the scene)
         if (this.bodies.size > DEATH.MAX_BODIES) {
             let old = null;
-            for (const b of this.bodies.values()) if (!b.lev && (!old || b.age > old.age)) old = b;
+            for (const b of this.bodies.values()) if (!b.lev && !b.lg && (!old || b.age > old.age)) old = b; // (never a body with its owner's legacy)
             if (old) this.removeBody(old.id, false);
         }
         const me = g.character?.group.position;
+        const mine = legacyOwner(g);
         for (const b of [...this.bodies.values()]) {
             b.age += dt;
+            if (b.lg) {
+                b.age = Math.min(b.age, DEATH.BODY_S + DEATH.BONES_S - 1); // (bones stay till the legacy is taken)
+                if (b.lg.owner === mine && me) this._legacyNear(b, me, dt);
+            }
             const st = bodyStage(b.age);
             if (st === 'gone') { this.removeBody(b.id); continue; }
             // (far away a body is not drawn: no draw calls, no shadow for something nobody can see)
@@ -502,6 +510,47 @@ export class DeathSystem {
         b.netAt = performance.now();
     }
 
+    // ------------------------------------------------------------ the legacy (Legacy.js)
+    /** My own body with my legacy, near me: golden sparks over it; a hand closing on it takes it back. */
+    _legacyNear(b, me, dt) {
+        const g = this.game;
+        const d = Math.abs(b.x - me.x) + Math.abs(b.z - me.z);
+        if (d > LEGACY.GLOW_R) return;
+        if ((b.glowT = (b.glowT || 0) - dt) <= 0 && g.fx) {
+            b.glowT = 0.25;
+            g.fx.spark(_v.set(b.x + (Math.random() - 0.5) * 1.2, b.y + 0.4, b.z + (Math.random() - 0.5) * 1.2), 0xffd36e, 0.1, _v2.set(0, 1.2, 0), 1.0);
+        }
+        if (d > 6 || g.combat?.dead || g.isDeadLocal || !g.currentPose || !g.weapons?.palmFrame) return;
+        const ch = g.character;
+        for (const side of ['right', 'left']) {
+            if (g.items?.held?.[side] || g.weapons.hands?.[side]?.held) continue;
+            const ws = g.weapons.hands[side];
+            const G = g.weapons.palmFrame(side, this._pfs || (this._pfs = {})).G;
+            if (G.distanceTo(_v.set(b.x, b.y + 0.4, b.z)) > LEGACY.TOUCH) continue;
+            const closing = ch.getGripCurl?.(side) > 0.55 && (g.now() - ws.lastOpen < 900 || g.weapons.frame - ws.lastOpenFrame <= 12);
+            if (closing) { this.takeLegacy(b); return; }
+        }
+    }
+
+    /** I take my legacy back from my body (my hand, «Gather»): everybody is told the body is empty now. */
+    takeLegacy(b) {
+        const g = this.game;
+        if (!b?.lg || b.lg.owner !== legacyOwner(g)) return false;
+        const rec = b.lg;
+        delete b.lg;
+        absorbLegacy(g, rec);
+        if (g.fx) for (let i = 0; i < 50; i++) g.fx.spark(_v.set(b.x, b.y + 0.5, b.z), i % 2 ? 0xffd36e : 0xfff2b0, 0.13, _v2.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3), 1.1);
+        g.sound?.playMagic?.(null, 1);
+        g.sync?.bodyLegacy?.(b.id);
+        return true;
+    }
+
+    /** (network) Its owner took the legacy from this body. */
+    onNetLegacy(id) {
+        const b = this.bodies.get(id);
+        if (b) delete b.lg;
+    }
+
     // ------------------------------------------------------------ «Gather»
     /**
      * «Gather» pointed at things lying about (at a body): everything within a
@@ -525,6 +574,9 @@ export class DeathSystem {
         if (!best) return null;
         const c = best.p;
         let n = 0, full = false;
+        // (my own body there: «Gather» takes my legacy back too)
+        const mine = legacyOwner(g);
+        for (const b of this.bodies.values()) if (b.lg?.owner === mine && _v.set(b.x, b.y + 0.4, b.z).distanceTo(c) <= DEATH.GATHER_R && this.takeLegacy(b)) n++;
         for (const w of [...(g.weapons?.weapons || [])]) {
             if (!this._freeWeapon(w) || w.position.distanceTo(c) > DEATH.GATHER_R) continue;
             const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0 };
@@ -551,7 +603,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0 };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */

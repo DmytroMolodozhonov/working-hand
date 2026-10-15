@@ -13,8 +13,9 @@
  *     feet) with a golden flash; put on by hand like any robe; every spell does 40 % less harm.
  *   • Death takes them (the author: «смерть их забирает»): all the achievements, their mana cells,
  *     their quicker mana and «Высший маг» go (onDeath) — as the mana grown with practice does
- *     (Mana.onDeath). They are won again by beating the bosses again. The High Mage's suit is given
- *     once only (it stays a thing of yours; only a High Mage can put it on — Armor.js).
+ *     (Mana.onDeath). They lie in the body (Legacy.js: its owner takes them back) or are won again by
+ *     beating the bosses again. The High Mage's suit is given once only: on death it drops by the
+ *     body as any thing (Death.takeEverything); only a High Mage can put it on (Armor.js).
  *     They live with the player (WorldSave.playerSnapshot → `ach`), as the mana and the things do.
  *
  * Who gets it (the author: «убийство Королевы можно втроём, и будет считаться всем» — the same

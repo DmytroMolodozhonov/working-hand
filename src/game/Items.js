@@ -1034,7 +1034,7 @@ export class ItemSystem {
             g.combat.addMaxFatigue?.(item.amount);
         }
         if (!g.combat?.enabled) g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
-        g.hud.setVoice?.(item.stat === 'hp' ? `📜🔥 Свиток сгорел: здоровье +${item.amount} навсегда` : `📜🔥 Свиток сгорел: сила +${item.amount} навсегда`, true);
+        g.hud.setVoice?.(item.stat === 'hp' ? `📜🔥 Свиток сгорел: здоровье +${item.amount}` : `📜🔥 Свиток сгорел: сила +${item.amount}`, true);
         // the magic of the scroll swirls around the hero
         const c = g.character.group.position;
         for (let i = 0; i < 60; i++) {

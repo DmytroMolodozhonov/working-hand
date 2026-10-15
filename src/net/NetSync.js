@@ -34,7 +34,8 @@
  *   mcred    host→player  your last blow killed a magical creature (kind) / a wizard you beat in a duel (wiz, mm): Mana.js
  *   achc     host→player  you took part in a kill worth an achievement (k): Achievements.js
  *   ach      player→all   my achievements: a new one (got) / how many I have (state) — «Высший маг» over my name
- *   dbody    any→all      a body stays where somebody died (Death.js; the host keeps the list)
+ *   dbody    any→all      a body stays where somebody died (Death.js; the host keeps the list; `lg`: its owner's legacy — Legacy.js)
+ *   dblg     any→all      its owner took the legacy back from that body
  *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
  *   clash    host→all     two charges are pushing (meeting point p); clashend: result
  *   dmcut / dmlimb / dmst / dmresc   a blade cut off a limb / the head (see Dismember.js)
@@ -550,6 +551,11 @@ export class NetSync {
         this.net.send({ t: 'dbody', b }, true);
     }
 
+    /** I took my legacy back from my body (Legacy.js): it is empty now for everybody. */
+    bodyLegacy(id) {
+        this.net.send({ t: 'dblg', id }, true);
+    }
+
     /** A body carried by my «Левиоса» (air) / where it landed. */
     bodyMove(b, q, air) {
         this.net.send({ t: 'bmv', id: b.id, x: r3(b.x), y: r3(b.y), z: r3(b.z), q: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)], a: air ? 1 : 0 }, true);
@@ -1045,6 +1051,7 @@ export class NetSync {
                 break;
             }
             case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
+            case 'dblg': if (typeof m.id === 'string') g.death?.onNetLegacy(m.id); break;
             case 'bmv': if (typeof m.id === 'string') g.death?.onNetMove(m); break;
             case 'pdead': {
                 if (m.by === this.me) break;
