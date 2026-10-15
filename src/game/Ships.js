@@ -245,7 +245,7 @@ export class Ships {
             let d = Infinity;
             for (const pl of players) d = Math.min(d, Math.hypot(pl.x - s.st.x, pl.z - s.st.z));
             if (!s.awake && d < WAKE) { if (!busy()) this.wake(s); }
-            else if (s.awake && d > (s.cls.magic ? SLEEP_FAR : SLEEP)) this.sleep(s); // (the black ship hunting far off stays awake)
+            else if (s.awake && d > (s.hunting ? SLEEP_FAR : SLEEP)) this.sleep(s); // (the black ship hunting far off stays awake — Blackbeard.js)
             // (asleep: soon woken — its model is built ahead, a little a frame; gone far again — dropped)
             if (!s.awake && s.preModel && d > PREBUILD + 150) { s.preModel.dispose(); s.preModel = null; s.preReady = false; this.crew.dropPre?.(s); }
             if (!s.awake && d < PREBUILD && d < preD && !s.preReady) { pre = s; preD = d; }

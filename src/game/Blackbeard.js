@@ -198,6 +198,7 @@ export class Blackbeard {
         }
         if (s.state === 'sinking' || s.state === 'wreck') return;
         this._phaseT += dt;
+        s.hunting = this.phase !== 'patrol'; // (Ships: kept awake further off while after its prey)
         // its prey
         const prey = this._lookout(s, now);
         if (this.phase === 'patrol' && prey) { this.prey = prey; this.phase = 'hunt'; this.broadsides = 0; this._phaseT = 0; this._shout(pick(SHOUT.spot)); this._warn(prey); }
