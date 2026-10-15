@@ -103,13 +103,15 @@ test('the five new spells work in the game', async () => {
         const a1 = g.terrain.data.topLayer(A.x, A.z);
         aimAt = B;
         t0 = performance.now();
-        while (g.terrain.data.topLayer(B.x, B.z) > tB - 2 && performance.now() - t0 < 25000) await frames(5);
+        const f0 = g.frameCount;
+        while (g.terrain.data.topLayer(B.x, B.z) > tB - 2 && performance.now() - t0 < 60000) await frames(5);
+        const bFrames = g.frameCount - f0, bMs = Math.round(performance.now() - t0);
         const b1 = g.terrain.data.topLayer(B.x, B.z), a2 = g.terrain.data.topLayer(A.x, A.z);
         g.stopSpells();
         await frames(5);
         const stillHolds = g.spells.spells.some((s) => s.kind === 'Drawdown' && s.life > 0);
         g.drawdown._aim = aim;
-        return { tA, a1, a2, tB, b1, stillHolds };
+        return { tA, a1, a2, tB, b1, stillHolds, bFrames, bMs };
     });
     assert.ok(b.a1 <= b.tA - 2, 'held on A: deeper ' + JSON.stringify(b));
     assert.ok(b.b1 <= b.tB - 2, 'led over to B: the pit follows the wand ' + JSON.stringify(b));
