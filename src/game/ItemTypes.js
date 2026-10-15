@@ -338,9 +338,12 @@ export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE, royal
     if (royal && r() < 0.6) out.push(rollKeyItem(r));
     // a piece of armour now and then (never a whole set; magic ones half as often — ArmorTypes)
     const arm = rollChestArmor(r, { royal });
+    if (royal) { if (arm) out.push(arm); if (r() < 0.3) out.push(rollPlainItem(r)); return out; }
+    // (elsewhere it takes the place of one plain thing — still 1–3 things; a magic piece is precious:
+    //  never beside another precious thing — then it is a plain one)
+    if (arm && out.length && arm.magic) { arm.magic = false; delete arm.strong; if (arm.kind === 'armor') arm.hp = Math.round(arm.hp / 2); }
     if (arm) out.push(arm);
-    if (royal) { if (r() < 0.3) out.push(rollPlainItem(r)); return out; }
-    const n = randInt(r, 1, cave ? 2 : 1);
+    const n = randInt(r, 1, cave ? 2 : 1) - (arm ? 1 : 0);
     for (let i = 0; i < n; i++) out.push(rollPlainItem(r));
     return out;
 }
