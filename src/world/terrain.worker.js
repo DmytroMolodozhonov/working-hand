@@ -21,6 +21,12 @@ self.onmessage = (e) => {
         data.skipSeaTop = !!m.skipSeaTop;
         return;
     }
+    if (m.type === 'site' && data && data.castles) {
+        // a castle's / a wizard's tower's plan for a cell (the same as the main thread would make)
+        const c = data.castles.cellOf(m.gx, m.gz), t = data.towers.cellOf(m.gx, m.gz);
+        self.postMessage({ type: 'site', id: m.id, key: m.key, gx: m.gx, gz: m.gz, castle: c && { ...c, _byChunk: new Map() }, tower: t && (t._byChunk ? { ...t, _byChunk: new Map() } : t) });
+        return;
+    }
     if (m.type === 'flora' && data) {
         // the tall grass and flowers of a chunk (Flora.js) — the chunk as generated
         const out = buildFlora(data, data.chunk(m.cx, m.cz));

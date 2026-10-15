@@ -59,6 +59,7 @@ export class Terrain {
         this._jobId = 0;
         this._floraAsked = new Map(); // chunk key -> job id (Flora.js: tall grass made in a worker)
         this._floraDone = [];
+        this._siteAsked = new Set(); // castle cells being planned in a worker
         if (typeof Worker === 'undefined' || typeof window === 'undefined' || window.__ZNS_NO_TERRAIN_WORKERS__) return;
         const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
         try {
@@ -98,6 +99,28 @@ export class Terrain {
         return out;
     }
 
+    /**
+     * The castles and towers ahead (within `r`, cells of `cell` m): planned in the workers before the
+     * minimap or the people ask for a whole row of them at once (a castle's plan is a long job). Without
+     * workers: made here, a little a frame (SiteIndex.warm).
+     */
+    warmSites(x, z, r, cell) {
+        const S = this.data.sites;
+        if (!S) return;
+        if (!this._workers) { S.warm(x, z, r, cell); return; }
+        const g0x = Math.floor((x - r) / cell) - 1, g1x = Math.floor((x + r) / cell) + 1;
+        const g0z = Math.floor((z - r) / cell) - 1, g1z = Math.floor((z + r) / cell) + 1;
+        for (let gz = g0z; gz <= g1z && this._siteAsked.size < 2; gz++) for (let gx = g0x; gx <= g1x && this._siteAsked.size < 2; gx++) {
+            const key = S.castles._key(gx, gz);
+            if ((S.castles.cells.has(key) && S.towers.cells.has(key)) || this._siteAsked.has(key)) continue;
+            let w = this._workers[0];
+            for (const o of this._workers) if (o.load < w.load) w = o;
+            w.load++;
+            this._siteAsked.add(key);
+            w.postMessage({ type: 'site', id: ++this._jobId, key, gx, gz });
+        }
+    }
+
     /** The workers failed (an old browser): everything is made here from now on. */
     _stopWorkers() {
         if (!this._workers) return;
@@ -107,10 +130,19 @@ export class Terrain {
         this._done.length = 0;
         this._floraAsked.clear();
         this._floraDone.length = 0;
+        this._siteAsked.clear();
         this._center = null; // (plan again: what was being made is wanted again)
     }
 
     _onBuilt(w, m) {
+        if (m.type === 'site') {
+            w.load--;
+            this._siteAsked.delete(m.key);
+            const S = this.data.sites;
+            if (S && !S.castles.cells.has(m.key)) S.castles.cells.set(m.key, m.castle);
+            if (S && !S.towers.cells.has(m.key)) S.towers.cells.set(m.key, m.tower);
+            return;
+        }
         if (m.type === 'flora') {
             w.load--;
             if (this._floraAsked.get(m.key) === m.id) { this._floraAsked.delete(m.key); this._floraDone.push(m); }
