@@ -222,3 +222,26 @@ test('«Create a House» waits for every kind of body before it puts a block whe
     const ci = src('src/game/CreatureImpact.js');
     for (const k of ['zombies', 'castleLife', 'animals']) assert.ok(ci.includes(k), k);
 });
+
+test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibility» decide every creature and thing (their TARGETS — «не действует» is written too, with why)', async () => {
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix' };
+    const tables = {
+        'Wind Impulse': [(await import('../../src/game/WindImpulse.js')).IMPULSE_TARGETS, ['me', 'players', 'servants', 'looseThings', 'heldThings', 'doors', 'ships', 'world']],
+        Drawdown: [(await import('../../src/game/Drawdown.js')).DRAWDOWN_TARGETS, ['me', 'players', 'blocks', 'trees', 'furniture', 'looseThings', 'water', 'ships', 'ward']],
+        Liquidation: [(await import('../../src/game/Liquidation.js')).LIQUIDATION_TARGETS, ['me', 'players', 'servants', 'looseThings', 'heldThings', 'blocks', 'trees', 'furniture', 'ships', 'water', 'ground']],
+        Stitching: [(await import('../../src/game/Stitching.js')).STITCH_TARGETS, ['me', 'players', 'blocks', 'houses', 'caves', 'open', 'water', 'ships', 'ward']],
+        Invisibility: [(await import('../../src/game/Invisibility.js')).INVIS_TARGETS, ['me', 'players', 'servants', 'spells', 'hits', 'things']],
+    };
+    for (const [spell, [T, things]] of Object.entries(tables)) {
+        for (const k of ALL) assert.ok(T[names[k]]?.why, `«${spell}» forgets: ${k}`);
+        for (const k of things) assert.ok(T[k]?.why, `«${spell}» forgets: ${k}`);
+    }
+    // where they look for their targets: every creature (CreatureImpact for the push, Duel._bodies for the splash)
+    assert.match(src('src/fx/SpellManager.js'), /castImpulse[\s\S]*?this\.hooks\.creatures\(name/, '«Wind Impulse» pushes every CreatureImpact kind (dragons sway)');
+    const liq = src('src/game/Liquidation.js');
+    assert.match(liq, /duel\?\._bodies\(casterId\)/, '«Liquidation» finds every living body');
+    for (const k of ['zombieById', 'spiders', 'dragons', 'phoenixes', 'books', 'livingTrees', 'animals', 'ships\\?\\.crew', 'castleLife']) assert.match(liq, new RegExp(k), `«Liquidation» hurts: ${k}`);
+    // the minds of the world ask where an invisible player is
+    for (const f of ['src/game/CastleLife.js', 'src/game/Dragons.js', 'src/game/Spider.js', 'src/game/Phoenixes.js', 'src/game/Animals.js', 'src/game/Sailors.js']) assert.match(src(f), /invis\.aiPos/, `${f}: an invisible player`);
+    assert.match(body(src('src/game/Game.js'), '    nearestPlayer(p) {'), /aiPos/, 'zombies: an invisible player');
+});
