@@ -57,6 +57,7 @@ import { HouseMagicFx } from '../fx/HouseMagicFx.js';
 export const HOUSE_MAGIC = {
     PILE_R: 4.5, // m: the heap — wool and sand this near the point the wand shows
     AIM: 30, // m: how far the wand reaches the heap
+    AHEAD: 13, // m: Creative, the hand not pointing at the ground — the house this far ahead
     NEAR_HOUSE: 22, // m from the house's middle: a heap thrown «beside the house»
     IMPROVE_WAIT: 180, // s after the house last changed (Creative: 10)
     GRACE: 0.7, // s without the wand in the hand before the magic breaks (a glitch of the camera is no letting go)
@@ -114,6 +115,8 @@ export class HouseMagic {
 
     get auth() { return this.game.authority; }
     get data() { return this.game.terrain?.data || this.game.world?.terrain?.data || null; }
+    /** Creative: every spell works without a wand (the hand casts) and the house needs no heap. */
+    get free() { const m = this.game.config?.mode; return m === 'creative' || m === 'test'; }
 
     /** Cost of a level: upfront mana and mana a second. */
     static cost(level) { const L = HOUSE_LEVELS[level]; return L ? { mana: L.mana, drain: L.drain } : null; }
@@ -149,9 +152,9 @@ export class HouseMagic {
         if (now - this._lastCast < 1500) return null;
         const say = (t) => { if (isFinal && t) g.hud.setVoice(t, true); return null; };
         if (this.magic) return say('🏠 Магия дома уже идёт — держите палочку');
-        if (!g.items?.heldOf?.('wand') && !this.testAim) return say('🪄 Возьмите палочку в руку и направьте её на шерсть и песок, лежащие на земле');
+        if (!g.items?.heldOf?.('wand') && !this.testAim && !this.free) return say('🪄 Возьмите палочку в руку и направьте её на шерсть и песок, лежащие на земле');
         const at = this._aimPoint();
-        if (!at) return say('🏠 Направьте палочку на брошенные шерсть и песок');
+        if (!at) return say(this.free ? '🏠 Покажите рукой на землю, где поставить дом' : '🏠 Направьте палочку на брошенные шерсть и песок');
         const me = g.character.group.position;
         let level = 1, hid = null;
         if (name === 'ImproveHouse') {
@@ -201,7 +204,14 @@ export class HouseMagic {
             const ang = dir.angleTo(to.normalize());
             if (ang < 0.4 && (!best || ang < best.ang)) best = { ang, p: L.model.position.clone() };
         }
-        return best ? best.p : hit;
+        if (best || hit || !this.free) return best ? best.p : hit;
+        // Creative, the hand raised as for any spell (its ray never meets the ground): the house stands
+        // on the ground ahead, where the hand points (the body's front when it points straight up)
+        const h = Math.hypot(dir.x, dir.z), ry = g.character.group.rotation.y;
+        const fx = h > 0.2 ? dir.x / h : -Math.sin(ry), fz = h > 0.2 ? dir.z / h : -Math.cos(ry);
+        const me = g.character.group.position;
+        const x = me.x + fx * HOUSE_MAGIC.AHEAD, z = me.z + fz * HOUSE_MAGIC.AHEAD;
+        return new THREE.Vector3(x, g.collision.groundY(x, z), z);
     }
 
     _isRes(L) { return !L.hover && (L.item.kind === 'wool' || (L.item.kind === 'blocks' && L.item.block === BLOCK.SAND)); }
@@ -403,7 +413,8 @@ export class HouseMagic {
             if (c?.enabled) c.fatigue = Math.max(0, c.fatigue - HOUSE_LEVELS[level].mana);
             if (c) c.paidCount = (c.paidCount || 0) + 1;
             this._noWand = 0;
-            g.hud?.setVoice?.(`✨ ${level === 1 ? 'Дом создаётся' : `Дом растёт до уровня ${level}`}… Держите палочку 10 секунд!`, true);
+            const hold = g.items?.heldOf?.('wand') || !this.free ? ' Держите палочку 10 секунд!' : ''; // (Creative without a wand: nothing to hold)
+            g.hud?.setVoice?.(`✨ ${level === 1 ? 'Дом создаётся' : `Дом растёт до уровня ${level}`}…${hold}`, true);
         }
         g.sound?.playMagic?.();
         g.fx?.lightFlash?.(_v.set(x, this.magic?.y ?? 0, z), 0xfff2c4, 4, 0.6, 60);
@@ -443,7 +454,7 @@ export class HouseMagic {
     /** The caster keeps the wand in the hand and pays a little mana every second — or the magic breaks. */
     _casterHold(m, dt) {
         const g = this.game;
-        const held = !!g.items?.heldOf?.('wand') || !!this.testAim;
+        const held = !!g.items?.heldOf?.('wand') || !!this.testAim || this.free; // (Creative: the hand casts)
         this._noWand = held ? 0 : this._noWand + dt;
         let why = null;
         if (this._noWand > HOUSE_MAGIC.GRACE) why = '🔥 Палочка выпала из руки — магия сорвалась, начался пожар!';
