@@ -43,6 +43,7 @@ import { createRng } from '../core/math.js';
 const WAKE = 320; // m: a ship near any player is awake (moves, has its model)
 const SLEEP = 420;
 const SCAN = 650; // m: ports this far are looked at
+const PREBUILD = WAKE + 220; // m: a sleeping ship's model is built ahead (a little a frame) this near
 const UNFURL_RATE = 1 / 3; // sails unroll in 3 s
 const WIND_PLAIN = 21; // m/s into the sails while «Вайнд» blows (3× the old gust)
 const WIND_MAXIMA = 42; // «Вайнд Максима» (6× the old «Вайнд»)
@@ -155,7 +156,10 @@ export class Ships {
         this.awake.add(s);
         const g = this.game;
         if (!s.model) {
-            s.model = new ShipModel(s.layout, { color: s.color, name: s.name });
+            // (built ahead a little a frame while it slept — Ships._pre: what is left of it, now)
+            if (s.preModel) s.preModel.finish();
+            s.model = s.preModel || new ShipModel(s.layout, { color: s.color, name: s.name });
+            s.preModel = null;
             g.scene.add(s.model.group);
             for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
         }
@@ -207,12 +211,17 @@ export class Ships {
                 }
             }
         }
+        let pre = null, preD = Infinity;
         for (const s of this.list.values()) {
             let d = Infinity;
             for (const pl of players) d = Math.min(d, Math.hypot(pl.x - s.st.x, pl.z - s.st.z));
             if (!s.awake && d < WAKE) { if (!busy()) this.wake(s); }
             else if (s.awake && d > SLEEP) this.sleep(s);
+            // (asleep: soon woken — its model is built ahead, a little a frame; gone far again — dropped)
+            if (!s.awake && s.preModel && d > PREBUILD + 150) { s.preModel.dispose(); s.preModel = null; }
+            if (!s.awake && d < PREBUILD && d < preD && !s.preModel?.ready) { pre = s; preD = d; }
         }
+        this._pre = pre;
     }
 
     _players() {
@@ -372,6 +381,11 @@ export class Ships {
         if (!this.enabled) return;
         const g = this.game;
         if ((this._scanT -= dt) <= 0) { this._scanT = 1; this._scan(); }
+        const pre = this._pre;
+        if (pre && !pre.awake && !pre.model) {
+            if (!pre.preModel) pre.preModel = new ShipModel(pre.layout, { color: pre.color, name: pre.name, lazy: true });
+            if (pre.preModel.buildSome(3)) this._pre = null;
+        } else this._pre = null;
         if (this.auth && !this.calm) this._weather(dt);
         this._blowing(dt);
         const t = g.seaTime ? g.seaTime() : performance.now() / 1000;
@@ -1526,6 +1540,7 @@ export class Ships {
 
     dispose() {
         for (const s of [...this.awake]) this.sleep(s);
+        for (const s of this.list.values()) { s.preModel?.dispose(); s.preModel = null; }
         this.list.clear();
         this.cannons.dispose?.();
         this.rigging.dispose();

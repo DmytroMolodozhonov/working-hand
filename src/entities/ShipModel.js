@@ -375,11 +375,31 @@ export class ShipModel {
         this.sails = new Map();
         this.cannons = new Map();
         this.racks = new Map();
-        this._build();
-        this.detail = 2;
+        // (opts.lazy: built a little a frame — buildSome() — while the ship is still far; a harbour's
+        // ship built whole in one frame was a long one in a fast flight)
+        this._steps = this._buildSteps();
+        this.ready = false;
+        if (!opts.lazy) this.finish();
     }
 
-    _build() {
+    /** Go on building for about `ms`; true when the model is whole. */
+    buildSome(ms = 3) {
+        if (this.ready) return true;
+        const t0 = performance.now();
+        while (performance.now() - t0 < ms) if (this._steps.next().done) { this.ready = true; this.detail = 2; this._steps = null; return true; }
+        return false;
+    }
+
+    /** Build what is left now. */
+    finish() {
+        if (this.ready) return;
+        while (!this._steps.next().done);
+        this.ready = true;
+        this.detail = 2;
+        this._steps = null;
+    }
+
+    *_buildSteps() {
         const L = this.L, S = shared();
         const hw = (z, y) => hullHalfWidth(L, z, y);
         const hull = new Batch();
@@ -419,6 +439,7 @@ export class ShipModel {
         const zt = zs[NZ];
         const tr = rings[NZ];
         for (let j = 0; j < NY; j++) hull.quad([-tr[j][0], tr[j][1], zt], [tr[j][0], tr[j][1], zt], [tr[j + 1][0], tr[j + 1][1], zt], [-tr[j + 1][0], tr[j + 1][1], zt], j > NY - 3 ? GOLD : DARK);
+        yield;
         // ------------------------------------------------- bulwarks (with the gangway gaps)
         const bulwark = (zA, zB, y0, y1, color = WOOD) => {
             const n = Math.max(2, Math.ceil((zB - zA) / 2.5));
@@ -474,6 +495,7 @@ export class ShipModel {
             for (let zz = -L.L * 0.32; zz < L.L * 0.3; zz += 6) for (const s of [1, -1]) hull.boxAt(s * (hw(zz, 2.4) + 0.06), 2.4, zz, 0.1, 1.0, 1.2, 0x161008);
         }
 
+        yield;
         // ------------------------------------------------------------- decks
         const deckGeo = new Batch();
         for (const f of L.floors) {
@@ -503,6 +525,7 @@ export class ShipModel {
         this.group.add(deck);
         this.deckMesh = deck;
 
+        yield;
         // ------------------------------------------- solids: bulkheads, rails, stairs, gear
         for (const b of L.solids) {
             switch (b.kind) {
@@ -566,6 +589,7 @@ export class ShipModel {
             near.boxAt(n.x + (n.x > 0 ? 1.5 : -1.5), n.y + 2.6, n.z, 1.2, 0.3, 3.2, 0xcfc3a0, 0, 0, n.x > 0 ? 0.15 : -0.15);
         }
 
+        yield;
         // ------------------------------------------------------- masts and yards
         this.mastTops = [];
         for (const m of L.masts) {
@@ -579,6 +603,7 @@ export class ShipModel {
                 if (y.kind === 'square') hull.cyl(0.32, 0.32, y.w, 0, y.y + 0.2, m.z - 0.9, 0x5a3a20, 0, 0, Math.PI / 2, 6);
             }
         }
+        yield;
         // ------------------------------------------------------------------ sails
         for (const sp of L.sails) {
             const sail = new SailMesh(sp);
@@ -592,6 +617,7 @@ export class ShipModel {
             this.group.add(sail.group);
             this.sails.set(sp.id, sail);
         }
+        yield;
         // ---------------------------------------------------------- rigging
         const lines = [];
         for (const m of L.masts) {
@@ -627,6 +653,7 @@ export class ShipModel {
         this.rigging = new THREE.LineSegments(lg, S.rope);
         this.near.add(this.rigging);
 
+        yield;
         // ------------------------------------------------------------- the wheel
         const helm = L.helm;
         const wheel = new THREE.Group();
@@ -660,6 +687,7 @@ export class ShipModel {
         near.box(-0.35, 0.35, helm.y - 1.9, helm.y - 0.1, helm.z + 0.25, helm.z + 0.75, DARK); // the post and the drum
         near.cyl(0.35, 0.35, 1.8, 0, helm.y - 1.0, helm.z + 0.5, 0x6b4526, 0, 0, Math.PI / 2, 8);
 
+        yield;
         // ------------------------------------------------------------- the guns
         // (the carriages are part of the inside; each barrel is one mesh: it jumps back when it fires)
         const bg = new Batch();
