@@ -271,7 +271,7 @@ export class Achievements {
         const g = this.game;
         if (!quiet) {
             const a = ACH_BY_ID[kind];
-            this._banner(`${a.icon} Ачивка: ${a.title}`, `+${a.mana} к максимуму маны · мана восстанавливается на ${Math.round(ACH.REGEN * 100)}% быстрее · ${this.count} из ${ACH_IDS.length}`);
+            this._banner(`${a.icon} Ачивка: ${a.title}`, `+${a.mana} ячеек маны · мана восстанавливается на ${Math.round(ACH.REGEN * 100)}% быстрее · ${this.count} из ${ACH_IDS.length}`);
             g.sound?.playMagic?.(null, 1);
             this._sparkle(0xffd36e, 40);
             g.sync?.ach?.({ a: 'got', k: kind, n: this.count, hi: this.high ? 1 : 0 });
@@ -297,7 +297,7 @@ export class Achievements {
     _becameHigh(quiet) {
         const g = this.game;
         if (!quiet) {
-            this._banner('🌟 Вы — Высший маг!', `+${ACH.HIGH_MANA} к максимуму маны · восстановление ещё на ${Math.round(ACH.HIGH_REGEN * 100)}% быстрее · костюм Высшего мага`, true);
+            this._banner('🌟 Вы — Высший маг!', `+${ACH.HIGH_MANA} ячеек маны · восстановление ещё на ${Math.round(ACH.HIGH_REGEN * 100)}% быстрее · костюм Высшего мага`, true);
             this._sparkle(0xfff2b0, 90);
             const p = this._myPos(1.2);
             if (p) { g.fx?.lightFlash?.(p, 0xffd36e, 3, 0.6, 18); g.sound?.playHouseDone?.(p); } // (a great chord, here)
@@ -415,10 +415,10 @@ export function achievementsHtml(done = new Set(), { world = '' } = {}) {
     const rows = ACHIEVEMENTS.map((a) => {
         const ok = done.has(a.id);
         return `<div class="ach-row${ok ? ' done' : ''}"><span class="ach-ic">${ok ? a.icon : '🔒'}</span><div class="ach-body"><b>${a.title}</b><span>${a.desc}</span>`
-            + `<span class="ach-gift">${ok ? '✅ Получено: ' : 'Даст: '}+${a.mana} к максимуму маны, восстановление +${Math.round(ACH.REGEN * 100)}%</span></div></div>`;
+            + `<span class="ach-gift">${ok ? '✅ Получено: ' : 'Даст: '}+${a.mana} ячеек маны, восстановление +${Math.round(ACH.REGEN * 100)}%</span></div></div>`;
     }).join('');
     return `<div class="ach-head">🏆 Ачивки: <b>${n} из ${ACH_IDS.length}</b>${world ? ` <span class="ach-world">(мир «${world}»)</span>` : ''}</div>`
-        + `<div class="ach-sum">Сейчас дают: +${b.mana} к максимуму маны, восстановление ×${b.regen.toFixed(2).replace(/\.?0+$/, '')}. Смерть их не отнимает.</div>`
+        + `<div class="ach-sum">Сейчас дают: +${b.mana} ячеек маны, восстановление ×${b.regen.toFixed(2).replace(/\.?0+$/, '')}. Смерть их не отнимает.</div>`
         + rows
-        + `<div class="ach-row high${high ? ' done' : ''}"><span class="ach-ic">${high ? '🌟' : '✨'}</span><div class="ach-body"><b>Высший маг</b><span>Все ачивки: ещё +${ACH.HIGH_MANA} к максимуму маны, восстановление ещё на ${Math.round(ACH.HIGH_REGEN * 100)}% быстрее и костюм Высшего мага (любое заклинание ранит на 40% слабее)</span><span class="ach-gift">${high ? '✅ Получено' : 'Нужны все'}</span></div></div>`;
+        + `<div class="ach-row high${high ? ' done' : ''}"><span class="ach-ic">${high ? '🌟' : '✨'}</span><div class="ach-body"><b>Высший маг</b><span>Все ачивки: ещё +${ACH.HIGH_MANA} ячеек маны, восстановление ещё на ${Math.round(ACH.HIGH_REGEN * 100)}% быстрее и костюм Высшего мага (любое заклинание ранит на 40% слабее)</span><span class="ach-gift">${high ? '✅ Получено' : 'Нужны все'}</span></div></div>`;
 }
