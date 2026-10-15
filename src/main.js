@@ -161,6 +161,18 @@ document.querySelectorAll('#tab-settings .sub-tab').forEach((btn) => {
         document.querySelectorAll('#tab-settings .sub-pane').forEach((p) => p.classList.toggle('active', p.id === btn.dataset.sub));
     });
 });
+// Settings: the villagers' net — which one and its state («загружается…», «готова»), the last game's when none is running
+(function villagerNetState() {
+    const el = $('villager-ai-state');
+    if (!el) return;
+    const show = (st, old = false) => {
+        if (!st?.text) return;
+        el.textContent = `${old ? 'В прошлой игре' : 'Сейчас'}: ${st.text}`;
+        el.style.color = st.state === 'ready' ? '#7bed9f' : st.state === 'failed' ? '#ff6b81' : '#eccc68';
+    };
+    try { show(JSON.parse(localStorage.getItem('zns-llm-state') || 'null'), true); } catch (e) { /* ignore */ }
+    window.addEventListener('zns-llm-state', (e) => show(e.detail));
+})();
 // Settings → «Журнал»; and the app launcher keeps running while this window is open
 setupLogPanel();
 keepLauncherAlive();
@@ -1302,6 +1314,8 @@ function escapeHtml(s) {
     if (vol20) for (const id of ['zombie-vol', 'music-vol', 'spell-vol']) saved[id] = '20';
     // the villagers' net is always on now — once for everybody who had switched it off (the author: no setting to find)
     if (!saved.aiOn) { saved['villager-ai'] = 'auto'; }
+    // the weak old nets chosen once by hand → «Авто» (Gemma 4 on the graphics card), once for everybody
+    if (!saved.aiGemma4 && ['light', 'smart'].includes(saved['villager-ai'])) saved['villager-ai'] = 'auto';
     const save = () => {
         const out = {};
         for (const id of IDS) {
@@ -1312,6 +1326,7 @@ function escapeHtml(s) {
         if (hv) out.handVersion = hv.value;
         out.vol20 = true;
         out.aiOn = true;
+        out.aiGemma4 = true;
         try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* private mode: just not remembered */ }
     };
     // Restore, and let each control's own handler apply the value (labels, sound, camera…)
@@ -1332,7 +1347,7 @@ function escapeHtml(s) {
         if (el) { el.addEventListener('input', save); el.addEventListener('change', save); }
     }
     for (const r of document.querySelectorAll('input[name="hand-version"]')) r.addEventListener('change', save);
-    if (vol20) save(); // (remembered: done once)
+    if (vol20 || !saved.aiGemma4) save(); // (remembered: done once)
 })();
 
 window.__zns = Object.defineProperties(window.__zns || {}, Object.getOwnPropertyDescriptors({ THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } }));

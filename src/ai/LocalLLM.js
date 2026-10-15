@@ -33,6 +33,7 @@ export class LocalLLM {
             noThink: true,
             tools: true,
             gpuOnly: true,
+            strong: true, // (answers every talk itself — the rules give it only the facts; TalkMind)
             fallback: 'qwen35',
         },
         // a strong computer (≥ 8 GB on the graphics card): Gemma 4 E4B — the cleverest and liveliest, but bigger and slower
@@ -44,6 +45,7 @@ export class LocalLLM {
             noThink: true,
             tools: true,
             gpuOnly: true,
+            strong: true,
             fallback: 'gemma4',
         },
         // the small conversation net (tool calling, 201 languages, Russian too): Qwen3.5 0.8B, text only
@@ -58,7 +60,7 @@ export class LocalLLM {
         },
         light: {
             id: 'onnx-community/gemma-3-270m-it-ONNX',
-            label: 'Лёгкая (Gemma 3 270M)',
+            label: 'Gemma 3 270M (лёгкая)',
             // fp16/q4f16 Gemma 3 overflows on WebGPU (onnxruntime issue #26732) → q4 (fp32 activations) there;
             // q4f16 is correct on WASM and is the smallest file.
             dtype: { webgpu: 'q4', webgpuNoF16: 'q4', wasm: 'q4f16' },
@@ -67,7 +69,7 @@ export class LocalLLM {
         },
         smart: {
             id: 'onnx-community/Qwen3-0.6B-ONNX',
-            label: 'Умная (Qwen3 0.6B)',
+            label: 'Qwen3 0.6B (старая)',
             dtype: { webgpu: 'q4f16', webgpuNoF16: 'q4', wasm: 'q4' },
             sizeMB: { webgpu: 570, wasm: 900 },
             noThink: true, // chat template flag enable_thinking=false → no <think> block
@@ -75,12 +77,23 @@ export class LocalLLM {
         },
     };
 
-    /** The setting value → the model key ('auto': the conversation net when the computer has a GPU for the browser). */
+    /**
+     * The setting value → the model key ('auto': Gemma 4 on a graphics card; without one Qwen3.5 0.8B on the
+     * processor — never the 270M net by itself: it can hardly hold a talk; only when chosen by hand).
+     */
     static pick(setting, hasGPU = LocalLLM.hasWebGPU) {
         if (!setting || setting === 'off') return null;
-        // (always on: with a graphics card the conversation net; without one the light net, quick on the processor)
-        if (setting === 'auto') return hasGPU ? 'gemma4' : 'light';
+        if (setting === 'auto') return hasGPU ? 'gemma4' : 'qwen35';
         return LocalLLM.MODELS[setting] ? setting : 'gemma4';
+    }
+
+    /** «Gemma 4 E2B, ~2,6 ГБ» — for the settings and the journal. */
+    static describe(key, device = 'webgpu') {
+        const m = LocalLLM.MODELS[key];
+        if (!m) return String(key || '');
+        const mbs = m.sizeMB?.[device === 'wasm' ? 'wasm' : 'webgpu'] || m.sizeMB?.webgpu || 0;
+        const size = mbs >= 1000 ? `~${(mbs / 1000).toFixed(1).replace('.', ',')} ГБ` : `~${mbs} МБ`;
+        return `${m.label}, ${size}`;
     }
 
     /** A worker + WebAssembly are available (a browser). */
@@ -118,6 +131,8 @@ export class LocalLLM {
     /** 'webgpu' | 'wasm' | null (once loaded) */
     get device() { return this._device; }
     get dtype() { return this._dtype; }
+    /** A big net (Gemma 4): it answers every talk itself, not only what the rules did not understand. */
+    get strong() { return !!this.model.strong; }
 
     /**
      * Starts the worker and loads the model. Idempotent.
@@ -158,7 +173,8 @@ export class LocalLLM {
                         this._ready = true;
                         this._device = m.device;
                         this._dtype = m.dtype;
-                        resolve({ device: m.device, dtype: m.dtype });
+                        this.loadInfo = { device: m.device, dtype: m.dtype, gpuName: m.gpuName || '', ms: m.ms || 0, why: m.why || '' };
+                        resolve(this.loadInfo);
                         break;
                     case 'load_error':
                         fail(new Error(m.message || 'model load failed'));
@@ -216,7 +232,8 @@ export class LocalLLM {
         for (const h of history || []) if (h?.content) messages.push({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.content) });
         messages.push({ role: 'user', content: String(user || '...') });
         const id = this._nextId++;
-        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'webgpu' ? 7000 : 12000);
+        // (a big net reads the long villager prompt longer; the answer is said while it writes, so the wait is short)
+        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'webgpu' ? (this.model.strong ? 12000 : 8000) : 14000);
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 if (!this._jobs.has(id)) return;

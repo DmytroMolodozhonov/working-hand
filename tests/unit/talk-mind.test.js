@@ -329,3 +329,43 @@ test('thinking words by the kind of words and the language; Gemma 4 game actions
     assert.equal(r.text, 'Слушаюсь!');
     assert.deepEqual(r.calls, [{ name: 'attack', args: { target: 'zombies' } }]);
 });
+
+test('a big net (Gemma 4) answers the usual phrases itself — with the rules\' facts as a hint; prices stay the rules\'', async () => {
+    const llm = fakeLLM('Здорово, добрый человек! Заходи, не стесняйся.');
+    llm.strong = true;
+    const mind = new TalkMind({ llm, rng: createRng(11) });
+    // a greeting, the way, «who are you»: the net is asked, the rules' answer is its hint
+    for (const p of ['привет', 'где рынок', 'кто ты такой']) {
+        const n = llm.asked.length;
+        await mind.hear(brain('farmer', { seed: 11 }), p, {});
+        assert.equal(llm.asked.length, n + 1, `the net hears «${p}»`);
+    }
+    assert.match(llm.asked[1].system, /Суть твоего ответа/);
+    assert.match(llm.asked[1].system, /рын/i);
+    // the market's numbers: the rules only
+    const n = llm.asked.length;
+    const m = new VillagerBrain({ id: 'm1', name: 'Фома', role: 'merchant', seed: 3 }, { timeOfDay: 'day' }, { rng: createRng(3) });
+    await mind.hear(m, 'сколько стоит хлеб', { nearbyGoods: [{ name: 'хлеб', price: 3 }] });
+    assert.equal(llm.asked.length, n, 'a price is not the net\'s');
+    // the same phrase with a small net: the rules at once (as before)
+    const small = fakeLLM('Привет!');
+    await new TalkMind({ llm: small, rng: createRng(11) }).hear(brain('farmer', { seed: 12 }), 'привет', {});
+    assert.equal(small.asked.length, 0);
+});
+
+test('a big net keeps the rules\' action; its words never refuse what the villager is doing', async () => {
+    const b = brain('knight', { king: true, seed: 13 });
+    const ctx = { playerIsKing: true, players: PLAYERS };
+    const rules = b.hear('пойдём со мной', ctx);
+    assert.equal(rules.action, 'follow', 'the king\'s knight follows by the rules');
+    const yes = fakeLLM('Слушаюсь, Ваше Величество, иду следом.');
+    yes.strong = true;
+    let r = await new TalkMind({ llm: yes, rng: createRng(13) }).hear(brain('knight', { king: true, seed: 14 }), 'пойдём со мной', ctx);
+    assert.equal(r.action, 'follow');
+    assert.equal(r.reply, 'Слушаюсь, Ваше Величество, иду следом.');
+    const no = fakeLLM('Нет, не пойду я никуда.');
+    no.strong = true;
+    r = await new TalkMind({ llm: no, rng: createRng(13) }).hear(brain('knight', { king: true, seed: 15 }), 'пойдём со мной', ctx);
+    assert.equal(r.action, 'follow');
+    assert.doesNotMatch(r.reply, /не пойду/);
+});

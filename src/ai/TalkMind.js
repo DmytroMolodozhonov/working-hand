@@ -55,6 +55,16 @@ export function orderLine(kind, role, rng = Math.random) {
 /** What the net answers (the rules know these only roughly); everything else the rules answer at once. */
 /** What the rules always answer themselves, however long the words (the market, orders, yes / no, manners). */
 const RULES_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'haggle', 'insult', 'threat', 'claim_king', 'bow', 'follow', 'stop_follow', 'thanks', 'bye', 'tell_name', 'ask_my_name']);
+/**
+ * A big net (Gemma 4, `llm.strong`) answers everything itself — a greeting, the way, a request, the king —
+ * and the rules only give it the facts (their answer as a hint) and the game action. Only the market's
+ * numbers stay the rules' (prices, «да»/«нет» to an offer, haggling): the net never names a price.
+ * (Before, the rules answered almost every usual phrase with a canned line and the net was not even asked:
+ * the author did not notice the new net at all.)
+ */
+const MARKET_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'haggle']);
+/** The net said no, while the rules had agreed to do it: the rules' line (the villager does what he says). */
+const REFUSAL = /^(нет|не-а|неа|не могу|не пойду|не буду|ни за что|отстань|no\b|i can'?t|i won'?t)|(не пойду|не могу пойти|не стану)/i;
 
 /**
  * The words a villager says at once while the net thinks («Хм…», «Я понял», «Так-так…») — so the talk feels
@@ -147,13 +157,15 @@ export class TalkMind {
     /**
      * @param {{llm?:{ready:boolean, chat:Function}|null, timeoutMs?:number, rng?:Function}} [opts]
      */
-    constructor({ llm = null, timeoutMs = 9000, rng = Math.random } = {}) {
+    constructor({ llm = null, timeoutMs = null, rng = Math.random } = {}) {
         this.llm = llm;
         this.timeoutMs = timeoutMs;
         this.rng = rng;
     }
 
     get smart() { return !!this.llm?.ready; }
+    /** A big net: it answers every talk (see MARKET_ONLY). */
+    get strong() { return !!(this.llm?.ready && this.llm.strong); }
 
     /** The Russian system prompt for this villager now. */
     systemPrompt(brain, ctx = {}) {
@@ -196,6 +208,8 @@ export class TalkMind {
             'Отвечай ПО СУТИ того, что спросил собеседник, и не меняй тему. Если не знаешь ответа — так и скажи просто, по-своему, и подскажи, у кого спросить (маги в башне, советник короля, торговцы на рынке, стражники у ворот).',
             'Если собеседник просит или приказывает что-то сделать и ты согласен — вызови подходящую функцию. Если не согласен — не вызывай, просто откажи словами.',
             'Говори как живой человек своего времени: просто, тепло или резко — по характеру, с живыми словечками, без канцелярита и без перечислений. Можешь в ответ спросить что-то короткое.',
+            // (a big net answers what the rules understood too: their answer holds the facts — the way, the name, the action)
+            ctx.hint ? `Суть твоего ответа сейчас (скажи это своими словами, живо и по-своему, сохрани смысл и факты, ничего не выдумывай сверх): «${ctx.hint}»` : '',
             en ? 'Собеседник говорит по-английски: отвечай ТОЛЬКО по-английски (простыми словами), одной-двумя короткими фразами, от первого лица, без кавычек, без чисел и без пояснений.'
                 : 'Отвечай ТОЛЬКО по-русски, грамотно, одной-двумя короткими законченными фразами, от первого лица, без кавычек, без чисел и без пояснений.',
         ];
@@ -252,7 +266,7 @@ export class TalkMind {
         // is the net's: a canned line about the king would not answer it)
         const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
         const complex = words >= 6 && !RULES_ONLY.has(res.intent) && !res.intent.startsWith('where_');
-        const quick = !OPEN_TOPICS.has(res.intent) && !complex;
+        const quick = this.strong ? MARKET_ONLY.has(res.intent) : !OPEN_TOPICS.has(res.intent) && !complex;
         const done = !this.smart || !res.reply || quick || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
         return { res, perm, done };
     }
@@ -292,7 +306,9 @@ export class TalkMind {
         } : null;
         const en = isEnglishText(text);
         this._en = en;
-        ctx = { ...ctx, lang: en ? 'en' : 'ru' };
+        // (what the rules understood well is given to a big net as the meaning of its answer — not for open talk)
+        const hint = this.strong && res.reply && !OPEN_TOPICS.has(res.intent) && !en ? res.reply : null;
+        ctx = { ...ctx, lang: en ? 'en' : 'ru', hint };
         try {
             opts.onThinking?.();
             let timer;
@@ -306,7 +322,8 @@ export class TalkMind {
                     maxTokens: 60,
                     ...(onPartial ? { onPartial } : {}),
                 }),
-                new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs); }),
+                // (a big net reads a longer prompt; its first sentence is said as soon as it is written anyway)
+                new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs ?? (this.strong ? 12000 : 9000)); }),
             ]);
             clearTimeout(timer);
         } catch (e) { this.lastTimedOut = false; return res; }
@@ -335,6 +352,8 @@ export class TalkMind {
             return res;
         }
         // no call: keep what the rules decided to do, say it in the net's words
+        // (unless the words refuse what the rules are doing — «пойдём со мной» → «Нет, не пойду» while he follows)
+        if (good && res.action && !spoken && REFUSAL.test(clean)) return res;
         if (good) { this._setReply(brain, res, clean); res.smart = true; }
         return res;
     }

@@ -50,6 +50,18 @@ const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', p
 /** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, or a piece of magic armour (ArmorTypes). */
 const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }];
 const _v = new THREE.Vector3();
+
+/**
+ * A line about the villagers' net for the game's journal (settings → «Журнал», via server.py) and the
+ * console — never for the player on the screen. Not served by the game's own server: only the console.
+ */
+export function journal(line) {
+    console.info('[Жители]', line);
+    try {
+        if (typeof fetch !== 'function' || typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return;
+        fetch('/api/gamelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Жители', line: String(line) }) }).catch(() => {});
+    } catch (_) { /* ignore */ }
+}
 const GOOD_IN = 0.35, PAID_IN = 0.2; // m from the counter's front edge: a good lying there; a paid one pushed to the buyer
 
 /** Across a stall's counter: the line `inset` m behind its front edge (the buyer's side). */
@@ -349,7 +361,7 @@ export class CastleTalk {
         this.mind.llm = this.llm?.ready ? this.llm : null;
         if (!this.mind.llm) this._whyNoNet();
         const first = this.mind.first(b, text, ctx);
-        if (first.done) { done(first.res); return true; } // (the rules: at once)
+        if (first.done) { this._talkLog(text, first.res, 'правила', 0); done(first.res); return true; } // (the rules: at once)
         const thinking = () => this._sayThinking(v, text, first.res?.intent);
         const t0 = performance.now();
         // (the first sentence of the net's answer is said as soon as it is written)
@@ -358,12 +370,18 @@ export class CastleTalk {
             // (too slow on this computer: say so now and then — the answer came from the rules)
             if (this.mind.lastTimedOut) {
                 this._slow = (this._slow || 0) + 1;
-                if (this._slow >= 2 && performance.now() - (this._slowT || -1e9) > 180000) { this._slowT = performance.now(); console.info('[CastleTalk] the net is too slow on this computer: the rules answered'); }
+                if (this._slow >= 2 && performance.now() - (this._slowT || -1e9) > 180000) { this._slowT = performance.now(); journal('нейросеть не успевает ответить вовремя — отвечают готовые фразы'); }
             } else this._slow = 0;
-            console.info(`[CastleTalk] ${res.smart ? 'net' : 'rules'} ${Math.round(performance.now() - t0)} ms: «${text}» → «${res.reply}»${res.action ? ` [${res.action}]` : ''}`);
+            this._talkLog(text, res, res.smart ? 'нейросеть' : this.mind.lastTimedOut ? 'правила (нейросеть не успела)' : 'правила (ответ нейросети не подошёл)', performance.now() - t0);
             done(res);
         }, () => done(first.res));
         return true;
+    }
+
+    /** Who answered what (the first lines of a game, while the net is on): for the journal. */
+    _talkLog(text, res, by, ms) {
+        if (!this.llm || (this._talkLogged = (this._talkLogged || 0) + 1) > 40) return;
+        journal(`«${text}» → «${res?.reply || ''}»${res?.action ? ` [${res.action}]` : ''} — ${by}${ms ? `, ${(ms / 1000).toFixed(1)} с` : ''}`);
     }
 
     /** Players in the game (for orders by name: «атакуйте Олега»). */
@@ -966,9 +984,9 @@ export class CastleTalk {
             const L = this.llm;
             if (L && this._llmWasReady && !L.ready && !L.loading && (this._llmRestarts || 0) < 3) {
                 this._llmRestarts = (this._llmRestarts || 0) + 1;
-                this.llmState = { state: 'loading', text: 'перезапускается' };
-                console.info('[CastleTalk] the net crashed: restarting it');
-                L.load().then(() => { this.llmState = { state: 'ready', text: 'готова' }; }, (e) => { console.warn('[CastleTalk] LLM restart failed:', e?.message || e); this.llmState = { state: 'failed', text: 'не перезапустилась' }; });
+                this._setLLMState('loading', 'перезапускается…');
+                journal(`нейросеть упала посреди игры (${L.error?.message || 'без причины'}) — перезапускаю`);
+                L.load().then(() => { this._setLLMState('ready', `${L.model.label} — готова`); journal('перезапущена'); }, (e) => { journal(`не перезапустилась: ${e?.message || e}`); this._setLLMState('failed', 'не перезапустилась'); });
             }
             // The heavy nets wait for the first seconds of play (their loading competes with the
             // game for the graphics card and the processor exactly when the world appears) —
@@ -996,43 +1014,69 @@ export class CastleTalk {
     async _loadLLM(setting) {
         const g = this.game;
         let LocalLLM;
-        this.llmState = { state: 'loading', text: 'готовится' };
-        try { ({ LocalLLM } = await import('../ai/LocalLLM.js')); } catch (e) { this.llmState = { state: 'failed', text: 'не загрузилась' }; return; }
-        if (!LocalLLM.supported) { this.llmState = { state: 'failed', text: 'этот браузер её не умеет' }; return; }
-        let gpu = false;
-        // ('auto': a real graphics adapter, not only the word WebGPU in the browser)
-        if (setting === 'auto') { try { gpu = !!(await navigator.gpu?.requestAdapter?.()); } catch (e) { gpu = false; } }
+        this._setLLMState('loading', 'готовится');
+        try { ({ LocalLLM } = await import('../ai/LocalLLM.js')); } catch (e) { this._setLLMState('failed', 'не загрузилась'); journal(`не загрузился код нейросети: ${e?.message || e}`); return; }
+        if (!LocalLLM.supported) { this._setLLMState('failed', 'этот браузер её не умеет'); journal('браузер не умеет Web Worker / WebAssembly — жители говорят готовыми фразами'); return; }
+        let gpu = false, gpuWhy = '';
+        // ('auto': a real graphics adapter, not only the word WebGPU in the browser — the same one the net asks for)
+        if (setting === 'auto') {
+            if (!navigator.gpu) gpuWhy = 'в окне игры нет WebGPU';
+            else {
+                try { gpu = !!(await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })); } catch (e) { gpuWhy = `WebGPU: ${e?.message || e}`; }
+                if (!gpu && !gpuWhy) gpuWhy = 'WebGPU есть, но видеокарту браузер не дал';
+            }
+        }
         let key = LocalLLM.pick(setting, gpu);
-        if (!key) { this.llmState = { state: 'failed', text: 'не загрузилась' }; return; }
+        if (!key) { this._setLLMState('failed', 'выключена'); return; }
+        journal(`настройка «${setting}»${setting === 'auto' ? (gpu ? ': видеокарта есть → Gemma 4' : `: ${gpuWhy} → модель для процессора`) : ''}`);
+        const tried = [];
         while (key) {
             const llm = new LocalLLM({ model: key });
             this.llm = llm;
             const m = LocalLLM.MODELS[key];
-            console.info('[CastleTalk]', `🧠 Загружаю нейросеть жителей (${m.label}, один раз)...`);
+            const name = LocalLLM.describe(key, m.gpuOnly ? 'webgpu' : (gpu || LocalLLM.hasWebGPU ? 'webgpu' : 'wasm'));
+            journal(`загружаю ${name}${m.gpuOnly ? ' (только видеокарта)' : ''}…`);
+            const t0 = performance.now();
             let last = 0;
+            this._setLLMState('loading', `${m.label}: загружается…`, key);
             try {
-                await llm.load((f, text) => {
+                const info = await llm.load((f, text) => {
                     const now = performance.now();
                     if (now - last < 1500 && f !== 1) return;
                     last = now;
-                    this.llmState = { state: 'loading', text: `ещё скачивается${f != null ? ` (${Math.round(f * 100)}%)` : ''}` };
+                    this._setLLMState('loading', `${m.label}: загружается${f != null ? ` (${Math.round(f * 100)}%)` : '…'}`, key);
                 });
                 if (this.llm !== llm) return; // (disposed meanwhile)
-                this.llmState = { state: 'ready', text: `готова (${m.label}, ${llm.device === 'webgpu' ? 'видеокарта' : 'процессор'})` };
+                const on = info.device === 'webgpu' ? 'видеокарта' : 'процессор';
+                this._setLLMState('ready', `${LocalLLM.describe(key, info.device)} — готова (${on})`, key);
                 this._llmWasReady = true;
                 this._warmLLM(llm);
+                journal(`✅ ГОТОВА: ${m.label} на ${info.device === 'webgpu' ? `видеокарте${info.gpuName ? ` (${info.gpuName})` : ''}` : 'процессоре'}, ${info.dtype}, загрузка ${((performance.now() - t0) / 1000).toFixed(1)} с`
+                    + `${info.why ? `; ${info.why}` : ''}${tried.length ? `; до неё не загрузились: ${tried.join('; ')}` : ''}`
+                    + `${llm.strong ? ' — отвечает на любые слова' : ' — отвечает на то, что не поняли готовые правила'}`);
                 console.info('[CastleTalk]', '🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
                 g.sync?.villagerAI?.(true);
                 return;
             } catch (e) {
-                console.warn('[CastleTalk] no villager LLM:', key, e?.message || e);
+                const err = String(e?.message || e).slice(0, 300);
+                journal(`❌ ${m.label} не загрузилась за ${((performance.now() - t0) / 1000).toFixed(1)} с: ${err}${m.fallback ? ` → пробую ${LocalLLM.MODELS[m.fallback]?.label}` : ''}`);
+                tried.push(`${m.label} (${err.slice(0, 120)})`);
                 llm.dispose?.();
                 if (this.llm === llm) this.llm = null;
                 key = m.fallback || null;
             }
         }
-        this.llmState = { state: 'failed', text: 'не загрузилась' };
-        console.info('[CastleTalk]', '🧠 Нейросеть не загрузилась — жители говорят готовыми фразами (приказы всё равно понимают)');
+        this._setLLMState('failed', 'не загрузилась — жители говорят готовыми фразами');
+        journal('нейросеть не загрузилась — жители говорят готовыми фразами (приказы всё равно понимают)');
+    }
+
+    /** The net's state: for the settings («загружается…», «готова») and remembered for the next start. */
+    _setLLMState(state, text, key = this.llmState?.key) {
+        this.llmState = { state, text, key };
+        try {
+            window.dispatchEvent(new CustomEvent('zns-llm-state', { detail: this.llmState }));
+            if (state !== 'loading') localStorage.setItem('zns-llm-state', JSON.stringify({ ...this.llmState, at: Date.now() }));
+        } catch (_) { /* (node tests, private window) */ }
     }
 
     /**

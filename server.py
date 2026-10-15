@@ -15,6 +15,7 @@ API:
   GET    /api/logs            — журналы игры (настройки → «Журнал»)
   GET    /api/alive           — окно игры открыто, пока держит эту строку (запускатор)
   POST   /api/perflog         — строка дневника производительности → zns-perf.log
+  POST   /api/gamelog         — строка из игры в журнал (какая нейросеть жителей загружена и т.п.)
   GET    /api/pose/status     — нейросеть камеры вне браузера (pose_native.py): есть ли, работает ли
   GET    /api/pose/stream     — её точки тела, рук и лица (Server-Sent Events)
   GET    /api/pose/snap       — её последний кадр камеры (JPEG; для записи руки)
@@ -298,7 +299,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
-        if any(p in (self.path or "") for p in ("/api/perflog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
+        if any(p in (self.path or "") for p in ("/api/perflog", "/api/gamelog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
             return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
@@ -561,6 +562,14 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 full = os.path.join(ROOT, RECORD_DIR, name)
                 print("  [Запись руки] сохранена: " + full)
                 return self._json(200, {"status": "ok", "file": full})
+
+            if path == "/api/gamelog":
+                data = self._read_json()
+                tag = "".join(ch for ch in str(data.get("tag", "Игра"))[:20] if ch.isalnum() or ch in " -")
+                line = str(data.get("line", ""))[:2000].replace("\r", " ").replace("\n", " ")
+                if line:
+                    print(f"  [{tag or 'Игра'}] {line}")
+                return self._json(200, {"status": "ok"})
 
             if path == "/api/perflog":
                 line = str(self._read_json().get("line", ""))[:4000].replace("\r", " ").replace("\n", " ")

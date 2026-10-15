@@ -384,3 +384,14 @@ test('Speech is a no-op in node', () => {
     const f = s.voiceParams({ voiceKey: 'a', role: 'farmer', female: true });
     assert.ok(k.pitch < f.pitch && k.rate < f.rate);
 });
+
+test('the villagers\' net: «auto» is Gemma 4 on a graphics card, Qwen3.5 on the processor — never the 270M net by itself', () => {
+    assert.equal(LocalLLM.pick('auto', true), 'gemma4');
+    assert.equal(LocalLLM.pick('auto', false), 'qwen35');
+    assert.equal(LocalLLM.pick('light', true), 'light');
+    assert.equal(LocalLLM.pick('off', true), null);
+    // the fallbacks never end on the 270M net either
+    for (let k = 'gemma4big'; k; k = LocalLLM.MODELS[k].fallback) assert.notEqual(k, 'light');
+    assert.ok(new LocalLLM({ model: 'gemma4' }).strong && !new LocalLLM({ model: 'qwen35' }).strong);
+    assert.match(LocalLLM.describe('gemma4'), /Gemma 4 E2B, ~2,6 ГБ/);
+});

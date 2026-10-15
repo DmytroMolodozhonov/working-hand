@@ -14,7 +14,7 @@
  *   { type: 'dispose' }
  * (worker → main):
  *   { type: 'progress', fraction, text }
- *   { type: 'ready', device, dtype }
+ *   { type: 'ready', device, dtype, gpuName, ms, why }   (ms: the load took; why: the graphics card failed → the processor)
  *   { type: 'load_error', message }
  *   { type: 'result', id, text }
  *   { type: 'gen_error', id, message }
@@ -59,15 +59,20 @@ async function pickDevice(pref) {
     if (pref === 'wasm') return { device: 'wasm', f16: false };
     const gpu = self.navigator && self.navigator.gpu;
     if (!gpu) {
-        if (pref === 'webgpu') throw new Error('no WebGPU');
+        if (pref === 'webgpu') throw new Error('в браузере нет WebGPU (видеокарта недоступна странице)');
         return { device: 'wasm', f16: false };
     }
     try {
         const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
-        if (adapter) return { device: 'webgpu', f16: adapter.features.has('shader-f16') };
+        if (adapter) {
+            // (which graphics card the net got: for the journal — the built-in chip or the strong one)
+            const i = adapter.info || {};
+            const gpuName = [i.vendor, i.architecture, i.description].filter(Boolean).join(' ').trim();
+            return { device: 'webgpu', f16: adapter.features.has('shader-f16'), gpuName };
+        }
     } catch (e) { /* no adapter */ }
     // (a big model only on the graphics card: on the processor it is far too slow — the smaller one is loaded instead)
-    if (pref === 'webgpu') throw new Error('no WebGPU adapter');
+    if (pref === 'webgpu') throw new Error('WebGPU есть, но видеокарту браузер не дал (драйвер или список запрета)');
     return { device: 'wasm', f16: false };
 }
 
@@ -127,14 +132,17 @@ async function load({ model, device: pref = 'auto' }) {
         await setupLibrary();
         criteria = new tf.InterruptableStoppingCriteria();
         modelInfo = model;
-        let { device, f16 } = await pickDevice(pref);
+        const t0 = Date.now();
+        let { device, f16, gpuName = '' } = await pickDevice(pref);
+        let why = '';
         let dtype = dtypeFor(model, device, f16);
         post({ type: 'progress', fraction: 0, text: `Нейросеть: ${device === 'webgpu' ? 'видеокарта (WebGPU)' : 'процессор (WASM)'}, ${dtype}` });
         try {
             ({ gen: generator, dtype } = await createAny(model, device, dtype));
             await warmup(model.noThink);
         } catch (e) {
-            if (device !== 'webgpu' || model.gpuOnly) throw e;
+            if (device !== 'webgpu' || model.gpuOnly) throw new Error(`${device === 'webgpu' ? 'видеокарта' : 'процессор'}, ${dtype}: ${e?.message || e}`);
+            why = `видеокарта не справилась: ${String(e?.message || e).slice(0, 200)}`;
             // WebGPU failed (driver, memory, unsupported op) → try the CPU path once
             try { await generator?.dispose?.(); } catch (_) { /* ignore */ }
             generator = null;
@@ -145,7 +153,7 @@ async function load({ model, device: pref = 'auto' }) {
             await warmup(model.noThink);
         }
         post({ type: 'progress', fraction: 1, text: 'Нейросеть готова' });
-        post({ type: 'ready', device, dtype });
+        post({ type: 'ready', device, dtype, gpuName, ms: Date.now() - t0, why });
     } catch (e) {
         generator = null;
         post({ type: 'load_error', message: String(e && (e.message || e)) });
