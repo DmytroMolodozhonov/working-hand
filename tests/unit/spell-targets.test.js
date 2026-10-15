@@ -204,3 +204,12 @@ test('carts on the roads (Carriages.js, Travelers.js): blasts, rays, lightning, 
     assert.match(src('src/game/Carriages.js'), /animals\._spawn\('horse'/);
     assert.match(src('src/game/Travelers.js'), /L\._activate\(cs, i/);
 });
+
+test('«Create a House» waits for every kind of body before it puts a block where one stands', () => {
+    const h = src('src/game/HouseMagic.js');
+    // (every creature kind of CreatureImpact.KINDS, the players too)
+    assert.match(body(h, '    _bodies() {'), /Object\.values\(KINDS\)/);
+    assert.match(body(h, '    _bodies() {'), /remotes/);
+    const ci = src('src/game/CreatureImpact.js');
+    for (const k of ['zombies', 'castleLife', 'animals']) assert.ok(ci.includes(k), k);
+});
