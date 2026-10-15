@@ -256,28 +256,28 @@ export class Inventory {
     }
 
     // =========================================================== hand / item
-    /** What of the chosen slot appears in the right hand. */
+    /** What of the chosen slot appears in the leading hand (the right one; a left-hander's left). */
     _takeIntoHand() {
         const s = this.selected >= 0 ? this.slots[this.selected] : null;
-        const g = this.game;
+        const g = this.game, D = g.dom || 'right';
         if (!s) return;
         if (s.kind === 'weapon') {
-            if (g.weapons.hands.right.held) return; // the hand is busy
+            if (g.weapons.hands[D].held) return; // the hand is busy
             const ch = g.character;
-            const p = ch.getGripObject('right').getWorldPosition(new THREE.Vector3());
+            const p = ch.getGripObject(D).getWorldPosition(new THREE.Vector3());
             const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id), s.magic ? s.bonus : 0);
             if (g.sync) g.sync.weaponAppeared?.(w);
             w.wake();
-            g.weapons.grab(w, 'right', 0.5);
-            g.weapons.hands.right.waitClose = true;
+            g.weapons.grab(w, D, 0.5);
+            g.weapons.hands[D].waitClose = true;
             this.slots[this.selected] = null;
             this.inHand = { kind: 'weapon', weapon: w };
             return;
         }
         if (s.kind === 'res') { this.inHand = { kind: 'res', stack: s }; return; }
         // any other thing (wand, scroll, shield, food…)
-        if (g.items && !g.items.held.right && !g.weapons.hands.right.held) {
-            g.items.takeIntoHand(s, 'right');
+        if (g.items && !g.items.held[D] && !g.weapons.hands[D].held) {
+            g.items.takeIntoHand(s, D);
             this.slots[this.selected] = null;
             this.inHand = { kind: 'item', item: s };
         }
@@ -289,8 +289,9 @@ export class Inventory {
         this.inHand = null;
         if (!h) return;
         const slot = this.selected >= 0 && !this.slots[this.selected] ? this.selected : null;
-        if (h.kind === 'weapon' && this.game.weapons.hands.right.held === h.weapon) this._storeWeapon(h.weapon, slot);
-        if (h.kind === 'item' && this.game.items?.held.right?.item === h.item) { const it = this.game.items.releaseHand('right'); if (slot != null) this.slots[slot] = it; else this.storeItem(it); }
+        const D = this.game.dom || 'right';
+        if (h.kind === 'weapon' && this.game.weapons.hands[D].held === h.weapon) this._storeWeapon(h.weapon, slot);
+        if (h.kind === 'item' && this.game.items?.held[D]?.item === h.item) { const it = this.game.items.releaseHand(D); if (slot != null) this.slots[slot] = it; else this.storeItem(it); }
     }
 
     _storeWeapon(w, slot = null) {
@@ -303,12 +304,12 @@ export class Inventory {
         return true;
     }
 
-    /** Right pocket: what the hand holds goes into a slot. */
+    /** The leading hand's pocket (the right one; a left-hander's left): what the hand holds goes into a slot. */
     pocketRight() {
-        const g = this.game;
+        const g = this.game, dom = g.dom || 'right';
         if (g.boards?.hold) { g.hud.toast?.('🏄 Доска слишком большая для кармана'); return; }
         // a sword, an axe, a hammer, a bow, a shield never go into a pocket: only on the back (over the shoulder)
-        for (const side of ['right', 'left']) {
+        for (const side of [dom, dom === 'right' ? 'left' : 'right']) {
             const w = g.weapons.hands[side].held;
             const h = g.items?.held[side];
             if (w || (h && BACK_KINDS.has(h.item.kind))) {
@@ -317,7 +318,7 @@ export class Inventory {
                 return;
             }
         }
-        for (const side of ['right', 'left']) {
+        for (const side of [dom, dom === 'right' ? 'left' : 'right']) {
             const h = g.items?.held[side];
             if (!h || h.item.kind === 'wand') continue; // (the wand goes only to the waistband: WandBelt)
             if (h.item.kind === 'coins' && this.purse.count < BELT_MAX) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
@@ -369,11 +370,12 @@ export class Inventory {
             if (ch.isRunning || ch.flying) { st.hist.length = 0; continue; }
             // the hand put INTO the pocket (as the camera sees it): it stays there a moment
             // (a slap on the hip no longer counts: people did it by accident)
-            const pk = g.currentPose.pocket;
-            let inPocket = side === 'left' ? pk?.left : pk?.right;
-            // a thing in the right hand brought to the right hip, as a pouch is tied on (the hand is
+            // (the things' pocket is the leading hand's: the right one, a left-hander's left — PoseInterpreter.bodyPlaces)
+            const pk = g.currentPose.pocket, dom = g.dom || 'right';
+            let inPocket = side === dom ? pk?.dom : pk?.off;
+            // a thing in the leading hand brought to its hip, as a pouch is tied on (the hand is
             // seen holding it, so its fingers never point down into the pocket): it goes into a slot too
-            if (side === 'right' && inPocket !== true && g.currentPose.purse?.right === true && this._pocketable('right')) inPocket = true;
+            if (side === dom && inPocket !== true && g.currentPose.purse?.dom === true && this._pocketable(dom)) inPocket = true;
             // the right hand reaching across into the LEFT pocket: the wand's pocket too
             // (the wand is no longer put away / drawn by a pocket — lowering the arm did it by
             // accident: it has its own place at the waistband, WandBelt.js)
@@ -385,9 +387,9 @@ export class Inventory {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
-                if (side === 'left') { /* (the left pocket was the wand's: see WandBelt) */ }
-                else if (g.items?.held.right || g.weapons.hands.right.held) this.pocketRight();
-                else this.takeNext('right');
+                if (side !== dom) { /* (the other hand's pocket was the wand's: see WandBelt) */ }
+                else if (g.items?.held[dom] || g.weapons.hands[dom].held) this.pocketRight();
+                else this.takeNext(dom);
             }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
             const b = this._back[side];
@@ -579,7 +581,7 @@ export class Inventory {
         const b = this._handBlock;
         b.visible = true;
         b.material.color.setHex(RESOURCE[s.block]?.color ?? 0xffffff);
-        const p = this.game.character.getGripObject('right').getWorldPosition(_v);
+        const p = this.game.character.getGripObject(this.game.dom || 'right').getWorldPosition(_v);
         const t = performance.now() / 1000;
         b.position.set(p.x, p.y + 0.3 + Math.sin(t * 3) * 0.04, p.z);
         b.rotation.set(t * 0.7, t, 0);

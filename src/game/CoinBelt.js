@@ -1,6 +1,7 @@
 /**
  * CoinBelt.js — the coin pouches' place on the body: tied to the belt on the right side,
  * beside the hip (the wand's place is in front, on the left: WandBelt.js). Seen on the hero.
+ * A left-hander (Настройки: Левша): all mirrored — on the left hip, the left hand.
  *
  *   - Tie a pouch on: the hand holding a coin pouch is brought to the right hip, at the
  *     belt, and kept there a moment — or its fingers opened there (the left hand may reach
@@ -49,8 +50,8 @@ export function pouchSize(c) {
 /** Where the pouches hang (the hero's space: +X its right, −Z ahead; the belt at y≈0). */
 export const PURSE_AT = [new THREE.Vector3(0.6, 0.02, -0.14), new THREE.Vector3(0.6, 0.02, 0.1), new THREE.Vector3(0.56, 0.02, 0.33)];
 
-/** The pouches of `n` coins as one model, hung on a body's group (the hero's own, or another player's). */
-export function makePurseModel(n) {
+/** The pouches of `n` coins as one model, hung on a body's group (the hero's own, or another player's); a left-hander's on the left hip. */
+export function makePurseModel(n, leftHanded = false) {
     const g = new THREE.Group();
     g.name = 'coin-belt';
     purseBags(n).forEach((c, i) => {
@@ -60,6 +61,7 @@ export function makePurseModel(n) {
         // tied by its neck to the belt: the neck at the belt, the pouch below it
         m.position.copy(PURSE_AT[i]).y -= 0.14 * 1.8 * s;
         m.rotation.y = -0.4 + i * 0.5;
+        if (leftHanded) { m.position.x = -m.position.x; m.rotation.y = -m.rotation.y; } // (mirrored: the left hip)
         m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
         g.add(m);
     });
@@ -102,9 +104,11 @@ export class CoinBelt {
         const pose = g.currentPose;
         if (!pose || g.combat?.immobile || g.combat?.dead || ch.flying) return;
         if (ch.isRunning) { this._away = 1; this._left = true; this._tie = 0; return; } // (arms swinging: never)
-        // which hand is at the right hip: the right one, or the left one reaching across with a pouch
+        // which hand is at the pouches' hip (the leading hand's: the right one for a right-hander,
+        // the left for a left-hander): the leading hand, or the other one reaching across with a pouch
+        const dom = g.dom || 'right', off = dom === 'right' ? 'left' : 'right';
         const coinsIn = (s) => items.held[s]?.item.kind === 'coins';
-        const side = pose.purse?.right === true ? 'right' : pose.purse?.cross === true && coinsIn('left') && !coinsIn('right') ? 'left' : null;
+        const side = pose.purse?.dom === true ? dom : pose.purse?.cross === true && coinsIn(off) && !coinsIn(dom) ? off : null;
         if (side) { this._away = 0; this._side = side; } else this._away += dt;
         if (this._away > AWAY_S) { this._left = true; this._open = false; this._tie = 0; return; }
         if (!side) return; // (lost for a moment: wait)
@@ -119,11 +123,11 @@ export class CoinBelt {
             return;
         }
         this._tie = 0;
-        if (side !== 'right') return;
+        if (side !== dom) return;
         // taking one: looking down at it, the empty hand came open and closes on it
         if (curl < 0.4) this._open = true;
-        const free = !h && !g.weapons?.hands?.right?.held;
-        if (free && this.count > 0 && this._open && curl > 0.45 && g.inventory?.belt?.lookingDown()) this._take('right');
+        const free = !h && !g.weapons?.hands?.[dom]?.held;
+        if (free && this.count > 0 && this._open && curl > 0.45 && g.inventory?.belt?.lookingDown()) this._take(dom);
     }
 
     _tieOn(side) {
@@ -166,10 +170,12 @@ export class CoinBelt {
     /** The pouches seen on the hero (and told to the other players when they change). */
     _show() {
         const ch = this.game.character;
-        if (this.count !== this._shown) {
+        const lefty = this.game.dom === 'left';
+        if (this.count !== this._shown || lefty !== this._lefty) {
             this._shown = this.count;
+            this._lefty = lefty;
             this._drop();
-            if (this.count > 0) { this.model = makePurseModel(this.count); ch.group.add(this.model); }
+            if (this.count > 0) { this.model = makePurseModel(this.count, lefty); ch.group.add(this.model); }
             this.resend();
         }
         if (this.model) this.model.visible = !!ch.group.visible;
@@ -177,7 +183,7 @@ export class CoinBelt {
 
     /** Tell the other players what hangs on my belt (also when somebody joins). */
     resend() {
-        this.game.sync?.itemHold?.('purse', this.count > 0 ? { kind: 'purse', count: this.count } : null);
+        this.game.sync?.itemHold?.('purse', this.count > 0 ? { kind: 'purse', count: this.count, left: this.game.dom === 'left' } : null); // (left: a left-hander's, on the left hip)
     }
 
     _drop() {

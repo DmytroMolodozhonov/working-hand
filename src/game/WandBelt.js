@@ -7,8 +7,11 @@
  *     tip down (tucking it in), and keeps it there a moment. Judged from the camera's
  *     real skeleton (the real wrist at the real waist, the elbow bent): lowering the arm,
  *     a hand hanging or resting a little to the left, a hand on the hip never do it.
- *   - Take it: look down at it, bring the empty right hand to its handle and close the
- *     fingers on it (the left hand when the right is busy).
+ *   - Take it: look down at it, bring the empty LEADING hand to its handle and close the
+ *     fingers on it — only the leading hand (the right one; a left-hander's left: Настройки).
+ *     The other hand never takes it off the belt (it can still be handed over, caught…).
+ *   - A left-hander: all mirrored — the wand in front a little to the right, its handle for
+ *     the left hand to take across.
  *
  * The wand (as data) stays in its inventory slot, so saving, dying and the slots work
  * as before; on the body it is the first wand of the slots.
@@ -127,8 +130,9 @@ export class WandBelt {
             if (!reach) { this._open[side] = false; continue; }
             if (curl < 0.4) this._open[side] = true;
             const free = !h && !g.weapons?.hands?.[side]?.held;
-            const rightFirst = side === 'left' && !items.held.right && !g.weapons?.hands?.right?.held; // (the right hand takes it when it can)
-            if (free && !rightFirst && this.beltWand() && this.lookingDown() && curl > 0.45 && this._open[side]) {
+            // (only the leading hand takes it off the belt: the right one, a left-hander's left)
+            const leading = side === (g.dom || 'right');
+            if (free && leading && this.beltWand() && this.lookingDown() && curl > 0.45 && this._open[side]) {
                 this._take(side);
                 return;
             }
@@ -150,7 +154,8 @@ export class WandBelt {
             if ((h && h.item.kind !== 'wand') || g.weapons?.hands?.[side]?.held) continue;
             if (!g.currentPose?.belt?.[side]?.near) continue; // (the real hand is by the waist)
             const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
-            const w = bellyWeight(local);
+            const m = this._mirror();
+            const w = bellyWeight(m ? _d.copy(local).setX(-local.x) : local); // (a left-hander's belly place mirrored)
             if (!(w > 0) || local.z >= BELLY_Z) continue;
             ch.reachHand(side, _w.set(local.x, local.y, BELLY_Z).applyMatrix4(ch.group.matrixWorld), w);
             ch.group.updateMatrixWorld(true);
@@ -226,20 +231,27 @@ export class WandBelt {
         inv._fx?.('🪄 Палочка в руке', side);
     }
 
+    /** A left-hander: the wand's place mirrored (in front, a little to the right). */
+    _mirror() { return this.game.dom === 'left'; }
+
     /** The belt wand seen on the hero. */
     _show() {
         const ch = this.game.character;
         const it = this.beltWand();
-        if (it !== this.item) {
+        const mir = this._mirror();
+        if (it !== this.item || mir !== this._m) {
+            this._m = mir;
             if (this.model) { this.model.parent?.remove(this.model); disposeModel(this.model); this.model = null; }
             this.item = it;
             if (it) {
                 const m = makeItemModel(it);
                 // its back (the handle) up at the waistband, the tip down into the trousers
                 const box = new THREE.Box3().setFromObject(m);
-                const along = _d.subVectors(BELT_TIP, BELT_TOP);
-                m.quaternion.setFromUnitVectors(_w.set(0, 1, 0), along.normalize());
-                m.position.copy(BELT_TOP).addScaledVector(along, -box.min.y);
+                const top = _v.copy(BELT_TOP), tip = _w.copy(BELT_TIP);
+                if (this._m) { top.x = -top.x; tip.x = -tip.x; }
+                const along = _d.subVectors(tip, top).normalize();
+                m.quaternion.setFromUnitVectors(_w.set(0, 1, 0), along);
+                m.position.copy(top).addScaledVector(along, -box.min.y);
                 m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
                 m.name = 'wand-belt';
                 ch.group.add(m);

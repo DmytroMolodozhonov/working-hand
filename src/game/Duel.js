@@ -494,7 +494,7 @@ export class Duel {
      */
     pickSide(preferPlayers = false) {
         const g = this.game, ch = g.character;
-        const pref = g.magicHand || g.lastMagicHand || 'right';
+        const pref = g.magicHand || g.lastMagicHand || g.dom || 'right';
         let best = null;
         const wand = g.wandSide?.(); // (a wand in a hand: only that hand casts)
         for (const side of wand ? [wand] : [pref, pref === 'right' ? 'left' : 'right']) {
@@ -582,7 +582,7 @@ export class Duel {
      * @param {object} [aim] {side, t} from pickSide (else: from the spell hand, at whatever it points at)
      */
     cast(spell, aim = null, handSide = null) {
-        const side = aim ? aim.side : (handSide || this.game.magicHand || this.game.lastMagicHand || 'right');
+        const side = aim ? aim.side : (handSide || this.game.magicHand || this.game.lastMagicHand || this.game.dom || 'right');
         const origin = new THREE.Vector3(), dir = new THREE.Vector3();
         this._myRay(side, origin, dir);
         // the body it may turn a little towards: the one pointed at — and where on it

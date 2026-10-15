@@ -190,6 +190,10 @@ export class Game {
         return !this.net || !this.net.active || this.net.isHost;
     }
 
+    /** The leading hand (Настройки: Правша / Левша): the wand is taken from the belt by it, the coin pouches and the pocket are on its side, it casts when no hand says otherwise. */
+    get dom() { return this.settings?.leftHanded ? 'left' : 'right'; }
+    get off() { return this.settings?.leftHanded ? 'right' : 'left'; }
+
     get localId() {
         return this.net && this.net.active ? this.net.localId : 'local';
     }
@@ -1149,7 +1153,7 @@ export class Game {
         const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);
-            const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : (this.wandSide() || ['right', 'left'].find((s) => this.character.isArmRaised(s))));
+            const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || this.dom) ? (this.magicHand || this.lastMagicHand || this.dom) : (this.wandSide() || [this.dom, this.off].find((s) => this.character.isArmRaised(s))));
             if (!side || !this.character.isArmRaised(side)) {
                 if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
                 return null;
@@ -1234,7 +1238,7 @@ export class Game {
         this._interimCast = isFinal ? null : { name, at: now };
         this.lastSpellCastTime = now;
         if (name === 'Flight') return name;
-        const side = this.wandSide() || this.magicHand || this.lastMagicHand || 'right';
+        const side = this.wandSide() || this.magicHand || this.lastMagicHand || this.dom;
         const origin = this.castOrigin(side);
         const dir = this.character.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
@@ -1507,7 +1511,7 @@ export class Game {
         if (!isFinal && name === 'WaveAttack') return null; // (wait for a possible «Максима»)
         if (this.waves.busy) return null;
         const ch = this.character;
-        const side = (this.wandSide() || ['right', 'left'].find((s) => ch.isArmRaised(s))) || this.magicHand || 'right';
+        const side = (this.wandSide() || [this.dom, this.off].find((s) => ch.isArmRaised(s))) || this.magicHand || this.dom;
         const o = this.castOrigin(side);
         const d = ch.getHandDirection(side);
         // the hand must point at water nearby
@@ -1541,7 +1545,7 @@ export class Game {
         const key = over ? '_lastOvergrown' : '_lastWind';
         if (now - (this[key] || 0) < 900) return null;
         const ch = this.character;
-        const pref = this.magicHand || this.lastMagicHand || 'right';
+        const pref = this.magicHand || this.lastMagicHand || this.dom;
         const side = this.wandSide() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s)));
         if (!side) { if (isFinal) this.hud.setVoice(over ? '🌿 Поднимите руку и направьте её на тех, кого разбросать, — и скажите «Overgrown»' : '🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
         const tired = this.combat.check(name);
@@ -1746,7 +1750,7 @@ export class Game {
             if (d.y > 0.5 || arm.y > 0.6) { side = s; break; }
         }
         if (!side && !ch.areBothHandsUp()) { if (isFinal) this.hud.setVoice('☀️ Поднимите руку к небу и скажите «To the Sun»', true); return null; }
-        side = side || 'right';
+        side = side || this.dom;
         const tired = this.combat.check('ToTheSun');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('ToTheSun');
@@ -1816,7 +1820,7 @@ export class Game {
             if (L.t >= 0.6) {
                 L.phase = 'hold';
                 L.t = 0;
-                L.side = this.magicHand || this.lastMagicHand || 'right';
+                L.side = this.magicHand || this.lastMagicHand || this.dom;
                 const p = ch.group.position;
                 this.spells.cast('LightningCatch', p, _v1.set(0, 1, 0), L.side, this.localId);
                 if (this.sync) this.sync.spell('LightningCatch', p, _v1.set(0, 1, 0), L.side);
@@ -1890,7 +1894,7 @@ export class Game {
         let hint;
         // «Gather» at a carcass (meat) or a golden tree (apples)
         if (name === 'Gather') {
-            const side = (this.wandSide() || ['right', 'left'].find((sd) => this.character.isArmRaised(sd))) || 'right';
+            const side = (this.wandSide() || [this.dom, this.off].find((sd) => this.character.isArmRaised(sd))) || this.dom;
             // things lying about (at a body): all of them into the slots (Death.js)
             const loot = this.death?.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
             if (loot && loot.startsWith('✨')) { this.hud.setVoice(loot, true); this._lastBuild = now; if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost); return 'Gather'; }
@@ -1998,7 +2002,7 @@ export class Game {
         if (this.doors.carried) { this.doors._putDown(); this._lastLevitate = now; return 'Levitation'; }
         const hint = this.levitation.cast();
         if (hint) {
-            const side = (this.wandSide() || ['right', 'left'].find((sd) => this.character.isArmRaised(sd))) || 'right';
+            const side = (this.wandSide() || [this.dom, this.off].find((sd) => this.character.isArmRaised(sd))) || this.dom;
             if (this.doors.tryLift(side)) { this.combat.pay('Levitation'); this._lastLevitate = now; return 'Levitation'; }
             this.hud.setVoice(hint, true);
             return null;
@@ -2299,10 +2303,10 @@ export class Game {
         if (name === 'Fire') { this.campfires._lastCast = 0; return this.campfires.cast(true, true); }
         if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') {
             this._lastWind = this._lastOvergrown = 0;
-            const origin = this.character.getHandWorldPosition('right');
+            const origin = this.character.getHandWorldPosition(this.dom);
             const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-            this.spells.cast(name, origin, dir, 'right', this.localId);
-            if (this.sync) this.sync.spell(name, origin, dir, 'right');
+            this.spells.cast(name, origin, dir, this.dom, this.localId);
+            if (this.sync) this.sync.spell(name, origin, dir, this.dom);
             return name;
         }
         if (name === 'SuitUp') return this.armor.suitUp(true);
@@ -2310,10 +2314,10 @@ export class Game {
         if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
         if (name === 'Sands') { this._lastDuelCast = 0; return this._castDuel('Sands', 'SandsDuel', true); }
         if (name === 'Ice' || name === 'Frozen') { this._lastDuelCast = 0; return this._castDuel('Ice', 'IceDuel', true); }
-        const origin = this.character.getHandWorldPosition('right');
+        const origin = this.character.getHandWorldPosition(this.dom);
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-        this.spells.cast(name, origin, dir, 'right', this.localId);
-        if (this.sync) this.sync.spell(name, origin, dir, 'right');
+        this.spells.cast(name, origin, dir, this.dom, this.localId);
+        if (this.sync) this.sync.spell(name, origin, dir, this.dom);
     }
 
     toggleFlashlight() {

@@ -62,8 +62,8 @@ export class Builder {
     /** The raised hand (preferring the spell hand) and its ray. */
     _hand() {
         const ch = this.game.character;
-        const pref = this.game.magicHand || this.game.lastMagicHand || 'right';
-        const side = this.game.wandSide?.() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s))); // (a wand: its hand only)
+        const pref = this.game.magicHand || this.game.lastMagicHand || this.game.dom || 'right';
+        const side = this.game.wandSide?.() || (ch.isArmRaised(pref) ? pref : [this.game.dom || 'right', this.game.off || 'left'].find((s) => ch.isArmRaised(s))); // (a wand: its hand only)
         if (!side) return null;
         return { side, o: ch.getHandWorldPosition(side, new THREE.Vector3()), d: ch.getHandDirection(side, new THREE.Vector3()) };
     }

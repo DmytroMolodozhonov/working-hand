@@ -252,6 +252,7 @@ function readConfig() {
         handVersion: document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
+        leftHanded: $('handedness')?.value === 'left',
         look: activeLook(), // the hero from the «Персонаж» tab
         villagerVoice: ($('villager-voice')?.value ?? '1') !== '0',
         villagerVoiceEngine: $('villager-voice')?.value === 'system' ? 'system' : 'neural', // (neural: Supertonic 3 in the browser)
@@ -747,6 +748,7 @@ async function startGameInner(config, welcome) {
         game.settings.smoothness = settings.smoothness;
         game.settings.sensitivity = settings.sensitivity;
         game.settings.drifting = config.drifting !== false;
+        game.settings.leftHanded = !!config.leftHanded;
         await game.init(config, updateProgress);
         if (welcome && game.sync) game.sync.applyWelcome(welcome);
         // the whole visible world is built on the loading screen (the first seconds of play stay smooth)
@@ -933,6 +935,15 @@ applyFps();
 const pauseAudio = setupPauseAudio($('pause-audio'));
 // «🖥 Графика» in the pause menu: the same graphics settings, applied at once
 const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
+// «Правша / Левша» in the pause menu (every mode): the same control as in «Настройки», applied at once
+const pauseHands = setupPauseAudio($('pause-hands'), ['handedness']);
+const applyHandedness = () => {
+    const left = $('handedness')?.value === 'left';
+    poseService.interpreter.leftHanded = left; // (the body's places mirrored: PoseInterpreter.bodyPlaces)
+    if (game?.settings) game.settings.leftHanded = left;
+};
+$('handedness')?.addEventListener('change', applyHandedness);
+applyHandedness();
 // the graphics settings change the running game at once (no restart of the world)
 $('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.world.viewDistance = viewDistanceScale(e.target.value); });
 $('graphics-quality')?.addEventListener('change', (e) => { game?.quality?.setSetting(e.target.value); });
@@ -1015,6 +1026,7 @@ function togglePauseMenu(show) {
         applyFps();
         pauseAudio.sync();
         pauseGraphics.sync();
+        pauseHands.sync();
         // «✨ Заклинания» — only in Creative (not on a map)
         const creative = game?.config?.mode === 'creative' && !game?.config?.map;
         document.querySelector('[data-pause-tab="pause-spells"]').hidden = !creative;
@@ -1280,7 +1292,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'creative-zombie-count', 'minimap-size'];
+        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'creative-zombie-count', 'minimap-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)

@@ -151,7 +151,7 @@ export class WandMagic {
     /** The bare hand casting (creative, no wand): the one the spell was cast with. */
     _bareSide() {
         const g = this.game, ch = g.character;
-        return this._bareHand || ['right', 'left'].find((s) => ch.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || 'right';
+        return this._bareHand || [g.dom || 'right', g.off || 'left'].find((s) => ch.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || g.dom || 'right';
     }
 
     /** The wand's tip in the world (and the direction it points); creative without a wand: the fingertips. */
@@ -184,7 +184,7 @@ export class WandMagic {
             return name;
         } // (a wand, or a bare hand)
         if (!this.wand && !this._bare()) { if (isFinal) g.hud.setVoice('🪄 Это заклинание работает только с волшебной палочкой в руке', true); return null; }
-        if (!this.wand) this._bareHand = ['right', 'left'].find((s) => g.character.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || 'right';
+        if (!this.wand) this._bareHand = [g.dom || 'right', g.off || 'left'].find((s) => g.character.isArmRaised?.(s) && !g.items?.held[s]) || g.magicHand || g.lastMagicHand || g.dom || 'right';
         if (name === 'Lumos' || name === 'LumosMaxima') {
             // (lit at once — «Максима» said right after only makes it brighter; the same word
             // heard again as the speech's final result is not a second cast)
@@ -354,7 +354,7 @@ export class WandMagic {
         if (!tip) {
             // no wand: the hand that points (the raised one, else the spell hand)
             const ch = g.character;
-            side = ['right', 'left'].find((s) => ch.isArmRaised(s) && !g.items.held[s]) || g.magicHand || g.lastMagicHand || 'right';
+            side = [g.dom || 'right', g.off || 'left'].find((s) => ch.isArmRaised(s) && !g.items.held[s]) || g.magicHand || g.lastMagicHand || g.dom || 'right';
             tip = ch.getHandWorldPosition(side, new THREE.Vector3());
             ch.getHandDirection(side, _v2);
         }

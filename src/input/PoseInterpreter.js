@@ -122,6 +122,47 @@ export function bodyPlace(lm, side, aspect = 4 / 3) {
     return purse ? 'purse' : 'wand';
 }
 
+/** The pose's points seen in a mirror (x → 1 − x, the left and the right points swapped): a left-hander as a right-hander. */
+const MIRROR_PAIRS = [[1, 4], [2, 5], [3, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16], [17, 18], [19, 20], [21, 22], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]];
+export function mirrorPose(lm) {
+    if (!lm) return lm;
+    const out = lm.map((p) => (p ? { ...p, x: 1 - p.x } : p));
+    for (const [a, b] of MIRROR_PAIRS) if (a < out.length && b < out.length) [out[a], out[b]] = [out[b], out[a]];
+    return out;
+}
+const mirrorHand = (h) => (h ? h.map((p) => ({ ...p, x: 1 - p.x })) : h);
+
+/**
+ * The body's own places for the hands (the camera's skeleton), for a right- or a left-hander.
+ * A right-hander: the wand in front, a little to the left (the right hand takes it across), the
+ * coin pouches and the things' pocket on the right. A left-hander: all of it mirrored — read
+ * here by mirroring the picture and reading it as a right-hander's.
+ *   belt, place — by the REAL hand ({left, right}: beltPose, bodyPlace);
+ *   pocket — {dom, off, cross}: the leading hand in its pocket (the things), the other hand in
+ *            its own, the leading hand across into the other's pocket;
+ *   purse — {dom, cross}: the leading hand at the pouches (its own hip), the other hand across.
+ */
+export function bodyPlaces(lm, leftHand, rightHand, aspect = 4 / 3, leftHanded = false) {
+    const L = leftHanded ? mirrorPose(lm) : lm;
+    // (in the mirror the person's left hand is the "right" one)
+    const hd = leftHanded ? mirrorHand(leftHand) : rightHand, ho = leftHanded ? mirrorHand(rightHand) : leftHand;
+    const real = (o) => (leftHanded ? { left: o.right, right: o.left } : o);
+    const belt = { left: beltPose(L, 'left', aspect), right: beltPose(L, 'right', aspect) };
+    // which place each hand is at (the wand's in front, the pouches' at the leading hand's hip): one answer
+    const place = { left: bodyPlace(L, 'left', aspect), right: bodyPlace(L, 'right', aspect) };
+    const pocket = {
+        dom: pocketPose(L, hd, 'right', aspect),
+        off: pocketPose(L, ho, 'left', aspect),
+        cross: pocketPose(L, hd, 'right', aspect, 'left'),
+    };
+    // (nor the leading hand's pocket: a hand at the wand's place takes the wand, not the next thing from a slot)
+    if (pocket.dom === true && place.right === 'wand') pocket.dom = false;
+    // (the leading hand at the pouches only when really at its hip — not reaching for the wand)
+    const pr = purseHand(L, 'right', aspect);
+    const purse = { dom: pr === true ? place.right === 'purse' : pr, cross: purseHand(L, 'left', aspect, 'right') };
+    return { belt: real(belt), place: real(place), pocket, purse };
+}
+
 export function purseHand(lm, side, aspect = 4 / 3, hipSide = side) {
     const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
     const h = hipSide === 'left' ? 23 : 24; // (the left hand can reach across to the RIGHT hip)
@@ -205,6 +246,7 @@ export class PoseInterpreter {
         // the head's turn: still → small jitter smoothed away; a real turn passes at once
         this.headFilter = { yaw: new OneEuro(0.2, 0.5), pitch: new OneEuro(0.2, 0.5) };
         this.headBody = new HeadFromBody(); // (no face found — farther from the camera: the nose and the ears)
+        this.leftHanded = false; // (Настройки: Левша — the body's places mirrored: bodyPlaces)
         // «Earthquake» stomp: a knee lifted, then put down hard
         this.legs = { left: { liftedAt: 0 }, right: { liftedAt: 0 } };
         this.stompAt = 0;
@@ -300,19 +342,8 @@ export class PoseInterpreter {
             data.nose = P(0);
             data.mouth = { x: (lm[9].x + lm[10].x) / 2, y: (lm[9].y + lm[10].y) / 2, z: 0 }; // (a bow's anchor is just under it)
             data.armLift = this._armLift(lm);
-            data.pocket = {
-                left: pocketPose(lm, results.leftHandLandmarks, 'left', data.aspect),
-                right: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect),
-                cross: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect, 'left'), // (the right hand in the LEFT pocket)
-            };
-            data.belt = { left: beltPose(lm, 'left', data.aspect), right: beltPose(lm, 'right', data.aspect) }; // (WandBelt)
-            // which place each hand is at (the wand's in front, the pouches' at the right hip): one answer
-            data.place = { left: bodyPlace(lm, 'left', data.aspect), right: bodyPlace(lm, 'right', data.aspect) };
-            // (the right hand at the pouches only when really at the right hip — not reaching for the wand)
-            const pr = purseHand(lm, 'right', data.aspect);
-            data.purse = { right: pr === true ? data.place.right === 'purse' : pr, cross: purseHand(lm, 'left', data.aspect, 'right') }; // (CoinBelt: the right hip; the left hand across)
-            // (nor the right pocket: a hand at the wand's place takes the wand, not the next thing from a slot)
-            if (data.pocket.right === true && data.place.right === 'wand') data.pocket.right = false;
+            // the body's own places (the wand's belt, the pouches, the pockets) — mirrored for a left-hander
+            Object.assign(data, bodyPlaces(lm, results.leftHandLandmarks, results.rightHandLandmarks, data.aspect, this.leftHanded));
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
             data.bodyTouch = { left: bodyTouch(lm, 'left', data.aspect), right: bodyTouch(lm, 'right', data.aspect) }; // (armour put on by hand: Armor.js)
 

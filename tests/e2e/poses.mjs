@@ -62,7 +62,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, bend = 
  *     go out of the picture's bottom, seen there with a low visibility, as a real camera does)
  *   jitter: a real camera's shake — every point moved randomly by up to this much (repeatable)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null, lowLeft = false, scale = 1, jitter = 0 } = {}) {
+export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null, lowLeft = false, scale = 1, jitter = 0, mirror = false } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -172,6 +172,13 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
         if (st == null) continue;
         const o = typeof st === 'number' ? { angle: st } : st;
         sticks.push({ wrist: [w.x, w.y], dir: [Math.sin(o.angle), -Math.cos(o.angle)], out: o.out ?? 2.5, len: (o.out ?? 2.5) + 1, conf: o.conf ?? 0.9 });
+    }
+    // `mirror`: the same person seen in a mirror — a left-hander doing what a right-hander does
+    // (x → 1 − x, the left and the right points and hands swapped)
+    if (mirror) {
+        for (const q of p) q.x = 1 - q.x;
+        for (const [i, j] of [[1, 4], [2, 5], [3, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16], [17, 18], [19, 20], [21, 22], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]]) [p[i], p[j]] = [p[j], p[i]];
+        for (const h of hands) { for (const q of h.landmarks) q.x = 1 - q.x; h.label = h.label === 'Right' ? 'Left' : 'Right'; }
     }
     return { poseLandmarks: p, hands, faceLandmarks: undefined, cost: 5, ...(sticks.length ? { sticks } : {}) };
 }

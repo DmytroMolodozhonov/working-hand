@@ -117,3 +117,42 @@ test('the wand is tucked in only on purpose: the head only a little lowered, low
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('only the leading hand takes the wand off the belt: a right-hander\'s left hand never; a left-hander (the setting) takes it with the left hand, the right never', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const setup = (lefty) => page.evaluate((lefty) => {
+        const g = window.__zns.game;
+        for (const s of ['left', 'right']) g.items.releaseHand(s);
+        g.inventory.slots.fill(null);
+        g.inventory.slots[1] = { kind: 'wand', uid: 'wl' + lefty, type: 0 };
+        g.inventory._render();
+        const sel = document.getElementById('handedness');
+        sel.value = lefty ? 'left' : 'right';
+        sel.dispatchEvent(new Event('change'));
+        window.__zns.poseService.interpreter.lastHead.pitch = -0.6;
+    }, lefty);
+    const hands = () => page.evaluate(() => ({ l: window.__zns.game.items.held.left?.item.kind || null, r: window.__zns.game.items.held.right?.item.kind || null }));
+    const reach = async (o) => {
+        await feedNoisy(page, { arms: 'forward', rightCurl: 0, leftCurl: 0, ...o }, 10);
+        await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0, ...o }, 12);
+        const c = o.belt === 'left' ? 'leftCurl' : 'rightCurl'; // (the hand that went to the belt — in the mirror too: its fingers go with it)
+        await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0, ...o, [c]: 0.9 }, 15);
+        await feedNoisy(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 6);
+    };
+    // a right-hander: the left hand at the wand — nothing
+    await setup(false);
+    await reach({ belt: 'left' });
+    assert.deepEqual(await hands(), { l: null, r: null }, 'a right-hander\'s left hand never takes it off the belt');
+    // a left-hander: the right hand at the wand (in front, a little right) — nothing; the left hand — taken
+    await setup(true);
+    await reach({ belt: 'left', mirror: true });
+    assert.deepEqual(await hands(), { l: null, r: null }, 'a left-hander\'s right hand never takes it off the belt');
+    await reach({ belt: 'right', mirror: true });
+    assert.deepEqual(await hands(), { l: 'wand', r: null }, 'a left-hander takes it with the left hand');
+    const shown = await page.evaluate(() => { const g = window.__zns.game; return { purse: g.inventory.purse.model ? g.inventory.purse.model.children[0].position.x : null }; });
+    assert.ok(shown.purse === null || shown.purse < 0, `a left-hander's pouches on the left hip (${shown.purse})`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

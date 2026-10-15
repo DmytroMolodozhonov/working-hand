@@ -612,7 +612,7 @@ export class Dragons {
             pouch.count = (pouch.count || 0) + k;
             put = k; where = `в мешочек (в нём ${pouch.count})`;
             inv?._render?.();
-        } else if (inv?.purse && inv.purse.count > 0 && g.currentPose?.purse?.right === true && side === 'right') {
+        } else if (inv?.purse && inv.purse.count > 0 && g.currentPose?.purse?.dom === true && side === (g.dom || 'right')) {
             const rest = inv.purse.add(n);
             put = n - rest; where = `в мешочки на поясе (${inv.purse.count})`;
             inv._render?.();

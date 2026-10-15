@@ -1078,7 +1078,7 @@ export class ItemSystem {
         if (!r) return;
         const cur = this.remoteHeld.get(id) || {};
         if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); cur[side].model.parent?.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
-        if (item && side === 'purse') { const model = makePurseModel(item.count || 0); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body)
+        if (item && side === 'purse') { const model = makePurseModel(item.count || 0, !!item.left); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body)
         else if (item) { const model = makeItemModel(item); g.scene.add(model); cur[side] = { item, model }; }
         this.remoteHeld.set(id, cur);
     }

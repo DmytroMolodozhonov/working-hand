@@ -52,6 +52,8 @@
             <div id="pause-main" class="pause-pane active">
                 <button id="pause-continue-btn">▶ Продолжить</button>
                 <button id="pause-exit-btn">🏠 Выйти в главное меню</button>
+                <!-- the leading hand (Правша / Левша), the same control as in «Настройки» -->
+                <div id="pause-hands"></div>
             </div>
             <div id="pause-audio" class="pause-pane"></div>
             <div id="pause-graphics" class="pause-pane"></div>
@@ -299,6 +301,13 @@
                                 V5 (Новая, испытываем)
                             </label>
                         </div>
+                    </div>
+                    <div class="settings-group">
+                        <label title="Левша: всё зеркально — палочка за поясом спереди чуть справа, её берёт левая рука; мешочки с монетами и карман для вещей — слева">Ведущая рука:</label>
+                        <select id="handedness">
+                            <option value="right" selected>Правша</option>
+                            <option value="left">Левша</option>
+                        </select>
                     </div>
                     <div class="settings-group">
                         <label>Качество Кистей (Hands):</label>
