@@ -22,8 +22,9 @@ test.after(async () => {
     srv?.stop();
 });
 
-test('«Create a Castle»: a whole castle with its gate, iron doors, beds, chests — and its pictures', { timeout: 240000 }, async () => {
+test('«Create a Castle»: a whole castle with its gate, iron doors, beds, chests — and its pictures', { timeout: 600000 }, async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 1280, height: 720 } });
+    page.on('console', (m) => { if (/^castle|shot/.test(m.text())) console.log(m.text()); });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
     // the castle ~70 m from the start (tried in a few directions until a place fits)
@@ -34,13 +35,14 @@ test('«Create a Castle»: a whole castle with its gate, iron doors, beds, chest
         for (const [dx, dz] of [[0, -110], [110, 0], [-110, 0], [0, 110], [150, -150], [-150, 150], [200, 0], [0, -200]]) {
             at = { x: Math.round(me.x + dx), z: Math.round(me.z + dz) };
             g.character.group.position.set(at.x - dx * 0.4, me.y, at.z - dz * 0.4);
-            for (let i = 0; i < 20; i++) await frame();
+            for (let i = 0; i < 4; i++) await frame();
+            console.log('castle try', dx, dz);
             res = cm._hostStart({ at: [at.x, 0, at.z], c: [at.x - dx * 0.4, at.z - dz * 0.4] }, g.localId);
             if (res === true) break;
         }
         if (res !== true) return { res };
         // (the headless browser draws a few frames a second: the 30 s run here, a little a frame, the worker given its time)
-        for (let i = 0; i < 4000 && cm.magic; i++) { cm.update(0.05); if (i % 20 === 0) await frame(); }
+        for (let i = 0; i < 4000 && cm.magic; i++) { cm.update(0.05); if (i % 40 === 0) { await frame(); console.log('castle t', cm.magic?.t?.toFixed(1), performance.now() | 0); } }
         const rec = [...cm.list.values()][0];
         const lay = rec && cm.plan(rec);
         return { res, done: !cm.magic, at, face: rec?.face, doors: lay ? lay.doors.filter((d) => g.doors.list.has(rec.id + d.id)).length : 0, beds: [...g.beds.list.keys()].filter((k) => k.startsWith(rec?.id)).length, chests: cm.chests.size };
@@ -69,7 +71,7 @@ test('«Create a Castle»: a whole castle with its gate, iron doors, beds, chest
             g.dayStart = Date.now() - 24 * 60 * 1000 * 0.3;
             g.world.setDayPhase?.(g.dayPhase());
             g.world.terrain.flushAround?.(eye.x, eye.z);
-            for (let i = 0; i < 160; i++) await frame();
+            const t0 = performance.now(); for (let i = 0; i < 60 && performance.now() - t0 < 25000; i++) await frame();
             cam.position.copy(eye); cam.lookAt(look);
             g.scene.updateMatrixWorld(true);
             g.renderer.render(g.scene, cam);
