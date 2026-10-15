@@ -59,7 +59,7 @@ export const HOUSE_MAGIC = {
     AIM: 30, // m: how far the wand reaches the heap
     AHEAD: 13, // m: Creative, the hand not pointing at the ground — the house this far ahead
     NEAR_HOUSE: 22, // m from the house's middle: a heap thrown «beside the house»
-    IMPROVE_WAIT: 180, // s after the house last changed (Creative: 10)
+    IMPROVE_WAIT: 180, // s after the house last changed (Creative: no wait)
     GRACE: 0.7, // s without the wand in the hand before the magic breaks (a glitch of the camera is no letting go)
     SCROLL_FIRST: 0.35, // the chance of a «Create a House» scroll in a chest — until the player has found one
     RUIN: 0.33, // less than this share of its blocks left: a ruin
@@ -341,7 +341,7 @@ export class HouseMagic {
             rec = this.list.get(ask.hid) || this.houseNear(at, HOUSE_MAGIC.NEAR_HOUSE);
             if (!rec) return '🏠 Рядом нет дома, созданного магией';
             if (rec.level >= MAX_LEVEL) return '🏰 Этот дом уже пятого уровня';
-            const wait = (creative ? 10 : HOUSE_MAGIC.IMPROVE_WAIT) - (Date.now() - (rec.t || 0)) / 1000;
+            const wait = creative ? 0 : HOUSE_MAGIC.IMPROVE_WAIT - (Date.now() - (rec.t || 0)) / 1000;
             if (wait > 0) return `⏳ Дом ещё не готов к новой магии — подождите ${Math.ceil(wait)} с`;
             level = rec.level + 1;
         } else {
