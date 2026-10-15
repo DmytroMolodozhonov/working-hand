@@ -2354,6 +2354,7 @@ export class Game {
     onLocalDeath(text, byId) {
         const manaMax = this.mana?.max; // (told to the others: a duel won against me is worth this much)
         this.mana?.onDeath(); // all the mana grown with practice is lost
+        this.achievements?.onDeath(); // … and the achievements with their mana cells (the author: death takes them)
         this.runner?.onDeath(); // (the running book's quickness is lost)
         this.death?.playerDied(byId, text); // the body stays, everything drops (Death.js); game.onDeath hooks
         if (this.sync) this.sync.died(byId, manaMax);

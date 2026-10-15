@@ -141,19 +141,24 @@ test('the suit: −40 % from any spell on top of a magic robe; blows as usual; s
     assert.equal(wornCode({ robe: suit }).r, 4);
 });
 
-test('death keeps the achievements: the practice-grown mana goes, the achievements\' bonus stays', () => {
+test('death takes the achievements: the practice-grown mana and the achievements\' cells both go; won again later', () => {
     const { g, a } = fakeGame();
     g.mana.grow(20, 'spell', 'Lumos');
     a.gain('king');
     assert.equal(g.combat.maxFatigue, 30 + 20 + 50);
-    g.mana.onDeath();
-    assert.equal(g.combat.maxFatigue, 30 + 50, 'the practice gone, the king\'s +50 kept');
-    assert.ok(a.done.has('king'));
     // saved and loaded: the same, never twice
     const { g: g2, a: a2 } = fakeGame();
     a2.restore(a.snapshot());
     a2.restore(a.snapshot());
     assert.equal(g2.combat.maxFatigue, 80);
+    g.mana.onDeath();
+    a.onDeath();
+    assert.equal(g.combat.maxFatigue, 30, 'the practice gone, the king\'s +50 gone too');
+    assert.equal(a.done.size, 0);
+    assert.equal(a.regenK, 1, 'no quicker mana either');
+    assert.equal(a.snapshot().done.length, 0, 'and so it is saved');
+    a.gain('king');
+    assert.equal(g.combat.maxFatigue, 80, 'the king again: +50 again');
 });
 
 test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; five of six is no High Mage', () => {

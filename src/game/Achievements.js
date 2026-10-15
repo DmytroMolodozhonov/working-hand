@@ -11,7 +11,10 @@
  *   • All of them: the status «Высший маг» — +1000 more to the maximum, +100 % more to the speed,
  *     and the High Mage's suit (ArmorTypes.makeArchmageSuit): it comes into a slot (or at the
  *     feet) with a golden flash; put on by hand like any robe; every spell does 40 % less harm.
- *   • Kept for good: death takes the mana grown with practice (Mana.onDeath), never these.
+ *   • Death takes them (the author: «смерть их забирает»): all the achievements, their mana cells,
+ *     their quicker mana and «Высший маг» go (onDeath) — as the mana grown with practice does
+ *     (Mana.onDeath). They are won again by beating the bosses again. The High Mage's suit is given
+ *     once only (it stays a thing of yours; only a High Mage can put it on — Armor.js).
  *     They live with the player (WorldSave.playerSnapshot → `ach`), as the mana and the things do.
  *
  * Who gets it (the author: «убийство Королевы можно втроём, и будет считаться всем» — the same
@@ -281,7 +284,7 @@ export class Achievements {
         return true;
     }
 
-    /** The bonus of the achievements on the mana bar (only what is new: never twice). */
+    /** The bonus of the achievements on the mana bar (only what is new: never twice; taken off when they are lost). */
     _applyBonus() {
         const c = this.game.combat;
         const want = achBonus(this.done).mana;
@@ -290,8 +293,21 @@ export class Achievements {
             if (c.addMaxFatigue) c.addMaxFatigue(dm);
             else { c.maxFatigue = (c.maxFatigue || 30) + dm; c.fatigue = Math.min(c.maxFatigue, (c.fatigue || 0) + dm); }
             c._hudKey = '';
+        } else if (dm < 0 && c) {
+            c.maxFatigue = Math.max(1, (c.maxFatigue || 30) + dm);
+            c.fatigue = Math.min(c.fatigue || 0, c.maxFatigue);
+            c._hudKey = '';
         }
         if (c || !dm) this._bonusOn.mana = want;
+    }
+
+    /** I died: the achievements are lost — their cells, their quicker mana, «Высший маг» (won again by beating the bosses again). */
+    onDeath() {
+        if (!this.done.size) return;
+        this.done.clear();
+        this._applyBonus();
+        this._mirror();
+        this.resend(); // (the others: no more «Высший маг» over my name)
     }
 
     _becameHigh(quiet) {
