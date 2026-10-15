@@ -328,6 +328,15 @@ export class Inventory {
         }
     }
 
+    /** The hand holds a thing that goes into a slot (not the wand, not coins — the belt's, not a weapon — the back's). */
+    _pocketable(side) {
+        const g = this.game;
+        const h = g.items?.held[side];
+        if (!h || g.weapons?.hands?.[side]?.held || g.boards?.hold) return false;
+        const k = h.item.kind;
+        return k !== 'wand' && k !== 'coins' && !BACK_KINDS.has(k);
+    }
+
     _fx(text, side = 'right') {
         this.game.hud.toast?.(text, 1200);
         const p = this.game.character.getHandWorldPosition(side);
@@ -359,7 +368,10 @@ export class Inventory {
             // the hand put INTO the pocket (as the camera sees it): it stays there a moment
             // (a slap on the hip no longer counts: people did it by accident)
             const pk = g.currentPose.pocket;
-            const inPocket = side === 'left' ? pk?.left : pk?.right;
+            let inPocket = side === 'left' ? pk?.left : pk?.right;
+            // a thing in the right hand brought to the right hip, as a pouch is tied on (the hand is
+            // seen holding it, so its fingers never point down into the pocket): it goes into a slot too
+            if (side === 'right' && inPocket !== true && g.currentPose.purse?.right === true && this._pocketable('right')) inPocket = true;
             // the right hand reaching across into the LEFT pocket: the wand's pocket too
             // (the wand is no longer put away / drawn by a pocket — lowering the arm did it by
             // accident: it has its own place at the waistband, WandBelt.js)
