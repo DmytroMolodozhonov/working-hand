@@ -343,6 +343,25 @@ export class ArmorSystem {
         return 'strip';
     }
 
+    /**
+     * (host) A knight / the king who can't get out of deep water in his plates throws them off
+     * (CreatureSwim.js): they sink by him — lying on the bottom, to be dived for — and he swims on.
+     */
+    shedVillager(v) {
+        const g = this.game;
+        if (v.dead || v.stripped || !(v.role === 'knight' || v.role === 'king')) return false;
+        const drops = this._villagerSteel(v);
+        v.armor = 0; v.maxArmor = 0;
+        this._restyle(v);
+        for (const it of drops) {
+            const at = new THREE.Vector3(v.x + (Math.random() - 0.5), v.y + 0.8, v.z + (Math.random() - 0.5));
+            g.items?.spawnLoose(it, at, { vel: new THREE.Vector3((Math.random() - 0.5) * 0.6, -1, (Math.random() - 0.5) * 0.6), spin: new THREE.Vector3(Math.random(), Math.random(), Math.random()) });
+        }
+        g.sync?.armor?.({ a: 'vstrip', id: v.id });
+        g.castleLife?._say?.(v, 'Прочь латы! Иначе утону!', 3);
+        return true;
+    }
+
     /** A knight's / the king's plates as things (as beaten as his armour was). */
     _villagerSteel(v) {
         const k = v.maxArmor > 0 ? Math.max(0.1, (v.armor || 0) / v.maxArmor) : 1;

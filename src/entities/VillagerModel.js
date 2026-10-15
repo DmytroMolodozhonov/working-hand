@@ -25,7 +25,7 @@ import { SKIN_TONES } from './Appearance.js';
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
@@ -1189,6 +1189,30 @@ export class VillagerModel {
                     rate = 30;
                 }
                 breathe = 0;
+                break;
+            }
+            case 'swim': {
+                // in deep water (CreatureSwim.js): the breaststroke — both hands forward, out wide and
+                // back; the legs kick; the body leans into the water, the chin up over it
+                const c = Math.sin(t * 3.4), k = Math.sin(t * 6.8);
+                T.aLX = T.aRX = 2.0 + c * 0.55;
+                T.aLZ = -0.25 - Math.max(0, -c) * 0.7; T.aRZ = 0.25 + Math.max(0, -c) * 0.7;
+                T.wrist = -0.4;
+                T.lL = -0.35 + k * 0.4; T.lR = -0.35 - k * 0.4; T.kL = -0.5 - Math.max(0, k) * 0.5; T.kR = -0.5 - Math.max(0, -k) * 0.5;
+                T.hx = -0.45; T.headX = 0.45;
+                rate = 18; breathe = 0;
+                break;
+            }
+            case 'paddle': {
+                // floundering (in plates, or going under): the hands slap at the water in turns, the
+                // legs kick hard, the head pulled back to keep the mouth out
+                const a = t * 7.5, l = Math.sin(t * 9);
+                T.aLX = 1.5 + Math.sin(a) * 0.8; T.aRX = 1.5 + Math.sin(a + Math.PI) * 0.8;
+                T.aLZ = -0.6 - Math.cos(a) * 0.25; T.aRZ = 0.6 + Math.cos(a) * 0.25;
+                T.wrist = -0.2;
+                T.lL = l * 0.6; T.lR = -l * 0.6; T.kL = -0.4 - Math.max(0, l) * 0.8; T.kR = -0.4 - Math.max(0, -l) * 0.8;
+                T.hx = -0.15; T.headX = 0.55; T.headY = Math.sin(t * 2.3) * 0.3;
+                rate = 26; breathe = 0;
                 break;
             }
             case 'sit':

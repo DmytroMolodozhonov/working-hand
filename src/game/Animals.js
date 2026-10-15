@@ -30,6 +30,7 @@
  * a rider moves their own horse.
  */
 
+import { SWIMMERS, deepAt, waterAt, swimStep, splashes } from './CreatureSwim.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { animalMagicKind, creditKill } from './Mana.js';
@@ -815,6 +816,7 @@ export class Animals {
         if (a.pegasus && this._pegasusThink(a, dt)) return; // (the Pegasus defends his herd in the air)
         if (a.form && this.guards.think(a, dt)) return; // (the bronze bull / the minotaur: HerdGuards.js)
         if (a.type === 'runbook' && g.runner) { g.runner.think(a, dt); return; } // (runs, dodges, hides: RunningBook.js)
+        if (this._swim(a, dt)) return; // (in deep water: swims to the bank — CreatureSwim.js)
         let speed = 0, bunch = false;
         // «Брейнрот»: a servant follows its master and fights for them
         const sv = a.servantOf != null ? g.servants?.plan('a', a, p, 1.6 * S.size + 0.8) : null;
@@ -1366,9 +1368,57 @@ export class Animals {
         if (a.spd > 0) {
             const yaw = a.group.rotation.y;
             const step = a.spd * slowFactor(a) * dt;
+            // deep water ahead: no step into it (they never wade in on their own — CreatureSwim.js)
+            const t = this.game.terrain?.data, kind = SWIMMERS[a.type];
+            if (t && kind && deepAt(t, p.x - Math.sin(yaw) * (step + 0.8), p.z - Math.cos(yaw) * (step + 0.8), p.y - 0.5, kind.deep)) { a.spd = 0; a.target?.set?.(p.x, p.y, p.z); return; }
             p.x -= Math.sin(yaw) * step; p.z -= Math.cos(yaw) * step;
             a.walkT += dt * a.spd * 2.2;
         }
+    }
+
+    /**
+     * (host) A beast in deep water (thrown in, a wave, the bank broken): it swims at the top — the
+     * horse well, the cow slower, a pig or a sheep floundering — to the nearest low bank or the
+     * shallows and scrambles out; nowhere to go: it tires and drowns. True: in the water.
+     */
+    _swim(a, dt) {
+        const kind = SWIMMERS[a.type];
+        const t = this.game.terrain?.data;
+        if (!kind || !t || a.fly || a.rider) return false;
+        const p = a.group.position;
+        if (a.climbA) {
+            // scrambling out: the front legs on the edge, a heave, up
+            const c = a.climbA;
+            c.t += dt;
+            const k = Math.min(1, c.t / c.dur), up = Math.min(1, k / 0.7);
+            p.x = c.x0 + (c.x1 - c.x0) * k; p.z = c.z0 + (c.z1 - c.z0) * k;
+            p.y = c.y0 + (c.y1 - c.y0) * (up * up * (3 - 2 * up));
+            a.walkT += dt * 9;
+            this._animate(a, 1, dt);
+            if (k >= 1) a.climbA = null;
+            return true;
+        }
+        if (!a.sw && !deepAt(t, p.x, p.z, p.y - 0.5, kind.deep)) return false; // (the usual case: dry land)
+        const sw = a.sw || (a.sw = {});
+        const b = a._swb || (a._swb = { x: 0, y: 0, z: 0, yaw: 0 });
+        b.x = p.x; b.y = p.y - 0.5; b.z = p.z; b.yaw = a.group.rotation.y;
+        const r = swimStep(b, sw, kind, { t, home: a.home, legH: a.dims?.legH ?? 0.6 }, dt);
+        if (!r) { a.sw = null; return false; } // (its feet on the bottom again: the shallows)
+        p.x = b.x; p.y = b.y + 0.5; p.z = b.z; a.group.rotation.y = b.yaw;
+        a.vel?.set(0, 0, 0); a.airborne = false;
+        a.spd = sw.moving ? kind.speed : 0;
+        a.walkT += dt * (kind.flounder ? 10 : 5); // (the legs paddle under the water)
+        this._animate(a, 1, dt);
+        splashes(this.game, p.x, b.y + (a.dims?.legH ?? 0.6) * 1.1 + 0.15, p.z, dt, !!kind.flounder, sw);
+        if (r === 'drown') this.hit(a, 1, null, a.attacker ?? null);
+        else if (r.out) {
+            const o = r.out;
+            a.sw = null;
+            a.group.rotation.y = Math.atan2(-(o.x - p.x), -(o.z - p.z));
+            a.climbA = { t: 0, dur: kind.flounder ? 1.1 : 0.8, x0: p.x, y0: p.y, z0: p.z, x1: o.x, y1: o.y + 0.5, z1: o.z };
+            a.target?.set?.(o.x, o.y + 0.5, o.z);
+        }
+        return true;
     }
 
     /** People near the animals (positions and how fast they walk), once a frame. */
@@ -1423,7 +1473,8 @@ export class Animals {
             const k = Math.max(0, 1 - (a.airborne ? 0.6 : 5) * dt);
             v.x *= k; v.z *= k;
         }
-        const gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
+        let gy = g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z);
+        if (a.dead) { const w = waterAt(g.terrain?.data, p.x, p.z, gy); if (w && w.depth >= 2) gy = w.surface - base; } // (a carcass in deep water floats)
         if (a.airborne || p.y > gy + base + 0.8) {
             // in the air: falls
             v.y -= 22 * dt;

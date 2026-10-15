@@ -6,6 +6,7 @@
  * ones from main.js; see the README for the list of fixes.
  */
 
+import { deepAt } from './CreatureSwim.js';
 import { crowdStep } from './CrowdSources.js';
 import * as THREE from 'three';
 import { VoiceGate } from './VoiceGate.js';
@@ -595,6 +596,21 @@ export class Game {
     }
 
     // ================================================================ zombies
+    /**
+     * A zombie's step (crowd: round the others). Deep water: they don't walk into it after anyone;
+     * thrown in, they don't breathe and don't float — they trudge along the bottom, slowly (CreatureSwim.js).
+     */
+    _zombieStep(me, p, ux, uz, d, speed, dt) {
+        const st = crowdStep(this, me, p, ux, uz, d, { r: 0.5, speed, dt });
+        if (!st) return st;
+        const t = this.terrain?.data;
+        if (!t) return st;
+        const feet = p.y - 1;
+        if (deepAt(t, p.x, p.z, feet)) { const o = this._zStep || (this._zStep = { x: 0, z: 0 }); o.x = st.x * 0.45; o.z = st.z * 0.45; return o; }
+        if (deepAt(t, p.x + st.x * 0.9, p.z + st.z * 0.9, feet)) return null; // (the bank: it stops at the water)
+        return st;
+    }
+
     _createZombie(pos, id = null) {
         const zid = id ?? this.nextZombieId++;
         const z = new Zombie(this.scene, pos, zid, { fx: this.fx, sound: this.sound });
@@ -3141,7 +3157,7 @@ export class Game {
             // held up by «Вингардиум Левиоса»: Levitation carries it (it can't walk or bite)
             if (z.lev) { z._spinHalo?.(dt); continue; }
             const target = z.dummy ? null : this._zombieTarget(z);
-            if (!z.steer) z.steer = (me, p, ux, uz, d, speed, sdt) => crowdStep(this, me, p, ux, uz, d, { r: 0.5, speed, dt: sdt });
+            if (!z.steer) z.steer = (me, p, ux, uz, d, speed, sdt) => this._zombieStep(me, p, ux, uz, d, speed, sdt);
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
             if (z.dummy && !z.isDead && !z.isFrozen && !z.isStunned && !(z.stunTimer > 0)) {
                 // pushed by a blow, it steps back to its place (stands on the spot)

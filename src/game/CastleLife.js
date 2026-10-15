@@ -51,6 +51,7 @@ import { Wanted, wreckPoints, wantedTactics } from './Wanted.js';
 import { knowsCulprit, sightRange, spellFamily } from './Blame.js';
 import { BodyFound } from './BodyFound.js';
 import { FACE, facesTarget } from './FaceTarget.js';
+import { CSWIM, SWIMMERS, deepAt, waterAt, swimStep, splashes } from './CreatureSwim.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -113,6 +114,12 @@ const SHOUT = {
 };
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+/** In the water (CreatureSwim.js). */
+const SWIM_LINES = {
+    heavy: ['Латы тянут на дно!', 'Тону! В доспехах не выплыть!', 'Тяжело… к берегу!'],
+    wet: ['Вода! Холодная!', 'Помогите, я в воде!', 'К берегу, скорее!'],
+    drown: ['Не могу… больше…', 'Помогите! Тону!', 'Буль…'],
+};
 /** Harm whose kind is done through something else, not straight from the hand (Blame.js: the culprit is not plain). */
 export const viaOfKind = (kind) => (kind === 'quake' ? 'quake' : kind === 'fire' ? 'fire' : null);
 const _v = new THREE.Vector3();
@@ -699,6 +706,8 @@ export class CastleLife {
         const L = Math.round(y + 1.5);
         const f = t.floorBelow(ix, iz, L + 1);
         if (f > L || f < L - 3) return false;
+        // deep water is no ground: nobody walks into it (nor after a foe swimming there — CreatureSwim.js)
+        if (t.get(ix, f + 1, iz) === BLOCK.WATER && t.get(ix, f + 2, iz) === BLOCK.WATER && t.get(ix, f + 3, iz) === BLOCK.WATER) return false;
         if (this.game.carriages?.list.size && this.game.carriages.blocksAt(x, z, y)) return false; // (a cart on the road: round it)
         if (treeAt(this.game, x, z, 0.45)) return false; // (a tree that is a model — an apple tree: never through its trunk)
         if (this.game.locks?.spelled?.size && this.game.locks.blocksAt(x, z, y)) return false; // (a door shut by «Lock»)
@@ -730,6 +739,8 @@ export class CastleLife {
             v.supT = (v.supT || 0) - dt;
             if (v.supT > 0) return;
             v.supT = 0.25;
+            const w = this._deepWater(v);
+            if (w && v.y >= w.surface - 0.6) return; // (the body floats)
             const c = this.game.collision;
             const gy = c?.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c?.groundY?.(v.x, v.z);
             if (gy == null || v.y <= gy + 0.05) return;
@@ -752,8 +763,75 @@ export class CastleLife {
             const k = Math.max(0, 1 - 0.6 * dt);
             v.vx = (v.vx || 0) * k; v.vz = (v.vz || 0) * k;
         }
+        // into deep water: a splash, the water holds the body up (it swims — or, dead, floats)
+        const w = v.vy < 0 ? this._deepWater(v) : null;
+        if (w) {
+            const fy = v.dead ? w.surface - 0.3 : w.surface - SWIMMERS.person.float;
+            if (v.y <= fy) {
+                if (v.vy < -3) this._splash(v, w.surface, true);
+                v.y = fy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false;
+                return;
+            }
+        }
         const gy = g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z);
         if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false; }
+    }
+
+    /** Deep water where the body is (off its feet), or null. */
+    _deepWater(v) {
+        const w = waterAt(this.game.world?.terrain?.data, v.x, v.z, v.y);
+        return w && w.depth >= CSWIM.DEEP ? w : null;
+    }
+
+    /** A splash where a body goes into the water (every computer sees the drops; the host's sound). */
+    _splash(v, surface, big = false) {
+        const st = { splT: 0 };
+        splashes(this.game, v.x, surface, v.z, 0, big, st);
+        if (big) splashes(this.game, v.x, surface, v.z, 0, big, { splT: 0 });
+    }
+
+    /**
+     * (host) In deep water (CreatureSwim.js): it swims at the top to the nearest place to get out
+     * and pulls itself out there; a knight / the king in plates goes slowly, low — no way out for
+     * long, he throws the plates off; nowhere at all (the sea): it tires and drowns. True: swimming.
+     */
+    _swim(v, dt) {
+        const t = this.game.world?.terrain?.data;
+        if (!t || v.seated) return false;
+        const heavy = (v.role === 'knight' || v.role === 'king') && !v.stripped && v.maxArmor > 0;
+        const kind = heavy ? SWIMMERS.heavy : SWIMMERS.person;
+        if (!v.sw && !deepAt(t, v.x, v.z, v.y, kind.deep)) return false; // (the usual case: dry land, the shallows)
+        const sw = v.sw || (v.sw = {});
+        const r = swimStep(v, sw, kind, { t, home: v.cs.def }, dt);
+        if (!r) { v.sw = null; return false; } // (on its feet again: the shallows)
+        v.path = null; v.investigate = null; v.bowing = 0;
+        if (!sw.said) {
+            sw.said = true;
+            if (heavy) this._say(v, pick(SWIM_LINES.heavy), 3);
+            else if (Math.random() < 0.6) this._say(v, pick(SWIM_LINES.wet), 3);
+        }
+        if (r === 'shed') {
+            // the plates pull him down: off with them — they sink, to lie on the bottom
+            this.game.armor?.shedVillager?.(v);
+            if (!v.stripped) { v.stripped = true; v.armor = 0; v.maxArmor = 0; } // (no armour system: the same in numbers)
+            sw.t = 0; sw.noWayT = 0; sw.findT = 0;
+        } else if (r === 'drown') {
+            v.hp = Math.max(0, v.hp - 1);
+            v.barT = 8;
+            if (v.hp <= 0) { this._die(v, v.foe ?? null); return true; }
+            if (Math.random() < 0.3) this._say(v, pick(SWIM_LINES.drown), 2);
+        } else if (r.out) {
+            // at the edge: hands on it, pulled up and out (as up a ledge: _climbStep)
+            const o = r.out;
+            v.sw = null;
+            v.yaw = Math.atan2(-(o.x - v.x), -(o.z - v.z));
+            v.climb = { t: 0, dur: 0.8 + Math.max(0, o.y - v.y - 1) * 0.5 + (heavy ? 0.6 : 0), x0: v.x, y0: v.y, z0: v.z, x1: o.x, y1: o.y, z1: o.z };
+            this._splash(v, o.y, false);
+            return true;
+        }
+        v.mode = heavy || sw.under ? 'paddle' : 'swim';
+        v.speed = sw.moving ? kind.speed : 0;
+        return true;
     }
 
     // ------------------------------------------------------------- think
@@ -776,6 +854,8 @@ export class CastleLife {
             return;
         }
         if (v.climb) { this._climbStep(v, dt); return; }
+        // in deep water: swims (never walks the bottom) — to the bank, and out
+        if (this._swim(v, dt)) return;
         // riding on a cart: on its seat (the cart's people get down when trouble comes — Travelers.js)
         if (v.seated && v.job === 'cart' && !v.foe && !v.fear && !(v.fleeT > 0) && g.travelers?.step(v, dt)) return;
         // got inside a wall somehow (a shove, a blink, a blast that moved the blocks): out to the nearest free place
@@ -2519,6 +2599,7 @@ export class CastleLife {
                 if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
                 else if (this.auth && v.model.strikeNow && v.order) this.orders.strike(v);
             }
+            if ((v.mode === 'swim' || v.mode === 'paddle') && visible && d < 40) splashes(g, v.x, v.y + SWIMMERS.person.float, v.z, dt, v.mode === 'paddle', v); // (the water round a swimmer)
             if (v.bubble) v.bubble.update(dt, _v.set(v.x, v.y + (v.wizard ? 5.6 : 4.4), v.z), cam);
             this._updateBar(v, dt, cam);
             if (v.dead) continue;
