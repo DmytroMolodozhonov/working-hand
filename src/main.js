@@ -425,6 +425,7 @@ function earlyTalk(command) {
         talkWait = null;
         const T = game?.castleLife?.talk;
         if (!game?.active || !T || game.isMagicActive || Date.now() - game.lastMagicTime < 1500 || matchSpell(command)) return;
+        if (!$('pause-menu')?.classList.contains('hidden')) return; // (the pause menu opened meanwhile)
         if (!T._listener?.() || !T.hear(command)) return;
         talkEarly = { key: talkKey(command), at: performance.now() };
         hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
@@ -433,6 +434,8 @@ function earlyTalk(command) {
 
 voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (!command) return;
+    // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager
+    if (game?.active && !$('pause-menu')?.classList.contains('hidden')) return;
     // (the words go on / are final: the early answer waits for them, or is already given)
     if (talkWait) { clearTimeout(talkWait); talkWait = null; }
     if (talkEarly && performance.now() - talkEarly.at < 5000) {
