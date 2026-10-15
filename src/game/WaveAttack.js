@@ -35,6 +35,7 @@
 
 import * as THREE from 'three';
 import { createWaterMaterial } from '../fx/WaterMaterial.js';
+import { WaterFlow } from '../fx/WaterFlow.js';
 import { KINDS } from './CreatureImpact.js';
 import { SPELL_PHYSICS, spellPush } from './Impact.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -255,6 +256,7 @@ const DEEP = new THREE.Color(0x0b4a5c), BODY = new THREE.Color(0x1d8aa3), LIGHT 
 const _c = new THREE.Color();
 const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _v = new THREE.Vector3(), _w = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _quat = new THREE.Quaternion();
+const _from = new THREE.Vector3(), _to = new THREE.Vector3();
 
 /** A profile point u (0…1: the back's foot → the crest → over the curl → the lip's foot): {s along, y up}. */
 export function profile(u, H, curl, out = { s: 0, y: 0, part: 0, k: 0 }) {
@@ -426,6 +428,7 @@ class Spray {
         wetGeo.rotateX(-Math.PI / 2);
         this.wet = make(wetGeo, this.wetMat, 500);
         this.d = []; this.f = []; this.p = [];
+        this.flow = new WaterFlow(scene, { maxVerts: 8000, radial: 10 }); // (the streams the wall rises from)
     }
 
     drop(x, y, z, vx, vy, vz, size, floor) {
@@ -505,6 +508,7 @@ class Spray {
 
     dispose() {
         for (const m of [this.drops, this.foam, this.wet]) { this.scene.remove(m); m.geometry.dispose(); m.dispose?.(); }
+        this.flow.dispose();
         this.dropMat.dispose(); this.foamMat.dispose(); this.wetMat.dispose();
     }
 }
@@ -643,6 +647,7 @@ export class WaveAttacks {
         dt = Math.min(dt, 0.05);
         this.time += dt;
         const g = this.game;
+        this.spray?.flow.begin(dt);
         for (const w of [...this.list]) {
             if (w.mine && (w.phase === 'rise' || w.phase === 'aim')) this._aim(w, dt);
             const before = w.phase;
@@ -654,6 +659,7 @@ export class WaveAttacks {
             if (waveHits(w)) this._hits(w);
             w.look?.draw(w, w.bases, this.time);
         }
+        this.spray?.flow.end();
         this.spray?.update(dt);
         if (!this.list.length && this.spray && !this.spray.busy) { this.spray.dispose(); this.spray = null; }
         void g;
@@ -708,8 +714,15 @@ export class WaveAttacks {
         const rnd = Math.random;
         const at = (a) => { const j = Math.round((a + 1) / 2 * (NX - 1)); return w.bases[j]; };
         if (w.phase === 'rise') {
-            // water streams up out of the river into the wall
-            const n = Math.round(60 * dt * (half / 3));
+            // water streams up out of the river into the wall: twisting jets pulled in from all round it
+            const k = Math.min(1, w.h / F.height + 0.15);
+            for (let i = 0; i < 6; i++) {
+                const a = i * 1.047 + Math.sin(this.time * 0.6 + i) * 0.3, r = half * 1.15;
+                _from.set(w.o.x + Math.cos(a) * r, w.o.y, w.o.z + Math.sin(a) * r);
+                _to.set(w.o.x + Math.cos(a + 0.6) * half * 0.3, w.o.y + w.h * 0.55, w.o.z + Math.sin(a + 0.6) * half * 0.3);
+                S.flow.stream(_from, _to, (0.1 + 0.05 * half) * (1.2 - k * 0.6), { lift: 0.4 + w.h * 0.2, strands: 1, speed: 7, foam: 0.35, phase: i });
+            }
+            const n = Math.round(30 * dt * (half / 3));
             for (let i = 0; i < n; i++) {
                 const a = rnd() * Math.PI * 2, r = half * (0.6 + 0.6 * rnd());
                 const x = w.o.x + Math.cos(a) * r, z = w.o.z + Math.sin(a) * r;
