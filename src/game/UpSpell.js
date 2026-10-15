@@ -31,7 +31,7 @@ export function isUpWord(text) {
 }
 
 /** The leap: up speed and the most sideways speed (hero m/s). */
-export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOWN: 0.85, LIFT_UP: 1.6 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
+export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOWN: 0.85, LIFT_UP: 1.3 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
 
 /**
  * What «Up» does now. `armUp`: a hand raised up. → 'rise' | 'leap' | a hint (string) | null (nothing to do).

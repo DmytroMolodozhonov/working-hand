@@ -995,8 +995,8 @@ export class Game {
         this._manaLater = false;
         const name = this._castLocalSpell(text, isFinal);
         if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
-        // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom)
-        if (name && name !== 'Protection' && name !== 'ProtectionMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
+        // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom) — except Lumos: a light on the wand tip is no spell in the way
+        if (name && name !== 'Protection' && name !== 'ProtectionMaxima' && name !== 'Lumos' && name !== 'LumosMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
         if (name && name !== 'Invisibility' && name !== 'Stand') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);

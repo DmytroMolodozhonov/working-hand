@@ -301,6 +301,9 @@ export class Duel {
     constructor(game) {
         this.game = game;
         this.bolts = new Map(); // id -> bolt
+        // real light of the flying charges (cave walls, ground, creatures): a few lights reused for the nearest charges
+        this.boltLights = [0, 1, 2].map(() => new THREE.PointLight(0xffffff, 0, 16, 2));
+        for (const l of this.boltLights) game.scene?.add(l);
         this.clashes = []; // {a, b, p, ...}
         this._t = 0;
         // Crackling charges: a thin bright core + a soft glow, one pair per spell AND
@@ -636,6 +639,23 @@ export class Duel {
         return body ? out.copy(body.a).lerp(body.b, b.ak) : null;
     }
 
+    /** The nearest flying charges light their surroundings in their own colour (every client lights the bolts it sees). */
+    _placeBoltLights() {
+        const cam = this.game.camera?.position, cave = this.game.world?.cave || 0;
+        const fly = [];
+        for (const b of this.bolts.values()) if (b.state === 'flying') fly.push(b);
+        if (cam && fly.length > this.boltLights.length) fly.sort((a, b) => a.front.distanceToSquared(cam) - b.front.distanceToSquared(cam));
+        this.boltLights.forEach((light, i) => {
+            const b = fly[i];
+            if (!b) { light.intensity = 0; return; }
+            light.color.setHex(this.colors(b.spell, b.by).glow);
+            light.position.copy(b.front);
+            light.intensity = 9 * (1 + 0.5 * cave);
+            light.distance = 16 + 8 * cave;
+            light.decay = 2 - 0.75 * cave;
+        });
+    }
+
     // ============================================================= update
     update(dt) {
         this._t += dt;
@@ -644,6 +664,7 @@ export class Duel {
         this._segLife = dt + 1e-4;
         this._trackHands();
         for (const b of [...this.bolts.values()]) this._updateBolt(b, dt);
+        this._placeBoltLights();
         if (this._referee()) this._detectClashes();
         for (const c of [...this.clashes]) this._updateClash(c, dt);
         if (this._won) this._wonAlive();
