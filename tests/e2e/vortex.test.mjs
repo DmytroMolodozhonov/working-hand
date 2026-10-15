@@ -62,12 +62,12 @@ test('Water Vortex: a wand at the river, the hand going round gathers water, poi
     assert.equal(said.phase, 'call');
     // The hand goes round and round (the synthetic camera): the water gathers
     await feed(page, circling(0.09, 1.2), 75, 33);
-    const g1 = await page.evaluate(() => { const s = window.__zns.game.vortex.state; return s && { phase: s.phase, v: s.volume, turns: window.__zns.game.vortex.meter.turns, blobs: window.__zns.game.vortex.blobs.count }; });
+    const g1 = await page.evaluate(() => { const s = window.__zns.game.vortex.state; return s && { phase: s.phase, v: s.volume, turns: window.__zns.game.vortex.meter.turns, blobs: window.__zns.game.vortex.flow.tubes }; });
     assert.ok(g1 && g1.phase === 'gather', `the vortex has started: ${JSON.stringify(g1)}`);
     await feed(page, circling(0.09, 1.6), 75, 33);
-    const g2 = await page.evaluate(() => { const V = window.__zns.game.vortex; return { v: V.state?.volume, blobs: V.blobs.count, visible: V.blobs.visible }; });
+    const g2 = await page.evaluate(() => { const V = window.__zns.game.vortex; return { v: V.state?.volume, blobs: V.flow.tubes, visible: V.flow.mesh.visible }; });
     assert.ok(g2.v > g1.v + 2, `more turns, more water (${g1.v.toFixed(1)} → ${g2.v.toFixed(1)} m³)`);
-    assert.ok(g2.visible && g2.blobs > 30, `rings of water round the player (${g2.blobs} drops of the rings)`);
+    assert.ok(g2.visible && g2.blobs >= 2, `rings of water round the player (${g2.blobs} streams of water)`);
     // A zombie where the hand points; the hand stops and points: everything flies at it
     const zid = await page.evaluate(() => {
         const g = window.__zns.game, T = window.__zns.THREE;

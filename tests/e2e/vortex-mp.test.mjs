@@ -70,7 +70,7 @@ test('Water Vortex over the network: seen by all, the hit decided by the one hit
         V.state = { phase: 'gather', side: 'right', t: 0, idle: 0, still: 0, volume: 20, shown: 20, src: p.clone(), angle: 0, spin: 3, lastDir: null, power: 1 };
         return p.toArray();
     });
-    await wf(guest.page, (id) => { const V = window.__zns.game.vortex; return V.remote.has(id) && V.blobs.count > 50; }, hostId, 20000);
+    await wf(guest.page, (id) => { const V = window.__zns.game.vortex; return V.remote.has(id) && V.flow.tubes >= 2; }, hostId, 20000);
 
     // The guest stands 10 m away; the host sends the vortex at them and says «Bubble» as it flies
     await ev(guest.page, (p) => {
