@@ -106,6 +106,7 @@ export class TotalDestruction {
         const g = this.game;
         const data = g.world?.terrain?.data;
         const f = form(max);
+        if (g.temple?.wards?.(p, f.R)) { g.temple.wardHit(p, f.R); g.sound?.playRumble?.(p, g.character.group.position); return null; } // (the Gods' temple: its golden ward)
         const d = { p: p.clone(), by, mine, max, ...f, P: TOTAL.POWER * f.harm, t: 0, done: false, collapsed: false, sample: data ? ruinSample(data, p.x, p.z, f.R, 400, p.y) : [], crash: 0 };
         this.list.push(d);
         g.sound?.playRumble?.(d.p, g.character.group.position);

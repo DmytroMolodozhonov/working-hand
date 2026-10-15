@@ -198,6 +198,7 @@ export class CreatureImpact {
         const K = ck && KINDS[ck];
         if (!K || !c.group || !K.alive(c)) return 'none';
         if (!this.auth) return 'none';
+        if (this.game.temple?.wards?.(c.group.position)) return 'none'; // (in the Gods' temple: its golden ward — nobody is thrown)
         if (c.lev) return 'none'; // (held up by Leviosa: the magic holds the body)
         if (K.immune?.(this.game, c, o)) return 'none'; // (the kind's own «не действует»: a phoenix in the air and an earthquake)
         // in a house's sphere of protection: a push / a spell from outside doesn't reach it (HouseWards.js)

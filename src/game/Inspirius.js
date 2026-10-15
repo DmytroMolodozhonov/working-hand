@@ -318,6 +318,8 @@ export class Inspirius {
     explode(p, by) {
         const g = this.game;
         p = p.clone();
+        // (the Gods' temple: the blast stops on its golden ward — seen and heard, nothing breaks, nobody flies)
+        if (g.temple?.wards?.(p, INSP.RUIN_R)) { g.temple.wardHit(p, INSP.RUIN_R); g.sound?.playExplosion?.(p, g.character?.group.position, 1); return; }
         const me = g.character?.group.position;
         // a house's sphere of protection breaks at once (the host decides)
         g.wards?.struck?.(p, INSP.RUIN_R, INSP.NAME, by);

@@ -562,7 +562,8 @@ export function templePlan(seed = 1) {
     const { X0, X1, Z0, Z1, HALL_H, GAL_H, LIB_H, RISE, DEPTH } = TEMPLE;
     // ── the podium and its stairs ──
     const SZ = 14.5; // the podium's front edge (stairs beyond)
-    B.abox('stone', X0, -DEPTH, Z0, X1, 0, SZ, FLOOR_B);
+    B.abox('stone', X0, -DEPTH, Z0, X1, 0, SZ, FLOOR_B, false);
+    B.solid(X0, -DEPTH, Z0, X1, 0, SZ, { floor: true }); // (the floor: a body a little sunk into it — a landing's squat — is lifted back)
     for (let i = 0; i < 6; i++) { // (six steps down to the ground at the front)
         const y = -(i + 1) * RISE / 6, z = SZ + i * 0.55;
         B.abox('stone', -18, -DEPTH, z, 18, y + RISE / 6, z + 0.55, tint(STONE, 0.95 + (i % 2) * 0.05));

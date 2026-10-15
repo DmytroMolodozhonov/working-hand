@@ -58,6 +58,7 @@ export class Quake {
         if (!g.character || !g.fx) return;
         const d = g.character.group.position.distanceTo(front);
         if (d > QUAKE.SHAKE_R) return;
+        if (g.temple?.wards?.(g.character.group.position)) return; // (in the Gods' temple: its golden ward holds still)
         const s = (power > 1 ? 1.6 : 0.9) * (1 - d / QUAKE.SHAKE_R);
         g.fx.shake = Math.max(g.fx.shake || 0, s);
     }

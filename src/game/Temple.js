@@ -57,10 +57,21 @@ function materials(renderer) {
  * hold everybody up (players, villagers, animals, things), its walls push bodies out, its roofs are
  * ceilings, spells and sight stop at it, hands and blades touch it (sphereDepth).
  */
+/**
+ * Is (x, y, z) within the bounds of a gift of the gods — the Temple of the Gods (all of it: walls, statues,
+ * shelves, books, pedestals, its floor and ground)? r: the reach of a blast round the point.
+ * Every destructive effect asks this (Game.applyExplosion, lightning, Inspirius, Total Destruction,
+ * CreatureImpact, the quake; blocks: Terrain.set / removeSphere through data.godGiftAt).
+ */
+export function isGodGiftAt(game, x, y, z, r = 0) {
+    _v.set(x, y, z);
+    return !!game?.temple?.wards?.(_v, r);
+}
+
 export class TempleCollider {
     constructor(spot, solids) {
         this.enabled = true;
-        this.boxes = solids.map((b) => ({ ...solidToWorld(spot, b), statue: !!b.statue, godGift: true }));
+        this.boxes = solids.map((b) => ({ ...solidToWorld(spot, b), statue: !!b.statue, floor: !!b.floor, godGift: true }));
         const f = templeFootprint(spot);
         this.aabb = f;
         this.grid = new Map();
@@ -90,7 +101,7 @@ export class TempleCollider {
         const list = this._at(x, z);
         for (let i = 0; i < list.length; i++) {
             const b = list[i];
-            if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ || b.maxY > reachY + 0.05) continue;
+            if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ || b.maxY > reachY + (b.floor ? 2.2 : 0.05)) continue;
             if (y === null || b.maxY > y) y = b.maxY;
         }
         return y;
@@ -120,7 +131,9 @@ export class TempleCollider {
                 if (pos.x + r <= b.minX || pos.x - r >= b.maxX || pos.z + r <= b.minZ || pos.z - r >= b.maxZ) continue;
                 // (low stone the body is already over — the podium, a plinth: a floor to stand on, not a wall
                 // to be thrown out of sideways)
-                if (b.maxY <= feetY + h * 0.5 && pos.x > b.minX && pos.x < b.maxX && pos.z > b.minZ && pos.z < b.maxZ) continue;
+                // (the feet given may be low by a landing's squat: up to a step and a half more still counts as under foot;
+                //  the temple's floor is never a wall to be thrown out of — floorAt lifts a sunk body onto it)
+                if ((b.floor || b.maxY <= feetY + Math.max(h * 0.5, stepHeight + 1.6)) && pos.x > b.minX && pos.x < b.maxX && pos.z > b.minZ && pos.z < b.maxZ) continue;
                 // out by the shortest way
                 const dl = pos.x + r - b.minX, dr = b.maxX - (pos.x - r), dn = pos.z + r - b.minZ, df = b.maxZ - (pos.z - r);
                 const m = Math.min(dl, dr, dn, df);
@@ -254,6 +267,9 @@ export class Temple {
         this.group = group;
         this.collider = new TempleCollider(s, plan.solids);
         g.collision?.addMover?.(this.collider);
+        // its ground is a gift of the gods too: no spell breaks a block within its bounds (Terrain.set / removeSphere)
+        const data = g.world?.terrain?.data, f = this.collider.aabb;
+        if (data) data.godGiftAt = (x, _L, z) => x >= f.minX - 1 && x <= f.maxX + 1 && z >= f.minZ - 1 && z <= f.maxZ + 1;
         // the four pedestals (the Creative ones: gifts of the gods) and their scrolls
         for (const p of plan.pedestals) {
             const w = templeToWorld(s, p.x, 0, p.z);
@@ -274,6 +290,8 @@ export class Temple {
         const g = this.game;
         this._wait = null;
         if (this.collider) { g.collision?.removeMover?.(this.collider); this.collider = null; }
+        const data = g.world?.terrain?.data;
+        if (data?.godGiftAt) data.godGiftAt = null;
         if (this.group) {
             for (const c of [...this.group.children, ...(this._pending || [])]) c.geometry?.dispose();
             this._pending = [];

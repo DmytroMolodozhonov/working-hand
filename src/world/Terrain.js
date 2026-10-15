@@ -1370,6 +1370,8 @@ export class TerrainData {
 
     set(ix, L, iz, type) {
         if (L < MIN_LAYER || L > MAX_LAYER) return;
+        // (a gift of the gods — the Temple of the Gods' ground: no spell breaks or changes a block of it)
+        if (this.godGiftAt && this.godGiftAt(ix, L, iz) && this.get(ix, L, iz) !== BLOCK.AIR) return;
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         if (c.empty) return; // (nothing is built in the empty zone between the planets)
         c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = type;
@@ -1553,6 +1555,7 @@ export class TerrainData {
                     const type = c.blocks[idx];
                     if (type === BLOCK.AIR || type === BLOCK.BEDROCK || type === BLOCK.WATER) continue;
                     if (keep && keep(ix, by, iz)) continue; // (inside a house's sphere of protection)
+                    if (this.godGiftAt && this.godGiftAt(ix, by, iz)) continue; // (a gift of the gods: the temple's ground)
                     c.blocks[idx] = BLOCK.AIR;
                     if (L < c.minOpen) c.minOpen = L;
                     hollowAt(c, lz * CHUNK + lx, L);
