@@ -327,6 +327,9 @@ export function hear(lp, T, o = {}) {
     const best = bestSpell(P, far, open, VOCAB, snr);
     const need = best ? threshold(best.len, far, snr) : 0;
     if (!best || best.avg < need) return { text: written, written, spell: null, sure: false, echo: false, far, best };
+    // (a phrase still being said: the spell must be over — nothing heard after it. «Бомбардо…» may yet
+    // be «Бомбардо Максима», «лет…» «Let the Hellfire come», «вин…» «Вингардиум»: the next look tells)
+    if (o.final === false && lettersOutside(P, -1, best.b) > 0) return { text: written, written, spell: null, sure: false, echo: false, far, best, early: true };
     // (said inside a sentence: talk — ALONE)
     const extra = lettersOutside(P, best.a, best.b);
     if (!WORDY.has(best.spell) && (extra > ALONE_MAX || (extra > ALONE && best.avg - need < ALONE_FIT))) {
