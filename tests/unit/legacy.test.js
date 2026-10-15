@@ -65,6 +65,14 @@ test('death takes all: scrolls, spells, flight, practice mana, achievements — 
     assert.ok(g.mana.spellsUsed.has('Lumos'), 'Lumos\'s first time is not counted twice');
 });
 
+test('«Give Me My Power» itself is never lost on death: the one way to take the rest back', () => {
+    const g = hero();
+    g.bonus.spells = { GiveMyPower: true, AvadaKedavra: true };
+    const lg = die(g);
+    assert.deepEqual(g.bonus.spells, { GiveMyPower: true });
+    assert.ok(lg.spells.includes('AvadaKedavra'));
+});
+
 test('a fresh hero who dies leaves no legacy; a legacy taken is never doubled by a second death', () => {
     const g = hero();
     assert.equal(die(g), null, 'nothing grown: nothing to leave');

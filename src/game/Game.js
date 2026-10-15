@@ -1305,6 +1305,7 @@ export class Game {
         if (name === 'Hellfire') return this.hellfire.cast(isFinal);
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
+        if (name === 'GiveMyPower') return this._castGiveMyPower(isFinal);
         if (name === 'LetItRain') return this._castRain(isFinal);
         if (BUILD_SPELLS[name]) return this._castBuild(name, isFinal);
         if (name === 'Earthquake' || name === 'EarthquakeMaxima') return this._castEarthquake(name, isFinal);
@@ -1910,6 +1911,25 @@ export class Game {
         if (this.sync) this.sync.spell('ToTheSun', o, _v1.set(0, 1, 0), side);
         this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Тучи расходятся, дождь стихает', true);
         return 'ToTheSun';
+    }
+
+    /**
+     * «Give Me My Power» (50, only from its scroll): the raised hand (the wand) pointed at my own
+     * skeleton — the body where my power stayed when I died — gives all of it back (Legacy.js).
+     * Nothing else: another's body, a creature, a thing — it does not work on them.
+     */
+    _castGiveMyPower(isFinal) {
+        if (!isFinal) return null;
+        const ch = this.character;
+        const side = this.wandSide() || [this.dom, this.off].find((s) => ch.isArmRaised(s));
+        if (!side || !ch.isArmRaised(side)) { this.hud.setVoice('✋ Поднимите руку и направьте её на свой скелет — тогда «Give Me My Power» сработает', true); return null; }
+        const b = this.death?.legacyAimed(this.castOrigin(side), ch.getHandDirection(side, new THREE.Vector3()));
+        if (!b) { this.hud.setVoice('💀 Направьте руку на свой скелет — там, где вы погибли и где осталась ваша сила', true); return null; }
+        const tired = this.combat.check('GiveMyPower');
+        if (tired) { this.hud.setVoice(tired, true); return null; }
+        this.combat.pay('GiveMyPower');
+        this.death.takeLegacy(b);
+        return 'GiveMyPower';
     }
 
     /**

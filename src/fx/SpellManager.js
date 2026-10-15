@@ -51,6 +51,9 @@ export function matchSpell(text) {
     if (iceMagic) return iceMagic;
     // «Inspirius» («Инспириус»): the mightiest — its whole word (never «инспирация» / «inspiration» in talk)
     if (has('inspir', 'инспир', 'инспайр', 'энспир', 'инспер') && !has('inspirat', 'инспирац')) return 'Inspirius';
+    // «Give Me My Power» («Гив ми май пауэр», «Верни мне мою силу»): your power back from your own skeleton (Legacy.js)
+    if (has('give me my power', 'give me power', 'give my power', 'гив ми май пауэр', 'гив ми май пауер', 'гив ми май пауа', 'гив ми май павер', 'гиф ми май пауэр', 'гив ми мой пауэр',
+        'верни мне мою силу', 'верни мою силу', 'дай мне мою силу', 'верните мне мою силу')) return 'GiveMyPower';
     // «Snowman» («Сноумен», «Снеговик»): a friendly snowman out of the snow pointed at — before Sands' «man»-free
     // short tokens and «Alive» (IceQueen.castSnowman)
     if (has('snowman', 'snow man', 'snowmen', 'snoman', 'сноумен', 'сноумэн', 'сноуман', 'сноу мен', 'сноу мэн', 'сноу ман', 'сноумин', 'сномен', 'снoумен', 'снеговик', 'снеговичок')) return 'Snowman';

@@ -88,6 +88,7 @@ export const SPELL_COST = {
     Brainrot: 15,
     LightningStrike: 25,
     ToTheSun: 12,
+    GiveMyPower: 50, // your power back from your own skeleton (Legacy.js; the author: 50)
     LetItRain: 20,
     Earthquake: 10,
     EarthquakeMaxima: 25,

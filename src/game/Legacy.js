@@ -8,15 +8,18 @@
  *    practice and crystals (and the firsts already counted), the achievements («Высший маг» with
  *    them). The things — the suit of the High Mage too — drop at the body (Death.takeEverything).
  *    The hero comes back as new, in the same world.
- *  - All of it lies in the body (`b.lg`, Death.js): only its owner can take it back — a hand that
- *    closes on their own body (or «Gather» pointed at it). Then it is all theirs again, added to
- *    what they have grown since (two deaths: two bodies, each gives back its own).
+ *  - All of it lies in the body (`b.lg`, Death.js): only its owner can take it back — the spell
+ *    «Give Me My Power» (the author: 50 mana, learned only from its scroll — the dark-gold ribbon)
+ *    cast at their own skeleton (Game._castGiveMyPower). Then it is all theirs again, added to what
+ *    they have grown since (two deaths: two bodies, each gives back its own). That one spell is
+ *    never lost on death — else nobody could ever take their power back.
  *  - A body with its owner's legacy never crumbles to dust (it stays as bones) and never goes for
  *    the bodies' limit; golden sparks rise over it near its owner.
  *
- * Who / what (CLAUDE.md): only the hero who died takes it (other players, people, creatures,
- * spells — nothing: «Gather» of another player only moves things, not the legacy); blasts / fire /
- * «Левиоса» move or leave the body as any. Multiplayer: the dying player's own computer makes it
+ * «Give Me My Power» — on whom / what (CLAUDE.md): only on the caster's own body that holds their
+ * legacy. Another player's body, people, creatures, animals, things, ships, the world — it does not
+ * work on them (nothing to give back: no power of yours is there). It pushes nobody (Impact: null),
+ * holds no concentration (instant). Blasts / fire / «Левиоса» move or leave the body as any body. Multiplayer: the dying player's own computer makes it
  * (the body with `lg` goes to everybody and the host keeps it in the world save); taking it — the
  * owner's computer, then 'dblg' tells everybody the body is empty now.
  */
@@ -24,8 +27,9 @@
 import { MANA } from './Mana.js';
 
 export const LEGACY = {
-    TOUCH: 1.5, // m from the body's middle a closing hand takes the legacy
     GLOW_R: 40, // m: golden sparks over the owner's body when they are this near
+    RANGE: 16, // m: «Give Me My Power» reaches the skeleton this far
+    CONE: 0.35, // rad: … the hand pointed this close to it
 };
 
 /** Who I am for my legacy (the lasting player id; a single player — 'me'). */
@@ -69,6 +73,7 @@ export function wipeHero(g) {
         c._hudKey = '';
     }
     g.bonus = { hp: 0, fatigue: 0 };
+    if (B.spells?.GiveMyPower) g.bonus.spells = { GiveMyPower: true }; // (kept: the one way to take the rest back)
     g.books?.learned?.clear();
 }
 
@@ -99,5 +104,5 @@ export function absorbLegacy(g, rec) {
     if (got) A.resend?.();
     if (g.combat) g.combat._hudKey = '';
     if (!g.combat?.enabled) g.hud?.update?.(g.playerHP, g.maxHP, g.killCount, g.punchCount);
-    g.hud?.setVoice?.(`✨ Вы забрали из своего тела всё, что было${got ? ` — и ачивки (${got})` : ''}`, true);
+    g.hud?.setVoice?.(`💪 <span style="color:#ffd36e">Give Me My Power!</span> Ваша сила вернулась: всё, что было${got ? `, и ачивки (${got})` : ''}`, true);
 }

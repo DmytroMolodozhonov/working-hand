@@ -9,8 +9,8 @@
  *    can take them: by hand, with «Gather» (everything around the body into the slots), with «Акцио».
  *    The player comes back with only the plain wooden wand (Inventory ensureStarterWand on
  *    respawn) and as a new hero: all they grew (scrolls, spells, mana, achievements) lies in the
- *    body as its legacy (`b.lg`, Legacy.js) — only they can take it back: a hand closed on their
- *    own body, or «Gather» at it. Such a body never crumbles to dust (bones stay) until it is taken.
+ *    body as its legacy (`b.lg`, Legacy.js) — only they can take it back: «Give Me My Power» cast
+ *    at their own skeleton. Such a body never crumbles to dust (bones stay) until it is taken.
  *  - Knights and the king (the armed people of the castles): their sword,
  *    their shield and their coins drop the same way; their body stays, then bones.
  *  - Creative: nobody dies there (no damage), and if it ever happens the
@@ -511,28 +511,34 @@ export class DeathSystem {
     }
 
     // ------------------------------------------------------------ the legacy (Legacy.js)
-    /** My own body with my legacy, near me: golden sparks over it; a hand closing on it takes it back. */
+    /** My own body with my legacy, near me: golden sparks over it (so it is found). */
     _legacyNear(b, me, dt) {
         const g = this.game;
-        const d = Math.abs(b.x - me.x) + Math.abs(b.z - me.z);
-        if (d > LEGACY.GLOW_R) return;
+        if (Math.abs(b.x - me.x) + Math.abs(b.z - me.z) > LEGACY.GLOW_R) return;
         if ((b.glowT = (b.glowT || 0) - dt) <= 0 && g.fx) {
             b.glowT = 0.25;
             g.fx.spark(_v.set(b.x + (Math.random() - 0.5) * 1.2, b.y + 0.4, b.z + (Math.random() - 0.5) * 1.2), 0xffd36e, 0.1, _v2.set(0, 1.2, 0), 1.0);
         }
-        if (d > 6 || g.combat?.dead || g.isDeadLocal || !g.currentPose || !g.weapons?.palmFrame) return;
-        const ch = g.character;
-        for (const side of ['right', 'left']) {
-            if (g.items?.held?.[side] || g.weapons.hands?.[side]?.held) continue;
-            const ws = g.weapons.hands[side];
-            const G = g.weapons.palmFrame(side, this._pfs || (this._pfs = {})).G;
-            if (G.distanceTo(_v.set(b.x, b.y + 0.4, b.z)) > LEGACY.TOUCH) continue;
-            const closing = ch.getGripCurl?.(side) > 0.55 && (g.now() - ws.lastOpen < 900 || g.weapons.frame - ws.lastOpenFrame <= 12);
-            if (closing) { this.takeLegacy(b); return; }
-        }
     }
 
-    /** I take my legacy back from my body (my hand, «Gather»): everybody is told the body is empty now. */
+    /** «Give Me My Power»: my own body with my legacy the hand points at (from `o` along `d`), or null. */
+    legacyAimed(o, d) {
+        const mine = legacyOwner(this.game);
+        let best = null, bs = Infinity;
+        for (const b of this.bodies.values()) {
+            if (b.lg?.owner !== mine) continue;
+            const to = _v.set(b.x, b.y + 0.4, b.z).sub(o);
+            const dist = to.length();
+            if (dist > LEGACY.RANGE) continue;
+            const ang = dist < 1.5 ? 0 : d.angleTo(to.normalize());
+            if (ang > LEGACY.CONE) continue;
+            const sc = ang * 5 + dist * 0.05;
+            if (sc < bs) { bs = sc; best = b; }
+        }
+        return best;
+    }
+
+    /** I take my legacy back from my body («Give Me My Power»): everybody is told the body is empty now. */
     takeLegacy(b) {
         const g = this.game;
         if (!b?.lg || b.lg.owner !== legacyOwner(g)) return false;
@@ -574,9 +580,6 @@ export class DeathSystem {
         if (!best) return null;
         const c = best.p;
         let n = 0, full = false;
-        // (my own body there: «Gather» takes my legacy back too)
-        const mine = legacyOwner(g);
-        for (const b of this.bodies.values()) if (b.lg?.owner === mine && _v.set(b.x, b.y + 0.4, b.z).distanceTo(c) <= DEATH.GATHER_R && this.takeLegacy(b)) n++;
         for (const w of [...(g.weapons?.weapons || [])]) {
             if (!this._freeWeapon(w) || w.position.distanceTo(c) > DEATH.GATHER_R) continue;
             const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0 };

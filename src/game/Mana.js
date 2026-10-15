@@ -53,7 +53,7 @@ export const FIRST_SPELL = {
     Snowman: 3, WaterVortex: 8, Alive: 8, AliveMaxima: 12, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8, CreateCastle: 20,
-    IceCastle: 15, IceBridge: 3, FlyingMaxima: 10,
+    IceCastle: 15, IceBridge: 3, FlyingMaxima: 10, GiveMyPower: 2,
 };
 
 /** Not spells (or nothing to learn): never grow the maximum. */
@@ -246,7 +246,7 @@ const TITLES = {
     CreateFloor: 'Create a Floor', CreateCeiling: 'Create a Ceiling', CreateWall: 'Create a Wall', CreateDoor: 'Create a Door', BuildRoof: 'Build a Roof', CreateBed: 'Create a Bed', CreateBoard: 'Create a Board',
     ChangeColor: 'Change a color', Unfurl: 'Анфёрл', Furl: 'Фёрл', Alohomora: 'Алохомора', Lock: 'Lock', Waterball: 'Waterbollow', WaterForming: 'Water forming', AirBubble: 'Air Bubble', VortexBubble: 'Бабл',
     Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Брейнрот', Maxima: 'Максима в дуэли',
-    Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', Frozen: 'Frozen', RodFrozen: 'Frozen (Ледяной Жезл)', RodIce: 'Лёд Ледяного Жезла', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
+    Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', GiveMyPower: 'Give Me My Power', Frozen: 'Frozen', RodFrozen: 'Frozen (Ледяной Жезл)', RodIce: 'Лёд Ледяного Жезла', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius',
