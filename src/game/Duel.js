@@ -49,6 +49,7 @@ import { IceLook, ICE } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
 import { starterWand, rollWand } from './ItemTypes.js';
 import { JoltLook } from '../fx/JoltLook.js';
+import { DOOR_SPELLS } from './Doors.js';
 import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
 export { JERK, sharpJerk } from './Jerk.js';
@@ -676,6 +677,15 @@ export class Duel {
         if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
         if (isJolt(b.spell)) this._joltThings(b, from);
         if (g.authority && g.dragons?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
+        // a door's leaf on its way: no charge goes through a door — «Джолт» shoves it (it swings open, or shut,
+        // as hard as the charge: Doors.impulse; a locked one only rattles); the others burst on the wood
+        const dh = g.doors?.segmentHit(from, b.front);
+        if (dh && !firstTouched(from, _v3.lerpVectors(from, b.front, dh.s), this._bodies(b.by))) {
+            b.front.lerpVectors(from, b.front, dh.s);
+            if (isJolt(b.spell)) g.doors.impulse(dh.door, _v3.copy(b.dir).multiplyScalar(DOOR_SPELLS[b.spell]), dh.k);
+            this._end(b, 'fizzle');
+            return false;
+        }
         // it hits the first body it really touches on its way (along the whole step: at a
         // low FPS a charge moves a metre and more per frame) — its target or anybody else
         const hit = firstTouched(from, b.front, this._bodies(b.by));

@@ -856,6 +856,8 @@ export class SpellManager {
         if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => body(push(pos)), power > 1 ? 'WindMaxima' : 'Wind');
         // Ships: the wind fills the sails it reaches (src/game/Ships.js)
         this.hooks.windShips?.(origin, direction, power, casterId);
+        // Doors: the gust swings the leaves it reaches (every computer the same — Doors.blow; a locked one only rattles)
+        this.hooks.doors?.((p) => push(p), origin);
     }
 
     // ------------------------------------------------------------- Overgrown
@@ -903,6 +905,8 @@ export class SpellManager {
         }
         // Me, if another wizard pointed it at me (every machine moves its own player)
         if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => push(pos), name);
+        // Doors: the burst shoves a leaf onward, along the pointing (not to the side: a leaf turns only round its hinges)
+        this.hooks.doors?.((p) => { const v = push(p); return v && _c.copy(direction).setY(0).normalize().multiplyScalar(Math.hypot(v.x, v.z)); }, origin);
     }
 
     // --------------------------------------------------------------- Sands

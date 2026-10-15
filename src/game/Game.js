@@ -261,6 +261,7 @@ export class Game {
             shielded: (from, to) => !!this.wards?.shields(from, to),
             drain: (casterId, mana, dt) => (casterId === this.localId || casterId === 'local' ? this.combat.drain(mana, dt) : true),
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
+            doors: (vAt, from) => this.doors?.blow(vAt, from), // (a gust / a burst swings the doors' leaves: Doors.blow)
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
             collision: this.collision,
             terrain: () => this.terrain,
@@ -678,6 +679,9 @@ export class Game {
         this.fx.shake = Math.max(this.fx.shake, Math.max(0, (power > 1 ? 2 : 1.2) - dPlayer / (power > 1 ? 45 : 30)));
         this.boards?.blast(pos, radius, power);
         this.cauldrons?.blast(pos, radius, power); // (a cauldron near the blast is thrown aside, knocked over)
+        // the blast's wave swings the doors round it (those right at it are broken: Wreck.afterBlast)
+        const wave = radius + 8 * push;
+        this.doors?.blow((p) => { const d = _v2.subVectors(p, pos).setY(0); const L = d.length(); return L > wave || L < 1e-3 ? null : d.multiplyScalar(26 * push * (1 - L / wave) / L); }, pos);
         if (dPlayer < radius + 3 && !meSafe) {
             // thrown by the blast: near it off the feet (and up into the air), further a stagger
             const k = 1 - dPlayer / (radius + 3);

@@ -21,6 +21,19 @@
  * «Вингардиум Левиоса» pointed at a door lifts it: carry it and say the
  * words again to put it down somewhere else.
  *
+ * A push of air or of a spell swings a leaf like a real one (blow / impulse): the push
+ * across the leaf turns it round its hinges — the stronger, the faster — and the hinges'
+ * friction slows it; it stops on the frame (a slam) and on its full opening (it bounces
+ * back a little), and on a body standing in its way (the leaf doesn't go through anybody).
+ * Which way it goes is where the push comes from: from the front it opens, from behind a
+ * door it is shut. «Вайнд» / «… Максима», «Overgrown» / «… Максима», a «Джолт» charge
+ * (it bursts on the leaf), a blast's wave; any new pushing spell calls blow() / impulse().
+ * Every door: the houses', the wizards' towers', the throne rooms' gates, «Create a Door»'s
+ * (ships have doorways without doors). A LOCKED door only rattles in its frame: the lock
+ * holds against any push (the spells shove, they don't pick locks — «Алохомора» does; a
+ * «Бомбардо» at it breaks the door itself, Wreck.js). Every computer swings it the same;
+ * the host tells where it came to rest.
+ *
  * Doors are saved with the world and shared with the other players.
  */
 
@@ -29,6 +42,7 @@ import { isWood, TREE_KINDS } from '../world/Terrain.js';
 
 const WOOD_NEEDED = 12;
 const W = 1.6, H = 3.6, T = 0.18; // a full-size door
+const DOOR_W = W, DOOR_H = H;
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _l = new THREE.Vector3();
@@ -59,7 +73,7 @@ function doorMats(color) {
  * a ring for a handle, no frame of its own (the stone doorway is its frame).
  * Both kinds open towards their local −Z.
  */
-export function doorModel(color, { mirror = false, gate = false } = {}) {
+export function doorModel(color, { mirror = false, gate = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
     const g = new THREE.Group();
     const { wood, dark, gold } = doorMats(color);
     const m = mirror ? -1 : 1;
@@ -133,6 +147,39 @@ export function leafPushed(was, h, a, max = DOOR_HAND.MAX_A) {
     return null;
 }
 
+/** A push swinging a leaf: Δω = K · (push across the leaf, m/s) / leaf width; the hinges' friction. */
+export const DOOR_PUSH = {
+    K: 0.55,
+    DAMP: 1.6, // 1/s: the hinges' viscous friction
+    DRY: 0.6, // rad/s²: their dry friction (a slow leaf stops)
+    BOUNCE_OPEN: 0.3, // … off its full opening (the stop)
+    SLAM: 1.2, // rad/s: shut faster than this — a slam
+    REST: 0.05, // rad/s: slower — it stands
+    RATTLE: 0.35, // rad/s: a push this strong on a locked door rattles it
+    REACH: 40, // m: doors further than this from a push are not looked at
+};
+/** How hard each pushing spell blows on a leaf (m/s across it, before falling off with distance). */
+export const DOOR_SPELLS = { Wind: 13, WindMaxima: 39, Overgrown: 16, OvergrownMaxima: 32, Jolt: 20, JoltMaxima: 60 };
+
+/**
+ * The swing of a leaf over dt (pure): angle a, angular speed w → {a, w, hit} (hit: 'frame' when it
+ * came against the frame, 'open' at its full opening). Friction: viscous and dry.
+ */
+export function swingStep(a, w, dt, max = DOOR_HAND.MAX_A) {
+    let hit = null;
+    a += w * dt;
+    w *= Math.exp(-DOOR_PUSH.DAMP * dt);
+    const dry = DOOR_PUSH.DRY * dt;
+    w = Math.abs(w) <= dry ? 0 : w - Math.sign(w) * dry;
+    if (a <= 0) { hit = w < -DOOR_PUSH.SLAM ? 'slam' : 'frame'; a = 0; w = Math.max(0, w); } // (shut: the latch catches it)
+    else if (a >= max) { hit = 'open'; a = max; w = w > 0 ? -w * DOOR_PUSH.BOUNCE_OPEN : w; }
+    if (Math.abs(w) < DOOR_PUSH.REST && (a === 0 || hit || Math.abs(w) < DOOR_PUSH.REST * 0.5)) w = 0;
+    return { a, w, hit };
+}
+
+const _q = new THREE.Vector3();
+const _n = new THREE.Vector3();
+
 export class Doors {
     constructor(game) {
         this.game = game;
@@ -189,11 +236,11 @@ export class Doors {
     _place(d) {
         const g = this.game;
         if (this.list.has(d.id)) { this._move(this.list.get(d.id), d); return; }
-        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate });
+        // (a house door fills its opening: wider and taller than a made one — made to its size, not
+        // stretched: a stretched model shears its leaf out of shape when it turns)
+        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate, w: d.w || W, h: d.h || H });
         model.position.set(d.x, d.y, d.z);
         model.rotation.y = d.ry;
-        // (a house door fills its opening: wider and taller than a made one)
-        if (d.w || d.h) model.scale.set((d.w || W) / W, (d.h || H) / H, 1);
         g.scene.add(model);
         const door = { ...d, model, boxId: null, holdSide: null, hand: { left: 0, right: 0 } };
         this.list.set(d.id, door);
@@ -257,6 +304,8 @@ export class Doors {
                 }
             }
         }
+        // leaves swung by a push (a spell, a blast)
+        this._swing(dt);
         // the hands on the doors: the handle held by closed fingers, a free hand against a leaf
         if (g.currentPose && !g.isDeadLocal) this._hands(dt);
         else this.releaseAll();
@@ -363,13 +412,145 @@ export class Doors {
         }
     }
 
+    // ------------------------------------------------------------ pushes
+    /** The leaf's hinge (world) and the leaf's own frame for a point: {x along the leaf, y up, z across (+: the opening side)}. */
+    _leafLocal(door, p, out) {
+        const m = door.mirror ? -1 : 1, lw = door.w || W;
+        const c = Math.cos(door.ry), s = Math.sin(door.ry);
+        // the hinge: (-m·lw/2, 0, 0) of the door, turned by ry
+        const hx = door.x + c * (-m * lw / 2), hz = door.z - s * (-m * lw / 2);
+        // into the door's frame (un-turn ry), then the leaf's (un-turn its angle m·a)
+        const dx = p.x - hx, dz = p.z - hz;
+        const lx = c * dx - s * dz, lz = s * dx + c * dz;
+        const t = m * door.a, ct = Math.cos(t), st = Math.sin(t);
+        const qx = ct * lx - st * lz, qz = st * lx + ct * lz;
+        return out.set(m * qx, p.y - door.y, -qz);
+    }
+
+    /** The leaf's normal towards its opening side (world), and its middle. */
+    _leafNormal(door, out) {
+        const m = door.mirror ? -1 : 1;
+        // door frame: (-m sin a, 0, -cos a); turned by ry
+        const nx = -m * Math.sin(door.a), nz = -Math.cos(door.a);
+        const c = Math.cos(door.ry), s = Math.sin(door.ry);
+        return out.set(c * nx + s * nz, 0, -s * nx + c * nz);
+    }
+
+    _leafMiddle(door, out) {
+        const m = door.mirror ? -1 : 1, lw = door.w || W, dh = door.h || H;
+        const c = Math.cos(door.ry), s = Math.sin(door.ry);
+        // in the door's frame: the hinge plus half the leaf along (m cos a, -sin a)
+        const lx = -m * lw / 2 + m * Math.cos(door.a) * lw / 2, lz = -Math.sin(door.a) * lw / 2;
+        return out.set(door.x + c * lx + s * lz, door.y + dh / 2, door.z - s * lx + c * lz);
+    }
+
+    /**
+     * A push on a leaf: `v` (m/s, world) — air or a spell moving across it, `k` (0..1) where along the
+     * leaf from the hinge it pushes (the middle by default: the lever). A locked one only rattles.
+     */
+    impulse(door, v, k = 0.5) {
+        if (!door || door.lifted || door.holdSide || this.carried?.door === door) return false;
+        // the leaf opens towards its opening side: a push going that way opens it, the other way shuts it
+        const dw = DOOR_PUSH.K * v.dot(this._leafNormal(door, _n)) * (k / 0.5) / (door.w || W);
+        if (Math.abs(dw) < 0.02) return false;
+        if (this.game.locks?.doorLocked?.(door)) { if (Math.abs(dw) > DOOR_PUSH.RATTLE) this._rattle(door, true); return false; }
+        if (door.a <= 0 && dw < 0) return false; // (pushed shut against its frame: it is shut already)
+        door.spin = (door.spin || 0) + dw;
+        return true;
+    }
+
+    /** A push of air over the place (a spell, a blast): vAt(p) → its push (m/s, world) at a point, or null. */
+    blow(vAt, from = null) {
+        let n = 0;
+        for (const door of this.list.values()) {
+            if (door.lifted) continue;
+            if (from && Math.abs(door.x - from.x) + Math.abs(door.z - from.z) > DOOR_PUSH.REACH * 1.5) continue;
+            const p = this._leafMiddle(door, _q);
+            const v = vAt(p);
+            if (v && this.impulse(door, v)) n++;
+        }
+        return n;
+    }
+
+    /**
+     * The first leaf a moving point (a spell's charge) touches between `a` and `b` (pad: its size).
+     * @returns {{door, s: number}|null} s: the share of the way
+     */
+    segmentHit(a, b, pad = 0.15) {
+        let best = null;
+        for (const door of this.list.values()) {
+            if (door.lifted) continue;
+            const lw = door.w || W, dh = door.h || H;
+            if (Math.abs(door.x - a.x) + Math.abs(door.z - a.z) > Math.abs(b.x - a.x) + Math.abs(b.z - a.z) + lw * 2 + 2) continue;
+            const p = this._leafLocal(door, a, new THREE.Vector3()), q = this._leafLocal(door, b, _q);
+            // the leaf: x 0..lw, y 0..dh, z ±T/2 (padded) — a slab test along the segment
+            let t0 = 0, t1 = 1;
+            for (const [p0, p1, lo, hi] of [[p.x, q.x, -pad, lw + pad], [p.y, q.y, -pad, dh + pad], [p.z, q.z, -T / 2 - pad, T / 2 + pad]]) {
+                const d = p1 - p0;
+                if (Math.abs(d) < 1e-9) { if (p0 < lo || p0 > hi) { t0 = 2; break; } continue; }
+                let u0 = (lo - p0) / d, u1 = (hi - p0) / d;
+                if (u0 > u1) [u0, u1] = [u1, u0];
+                t0 = Math.max(t0, u0); t1 = Math.min(t1, u1);
+                if (t0 > t1) break;
+            }
+            if (t0 <= t1 && t0 <= 1 && (!best || t0 < best.s)) best = { door, s: t0, k: Math.max(0.1, Math.min(1, (p.x + (q.x - p.x) * t0) / lw)) };
+        }
+        return best;
+    }
+
+    /** Leaves swinging by themselves (after a push): the hinges slow them, the frame / the stop / a body stop them. */
+    _swing(dt) {
+        const g = this.game;
+        for (const door of this.list.values()) {
+            if (!door.spin) continue;
+            if (door.holdSide || door.lifted || g.locks?.doorLocked?.(door)) { door.spin = 0; continue; }
+            const was = door.a;
+            const r = swingStep(door.a, door.spin, Math.min(dt, 0.05));
+            // a body in its way (me, the others, people, zombies, animals): the leaf stops on it
+            const stop = this._bodyInSwing(door, was, r.a);
+            if (stop != null) { r.a = stop; r.w = -r.w * 0.2; r.hit = 'body'; if (Math.abs(r.w) < DOOR_PUSH.REST * 4) r.w = 0; }
+            this._setAngle(door, r.a);
+            door.spin = r.w;
+            if (r.hit === 'slam') g.sound?.playClang?.(Math.min(0.5, 0.15 + Math.abs(r.w) * 0.1));
+            else if (r.hit === 'open' && Math.abs(r.w) > 0.4) g.sound?.playClang?.(0.12);
+            if (!door.spin && g.authority) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); } // (where it came to rest)
+        }
+    }
+
+    /** Is there a body between the leaf's angles a0 → a1? The angle the leaf stops at, or null. */
+    _bodyInSwing(door, a0, a1) {
+        const g = this.game, lw = door.w || W;
+        const lo = Math.min(a0, a1), hi = Math.max(a0, a1);
+        let stop = null;
+        const test = (x, y, z, rad) => {
+            if (Math.abs(x - door.x) > lw + 2 || Math.abs(z - door.z) > lw + 2) return;
+            if (y < door.y - 2.5 || y > door.y + (door.h || H) + 0.5) return;
+            const L = this._local(door, _q.set(x, y, z), _q);
+            const r = Math.hypot(L.x, L.z);
+            if (r < 0.25 || r > lw + rad) return;
+            const ha = hingeAngle(L.x, L.z, door.mirror), pad = Math.min(1.2, (rad + T / 2) / Math.max(0.3, r));
+            if (ha + pad < lo || ha - pad > hi) return;
+            // stop just short of it (on the side the leaf came from)
+            const at = a1 > a0 ? Math.max(a0, ha - pad) : Math.min(a0, ha + pad);
+            if (stop == null || Math.abs(at - a0) < Math.abs(stop - a0)) stop = at;
+        };
+        const me = g.character?.group.position;
+        if (me && !g.isDeadLocal) test(me.x, me.y - 1, me.z, 0.4);
+        for (const [, r] of g.remotes || []) if (r.position) test(r.position.x, r.position.y - 1, r.position.z, 0.4);
+        for (const v of g.castleLife?.byId?.values() || []) if (!v.dead) test(v.x, v.y + 1, v.z, 0.4);
+        for (const z of g.zombies || []) if (!z.isDead) test(z.group.position.x, z.group.position.y + 1, z.group.position.z, 0.4);
+        for (const a of g.animals?.list || []) if (!a.dead) test(a.group.position.x, a.group.position.y + 0.8, a.group.position.z, 0.7);
+        return stop;
+    }
+
     /** A locked leaf tried by the hand: it rattles (a sound, a hint now and then). */
-    _rattle(door) {
+    _rattle(door, pushed = false) {
         const g = this.game;
         if (door.shakeT > 0) return;
         door.shakeT = 0.3;
         g.sound?.playClang?.(0.12);
-        g.locks?.lockedTried?.(door);
+        if (pushed) { if (Math.hypot(door.x - g.character.group.position.x, door.z - g.character.group.position.z) < 30) g.hud?.setVoice?.('🔒 Дверь заперта — её трясёт, но замок держит. Откройте «Алохоморой»', true); }
+        else g.locks?.lockedTried?.(door);
     }
 
     /** The hand takes the handle: the fingers stay closed round it. */
