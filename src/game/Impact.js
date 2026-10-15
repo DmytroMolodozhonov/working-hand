@@ -158,7 +158,8 @@ export const SPELL_PHYSICS = {
     Alive: null, // (a tree comes alive: nobody is pushed by the spell itself)
     Unfurl: null, UnfurlMaxima: null, Furl: null, // (a ship's sails: they move the ship, not bodies)
     // («Wind Impulse»: a ring of air from the caster, pushes straight away — WindImpulse.impulsePush gives the push)
-    WindImpulse: { push: 16, range: 3, jolt: 1.5 }, WindImpulseMaxima: { push: 30, range: 9, jolt: 2.5 },
+    // (everybody in the ring is thrown off the feet and up a little — knights in plain armour too)
+    WindImpulse: { push: 22, range: 3, always: true, down: 1.5, toss: 4, jolt: 1.5 }, WindImpulseMaxima: { push: 34, range: 9, always: true, down: 2, toss: 6, jolt: 2.5 },
     // («Drawdown»: the ground sinks — bodies stand on it and go down with it, nobody is pushed;
     //  «Stitching»: stones laid where nobody stands; «Invisibility»: nobody sees — Drawdown.js / Stitching.js / Invisibility.js)
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null,

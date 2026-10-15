@@ -13,8 +13,10 @@
 import * as THREE from 'three';
 
 export const IMPULSE = {
-    WindImpulse: { r: 3, push: 16, up: 3 },
-    WindImpulseMaxima: { r: 9, push: 30, up: 5 },
+    // (strong enough to throw a knight in plain armour — 1.4 times a person's weight — off his feet
+    //  at the very edge: the author «рыцари не отлетели вообще»; SPELL_PHYSICS also says it always knocks down)
+    WindImpulse: { r: 3, push: 22, up: 4 },
+    WindImpulseMaxima: { r: 9, push: 34, up: 6 },
     /** a book-bird this near is knocked out of the air (a light book in a gust) */
     BIRD_K: 1,
     /** loose things fly this much faster than bodies are pushed (they are light) */
@@ -31,12 +33,12 @@ export function impulsePush(name, origin, pos, out = new THREE.Vector3()) {
     const P = IMPULSE[name];
     if (!P) return null;
     out.set(pos.x - origin.x, 0, pos.z - origin.z);
-    const flat = out.length();
-    const d = Math.hypot(flat, (pos.y - origin.y) * 0.5); // (a little up or down still counts: a ring of air, not a disc)
-    if (d > P.r) return null;
-    if (flat < 1e-3) out.set(1, 0, 0); else out.divideScalar(flat);
-    const k = P.push * (1 - 0.65 * d / P.r);
-    return out.multiplyScalar(k).setY(P.up * (1 - 0.5 * d / P.r));
+    const d = out.length();
+    // (measured along the ground — a big body's middle stands high; the wave reaches as far up and down as out)
+    if (d > P.r || Math.abs(pos.y - origin.y) > P.r + 2) return null;
+    if (d < 1e-3) out.set(1, 0, 0); else out.divideScalar(d);
+    const k = P.push * (1 - 0.5 * d / P.r);
+    return out.multiplyScalar(k).setY(P.up * (1 - 0.4 * d / P.r));
 }
 
 /**
@@ -46,8 +48,8 @@ export function impulsePush(name, origin, pos, out = new THREE.Vector3()) {
 export const IMPULSE_TARGETS = {
     me: { does: 'none', why: 'сам колдующий стоит в центре волны — его не толкает' },
     players: { does: 'push', why: 'других игроков в радиусе отталкивает от колдующего (каждый компьютер толкает своего игрока); поднятый к волне щит «Protection» или купол держит её, сфера дома — тоже' },
-    zombies: { does: 'push', why: 'отталкивает (CreatureImpact): ближе — сбивает с ног, дальше — шатаются' },
-    castlePeople: { does: 'push', why: 'жители, рыцари, король, волшебники — отталкивает так же (CreatureImpact)' },
+    zombies: { does: 'push', why: 'отлетают от колдующего и падают (CreatureImpact: всегда сбивает с ног, подбрасывает)' },
+    castlePeople: { does: 'push', why: 'жители, рыцари (и в обычных доспехах), король, волшебники — отлетают и падают (CreatureImpact, всегда с ног); волшебника Мастера защищает его купол' },
     animals: { does: 'push', why: 'тяжёлую корову толкает слабее, овцу и свинью — сильнее (масса CreatureImpact)' },
     sailors: { does: 'push', why: 'моряков на палубе толкает по палубе (в координатах корабля), у борта — за борт' },
     spider: { does: 'none', why: 'гигантская паучиха слишком тяжёлая и держится всеми лапами — волна только обдаёт её' },
