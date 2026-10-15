@@ -35,7 +35,7 @@ test('«Wind Impulse»: knights round me fly off and fall (plain and Maxima)', a
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
         const cs = g.castleLife.castles.get(c.id);
         const out = {};
-        for (const [name, dists] of [['WindImpulse', [1.6, 2.4]], ['WindImpulseMaxima', [3, 6, 8]]]) {
+        for (const [name, dists] of [['WindImpulse', [1.6, 2.4]], ['WindImpulseMaxima', [3, 5.5, 7.5]]]) {
             const knights = [...cs.active.values()].filter((v) => v.role === 'knight' && !v.dead && !v.seated).slice(0, dists.length);
             const me = g.character.group.position;
             // the knights stand round me, at these distances (between my body's middle and theirs)
@@ -61,7 +61,10 @@ test('«Wind Impulse»: knights round me fly off and fall (plain and Maxima)', a
         return out;
     });
     const s = JSON.stringify(r);
-    for (const k of [...r.WindImpulse, ...r.WindImpulseMaxima]) {
+    // (everybody who stood in the ring when it burst: 3 m, Maxima 9 m — a knight that had walked out is not)
+    const inRing = [...r.WindImpulse.filter((k) => k.d0 <= 3), ...r.WindImpulseMaxima.filter((k) => k.d0 <= 9)];
+    assert.ok(inRing.length >= 4, s);
+    for (const k of inRing) {
         assert.ok(k.d1 > k.d0 + 1, 'thrown away ' + s);
         assert.ok(k.fell, 'fell ' + s);
     }
