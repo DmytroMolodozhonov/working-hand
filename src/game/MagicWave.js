@@ -33,6 +33,7 @@ export function eachBody(g, fn) {
     for (const f of g.phoenixes?.list || []) if (!f.dead && f.group) fn('phoenix', f, phoenixCenter(f));
     for (const t of g.livingTrees?.list || []) if (!t.isDead && t.model) fn('tree', t, t.model.position);
     for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall' && b.model) fn('book', b, b.model.position);
+    for (const c of g.iceCastle?.list || []) if (!c.dead && c.model) fn('ice', c, c.model.position); // (the Ice Castle: IceQueen.iceDamage)
 }
 
 /**
@@ -52,6 +53,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'phoenix': g.phoenixes?.hit(c, dmg, spell, by); break;
         case 'tree': if (treeKind) g.livingTrees?.hit(c, dmg, treeKind, by); break;
         case 'book': g.books?.hitAt(pos, 0.3, by, null); break;
+        case 'ice': g.iceCastle?.hit(c, dmg, spell, by); break;
         default: break;
     }
 }
@@ -63,6 +65,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
  */
 export function throwBody(g, kind, c, v, toss, spell, by, from) {
     if (kind === 'spider' || kind === 'book') return;
+    if (kind === 'ice') { g.iceCastle?.push(spell, by, (_p, x) => (x === c ? v : null)); return; }
     if (kind === 'dragon') { g.dragons?.push?.(spell, by, (_p, d) => (d === c ? v : null), { from }); return; }
     g.creatureImpact?.apply(c, { v: v.clone(), by, spell, jolt: 4, from, always: { down: 3 }, down: 3, toss, fly: true });
 }

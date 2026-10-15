@@ -34,6 +34,8 @@ import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
 import { phoenixDist } from './Phoenixes.js';
+import { iceBody } from './IceQueen.js';
+import { segmentSegmentDistSq } from '../core/math.js';
 import { BowDraw, drawProgress } from './BowDraw.js';
 
 const _v = new THREE.Vector3();
@@ -483,6 +485,15 @@ export class Gear {
                     a.hit.add(dr);
                     g.dragons.hit(dr, a.dmg, 'arrow', a.by);
                     this._stick(a, dr.model);
+                }
+                // the Ice Castle's creatures: an arrow in ice (IceQueen.iceDamage: the monsters' ice — half)
+                if (g.authority) for (const c of g.iceCastle?.targets() || []) {
+                    if (a.hit.has(c)) continue;
+                    const e = iceBody(c, this._iceCap || (this._iceCap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }));
+                    if (Math.sqrt(segmentSegmentDistSq([p.x, p.y, p.z], [p.x, p.y, p.z], [e.a.x, e.a.y, e.a.z], [e.b.x, e.b.y, e.b.z])) > e.r + 0.15) continue;
+                    a.hit.add(c);
+                    g.iceCastle.hit(c, a.dmg, 'arrow', a.by);
+                    if (!c.dead) this._stick(a, c.model);
                 }
                 // a phoenix (Phoenixes.js): the arrow goes in, it is hurt (and mostly flies off)
                 if (g.authority) for (const f of g.phoenixes?.targets() || []) {

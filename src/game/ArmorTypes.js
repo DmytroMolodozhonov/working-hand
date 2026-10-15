@@ -292,6 +292,7 @@ export const DISARMOR_TARGETS = {
     livingTrees: { does: 'none', why: 'кора — не доспех: не действует' },
     bookBirds: { does: 'fall', why: 'как любой заряд: сбивает книгу-птицу' },
     dragon: { does: 'none', why: 'чешуя — не доспех: не действует' },
+    iceCastle: { does: 'none', why: 'платье королевы и лёд монстров — не доспехи: не действует (снеговика только откидывает)' },
     phoenix: { does: 'push', why: 'перья не снимешь — только толчок' },
     servants: { does: 'as their kind', why: 'слуга — зомби, житель, животное или дерево: как они' },
     looseThings: { does: 'none', why: 'лежащие доспехи и так ничьи' },

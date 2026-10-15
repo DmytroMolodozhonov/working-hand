@@ -625,6 +625,8 @@ export class NetSync {
     bossNotice() { if (this.net.isHost) this.net.send({ t: 'bnote' }, true); }
     /** Dragons (Dragons.js): the host's state; a guest's blow, scoop; the host's word to a player. */
     dragon(m) { this.net.send({ t: 'drg', ...m }); }
+    /** The Ice Castle (IceQueen.js): its creatures' state, shots, the queen's magic, the Ice Rod. */
+    ice(m) { this.net.send({ t: 'ice', ...m }); }
 
     // ---- «Alive»: living trees (the host moves them), servants of «Брейнрот»
     livingTrees(list, servants) { if (this.net.isHost) this.net.send({ t: 'ltree', l: list, sv: servants }); }
@@ -870,6 +872,7 @@ export class NetSync {
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
             case 'bnote': g.hud.notify?.('🕷️ Из темноты выходит гигантская паучиха...'); break;
             case 'drg': g.dragons?.onNet(m, m.from); break;
+            case 'ice': g.iceCastle?.onNet(m, m.from); break; // (the Ice Castle: IceQueen.js)
             case 'phx': g.phoenixes?.onNet(m, this.net.isHost); break; // (phoenixes: Phoenixes.js)
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)

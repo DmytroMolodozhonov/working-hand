@@ -290,7 +290,7 @@ float snowflakeAt(vec2 uv) {
 {
     float vp = floor(vVoxPat + 0.5);
     if (vp == 11.0 || vp == 12.0) totalEmissiveRadiance += diffuseColor.rgb * 0.9; // lanterns and crystal lamps glow at night
-    else if (vp == 15.0) totalEmissiveRadiance += diffuseColor.rgb * 0.32; // glacier ice glows from within
+    else if (vp == 15.0) totalEmissiveRadiance += diffuseColor.rgb * 0.16; // glacier ice glows from within
     else if (vp == 16.0) {
         vec3 sn = abs(vVoxNormal);
         totalEmissiveRadiance += diffuseColor.rgb * (0.2 + (sn.y > 0.5 ? 0.6 * snowflakeAt((vVoxPos + vec3(0.5)).xz) : 0.0));

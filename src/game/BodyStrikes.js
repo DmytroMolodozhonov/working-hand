@@ -143,6 +143,8 @@ export class BodyStrikes {
         for (const t of g.livingTrees?.list || []) if (!t.isDead && near(t.model.position)) out.push({ key: 'T:' + t.id, creature: t, owner: t, parts: creatureParts(t), centre: t.model.position });
         // a phoenix within reach (on the ground by me, or flying low): a fist hurts it, a hand rests on it
         for (const f of g.phoenixes?.list || []) if (!f.dead && near(f.model.position)) out.push({ key: 'F:' + f.id, creature: f, owner: f, parts: creatureParts(f), centre: f.model.position, vel: f.vel });
+        // the Ice Castle's creatures: a fist breaks a snowman, barely scratches the queen's ice (IceQueen.iceDamage)
+        for (const c of g.iceCastle?.list || []) if (!c.dead && near(c.model.position)) out.push({ key: 'I:' + c.id, creature: c, owner: c, parts: creatureParts(c), centre: c.model.position });
         return out;
     }
 

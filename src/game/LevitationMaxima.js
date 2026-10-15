@@ -169,6 +169,7 @@ export const MAXIMA_TARGETS = {
     bookBirds: { why: 'не действует: книги-птицы летают сами, Максима берёт стоящих на земле (книгу ловит обычная «Левиоса»)' },
     phoenix: { why: 'не действует: феникс летит сам (его ловит обычная «Левиоса»)' },
     dragon: { why: 'не действует: дракон вырывается из любой Левиосы — он сильнее магии' },
+    iceCastle: { why: 'не действует: ледяная магия королевы держит её, монстров и снеговиков на земле' },
     servants: { why: 'слуги «Брейнрота» — это жители/зомби/животные: поднимаются как они' },
     ships: { why: 'корабль целиком поднимается из воды с экипажем и всем на палубе; брошенный в море — пробоины по высоте, на суше — обломки' },
     houses: { why: 'дом шатается, трещит и отрывается от земли целиком (без корней) — те же блоки, дверь, окна, кровати, сундуки; замахом руки его бросают; упав или ударившись о стену, дом, существо — разлетается на блоки в груду, сундуки выпадают, кто под ним — ранен; поставленный — стоит целый с мебелью на новом месте' },
@@ -1425,6 +1426,7 @@ export class LevitationMaxima {
         if (!ship) g.ships?.crew?.hitAt?.(c, r, dmg, by);
         g.spiders?.hitAt?.(c, r, dmg, 'crush', by);
         g.phoenixes?.hitAt?.(c, r, dmg, 'crush', by);
+        g.iceCastle?.hitAt?.(c, r, dmg, 'crush', by); // (a house falling on the queen: it is no spell — it hurts)
         // (a living tree is hurt only by fire; a dragon is never under it — it flies; book-birds fly)
         // knocked down
         for (const ent of [...(g.zombies || []), ...(g.castleLife?.targets?.() || []), ...(g.animals?.targets?.() || [])]) {

@@ -57,7 +57,7 @@ export const RECIPES = [
 ];
 
 /** Things that never dissolve: they sink to the bottom and lie there (a hand can fish them out). */
-export const DURABLE = new Set(['wand', 'bow', 'shield', 'backpack', 'hammer', 'book', 'coins', 'arrows', 'cannonball', 'logs', 'blocks', 'flask', 'potion']);
+export const DURABLE = new Set(['wand', 'bow', 'shield', 'backpack', 'hammer', 'iceRod', 'book', 'coins', 'arrows', 'cannonball', 'logs', 'blocks', 'flask', 'potion']);
 
 /** Item kinds by name, for the hints (what went in). */
 export const INGREDIENT_RU = {

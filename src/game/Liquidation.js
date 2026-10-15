@@ -33,7 +33,7 @@ export const LIQ = {
 export const isLiquidation = (name) => name === 'Liquidation' || name === 'LiquidationMaxima';
 
 /** Magic things the plain splash cannot take (the «Максима» can). */
-const MAGIC_KINDS = new Set(['wand', 'hammer', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather']);
+const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather']);
 export function liquidationNeedsMaxima(it) {
     if (!it) return false;
     return isMagicItem(it) || MAGIC_KINDS.has(it.kind);
@@ -68,6 +68,7 @@ export const LIQUIDATION_TARGETS = {
     livingTrees: { does: 'hurt', why: 'живое: −3 HP, не рассыпается' },
     bookBirds: { does: 'hurt', why: 'книга-птица — живая книга: −3, лёгкую сбивает на землю (книгу защиты — нет)' },
     dragon: { does: 'hurt', why: '−3 (DragonKinds.ON_DRAGON) — дракон только разозлится' },
+    iceCastle: { does: 'hurt', why: 'снеговику −урон; королеву и ледяных монстров не берёт (заклинание без свитка — IceQueen.iceDamage)' },
     phoenix: { does: 'hurt', why: '−3, это нападение' },
     servants: { does: 'hurt', why: 'свои слуги тоже живые: −3, если попасть' },
     looseThings: { does: 'dust', why: 'любая неживая вещь на земле (еда, оружие, щит, лук, мешочек…) рассыпается в прах; волшебная — только «Максимой»' },
@@ -289,6 +290,7 @@ export class Liquidation {
         if (bk === 's') { const sp = g.spiders?.byId(id); if (sp) g.spiders.hit(sp, LIQ.DMG, 'Liquidation', by); return; }
         if (bk === 'D') { const dr = g.dragons?.byId(id); if (dr) g.dragons.hit(dr, LIQ.DMG, 'Liquidation', by); return; }
         if (bk === 'f') { const f = g.phoenixes?.byId(id); if (f) g.phoenixes.hit(f, LIQ.DMG, 'Liquidation', by); return; }
+        if (bk === 'I') { const ic = g.iceCastle?.byId(id); if (ic) g.iceCastle.hit(ic, LIQ.DMG, ic.type === 'snowman' ? 'melee' : 'Liquidation', by); return; }
         const c = g.duel?._creature(bk, id);
         if (!c) return;
         if (bk === 'b') { g.books?.hitBird(c, LIQ.DMG, 'Liquidation'); return; }

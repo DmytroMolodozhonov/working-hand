@@ -43,3 +43,31 @@ test('Creative: the castle stands on the mountain right by the start (seen at on
     assert.ok(Math.hypot(p.x - TEST_CAVE.X, p.z - TEST_CAVE.Z) < TEST_CAVE.R, 'on the test mountain');
     assert.ok(Math.hypot(p.x, p.z) < 150, 'by the start');
 });
+
+test('the Ice Queen: the plain spells (known without a scroll) do nothing on her; fire hurts her more, the stronger the fire; scroll spells and blades as usual', async () => {
+    const { iceDamage, iceBolt, ICE } = await import('../../src/game/IceQueen.js');
+    assert.equal(ICE.QUEEN.HP, 350);
+    for (const k of ['Bombardo', 'Sapira', 'Thunderwave' === 'x' ? '' : 'Wind', 'CircleAttack', 'WaveAttack', 'Ice', 'Frozen', 'Liquidation', 'Earthquake']) assert.equal(iceDamage('queen', k, 10), 0, k);
+    for (const s of ['Stupefy', 'SapiraDuel', 'IceDuel', 'Jolt', 'Expelliarmus', 'SandsDuel']) assert.equal(iceBolt('queen', s).dmg, 0, s);
+    assert.ok(iceDamage('queen', 'Inferno', 10) > 10, 'Inferno: more than its damage');
+    assert.ok(iceDamage('queen', 'FireMaxima', 10) > iceDamage('queen', 'Inferno', 10), 'Fire Maxima stronger');
+    assert.ok(iceDamage('queen', 'Hellfire', 10) > iceDamage('queen', 'FireMaxima', 10), 'the Hellfire the strongest');
+    assert.equal(iceDamage('queen', 'Lightning', 20), 20, 'a scroll spell: as usual');
+    assert.equal(iceBolt('queen', 'AvadaKedavra').dmg, 25, '«Авада Кедавра» (a scroll): −25');
+    assert.equal(iceDamage('queen', 'melee', 12), 12, 'a sword: as usual');
+    // the monsters: fire hurts; a blade only chips the ice
+    assert.ok(iceDamage('monster', 'Inferno', 10) > 10);
+    assert.equal(iceDamage('monster', 'melee', 10), 5);
+    assert.equal(ICE.MONSTER.S, 2, 'twice a villager');
+    assert.equal(ICE.QUEEN.S, 1.5, 'one and a half villagers tall');
+});
+
+test('a snowman: 10 HP, a snowflake −1; a blast shatters it, fire melts it; ice does nothing', async () => {
+    const { iceDamage, ICE } = await import('../../src/game/IceQueen.js');
+    assert.equal(ICE.SNOW.HP, 10);
+    assert.equal(ICE.SNOW.DMG, 1, 'one snowflake: −1 HP');
+    assert.ok(iceDamage('snowman', 'Bombardo', 5) >= 10, 'Bombardo shatters it');
+    assert.ok(iceDamage('snowman', 'Inferno', 3) >= 10, 'fire melts it');
+    assert.equal(iceDamage('snowman', 'IceDuel', 10), 0);
+    assert.equal(iceDamage('snowman', 'Sapira', 10), 10, 'any other blow: as it is');
+});

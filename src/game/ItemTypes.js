@@ -33,6 +33,7 @@ import { recipeById } from './Potions.js';
 import { DRAGON_KINDS } from './DragonKinds.js';
 import { rollChestArmor, armorValue, describeArmor } from './ArmorTypes.js';
 import { armorItemModel } from '../entities/ArmorLook.js';
+import { iceRodModel } from './IceModels.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Expelliarmus', 'Jolt'] },
@@ -119,6 +120,8 @@ export const ITEM_INFO = {
     // armour and robes (ArmorTypes.js): a piece {piece: helmet | chest | legs, magic, hp…}; put on by hand or «Suit Up»
     armor: { name: 'Доспех', icon: '🪖', weight: 4 },
     robe: { name: 'Мантия', icon: '🧥', weight: 1 },
+    // the Ice Queen's rod (IceQueen.js): one in the world, she drops it — not a wand: a staff of ice
+    iceRod: { name: 'Ледяной Жезл', icon: '❄️', weight: 2 },
 };
 
 /**
@@ -136,6 +139,7 @@ export function itemValue(it) {
         case 'backpack': return 30 + 5 * (it.slots || 3);
         case 'bow': return it.magic ? 90 + (it.bonus || 0) : 25;
         case 'hammer': return 300;
+        case 'iceRod': return 2000;
         case 'book': return 50;
         case 'apple': return 12 * (it.count || 1);
         case 'redApple': return 1 * (it.count || 1);
@@ -158,7 +162,7 @@ export function itemValue(it) {
 }
 
 /** Is it a magic thing? (for the merchant and the conversation) */
-export const isMagicItem = (it) => !!it && (it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'book' || it.magic === true || (it.kind === 'scroll'));
+export const isMagicItem = (it) => !!it && (it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'iceRod' || it.kind === 'book' || it.magic === true || (it.kind === 'scroll'));
 
 const SHIELD_KINDS = [
     { name: 'Деревянный щит', color: 0x8b5a2b, rim: 0x5a3a1e },
@@ -382,6 +386,8 @@ export function describeItem(it) {
             return { title: '🎒 Рюкзак', color: it.color, lines: [`+<b>${it.slots}</b> ячейки, если надеть (руки за спину)`] };
         case 'bow':
             return { title: '🏹 ' + BOW_KINDS[it.type || 0] + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: [it.magic ? `Стрелы бьют сильнее на <b>${it.bonus}%</b>` : 'Обычный лук', `Стрел: <b>${it.arrows ?? 0}</b> (до 25)`] };
+        case 'iceRod':
+            return { title: '❄️ Ледяной Жезл', color: 0xbfefff, lines: ['Посох Ледяной Королевы (не палочка): держите в кулаке', 'Направьте кристалл на существо и скажите <b>«Frozen»</b> — оно во льду, <b>даже в магических доспехах</b>', 'Направьте на землю, стену или воду — <b>«Frozen»</b> кладёт слой льда (ещё раз — следующий слой)', 'Снеговики рядом слушаются: идут за вами; <b>«Атака»</b> — нападают, на кого показывает жезл'] };
         case 'hammer':
             return { title: '🔨 Молот Тора', color: 0xbfe3ff, lines: ['В грозу поднимите его вверх — в него ударит молния', 'Наведите на цель: молния бьёт туда (до 3 раз)', `Заряды: <b>${it.charges || 0}</b>`] };
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
@@ -733,7 +739,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -751,6 +757,7 @@ function buildItemModel(it) {
         case 'backpack': return backpackModel(it);
         case 'bow': return bowModel(it);
         case 'hammer': return hammerModel(it);
+        case 'iceRod': return iceRodModel();
         case 'apple': return appleModel(it);
         case 'redApple': return appleModel(it, true);
         case 'meat': return meatModel(false);

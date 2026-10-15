@@ -810,6 +810,7 @@ export class Cauldrons {
         g.ships?.crew?.hitAt?.(at, r, dmg, null);
         g.spiders?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.dragons?.hitAt?.(at, r, dmg, 'Cauldron', null);
+        g.iceCastle?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.phoenixes?.hitAt?.(at, r, dmg, 'Cauldron', null); // (a phoenix standing there; in the air it is not under it)
         // (a living tree: not hurt — only fire hurts it; book-birds are in the air, it falls past them)
         const me = g.character.group.position;

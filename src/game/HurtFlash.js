@@ -52,6 +52,7 @@ export class HurtFlash {
         for (const t of g.livingTrees?.list || []) this.watch(t, t.model, t.hp, t.gone || t.phase === 'fall', me);
         for (const d of g.dragons?.list || []) this.watch(d, d.model, d.hp, d.dead, me);
         for (const f of g.phoenixes?.list || []) this.watch(f, f.model, f.hp, f.dead, me);
+        for (const c of g.iceCastle?.list || []) this.watch(c, c.model, c.hp, c.dead, me);
         this._restore();
     }
 

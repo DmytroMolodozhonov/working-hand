@@ -45,7 +45,7 @@ const SHOP_GRIP = 0.5; // fingers this closed (tracked curl) to take a good from
 /** The fingers close on a thing this near (from the grip point in the fingers to its surface / handle). */
 const PICK_REACH = 0.35;
 /** Long things are taken by their handle (wand, hammer, bow): the rest by their body. */
-const BY_HANDLE = new Set(['wand', 'hammer', 'bow']);
+const BY_HANDLE = new Set(['wand', 'hammer', 'bow', 'iceRod']);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -53,7 +53,7 @@ const _inv = new THREE.Matrix4();
 
 /** The rooms of a keep whose chest is the king's own (Castles.js ROOM_NAMES). */
 const ROYAL_ROOMS = new Set(['king', 'treasury', 'throne', 'vault']);
-const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
+const AIMED = new Set(['bow', 'wand', 'hammer', 'shield', 'iceRod']);
 /** Held in the fist like the sword: handle (model y, before scaling) at the fingers, the axis across the palm. */
 /**
  * pose: how the fingers lie round it (SimplifiedHand GRIP_POSES); at: [y, z] where its handle /
@@ -65,6 +65,7 @@ const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
 const GRIPPED = {
     wand: { axis: 'y', handle: 0.12, curl: 0.38, pose: 'pen' }, // like a pen (V4 hands): see _penGrip
     hammer: { axis: 'y', handle: 0.12, pose: 'power', at: [0.13, -0.148] },
+    iceRod: { axis: 'y', handle: 0.5, pose: 'power', at: [0.13, -0.148] }, // (a staff: the fist round its shaft a third of the way up, the crystal above)
     bow: { axis: 'y', handle: 0, pose: 'thick', at: [0.13, -0.155] },
     scroll: { axis: 'x', handle: 0, curl: 0.5, pose: 'roll', at: [0.15, -0.194] },
     shield: { axis: 'y', handle: 0, face: 'back', pose: 'thin', at: [0.13, -0.115] },
@@ -107,7 +108,7 @@ const ARM_MASS = 1.2;
 /** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
 const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
-export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, dragonEgg: 0.004, phoenixFeather: 0.6, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
+export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, dragonEgg: 0.004, phoenixFeather: 0.6, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
     constructor(game) {
@@ -1096,7 +1097,7 @@ export class ItemSystem {
                 if (!h) continue;
                 // a book open in their hands: as they hold it, at the page they read
                 if (h.item.kind === 'book' && this.game.books?.reading?.placeRemote(ch, h.model, h.item, r.target?.bk || null)) continue;
-                if (h.item.kind === 'wand' || h.item.kind === 'hammer') { this._remoteGrip(ch, side, h); continue; }
+                if (h.item.kind === 'wand' || h.item.kind === 'hammer' || h.item.kind === 'iceRod') { this._remoteGrip(ch, side, h); continue; }
                 const grip = ch.getGripObject(side);
                 grip.getWorldPosition(h.model.position);
                 grip.getWorldQuaternion(h.model.quaternion);
@@ -1132,7 +1133,7 @@ export class ItemSystem {
 
     /** One model of each kind, for compiling the shaders while loading. */
     sampleModels() {
-        return [{ kind: 'armor', piece: 'helmet', magic: true }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true }, { kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'apple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
+        return [{ kind: 'armor', piece: 'helmet', magic: true }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true }, { kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'iceRod' }, { kind: 'apple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
     }
 
     /** Everything this player carries (for the save). */

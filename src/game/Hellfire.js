@@ -567,6 +567,7 @@ export class Hellfire {
         if (blaze) { g.books?.hitAt?.(f.c, f.R, by, 'fire'); g.houses?.hitAt?.(f.c, f.R * 0.5); }
         // a house's sphere of protection holds the fire out — and wears down (HouseWards.js)
         if (blaze) g.wards?.struck?.(f.c, f.R, HELLFIRE.NAME, by); // (held on it ~7 s: burnt through)
+        if (blaze) g.iceCastle?.meltAt(f.c, 3, by ?? null, f.R + 1); // (the Ice Castle's ice: the Hellfire melts the most)
         // creatures of every kind (players: every computer burns its own — _burnMe): in the fire they
         // burn hard; near it the heat burns them too (through a shield, through armour); they fear it
         // — the brave back off behind their shields step by step, the rest run; its surge throws them back
@@ -618,6 +619,9 @@ export class Hellfire {
                     if (sp) g.spiders.hit(sp, dmg * 2, HELLFIRE.NAME, by);
                 } else if (b.kind === 'D') {
                     g.dragons?.hit?.(g.dragons.byId(b.id), dmg, HELLFIRE.NAME, by); // (even the hellfire: a dragon does not care — DragonKinds.FIRE_KINDS)
+                } else if (b.kind === 'I') {
+                    const ic = g.iceCastle?.byId(b.id); // (the Ice Castle's creatures: the mightiest fire — ×3.5, IceQueen.FIRE_K)
+                    if (ic) g.iceCastle.hit(ic, dmg, HELLFIRE.NAME, by);
                 } else if (cr) {
                     if (b.kind === 'a') { cr.damageCooldown = 0; g.animals?.hit?.(cr, dmg, dir, by, true); }
                     else if (b.kind === 'v') g.castleLife?.hit?.(cr, dmg, dir, by, { spell: true, magic: true, fire: true });

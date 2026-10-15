@@ -76,6 +76,8 @@ export const SPELL_COST = {
     Maxima: 4,
     WaterForming: 5,
     Frozen: 5,
+    RodFrozen: 12, // the Ice Rod: a creature frozen through any armour (IceQueen.js)
+    RodIce: 4, // …a layer of ice laid where it points
     Levitation: 6,
     LevitationMaxima: 50, // «Вингардиум Левиоса Максима»: 50 at once, then 2 a second while it holds (LevitationMaxima.js)
     Accio: 5,

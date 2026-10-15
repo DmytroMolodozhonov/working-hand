@@ -69,6 +69,7 @@ export class Servants {
         if (k === 't') { const t = g.livingTrees?.byId.get(id); return t && !t.isDead ? t : null; }
         if (k === 's') { const s = g.spiders?.list.find((x) => x.id === id); return s && !s.dead ? s : null; }
         if (k === 'D') return g.dragons?.byId(id) || null; // (a dragon: servants fight it — «Брейнрот» never makes it one)
+        if (k === 'I') return g.iceCastle?.byId(id) || null; // (the Ice Castle's creatures: servants fight them)
         if (k === 'p') {
             if (id === g.localId) return g.combat?.dead || g.isDeadLocal ? null : { isPlayer: true, local: true, position: g.character.group.position };
             const r = g.remotes?.get(id);
@@ -191,6 +192,7 @@ export class Servants {
         }
         for (const s of g.spiders?.list || []) if (!s.dead && s.target === master) consider('s', s.id, s.model.position);
         for (const d of g.dragons?.list || []) if (!d.dead && d.target === master) consider('D', d.id, d.model.position);
+        for (const c of g.iceCastle?.list || []) if (!c.dead && c.target?.id === master) consider('I', c.id, c.model.position);
         return best;
     }
 
@@ -225,6 +227,7 @@ export class Servants {
         else if (target.k === 't') g.livingTrees.hit(c, dmg, kind, by);
         else if (target.k === 's') g.spiders.hit(c, dmg, 'melee');
         else if (target.k === 'D') g.dragons.hit(c, dmg, 'servant', by);
+        else if (target.k === 'I') g.iceCastle.hit(c, dmg, 'servant', by);
         else if (target.k === 'p') {
             if (c.local) this.hitMe(dmg, d, by, kind);
             else if (g.sync?.servantHit) {

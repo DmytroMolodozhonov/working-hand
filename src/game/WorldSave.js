@@ -241,6 +241,7 @@ export class WorldKeeper {
             bodies: g.death?.snapshot() || [],
             crystals: g.crystals?.snapshot() || [],
             dragons: g.dragons?.snapshot() || {}, // dragons' lairs: the gold left, their dragons' health (Dragons.js)
+            iceCastle: g.iceCastle?.snapshot() || null, // the Ice Castle: the queen dead or her health, the monsters, seen on the map (IceQueen.js; its melted ice — the block edits)
             ships: g.ships?.snapshot() || [], // ships that moved, burnt, sank, were captured…
             guns: g.ships?.cannons.snapshot() || [],
             players: this.players,
@@ -293,6 +294,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.bodies) g.death?.restore(save.bodies);
     if (save.crystals) g.crystals?.restore(save.crystals);
     if (save.dragons) g.dragons?.restore(save.dragons);
+    if (save.iceCastle) g.iceCastle?.restore(save.iceCastle);
     if (save.ships) g.ships?.restore(save.ships);
     if (save.guns) g.ships?.cannons.restore(save.guns);
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses); // (after the beds, the doors and the things lying about)

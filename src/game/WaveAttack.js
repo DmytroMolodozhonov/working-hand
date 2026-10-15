@@ -841,6 +841,11 @@ export class WaveAttacks {
             if (dr.dead || w.hit.has(dr) || !dr.group) continue;
             if (waveTouch(w, dr.group.position)) { w.hit.add(dr); this._splash(dr.group.position, w); }
         }
+        // the Ice Castle's creatures: a snowman is knocked about, the queen and her monsters only sway (IceQueen.push)
+        if (g.authority) for (const c of g.iceCastle?.list || []) {
+            if (c.dead || w.hit.has(c)) continue;
+            if (waveTouch(w, c.model.position)) { w.hit.add(c); this._splash(c.model.position, w); g.iceCastle.push('WaveAttack', w.by, (_p, x) => (x === c ? new THREE.Vector3(w.dx, 0, w.dz).multiplyScalar(12) : null)); }
+        }
         // weapons and things lying there: dragged along (where they are simulated)
         for (const it of g.weapons?.weapons || []) {
             if (it.holder || it.remoteTarget || w.hit.has(it)) continue;

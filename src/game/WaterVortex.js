@@ -688,6 +688,8 @@ export class WaterVortex {
             if (!mine) continue;
             if (segDist(f.pos, b.a, b.b) > b.r + rf) continue;
             // a dragon: the water can't hold such a great body — it only splashes on it (DragonKinds.ON_DRAGON.WaterVortex)
+            // (the Ice Castle's creatures: the water splashes on the ice — a snowman is knocked about, IceQueen.ICE_TARGETS.water)
+            if (b.kind === 'I') { const c = g.iceCastle?.byId(b.id); if (c) g.iceCastle.push('WaterVortex', f.by, (_p, x) => (x === c ? f.dir.clone().multiplyScalar(10) : null)); this._endFlight(f, 'wall'); return true; }
             if (b.kind === 'D') { this._endFlight(f, 'wall'); return true; }
             if (b.kind === 'p') {
                 // my own computer knows my shield
@@ -1252,6 +1254,7 @@ export class WaterVortex {
     _bloom(e) {
         const g = this.game;
         const R = FIRE_MAXIMA.RADIUS;
+        g.iceCastle?.meltAt(e.p, 2, e.by ?? null, R); // (the Ice Castle's ice melts: «Fire Maxima» — a strong fire)
         g.fx?.lightFlash?.(e.p, 0xff9a2b, 5, 0.5, 30);
         this._note({ ev: 'bloom', by: e.by });
         // ice bubbles melt (everybody sees the same: every computer gets the same fire)
@@ -1281,6 +1284,7 @@ export class WaterVortex {
                 if (b.kind === 'D') { g.dragons?.hit?.(g.dragons.byId(b.id), CD, 'FireMaxima', e.by); continue; } // (fire: a dragon does not care)
                 const mid = _b.copy(b.a).add(b.b).multiplyScalar(0.5);
                 if (segDist(e.p, b.a, b.b) > R + b.r * 0.5 && mid.distanceTo(e.p) > R + b.r) continue;
+                if (b.kind === 'I') { const ic = g.iceCastle?.byId(b.id); if (ic) g.iceCastle.hit(ic, CD, 'FireMaxima', e.by); continue; } // (the Ice Castle: ×2.5 — IceQueen.FIRE_K)
                 const dir = _c.subVectors(mid, e.p).setY(0);
                 if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
                 dir.normalize();

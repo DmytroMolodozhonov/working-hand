@@ -75,9 +75,14 @@ function doorMats(color) {
  * a ring for a handle, no frame of its own (the stone doorway is its frame).
  * Both kinds swing both ways: a positive angle towards their local −Z, a negative one towards +Z.
  */
-export function doorModel(color, { mirror = false, gate = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
+export function doorModel(color, { mirror = false, gate = false, ice = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
     const g = new THREE.Group();
-    const { wood, dark, gold } = doorMats(color);
+    let { wood, dark, gold } = doorMats(color);
+    // the Ice Castle's gates (IceQueen.js): clear glowing ice with a frost snowflake on each leaf
+    if (ice) {
+        wood = _mats.ice || (_mats.ice = new THREE.MeshLambertMaterial({ color: 0xcdeffd, transparent: true, opacity: 0.78, emissive: 0x24597a }));
+        gold = _mats.frost || (_mats.frost = new THREE.MeshBasicMaterial({ color: 0xe8fbff }));
+    }
     const m = mirror ? -1 : 1;
     // frame (its inner faces a hair inside the opening: a house door is scaled to fill its doorway
     // exactly, and faces flush with the stone of the doorway flickered through it)
@@ -95,7 +100,20 @@ export function doorModel(color, { mirror = false, gate = false, w: W = DOOR_W, 
     leaf.position.set(m * W / 2, H / 2, 0);
     leaf.castShadow = true;
     hinge.add(leaf);
-    if (gate) {
+    if (ice) {
+        // a snowflake of frost on both faces, and a frost rim
+        for (const z of [-T / 2 - 0.02, T / 2 + 0.02]) {
+            for (let k = 0; k < 3; k++) {
+                const arm = new THREE.Mesh(new THREE.BoxGeometry(W * 0.7, 0.06, 0.03), gold);
+                arm.position.set(m * W / 2, H * 0.55, z);
+                arm.rotation.z = (k / 3) * Math.PI + Math.PI / 2;
+                hinge.add(arm);
+            }
+            const rim = new THREE.Mesh(new THREE.BoxGeometry(W * 0.94, 0.07, 0.03), gold);
+            rim.position.set(m * W / 2, H * 0.97, z);
+            hinge.add(rim);
+        }
+    } else if (gate) {
         // iron bands across both faces
         const iron = _mats.iron || (_mats.iron = new THREE.MeshStandardMaterial({ color: 0x3a3a40, metalness: 0.7, roughness: 0.5 }));
         for (const y of [H * 0.15, H * 0.5, H * 0.85]) {
@@ -116,7 +134,7 @@ export function doorModel(color, { mirror = false, gate = false, w: W = DOOR_W, 
         }
     }
     // the handles (both faces): a golden knob, on a gate — an iron ring
-    const knob = gate ? new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), _mats.iron) : new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), gold);
+    const knob = gate ? new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), ice ? gold : _mats.iron || (_mats.iron = new THREE.MeshStandardMaterial({ color: 0x3a3a40, metalness: 0.7, roughness: 0.5 }))) : new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), gold);
     knob.position.set(m * (W - 0.22), H * 0.48, -T / 2 - 0.08);
     hinge.add(knob);
     const knob2 = knob.clone();
@@ -246,7 +264,7 @@ export class Doors {
         if (this.list.has(d.id)) { this._move(this.list.get(d.id), d); return; }
         // (a house door fills its opening: wider and taller than a made one — made to its size, not
         // stretched: a stretched model shears its leaf out of shape when it turns)
-        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate, w: d.w || W, h: d.h || H });
+        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate, ice: !!d.ice, w: d.w || W, h: d.h || H });
         model.position.set(d.x, d.y, d.z);
         model.rotation.y = d.ry;
         g.scene.add(model);

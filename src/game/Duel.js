@@ -44,6 +44,7 @@ import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
 import { dragonBody, dragonCenter } from './Dragons.js';
 import { phoenixBody, phoenixCenter } from './Phoenixes.js';
+import { iceBody, iceCenter } from './IceQueen.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { IceLook, ICE } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
@@ -110,6 +111,7 @@ export const JOLT_TARGETS = {
     spider: 'too big and too many legs: it only reels back a little and is dazed for a moment (no damage)',
     livingTrees: 'rooted: it only reels (never falls — its own fall is its death); no damage',
     dragon: 'a great heavy body: it only sways a little, the jolt wakes and angers it (no damage) — Dragons.boltHit',
+    iceCastle: 'a snowman is thrown back; the queen and her ice monsters only sway (no damage: a spell without a scroll) — IceCastleLife.boltHit',
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
@@ -487,6 +489,8 @@ export class Duel {
         for (const dr of g.dragons?.targets() || []) dragonBody(dr, put('D', dr.id));
         // phoenixes (in the air or on the ground): their body from the tail to the breast
         for (const f of g.phoenixes?.targets() || []) phoenixBody(f, put('f', f.id));
+        // the Ice Castle's creatures: the queen, the snowmen, the ice monsters (IceQueen.iceBolt says what a charge does)
+        for (const c of g.iceCastle?.targets() || []) iceBody(c, put('I', c.id));
         return out;
     }
 
@@ -506,6 +510,7 @@ export class Duel {
         if (kind === 's') { const sp = g.spiders?.byId(id); return sp ? spiderBody(sp, e) : null; }
         if (kind === 'D') { const dr = g.dragons?.byId(id); return dr ? dragonBody(dr, e) : null; }
         if (kind === 'f') { const f = g.phoenixes?.byId(id); return f ? phoenixBody(f, e) : null; }
+        if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
         return kind === 'v' || kind === 'c' ? this._villagerBody(c, e) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
@@ -617,6 +622,7 @@ export class Duel {
         if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
+        if (b.tk === 'I') { const c = g.iceCastle?.byId(b.tid); return c ? iceCenter(c, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
             const r = g.remotes.get(b.tid);
@@ -869,6 +875,7 @@ export class Duel {
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f') && this._referee()) { this._arriveAtCreature(b); return; }
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by); return; }
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by); return; }
+        if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
         if (b.waitT > 2) this._end(b, 'fizzle', false);

@@ -55,6 +55,15 @@ function placeIcon(ctx, kind, s) {
         ctx.fillStyle = '#d8d8e0'; ctx.strokeStyle = '#111';
         ctx.beginPath(); ctx.rect(-8, -8, 3, 16); ctx.rect(-12, -4, 11, 3); ctx.fill();
         ctx.beginPath(); ctx.moveTo(1, 9); ctx.lineTo(1, -2); ctx.arc(5.5, -2, 4.5, Math.PI, 0); ctx.lineTo(10, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (kind === 'ice') {
+        // the Ice Castle: a glowing six-armed snowflake
+        ctx.strokeStyle = '#dff7ff'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+        for (let k = 0; k < 6; k++) {
+            const a = (k / 6) * Math.PI * 2, x = Math.cos(a) * 9, y = Math.sin(a) * 9;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(x, y); ctx.stroke();
+            const bx = Math.cos(a) * 5.5, by = Math.sin(a) * 5.5;
+            for (const s of [-0.8, 0.8]) { ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + Math.cos(a + s) * 3, by + Math.sin(a + s) * 3); ctx.stroke(); }
+        }
     } else if (kind === 'tower') {
         // a slim stone tower with a pointed violet roof and a gold star on top
         ctx.fillStyle = '#cfc6e6'; ctx.strokeStyle = '#2a1f45';
@@ -566,7 +575,7 @@ export class Hud {
             ctx.font = 'bold 12px sans-serif';
         };
         const badge = (x, y, kind, a = null) => {
-            const ring = kind === 'tower' ? '#b48be0' : '#ffd76a';
+            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : '#ffd76a';
             if (a != null) {
                 // the pointer: which way the place is
                 ctx.save(); ctx.translate(x, y); ctx.rotate(a);
@@ -601,10 +610,13 @@ export class Hud {
             ctx.save(); ctx.translate(gx, gz + 1); placeIcon(ctx, 'grave', 14); ctx.restore();
             label('Кладбище', gx, Math.max(-hh + 12, gz - 13));
         }
-        for (const c of castles.filter((q) => q.icon !== '✝').slice(0, 3)) {
+        // (the Ice Castle — once seen — always among them, however many castles are nearer)
+        const shown = castles.filter((q) => q.icon !== '✝' && q.icon !== '❄').slice(0, 3);
+        for (const q of castles) if (q.icon === '❄') shown.push(q);
+        for (const c of shown) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
-            const kind = icon === '🧙' ? 'tower' : 'castle';
+            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : 'castle';
             this.minimapCastles.push(icon === '🏰' ? c.name : `${icon} ${c.name}`);
             if (inside(cx, cz, BADGE)) {
                 badge(cx, cz, kind);

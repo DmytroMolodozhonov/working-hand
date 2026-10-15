@@ -184,6 +184,8 @@ export class Levitation {
         const cands = this._candidates();
         // (a dragon is pointed at too — only to say it can't be lifted: DragonKinds.ON_DRAGON.Levitation)
         for (const dr of g.dragons?.targets() || []) cands.push({ kind: 'dragon', obj: dr, pos: dr.model.position.clone().add(new THREE.Vector3(0, 3 * dr.size, 0)), r: 3 * dr.size });
+        // (the Ice Castle's creatures: pointed at only to say no — IceQueen.ICE_TARGETS.levitation)
+        for (const c of g.iceCastle?.targets() || []) cands.push({ kind: 'iceCreature', obj: c, pos: c.model.position.clone().add(new THREE.Vector3(0, c.h * 0.5, 0)), r: c.r });
         const wizards = [];
         for (const [id, r] of g.remotes || []) if (!r.dead && r.character?.group) wizards.push({ id, r });
         for (const side of ['right', 'left']) {
@@ -237,6 +239,7 @@ export class Levitation {
         let best = this._pick();
         if (best?.kind === 'wizard') best = null; // (a wizard is lifted by a duel charge: Game → aimWizard)
         if (best?.kind === 'dragon') return '🐉 Дракона «Левиоса» не поднимет — он слишком тяжёлый';
+        if (best?.kind === 'iceCreature') return '❄️ Ледяная магия держит его на земле — «Левиоса» не поднимет';
         if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар, тело), на животное, зомби, жителя или на другого волшебника — не дальше 30 м — и скажите «Вингардиум Левиоса»';
         const s = {
             kind: best.kind,

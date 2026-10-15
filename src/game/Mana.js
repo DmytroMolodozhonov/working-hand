@@ -43,7 +43,7 @@ export const FIRST_SPELL = {
     Protection: 1, Rescue: 1, Brainrot: 1, Firefighting: 1, Drawdown: 1, Stitching: 1,
     // medium: +2…+5
     LumosMaxima: 2, UnfurlMaxima: 2, AirBubbleMaxima: 2, AlohomoraMaxima: 2, Maxima: 2,
-    Flight: 2, LetItRain: 2, ToTheSun: 2, Frozen: 2, Sapira: 2, Sands: 2, Ice: 2, Jolt: 2,
+    Flight: 2, LetItRain: 2, ToTheSun: 2, Frozen: 2, RodFrozen: 3, RodIce: 1, Sapira: 2, Sands: 2, Ice: 2, Jolt: 2,
     Bombardo: 2, Earthquake: 2, Overgrown: 2, Breakthrough: 2, WaveAttack: 2, WindImpulse: 2, Liquidation: 2,
     WindMaxima: 3, Inferno: 3, Stupefy: 3, Expelliarmus: 3, Disarmor: 3, SuitUp: 1, ProtectionInvisible: 3,
     DrawdownMaxima: 3, Invisibility: 4, LiquidationMaxima: 4,
@@ -83,6 +83,9 @@ export const MAGIC_KILL = {
     bronzeBull: { n: 12, name: 'Медный бык' },
     minotaur: { n: 12, name: 'Минотавр' },
     spider: { n: 20, name: 'Гигантская паучиха' },
+    snowman: { n: 1, name: 'Злой снеговик' },
+    iceMonster: { n: 12, name: 'Ледяной монстр' },
+    iceQueen: { n: 30, name: 'Ледяная Королева' },
     dragon: { n: 20, name: 'Дракон' },
 };
 
@@ -242,7 +245,7 @@ const TITLES = {
     CreateFloor: 'Create a Floor', CreateCeiling: 'Create a Ceiling', CreateWall: 'Create a Wall', CreateDoor: 'Create a Door', BuildRoof: 'Build a Roof', CreateBed: 'Create a Bed', CreateBoard: 'Create a Board',
     ChangeColor: 'Change a color', Unfurl: 'Анфёрл', Furl: 'Фёрл', Alohomora: 'Алохомора', Lock: 'Lock', Waterball: 'Waterbollow', WaterForming: 'Water forming', AirBubble: 'Air Bubble', VortexBubble: 'Бабл',
     Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Брейнрот', Maxima: 'Максима в дуэли',
-    Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', Frozen: 'Frozen', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
+    Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', Frozen: 'Frozen', RodFrozen: 'Frozen (Ледяной Жезл)', RodIce: 'Лёд Ледяного Жезла', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius',
