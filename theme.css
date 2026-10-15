@@ -482,11 +482,11 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ------------------------------------------------------------ pause: tabs «Меню» / «Звук» */
 .pause-box { width: min(520px, calc(100vw - 32px)); }
-.pause-tabs { display: flex; gap: 4px; padding: 4px; margin: 0 0 12px; background: rgba(5, 3, 18, 0.5); border: 1px solid var(--ui-border); border-radius: 14px; }
+.pause-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin: 0 0 12px; background: rgba(5, 3, 18, 0.5); border: 1px solid var(--ui-border); border-radius: 14px; }
 /* (Creative has five tabs: a wider window, and a tab never sticks out of the bar) */
 .pause-box:has(.pause-tab[data-pause-tab="pause-spells"]:not([hidden])) { width: min(700px, calc(100vw - 32px)); }
 .pause-box .pause-tab {
-    flex: 1 1 0; min-width: 0; overflow-wrap: anywhere;
+    flex: 1 1 auto; min-width: 0; white-space: nowrap; /* (too many for one row: whole tabs go to a second row — never a word broken) */
     width: auto; margin: 0; padding: 8px 6px; font-size: 0.9rem; border-radius: 10px; border: 1px solid transparent;
     background: transparent; color: var(--ui-muted); box-shadow: none;
 }
