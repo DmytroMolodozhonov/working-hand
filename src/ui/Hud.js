@@ -50,7 +50,12 @@ function placeIcon(ctx, kind, s) {
     ctx.scale(u, u);
     ctx.lineWidth = 1.4;
     ctx.lineJoin = 'round';
-    if (kind === 'tower') {
+    if (kind === 'grave') {
+        // a cross and a rounded headstone
+        ctx.fillStyle = '#d8d8e0'; ctx.strokeStyle = '#111';
+        ctx.beginPath(); ctx.rect(-8, -8, 3, 16); ctx.rect(-12, -4, 11, 3); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(1, 9); ctx.lineTo(1, -2); ctx.arc(5.5, -2, 4.5, Math.PI, 0); ctx.lineTo(10, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (kind === 'tower') {
         // a slim stone tower with a pointed violet roof and a gold star on top
         ctx.fillStyle = '#cfc6e6'; ctx.strokeStyle = '#2a1f45';
         ctx.beginPath(); ctx.rect(-3.5, -3, 7, 13); ctx.fill(); ctx.stroke();
@@ -559,7 +564,17 @@ export class Hud {
             ctx.save(); ctx.translate(x, y + 1); placeIcon(ctx, kind, 19); ctx.restore();
         };
         this.minimapCastles = [];
-        for (const c of castles.slice(0, 3)) {
+        // village graveyards: a small cross-and-headstone badge, only when it is on the map
+        for (const c of castles) {
+            if (c.icon !== '✝') continue;
+            const gx = (c.x - charPos.x) * scale, gz = (c.z - charPos.z) * scale;
+            if (!inside(gx, gz, 10)) continue;
+            ctx.fillStyle = 'rgba(30, 30, 36, 0.9)'; ctx.strokeStyle = '#b8b8c4'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(gx, gz, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.save(); ctx.translate(gx, gz + 1); placeIcon(ctx, 'grave', 14); ctx.restore();
+            label('Кладбище', gx, Math.max(-hh + 12, gz - 13));
+        }
+        for (const c of castles.filter((q) => q.icon !== '✝').slice(0, 3)) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
             const kind = icon === '🧙' ? 'tower' : 'castle';

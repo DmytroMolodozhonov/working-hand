@@ -152,3 +152,14 @@ test('every village has a small graveyard: earth plots with a stone or a post at
         }
     }
 });
+
+test('the graveyards are on the map list of the sites', () => {
+    const t = world(4242);
+    const cs = castlesOf(t, 4);
+    for (const c of cs) assert.ok(c.graveyards.length >= 1 && c.graves.length >= 1, c.id);
+    const idx = t.data?.sites || t.data?.castles;
+    if (!idx?.nearestForMap) return;
+    const c = cs[0];
+    const list = idx.nearestForMap({ x: c.x, z: c.z });
+    assert.ok(list.some((q) => q.icon === '✝'), 'a graveyard mark near the castle');
+});

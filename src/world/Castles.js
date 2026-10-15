@@ -1278,6 +1278,14 @@ function buildVillage(p, s, rng, out) {
         p.link(door, roadNode());
     }
     out.fields = fields;
+    // no outer lot was left for the graveyard (a sea castle, a crowded ring): any free place outside the outer road
+    if (!out.graves) {
+        const spots = [];
+        for (let t = -R2 + 8; t <= R2 - 8; t += 17) spots.push([t, -R2z - 9, 0], [t, R2z + 9, 2]);
+        for (let t = -R2z + 8; t <= R2z - 8; t += 17) spots.push([-R2 - 9, t, 3], [R2 + 9, t, 1]);
+        const at = spots.find(([u, v]) => free(u, v, 7) && !used.some((o) => Math.abs(o.u - u) < 14 && Math.abs(o.v - v) < 14));
+        if (at) buildGraveyard(p, at[0], at[1], at[2], s, out);
+    }
 }
 
 // --------------------------------------------------------- sea castles

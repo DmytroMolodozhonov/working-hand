@@ -51,7 +51,10 @@ export class SiteIndex {
         if (a !== this._ma || b !== this._mb) {
             this._ma = a; this._mb = b;
             const out = [...a.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '🏰', def: c })), ...b.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '🧙', def: c }))];
-            this._list = out.sort((u, v) => Math.hypot(u.x - p.x, u.z - p.z) - Math.hypot(v.x - p.x, v.z - p.z));
+            out.sort((u, v) => Math.hypot(u.x - p.x, u.z - p.z) - Math.hypot(v.x - p.x, v.z - p.z));
+            // (the village graveyards: small crosses on the map, only the ones close by)
+            for (const c of a) for (const g of c.graveyards || []) out.push({ x: g.x, z: g.z, name: 'Кладбище', icon: '✝', def: c });
+            this._list = out;
         }
         return this._list;
     }
