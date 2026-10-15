@@ -120,3 +120,17 @@ test('spells off the Earth: what has nothing to work with says why (who / what Ã
     assert.equal(spaceSpellBlock('Earthquake', 'mars', 'thin'), null, 'on a planet: ground to shake');
     for (const ok of ['Stupefy', 'Jolt', 'Protection', 'ProtectionMaxima', 'Lumos', 'Levitation', 'Accio', 'AvadaKedavra', 'Expelliarmus']) assert.equal(spaceSpellBlock(ok, 'space', 'space'), null, ok);
 });
+
+test('other players in space are drawn where they really are in space (each hero has his own origin)', async () => {
+    const { Space } = await import('../../src/game/Space.js');
+    const mk = () => { const s = new Space({ config: { mode: 'creative' }, seed: 1 }); s.realm = 'space'; return s; };
+    const me = mk(), you = mk();
+    me.P = { x: 50000, y: 300, z: -20000 }; me.O = { x: 49500, y: 0, z: -20500 };
+    you.P = { x: 50040, y: 310, z: -19990 }; you.O = { x: 51000, y: 900, z: -18000 };
+    const at = me.remoteWorld(you.netPos());
+    const mine = [SPACE.ANCHOR_X + (me.P.x - me.O.x), SPACE.ORIGIN_Y + (me.P.y - me.O.y), SPACE.ANCHOR_Z + (me.P.z - me.O.z)];
+    assert.deepEqual(at.map((v, i) => Math.round(v - mine[i])), [40, 10, 10], 'the same 40 m apart on my screen as in space');
+    me.realm = 'mars';
+    assert.equal(me.remoteWorld(you.netPos()), null, 'not while I am elsewhere');
+    assert.equal(me.netPos(), undefined);
+});
