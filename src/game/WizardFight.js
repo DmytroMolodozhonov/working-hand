@@ -9,6 +9,10 @@
  * and a wizard's meet in a real duel (the beams push — Duel.js): the wizard holds his wand on the
  * player, stands and pushes with his strength (skill, mana, health); a weak student may give up.
  *
+ * They cast only facing the foe fully (FaceTarget.js — the author's rule «лицом к цели»): from the
+ * side or with his back a wizard first turns (at a body's speed, never an instant about-face), then
+ * casts; ready to cast, he stops to turn and aim. The charge flies where his wand points.
+ *
  * They cast only with a real line of sight from the wand to the foe (a window, a doorway, an
  * arrow slit — never through a wall, a floor or a closed door), and stand only where they can.
  * One stuck (a corner, a wall in the way) takes another place / the tower's paths.
@@ -33,6 +37,7 @@ import { FX } from '../fx/WizardFx.js';
 import { DUEL_SPELLS } from './Duel.js';
 import { PVP, shieldHitCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
+import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 
 const WALK = 2.3, RUN = 5.6;
 const DUEL_DRAIN = 1; // mana a second a wizard spends pushing in a duel (as a player's fatigue)
@@ -251,7 +256,10 @@ export class WizardFight {
         if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2) { if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; }
         // the Master: he comes too close → blink away
         if (v.role === 'master' && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
-        const spot = this._spot(v, fp, d, sq);
+        let spot = this._spot(v, fp, d, sq);
+        // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
+        const shot = this._castReady(v, d) && this.clearShot(v, fp);
+        if (shot && spot && !spot.run && !(v.unstickT > 0)) spot = null;
         let moving = false;
         if (v.unstickT > 0 && v.path) {
             // (stuck: round by the tower's paths for a while)
@@ -263,9 +271,9 @@ export class WizardFight {
             moving = !there && v.speed > 0;
             if (!there) this._stuck(v, spot, dt); else v.stk = null;
         }
-        if (!moving) { v.speed = 0; L._face(v, fp, dt); }
+        if (!moving) { v.speed = 0; this._turnTo(v, fp, dt); }
         if (wt?.role === 'retreat' && !moving) { v.mana = Math.min(v.maxMana, v.mana + W.regen * 2 * dt); v.hp = Math.min(v.maxHp, v.hp + 0.3 * dt); }
-        this._tryCast(v, fp, d, sq);
+        if (shot) this._tryCast(v, fp, d, sq);
         v.mode = v.castT > 0 ? 'cast' : (v.fx & FX.SHIELD) ? 'shield' : moving ? (v.speed > WALK * 1.4 ? 'run' : 'walk') : 'idle';
         if (v.mode === 'shield') v.aimPitch = 0;
         L._ground(v);
@@ -329,12 +337,24 @@ export class WizardFight {
         }
     }
 
+    /** Could he cast at the foe now (the pause over, his role casts, in range)? (The line of sight: clearShot.) */
+    _castReady(v, d) {
+        const W = v.W, wt = v.wt;
+        v.castCd = (v.castCd ?? 0);
+        if (v.castCd > 0 || v.castT > 0.15) return false;
+        if (wt && (wt.role === 'shield' || wt.role === 'guard' || wt.role === 'retreat')) return false;
+        if (v.mana < NPC_COST.Jolt) return false; // (no mana for any spell: he does not stand waiting to aim)
+        return !(d > W.range[1] * 1.2 || d < 1.2);
+    }
+
+    /** He turns to a point at a body's speed (FaceTarget: never an instant about-face). */
+    _turnTo(v, p, dt) {
+        v.yaw = turnToward(v.yaw, yawTo(v.x, v.z, p.x, p.z), FACE.WIZARD_TURN * dt);
+    }
+
+    /** (`_castReady` and `clearShot` already true) The spell at the foe — only once he faces him fully (`_cast`). */
     _tryCast(v, fp, d, sq) {
         const L = this.life, W = v.W, wt = v.wt;
-        v.castCd = (v.castCd ?? 0);
-        if (v.castCd > 0 || v.castT > 0.15) return;
-        if (wt && (wt.role === 'shield' || wt.role === 'guard' || wt.role === 'retreat')) return;
-        if (d > W.range[1] * 1.2 || d < 1.2 || !this.clearShot(v, fp)) return;
         const plan = sq?.plan || 'duel';
         if (plan === 'volley') {
             if (this.clock < sq.volleyAt || v.volleyed === sq.volleyId) return;
@@ -423,7 +443,7 @@ export class WizardFight {
         const fp = this.life._playerPos(op);
         v.speed = 0; v.path = null;
         if (fp) {
-            this.life._face(v, fp, dt);
+            this._turnTo(v, fp, dt);
             const dy = fp.y + 0.3 - (v.y + 3.4), dh = Math.hypot(fp.x - v.x, fp.z - v.z) || 1;
             v.aimPitch = Math.atan2(dy, dh);
         }
@@ -447,6 +467,8 @@ export class WizardFight {
     _cast(v, spell, foeId, fp, vs = null, at = null) {
         const g = this.game, duel = g.duel;
         if (!duel?._addBolt) return false;
+        // «лицом к цели»: from the side or with his back — no spell; he turns first (step / pursueThreat)
+        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
         if (v.group.visible) v.model.getWandTip(_o);
         else _o.set(v.x - Math.sin(v.yaw), v.y + 3.4, v.z - Math.cos(v.yaw));
         // (the wand's tip through a wall he stands against: no — the charge would start on the other side)
@@ -461,7 +483,6 @@ export class WizardFight {
         const b = duel._addBolt({ id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: at ? at.k : 'p', tid: at ? at.id : foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true, vs });
         if (spell === 'AvadaKedavra') this.life._say(v, 'Авада Кедавра!', 2); // (the killing words are heard)
         g.sync?.duelCast?.(b);
-        v.yaw = Math.atan2(-_d.x, -_d.z);
         v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));
         v.castT = 0.55;
         v.model.castNow = true;
@@ -500,7 +521,7 @@ export class WizardFight {
             else if (r === 'shield' || r === 'counter') {
                 if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; // (raised in the free hand: the wand goes on casting)
                 v.shieldT = Math.max(v.shieldT, 1.4); v.fx |= FX.SHIELD;
-                v.yaw = Math.atan2(-(b.o.x - v.x), -(b.o.z - v.z));
+                v.yaw = turnToward(v.yaw, yawTo(v.x, v.z, b.o.x, b.o.z), 0.5); // (a quick turn of the shoulder to it — not an about-face)
                 if (Math.random() < 0.25) this.life._say(v, pick(WIZ_LINES.shield), 1.5);
             }
         }
@@ -539,8 +560,25 @@ export class WizardFight {
         const spell = v.role === 'master' ? 'JoltMaxima' : 'Jolt';
         const cost = NPC_COST[spell] ?? 5;
         if (v.mana < cost) return false;
-        if (this._cast(v, spell, null, fp, null, ref)) { v.mana -= cost; v.castCd = v.W.cast; return true; }
+        // not facing it yet: he turns to it first (pursueThreat), then casts
+        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) { v.threatAt = { ref, until: this.clock + 3 }; return false; }
+        if (this._cast(v, spell, null, fp, null, ref)) { v.mana -= cost; v.castCd = v.W.cast; v.threatAt = null; return true; }
         return false;
+    }
+
+    /** (host) A creature hurt him and he is turning to it to answer (threat): true — busy with it this frame. */
+    pursueThreat(v, dt) {
+        const t = v.threatAt;
+        if (!t || v.foe || v.noWand || v.dead || v.stunT > 0 || this.clock > t.until) { v.threatAt = null; return false; }
+        const c = this.game.duel?._creature?.(t.ref.k, t.ref.id);
+        if (!c) { v.threatAt = null; return false; }
+        const at = this.game.duel._creaturePoint(c, _d.clone());
+        v.speed = 0; v.path = null;
+        this._turnTo(v, at, dt);
+        v.mode = 'idle';
+        if ((v.castCd ?? 0) <= 0) this.threat(v, t.ref);
+        this.life._ground(v);
+        return true;
     }
 
     /** A spell straight back at the one who cast at him: the two charges meet (Duel.js: a clash). */

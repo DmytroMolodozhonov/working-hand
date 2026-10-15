@@ -30,6 +30,8 @@ import { matchSpell } from '../fx/SpellManager.js';
 import { registerKind } from './CreatureImpact.js';
 import { avoidStep } from './Avoid.js';
 import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics.js';
+import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
+const SAILOR_TURN = 7; // rad/s — a sailor turning to his foe on deck (FaceTarget: «лицом к цели»)
 
 /** Damage of a drop from `h` m onto a deck (as Levitation.fallDamage). */
 const fallDrop = (h) => (h > 3.5 ? Math.round((h - 3.5) * 2) : 0);
@@ -1086,7 +1088,7 @@ export class Sailors {
         const fs = v.fs || (v.fs = { st: 'close', t: 0, cd: 0.2 + Math.random() * 0.6, side: v.idx % 2 ? 1 : -1 });
         fs.t += dt; fs.cd -= dt;
         const d = Math.hypot(foe.x - v.l.x, foe.z - v.l.z);
-        const face = () => { v.lyaw = Math.atan2(-(foe.x - v.l.x), -(foe.z - v.l.z)); };
+        const face = () => { v.lyaw = turnToward(v.lyaw ?? 0, yawTo(v.l.x, v.l.z, foe.x, foe.z), SAILOR_TURN * dt); }; // (he turns at a man's speed: no instant about-face)
         // he is on another deck (or can't get round something to him): by the walking graph first
         if ((v.lostT || 0) >= 3) { v.graphT = 3; v.lostT = 0; }
         if (v.graphT > 0) v.graphT -= dt;
@@ -1097,7 +1099,8 @@ export class Sailors {
                 const p = spotAt(foe, v.tac.slot, T.STANDOFF);
                 if (d > 5) { this._steer(v, s, p.x, p.z, RUN, dt); v.mode = 'run'; }
                 else { this._steer(v, s, p.x, p.z, GUARD, dt); v.mode = 'block'; face(); }
-                if (d < T.STANDOFF + 0.5 && fs.cd <= 0 && canSwing(group, v, now, m.lastSwing)) {
+                // («лицом к цели»: he swings only turned fully to him — from the side, first the turn)
+                if (d < T.STANDOFF + 0.5 && fs.cd <= 0 && facesTarget(v.lyaw, v.l.x, v.l.z, foe.x, foe.z, FACE.MELEE) && canSwing(group, v, now, m.lastSwing)) {
                     fs.st = 'swing'; fs.t = 0; fs.hit = false; m.lastSwing = now; v.busy = true;
                 }
                 break;

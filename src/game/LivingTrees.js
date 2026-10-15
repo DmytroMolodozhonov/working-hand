@@ -27,6 +27,7 @@ import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, BASE_COLORS } from '../world/Terrain.js';
 import { creditKill } from './Mana.js';
 import { avoidStep } from './Avoid.js';
+import { FACE, facesTarget } from './FaceTarget.js';
 
 export const ALIVE = {
     COST: 25, // mana at once
@@ -628,7 +629,8 @@ export class LivingTrees {
         let speed = 0, face = null;
         if (plan.mode === 'strike') {
             face = plan.enemy;
-            if (!t.swing && t.nextSwing <= 0) {
+            // («лицом к цели»: the branch comes down only on what is in front of it — first it turns)
+            if (!t.swing && t.nextSwing <= 0 && facesTarget(t.model.rotation.y, p.x, p.z, plan.enemy.x, plan.enemy.z, FACE.MELEE)) {
                 t.swing = { t: 0, target: { k: plan.enemy.k, id: plan.enemy.id }, hit: false };
                 t.swingSide = 1 - t.swingSide;
                 t.nextSwing = ALIVE.SWING_GAP;

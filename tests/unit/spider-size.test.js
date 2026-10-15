@@ -89,6 +89,7 @@ test('it walks twice as fast, stops and grabs twice as far, and stands on the hi
     // grabs within 9 m (the old one: 4.5)
     s.model.position.set(0, 0, -8);
     s.nextGrab = 0; s.nextAny = 0;
+    s.model.rotation.y = Math.PI; // (turned to him: «лицом к цели» — from the side or behind it does not grab)
     const rnd = Math.random; Math.random = () => 0;
     S._seized = () => {};
     S._think(s, 0.01);

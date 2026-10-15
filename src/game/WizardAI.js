@@ -101,8 +101,9 @@ export function pickSpell(role, rng = Math.random, { foeUsedAvada = false } = {}
  *  { role, hp, mana, brave, dist, sees, castReady, domeReady, windReady, blinkReady,
  *    incoming (charges flying at them), inClash, clashP (how well the clash goes, 0..1),
  *    foeHelpless (stunned / frozen / lifted), hurtAgo (s since this wizard was last hurt),
- *    closeT (s the foe has stayed within 3 m), spell (the one it would cast) }
- * → { a: 'flee'|'clash'|'giveup'|'dome'|'wind'|'blink'|'hold'|'move'|'cast'|'wait', spell? }
+ *    closeT (s the foe has stayed within 3 m), spell (the one it would cast),
+ *    faced (false: not turned fully to the foe yet — FaceTarget.js) }
+ * → { a: 'flee'|'clash'|'giveup'|'dome'|'wind'|'blink'|'hold'|'move'|'cast'|'turn'|'wait', spell? }
  */
 export function decide(input, rng = Math.random) {
     const W = WIZ[input.role] || WIZ.teacher;
@@ -121,7 +122,8 @@ export function decide(input, rng = Math.random) {
     if (input.foeHelpless && !(input.hurtAgo < 5)) return { a: 'hold' };
     if (!input.sees || input.dist > W.range[1] || input.dist < W.range[0] * 0.5) return { a: 'move' };
     const spell = input.spell || pickSpell(input.role, rng);
-    if (input.castReady && input.mana >= (NPC_COST[spell] ?? 10)) return { a: 'cast', spell };
+    // «лицом к цели» (FaceTarget.js): from the side or with his back he first turns, then casts
+    if (input.castReady && input.mana >= (NPC_COST[spell] ?? 10)) return input.faced === false ? { a: 'turn', spell } : { a: 'cast', spell };
     return { a: input.dist > W.range[1] * 0.9 ? 'move' : 'wait' };
 }
 

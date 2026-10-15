@@ -49,6 +49,7 @@ import { NightLife } from './NightLife.js';
 import { Wanted, wreckPoints, wantedTactics } from './Wanted.js';
 import { knowsCulprit, sightRange, spellFamily } from './Blame.js';
 import { BodyFound } from './BodyFound.js';
+import { FACE, facesTarget } from './FaceTarget.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -988,7 +989,7 @@ export class CastleLife {
             this._steer(v, e.x, e.z, 0, dt, 9); // (turned to the enemy)
             v.speed = 0;
             v.mode = 'attack';
-            if (v.serveT <= 0) {
+            if (v.serveT <= 0 && facesTarget(v.yaw, v.x, v.z, e.x, e.z, FACE.MELEE)) { // («лицом к цели»)
                 v.serveT = 1.1;
                 g.servants.damage(e, STATS[v.role]?.dmg || 1, _v2.set(e.x - v.x, 0, e.z - v.z).normalize(), v.servantOf);
             }
@@ -1466,7 +1467,8 @@ export class CastleLife {
                 const D = Math.hypot(fp.x - v.x, fp.z - v.z);
                 v.aimPitch = Math.max(-1, Math.min(1, Math.atan2(fp.y + 0.6 - (v.y + 3.2), D)));
                 tac.draw += dt;
-                if (tac.draw >= 1.3) { tac.draw = -(0.8 + Math.random() * 1.2); this._loose(v, sq, fp); }
+                // («лицом к цели»: drawn, he looses only turned fully to him — else holds the draw while he turns)
+                if (tac.draw >= 1.3) { if (facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.ARROW)) { tac.draw = -(0.8 + Math.random() * 1.2); this._loose(v, sq, fp); } else tac.draw = 1.3; }
             }
         }
         this._ground(v);
@@ -1737,6 +1739,7 @@ export class CastleLife {
         const fp = this._playerPos(v.foe);
         if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4) return;
         if (Math.abs(fp.y - 1.95 - v.y) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
+        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.MELEE)) return; // («лицом к цели»: a swing from the side / behind cuts the air)
         const sq = v.cs?.squads?.get(v.foe);
         if (sq) sq.blows++;
         // (its sword knocked out by «Экспеллиармус»: fists)

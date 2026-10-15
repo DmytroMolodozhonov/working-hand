@@ -243,6 +243,7 @@ export class WizardLife {
         if (v.lostWand) return this._fetchWand(v, dt);
         // (no fight yet, but a player's spell flies at him: a shield — or a spell back, and the beams meet in a duel)
         if (W && !v.foe && !v.noWand && WizardFight.fights(v)) this.fight._react(v, dt);
+        if (W && v.threatAt && this.fight.pursueThreat(v, dt)) return true; // (turning to a creature that hurt him, to answer it)
         if (v.foe && W) return this.fight.step(v, dt);
         return false;
     }

@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { rollWand, rollLoot, newUid } from './ItemTypes.js';
+import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 
 const HP = 200;
 /** How big it is against the first (smaller) spider: everything below scales with it. */
@@ -33,6 +34,7 @@ const BODY = { y: 2.6, z0: -1.0, z1: 2.4, r: 1.7 };
 const MOUTH = { fwd: 2.6, up: 1.6 };
 /** Reaches (unscaled): it stops this close; it grabs within this. */
 const STOP = 3.2, GRAB = 4.5;
+const SPIDER_TURN = 2.6; // rad/s — how fast the giant spider turns round (FaceTarget: «лицом к цели»)
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -381,13 +383,14 @@ export class Spiders {
         } else if (tp && near.d > STOP * SIZE) {
             const to = _v.set(tp.x - p.x, 0, tp.z - p.z).normalize();
             p.addScaledVector(to, SPEED * (s.legK ?? 1) * dt); // (legs cut off: slower)
-            s.model.rotation.y = Math.atan2(-to.x, -to.z);
+            s.model.rotation.y = turnToward(s.model.rotation.y, Math.atan2(-to.x, -to.z), SPIDER_TURN * dt);
             moving = true;
-        } else if (tp) s.model.rotation.y = Math.atan2(-(tp.x - p.x), -(tp.z - p.z));
+        } else if (tp) s.model.rotation.y = turnToward(s.model.rotation.y, yawTo(p.x, p.z, tp.x, tp.z), SPIDER_TURN * dt); // (a big body: it turns, never spins round at once)
         p.y += (spiderGroundY(g.collision, p.x, p.z, s.model.rotation.y) - p.y) * Math.min(1, dt * 6);
         // tricks (at least 3 s apart)
         s.nextPoison -= dt; s.nextWeb -= dt; s.nextGrab -= dt; s.nextAny -= dt;
-        if (tp && s.nextAny <= 0 && !s.holding) {
+        // («лицом к цели»: it grabs and spits only at one right in front of it)
+        if (tp && s.nextAny <= 0 && !s.holding && facesTarget(s.model.rotation.y, p.x, p.z, tp.x, tp.z, FACE.SHOT)) {
             if (s.nextGrab <= 0 && near.d < GRAB * SIZE) {
                 s.nextGrab = 30; s.nextAny = 3;
                 if (Math.random() < 0.44) {

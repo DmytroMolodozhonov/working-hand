@@ -19,6 +19,7 @@
  */
 
 import { ARMY } from '../ai/TalkActions.js';
+import { FACE, facesTarget } from './FaceTarget.js';
 
 const WALK = 2.3, RUN = 5.6;
 const HUNT = 45; // m round the king (or the knight) a hunted creature is looked for
@@ -285,6 +286,7 @@ export class VillagerOrders {
         const p = posOf(c.obj);
         const d = Math.hypot(p.x - v.x, p.z - v.z);
         if (d > (c.kind === 's' ? REACH + 3 : REACH + 0.8)) return;
+        if (!facesTarget(v.yaw, v.x, v.z, p.x, p.z, FACE.MELEE)) return; // («лицом к цели»: not from the side / behind)
         const g = this.game;
         const dmg = v.role === 'king' ? 5 : 3;
         const dir = { x: (p.x - v.x) / (d || 1), y: 0, z: (p.z - v.z) / (d || 1) };

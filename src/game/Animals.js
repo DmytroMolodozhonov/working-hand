@@ -41,6 +41,7 @@ import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
 import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
 import { slowFactor, tickSlow } from './Slow.js';
+import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 
 export { animalModel };
 
@@ -822,8 +823,8 @@ export class Animals {
         } else if (sv) {
             if (sv.mode === 'strike') {
                 const e = sv.enemy;
-                a.group.rotation.y = Math.atan2(-(e.x - p.x), -(e.z - p.z));
-                if (a.t > 1.2) { a.t = 0; g.servants.damage(e, S.dmg, _v.set(e.x - p.x, 0, e.z - p.z).normalize(), a.servantOf); }
+                a.group.rotation.y = turnToward(a.group.rotation.y, yawTo(p.x, p.z, e.x, e.z), 5 * dt); // (it turns to it — no instant about-face; bites / butts only turned to it: «лицом к цели»)
+                if (a.t > 1.2 && facesTarget(a.group.rotation.y, p.x, p.z, e.x, e.z, FACE.MELEE)) { a.t = 0; g.servants.damage(e, S.dmg, _v.set(e.x - p.x, 0, e.z - p.z).normalize(), a.servantOf); }
             } else if (sv.mode !== 'stay') {
                 a.target.set(sv.x, p.y, sv.z);
                 speed = sv.mode === 'chase' ? S.run * 0.9 : Math.max(S.speed * 1.5, 2);

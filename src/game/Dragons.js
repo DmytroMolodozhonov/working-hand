@@ -35,6 +35,7 @@ import { newUid } from './ItemTypes.js';
 import { createRng } from '../core/math.js';
 import { skeletonModel } from './Death.js';
 import { creditKill } from './Mana.js';
+import { FACE, facesTarget, facingError } from './FaceTarget.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -841,7 +842,7 @@ export class Dragons {
         const s = d.size;
         const centre = _v2.copy(tp).add(_q.set(0, 0.6, 0));
         if (d.blowCd <= 0 && !d.breath && d.fly < 0.3) {
-            if (dist < 7.5 * s && Math.abs(ang) < 0.7) {
+            if (dist < 7.5 * s && Math.abs(ang) < FACE.BITE) { // («лицом к цели»: the jaws bite only what is right in front)
                 d.blowCd = DRAGON.BLOW_REST; d.mouthT = 0.5; d.lowerT = 0.5;
                 const push = _v.set(tp.x - d.model.position.x, 0, tp.z - d.model.position.z).normalize().multiplyScalar(6).setY(3);
                 this._hurt(d.target, DRAGON.BITE, 'bite', dragonCenter(d, _v3), push.clone());
@@ -856,9 +857,9 @@ export class Dragons {
                 return;
             }
         }
-        // its fire: in reach, the head turned to them, nothing solid between (and it can see)
+        // its fire: in reach, turned fully to them («лицом к цели»), nothing solid between (and it can see)
         const reach = flameReach(d.flame);
-        if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && dist > 4 * s && dist < reach && Math.abs(ang) < 0.55) {
+        if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && dist > 4 * s && dist < reach && Math.abs(ang) < FACE.BREATH) {
             const mouth = this._mouth(d, _v3);
             if (this.game.collision?.lineOfSight?.(mouth.x, mouth.y, mouth.z, centre.x, centre.y, centre.z, 1.5) !== false) {
                 d.breath = { t: 0, dir: new THREE.Vector3().subVectors(centre, mouth).normalize(), aim: d.target };
@@ -947,15 +948,19 @@ export class Dragons {
             // circle over them, a little above, then swoop and breathe
             d.orbit = (d.orbit ?? Math.random() * TAU) + dt * 0.35 * quick;
             const R = 16 * d.size;
-            const goal = _v3.set(tp.x + Math.cos(d.orbit) * R, tp.y + 9 * d.size, tp.z + Math.sin(d.orbit) * R);
-            this._flyTo(d, goal, DRAGON.FLY * quick, dt);
             const dist = p.distanceTo(tp);
+            // its fire ready and they are near: it swoops at them head first («лицом к цели»), not sideways from the circle
+            const swoop = d.breathCd <= 0 && d.blind <= 0 && dist < flameReach(d.flame) * 1.4;
+            if (swoop) d.orbit = Math.atan2(p.z - tp.z, p.x - tp.x); // (the circle goes on from where it is)
+            const goal = swoop ? _v3.set(tp.x + Math.cos(d.orbit) * 4 * d.size, tp.y + 7 * d.size, tp.z + Math.sin(d.orbit) * 4 * d.size)
+                : _v3.set(tp.x + Math.cos(d.orbit) * R, tp.y + 9 * d.size, tp.z + Math.sin(d.orbit) * R);
+            this._flyTo(d, goal, DRAGON.FLY * quick, dt);
             // (in flight it breathes at them as it passes: its head turned down to them)
             if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && dist < flameReach(d.flame)) {
                 const mouth = this._mouth(d, _v);
                 const aim = _v2.copy(tp).add(_q.set(0, 0.6, 0)).sub(mouth).normalize();
                 const fwd = _q.set(-Math.sin(d.model.rotation.y), 0, -Math.cos(d.model.rotation.y));
-                if (aim.dot(fwd) > -0.2 && this.game.collision?.lineOfSight?.(mouth.x, mouth.y, mouth.z, tp.x, tp.y + 0.6, tp.z, 1.5) !== false) {
+                if (aim.dot(fwd) > 0 && facesTarget(d.model.rotation.y, p.x, p.z, tp.x, tp.z, FACE.BREATH) && this.game.collision?.lineOfSight?.(mouth.x, mouth.y, mouth.z, tp.x, tp.y + 0.6, tp.z, 1.5) !== false) {
                     d.breath = { t: 0, dir: aim.clone(), aim: d.target };
                     d.breathCd = DRAGON.FLAME_REST + DRAGON.FLAME_TIME;
                     this.log.push('breath');
@@ -1017,7 +1022,8 @@ export class Dragons {
         // (host) it keeps it on its target, sweeping a little side to side
         if (this.auth && b.aim) {
             const tp = this._playerPos(b.aim);
-            if (tp) {
+            // (the neck turns the head only so far: a target gone round behind it is not followed by the flame)
+            if (tp && facingError(d.model.rotation.y, d.model.position.x, d.model.position.z, tp.x, tp.z) < 1.2) {
                 const want = _v.copy(tp).add(_q.set(0, 0.6, 0)).sub(o).normalize();
                 b.dir.lerp(want, Math.min(1, dt * 1.6 * d.react)).normalize();
             }
