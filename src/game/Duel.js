@@ -689,7 +689,7 @@ export class Duel {
         }
         // it hits the first body it really touches on its way (along the whole step: at a
         // low FPS a charge moves a metre and more per frame) — its target or anybody else
-        // a wall, a floor or a closed door on this step's way (looked at every 0.3 m): nothing behind it is touched
+        // a wall or a floor on this step's way (looked at every 0.3 m): nothing behind it is touched
         const wallS = this._wallOnWay(from, b.front);
         const hit = firstTouched(from, b.front, this._bodies(b.by));
         if (hit && hit.s > wallS) { b.front.lerpVectors(from, b.front, wallS); this._end(b, 'fizzle'); return false; }
@@ -710,11 +710,11 @@ export class Duel {
     }
 
     /**
-     * Where on the segment a→b (0…1) the first solid block or closed door is; 2 — none.
-     * (CLAUDE.md: a charge never goes through a wall, a floor or a closed door — whoever casts it.)
+     * Where on the segment a→b (0…1) the first solid block is; 2 — none. (Doors: segmentHit above.)
+     * (CLAUDE.md: a charge never goes through a wall or a floor — whoever casts it.)
      */
     _wallOnWay(a, b) {
-        const g = this.game, t = g.terrain?.data, c = g.collision;
+        const g = this.game, t = g.terrain?.data;
         if (!t) return 2;
         const len = a.distanceTo(b);
         const n = Math.max(1, Math.ceil(len / 0.3));
@@ -722,7 +722,6 @@ export class Duel {
             const k = i / n;
             const x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k, z = a.z + (b.z - a.z) * k;
             if (t.isSolidAt(x, y, z)) return k;
-            if (c?.queryBoxes) for (const bx of c.queryBoxes(x, x, z, z)) if (bx.kind === 'door' && y >= bx.minY && y <= bx.maxY && x >= bx.minX && x <= bx.maxX && z >= bx.minZ && z <= bx.maxZ) return k;
         }
         return 2;
     }
