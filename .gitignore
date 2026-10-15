@@ -12,3 +12,4 @@ logs/
 recordings/
 .handbench/
 vendor/mediapipe/models/v5/
+vendor/ort-gpu/
