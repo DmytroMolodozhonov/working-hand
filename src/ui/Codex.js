@@ -494,7 +494,7 @@ export function renderBossesTab(boxId = 'bosses-list') {
             <div class="boss-body">
                 <h3 class="boss-name">${a.icon} ${b.name}</h3>
                 ${b.about.map((t) => `<p class="boss-about">${t}</p>`).join('')}
-                <div class="boss-reward">🏆 Ачивка «${a.title}»: <b>+${a.mana}</b> ячеек маны навсегда</div>
+                <div class="boss-reward">🏆 Ачивка «${a.title}»: <b>+${a.mana}</b> ячеек маны</div>
             </div>
         </section>`;
     }).join('');
