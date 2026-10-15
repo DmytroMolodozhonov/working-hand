@@ -211,7 +211,10 @@ export class Sailors {
         for (const e of crewRoster(s)) {
             if (s.crewKilled.has(e.idx)) continue;
             const S = SAILOR_STATS[e.role];
-            const model = new VillagerModel(sailorLook(e, s.color), { castleColor: s.color });
+            // (made ahead, one a frame, while the ship was coming near — prebuildOne — or now)
+            let model = s.preCrew?.get(e.idx);
+            if (model) s.preCrew.delete(e.idx);
+            else model = new VillagerModel(sailorLook(e, s.color), { castleColor: s.color });
             this.game.scene.add(model.group);
             // a station: the captain by the wheel; the others round the ship
             let home;
@@ -236,7 +239,29 @@ export class Sailors {
             this.byId.set(v.id, v);
         }
         this.crews.set(s.id, list);
+        this.dropPre(s);
         this._place(s);
+    }
+
+    /**
+     * A sleeping ship that will soon wake (Ships._pre): one of its sailors' models made now, so the
+     * crew does not all come to be in one frame. @returns true when all are made.
+     */
+    prebuildOne(s) {
+        if (this.crews.has(s.id)) return true;
+        const m = s.preCrew || (s.preCrew = new Map());
+        for (const e of crewRoster(s)) {
+            if (s.crewKilled.has(e.idx) || m.has(e.idx)) continue;
+            m.set(e.idx, new VillagerModel(sailorLook(e, s.color), { castleColor: s.color }));
+            return false;
+        }
+        return true;
+    }
+
+    /** The sailors' models made ahead and not used (the ship went away, or they died meanwhile). */
+    dropPre(s) {
+        if (s.preCrew) for (const model of s.preCrew.values()) model.dispose();
+        s.preCrew = null;
     }
 
     sleep(s) {

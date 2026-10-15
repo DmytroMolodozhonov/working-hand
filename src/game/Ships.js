@@ -160,6 +160,7 @@ export class Ships {
             if (s.preModel) s.preModel.finish();
             s.model = s.preModel || new ShipModel(s.layout, { color: s.color, name: s.name });
             s.preModel = null;
+            s.preReady = false;
             g.scene.add(s.model.group);
             for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
         }
@@ -218,8 +219,8 @@ export class Ships {
             if (!s.awake && d < WAKE) { if (!busy()) this.wake(s); }
             else if (s.awake && d > SLEEP) this.sleep(s);
             // (asleep: soon woken — its model is built ahead, a little a frame; gone far again — dropped)
-            if (!s.awake && s.preModel && d > PREBUILD + 150) { s.preModel.dispose(); s.preModel = null; }
-            if (!s.awake && d < PREBUILD && d < preD && !s.preModel?.ready) { pre = s; preD = d; }
+            if (!s.awake && s.preModel && d > PREBUILD + 150) { s.preModel.dispose(); s.preModel = null; s.preReady = false; this.crew.dropPre?.(s); }
+            if (!s.awake && d < PREBUILD && d < preD && !s.preReady) { pre = s; preD = d; }
         }
         this._pre = pre;
     }
@@ -384,7 +385,8 @@ export class Ships {
         const pre = this._pre;
         if (pre && !pre.awake && !pre.model) {
             if (!pre.preModel) pre.preModel = new ShipModel(pre.layout, { color: pre.color, name: pre.name, lazy: true });
-            if (pre.preModel.buildSome(3)) this._pre = null;
+            if (!pre.preModel.ready) pre.preModel.buildSome(3);
+            else if (this.crew.prebuildOne?.(pre) ?? true) { pre.preReady = true; this._pre = null; } // (then its sailors, one a frame)
         } else this._pre = null;
         if (this.auth && !this.calm) this._weather(dt);
         this._blowing(dt);
@@ -1540,7 +1542,7 @@ export class Ships {
 
     dispose() {
         for (const s of [...this.awake]) this.sleep(s);
-        for (const s of this.list.values()) { s.preModel?.dispose(); s.preModel = null; }
+        for (const s of this.list.values()) { s.preModel?.dispose(); s.preModel = null; this.crew.dropPre?.(s); }
         this.list.clear();
         this.cannons.dispose?.();
         this.rigging.dispose();

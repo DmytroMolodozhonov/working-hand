@@ -123,6 +123,11 @@ async function flyRoute() {
     wrap(g.world.sky, 'update', 'небо');
     wrap(g.renderer.shadowMap, 'render', 'тени');
     wrap(g.hud, 'drawMinimap', 'миникарта');
+    wrap(g.ships, 'wake', 'корабль:пробуждение');
+    wrap(g.ships, '_scan', 'корабли:поиск');
+    wrap(g.ships?.crew, 'wake', 'матросы:появление');
+    wrap(g, '_updatePlayer', 'игрок:тело');
+    wrap(g.handBlocks, 'update', 'руки:упоры');
     wrap(g.world, 'followShadow', 'тени:коробка');
     wrap(g.world, 'setDayPhase', 'день/ночь');
     wrap(g.swim, 'applyFog', 'туман воды');
