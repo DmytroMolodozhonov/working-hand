@@ -180,6 +180,7 @@ body {
 }
 
 #stats-container {
+    margin-left: auto; /* (always on the right: without the HP bar — Creative — it slid to the left, onto the FPS) */
     text-align: right;
     color: white;
     font-weight: bold;
