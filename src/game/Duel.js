@@ -75,8 +75,9 @@ export const DUEL_SPELLS = {
     // «Disarmor»: a cold steel-grey bolt — the plain armour flies off the one it touches (Armor.js)
     Disarmor: { color: 0x8fa3b8, name: 'Disarmor', speed: 16, core: 0.04, glow: 0.18, coreColor: 0xf2f6ff },
     // «Джолт»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
-    Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 21, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
-    JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 21, core: 0.026, glow: 0.11, coreColor: 0xffffff },
+    //  (as fast as the other duel charges: there must be time to answer it — or it to answer — and meet: a duel)
+    Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 15.5, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
+    JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 15.5, core: 0.026, glow: 0.11, coreColor: 0xffffff },
 };
 
 /**
@@ -617,8 +618,31 @@ export class Duel {
 
     /** A charge announced by another player. */
     remoteCast(m) {
-        if (this.bolts.has(m.id)) return;
+        const had = this.bolts.get(m.id);
+        if (had) { if (m.s === 'JoltMaxima' && had.spell === 'Jolt') had.spell = m.s; return; } // (it became «Джолт Максима»: upgradeJolt)
+        if (m.up) return; // (an upgrade of a charge already gone here: nothing new flies)
         this._addBolt({ id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
+    }
+
+    /** A duel charge of someone else is flying at me (an answer can't wait for the end of the phrase). */
+    underFire() {
+        for (const b of this.bolts.values()) if (b.by !== this.me && b.state === 'flying' && b.tk === 'p' && b.tid === this.me) return true;
+        return false;
+    }
+
+    /**
+     * «Джолт…» was cast before the phrase ended (an answer to a charge flying at me) and the phrase ended
+     * as «Джолт Максима»: my charge just cast (still flying or already in a clash) becomes the Maxima.
+     * @returns {boolean} false: no such charge any more
+     */
+    upgradeJolt(maxAge = 3) {
+        let mine = null;
+        for (const b of this.bolts.values()) if (b.by === this.me && b.spell === 'Jolt' && b.age < maxAge && (!mine || b.age < mine.age)) mine = b;
+        if (!mine) return false;
+        mine.spell = 'JoltMaxima';
+        mine.up = 1;
+        this.game.sync?.duelCast(mine);
+        return true;
     }
 
     _addBolt(o) {
@@ -1231,7 +1255,9 @@ export class Duel {
             // each wizard's beam has a thin core of their own marker colour (the glow keeps the spell's)
             this._drawBolt(a.spell, ha, m, a.by, this._markPool(c.marks[0]));
             this._drawBolt(b.spell, hb, m, b.by, this._markPool(c.marks[1]));
-            if (Math.random() < 0.7) this._burst(m, c.marks[Math.random() < 0.5 ? 0 : 1], 3);
+            // («Джолт» in a duel: no sparks — the air trembles along the beam and rings of shoved air roll from the point)
+            for (const [x, h] of [[a, ha], [b, hb]]) if (isJolt(x.spell)) this.jolt.clash(x, h, m, x.spell === 'JoltMaxima', dt);
+            if (Math.random() < 0.7 && !(isJolt(a.spell) && isJolt(b.spell))) this._burst(m, c.marks[Math.random() < 0.5 ? 0 : 1], 3);
             // each wand hand glows in its owner's colour: a colour is a person
             if (Math.random() < 0.6) { g.fx.spark(ha, c.marks[0], 0.2, _v3.set(0, 0.6, 0), 0.25); g.fx.spark(hb, c.marks[1], 0.2, _v3.set(0, 0.6, 0), 0.25); }
             // where they meet: who is winning, and who pushes now
@@ -1495,10 +1521,11 @@ export class Duel {
         const prev = _v3.copy(a), p = _v2;
         for (let i = 1; i <= n; i++) {
             p.copy(a).lerp(b, i / n);
-            // (the air trembles: a fine ripple, not a crackle)
-            if (i < n) p.addScaledVector(side, Math.sin(this._t * 60 + i * 2.1) * 0.025).addScaledVector(up, Math.cos(this._t * 47 + i * 1.7) * 0.025);
+            // (the air trembles: a fine ripple, not a crackle — held in a duel, it shakes harder)
+            const amp = core ? 0.06 : 0.025;
+            if (i < n) p.addScaledVector(side, Math.sin(this._t * 60 + i * 2.1) * amp).addScaledVector(up, Math.cos(this._t * 47 + i * 1.7) * amp);
             (core || pool.core).add(prev, p, this._segLife || 0.05);
-            if (i > n - 3) pool.glow.add(prev, p, this._segLife || 0.05); // (only the head is a little brighter)
+            if (core || i > n - 3) pool.glow.add(prev, p, this._segLife || 0.05); // (flying: only the head is a little brighter; in a duel the whole beam)
             prev.copy(p);
         }
         if (!core) this.jolt.trail(b, dir, spell === 'JoltMaxima', this._dt || 1 / 60);

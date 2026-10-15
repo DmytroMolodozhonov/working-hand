@@ -1155,8 +1155,10 @@ export class Game {
             if (performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
             ice = true;
         }
-        // («Джолт» alone, still being spoken: wait — it may yet be «Джолт Максима»)
-        if (name === 'Jolt' && !isFinal) return null;
+        // («Джолт» alone, still being spoken: wait — it may yet be «Джолт Максима»; but with a duel charge
+        //  flying at me the answer can't wait: it flies now, and «…Максима» then makes it the Maxima)
+        if (name === 'Jolt' && !isFinal && !this.duel.underFire?.()) return null;
+        if (name === 'JoltMaxima' && this._joltUpgrade()) return name;
         // («Firefighting» alone, still being spoken: it may yet be «Firefighting Maxima»)
         if (name === 'Firefighting' && !isFinal) return null;
         // «Suit Up»: the best armour of the slots and of what lies near — on at once (Armor.js)
@@ -1369,10 +1371,26 @@ export class Game {
     }
 
     /** Duel spell: costs fatigue, flies to the pointed-at creature (or straight ahead). */
+    /**
+     * «Джолт» already flew before the phrase ended (an answer: Duel.underFire) and the phrase is «Джолт Максима»:
+     * that charge becomes the Maxima (the rest of its mana is paid; none left — it stays a «Джолт») — never a
+     * second charge. false: no such early «Джолт» (an ordinary cast).
+     */
+    _joltUpgrade() {
+        const early = this._interimCast;
+        if (!early || early.name !== 'Jolt' || Date.now() - early.at > 3000) return false;
+        this._interimCast = null;
+        const extra = this.combat.costOf('JoltMaxima') - this.combat.costOf('Jolt');
+        if (this.combat.enabled && this.combat.fatigue < extra) return true; // (no mana for more: it stays a «Джолт»)
+        if (this.duel.upgradeJolt() && this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - extra);
+        return true;
+    }
+
     _castDuel(costName, spell, isFinal, aim = undefined, side = null) {
         const now = Date.now();
         const early = this._interimCast;
         if (isFinal && early && early.name === costName && now - early.at < 3000) { this._interimCast = null; return null; }
+        if (!isFinal && early && early.name === costName && now - early.at < 3000) return null; // (the same phrase still being heard: no second charge)
         if (now - (this._lastDuelCast || 0) < 900) return null;
         const tired = this.combat.check(costName);
         if (tired) { this.hud.setVoice(tired, true); return null; }
