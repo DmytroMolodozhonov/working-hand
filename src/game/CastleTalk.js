@@ -34,6 +34,7 @@ import * as THREE from 'three';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
+import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
 import { detectOrder, toolsFor } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
@@ -44,6 +45,8 @@ const VOICE = 18; // m: a villager's voice carries this far
 const SHOUT_RANGE = 55; // m: a battle cry / a call for help carries much farther
 /** The master of cauldrons and potions (a wizards' house's stall): flasks and ingredients (the cauldron stands beside: Cauldrons.js). */
 const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', price: 35 }, { kind: 'crystal', price: 70 }];
+/** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, or a piece of magic armour (ArmorTypes). */
+const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }];
 const GOODS = [
     { kind: 'bread', price: 3 }, { kind: 'cheese', price: 4 }, { kind: 'pie', price: 6 }, { kind: 'steak', price: 6 },
     { kind: 'apple', price: 30 }, { kind: 'arrows', price: 8, count: 10 }, { kind: 'shield', price: 25, type: 0 }, { kind: 'bow', price: 30, type: 0 },
@@ -89,7 +92,7 @@ export function namesGood(text, item) {
     return words.some((w) => stems.some((st) => w.startsWith(st) && (st.length > 3 || w.length <= st.length + 2)));
 }
 
-const nameOf = (it) => (it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
+const nameOf = (it) => (it.kind === 'armor' || it.kind === 'robe' ? armorName(it).toLowerCase() : it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
 
 export class CastleTalk {
     constructor(game, life) {
@@ -556,9 +559,12 @@ export class CastleTalk {
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
-                    const pick = stall.potions ? POTION_GOODS[k % POTION_GOODS.length] : GOODS[((n % GOODS.length) + GOODS.length) % GOODS.length];
-                    const price = Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
-                    const item = { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
+                    const pick = stall.potions ? (k === 2 ? WIZARD_RARE[((n % 3) + 3) % 3] : POTION_GOODS[k % POTION_GOODS.length]) : GOODS[((n % GOODS.length) + GOODS.length) % GOODS.length];
+                    const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
+                    // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
+                    const item = pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
+                        : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
+                            : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
                     if (pick.kind === 'shield') { item.type = pick.type; item.magic = false; item.max = 0; delete item.count; }
                     if (pick.kind === 'bow') { item.type = 0; item.magic = false; item.bonus = 0; item.arrows = 5; delete item.count; }
                     const f = (k + 0.5) / 3;

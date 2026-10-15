@@ -33,11 +33,14 @@ import { dragonModel, poseDragon, BODY, SCALE } from './DragonModel.js';
 import { LAIR } from '../world/DragonLairs.js';
 import { newUid } from './ItemTypes.js';
 import { createRng } from '../core/math.js';
+import { skeletonModel } from './Death.js';
 import { creditKill } from './Mana.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
 const TAU = Math.PI * 2;
+/** m from the heap's middle: a dead knight's bones, his named armour and sword (just beyond the fullest heap). */
+const BONES_R = 5.2;
 const POUCH = 100;
 /** Wandering dragons: checked this often (s) by the host; this chance a check brings one. */
 const WANDER = { EVERY: 60, CHANCE: 0.075, /* (half as often as before — the author asked) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
@@ -215,6 +218,7 @@ export class Dragons {
     }
 
     boltHit(d, spell, by = undefined) {
+        if (spell === 'Disarmor') return; // (scales are no armour: «Disarmor» does nothing — ArmorTypes.DISARMOR_TARGETS)
         // «Джолт»: a great heavy body only sways a little — it wakes and turns on the caster (no damage)
         if (spell === 'Jolt' || spell === 'JoltMaxima') {
             d.sweep = (Math.random() < 0.5 ? -1 : 1);
@@ -423,8 +427,22 @@ export class Dragons {
                 g.items.spawnLoose(it, at(rng() * TAU, R * 0.85 + i * 0.6, 0.5));
                 st.items.push(it.uid);
             });
+            // what is left of a knight who came for the gold (its bones: the heap's model): his named armour —
+            // a whole magic set, its perks rolled now (and now and then a magic robe) — and his magic sword (Armor.js)
+            const ba = this._bonesAt(L);
+            (g.armor?.lairHoard() || []).forEach((it, i) => {
+                g.items.spawnLoose(it, at(ba + (i - 1) * 0.16, BONES_R + (i % 2) * 0.5, 0.7));
+                st.items.push(it.uid);
+            });
+            if (g.weapons?.spawnLying) {
+                const w = g.weapons.markMagic(g.weapons.spawnLying('sword', hx + Math.cos(ba + 0.35) * BONES_R, fy, hz + Math.sin(ba + 0.35) * BONES_R, ba, 'lair' + L.id), 30 + Math.floor(rng() * 31));
+                g.sync?.weaponAppeared?.(w);
+            }
         }
     }
+
+    /** Where round the heap the dead knight lies (always the same for a lair). */
+    _bonesAt(L) { return createRng(L.seed ^ 0xb0e5)() * TAU; }
 
     // ---- the heap of loose coins
     _heapR(n) { return n > 0 ? 1.6 + 3.2 * Math.sqrt(Math.min(5000, n) / 5000) : 0; }
@@ -442,6 +460,12 @@ export class Dragons {
         const N = 260;
         const coins = new THREE.InstancedMesh(coin, new THREE.MeshLambertMaterial({ color: 0xffd34a, emissive: 0x4a3000 }), N);
         group.add(coins);
+        // the bones of a knight in the gold (his armour and sword lie by them: _wakeLair)
+        const bones = skeletonModel();
+        const ba = this._bonesAt(L);
+        bones.position.set(Math.cos(ba) * BONES_R, 0.02, Math.sin(ba) * BONES_R);
+        bones.rotation.y = ba + 1.2;
+        group.add(bones);
         g.scene.add(group);
         const rng = createRng(L.seed ^ 0xc011);
         const spots = [];

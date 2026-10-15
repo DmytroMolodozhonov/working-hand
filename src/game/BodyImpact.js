@@ -42,7 +42,7 @@ export class BodyImpact {
         const dome = !!(c.shield && c.shield.type === 2 && c.shield.left > 0);
         const facing = !o.noShield && !!o.from && !dome && c.shieldFactor(o.from) >= 1;
         const swim = ch.swimY != null, frozen = !!c.frozen;
-        const v = o.v.length();
+        const v = o.v.length() * (g.armor?.stat('push') ?? 1); // (a named armour's perk: pushes move half as much)
         let k = 1, res;
         if (o.blast) {
             k = dome ? IMPACT.BLAST_DOME_K : facing ? IMPACT.BLAST_SHIELD_K : 1;

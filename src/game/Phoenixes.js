@@ -95,6 +95,7 @@ export const TARGETS = {
     IceDuel: { does: 'none', why: '«Айс»: лёд тает на нём сразу (огненная птица) — но это нападение' },
     LevitateDuel: { does: 'push', why: 'подбрасывает вверх, без урона; нападение' },
     Expelliarmus: { does: 'push', why: 'в когтях ничего нет — только толчок; нападение' },
+    Disarmor: { does: 'push', why: '«Disarmor»: перья не снимешь — только толчок; нападение' },
     Jolt: { does: 'push', why: '«Джолт»: лёгкую птицу отбрасывает по воздуху, кувырком, без урона; нападение' },
     Firefighting: { does: 'push', why: '«Firefighting»: лёгкий толчок, пылающий феникс гаснет и бросает атаку; без урона' },
     SapiraDuel: { does: 'hit', why: '−10' },
@@ -784,7 +785,7 @@ export class Phoenixes {
         else if (spell === 'IceDuel') this.hit(f, 0, 'IceDuel', by);
         else if (spell === 'LevitateDuel') { f.vel.y += 9; this._attacked(f, by, spell); }
         else if (spell === 'Jolt' || spell === 'JoltMaxima') { f.vel.add(_v.subVectors(f.model.position, this._player(by)?.pos || f.model.position).setY(0).setLength(spell === 'Jolt' ? 14 : 24)).setY(4); f.stunT = 1.2; this._attacked(f, by, spell); }
-        else if (spell === 'Expelliarmus') { f.vel.add(_v.subVectors(f.model.position, this._player(by)?.pos || f.model.position).setY(0).setLength(6)); this._attacked(f, by, spell); }
+        else if (spell === 'Expelliarmus' || spell === 'Disarmor') { f.vel.add(_v.subVectors(f.model.position, this._player(by)?.pos || f.model.position).setY(0).setLength(6)); this._attacked(f, by, spell); }
         else this.hit(f, 4, spell, by);
     }
 
@@ -1375,7 +1376,7 @@ export class Phoenixes {
     }
 }
 
-const DUEL_KINDS = new Set(['AvadaKedavra', 'Stupefy', 'IceDuel', 'LevitateDuel', 'SapiraDuel', 'SandsDuel', 'Expelliarmus', 'Jolt', 'JoltMaxima']);
+const DUEL_KINDS = new Set(['AvadaKedavra', 'Stupefy', 'IceDuel', 'LevitateDuel', 'SapiraDuel', 'SandsDuel', 'Expelliarmus', 'Disarmor', 'Jolt', 'JoltMaxima']);
 const r2 = (v) => Math.round(v * 100) / 100;
 
 // pushes, gusts, knockdowns (CreatureImpact): a light bird thrown through the air — it never falls over

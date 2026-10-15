@@ -178,7 +178,7 @@ export class FlightController {
         } else {
             // Cruise
             const steer = this.steering(input.torso, input.headPitch || 0);
-            this.speed = Math.min(FLIGHT.MAX_SPEED, this.speed + FLIGHT.CRUISE_ACCEL * dt);
+            this.speed = Math.min(FLIGHT.MAX_SPEED * (this.armorK || 1), this.speed + FLIGHT.CRUISE_ACCEL * (this.armorK || 1) * dt); // (armorK: a named armour's perk, Armor.js)
             const target = steer.dive >= 0 ? steer.dive * FLIGHT.MAX_DIVE : -steer.dive * FLIGHT.MAX_CLIMB;
             // Right after take-off the path levels out by itself
             const level = clamp(1 - this.t / 2.0, 0, 1);

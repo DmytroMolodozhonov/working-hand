@@ -1529,3 +1529,33 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 }
 #voice-debug.hint.on { opacity: 1; transition: opacity 0.15s; }
 @media (max-height: 560px) { #voice-debug.hint { font-size: 20px !important; top: 92px !important; } }
+
+/* armour worn (Armor.js): cells on the right, one above the other — only while something is worn */
+#armor-cells {
+    position: fixed;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 1200;
+    pointer-events: none;
+}
+.armor-cell {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    background: rgba(12, 12, 22, 0.72);
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
+}
+.armor-cell .ac-icon { position: absolute; inset: 7px 7px 11px; opacity: 0.25; filter: grayscale(1); }
+.armor-cell.on { border-style: solid; border-color: rgba(255, 255, 255, 0.6); }
+.armor-cell.on .ac-icon { opacity: 1; filter: none; }
+.armor-cell.on.magic { border-color: #9fd8ff; box-shadow: 0 0 8px rgba(111, 184, 255, 0.7), inset 0 0 6px rgba(0, 0, 0, 0.8); }
+.armor-cell.on.magic .ac-icon { filter: drop-shadow(0 0 4px #6fb8ff); }
+.armor-cell .ac-bar { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 4px; background: rgba(0, 0, 0, 0.6); border-radius: 2px; overflow: hidden; }
+.armor-cell .ac-bar i { display: block; height: 100%; width: 100%; background: #b8c2cc; }
+.armor-cell.magic .ac-bar i { background: #6fb8ff; }

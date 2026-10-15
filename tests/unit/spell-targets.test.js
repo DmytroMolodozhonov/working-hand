@@ -245,3 +245,14 @@ test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibi
     for (const f of ['src/game/CastleLife.js', 'src/game/Dragons.js', 'src/game/Spider.js', 'src/game/Phoenixes.js', 'src/game/Animals.js', 'src/game/Sailors.js']) assert.match(src(f), /invis\.aiPos/, `${f}: an invisible player`);
     assert.match(body(src('src/game/Game.js'), '    nearestPlayer(p) {'), /aiPos/, 'zombies: an invisible player');
 });
+
+test('«Disarmor» decides every creature and thing (ArmorTypes.DISARMOR_TARGETS — «не действует» is written too, with why)', async () => {
+    const { DISARMOR_TARGETS: T } = await import('../../src/game/ArmorTypes.js');
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix' };
+    for (const k of ALL) assert.ok(T[names[k]]?.why, `«Disarmor» forgets: ${k}`);
+    for (const k of ['me', 'players', 'servants', 'looseThings', 'world']) assert.ok(T[k]?.why, k);
+    assert.match(src('src/game/Spider.js'), /spell === 'Disarmor'/, 'the spider answers «Disarmor» itself');
+    assert.match(src('src/game/Dragons.js'), /spell === 'Disarmor'/, 'a dragon answers «Disarmor» itself');
+    assert.match(src('src/game/Phoenixes.js'), /spell === 'Disarmor'/, 'a phoenix answers «Disarmor» itself');
+    assert.match(body(src('src/game/Duel.js'), '    applyToCreature(spell, c, byId, from = null) {'), /stripVillager/, 'knights / wizards stripped by the host');
+});

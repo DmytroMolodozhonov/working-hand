@@ -103,6 +103,7 @@ export const ON_DRAGON = {
     SandsDuel: { dmg: 8, blind: 3, why: 'песок в глаза: 3 секунды он не видит цель (−8)' },
     IceDuel: { dmg: 20, slow: 4, why: 'лёд: −20 и 4 секунды он медленнее — заморозить такого великана нельзя' },
     Expelliarmus: { dmg: 0, why: 'нет палочки и оружия — выбивать нечего, не действует' },
+    Disarmor: { dmg: 0, why: 'чешуя — не доспех, снять нечего: не действует' },
     // blasts, rays, lightning (Game.explode / birdRay / lightningAt), Total Destruction, a cauldron's blast
     Bombardo: { mult: 1, why: 'взрыв ранит (взрыв — не огонь)' },
     TotalDestruction: { mult: 1, why: 'разрушение ранит' },

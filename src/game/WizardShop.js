@@ -10,6 +10,7 @@
 
 import { newUid, itemValue, SPELL_RU } from './ItemTypes.js';
 import { bookSpells } from './BookBirds.js';
+import { rollChestArmor } from './ArmorTypes.js';
 
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const randInt = (r, a, b) => a + Math.floor(r() * (b - a + 1));
@@ -28,6 +29,9 @@ export function rollWizardHouseLoot(r = Math.random, rich = false) {
         else if (x < 0.82) out.push({ kind: 'wand', uid: newUid(), plain: true, model: 0, color: 0x6b4426, dir: null, fav: null, power: 0 });
         else out.push({ ...pick(r, [{ kind: 'bread', count: 1 }, { kind: 'cheese', count: 1 }, { kind: 'apple', count: 1 }, { kind: 'pie', count: 1 }]), uid: newUid() });
     }
+    // (the wizards keep magic armour more often than anybody — and now and then a magic robe: ArmorTypes)
+    const arm = rollChestArmor(r, { wizard: true });
+    if (arm) out.push(arm);
     return out;
 }
 

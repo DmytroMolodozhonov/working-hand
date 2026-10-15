@@ -161,8 +161,16 @@ export function judgeCut(hit, blockedAt, dt, w, edgeN, prevTipSpeed, tissue) {
 }
 
 // ------------------------------------------------------------ armour
-/** A player's steel in the look: Латы (top 5), Шлем (hat 9), Поножи (bottom 8), Латные (shoes 6). */
-export function armourCovers(look, limb, d) {
+/**
+ * A player's steel: in the look — Латы (top 5), Шлем (hat 9), Поножи (bottom 8), Латные (shoes 6) — or
+ * the armour worn (`worn`: VoxelCharacter.armorWorn — helmet / chest / legs, ArmorLook).
+ */
+export function armourCovers(look, limb, d, worn = null) {
+    if (worn) {
+        if (limb === 'head' && (worn.helmet || worn.chest)) return true; // the helmet / the breastplate's gorget
+        if (limb.endsWith('Arm') && worn.chest && d < 1.9) return true; // the arm plates to the wrist
+        if (limb.endsWith('Leg') && worn.legs) return true;
+    }
     if (!look) return false;
     if (limb === 'head') return look.top === 5 || look.hat === 9; // the plate's gorget / the helmet's aventail
     if (limb.endsWith('Arm')) return look.top === 5 && d < 1.9; // steel sleeves to the wrist; the bare hand is not
@@ -333,7 +341,7 @@ export class Dismemberment {
         const res = judgeCut(hit, blk, ctx.dt, { cutSpeed: ctx.E.cutSpeed, sides: ctx.E.sides, bonus: ctx.w.magic ? ctx.w.bonus : 0 }, facing, ctx.prevTip, tissue);
         res.tissue = tissue;
         if (res.kind !== 'cut') return res;
-        if (who.k === 'p' && armourCovers(who.r?.look || who.r?.character?.look, hit.limb, hit.d)) return { ...res, kind: 'armour' };
+        if (who.k === 'p' && armourCovers(who.r?.look || who.r?.character?.look, hit.limb, hit.d, who.r?.character?.armorWorn)) return { ...res, kind: 'armour' };
         if (who.k === 'v' && villagerArmoured(t)) return { ...res, kind: 'armour' };
         // the cut's normal in the frame of the bone it goes through (the same on every computer)
         let nSeg = [0, 1, 0];
@@ -470,7 +478,7 @@ export class Dismemberment {
         if (g.sync?.weaponOwners && ![...g.sync.weaponOwners.values()].includes(by)) return false; // no blade in their hand
         if (g.gear?.shieldFaces?.(att.position)) { g.gear.shieldTook?.('melee'); return false; }
         if (g.combat.frozen) return false; // (the hit shatters me instead)
-        if (armourCovers(g.character.look, sv.limb, sv.d)) { g.hud?.setVoice?.('🛡️ Латы выдержали удар', true); return false; }
+        if (armourCovers(g.character.look, sv.limb, sv.d, g.character.armorWorn)) { g.hud?.setVoice?.('🛡️ Латы выдержали удар', true); return false; }
         return this._cutMine(sv, by, true);
     }
 

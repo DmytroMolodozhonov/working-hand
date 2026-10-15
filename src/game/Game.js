@@ -93,6 +93,7 @@ import { Knockdown } from './Knockdown.js';
 import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
 import { HurtFlash } from './HurtFlash.js';
+import { ArmorSystem } from './Armor.js';
 import { BodyStrikes } from './BodyStrikes.js';
 import { HandBlocks } from './HandBlocks.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
@@ -336,6 +337,7 @@ export class Game {
         this.scrolls = new ScrollReading(this); // a scroll opened with both hands and read
         this.swim = new Swimming(this); // deep water: swimming, air, «Air Bubble»
         this.items = new ItemSystem(this); // wands, scrolls, shields, backpacks, bows, food… in the world and the hands
+        this.armor = new ArmorSystem(this); // armour and robes: put on by hand / «Suit Up», «Disarmor» (Armor.js)
         this.wandMagic = new WandMagic(this); // a wand: stronger spells, «Люмос», drawing, «Раскрой свои секреты»
         this.gear = new Gear(this); // shields, the bow, Thor's hammer, thunderstorms
         this.bleeding = new Bleeding(this); // blades stuck in bodies, blood, «Rescue»
@@ -1102,7 +1104,9 @@ export class Game {
         if (name === 'Jolt' && !isFinal) return null;
         // («Firefighting» alone, still being spoken: it may yet be «Firefighting Maxima»)
         if (name === 'Firefighting' && !isFinal) return null;
-        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
+        // «Suit Up»: the best armour of the slots and of what lies near — on at once (Armor.js)
+        if (name === 'SuitUp') return this.armor.suitUp(isFinal);
+        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || 'right') ? (this.magicHand || this.lastMagicHand || 'right') : (this.wandSide() || ['right', 'left'].find((s) => this.character.isArmRaised(s))));
@@ -2260,7 +2264,8 @@ export class Game {
             if (this.sync) this.sync.spell(name, origin, dir, 'right');
             return name;
         }
-        if (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Jolt' || name === 'JoltMaxima') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
+        if (name === 'SuitUp') return this.armor.suitUp(true);
+        if (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         if (name === 'Sapira') { this._lastDuelCast = 0; return this._castDuel('Sapira', 'SapiraDuel', true); }
         if (name === 'Sands') { this._lastDuelCast = 0; return this._castDuel('Sands', 'SandsDuel', true); }
         if (name === 'Ice' || name === 'Frozen') { this._lastDuelCast = 0; return this._castDuel('Ice', 'IceDuel', true); }
@@ -2465,6 +2470,7 @@ export class Game {
         this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();
+        this.armor.update(dt);
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
         this.wards?.update(dt);

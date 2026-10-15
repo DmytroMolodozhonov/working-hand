@@ -28,7 +28,8 @@ import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRole
 import { BLOCK } from '../world/Terrain.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
-import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
+import { ARMOR } from './ArmorTypes.js';
+import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 import { createRng } from '../core/math.js';
@@ -269,7 +270,9 @@ export class CastleLife {
         const def = cs.def;
         if (cs.active.has(idx) || this.state(def.id).killed.has(idx)) return null;
         const e = this._roster(def, idx);
-        const look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
+        let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
+        if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
+        if (this.game.armor?.wasStripped(def.id + ':' + idx)) look = strippedLook(look); // («Disarmor» took the steel / the plain robe off)
         const model = new VillagerModel(look, { castleColor: def.color });
         this.game.scene.add(model.group);
         const S = WIZ[e.role] ? { hp: WIZ[e.role].hp, armor: WIZ[e.role].ward } : STATS[e.role]; // (a wizard's ward is its armour)
@@ -284,6 +287,9 @@ export class CastleLife {
             walk: WALK * (0.72 + ((e.seed >>> 4) % 100) / 220), lane: (((e.seed >>> 11) % 100) / 100 - 0.5) * 2.6,
             bubble: null, bar: null, net: null,
         };
+        if (e.robe) v.robe = true;
+        if (look.unarmored || look.robeOff) v.stripped = true;
+        if (look.unarmored) { v.armor = 0; v.maxArmor = 0; } // (a wizard's ward is no steel: it stays)
         if (WIZ[e.role]) this.wizards.init(v);
         v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
         v.group.rotation.y = v.yaw;
@@ -1401,7 +1407,7 @@ export class CastleLife {
     _archer(v, sq, fp, d, dt) {
         const tac = v.tac;
         // he came down to me: the sword again (and the bow knocked out of the hands: fists)
-        if ((this._closeTo(v, fp, d) && !sq.sit?.air) || v.disarmed) { v.fx &= ~1; return false; }
+        if ((this._closeTo(v, fp, d) && !sq.sit?.air) || v.disarmed || performance.now() < (sq.noArrows || 0)) { v.fx &= ~1; return false; }
         v.fx = (v.fx | 0) | 1;
         tac.spotT = (tac.spotT || 0) - dt;
         if (!tac.spot || tac.spotT <= 0) { tac.spotT = 2.5; tac.spot = this._archerSpot(v, sq, fp) || tac.spot; }
@@ -1470,6 +1476,11 @@ export class CastleLife {
         g.gear.fire(from, vel, dmg, v.id);
         g.sync?.arrow?.(from, vel, dmg, v.id);
         sq.shots++;
+        // his arrows bounce off magic steel (Armor.js): after a few they think it does not work and leave the bows a while
+        if (g.armor?.bouncesArrows(sq.foe)) {
+            sq.futile = (sq.futile || 0) + 1;
+            if (sq.futile >= ARMOR.GIVE_UP) { sq.futile = 0; sq.noArrows = performance.now() + ARMOR.GIVE_UP_T * 1000; this._say(v, 'Стрелы его не берут! Бросьте луки!', 3); }
+        }
         const me = g.character.group.position;
         if (Math.hypot(me.x - v.x, me.z - v.z) < 35) g.sound?.playBowRelease?.(0.7);
     }

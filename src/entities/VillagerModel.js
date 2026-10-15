@@ -223,6 +223,24 @@ export function villagerLook(seed, role = 'farmer', female, opts = {}) {
     return L;
 }
 
+/**
+ * The steel / the plain robe gone («Disarmor», or taken off a dead body — Armor.js): a knight's and
+ * the king's plates leave a padded gambeson (the king keeps his crown and his cape); a wizard's
+ * plain robe leaves the shirt and the trousers under it (and no hat).
+ */
+export function strippedLook(L) {
+    const S = { ...L };
+    if (L.role === 'knight' || L.role === 'king') {
+        S.unarmored = true;
+        if (L.role === 'knight') { S.hat = 'none'; S.plume = false; }
+        S.shirt = 0xcdbf98; S.pants = 0x5a4632; S.boots = 0x4a3020;
+    } else if (L.wizard) {
+        S.robeOff = true; S.dress = false; S.hat = 'none';
+        S.shirt = 0xe8dcc0; S.pants = 0x4a3a2a;
+    }
+    return S;
+}
+
 /** Wizards: a robe to the ground, a pointed hat, a wand (a wanderer: a staff), the Master — a long beard. */
 function wizardLook(L, r, pick) {
     const role = L.role;
@@ -432,6 +450,13 @@ function bodyBoxes(L) {
         b(B, 1.42, 0.12, 1.02, 0, -1.9, 0, shade(dc, 0.7));
         b(B, 1.26, 0.16, 0.86, 0, -0.62, 0, shade(dc, 0.75));
     };
+    if (L.unarmored || L.robeOff) { // (the steel / the robe gone: a padded gambeson / the shirt)
+        b(B, 1.2, 1.5, 0.8, 0, 0, 0, L.shirt);
+        if (L.unarmored) for (const y of [0.45, 0.1, -0.25]) b(B, 1.22, 0.05, 0.82, 0, y, 0, shade(L.shirt, 0.85)); // the quilting
+        b(B, 0.4, 0.12, 0.04, 0, 0.66, -0.41, L.skin);
+        belt();
+        return B;
+    }
     if (L.role === 'knight') {
         b(B, 1.2, 1.5, 0.8, 0, 0, 0, STEEL);
         b(B, 1.1, 0.85, 0.08, 0, 0.28, -0.42, STEEL_LIGHT); // chest plate
@@ -489,6 +514,7 @@ function bodyBoxes(L) {
         b(B, 0.56, 0.16, 0.08, 0, 0.72, -0.4, tr); // collar
         b(B, 1.3, 0.16, 0.9, 0, -0.62, 0, shade(rc, 0.7)); b(B, 0.18, 0.16, 0.04, 0, -0.62, -0.46, tr); // sash
         b(B, 0.2, 0.2, 0.03, 0.32, 0.32, -0.45, L.role === 'master' ? 0xfff2a0 : 0xe8e8ff, 0, 0, Math.PI / 4); // a star
+        if (L.magicRobe) { for (const [x, y] of [[-0.34, 0.45], [-0.3, -0.2], [0.36, -0.3], [0.1, 0.5]]) b(B, 0.14, 0.14, 0.03, x, y, -0.45, 0xbfe8ff, 0, 0, Math.PI / 4); b(B, 0.14, 1.42, 0.035, 0, 0.05, -0.445, 0xffe08a); } // a magic robe: pale stars, a gold front
         if (L.role === 'seller' || L.role === 'wanderer') { b(B, 0.3, 0.34, 0.2, -0.42, -0.84, -0.38, 0x8b5a2b); b(B, 0.2, 0.08, 0.22, -0.42, -0.66, -0.38, tr); } // a satchel of scrolls
     } else { // merchant: vest, gold trim, coin pouch
         const v = L.accent;
@@ -508,7 +534,7 @@ function bodyBoxes(L) {
 /** Shoulder pivot; the arm hangs along −Y (top +0.2, hand down to −1.35). side −1 = left. */
 function armBoxes(L, side) {
     const B = [];
-    if (L.role === 'knight' || L.role === 'king') {
+    if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
         const king = L.role === 'king';
         b(B, 0.42, 1.15, 0.42, 0, -0.375, 0, STEEL);
         b(B, 0.62, 0.36, 0.64, side * 0.06, 0.17, 0, king ? GOLD : STEEL_LIGHT); // pauldron
@@ -529,13 +555,13 @@ function armBoxes(L, side) {
         b(B, 0.36, 0.4, 0.36, 0, -1.15, 0, L.skin);
     }
     if (L.role === 'merchant') b(B, 0.44, 0.08, 0.44, 0, 0.1, 0, L.accent); // vest shoulder
-    if (L.wizard) b(B, 0.54, 0.2, 0.54, 0, -0.95, 0, shade(L.dressColor, 0.85)); // a wide robe cuff
+    if (L.wizard && !L.robeOff) b(B, 0.54, 0.2, 0.54, 0, -0.95, 0, shade(L.dressColor, 0.85)); // a wide robe cuff
     return B;
 }
 
 function thighBoxes(L) {
     const B = [];
-    if (L.role === 'knight' || L.role === 'king') {
+    if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
         b(B, 0.5, LEG_UP, 0.5, 0, -LEG_UP / 2, 0, STEEL);
         b(B, 0.56, 0.22, 0.58, 0, -0.92, -0.02, L.role === 'king' ? GOLD : STEEL_LIGHT);
         return B;
@@ -547,7 +573,7 @@ function thighBoxes(L) {
 /** Knee pivot; the shin + foot go down to −0.95 (= group y −1.95). */
 function shinBoxes(L) {
     const B = [];
-    if (L.role === 'knight' || L.role === 'king') {
+    if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
         b(B, 0.5, 0.62, 0.5, 0, -0.31, 0, STEEL);
         b(B, 0.54, 0.34, 0.66, 0, -0.78, -0.06, STEEL_DARK);
         b(B, 0.4, 0.14, 0.2, 0, -0.88, -0.44, STEEL);

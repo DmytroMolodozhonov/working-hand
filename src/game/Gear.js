@@ -504,6 +504,14 @@ export class Gear {
                     a.hit.add('me');
                     const from = _v2.copy(p).addScaledVector(a.vel, -0.1);
                     if (this.shieldFaces(from)) { this.shieldTook('melee'); a.stuck = true; continue; }
+                    // magic steel: the arrow just bounces off it (Armor.js) — it flies back a little and falls
+                    if (g.armor?.arrowBounces()) {
+                        a.vel.set(-a.vel.x * 0.25 + (Math.random() - 0.5) * 2, 2 + Math.random() * 2, -a.vel.z * 0.25 + (Math.random() - 0.5) * 2);
+                        a.life = Math.min(a.life, 10);
+                        for (let k = 0; k < 8; k++) g.fx?.spark(p, 0x9fd8ff, 0.06, _v.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.3);
+                        g.sound?.playFrozenHit?.();
+                        continue;
+                    }
                     if (g.combat.enabled) g.combat.damage(Math.round(a.dmg), a.by, 'arrow');
                     else g.damageLocalPlayer(Math.round(a.dmg));
                     // the arrow's blow: a small shove (in the head: the head jerks)

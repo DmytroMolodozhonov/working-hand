@@ -59,6 +59,11 @@ export function matchSpell(text) {
     if (hell === 1) return null; // («hellfire» alone: wait for «come» — never a campfire)
     // «Экспеллиармус»: the whole word only (before every short token that might sit inside it)
     if (isExpelliarmus(s)) return 'Expelliarmus';
+    // «Suit Up» («сьют ап», «одеть всё»): all the armour on at once — before «Up» («ап») (Armor.js)
+    if (has('suit up', 'suitup', 'soot up', 'сьют ап', 'сьютап', 'сют ап', 'сютап', 'съют ап', 'съютап', 'шьют ап', 'сьют', 'облачись', 'облачиться',
+        'надеть все', 'надеть всё', 'одеть все', 'одеть всё', 'надень все', 'надень всё', 'одень все', 'одень всё')) return 'SuitUp';
+    // «Disarmor» («дизармор», «раздеть»): the plain steel flies off the one the hand points at (a duel charge)
+    if (has('disarmor', 'dis armor', 'disarmour', 'дизармор', 'дисармор', 'дезармор', 'дизарм', 'дисарм', 'дизармо', 'раздень', 'раздеть', 'разоблач')) return 'Disarmor';
     // «Алохомора» («…Максима»): whole words round «хомор» / «хамор» — before «Максима» alone, «мах»…
     const alo = alohomoraWords(s);
     if (alo) return alo === 2 ? 'AlohomoraMaxima' : 'Alohomora';

@@ -488,7 +488,7 @@ export class WizardFight {
             seen.add(v.id);
             const eta = dist / 15;
             if (eta < (v.W.reactT ?? 0.5)) continue; // (too late to do anything)
-            const r = react({ role: v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta });
+            const r = react({ role: v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta, robe: !!v.robe });
             if (r && !v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; v.seated = false; } // (he cast at me: now it is a fight)
             if (r === 'dome') this._dome(v);
             else if (r === 'counter' && this._counter(v, b)) { /* (a spell back: the beams meet — a duel) */ }

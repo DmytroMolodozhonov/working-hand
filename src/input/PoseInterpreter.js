@@ -139,6 +139,30 @@ export function handAtMouth(lm, hand, side, aspect = 4 / 3) {
     return Math.abs(dx) < 0.35 && dy > -0.1 && dy < 0.7;
 }
 
+/**
+ * A hand put on the body, as the picture shows it (armour put on by hand — Armor.js): on the head
+ * (the wrist at the face or above it, over the head), on the chest (between the shoulders, on the
+ * upper half of the body), at the knee (reached down well below the hips — a hand hanging at the
+ * side is not). → {head, chest, knee} | null (the body not seen).
+ */
+export function bodyTouch(lm, side, aspect = 4 / 3) {
+    const w = side === 'left' ? 15 : 16;
+    const ls = lm?.[11], rs = lm?.[12], nose = lm?.[0], wr = lm?.[w], lh = lm?.[23], rh = lm?.[24];
+    if (!ls || !rs || !nose || !wr || (wr.visibility ?? 1) < 0.4) return null;
+    const W = Math.abs(ls.x - rs.x) * aspect;
+    if (W < 0.03) return null;
+    const sy = (ls.y + rs.y) / 2, mx = (ls.x + rs.x) / 2;
+    const T = lh && rh && (lh.visibility ?? 1) > 0.3 && (rh.visibility ?? 1) > 0.3 ? Math.max(0.5 * W, (lh.y + rh.y) / 2 - sy) : 1.3 * W; // (the torso's length)
+    const hy = sy + T;
+    const hx = (wr.x - nose.x) * aspect / W, hdy = (wr.y - nose.y) / W;
+    const cx = (wr.x - mx) * aspect / W, cdy = (wr.y - sy) / T;
+    return {
+        head: Math.abs(hx) < 0.75 && hdy > -1.1 && hdy < 0.4, // (from the chin up)
+        chest: Math.abs(cx) < 0.5 && cdy > 0.08 && cdy < 0.65,
+        knee: wr.y > hy + 0.45 * T,
+    };
+}
+
 export class PoseInterpreter {
     /**
      * @param {object} [faceSolver] Kalidokit.Face (optional; head rotation)
@@ -255,6 +279,7 @@ export class PoseInterpreter {
             data.belt = { left: beltPose(lm, 'left', data.aspect), right: beltPose(lm, 'right', data.aspect) }; // (WandBelt)
             data.purse = { right: purseHand(lm, 'right', data.aspect), cross: purseHand(lm, 'left', data.aspect, 'right') }; // (CoinBelt: the right hip; the left hand across)
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
+            data.bodyTouch = { left: bodyTouch(lm, 'left', data.aspect), right: bodyTouch(lm, 'right', data.aspect) }; // (armour put on by hand: Armor.js)
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));

@@ -635,7 +635,11 @@ export class NetSync {
     sendLook() {
         const look = this.game.character.look;
         if (look) this.net.send({ t: 'look', by: this.me, look }, true);
+        this.game.armor?.resend(); // (and what armour I wear: Armor.js)
     }
+
+    /** Armour (Armor.js): {a: 'worn', w} what I wear; (host) {a: 'vstrip', id} a villager stripped by «Disarmor». */
+    armor(m) { this.net.send({ t: 'arm', by: this.me, ...m }, true); }
 
     impale(to, wid, rel = null) {
         this.game.bleeding?.noteImpale(wid, to);
@@ -856,6 +860,7 @@ export class NetSync {
             case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
             case 'bed': g.beds?.onNet(m); break;
+            case 'arm': if (m.by !== this.me) g.armor?.onNet(m, m.by || m.from); break;
             case 'look': {
                 if (m.by === this.me || !m.look) break;
                 this.looks = this.looks || new Map();

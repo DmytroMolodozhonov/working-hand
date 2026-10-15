@@ -40,6 +40,8 @@ const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
+/** The rooms of a keep whose chest is the king's own (Castles.js ROOM_NAMES). */
+const ROYAL_ROOMS = new Set(['king', 'treasury', 'throne', 'vault']);
 const AIMED = new Set(['bow', 'wand', 'hammer', 'shield']);
 /** Held in the fist like the sword: handle (model y, before scaling) at the fingers, the axis across the palm. */
 /**
@@ -74,6 +76,8 @@ const GRIPPED = {
     arrows: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true },
     coins: { axis: 'hang', pose: 'neck', at: [0.13, -0.17], top: 0.02, off: 0.25 },
     backpack: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.032 }, // (by its loop)
+    armor: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.08 }, // (by the leather loop on its top: ArmorLook)
+    robe: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.08 }, // (by its collar's loop)
     book: { axis: 'book', handle: 0, curl: 0.55 }, // by the spine: the covers between the thumb and the fingers
 };
 /** The wand with V3 hands (stable): in the fist, as it was before the pen grip. */
@@ -90,7 +94,7 @@ const ARM_MASS = 1.2;
 /** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
 const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
-export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, dragonEgg: 0.004, phoenixFeather: 0.6 }; // (a feather drifts down slowly)
+export const AERO = { book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, dragonEgg: 0.004, phoenixFeather: 0.6, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
     constructor(game) {
@@ -146,7 +150,9 @@ export class ItemSystem {
      */
     lootChest(pos, rng = Math.random, house = null, kind = null, { chest = null, extra = [], key = undefined } = {}) {
         // (a wizards' house: scrolls, sometimes a spell book — src/game/WizardShop.js)
-        const items = (house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng, { key })).concat(extra);
+        // (the king's own chest in the keep — his chambers, the treasury: mostly the fine things — ArmorTypes / rollLoot)
+        const royal = !!chest?.castle && ROYAL_ROOMS.has(chest.room);
+        const items = (house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng, { key: royal ? 1 : key, royal })).concat(extra);
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
         const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();
@@ -1025,7 +1031,7 @@ export class ItemSystem {
 
     /** One model of each kind, for compiling the shaders while loading. */
     sampleModels() {
-        return [{ kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'apple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
+        return [{ kind: 'armor', piece: 'helmet', magic: true }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true }, { kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'apple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
     }
 
     /** Everything this player carries (for the save). */
@@ -1033,12 +1039,14 @@ export class ItemSystem {
         return {
             held: ['right', 'left'].map((s) => this.held[s]?.item || null),
             backpack: this.worn.backpack?.item || null,
+            armor: this.game.armor?.snapshot() || null, // (the armour and the robe worn: Armor.js)
         };
     }
 
     restore(s) {
         if (!s) return;
         if (s.backpack) this.wear(s.backpack);
+        if (s.armor) this.game.armor?.restore(s.armor);
         if (s.held) s.held.forEach((it, i) => { if (it) this.takeIntoHand(it, i ? 'left' : 'right'); });
     }
 

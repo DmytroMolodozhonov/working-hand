@@ -27,7 +27,7 @@
 import * as THREE from 'three';
 import { RESOURCE } from './Inventory.js';
 import { purseBags } from './CoinBelt.js';
-import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
+import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
 import { newUid } from './ItemTypes.js';
 import { VoxelCharacter } from '../entities/Character.js';
@@ -179,6 +179,7 @@ export class DeathSystem {
         // the coin pouches on the belt drop too, each as it was (CoinBelt)
         if (inv?.purse?.count > 0) { for (const c of purseBags(inv.purse.count)) held.push({ kind: 'coins', count: c }); inv.purse.count = 0; }
         const slots = inv ? inv.slots.slice() : [];
+        held.push(...(g.armor?.takeOffAll() || [])); // (the armour and the robe worn drop too)
         let backpack = null;
         if (it?.worn.backpack) {
             const bp = it.worn.backpack;
@@ -234,9 +235,12 @@ export class DeathSystem {
         const y = this._ground(v.x, v.z, v.y + 1.5);
         // (a sword knocked out by «Экспеллиармус» already lies somewhere: not a second one)
         const drops = lootOfVillager(v.role, { shield: !!v.model?.shield }).filter((d) => !(v.disarmed && d.kind === 'weapon'));
+        // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
+        const steel = g.armor?.villagerLoot(v) || [];
+        drops.push(...steel);
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
-        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0 };
+        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0 };
         this.addBody(b);
         g.sync?.deathBody?.(this._wire(b));
     }
@@ -313,6 +317,7 @@ export class DeathSystem {
         const cs = cl && ([...(cl.castles?.values() || [])].find((c) => c.def.id === cid) || cl._runtimeById?.(cid));
         if (cs) { const e = rosterEntry(cs.def, +n); look = villagerLook(e.seed, e.role, e.female, { castleColor: cs.def.color }); }
         else look = villagerLook(Math.abs(hashStr(b.id)), b.role || 'farmer');
+        if (b.st) look = strippedLook(look); // (its plates / robe lie beside it: Armor.js)
         const m = new VillagerModel({ ...look, tool: 'none' }, { shield: false });
         for (let i = 0; i < 10 && !m.isDeadDone; i++) m.update(0.1, { mode: 'dead' });
         const pivot = new THREE.Group();
@@ -502,7 +507,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0 };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */

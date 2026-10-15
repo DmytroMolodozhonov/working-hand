@@ -28,6 +28,8 @@ import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand } from './ItemTypes.js';
 import { WandBelt } from './WandBelt.js';
 import { CoinBelt, BELT_MAX } from './CoinBelt.js';
+import { armorIcon } from './Armor.js';
+import { armorName } from './ArmorTypes.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -659,6 +661,11 @@ export class Inventory {
                 if (s.magic) icon.style.textShadow = '0 0 8px #6fb8ff, 0 0 3px #fff';
             } else if (s.kind === 'book') {
                 icon.textContent = '📖';
+            } else if (s.kind === 'armor' || s.kind === 'robe') {
+                // a piece of armour / a robe: its own little picture (Armor.js)
+                icon.innerHTML = armorIcon(s.kind === 'robe' ? 'robe' : s.piece, s.named ? 3 : s.magic ? 2 : 1, s.color || 0);
+                if (s.magic) icon.style.textShadow = '0 0 8px #6fb8ff';
+                c.title = armorName(s);
             } else {
                 icon.textContent = ITEM_INFO[s.kind]?.icon || '❔';
                 if (s.kind === 'wand' && s.color != null) icon.style.background = `radial-gradient(circle, #${(s.color >>> 0).toString(16).padStart(6, '0')}55, transparent 70%)`;

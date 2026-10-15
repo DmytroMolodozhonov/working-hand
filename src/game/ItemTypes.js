@@ -31,6 +31,8 @@ import { crystalItemModel } from './CrystalModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
 import { DRAGON_KINDS } from './DragonKinds.js';
+import { rollChestArmor, armorValue, describeArmor } from './ArmorTypes.js';
+import { armorItemModel } from '../entities/ArmorLook.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Expelliarmus', 'Jolt'] },
@@ -45,7 +47,7 @@ export const SPELL_RU = {
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
     WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', Inspirius: 'Inspirius', LetItRain: 'Let it rain', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
-    Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Alohomora: 'Алохомора', AlohomoraMaxima: 'Алохомора Максима', LevitationMaxima: 'Вингардиум Левиоса Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
+    Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', Alohomora: 'Алохомора', AlohomoraMaxima: 'Алохомора Максима', LevitationMaxima: 'Вингардиум Левиоса Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
     ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant',
     CreateHouse: 'Create a House', ImproveHouse: 'Improve a House',
     WindImpulse: 'Wind Impulse', WindImpulseMaxima: 'Wind Impulse Maxima', Drawdown: 'Drawdown', DrawdownMaxima: 'Drawdown Maxima', Liquidation: 'Liquidation', LiquidationMaxima: 'Liquidation Maxima',
@@ -114,6 +116,9 @@ export const ITEM_INFO = {
     dragonEgg: { name: 'Яйцо дракона', icon: '🥚', weight: 4 },
     // the phoenix (Phoenixes.js): what it leaves when it is killed — for potions later (no effect yet)
     phoenixFeather: { name: 'Перо феникса', icon: '🪶', weight: 0.05, stack: 10 },
+    // armour and robes (ArmorTypes.js): a piece {piece: helmet | chest | legs, magic, hp…}; put on by hand or «Suit Up»
+    armor: { name: 'Доспех', icon: '🪖', weight: 4 },
+    robe: { name: 'Мантия', icon: '🧥', weight: 1 },
 };
 
 /**
@@ -147,6 +152,7 @@ export function itemValue(it) {
         case 'web': return 120 * (it.count || 1);
         case 'glass': return 2 * (it.count || 1);
         case 'phoenixFeather': return 250 * (it.count || 1);
+        case 'armor': case 'robe': return armorValue(it);
         default: return 0;
     }
 }
@@ -325,9 +331,15 @@ export function rollPlainItem(r = Math.random) {
  * now and then (`key`: 25%) ONE precious thing (a wand, a scroll, a magic weapon…), never more.
  * (Coins come apart, in their pouch: Game.openChest.)
  */
-export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE } = {}) {
+export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE, royal = false } = {}) {
     const out = [];
     if (r() < key) out.push(rollKeyItem(r));
+    // (a royal chest in the keep: many times more fine things than plain ones — a second precious thing too)
+    if (royal && r() < 0.6) out.push(rollKeyItem(r));
+    // a piece of armour now and then (never a whole set; magic ones half as often — ArmorTypes)
+    const arm = rollChestArmor(r, { royal });
+    if (arm) out.push(arm);
+    if (royal) { if (r() < 0.3) out.push(rollPlainItem(r)); return out; }
     const n = randInt(r, 1, cave ? 2 : 1);
     for (let i = 0; i < n; i++) out.push(rollPlainItem(r));
     return out;
@@ -386,6 +398,7 @@ export function describeItem(it) {
         case 'web': return { title: '🕸️ Связка паутины', color: 0xf2f2ff, lines: ['Осталась от гигантской паучихи', 'Ингредиент зелья невидимости: бросьте в кипящий котёл'] };
         case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
+        case 'armor': case 'robe': return describeArmor(it);
         case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Пригодится для зелий (позже)'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
@@ -754,6 +767,7 @@ function buildItemModel(it) {
         case 'web': return webModel();
         case 'glass': return glassModel();
         case 'phoenixFeather': return phoenixFeatherModel();
+        case 'armor': case 'robe': return armorItemModel(it);
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);
         case 'book': return it.ward || it.spells?.includes('ProtectionHouse') ? makeSpellBookModel(WARD_COVER, WARD_TRIM) : it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);

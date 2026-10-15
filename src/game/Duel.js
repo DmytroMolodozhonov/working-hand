@@ -54,6 +54,7 @@ import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
 import { duelStrength } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
+import { ROBE_BLOCKS } from './ArmorTypes.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -71,6 +72,8 @@ export const DUEL_SPELLS = {
     SandsDuel: { color: 0xd2b48c, name: 'Даст', speed: 13, coreColor: 0xfff1cf },
     // «Экспеллиармус»: a deep crimson bolt with a white-hot core (Остолбеней is a lighter red)
     Expelliarmus: { color: 0xc8102e, name: 'Экспеллиармус', speed: 16, core: 0.045, glow: 0.2, coreColor: 0xffffff },
+    // «Disarmor»: a cold steel-grey bolt — the plain armour flies off the one it touches (Armor.js)
+    Disarmor: { color: 0x8fa3b8, name: 'Disarmor', speed: 16, core: 0.04, glow: 0.18, coreColor: 0xf2f6ff },
     // «Джолт»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
     Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 21, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
     JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 21, core: 0.026, glow: 0.11, coreColor: 0xffffff },
@@ -278,7 +281,8 @@ const _c2 = new THREE.Color();
 const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vector3(), _ds = new THREE.Vector3(), _du = new THREE.Vector3();
 
 /** The wand a castle wizard holds: a student's plain wooden one, the others' a real (random) one. */
-const wizardWandOf = (v) => (v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand());
+// (a wizard in a magic robe has a fine wand: strong, +35–50 % power)
+const wizardWandOf = (v) => (v.robe ? (({ power, ...w }) => ({ ...w, power: Math.max(power || 0, 35 + Math.floor(Math.random() * 16)) }))(rollWand()) : v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand());
 
 let nextId = 1;
 
@@ -788,6 +792,8 @@ export class Duel {
         const p = this._creaturePoint(c, _v1);
         this._hitBurst(spell, p, 30);
         if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
+        // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
+        if (c.isVillager && c.robe && ROBE_BLOCKS.has(spell)) { this._burst(p, 0xc39bff, 20); if (spell === 'Disarmor') g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); return; }
         // a book-bird: any charge knocks it out of the air (it falls as a book)
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
@@ -797,7 +803,7 @@ export class Duel {
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
         // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
         // («Джолт»: no damage — a rooted tree only reels from the shove: below)
-        if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell, byId); return; }
+        if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus' && spell !== 'Disarmor') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell, byId); return; }
         if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
@@ -829,6 +835,10 @@ export class Duel {
             const out = !c.isAnimal && !c.isSailor ? disarmVillager(g, c, wizardWandOf) : null;
             if (out === 'wand') this.game.castleLife?._say?.(c, 'Моя палочка!', 3);
             g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
+        } else if (spell === 'Disarmor') {
+            // a knight's / the king's plates, a wizard's plain robe fly off as things (Armor.js); the others only reel
+            if (c.isVillager && !c.isSailor) g.armor?.stripVillager(c, byId);
+            if (!c.dead) g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
         }
     }
 
@@ -856,6 +866,13 @@ export class Duel {
         const hand = new THREE.Vector3();
         const from = this._handOf(byId, side || 'right', hand, new THREE.Vector3()) ? hand : null;
         const push = (k) => { const d = p.clone().sub(from || p.clone().add(_v2.set(0, 0, -1).applyAxisAngle(_v3.set(0, 1, 0), g.character.group.rotation.y))).setY(0); if (d.lengthSq() < 1e-6) d.set(0, 0, 1); return d.normalize().multiplyScalar(k); };
+        // «Disarmor»: my plain steel flies off (magic stays); my armour / robe may turn the simplest magic away (Armor.js)
+        if (spell === 'Disarmor') {
+            g.armor?.disarmorMe(byId);
+            g.impact?.apply({ v: push(3), from, by: byId, spell: 'Expelliarmus', jolt: 1.5, noShield: true });
+            return;
+        }
+        if (g.armor?.guard(spell)) return;
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 6, 0.6, 30);
             g.hud.flashColor?.('rgba(40, 255, 90, 0.75)');
@@ -941,8 +958,8 @@ export class Duel {
             z.slowT = Math.max(z.slowT || 0, SLOW.TIME);
             this._sand(p);
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'SandsDuel', src, byId);
-        } else if (spell === 'Expelliarmus') {
-            g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon: a small push)
+        } else if (spell === 'Expelliarmus' || spell === 'Disarmor') {
+            g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon, no armour: a small push)
         } else if (isJolt(spell)) {
             this._joltCreature(z, spell, src, byId);
         }

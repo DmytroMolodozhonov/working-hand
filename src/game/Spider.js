@@ -212,6 +212,7 @@ export class Spiders {
     /** A duel charge touched this spider's body. */
     boltHit(s, spell, by = undefined) {
         if (spell === 'Expelliarmus') return; // (no wand, no weapon in its legs: nothing to knock out — no effect)
+        if (spell === 'Disarmor') return; // (its shell is its own: nothing to take off — no effect, ArmorTypes.DISARMOR_TARGETS)
         if (spell === 'Jolt' || spell === 'JoltMaxima') { this.jolt(s, spell, by); return; }
         this.hit(s, spell === 'AvadaKedavra' ? 25 : spell === 'SapiraDuel' ? 10 : 4, spell, by);
     }

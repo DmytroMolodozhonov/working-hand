@@ -93,6 +93,8 @@ export const SPELL_COST = {
     OvergrownMaxima: 20,
     Stupefy: 12,
     Expelliarmus: 12, // the wand flies out of the target's hand (Expelliarmus.js)
+    Disarmor: 12, // the plain steel flies off the target (Armor.js)
+    SuitUp: 5, // all the armour on at once (Armor.js; known without a scroll)
     Jolt: 5, // a bolt of air: the target is thrown back and falls (Duel.JOLT)
     JoltMaxima: 15, // … three times as strong (and three times the cost)
     ProtectionHouse: 20, // a house's sphere of protection (HouseWards.js)
@@ -437,7 +439,7 @@ export class Combat {
     /** Pay the fatigue of a spell that was cast. */
     /** Fatigue a spell costs (a wand in the hand saves 15%). */
     costOf(name) {
-        const base = SPELL_COST[name] ?? 5;
+        const base = (SPELL_COST[name] ?? 5) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper)
         const w = this.game.items?.wand;
         return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Hellfire|WaterVortexSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
@@ -647,6 +649,8 @@ export class Combat {
             if (this.game.impact && kind !== 'Bounce') this.game.impact.apply({ v: push ? push.clone() : this._pushOf(kind, from), from, by: byId, spell: kind });
             return false;
         }
+        // worn armour / a robe (Armor.js): the simplest magic bounces off a magic robe / the whole magic set
+        if (this.game.armor?.guard(kind)) return false;
         if (kind === 'Inferno') {
             if (this.infernoCooldown > 0) return true;
             this.infernoCooldown = PVP.INFERNO_TICK;
@@ -674,6 +678,7 @@ export class Combat {
     chillBy(amount, from, byId) {
         if (!this.enabled || this.dead) return false;
         if (this.shieldFactor(from) >= 1 && this._blocked(from, 'Ice')) return false;
+        if (this.game.armor?.guard('chill')) return false; // (a magic robe / the whole magic set: the cold does not take)
         if (this.frozen) return true;
         this.chill = Math.min(1, this.chill + amount);
         this.chillTimer = 0.4;
@@ -731,6 +736,8 @@ export class Combat {
         if (this.dead) return;
         // Any hit on a frozen player shatters them, whatever their HP
         if (this.frozen && kind !== 'Inferno') { this.die(byId, 'shatter'); return; }
+        // worn armour takes its share; a robe / a named armour's perks soften it (Armor.js)
+        if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
         this.hp = Math.max(0, this.hp - amount);
         this.hurtAt = performance.now(); // (in a fight: the microphone listens for spells — main.js)
         this.game.hud.damageFlash();
@@ -791,7 +798,7 @@ export class Combat {
         const holding = this.shield?.drain != null;
         const tree = !!this.game.livingTrees?.draining;
         // (a held «Protection» spends the strength instead of it coming back)
-        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * dt);
+        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * dt);
         if (holding) {
             this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
             this.shield.left = this.fatigue / this.shield.drain;

@@ -638,7 +638,7 @@ export class VoxelCharacter {
             if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 7.5;
                 // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book)
-                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1);
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1);
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
@@ -767,7 +767,7 @@ export class VoxelCharacter {
         // looking down (FPV_BELLY_TOP)
         this.head.traverse((c) => c.layers.set(layer));
         this.body.traverse((c) => c.layers.set(layer));
-        for (const p of this._lookParts || []) if (p.parent === this.torso || p.parent === this.head) p.traverse((c) => c.layers.set(layer));
+        for (const p of [...(this._lookParts || []), ...(this._armorParts || [])]) if (p.parent === this.torso || p.parent === this.head) p.traverse((c) => c.layers.set(layer)); // (and the armour: ArmorLook)
         if (!this._belly) {
             // the belly: the torso from its bottom up to FPV_BELLY_TOP (torso space), seen in first person only
             const bottom = -0.75, top = FPV_BELLY_TOP;
