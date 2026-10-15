@@ -12,6 +12,12 @@
  * turns that way needed more and more head and crawled (the harder you tried, the
  * further it crept). Now a held turn never moves "straight", and it can't wander
  * further than a camera beside the screen could need.
+ *
+ * Inside the dead zone it learned from every frame: glances to one side (the minimap,
+ * a thing in the hand) and the head passing through on its way out and back pulled
+ * "straight" that way — after a long game a turn that way needed far more head. Now
+ * "straight" is where the head RESTS most of the time (the most frequent still place
+ * of the last minute): glances and the way through don't count.
  * Pure logic, no THREE.
  */
 
@@ -19,6 +25,10 @@ export const HEAD_DEAD = 0.15; // rad of head turn that doesn't turn the view
 export const NEUTRAL_MAX = 0.5; // "straight" is never further than this from the camera's straight
 const LEARN_RATE = 0.12; // per second
 const MAX_SPEED = 2.2; // rad/s
+const BIN = 0.02; // rad: the rest places are counted in steps this wide
+const NB = Math.ceil(2 * (NEUTRAL_MAX + HEAD_DEAD) / BIN);
+const MEMORY_S = 60; // s: older rests fade
+const STILL = 0.3; // rad/s: the head slower than this is resting
 
 /**
  * One frame. `st` = { neutral } (kept between frames), `headYaw` = the smoothed head
@@ -29,9 +39,27 @@ export function headTurnStep(st, headYaw, dt) {
     if (!Number.isFinite(st.neutral)) st.neutral = 0;
     if (!Number.isFinite(headYaw) || !(dt > 0)) return { rate: 0, rel: 0 };
     let off = headYaw - st.neutral;
+    const still = Number.isFinite(st.prev) && Math.abs(headYaw - st.prev) < STILL * dt;
+    st.prev = headYaw;
     if (Math.abs(off) < HEAD_DEAD) {
-        st.neutral += off * Math.min(1, dt * LEARN_RATE);
-        st.neutral = Math.max(-NEUTRAL_MAX, Math.min(NEUTRAL_MAX, st.neutral));
+        // the head resting here (not turning the view, not on its way): counted
+        if (!st.hist || st.hist.length !== NB) { st.hist = new Float32Array(NB); st.total = 0; }
+        const h = st.hist, fade = Math.exp(-dt / MEMORY_S);
+        for (let i = 0; i < NB; i++) h[i] *= fade;
+        st.total *= fade;
+        if (still) {
+            const i = Math.floor((headYaw + NEUTRAL_MAX + HEAD_DEAD) / BIN);
+            if (i >= 0 && i < NB) { h[i] += dt; st.total += dt; }
+        }
+        // "straight" goes (slowly) to the most frequent rest place
+        if (st.total > 1) {
+            let m = 0;
+            for (let i = 1; i < NB; i++) if (h[i] > h[m]) m = i;
+            let w = 0, s = 0;
+            for (let i = Math.max(0, m - 1); i <= Math.min(NB - 1, m + 1); i++) { w += h[i]; s += h[i] * ((i + 0.5) * BIN - NEUTRAL_MAX - HEAD_DEAD); }
+            st.neutral += (s / w - st.neutral) * Math.min(1, dt * LEARN_RATE);
+            st.neutral = Math.max(-NEUTRAL_MAX, Math.min(NEUTRAL_MAX, st.neutral));
+        }
         off = headYaw - st.neutral;
     }
     const over = Math.abs(off) - HEAD_DEAD;

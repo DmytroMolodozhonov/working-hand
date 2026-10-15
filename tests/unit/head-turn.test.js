@@ -80,3 +80,11 @@ test('the turn speed does not depend on how far the body has already turned roun
     assert.equal(headTurnStep(a, 0.3, DT).rate, headTurnStep(b, 0.3, DT).rate);
     assert.equal(headTurnStep(a, -0.3, DT).rate, -headTurnStep(b, 0.3, DT).rate);
 });
+
+test('glances to one side (the minimap) for half an hour do not move "straight": left turns as at the start', () => {
+    const st = { neutral: 0 };
+    let head = 0;
+    const go = (target, sec) => { for (let k = 0; k < sec / DT; k++) headTurnStep(st, head += (target - head) * Math.min(1, DT * 6), DT); };
+    for (let m = 0; m < 30 * 60; m += 5) { go(0.12, 2); go(0, 3); if (m % 15 === 0) { go(0.5, 1); go(0, 2); } }
+    assert.ok(Math.abs(st.neutral) < 0.02, `"straight" stayed (${st.neutral})`);
+});

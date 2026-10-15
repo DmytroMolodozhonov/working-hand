@@ -23,7 +23,9 @@ export const BELT_TOP = new THREE.Vector3(-0.12, 0.22, -0.52);
 export const BELT_TIP = new THREE.Vector3(-0.3, -0.85, -0.24);
 const TUCK_S = 0.2; // s the wand is held tucked in (the author: it should be simple)
 const CALM_S = 0.25; // s the arm must be calm first (no wind-up, no flick)
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
+/** Looking down this much (the view's forward, down, in the body's own space) to tuck it in: a slight nod never does. */
+export const TUCK_LOOK = -0.5;
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
 /** Just in front of the belly (the body's front is at z −0.4; a hand ~0.15 thick). */
@@ -53,6 +55,8 @@ export class WandBelt {
         this._in = { left: false, right: false };
         this._calm = { left: 0, right: 0 }; // (s the arm has been calm)
         this._last = { left: null, right: null }; // (the real wrist a picture ago)
+        this._hand = { left: null, right: null }; // (the hand in the hero's own space a frame ago)
+        this._handV = { left: 0, right: 0 }; // (its speed against the body, m/s)
         this.log = []; // (what it did: tests / the hand recording)
     }
 
@@ -70,6 +74,7 @@ export class WandBelt {
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
         this._reachBelly();
+        this._handSpeed(dt);
         const now = performance.now();
         if (now - this._at < 900) return; // (just done: not at once back)
         for (const side of ['right', 'left']) {
@@ -102,9 +107,13 @@ export class WandBelt {
                 const down = h.model ? _d.set(0, 1, 0).applyQuaternion(h.model.getWorldQuaternion(_q)).y < -0.2 : false; // (pointing down at all)
                 // ...and the arm otherwise still: a wind-up or a flick (throwing Lumos, a spell)
                 // passing the hip never tucks it in — the hand and the real wrist must be calm
-                const fast = (ch.handVelocity?.[side]?.length() || 0) > 3.0 || this._wristSpeed(side, rb, now) > 1.6; // (a swing moves a torso in ~0.2 s: 5 a second; the camera's jitter well under 1)
+                // (the hand's speed AGAINST THE BODY: on a sailing, rolling ship or going up its stairs
+                // the hand moves with the whole body in the world — that was a "swing", and on a ship
+                // the wand could hardly ever be tucked in)
+                const fast = this._handV[side] > 3.0 || this._wristSpeed(side, rb, now) > 1.6; // (a swing moves a torso in ~0.2 s: 5 a second; the camera's jitter well under 1)
                 this._calm[side] = fast ? 0 : this._calm[side] + dt;
-                this._tuck[side] = near && down && this._pushed[side] && this._calm[side] > CALM_S ? this._tuck[side] + dt : 0;
+                // ...and looking down at the belt (as one does tucking it in): a slight nod never does
+                this._tuck[side] = near && down && this._pushed[side] && this._calm[side] > CALM_S && this.lookingDown(TUCK_LOOK) ? this._tuck[side] + dt : 0;
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
                 continue;
             }
@@ -147,6 +156,20 @@ export class WandBelt {
         }
     }
 
+    /** How fast each hand moves against the hero's own body (its own space: a ship's or a stair's motion doesn't count). */
+    _handSpeed(dt) {
+        const ch = this.game.character;
+        for (const side of ['right', 'left']) {
+            const p = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
+            const l = this._hand[side];
+            if (l && dt > 0) {
+                const v = p.distanceTo(l) / dt;
+                this._handV[side] += (v - this._handV[side]) * 0.3; // (as Character.handVelocity smooths)
+                l.copy(p);
+            } else this._hand[side] = p.clone();
+        }
+    }
+
     /** How fast the REAL wrist moves (torso heights a second), from the camera's skeleton. */
     _wristSpeed(side, rb, now) {
         const l = this._last[side];
@@ -158,12 +181,17 @@ export class WandBelt {
         return v;
     }
 
-    /** The head turned down towards the belt. */
-    lookingDown() {
+    /**
+     * The head turned down towards the belt — in the body's own space (a ship rolling under
+     * the feet doesn't tip the look). Taking it: a slight look down is enough; tucking it in
+     * needs a real look down (TUCK_LOOK).
+     */
+    lookingDown(lim = -0.1) {
         const ch = this.game.character;
         if (!ch.getHeadQuaternion) return false;
-        const f = _w.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion(_q));
-        return f.y < -0.1; // (a slight look down is enough)
+        ch.getHeadQuaternion(_q).premultiply(ch.group.getWorldQuaternion(_q2).invert());
+        const f = _w.set(0, 0, -1).applyQuaternion(_q);
+        return f.y < lim;
     }
 
     _putAway(side) {

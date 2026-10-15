@@ -113,9 +113,10 @@ export function dressArmor(ch, code) {
     if (c.c && ch.torso) chestParts(ch, ch.torso, c.c, list);
     if (c.l) for (const p of [ch.leftLegPivot, ch.rightLegPivot]) if (p) legParts(p, c.l, list);
     if (c.r && ch.torso) robeParts(ch, c.r, c.rc, !c.h, list);
-    // (first person: what is on the head and the body is not seen from inside — as the head itself)
+    // (first person: what is on the head is not seen from inside — as the head itself; on the
+    // torso it is seen looking down, as the torso is: Character.setFirstPerson)
     const layer = ch._fpv ? 1 : 0;
-    for (const m of list) if (m.parent === ch.head || m.parent === ch.torso) m.layers.set(layer);
+    for (const m of list) if (m.parent === ch.head) m.layers.set(layer);
 }
 
 // ------------------------------------------------------------------ as things
