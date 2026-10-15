@@ -170,3 +170,30 @@ test('knights errant and wandering wizards walk on foot to where they go; far fr
     run(g, 0.5);
     assert.ok(!T.parties.size && !L.byId.size, 'gone out of sight');
 });
+
+test('an apple tree (a model with a collision box, not blocks) in the way: the cart drives round it, never through; the walkers see it too', () => {
+    const { g, carts } = fakeGame();
+    g.collision.addBox({ minX: -0.45, maxX: 0.45, minY: -0.5, maxY: 4, minZ: -25.45, maxZ: -24.55, kind: 'tree', noSupport: true });
+    assert.ok(wayFree(g, 0, 0, 0, -1, 40, { half: 0.5 }) < 26, 'the walkers\' look ahead sees the trunk');
+    const c = carts.spawn(false, 0, 0, 0);
+    let through = false;
+    for (let i = 0; i < 1400 && c.z > -50; i++) {
+        carts.drive(c, 0, -200, CART.WALK, 0.05);
+        // (the trunk inside the cart's box?)
+        const dx = 0 - c.x, dz = -25 - c.z, cs = Math.cos(c.yaw), sn = Math.sin(c.yaw);
+        if (Math.abs(dx * cs - dz * sn) < CART.WID / 2 && Math.abs(dx * sn + dz * cs) < CART.LEN / 2) through = true;
+    }
+    assert.ok(!through, 'never through the tree');
+    assert.ok(c.z < -35, `past it (${c.x.toFixed(1)}, ${c.z.toFixed(1)})`);
+});
+
+test('the wizards\' carriage: its hood arches up over the chest, the stars lie on the canvas (nothing hangs in the air)', async () => {
+    const { cartModel } = await import('../../src/game/Carriages.js');
+    const m = cartModel(true);
+    m.updateMatrixWorld(true);
+    const hood = m.userData.body.children.find((o) => o.geometry?.type === 'CylinderGeometry' && o.geometry.parameters.openEnded);
+    const box = new THREE.Box3().setFromObject(hood);
+    assert.ok(box.min.y >= CART.FLOOR + CART.SIDE - 0.05 && box.max.y > CART.FLOOR + CART.SIDE + CART.WID / 2 - 0.1, `up (${box.min.y.toFixed(2)}…${box.max.y.toFixed(2)})`);
+    const top = CART.FLOOR + CART.SIDE + CART.WID / 2 + 0.2;
+    m.traverse((o) => { if (o.isMesh) { const b = new THREE.Box3().setFromObject(o); assert.ok(b.max.y <= top + 0.6, `${o.geometry.type} at ${b.max.y.toFixed(2)}`); } });
+});

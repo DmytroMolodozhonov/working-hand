@@ -22,6 +22,7 @@
  * guests show them and send their hits.
  */
 
+import { treeAt } from './Carriages.js';
 import { shareFoes } from './CrewTactics.js';
 import { avoidStep } from './Avoid.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
@@ -688,6 +689,7 @@ export class CastleLife {
         const f = t.floorBelow(ix, iz, L + 1);
         if (f > L || f < L - 3) return false;
         if (this.game.carriages?.list.size && this.game.carriages.blocksAt(x, z, y)) return false; // (a cart on the road: round it)
+        if (treeAt(this.game, x, z, 0.45)) return false; // (a tree that is a model — an apple tree: never through its trunk)
         return !t.solidIn(ix, iz, f + 1, f + 5);
     }
 

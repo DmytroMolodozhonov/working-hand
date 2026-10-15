@@ -344,7 +344,7 @@ export class Travelers {
         const direct = Math.atan2(-(P.dest.x - v.x), -(P.dest.z - v.z));
         for (const off of [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2]) {
             const a = direct + off;
-            if (wayFree(this.game, v.x, v.z, -Math.sin(a), -Math.cos(a), 8, { half: 0.5, rise: 2, avoidLand: true, into: P.dest.into }) >= 8) return a;
+            if (wayFree(this.game, v.x, v.z, -Math.sin(a), -Math.cos(a), 8, { half: 0.5, rise: 2, clear: 5, avoidLand: true, into: P.dest.into }) >= 8) return a;
         }
         return null;
     }

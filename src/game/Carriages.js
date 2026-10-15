@@ -82,6 +82,14 @@ export function worldToCart(px, pz, yaw, x, z, out = { x: 0, z: 0 }) {
  * rise or fall more than `rise` blocks a metre, no water, no trunk, wall or rock at body height,
  * no castle or tower land (but `into` — the site where they go). `half`: half the width to check.
  */
+/** A tree trunk that is a model with a collision box (apple trees, the trees of the flat maps) within r of (x, z). */
+export function treeAt(game, x, z, r = 0.5) {
+    const col = game.collision;
+    if (!col?.queryBoxes) return false;
+    for (const b of col.queryBoxes(x - r, x + r, z - r, z + r)) if (b.kind === 'tree') return true;
+    return false;
+}
+
 export function wayFree(game, x, z, dx, dz, dist, o = {}) {
     const t = game.world?.terrain?.data;
     if (!t?.floorBelow) return dist;
@@ -99,6 +107,7 @@ export function wayFree(game, x, z, dx, dz, dist, o = {}) {
             if (f < prev - Math.max(2, rise + 1)) return s - 1; // (a drop)
             if (t.solidIn(ix, iz, f + 1, f + clear)) return s - 1; // (a step too high, a trunk, a wall)
             if (t.get(ix, f + 1, iz) === BLOCK.WATER || t.isSeaColumn?.(ix, iz)) return s - 1;
+            if (treeAt(game, px, pz, sd ? 0.3 : 0.6)) return s - 1; // (a tree that is a model, not blocks: an apple tree…)
             if (o.avoidLand && idx?.landAt) { const land = idx.landAt(ix, iz); if (land && land.castle?.id !== o.into) return s - 1; }
             if (!sd) centre = f;
         }
@@ -189,7 +198,7 @@ export function cartModel(magic) {
     if (magic) {
         // the hood over the chest: canvas over three hoops, with stars
         const hood = new THREE.Mesh(new THREE.CylinderGeometry(W / 2, W / 2, 2.7, 16, 1, true, -Math.PI / 2, Math.PI), lam(0x2b2f6e, { side: THREE.DoubleSide }));
-        hood.rotation.x = Math.PI / 2;
+        hood.rotation.x = -Math.PI / 2; // (the arch up over the chest; the stars sit on its canvas)
         hood.position.set(0, F + CART.SIDE, L / 2 - 1.45);
         hood.castShadow = true;
         body.add(hood);
@@ -414,7 +423,7 @@ export class Carriages {
             // (still turning hard: slower)
             const step = c.spd * dt * (Math.abs(da) > 0.6 ? 0.6 : 1);
             const nx = c.x - Math.sin(c.yaw) * step, nz = c.z - Math.cos(c.yaw) * step;
-            if (wayFree(this.game, c.x, c.z, -Math.sin(c.yaw), -Math.cos(c.yaw), 2, { half: CART.WID / 2, rise: 1, avoidLand: true, into: o.into })) { c.x = nx; c.z = nz; c.roll0 += step; }
+            if (wayFree(this.game, c.x, c.z, -Math.sin(c.yaw), -Math.cos(c.yaw), 2, { half: CART.WID / 2, rise: 1, clear: 4, avoidLand: true, into: o.into })) { c.x = nx; c.z = nz; c.roll0 += step; }
             else { c.spd = 0; c.thinkT = 0; c.stuckT = (c.stuckT || 0) + dt; }
         }
         this._place(c, dt);
@@ -428,7 +437,7 @@ export class Carriages {
         let best = null, bs = -Infinity;
         for (const off of [0, 0.3, -0.3, 0.6, -0.6, 0.95, -0.95, 1.35, -1.35, 1.8, -1.8]) {
             const a = direct + off;
-            const free = wayFree(this.game, c.x, c.z, -Math.sin(a), -Math.cos(a), look, { half: CART.WID / 2 + 0.3, rise: 1, avoidLand: true, into: o.into });
+            const free = wayFree(this.game, c.x, c.z, -Math.sin(a), -Math.cos(a), look, { half: CART.WID / 2 + 0.3, rise: 1, clear: 4, avoidLand: true, into: o.into });
             let turnCost = a - c.yaw;
             while (turnCost > Math.PI) turnCost -= Math.PI * 2;
             while (turnCost < -Math.PI) turnCost += Math.PI * 2;
