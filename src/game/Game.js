@@ -91,6 +91,7 @@ import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
 import { HurtFlash } from './HurtFlash.js';
 import { BodyStrikes } from './BodyStrikes.js';
+import { HandBlocks } from './HandBlocks.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
 import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
@@ -298,6 +299,7 @@ export class Game {
         this.creatureImpact = new CreatureImpact(this);
         this.hurtFlash = new HurtFlash(this); // (wounded creatures glow red for a moment)
         this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
+        this.handBlocks = new HandBlocks(this); // hands never go into blocks: a counter, a wall, a table
         this._headBase = { yaw: 0, pitch: 0 };
         this.quake = new Quake(this); // «Earthquake»: creatures thrown, the ground breaking, shaking (Quake.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
@@ -2354,6 +2356,7 @@ export class Game {
         const isTest = this.config.mode === 'test';
         this.ships?.update(dt); // ships move first and carry everyone standing on them
         this._updatePlayer(dt);
+        this.handBlocks.update(); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
         this._updateChests(dt);
         if (!isTest) this._checkVictory();
         mark('игрок');
@@ -2424,6 +2427,7 @@ export class Game {
         if (!isTest) this._spawnWaves();
 
         for (const r of this.remotes.values()) r.update(dt, this.ships);
+        this.handBlocks.updateRemotes(); // (their hands neither go into the walls here)
         this.handHold.update(dt); // (hands holding hands: after the others' arms are set)
         this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
         this.ships?.attach(); // (who stands on which ship now)
