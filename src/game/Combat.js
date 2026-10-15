@@ -800,7 +800,7 @@ export class Combat {
         const holding = this.shield?.drain != null;
         const tree = !!this.game.livingTrees?.draining;
         // (a held «Protection» spends the strength instead of it coming back)
-        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * dt);
+        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * (this.game.achievements?.regenK ?? 1) * dt); // (achievements: +15 % each, «Высший маг» +100 %)
         if (holding) {
             this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
             this.shield.left = this.fatigue / this.shield.drain;

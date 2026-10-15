@@ -1813,6 +1813,7 @@ export class CastleLife {
         if (!v || v.dead) return;
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
+        this._achHit(v, by);
         this.night?.noise(v, 9);
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
@@ -1969,7 +1970,33 @@ export class CastleLife {
         this.game.death?.villagerDied(v); // the body stays; a knight's sword, shield and coins drop
         if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30 }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
+        this._achDied(v, by);
         this._sendState(v.cs);
+    }
+
+    /** Which achievement this person's death is (Achievements.js): the king, the Ice Queen, a tower's Master. */
+    _achKind(v) {
+        if (v.role === 'iceQueen' || v.iceQueen) return 'iceQueen'; // (the Ice Queen: made in another work — counted as soon as she is)
+        if (v.role === 'king') return 'king';
+        if (v.role === 'master' && v.cs?.def?.kind === 'tower') return 'master';
+        return null;
+    }
+
+    /** (host) A blow on a castle person: taking part (the king, the Queen, the Master) / fighting there. */
+    _achHit(v, by) {
+        const a = this.game.achievements;
+        if (!a || by == null) return;
+        const k = this._achKind(v);
+        if (k) a.hit(k, v.id, by); else a.fought(by);
+    }
+
+    /** (host) The king / the Ice Queen / a tower's Master died: the achievement to all who took part. */
+    _achDied(v, by) {
+        const a = this.game.achievements, k = this._achKind(v);
+        if (!a || !k) return;
+        const pos = { x: v.x, y: v.y, z: v.z };
+        if (k === 'master') a.masterKilled(v.cs.def, v.id, by, pos);
+        else a.killed(k, v.id, by, pos);
     }
 
     /** Does this one fight (knights, the king; the tower's wizards but a timid student)? */
@@ -2148,6 +2175,7 @@ export class CastleLife {
         let counted = false;
         for (const def of this.index.near(pos.x, pos.z, 0)) {
             if (!this._inLand(def, pos, 12)) continue;
+            if (isPlayer && blocks > 0 && def.kind === 'tower') g.achievements?.towerWrecked(def, by); // (a wizards' tower pulled down: Achievements.js)
             const cs = this._runtime(def);
             if (!cs.awake) continue;
             const st = this.state(def.id);

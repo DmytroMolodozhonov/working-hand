@@ -108,6 +108,7 @@ export function playerSnapshot(game) {
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
         mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
+        ach: game.achievements?.snapshot() || null, // the achievements (and «Высший маг»): kept for good
         limbs: game.dismember?.snapshot() || null, // cut off (until death): no healing by leaving
         bleed: game.bleeding?.rate || 0,
         ship: game.ships?.playerSnap() || null, // standing on a ship: [ship id, place on its deck]
@@ -141,6 +142,7 @@ export function applyPlayerSnapshot(game, s) {
     }
     if (s.gear) game.items?.restore(s.gear);
     if (s.mana) game.mana?.restore(s.mana);
+    if (s.ach) game.achievements?.restore(s.ach);
     if (s.limbs && Number.isFinite(s.hp) && s.hp > 0) game.dismember?.restoreMine(s.limbs, s.bleed || 0);
     if (s.bed) game.beds?.setHome(s.bed);
     if (s.ship) game.ships?.applyPlayerSnap(s.ship); // (back on the ship's deck, wherever it sailed)

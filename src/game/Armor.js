@@ -32,10 +32,11 @@ const _v2 = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const SLOTS = ['helmet', 'chest', 'legs', 'robe'];
 const slotOf = (it) => (it?.kind === 'robe' ? 'robe' : it?.kind === 'armor' ? it.piece : null);
-const score = (it) => (!it ? 0 : (it.named ? 4 : it.magic ? 3 : 2) + (it.kind === 'armor' ? 0.5 * (it.hp ?? 0) / Math.max(1, pieceMax(it)) : 0));
+const score = (it) => (!it ? 0 : it.archmage ? 9 : (it.named ? 4 : it.magic ? 3 : 2) + (it.kind === 'armor' ? 0.5 * (it.hp ?? 0) / Math.max(1, pieceMax(it)) : 0));
 
 /** A small picture of a piece for the cells (SVG, 24×24). code: 1 plain, 2 magic, 3 named; robe colour. */
 export function armorIcon(slot, code = 1, color = 0) {
+    if (slot === 'robe' && code === 4) return '<svg viewBox="0 0 24 24" width="100%" height="100%"><path d="M10 2h4l1 6 4 13H5L9 8z" fill="#15183f" stroke="#e7c25a" stroke-width="1.2"/><path d="M12 9l1 2.2 2.3.2-1.8 1.5.6 2.3-2.1-1.2-2.1 1.2.6-2.3-1.8-1.5 2.3-.2z" fill="#ffd36e"/><circle cx="12" cy="18" r="0.9" fill="#9fe8ff"/></svg>';
     const fill = slot === 'robe' ? '#' + ((color || (code >= 2 ? 0x4b2a7a : 0x2c3e7a)) >>> 0).toString(16).padStart(6, '0') : code === 3 ? '#ffd36e' : code === 2 ? '#bcd6ff' : '#b8c2cc';
     const stroke = code >= 2 ? '#e8f2ff' : '#3a4048';
     const path = {
@@ -67,14 +68,20 @@ export class ArmorSystem {
         const slot = slotOf(item);
         if (!slot) return false;
         const g = this.game;
+        // (the High Mage's suit: only a High Mage wears it — Achievements.js)
+        if (item.archmage && g.achievements && !g.achievements.high) {
+            if (!quiet) g.hud?.setVoice?.('🌟 Этот костюм наденет только Высший маг', true);
+            return false;
+        }
         if (item.kind === 'armor' && item.hp == null) item.hp = pieceMax(item);
         const old = this.worn[slot];
         this.worn[slot] = item;
         if (old) this._stow(old);
         this._changed();
         if (!quiet) {
-            g.hud?.setVoice?.(`${slot === 'robe' ? '🧥' : '🪖'} Надето: <b>${armorName(item)}</b>${item.magic ? ' ✨' : ''}`, true);
+            g.hud?.setVoice?.(`${item.archmage ? '🌟' : slot === 'robe' ? '🧥' : '🪖'} Надето: <b>${armorName(item)}</b>${item.magic ? ' ✨' : ''}`, true);
             g.sound?.playPickup?.();
+            if (item.archmage) this._suitGlow();
         }
         return true;
     }
@@ -88,10 +95,21 @@ export class ArmorSystem {
         else g.sync.itemThrow?.(it, p, _v2.set(0, 1, 0));
     }
 
-    /** Everything worn comes off (death: it drops with the rest). */
+    /** A golden whirl round me: the High Mage's suit put on. */
+    _suitGlow() {
+        const g = this.game, c = g.character?.group?.position;
+        if (!c) return;
+        for (let i = 0; i < 48; i++) {
+            const a = i / 48 * Math.PI * 4;
+            g.fx?.spark(_v.set(c.x + Math.cos(a) * 0.8, c.y + i / 48 * 2.4, c.z + Math.sin(a) * 0.8), i % 3 ? 0xffd36e : 0x9fe8ff, 0.08, _v2.set(Math.cos(a), 1.2, Math.sin(a)), 0.9);
+        }
+        g.fx?.lightFlash?.(_v.set(c.x, c.y + 1.2, c.z), 0xffd36e, 2, 0.4, 12);
+    }
+
+    /** Everything worn comes off (death: it drops with the rest — but the High Mage's suit stays on). */
     takeOffAll() {
-        const out = SLOTS.map((s) => this.worn[s]).filter(Boolean);
-        for (const s of SLOTS) this.worn[s] = null;
+        const out = SLOTS.map((s) => this.worn[s]).filter((it) => it && !it.archmage);
+        for (const s of SLOTS) if (!this.worn[s]?.archmage) this.worn[s] = null;
         this._changed();
         return out;
     }
@@ -177,7 +195,7 @@ export class ArmorSystem {
             const now = performance.now();
             if (now - (this._saidAt || 0) > 1500) {
                 this._saidAt = now;
-                g.hud?.setVoice?.(r.why === 'robe' ? '🧙 Волшебная мантия отвела заклинание' : r.why === 'perk' ? '✨ Именной доспех: это заклинание вас не берёт' : '✨ Волшебные доспехи отразили заклинание', true);
+                g.hud?.setVoice?.(r.why === 'robe' ? (this.fx.archmage ? '🌟 Костюм Высшего мага отвёл заклинание' : '🧙 Волшебная мантия отвела заклинание') : r.why === 'perk' ? '✨ Именной доспех: это заклинание вас не берёт' : '✨ Волшебные доспехи отразили заклинание', true);
             }
         }
         return true;

@@ -15,6 +15,7 @@ import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderSpellsTab, renderItemsTab, renderMechanicsTab } from './ui/Codex.js';
+import { achievementsHtml } from './game/Achievements.js';
 import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
@@ -148,6 +149,7 @@ tabBtns.forEach((btn) => {
         if (btn.dataset.tab === 'tab-game') { updateGameMapList(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-items') renderItemsTab();
         if (btn.dataset.tab === 'tab-mechanics') renderMechanicsTab();
+        if (btn.dataset.tab === 'tab-ach') renderMenuAchievements();
         if (btn.dataset.tab === 'tab-spells') renderSpellsTab();
         if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-character') { window.__charEditor = window.__charEditor || new CharacterEditor($('tab-character')); window.__charEditor.show(); }
@@ -1029,6 +1031,13 @@ $('v5-gpu')?.addEventListener('change', (e) => {
     const v5 = document.querySelector('input[name="hand-version"]:checked')?.value === 'v5';
     if (v5) poseService._setHands?.(e.target.checked ? 'v5rtm' : 'v5');
 });
+/** «🏆 Ачивки» in the main menu: the last world played (Achievements._mirror keeps it). */
+function renderMenuAchievements() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem('zns-achievements') || 'null'); } catch (e) { /* none yet */ }
+    const el = $('menu-ach-list');
+    if (el) el.innerHTML = achievementsHtml(new Set(s?.done || []), { world: s?.world || '' }) + '<div class="ach-note">Ачивки хранятся у вашего героя в каждом мире отдельно. Здесь — последний мир, в котором вы играли.</div>';
+}
 function showPauseTab(id) {
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
@@ -1037,6 +1046,7 @@ function showPauseTab(id) {
     if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-creative') pauseCreative.sync();
     if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid');
+    if (id === 'pause-ach' && $('pause-ach-list')) $('pause-ach-list').innerHTML = achievementsHtml(game?.achievements?.done || new Set());
 }
 document.querySelectorAll('.pause-tab').forEach((b) => { b.onclick = () => showPauseTab(b.dataset.pauseTab); });
 function togglePauseMenu(show) {

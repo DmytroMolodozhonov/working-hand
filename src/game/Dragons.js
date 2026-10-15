@@ -175,6 +175,7 @@ export class Dragons {
         if (rule?.slow) d.slow = Math.max(d.slow, rule.slow);
         // it turns on whoever struck it (a player) — even a blow that did not hurt it
         if (who && who !== 'dragon' && this._playerPos(who)) this._anger(d, who);
+        g.achievements?.hit('dragon', d.id, who); // (taking part: the achievement — even a blow that did not hurt it)
         if (n <= 0) return 0;
         d.hp = Math.max(0, d.hp - n);
         d.lastBy = who;
@@ -296,6 +297,7 @@ export class Dragons {
         if (this.auth) {
             // mana: a magical creature — the killer's maximum grows (once per kind; the host credits, Mana.creditKill)
             creditKill(g, killer, { kind: 'dragon' });
+            g.achievements?.killed('dragon', d.id, killer, c); // (the achievement: to everyone who took part)
             // its wand: deep crimson, glowing like embers — every fire spell 60% stronger
             const p = c.clone().add(_v2.set(0, 1.5, 0));
             g.items?.spawnLoose(dragonWand(newUid()), p, { hover: true });

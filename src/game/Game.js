@@ -96,6 +96,7 @@ import { headTurnStep, lyingHead } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { HandHold } from './HandHold.js';
 import { Mana, NOT_SPELLS } from './Mana.js';
+import { Achievements } from './Achievements.js';
 import { BodyImpact } from './BodyImpact.js';
 import { Knockdown } from './Knockdown.js';
 import { UpSpell } from './UpSpell.js';
@@ -327,6 +328,7 @@ export class Game {
         this.waterStorm = new WaterStorm(this); // «Water Vortex Super Maxima»: a great storm of water held and steered by the wand
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
+        this.achievements = new Achievements(this); // the five deeds and the status «Высший маг» (kept on death)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
         this.impact = new BodyImpact(this);
         this.knock = new Knockdown(this);
@@ -2580,6 +2582,7 @@ export class Game {
         this.items.update(dt);
         this.items.updateRemote();
         this.armor.update(dt);
+        this.achievements.update();
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
         this.wards?.update(dt);

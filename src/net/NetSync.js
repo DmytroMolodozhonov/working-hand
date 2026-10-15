@@ -32,6 +32,8 @@
  *   cstrike  client→host  my hands hit a creature: the host applies the push
  *   pdead    player→all   I was killed (by `killer`; `mm` my mana maximum: a duel won against me is worth it)
  *   mcred    host→player  your last blow killed a magical creature (kind) / a wizard you beat in a duel (wiz, mm): Mana.js
+ *   achc     host→player  you took part in a kill worth an achievement (k): Achievements.js
+ *   ach      player→all   my achievements: a new one (got) / how many I have (state) — «Высший маг» over my name
  *   dbody    any→all      a body stays where somebody died (Death.js; the host keeps the list)
  *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
  *   clash    host→all     two charges are pushing (meeting point p); clashend: result
@@ -528,6 +530,14 @@ export class NetSync {
         if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null });
     }
 
+    /** (host) An achievement for player `to`: they took part in the kill (Achievements.js). */
+    achCredit(to, k) {
+        if (this.net.isHost) this.net.sendTo(to, { t: 'achc', k });
+    }
+
+    /** My achievements: {a: 'got', k, n, hi} a new one / {a: 'state', n, hi} how many (a newcomer). */
+    ach(m) { this.net.send({ t: 'ach', by: this.me, ...m }, true); }
+
     /** A body stays where somebody died (Death.js). */
     deathBody(b) {
         this.net.send({ t: 'dbody', b }, true);
@@ -643,6 +653,7 @@ export class NetSync {
         const look = this.game.character.look;
         if (look) this.net.send({ t: 'look', by: this.me, look }, true);
         this.game.armor?.resend(); // (and what armour I wear: Armor.js)
+        this.game.achievements?.resend(); // (and how many achievements: «Высший маг» over the name)
     }
 
     /** Armour (Armor.js): {a: 'worn', w} what I wear; (host) {a: 'vstrip', id} a villager stripped by «Disarmor». */
@@ -1039,6 +1050,8 @@ export class NetSync {
                 break;
             }
             case 'bite': g.damageLocalPlayer(m.dmg || 1); break;
+            case 'achc': if (!this.net.isHost && typeof m.k === 'string') g.achievements?.onCredit(m.k); break; // (an achievement: the host saw me take part)
+            case 'ach': if (m.by !== this.me) g.achievements?.onNet(m, m.by); break;
             case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm }); break; // (mana: my kill, the host decided)
             case 'win': g.victory(g.killCount * 100 + g.playerHP * 50); break;
             default: break;

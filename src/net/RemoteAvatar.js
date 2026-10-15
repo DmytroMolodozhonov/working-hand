@@ -176,23 +176,41 @@ export class RemoteAvatar {
         this.tag.material.dispose();
         this.character.dispose();
     }
+
+    /** «Высший маг» (Achievements.js): the name tag turns gold with a star — every player sees it. */
+    setTitle(title) {
+        if ((this._title || null) === (title || null)) return;
+        this._title = title || null;
+        const map = this.tag?.material?.map;
+        if (!map?.image) return;
+        drawNameTag(map.image, this.name, this._title);
+        map.needsUpdate = true;
+    }
+}
+
+/** The tag's picture: the name; a High Mage's — gold, with a star (Achievements.js). */
+function drawNameTag(canvas, name, title = null) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const text = title ? `★ ${name} ★` : name;
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillStyle = title ? 'rgba(21,24,63,0.8)' : 'rgba(0,0,0,0.55)';
+    const w = Math.min(250, 30 + ctx.measureText(text).width);
+    roundRect(ctx, (256 - w) / 2, 8, w, 48, 12);
+    ctx.fill();
+    if (title) { ctx.strokeStyle = '#e7c25a'; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillStyle = title ? '#ffd36e' : '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 33, 240);
 }
 
 function makeNameTag(name) {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    ctx.font = 'bold 30px sans-serif';
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    const w = Math.min(250, 30 + ctx.measureText(name).width);
-    roundRect(ctx, (256 - w) / 2, 8, w, 48, 12);
-    ctx.fill();
-    ctx.font = 'bold 30px sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(name, 128, 33);
+    drawNameTag(canvas, name);
     const tex = new THREE.CanvasTexture(canvas);
     // Same readable size on screen at any distance (sizeAttenuation off)
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false }));

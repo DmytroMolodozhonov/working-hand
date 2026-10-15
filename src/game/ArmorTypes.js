@@ -14,6 +14,7 @@
  *           «Остолбеней», the freezing «Айс»…), «Инферно» does half, arrows bounce off it;
  *   named   a dragon's lair always hides one: a whole magic set of a dead knight
  *           («Доспех сэра …»), with its own perks (PERKS) — on the set and on the pieces.
+ * The High Mage's suit (makeArchmageSuit, at the end): a robe given only for the status «Высший маг».
  * Robe (мантия): plain — only clothes; magic — never cold, and the simplest magic
  * (ROBE_BLOCKS — «Инферно», «Остолбеней», «Левиоса», «Айс»…) does nothing; it may have
  * half the harm from 2–3 strong spells (ROBE_STRONG).
@@ -146,6 +147,7 @@ export function rollChestArmor(r = Math.random, { royal = false, wizard = false 
 
 /** What a thing of armour is worth at a market. */
 export function armorValue(it) {
+    if (it.archmage) return 0; // (the High Mage's suit: not for sale — it is earned)
     if (it.kind === 'robe') return it.magic ? 700 + 80 * (it.strong?.length || 0) : 25;
     if (it.named) return 900;
     const base = { helmet: 40, chest: 70, legs: 45 }[it.piece] || 40;
@@ -154,6 +156,15 @@ export function armorValue(it) {
 
 /** «Раскрой свои секреты»: what the hologram says. */
 export function describeArmor(it) {
+    if (it.archmage) {
+        return { title: '🌟 Костюм Высшего мага', color: 0xffd36e, lines: [
+            'Даётся только за статус «Высший маг» — за все пять ачивок',
+            'Любое заклинание ранит на 40% слабее — поверх обычной защиты волшебной мантии',
+            'Как волшебная мантия: холод не берёт, простейшие заклинания («Инферно», «Остолбеней», «Левиоса», «Айс», «Сапира», «Даст», «Экспеллиармус») не действуют',
+            'Не слетает от «Disarmor» и остаётся с вами после смерти',
+            'Надевается на всё тело — приложите его к груди',
+        ] };
+    }
     if (it.kind === 'robe') {
         if (!it.magic) return { title: '🧥 Мантия', color: it.color ?? 0x2c3e7a, lines: ['Обычная мантия: просто красивый наряд, без волшебства', 'Надевается на всё тело — приложите её к груди'] };
         const lines = ['Холод не берёт', 'Простейшие заклинания на вас не действуют: «Инферно», «Остолбеней», «Левиоса», «Айс», «Сапира», «Даст», «Экспеллиармус»'];
@@ -173,6 +184,7 @@ export function describeArmor(it) {
 /** The display name of a piece / robe (a slot's title, a hint). */
 export function armorName(it) {
     if (!it) return '';
+    if (it.archmage) return 'Костюм Высшего мага';
     if (it.kind === 'robe') return it.magic ? 'Волшебная мантия' : 'Мантия';
     return it.named || (it.magic ? `Волшебный ${PIECE_OF[it.piece]}` : PIECE_RU[it.piece]);
 }
@@ -185,7 +197,7 @@ export function armorName(it) {
 export function wornEffects(worn = {}) {
     const pieces = PIECES.map((p) => worn[p]).filter(Boolean);
     const magicSet = pieces.length === 3 && pieces.every((it) => it.magic);
-    const fx = { magicSet, robe: worn.robe ? (worn.robe.magic ? 'magic' : 'plain') : null, immune: new Set(), dmg: {}, stat: {}, perks: [] };
+    const fx = { magicSet, robe: worn.robe ? (worn.robe.magic ? 'magic' : 'plain') : null, archmage: !!worn.robe?.archmage, immune: new Set(), dmg: {}, stat: {}, perks: [] };
     const perkIds = [];
     for (const it of pieces) perkIds.push(...(it.perks || []));
     // a named set's own perks: only when all three of the same set are worn
@@ -228,6 +240,7 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
     let a = amount * (fx?.dmg?.[kind] ?? 1);
     if (fx?.robe === 'magic' && kind === 'cold') a = 0;
     if (fx?.magicSet && FIRE.has(kind)) a *= 0.5; // (the whole magic set: fire does half)
+    if (fx?.archmage && SPELL_DAMAGE.has(kind)) a *= ARCHMAGE.SPELL_K; // (the High Mage's suit: −40 % from any spell, on top of the rest)
     const wear = {};
     if (a <= 0 || !SOAKED.has(kind)) return { hp: Math.max(0, a), wear };
     // where it lands: a piece by its share of the body (bare where nothing is worn)
@@ -242,7 +255,7 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
 
 /** The four armour cells and what is in them, for the screen / the network (0 none, 1 plain, 2 magic, 3 named). */
 export function wornCode(worn = {}) {
-    const c = (it) => (!it ? 0 : it.named ? 3 : it.magic ? 2 : 1);
+    const c = (it) => (!it ? 0 : it.archmage ? 4 : it.named ? 3 : it.magic ? 2 : 1); // (4: the High Mage's suit — a robe)
     return { h: c(worn.helmet), c: c(worn.chest), l: c(worn.legs), r: c(worn.robe), rc: worn.robe?.color ?? 0 };
 }
 
@@ -284,3 +297,34 @@ export const DISARMOR_TARGETS = {
     looseThings: { does: 'none', why: 'лежащие доспехи и так ничьи' },
     world: { does: 'none', why: 'корабли, стены, деревья, вода, земля: не действует, заряд разбивается' },
 };
+
+// ================================================================ the High Mage's suit
+/**
+ * The High Mage's suit (Achievements.js: all five achievements, the status «Высший маг»): a
+ * robe of midnight blue with gold patterns, glowing runes and a cloak. Only for the status —
+ * never in chests, at the market or in the character editor; it stays with its owner on death.
+ * Worn as a robe (in the robe's place): every standard protection of a magic robe (ROBE_BLOCKS,
+ * no cold) — and on top of it every spell's harm to the health −40 % (ARCHMAGE.SPELL_K).
+ */
+export const ARCHMAGE = {
+    SPELL_K: 0.6, // a spell's harm on the health × this (−40 %), after every other protection
+    COLOR: 0x15183f,
+    // who / what it acts on (CLAUDE.md): only on its wearer — a player who is a High Mage
+    WHO: {
+        me: 'на мне: любое заклинание по здоровью −40% поверх защиты волшебной мантии; удары, стрелы, падения, звери — как обычно',
+        players: 'другой игрок-Высший маг: так же, решает его компьютер (урон считается у него)',
+        others: 'жители, волшебники, рыцари, зомби, животные, моряки, драконы: не носят — костюм только у игроков со статусом',
+        world: 'лежащий костюм ничего не делает; «Disarmor» его не снимает; в сундуках, у торговцев и в редакторе персонажа его нет',
+    },
+};
+
+/** Damage kinds that are spells (Combat.damage `kind`): the suit softens these. */
+export const SPELL_DAMAGE = new Set([
+    'AvadaKedavra', 'Sapira', 'Sands', 'IceBall', 'Thunderwave', 'Lightning', 'Inferno', 'Fire', 'Hellfire', 'Bombardo',
+    'WaterVortex', 'WaterVortexSuperMaxima', 'Liquidation', 'Inspirius', 'CircleAttack', 'CircleAttackMaxima', 'Jolt', 'JoltMaxima',
+    'cold', 'air', 'Ward', 'crush', 'thrown', 'TotalDestruction', 'TotalDestructionMaxima', 'Expelliarmus', 'Disarmor', 'Stupefy',
+]);
+
+export function makeArchmageSuit() {
+    return { kind: 'robe', uid: armorUid(), magic: true, archmage: true, color: ARCHMAGE.COLOR };
+}

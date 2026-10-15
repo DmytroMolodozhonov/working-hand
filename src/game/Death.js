@@ -175,10 +175,11 @@ export class DeathSystem {
     takeEverything() {
         const g = this.game, inv = g.inventory, it = g.items;
         const held = [];
-        if (it) for (const side of ['right', 'left']) if (it.held[side]) held.push(it.releaseHand(side));
+        const keep = []; // (the High Mage's suit stays with its owner: Achievements.js)
+        if (it) for (const side of ['right', 'left']) if (it.held[side]) { const x = it.releaseHand(side); (x?.archmage ? keep : held).push(x); }
         // the coin pouches on the belt drop too, each as it was (CoinBelt)
         if (inv?.purse?.count > 0) { for (const c of purseBags(inv.purse.count)) held.push({ kind: 'coins', count: c }); inv.purse.count = 0; }
-        const slots = inv ? inv.slots.slice() : [];
+        const slots = inv ? inv.slots.map((x) => (x?.archmage ? (keep.push(x), null) : x)) : [];
         held.push(...(g.armor?.takeOffAll() || [])); // (the armour and the robe worn drop too)
         let backpack = null;
         if (it?.worn.backpack) {
@@ -194,6 +195,7 @@ export class DeathSystem {
             inv.inHand = null;
             inv.selected = -1;
             if (backpack) inv.setExtraSlots(0);
+            for (const x of keep) inv.storeItem?.(x);
             inv._render?.();
         }
         return lootOfPlayer({ slots, held, backpack });
