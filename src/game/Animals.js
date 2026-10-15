@@ -39,7 +39,7 @@ import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS, PEGASU
 import { FLY, takeOff, stepFlight, wingTick, pickMigration, flockSlot } from './PigFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
-import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs } from './AnimalHerd.js';
+import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
 import { slowFactor, tickSlow } from './Slow.js';
 
 export { animalModel };
@@ -83,6 +83,7 @@ export function outOfSight(me, look, x, z, behind = HERDS.BEHIND) {
 }
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _span = {}, _ray = {}; // (bodySpan / rayToSpan results)
 const _inv = new THREE.Matrix4();
 
 let _nextId = Math.floor(Math.random() * 1e5) * 10;
@@ -379,11 +380,12 @@ export class Animals {
     hitRay(o, d, len, width, dmg = 3, by = null, name = null) {
         for (const a of this.list) {
             if (a.dead) continue;
-            const to = _v.subVectors(a.group.position, o).add(_v2.set(0, 0.8, 0));
-            const along = to.dot(d);
-            if (along < 0 || along > len) continue;
-            if (to.addScaledVector(d, -along).length() >= width + 0.9 * SPECIES[a.type].size) continue;
-            this.hit(a, dmg, d.clone(), by);
+            // (its real body now — feet to the top, its width: a tall minotaur is hit in the chest too)
+            const s = bodySpan(a, _span);
+            if (_v.set(s.x - o.x, 0, s.z - o.z).dot(d) < -s.r) continue; // (behind the caster)
+            const ray = rayToSpan(o, d, len, s.x, s.bot, s.top, s.z, _ray);
+            if (ray.dist >= width + Math.max(s.r, 0.45 * SPECIES[a.type].size)) continue;
+            this.hit(a, dmg, d.clone(), by, name === 'Inferno');
             if (this.auth && name === 'Thunderwave') {
                 this.push(a, _v2.copy(d).setY(0).normalize().multiplyScalar(16).setY(6), 2.2);
                 for (let i = 0; i < 8; i++) this.game.fx.spark(a.group.position, 0x9fd8ff, 0.1, _v.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
@@ -393,16 +395,41 @@ export class Animals {
 
     /** Inferno: living animals burn (and die cooked), carcasses get cooked. */
     burnAlong(o, d, len, by = this.game.localId) {
+        const g = this.game;
+        // (every computer draws every flame; the host burns for all of them, a guest only for its own —
+        // otherwise each guest would send the host one more burn for somebody else's flame)
+        const mine = this.auth || by == null || by === 'local' || by === g.localId;
+        const now = performance.now();
         let burnt = false;
         for (const a of this.list) {
-            const to = _v.subVectors(a.group.position, o);
-            const along = to.dot(d);
-            if (along < 0 || along > len) continue;
-            if (to.addScaledVector(d, -along).length() > 2.2) continue;
-            if (a.dead) { if (!a.cooked && a.meat > 0) { a.cooked = true; this._tintCooked(a); this.game.hud.setVoice?.('🔥 Мясо поджарилось', true); } continue; }
-            if (a.damageCooldown <= 0) { a.cooked = true; this.hit(a, 2, d, by, true); a.damageCooldown = 0.6; if (!a.dead) a.cooked = false; burnt = true; }
+            // the stream against its real body (feet … top, its width): aimed at a tall minotaur's
+            // chest or a grown bronze bull it burns them, not only near the feet
+            const s = bodySpan(a, _span);
+            if (_v.set(s.x - o.x, 0, s.z - o.z).dot(d) < -s.r) continue; // (behind the caster)
+            const ray = rayToSpan(o, d, len, s.x, s.bot, s.top, s.z, _ray);
+            if (ray.dist > s.r + 0.8) continue;
+            if (a.dead) { if (!a.cooked && a.meat > 0) { a.cooked = true; this._tintCooked(a); g.hud.setVoice?.('🔥 Мясо поджарилось', true); } continue; }
+            burnt = true;
+            if (!mine || now < (a._burnAt || 0)) continue;
+            a._burnAt = now + 600; // (its own timer: on a guest the host's damageCooldown never runs down)
+            a.cooked = true; this.hit(a, 2, d, by, true); if (!a.dead) a.cooked = false;
         }
         return burnt;
+    }
+
+    /** (host) Standing in a burning tree's / a burning block's fire: it burns a little every second. */
+    _burnInFire(dt) {
+        const F = this.game.fire;
+        if (!F || (!F.burningTrees?.length && !F.burningBlocks?.size)) { this._fireT = 0; return; }
+        this._fireT = (this._fireT || 0) + dt;
+        if (this._fireT < 1) return;
+        this._fireT = 0;
+        for (const a of this.list) {
+            if (a.dead || a.lev || a.fly) continue;
+            const s = bodySpan(a, _span);
+            if (!F.burningAt(_v.set(s.x, s.bot + 0.5, s.z), Math.max(0.4, s.r * 0.7))) continue;
+            this.hit(a, 1, null, null, true); // (fire: ~1 HP a second; it runs if it can)
+        }
     }
 
     /** Targets for weapons (the same shape as zombies). */
@@ -1495,6 +1522,7 @@ export class Animals {
                 }
                 this._think(a, dt);
             }
+            this._burnInFire(dt); // (in a burning tree's / block's fire)
         } else {
             for (const a of this.list) if (a.net && a !== this.riding) {
                 a.group.position.lerp(a.net, Math.min(1, dt * 8));
@@ -1557,7 +1585,7 @@ export class Animals {
         this._netT = 0.2;
         const r = (v) => Math.round(v * 100) / 100;
         if (this.auth) {
-            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0, a.flyCode || 0, r(a.bank || 0), r(a.pitch || 0), a.form || 0, r(a.formK || 0), a.act || 0]));
+            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0, a.flyCode || 0, r(a.bank || 0), r(a.pitch || 0), a.form || 0, r(a.formK || 0), a.act || 0, Math.round(a.hp * 10) / 10]));
         } else if (this.riding) {
             const a = this.riding;
             g.sync.animalPos?.(a.id, [r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.flyCode || 0]);
@@ -1567,7 +1595,7 @@ export class Animals {
     /** (guests) the host's animals. */
     applyNet(list) {
         const seen = new Set();
-        for (const [id, type, x, y, z, ry, dead, meat, cooked, color, tamed, rider, bonus, moving, pose, fly, bank, pitch, form, formK, act] of list || []) {
+        for (const [id, type, x, y, z, ry, dead, meat, cooked, color, tamed, rider, bonus, moving, pose, fly, bank, pitch, form, formK, act, hp] of list || []) {
             seen.add(id);
             let a = this.byId.get(id);
             if (!a) a = this._spawn(type, new THREE.Vector3(x, y, z), { id, color: color || null, bonus });
@@ -1579,6 +1607,7 @@ export class Animals {
             a.form = form || 0; a.formK = formK || 0; a.act = act || 0; // (the bull / the minotaur: how far it has changed, what it does)
             a.group.rotation.y = ry;
             a.meat = meat;
+            if (Number.isFinite(hp)) a.hp = hp; // (its wounds: HurtFlash shows them on every computer)
             a.tamed = tamed || null;
             a.rider = rider || null;
             a.model.userData.saddle && (a.model.userData.saddle.visible = !!rider);

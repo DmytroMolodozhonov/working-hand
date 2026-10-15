@@ -86,6 +86,7 @@ import { BodyImpact } from './BodyImpact.js';
 import { Knockdown } from './Knockdown.js';
 import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
+import { HurtFlash } from './HurtFlash.js';
 import { BodyStrikes } from './BodyStrikes.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
@@ -292,6 +293,7 @@ export class Game {
         this.knock = new Knockdown(this);
         this.up = new UpSpell(this); // «Up»: get up from the ground / leap out of the water
         this.creatureImpact = new CreatureImpact(this);
+        this.hurtFlash = new HurtFlash(this); // (wounded creatures glow red for a moment)
         this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
         this._headBase = { yaw: 0, pitch: 0 };
         this.quake = new Quake(this); // «Earthquake»: creatures thrown, the ground breaking, shaking (Quake.js)
@@ -2402,6 +2404,7 @@ export class Game {
         this.creatureImpact.update(dt); // (after every creature moved: their falls and staggers are drawn on top)
         this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.dragons.targets(), this.phoenixes.targets(), this.castleLife.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : []), dt);
         this.dismember.update(dt);
+        this.hurtFlash?.update(dt); // (a creature that lost HP glows red a moment — every computer sees it)
         mark('зомби');
 
         this.spells.update(dt);

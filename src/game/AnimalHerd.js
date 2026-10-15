@@ -176,3 +176,44 @@ export function foldLegs(model, lie) {
         if (lower) lower.rotation.x += ((front ? 2.9 : -2.9) - lower.rotation.x) * lie;
     }
 }
+
+/**
+ * The animal's real body now, as an upright segment with a radius: from its feet to the
+ * top of its body (its current size — a bronze bull grown 2×, the ram turned into the
+ * ~5.6 m minotaur), and half its real width. For rays (fire, ray spells) aimed at its chest.
+ * @returns {{x:number, z:number, bot:number, top:number, r:number}}
+ */
+export function bodySpan(a, out = {}) {
+    const p = a.group.position;
+    out.x = p.x; out.z = p.z;
+    if (a.model?.userData?.minotaur?.visible && a.bodyH) {
+        out.bot = p.y - 0.5; out.top = p.y + a.bodyH; out.r = Math.max(0.6, a.bodyR || 1);
+        return out;
+    }
+    const d = a.dims, sy = a.group.scale.y || 1;
+    if (!d || !(d.maxY > d.minY)) { out.bot = p.y - 0.5; out.top = p.y + 1.5; out.r = 0.8; return out; }
+    const k = (sy * (d.maxY - d.minY)) / d.height; // (how much it has grown since it was measured)
+    out.bot = p.y + d.minY * sy;
+    out.top = p.y + d.maxY * sy;
+    out.r = Math.max(0.4, a.bodyR || 0.5 * Math.max(d.wid, 0.6 * d.len) * k);
+    return out;
+}
+
+/**
+ * How close the ray segment o + d·s (s ∈ [0, len], d unit) passes to the upright segment
+ * (x, bot…top, z). Returns the distance, and `along` (s at the closest point).
+ */
+export function rayToSpan(o, d, len, x, bot, top, z, out = {}) {
+    const wx = o.x - x, wy = o.y - bot, wz = o.z - z;
+    const b = d.y, dd = d.x * wx + d.y * wy + d.z * wz, h = Math.max(0, top - bot);
+    const den = 1 - b * b;
+    let s = den > 1e-6 ? (b * wy - dd) / den : 0;
+    s = Math.max(0, Math.min(len, s));
+    let t = Math.max(0, Math.min(h, wy + b * s));
+    s = Math.max(0, Math.min(len, b * t - dd)); // (again for the clamped point on the body)
+    t = Math.max(0, Math.min(h, wy + b * s));
+    const ex = wx + d.x * s, ey = wy + d.y * s - t, ez = wz + d.z * s;
+    out.dist = Math.sqrt(ex * ex + ey * ey + ez * ez);
+    out.along = s;
+    return out;
+}

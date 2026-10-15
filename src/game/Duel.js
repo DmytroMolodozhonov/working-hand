@@ -53,6 +53,7 @@ import { DOOR_SPELLS } from './Doors.js';
 import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
 import { duelStrength } from './WizardAI.js';
+import { bodySpan } from './AnimalHerd.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -464,6 +465,14 @@ export class Duel {
 
     /** An animal / a book-bird: a ball round its middle. */
     _roundBody(kind, c, e) {
+        if (kind === 'a' && c.bodyH) {
+            // (the grown bronze bull / the ram turned minotaur: its real tall body, not the sheep's ball)
+            const s = bodySpan(c, {});
+            e.r = s.r;
+            e.a.set(s.x, s.bot + s.r, s.z);
+            e.b.set(s.x, Math.max(s.bot + s.r, s.top - s.r), s.z);
+            return e;
+        }
         this._creaturePoint(c, e.a);
         e.b.copy(e.a);
         e.r = kind === 'a' ? this._animalBody(c).r : BODY.BIRD;
