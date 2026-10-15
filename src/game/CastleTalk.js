@@ -1047,11 +1047,13 @@ export class CastleTalk {
                     this._setLLMState('loading', `${m.label}: загружается${f != null ? ` (${Math.round(f * 100)}%)` : '…'}`, key);
                 });
                 if (this.llm !== llm) return; // (disposed meanwhile)
-                const on = info.device === 'webgpu' ? 'видеокарта' : 'процессор';
-                this._setLLMState('ready', `${LocalLLM.describe(key, info.device)} — готова (${on})`, key);
+                // (the program on this computer — llm_native.py — runs Gemma 4 whatever was asked: its own name then)
+                const nat = info.device === 'native', mk = LocalLLM.MODELS[llm.modelKey] || m;
+                const on = nat ? 'отдельная программа на компьютере' : info.device === 'webgpu' ? 'видеокарта' : 'процессор';
+                this._setLLMState('ready', `${LocalLLM.describe(llm.modelKey || key, info.device)} — готова (${on})`, key);
                 this._llmWasReady = true;
                 this._warmLLM(llm);
-                journal(`✅ ГОТОВА: ${m.label} на ${info.device === 'webgpu' ? `видеокарте${info.gpuName ? ` (${info.gpuName})` : ''}` : 'процессоре'}, ${info.dtype}, загрузка ${((performance.now() - t0) / 1000).toFixed(1)} с`
+                journal(`✅ ГОТОВА: ${mk.label} ${nat ? 'отдельной программой на компьютере (llama.cpp, процессор — видеокарта остаётся игре)' : `на ${info.device === 'webgpu' ? `видеокарте${info.gpuName ? ` (${info.gpuName})` : ''}` : 'процессоре'}`}, ${info.dtype}, загрузка ${((performance.now() - t0) / 1000).toFixed(1)} с`
                     + `${info.why ? `; ${info.why}` : ''}${tried.length ? `; до неё не загрузились: ${tried.join('; ')}` : ''}`
                     + `${llm.strong ? ' — отвечает на любые слова' : ' — отвечает на то, что не поняли готовые правила'}`);
                 console.info('[CastleTalk]', '🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');

@@ -1,0 +1,338 @@
+"""
+llm_native.py — the villagers' conversation network as a program of its own on this computer.
+
+Why: in the browser the network (Gemma 4, ≈ 2.6 GB) ran on the game's own video card — while a
+villager thought of an answer, the picture lost frames. Here it is llama.cpp's own program
+(llama-server, from the ggml-org/llama.cpp releases — MIT), started by the game server in a
+process of its own, below normal priority, on the processor (-ngl 0): the video card stays the
+game's, and the game's frames always come first.
+
+  - the program: downloaded once (≈ 20 MB, a pinned release, checked by SHA-256) into the user's own
+    folder (the game folder is replaced by updates);
+  - the model: llama-server downloads it itself from Hugging Face (-hf, ggml-org's GGUF of Gemma 4)
+    once, into the same folder, then uses it from there;
+  - the page talks to it through server.py (/api/llm/...): the same messages as its old web worker
+    (src/ai/llm.worker.js — src/ai/NativeLLM.js), the answers streamed word by word.
+
+Nothing here runs at import time.
+"""
+
+import hashlib
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tarfile
+import threading
+import time
+import urllib.request
+import zipfile
+
+BUILD = "b11669"  # llama.cpp release (October 2026): Gemma 4, tool calls, --reasoning off
+RELEASE = f"https://github.com/ggml-org/llama.cpp/releases/download/{BUILD}/"
+# the processor build of each system (≈ 12–20 MB), checked before use
+ASSETS = {
+    "win": (f"llama-{BUILD}-bin-win-cpu-x64.zip", "37b3efcf962847ca869745fd4ccf7f5e7e8dacfeff9fa3523b4ca8cdc66d632b"),
+    "linux": (f"llama-{BUILD}-bin-ubuntu-x64.tar.gz", "cf07c1c112d709bd67e522017471de57ed0ec8bea031d732c5422351c07f65ac"),
+    "mac": (f"llama-{BUILD}-bin-macos-arm64.tar.gz", "dbed55493d72bc1ba2babc8770d669c2289b5bc4ee9fb2a4dfc158d45b7d13fd"),
+}
+ASSET_MAX = 64 * 1024 * 1024
+# the page's model choice → the GGUF on Hugging Face (llama-server picks its usual 4-bit file)
+MODELS = {
+    "gemma4": "ggml-org/gemma-4-E2B-it-GGUF",
+    "gemma4big": "ggml-org/gemma-4-E4B-it-GGUF",
+}
+DEFAULT_MODEL = "gemma4"
+
+
+def data_dir():
+    """The user's own folder for the program and the model (as the voice's models)."""
+    if os.environ.get("ZNS_LLM_DIR"):
+        return os.environ["ZNS_LLM_DIR"]
+    if sys.platform.startswith("win"):
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        return os.path.join(base, "Volshebstvo", "llm")
+    if sys.platform == "darwin":
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "Volshebstvo", "llm")
+    return os.path.join(os.path.expanduser("~"), ".cache", "volshebstvo", "llm")
+
+
+def platform_key():
+    if sys.platform.startswith("win"):
+        return "win"
+    if sys.platform == "darwin":
+        return "mac"
+    return "linux"
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def strip_think(s):
+    """Thoughts out of an answer (the model was asked not to think — just in case)."""
+    import re
+    s = re.sub(r"<think>[\s\S]*?</think>", "", s or "", flags=re.I)
+    s = re.sub(r"<think>[\s\S]*$", "", s, flags=re.I)
+    s = re.sub(r"<\|channel>[\s\S]*?(<channel\|>|$)", "", s)
+    return re.sub(r"<\|?(turn|eos|end_of_turn)\|?>", "", s).strip()
+
+
+class NativeLLM:
+    def __init__(self):
+        self.state = "off"  # off | downloading | loading | ready | error
+        self.error = ""
+        self.progress = 0.0
+        self.detail = ""
+        self.model = ""
+        self.proc = None
+        self.port = 0
+        self.ms = 0
+        self._lock = threading.Lock()
+        self._log = []
+        self._current = {}  # job id → the open answer stream (closed to interrupt it)
+        self._key = ""
+
+    # ------------------------------------------------------------ status
+    def available(self):
+        """Can it run here at all (a build for this system)? The download comes on first use."""
+        return platform_key() in ASSETS and not os.environ.get("ZNS_NO_NATIVE_LLM")
+
+    def status(self):
+        return {"available": self.available(), "state": self.state, "error": self.error, "progress": round(self.progress, 3),
+                "detail": self.detail, "model": self.model, "ms": self.ms, "build": BUILD}
+
+    # ------------------------------------------------------------ the program
+    def binary_dir(self):
+        return os.path.join(data_dir(), BUILD)
+
+    def binary(self):
+        """The llama-server of this system (downloaded and checked once)."""
+        exe = "llama-server.exe" if platform_key() == "win" else "llama-server"
+        for root, _, files in os.walk(self.binary_dir()):
+            if exe in files:
+                return os.path.join(root, exe)
+        return None
+
+    def _download_binary(self):
+        name, sha = ASSETS[platform_key()]
+        os.makedirs(data_dir(), exist_ok=True)
+        part = os.path.join(data_dir(), name + ".part")
+        self.detail = "скачивается программа нейросети (≈ 20 МБ)"
+        h = hashlib.sha256()
+        with urllib.request.urlopen(urllib.request.Request(RELEASE + name, headers={"User-Agent": "Volshebstvo"}), timeout=60) as r, open(part, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0)
+            got = 0
+            while True:
+                b = r.read(1 << 16)
+                if not b:
+                    break
+                got += len(b)
+                if got > ASSET_MAX:
+                    raise ValueError("программа нейросети больше ожидаемого — не используется")
+                h.update(b)
+                f.write(b)
+                if total:
+                    self.progress = 0.1 * got / total
+        if h.hexdigest() != sha:
+            os.remove(part)
+            raise ValueError("программа нейросети не совпала с опубликованной (SHA-256) — не используется")
+        dest = self.binary_dir()
+        shutil.rmtree(dest, ignore_errors=True)
+        os.makedirs(dest, exist_ok=True)
+        root = os.path.realpath(dest)
+
+        def safe(member_name):
+            p = os.path.realpath(os.path.join(dest, member_name))
+            return p == root or p.startswith(root + os.sep)
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(part) as z:
+                for m in z.namelist():
+                    if safe(m):
+                        z.extract(m, dest)
+        else:
+            with tarfile.open(part) as t:
+                members = [m for m in t.getmembers() if safe(m.name) and (m.isfile() or m.isdir() or m.issym()) and (not m.issym() or safe(os.path.join(os.path.dirname(m.name), m.linkname)))]
+                t.extractall(dest, members=members)
+        os.remove(part)
+        exe = self.binary()
+        if not exe:
+            raise RuntimeError("в архиве нет llama-server")
+        if platform_key() != "win":
+            os.chmod(exe, 0o755)
+
+    # ------------------------------------------------------------ start / stop
+    def start(self, model=DEFAULT_MODEL):
+        """Asked for by the page (never waits): get the program, start it with the model. True once ready."""
+        model = model if model in MODELS else DEFAULT_MODEL
+        with self._lock:
+            if self.state in ("downloading", "loading") and self.model == model:
+                return False
+            if self.state == "ready" and self.model == model and self.proc and self.proc.poll() is None:
+                return True
+            self.stop()
+            self.model = model
+            self.state = "downloading"
+            self.error = ""
+            self.progress = 0.0
+            threading.Thread(target=self._run, args=(model,), name="llm-native", daemon=True).start()
+        return False
+
+    def _run(self, model):
+        t0 = time.time()
+        try:
+            if not self.binary():
+                self._download_binary()
+            self.state = "loading"
+            self.detail = "загружается модель (в первый раз скачивается, ≈ 3 ГБ)"
+            self.port = free_port()
+            # (only the game may ask it: it lets every page in the browser call it otherwise)
+            self._key = hashlib.sha256(os.urandom(32)).hexdigest()
+            cache = os.path.join(data_dir(), "models")
+            os.makedirs(cache, exist_ok=True)
+            threads = max(2, min(8, (os.cpu_count() or 4) // 2))  # (half the cores: the game and the camera keep theirs)
+            args = [self.binary(), "-hf", MODELS[model], "--host", "127.0.0.1", "--port", str(self.port),
+                    "-ngl", "0", "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "4096", "-t", str(threads),
+                    "--no-ui", "-np", "1", "--api-key", self._key]
+            env = {**os.environ, "LLAMA_CACHE": cache}
+            kw = {}
+            if platform_key() == "win":
+                kw["creationflags"] = 0x00004000 | 0x08000000  # BELOW_NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW
+            else:
+                kw["preexec_fn"] = lambda: os.nice(10)
+            self.proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=os.path.dirname(self.binary()), **kw)
+            threading.Thread(target=self._read_log, args=(self.proc,), daemon=True).start()
+            # ready when its /health says so (the model downloaded and loaded)
+            while self.proc.poll() is None:
+                try:
+                    with urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{self.port}/health", headers={"Authorization": "Bearer " + self._key}), timeout=2) as r:
+                        if r.status == 200 and json.loads(r.read() or b"{}").get("status") == "ok":
+                            break
+                except Exception:  # noqa: BLE001
+                    pass
+                time.sleep(0.5)
+            if self.proc.poll() is not None:
+                raise RuntimeError("программа нейросети остановилась: " + " | ".join(self._log[-3:]))
+            self.ms = int((time.time() - t0) * 1000)
+            self.progress = 1.0
+            self.detail = "готова"
+            self.state = "ready"
+            print(f"  [Нейросеть жителей] {MODELS[model]} готова: отдельная программа llama.cpp ({BUILD}), процессор, {self.ms} мс")
+        except Exception as e:  # noqa: BLE001
+            self.error = str(e) or type(e).__name__
+            self.state = "error"
+            print(f"  [Нейросеть жителей] не запустилась (работает браузерная): {self.error}")
+            self.stop(keep_state=True)
+
+    def _read_log(self, proc):
+        """Its output: the model's download progress (for the page), the last lines (for an error)."""
+        import re
+        for raw in iter(proc.stdout.readline, b""):
+            line = raw.decode("utf-8", "replace").strip()
+            if not line:
+                continue
+            self._log = (self._log + [line])[-40:]
+            m = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%", line)
+            if m and self.state == "loading":
+                self.progress = 0.1 + 0.85 * min(100.0, float(m.group(1))) / 100
+
+    def stop(self, keep_state=False):
+        p = self.proc
+        self.proc = None
+        if p and p.poll() is None:
+            try:
+                p.terminate()
+                p.wait(timeout=5)
+            except Exception:  # noqa: BLE001
+                try:
+                    p.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+        if not keep_state:
+            self.state = "off"
+
+    # ------------------------------------------------------------ answers
+    def generate(self, job, emit):
+        """One answer, as the old worker's 'generate' message: emit({'type': 'partial', 'text'}) while it
+        writes (stream), then returns the whole text (tool calls as <tool_call>{json}</tool_call>)."""
+        if self.state != "ready":
+            raise RuntimeError("model not loaded")
+        jid = job.get("id")
+        tools = job.get("tools") or None
+        temp = float(job.get("temperature", 0.7))
+        body = {
+            "messages": job.get("messages") or [],
+            "max_tokens": max(4, min(200, int(job.get("maxTokens") or 60))),
+            "temperature": max(0.05, temp) if temp > 0 else 0.0,
+            "top_k": 40, "top_p": 0.9,
+            "repeat_penalty": 1.05 if job.get("raw") else 1.15,
+            "stream": True,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        if tools:
+            body["tools"] = [t if t.get("type") == "function" else {"type": "function", "function": t} for t in tools]
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode("utf-8"),
+                                     headers={"Content-Type": "application/json", "Authorization": "Bearer " + self._key})
+        text, calls = "", {}
+        r = urllib.request.urlopen(req, timeout=60)
+        self._current[jid] = r
+        try:
+            for raw in r:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    d = json.loads(data)
+                except ValueError:
+                    continue
+                for ch in d.get("choices") or []:
+                    delta = ch.get("delta") or {}
+                    piece = delta.get("content")
+                    if piece:
+                        text += piece
+                        if job.get("stream"):
+                            emit({"type": "partial", "id": jid, "text": piece})
+                    for tc in delta.get("tool_calls") or []:
+                        c = calls.setdefault(tc.get("index", 0), {"name": "", "args": ""})
+                        fn = tc.get("function") or {}
+                        c["name"] += fn.get("name") or ""
+                        c["args"] += fn.get("arguments") or ""
+        except (OSError, ValueError):
+            if jid not in self._current:
+                return ""  # (interrupted)
+            raise
+        finally:
+            self._current.pop(jid, None)
+            try:
+                r.close()
+            except Exception:  # noqa: BLE001
+                pass
+        for _, c in sorted(calls.items()):
+            try:
+                args = json.loads(c["args"]) if c["args"] else {}
+            except ValueError:
+                args = {}
+            text += "<tool_call>" + json.dumps({"name": c["name"], "arguments": args}, ensure_ascii=False) + "</tool_call>"
+        return strip_think(text)
+
+    def interrupt(self, jid):
+        r = self._current.pop(jid, None)
+        if r is not None:
+            try:
+                r.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+LLM = NativeLLM()
+
+import atexit  # noqa: E402
+
+atexit.register(LLM.stop)  # (the program goes when the game server goes)

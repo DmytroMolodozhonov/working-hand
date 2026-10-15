@@ -265,7 +265,7 @@ def adopt_app_launcher():
 
 LOCAL_ADDRS = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
 LOCAL_NAMES = ("localhost", "127.0.0.1", "::1")
-PRIVATE_PATHS = ("/api/voice/", "/api/pose/")  # the microphone and the camera
+PRIVATE_PATHS = ("/api/voice/", "/api/pose/", "/api/llm/")  # the microphone, the camera, the villagers' network
 
 
 def is_own_page(client_ip, headers):
@@ -458,6 +458,35 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 VOICE.clients -= 1
             VOICE.last_client = time.time()
 
+    def _llm(self, path):
+        """/api/llm/load {model} → its status; /api/llm/generate {job} → the answer streamed (SSE: «partial»
+        pieces, then «result» or «gen_error» — the old web worker's messages); /api/llm/interrupt {id}."""
+        from llm_native import LLM
+        data = self._read_json() or {}
+        if path == "/api/llm/load":
+            LLM.start(str(data.get("model") or ""))
+            return self._json(200, LLM.status())
+        if path == "/api/llm/interrupt":
+            LLM.interrupt(data.get("id"))
+            return self._json(200, {"ok": True})
+        if path != "/api/llm/generate":
+            return self._json(404, {"status": "error"})
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        send = lambda m: (self.wfile.write(("data: " + json.dumps(m, ensure_ascii=False) + "\n\n").encode("utf-8")), self.wfile.flush())  # noqa: E731
+        try:
+            text = LLM.generate(data, send)
+            send({"type": "result", "id": data.get("id"), "text": text})
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            LLM.interrupt(data.get("id"))
+        except Exception as e:  # noqa: BLE001
+            try:
+                send({"type": "gen_error", "id": data.get("id"), "message": str(e)})
+            except OSError:
+                pass
+
     def _alive(self):
         """The game page holds this open while its window lives (the app launcher
         quits when no window is left; here it only keeps the line open)."""
@@ -484,6 +513,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_stream(urlparse(self.path).query)
         if path == "/api/voice/status":
             return self._voice_status()
+        if path == "/api/llm/status":
+            from llm_native import LLM
+            return self._json(200, LLM.status())
         if path == "/api/voice/stream":
             return self._voice_stream()
         if path == "/api/voice/devices":
@@ -534,6 +566,12 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 local = self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")  # (only this computer's own window)
                 ok = local and window_action(str(data.get("action", "")), data)
                 return self._json(200, {"ok": ok})
+
+            if path.startswith("/api/llm/"):
+                # the villagers' conversation network as a program of its own (llm_native.py): this computer's game only
+                if not is_own_page(self.client_address[0], self.headers):
+                    return self._json(403, {"status": "error", "message": "only the game on this computer"})
+                return self._llm(path)
 
             if path == "/api/voice/mic":
                 # the microphone for the spells, chosen in the settings: taken at once (this computer's game only)

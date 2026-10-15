@@ -15,6 +15,8 @@
  * Safe to import in node (nothing runs at import time; no DOM access).
  */
 
+import { NativeLLMPort } from './NativeLLM.js';
+
 export class LocalLLM {
     /**
      * Model choices. dtype per device: `webgpu` (GPU with shader-f16),
@@ -142,13 +144,17 @@ export class LocalLLM {
     load(onProgress) {
         if (this._loading) return this._loading;
         this._error = null;
-        this._loading = new Promise((resolve, reject) => {
-            if (!LocalLLM.supported) { reject(new Error('Web Workers / WebAssembly are not available')); return; }
+        this._loading = new Promise((resolve, reject) => { (async () => {
+            // First the program on this computer (llm_native.py — never the game's video card); if it can't
+            // run here or fails to start, the browser's web worker as before.
+            let native = !this.workerUrl && await NativeLLMPort.available();
+            const start = () => {
+                if (native) return new NativeLLMPort();
+                if (!LocalLLM.supported) throw new Error('Web Workers / WebAssembly are not available');
+                return new Worker(this.workerUrl || new URL('./llm.worker.js', import.meta.url), { type: 'module' });
+            };
             let worker;
-            try {
-                const url = this.workerUrl || new URL('./llm.worker.js', import.meta.url);
-                worker = new Worker(url, { type: 'module' });
-            } catch (e) { reject(e); return; }
+            try { worker = start(); } catch (e) { reject(e); return; }
             this._worker = worker;
             const fail = (err) => {
                 this._error = err;
@@ -159,33 +165,50 @@ export class LocalLLM {
                 this._loading = null;
                 this._terminate();
             };
-            worker.onerror = (ev) => {
-                ev?.preventDefault?.();
-                fail(new Error(`LLM worker error: ${ev?.message || 'failed to start'}`));
+            const wire = (w) => {
+                w.onerror = (ev) => {
+                    ev?.preventDefault?.();
+                    fail(new Error(`LLM worker error: ${ev?.message || 'failed to start'}`));
+                };
+                w.onmessage = (ev) => {
+                    const m = ev.data || {};
+                    switch (m.type) {
+                        case 'progress':
+                            if (onProgress) { try { onProgress(m.fraction, m.text); } catch (_) { /* ignore */ } }
+                            break;
+                        case 'ready':
+                            this._ready = true;
+                            // (the program on this computer runs Gemma 4 whatever was picked for the browser: it answers every talk)
+                            if (m.device === 'native') { this.modelKey = this.modelKey === 'gemma4big' ? 'gemma4big' : 'gemma4'; this.model = LocalLLM.MODELS[this.modelKey]; }
+                            this._device = m.device;
+                            this._dtype = m.dtype;
+                            this.loadInfo = { device: m.device, dtype: m.dtype, gpuName: m.gpuName || '', ms: m.ms || 0, why: m.why || '' };
+                            resolve(this.loadInfo);
+                            break;
+                        case 'load_error':
+                            if (native) {
+                                // (the program did not start here: the browser's network instead)
+                                console.warn('[LocalLLM] the program on this computer failed, the browser takes over:', m.message);
+                                native = false;
+                                this.nativeWhy = m.message || '';
+                                try { worker.terminate(); } catch (_) { /* ignore */ }
+                                try { worker = start(); } catch (e) { fail(e); break; }
+                                this._worker = worker;
+                                wire(worker);
+                                worker.postMessage({ type: 'load', model: { ...this.model }, device: this.model.gpuOnly ? 'webgpu' : this.preferredDevice });
+                                break;
+                            }
+                            fail(new Error(m.message || 'model load failed'));
+                            break;
+                        case 'partial': { const job = this._jobs.get(m.id); if (job?.onPartial) { try { job.onPartial(String(m.text || '')); } catch (_) { /* ignore */ } } break; }
+                        case 'result': this._finish(m.id, m.text ?? ''); break;
+                        case 'gen_error': this._finish(m.id, null, new Error(m.message)); break;
+                    }
+                };
             };
-            worker.onmessage = (ev) => {
-                const m = ev.data || {};
-                switch (m.type) {
-                    case 'progress':
-                        if (onProgress) { try { onProgress(m.fraction, m.text); } catch (_) { /* ignore */ } }
-                        break;
-                    case 'ready':
-                        this._ready = true;
-                        this._device = m.device;
-                        this._dtype = m.dtype;
-                        this.loadInfo = { device: m.device, dtype: m.dtype, gpuName: m.gpuName || '', ms: m.ms || 0, why: m.why || '' };
-                        resolve(this.loadInfo);
-                        break;
-                    case 'load_error':
-                        fail(new Error(m.message || 'model load failed'));
-                        break;
-                    case 'partial': { const job = this._jobs.get(m.id); if (job?.onPartial) { try { job.onPartial(String(m.text || '')); } catch (_) { /* ignore */ } } break; }
-                    case 'result': this._finish(m.id, m.text ?? ''); break;
-                    case 'gen_error': this._finish(m.id, null, new Error(m.message)); break;
-                }
-            };
-            worker.postMessage({ type: 'load', model: { ...this.model }, device: this.model.gpuOnly ? 'webgpu' : this.preferredDevice });
-        });
+            wire(worker);
+            worker.postMessage({ type: 'load', model: { ...this.model, native: this.modelKey === 'gemma4big' ? 'gemma4big' : 'gemma4' }, device: this.model.gpuOnly ? 'webgpu' : this.preferredDevice });
+        })(); });
         // allow a later retry after a failure
         this._loading.catch(() => { this._loading = null; this._terminate(); });
         return this._loading;
@@ -207,7 +230,7 @@ export class LocalLLM {
         }
         messages.push({ role: 'user', content: String(user || '...') });
         const id = this._nextId++;
-        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'webgpu' ? 5000 : 8000);
+        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'native' ? 15000 : this._device === 'webgpu' ? 5000 : 8000);
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 if (!this._jobs.has(id)) return;
@@ -233,7 +256,8 @@ export class LocalLLM {
         messages.push({ role: 'user', content: String(user || '...') });
         const id = this._nextId++;
         // (a big net reads the long villager prompt longer; the answer is said while it writes, so the wait is short)
-        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'webgpu' ? (this.model.strong ? 12000 : 8000) : 14000);
+        // (the program on this computer reads a villager's long rules once — then it keeps them — on the processor)
+        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'native' ? 25000 : this._device === 'webgpu' ? (this.model.strong ? 12000 : 8000) : 14000);
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 if (!this._jobs.has(id)) return;
