@@ -955,7 +955,7 @@ const pauseAudio = setupPauseAudio($('pause-audio'));
 // «🖥 Графика» in the pause menu: the same graphics settings, applied at once
 const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
 // «Правша / Левша» in the pause menu (every mode): the same control as in «Настройки», applied at once
-const pauseHands = setupPauseAudio($('pause-hands'), ['handedness']);
+const pauseHands = setupPauseAudio($('pause-hands'), ['handedness', 'walk-mode']);
 const applyHandedness = () => {
     const left = $('handedness')?.value === 'left';
     poseService.interpreter.leftHanded = left; // (the body's places mirrored: PoseInterpreter.bodyPlaces)
@@ -963,6 +963,10 @@ const applyHandedness = () => {
 };
 $('handedness')?.addEventListener('change', applyHandedness);
 applyHandedness();
+// «Ходьба и бег»: the usual walk (the body's bob) or the new one (steps read from the legs)
+const applyWalkMode = () => { poseService.interpreter.walkMode = $('walk-mode')?.value === 'legs' ? 'legs' : 'old'; };
+$('walk-mode')?.addEventListener('change', applyWalkMode);
+applyWalkMode();
 // the graphics settings change the running game at once (no restart of the world)
 $('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.world.viewDistance = viewDistanceScale(e.target.value); });
 $('graphics-quality')?.addEventListener('change', (e) => { game?.quality?.setSetting(e.target.value); });
@@ -1324,7 +1328,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'creative-zombie-count', 'minimap-size', 'v5-gpu'];
+        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'creative-zombie-count', 'minimap-size', 'v5-gpu'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)

@@ -6,6 +6,7 @@
 
 import { mouthOpenness } from '../game/VoiceGate.js';
 import { LegReader } from './LegReader.js';
+import { StepReader } from './StepReader.js';
 import { HeadFromBody } from './HeadFromBody.js';
 
 /**
@@ -274,6 +275,8 @@ export class PoseInterpreter {
     constructor(faceSolver = null) {
         this.faceSolver = faceSolver;
         this.shoulderHistory = [];
+        this.walkMode = 'old'; // (Настройки → Ходьба: 'old' — the body's bob, 'legs' — steps on the spot: StepReader)
+        this.steps = new StepReader();
         this.prevWrists = null;
         this.wasCrouching = false;
         this.lastHead = { yaw: 0, pitch: 0 };
@@ -412,6 +415,13 @@ export class PoseInterpreter {
             if (!this.wasCrouching) { if (noseY > 0.5) this.wasCrouching = true; }
             else if (noseY < 0.45) this.wasCrouching = false;
             data.isCrouching = this.wasCrouching;
+
+            // the new walk (a setting): steps on the spot, from the legs (the body's bob only without legs to read)
+            if (this.walkMode === 'legs') {
+                const walk = this.steps.read(data.legs, (lm[11].y + lm[12].y) / 2, data.isCrouching);
+                data.isRunning = walk.isRunning;
+                data.runIntensity = walk.runIntensity;
+            }
         }
 
         data.stompAt = this.stompAt;
