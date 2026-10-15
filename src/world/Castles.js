@@ -1099,15 +1099,16 @@ function buildYard(p, cu, cv, face, rng, s, out, pen) {
 }
 
 /**
- * A village graveyard on a lot (15 × 15, a tall fence with a gate towards the road, a wide path
- * through the middle): two rows of graves for a man of this world (~3 m: a plot 2 × 4 of earth) —
- * each with a big headstone (a slab or a tall cross, 3 high) at its head. Every grave goes into
- * out.graves: «Alive» said at one raises its dead (LivingTrees.js — a skeleton), and that grave
- * stays dug open (block edits, saved with the world). Two crosses by the gate and a lantern post
- * make it plain from afar that this is a graveyard.
+ * The village graveyard — a big place of its own (29 × 29) outside the houses, a tall fence with a wide
+ * gate towards the road and two huge crosses at the gate, a path through the middle. Two rows of
+ * six graves made for the people of this world (a man is ~5 m: a plot 3 × 7 of earth), each with a
+ * tall headstone slab (4 high) or a huge cross (8 high). Every grave goes into out.graves: «Alive»
+ * said at one raises its dead (LivingTrees.js — a skeleton), and that grave stays dug open (block
+ * edits, saved with the world).
  */
-export const GRAVE_COLS = [-6, -3, 1, 4]; // (the plot's first a; it is 2 wide, the path is a = −1…0)
-export const GRAVE_ROWS = [-5, 2]; // (the plot's first b; it is 4 long, the stone just behind it)
+export const GRAVE_COLS = [-12, -8, -4, 1, 5, 9]; // (the plot's first a; it is 3 wide, the path is a = −1…0)
+export const GRAVE_ROWS = [-10, 3]; // (the plot's first b; it is 7 long, the stone just behind it)
+export const GRAVEYARD_R = 14;
 function buildGraveyard(p, cu, cv, face, s, out) {
     const P = {
         box: (a0, a1, l0, l1, b0, b1, t) => {
@@ -1116,35 +1117,33 @@ function buildGraveyard(p, cu, cv, face, s, out) {
         },
         pt: (a, b, l = 0) => { const [x, z] = rotLot(a, b, face); return p.pt(cu + x, cv + z, l); },
     };
-    const R = 7;
-    // the fence (rails 1 high, posts 3 high every 2), a gate towards the road
+    const R = GRAVEYARD_R;
+    // the fence (rails 1 high, posts 4 high every 2), a wide gate towards the road
     P.box(-R, R, 0, 0, -R, -R, BLOCK.FENCE); P.box(-R, R, 0, 0, R, R, BLOCK.FENCE);
     P.box(-R, -R, 0, 0, -R, R, BLOCK.FENCE); P.box(R, R, 0, 0, -R, R, BLOCK.FENCE);
-    for (let k = -R; k <= R; k += 2) for (const [a, b] of [[k, -R], [k, R], [-R, k], [R, k]]) P.box(a, a, 1, 2, b, b, BLOCK.FENCE);
-    P.box(-2, 1, 0, 2, -R, -R, 0);
+    for (let k = -R; k <= R; k += 2) for (const [a, b] of [[k, -R], [k, R], [-R, k], [R, k]]) P.box(a, a, 1, 3, b, b, BLOCK.FENCE);
+    P.box(-3, 2, 0, 5, -R, -R, 0);
     P.box(-1, 0, -1, -1, -R, R - 1, BLOCK.PATH); // (a path in from the gate to the far end)
-    // the gate posts: tall crosses on both sides, seen from the road
-    for (const [a, o] of [[-3, -1], [2, 1]]) { P.box(a, a, 0, 3, -R, -R, BLOCK.CS_GREY); P.box(Math.min(a, a + o), Math.max(a, a + o), 2, 2, -R, -R, BLOCK.CS_GREY); }
+    // two huge crosses at the gate, seen from the road
+    for (const [a, o] of [[-5, -2], [4, 2]]) { P.box(a, a, 0, 8, -R, -R, BLOCK.CS_GREY); P.box(Math.min(a, a + o), Math.max(a, a + o), 6, 6, -R, -R, BLOCK.CS_GREY); }
     const graves = out.graves || (out.graves = []);
     let i = 0;
     for (const b0 of GRAVE_ROWS) {
         for (const a of GRAVE_COLS) {
-            P.box(a, a + 1, -1, -1, b0, b0 + 3, BLOCK.DIRT); // the plot, 2 × 4
+            P.box(a, a + 2, -1, -1, b0, b0 + 6, BLOCK.DIRT); // the plot, 3 × 7
             const h = hash01(cu * 7 + a, cv * 13 + b0, i++);
-            const sb = b0 + 4; // the stone row, behind the plot's head
-            if (h < 0.35) { // a tall cross
-                P.box(a, a + 1, 0, 0, sb, sb, BLOCK.CS_GREY); // the foot
-                P.box(a, a, 1, 3, sb, sb, BLOCK.CS_GREY); P.box(a - 1, a + 1, 2, 2, sb, sb, BLOCK.CS_GREY);
-            } else { // a wide headstone slab, 3 high
-                const t = h < 0.7 ? BLOCK.CS_MOSSY : BLOCK.CS_GREY;
-                P.box(a, a + 1, 0, 2, sb, sb, t);
+            const sb = b0 + 7; // the stone row, behind the plot's head
+            if (h < 0.4) { // a huge cross (its arms stay in the plot's width beside the path)
+                const near = a === -4 || a === 1;
+                P.box(a, a + 2, 0, 0, sb, sb, BLOCK.CS_GREY); // the foot
+                P.box(a + 1, a + 1, 1, 7, sb, sb, BLOCK.CS_GREY);
+                P.box(near ? a : a - 1, near ? a + 2 : a + 3, 5, 5, sb, sb, BLOCK.CS_GREY);
+            } else { // a wide headstone slab, 4 high
+                P.box(a, a + 2, 0, 3, sb, sb, h < 0.7 ? BLOCK.CS_MOSSY : BLOCK.CS_GREY);
             }
-            const c = P.pt(a + 0.5, b0 + 1.5), ex = P.pt(a + 0.5, b0 - 1), st = P.pt(a, sb);
-            const [x0, z0] = rotLot(a, b0, face), [x1, z1] = rotLot(a, b0 + 1, face);
-            const cells = [[p.wx(cu + x0, cv + z0), p.wz(cu + x0, cv + z0)], [p.wx(cu + x1, cv + z1), p.wz(cu + x1, cv + z1)]];
-            // (the rest of the plot: the second column and the length)
-            for (const da of [0, 1]) for (const db of [0, 1, 2, 3]) {
-                if (da === 0 && db < 2) continue;
+            const c = P.pt(a + 1, b0 + 3), ex = P.pt(a + 1, b0 - 2), st = P.pt(a + 1, sb);
+            const cells = [];
+            for (let da = 0; da < 3; da++) for (let db = 0; db < 7; db++) { // (the first two: along the plot — the heap goes beside them)
                 const [xx, zz] = rotLot(a + da, b0 + db, face);
                 cells.push([p.wx(cu + xx, cv + zz), p.wz(cu + xx, cv + zz)]);
             }
@@ -1265,8 +1264,16 @@ function buildVillage(p, s, rng, out) {
     // (back-to-back rows must not overlap)
     const used = [];
     const fields = [];
+    // the graveyard first (a big place of its own: it takes the first free outer lot, no other lot within 26 m; no rng drawn)
+    const gy = lots.find((l) => (Math.abs(l.u) > R2 || Math.abs(l.v) > R2z) && free(...[l.u, l.v].map((x, k) => x + rotLot(0, 7, l.face)[k]), GRAVEYARD_R + 2));
+    if (gy) {
+        // (pushed 7 m away from the road so that the gate and the fence stay off it)
+        const [da, db] = rotLot(0, 7, gy.face);
+        gy.u += da; gy.v += db; gy.big = true; used.push(gy);
+        buildGraveyard(p, gy.u, gy.v, gy.face, s, out);
+    }
     for (const lot of lots) {
-        if (used.some((o) => Math.abs(o.u - lot.u) < 14 && Math.abs(o.v - lot.v) < 14)) continue;
+        if (used.some((o) => Math.abs(o.u - lot.u) < (o.big ? 26 : 14) && Math.abs(o.v - lot.v) < (o.big ? 26 : 14))) continue;
         used.push(lot);
         const outer = Math.abs(lot.u) > R2 || Math.abs(lot.v) > R2z;
         const [ra, rb] = rotLot(0, -9, lot.face);
@@ -1282,7 +1289,6 @@ function buildVillage(p, s, rng, out) {
             continue;
         }
         // one small graveyard a village, on the first outer lot (not drawing on rng: the rest stays as it was)
-        if (outer && !out.graves) { buildGraveyard(p, lot.u, lot.v, lot.face, s, out); continue; }
         // gardens and pens between the houses
         const y = rng();
         if (y < 0.16) { buildYard(p, lot.u, lot.v, lot.face, rng, s, out, rng() < 0.5); continue; }
@@ -1298,9 +1304,9 @@ function buildVillage(p, s, rng, out) {
     // no outer lot was left for the graveyard (a sea castle, a crowded ring): any free place outside the outer road
     if (!out.graves) {
         const spots = [];
-        for (let t = -R2 + 8; t <= R2 - 8; t += 17) spots.push([t, -R2z - 9, 0], [t, R2z + 9, 2]);
-        for (let t = -R2z + 8; t <= R2z - 8; t += 17) spots.push([-R2 - 9, t, 3], [R2 + 9, t, 1]);
-        const at = spots.find(([u, v]) => free(u, v, 7) && !used.some((o) => Math.abs(o.u - u) < 14 && Math.abs(o.v - v) < 14));
+        for (let t = -R2 + 14; t <= R2 - 14; t += 12) spots.push([t, -R2z - 16, 0], [t, R2z + 16, 2]);
+        for (let t = -R2z + 14; t <= R2z - 14; t += 12) spots.push([-R2 - 16, t, 3], [R2 + 16, t, 1]);
+        const at = spots.find(([u, v]) => free(u, v, GRAVEYARD_R + 2) && !used.some((o) => Math.abs(o.u - u) < 26 && Math.abs(o.v - v) < 26));
         if (at) buildGraveyard(p, at[0], at[1], at[2], s, out);
     }
 }

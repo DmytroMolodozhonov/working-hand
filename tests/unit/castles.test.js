@@ -140,10 +140,10 @@ test('every village has a small graveyard: earth plots with a stone or a post at
     const t = world(4242);
     for (const c of castlesOf(t, 4)) {
         assert.equal(c.graveyards.length, 1, c.id);
-        assert.equal(c.graves.length, 8, c.id);
-        assert.ok(c.graves.every((g) => g.cells.length === 8), "a plot 2 × 4: a man fits");
+        assert.equal(c.graves.length, 12, c.id);
+        assert.ok(c.graves.every((g) => g.cells.length === 21), "a plot 3 × 7: a big man fits");
         const ids = new Set(c.graves.map((q) => q.id));
-        assert.equal(ids.size, 8);
+        assert.equal(ids.size, 12);
         for (const g of c.graves) {
             t.ensureArea?.(g.x, g.z, 8);
             for (const [x, z] of g.cells) assert.equal(t.get(x, g.L, z), BLOCK.DIRT, `${g.id}: the plot is earth`);
