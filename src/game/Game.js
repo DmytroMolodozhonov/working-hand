@@ -196,6 +196,10 @@ export class Game {
         return performance.now();
     }
 
+    /** The hero's gravity (1 = Earth): one multiplier for falling, jumping and walking — Jump.js says how to change it. */
+    get gravityK() { return this.character?.gravityK ?? 1; }
+    set gravityK(k) { if (this.character) this.character.gravityK = Math.max(0.05, +k || 1); }
+
     get authority() {
         return !this.net || !this.net.active || this.net.isHost;
     }
@@ -2863,6 +2867,7 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
+        this._jumpStep(pose);
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
@@ -3446,6 +3451,33 @@ export class Game {
     }
 
     /** Walking on snow: a soft crunch at every step (a step is ~0.8 m walking, longer running). */
+    /**
+     * A real jump (JumpReader: the whole body went up in the picture): the hero jumps as high as
+     * the person did (and the planet's gravity lets) — not in flight, in water, lying, stunned, in a
+     * bed, on a horse (a jump by a horse gets on it: Animals), hanging on a ledge or a rope ladder.
+     * The landing: a little shake and a thud (a hard one knocks over — Knockdown).
+     */
+    _jumpStep(pose) {
+        const ch = this.character, J = pose?.jump;
+        if (J && J.jumps !== this._jumpSeen) {
+            const first = this._jumpSeen == null;
+            this._jumpSeen = J.jumps;
+            const busy = this.flight.busy || ch.swimY != null || ch.swimming || this.knock.down || this.knock.flyT > 0
+                || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.()
+                || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active
+                || (this.config.mode === 'test' && this.testState === 'setup');
+            if (!first && !busy && ch.onGround && ch.jump(J.strength)) this._jumpAt = J.at;
+        } else if (J && J.air && ch.jumpAir && J.at === this._jumpAt) ch.jumpBoost(J.strength); // (it went up higher)
+        const L = ch.landing;
+        if (L && L.at !== this._landSeen) {
+            this._landSeen = L.at;
+            if (L.drop > 0.3 && ch.swimY == null) {
+                this.fx.shake = Math.max(this.fx.shake || 0, Math.min(0.35, 0.06 + L.speed / 45));
+                this.sound?.playLand?.(Math.min(1, 0.3 + L.speed / 14));
+            }
+        }
+    }
+
     _snowSteps(ch) {
         const p = ch.group.position, last = this._stepAt || (this._stepAt = p.clone());
         const d = Math.hypot(p.x - last.x, p.z - last.z);

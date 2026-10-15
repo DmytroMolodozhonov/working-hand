@@ -551,7 +551,7 @@ export class SoundManager {
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
-            ['snowStep', () => this._synthSnowStep()], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
+            ['snowStep', () => this._synthSnowStep()], ['land', () => this._synthKnock(55, 0.22)], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
             // («Create an Ice Castle», «Ice Bridge» — IceMagic.js)
             ['iceBell', () => this._synthIceBell()], ['iceFloor', () => this._synthIceFloor(2.6)],
             ['iceDone', () => this._synthChime([523, 659, 784, 1047, 1319, 1568, 2093], 3.2, 1.5)], ['iceChime', () => this._synthChime([1568, 2093, 2637, 3136], 1.4, 3)],
@@ -1027,6 +1027,13 @@ export class SoundManager {
             d[i] = Math.max(-1, Math.min(1, s * Math.min(1, t * 3000)));
         }
         return buf;
+    }
+
+    /** Landing after a jump / a drop: a dull thud of the feet (made ahead: prewarmStep). */
+    playLand(volume = 1) {
+        if (!this.context) return;
+        if (!this.sounds.land) this.sounds.land = this._synthKnock(55, 0.22);
+        this._play(this.sounds.land, 0.6 * volume, 0.9 + Math.random() * 0.2);
     }
 
     /** A step on snow: a soft muffled crunch (the crystals giving under the foot). */

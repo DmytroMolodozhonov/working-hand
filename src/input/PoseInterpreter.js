@@ -7,6 +7,7 @@
 import { mouthOpenness } from '../game/VoiceGate.js';
 import { LegReader } from './LegReader.js';
 import { StepReader } from './StepReader.js';
+import { JumpReader } from './JumpReader.js';
 import { HeadFromBody } from './HeadFromBody.js';
 
 /**
@@ -289,6 +290,7 @@ export class PoseInterpreter {
         this.stompAt = 0;
         this.legsSeenAt = 0;
         this.legReader = new LegReader(); // (the surfboard: getting on, paddling with a leg)
+        this.jumpReader = new JumpReader(); // a real jump (the hero, the horse: Game._jumpStep, Animals)
     }
 
     /**
@@ -409,6 +411,7 @@ export class PoseInterpreter {
 
             this._legs(lm, data);
             data.legs = this.legReader.read(lm);
+            data.jump = this.jumpReader.read(lm);
 
             // Crouch with hysteresis
             const noseY = data.nose.y;
@@ -424,6 +427,7 @@ export class PoseInterpreter {
             }
         }
 
+        if (!data.jump) data.jump = this.jumpReader.read(null); // (no pose: a jump lost in the air still lands)
         data.stompAt = this.stompAt;
         data.legsSeenAt = this.legsSeenAt;
         if (results.rightHandLandmarks) data.rightHandLandmarks = results.rightHandLandmarks;

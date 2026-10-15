@@ -28,6 +28,7 @@ const _qId = new THREE.Quaternion();
 import { DetailedHand } from './DetailedHand.js';
 import { stumpEnd } from './LimbSurgery.js';
 import { KD } from '../game/Impact.js';
+import { G, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -139,6 +140,41 @@ export class VoxelCharacter {
         this.legPose = null; // {left: {hip}, right: {hip}}: the legs held so (a surfboard), not walked
         this.boardRoll = 0; // the body tilted sideways with a surfboard under it
         this.flying = false;
+        // the hero's gravity: ONE multiplier for falling, jumping and walking (1 = Earth; Jump.js says how to change it)
+        this.gravityK = 1;
+        this.jumpAir = false; // up in a real jump (JumpReader → Game._jumpStep → jump())
+        this.jumpVel = { x: 0, z: 0 }; // the run carried on through the air (a long jump)
+        this._jumpT = 0;
+        this._planar = { x: 0, z: 0 }; // how fast the body has been walking (smoothed over ~0.5 s)
+    }
+
+    /**
+     * A real jump: the legs push the body up (strength 0..1 from JumpReader, the gravity's
+     * multiplier decides how high), the run goes on through the air. The caller checks that
+     * the body may jump (on the ground, not in water, not lying…). True: it left the ground.
+     */
+    jump(strength) {
+        const v = jumpSpeed(strength, this.gravityK);
+        if (v < 1 || this.jumpAir || !this.onGround) return false;
+        this.verticalVelocity = v;
+        this.jumpAir = true;
+        this.onGround = false;
+        this._jumpT = 0;
+        this._jumpS = strength;
+        this.airTop = this.group.position.y;
+        // (a standing jump stays in place: only a real run is carried on — a long jump)
+        const sp = Math.hypot(this._planar.x, this._planar.z);
+        const keep = sp > 2 ? 1 : 0;
+        this.jumpVel.x = this._planar.x * keep; this.jumpVel.z = this._planar.z * keep;
+        return true;
+    }
+
+    /** The jump turned out stronger while the body still went up (it went up higher): a little more push. */
+    jumpBoost(strength) {
+        if (!this.jumpAir || this.verticalVelocity <= 0 || this._jumpT > 0.25 || strength <= (this._jumpS || 0)) return;
+        const v = jumpSpeed(strength, this.gravityK) - G * this.gravityK * this._jumpT;
+        if (v > this.verticalVelocity) this.verticalVelocity = v;
+        this._jumpS = strength;
     }
 
     createCharacter() {
@@ -646,12 +682,18 @@ export class VoxelCharacter {
         this._pitchOwned = own;
         this.stepping = Math.max(0, (this.stepping || 0) - dt);
 
+        if (!move && !this.remote) this.jumpAir = false; // (the horse, the bed, flight… took the body)
         if (move) {
-            // Movement (original speeds)
-            if (this.isRunning) {
+            const fromX = this.group.position.x, fromZ = this.group.position.z;
+            if (this.jumpAir) {
+                // in the air: the run goes on as it was at the take-off, the legs push nothing
+                this._jumpT += dt;
+                this.group.position.x += this.jumpVel.x * dt;
+                this.group.position.z += this.jumpVel.z * dt;
+            } else if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 9.75; // (the run: 30% faster than the first 7.5, as the author asked)
                 // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book)
-                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1);
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1) * walkK(this.gravityK); // (a heavy planet: slower)
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
@@ -678,10 +720,10 @@ export class VoxelCharacter {
                 this.onGround = false;
                 this.airTop = null;
                 this.group.position.y += (Math.max(this.swimY, targetY) - y) * Math.min(1, 6 * dt);
-            } else if (y > targetY + 0.6 && !this.isCrouching) {
-                // Falling into a crater / off a ledge
+            } else if ((y > targetY + 0.6 && !this.isCrouching) || this.jumpAir) {
+                // Falling into a crater / off a ledge (or up in a jump) — the hero's gravity
                 this.airTop = Math.max(this.airTop ?? y, y);
-                this.verticalVelocity -= 20 * dt;
+                this.verticalVelocity -= G * this.gravityK * dt;
                 let ny = y + this.verticalVelocity * dt;
                 // (thrown up under a cave roof / a ceiling: the head stops at the rock, never in it)
                 if (collision?.ceilingAt) {
@@ -692,17 +734,26 @@ export class VoxelCharacter {
                 this.onGround = this.group.position.y <= targetY + 1e-3;
                 if (this.onGround) {
                     // (how far it fell and how fast it hit the ground: a high fall knocks over — Knockdown.js)
-                    this.landing = { drop: this.airTop - this.group.position.y, speed: -this.verticalVelocity, at: performance.now() };
+                    // (the drop as it would hurt on Earth: a long slow fall on the Moon is a soft one)
+                    this.landing = { drop: (this.airTop - this.group.position.y) * this.gravityK, speed: -this.verticalVelocity, at: performance.now(), jump: this.jumpAir };
+                    this.jumpAir = false;
                     this.airTop = null;
                     this.verticalVelocity = 0;
                 }
             } else {
                 // (the last bit of a fall is eased onto the ground here: it lands now)
-                if (this.airTop != null) this.landing = { drop: this.airTop - targetY, speed: -this.verticalVelocity, at: performance.now() };
+                if (this.airTop != null) this.landing = { drop: (this.airTop - targetY) * this.gravityK, speed: -this.verticalVelocity, at: performance.now() };
                 this.verticalVelocity = 0;
                 this.airTop = null;
                 this.onGround = true;
                 this.group.position.y += (targetY - y) * Math.min(1, 10 * dt);
+            }
+            // how fast the body walks (smoothed): a jump carries it on
+            if (dt > 0 && !this.jumpAir) {
+                const k = Math.min(1, dt * 4), dx = this.group.position.x - fromX, dz = this.group.position.z - fromZ;
+                const far = dx * dx + dz * dz > 25 * dt * dt * 100; // (teleported, not walked)
+                this._planar.x += ((far ? 0 : dx / dt) - this._planar.x) * k;
+                this._planar.z += ((far ? 0 : dz / dt) - this._planar.z) * k;
             }
         }
 
@@ -726,6 +777,12 @@ export class VoxelCharacter {
             const flutter = Math.sin(this.runCycle) * 0.05;
             this.leftLegPivot.rotation.x += (flutter - this.leftLegPivot.rotation.x) * k;
             this.rightLegPivot.rotation.x += (-flutter - this.rightLegPivot.rotation.x) * k;
+        } else if (this.jumpAir) {
+            // in a jump: the knees come up a little, both legs together
+            const k = Math.min(1, 10 * dt);
+            const tuck = this.verticalVelocity > 0 ? -0.55 : -0.25;
+            this.leftLegPivot.rotation.x += (tuck - this.leftLegPivot.rotation.x) * k;
+            this.rightLegPivot.rotation.x += (tuck - this.rightLegPivot.rotation.x) * k;
         } else if (this.isRunning || this.stepping > 0) {
             const intensity = this.isRunning ? this.runIntensity : 0.6;
             const animSpeed = 8 + (intensity * 12);
@@ -839,7 +896,7 @@ export class VoxelCharacter {
 
     /** How much lower the body is: crouching, or on the stumps with both legs cut off. */
     bodyDrop() {
-        return Math.max(this.isCrouching ? 1.0 : 0, this.legDrop || 0);
+        return Math.max(this.isCrouching ? 1.0 : 0, this.legDrop || 0) + heavySink(this.gravityK); // (a heavy planet: the knees give a little)
     }
 
     /** V3 (stable), V4 and V5 (the full hand, being finished) are all the voxel SimplifiedHand. */
@@ -896,6 +953,7 @@ export class VoxelCharacter {
             ra: q(this.rightArmAnchor), re: q(this.rightElbowAnchor),
             run: this.isRunning || this.stepping > 0 ? r2(this.isRunning ? this.runIntensity : 0.6) : -1,
             cr: this.isCrouching ? 1 : 0,
+            jp: this.jumpAir ? (this.verticalVelocity > 0 ? 2 : 1) : undefined, // (up in a jump: the legs tucked)
             kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
             tb: this.knockedDown && this.tumbleAng ? r3(this.tumbleAng) : undefined, // (flipping over in the air: «Джолт»)
             ku: this.knockedDown && this.liftUp > 0 ? r2(this.liftUp) : undefined,

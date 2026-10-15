@@ -175,9 +175,7 @@ export class Animals {
         this._netT = 0;
         this._treeT = 0;
         this.riding = null; // the horse I ride
-        this._noseHist = [];
         this._feedT = 0;
-        this._jumpAt = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test';
         this.guards = new HerdGuards(this); // (a herd's hidden bull / leader ram)
     }
@@ -763,15 +761,22 @@ export class Animals {
         if (a.pegasus) { a.flyCode = 0; a.landing = false; a.riderFly = false; }
     }
 
+    /** A real jump (JumpReader — the same one the hero jumps with): true once per jump. */
     _detectJump(dt) {
-        const pose = this.game.currentPose;
-        const now = performance.now();
-        if (!pose?.nose) return false;
-        this._noseHist.push({ t: now, y: pose.nose.y });
-        while (this._noseHist.length && now - this._noseHist[0].t > 350) this._noseHist.shift();
-        const first = this._noseHist[0];
-        // the head jumps up in the picture (image y goes down)
-        if (first && first.y - pose.nose.y > 0.09 && now - this._jumpAt > 1200) { this._jumpAt = now; this._noseHist.length = 0; return true; }
+        const J = this.game.currentPose?.jump;
+        if (!J) return false;
+        const first = this._jumpSeen == null, fresh = J.jumps !== this._jumpSeen;
+        this._jumpSeen = J.jumps;
+        return fresh && !first;
+    }
+
+    /** A horse close enough to jump onto (a jump by it gets on it instead of a jump on the spot). */
+    horseNear() {
+        const me = this.game.character.group.position;
+        for (const a of this.list) {
+            if (a.dead || a.type !== 'horse' || a.rider || a.cart) continue;
+            if (Math.hypot(a.group.position.x - me.x, a.group.position.z - me.z) < 3) return true;
+        }
         return false;
     }
 
