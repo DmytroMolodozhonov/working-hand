@@ -76,11 +76,14 @@ export function treeFollowPlan(me, master, s = 1) {
 const FIRE = new Set(['Inferno', 'Hellfire', 'InfernoMaxima', 'FireMaxima', 'Fire', 'fire', 'campfire', 'burn', 'burning']);
 export const isFireDamage = (kind) => FIRE.has(kind);
 /**
- * …and so do lightning (electricity) and the mightiest spells (80+ mana: they break a tree too —
- * the author): «Lightning Strike», «Total Destruction» (+ Maxima), «Circle Attack» (+ Maxima),
- * «Inspirius». Blades, fists, «Авада», «Бомбардо» and the other spells still do nothing.
+ * …and so do lightning (electricity), the bursting spells («Бомбардо», «Бомбардо Максима» — there
+ * is fire in them; they tear the tree apart) and the mightiest spells (80+ mana — the author):
+ * «Total Destruction» (+ Maxima), «Circle Attack» (+ Maxima), «Inspirius». Blades, fists,
+ * «Авада» and the other spells still do nothing.
  */
-export const MIGHTY_ON_TREES = new Set(['Lightning', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius']);
+export const MIGHTY_ON_TREES = new Set(['Lightning', 'LightningStrike', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius']);
+/** These tear it apart (splinters; killed — it falls like a felled trunk) instead of burning it. */
+const TEARS = new Set(['Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius']);
 /** How much of a blow of `kind` a living tree takes. */
 export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has(kind) ? dmg : 0);
 /** The caster's mana after dt seconds of their living tree (Creative: no limit). */
@@ -392,8 +395,25 @@ export class LivingTrees {
         if (!this.auth) return; // (the host replays the fire too and decides)
         if (by != null) t.lastBy = by; // (who set it burning: the mana for it, if it burns down)
         t.hp = Math.max(0, t.hp - dmg);
-        if (isFireDamage(kind) || kind === 'Lightning' || kind === 'LightningStrike') this.ignite(t); // (a mighty blast breaks it without setting it alight)
+        if (TEARS.has(kind)) {
+            // a burst tears it: splinters of bark and wood, leaves; killed — it is torn apart and falls
+            const u = t.model.userData;
+            for (let i = 0; i < 14; i++) g.fx?.debris?.spawn(p.x + (Math.random() - 0.5) * 1.6 * u.s, p.y + 1 + Math.random() * 6 * u.s, p.z + (Math.random() - 0.5) * 1.6 * u.s,
+                (Math.random() - 0.5) * 9, 3 + Math.random() * 6, (Math.random() - 0.5) * 9, i % 3 ? u.trunk.getHex() : 0x3f7a2a, 0.15 + Math.random() * 0.3, 2, { shrink: 0.1, fade: false, spin: 10 });
+            if (t.hp <= 0) this._tornApart(t);
+            return;
+        }
+        this.ignite(t); // (fire and lightning set it burning)
         if (t.hp <= 0) this._burnDown(t);
+    }
+
+    /** (authority) A burst killed it: torn apart, it topples like a felled trunk (no fire). */
+    _tornApart(t) {
+        if (t.lastBy != null) creditKill(this.game, t.lastBy, { kind: 'livingTree' }); // (mana: a magical creature)
+        t.form = 0;
+        t.swing = null;
+        t.phase = 'fall'; t.pt = 0; t.theta = 0.12; t.omega = 0.6;
+        if (t.owner === this.game.localId) this.game.hud?.setVoice?.('💥 Ваше живое дерево разорвало', true);
     }
 
     /** Fire touched it: it burns for a while. */

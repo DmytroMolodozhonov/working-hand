@@ -21,9 +21,9 @@ test('«Alive»: 25 mana, 15 HP; only fire hurts the tree; its life drains the m
     assert.equal(ALIVE.DRAIN, 0.5);
     assert.equal(ALIVE.RANGE, 50);
     for (const k of ['Inferno', 'FireMaxima', 'campfire', 'burn']) assert.equal(aliveDamage(k, 3), 3, k);
-    for (const k of ['AvadaKedavra', 'melee', 'Bombardo', 'Sapira', 'SapiraDuel', 'Stupefy', 'tree', null]) assert.equal(aliveDamage(k, 999), 0, String(k));
+    for (const k of ['AvadaKedavra', 'melee', 'Sapira', 'SapiraDuel', 'Stupefy', 'tree', null]) assert.equal(aliveDamage(k, 999), 0, String(k));
     // (the author: lightning and the mightiest spells — 80+ mana — break a living tree too)
-    for (const k of ['Lightning', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius']) assert.equal(aliveDamage(k, 7), 7, k);
+    for (const k of ['Lightning', 'LightningStrike', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius']) assert.equal(aliveDamage(k, 7), 7, k);
     assert.equal(aliveDrain(10, 2), 9);
     assert.equal(aliveDrain(0.2, 1), 0);
     assert.equal(aliveDrain(10, 2, true), 10, 'Creative: no limit');
@@ -76,7 +76,7 @@ test('the living tree: comes alive in ~3 s; Avada / swords do nothing; Inferno b
     assert.equal(t.phase, 'alive');
     g.livingTrees.hit(t, 999, 'AvadaKedavra');
     g.livingTrees.hit(t, 8, 'melee');
-    g.livingTrees.hit(t, 30, 'Bombardo');
+    g.livingTrees.hit(t, 30, 'Sapira');
     assert.equal(t.hp, 15);
     g.livingTrees.hit(t, 3, 'Inferno');
     assert.equal(t.hp, 12);
@@ -85,6 +85,14 @@ test('the living tree: comes alive in ~3 s; Avada / swords do nothing; Inferno b
     assert.equal(t.phase, 'burn');
     run(g, ALIVE.COLLAPSE + 0.2);
     assert.equal(g.livingTrees.list.length, 0, 'burnt down and gone');
+    // «Бомбардо» tears another one apart: no fire, it topples like a felled trunk
+    const t2 = g.livingTrees.spawn(D, 'me');
+    run(g, 3.3);
+    g.livingTrees.hit(t2, 6, 'Bombardo');
+    assert.equal(t2.hp, 9);
+    assert.ok(!(t2.burnT > 0), 'a burst does not set it alight');
+    g.livingTrees.hit(t2, 24, 'BombardoMaxima');
+    assert.equal(t2.phase, 'fall', 'torn apart');
 });
 
 test('the living tree lives on its caster\'s mana: no regeneration, it drains; mana gone → it stiffens and falls', () => {
