@@ -37,6 +37,11 @@ const run = (g, s, dt = 0.05) => { for (let t = 0; t < s; t += dt) g.livingTrees
 test('«Alive» at a grave: it shakes, a hand comes up, the earth bursts open (dug), the skeleton climbs out', () => {
     const g = fakeGame();
     assert.ok(graveOnRay(g.castleLife.index, new THREE.Vector3(0, 1.5, 0.5), new THREE.Vector3(6, -1.5, 0).normalize()), 'the hand finds the grave');
+    // a hand raised to cast (forward and 30° up), from 20 m: still that grave (the author had to stand too close)
+    const far = { near: () => [{ id: 'cs1_2', graves: [{ ...GRAVE, x: GRAVE.x + 20 }] }] };
+    assert.ok(graveOnRay(far, new THREE.Vector3(GRAVE.x, 1.5, GRAVE.z), new THREE.Vector3(Math.cos(0.52), Math.sin(0.52), 0)), 'raised hand, 20 m');
+    assert.equal(graveOnRay(far, new THREE.Vector3(GRAVE.x, 1.5, GRAVE.z), new THREE.Vector3(0, 0, 1)), null, 'pointing elsewhere: none');
+    assert.equal(graveOnRay(far, new THREE.Vector3(GRAVE.x, 1.5, GRAVE.z), new THREE.Vector3(0.05, 1, 0).normalize()), null, 'pointing at the sky: none');
     assert.equal(g.livingTrees.cast(true), 'Alive');
     const t = g.livingTrees.list[0];
     assert.ok(t.skel && t.isLivingTree, 'a skeleton — a living tree in principle');

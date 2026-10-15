@@ -31,7 +31,7 @@ export const SKEL = {
     SPEED: 2.4, RUN: 4.0,
     REACH: 5.4, // m its arms reach
     KEEP: 7, // m from its master (it is as big as a man)
-    AIM: 14, // m: the grave pointed at
+    AIM: 28, // m: the grave pointed at (twice the first 14: the author had to stand too close)
     BONE: 0xe6dcc0,
 };
 
@@ -46,19 +46,23 @@ export const SKEL_DUEL_IMMUNE = 'no life in it to take: «Авада Кедав�
 export const skeletonDamage = (kind, dmg) => (isFireDamage(kind) || MIGHTY_ON_TREES.has(kind) || PHYS.has(kind) ? dmg : 0);
 
 /**
- * The grave the hand points at (the nearest along the ray, within ~10° and SKEL.AIM m): a grave
- * of a village graveyard near (CastleIndex). → {grave, dist} | null
+ * The grave the hand points at — by the hand's heading over the ground (within ~11° and SKEL.AIM m),
+ * not its pitch: a hand raised to cast (forward and a little up) still means the grave ahead; only a
+ * hand pointing up at the sky means none. A grave of a village graveyard near (CastleIndex). → {grave, dist} | null
  */
 export function graveOnRay(index, o, d, max = SKEL.AIM) {
     if (!index?.near) return null;
+    const hl = Math.hypot(d.x, d.z);
+    if (hl < 0.35) return null; // (the hand straight up or down: no heading)
+    const ux = d.x / hl, uz = d.z / hl;
     let best = null;
     for (const c of index.near(o.x, o.z, max)) {
         for (const q of c.graves || []) {
-            const dx = q.x - o.x, dy = q.y - o.y, dz = q.z - o.z;
-            const along = dx * d.x + dy * d.y + dz * d.z;
+            const dx = q.x - o.x, dz = q.z - o.z;
+            const along = dx * ux + dz * uz; // (how far ahead, over the ground)
             if (along < 0.5 || along > max) continue;
-            const off = Math.sqrt(Math.max(0, dx * dx + dy * dy + dz * dz - along * along));
-            if (off > Math.max(1.3, along * 0.17)) continue;
+            const off = Math.abs(dx * uz - dz * ux); // (how far beside the hand's line)
+            if (off > Math.max(1.6, along * 0.2)) continue;
             if (!best || along < best.dist) best = { grave: q, dist: along, castle: c };
         }
     }
