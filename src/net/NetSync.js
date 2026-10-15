@@ -1079,7 +1079,7 @@ export class NetSync {
             if (res.decap) z.decapitate();
             if (res.died) {
                 z.isDead = true;
-                if (g.sound) g.sound.playDeath(z.group.position);
+                if (g.sound && !z.dummy) g.sound.playDeath(z.group.position);
             } else if (m.by !== this.me && g.sound) {
                 g.sound.playHit();
             }

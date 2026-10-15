@@ -253,7 +253,7 @@ export class SoundManager {
         let minDist = Infinity;
         const candidates = [];
         for (const z of zombies) {
-            if (z.isDead) continue;
+            if (z.isDead || z.dummy) continue; // (the training dummy is silent: no growls, no battle music)
             const dist = playerPos.distanceTo(z.group.position);
             if (dist < minDist) minDist = dist;
             if (dist < 15) candidates.push({ zombie: z, dist });

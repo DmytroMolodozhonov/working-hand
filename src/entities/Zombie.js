@@ -457,7 +457,7 @@ export class Zombie {
         this.isAttacking = false;
         this.isStunned = false;
         this.corpseTimer = 0;
-        if (this.ctx.sound) this.ctx.sound.playDeath(this.group.position);
+        if (this.ctx.sound && !this.dummy) this.ctx.sound.playDeath(this.group.position);
     }
 
     turnToSand() {
