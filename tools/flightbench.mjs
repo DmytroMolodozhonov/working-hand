@@ -245,7 +245,12 @@ async function runLevel(browser, url, level) {
     await sleep(4000); // (the first frames: shaders of what is on screen)
     // (Circle Attack and Inspirius compile their looks a couple of game seconds after the start, on the
     // ground; here the frames are slow, so wait for that before taking off — in a real game it is long done)
-    await page.waitForFunction(() => { const g = window.__zns.game; return (g.circleAttack?._warmed ?? true) && (g.inspirius?._warmed ?? true); }, null, { timeout: 120000 }).catch(() => {});
+    for (let i = 0; i < 240; i++) {
+        const st = await page.evaluate(() => { const g = window.__zns.game; return { ok: !!(g.circleAttack?._warmed ?? true) && !!(g.inspirius?._warmed ?? true), sound: !!(g.circleAttack?._soundReady ?? true) && !!(g.inspirius?._soundsReady ?? true), frames: g.frameCount }; });
+        if (st.ok && st.sound) break;
+        if (i % 20 === 19) console.log('  (ждём прогрев эффектов…)', JSON.stringify(st));
+        await sleep(500);
+    }
     await sleep(1500);
     let cdp = null;
     if (PROFILE && level === LEVELS[LEVELS.length - 1]) {

@@ -15,7 +15,7 @@ export function lastWords(text, n = HEARD_WORDS) {
     const words = String(text ?? '').trim().split(/\s+/).filter(Boolean);
     return words.slice(-n).join(' ');
 }
-import { BLOCK, BASE_COLORS } from '../world/Terrain.js';
+import { BLOCK, BASE_COLORS, CHUNK } from '../world/Terrain.js';
 
 /**
  * The minimap's size, % of 240 × 160 (settings → «Размер мини-карты»): the same picture,
@@ -429,13 +429,23 @@ export class Hud {
         }
         // (with a shift: only the columns / rows that came into the window)
         const fresh = (x, z) => !shift || x < Math.max(0, -sx) || x >= size - Math.max(0, sx) || z < Math.max(0, -sz) || z >= size - Math.max(0, sz);
-        for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) if (fresh(x, z)) H[(z + 1) * (size + 1) + (x + 1)] = d.topLayer(cx - half + x, cz - half + z);
+        // (land not made yet — in a fast flight it is being made in a worker — is not made here for the
+        // map: it stays plain green this time and the map is drawn again until it is all there)
+        const have = (wx, wz) => d.hasChunk(Math.floor(wx / CHUNK), Math.floor(wz / CHUNK));
+        let missing = false;
+        for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) {
+            if (!fresh(x, z)) continue;
+            const wx = cx - half + x, wz = cz - half + z;
+            if (have(wx, wz)) H[(z + 1) * (size + 1) + (x + 1)] = d.topLayer(wx, wz);
+            else { H[(z + 1) * (size + 1) + (x + 1)] = 0; missing = true; }
+        }
         for (let z = 0; z < size; z++) {
             for (let x = 0; x < size; x++) {
                 if (!fresh(x, z)) continue;
                 const wx = cx - half + x, wz = cz - half + z;
                 const top = H[(z + 1) * (size + 1) + (x + 1)];
                 const i = (z * size + x) * 4;
+                if (missing && !have(wx, wz)) { px[i] = 0x4C; px[i + 1] = 0xAF; px[i + 2] = 0x50; px[i + 3] = 255; continue; }
                 let col, shade = 1;
                 // water above the ground?
                 let depth = 0;
@@ -458,7 +468,7 @@ export class Hud {
         ti.ctx.putImageData(ti.img, 0, 0);
         ti.cx = cx;
         ti.cz = cz;
-        ti.version = d.version;
+        ti.version = missing ? -1 : d.version; // (-1: all of it again next time)
     }
 
     drawMinimap(charPos, rotY, world, zombies, others = [], server = null, castles = []) {

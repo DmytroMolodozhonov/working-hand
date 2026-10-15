@@ -8,6 +8,7 @@
  * chunks it made lately (the next chunk over needs most of them again), not more.
  */
 import { TerrainData } from './Terrain.js';
+import { buildFlora } from './FloraBuild.js';
 
 const KEEP = 240; // chunks kept (≈ 140 KB each)
 let data = null;
@@ -18,6 +19,12 @@ self.onmessage = (e) => {
         data = new TerrainData();
         data.generate(m.opts);
         data.skipSeaTop = !!m.skipSeaTop;
+        return;
+    }
+    if (m.type === 'flora' && data) {
+        // the tall grass and flowers of a chunk (Flora.js) — the chunk as generated
+        const out = buildFlora(data, data.chunk(m.cx, m.cz));
+        self.postMessage({ type: 'flora', id: m.id, key: m.key, out }, [out.pos.buffer, out.nor.buffer, out.col.buffer, out.sway.buffer, out.glow.buffer]);
         return;
     }
     if (m.type !== 'build' || !data) return;

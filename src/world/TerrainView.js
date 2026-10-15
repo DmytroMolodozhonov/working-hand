@@ -57,6 +57,8 @@ export class Terrain {
         this._done = []; // finished chunks waiting to go in
         this._local = []; // chunks to make here (next to a changed one)
         this._jobId = 0;
+        this._floraAsked = new Map(); // chunk key -> job id (Flora.js: tall grass made in a worker)
+        this._floraDone = [];
         if (typeof Worker === 'undefined' || typeof window === 'undefined' || window.__ZNS_NO_TERRAIN_WORKERS__) return;
         const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
         try {
@@ -75,6 +77,27 @@ export class Terrain {
         }
     }
 
+    /** Can the workers make the tall grass of a chunk (Flora.js)? */
+    get floraAsync() { return !!this._workers; }
+
+    /** Ask a worker for the grass and flowers of a chunk as generated (once until it comes). */
+    askFlora(key, cx, cz) {
+        if (!this._workers || this._floraAsked.has(key)) return;
+        let w = this._workers[0];
+        for (const o of this._workers) if (o.load < w.load) w = o;
+        w.load++;
+        const id = ++this._jobId;
+        this._floraAsked.set(key, id);
+        w.postMessage({ type: 'flora', id, key, cx, cz });
+    }
+
+    /** The grass the workers made since the last look: [{key, out}]. */
+    takeFlora() {
+        const out = this._floraDone;
+        this._floraDone = [];
+        return out;
+    }
+
     /** The workers failed (an old browser): everything is made here from now on. */
     _stopWorkers() {
         if (!this._workers) return;
@@ -82,10 +105,17 @@ export class Terrain {
         this._workers = null;
         this._inFlight.clear();
         this._done.length = 0;
+        this._floraAsked.clear();
+        this._floraDone.length = 0;
         this._center = null; // (plan again: what was being made is wanted again)
     }
 
     _onBuilt(w, m) {
+        if (m.type === 'flora') {
+            w.load--;
+            if (this._floraAsked.get(m.key) === m.id) { this._floraAsked.delete(m.key); this._floraDone.push(m); }
+            return;
+        }
         if (m.type !== 'built') return;
         w.load--;
         const f = this._inFlight.get(m.key);
