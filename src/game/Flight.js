@@ -64,6 +64,18 @@ export class FlightController {
         return true;
     }
 
+    /**
+     * Floating with nothing under the feet (space, Space.js): flying, hovering on the spot — never
+     * the take-off (no arms to hold up) and never a landing.
+     */
+    float() {
+        this.reset();
+        this.state = 'cruise';
+        this.t = 2;
+        this.hovering = true;
+        this.tilt = 0.15;
+    }
+
     /** «Флайн» while hovering: fly on. */
     resume() {
         if (!this.hovering) return false;

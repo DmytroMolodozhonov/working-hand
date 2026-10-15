@@ -21,6 +21,11 @@ self.onmessage = (e) => {
         data.skipSeaTop = !!m.skipSeaTop;
         return;
     }
+    if (m.type === 'planets' && data) {
+        // the planets changed (made, terraformed…: Planets.js) — their ground is made by the new recipe
+        data.setPlanets(m.s);
+        return;
+    }
     if (m.type === 'site' && data && data.castles) {
         // a castle's / a wizard's tower's plan for a cell (the same as the main thread would make)
         const c = data.castles.cellOf(m.gx, m.gz), t = data.towers.cellOf(m.gx, m.gz);

@@ -110,7 +110,7 @@ export class RemoteAvatar {
         }
     }
 
-    update(dt, ships = null) {
+    update(dt, ships = null, space = null) {
         const s = this.target;
         if (!s) return;
         const ch = this.character;
@@ -120,6 +120,8 @@ export class RemoteAvatar {
         // on a ship: their place on its deck, put where this computer draws the ship (no sliding off)
         this.ship = Array.isArray(s.sh) ? s.sh[0] : null;
         if (this.ship && ships?.remoteOnShip(s.sh, _sh)) p = [_sh.x, _sh.y, _sh.z];
+        // in space: their true place there, put where my own space is drawn (Space.js: each hero has his own origin)
+        if (s.sp && space?.remoteWorld(s.sp, this._spw || (this._spw = []))) p = this._spw;
         const g = ch.group.position;
         if (Math.hypot(p[0] - g.x, p[2] - g.z) > 10) g.set(p[0], p[1], p[2]);
         else { g.x += (p[0] - g.x) * k; g.y += (p[1] - g.y) * k; g.z += (p[2] - g.z) * k; }

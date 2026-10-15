@@ -142,6 +142,7 @@ export const SPELL_COST = {
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
     IceCastle: 500, // «Create an Ice Castle»: a stamp, then the hands raise it (IceMagic.js; free in Creative)
     IceBridge: 50, // «Ice Bridge»: an arch of ice after the hand (IceMagic.js)
+    FlyingMaxima: 30, // «Flying Maxima»: up out of the air into space (Space.js; then breathing there: 0.5 a second)
 };
 
 /** Damage to players (HP is 10: most spells take 2–4). */

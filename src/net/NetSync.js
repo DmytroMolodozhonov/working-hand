@@ -162,6 +162,7 @@ export class NetSync {
             mhouses: g.houseMagic?.netList() || [], // houses made by magic (HouseMagic.js)
             mcastles: g.castleMagic?.netList() || [], // castles made by magic (CastleMagic.js)
             icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
+            planets: g.space?.planets.toJSON() || null, // the planets (made, changed by spells: Space.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
@@ -197,6 +198,7 @@ export class NetSync {
         if (msg.mhouses) g.houseMagic?.applyNet(msg.mhouses);
         if (msg.mcastles) g.castleMagic?.applyNet(msg.mcastles);
         if (msg.icemagic) g.iceMagic?.applyNet(msg.icemagic);
+        if (msg.planets) g.space?.planets.applyJSON(msg.planets);
         if (msg.castles) g.castleLife?.restore(msg.castles);
         if (msg.ships) g.ships?.restore(msg.ships);
         if (msg.guns) g.ships?.cannons.restore(msg.guns);
@@ -263,6 +265,7 @@ export class NetSync {
                 bd: g.boards?.netMine(), // (the surfboard I carry or ride)
                 bw: g.gear?.netBow(), // (an arrow on my bow's string, and how far it is drawn)
                 dw: g.items?.wand?.dragon ? 1 : undefined, // (the dragon's wand in my hand: my fire spells are 60% stronger)
+                sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
             }, true);
         }
         // Water ball in my hand
@@ -819,6 +822,7 @@ export class NetSync {
             case 'mcastle': g.castleMagic?.onNet(m, this.net.isHost); break; // («Create a Castle»)
             case 'mhouse': g.houseMagic?.onNet(m, this.net.isHost); break; // («Create a House», «Improve a House»)
             case 'icemagic': g.iceMagic?.onNet(m, this.net.isHost); break; // («Create an Ice Castle», «Ice Bridge»)
+            case 'planets': g.space?.onNet(m, this.net.isHost); break; // (the planets: the host's, a guest's ask — Space.js)
             case 'bice': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.hitBird(b, 99, 'ice'); } break;
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;

@@ -117,6 +117,7 @@ import { ZombieSpawn, worldLights, litAt } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
 import { IceMagic } from './IceMagic.js';
+import { Space } from './Space.js';
 import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
@@ -397,6 +398,7 @@ export class Game {
         this.houseMagic = new HouseMagic(this); // «Create a House», «Improve a House» (HouseMagic.js)
         this.castleMagic = new CastleMagic(this); // «Create a Castle» (CastleMagic.js)
         this.iceMagic = new IceMagic(this); // «Create an Ice Castle», «Ice Bridge» (IceMagic.js)
+        this.space = new Space(this); // «Космос»: Flying Maxima, the Solar System, the planets (Space.js, world/Planets.js)
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
         this.burnWreck = new BurnWreck(this); // a house burning down: what loses its support falls, chests burn (BurnWreck.js)
@@ -1045,8 +1047,15 @@ export class Game {
     }
 
     // ============================================================== players
+    /** Does this computer run the Earth's life for other players while my hero is off it (the host)? */
+    _earthNeeded() {
+        if (!this.net?.active || !this.authority) return false;
+        for (const r of this.remotes.values()) if (!r.dead && r.position.y < 30000 && r.position.x < 240000) return true;
+        return false;
+    }
+
     _playerPositions() {
-        const list = [this.character.group.position];
+        const list = this.space?.offEarth ? [] : [this.character.group.position]; // (off the Earth: not here for its creatures)
         for (const r of this.remotes.values()) list.push(r.position);
         return list;
     }
@@ -1056,7 +1065,7 @@ export class Game {
         // (an invisible player: where they were last noticed, for a few seconds — Invisibility.aiPos)
         const seen = (id, pos) => (this.invis ? this.invis.aiPos(id, pos) : pos);
         let best = seen(this.localId, this.character.group.position), bestId = this.localId, bestD = best ? p.distanceToSquared(best) : Infinity;
-        if (this.isDeadLocal) { best = null; bestD = Infinity; }
+        if (this.isDeadLocal || this.space?.offEarth) { best = null; bestD = Infinity; }
         for (const [id, r] of this.remotes) {
             if (r.dead) continue;
             const rp = seen(id, r.position);
@@ -1190,6 +1199,17 @@ export class Game {
             return null;
         }
         if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
+        // «Flying Maxima»: out of the air, into space (Space.js) — only in flight
+        if (name === 'FlyingMaxima') {
+            const tired = this.combat.check(name);
+            if (tired) { if (isFinal) this.hud.setVoice(tired, true); return null; }
+            const r = this.space.cast(isFinal);
+            if (r) this.combat.pay(name);
+            return r;
+        }
+        // off the Earth some spells have nothing to work with: no air for fire, no water, no ground in space (Space.js)
+        const offEarth = this.space?.spellBlocked(name);
+        if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
         // «Максима» while my house's dome grows: it grows twice as fast (before the water's / the duel's)
@@ -2378,6 +2398,7 @@ export class Game {
         this.impact.reset();
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.inventory?.ensureStarterWand();
+        this.space?.onRespawn(); // (back on the Earth: nothing of space left on)
         this.death?.respawned(); // game.onRespawn hooks
         if (this.sync) this.sync.respawned();
         for (let i = 0; i < 30; i++) this.fx.spark(_v1.copy(p).add(_v2.set(0, -1, 0)), i % 2 ? 0xffffff : 0x9fd8ff, 0.15, _v2.set((Math.random() - 0.5) * 4, Math.random() * 5, (Math.random() - 0.5) * 4), 0.7);
@@ -2422,6 +2443,7 @@ export class Game {
     /** Debug keys: cast in the camera direction. */
     castDebug(name) {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
+        if (name === 'FlyingMaxima') { if (!this.flight.active) this.startFlight(true); this.flight.state = 'cruise'; this.space?.cast(true); return; }
         if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
         if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
@@ -2533,6 +2555,7 @@ export class Game {
         zoo.traverse((o) => { if (o.isMesh && !o.geometry.userData?.keep && !o.geometry.userData?.shared) o.geometry.dispose(); });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
+        this.space?.prewarm(this.renderer); // (every shader of space: the planets, the Sun, the rings, the stars)
         this.prewarmedPrograms = this.renderer.info.programs.length;
     }
 
@@ -2671,8 +2694,14 @@ export class Game {
         }
 
         const isTest = this.config.mode === 'test';
-        this.ships?.update(dt); // ships move first and carry everyone standing on them
-        this.blackbeard?.update(dt); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
+        this.space?.beginFrame(); // (which world the hero is in: the Earth, space, another planet — Space.js)
+        // off the Earth (space, another planet) the Earth's own life waits — unless this computer runs it
+        // for other players still there (the host): then it goes on, without me in it (_playerPositions)
+        const earth = !this.space?.offEarth || this._earthNeeded();
+        if (earth) {
+            this.ships?.update(dt); // ships move first and carry everyone standing on them
+            this.blackbeard?.update(dt); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
+        }
         this._updatePlayer(dt);
         this.ledge.update(dt); // (palms on a ledge's edge, pulled down: the body up — before the hands are stopped at the rock)
         this.handBlocks.update(); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
@@ -2681,51 +2710,51 @@ export class Game {
         mark('игрок');
 
         this.levitation.update(dt);
-        this.levMax?.update(dt);
+        if (earth) this.levMax?.update(dt);
         this.accio.update(dt);
         this.inventory.update(dt);
         this.builder.update(dt);
         this.swim.update(dt);
-        this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
+        if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)
         this.items.update(dt);
         this.items.updateRemote();
         this.armor.update(dt);
         this.achievements.update();
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
-        this.wards?.update(dt);
+        if (earth) this.wards?.update(dt);
         this.houseMagic?.update(dt);
         this.castleMagic?.update(dt);
         this.iceMagic?.update(dt);
-        this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
-        this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
+        if (earth) this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
+        if (earth) this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
         this.scrolls.update(dt);
         this.wandMagic.update(dt);
         this.gear.update(dt);
         this.bleeding.update(dt);
-        this.animals.update(dt);
-        this.runner.update(dt);
-        this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
-        this.carriages?.update(dt);
-        this.castleLife.update(dt);
-        this.doors.update(dt);
-        this.locks.update(dt);
-        this.campfires.update(dt);
-        this.lanterns?.update(dt);
-        this.cauldrons?.update(dt);
+        if (earth) this.animals.update(dt);
+        if (earth) this.runner.update(dt);
+        if (earth) this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
+        if (earth) this.carriages?.update(dt);
+        if (earth) this.castleLife.update(dt);
+        if (earth) this.doors.update(dt);
+        if (earth) this.locks.update(dt);
+        if (earth) this.campfires.update(dt);
+        if (earth) this.lanterns?.update(dt);
+        if (earth) this.cauldrons?.update(dt);
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
-        this.crystals?.update(dt);
-        this.beds.update(dt);
-        this.houses.update(dt);
-        this.spiders.update(dt);
-        this.dragons.update(dt);
-        this.iceCastle.update(dt);
-        this.phoenixes.update(dt);
-        this.livingTrees.update(dt);
+        if (earth) this.crystals?.update(dt);
+        if (earth) this.beds.update(dt);
+        if (earth) this.houses.update(dt);
+        if (earth) this.spiders.update(dt);
+        if (earth) this.dragons.update(dt);
+        if (earth) this.iceCastle.update(dt);
+        if (earth) this.phoenixes.update(dt);
+        if (earth) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
-        this.servants.update(dt);
+        if (earth) this.servants.update(dt);
         this.invis?.update(dt);
-        this._updateCaves(dt);
+        if (earth) this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
         this.sun.update(dt);
@@ -2735,7 +2764,7 @@ export class Game {
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);
-        this.burnWreck?.update(dt);
+        if (earth) this.burnWreck?.update(dt);
         this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal) }); // (the dead don't take things)
         this.water.update(dt);
         this.combat.update(dt);
@@ -2745,7 +2774,7 @@ export class Game {
         this.strikes.update(dt); // fists, slaps, pushes, shoves: real contact only
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
-        this._updateZombies(dt);
+        if (earth) this._updateZombies(dt);
         this.creatureImpact.update(dt); // (after every creature moved: their falls and staggers are drawn on top)
         this.weapons.checkHits(this.zombies.concat(this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.dragons.targets(), this.phoenixes.targets(), this.castleLife.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : [], this.iceCastle.targets()), dt);
         this.dismember.update(dt);
@@ -2755,9 +2784,9 @@ export class Game {
         this.spells.update(dt);
         this._updateMagicGesture();
         this._updatePendingSpell();
-        if (!isTest) this._spawnWaves(dt);
+        if (!isTest && earth) this._spawnWaves(dt);
 
-        for (const r of this.remotes.values()) r.update(dt, this.ships);
+        for (const r of this.remotes.values()) r.update(dt, this.ships, this.space);
         this.handBlocks.updateRemotes(); // (their hands neither go into the walls here)
         this.handHold.update(dt); // (hands holding hands: after the others' arms are set)
         this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
@@ -2768,7 +2797,8 @@ export class Game {
         this.fx.update(dt);
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
-        this.world.update(this.character.group.position, this._viewBoost);
+        // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)
+        if (!this.space?.inSpace) this.world.update(this.character.group.position, this._viewBoost);
         this.swim.applyFog(); // (under the water: murky and blue)
         this.falling?.update(Math.min(0.05, dt));
         this.destruction?.update(Math.min(0.05, dt));
@@ -2777,6 +2807,9 @@ export class Game {
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(this.character.group.position, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
         this.seaSurface?.update(dt, this.character.group.position);
+        this.space?.afterWorld(dt); // (the sky, the light and the air of space / another planet; the breathing; the Sun's heat)
+        this.space?.uploadStep(); // (a planet's map from the worker: one a frame to the video card)
+        if (this.frameCount % 60 === 7) { this.space?.checkUnlock(); if (this.frameCount > 900 && this.space?.knows()) this.space.prepare(); }
         mark('мир');
         this._updateCamera(dt);
 
@@ -2784,14 +2817,15 @@ export class Game {
         if (!this._soundsWarm && this.frameCount > 240 && this.frameCount % 30 === 0) this._soundsWarm = !(this.sound?.prewarmStep?.() ?? false);
         // (the castles and towers ahead: made a little a frame before the minimap and the people want them)
         if (this.frameCount % 3 === 1) this.world.terrain?.warmSites?.(this.character.group.position.x, this.character.group.position.z, 900 + CASTLE_CELL, CASTLE_CELL);
-        if (this.frameCount % 5 === 0) {
+        if (this.frameCount % 5 === 0 && this.space?.inSpace) this.space.drawMap(this.hud); // (the map of the Solar System)
+        else if (this.frameCount % 5 === 0) {
             const cp = this.character.group.position;
             const others = [...this.remotes].filter(([id, r]) => !r.dead && !this.invis?.hidden(id)).map(([, r]) => r).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
             // on a server: its name on the map and a mark at its start point
             const online = this.net && this.net.active;
             const server = online ? { name: (this.net.isHost ? this.net.info?.name : this.net.serverName) || 'Сервер', players: this.remotes.size + 1, home: this.world.mapResult?.playerSpawn || { x: 0, z: 0 } } : null;
             const castleIdx = this.world.terrain?.data?.sites || this.world.terrain?.data?.castles; // (castles and wizards' towers)
-            let castles = castleIdx ? castleIdx.nearestForMap(cp) : [];
+            let castles = castleIdx && !this.space?.offEarth ? castleIdx.nearestForMap(cp) : [];
             if (this.iceCastle?.mapMark) castles = castles.concat([this.iceCastle.mapMark]); // (the Ice Castle: only once seen)
             this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
@@ -2803,7 +2837,7 @@ export class Game {
         if (logic > (this.stats.worstLogicMs || 0)) this.stats.worstLogicMs = logic;
 
         mark('прочее');
-        this.renderer.render(this.scene, this.camera);
+        if (!this.space?.render()) this.renderer.render(this.scene, this.camera); // (space: its own picture first — Space.render)
         mark('графика');
         this._frameEnd = performance.now();
         this.perf?.frame(deltaTime * 1000, parts);
@@ -2868,7 +2902,8 @@ export class Game {
         this.up.update(dt); // («Up» out of the water: the arc's sideways part)
         if (this.config.mode === 'test' && this.testState === 'setup') ch.setRunning(false);
 
-        if (flying) this._updateFlight(dt, pose);
+        if (this.space?.handles) this.space.update(dt, pose); // (the climb to space, space, the fall back: Space.js)
+        else if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
         this._jumpStep(pose);
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
@@ -3592,6 +3627,7 @@ export class Game {
             remotes: [...this.remotes.entries()].map(([id, r]) => ({ id, name: r.name, pos: [r.position.x, r.position.y, r.position.z] })),
             explosions: this.explosions.length,
             flight: { state: this.flight.state, speed: this.flight.speed, tilt: this.flight.tilt, pitch: this.flight.pitch },
+            space: this.space ? { state: this.space.state, realm: this.space.realm, P: { ...this.space.P }, speed: this.space.speed, knows: this.space.knows() } : null,
             stats: { ...this.stats, fx: { sparks: this.fx.sparks.active, debris: this.fx.debris.active } },
         };
     }

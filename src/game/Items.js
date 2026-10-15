@@ -729,9 +729,13 @@ export class ItemSystem {
         }
         if (L.rest || L.accio || L.lev) return; // («Акцио» / «Левиоса» carries it)
         if (L.remote) { m.position.lerp(L.remote, Math.min(1, dt * 8)); return; }
-        L.vel.y -= 14 * dt;
-        // the air: quadratic drag by shape and weight (a book flutters, a hammer flies on)
-        L.vel.multiplyScalar(1 / (1 + (AERO[L.item.kind] ?? 0.02) * L.vel.length() * dt));
+        // (in space — above everything, Space.js: no weight, no air — it floats on as it was let go)
+        const space = m.position.y > 30000;
+        if (!space) {
+            L.vel.y -= 14 * dt;
+            // the air: quadratic drag by shape and weight (a book flutters, a hammer flies on)
+            L.vel.multiplyScalar(1 / (1 + (AERO[L.item.kind] ?? 0.02) * L.vel.length() * dt));
+        }
         // spinning: a real angular velocity about its axis (the wrist's snap), slowly dying
         const wv = L.spin.length();
         if (wv > 1e-3) { m.quaternion.premultiply(_q.setFromAxisAngle(_v.copy(L.spin).divideScalar(wv), wv * dt)); L.spin.multiplyScalar(Math.max(0, 1 - 0.2 * dt)); }

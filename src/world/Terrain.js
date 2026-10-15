@@ -29,6 +29,8 @@ import { CAVES, growCaveSystem, caveMouth, carveColumn, chamberFloor, systemIn, 
 import { LAIR, lairOf } from './DragonLairs.js';
 import { IceCastleSite, ICE_BLOCK } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
+import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
+import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -49,7 +51,11 @@ export const BLOCK = {
     // the Ice Queen's palace (src/world/IceCastle.js) and the Ice Rod's ice (IceQueen.js): glacier ice,
     // glowing ice, the snowflake floor, deep blue ice — melted by fire, never by the sun
     ICE_WALL: 59, ICE_GLOW: 60, ICE_FLOOR: 61, ICE_DARK: 62,
+    // other planets' ground (PlanetSurface.js): dust, rock, ice, the dark land — coloured by each planet's palette
+    REGOLITH: 63, PLANET_ROCK: 64, PLANET_ICE: 65, PLANET_DARK: 66,
 };
+/** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
+export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_DARK;
 /** The palace's / the Ice Rod's ice (melts in fire: IceQueen.melt). */
 export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
@@ -172,6 +178,10 @@ export const BASE_COLORS = {
     [BLOCK.ICE_GLOW]: 0x9ee4ff,
     [BLOCK.ICE_FLOOR]: 0xc4e8fa,
     [BLOCK.ICE_DARK]: 0x5ea8d8,
+    [BLOCK.REGOLITH]: 0x8a7f74,
+    [BLOCK.PLANET_ROCK]: 0x6a6058,
+    [BLOCK.PLANET_ICE]: 0xdedad2,
+    [BLOCK.PLANET_DARK]: 0x4a4440,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -452,6 +462,17 @@ const CAVE_CELL = 90; // at most one cave per 90×90 m
 const TREE_MIN_DIST = 128; // trees closer to spawn are the original (instanced) ones
 /** Generation 5's floating islands: at most one (with its small ones) per CELL×CELL m. */
 export const ISLE = { CELL: 112, R_MIN: 6, R_MAX: 15 };
+const ZONE_CX = Math.floor(SPACE.ZONE_X / CHUNK);
+let _empty = null;
+/** The one chunk of the empty far zone: bedrock at the bottom, air above. */
+function emptyChunk() {
+    if (_empty) return _empty;
+    const blocks = new Uint8Array(CHUNK * CHUNK * HEIGHT);
+    blocks.fill(BLOCK.BEDROCK, 0, CHUNK * CHUNK);
+    const top = new Int16Array(CHUNK * CHUNK).fill(MIN_LAYER);
+    _empty = { cx: 0, cz: 0, blocks, top, maxTop: MIN_LAYER, modified: false, minOpen: MIN_LAYER + 1, sea: null, empty: true };
+    return _empty;
+}
 
 export class TerrainData {
     /**
@@ -481,6 +502,7 @@ export class TerrainData {
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
+        this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
         this.castles = this.towers = this.sites = this.iceCastle = null;
         if (mountains) {
@@ -518,6 +540,30 @@ export class TerrainData {
             fn.mesa = fn.emer = fn.moon = fn.fant = 0;
             this.heightAt = fn;
         } else this.heightAt = raw;
+        // the other planets' surfaces: far regions of this same world, each by its own recipe (Planets.js)
+        this.planets = this.planets && this.planets.seed === (seed | 0) ? this.planets : new PlanetRegistry(seed);
+        const earthH = this.heightAt, planets = this.planets;
+        if (mountains) {
+            const fn = (ix, iz) => {
+                if (ix >= SPACE.ZONE_X) {
+                    const def = planets.bySlot(slotAt(ix, iz));
+                    if (def) {
+                        const h = planetHeight(def, ix, iz);
+                        fn.water = planetHeight.water; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+                        fn.mesa = fn.emer = fn.moon = fn.fant = 0;
+                        return h;
+                    }
+                }
+                const h = earthH(ix, iz);
+                fn.water = earthH.water; fn.sea = earthH.sea; fn.beach = earthH.beach; fn.kind = earthH.kind;
+                fn.mesa = earthH.mesa; fn.emer = earthH.emer; fn.moon = earthH.moon; fn.fant = earthH.fant;
+                return h;
+            };
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+            fn.mesa = fn.emer = fn.moon = fn.fant = 0;
+            fn.land = earthH.land;
+            this.heightAt = fn;
+        }
         this._caves = new Map();
         this._lairs = new Map(); // (dragons' lairs high in the mountains: DragonLairs.js)
         this._isles = new Map(); // (generation 5: the floating islands)
@@ -532,6 +578,9 @@ export class TerrainData {
         if (last && last.cx === cx && last.cz === cz) return last;
         const key = chunkKey(cx, cz);
         let c = this.chunks.get(key);
+        // (the far zone between the planets — where a hero in space is kept, Space.js: nothing at all
+        //  there, one shared empty chunk, never kept: a flight there makes no ground)
+        if (!c && cx >= ZONE_CX && this.mountains && !this.planetOfChunk(cx, cz)) return emptyChunk();
         if (!c) {
             c = this._generateChunk(cx, cz);
             this.chunks.set(key, c);
@@ -544,7 +593,24 @@ export class TerrainData {
         return this.chunks.has(chunkKey(cx, cz));
     }
 
+    /** The planet whose surface a chunk is on (or null: the Earth). */
+    planetOfChunk(cx, cz) {
+        const x = cx * CHUNK;
+        if (x + CHUNK <= SPACE.ZONE_X || !this.planets || !this.mountains) return null;
+        return this.planets.bySlot(slotAt(x + CHUNK / 2, cz * CHUNK + CHUNK / 2));
+    }
+
+    /** The planets changed (a guest got the host's, a planet was made or terraformed): the worker's copy too. */
+    setPlanets(json) {
+        this.planets?.applyJSON(json);
+        // (chunks of the planets made before: by the old recipe — made again when asked)
+        for (const [k, c] of this.chunks) if (c.planet && !c.modified) this.chunks.delete(k);
+        this._last = null;
+    }
+
     _generateChunk(cx, cz) {
+        const planet = this.planetOfChunk(cx, cz);
+        if (planet) return generatePlanetChunk(cx, cz, planet, this.bedrockTop ?? OLD_BEDROCK);
         if (this.lush) return this._generateLush(cx, cz);
         const blocks = new Uint8Array(CHUNK * CHUNK * HEIGHT);
         const top = new Int16Array(CHUNK * CHUNK);
@@ -752,7 +818,7 @@ export class TerrainData {
      * two small ones beside it: grass on top, earth, then rock tapering down to a point.
      */
     islandOf(gx, gz) {
-        if (!this.lush) return null;
+        if (!this.lush || offEarth((gx + 1) * ISLE.CELL)) return null; // (none over other planets)
         const m = this._isles || (this._isles = new Map());
         const key = gx * 100003 + gz;
         if (m.has(key)) return m.get(key);
@@ -790,7 +856,7 @@ export class TerrainData {
     /** The floating islands reaching within `r` of a point. */
     islandsNear(x, z, r) {
         const out = [];
-        if (!this.lush) return out;
+        if (!this.lush || offEarth(x + r)) return out;
         const C = ISLE.CELL, R = r + ISLE.R_MAX * 2.6 + 6;
         for (let gz = Math.floor((z - R) / C); gz <= Math.floor((z + R) / C); gz++) {
             for (let gx = Math.floor((x - R) / C); gx <= Math.floor((x + R) / C); gx++) {
@@ -939,6 +1005,7 @@ export class TerrainData {
      * Deterministic (the same on every computer for the seed).
      */
     caveOf(gx, gz) {
+        if (offEarth((gx + 1) * CAVE_CELL)) return null; // (the Earth's caves: never on other planets)
         const key = gx + ',' + gz;
         this._caves = this._caves || new Map();
         if (this._caves.has(key)) return this._caves.get(key);
@@ -1022,7 +1089,7 @@ export class TerrainData {
      * with a huge mouth in its side (DragonLairs.js).
      */
     lairOf(gx, gz) {
-        if (!this.deepCaves) return null;
+        if (!this.deepCaves || offEarth((gx + 1) * LAIR.CELL)) return null;
         const key = gx * 100003 + gz;
         const m = this._lairs || (this._lairs = new Map());
         if (m.has(key)) return m.get(key);
@@ -1037,7 +1104,7 @@ export class TerrainData {
     /** The dragons' lairs whose hall or mouth is within `r` of a point (their systems; `.lair` is the lair). */
     lairsNear(x, z, r) {
         const out = [];
-        if (!this.deepCaves) return out;
+        if (!this.deepCaves || offEarth(x + r)) return out;
         const C = LAIR.CELL;
         for (let gz = Math.floor((z - r) / C); gz <= Math.floor((z + r) / C); gz++) {
             for (let gx = Math.floor((x - r) / C); gx <= Math.floor((x + r) / C); gx++) {
@@ -1051,6 +1118,7 @@ export class TerrainData {
     /** Caves whose chamber (generation 4: any part of the system) is within `r` of a point. */
     cavesNear(x, z, r) {
         const out = [];
+        if (offEarth(x + r)) return out;
         if (this.deepCaves) {
             const R = r + CAVES.REACH;
             for (let gz = Math.floor((z - R) / CAVE_CELL); gz <= Math.floor((z + R) / CAVE_CELL); gz++) {
@@ -1298,6 +1366,7 @@ export class TerrainData {
     set(ix, L, iz, type) {
         if (L < MIN_LAYER || L > MAX_LAYER) return;
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        if (c.empty) return; // (nothing is built in the empty zone between the planets)
         c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = type;
         c.modified = true;
         if (!drawn(type) && L < c.minOpen) c.minOpen = L;
@@ -1620,6 +1689,7 @@ export class TerrainData {
 
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
+        if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_DARK) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }
         let base = BASE_COLORS[type] ?? 0xff00ff;
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;

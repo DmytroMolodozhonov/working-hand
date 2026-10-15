@@ -113,6 +113,7 @@ export function playerSnapshot(game) {
         bleed: game.bleeding?.rate || 0,
         ship: game.ships?.playerSnap() || null, // standing on a ship: [ship id, place on its deck]
         bed: game.beds?.home || null, // the bed they come back to life at
+        space: game.space?.snapshot() || null, // in space: where (the planets' surfaces need nothing: the place says it — Space.js)
     };
 }
 
@@ -146,6 +147,7 @@ export function applyPlayerSnapshot(game, s) {
     if (s.limbs && Number.isFinite(s.hp) && s.hp > 0) game.dismember?.restoreMine(s.limbs, s.bleed || 0);
     if (s.bed) game.beds?.setHome(s.bed);
     if (s.ship) game.ships?.applyPlayerSnap(s.ship); // (back on the ship's deck, wherever it sailed)
+    if (s.space) game.space?.restore(s.space); // (still in space)
 }
 
 /**
@@ -237,6 +239,7 @@ export class WorldKeeper {
             magicCastles: g.castleMagic?.snapshot() || null, // castles made by magic and what is in their chests (CastleMagic.js)
             magicHouses: g.houseMagic?.snapshot() || null, // houses made by magic and what is in their chests (HouseMagic.js)
             iceMagic: g.iceMagic?.snapshot() || null, // castles and bridges of ice (IceMagic.js)
+            planets: g.space?.planets.toJSON() || null, // the planets: made by players, changed by spells (Planets.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // what the builders put back (Rebuild.js)
@@ -302,6 +305,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses);
     if (save.magicCastles) g.castleMagic?.restore(save.magicCastles); // («Create a Castle») // (after the beds, the doors and the things lying about)
     if (save.iceMagic) g.iceMagic?.restore(save.iceMagic);
+    if (save.planets) g.space?.planets.applyJSON(save.planets);
     // (Creative always opens in the full day; the other modes go on from the hour they were left at)
     if (Number.isFinite(save.dayPhase) && g.config?.mode !== 'creative') g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());

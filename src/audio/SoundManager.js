@@ -32,6 +32,8 @@ const FILES = [
 ];
 
 /** Runs a sound-making generator to its end (when it is needed now). */
+import { SPACE_SOUNDS } from './SpaceSounds.js';
+
 function finish(gen) { let r; do { r = gen.next(); } while (!r.done); return r.value; }
 
 export class SoundManager {
@@ -561,6 +563,38 @@ export class SoundManager {
             if (!this.sounds[key]) { this.sounds[key] = make(); return list.length > 0; }
         }
         return false;
+    }
+
+    /**
+     * «Космос» (Space.js): its sounds made ahead, a few ms a frame — call every frame until true
+     * (SpaceSounds.js: the climb, the fall into the air, Venus' wind, the Sun's heat, the gift, a chime).
+     */
+    prepareSpace() {
+        if (!this.context) return true;
+        for (const [key, gen] of Object.entries(SPACE_SOUNDS)) if (!this.sounds[key] && !this._prepare(key, () => gen(this.context), 2)) return false;
+        return true;
+    }
+
+    /** One of space's sounds (not where it is: the hero's own — the climb, the burning air, the gift). */
+    playSpace(kind, volume = 1, rate = 1) {
+        if (!this.context || !this.sounds[kind]) return;
+        this._spell(this.sounds[kind], volume, rate);
+    }
+
+    /** A looping sound of space (Venus' wind, the Sun's heat) at loudness k (0: stopped). */
+    spaceLoop(kind, k) {
+        if (!this.enabled || !this.context || !this.sounds[kind]) return;
+        const loops = this._spaceLoops || (this._spaceLoops = {});
+        let a = loops[kind];
+        if (!a) {
+            if (k <= 0.01) return;
+            a = loops[kind] = new THREE.Audio(this.audioListener);
+            a.setBuffer(this.sounds[kind]);
+            a.setLoop(true);
+        }
+        a.setVolume(Math.min(1.2, k) * this.globalVolume);
+        if (k > 0.01 && !a.isPlaying) { try { a.play(); } catch (e) { /* not resumed yet */ } }
+        else if (k <= 0.01 && a.isPlaying) a.stop();
     }
 
     /** «Circle Attack»'s music made ahead (early in the game, not on the first cast): call every frame until true. */

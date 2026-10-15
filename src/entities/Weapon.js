@@ -220,12 +220,12 @@ export class Weapon {
             if (sinHalf > 1e-5) _v2.set(_q2.x / sinHalf, _q2.y / sinHalf, _q2.z / sinHalf).multiplyScalar(angle * k);
             else _v2.set(0, 0, 0);
             this.angularVelocity.lerp(_v2, Math.min(1, h * 30));
-        } else {
+        } else if (this.position.y < 30000) {
             this.velocity.y += GRAVITY * h;
             // Air drag
             this.velocity.multiplyScalar(1 - 0.08 * h);
             this.angularVelocity.multiplyScalar(1 - 0.25 * h);
-        }
+        } // (in space — Space.js — no weight and no air: it flies on as it was let go)
 
         this.position.addScaledVector(this.velocity, h);
         integrateQuaternion(this.quaternion, this.angularVelocity, h);

@@ -24,6 +24,7 @@
 
 import { BLOCK } from './Terrain.js';
 import { createRng } from '../core/math.js';
+import { offEarth } from './Planets.js';
 
 export const CASTLE_CELL = 480;
 const MIN_SPAWN_DIST = 360;
@@ -1571,6 +1572,7 @@ export class CastleIndex {
     }
 
     _makeCastle(gx, gz) {
+        if (offEarth((gx + 1) * CASTLE_CELL)) return null; // (no castles on other planets: Planets.js)
         if (this.test && gx === 0 && gz === -1) return (this.seas?.test && this._makeTestSeaCastle(gx, gz)) || this._makeTestCastle(gx, gz);
         if (hash01(gx * 5 + 1, gz * 3 + 7, this.seed + 900) > 0.92) return null;
         const rng = createRng((this.seed * 7919 + gx * 104729 + gz * 1299709) >>> 0);
@@ -1777,6 +1779,7 @@ export class CastleIndex {
 
     /** Castles whose land reaches within `r` of a point. */
     near(x, z, r = 0) {
+        if (offEarth(x - r)) return [];
         const out = [];
         const g0x = Math.floor((x - r) / CASTLE_CELL) - 1, g1x = Math.floor((x + r) / CASTLE_CELL) + 1;
         const g0z = Math.floor((z - r) / CASTLE_CELL) - 1, g1z = Math.floor((z + r) / CASTLE_CELL) + 1;

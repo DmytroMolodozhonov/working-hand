@@ -22,6 +22,7 @@
 import { BLOCK } from './Terrain.js';
 import { CASTLE_CELL, BLEND, hash01, Plan, buildHouse, rotLot, inwardRy } from './Castles.js';
 import { createRng } from '../core/math.js';
+import { offEarth } from './Planets.js';
 
 export const TOWER_ZONE = 58; // half-size of the levelled land
 const TOWER_P = 0.2; // share of castle-free cells that try to hold a tower
@@ -694,6 +695,7 @@ export class TowerIndex {
     }
 
     _makeTower(gx, gz) {
+        if (offEarth((gx + 1) * CASTLE_CELL)) return null; // (no towers on other planets)
         if (this.castles.cellOf(gx, gz)) return null; // (one site per cell)
         const pass = hash01(gx * 11 + 3, gz * 13 + 5, this.seed + 1700) <= TOWER_P;
         if (!pass) {
@@ -707,6 +709,7 @@ export class TowerIndex {
 
     /** Towers whose land reaches within `r` of a point. */
     near(x, z, r = 0) {
+        if (offEarth(x - r)) return [];
         const out = [];
         const g0x = Math.floor((x - r) / CASTLE_CELL) - 1, g1x = Math.floor((x + r) / CASTLE_CELL) + 1;
         const g0z = Math.floor((z - r) / CASTLE_CELL) - 1, g1z = Math.floor((z + r) / CASTLE_CELL) + 1;

@@ -20,6 +20,7 @@ import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
 import { FIREFIGHT, firefightWords } from '../game/Firefighting.js';
 import { IMPULSE, impulsePush } from '../game/WindImpulse.js';
 import { iceMagicWords } from '../game/IceMagic.js';
+import { flyingMaximaWords } from '../game/Space.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -173,6 +174,8 @@ export function matchSpell(text) {
     if (has('форминг', 'forming', 'формин') || (water && has('форм', 'form'))) return 'WaterForming';
     if (water && has('бол', 'бал', 'ball', 'bowl', 'bol', 'шар', 'буль', 'бул')) return 'Waterball';
     if (has('фрозен', 'фроузен', 'фрозэн', 'фризен', 'frozen', 'frosen', 'заморо')) return 'Frozen';
+    // «Flying Maxima» («Флайн Максима», «Флайинг Максима»): into space (Space.js) — before the lone «Максима» and «Флайн»
+    if (flyingMaximaWords(s)) return 'FlyingMaxima';
     if (has('максим', 'maxim', 'макс', 'max')) return 'Maxima';
     if (has('флайн', 'флаин', 'флайм', 'флай', 'флэй', 'флей', 'фляй', 'fly', 'flai', 'полёт', 'полет', 'взлёт', 'взлет')) return 'Flight';
     // «Thunder wave» heard as «Сандер вейв»: the wave word wins over the Sand tokens
@@ -397,6 +400,7 @@ export class SpellManager {
             case 'Stitching': this.hooks.stitching?.(o, d, casterId); break; // (Stitching.js)
             case 'WallRise': case 'WallRiseMaxima': this.castWallRise(o, d, casterId, name === 'WallRiseMaxima'); break; // (Breakthrough's wall)
             case 'Flight': return false; // handled by the game (it moves the caster)
+            case 'FlyingMaxima': return false; // (Space.js: the game moves the caster)
             default: return false;
         }
         return true;

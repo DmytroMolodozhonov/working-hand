@@ -1,0 +1,1148 @@
+/**
+ * Space.js — «Космос»: Flying Maxima, the flight out of the Earth's air into the Solar System, the
+ * planets, the way back. The game system (THREE); the planets' data: src/world/Planets.js (read its
+ * header: the API for the other «Космос» sessions — the Gods' temple on Venus, the planet spells).
+ *
+ *   1. 1000 mana cells (any way: practice, achievements, «Высший маг», crystals, scrolls): once —
+ *      «Поздравляем! Вы приблизились к силе богов» and «Flying Maxima» is learnt (kept with the hero,
+ *      game.bonus.spells.FlyingMaxima). In Creative it is known at once.
+ *   2. Only in flight (after «Флайн»): «Flying Maxima» — the hero shoots straight up, faster and
+ *      faster; the sky darkens, the stars come out, clouds rush down past, a white-out — and he is
+ *      above the round Earth, going on out of its orbit (state ascend → space).
+ *   3. Space: the same flight by the body (lean to turn, forward / back to dive / climb, «Паузин» to
+ *      hover, «Флайн» on), faster and faster — the speed held down near a planet. Breathing in space
+ *      takes magic: −0.5 mana a second (the free world's mana; none comes back meanwhile); no mana left —
+ *      you suffocate (a few seconds to get back into air, then death). The Sun: the heat grows, a
+ *      warning — and close to it everybody dies, in any mode, with any protection.
+ *   4. Back: fly into a planet with ground (the Earth, the Moon, Mercury, Venus, Mars, Pluto) — the air
+ *      burns round you (state entry), then you are over the very place you flew at (descend) and fly on
+ *      as usual. On the Earth that is anywhere in the world (a quick way to travel). Gas giants have no
+ *      ground: the clouds' pressure throws you back out.
+ *   5. Other planets: their own ground (PlanetSurface.js), gravity, sky; no air on the Moon, Mercury,
+ *      Pluto and Mars (thin) — the breathing magic goes on; Venus has air (not toxic here: the author) but
+ *      storms — strong wind, dust, lightning far off. «Flying Maxima» there takes you back to space.
+ *
+ * Where the hero is: the realm comes from the position alone (Planets.realmAt). In space his true place
+ * is `P` (heliocentric, metres, doubles); in the world he stays near SPACE.ANCHOR (an empty spot between
+ * the planets' slots) at A + (P − O), O moved along now and then (floating origin): the ground under him
+ * is never made, everything round him stays precise.
+ *
+ * Who / what × how (CLAUDE.md) — off the Earth (spellBlocked below has the list, each with its reason):
+ *   - fire needs air: Inferno, Fire, Fire Maxima, Hellfire don't burn in space, on the Moon, Mercury, Pluto
+ *     or thin Mars (Venus: they do); lightning needs clouds (only Venus); water spells: no water (in space
+ *     it would freeze at once); wind spells: no air to blow (Venus: yes); building and the ground's
+ *     spells need ground (on the planets: yes — the same voxels); creatures: none live off the Earth.
+ *   - creatures never come to space: dragons, phoenixes, Pegasus fly only under the sky (their own
+ *     flights never go above it); riding one, Flying Maxima is refused («спешьтесь»).
+ *   - players: each sees the others in space and on the planets (their positions say where); duel
+ *     charges, shields, Lumos work everywhere (charges fly on in the void).
+ *   - things let go in space float on with the speed they had (Items: no fall above SPACE.FLOOR_Y).
+ *   - the gods' gifts are not touched by any of this; nothing here breaks blocks except on purpose.
+ * The host decides the planets (game.space.planets — saved with the world); every computer flies its
+ * own hero (positions go as always).
+ */
+import * as THREE from 'three';
+import { SPACE, PLANETS, planetPosition, spinAt, realmAt, surfaceToDir, dirToSurface, earthToDir, dirToEarth, slotRect, PlanetRegistry } from '../world/Planets.js';
+import { SpaceView } from '../world/SpaceView.js';
+import { clamp, smoothstep } from '../core/math.js';
+
+export const FLYMAX = {
+    UNLOCK: 1000, // mana cells
+    BREATH: 0.5, // mana a second to breathe without air
+    SUFFOCATE: 6, // s without mana before death
+    EARTH_TOP: 440, // the climb ends (and space begins) this high over the Earth (world y)
+    PLANET_TOP: 300, // … over another planet's ground
+    ENTRY_T: 1.7, // s of burning air (planets with air); 0.8 without
+    DESC_H: 240, // m over the ground after the fall into the air (Earth); planets: 160
+    MAX_SPEED: 18000, // m/s far out (the speed near a planet is held down by its distance)
+    SOI: 5, // a planet carries a hero within this many radii (+1500 m) along its orbit
+    TEMPLE_HOOK: null, // set by src/world/GodsTemple.js (the other session): where the Gods' temple stands on Venus
+};
+
+/** «Flying Maxima» in Russian and English, as the recognizer hears it (SpellManager calls this first). */
+export function flyingMaximaWords(s) {
+    const fly = /(флайн|флаин|флайинг|флаинг|флайэнг|флаенг|флайм|flying|fly|flai|полёт|полет)/.test(s);
+    const max = /(макс|max|мах|maks|мекс|мэкс)/.test(s);
+    return fly && max;
+}
+
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _p = { x: 0, y: 0, z: 0 }, _p2 = { x: 0, y: 0, z: 0 }, _d = { x: 0, y: 0, z: 0 }, _s = { x: 0, z: 0 };
+const A = { x: SPACE.ANCHOR_X, y: SPACE.ORIGIN_Y, z: SPACE.ANCHOR_Z };
+const EPOCH = 1.79e9; // (the shared clock: seconds since then — the same on every computer)
+
+/** Spells off the Earth: why one does not work here (or null). air: 'space' | 'none' | 'thin' | 'air'. */
+export function spaceSpellBlock(name, where, air) {
+    if (where === 'earth') return null;
+    const vacuum = where === 'space' || air === 'none' || air === 'thin';
+    const base = (name || '').replace(/Maxima$/, '');
+    if (/^(Inferno|Fire|Hellfire|FireMaxima)$/.test(name) || base === 'Fire') {
+        if (vacuum) return where === 'space' ? '🔥 В космосе нет воздуха — огонь не горит' : `🔥 Здесь ${air === 'thin' ? 'почти ' : ''}нет воздуха — огонь не горит`;
+    }
+    if (/^(LightningStrike|LetItRain|Thunderwave)$/.test(name) && where !== 'venus') return '⛈️ Здесь нет туч — молнии и дождю неоткуда взяться';
+    if (/^(Wind|WindMaxima|WindImpulse|WindImpulseMaxima|Unfurl|UnfurlMaxima|Furl)$/.test(name) && vacuum) return '🌬️ Без воздуха ветру нечем дуть';
+    if (/^(Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|Firefighting|FirefightingMaxima|AirBubble|AirBubbleMaxima|WaveAttack|WaveAttackMaxima|Frozen|Drawdown|DrawdownMaxima)$/.test(name)) {
+        return where === 'space' ? '💧 В космосе вода мгновенно замерзает — водяная магия не работает' : '💧 Здесь нет воды';
+    }
+    if (where === 'space') {
+        // (nothing under the feet: no ground to raise, build on or shake; nobody to command)
+        if (/^(Earthquake|EarthquakeMaxima|Breakthrough|BreakthroughMaxima|WallRise|WallRiseMaxima|Gather|CreateFloor|CreateWall|CreateCeiling|BuildRoof|CreateDoor|CreateBed|CreateBoard|CreateHouse|ImproveHouse|CreateCastle|IceCastle|IceBridge|Liquidation|LiquidationMaxima|Stitching|Overgrown|OvergrownMaxima|Alive|AliveMaxima|Snowman|TotalDestruction|TotalDestructionMaxima|CircleAttack|CircleAttackMaxima|Inspirius|ToTheSun|LevitationMaxima|Brainrot|Attack|Rescue|ProtectionHouse|Up|Bombardo|BombardoMaxima)$/.test(name)) return '🌌 В космосе под ногами ничего нет — это заклинание здесь не на что направить';
+    }
+    return null;
+}
+
+export class Space {
+    constructor(game) {
+        this.game = game;
+        const data = game.world?.terrain?.data;
+        this.enabled = !!(data && data.mountains);
+        this.planets = data?.planets || new PlanetRegistry(game.seed || 1);
+        this.state = 'off'; // off | ascend | space | entry | descend
+        this.P = { x: 0, y: 0, z: 0 }; // where the hero is in space (heliocentric)
+        this.O = { x: 0, y: 0, z: 0 }; // the floating origin (world A = space O)
+        this.vel = { x: 0, y: 0, z: 0 };
+        this.speed = 0;
+        this.yaw = 0; this.pitch = 0;
+        this.realm = 'earth';
+        this._last = new THREE.Vector3();
+        this._prev = new Map(); // body id -> its position last frame (a planet carries a hero along)
+        this.suffocate = 0;
+        this.heat = 0;
+        this.view = null;
+        this._tex = new Map(); // body id -> 'asked' | 'done'
+        this._msgAt = {};
+        this._dom = null;
+        this._windT = 0; this._boltT = 3;
+        this._soundsReady = false;
+        if (this.enabled && game.renderer && typeof document !== 'undefined') this.view = new SpaceView(this.planets);
+        this.planets.onChange(() => this._planetsChanged());
+    }
+
+    /** The shared clock (s): the planets are where they are on every computer. */
+    now() { return Date.now() / 1000 - EPOCH + (this.game.net?.clockOffset || 0) / 1000; }
+
+    get offEarth() { return this.realm !== 'earth'; }
+    get inSpace() { return this.realm === 'space'; }
+    /** Space's flight runs instead of the plain «Флайн» one (Game._updatePlayer). */
+    get handles() { return this.state !== 'off' || this.realm === 'space'; }
+
+    /** Is «Flying Maxima» known? (Creative: always; elsewhere: given at 1000 mana cells.) */
+    knows() {
+        const m = this.game.config?.mode;
+        return m === 'creative' || m === 'test' || !!this.game.bonus?.spells?.FlyingMaxima;
+    }
+
+    // ─────────────────────────────────────────────────────────────── the gift at 1000 cells
+    /** Every second or so: the hero reached 1000 mana cells — the gods' gift, once. */
+    checkUnlock() {
+        const g = this.game;
+        const m = g.config?.mode;
+        if (m === 'creative' || m === 'test' || g.bonus?.spells?.FlyingMaxima) return false;
+        const max = g.combat?.maxFatigue || 30;
+        if (max < FLYMAX.UNLOCK) return false;
+        g.bonus = g.bonus || {};
+        g.bonus.spells = { ...(g.bonus.spells || {}), FlyingMaxima: true };
+        const title = '✨ Поздравляем, вы приблизились к силе богов!';
+        const sub = 'Вам открыто заклинание «Flying Maxima»: в полёте скажите его — и летите вверх, за небо, в космос';
+        if (g.achievements?._banner) g.achievements._banner(title, sub, true);
+        else g.hud?.notify?.(`${title} ${sub}`, 8000);
+        g.hud?.setVoice?.(`${title}<br>${sub}`, true);
+        g.sound?.playSpace?.('spaceGift', 1);
+        const p = g.character.group.position;
+        for (let i = 0; i < 70; i++) {
+            const a = Math.random() * Math.PI * 2, r = 0.6 + Math.random() * 1.2;
+            g.fx?.spark?.(_v1.set(p.x + Math.cos(a) * r, p.y - 1 + Math.random() * 3, p.z + Math.sin(a) * r), i % 3 ? 0xfff2b0 : 0x9fd8ff, 0.18, _v2.set(0, 2 + Math.random() * 4, 0), 1.6);
+        }
+        this.prepare();
+        return true;
+    }
+
+    /** Get ready (the planets' maps in a worker, the sounds): once the spell is known. */
+    prepare() {
+        if (this._prepared || !this.enabled) return;
+        this._prepared = true;
+        this._askTextures();
+    }
+
+    // ─────────────────────────────────────────────────────────────── casting
+    /** «Flying Maxima» said (Game._castLocalSpell). Returns the spell name when it works, else null. */
+    cast(isFinal = true) {
+        const g = this.game;
+        const say = (t) => { if (isFinal) g.hud?.setVoice?.(t, true); return null; };
+        if (!this.enabled) return say('🚫 На картах в космос не улететь');
+        if (!this.knows()) return say('✨ «Flying Maxima» откроется, когда у вас будет 1000 ячеек маны');
+        if (this.state === 'space' || this.realm === 'space') {
+            // (in space: one more burst of speed)
+            this.speed = Math.max(this.speed, this._speedCap() * 0.9);
+            g.flight.resume?.();
+            if (isFinal) g.hud?.setVoice?.('🚀 Flying Maxima — полный вперёд!', true);
+            return 'FlyingMaxima';
+        }
+        if (this.state !== 'off') return null;
+        if (!g.flight.active || g.flight.state !== 'cruise') return say('🦸 «Flying Maxima» — только в полёте: сначала взлетите («Флайн»), потом скажите «Flying Maxima»');
+        if (g.animals?.riding) return say('🐴 Звери не летают выше неба — сначала спешьтесь');
+        const p = g.character.group.position;
+        if (g.collision?.ceilingAt && g.collision.ceilingAt(p.x, p.z, p.y + 1) !== Infinity) return say('🧱 Над вами крыша — вылетите под открытое небо');
+        this.state = 'ascend';
+        this._t = 0;
+        this._v = Math.max(14, g.flight.speed * 0.6);
+        this._from = this.realm;
+        this._y0 = p.y;
+        const gy = g.world?.terrain?.data ? g.world.terrain.data.heightAt(Math.round(p.x), Math.round(p.z)) : 0;
+        this._top = this.realm === 'earth' ? Math.max(FLYMAX.EARTH_TOP, p.y + 200) : Math.max(p.y + 120, gy + FLYMAX.PLANET_TOP);
+        g.flight.hovering = false;
+        this.prepare();
+        g.sound?.playSpace?.('spaceRise', 1);
+        g.fx?.lightFlash?.(p, 0xbfe4ff, 2, 0.5, 40);
+        if (isFinal) g.hud?.setVoice?.('🚀 <b>Flying Maxima!</b> Вы уходите вверх — к звёздам…', true);
+        return 'FlyingMaxima';
+    }
+
+    /** Spells off the Earth: a reason it does not work here, or null (Game._castLocalSpell). */
+    spellBlocked(name) {
+        if (!this.offEarth) return null;
+        const def = this.planets.get(this.realm);
+        return spaceSpellBlock(name, this.realm, this.realm === 'space' ? 'space' : def?.air || 'none');
+    }
+
+    // ─────────────────────────────────────────────────────────────── the frame
+    /** Before the hero moves: which world he is in (and its gravity). */
+    beginFrame() {
+        const g = this.game, p = g.character.group.position;
+        const was = this.realm;
+        this.realm = this.enabled ? realmAt(p.x, p.y, p.z, this.planets) : 'earth';
+        const def = this.planets.get(this.realm);
+        g.character.gravityK = def && this.realm !== 'earth' && this.realm !== 'space' ? def.gravity : 1;
+        if (was !== this.realm) this._realmChanged(was);
+        if (!this._soundsReady && this._prepared && g.sound?.prepareSpace) this._soundsReady = g.sound.prepareSpace();
+    }
+
+    _realmChanged(was) {
+        const g = this.game;
+        if (this.realm === 'earth' && was !== 'earth') this._restoreEarthSky();
+        if (this.realm !== 'space' && this.realm !== 'earth') {
+            const def = this.planets.get(this.realm);
+            this._say(`🪐 ${def?.name || 'Планета'}: ${planetLine(def)}`, 'land' + this.realm, 7000);
+            g.sound?.playSpace?.('spaceBeep', 0.8);
+        }
+        if (this.realm === 'earth' && was !== 'earth' && was !== 'space') this._say('🌍 Вы снова дома, на Земле', 'home', 4000);
+        if (this.realm === 'space' && this.state === 'off') {
+            // (back in a saved game, or pushed up there: the hero floats)
+            this.state = 'space';
+            if (!g.flight.active) g.flight.float();
+        }
+    }
+
+    /**
+     * The hero's own movement while Space has it (Game._updatePlayer calls this instead of the plain flight).
+     */
+    update(dt, pose) {
+        const g = this.game;
+        if (this.state === 'ascend') return this._ascend(dt);
+        if (this.state === 'descend') return this._descend(dt, pose);
+        if (this.realm === 'space' || this.state === 'space' || this.state === 'entry') return this._fly(dt, pose);
+        g._updateFlight(dt, pose);
+    }
+
+    _ascend(dt) {
+        const g = this.game, ch = g.character, p = ch.group.position, fl = g.flight;
+        this._t += dt;
+        this._v = Math.min(900, this._v + (24 + this._v * 1.15) * dt);
+        p.y += this._v * dt;
+        ch.flying = true;
+        fl.tilt += (0.12 - fl.tilt) * Math.min(1, dt * 3);
+        ch.setFlightTilt(fl.tilt);
+        ch.head.rotation.x = g.smoothHead.pitch + fl.tilt;
+        ch.flightView = 0;
+        const k = clamp((p.y - this._y0) / Math.max(1, this._top - this._y0), 0, 1);
+        this.climbK = k;
+        // clouds rushing down past (the planets with air): big pale puffs above, left behind at once
+        if ((this._from === 'earth' || this.planets.get(this._from)?.air === 'air') && k > 0.45 && k < 0.98) {
+            for (let i = 0; i < 4; i++) {
+                const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 14;
+                g.fx?.spark?.(_v1.set(p.x + Math.cos(a) * r, p.y + 25 + Math.random() * 30, p.z + Math.sin(a) * r), this._from === 'venus' ? 0xf0d9a0 : 0xffffff, 2.2 + Math.random() * 2.5, _v2.set(0, 0, 0), 0.6);
+            }
+        }
+        g.fx.shake = Math.max(g.fx.shake || 0, 0.15 * k);
+        this._overlay(this._from === 'earth' || this.planets.get(this._from)?.air === 'air' ? 'white' : 'black', smoothstep(0.8, 1, k));
+        if (p.y >= this._top) this._enterSpace(this._from);
+    }
+
+    /** Out of the air: above the planet left, going on away from it. */
+    _enterSpace(from) {
+        const g = this.game, p = g.character.group.position;
+        const t = this.now();
+        const def = this.planets.get(from === 'earth' ? 'earth' : from) || this.planets.get('earth');
+        planetPosition(def, t, _p, this.planets);
+        if (from === 'earth') earthToDir(p.x, p.z, _d);
+        else { surfaceToDir(def, p.x, p.z, _d); rotY(_d, spinAt(def, t)); }
+        const R = def.radius;
+        this.P.x = _p.x + _d.x * (R + 45); this.P.y = _p.y + _d.y * (R + 45); this.P.z = _p.z + _d.z * (R + 45);
+        this.O.x = this.P.x; this.O.y = this.P.y; this.O.z = this.P.z;
+        const v = Math.max(260, this._v || 300);
+        this.vel.x = _d.x * v; this.vel.y = _d.y * v; this.vel.z = _d.z * v;
+        this.speed = v;
+        this._exitDir = { x: _d.x, y: _d.y, z: _d.z };
+        this._exitT = 0;
+        this.yaw = g.character.group.rotation.y;
+        this.pitch = 0;
+        if (from === 'earth') this.earthBack = { x: p.x, z: p.z };
+        p.set(A.x, A.y, A.z);
+        this._last.copy(p);
+        this.state = 'space';
+        this.realm = 'space';
+        const fl = g.flight;
+        if (!fl.active) fl.float();
+        fl.hovering = false;
+        this._prev.clear();
+        this._overlayFade = 1; // (the white-out clears)
+        const mana = g.combat?.enabled;
+        this._say(mana ? '🌌 Вы в космосе! Магия дыхания: <b>−0,5 маны в секунду</b> — без неё здесь не выжить. Кончится мана — вернитесь в воздух' : '🌌 Вы в космосе! Здесь дышат магией (в этом режиме — без затрат маны)', 'enter', 7000);
+    }
+
+    /** The hero in space: his flight by the body, the planets, the Sun. */
+    _fly(dt, pose) {
+        const g = this.game, ch = g.character, p = ch.group.position, fl = g.flight;
+        const t = this.now();
+        if (!fl.active) fl.float(); // (a «стоп», a stun: in space one just floats)
+        // what moved me besides my flight (a blast, a shove, Leviosa): it moves my place in space too
+        const dx = p.x - this._last.x, dy = p.y - this._last.y, dz = p.z - this._last.z;
+        if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < 60) { this.P.x += dx; this.P.y += dy; this.P.z += dz; }
+        // a planet carries the hero near it along its orbit (the Moon round the Earth too)
+        const near = this._nearest(t);
+        if (near && near.def.id !== 'sun') {
+            const pv = this._prev.get(near.def.id);
+            if (pv && near.alt < near.def.radius * FLYMAX.SOI + 1500) { this.P.x += near.pos.x - pv.x; this.P.y += near.pos.y - pv.y; this.P.z += near.pos.z - pv.z; }
+        }
+        for (const b of this._bodies) { const q = this._prev.get(b.def.id) || {}; q.x = b.pos.x; q.y = b.pos.y; q.z = b.pos.z; this._prev.set(b.def.id, q); }
+
+        // steering: the same as «Флайн» (lean sideways to turn; forward / back, or the look, to dive / climb)
+        const steer = fl.steering(pose ? pose.torso : null, g.smoothHead.pitch);
+        const yawRate = steer.turn * 1.5;
+        if (yawRate) {
+            if (g.settings.drifting) g.cameraBaseRotation += yawRate * dt; else g.smoothBody += yawRate * dt;
+            ch.setBodyRotation(g.settings.drifting ? g.cameraBaseRotation : g.smoothBody);
+        }
+        this.yaw = ch.group.rotation.y;
+        this.pitch = clamp(this.pitch - steer.dive * 1.3 * dt, -1.45, 1.45);
+        if (this.state === 'entry') return this._entry(dt, t, near);
+
+        // speed: faster and faster; held down near a planet (its distance) — «Паузин» stops
+        const cap = this._speedCap(near);
+        if (fl.hovering) this.speed *= Math.exp(-2.5 * dt);
+        else if (this.speed < cap) this.speed = Math.min(cap, this.speed + (30 + this.speed * 0.55) * dt);
+        else this.speed = cap + (this.speed - cap) * Math.exp(-3 * dt);
+        // where it goes: the look of the body (out of the Earth's air at first: straight away from it)
+        const cp = Math.cos(this.pitch);
+        let hx = -Math.sin(this.yaw) * cp, hy = Math.sin(this.pitch), hz = -Math.cos(this.yaw) * cp;
+        if (this._exitDir && this._exitT < 3.5) {
+            this._exitT += dt;
+            const k = smoothstep(2.0, 3.5, this._exitT);
+            hx = this._exitDir.x * (1 - k) + hx * k; hy = this._exitDir.y * (1 - k) + hy * k; hz = this._exitDir.z * (1 - k) + hz * k;
+            const l = Math.hypot(hx, hy, hz) || 1; hx /= l; hy /= l; hz /= l;
+            if (!fl.hovering) this.speed = Math.max(this.speed, 300 + this._exitT * 500);
+        } else this._exitDir = null;
+        const ki = 1 - Math.exp(-2.2 * dt); // (a little drift: space has no air to turn against)
+        this.vel.x += (hx * this.speed - this.vel.x) * ki;
+        this.vel.y += (hy * this.speed - this.vel.y) * ki;
+        this.vel.z += (hz * this.speed - this.vel.z) * ki;
+        this.P.x += this.vel.x * dt; this.P.y += this.vel.y * dt; this.P.z += this.vel.z * dt;
+
+        this._bodiesCheck(dt, t, near);
+        this._place();
+
+        // the body: Superman when going fast, upright hovering
+        const tiltT = fl.hovering ? 0.15 : 1.35 - Math.max(0, this.pitch) * 0.5;
+        fl.tilt += clamp(tiltT - fl.tilt, -1.2 * dt, 1.2 * dt);
+        fl.pitch = this.pitch;
+        ch.flying = true;
+        ch.setFlightTilt(fl.tilt);
+        const view = clamp(this.pitch, -1.3, 1.1);
+        ch.head.rotation.x = g.smoothHead.pitch + fl.tilt + view;
+        ch.flightView = view;
+        // speed lines (the dust of space rushing past)
+        if (this.speed > 60 && g.cameraMode === 'fpv' && !fl.hovering) {
+            const n = this.speed > 2000 ? 3 : 1;
+            for (let i = 0; i < n; i++) {
+                _v1.set(p.x + hx * 14 + (Math.random() - 0.5) * 12, p.y + 1.5 + hy * 14 + (Math.random() - 0.5) * 8, p.z + hz * 14 + (Math.random() - 0.5) * 12);
+                g.fx.spark(_v1, 0xcfe4ff, 0.05, _v2.set(-hx * 60, -hy * 60, -hz * 60), 0.35);
+            }
+        }
+    }
+
+    /** Where the hero is put in the world: near the anchor, P − O from it (O follows when he gets far). */
+    _place() {
+        const g = this.game, p = g.character.group.position, F = SPACE.FLOAT;
+        if (Math.abs(this.P.x - this.O.x) > F || Math.abs(this.P.y - this.O.y) > F || Math.abs(this.P.z - this.O.z) > F) {
+            // the origin moves to me: the things floating in space round me move with it (they keep their place in space)
+            const sx = this.O.x - this.P.x, sy = this.O.y - this.P.y, sz = this.O.z - this.P.z;
+            this.O.x = this.P.x; this.O.y = this.P.y; this.O.z = this.P.z;
+            this._shiftLocal(sx, sy, sz);
+        }
+        p.set(A.x + (this.P.x - this.O.x), A.y + (this.P.y - this.O.y), A.z + (this.P.z - this.O.z));
+        this._last.copy(p);
+    }
+
+    /** Things let go in space (Items, weapons) keep their place in space when the origin moves. */
+    _shiftLocal(dx, dy, dz) {
+        const g = this.game;
+        for (const L of g.items?.loose?.values?.() || []) { const q = L.model?.position; if (q && q.y > SPACE.FLOOR_Y) { q.x += dx; q.y += dy; q.z += dz; } }
+        for (const w of g.weapons?.weapons || []) { if (!w.holder && w.position?.y > SPACE.FLOOR_Y) { w.position.x += dx; w.position.y += dy; w.position.z += dz; } }
+    }
+
+    /** The speed allowed here: slow near a planet's ground, very fast far out. */
+    _speedCap(near = this._nearest(this.now())) {
+        const d = near ? near.alt : 1e6;
+        return clamp(d * 0.75 + 80, 80, FLYMAX.MAX_SPEED);
+    }
+
+    /** Every body's place now and the nearest one's ground (alt: metres above it). */
+    _nearest(t) {
+        const out = this._bodies || (this._bodies = []);
+        const list = this.planets.list;
+        out.length = list.length;
+        let best = null;
+        for (let i = 0; i < list.length; i++) {
+            const def = list[i];
+            const b = out[i] || (out[i] = { def: null, pos: { x: 0, y: 0, z: 0 }, dist: 0, alt: 0 }); // (kept: no garbage a frame)
+            b.def = def;
+            planetPosition(def, t, b.pos, this.planets);
+            b.dist = Math.hypot(this.P.x - b.pos.x, this.P.y - b.pos.y, this.P.z - b.pos.z);
+            b.alt = b.dist - def.radius;
+            if (!best || b.alt < best.alt) best = b;
+        }
+        return best;
+    }
+
+    /** Close to a body: the burning air of a planet with ground, a gas giant's push, the Sun's heat. */
+    _bodiesCheck(dt, t, near) {
+        const g = this.game;
+        let heat = 0;
+        for (const b of this._bodies) {
+            const def = b.def;
+            if (def.kind === 'star') {
+                heat = clamp((SPACE.HEAT_R - b.dist) / (SPACE.HEAT_R - SPACE.DEATH_R), 0, 1);
+                if (b.dist < SPACE.DEATH_R) { this._die('☀️ Вы сгорели у Солнца. Так близко к нему не выживает никто — никакая защита не помогает'); return; }
+                continue;
+            }
+            const nx = (this.P.x - b.pos.x) / b.dist, ny = (this.P.y - b.pos.y) / b.dist, nz = (this.P.z - b.pos.z) / b.dist;
+            const inward = -(this.vel.x * nx + this.vel.y * ny + this.vel.z * nz);
+            if (def.kind === 'gas') {
+                if (b.alt < def.radius * 0.07) {
+                    // no ground: the deeper, the thicker the clouds — the pressure throws the hero back out
+                    this.P.x = b.pos.x + nx * (def.radius * 1.07 + 2); this.P.y = b.pos.y + ny * (def.radius * 1.07 + 2); this.P.z = b.pos.z + nz * (def.radius * 1.07 + 2);
+                    const out = Math.max(120, inward * 0.6);
+                    this.vel.x = nx * out; this.vel.y = ny * out; this.vel.z = nz * out;
+                    this.speed = Math.min(this.speed, 150);
+                    g.fx.shake = Math.max(g.fx.shake || 0, 1.2);
+                    this._overlay('amber', 0.6);
+                    this._say(`🌪️ У ${def.name === 'Юпитер' ? 'Юпитера' : def.name === 'Сатурн' ? 'Сатурна' : def.name === 'Уран' ? 'Урана' : 'Нептуна'} нет поверхности — только всё более плотные облака. Давление выталкивает вас обратно!`, 'gas' + def.id, 5000);
+                }
+                continue;
+            }
+            // a body with ground: into its air (or straight down to it, without air)
+            const entryAlt = 40 + def.radius * 0.04;
+            if (b.alt < entryAlt && (inward > 0 || b.alt < 8)) { this._startEntry(def, b); return; }
+        }
+        this.heat = heat;
+    }
+
+    _startEntry(def, b) {
+        const g = this.game;
+        this.state = 'entry';
+        this._entryDef = def;
+        this._t = 0;
+        const air = def.id === 'earth' || def.air === 'air' || def.air === 'thin';
+        this._entryT = air ? FLYMAX.ENTRY_T : 0.8;
+        this._entryAir = air;
+        // where: the very place flown at (the surface under the hero in the planet's own frame)
+        const t = this.now();
+        _d.x = this.P.x - b.pos.x; _d.y = this.P.y - b.pos.y; _d.z = this.P.z - b.pos.z;
+        if (def.id === 'earth') dirToEarth(_d, _s);
+        else { rotY(_d, -spinAt(def, t)); dirToSurface(def, _d, _s); }
+        this.dest = { id: def.id, x: Math.round(_s.x), z: Math.round(_s.z) };
+        if (air) g.sound?.playSpace?.('spaceEntry', 1);
+        this._say(def.id === 'earth' ? '🔥 Вход в атмосферу Земли!' : air ? `🔥 Вход в атмосферу: ${def.name}` : `🪐 Посадка: ${def.name}`, 'entry', 3000);
+    }
+
+    /** The air burning round the hero; the land below is made meanwhile; then he is over it. */
+    _entry(dt, t, near) {
+        const g = this.game, ch = g.character, p = ch.group.position;
+        this._t += dt;
+        const k = this._t / this._entryT;
+        // still falling in, slower and slower
+        const def = this._entryDef, pos = planetPosition(def, t, _p, this.planets);
+        const dist = Math.hypot(this.P.x - pos.x, this.P.y - pos.y, this.P.z - pos.z) || 1;
+        const v = Math.max(20, 160 * (1 - k));
+        this.P.x -= ((this.P.x - pos.x) / dist) * v * dt; this.P.y -= ((this.P.y - pos.y) / dist) * v * dt; this.P.z -= ((this.P.z - pos.z) / dist) * v * dt;
+        this.vel.x = this.vel.y = this.vel.z = 0;
+        this._place();
+        if (this._entryAir) {
+            g.fx.shake = Math.max(g.fx.shake || 0, 0.9 * Math.sin(Math.min(1, k) * Math.PI) + 0.2);
+            for (let i = 0; i < 6; i++) {
+                const a = Math.random() * Math.PI * 2, r = 1.2 + Math.random() * 3;
+                g.fx.spark(_v1.set(p.x + Math.cos(a) * r, p.y - 2.5 + Math.random() * 2, p.z + Math.sin(a) * r), i % 2 ? 0xff7a2a : 0xffd27a, 0.35, _v2.set(Math.cos(a) * 3, 18 + Math.random() * 10, Math.sin(a) * 3), 0.5);
+            }
+            this._overlay('fire', smoothstep(0, 0.5, k) * (1 - smoothstep(0.85, 1, k) * 0.2));
+        } else this._overlay('black', smoothstep(0.4, 1, k));
+        // the land there is made now, while the air burns (the terrain worker): no long frame on arrival
+        if (this.dest) g.world?.update?.({ x: this.dest.x, y: 0, z: this.dest.z }, 1);
+        if (this._t >= this._entryT) this._arrive();
+    }
+
+    /** Over the place flown at, high up, falling into the usual flight. */
+    _arrive() {
+        const g = this.game, ch = g.character, p = ch.group.position;
+        const d = this.dest;
+        const data = g.world?.terrain?.data;
+        const ground = data ? data.heightAt(d.x, d.z) : 0;
+        const h = d.id === 'earth' ? FLYMAX.DESC_H : 160;
+        p.set(d.x + 0.5, Math.max(ground + h, d.id === 'earth' ? 260 : ground + 120), d.z + 0.5);
+        this._last.copy(p);
+        this.state = 'descend';
+        this._t = 0;
+        this._v = 120;
+        this._descTop = p.y;
+        this.realm = realmAt(p.x, p.y, p.z, this.planets);
+        g.character.gravityK = 1;
+        this._overlayFade = 1;
+        const fl = g.flight;
+        if (!fl.active) fl.float();
+        fl.hovering = false;
+        if (d.id === 'earth') this._restoreEarthSky();
+    }
+
+    _descend(dt, pose) {
+        const g = this.game, ch = g.character, p = ch.group.position, fl = g.flight;
+        this._t += dt;
+        this._v = Math.max(18, this._v * Math.exp(-0.9 * dt));
+        p.y -= this._v * dt;
+        const data = g.world?.terrain?.data;
+        const ground = data ? data.heightAt(Math.round(p.x), Math.round(p.z)) : 0;
+        fl.tilt += (0.6 - fl.tilt) * Math.min(1, dt * 2);
+        ch.flying = true;
+        ch.setFlightTilt(fl.tilt);
+        ch.head.rotation.x = g.smoothHead.pitch + fl.tilt - 0.5;
+        ch.flightView = -0.5;
+        this.climbK = this.realm === 'earth' ? smoothstep(110, this._descTop, p.y) : 0;
+        if (p.y - ground < 70 || this._t > 12) {
+            // the usual flight from here (diving a little, at the usual speed)
+            this.state = 'off';
+            fl.state = 'cruise'; fl.t = 2; fl.hovering = false; fl.speed = 22; fl.pitch = -0.25;
+            this.climbK = 0;
+            this._say(`${this.realm === 'earth' ? '🌍' : '🪐'} Вы в небе над ${this.realm === 'earth' ? 'Землёй' : this.planets.get(this.realm)?.name || 'планетой'}. Летите, куда хотите; «Flying Maxima» — снова в космос`, 'arrived', 5000);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────── after the world moved
+    /**
+     * The sky, the light, the fog, the weather and the breathing for where the hero is (Game.frame,
+     * after the world's own day / night): every frame while off the Earth or climbing.
+     */
+    afterWorld(dt) {
+        const g = this.game;
+        if (!this.enabled) return;
+        this._breath(dt);
+        this._heatFx(dt);
+        this._overlayStep(dt);
+        const world = g.world, sky = world.sky;
+        if (this.realm === 'earth') {
+            const k = this.state === 'ascend' || this.state === 'descend' ? this.climbK || 0 : 0;
+            if (k > 0.001) this._darkSky(k);
+            else if (this._skyDark) this._restoreEarthSky();
+            g.sound?.spaceLoop?.('spaceWind', 0);
+            return;
+        }
+        this._skyDark = true;
+        if (this.realm === 'space') {
+            if (sky) sky.mesh.visible = false;
+            this._fogOff();
+            this._sunLight(1, 0xfff6e6, 0.07);
+            g.sound?.spaceLoop?.('spaceWind', 0);
+            return;
+        }
+        this._planetSky(dt);
+    }
+
+    /** Climbing out of the Earth's air: the sky goes dark, the stars come out, the haze falls away. */
+    _darkSky(k) {
+        const w = this.game.world, sky = w.sky;
+        this._skyDark = true;
+        if (sky) {
+            const u = sky.uniforms;
+            u.uZenith.value.lerp(_c1.setRGB(0.0, 0.0, 0.01), k);
+            u.uHorizon.value.lerp(_c1.setRGB(0.02, 0.05, 0.14), Math.pow(k, 0.7));
+            u.uGround.value.lerp(_c1.setRGB(0.01, 0.02, 0.05), k);
+            u.uNight.value = Math.max(u.uNight.value, k);
+            u.uClouds.value = k > 0.55 ? 0 : u.uClouds.value;
+            u.uOvercast.value *= 1 - k;
+        }
+        const f = this.game.scene.fog;
+        if (f) {
+            f.far = f.far + (6000 - f.far) * k;
+            f.near = f.near + (3000 - f.near) * k;
+            f.color.lerp(_c1.setRGB(0.02, 0.05, 0.14), k);
+            if (this.game.scene.background?.isColor) this.game.scene.background.copy(f.color);
+        }
+    }
+
+    _fogOff() {
+        const f = this.game.scene.fog;
+        if (f) { f.near = 1e7; f.far = 2e7; f.color.setRGB(0, 0, 0); }
+    }
+
+    /** The world's light from the Sun's real direction (space, a planet without air). */
+    _sunLight(k, color, amb) {
+        const w = this.game.world, t = this.now();
+        const sunDist = Math.hypot(this.P.x, this.P.y, this.P.z) || 1;
+        const fall = clamp(Math.pow(SPACE.AU / sunDist, 0.6), 0.35, 1.6); // (dim at Pluto, bright at Mercury)
+        const dl = w.dirLight;
+        if (!dl) return;
+        _v1.set(-this.P.x, -this.P.y, -this.P.z).normalize();
+        const p = this.game.character.group.position;
+        dl.target.position.copy(p); dl.target.updateMatrixWorld();
+        dl.position.copy(p).addScaledVector(_v1, 200);
+        dl.color.set(color);
+        dl.intensity = 1.05 * fall * k;
+        w.ambientLight.intensity = amb;
+        w.ambientLight.color.setRGB(0.8, 0.85, 1);
+        w.hemiLight.intensity = amb * 0.6;
+        void t;
+    }
+
+    /** On another planet: its sky, its sun where it really is in its sky, its fog and weather. */
+    _planetSky(dt) {
+        const g = this.game, w = g.world, sky = w.sky, def = this.planets.get(this.realm);
+        if (!def) return;
+        const t = this.now(), p = g.character.group.position;
+        // the sun in this planet's sky: from the place on the planet's turning surface
+        const c = planetPosition(def, t, _p, this.planets);
+        surfaceToDir(def, p.x, p.z, _d);
+        rotY(_d, spinAt(def, t));
+        const n = _v1.set(_d.x, _d.y, _d.z).normalize();
+        const s = _v2.set(-c.x - n.x * def.radius, -c.y - n.y * def.radius, -c.z - n.z * def.radius).normalize();
+        // the local frame: up = n, east = Y × n, north = n × east (the world's x east, −z north)
+        const east = _v3.set(0, 1, 0).cross(n);
+        if (east.lengthSq() < 1e-6) east.set(1, 0, 0); else east.normalize();
+        const north = _v4.copy(n).cross(east).normalize();
+        const local = _v5.set(s.dot(east), s.dot(n), -s.dot(north)).normalize();
+        this.P.x = c.x + n.x * def.radius; this.P.y = c.y + n.y * def.radius; this.P.z = c.z + n.z * def.radius; // (for the light's strength, the map)
+        this._localFrame = { n: n.clone(), east: east.clone(), north: north.clone() };
+        const elev = local.y;
+        const day = smoothstep(-0.06, 0.12, elev);
+        const vac = def.sky === 'vacuum';
+        if (sky) {
+            sky.mesh.visible = !vac;
+            sky.setSunDirection(local);
+            const u = sky.uniforms;
+            if (def.sky === 'mars') {
+                u.uZenith.value.setRGB(0.55, 0.38, 0.25).lerp(_c1.setRGB(0.02, 0.02, 0.04), 1 - day);
+                u.uHorizon.value.setRGB(0.86, 0.66, 0.46).lerp(_c1.setRGB(0.05, 0.04, 0.06), 1 - day);
+                u.uGround.value.setRGB(0.45, 0.28, 0.18).lerp(_c1.setRGB(0.02, 0.02, 0.03), 1 - day);
+                u.uNight.value = 1 - day; u.uClouds.value = 0; u.uOvercast.value = 0;
+            } else if (def.sky === 'venus') {
+                u.uZenith.value.setRGB(0.66, 0.5, 0.26).multiplyScalar(0.3 + 0.7 * day);
+                u.uHorizon.value.setRGB(0.88, 0.7, 0.4).multiplyScalar(0.3 + 0.7 * day);
+                u.uGround.value.setRGB(0.5, 0.36, 0.2).multiplyScalar(0.3 + 0.7 * day);
+                u.uNight.value = 0; u.uClouds.value = 1; u.uOvercast.value = 0.85;
+            }
+        }
+        const f = g.scene.fog;
+        if (f) {
+            if (vac) { f.color.setRGB(0, 0, 0); f.near = Math.max(60, f.far * 0.75); }
+            else if (def.sky === 'mars') { f.color.setRGB(0.78, 0.57, 0.4).multiplyScalar(0.25 + 0.75 * day); f.near = 30; }
+            else { f.color.setRGB(0.8, 0.62, 0.34).multiplyScalar(0.3 + 0.7 * day); f.near = 6; f.far = Math.min(f.far, 150); }
+            if (g.scene.background?.isColor) g.scene.background.copy(f.color);
+        }
+        // the light: from this planet's sun (dim through Venus' clouds — mostly the glow of the sky)
+        const dl = w.dirLight;
+        if (dl) {
+            dl.target.position.copy(p); dl.target.updateMatrixWorld();
+            dl.position.copy(p).add(_v1.copy(local).multiplyScalar(200));
+            const sunDist = Math.hypot(c.x, c.y, c.z) || 1;
+            const fall = clamp(Math.pow(SPACE.AU / sunDist, 0.6), 0.4, 1.6);
+            const venus = def.sky === 'venus';
+            dl.intensity = (venus ? 0.35 : 1.0) * fall * day;
+            dl.color.set(venus ? 0xffd49a : def.sky === 'mars' ? 0xffe2c4 : 0xffffff);
+            w.ambientLight.intensity = venus ? 0.32 * (0.4 + 0.6 * day) + 0.05 : vac ? 0.07 + 0.05 * day : 0.16 + 0.1 * day;
+            w.ambientLight.color.set(venus ? 0xffc77a : def.sky === 'mars' ? 0xffc9a4 : 0xc8d4ff);
+            w.hemiLight.intensity = venus ? 0.25 * (0.3 + 0.7 * day) : vac ? 0.03 : 0.12 * day;
+        }
+        this._weather(dt, def);
+    }
+
+    /** Venus' storms: the wind pushes, dust flies, lightning far off. Mars: a little dust. */
+    _weather(dt, def) {
+        const g = this.game, p = g.character.group.position;
+        if (!def.storms) { g.sound?.spaceLoop?.('spaceWind', def.sky === 'mars' ? 0.15 : 0); return; }
+        const t = this.now();
+        const dir = t * 0.03, gust = 0.6 + 0.4 * Math.sin(t * 0.7) * Math.sin(t * 0.23 + 1);
+        const wx = Math.cos(dir) * 11 * gust, wz = Math.sin(dir) * 11 * gust;
+        this.wind = { x: wx, z: wz };
+        if (g.flight?.active) { p.x += wx * 0.35 * dt; p.z += wz * 0.35 * dt; }
+        else if (g.knockback) { g.knockback.x += wx * 0.55 * dt; g.knockback.z += wz * 0.55 * dt; }
+        for (let i = 0; i < 5; i++) {
+            const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 14;
+            g.fx.spark(_v1.set(p.x + Math.cos(a) * r - wx, p.y - 1 + Math.random() * 4, p.z + Math.sin(a) * r - wz), i % 2 ? 0xc89a5a : 0xa8783e, 0.12 + Math.random() * 0.15, _v2.set(wx * 1.6, (Math.random() - 0.5), wz * 1.6), 1.2);
+        }
+        g.sound?.spaceLoop?.('spaceWind', 0.45 + 0.4 * gust);
+        // lightning in the clouds far off: a flash, then the thunder (no harm: only the wind pushes)
+        this._boltT -= dt;
+        if (this._boltT <= 0) {
+            this._boltT = 3 + Math.random() * 8;
+            const a = Math.random() * Math.PI * 2, r = 90 + Math.random() * 120;
+            g.fx.lightFlash?.(_v1.set(p.x + Math.cos(a) * r, p.y + 40 + Math.random() * 40, p.z + Math.sin(a) * r), 0xfff0c8, 3, 0.25, 260);
+            const f = g.scene.fog;
+            if (f) f.color.multiplyScalar(1.6);
+            setTimeout(() => g.sound?.playThunder?.(), 600 + r * 6);
+        }
+    }
+
+    /** Without air, the hero breathes by magic: −0.5 mana a second; no mana — he suffocates. */
+    _breath(dt) {
+        const g = this.game, c = g.combat;
+        const def = this.planets.get(this.realm);
+        const airless = this.realm === 'space' || (def && this.realm !== 'earth' && def.air !== 'air');
+        this.breathing = airless;
+        if (!airless || g.isDeadLocal || c?.dead) { this.suffocate = 0; this._panel(); return; }
+        if (c?.enabled) {
+            const ok = c.drain(FLYMAX.BREATH * dt, dt);
+            if (!ok || c.fatigue <= 0) {
+                this.suffocate += dt;
+                this._overlay('suffocate', clamp(this.suffocate / FLYMAX.SUFFOCATE, 0.15, 0.9));
+                this._say(`🫁 Мана кончилась — нечем дышать! Скорее в воздух (Земля или Венера): ${Math.max(0, Math.ceil(FLYMAX.SUFFOCATE - this.suffocate))} с`, 'suff' + Math.ceil(FLYMAX.SUFFOCATE - this.suffocate), 900);
+                if (this.suffocate >= FLYMAX.SUFFOCATE) this._die(this.realm === 'space' ? '🫁 Вы задохнулись в космосе: кончилась мана, а без неё там не дышат' : `🫁 Вы задохнулись: на планете «${def?.name}» нет воздуха, а мана кончилась`);
+            } else this.suffocate = 0;
+        }
+        this._panel();
+    }
+
+    /** Near the Sun: the heat (a warning, a glow, its sound). */
+    _heatFx(dt) {
+        const g = this.game;
+        const k = this.realm === 'space' ? this.heat : 0;
+        g.sound?.spaceLoop?.('spaceHeat', k * 1.2);
+        if (k > 0.02) {
+            this._overlay('heat', k * 0.85);
+            g.fx.shake = Math.max(g.fx.shake || 0, k * 0.6);
+            this._say(k > 0.6 ? '🔥 ЖАР! Вы сгораете — немедленно прочь от Солнца!' : '☀️ Солнце совсем близко — становится нестерпимо жарко. Дальше — верная смерть!', k > 0.6 ? 'heat2' : 'heat1', 4000);
+        }
+    }
+
+    _die(text) {
+        const g = this.game;
+        if (g.isDeadLocal || g.combat?.dead) return;
+        this._overlay('heat', 0);
+        if (g.combat?.enabled) { g.combat.dead = true; g.combat.hp = 0; } else g.isDeadLocal = true;
+        g.onLocalDeath(text, null);
+    }
+
+    /** Back to life on the Earth (Game.respawn): nothing of space left on. */
+    onRespawn() {
+        this.state = 'off';
+        this.suffocate = 0; this.heat = 0;
+        this._overlay('none', 0);
+        this.game.character.gravityK = 1;
+        this._restoreEarthSky();
+    }
+
+    _restoreEarthSky() {
+        const g = this.game, w = g.world;
+        if (!w) return;
+        if (w.sky) w.sky.mesh.visible = true;
+        this._skyDark = false;
+        g.sound?.spaceLoop?.('spaceWind', 0);
+        g.sound?.spaceLoop?.('spaceHeat', 0);
+        // (the world's own day and light, worked out afresh)
+        w._night = -1; w._phase = -1; w._shadowX = null;
+        if (g.dayCycle) w.setDayPhase(g.dayPhase());
+        else w.setNightMode?.(g.isNight);
+        if (w.sky && !g.dayCycle) w.sky.setClouds(true);
+    }
+
+    // ─────────────────────────────────────────────────────────────── drawing
+    /**
+     * Draw the frame: space first (when it shows: in space, climbing high, on a planet without air),
+     * the game's own scene over it. @returns true when drawn here.
+     */
+    render() {
+        const g = this.game, view = this.view;
+        if (!view || !this.enabled) return false;
+        const def = this.planets.get(this.realm);
+        const vac = this.realm === 'space' || (def && this.realm !== 'earth' && def.sky === 'vacuum');
+        const high = this.realm === 'earth' && (this.climbK || 0) > 0.3;
+        if (!vac && !high) return false;
+        const R = g.renderer, cam = g.camera, t = this.now();
+        // the camera in space: in space — the hero's place; on a planet — its ground, in its turning frame
+        let hide = null;
+        _q.copy(cam.quaternion);
+        if (this.realm === 'space') {
+            _p2.x = this.O.x + (cam.position.x - A.x); _p2.y = this.O.y + (cam.position.y - A.y); _p2.z = this.O.z + (cam.position.z - A.z);
+        } else if (def && this.realm !== 'earth' && this._localFrame) {
+            const F = this._localFrame;
+            const c = planetPosition(def, t, _p, this.planets);
+            const up = def.radius + 4 + Math.max(0, cam.position.y) * 0.05;
+            _p2.x = c.x + F.n.x * up; _p2.y = c.y + F.n.y * up; _p2.z = c.z + F.n.z * up;
+            // the world's axes in space: x = east, y = up, z = south
+            _m.makeBasis(F.east, F.n, _v6.copy(F.north).negate());
+            _q.setFromRotationMatrix(_m).multiply(cam.quaternion);
+            hide = def.id;
+        } else {
+            // climbing out of the Earth's air: the planets and stars appear over the darkening sky
+            const e = planetPosition(this.planets.get('earth'), t, _p, this.planets);
+            earthToDir(cam.position.x, cam.position.z, _d);
+            const up = this.planets.get('earth').radius + 30 + cam.position.y * 0.05;
+            _p2.x = e.x + _d.x * up; _p2.y = e.y + _d.y * up; _p2.z = e.z + _d.z * up;
+            hide = 'earth';
+        }
+        const near = this._nearest(t);
+        const nearAlt = near ? Math.hypot(_p2.x - near.pos.x, _p2.y - near.pos.y, _p2.z - near.pos.z) - near.def.radius : 1000;
+        view.update(t, _p2, _q, { fov: cam.fov, aspect: cam.aspect, height: R.domElement?.height || 720, near: clamp(nearAlt * 0.3, 1, 60), hide, k: high ? smoothstep(0.3, 1, this.climbK) : 1, orbits: this.realm === 'space' });
+        const bg = g.scene.background, skyVis = g.world.sky?.mesh.visible;
+        const auto = R.autoClear;
+        R.autoClear = true;
+        view.render(R);
+        R.autoClear = false;
+        R.clearDepth();
+        g.scene.background = null;
+        if (high && g.world.sky) g.world.sky.mesh.visible = false;
+        R.render(g.scene, cam);
+        g.scene.background = bg;
+        if (g.world.sky) g.world.sky.mesh.visible = skyVis;
+        R.autoClear = auto;
+        this._labels(t);
+        return true;
+    }
+
+    /** Every shader of space made now (Game.prewarm, the loading screen). */
+    prewarm(renderer) {
+        this.view?.compile(renderer);
+    }
+
+    // ─────────────────────────────────────────────────────────────── the planets' maps
+    _askTextures() {
+        if (!this.view || this._worker === false) return;
+        if (!this._worker) {
+            try {
+                this._worker = new Worker(new URL('../world/space.worker.js', import.meta.url), { type: 'module' });
+                this._worker.onmessage = (e) => this._gotTexture(e.data);
+                this._worker.onerror = (e) => { e.preventDefault?.(); this._worker = false; };
+                const T = this.game.world.terrain;
+                this._worker.postMessage({ type: 'init', opts: T.opts, planets: this.planets.toJSON() });
+            } catch (e) { this._worker = false; return; }
+        }
+        this._texQueue = this.planets.list.filter((d) => !this._tex.has(d.id) && d.kind !== 'star').map((d) => d.id);
+        // the Earth first (seen at once), the rest by distance from it
+        this._texQueue.sort((a, b) => (a === 'earth' ? -1 : b === 'earth' ? 1 : (this.planets.get(a).a || 0) - (this.planets.get(b).a || 0)));
+        this._nextTexture();
+    }
+
+    _nextTexture() {
+        if (!this._worker || this._texBusy) return;
+        const id = this._texQueue?.shift();
+        if (!id) return;
+        const def = this.planets.get(id);
+        if (!def) return this._nextTexture();
+        const big = id === 'earth' || id === 'jupiter' || id === 'saturn';
+        this._tex.set(id, 'asked');
+        this._texBusy = true;
+        this._worker.postMessage({ type: 'tex', id, w: big ? 1024 : 512, h: big ? 512 : 256 });
+    }
+
+    _gotTexture(m) {
+        this._texBusy = false;
+        if (m.type === 'tex' && !m.none && m.data) {
+            // (put in a frame of its own: one upload, then the next map is asked for)
+            this._pendingTex = this._pendingTex || [];
+            this._pendingTex.push(m);
+        }
+        this._nextTexture();
+    }
+
+    /** One finished map a frame goes to the video card (Game.frame). */
+    uploadStep() {
+        const m = this._pendingTex?.shift();
+        if (m) { this.view?.setTexture(m.id, m.w, m.h, m.data); this._tex.set(m.id, 'done'); }
+    }
+
+    _planetsChanged() {
+        const json = this.planets.toJSON();
+        this.game.world?.terrain?.planetsChanged?.(json);
+        if (this._worker) {
+            this._worker.postMessage({ type: 'planets', s: json });
+            // (a changed planet's map made again)
+            for (const p of this.planets.list) if (!p.base || p.terraformed) this._tex.delete(p.id);
+            if (this._prepared) this._askTextures();
+        }
+        if (this.game.authority && this.game.sync?.net?.active) this.game.sync.net.send({ t: 'planets', s: json });
+    }
+
+    // ─────────────────────────────────────────────────────────────── the planet spells' hooks
+    /** A spell creates a planet (the host applies it; a guest asks the host). Returns its id (host) or null. */
+    create(def) {
+        const g = this.game;
+        if (!g.authority) { g.sync?.net?.send({ t: 'planets', op: 'create', def }); return null; }
+        return this.planets.add(def);
+    }
+
+    /** A spell changes a planet (bigger, terraformed, its orbit…). */
+    change(id, patch) {
+        const g = this.game;
+        if (!g.authority) { g.sync?.net?.send({ t: 'planets', op: 'update', id, patch }); return false; }
+        return this.planets.update(id, patch);
+    }
+
+    /** A deterministic spot on a planet's surface (e.g. kind 'temple' on Venus): {x, z, y} in the world. */
+    surfaceSpot(id, kind = 'temple') {
+        const def = this.planets.get(id);
+        const r = def && slotRect(def);
+        if (!r) return null;
+        let h = 2166136261;
+        for (const ch of `${kind}:${def.seed}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+        const u = ((h >>> 0) % 10000) / 10000, v = ((Math.imul(h, 2654435761) >>> 0) % 10000) / 10000;
+        const x = Math.round(r.cx + (u - 0.5) * r.w * 0.3), z = Math.round(r.cz + (v - 0.5) * r.h * 0.3);
+        const data = this.game.world?.terrain?.data;
+        return { x, z, y: data ? data.heightAt(x, z) + 1 : 1 };
+    }
+
+    // ─────────────────────────────────────────────────────────────── network, saving
+    /** In my 'p' message: my place in space (the others draw me there). */
+    netPos() {
+        if (this.realm !== 'space') return undefined;
+        return [Math.round(this.P.x * 10) / 10, Math.round(this.P.y * 10) / 10, Math.round(this.P.z * 10) / 10];
+    }
+
+    /** Another player in space: where to draw them in my world (or null: not while I am elsewhere). */
+    remoteWorld(sp, out = []) {
+        if (this.realm !== 'space' || !Array.isArray(sp)) return null;
+        out[0] = A.x + (sp[0] - this.O.x); out[1] = A.y + (sp[1] - this.O.y); out[2] = A.z + (sp[2] - this.O.z);
+        return out;
+    }
+
+    /** The planets from the host / a guest's ask (NetSync 't: planets'). */
+    onNet(m, isHost) {
+        if (m.s && !isHost) { this.planets.applyJSON(m.s); return; }
+        if (!isHost) return;
+        if (m.op === 'create' && m.def && typeof m.def === 'object') this.planets.add({ ...m.def, created: m.def.created || true });
+        else if (m.op === 'update' && typeof m.id === 'string' && m.patch && typeof m.patch === 'object') this.planets.update(m.id, m.patch);
+    }
+
+    /** The hero's own (in the player's save): where in space. */
+    snapshot() {
+        if (this.realm !== 'space') return null;
+        return { P: [this.P.x, this.P.y, this.P.z], O: [this.O.x, this.O.y, this.O.z] };
+    }
+
+    restore(s) {
+        if (!s || !Array.isArray(s.P) || !s.P.every(Number.isFinite)) return;
+        this.P.x = s.P[0]; this.P.y = s.P[1]; this.P.z = s.P[2];
+        const O = Array.isArray(s.O) && s.O.every(Number.isFinite) ? s.O : s.P;
+        this.O.x = O[0]; this.O.y = O[1]; this.O.z = O[2];
+        this.state = 'space';
+        this.speed = 0;
+        this.prepare();
+        this._place();
+        this.game.flight?.float?.();
+    }
+
+    // ─────────────────────────────────────────────────────────────── the map
+    /**
+     * The space map in the minimap's place (Game.frame, every few frames while in space): the Sun, the
+     * orbits, the planets (the Earth lit up), the hero, the line to the Earth with the distance.
+     */
+    drawMap(hud) {
+        const ctx = hud?.mmCtx, cvs = hud?.el?.minimap;
+        if (!ctx || !cvs) return false;
+        const t = this.now();
+        const W = cvs.width, H = cvs.height;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#04060f';
+        ctx.fillRect(0, 0, W, H);
+        const cx = W / 2, cy = H / 2, Rm = Math.min(W, H) * 0.47;
+        const scale = (a) => (Math.log(1 + a / 4000) / Math.log(1 + 500000 / 4000)) * Rm;
+        const toMap = (x, z) => { const r = Math.hypot(x, z); const k = r > 0 ? scale(r) / r : 0; return [cx + x * k, cy + z * k]; };
+        // orbits
+        ctx.lineWidth = 1;
+        for (const def of this.planets.list) {
+            if (!def.a || def.parent) continue;
+            ctx.strokeStyle = def.id === 'earth' ? 'rgba(127,208,255,0.75)' : 'rgba(111,143,200,0.35)';
+            ctx.beginPath(); ctx.arc(cx, cy, scale(def.a), 0, Math.PI * 2); ctx.stroke();
+        }
+        // the belts
+        ctx.strokeStyle = 'rgba(160,140,120,0.25)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(cx, cy, scale(62000), 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, scale(420000), 0, Math.PI * 2); ctx.stroke();
+        // the Sun
+        ctx.fillStyle = '#ffd27a'; ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+        const label = (txt, x, y, col = '#fff') => { ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(txt, x, y); ctx.fillStyle = col; ctx.fillText(txt, x, y); };
+        let earthAt = null;
+        for (const def of this.planets.list) {
+            if (def.kind === 'star' || def.parent) continue;
+            planetPosition(def, t, _p, this.planets);
+            const [x, y] = toMap(_p.x, _p.z);
+            const r = def.kind === 'gas' ? 3.5 : def.id === 'earth' ? 3.5 : 2.5;
+            ctx.fillStyle = '#' + def.color.toString(16).padStart(6, '0');
+            ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+            if (def.id === 'earth') { earthAt = [x, y, { ..._p }]; ctx.strokeStyle = '#7fd0ff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.stroke(); }
+            label(def.name, x, y - 6, def.id === 'earth' ? '#9fe0ff' : '#dfe6ff');
+        }
+        // me, and the way to the Earth
+        const [hx, hy] = toMap(this.P.x, this.P.z);
+        if (earthAt) {
+            ctx.setLineDash([4, 3]); ctx.strokeStyle = 'rgba(127,208,255,0.9)'; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(earthAt[0], earthAt[1]); ctx.stroke(); ctx.setLineDash([]);
+            const e = earthAt[2], d = Math.hypot(this.P.x - e.x, this.P.y - e.y, this.P.z - e.z) - SPACE.EARTH_R;
+            ctx.textAlign = 'left';
+            label(`🌍 До Земли: ${dist(d)}`, 6, H - 8, '#9fe0ff');
+            ctx.textAlign = 'center';
+        }
+        // the others in space (their place) and on the planets
+        for (const r of this.game.remotes?.values?.() || []) {
+            const sp = r.target?.sp;
+            if (!Array.isArray(sp)) continue;
+            const [x, y] = toMap(sp[0], sp[2]);
+            ctx.fillStyle = '#' + (r.color || 0xffffff).toString(16).padStart(6, '0');
+            ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+            label(r.name || 'Игрок', x, y - 5);
+        }
+        const yaw = this.yaw;
+        ctx.save(); ctx.translate(hx, hy); ctx.rotate(Math.atan2(-Math.sin(yaw), -Math.cos(yaw)) + Math.PI / 2);
+        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+        ctx.textAlign = 'right';
+        label(`${dist(this.speed)}/с`, W - 6, 13, '#ffe9a8');
+        return true;
+    }
+
+    // ─────────────────────────────────────────────────────────────── the HUD of space
+    _el() {
+        if (this._dom || typeof document === 'undefined') return this._dom;
+        const root = document.createElement('div');
+        root.id = 'space-hud';
+        root.innerHTML = '<div class="space-overlay"></div><div class="space-panel"></div><div class="space-labels"></div>';
+        const st = document.createElement('style');
+        st.textContent = `#space-hud{position:fixed;inset:0;pointer-events:none;z-index:30}
+#space-hud .space-overlay{position:absolute;inset:0;opacity:0;transition:none}
+#space-hud .space-panel{position:absolute;left:50%;top:12px;transform:translateX(-50%);padding:6px 14px;border-radius:12px;background:rgba(6,10,24,.55);color:#dfeaff;font:600 14px/1.35 system-ui,sans-serif;text-align:center;display:none;white-space:nowrap}
+#space-hud .space-label{position:absolute;transform:translate(-50%,-140%);color:#e9f0ff;font:600 12px system-ui,sans-serif;text-shadow:0 0 3px #000,0 0 6px #000;white-space:nowrap}
+#space-hud .space-label b{color:#9fe0ff}`;
+        root.appendChild(st);
+        document.body.appendChild(root);
+        this._dom = { root, overlay: root.children[0], panel: root.children[1], labels: root.children[2], pool: [] };
+        return this._dom;
+    }
+
+    /** The full-screen tint: 'white' (clouds), 'black', 'fire' (burning air), 'heat', 'amber', 'suffocate'. */
+    _overlay(kind, k) {
+        if (k > (this._ovK || 0) || kind !== this._ovKind || kind === 'none') { this._ovKind = kind; this._ovK = k; this._ovSet = true; }
+    }
+
+    _overlayStep(dt) {
+        const d = this._el();
+        if (!d) return;
+        if (!this._ovSet) this._ovK = Math.max(0, (this._ovK || 0) - dt * 1.2); // (fades by itself)
+        this._ovSet = false;
+        const k = this._ovK || 0;
+        const css = { white: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(235,244,255,1) 100%)', black: '#000', fire: 'radial-gradient(circle, rgba(255,140,40,0) 25%, rgba(255,90,20,.85) 75%, rgba(255,210,120,1) 100%)',
+            heat: 'radial-gradient(circle, rgba(255,240,200,.6) 0%, rgba(255,120,30,1) 100%)', amber: 'radial-gradient(circle, rgba(230,190,120,.2) 30%, rgba(200,150,80,.9) 100%)',
+            suffocate: 'radial-gradient(circle, rgba(0,0,30,0) 35%, rgba(0,0,40,.95) 100%)', none: 'none' }[this._ovKind || 'none'];
+        if (d._css !== css) { d.overlay.style.background = css; d._css = css; }
+        const o = k < 0.003 ? '0' : k.toFixed(3);
+        if (d._o !== o) { d.overlay.style.opacity = o; d._o = o; }
+    }
+
+    /** The line at the top: breathing by magic, the nearest planet. */
+    _panel() {
+        const d = this._el();
+        if (!d) return;
+        let html = '';
+        if (this.offEarth && !this.game.isDeadLocal) {
+            const parts = [];
+            if (this.breathing) parts.push(this.game.combat?.enabled ? '🫧 Дыхание магией: <b>−0,5 маны/с</b>' : '🫧 Дыхание магией');
+            if (this.realm === 'space' && this._bodies?.length) {
+                let best = null;
+                for (const b of this._bodies) if (b.def.kind !== 'star' && (!best || b.alt < best.alt)) best = b;
+                if (best) parts.push(`🪐 ${best.def.name}: ${dist(best.alt)}`);
+                parts.push(`🚀 ${dist(this.speed)}/с`);
+            } else if (this.realm !== 'space') {
+                const def = this.planets.get(this.realm);
+                if (def) parts.push(`🪐 ${def.name} · тяжесть ×${def.gravity}`);
+                if (def?.storms) parts.push('🌪️ Буря');
+            }
+            html = parts.join(' · ');
+        }
+        if (d._html !== html) { d.panel.innerHTML = html; d.panel.style.display = html ? 'block' : 'none'; d._html = html; }
+    }
+
+    /** Names over the planets in space (the nearest few). */
+    _labels(t) {
+        const d = this._el();
+        if (!d) return;
+        const show = this.realm === 'space' && this.view;
+        let i = 0;
+        if (show) {
+            const cam = this.view.camera, w = innerWidth, h = innerHeight;
+            const list = (this._bodies || []).filter((b) => b.def.kind !== 'star' || true).slice().sort((a, b) => a.alt - b.alt).slice(0, 9);
+            for (const b of list) {
+                _v1.set(b.pos.x - _p2.x, b.pos.y - _p2.y, b.pos.z - _p2.z);
+                const far = _v1.length();
+                _v1.project(cam);
+                if (_v1.z > 1 || Math.abs(_v1.x) > 1.1 || Math.abs(_v1.y) > 1.1) continue;
+                let el = d.pool[i];
+                if (!el) { el = d.pool[i] = document.createElement('div'); el.className = 'space-label'; d.labels.appendChild(el); }
+                const txt = `${b.def.id === 'earth' ? '<b>' : ''}${b.def.name}${b.def.id === 'earth' ? '</b>' : ''} · ${dist(Math.max(0, b.alt))}`;
+                if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
+                el.style.left = `${((_v1.x + 1) / 2) * w}px`;
+                el.style.top = `${((1 - _v1.y) / 2) * h}px`;
+                el.style.display = 'block';
+                void far;
+                i++;
+            }
+        }
+        for (; i < d.pool.length; i++) if (d.pool[i].style.display !== 'none') d.pool[i].style.display = 'none';
+    }
+
+    _say(text, key, ms = 4000) {
+        const now = performance.now();
+        if (now - (this._msgAt[key] || -1e9) < ms) return;
+        this._msgAt[key] = now;
+        this.game.hud?.setVoice?.(text, true);
+    }
+
+    dispose() {
+        this._worker?.terminate?.();
+        this._worker = null;
+        this._dom?.root.remove();
+        this._dom = null;
+        this.view?.dispose();
+    }
+}
+
+const _c1 = new THREE.Color();
+const _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3();
+const _m = new THREE.Matrix4();
+
+/** Turn a direction round the y axis (a planet's spin). */
+function rotY(d, a) {
+    const c = Math.cos(a), s = Math.sin(a);
+    const x = d.x * c + d.z * s, z = -d.x * s + d.z * c;
+    d.x = x; d.z = z;
+    return d;
+}
+
+/** «12 км», «830 м». */
+export function dist(m) {
+    m = Math.max(0, m);
+    return m >= 10000 ? `${Math.round(m / 1000)} км` : m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} км` : `${Math.round(m)} м`;
+}
+
+/** One line about a planet on arrival. */
+function planetLine(def) {
+    if (!def) return '';
+    const air = def.air === 'air' ? 'воздух есть' : def.air === 'thin' ? 'воздух слишком редкий — дышите магией' : 'воздуха нет — дышите магией';
+    return `тяжесть ×${def.gravity}, ${air}${def.storms ? ', бури и сильный ветер' : ''}`;
+}
+
+export { PLANETS };

@@ -4,10 +4,13 @@
  * the houses, the animals and the minimap ask it instead of the castles alone.
  * (Pure: imports nothing from Terrain.js.)
  */
+import { offEarth } from './Planets.js';
+
 export class SiteIndex {
     constructor(castles, towers, ice = null) { this.castles = castles; this.towers = towers; this.ice = ice; }
 
     near(x, z, r = 0) {
+        if (offEarth(x - r)) return []; // (other planets: nobody built anything there — Planets.js)
         const a = this.castles.near(x, z, r), b = this.towers.near(x, z, r);
         return b.length ? a.concat(b) : a;
     }

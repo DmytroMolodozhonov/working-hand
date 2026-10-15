@@ -43,7 +43,20 @@ export class Terrain {
         this._frame = 0;
         this.stats = { built: 0, unloaded: 0, maxBuildMs: 0, byWorkers: 0, maxWorkerMs: 0, maxApplyMs: 0 };
         this.flushAround(0, 0);
-        this._startWorkers({ seed, mountains, seas, test, deepCaves, lush });
+        this.opts = { seed, mountains, seas, test, deepCaves, lush }; // (the world's recipe: space.worker.js makes the Earth's globe from it)
+        this._startWorkers(this.opts);
+    }
+
+    /**
+     * The planets changed (Planets.js: made, terraformed, sent by the host): the workers make their ground
+     * by the new recipe; the planets' chunks made before (not changed by anybody) are made again.
+     */
+    planetsChanged(json) {
+        if (this._workers) for (const w of this._workers) w.postMessage({ type: 'planets', s: json });
+        for (const [k, c] of this.data.chunks) if (c.planet && !c.modified) this.data.chunks.delete(k);
+        this.data._last = null;
+        for (const [key, e] of [...this.meshes]) if (this.data.planetOfChunk(e.cx, e.cz)) this._unload(key, e);
+        this._center = null;
     }
 
     /**
