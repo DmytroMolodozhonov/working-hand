@@ -13,7 +13,7 @@
  */
 
 export const CAVES = {
-    CHANCE: 0.28, // per cave cell (90 m): a system starts there
+    CHANCE: 0.5, // per cave cell (90 m): a system starts there (was 0.28: «caves are really rare» — the author; the old ones stay, new ones join them)
     MIN_SPAWN: 150, // m: no mouth nearer the spawn (the creative test cave aside)
     KEEP_SPAWN: 80, // m: a natural cave never reaches the spawn's ground
     STEP: 3, // m per tunnel segment
