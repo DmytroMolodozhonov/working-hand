@@ -155,3 +155,24 @@ test('«Stitching» on real places: a villager\'s doorway (every kind, every fac
     assert.match(stitchHint('none'), /упирается/);
     assert.match(stitchHint('wide'), /широкий/);
 });
+
+test('«Stitching» closes like a camera\'s iris: the edge first from every side, ring by ring, the middle last', async () => {
+    const { irisOrder } = await import('../../src/game/Stitching.js');
+    // a 5×5 hole in a wall (plane x): its cells
+    const cells = [];
+    for (let L = 1; L <= 5; L++) for (let z = -2; z <= 2; z++) cells.push({ x: 0, L, z });
+    const inside = new Set(cells.map((c) => `${c.x},${c.L},${c.z}`));
+    const get = (x, L, z) => (inside.has(`${x},${L},${z}`) ? BLOCK.AIR : BLOCK.STONE);
+    const o = irisOrder(get, cells, 'x');
+    assert.equal(o.stones.length, 25);
+    const last = o.stones[o.stones.length - 1];
+    assert.deepEqual([last.c.L, last.c.z], [3, 0], 'the middle shuts last');
+    // every ring before the next one in, and the first ring has stones on all four sides
+    for (let i = 1; i < o.stones.length; i++) assert.ok(o.stones[i].ring >= o.stones[i - 1].ring, 'ring by ring, inwards');
+    const first = o.stones.filter((s) => s.ring === 0);
+    assert.equal(first.length, 16);
+    assert.ok(first.some((s) => s.c.L === 1) && first.some((s) => s.c.L === 5) && first.some((s) => s.c.z === -2) && first.some((s) => s.c.z === 2));
+    // each stone comes from outside the hole (torn off the wall), toward the middle
+    for (const s of o.stones) assert.ok(s.from.distanceTo(o.mid) > s.to.distanceTo(o.mid), 'flies in from outside');
+    assert.ok(o.T >= 1.6 && o.T <= 5);
+});

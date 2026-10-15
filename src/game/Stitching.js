@@ -6,9 +6,10 @@
  * cross-section that is closed all round by material (rock, stone, brick, planks…): that is the
  * passage (a doorway 3×5, a hole blown by «Бомбардо», a cave's tunnel ~5 m across). If the emptiness
  * is not closed all round (open air, a field, a hall too wide), the magic does not work — and the
- * hint says why. Then stones of the same material as round the hole come flying off the walls
- * one after another — glowing seams of magic between them — and are laid into the passage: stone
- * by stone, from the bottom up, until it is shut. What is laid is an ordinary solid block of the
+ * hint says why. Then stones of the same material as round the hole are torn off the walls and
+ * close it like a camera's iris: from every side at once, ring after ring from the edge to the middle
+ * along a spiral, threads of light stitching them, the outline shimmering — the last one shuts the
+ * middle with a flash (irisOrder). What is laid is an ordinary solid block of the
  * world: nobody walks or shoots through it, «Бомбардо» and the rest break it like any wall.
  *
  * Who decides: the spell goes to everybody ('spell') and every computer sees the stones fly; the
@@ -165,6 +166,59 @@ export function stitchHint(why) {
 }
 
 /**
+ * The order the stones close the passage in, like a camera's iris: ring 0 — the cells at the edge of
+ * the hole — first, then the next ring in, … the middle last; round each ring along a spiral (by the
+ * angle round the middle). Each stone comes from the wall straight out from the middle behind its
+ * place, and is stitched by a thread to its neighbour further out (or the wall). Pure: tested.
+ * → {stones: [{c, to, from, anchor, ring, at}], mid, normal, u, v, edge, T}
+ */
+export function irisOrder(get, cells, plane) {
+    const key = (c) => `${c.x},${c.L},${c.z}`;
+    const inside = new Map(cells.map((c) => [key(c), c]));
+    const ring = new Map();
+    let front = cells.filter((c) => around(c, plane).some(([x, L, z]) => !inside.has(`${x},${L},${z}`)));
+    for (const c of front) ring.set(key(c), 0);
+    for (let r = 1; front.length; r++) {
+        const next = [];
+        for (const c of front) for (const [x, L, z] of around(c, plane)) {
+            const k = `${x},${L},${z}`;
+            if (inside.has(k) && !ring.has(k)) { ring.set(k, r); next.push(inside.get(k)); }
+        }
+        front = next;
+    }
+    const at = (c) => new THREE.Vector3(c.x, c.L - 1, c.z);
+    const mid = new THREE.Vector3();
+    for (const c of cells) mid.add(at(c));
+    mid.divideScalar(cells.length);
+    const normal = new THREE.Vector3(...NORMAL[plane]);
+    const u = plane === 'y' ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const v = new THREE.Vector3().crossVectors(normal, u).normalize();
+    const rings = Math.max(...ring.values()) + 1;
+    const T = Math.min(5, Math.max(1.6, cells.length * STITCH.STEP)); // (about as long as stone by stone took)
+    const ringT = (T * 0.75) / rings, sweep = T * 0.25;
+    const stones = cells.map((c) => {
+        const to = at(c), r = ring.get(key(c));
+        const off = to.clone().sub(mid);
+        const ang = Math.atan2(off.dot(v), off.dot(u)); // −π…π round the middle
+        const out = off.lengthSq() > 1e-6 ? off.clone().normalize() : u.clone();
+        // from the wall behind its place: out past the edge of the hole, a little off the plane
+        const span = (rings - r) + 1.5 + Math.random() * 1.2;
+        const from = to.clone().addScaledVector(out, span).addScaledVector(normal, (Math.random() - 0.5) * 1.2);
+        // the thread: to its neighbour one ring out (or, at the edge, to the wall just outside)
+        let anchor = to.clone().addScaledVector(out, 1);
+        for (const [x, L, z] of around(c, plane)) {
+            const k = `${x},${L},${z}`;
+            if (ring.has(k) && ring.get(k) === r - 1) { anchor = at(inside.get(k)); break; }
+        }
+        return { c, to, from, anchor, ring: r, at: r * ringT + ((ang + Math.PI) / (2 * Math.PI)) * sweep };
+    });
+    stones.sort((a, b) => a.at - b.at);
+    // the outline of the hole (for its shimmer): the outer face of every edge stone
+    const edge = stones.filter((s) => s.ring === 0).map((s) => s.to.clone().addScaledVector(s.to.clone().sub(mid).normalize(), 0.5));
+    return { stones, mid, normal, u, v, edge, T };
+}
+
+/**
  * ON WHOM AND ON WHAT (CLAUDE.md). Stitching lays stones; it never strikes.
  */
 export const STITCH_TARGETS = {
@@ -188,7 +242,7 @@ export const STITCH_TARGETS = {
     ward: { does: 'none', why: 'дом под чужой сферой защиты не трогает (HouseWards.forbids)' },
 };
 
-const _v = new THREE.Vector3();
+const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
 export class Stitching {
     constructor(game) {
@@ -229,7 +283,12 @@ export class Stitching {
         return 'Stitching';
     }
 
-    /** (every computer) the stones fly into the passage; the caster's computer lays them. */
+    /**
+     * (every computer) the passage closes like a camera's iris: stones torn out of the walls round it
+     * fly in from every side at once, ring after ring from the edge to the middle along a spiral,
+     * threads of light stitching each to the one beside it; the last one shuts the middle — a flash.
+     * The caster's computer lays them as blocks of the world.
+     */
     sew(origin, dir, casterId) {
         const g = this.game;
         const get = this._get();
@@ -238,70 +297,102 @@ export class Stitching {
         if (!found.cells) return;
         const mine = casterId === g.localId || casterId === 'local';
         const color = BASE_COLORS[found.block] ?? 0x8a8a8a;
-        const mat = new THREE.MeshLambertMaterial({ color, emissive: 0x6a5cff, emissiveIntensity: 0.35 });
+        const iris = irisOrder(get, found.cells, found.plane);
+        const n = iris.stones.length;
+        const mid = iris.mid;
+        // one draw for all the flying stones; one for all the threads
         if (!this._geo) this._geo = new THREE.BoxGeometry(0.96, 0.96, 0.96);
-        // where each stone comes from: a point on the walls round the passage, a little out of them
-        const mid = new THREE.Vector3();
-        for (const c of found.cells) mid.add(_v.set(c.x, c.L - 1, c.z));
-        mid.divideScalar(found.cells.length);
-        const step = Math.min(STITCH.STEP, 6 / found.cells.length); // (a big passage: faster)
-        const stones = found.cells.map((c, i) => {
-            const to = new THREE.Vector3(c.x, c.L - 1, c.z);
-            const a = Math.random() * Math.PI * 2;
-            const from = to.clone().add(_v.set(Math.cos(a) * 2.5, (Math.random() - 0.3) * 2.5, Math.sin(a) * 2.5));
-            return { c, to, from, at: i * step, mesh: null, laid: false, waitT: 0 };
-        });
+        const mat = new THREE.MeshLambertMaterial({ color, emissive: 0x6a5cff, emissiveIntensity: 0.45 });
+        const rocks = new THREE.InstancedMesh(this._geo, mat, n);
+        rocks.frustumCulled = false;
+        const hide = new THREE.Matrix4().makeScale(0, 0, 0);
+        for (let i = 0; i < n; i++) rocks.setMatrixAt(i, hide);
+        g.scene.add(rocks);
+        const lineGeo = new THREE.BufferGeometry();
+        const linePos = new Float32Array(n * 6);
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(linePos, 3));
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xc9bfff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+        const threads = new THREE.LineSegments(lineGeo, lineMat);
+        threads.frustumCulled = false;
+        g.scene.add(threads);
+        const stones = iris.stones.map((st) => ({ ...st, laid: false, waitT: 0, started: false }));
         g.sound?.playWhoosh?.();
         g.fx.lightFlash?.(mid, 0x8f80ff, 2.5, 0.4, 14);
-        let t = 0;
-        const total = stones.length * step + STITCH.FLY + 3; // (+3 s: a stone waits for a body to step aside)
+        const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e3 = new THREE.Euler(), sc = new THREE.Vector3(), pos = new THREE.Vector3();
+        let t = 0, closed = false;
         g.spells.spells.push({
-            life: total,
+            life: iris.T + STITCH.FLY + 3, // (+3 s: a stone waits for a body to step aside)
             onUpdate: (spell, dt) => {
                 t += dt;
-                let left = 0;
-                for (const s of stones) {
+                let left = 0, lines = 0;
+                // the outline of the hole shimmers while it closes
+                for (let k = 0; k < 3; k++) {
+                    const b = iris.edge[(Math.random() * iris.edge.length) | 0];
+                    if (b) g.fx.spark(b, Math.random() < 0.5 ? 0xb9a8ff : 0xe6e0ff, 0.06, _v.set(0, 0, 0), 0.35);
+                }
+                for (let i = 0; i < n; i++) {
+                    const s = stones[i];
                     if (s.laid) continue;
                     left++;
                     const lt = t - s.at;
                     if (lt < 0) continue;
-                    if (!s.mesh) {
-                        s.mesh = new THREE.Mesh(this._geo, mat);
-                        s.mesh.scale.setScalar(0.3);
-                        g.scene.add(s.mesh);
-                        // a puff of grit where it leaves the wall
-                        for (let i = 0; i < 6; i++) g.fx.spark(s.from, color, 0.08, _v.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.5);
+                    if (!s.started) { // (torn out of the wall: a puff of grit)
+                        s.started = true;
+                        for (let k = 0; k < 5; k++) g.fx.spark(s.from, color, 0.08, _v.set((Math.random() - 0.5) * 2, Math.random() * 1.5, (Math.random() - 0.5) * 2), 0.45);
                     }
                     const k = Math.min(1, lt / STITCH.FLY);
                     const e = k * k * (3 - 2 * k);
-                    s.mesh.position.lerpVectors(s.from, s.to, e);
-                    s.mesh.position.y += Math.sin(k * Math.PI) * 0.8; // (an arc)
-                    s.mesh.rotation.set((1 - e) * 4, (1 - e) * 3, 0);
-                    s.mesh.scale.setScalar(0.3 + 0.7 * e);
-                    if (Math.random() < 0.5) g.fx.spark(s.mesh.position, 0xb9b0ff, 0.06, _v.set(0, 0.3, 0), 0.4); // (the thread of magic behind it)
-                    if (k < 1) continue;
+                    // a petal of the iris: in along a curve — it swings round the middle as it closes in
+                    const sw = (1 - e) * 0.9;
+                    pos.lerpVectors(s.from, s.to, e);
+                    pos.sub(mid).applyAxisAngle(iris.normal, sw).add(mid);
+                    e3.set((1 - e) * 3, (1 - e) * 2, 0);
+                    q.setFromEuler(e3);
+                    sc.setScalar(0.35 + 0.65 * e);
+                    m4.compose(pos, q, sc);
+                    rocks.setMatrixAt(i, k < 1 ? m4 : hide);
+                    // the thread of light that stitches it to the stone (or the wall) beside it
+                    if (k < 1) {
+                        const a = s.anchor, o = lines * 6;
+                        linePos[o] = pos.x; linePos[o + 1] = pos.y; linePos[o + 2] = pos.z;
+                        linePos[o + 3] = a.x; linePos[o + 4] = a.y; linePos[o + 5] = a.z;
+                        lines++;
+                        if (Math.random() < 0.25) g.fx.spark(pos, 0xd8d0ff, 0.05, _v.set(0, 0, 0), 0.3);
+                        continue;
+                    }
                     // in place: never into a body — it waits for it to step aside
-                    if (this._occupied(s.c)) { s.waitT += dt; if (s.waitT < 3) continue; this._drop(s); continue; }
+                    if (this._occupied(s.c)) { s.waitT += dt; if (s.waitT < 3) { rocks.setMatrixAt(i, hide); continue; } s.laid = true; continue; }
+                    s.laid = true;
                     this._lay(s, found.block, mine, color);
                 }
-                if (!left) spell.life = 0;
+                rocks.instanceMatrix.needsUpdate = true;
+                lineGeo.setDrawRange(0, lines * 2);
+                lineGeo.attributes.position.needsUpdate = true;
+                lineMat.opacity = 0.6 + 0.35 * Math.sin(t * 30);
+                // the iris shuts: a flash in the middle and a ring of sparks
+                if (!left && !closed) {
+                    closed = true;
+                    g.fx.lightFlash?.(mid, 0xb8a8ff, 5, 0.5, 22);
+                    for (let k = 0; k < 36; k++) {
+                        const a = (k / 36) * Math.PI * 2;
+                        _w.copy(iris.u).multiplyScalar(Math.cos(a) * 3).addScaledVector(iris.v, Math.sin(a) * 3);
+                        g.fx.spark(mid, k % 2 ? 0xd8d0ff : 0x9f8cff, 0.09, _w, 0.5);
+                    }
+                    g.sound?.playSapira?.() ?? g.sound?.playWhoosh?.();
+                    spell.life = 0;
+                }
             },
-            onEnd: () => { for (const s of stones) if (s.mesh) this._drop(s); mat.dispose(); },
+            onEnd: () => {
+                g.scene.remove(rocks); g.scene.remove(threads);
+                rocks.dispose?.(); mat.dispose(); lineGeo.dispose(); lineMat.dispose();
+            },
         });
-    }
-
-    _drop(s) {
-        if (!s.mesh) return;
-        this.game.scene.remove(s.mesh);
-        s.mesh = null;
-        s.laid = true;
     }
 
     /** The stone is in: a seam of light round it; the caster's computer makes it a block of the world. */
     _lay(s, block, mine, color) {
         const g = this.game;
-        this._drop(s);
-        for (let i = 0; i < 10; i++) g.fx.spark(s.to, i % 2 ? 0xd8d0ff : color, 0.07, _v.set((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3), 0.35);
+        for (let i = 0; i < 8; i++) g.fx.spark(s.to, i % 2 ? 0xd8d0ff : color, 0.07, _v.set((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3), 0.35);
         g.sound?.playStep?.();
         if (!mine) return;
         const data = g.terrain?.data;
