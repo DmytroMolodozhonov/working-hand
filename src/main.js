@@ -475,7 +475,6 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         if (spoken) {
             const now = performance.now();
             if (fromGame(spoken, { ...meta, from: meta?.from ?? now - 2500, to: meta?.to ?? now })) {
-                hud.setVoice(`🔇 «${escapeHtml(lastWords(command))}» — в этот миг говорил житель из колонок: похоже, это его голос. Скажите ещё раз`);
                 if (isFinal) netLog(`заклинание «${command}» не моё: его слова только что сказал голос игры`);
                 return;
             }
@@ -501,7 +500,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         const margin = parseInt($('voice-filter')?.value ?? '9', 10);
         // Multiplayer: a friend's voice heard by this microphone must not cast here
         if (margin > 0 && game.remotes?.size > 0 && matchSpell(command) && !voice.isOwnVoice(margin)) {
-            hud.setVoice(`🔇 Тихо — похоже, это голос другого игрока: «${escapeHtml(lastWords(command))}»`);
+            netLog(`заклинание «${command}» не моё: тише моего голоса`);
             return;
         }
         // …and it must be ME who said it: my lips moved (the camera sees the mouth), and it isn't
@@ -511,7 +510,6 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         if (heard && (game.remotes?.size > 0 || game.voiceGate.echoes(heard, performance.now()))) {
             const gate = game.voiceGate.check(heard, performance.now(), { levels: voice._levels, floor: voice.noiseFloor });
             if (!gate.ok) {
-                hud.setVoice(gate.why === 'lips' ? `🔇 «${escapeHtml(lastWords(command))}» — ваш рот не двигался вместе с этим голосом: это сказали не вы` : `🔇 «${escapeHtml(lastWords(command))}» — это чужой голос (это заклинание только что сказал кто-то другой)`);
                 if (isFinal || held) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
                 return;
             }
@@ -541,7 +539,6 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
 // The native voice heard a spell only as the speakers' echo (a friend over Discord, the game itself)
 voice.onEcho = (words) => {
     if (!game?.active) return;
-    hud.setVoice(`🔇 «${escapeHtml(words)}» — это голос из колонок (друг в Discord или сама игра), а не ваш`);
     netLog(`заклинание «${words}» не моё: оно звучало из колонок`);
 };
 
