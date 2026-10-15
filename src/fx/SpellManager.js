@@ -1246,6 +1246,8 @@ export class SpellManager {
         const size = maxima ? 2.3 : 1;
         orb.scale.setScalar(size);
         orb.position.copy(origin).addScaledVector(direction, 0.8 * size);
+        // (the orb shows a little ahead of the hand — whatever stands in that gap is touched first: below)
+        let gapFrom = origin.clone();
         const vel = direction.clone().multiplyScalar(maxima ? 27 : 32);
         const gravity = maxima ? 3.5 : 6;
         const radius = bombardoRadius(power);
@@ -1267,7 +1269,8 @@ export class SpellManager {
         this.spells.push({
             life: maxima ? 3.2 : 2.6,
             onUpdate: (spell, dt) => {
-                prev.copy(orb.position);
+                // first frame: the way from the hand to where the orb appeared (a wall or a knight right before the hand)
+                if (gapFrom) { prev.copy(gapFrom); gapFrom = null; } else prev.copy(orb.position);
                 age += dt;
                 vel.y -= gravity * dt;
                 orb.position.addScaledVector(vel, dt);
@@ -1308,6 +1311,10 @@ export class SpellManager {
                 if (this.hooks.leavesAt?.(orb.position.x, orb.position.y, orb.position.z)) {
                     explodeAt(orb.position); spell.life = 0; return;
                 }
+                // every creature on this step's way (knights, villagers, animals, sailors, trees, the spider…:
+                // Duel.touchOnWay) — not only zombies; and touched along the whole move, not only where it ended
+                const bh = this.hooks.bodyOnWay?.(prev, orb.position, casterId);
+                if (bh) { explodeAt(bh); spell.life = 0; return; }
                 // Players: a shield sends the orb back, otherwise it blows up on them
                 for (const p of players) {
                     const pc = p.center();

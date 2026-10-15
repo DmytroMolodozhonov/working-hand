@@ -100,6 +100,13 @@ export function fallDamage(h) {
 }
 
 const _v1 = new THREE.Vector3();
+const _ia = new THREE.Vector3(), _ib = new THREE.Vector3(), _ic = {};
+/** The arm (shoulder→hand) goes into the body round `pos` (r: its pick size; upright, ±r — the real body ~0.6 r wide). */
+export function armIn(shoulder, hand, pos, r) {
+    _ia.copy(pos).y -= r;
+    _ib.copy(pos).y += r;
+    return segmentToSegment(shoulder, hand, _ia, _ib, _ic).dist <= r * 0.6;
+}
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
@@ -182,6 +189,8 @@ export class Levitation {
         for (const side of ['right', 'left']) {
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
+            const anchor = side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor;
+            const shoulder = anchor?.getWorldPosition ? anchor.getWorldPosition(new THREE.Vector3()) : null;
             // a wizard: the point of his body (soles to hair) nearest to the line of the hand
             const list = cands.slice();
             for (const { id, r } of wizards) {
@@ -191,6 +200,13 @@ export class Levitation {
                 list.push({ kind: 'wizard', obj: id, pos: a.lerp(b, k), r: BODY.HERO.R + 0.3 });
             }
             for (const c of list) {
+                // somebody standing so close that the arm is in them (the hand in or through their body):
+                // that one is meant — the line of the hand, which starts beyond them, would miss them
+                if (shoulder && c.r && (c.kind === 'creature' || c.kind === 'wizard') && armIn(shoulder, hand, c.pos, c.r)) {
+                    const d = c.pos.distanceTo(hand);
+                    if (!best || best.score > -1) best = { ...c, side, score: -1, d };
+                    continue;
+                }
                 const to = _v1.subVectors(c.pos, hand);
                 const d = to.length();
                 if (d > LEVITATE.RANGE || d < 0.3) continue;

@@ -253,6 +253,8 @@ export class Game {
             sand: (z) => this.sandZombie(z),
             chill: (z, amt) => z.applyChill(amt),
             explode: (p, r, casterId, power) => this.explode(p, r, casterId, power),
+            // the first creature (not a player: those have their shields — SpellManager) the move p→q touches: the point, or null
+            bodyOnWay: (p, q, casterId) => this.duel?.touchOnWay(p, q, casterId === 'local' ? this.localId : casterId, true) || null,
             wave: (name, o, d, ph, by) => this.waves.onNet(name, o, d, ph, by), // («Wave Attack»: WaveAttack.js)
             success: (casterId, name) => { if (casterId === this.localId || casterId === 'local') this.mana?.success(name); }, // (mana: my spell worked)
             handPose: (casterId, side) => this.handPose(casterId, side),
@@ -1003,6 +1005,15 @@ export class Game {
         return w && w.side === side ? this.wandMagic.tip(out) : this.character.getHandWorldPosition(side, out);
     }
 
+    /**
+     * Where a one-shot spell («Бомбардо», a ray, the wind…) leaves `side`: castOrigin — pulled back
+     * along the arm when the wand's tip is already in somebody standing close, or in a wall (Duel.armStart).
+     */
+    spellStart(side, out = new THREE.Vector3()) {
+        this.castOrigin(side, out);
+        return this.duel ? this.duel.myStart(side, out) : out;
+    }
+
     handPose(casterId, side) {
         if (casterId === 'local' || casterId === this.localId) {
             return { origin: this.castOrigin(side), dir: this.character.getHandDirection(side) };
@@ -1256,7 +1267,7 @@ export class Game {
         this.lastSpellCastTime = now;
         if (name === 'Flight') return name;
         const side = this.wandSide() || this.magicHand || this.lastMagicHand || this.dom;
-        const origin = this.castOrigin(side);
+        const origin = this.spellStart(side);
         const dir = this.character.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
@@ -1583,7 +1594,7 @@ export class Game {
         if (!side) { if (isFinal) this.hud.setVoice(over ? '🌿 Поднимите руку и направьте её на тех, кого разбросать, — и скажите «Overgrown»' : '🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
-        const origin = this.castOrigin(side);
+        const origin = this.spellStart(side);
         const dir = ch.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);

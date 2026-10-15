@@ -286,6 +286,13 @@ const _qInv = new THREE.Quaternion();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _vFrom = new THREE.Vector3();
+const _armSh = new THREE.Vector3(), _armC = {};
+/**
+ * The line of the arm (Duel.armStart): a body counts when it comes this close to it (× its
+ * radius — the real body, not the generous aiming capsule: a man beside the arm is not hit);
+ * the spell then starts BACK m before it (rays look only forwards from their start).
+ */
+export const ARM = { BODY: 0.6, BACK: 0.3 };
 const _c2 = new THREE.Color();
 const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vector3(), _ds = new THREE.Vector3(), _du = new THREE.Vector3();
 
@@ -377,6 +384,65 @@ export class Duel {
         if (ch.getPointingDirection) ch.getPointingDirection(side, outDir);
         else ch.getHandDirection(side, outDir);
         return outDir;
+    }
+
+    /**
+     * Where a spell really leaves the hand: the wand's tip (`tip`) — unless the line of the arm,
+     * from the shoulder (`from`) to that tip, already goes into somebody standing close (the tip
+     * in them, or pushed right through them) or into a wall (the hand pushed into a block). Then
+     * it leaves just before that body / wall: it hits them, never flies on from their far side.
+     * `tip` is moved; true when it was. (`skip`: the caster — never his own body, nor the horse
+     * he rides.) For every kind of spell: duel charges, «Бомбардо», rays (Game.spellStart).
+     */
+    armStart(from, tip, skip = this.me) {
+        const len = from.distanceTo(tip);
+        if (!(len > 1e-4) || len > 4) return false;
+        const g = this.game;
+        const horse = skip === this.me ? g.animals?.riding?.id : undefined;
+        let s = 2, back = ARM.BACK;
+        for (const body of this._bodies(skip)) {
+            if (body.kind === 'a' && body.id === horse) continue;
+            segmentToSegment(from, tip, body.a, body.b, _armC);
+            if (_armC.dist <= body.r * ARM.BODY && _armC.s < s) s = _armC.s;
+        }
+        // a wall / a floor in the arm's way (looked at every 5 cm), and a door's leaf
+        const t = g.terrain?.data;
+        if (t) {
+            const n = Math.ceil(len / 0.05);
+            for (let i = 1; i <= n && i / n < s; i++) {
+                const k = i / n;
+                if (t.isSolidAt(from.x + (tip.x - from.x) * k, from.y + (tip.y - from.y) * k, from.z + (tip.z - from.z) * k)) { s = k; back = 0.05; break; }
+            }
+        }
+        const dh = g.doors?.segmentHit(from, tip);
+        if (dh && dh.s < s) { s = dh.s; back = 0.05; }
+        if (s > 1) return false;
+        tip.lerpVectors(from, tip, Math.max(0, s - back / len));
+        return true;
+    }
+
+    /**
+     * The first body (any creature: knights, villagers, animals, sailors, trees, the spider…) the
+     * move p→q touches — the point on the move, or null. (`noPlayers`: players are looked at by the
+     * caller.) For things flying that are not duel charges: «Бомбардо»'s orb (SpellManager).
+     */
+    touchOnWay(p, q, skip = null, noPlayers = false) {
+        let best = null;
+        const horse = skip === this.me ? this.game.animals?.riding?.id : undefined;
+        for (const body of this._bodies(skip)) {
+            if ((noPlayers && body.kind === 'p') || (body.kind === 'a' && body.id === horse)) continue;
+            segmentToSegment(p, q, body.a, body.b, _armC);
+            if (_armC.dist <= body.r && (!best || _armC.s < best.s)) best = { s: _armC.s };
+        }
+        return best ? new THREE.Vector3().lerpVectors(p, q, best.s) : null;
+    }
+
+    /** My wand's tip (`out`, from castOrigin) pulled back along my arm by armStart. */
+    myStart(side, out) {
+        const ch = this.game.character;
+        const anchor = side === 'left' ? ch?.leftArmAnchor : ch?.rightArmAnchor;
+        if (anchor?.getWorldPosition) this.armStart(anchor.getWorldPosition(_armSh), out);
+        return out;
     }
 
     /**
@@ -594,6 +660,9 @@ export class Duel {
         const side = aim ? aim.side : (handSide || this.game.magicHand || this.game.lastMagicHand || this.game.dom || 'right');
         const origin = new THREE.Vector3(), dir = new THREE.Vector3();
         this._myRay(side, origin, dir);
+        // somebody standing so close that the wand's tip is in them (or through them), a wall the
+        // hand is pushed into: the charge leaves right before them — it hits them, never flies on behind
+        this.myStart(side, origin);
         // the body it may turn a little towards: the one pointed at — and where on it
         // the line of the hand comes closest (the head, the legs…)
         let tk = 'n', tid = null, ak = 0.5;

@@ -43,7 +43,7 @@ const WALK = 2.3, RUN = 5.6;
 const DUEL_DRAIN = 1; // mana a second a wizard spends pushing in a duel (as a player's fatigue)
 const URGENT = new Set(['punish', 'regroup', 'guardMaster', 'kite']);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const _o = new THREE.Vector3(), _d = new THREE.Vector3();
+const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _ch = new THREE.Vector3();
 
 export class WizardFight {
     constructor(wl) {
@@ -484,6 +484,8 @@ export class WizardFight {
         // (the wand's tip through a wall he stands against: no — the charge would start on the other side)
         const c = g.collision;
         if (c?.lineOfSight && (!c.lineOfSight(v.x, v.y + 3.0, v.z, _o.x, _o.y, _o.z, 0.15) || c.pointBlocked?.(_o.x, _o.y, _o.z))) return false;
+        // (somebody right before him, the wand's tip in them or through them: it starts before them — hits them)
+        duel.armStart?.(_ch.set(v.x, v.y + 3.0, v.z), _o, v.id);
         const body = at ? null : duel._bodyOf?.('p', foeId, duel._tmpBody()); // (`at`: a creature {k, id} instead of a player)
         if (body) _d.copy(body.a).lerp(body.b, 0.55); else _d.set(fp.x, fp.y, fp.z);
         _d.sub(_o).normalize();
