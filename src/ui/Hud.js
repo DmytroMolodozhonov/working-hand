@@ -568,7 +568,19 @@ export class Hud {
         for (const c of castles) {
             if (c.icon !== '✝') continue;
             const gx = (c.x - charPos.x) * scale, gz = (c.z - charPos.z) * scale;
-            if (!inside(gx, gz, 10)) continue;
+            if (!inside(gx, gz, 10)) {
+                // beyond the edge: a small pointer on the edge of the map with the distance
+                const d = Math.hypot(gx, gz) / scale;
+                if (d > 450) continue;
+                const a = Math.atan2(gz, gx), m = 16;
+                const k = Math.min((hw - m) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - m) / Math.max(1e-6, Math.abs(Math.sin(a))));
+                const bx = Math.cos(a) * k, by = Math.sin(a) * k;
+                ctx.fillStyle = 'rgba(30, 30, 36, 0.9)'; ctx.strokeStyle = '#b8b8c4'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(bx, by, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.save(); ctx.translate(bx, by + 1); placeIcon(ctx, 'grave', 14); ctx.restore();
+                label(distText(d), bx - Math.cos(a) * 24, by - Math.sin(a) * 14 + 4);
+                continue;
+            }
             ctx.fillStyle = 'rgba(30, 30, 36, 0.9)'; ctx.strokeStyle = '#b8b8c4'; ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.arc(gx, gz, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             ctx.save(); ctx.translate(gx, gz + 1); placeIcon(ctx, 'grave', 14); ctx.restore();
