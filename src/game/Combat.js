@@ -42,7 +42,7 @@ export const PVP = {
     MAX_HP: 20,
     MAX_FATIGUE: 30,
     FATIGUE_REGEN: 1, // per second
-    SHIELD_HOLD_MAX: 60, // s a «Protection» holds where there is no strength to spend (no fatigue rules)
+    SHIELD_HOLD_MAX: Infinity, // s a «Protection» / its dome holds where there is no mana to spend (Creative): until «стоп»
     SHIELD_DRAIN: 0.5, // mana a second a held «Protection» takes
     DOME_DRAIN: 1, // … and «Protection Maxima»
     SHIELD_SCALE: 1.5, // the hand shield's size (m; 30 % bigger than it was: 1.15)
@@ -852,7 +852,7 @@ export class Combat {
         return {
             shield: this.shield ? this.shield.type : 0,
             side: this.shield ? this.shield.side : 'right',
-            shieldLeft: this.shield ? this.shield.left : 0,
+            shieldLeft: this.shield ? Math.min(this.shield.left, 1e6) : 0, // (Creative's endless one: a number the network can carry)
             frozen: this.frozen,
         };
     }
