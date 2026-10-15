@@ -17,12 +17,17 @@
  * castles' kind of parts (boxes k 0, cylinders k 1), built into the chunks by TerrainData.
  */
 
-import { createRng } from '../core/math.js';
+import { createRng, createNoise2D } from '../core/math.js';
 
 export const ICE_CASTLE = {
     MIN: 950, MAX: 1700, // m from the spawn: far, but a flight reaches it
     R: 30, BLEND: 24, // m: the levelled zone and the ring blending it into the mountain
     TEST_R: 26, TEST_BLEND: 12,
+    // (the author: «где очень высоко… там, где много камня и где реально не может вырасти трава»)
+    PEAK_MIN: 86, // layers: the castle's floor is never lower — a lower summit is raised into a crag of rock
+    MASSIF: 42, // m beyond the plateau: the rocky massif falling steeply from it to the mountain round it
+    TEST_PEAK: 66, TEST_MASSIF: 20, // (the creative test ground: its mountain grows a peak of rock and snow)
+    ROCK: 10, // m beyond the massif: still no grass, no trees — bare rock, scree and snow
     HALL_R: 15, // m: the round hall (outer radius)
     PODIUM: 3, // layers: the palace stands on a podium this high above the plateau
 };
@@ -63,7 +68,8 @@ export function iceCastleSpot(seed, raw, busy, test = null) {
             for (let k = 0; k < m; k++) { s += H(p.x + Math.cos((k / m) * TAU) * q, p.z + Math.sin((k / m) * TAU) * q); n++; }
         }
         const x = Math.round(p.x), z = Math.round(p.z);
-        const F = Math.round(s / n) + 1;
+        // high above the grass: a lower summit is raised into a peak of bare rock
+        const F = Math.max(Math.round(s / n) + 1, test ? ICE_CASTLE.TEST_PEAK : ICE_CASTLE.PEAK_MIN);
         // the gates look toward the spawn
         const ax = -x, az = -z;
         const rot = Math.abs(az) >= Math.abs(ax) ? (az > 0 ? 0 : 2) : (ax > 0 ? 1 : 3);
@@ -96,6 +102,17 @@ export function iceCastleSpot(seed, raw, busy, test = null) {
         if (ok && !busy(p.x, p.z)) return finish(p, R);
     }
     return null;
+}
+
+/** The castle's massif: how high the rock stands `d` m from its middle (−∞: beyond it). Crags by `n`. */
+export function massifHeight(S, d, n, spread = 1) {
+    const R = S.test ? ICE_CASTLE.TEST_R : ICE_CASTLE.R, M = (S.test ? ICE_CASTLE.TEST_MASSIF : ICE_CASTLE.MASSIF) * spread;
+    if (d > R + M) return -Infinity;
+    if (d <= R) return S.F;
+    const t = (d - R) / M; // 0 at the plateau's edge … 1 at the massif's foot
+    // steep crags: a cliff under the rim, ledges, buttresses and gullies, falling to nothing at the foot
+    const h = S.F * (1 - Math.pow(t, 1.25)) + 10 * n * Math.min(1, t * 4) * (1 - t) - 1;
+    return Math.round(t < 0.5 ? Math.round(h / 3) * 3 : h); // (its upper half in ledges: snow lies on them)
 }
 
 /** Local (u across, v toward the gates) → world, for a castle turned by `rot`. */
@@ -237,6 +254,7 @@ export function iceCastlePlan(S) {
 export class IceCastleSite {
     constructor(seed, raw, busy, test = null) {
         this.seed = seed; this.raw = raw; this.busy = busy; this.testAt = test;
+        this._crag = createNoise2D((seed ^ 0x1ce5ea) >>> 0);
         this._plan = undefined;
         this._byChunk = new Map();
     }
@@ -253,13 +271,35 @@ export class IceCastleSite {
     landAt(ix, iz) {
         const k = this.plan;
         if (!k) return null;
-        const B = k.test ? ICE_CASTLE.TEST_BLEND : ICE_CASTLE.BLEND;
+        // (only the plateau: round it the massif of rock falls away by itself — liftAt)
         const dx = ix - k.x, dz = iz - k.z;
-        if (Math.abs(dx) > k.R + B || Math.abs(dz) > k.R + B) return null;
+        if (Math.abs(dx) > k.R || Math.abs(dz) > k.R || dx * dx + dz * dz > k.R * k.R) return null;
+        return { castle: k, w: 1, ice: true };
+    }
+
+    /** The rock massif under the castle at a column (its top layer), or −∞ beyond it. */
+    liftAt(ix, iz) {
+        const k = this.plan;
+        if (!k) return -Infinity;
+        const M = k.R + (k.test ? ICE_CASTLE.TEST_MASSIF : ICE_CASTLE.MASSIF);
+        const dx = ix - k.x, dz = iz - k.z;
+        if (Math.abs(dx) > M || Math.abs(dz) > M) return -Infinity;
         const d = Math.hypot(dx, dz);
-        if (d > k.R + B) return null;
-        const w = d <= k.R ? 1 : 1 - (d - k.R) / B;
-        return { castle: k, w: w * w * (3 - 2 * w), ice: true };
+        if (d > M) return -Infinity;
+        // (not a drum: spurs and bays round it, crags and gullies down its sides)
+        const a = Math.atan2(dz, dx);
+        const spread = 0.6 + 0.5 * (0.5 + 0.5 * this._crag(Math.cos(a) * 2.2 + 30, Math.sin(a) * 2.2 - 12));
+        const n = 0.6 * this._crag(ix / 7, iz / 7) + 0.4 * Math.abs(this._crag(Math.cos(a) * 6 - 5, Math.sin(a) * 6 + 9)) * 2 - 0.4;
+        return massifHeight(k, d, n, spread);
+    }
+
+    /** Bare rock and snow here — no grass, no trees (the massif and a ring round it)? */
+    rocky(ix, iz) {
+        const k = this.plan;
+        if (!k) return false;
+        const M = k.R + (k.test ? ICE_CASTLE.TEST_MASSIF : ICE_CASTLE.MASSIF) + ICE_CASTLE.ROCK;
+        const dx = ix - k.x, dz = iz - k.z;
+        return Math.abs(dx) <= M && Math.abs(dz) <= M && dx * dx + dz * dz <= M * M;
     }
 
     partsForChunk(cx, cz, C) {

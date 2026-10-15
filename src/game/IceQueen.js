@@ -499,12 +499,15 @@ export class IceCastleLife {
         let x, z;
         if (at) { x = at.x + (Math.random() - 0.5) * 6; z = at.z + (Math.random() - 0.5) * 6; }
         else {
-            const a = Math.random() * Math.PI * 2, d = P.R * 0.55 + Math.random() * (P.R * 0.9);
-            x = P.x + Math.cos(a) * d; z = P.z + Math.sin(a) * d;
-            // (not in the hall, nor right under a player's nose)
-            if (Math.hypot(x - P.hall.x, z - P.hall.z) < P.hall.r + 6) return null;
+            // on the plateau (its rim is a cliff): not in the hall, nor right under a player's nose
             const me = g.character.group.position;
-            if (Math.hypot(me.x - x, me.z - z) < 12) return null;
+            let ok = false;
+            for (let i = 0; i < 8 && !ok; i++) {
+                const a = Math.random() * Math.PI * 2, d = P.R * (0.6 + Math.random() * 0.32);
+                x = P.x + Math.cos(a) * d; z = P.z + Math.sin(a) * d;
+                ok = Math.hypot(x - P.hall.x, z - P.hall.z) > P.hall.r + 4 && Math.hypot(me.x - x, me.z - z) > 10;
+            }
+            if (!ok) return null;
         }
         const y = this._floor(x, z, (at ? at.y : P.F) + 6);
         const s = this._spawn('snowman', new THREE.Vector3(x, y, z), { yaw: Math.random() * Math.PI * 2 });
@@ -732,7 +735,7 @@ export class IceCastleLife {
         if (!e) {
             // wandering round the palace
             if (!c.roam || Math.hypot(c.roam.x - p.x, c.roam.z - p.z) < 1.5 || (c.roamT -= dt) <= 0) {
-                const a = Math.random() * Math.PI * 2, r = P.R * 0.5 + Math.random() * S.ROAM * 0.6;
+                const a = Math.random() * Math.PI * 2, r = P.R * (0.4 + Math.random() * 0.5);
                 c.roam = { x: P.x + Math.cos(a) * r, z: P.z + Math.sin(a) * r }; c.roamT = 8 + Math.random() * 8;
                 if (Math.hypot(c.roam.x - P.hall.x, c.roam.z - P.hall.z) < P.hall.r + 4) c.roam = null;
             }
@@ -1329,7 +1332,7 @@ export class IceCastleLife {
             const b = t.get(x, L, z);
             if (!isPalaceIce(b) && b !== BLOCK.ICE && b !== BLOCK.SNOW) continue;
             const d = Math.hypot(x - p.x, L - 1 - p.y, z - p.z);
-            if (d > R || Math.random() > 0.35 + 0.2 * power - d / R * 0.4) continue;
+            if (d > R || (d > R * 0.4 && Math.random() > 0.35 + 0.2 * power - d / R * 0.4)) continue; // (the heart of the fire: all of it)
             if (b === BLOCK.SNOW && (L <= (this.plan?.F ?? -99) || power < 2)) continue; // (the mountain's own snow stays)
             t.set(x, L, z, BLOCK.AIR);
             edits.push([x, L, z, BLOCK.AIR]);

@@ -71,3 +71,19 @@ test('a snowman: 10 HP, a snowflake −1; a blast shatters it, fire melts it; ic
     assert.equal(iceDamage('snowman', 'IceDuel', 10), 0);
     assert.equal(iceDamage('snowman', 'Sapira', 10), 10, 'any other blow: as it is');
 });
+
+test('the castle stands high up on bare rock and snow: no grass, no trees round it', () => {
+    for (const [seed, t] of [[12345, false], [777, false], [42, true]]) {
+        const d = world(seed, t), P = d.iceCastle.plan;
+        assert.ok(P.F >= (t ? ICE_CASTLE.TEST_PEAK : ICE_CASTLE.PEAK_MIN), `high: ${P.F}`);
+        let grass = 0, n = 0;
+        for (let dx = -70; dx <= 70; dx += 3) for (let dz = -70; dz <= 70; dz += 3) {
+            const x = P.x + dx, z = P.z + dz;
+            if (!d.iceCastle.rocky(x, z)) continue;
+            n++;
+            if (d.get(x, d.topLayer(x, z), z) === BLOCK.GRASS) grass++;
+        }
+        assert.ok(n > 100);
+        assert.equal(grass, 0, `seed ${seed}: grass on the castle's mountain`);
+    }
+});
