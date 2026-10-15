@@ -8,7 +8,7 @@
  *     +50, the Ice Queen +100, the spider +100, a dragon +150, a tower +200, Captain Black Moustache
  *     +75) and +15 % to how fast
  *     the mana comes back (ACH.REGEN).
- *   • All of them: the status «Высший маг» — +300 more to the maximum, +100 % more to the speed,
+ *   • All of them: the status «Высший маг» — +1000 more to the maximum, +100 % more to the speed,
  *     and the High Mage's suit (ArmorTypes.makeArchmageSuit): it comes into a slot (or at the
  *     feet) with a golden flash; put on by hand like any robe; every spell does 40 % less harm.
  *   • Kept for good: death takes the mana grown with practice (Mana.onDeath), never these.
@@ -35,7 +35,7 @@ import { makeArchmageSuit } from './ArmorTypes.js';
 
 export const ACH = {
     REGEN: 0.15, // + to the mana regeneration speed for each (15 %)
-    HIGH_MANA: 300, // «Высший маг»: + this much more
+    HIGH_MANA: 1000, // «Высший маг»: + this much more (the author: 1000)
     HIGH_REGEN: 1.0, // … and +100 % more speed
     WINDOW: 60000, // ms: a blow this recent counts as taking part
     NEAR: 40, // m: near the death and fighting there — taking part too

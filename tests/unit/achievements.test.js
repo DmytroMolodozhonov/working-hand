@@ -1,6 +1,6 @@
 // Achievements (Achievements.js): everyone who took part gets it, the bonus (+50 mana, +15 %),
 // a wizards' tower needs both its Master dead and the tower down, all six → «Высший маг»
-// (+300, +100 %, the suit), the suit's −40 % from spells on top of a magic robe, kept on death.
+// (+1000, +100 %, the suit), the suit's −40 % from spells on top of a magic robe, kept on death.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Achievements, ACH, ACH_IDS, TOWER, achBonus, towerLeft, towerSamples } from '../../src/game/Achievements.js';
@@ -113,7 +113,7 @@ test('how much of a tower stands: whole ≈ 1, two thirds of the walls gone → 
     assert.equal(towerLeft(def, get(() => false), () => false), null, 'not loaded: unknown');
 });
 
-test('all six (Captain Black Moustache too) → «Высший маг»: +300 more, +100 % more, the suit comes into a slot', () => {
+test('all six (Captain Black Moustache too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
     const { g, a } = fakeGame();
     for (const k of ACH_IDS) a.gain(k);
     assert.ok(a.high);
@@ -121,7 +121,7 @@ test('all six (Captain Black Moustache too) → «Высший маг»: +300 mo
     assert.ok(Math.abs(a.regenK - (1 + 6 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
     const suit = g.inventory.slots.find((it) => it?.archmage);
     assert.ok(suit && suit.kind === 'robe' && suit.magic, 'the suit is mine');
-    assert.deepEqual(achBonus(ACH_IDS), { mana: 975, regen: 2.9, high: true });
+    assert.deepEqual(achBonus(ACH_IDS), { mana: 1675, regen: 2.9, high: true });
     assert.deepEqual(achBonus(['tower']), { mana: 200, regen: 1.15, high: false });
 });
 
