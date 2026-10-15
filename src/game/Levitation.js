@@ -673,8 +673,7 @@ export class Levitation {
         const want = this.holdPoint(L.by, L.side, L.hold, up, _h2);
         if (!want || g.combat.dead || (!g.combat.enabled && L.age > LEVITATE.WIZARD_T + 3)) { this.dropMe(false); return; }
         // «Protection» towards the caster: the magic breaks on it
-        if (g.duel._handOf(L.by, L.side, _h3, _h4) && g.combat.shield && g.combat.shieldFactor(_h3) >= 1) {
-            g.combat._blocked(_h3);
+        if (g.duel._handOf(L.by, L.side, _h3, _h4) && g.combat.shield && g.combat.shieldFactor(_h3) >= 1 && g.combat._blocked(_h3, 'Levitation')) {
             this.dropMe(false, true);
             return;
         }

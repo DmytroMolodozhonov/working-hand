@@ -94,7 +94,9 @@ test('Protection: arm out → the shield holds; spells from the front bounce off
     const { combat: c2 } = fakeGame({ armOut: 'right' });
     assert.equal(c2.castProtection(false), null);
     assert.equal(c2.fatigue, 25);
+    c2.fatigue = 60; // (plenty of mana: every spell it stops costs half of its own)
     assert.equal(c2.hitBySpell('Sapira', FRONT, 'enemy'), false, 'blocked');
+    assert.equal(c2.fatigue, 50, 'Sapira (20) cost the shield 10');
     assert.equal(c2.hp, 20);
     assert.equal(c2.hitBySpell('Sapira', BEHIND, 'enemy'), true, 'hits from behind');
     assert.equal(c2.hp, 16);
@@ -112,19 +114,19 @@ test('Protection: arm out → the shield holds; spells from the front bounce off
     assert.equal(events.deaths.length, 0);
 });
 
-test('Protection costs 5, then holds as many seconds as the strength left; the strength drains, not comes back', () => {
+test('Protection costs 5, then 0.5 mana a second while held; the mana drains, not comes back', () => {
     const { combat: c, events } = fakeGame({ armOut: 'right' });
-    c.fatigue = 18;
+    c.fatigue = 9;
     assert.equal(c.castProtection(false), null);
-    assert.equal(c.fatigue, 13, '5 taken at once');
-    assert.ok(Math.abs(c.shield.left - 13) < 1e-9, 'it will hold 13 s');
-    for (let i = 0; i < 5 * 60; i++) c.update(1 / 60); // 5 s
-    assert.ok(Math.abs(c.fatigue - 8) < 0.05, `1 a second spent while holding (${c.fatigue})`);
-    assert.ok(Math.abs(c.shield.left - 8) < 0.05, `${c.shield.left} s left`);
-    for (let i = 0; i < 7.9 * 60; i++) c.update(1 / 60);
-    assert.ok(c.shield, 'still up just before the strength ends');
+    assert.equal(c.fatigue, 4, '5 taken at once');
+    assert.ok(Math.abs(c.shield.left - 8) < 1e-9, 'it will hold 8 s');
+    for (let i = 0; i < 4 * 60; i++) c.update(1 / 60); // 4 s
+    assert.ok(Math.abs(c.fatigue - 2) < 0.05, `0.5 a second spent while holding (${c.fatigue})`);
+    assert.ok(Math.abs(c.shield.left - 4) < 0.05, `${c.shield.left} s left`);
+    for (let i = 0; i < 3.9 * 60; i++) c.update(1 / 60);
+    assert.ok(c.shield, 'still up just before the mana ends');
     for (let i = 0; i < 0.3 * 60; i++) c.update(1 / 60);
-    assert.equal(c.shield, null, 'out when the strength is gone');
+    assert.equal(c.shield, null, 'out when the mana is gone');
     assert.ok(events.voice.some((t) => /мана кончилась/.test(t)));
     // then the strength comes back as usual
     const f0 = c.fatigue;
@@ -158,13 +160,20 @@ test('Protection: a sharp jerk of the shield arm puts it out; a small move does 
     assert.equal(c2.dropShield(), false, 'nothing to drop');
 });
 
-test('Protection Maxima: needs a T-pose, dome for 5 s blocks every direction, costs 20', () => {
+test('Protection Maxima: needs a T-pose, costs 20, then 1 a second until «стоп»; blocks every direction', () => {
     const { combat } = fakeGame({ armOut: 'both', tPose: false });
     assert.match(combat.castProtection(true), /буква T|T/);
     const { combat: c } = fakeGame({ armOut: 'both', tPose: true });
     assert.equal(c.castProtection(true), null);
     assert.equal(c.fatigue, 10);
-    assert.equal(c.shield.left, 5, 'the dome lasts 5 seconds');
+    assert.equal(c.shield.left, 10, 'it holds as long as the mana: 1 a second');
+    for (let i = 0; i < 6 * 60; i++) c.update(1 / 60);
+    assert.ok(c.shield && Math.abs(c.fatigue - 4) < 0.05, `still up after 6 s, 1 a second spent (${c.fatigue})`);
+    assert.equal(c.dropShield(), true, '«стоп» puts it out');
+    c.castProtection(true); // (not enough mana: 4 < 20)
+    assert.equal(c.shield, null);
+    c.fatigue = 60;
+    assert.equal(c.castProtection(true), null);
     assert.equal(c.hitBySpell('Thunderwave', FRONT, 'enemy'), false);
     assert.equal(c.hitBySpell('Thunderwave', BEHIND, 'enemy'), false);
     assert.equal(c.hp, 20);

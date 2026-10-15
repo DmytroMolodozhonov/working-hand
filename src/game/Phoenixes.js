@@ -1182,7 +1182,7 @@ export class Phoenixes {
         if (m.to !== g.localId || g.isDeadLocal || g.combat?.dead) return;
         const c = g.combat;
         if (g.wards?.shields?.(from, c.center(_v3))) return; // (in a protected house: the sphere holds it)
-        if (c.shieldFactor?.(from) >= 1) { c._blocked?.(from, 'Inferno'); g.hud?.setVoice?.('🛡️ Щит удержал огонь феникса', true); return; }
+        if (c.shieldFactor?.(from) >= 1) { c._blocked?.(from, 'phoenixFire'); g.hud?.setVoice?.('🛡️ Щит удержал огонь феникса', true); return; }
         if (g.character?.swimY != null) return; // (in the water: the fire goes out)
         const dmg = Math.min(10, +m.dmg || PHOENIX.STRIKE_DMG);
         if (c.frozen) c.frozenLeft = 0; // (its fire melts the ice)

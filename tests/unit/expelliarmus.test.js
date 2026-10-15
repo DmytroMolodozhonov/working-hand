@@ -115,7 +115,7 @@ test('«Экспеллиармус» with nothing in the hands: only a push, a c
 test('«Protection» blocks it: the wand stays in the hand', () => {
     const { g, ev } = fakeGame();
     g.combat.shield = { type: 2, left: 5, side: 'right' };
-    g.combat._blocked = () => { ev.blocked = true; };
+    g.combat._blocked = () => { ev.blocked = true; return true; }; // (held: mana enough)
     const d = duelOf(g);
     const b = { id: 'enemy:1', by: 'enemy', spell: 'Expelliarmus', side: 'right', o: new THREE.Vector3(0, 1, -8), dir: new THREE.Vector3(0, 0, 1), front: new THREE.Vector3(0, 1, -0.5), state: 'arrived', tk: 'p', tid: 'me' };
     d.bolts.set(b.id, b);

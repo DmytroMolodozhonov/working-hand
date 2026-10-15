@@ -273,7 +273,7 @@ export class TotalDestruction {
         // 5× «Бомбардо Максима» (a shield takes part of it)
         let dmg = 5 * harm * bombardoDamage(dist, R, MAXIMA_POWER); // (Maxima: twice)
         const c = g.combat, s = c?.shield;
-        if (s && s.left > 0) dmg *= s.type === 2 ? 0.25 : 0.5;
+        if (s && s.left > 0 && c._payHit(d.name)) dmg *= s.type === 2 ? 0.25 : 0.5; // (half its mana; out of mana: shattered — all of it)
         dmg = Math.round(dmg);
         if (dmg <= 0) return;
         const by = d.by === g.localId ? null : d.by;

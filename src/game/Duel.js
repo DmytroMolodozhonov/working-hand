@@ -712,8 +712,8 @@ export class Duel {
             if (b.meWait < CLASH.WAIT && o.dir.dot(b.dir) <= -CLASH.FACING) return;
         }
         const caster = this._handOf(b.by, b.side, _v1, _v2) ? _v1.clone() : b.o;
-        if (g.combat.shieldFactor(caster) >= 1) {
-            g.combat._blocked(caster);
+        // (my «Protection» pays half of the charge's mana; out of mana it shatters and the charge goes on)
+        if (g.combat.shieldFactor(caster) >= 1 && g.combat._blocked(caster, b.spell)) {
             this._end(b, 'blocked');
             return;
         }

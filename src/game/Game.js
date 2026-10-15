@@ -81,7 +81,7 @@ import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep, lyingHead } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { HandHold } from './HandHold.js';
-import { Mana } from './Mana.js';
+import { Mana, NOT_SPELLS } from './Mana.js';
 import { BodyImpact } from './BodyImpact.js';
 import { Knockdown } from './Knockdown.js';
 import { UpSpell } from './UpSpell.js';
@@ -930,6 +930,8 @@ export class Game {
         this._manaLater = false;
         const name = this._castLocalSpell(text, isFinal);
         if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
+        // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom)
+        if (name && name !== 'Protection' && name !== 'ProtectionMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
         return name;
@@ -1535,7 +1537,7 @@ export class Game {
         const c = this.combat;
         if (!c.enabled || c.dead || this.flight.active) return false;
         if (!reached(this.character.group.position)) return false;
-        if (c.shield && c.shield.type === 2 && c.shield.left > 0) { c._blocked(origin); return true; } // the dome holds
+        if (c.shield && c.shield.type === 2 && c.shield.left > 0 && c._blocked(origin, power > 1 ? 'EarthquakeMaxima' : 'Earthquake')) return true; // the dome holds (out of mana: shattered)
         // the ground runs away under the feet along the wave: the body falls back against it (hands stay free)
         const max = power > 1;
         const d = (dir || _v1.subVectors(this.character.group.position, origin)).clone().setY(0);
@@ -1801,7 +1803,7 @@ export class Game {
         const v = pushAt(this.combat.center(new THREE.Vector3()));
         if (!v) return;
         // (a shield turned to it holds most of it: felt, the shield arm pushed back, never a fall)
-        if (this.combat.shieldFactor(origin) >= 1) this.combat._blocked(origin);
+        if (this.combat.shieldFactor(origin) >= 1) this.combat._blocked(origin, name);
         if (this.boards?.mounted && !this.boards.onPush(v)) return; // (on a surfboard: a push along the board just rides on)
         const P = SPELL_PHYSICS[name] || {};
         this.impact.apply({ v: v.clone(), from: origin, by: casterId, spell: name, jolt: P.jolt || 0 });

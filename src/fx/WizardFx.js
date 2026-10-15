@@ -59,7 +59,7 @@ export class WizardFx {
         }
         // shields of light and the Master's dome (pooled)
         this.shieldMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
-        this.shieldGeo = new THREE.CircleGeometry(1.4, 24);
+        this.shieldGeo = new THREE.CircleGeometry(1.82, 24); // (30 % bigger than it was: 1.4 — as a player's; ShieldBounce.NPC_SHIELD)
         this.domeMat = new THREE.MeshBasicMaterial({ color: 0xc58bff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
         this.domeGeo = new THREE.SphereGeometry(3.2, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2);
         this.shields = [];
@@ -162,7 +162,8 @@ export class WizardFx {
                 const s = this.shields[si] || this._shield();
                 si++;
                 const yaw = v.yaw;
-                s.position.set(v.x - Math.sin(yaw) * 1.3, v.y + 2.6, v.z - Math.cos(yaw) * 1.3);
+                // (before the free left hand: the wand hand goes on casting — ShieldBounce.NPC_SHIELD)
+                s.position.set(v.x - Math.sin(yaw) * 1.3 - Math.cos(yaw) * 0.35, v.y + 2.6, v.z - Math.cos(yaw) * 1.3 + Math.sin(yaw) * 0.35);
                 s.rotation.set(0, yaw, 0);
                 s.material.opacity = 0.3 + 0.08 * Math.sin(t * 12);
                 s.visible = true;

@@ -87,12 +87,20 @@ export class RemoteAvatar {
         this.duelContact = s.dc ? s.dc[0] : 1;
         this.duelJerk = s.dc ? s.dc[1] : 0;
         if (s.c) {
-            // [shield type, side (1 = left), seconds left, frozen seconds left]
+            // [shield type, side (1 = left), seconds left, frozen seconds left, times it shattered]
+            const was = this.combat.shield, wasSide = this.combat.side;
             this.combat.shield = s.c[0];
             this.combat.side = s.c[1] ? 'left' : 'right';
             this.combat.shieldLeft = s.c[2];
             this.combat.frozen = s.c[3] > 0;
             if (!this.visuals) this.visuals = new CombatVisuals(this.scene);
+            // their shield shattered (out of mana, or knocked down by a spell from the same hand): the pieces fly
+            const broke = s.c[4] | 0;
+            if (this._broke != null && broke !== this._broke && was) {
+                if (was === 2) this.visuals.shatter(2, this.position.clone().add(_d.set(0, 0.6, 0)));
+                else { const hp = this.handPose(wasSide); this.visuals.shatter(1, hp.origin.clone().addScaledVector(hp.dir, 0.45), hp.dir); }
+            }
+            this._broke = broke;
         } else if (this.combat.shield) {
             // (no shield sent any more: it went out — «стоп», a jerk — long before its time)
             this.combat.shield = 0;

@@ -335,7 +335,7 @@ export class Dragons {
         const g = this.game, c = g.combat;
         if (!c || c.dead || g.isDeadLocal) return;
         // a raised «Protection» facing it stops a bite / a sweep too (the body still feels it)
-        if (c.shieldFactor?.(from) >= 1) { c._blocked?.(from, 'Thunderwave'); if (push) g.knockback?.add(push.clone().multiplyScalar(0.3)); return; }
+        if (c.shieldFactor?.(from) >= 1) { c._blocked?.(from, 'bite'); if (push) g.knockback?.add(push.clone().multiplyScalar(0.3)); return; }
         if (c.frozen && kind === 'fire') c.frozenLeft = 0; // (the ice melts in the flame)
         if (c.enabled) c.damage(dmg, null, kind === 'fire' ? 'Inferno' : 'bite'); else g.damageLocalPlayer?.(dmg);
         if (push) g.knockback?.add(push);
@@ -1019,7 +1019,7 @@ export class Dragons {
             const me = c.center ? c.center(_v) : _v.copy(g.character.group.position);
             if (inFlame(o, dir, b.len, me, 0.45)) {
                 d.meT = DRAGON.FLAME_TICK;
-                if (c.shieldFactor?.(o) >= 1) c._blocked?.(o, 'Inferno'); // (a «Protection» facing the fire holds it)
+                if (c.shieldFactor?.(o) >= 1) c._blocked?.(o, 'dragonFire'); // (a «Protection» facing the fire holds it — a beast's fire, not a spell: no mana)
                 else this._hurtMe(Math.round(DRAGON.FLAME_PLAYER * d.flame * 10) / 10, 'fire', o, null);
             }
         }

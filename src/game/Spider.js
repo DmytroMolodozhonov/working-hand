@@ -303,7 +303,7 @@ export class Spiders {
     /** Poison / web reached me. */
     _iAmHit(kind, from) {
         const g = this.game;
-        if (g.combat.shieldFactor(from) >= 1) { g.combat._blocked(from, kind === 'web' ? 'Sands' : 'Thunderwave'); return; }
+        if (g.combat.shieldFactor(from) >= 1 && g.combat._blocked(from, kind === 'web' ? 'web' : 'poison')) return; // (not a spell: it costs the shield no mana)
         if (kind === 'poison') {
             if (g.combat.enabled) g.combat.damage(7, null, 'poison'); else g.damageLocalPlayer(7);
             g.hud.setVoice('☠️ Яд паучихи: −7 HP', true);

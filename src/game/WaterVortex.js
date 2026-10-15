@@ -699,8 +699,7 @@ export class WaterVortex {
             if (b.kind === 'p') {
                 // my own computer knows my shield
                 const from = _a.copy(f.pos).addScaledVector(f.dir, -3);
-                if (g.combat.shieldFactor(from) >= 1) {
-                    g.combat._blocked(from, 'WaterVortex');
+                if (g.combat.shieldFactor(from) >= 1 && g.combat._blocked(from, 'WaterVortex')) { // (out of mana: it shatters, the water goes on)
                     this._send({ ev: 'block', id: f.id, p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
                     this._endFlight(f, 'block');
                     return true;
@@ -1262,7 +1261,7 @@ export class WaterVortex {
         // my own body (not the caster's: their fire doesn't hurt them; not the one being freed)
         const c = g.combat;
         if (e.by !== this.me && !rescued.has(`p:${this.me}`) && !c.dead && c.center(_a).distanceTo(e.p) < R + 0.7) {
-            if (c.shieldFactor(e.o) >= 1) c._blocked(e.o, 'FireMaxima');
+            if (c.shieldFactor(e.o) >= 1 && c._blocked(e.o, 'FireMaxima')) { /* held */ }
             else {
                 if (c.frozen) c.frozenLeft = 0; // (the ice on me melts too)
                 const dmg = FIRE_MAXIMA.PLAYER_DMG * (g.fireBoost?.(e.by) ?? 1); // (the dragon's wand: 60% hotter)

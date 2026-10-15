@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
+import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 import { makePurseModel } from './CoinBelt.js';
@@ -617,8 +618,21 @@ export class ItemSystem {
         const col = this.game.collision;
         const cauls = this.game.cauldrons?.list.size ? this.game.cauldrons : null;
         const steps = Math.max(1, Math.ceil(L.vel.length() * dt / 0.25)), hs = dt / steps;
+        // flying fast (thrown): a «Protection» / a dome in its way mirrors it (ShieldBounce.js)
+        let shields = null;
+        if (L.vel.lengthSq() > 16) {
+            const now = performance.now();
+            if (now - (this._shieldsAt || -1e9) > 15) { this._shields = shieldsNow(this.game); this._shieldsAt = now; }
+            shields = this._shields.length ? this._shields : null;
+        }
         for (let s = 0; s < steps; s++) {
             _v.copy(m.position).addScaledVector(L.vel, hs);
+            if (shields && bounceOffShields(shields, m.position, _v, L.vel, L.thrower)) {
+                for (let k = 0; k < 6; k++) this.game.fx.spark(_v, 0x9fd8ff, 0.09, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.3);
+                L.spin.multiplyScalar(0.6);
+                m.position.copy(_v);
+                break;
+            }
             // into a cauldron's opening: it falls in (the iron walls round it are not in its way);
             // at the water it dissolves, or it lies on the bottom (Cauldrons.js)
             if (cauls) {

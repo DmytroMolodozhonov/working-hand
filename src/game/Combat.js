@@ -7,14 +7,22 @@
  *               `fatigue`), +1 per second. Every spell costs mana; without
  *               enough the spell fails. The maximum grows: see Mana.js.
  *   Protection  arm stretched out + «Protection»: a blue shield in front of
- *               the hand. 5 fatigue at once, then it holds while there is
- *               strength: 1 a second, none comes back meanwhile (as many seconds
- *               as the fatigue left). A sharp jerk of the shield arm or «стоп»
- *               puts it out sooner. Spells cast straight at you bounce off it;
- *               a Bombardo blast next to you still hurts, but half as much.
+ *               the hand. 5 mana at once, then it holds while there is mana:
+ *               0.5 a second, none comes back meanwhile. A sharp jerk of the
+ *               shield arm or «стоп» puts it out sooner. It is bound to the hand
+ *               it was cast with: another spell cast from that hand (the wand
+ *               hand) breaks it — hold it with the other hand and cast with the wand.
+ *               Spells cast straight at you bounce off it; a Bombardo blast next
+ *               to you still hurts, but half as much.
  *   Protection Maxima  arms out in a T + «Protection Maxima»: a dome around
- *               the whole body for 5 s (blast damage −75 %). Shields work and are
- *               visible in every mode; HP/fatigue rules only in the free world.
+ *               the whole body (blast damage −75 %): 20 mana at once, then 1 a
+ *               second until «стоп» or the mana is gone. Not bound to a hand.
+ *   Every spell a shield (hand or dome) stops costs its holder HALF of that
+ *   spell's own mana (shieldHitCost: «Авада Кедавра» 25 → 12.5). Not enough
+ *   mana left: the shield shatters and that spell goes on through as if there
+ *   were no shield. Arrows (and other things flying) bounce off it (ShieldBounce.js)
+ *   — they cost no mana. Shields work and are visible in every mode;
+ *   HP/mana rules only in the free world.
  *   Freezing    the ice beam freezes players too (5 s in the beam, keep
  *               running and it breaks). A frozen player can't move or cast
  *               for 20 s — and ANY hit shatters them, whatever their HP.
@@ -35,7 +43,11 @@ export const PVP = {
     MAX_FATIGUE: 30,
     FATIGUE_REGEN: 1, // per second
     SHIELD_HOLD_MAX: 60, // s a «Protection» holds where there is no strength to spend (no fatigue rules)
-    DOME_TIME: 5,
+    SHIELD_DRAIN: 0.5, // mana a second a held «Protection» takes
+    DOME_DRAIN: 1, // … and «Protection Maxima»
+    SHIELD_SCALE: 1.5, // the hand shield's size (m; 30 % bigger than it was: 1.15)
+    DOME_R: 2.6, // the dome's radius (m)
+    BEAM_GAP: 1.5, // s: a flame / a beam held on the shield is one spell (paid once) until it stops this long
     FREEZE_TIME: 20,
     CHILL_TIME: 5, // s in the ice beam to freeze
     INFERNO_TICK: 0.6, // s between Inferno damage ticks
@@ -132,6 +144,26 @@ export function bombardoDamage(dist, radius, power = 1) {
     return PVP.MAX_HP * (power > 1 ? 1.5 : 1) * k * k;
 }
 
+/** The name a hit's kind is paid by (SPELL_COST): a duel charge, a ball, a bolt. */
+const HIT_SPELL = {
+    IceBall: 'Ice', IceDuel: 'Ice', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
+    Lightning: 'LightningStrike', Bombardo: 'Bombardo', BombardoMax: 'BombardoMaxima',
+};
+/** Not spells (a ball bounced off, a blow): a shield stops them for nothing. */
+const NOT_A_SPELL = new Set(['Bounce', 'melee', 'arrow', 'web', 'poison', 'bite', 'dragonFire', 'phoenixFire']);
+/** Kinds that keep touching the shield while held (a flame, a beam, a wind): paid once a spell. */
+const BEAM_KINDS = new Set(['Inferno', 'Ice', 'Wind', 'WindMaxima', 'Overgrown', 'OvergrownMaxima', 'Fire', 'FireMaxima', 'Hellfire', 'WaterVortex']);
+
+/**
+ * What a spell stopped by a «Protection» / «Protection Maxima» costs the one holding it:
+ * half of that spell's own mana (the author's rule: «Авада Кедавра» 25 → 12.5).
+ */
+export function shieldHitCost(kind) {
+    if (!kind || NOT_A_SPELL.has(kind)) return 0;
+    const cost = SPELL_COST[HIT_SPELL[kind] || kind];
+    return (cost ?? 10) / 2; // (an unnamed spell: as an ordinary one, 10)
+}
+
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -196,6 +228,43 @@ export class CombatVisuals {
             scene.add(o);
         }
         this._t = 0;
+        this.shards = []; // (a shattered shield's pieces flying apart)
+    }
+
+    /**
+     * The shield shatters (out of mana): its pieces fly apart and fade. type 1 the hand
+     * shield at `at` facing `dir`; 2 the dome round `at`.
+     */
+    shatter(type, at, dir = null) {
+        const S = shared();
+        const geo = S.shard || (S.shard = new THREE.CircleGeometry(0.22, 3));
+        const n = type === 2 ? 26 : 16;
+        for (let i = 0; i < n; i++) {
+            const m = new THREE.Mesh(geo, S.shieldMat.clone());
+            m.material.opacity = 0.75;
+            const u = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize();
+            if (type === 2) m.position.copy(at).addScaledVector(u, PVP.DOME_R * 0.95);
+            else {
+                m.position.copy(at).add(_v1.set((Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 0.3));
+                if (dir) u.addScaledVector(dir, 1.2).normalize();
+            }
+            m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+            m.renderOrder = 4;
+            this.scene.add(m);
+            this.shards.push({ m, v: u.multiplyScalar(2.5 + Math.random() * 3.5), w: (Math.random() - 0.5) * 14, life: 0.9 });
+        }
+    }
+
+    _updateShards(dt) {
+        for (let i = this.shards.length - 1; i >= 0; i--) {
+            const s = this.shards[i];
+            s.life -= dt;
+            if (s.life <= 0) { this.scene.remove(s.m); s.m.material.dispose(); this.shards.splice(i, 1); continue; }
+            s.v.y -= 6 * dt;
+            s.m.position.addScaledVector(s.v, dt);
+            s.m.rotation.x += s.w * dt; s.m.rotation.y += s.w * 0.7 * dt;
+            s.m.material.opacity = 0.75 * Math.min(1, s.life / 0.5);
+        }
     }
 
     /**
@@ -205,7 +274,7 @@ export class CombatVisuals {
      */
     update(dt, st, body) {
         this._t += dt;
-        const fade = (left, total) => Math.min(1, left / 0.35, (total - left) / 0.25 + 0.2);
+        if (this.shards.length) this._updateShards(dt);
         const showHand = st.shield === 1 && st.shieldLeft > 0;
         this.hand.visible = showHand;
         this._handAge = showHand ? (this._handAge || 0) + dt : 0;
@@ -214,16 +283,17 @@ export class CombatVisuals {
             const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._handAge / 0.25 + 0.2));
             this.hand.position.copy(body.hand).addScaledVector(body.dir, 0.45);
             this.hand.lookAt(_v1.copy(this.hand.position).add(body.dir));
-            this.hand.scale.setScalar(1.15 * k);
+            this.hand.scale.setScalar(PVP.SHIELD_SCALE * k);
             this.handRing.rotation.z = this._t * 2;
             this.handHex.rotation.z = -this._t * 1.3;
         }
         const showDome = st.shield === 2 && st.shieldLeft > 0;
         this.dome.visible = showDome;
+        this._domeAge = showDome ? (this._domeAge || 0) + dt : 0;
         if (showDome) {
-            const k = Math.max(0.05, fade(st.shieldLeft, PVP.DOME_TIME));
+            const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._domeAge / 0.25 + 0.2));
             this.dome.position.copy(body.center);
-            this.dome.scale.setScalar(2.6 * k * (1 + 0.03 * Math.sin(this._t * 6)));
+            this.dome.scale.setScalar(PVP.DOME_R * k * (1 + 0.03 * Math.sin(this._t * 6)));
             this.domeGrid.rotation.set(this._t * 0.4, this._t * 0.6, 0);
         }
         this.shell.visible = !!st.frozen;
@@ -238,6 +308,8 @@ export class CombatVisuals {
 
     dispose() {
         for (const o of [this.hand, this.dome, this.shell]) this.scene.remove(o);
+        for (const s of this.shards) { this.scene.remove(s.m); s.m.material.dispose(); }
+        this.shards = [];
     }
 }
 
@@ -391,14 +463,20 @@ export class Combat {
         const ch = this.game.character;
         if (maxima) {
             if (!ch.isTPose()) return '🛡️ Для «Protection Maxima» разведите руки <b>в стороны, как буква T</b>';
+            if (this.shield?.type === 2) return null; // (already round me: nothing more to pay)
             const hint = this.spend('ProtectionMaxima');
             if (hint) return hint;
             this.game.mana?.success('ProtectionMaxima'); // (the dome is up)
-            this.shield = { type: 2, side: 'right', left: PVP.DOME_TIME };
+            // it holds while there is mana: 1 a second, until «стоп» (not bound to a hand: the wand casts on)
+            this.shield = { type: 2, side: 'right', left: this.enabled ? this.fatigue / PVP.DOME_DRAIN : PVP.SHIELD_HOLD_MAX, drain: PVP.DOME_DRAIN, age: 0 };
             this.game.spiders?.onDome(); // the only way out of the spider's fangs
         } else {
-            // The stretched-out hand; if none is fully stretched, the one reaching furthest
-            let side = ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
+            if (this.shield?.type === 2) return '🛡️ Вы уже под куполом «Protection Maxima»';
+            // The stretched-out hand; if none is fully stretched, the one reaching furthest.
+            // A wand in one hand: the other hand stretched out takes the shield (the wand stays free to cast)
+            const wand = this.game.wandSide?.();
+            const free = wand === 'right' ? 'left' : wand === 'left' ? 'right' : null;
+            let side = free && ch.isArmExtended(free) ? free : ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
             if (!side) {
                 const reach = (sd) => ch.getHandWorldPosition(sd, _v1).distanceTo(ch.group.position);
                 side = reach('right') >= reach('left') ? 'right' : 'left';
@@ -407,10 +485,12 @@ export class Combat {
             const hint = this.spend('Protection');
             if (hint) return hint;
             this.game.mana?.success('Protection'); // (the shield is up)
-            // it holds while there is strength: 1 a second (a wand favouring it: 1/1.4 a second);
+            // it holds while there is mana: 0.5 a second (a wand favouring it: 0.5/1.4 a second);
             // off sooner with a sharp jerk of the shield arm or «стоп»
             const fav = this.game.items?.wand?.fav === 'Protection' ? 1.4 : 1;
-            this.shield = { type: 1, side, left: this.enabled ? this.fatigue * fav : PVP.SHIELD_HOLD_MAX, drain: 1 / fav, age: 0 };
+            const drain = PVP.SHIELD_DRAIN / fav;
+            this.shield = { type: 1, side, left: this.enabled ? this.fatigue / drain : PVP.SHIELD_HOLD_MAX, drain, age: 0 };
+            if (wand && side === wand) this.game.hud?.setVoice?.('🛡️ Щит в руке с палочкой: любое другое заклинание этой палочкой собьёт его. Держите щит другой рукой', true);
         }
         if (this.game.sound) this.game.sound.playIce?.();
         return null;
@@ -419,7 +499,7 @@ export class Combat {
     /** A held «Protection»: a sharp jerk of the shield arm puts it out (not a small move). */
     _shieldJerk(dt) {
         const s = this.shield;
-        if (!s || s.drain == null) return;
+        if (!s || s.type !== 1) return;
         s.age = (s.age || 0) + dt;
         if (s.age > 0.6 && sharpJerk(this.game.duel?.jerk?.[s.side])) this.dropShield('🛡️ Вы сбросили щит');
     }
@@ -430,6 +510,55 @@ export class Combat {
         this.shield = null;
         this.game.hud.setVoice(text, true);
         return true;
+    }
+
+    /**
+     * Another spell was just cast from `side` (Game.castLocalSpell): a «Protection» held in that
+     * same hand is knocked down by it (the wand can't hold the shield and cast another spell).
+     * The dome («Maxima») is not in a hand: it stays.
+     */
+    castFrom(side) {
+        const s = this.shield;
+        if (!s || s.type !== 1 || !side || s.side !== side) return false;
+        this._shatter('🛡️ Заклинание из той же руки сбило щит. Держите «Protection» другой рукой', false);
+        return true;
+    }
+
+    /** The shield breaks: its pieces fly apart (seen by everybody: serialize()'s counter). */
+    _shatter(text, sound = true) {
+        const s = this.shield;
+        if (!s) return;
+        const ch = this.game.character;
+        if (this.visuals) {
+            if (s.type === 2) this.visuals.shatter(2, this.center(_v1));
+            else this.visuals.shatter(1, ch.getHandWorldPosition(s.side, _v1).addScaledVector(ch.getHandDirection(s.side, _v2), 0.45), _v2);
+        }
+        const at = s.type === 2 ? this.center(_v1) : ch.getHandWorldPosition(s.side, _v1);
+        this.game.fx?.lightFlash?.(at, 0x6fc3ff, 3, 0.3, 18);
+        this.shield = null;
+        this.brokeN = ((this.brokeN || 0) + 1) % 100;
+        if (text) this.game.hud.setVoice(text, true);
+        if (sound) this.game.sound?.playFrozenHit?.();
+    }
+
+    /**
+     * A spell of `kind` is stopped by my «Protection» / «Maxima»: it costs half of its mana.
+     * @returns {boolean} true: held (paid); false: not enough mana — the shield shattered, the spell goes on
+     */
+    _payHit(kind) {
+        if (!this.enabled || !this.shield) return true;
+        let cost = shieldHitCost(kind);
+        if (cost > 0 && BEAM_KINDS.has(kind)) {
+            // (a flame / a beam keeps touching it: one spell, paid once, while it doesn't stop)
+            const now = performance.now(), m = this._beamAt || (this._beamAt = {});
+            if (now - (m[kind] || -1e9) < PVP.BEAM_GAP * 1000) cost = 0;
+            m[kind] = now;
+        }
+        if (cost <= 0) return true;
+        if (this.fatigue >= cost) { this.fatigue -= cost; return true; }
+        this.fatigue = 0;
+        this._shatter('💥 Щит разбит — не хватило маны, чтобы удержать заклинание!');
+        return false;
     }
 
     /** Does my shield stop something coming from `from`? 1 = fully, 0 = no. */
@@ -445,8 +574,15 @@ export class Combat {
         return dir.dot(toAttacker) > 0.25 ? 1 : 0;
     }
 
+    /**
+     * Something was stopped by a shield (shieldFactor said so): the sparks — and a «Protection»
+     * pays half of the spell's mana for it (_payHit).
+     * @returns {boolean} true: it held; false: it shattered now (out of mana) — the spell goes on to me
+     */
     _blocked(from, kind = null) {
-        if ((!this.shield || this.shield.left <= 0) && this.game.gear?.shieldFaces(from)) { this.game.gear.shieldTook(kind || 'Sapira'); return; }
+        if ((!this.shield || this.shield.left <= 0) && this.game.gear?.shieldFaces(from)) { this.game.gear.shieldTook(kind || 'Sapira'); return true; }
+        if (!this.shield) return false;
+        if (!this._payHit(kind)) return false;
         const c = this.center(_v1);
         const fx = this.game.fx;
         const at = this.shield.type === 2 ? c.addScaledVector(_v2.subVectors(from, c).normalize(), 2.4) : this.game.character.getHandWorldPosition(this.shield.side, _v1);
@@ -454,6 +590,7 @@ export class Combat {
         fx.lightFlash(at, 0x6fc3ff, 2, 0.2, 15);
         this.game.hud.setVoice('🛡️ Щит отразил заклинание!', true);
         if (this.game.sound) this.game.sound.playFrozenHit?.();
+        return true;
     }
 
     // ============================================================== incoming
@@ -468,8 +605,7 @@ export class Combat {
      */
     hitBySpell(kind, from, byId, push = null) {
         if (!this.enabled || this.dead) return false;
-        if (this.shieldFactor(from) >= 1) {
-            this._blocked(from, kind);
+        if (this.shieldFactor(from) >= 1 && this._blocked(from, kind)) {
             // (still felt: the shield arm is pushed back, the body slides a little — never a fall)
             if (this.game.impact && kind !== 'Bounce') this.game.impact.apply({ v: push ? push.clone() : this._pushOf(kind, from), from, by: byId, spell: kind });
             return false;
@@ -500,7 +636,7 @@ export class Combat {
      */
     chillBy(amount, from, byId) {
         if (!this.enabled || this.dead) return false;
-        if (this.shieldFactor(from) >= 1) { this._blocked(from, 'Ice'); return false; }
+        if (this.shieldFactor(from) >= 1 && this._blocked(from, 'Ice')) return false;
         if (this.frozen) return true;
         this.chill = Math.min(1, this.chill + amount);
         this.chillTimer = 0.4;
@@ -527,9 +663,8 @@ export class Combat {
         let dmg = bombardoDamage(d, radius, power);
         if (dmg <= 0) return;
         const s = this.shield;
-        if (s && s.left > 0) {
-            if (s.type === 2) dmg *= 0.25;
-            else if (this.shieldFactor(pos) >= 1) dmg *= 0.5;
+        if (s && s.left > 0 && (s.type === 2 || this.shieldFactor(pos) >= 1) && this._payHit(power > 1 ? 'BombardoMaxima' : 'Bombardo')) {
+            dmg *= s.type === 2 ? 0.25 : 0.5; // (out of mana: it shattered — the whole blast)
         }
         dmg = Math.round(dmg);
         if (dmg > 0) this.damage(dmg, byId, 'Bombardo');
@@ -624,7 +759,7 @@ export class Combat {
             this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
             this.shield.left = this.fatigue / this.shield.drain;
             this._shieldJerk(dt);
-            if (this.shield && this.fatigue <= 0) { this.shield = null; this.game.hud.setVoice('🛡️ Щит погас — мана кончилась', true); }
+            if (this.shield && this.fatigue <= 0) this._shatter(this.shield.type === 2 ? '🛡️ Купол рассыпался — мана кончилась' : '🛡️ Щит рассыпался — мана кончилась');
         } else if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
         if (this.frozenLeft > 0) {
             this.frozenLeft = Math.max(0, this.frozenLeft - dt);
@@ -679,7 +814,7 @@ export class Combat {
     serialize() {
         if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Айс» is seen in every mode)
         const s = this.shield;
-        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft)];
+        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0]; // (the last: how many times it shattered — the others see the pieces)
     }
 
     // ============================================================ melee out

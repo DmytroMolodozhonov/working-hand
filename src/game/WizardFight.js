@@ -10,6 +10,12 @@
  *
  * The host runs it (like all the castle people); the charges go to everyone as duel casts, the
  * shield / dome / blink as the wizard's `fx` bits, the cast as its mode.
+ *
+ * Their «Protection» as a player's (Combat.js): the hand shield is held in the free (left) hand —
+ * the wand hand goes on casting; 5 mana to raise, then 0.5 a second. The Master's dome
+ * («Protection Maxima»): 20, then 1 a second, held while charges come (let go after `dome.t` s
+ * of quiet). Every spell either stops costs half of that spell's mana (shieldPays); out of mana
+ * it shatters and the spell goes on through.
  */
 
 import * as THREE from 'three';
@@ -17,6 +23,7 @@ import { WIZ, NPC_COST, pickSpell, react } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
+import { PVP, shieldHitCost } from './Combat.js';
 
 const WALK = 2.3, RUN = 5.6;
 const URGENT = new Set(['punish', 'regroup', 'guardMaster', 'kite']);
@@ -213,7 +220,10 @@ export class WizardFight {
         v.seated = false;
         v.shieldT = (v.shieldT || 0) - dt; v.domeT = (v.domeT || 0) - dt; v.castT = (v.castT || 0) - dt; v.blinkFx = (v.blinkFx || 0) - dt;
         if (v.shieldT <= 0) v.fx &= ~FX.SHIELD;
-        if (v.domeT <= 0 || !(v.domeHits > 0)) v.fx &= ~FX.DOME;
+        if (v.domeT <= 0) v.fx &= ~FX.DOME; // (quiet a while: he lets it go — his «стоп»)
+        // a held shield / dome takes mana every second (as a player's); none left — it falls apart
+        const hold = ((v.fx & FX.SHIELD) ? PVP.SHIELD_DRAIN : 0) + ((v.fx & FX.DOME) ? PVP.DOME_DRAIN : 0);
+        if (hold) { v.mana -= hold * dt; if (v.mana <= 0) { v.mana = 0; this._shatter(v, FX.SHIELD | FX.DOME); } }
         if (v.blinkFx <= 0) v.fx &= ~FX.BLINK;
         // the wand knocked out of the hand («Экспеллиармус»): no magic — away from him
         if (v.noWand) {
@@ -226,7 +236,7 @@ export class WizardFight {
         const wt = v.wt, sq = wt?.sq;
         const W = v.W;
         // (a held shield: the guards and the screen keep it up — it costs a little mana)
-        if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2) { v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; v.mana -= 0.8 * dt; }
+        if (wt && (wt.role === 'shield' || wt.role === 'guard') && v.mana > 2) { if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; v.shieldT = Math.max(v.shieldT, 0.4); v.fx |= FX.SHIELD; }
         // the Master: he comes too close → blink away
         if (v.role === 'master' && W.blink && d < 3.5 && (v.blinkCd ?? 0) <= 0) this._blink(v, fp);
         const spot = this._spot(v, fp, d, sq);
@@ -372,7 +382,8 @@ export class WizardFight {
             const r = react({ role: v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta });
             if (r === 'dome') this._dome(v);
             else if (r === 'shield' || r === 'counter') {
-                v.shieldT = 1.4; v.fx |= FX.SHIELD; v.mana -= NPC_COST.Protection;
+                if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection; // (raised in the free hand: the wand goes on casting)
+                v.shieldT = Math.max(v.shieldT, 1.4); v.fx |= FX.SHIELD;
                 v.yaw = Math.atan2(-(b.o.x - v.x), -(b.o.z - v.z));
                 if (Math.random() < 0.25) this.life._say(v, pick(WIZ_LINES.shield), 1.5);
             }
@@ -381,10 +392,41 @@ export class WizardFight {
 
     _dome(v) {
         const D = v.W.dome;
-        if (!D || v.mana < NPC_COST.ProtectionMaxima) return;
+        if (!D || (v.fx & FX.DOME) || v.mana < NPC_COST.ProtectionMaxima) return;
         v.mana -= NPC_COST.ProtectionMaxima;
-        v.domeT = D.t; v.domeHits = D.hits; v.domeCd = D.cd;
+        v.domeT = D.t; v.domeCd = D.cd;
         v.fx |= FX.DOME;
+    }
+
+    /**
+     * (host) A spell reached this wizard's shield (`dome`: the Master's dome, else the hand shield):
+     * it costs half of that spell's mana. true: held; false: no mana for it — it shatters, the spell goes on.
+     */
+    shieldPays(v, spell, dome = false) {
+        const cost = shieldHitCost(spell);
+        if (dome) v.domeT = Math.max(v.domeT || 0, v.W?.dome?.t || 6); // (still under fire: he keeps it up)
+        if (v.mana >= cost) { v.mana -= cost; return true; }
+        v.mana = 0;
+        this._shatter(v, dome ? FX.DOME : FX.SHIELD);
+        return false;
+    }
+
+    /** The wizard's shield / dome breaks: its light flies apart in pieces. */
+    _shatter(v, bits) {
+        if (!(v.fx & bits)) return;
+        const dome = !!(v.fx & bits & FX.DOME);
+        v.fx &= ~bits;
+        if (bits & FX.SHIELD) v.shieldT = 0;
+        if (bits & FX.DOME) v.domeT = 0;
+        const fx = this.game.fx;
+        if (!fx) return;
+        for (let i = 0; i < (dome ? 40 : 20); i++) {
+            const a = Math.random() * Math.PI * 2, r = dome ? 3.2 : 0.9;
+            _o.set(v.x + (dome ? Math.cos(a) * r : -Math.sin(v.yaw) * 1.3 + (Math.random() - 0.5) * r), v.y + (dome ? Math.random() * 3 : 2.6 + (Math.random() - 0.5) * r), v.z + (dome ? Math.sin(a) * r : -Math.cos(v.yaw) * 1.3));
+            fx.spark(_o, i % 2 ? 0x9fd8ff : 0xffffff, 0.14, _d.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.7);
+        }
+        fx.lightFlash?.(_o, 0x6fc3ff, 3, 0.3, 18);
+        if (Math.random() < 0.5) this.life._say(v, dome ? 'Мой купол!' : 'Щит!', 1.5);
     }
 
     /** The Master is gone in a puff of smoke — and stands a dozen metres off. */

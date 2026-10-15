@@ -42,7 +42,7 @@ function world({ authority = true, freeworld = false } = {}) {
             getHandDirection: (side, out = new THREE.Vector3()) => out.copy(aim).normalize(),
             onGround: true, verticalVelocity: 0,
         },
-        combat: { enabled: freeworld, fatigue: 30, dead: false, shield: null, center: (out = new THREE.Vector3()) => out.copy(g.character.group.position).add(new THREE.Vector3(0, 0.6, 0)), shieldFactor: () => 1, _blocked() {}, damage: (d, by) => hits.push({ who: 'me', d, by }) },
+        combat: { enabled: freeworld, fatigue: 30, dead: false, shield: null, center: (out = new THREE.Vector3()) => out.copy(g.character.group.position).add(new THREE.Vector3(0, 0.6, 0)), shieldFactor: () => 1, _blocked() { return true; }, damage: (d, by) => hits.push({ who: 'me', d, by }) },
         knockback: new THREE.Vector3(),
         hud: { setVoice: (t) => voice.push(t) },
         fx: { spark() {} },

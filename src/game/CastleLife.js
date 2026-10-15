@@ -1668,7 +1668,8 @@ export class CastleLife {
         v.damageCooldown = 0.35;
         if (v.wizard) v.hurtAt = Date.now();
         // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
-        if (v.wizard && (v.fx & FX.DOME) && !opts.pierce) { v.domeHits = (v.domeHits || 1) - 1; if (v.domeHits <= 0) v.fx &= ~FX.DOME; this._flash(v); return; }
+        // (a spell: half its mana from his — an unnamed one as an ordinary 10; a blow: nothing. Out of mana it shatters)
+        if (v.wizard && (v.fx & FX.DOME) && !opts.pierce && this.wizards.fight.shieldPays(v, opts.spell ? opts.kind || 'spell' : 'melee', true)) { this._flash(v); return; }
         // a shield held up (the shield wall, the ones holding a place, a wizard's hand shield) takes a blow
         // or a spell from the front: little gets through. «Авада Кедавра» passes any shield.
         if (dir && !opts.pierce && v.foe && this._shieldUp(v)) {
@@ -1805,15 +1806,18 @@ export class CastleLife {
 
     /**
      * (host) A duel charge reached a castle person (Duel.applyToCreature): taken by a shield? The
-     * Master's dome takes any (its hits are counted); a wizard's hand shield or a knight's raised
-     * shield — one from the front (Sapira's blow on a knight's shield: hit() weakens it). Not Avada.
+     * Master's dome takes any; a wizard's hand shield or a knight's raised shield — one from the
+     * front (Sapira's blow on a knight's shield: hit() weakens it; Avada passes a knight's shield).
+     * A wizard's shield pays half of the charge's mana for it — out of mana it shatters.
      */
     wardOff(v, from, spell) {
-        if (v.dead || spell === 'AvadaKedavra') return false;
-        if (v.wizard && (v.fx & FX.DOME)) { v.domeHits = (v.domeHits || 1) - 1; if (v.domeHits <= 0) v.fx &= ~FX.DOME; return true; }
+        if (v.dead) return false;
+        // a wizard's «Protection» / the Master's dome: any charge — «Авада Кедавра» too — for half its mana (WizardFight.shieldPays)
+        if (v.wizard && (v.fx & FX.DOME)) return this.wizards.fight.shieldPays(v, spell, true);
         const front = !!from && (from.x - v.x) * -Math.sin(v.yaw) + (from.z - v.z) * -Math.cos(v.yaw) > 0;
         if (!front || !v.foe || !this._shieldUp(v)) return false;
-        return v.wizard || spell !== 'SapiraDuel';
+        if (v.wizard) return this.wizards.fight.shieldPays(v, spell, false);
+        return spell !== 'AvadaKedavra' && spell !== 'SapiraDuel'; // (a knight's shield of wood and iron)
     }
 
     /** Who saw it? If anyone did (or the victim lives to tell), the castle turns on `by`. */

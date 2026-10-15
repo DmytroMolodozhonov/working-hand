@@ -29,6 +29,7 @@
 
 import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
+import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
@@ -436,6 +437,8 @@ export class Gear {
 
     _updateArrows(dt) {
         const g = this.game;
+        // the shields of light up now (a «Protection» / a dome mirrors an arrow: ShieldBounce.js)
+        const shields = this.arrows.some((a) => !a.stuck) ? shieldsNow(g) : [];
         for (let i = this.arrows.length - 1; i >= 0; i--) {
             const a = this.arrows[i];
             a.life -= dt;
@@ -450,6 +453,13 @@ export class Gear {
                 // a house's sphere of protection: the arrow stops on it and falls (HouseWards.js)
                 const ward = g.wards?.segmentHit(was, p);
                 if (ward) { p.copy(ward); a.vel.set(0, -2, 0); a.stuck = true; a.life = Math.min(a.life, 4); break; }
+                // a «Protection» / «Protection Maxima»: the arrow is mirrored off it (no mana: it is no spell)
+                if (shields.length && bounceOffShields(shields, was, p, a.vel, a.by)) {
+                    for (let k = 0; k < 8; k++) g.fx.spark(p, k % 2 ? 0x9fd8ff : 0xffffff, 0.1, _v2.set((Math.random() - 0.5) * 5, Math.random() * 3, (Math.random() - 0.5) * 5), 0.35);
+                    g.sound?.playFrozenHit?.();
+                    a.by = null; // (mirrored: it may now hit anybody — its shooter too)
+                    break;
+                }
                 // creatures
                 if (g.authority) {
                     for (const z of g.zombies) {
