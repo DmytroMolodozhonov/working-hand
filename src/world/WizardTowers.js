@@ -506,6 +506,15 @@ function buildGrounds(p, rng, out) {
     out.posts = [{ ...p.pt(-4, -24, 0), yaw: p.yaw(0) }, { ...p.pt(4, -24, 0), yaw: p.yaw(0) }];
 }
 
+/**
+ * The great door of the academy in its high doorway (5 wide, 6 high: the pointed hats pass): it
+ * stands closed; the wizards open it as they come (Houses), a player with the hand (Doors.js).
+ */
+function towerDoor(p) {
+    const o = p.pt(0, 0), q = p.pt(1, 0), d = p.pt(0, -(R_IN + 1));
+    return { x: d.x, y: d.y, z: d.z, ry: Math.atan2(-(q.z - o.z), q.x - o.x), w: 5, h: 6 };
+}
+
 /** 4–6 wizards' houses on lots facing the ring road; their doors join the road. */
 function buildWizardHouses(p, rng, out) {
     const B = BLOCK;
@@ -591,7 +600,7 @@ export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
     // the tower itself as a «house» (glass in its windows, the students' beds)
     houses.push({
         kind: 'tower', rich: true, wizard: true, id: id + '_h' + houses.length, c: p.pt(0, 0), r: R_OUT + 1,
-        doorRec: null, windows: out.windows, chests: [], bedSpots: out.bedSpots.map(({ room, ...b }) => b), homeNode: out.dormNode, doorNode: out.gateNode,
+        doorRec: towerDoor(p), windows: out.windows, chests: [], bedSpots: out.bedSpots.map(({ room, ...b }) => b), homeNode: out.dormNode, doorNode: out.gateNode,
         door: p.pt(0, -22), inside: p.pt(0, -6, 28), beds: out.bedSpots.length, bedColour: 'purple',
     });
     const def = {

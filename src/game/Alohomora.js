@@ -29,6 +29,7 @@ export const ALOHOMORA = {
     CONE: 0.5, // rad round the pointing hand (a lock right by the hand: more, see _pick)
     GATE_HITS: 2, // blasts to break the gates: «Бомбардо» counts 1, «Бомбардо Максима» 3, «Total Destruction» breaks them at once
     LOCK_SHARE: 0.55, // of the houses of a village lock their doors (at night / nobody home)
+    WIZ_LOCK_SHARE: 0.85, // of the wizards' houses lock their doors (at night; most of them by day too)
     NEAR: 70, // m: the gates of a castle this near are put up
 };
 
@@ -46,7 +47,7 @@ export const TARGETS = {
     castleDoor: { plain: 'none', maxima: 'none', why: 'двери внутри замка без замков (открываются рукой)' },
     throneGate: { plain: 'refuse', maxima: 'unlock', why: 'ворота тронного зала: слишком сильный замок для простой «Алохоморы»; ломаются и взрывом' },
     playerDoor: { plain: 'none', maxima: 'none', why: 'дверь, поставленная игроком, не запирается' },
-    wizardDoor: { plain: 'none', maxima: 'none', why: 'двери домов волшебников — позже (пока не заперты)' },
+    wizardDoor: { plain: 'unlock', maxima: 'unlock', why: 'двери домов волшебников почти всегда заперты (и днём); большая дверь академии — на ночь; открывается щелью, дальше — рукой' },
     shipHatch: { plain: 'none', maxima: 'none', why: 'на кораблях дверей с замками нет' },
     // ---- the living: no lock in them, nothing to open (it doesn't push, hurt or hold anybody)
     players: { plain: 'none', maxima: 'none', why: 'на игроков (меня и других по сети) не действует: в человеке нет замка' },
@@ -133,15 +134,18 @@ export class Alohomora {
             const owner = this.game.castleLife?.state?.(d.castle)?.owner;
             return !(owner && owner === this.game.localId); // (the castle is mine: its gates open to me)
         }
-        if (!d.gen || d.tower) return false;
+        if (!d.gen) return false;
         return !!this.doorLocks.get(d.id) && !this.picked.has(d.id);
     }
 
     /** A house's door locks (the host): some houses do, at night or with nobody of the family at home. */
     _houseLocked(rec) {
         const g = this.game;
-        if (rec.def?.kind === 'tower') return false; // (wizards' houses: later)
-        if (hash01(rec.h.id) >= ALOHOMORA.LOCK_SHARE) return false;
+        if (rec.def?.kind === 'tower') {
+            if (rec.h.kind === 'tower') return !!g.isNight; // (the academy's great door: locked for the night)
+            if (hash01(rec.h.id) >= ALOHOMORA.WIZ_LOCK_SHARE) return false;
+            if (g.isNight || hash01(rec.h.id + 'd') < 0.6) return true; // (a wizard locks his door — most even when at home)
+        } else if (hash01(rec.h.id) >= ALOHOMORA.LOCK_SHARE) return false;
         if (g.isNight) return true;
         const home = [...(g.castleLife?.byId?.values() || [])].some((v) => !v.dead && v.cs?.def === rec.def && v.job === 'home' && v.house === rec.i);
         return !home;
