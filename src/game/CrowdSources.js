@@ -47,11 +47,11 @@ export function crowdOf(g) {
             const p = d.model.position;
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.dragon * (d.size || 1) / 1.25, ref: d, id: d.id, kind: 'dragon' });
         }
-        // the Ice Castle's queen, snowmen and ice monsters (IceQueen.js)
+        // the Ice Castle's queen, snowmen and ice monsters, and the friendly snowmen of «Snowman» (IceQueen.js)
         for (const c of g.iceCastle?.list || []) {
             if (c.dead || !c.model) continue;
             const p = c.model.position;
-            push({ x: p.x, y: p.y, z: p.z, r: c.r, ref: c, id: c.id, kind: c.type === 'snowman' ? 'snowman' : c.type === 'monster' ? 'iceMonster' : 'iceQueen' });
+            push({ x: p.x, y: p.y, z: p.z, r: c.r, ref: c, id: c.id, kind: c.type === 'snowman' || c.type === 'friend' ? 'snowman' : c.type === 'monster' ? 'iceMonster' : 'iceQueen' }); // (the friendly snowman of «Snowman» too)
         }
         // carts on the roads
         for (const k of g.carriages?.list?.values?.() || []) {

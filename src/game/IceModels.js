@@ -196,6 +196,55 @@ export function snowmanModel() {
     return g;
 }
 
+// ================================================================== the friendly snowman («Snowman»)
+const SCARF = 0xd8433c, SCARF2 = 0xf3efe6, CHEEK = 0xf4a9b4;
+/** Its size: the creature (IceQueen 'friend') — feet at 0, a head's top at FRIEND_H. */
+export const FRIEND_H = 2.45;
+/**
+ * A friendly snowman (the spell «Snowman»; ≈2.4 m, smaller than the queen's): three balls of snow,
+ * round coal eyes with a glint, rosy cheeks, a wide smile turned UP, a carrot nose, coal buttons, a
+ * red striped scarf with a hanging end, twig arms with three fingers. Nothing like the evil ones
+ * (no brows, no red eyes, no jagged grin).
+ * Parts apart (the spell builds it bit by bit): userData {base, mid, head, face, lids, armL, armR, scarf}
+ */
+export function friendSnowmanModel() {
+    const g = new THREE.Group();
+    const base = mesh([['ball', 1.3, 1.15, 1.3, 0, 0, 0, SNOWC]]);
+    base.position.y = 0.55;
+    const mid = pivot(0, 1.4, 0, mesh([['ball', 0.98, 0.88, 0.98, 0, 0, 0, SNOWC2],
+        ['ball', 0.1, 0.1, 0.05, 0, 0.12, -0.47, COAL], ['ball', 0.1, 0.1, 0.05, 0, -0.12, -0.48, COAL]]));
+    // the scarf round the neck, its end hanging down the front
+    const scarf = mesh([['cyl', 0.78, 0.17, 0.78, 0, 0.42, 0, SCARF], ['cyl', 0.8, 0.05, 0.8, 0, 0.42, 0, SCARF2],
+        ['box', 0.2, 0.55, 0.06, 0.2, 0.14, -0.4, SCARF, 0.12, 0, 0.12], ['box', 0.21, 0.05, 0.07, 0.21, 0.05, -0.41, SCARF2, 0.12, 0, 0.12],
+        ['box', 0.21, 0.05, 0.07, 0.17, -0.08, -0.43, SCARF2, 0.12, 0, 0.12]], MAT.solid, false);
+    mid.add(scarf);
+    const ball = mesh([['ball', 0.72, 0.68, 0.72, 0, 0, 0, SNOWC]]);
+    // the face: round coal eyes, rosy cheeks, a smile curving up at its ends, the carrot
+    const F = [['ball', 0.12, 0.14, 0.06, -0.13, 0.07, -0.33, COAL], ['ball', 0.12, 0.14, 0.06, 0.13, 0.07, -0.33, COAL],
+        ['ball', 0.12, 0.07, 0.04, -0.21, -0.06, -0.3, CHEEK], ['ball', 0.12, 0.07, 0.04, 0.21, -0.06, -0.3, CHEEK],
+        ['cone', 0.09, 0.32, 0.09, 0, -0.01, -0.48, CARROT, -Math.PI / 2, 0, 0]];
+    for (let i = -3; i <= 3; i++) F.push(['ball', 0.055, 0.055, 0.04, i * 0.055, -0.15 + i * i * 0.008, -0.33 + Math.abs(i) * 0.008, COAL]);
+    const glint = mesh([['box', 0.035, 0.035, 0.02, -0.11, 0.1, -0.365, 0xffffff], ['box', 0.035, 0.035, 0.02, 0.15, 0.1, -0.365, 0xffffff]], MAT.glow, false);
+    const face = pivot(0, 0, 0, mesh(F, MAT.solid, false), glint);
+    // the eyelids (snow): shown for a blink
+    const lids = mesh([['box', 0.15, 0.17, 0.05, -0.13, 0.07, -0.355, SNOWC], ['box', 0.15, 0.17, 0.05, 0.13, 0.07, -0.355, SNOWC]], MAT.solid, false);
+    lids.visible = false;
+    const head = pivot(0, 2.08, 0, ball, face, lids);
+    const twig = (s) => mesh([['box', 0.06, 0.85, 0.06, 0, -0.42, 0, TWIG], ['box', 0.04, 0.22, 0.04, s * 0.06, -0.78, 0, TWIG, 0, 0, s * 0.6],
+        ['box', 0.04, 0.2, 0.04, -s * 0.05, -0.82, 0, TWIG, 0, 0, -s * 0.5], ['box', 0.035, 0.2, 0.035, 0, -0.92, 0, TWIG]], MAT.solid, false);
+    const armL = pivot(-0.45, 1.5, 0, twig(-1)), armR = pivot(0.45, 1.5, 0, twig(1));
+    armL.rotation.z = -1.2; armR.rotation.z = 1.2; // (out to the sides, a little down: friendly)
+    g.add(base, mid, head, armL, armR);
+    g.userData = { base, mid, head, face, lids, armL, armR, scarf };
+    return g;
+}
+
+/** The puddle a melted snowman leaves (a flat disc of melt-water; IceQueen scales and fades it). */
+export function puddleModel() {
+    const m = new THREE.Mesh(merged([['cyl', 1, 0.04, 1, 0, 0.02, 0, 0xa9d6ef], ['ball', 0.12, 0.08, 0.1, 0.08, 0.06, -0.05, COAL], ['cone', 0.07, 0.22, 0.07, -0.15, 0.05, 0.1, CARROT, Math.PI / 2, 0.6, 0]]), MAT.ice);
+    return m;
+}
+
 // ================================================================== the ice monsters
 const ICEB = 0xa8ddf7, ICEB2 = 0x86c8ee, ICEB3 = 0xcdeffd, CRACK = 0xe9fbff;
 /**
@@ -267,5 +316,5 @@ export function iceSpikeModel() { const m = new THREE.Mesh(merged([['cone', 1, 1
 export function sampleIceModels() {
     const hurt = snowmanModel();
     hurt.traverse((o) => { if (o.isMesh && o.material === MAT.solid) o.material = MAT.hit; }); // (the red flash of a hurt one)
-    return [iceQueenModel(), snowmanModel(), hurt, iceMonsterModel(), chandelierModel(), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel()];
+    return [iceQueenModel(), snowmanModel(), hurt, friendSnowmanModel(), puddleModel(), iceMonsterModel(), chandelierModel(), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel()];
 }

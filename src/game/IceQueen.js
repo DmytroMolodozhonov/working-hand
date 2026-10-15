@@ -25,7 +25,7 @@
 import * as THREE from 'three';
 import { crowdStep } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
-import { iceQueenModel, snowmanModel, iceMonsterModel, chandelierModel, snowflakeShotModel, shardModel, iceSpikeModel, ICE_MATERIALS, ROD_TIP } from './IceModels.js';
+import { iceQueenModel, snowmanModel, friendSnowmanModel, puddleModel, iceMonsterModel, chandelierModel, snowflakeShotModel, shardModel, iceSpikeModel, ICE_MATERIALS, ROD_TIP, FRIEND_H } from './IceModels.js';
 import { iceYaw, iceLocal } from '../world/IceCastle.js';
 import { BLOCK, isPalaceIce, isSolid } from '../world/Terrain.js';
 import { newUid } from './ItemTypes.js';
@@ -41,12 +41,28 @@ export const ICE = {
     QUEEN: { HP: 350, S: 1.5, H: 7.0, R: 1.0, SPEED: 2.6, TURN: 2.4, SIGHT: 55, LEASH: 75, CAST: 3.0, REACH: 34 },
     SNOW: { HP: 10, H: 3.0, R: 0.85, SPEED: 3.3, TURN: 5, MAX: 14, RESPAWN: 16, THROW: 2.4, RANGE: 26, SIGHT: 34, ROAM: 48, DMG: 1 },
     MONSTER: { HP: 180, S: 2, H: 7.6, R: 1.6, SPEED: 3.4, TURN: 1.8, PUNCH: 14, REACH: 4.6, BOULDER: 10, GUARD: 28, LEASH: 36, RESPAWN: 1200 },
+    // the friendly snowman of the spell «Snowman» (nobody's: it only wanders and fears the heat)
+    FRIEND: { HP: 10, H: FRIEND_H, R: 0.65, SPEED: 1.2, TURN: 3, MAX: 12, BUILD: 3.6, RANGE: 16, ROAM: 12, FLEE: 13, MELT: 4.5, MELT_DPS: 1.6, FLEE_K: 2.4, AWAKE: 150 },
     ROD: { FREEZE_T: 10, CREATURE_T: 12, RANGE: 45, LAYER: 2.3, LAYERS: 6, FOLLOW: 38, AIM: 1.2 },
     G: 14, // the shots' gravity
 };
 
 /** Fire and how strong each kind is on the ice (the author: «чем сильнее огненное заклятие, тем сильнее урон»). */
-export const FIRE_K = { fire: 1.5, burn: 1.5, Fire: 1.5, Campfire: 1.5, Inferno: 2, FireMaxima: 2.5, Hellfire: 3.5 };
+export const FIRE_K = { fire: 1.5, burn: 1.5, Fire: 1.5, Campfire: 1.5, Inferno: 2, FireMaxima: 2.5, Hellfire: 3.5, heat: 0.5 };
+/**
+ * Every cold kind of harm — ice, frost, snow, the rod, frozen water (the author: «у Ледяной Королевы
+ * иммунитет к холоду и к холодным заклинаниям любого вида»). One list for every place where cold acts on
+ * a creature: on the queen (and her monsters, and every snowman) none of them does anything — no damage,
+ * no freezing, no ice round her, no slowing (Duel, WaterMagic, WaterVortex, WaterStorm, the rod…).
+ */
+export const COLD_KINDS = new Set(['Ice', 'IceDuel', 'IceBall', 'Frozen', 'RodFrozen', 'RodIce', 'cold', 'chill', 'snow', 'ice', 'frost', 'freeze',
+    'FrozenWater', 'WaterFrozen', 'VortexIce', 'StormIce', 'IceTrap', 'IceBridge', 'IceWall', 'IceCastle']);
+/** Is `kind` (a spell, a harm) cold? */
+export const isCold = (kind) => COLD_KINDS.has(kind);
+/** Does the cold not touch this creature (the queen, her monsters, every snowman — they are ice themselves)? */
+export const coldProof = (c) => !!c && (c.isIce === true || c.type === 'queen' || c.ck === 'I');
+/** The small snow folk: the queen's evil snowmen and the friendly ones of «Snowman» (thrown about, a blow scatters them). */
+const small = (type) => type === 'snowman' || type === 'friend';
 /** The spells only a scroll (or a spell book) teaches: they act on the queen as on anyone. */
 export const SCROLL_KINDS = new Set(['Lightning', 'LightningStrike', 'Thunderwave', 'ToTheSun', 'AvadaKedavra', 'TotalDestruction', 'TotalDestructionMaxima', 'LetItRain',
     'BombardoMaxima', 'Inspirius', 'LevitationMaxima', 'WindImpulse', 'WindImpulseMaxima', 'Invisibility', 'OvergrownMaxima', 'AlohomoraMaxima', 'FirefightingMaxima',
@@ -63,9 +79,10 @@ const PLAIN = { melee: 1, arrow: 1, fist: 1, punch: 1, Cauldron: 1, Ward: 1, fal
  */
 export function iceDamage(type, kind, dmg) {
     if (!(dmg > 0)) return 0;
-    if (kind === 'Ice' || kind === 'IceDuel' || kind === 'Frozen' || kind === 'RodFrozen' || kind === 'cold' || kind === 'chill' || kind === 'snow' && type !== 'snowman') return 0;
+    // cold: nothing (only an evil snowman's snowball breaks another evil snowman — the rod's war)
+    if (COLD_KINDS.has(kind) && !(kind === 'snow' && type === 'snowman')) return 0;
     const fire = FIRE_K[kind];
-    if (type === 'snowman') {
+    if (small(type)) {
         if (fire) return dmg * fire * 2;
         if (kind === 'Bombardo' || kind === 'BombardoMaxima' || kind === 'Lightning') return dmg * 3;
         return dmg;
@@ -85,9 +102,9 @@ export function iceDamage(type, kind, dmg) {
 
 /** A duel charge on an ice creature: what it takes (and whether it is stunned). */
 export function iceBolt(type, spell) {
+    if (COLD_KINDS.has(spell)) return { dmg: 0 }; // («Айс», «Frozen»: ice on ice — no harm, no stun, no freezing)
     if (spell === 'AvadaKedavra') return { dmg: 25 }; // (a scroll's curse: −25 on anyone)
-    if (type !== 'snowman') return { dmg: 0 }; // (the queen and her monsters: the simple duel magic does nothing)
-    if (spell === 'IceDuel') return { dmg: 0 };
+    if (!small(type)) return { dmg: 0 }; // (the queen and her monsters: the simple duel magic does nothing)
     if (spell === 'Stupefy') return { dmg: 0, stun: 4 };
     if (spell === 'SapiraDuel') return { dmg: 10 };
     if (spell === 'SandsDuel') return { dmg: 3 };
@@ -120,7 +137,7 @@ export const ICE_TARGETS = {
     dragon: { does: 'slow', why: 'великана не заморозить: −20 и медленнее (как «Айс», DragonKinds)' },
     phoenix: { does: 'none', why: 'лёд тает на огненной птице (но это нападение)' },
     bookBirds: { does: 'down', why: 'замёрзшая книга падает' },
-    iceCreatures: { does: 'none', why: 'королева, монстры, снеговики — сами изо льда; снеговиками жезл управляет' },
+    iceCreatures: { does: 'none', why: 'королева, монстры, снеговики — сами изо льда; злыми снеговиками жезл управляет, доброго («Snowman») не трогает' },
     // ---- the Ice Rod's «Frozen» on things
     ground: { does: 'ice', why: 'на землю, стену, крышу — слой льда на поверхности; ещё «Frozen» туда же — следующий слой (стены, мосты)' },
     water: { does: 'ice', why: 'вода, куда показали, покрывается льдом — по нему можно ходить' },
@@ -131,7 +148,25 @@ export const ICE_TARGETS = {
 };
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
-const TYPES = ['queen', 'snowman', 'monster'];
+const TYPES = ['queen', 'snowman', 'monster', 'friend'];
+
+/**
+ * «Кто/что × как действует» for the friendly snowman of «Snowman» (IceQueen type 'friend'; it lives in
+ * this same list — so every place that finds the Ice Castle's creatures (Duel._bodies/_creature,
+ * Game.explode, birdRay, lightningAt, CreatureImpact 'I', Levitation, WaterVortex, the blows) finds it too).
+ */
+export const FRIEND_TARGETS = {
+    fire: { does: 'melt', why: '10 HP; огонь ×2 (Инферно, Fire Maxima, Адский огонь — тает сразу); у костра, пожара, взрыва — убегает, рядом тает (меньше), растаял — лужица' },
+    blows: { does: 'damage', why: 'меч, топор, стрелы, кулак рассыпают снег (полный урон); Бомбардо и молния ×3' },
+    duel: { does: 'damage', why: 'дуэльные заряды как злому снеговику (Остолбеней — оглушает, Сапира −10…); «Авада Кедавра» −25' },
+    cold: { does: 'none', why: '«Айс», «Frozen», жезл, снег — он сам из снега (COLD_KINDS)' },
+    push: { does: 'push', why: 'ветер, взрывы, вода, «Джолт» отбрасывают его как злого снеговика' },
+    levitation: { does: 'none', why: 'как все ледяные существа (ICE_TARGETS.levitation)' },
+    queen: { does: 'none', why: 'Королева, её злые снеговики и монстры его не трогают; «Атака» жезлом на него не действует' },
+    villagers: { does: 'none', why: 'жителей не пугает (никакой тревоги)' },
+    master: { does: 'none', why: 'никому не подчиняется («Брейнрот», «Атака», концентрация — нет); «стоп» его не убирает' },
+    network: { does: 'host', why: 'хост ведёт его (ум, тело, HP) и шлёт всем; сохраняется с миром, пока не растает' },
+};
 const r2 = (v) => Math.round(v * 100) / 100;
 const vec = (a) => new THREE.Vector3(+a[0] || 0, +a[1] || 0, +a[2] || 0);
 
@@ -184,15 +219,15 @@ export class IceCastleLife {
 
     _spawn(type, pos, { id = null, hp = null, yaw = 0, slot = 0 } = {}) {
         const g = this.game;
-        const model = type === 'queen' ? iceQueenModel() : type === 'snowman' ? snowmanModel() : iceMonsterModel();
+        const model = type === 'queen' ? iceQueenModel() : type === 'snowman' ? snowmanModel() : type === 'friend' ? friendSnowmanModel() : iceMonsterModel();
         const S = type === 'queen' ? ICE.QUEEN.S : type === 'monster' ? ICE.MONSTER.S : 1;
         model.scale.setScalar(S);
         model.position.copy(pos);
         model.rotation.y = yaw;
         g.scene.add(model);
-        const T = type === 'queen' ? ICE.QUEEN : type === 'monster' ? ICE.MONSTER : ICE.SNOW;
+        const T = type === 'queen' ? ICE.QUEEN : type === 'monster' ? ICE.MONSTER : type === 'friend' ? ICE.FRIEND : ICE.SNOW;
         const c = {
-            id: id || (type === 'queen' ? 'iceQueen' : type === 'monster' ? 'iceMon' + slot : 'snow' + (++this._seq) + Math.floor(Math.random() * 1e4).toString(36)),
+            id: id || (type === 'queen' ? 'iceQueen' : type === 'monster' ? 'iceMon' + slot : (type === 'friend' ? 'frs' : 'snow') + (++this._seq) + Math.floor(Math.random() * 1e4).toString(36)),
             type, ck: 'I', isIce: true, model, group: model, hp: hp ?? T.HP, max: T.HP, dead: false,
             r: T.R, h: T.H, speed: T.SPEED, turn: T.TURN || 3, slot,
             get isDead() { return this.dead; }, get position() { return this.model.position; },
@@ -222,6 +257,16 @@ export class IceCastleLife {
         const n = iceDamage(c.type, kind, dmg);
         if (!this.auth) { if (dmg > 0) g.sync?.ice?.({ e: 'hit', id: c.id, dmg: r2(dmg), kind, by: who }); this._flash(c, n > 0); return n; }
         this._flash(c, n > 0);
+        if (c.type === 'friend') {
+            // the friendly snowman: nobody's foe, no achievement — it only runs from fire (where it came from)
+            if (FIRE_K[kind]) { c.scaredT = 4; (c.fireFrom || (c.fireFrom = new THREE.Vector3())).copy(this._casterPos(who, c)); }
+            if (n <= 0) return 0;
+            c.hp = Math.max(0, c.hp - n);
+            c.hurtT = 0.25;
+            c.lastKind = kind;
+            if (c.hp <= 0) this._die(c, who);
+            return n;
+        }
         if (who != null) c.lastBy = who;
         if (c.type === 'queen') g.achievements?.hit('iceQueen', c.id, who); else g.achievements?.fought(who); // (the achievement: everyone who took part)
         // (struck: it turns on whoever did it — a creature of the castle defends itself)
@@ -289,12 +334,34 @@ export class IceCastleLife {
             const v = pushAt(c.model.position, c);
             if (!v) continue;
             n++;
-            const k = c.type === 'snowman' ? 1 : c.type === 'queen' ? 0.15 : 0.08;
+            const k = small(c.type) ? 1 : c.type === 'queen' ? 0.15 : 0.08;
             c.shove = (c.shove || new THREE.Vector3()).addScaledVector(_v.set(v.x, 0, v.z), k);
-            if (c.type === 'snowman') { c.vy = Math.max(c.vy, Math.min(8, (v.y || 0) * 0.6 + v.length() * 0.25)); if (v.length() > 9) c.stunT = Math.max(c.stunT, 1.5); }
+            if (small(c.type)) { c.vy = Math.max(c.vy, Math.min(8, (v.y || 0) * 0.6 + v.length() * 0.25)); if (v.length() > 9) c.stunT = Math.max(c.stunT, 1.5); }
             c.sway = Math.min(0.4, (c.sway || 0) + v.length() * 0.02);
         }
         return n;
+    }
+
+    /** A melted snowman's puddle: it spreads, then soaks away (every computer its own). */
+    _puddle(c) {
+        const m = puddleModel(), p = c.model.position;
+        m.position.set(p.x, p.y + 0.01, p.z);
+        m.scale.set(0.3, 1, 0.3);
+        this.game.scene.add(m);
+        (this.puddles || (this.puddles = [])).push({ m, t: 0 });
+        this.game.sound?.playSnowStep?.(0.6);
+    }
+
+    _updatePuddles(dt) {
+        const l = this.puddles;
+        if (!l?.length) return;
+        for (let i = l.length - 1; i >= 0; i--) {
+            const q = l[i];
+            q.t += dt;
+            const s = q.t < 1.5 ? 0.3 + q.t * 0.9 : Math.max(0.01, 1.65 - (q.t - 1.5) / 18 * 1.65);
+            q.m.scale.set(s * 1.6, 1, s * 1.6);
+            if (q.t > 19.5) { this.game.scene.remove(q.m); l.splice(i, 1); }
+        }
     }
 
     _die(c, killer) {
@@ -303,7 +370,8 @@ export class IceCastleLife {
         c.dead = true;
         c.hp = 0;
         const p = iceCenter(c, new THREE.Vector3());
-        const big = c.type !== 'snowman';
+        const big = !small(c.type);
+        if (c.type === 'friend' && (FIRE_K[c.lastKind] || c.melting)) { c.melting = true; this._puddle(c); } // (melted: a puddle with its coal and carrot)
         for (let i = 0; i < (big ? 70 : 24); i++) g.fx?.spark?.(p, i % 3 ? 0xe8fbff : 0x8fd6ff, (big ? 0.3 : 0.18), _v2.set((Math.random() - 0.5) * (big ? 12 : 6), Math.random() * (big ? 9 : 5), (Math.random() - 0.5) * (big ? 12 : 6)), big ? 1.4 : 0.9);
         g.sound?.playFrozenHit?.();
         if (c.type === 'queen') {
@@ -322,7 +390,7 @@ export class IceCastleLife {
             this.state.monsters[c.slot] = 0;
             this.state.monsterDeadAt[c.slot] = Date.now();
             if (this.auth) creditKill(g, killer, { kind: 'iceMonster' });
-        } else if (this.auth && killer) creditKill(g, killer, { kind: 'snowman' });
+        } else if (this.auth && killer && c.type === 'snowman') creditKill(g, killer, { kind: 'snowman' }); // (the friendly one: no reward for it)
         // (it falls apart: the model sinks and is gone)
         c.deadT = 1.2;
         this._sendSoon = true;
@@ -332,24 +400,29 @@ export class IceCastleLife {
     update(dt) {
         const g = this.game;
         const P = this.plan;
-        if (!P) return;
         const me = g.character?.group.position;
         if (!me) return;
-        const dMe = Math.hypot(me.x - P.x, me.z - P.z);
-        // the minimap: the castle once seen (near enough to see its spires)
-        if (!this.state.seen && dMe < 260) { this.state.seen = true; g.hud?.notify?.('❄️ Вдали сверкает Ледяной замок'); }
-        this.mapMark = this.state.seen ? { x: P.x, z: P.z, name: 'Ледяной замок', icon: '❄' } : null;
-        // the gates and the chandelier: whoever is near (each computer its own; the doors sync themselves)
-        const near = dMe < ICE.ACTIVE + 60;
-        if (near && !this._gates) this._makeGates();
-        if (!near && this._gates && dMe > ICE.SLEEP + 60) this._dropGates();
+        if (!P && !this.list.length && !this.puddles?.length && !this._friendsToLoad) { this._netSend(dt); return; } // (no castle here, no snowman: nothing to do)
+        if (P) {
+            const dMe = Math.hypot(me.x - P.x, me.z - P.z);
+            // the minimap: the castle once seen (near enough to see its spires)
+            if (!this.state.seen && dMe < 260) { this.state.seen = true; g.hud?.notify?.('❄️ Вдали сверкает Ледяной замок'); }
+            this.mapMark = this.state.seen ? { x: P.x, z: P.z, name: 'Ледяной замок', icon: '❄' } : null;
+            // the gates and the chandelier: whoever is near (each computer its own; the doors sync themselves)
+            const near = dMe < ICE.ACTIVE + 60;
+            if (near && !this._gates) this._makeGates();
+            if (!near && this._gates && dMe > ICE.SLEEP + 60) this._dropGates();
+            if (this.auth) {
+                let dNear = dMe;
+                for (const r of g.remotes?.values() || []) if (r.position) dNear = Math.min(dNear, Math.hypot(r.position.x - P.x, r.position.z - P.z));
+                if (!this.active && dNear < ICE.ACTIVE) this._wake();
+                else if (this.active && dNear > ICE.SLEEP) this._sleep();
+                if (this.active) this._respawn(dt);
+            }
+        }
         if (this.auth) {
-            let dNear = dMe;
-            for (const r of g.remotes?.values() || []) if (r.position) dNear = Math.min(dNear, Math.hypot(r.position.x - P.x, r.position.z - P.z));
-            if (!this.active && dNear < ICE.ACTIVE) this._wake();
-            else if (this.active && dNear > ICE.SLEEP) this._sleep();
-            if (this.active) this._respawn(dt);
-            for (const c of [...this.list]) if (!c.dead) this._think(c, dt);
+            if (this._friendsToLoad) this._loadFriends();
+            for (const c of [...this.list]) if (!c.dead && (c.type !== 'friend' || this._awake(c))) this._think(c, dt);
         } else {
             for (const c of this.list) if (c.net && !c.dead) {
                 c.model.position.lerp(c.net, Math.min(1, dt * 8));
@@ -357,11 +430,18 @@ export class IceCastleLife {
             }
         }
         for (const c of [...this.list]) {
-            if (c.dead) { c.deadT -= dt; c.model.position.y -= dt * 1.5; c.model.scale.multiplyScalar(1 - dt * 0.6); if (c.deadT <= 0) this._remove(c); continue; }
+            if (c.dead) {
+                c.deadT -= dt; c.model.position.y -= dt * 1.5; c.model.scale.multiplyScalar(1 - dt * 0.6);
+                if (c.type === 'friend' && c.melting) c.model.scale.y = Math.max(0.02, c.model.scale.y - dt * 1.5); // (melting: it slumps)
+                if (c.deadT <= 0) this._remove(c);
+                continue;
+            }
             this._animate(c, dt);
             if (c.bubble) c.bubble.update(dt, _v.copy(c.model.position).setY(c.model.position.y + c.h + 0.6), g.camera);
             if (c.mockT > 0) c.mockT -= dt;
         }
+        this._updatePuddles(dt);
+        if (!P) { this._netSend(dt); return; }
         this._updateShots(dt);
         this._updateFx(dt);
         this._updateRod(dt);
@@ -395,6 +475,7 @@ export class IceCastleLife {
         this.active = false;
         const h = this._rodHolder();
         for (const c of [...this.list]) {
+            if (c.type === 'friend') continue; // (the friendly snowmen are nobody's: they stay where they wander)
             // (the snowmen following the rod's holder go on with him)
             if (c.type === 'snowman' && h && this.state.queenDead && Math.hypot(h.p.x - c.model.position.x, h.p.z - c.model.position.z) < ICE.ROD.FOLLOW) continue;
             if (c.type === 'queen' && !c.dead) this.state.queenHp = c.hp;
@@ -495,6 +576,7 @@ export class IceCastleLife {
         if (c.stunT > 0) { c.stunT -= dt; this._ground(c, dt); c.moving = false; return; }
         if (c.type === 'queen') this._thinkQueen(c, dt);
         else if (c.type === 'monster') this._thinkMonster(c, dt);
+        else if (c.type === 'friend') this._thinkFriend(c, dt);
         else this._thinkSnowman(c, dt);
         this._ground(c, dt);
     }
@@ -634,7 +716,7 @@ export class IceCastleLife {
         const h = this.state.queenDead ? this._rodHolder() : null;
         let e = null;
         if (h && Math.hypot(h.p.x - p.x, h.p.z - p.z) < ICE.ROD.FOLLOW) {
-            const cmd = this.rodCmd;
+            const cmd = this.rodCmd && !(this.rodCmd.k === 'I' && this.byId(this.rodCmd.id)?.type === 'friend') ? this.rodCmd : null;
             const tp = cmd ? this._bodyPos(cmd.k, cmd.id, new THREE.Vector3()) : null;
             if (tp) e = { k: cmd.k, id: cmd.id, p: tp, d: Math.hypot(tp.x - p.x, tp.z - p.z) };
             else {
@@ -669,6 +751,168 @@ export class IceCastleLife {
         c.throwT = S.THROW * (0.8 + Math.random() * 0.5);
         c.act = 'throw'; c.actT = 0.35; c.actTo = e;
         this._fire('snow', this._hand(c, new THREE.Vector3()), tp, { by: c.id, to: e, delay: 0.3 });
+    }
+
+    // ---------------------------------------------------------------- the friendly snowman (host)
+    /** Is a player near enough for it to live (far from everybody it just stands, as the world does)? */
+    _awake(c) {
+        const p = c.model.position, R = ICE.FRIEND.AWAKE;
+        for (const q of this._players()) if (Math.abs(q.p.x - p.x) < R && Math.abs(q.p.z - p.z) < R) return true;
+        return false;
+    }
+
+    /**
+     * The nearest heat round p within R (a campfire, a burning tree or block, fire / a blast the people
+     * fear right now): `out` {x, z, d, k} — k how hot (1: a campfire … 2: a great fire) — or null.
+     */
+    _heatNear(p, R, out) {
+        const g = this.game;
+        let best = R;
+        out.k = 0;
+        const put = (x, z, y, k) => {
+            if (Math.abs(y - p.y) > 6) return;
+            const d = Math.hypot(x - p.x, z - p.z);
+            if (d < best) { best = d; out.x = x; out.z = z; out.d = d; out.k = k; }
+        };
+        for (const f of g.campfires?.list?.values?.() || []) put(f.x, f.z, f.y, 1);
+        const fire = g.fire;
+        if (fire) {
+            let n = 0;
+            for (const b of fire.burningBlocks.values()) { if (++n > 400) break; if (Math.abs(b.x - p.x) < R && Math.abs(b.z - p.z) < R) put(b.x, b.z, b.L - 1, 1.5); }
+            for (const { tree: t } of fire.burningTrees) if (t.alive) put(t.x, t.z, p.y, 2);
+        }
+        const fear = g.castleLife?.fright;
+        if (fear) for (const z of fear.list.values()) {
+            if (fear.now - z.at > 4) continue; // (only what is going on now)
+            if (z.kind === 'fire' || z.kind === 'blast') put(z.x, z.z, z.y, z.kind === 'fire' ? 2 : 1);
+            else if (z.kind === 'inspirius' || z.kind === 'circle' || z.kind === 'ruin') put(z.x, z.z, z.y, 1);
+        }
+        return out.k > 0 ? out : null;
+    }
+
+    /** Somewhere to wander to near its home — snow if there is any (it keeps to the cold). */
+    _friendRoam(c) {
+        const t = this.game.world?.terrain?.data, p = c.model.position, F = ICE.FRIEND;
+        let best = null;
+        for (let i = 0; i < 6; i++) {
+            const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * F.ROAM;
+            const x = c.home.x + Math.cos(a) * r, z = c.home.z + Math.sin(a) * r;
+            const y = this._floor(x, z, p.y + 5);
+            if (Math.abs(y - p.y) > 6) continue;
+            const snow = t ? t.get(Math.round(x), Math.floor(y - 0.3 + 1.5), Math.round(z)) === BLOCK.SNOW : false;
+            if (snow) return { x, z };
+            if (!best) best = { x, z };
+        }
+        return best;
+    }
+
+    /** It wanders to and fro, stops to look round — and runs from the heat (near it, it melts). */
+    _thinkFriend(c, dt) {
+        const F = ICE.FRIEND, p = c.model.position;
+        if (c.buildT < F.BUILD) { c.moving = false; return; } // (still being made)
+        if ((c.heatT = (c.heatT || 0) - dt) <= 0) { c.heatT = 0.4; c.heat = this._heatNear(p, F.FLEE, c._heat || (c._heat = { x: 0, z: 0, d: 0, k: 0 })); }
+        let h = c.heat;
+        if (c.scaredT > 0) { // (fire hit it: it runs from where it came)
+            c.scaredT -= dt;
+            const d = Math.hypot(c.fireFrom.x - p.x, c.fireFrom.z - p.z);
+            if (!h || d < h.d) h = { x: c.fireFrom.x, z: c.fireFrom.z, d, k: 0 };
+        }
+        if (h) {
+            // near the heat it melts (it grows smaller: IceCastleLife._animate), and a great fire melts it away
+            if (h.k > 0 && h.d < F.MELT) {
+                const n = F.MELT_DPS * h.k * (1.4 - h.d / F.MELT) * dt;
+                c.hp = Math.max(0, c.hp - n);
+                c.melting = true;
+                c.lastKind = 'heat';
+                if (Math.random() < dt * 6) this.game.fx?.spark?.(_v.set(p.x, p.y + c.h * 0.8, p.z), 0xd8f4ff, 0.2, _v2.set(0, 1.5, 0), 1.0); // (steam)
+                if (c.hp <= 0) { this._die(c, null); return; }
+            }
+            const dx = p.x - h.x, dz = p.z - h.z, d = Math.hypot(dx, dz) || 1;
+            c.roam = null; c.idleT = 0;
+            this._step(c, p.x + (dx / d) * 8, p.z + (dz / d) * 8, dt, 0.2, F.FLEE_K);
+            return;
+        }
+        c.melting = false;
+        // back in the cold, far from fire: the snow it stands on heals it a little
+        if (c.hp < c.max) c.hp = Math.min(c.max, c.hp + dt * 0.15);
+        if (c.idleT > 0) {
+            c.idleT -= dt; c.moving = false;
+            // (it looks at a player near)
+            let q = null, qd = 7;
+            for (const e of this._players()) { const d = Math.hypot(e.p.x - p.x, e.p.z - p.z); if (d < qd) { qd = d; q = e; } }
+            if (q) this._face(c, q.p, dt);
+            return;
+        }
+        if (!c.roam || Math.hypot(c.roam.x - p.x, c.roam.z - p.z) < 0.8 || (c.roamT -= dt) <= 0) {
+            if (c.roam && Math.random() < 0.6) c.idleT = 1.5 + Math.random() * 3.5; // (a rest on the way)
+            c.roam = this._friendRoam(c); c.roamT = 10 + Math.random() * 8;
+            if (!c.roam) { c.idleT = 2; return; }
+        }
+        if (this._step(c, c.roam.x, c.roam.z, dt, 0.6, 1) && !c.moving) c.roamT -= dt * 3; // (blocked: it soon picks another way)
+    }
+
+    /** (host) A friendly snowman made by «Snowman» at pos. */
+    makeFriend(pos, ry = 0) {
+        if (this.list.filter((c) => c.type === 'friend' && !c.dead).length >= ICE.FRIEND.MAX) return null;
+        const c = this._spawn('friend', pos, { yaw: ry });
+        c.buildT = 0;
+        c.idleT = 1;
+        this._born(c);
+        this._sendSoon = true;
+        return c;
+    }
+
+    /** It is being made (every computer): the soft crunch and the merry ring. */
+    _born(c) { this.game.sound?.playSnowman?.(c.model.position); }
+
+    /**
+     * «Snowman» said with the hand pointing at snow: the snow there rolls into three balls, they stack,
+     * the coal eyes, the carrot and the twig arms come — and it is alive. Instant: no concentration held
+     * (it is nobody's: «стоп» doesn't take it away). 30 mana (Creative: free).
+     */
+    castSnowman(isFinal = true) {
+        const g = this.game, F = ICE.FRIEND;
+        const now = Date.now();
+        const early = g._interimCast;
+        if (isFinal && early && early.name === 'Snowman' && now - early.at < 3000) { g._interimCast = null; return null; }
+        if (now - (this._snowAt || 0) < 1500) return null;
+        const say = (t) => { if (isFinal) g.hud?.setVoice?.(t, true); return null; };
+        const h = g.builder?._hand?.();
+        if (!h) return say('☃️ Поднимите руку, направьте её на снег и скажите «Snowman»');
+        const t = g.world?.terrain?.data;
+        const hit = t?.raycast(h.o, h.d, F.RANGE);
+        if (!hit) return say('☃️ Направьте руку на снег (не дальше 16 м)');
+        const b = t.get(Math.round(hit.x + h.d.x * 0.05), Math.floor(hit.y + h.d.y * 0.05 + 1.5), Math.round(hit.z + h.d.z * 0.05));
+        if (b !== BLOCK.SNOW) return say('☃️ Снеговика лепят из снега — направьте руку на снег');
+        if (g.ships?.footprintAt?.(hit.x, hit.y, hit.z)) return say('☃️ Здесь снеговик не встанет');
+        if (this.list.filter((c) => c.type === 'friend' && !c.dead).length >= F.MAX) return say('☃️ Снеговиков вокруг уже много');
+        const tired = g.combat?.check?.('Snowman');
+        if (tired) return say(tired);
+        g.combat?.pay?.('Snowman');
+        g.mana?.success?.('Snowman');
+        this._snowAt = now;
+        g._interimCast = isFinal ? null : { name: 'Snowman', at: now };
+        const pos = new THREE.Vector3(hit.x, 0, hit.z);
+        pos.y = this._floor(pos.x, pos.z, hit.y + 1.2);
+        const me = g.character.group.position;
+        const ry = Math.atan2(-(me.x - pos.x), -(me.z - pos.z)); // (it comes alive facing its maker)
+        if (this.auth) this.makeFriend(pos, ry);
+        else g.sync?.ice?.({ e: 'mk', p: [r2(pos.x), r2(pos.y), r2(pos.z)], ry: r2(ry) });
+        // the magic flies from the hand to the snow
+        for (let k = 0; k < 18; k++) g.fx?.spark?.(_v.copy(h.o).lerp(pos, Math.random()), k % 2 ? 0xffffff : 0xcfeeff, 0.12, _v2.set(0, 0.3, 0), 0.6);
+        return 'Snowman';
+    }
+
+    _loadFriends() {
+        const l = this._friendsToLoad;
+        this._friendsToLoad = null;
+        for (const f of l) {
+            if (this.list.filter((c) => c.type === 'friend').length >= ICE.FRIEND.MAX) break;
+            const c = this._spawn('friend', new THREE.Vector3(f[0], f[1], f[2]), { yaw: f[3], hp: Math.max(1, Math.min(ICE.FRIEND.HP, +f[4] || ICE.FRIEND.HP)) });
+            c.buildT = ICE.FRIEND.BUILD;
+            if (Number.isFinite(f[5])) c.home.set(f[5], c.home.y, f[6]);
+        }
+        this._sendSoon = true;
     }
 
     /** (host) A wind-up done: the blow / the spell itself. */
@@ -940,6 +1184,8 @@ export class IceCastleLife {
             u.armL.rotation.x = -w * 0.35 + (c.act === 'punch' ? -actK * 2.2 : 0) + (c.act === 'boulder' ? -actK * 2.8 : 0);
             u.armR.rotation.x = w * 0.35 + (c.act === 'boulder' ? -actK * 2.8 : 0);
             u.torso.rotation.x = -0.5 + (c.act === 'punch' ? actK * 0.25 : 0) + Math.sin(t * 0.7) * 0.03;
+        } else if (c.type === 'friend') {
+            this._animFriend(c, u, t, dt);
         } else {
             // a snowman hops along (no legs): the body bounces, the twigs swing; out of the snow when it rises
             const hop = c.moving ? Math.abs(Math.sin(t)) * 0.35 : 0;
@@ -954,6 +1200,48 @@ export class IceCastleLife {
             c._hurtShown = hurt;
             c.model.traverse((o) => { if (o.isMesh && (o.material === ICE_MATERIALS.solid || o.material === ICE_MATERIALS.hit)) o.material = hurt ? ICE_MATERIALS.hit : ICE_MATERIALS.solid; });
         }
+    }
+
+    /**
+     * The friendly snowman: made bit by bit (three balls of snow roll and stack, then the face and the
+     * twigs come, it blinks and turns its head — alive), then it waddles, blinks, looks about; the heat
+     * melts it smaller.
+     */
+    _animFriend(c, u, t, dt) {
+        const F = ICE.FRIEND, g = this.game;
+        const B = c.buildT = Math.min(F.BUILD + 1, (c.buildT ?? F.BUILD) + dt);
+        const cl = (x) => Math.max(0.01, Math.min(1, x));
+        if (B < F.BUILD) {
+            const k0 = cl(B / 0.9), k1 = cl((B - 0.9) / 0.8), k2 = cl((B - 1.75) / 0.8), k3 = cl((B - 2.55) / 0.5);
+            u.base.scale.setScalar(k0); u.base.rotation.x = (1 - k0) * 5; u.base.position.y = 0.55 * k0; // (the first ball rolls up)
+            u.mid.visible = B > 0.9; u.mid.scale.setScalar(cl(k1 * 1.6)); u.mid.position.y = 1.4 + (1 - k1) ** 2 * 1.4; // (the second lands on it)
+            u.head.visible = B > 1.75; u.head.scale.setScalar(cl(k2 * 1.6)); u.head.position.y = 2.08 + (1 - k2) ** 2 * 1.2; // (the head on top)
+            u.face.scale.setScalar(k3); u.scarf.scale.setScalar(k3); u.armL.scale.setScalar(k3); u.armR.scale.setScalar(k3); // (coal, carrot, twigs, the scarf)
+            u.lids.visible = B > 3.1 && B < 3.24; // (it blinks…)
+            u.head.rotation.y = B > 3.05 ? Math.sin(((B - 3.05) / 0.55) * Math.PI * 2) * 0.45 : 0; // (…and looks round: alive)
+            if (B < 2.6 && Math.random() < dt * 16) {
+                const p = c.model.position, a = Math.random() * Math.PI * 2, r = 0.8 + Math.random() * 1.2;
+                g.fx?.spark?.(_v.set(p.x + Math.cos(a) * r, p.y + 0.15, p.z + Math.sin(a) * r), 0xffffff, 0.14, _v2.set(-Math.cos(a) * r * 1.5, 0.8, -Math.sin(a) * r * 1.5), 0.6); // (the snow gathers in)
+            }
+            return;
+        }
+        if (!c._built) {
+            c._built = true;
+            u.base.scale.setScalar(1); u.base.rotation.x = 0;
+            for (const o of [u.mid, u.head, u.face, u.scarf, u.armL, u.armR]) { o.visible = true; o.scale.setScalar(1); }
+        }
+        const hop = c.moving ? Math.abs(Math.sin(t)) * 0.15 : 0;
+        u.base.position.y = 0.55 + hop; u.mid.position.y = 1.4 + hop; u.head.position.y = 2.08 + hop + Math.sin(t * 0.9) * 0.02;
+        const scared = c.moving && c.melting;
+        u.armL.rotation.z = scared ? -2.3 : -1.2; u.armR.rotation.z = scared ? 2.3 : 1.2; // (running from the heat: twigs up)
+        u.armR.rotation.x = Math.sin(t) * 0.25; u.armL.rotation.x = -Math.sin(t) * 0.25;
+        u.head.rotation.y = c.moving ? 0 : Math.sin(t * 0.45) * 0.4;
+        c.blinkT = (c.blinkT ?? 3) - dt;
+        if (c.blinkT <= -0.13) c.blinkT = 2.5 + Math.random() * 3.5;
+        u.lids.visible = c.blinkT < 0;
+        // the heat melts it smaller (its health is its snow)
+        const k = 0.5 + 0.5 * Math.max(0, c.hp) / c.max;
+        if (Math.abs(c.model.scale.x - k) > 0.004) c.model.scale.setScalar(k);
     }
 
     /** The queen speaks (coldly, majestically): words over her head, her voice if the villagers have voices. */
@@ -1138,7 +1426,7 @@ export class IceCastleLife {
         const g = this.game;
         const to = _v.copy(b.a).lerp(b.b, 0.5);
         this._fx({ e: 'fx', k: 'beam', o: [r2(aim.o.x), r2(aim.o.y), r2(aim.o.z)], t: [r2(to.x), r2(to.y), r2(to.z)] });
-        if (b.kind === 'I') { const c = this.byId(b.id); if (c?.type === 'snowman') g.hud?.setVoice?.('☃️ Снеговик и так изо льда — скажите «Атака», и снеговики нападут, на кого покажет жезл', true); else g.hud?.setVoice?.('❄️ Ледяное существо не заморозить — оно само изо льда', true); return true; }
+        if (b.kind === 'I') { const c = this.byId(b.id); if (c?.type === 'friend') g.hud?.setVoice?.('☃️ Снеговик и так из снега — холод ему не страшен', true); else if (c?.type === 'snowman') g.hud?.setVoice?.('☃️ Снеговик и так изо льда — скажите «Атака», и снеговики нападут, на кого покажет жезл', true); else g.hud?.setVoice?.('❄️ Ледяное существо не заморозить — оно само изо льда', true); return true; }
         if (b.kind === 'p') { this._freezePlayer(b.id, g.localId, ICE.ROD.FREEZE_T); g.hud?.setVoice?.('🧊 «Frozen»! Он во льду — никакие доспехи не помогли', true); return true; }
         if (this.auth) this.applyRodFreeze(b.kind, b.id, g.localId);
         else g.sync?.ice?.({ e: 'rodF', k: b.kind, id: b.id, by: g.localId });
@@ -1149,6 +1437,7 @@ export class IceCastleLife {
     /** (host) The rod's ice on a creature of a duel kind (ICE_TARGETS says what each does). */
     applyRodFreeze(k, id, by) {
         const g = this.game, T = ICE.ROD.CREATURE_T;
+        if (k === 'I') return; // (the queen, her monsters, every snowman: cold-proof — COLD_KINDS)
         if (k === 'z') { const z = g.zombieById?.get(id); if (z && !z.isDead) { z.freezeProgress = 1; z.freeze?.(); } return; }
         if (k === 's') return; // (the spider: the cold doesn't take it)
         if (k === 'D') { const d = g.dragons?.byId(id); if (d) g.dragons.boltHit(d, 'IceDuel', by); return; }
@@ -1224,6 +1513,7 @@ export class IceCastleLife {
         if (!aim) return false;
         const b = this._aimBody(aim.o, aim.d, ICE.ROD.RANGE);
         if (!b) { if (isFinal) g.hud?.setVoice?.('☃️ Покажите жезлом, на кого напасть', true); return false; }
+        if (b.kind === 'I' && this.byId(b.id)?.type === 'friend') { if (isFinal) g.hud?.setVoice?.('☃️ Злые снеговики доброго снеговика не трогают', true); return true; }
         const cmd = { k: b.kind, id: b.id };
         if (this.auth) this.rodCmd = cmd; else g.sync?.ice?.({ e: 'cmd', k: cmd.k, id: cmd.id });
         g.hud?.setVoice?.('☃️ Снеговики, в атаку!', true);
@@ -1246,7 +1536,9 @@ export class IceCastleLife {
         if (this._netT > 0 && !this._sendSoon) return;
         this._netT = 0.1;
         this._sendSoon = false;
-        const l = this.list.filter((c) => !c.dead || c.deadT > 0).map((c) => [c.id, TYPES.indexOf(c.type), r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp), c.dead ? 1 : 0, (c.moving ? 1 : 0) | (c.act ? 2 : 0), c.act || 0, c.slot || 0]);
+        // (no castle here and nobody to send: one empty list, then quiet)
+        if (!this.plan && !this.list.length) { if (this._sentEmpty) return; this._sentEmpty = true; } else this._sentEmpty = false;
+        const l = this.list.filter((c) => !c.dead || c.deadT > 0).map((c) => [c.id, TYPES.indexOf(c.type), r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, c.dead ? 1 : 0, (c.moving ? 1 : 0) | (c.act ? 2 : 0) | (c.melting ? 4 : 0), c.act || 0, c.slot || 0, c.type === 'friend' ? r2(Math.min(c.buildT, ICE.FRIEND.BUILD)) : 0]);
         g.sync.ice?.({ e: 's', l, st: { qd: this.state.queenDead ? 1 : 0 } });
     }
 
@@ -1263,6 +1555,7 @@ export class IceCastleLife {
             case 'rodF': if (this.auth && typeof m.k === 'string') this.applyRodFreeze(m.k, m.id, m.by ?? from); break;
             case 'enc': if (!this.auth && typeof m.k === 'string') g.duel?._encase?.(m.k, m.id, Math.min(20, +m.T || 10)); break;
             case 'cmd': if (this.auth && typeof m.k === 'string') this.rodCmd = { k: m.k, id: m.id }; break;
+            case 'mk': if (this.auth && Array.isArray(m.p) && m.p.every(Number.isFinite)) this.makeFriend(vec(m.p), +m.ry || 0); break; // (a guest's «Snowman»)
             default: break;
         }
     }
@@ -1270,11 +1563,16 @@ export class IceCastleLife {
     _applyState(m) {
         const seen = new Set();
         for (const row of m.l || []) {
-            const [id, ti, x, y, z, ry, hp, dead, fl, act, slot] = row;
+            const [id, ti, x, y, z, ry, hp, dead, fl, act, slot, bt] = row;
             seen.add(id);
             let c = this.byIdMap.get(id);
             const type = TYPES[ti] || 'snowman';
-            if (!c) { if (dead) continue; c = this._spawn(type, new THREE.Vector3(x, y, z), { id, hp, yaw: ry, slot }); }
+            if (!c) {
+                if (dead) continue;
+                c = this._spawn(type, new THREE.Vector3(x, y, z), { id, hp, yaw: ry, slot });
+                if (type === 'friend') { c.buildT = +bt || 0; if (c.buildT < 1) this._born(c); }
+            }
+            c.melting = !!(fl & 4);
             (c.net || (c.net = new THREE.Vector3())).set(x, y, z);
             c.netYaw = ry;
             if (hp < c.hp) c.hurtT = 0.2;
@@ -1293,7 +1591,9 @@ export class IceCastleLife {
         const q = this.list.find((c) => c.type === 'queen' && !c.dead);
         const mons = this.state.monsters.slice();
         for (const c of this.list) if (c.type === 'monster' && !c.dead) mons[c.slot] = Math.round(c.hp);
-        return { queenDead: !!this.state.queenDead, queenHp: Math.round(q ? q.hp : this.state.queenHp), monsters: mons, monsterDeadAt: this.state.monsterDeadAt.slice(), seen: !!this.state.seen };
+        // the friendly snowmen stay in the world till they melt: [x, y, z, yaw, hp, homeX, homeZ]
+        const friends = this.list.filter((c) => c.type === 'friend' && !c.dead).map((c) => [r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, r2(c.home.x), r2(c.home.z)]);
+        return { queenDead: !!this.state.queenDead, queenHp: Math.round(q ? q.hp : this.state.queenHp), monsters: mons, monsterDeadAt: this.state.monsterDeadAt.slice(), seen: !!this.state.seen, friends };
     }
 
     restore(s) {
@@ -1304,6 +1604,7 @@ export class IceCastleLife {
         if (Array.isArray(s.monsters)) this.state.monsters = [0, 1].map((i) => (s.monsters[i] == null ? ICE.MONSTER.HP : n(s.monsters[i], ICE.MONSTER.HP)));
         if (Array.isArray(s.monsterDeadAt)) this.state.monsterDeadAt = [0, 1].map((i) => +s.monsterDeadAt[i] || 0);
         this.state.seen = !!s.seen;
+        if (Array.isArray(s.friends)) this._friendsToLoad = s.friends.filter((f) => Array.isArray(f) && f.length >= 5 && f.slice(0, 5).every(Number.isFinite)).slice(0, ICE.FRIEND.MAX);
     }
 
     // ================================================================ tests / debugging
@@ -1314,6 +1615,8 @@ export class IceCastleLife {
         for (const c of [...this.list]) this._remove(c);
         for (let i = this.shots.length - 1; i >= 0; i--) this._dropShot(i);
         for (const f of this.fxs) for (const s of f.meshes || []) this.game.scene.remove(s.m);
+        for (const q of this.puddles || []) this.game.scene.remove(q.m);
+        if (this.puddles) this.puddles.length = 0;
         this.fxs.length = 0;
         this._dropGates();
         if (this._hud) { this._hud.style.display = 'none'; this._hudShown = false; }
@@ -1330,14 +1633,14 @@ registerKind('I', {
     list: (g) => g.iceCastle?.list || [],
     get: (g, id) => g.iceCastle?.byId(id),
     alive: (c) => !c.dead,
-    body: (c) => (c.type === 'snowman' ? 'snowman' : c.type === 'monster' ? 'iceMonster' : 'iceQueen'),
+    body: (c) => (small(c.type) ? 'snowman' : c.type === 'monster' ? 'iceMonster' : 'iceQueen'),
     centre: (c, out) => iceCenter(c, out),
     pivot: () => ({ obj: null, base: 0, lie: 0 }), // (its own sway shows the reel)
     head: (c) => c.model.userData.head || null, arms: () => [], legs: () => [],
     move(g, c, dx, dz) { const p = c.model.position; p.x += dx; p.z += dz; g.collision?.resolveCylinder?.(p, c.r, p.y, c.h, 1.05); },
-    toss(g, c, vy) { if (c.type === 'snowman') c.vy = Math.max(c.vy || 0, vy); },
-    hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, c.type === 'snowman' ? t : Math.min(t, 0.5)); },
+    toss(g, c, vy) { if (small(c.type)) c.vy = Math.max(c.vy || 0, vy); },
+    hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, small(c.type) ? t : Math.min(t, 0.5)); },
     frozen: () => false,
     noKnock: () => true, // (a snowman is thrown and slides, it doesn't lie down; the big ones only sway)
-    struck(g, c, o) { if (o.by != null) c.foe = o.by; },
+    struck(g, c, o) { if (o.by != null && c.type !== 'friend') c.foe = o.by; },
 });

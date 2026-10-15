@@ -121,6 +121,7 @@ export const SPELL_COST = {
     WaterVortex: 25, // very strong: a whole vortex of water (see WaterVortex.js)
     VortexBubble: 0, // «Bubble» on the one the vortex hit: part of the vortex (already paid)
     FireMaxima: 20, // the only way out of the vortex's ice
+    Snowman: 30, // a friendly snowman out of snow (instant; nobody's — IceQueen.castSnowman)
     Alive: 25, // a living tree (then it drains the mana while it lives)
     AliveMaxima: 50, // twice «Alive»: every grave of a graveyard / the trees round (each then drains 1 mana a second)
     TotalDestruction: 80, // the whole area falls into ruins (only with a mana maximum of 100+)

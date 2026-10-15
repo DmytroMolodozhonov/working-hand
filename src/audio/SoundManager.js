@@ -551,7 +551,7 @@ export class SoundManager {
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
-            ['snowStep', () => this._synthSnowStep()],
+            ['snowStep', () => this._synthSnowStep()], ['snowman', () => this._synthSnowman()],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -940,6 +940,42 @@ export class SoundManager {
         if (!this.context) return;
         if (!this.sounds.snowStep) this.sounds.snowStep = this._synthSnowStep();
         this._play(this.sounds.snowStep, 0.55 * volume, 0.85 + Math.random() * 0.3);
+    }
+
+    /** «Snowman»: the snow rolls into three balls (soft crunches) — then a merry ring as it comes alive. */
+    playSnowman(position) {
+        if (!this.enabled || !this.context) return;
+        if (!this.sounds.snowman) this.sounds.snowman = this._synthSnowman();
+        this._playAt(this.sounds.snowman, position, 1.3, 9, 1);
+    }
+
+    _synthSnowman() {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * 4.2);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        // soft crunches while the balls roll and settle (0 … 2.8 s), a little louder as each lands
+        let lp = 0, lp2 = 0, grain = 0;
+        for (let i = 0; i < Math.floor(sr * 2.9); i++) {
+            const t = i / sr;
+            const land = [0.9, 1.75, 2.55].reduce((m, a) => Math.max(m, t >= a ? Math.exp(-(t - a) * 12) : 0), 0);
+            const env = Math.min(1, t * 6) * (0.35 + 0.25 * Math.abs(Math.sin(t * 9)) + 0.7 * land);
+            lp += ((Math.random() * 2 - 1) - lp) * 0.2;
+            lp2 += (lp - lp2) * 0.3;
+            if (Math.random() < 0.01) grain = (Math.random() * 2 - 1) * 0.8;
+            grain *= 0.93;
+            d[i] = (lp2 * 1.1 + grain * 0.45) * env * 0.7;
+        }
+        // the merry ring: bells rising (it comes alive), then a little blink-ting
+        const notes = [[2.9, 784], [3.0, 988], [3.1, 1175], [3.2, 1568], [3.65, 2093]];
+        for (const [at, f] of notes) {
+            const i0 = Math.floor(at * sr);
+            for (let i = i0; i < len; i++) {
+                const t = (i - i0) / sr;
+                const e = Math.min(1, t * 400) * Math.exp(-t * 4.5);
+                d[i] += (Math.sin(2 * Math.PI * f * t) + 0.3 * Math.sin(2 * Math.PI * f * 2.01 * t)) * e * 0.22;
+            }
+        }
+        for (let i = 0; i < len; i++) d[i] = Math.max(-1, Math.min(1, d[i] * Math.min(1, (len - i) / (sr * 0.1))));
+        return buf;
     }
 
     _synthSnowStep() {
