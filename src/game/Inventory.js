@@ -12,12 +12,14 @@
  * hip, a hand hanging or swinging never does anything):
  *   - the wand has its own place, tucked into the waistband in front (WandBelt.js):
  *     tucked in there to put it away, taken from there looking down at it;
- *   - the coin pouches tied to the belt on the right side (CoinBelt.js): a pouch in the
- *     right hand put on the side is tied on (the next ones emptied into it), taken off
- *     looking down at it;
- *   - the right pocket: the right hand holding a thing puts it away; put in empty,
- *     it takes out the next thing of the slots (food, a scroll, a book, the building
- *     blocks…);
+ *   - the coin pouches tied to the belt on the right side (CoinBelt.js), beside the hip;
+ *   - the right pocket, in front of the right hip: the LEFT hand reaching across, looking down
+ *     at it, puts away what it holds; put in empty, it takes out the next thing of the slots
+ *     (food, a scroll, a book, the building blocks…) into the left hand.
+ *   The pocket and the pouches are the OTHER hand's (the author: a right-hander takes things out
+ *   of the right pocket with the left hand — the right hand is the wand's, it never takes from or
+ *   puts into them), and only looking down at them (as in life: never by chance). A left-hander:
+ *   all mirrored (the left pocket and pouches, the right hand).
  *   - over the shoulder: swords, axes, shields, the bow, the hammer — on the back,
  *     or taken from it.
  * The «hand» cell shows what the hands hold. Keys 1–5 choose a slot too, 0 / ` — the free hand.
@@ -85,6 +87,20 @@ export function pocketStrike(hist, local, sx) {
 
 /** s the hand must stay in the pocket (the camera: wrist at the hip, elbow bent, hand gone in). */
 export const POCKET_DWELL = 0.3;
+/**
+ * The head bowed to look at the pocket / the pouches (the view's forward, down, in the body's own
+ * space: ~20° down). Taking or putting there needs it; a glance (the wand's −0.1) does not.
+ */
+export const POCKET_LOOK = -0.34;
+const LOOK_ON = 0.1; // s looking down before it counts (a nod passing by does not)
+const LOOK_OFF = 0.3; // s it still counts after the head comes up (the camera's head jitters)
+
+/** The head bowed down, kept a moment (steady: no flicker). `st` — {on, t}; → st.on. */
+export function lookSteady(st, down, dt) {
+    if (down === st.on) st.t = 0;
+    else if ((st.t += dt) > (down ? LOOK_ON : LOOK_OFF)) { st.on = down; st.t = 0; }
+    return st.on;
+}
 
 /** Things that go on the back (over the shoulder) rather than into a pocket. */
 export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield', 'dragonEgg', 'iceRod']); // (a dragon's egg is too big for a pocket)
@@ -100,7 +116,9 @@ export class Inventory {
         this.game = game;
         this.slots = new Array(SLOT_COUNT).fill(null);
         this.selected = -1; // -1: the «hand» cell (free right hand)
-        this.inHand = null; // {slot, kind, weapon?}: what of the selected slot is in the right hand
+        this.inHand = null; // {slot, kind, weapon?, side}: what of the selected slot is in a hand
+        this._look = { on: false, t: 0 }; // (looking down at the pocket / the pouches: lookSteady)
+        this.headDown = false;
         this._pocket = { left: { out: 0, hist: [], armed: true }, right: { out: 0, hist: [], armed: true } };
         this.belt = new WandBelt(game); // (the wand's place at the waistband: WandBelt.js)
         this.purse = new CoinBelt(game); // (the coin pouches on the belt's right side: CoinBelt.js)
@@ -234,12 +252,12 @@ export class Inventory {
     }
 
     /** Choose a cell: -1 is the free hand, 0… the slots. */
-    select(i) {
+    select(i, side = null) {
         if (i === this.selected && (this.inHand || i < 0)) return;
         this._putBackHand();
         const n = this.slots.length + 1;
         this.selected = ((((i + 1) % n) + n) % n) - 1;
-        this._takeIntoHand();
+        this._takeIntoHand(side);
         this._render();
     }
 
@@ -256,10 +274,10 @@ export class Inventory {
     }
 
     // =========================================================== hand / item
-    /** What of the chosen slot appears in the leading hand (the right one; a left-hander's left). */
-    _takeIntoHand() {
+    /** What of the chosen slot appears in the hand: the leading one (keys), or `side` (taken from the pocket by the other hand). */
+    _takeIntoHand(side = null) {
         const s = this.selected >= 0 ? this.slots[this.selected] : null;
-        const g = this.game, D = g.dom || 'right';
+        const g = this.game, D = side || g.dom || 'right';
         if (!s) return;
         if (s.kind === 'weapon') {
             if (g.weapons.hands[D].held) return; // the hand is busy
@@ -271,7 +289,7 @@ export class Inventory {
             g.weapons.grab(w, D, 0.5);
             g.weapons.hands[D].waitClose = true;
             this.slots[this.selected] = null;
-            this.inHand = { kind: 'weapon', weapon: w };
+            this.inHand = { kind: 'weapon', weapon: w, side: D };
             return;
         }
         if (s.kind === 'res') { this.inHand = { kind: 'res', stack: s }; return; }
@@ -279,7 +297,7 @@ export class Inventory {
         if (g.items && !g.items.held[D] && !g.weapons.hands[D].held) {
             g.items.takeIntoHand(s, D);
             this.slots[this.selected] = null;
-            this.inHand = { kind: 'item', item: s };
+            this.inHand = { kind: 'item', item: s, side: D };
         }
     }
 
@@ -289,7 +307,7 @@ export class Inventory {
         this.inHand = null;
         if (!h) return;
         const slot = this.selected >= 0 && !this.slots[this.selected] ? this.selected : null;
-        const D = this.game.dom || 'right';
+        const D = h.side || this.game.dom || 'right';
         if (h.kind === 'weapon' && this.game.weapons.hands[D].held === h.weapon) this._storeWeapon(h.weapon, slot);
         if (h.kind === 'item' && this.game.items?.held[D]?.item === h.item) { const it = this.game.items.releaseHand(D); if (slot != null) this.slots[slot] = it; else this.storeItem(it); }
     }
@@ -304,12 +322,16 @@ export class Inventory {
         return true;
     }
 
-    /** The leading hand's pocket (the right one; a left-hander's left): what the hand holds goes into a slot. */
-    pocketRight() {
+    /**
+     * The things' pocket (the right one; a left-hander's left): what the hand holds goes into a slot.
+     * `only` — just that hand (the other hand reaching into it); none — either hand, the leading one first.
+     */
+    pocketRight(only = null) {
         const g = this.game, dom = g.dom || 'right';
         if (g.boards?.hold) { g.hud.toast?.('🏄 Доска слишком большая для кармана'); return; }
+        const sides = only ? [only] : [dom, dom === 'right' ? 'left' : 'right'];
         // a sword, an axe, a hammer, a bow, a shield never go into a pocket: only on the back (over the shoulder)
-        for (const side of [dom, dom === 'right' ? 'left' : 'right']) {
+        for (const side of sides) {
             const w = g.weapons.hands[side].held;
             const h = g.items?.held[side];
             if (w || (h && BACK_KINDS.has(h.item.kind))) {
@@ -318,7 +340,7 @@ export class Inventory {
                 return;
             }
         }
-        for (const side of [dom, dom === 'right' ? 'left' : 'right']) {
+        for (const side of sides) {
             const h = g.items?.held[side];
             if (!h || h.item.kind === 'wand') continue; // (the wand goes only to the waistband: WandBelt)
             if (h.item.kind === 'coins' && this.purse.count < BELT_MAX) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
@@ -361,6 +383,8 @@ export class Inventory {
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
         const now = performance.now();
+        // looking down at the pocket / the pouches (held a moment: a nod passing by, or the camera's jitter, never)
+        this.headDown = lookSteady(this._look, !!this.belt.lookingDown(POCKET_LOOK), dt);
         for (const side of ['left', 'right']) {
             const st = this._pocket[side];
             const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
@@ -370,14 +394,17 @@ export class Inventory {
             if (ch.isRunning || ch.flying) { st.hist.length = 0; continue; }
             // the hand put INTO the pocket (as the camera sees it): it stays there a moment
             // (a slap on the hip no longer counts: people did it by accident)
-            // (the things' pocket is the leading hand's: the right one, a left-hander's left — PoseInterpreter.bodyPlaces)
-            const pk = g.currentPose.pocket, dom = g.dom || 'right';
-            let inPocket = side === dom ? pk?.dom : pk?.off;
-            // a thing in the leading hand brought to its hip, as a pouch is tied on (the hand is
+            // (the things' pocket is at the leading hand's hip — the right one, a left-hander's left —
+            // and only the OTHER hand reaches into it, across the body: PoseInterpreter.offHip;
+            // the leading hand is the wand's and never takes from it or puts into it)
+            const pk = g.currentPose.pocket, dom = g.dom || 'right', off = dom === 'right' ? 'left' : 'right';
+            let inPocket = side === off ? pk?.off : false;
+            // a thing in the other hand brought to the pouches, as a pouch is tied on (the hand is
             // seen holding it, so its fingers never point down into the pocket): it goes into a slot too
-            if (side === dom && inPocket !== true && g.currentPose.purse?.dom === true && this._pocketable(dom)) inPocket = true;
-            // the right hand reaching across into the LEFT pocket: the wand's pocket too
-            // (the wand is no longer put away / drawn by a pocket — lowering the arm did it by
+            if (side === off && inPocket !== true && g.currentPose.purse?.off === true && this._pocketable(off)) inPocket = true;
+            // ...and only looking down at it (as in life — never by chance)
+            if (inPocket && !this.headDown) inPocket = false;
+            // (the wand is not put away / drawn by a pocket — lowering the arm did it by
             // accident: it has its own place at the waistband, WandBelt.js)
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
             st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
@@ -387,9 +414,8 @@ export class Inventory {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
-                if (side !== dom) { /* (the other hand's pocket was the wand's: see WandBelt) */ }
-                else if (g.items?.held[dom] || g.weapons.hands[dom].held) this.pocketRight();
-                else this.takeNext(dom);
+                if (g.items?.held[side] || g.weapons.hands[side].held) this.pocketRight(side);
+                else this.takeNext(side);
             }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
             const b = this._back[side];
@@ -435,7 +461,7 @@ export class Inventory {
         return true;
     }
 
-    /** The right pocket, an empty hand: the next thing of the slots (not the wand, not what goes on the back). */
+    /** The things' pocket, an empty hand: the next thing of the slots into it (not the wand, not what goes on the back). */
     takeNext(side = 'right') {
         const n = this.slots.length;
         const start = this._next ?? -1;
@@ -444,7 +470,7 @@ export class Inventory {
             const it = this.slots[i];
             if (!it || it.kind === 'wand' || BACK_KINDS.has(it.kind)) continue;
             this._next = i;
-            this.select(i);
+            this.select(i, side);
             this._fx(`${it.kind === 'res' ? '🧱' : ITEM_INFO[it.kind]?.icon || '✋'} ${it.kind === 'res' ? RESOURCE[it.block]?.name || 'Блоки' : ITEM_INFO[it.kind]?.name || 'Предмет'}`, side);
             return true;
         }

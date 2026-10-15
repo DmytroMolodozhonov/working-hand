@@ -430,7 +430,7 @@ test('the hand follows the camera\'s hand fully: bent left / right at the wrist,
     await page.close();
 });
 
-test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked in, tip down) and is taken from there looking down; lowered arms, pockets never move it; the right pocket puts a thing away / takes the next one', async () => {
+test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked in, tip down) and is taken from there looking down; lowered arms, pockets never move it; the right pocket — the LEFT hand across, looking down — puts a thing away / takes the next one; the right hand never', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -475,13 +475,24 @@ test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked 
     await feed(page, { arms: 'hang', belt: 'right', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 30, 40);
     const away = await state();
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 30, 40);
-    // the right pocket, the empty hand: the next thing (the apple, not the wand)
-    await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 20, 40);
+    // the right pocket, the LEFT hand across, NOT looking down: nothing
+    await feed(page, { arms: 'hang', pocket: 'cross', rightCurl: 0 }, 25, 40);
+    const notLookingP = await state();
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40);
+    await look(-0.8);
+    await page.waitForFunction(() => { const g = window.__zns.game; return g.inventory.headDown; }, null, { timeout: 30000 }); // (the view eases down)
+    // the right hand in the right pocket, looking down: nothing (it is the wand's hand)
+    await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 25, 40);
+    const rightHandP = await state();
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40);
+    // the left hand across into it, the empty hand: the next thing (the apple, not the wand) — into the LEFT hand
+    await feed(page, { arms: 'hang', pocket: 'cross', rightCurl: 0 }, 20, 40);
     const next = await state();
-    await feed(page, { arms: 'hang', rightCurl: 0.9, leftCurl: 0 }, 20, 40);
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 20, 40);
     // in again, holding it: it goes back
-    await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 20, 40);
+    await feed(page, { arms: 'hang', pocket: 'cross', rightCurl: 0 }, 20, 40);
     const stored = await state();
+    await look(0);
     assert.ok(!hanging.l && !hanging.r && hanging.sel === -1 && hanging.wandSlot && hanging.belt, 'hanging arms: nothing happens; the wand is seen on the belt ' + JSON.stringify(hanging));
     assert.ok(!pocketL.l && !pocketL.r && pocketL.wandSlot, 'the left pocket no longer draws the wand ' + JSON.stringify(pocketL));
     assert.ok(!notLooking.r, 'not looking down at it: not taken ' + JSON.stringify(notLooking));
@@ -489,68 +500,88 @@ test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked 
     assert.ok(drawn.cell.includes('🪄'), 'the «hand» cell shows the wand in the hand');
     assert.equal(kept.r, 'wand', 'lowered arms and pockets never put the wand away ' + JSON.stringify(kept));
     assert.ok(!away.r && away.wandSlot && away.belt, 'tucked into the waistband ' + JSON.stringify(away));
-    assert.equal(next.r, 'apple', 'the right pocket, empty hand: the next thing ' + JSON.stringify(next));
-    assert.ok(!stored.r, 'the right hand with a thing puts it away ' + JSON.stringify(stored));
+    assert.ok(!notLookingP.l && !notLookingP.r, 'not looking down: nothing out of the pocket ' + JSON.stringify(notLookingP));
+    assert.ok(!rightHandP.l && !rightHandP.r, 'the right hand in the right pocket: nothing ' + JSON.stringify(rightHandP));
+    assert.ok(next.l === 'apple' && !next.r, 'the left hand across, looking down: the next thing into the left hand ' + JSON.stringify(next));
+    assert.ok(!stored.l && !stored.r, 'the left hand with a thing puts it away ' + JSON.stringify(stored));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
 
-test('coin pouches on the belt\'s right side: a pouch in the hand put on the side is tied on, the next ones emptied into it (100 a pouch, up to 3); hanging arms never; taken off looking down; the counter at the top right', async () => {
+test('coin pouches on the belt\'s right side: the LEFT hand across, looking down, ties a pouch on, the next ones emptied into it (100 a pouch, up to 3); the right hand, hanging arms, not looking never; taken off looking down; the counter at the top right', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
-    const give = (n) => page.evaluate((c) => { const g = window.__zns.game; g.items.releaseHand('right'); g.items.takeIntoHand({ kind: 'coins', uid: 'pc' + c, count: c }, 'right'); }, n);
-    const look = (pitch) => page.evaluate((p) => { window.__zns.poseService.interpreter.lastHead.pitch = p; }, pitch);
-    const state = () => page.evaluate(() => { const g = window.__zns.game, p = g.inventory.purse; return { r: g.items.held.right ? g.items.held.right.item.count : null, belt: p.count, bags: p.model ? p.model.children.length : 0, size: p.model ? +p.model.children[0].scale.x.toFixed(2) : 0, coins: g.inventory.coins(), shown: document.getElementById('coin-count')?.textContent, log: p.log.join(',') }; });
-    await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.inventory.select(-1); });
+    const give = (n, side = 'left') => page.evaluate(([c, sd]) => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.items.takeIntoHand({ kind: 'coins', uid: 'pc' + c, count: c }, sd); }, [n, side]);
+    const look = async (pitch) => {
+        await page.evaluate((p) => { window.__zns.poseService.interpreter.lastHead.pitch = p; }, pitch);
+        await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 4, 40);
+        await page.waitForFunction((d) => window.__zns.game.inventory.headDown === d, pitch < 0, { timeout: 30000 }); // (the view eases)
+    };
+    const state = () => page.evaluate(() => { const g = window.__zns.game, p = g.inventory.purse; return { r: g.items.held.right ? g.items.held.right.item.count : null, l: g.items.held.left ? g.items.held.left.item.count : null, belt: p.count, bags: p.model ? p.model.children.length : 0, size: p.model ? +p.model.children[0].scale.x.toFixed(2) : 0, coins: g.inventory.coins(), shown: document.getElementById('coin-count')?.textContent, log: p.log.join(',') }; });
+    await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.inventory.select(-1); g.inventory.purse.count = 0; });
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40);
     const empty = await state();
-    // a pouch in the hand: hanging, lowered arms, the hand in front — it stays in the hand
-    await give(60);
-    await feed(page, { arms: 'hang', rightCurl: 0.9, leftCurl: 0 }, 30, 40);
-    await feed(page, { arms: 'down', rightCurl: 0.9, leftCurl: 0 }, 30, 40);
-    await feed(page, { arms: 'hang', belt: 'right', rightCurl: 0.9, leftCurl: 0 }, 30, 40);
-    const kept = await state();
-    // the fist with it on the right side of the belt: tied on
+    // a pouch in the RIGHT hand at the pouches, looking down: the right hand never ties it on
+    await look(-0.8);
+    await give(60, 'right');
     await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0.9, leftCurl: 0 }, 25, 40);
+    await feed(page, { arms: 'hang', purse: 'hip', rightCurl: 0.9, leftCurl: 0 }, 25, 40);
+    const rightHand = await state();
+    // in the left hand: hanging, lowered arms; across to the pouches NOT looking down — it stays in the hand
+    await look(0);
+    await give(60);
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 30, 40);
+    await feed(page, { arms: 'down', rightCurl: 0, leftCurl: 0.9 }, 30, 40);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 30, 40);
+    const kept = await state();
+    // looking down, the left hand across on the right side of the belt: tied on
+    await look(-0.8);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 25, 40);
     const tied = await state();
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 15, 40);
     // the next one is emptied into it: past 100 — a second pouch beside it
     await give(70);
-    await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0.9, leftCurl: 0 }, 25, 40);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 25, 40);
     const two = await state();
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 15, 40);
     // three pouches at most: what does not fit stays in the hand
     await give(250);
-    await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0.9, leftCurl: 0 }, 25, 40);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 25, 40);
     const full = await state();
-    await page.evaluate(() => window.__zns.game.items.releaseHand('right'));
+    await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); });
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 15, 40);
-    // not looking down: the hand on the side closing does not take one
-    await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0, leftCurl: 0 }, 10, 40);
-    await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0.9, leftCurl: 0 }, 15, 40);
+    // the right hand on the pouches, looking down, the fingers close: not taken (the right hand is the wand's)
+    await feed(page, { arms: 'hang', purse: 'hip', rightCurl: 0, leftCurl: 0 }, 10, 40);
+    await feed(page, { arms: 'hang', purse: 'hip', rightCurl: 0.9, leftCurl: 0 }, 15, 40);
+    const rightTake = await state();
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 15, 40);
+    // not looking down: the left hand on the side closing does not take one
+    await look(0);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0 }, 10, 40);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 15, 40);
     const notLooking = await state();
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 15, 40);
-    // looking down at it: the open hand on it, the fingers close — the last pouch in the hand
+    // looking down at it: the open left hand on it, the fingers close — the fullest pouch in the hand
     await look(-0.8);
-    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 10, 40);
-    await page.waitForFunction(() => window.__zns.game.inventory.belt.lookingDown(), null, { timeout: 30000 }); // (the view eases down)
-    await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0, leftCurl: 0 }, 10, 40);
-    await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0.9, leftCurl: 0 }, 15, 40);
-    await feed(page, { arms: 'hang', purse: 'right', rightCurl: 0.9, leftCurl: 0 }, 30, 40); // (still there: not tied back at once)
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0 }, 10, 40);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 15, 40);
+    await feed(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 30, 40); // (still there: not tied back at once)
     const taken = await state();
     await look(0);
     // paying takes from the belt too
-    const paid = await page.evaluate(() => { const g = window.__zns.game; g.items.releaseHand('right'); const ok = g.inventory.spendCoins(150); return { ok, belt: g.inventory.purse.count, coins: g.inventory.coins() }; });
+    const paid = await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); const ok = g.inventory.spendCoins(150); return { ok, belt: g.inventory.purse.count, coins: g.inventory.coins() }; });
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 5, 40);
     const after = await state();
     assert.ok(empty.belt === 0 && empty.shown === '0' && empty.bags === 0, 'nothing at the start, the counter at 0 ' + JSON.stringify(empty));
-    assert.ok(kept.r === 60 && kept.belt === 0, 'hanging, lowered arms, the wand\'s place never tie it on ' + JSON.stringify(kept));
-    assert.ok(tied.r === null && tied.belt === 60 && tied.bags === 1 && tied.shown === '60', 'tied on the right side ' + JSON.stringify(tied));
-    assert.ok(two.r === null && two.belt === 130 && two.bags === 2 && two.size > tied.size, 'emptied into it; a second pouch, the first one bigger ' + JSON.stringify(two));
-    assert.ok(full.belt === 300 && full.bags === 3 && full.r === 80 && full.shown === '380', 'three pouches at most, the rest stays in the hand ' + JSON.stringify(full));
-    assert.ok(notLooking.r === null && notLooking.belt === 300, 'not looking down: not taken ' + JSON.stringify(notLooking));
-    assert.ok(taken.r === 100 && taken.belt === 200 && taken.bags === 2 && taken.coins === 300, 'the last pouch taken into the hand ' + JSON.stringify(taken));
+    assert.ok(rightHand.r === 60 && rightHand.belt === 0, 'the right hand never ties it on ' + JSON.stringify(rightHand));
+    assert.ok(kept.l === 60 && kept.belt === 0, 'hanging, lowered arms, not looking down never tie it on ' + JSON.stringify(kept));
+    assert.ok(tied.l === null && tied.belt === 60 && tied.bags === 1 && tied.shown === '60', 'tied on the right side by the left hand ' + JSON.stringify(tied));
+    assert.ok(two.l === null && two.belt === 130 && two.bags === 2 && two.size > tied.size, 'emptied into it; a second pouch, the first one bigger ' + JSON.stringify(two));
+    assert.ok(full.belt === 300 && full.bags === 3 && full.l === 80 && full.shown === '380', 'three pouches at most, the rest stays in the hand ' + JSON.stringify(full));
+    assert.ok(rightTake.r === null && rightTake.belt === 300, 'the right hand never takes one ' + JSON.stringify(rightTake));
+    assert.ok(notLooking.l === null && notLooking.belt === 300, 'not looking down: not taken ' + JSON.stringify(notLooking));
+    assert.ok(taken.l === 100 && taken.belt === 200 && taken.bags === 2 && taken.coins === 300, 'a pouch taken into the left hand ' + JSON.stringify(taken));
     assert.ok(paid.ok && paid.belt === 50 && after.shown === '50', 'paid from the belt ' + JSON.stringify(paid) + JSON.stringify(after));
     assert.deepEqual(realErrors(errors), []);
     await page.close();

@@ -94,7 +94,7 @@ test('one place for a hand at the belt: reaching for the wand is never the coin 
     assert.notEqual(bodyPlace(f, 'right'), 'purse', 'right of the middle, still in front of the belly: not the pouches');
 });
 
-test('a left-hander: the belt mirrored — the left hand at the wand, the pouches and the things\' pocket at the left hip; a right-hander\'s places are not a left-hander\'s', async () => {
+test('a left-hander: the belt mirrored — the left hand at the wand, the pouches and the things\' pocket at the left hip (reached by the right hand); a right-hander\'s places are not a left-hander\'s', async () => {
     const { bodyPlaces } = await import('../../src/input/PoseInterpreter.js');
     const { frame } = await import('../e2e/poses.mjs');
     const at = (o, lefty) => {
@@ -104,17 +104,14 @@ test('a left-hander: the belt mirrored — the left hand at the wand, the pouche
     };
     // a right-hander
     assert.equal(at({ arms: 'hang', belt: 'right' }, false).place.right, 'wand');
-    assert.equal(at({ arms: 'hang', purse: 'hip' }, false).purse.dom, true);
-    // a left-hander doing the same in the mirror: the LEFT hand
+    assert.equal(at({ arms: 'hang', purse: 'cross', leftCurl: 0.9 }, false).purse.off, true, 'the left hand across at the pouches');
+    // a left-hander doing the same in the mirror: the LEFT hand at the wand, the RIGHT hand across at the pouches
     const w = at({ arms: 'hang', belt: 'right', mirror: true }, true);
     assert.equal(w.place.left, 'wand', 'the left hand reaching across to the wand');
     assert.notEqual(w.place.right, 'wand');
-    const p = at({ arms: 'hang', purse: 'hip', mirror: true }, true);
-    assert.equal(p.purse.dom, true, 'the left hand at the left hip: the pouches');
-    assert.equal(p.place.left, 'purse');
-    // a left-hander's right hand at the right hip: not the pouches (their place is on the left)
-    assert.notEqual(at({ arms: 'hang', purse: 'hip' }, true).purse.dom, true);
-    assert.notEqual(at({ arms: 'hang', purse: 'hip' }, true).place.right, 'purse');
-    // and a right-hander's left hand at the left hip: not the pouches either
-    assert.notEqual(at({ arms: 'hang', purse: 'hip', mirror: true }, false).purse.dom, true);
+    assert.equal(at({ arms: 'hang', purse: 'cross', leftCurl: 0.9, mirror: true }, true).purse.off, true, 'the right hand across to the left hip: the pouches');
+    // a left-hander's left hand across to the right hip: not the pouches (their place is on the left)
+    assert.notEqual(at({ arms: 'hang', purse: 'cross', leftCurl: 0.9 }, true).purse.off, true);
+    // and a right-hander's right hand across to the left hip: not the pouches either
+    assert.notEqual(at({ arms: 'hang', purse: 'cross', leftCurl: 0.9, mirror: true }, false).purse.off, true);
 });

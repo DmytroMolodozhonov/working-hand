@@ -1,17 +1,20 @@
 /**
  * CoinBelt.js — the coin pouches' place on the body: tied to the belt on the right side,
  * beside the hip (the wand's place is in front, on the left: WandBelt.js). Seen on the hero.
- * A left-hander (Настройки: Левша): all mirrored — on the left hip, the left hand.
+ * A left-hander (Настройки: Левша): all mirrored — on the left hip, the right hand.
  *
- *   - Tie a pouch on: the hand holding a coin pouch is brought to the right hip, at the
- *     belt, and kept there a moment — or its fingers opened there (the left hand may reach
- *     across); the coins jingle. The first pouch is tied there; the next ones are emptied into it — the
+ * The pouches are the OTHER hand's, as the things' pocket (the author: a right-hander's LEFT hand
+ * reaches across to them; the right hand is the wand's and never takes or ties one there), and
+ * only looking down at them (Inventory.headDown: as in life, never by chance).
+ *   - Tie a pouch on: the left hand holding a coin pouch is brought across to the right side
+ *     of the belt, beside the hip, and kept there a moment — or its fingers opened there; the
+ *     coins jingle. The first pouch is tied there; the next ones are emptied into it — the
  *     pouch grows with its coins. A pouch holds 100 coins: more, and a second pouch hangs
  *     beside it, then a third (300 coins on the belt at most). What does not fit stays in
  *     the pouch in the hand.
- *   - Take one off: look down at it, bring the open right hand to it and close the
- *     fingers — the last pouch comes into the hand (to give, to pay, to throw).
- * A hanging, lowered or swinging arm never does it (its elbow is straight: PoseInterpreter.purseHand).
+ *   - Take one off: look down at it, bring the open left hand to it and close the
+ *     fingers — the fullest pouch comes into the hand (to give, to pay, to throw).
+ * A hanging, lowered or swinging arm never does it (its elbow is straight: PoseInterpreter.offHip).
  *
  * The coins on the belt are the player's (Inventory.coins(): paying at the market, the
  * save, death — they drop as pouches); other players see the pouches.
@@ -104,11 +107,10 @@ export class CoinBelt {
         const pose = g.currentPose;
         if (!pose || g.combat?.immobile || g.combat?.dead || ch.flying) return;
         if (ch.isRunning) { this._away = 1; this._left = true; this._tie = 0; return; } // (arms swinging: never)
-        // which hand is at the pouches' hip (the leading hand's: the right one for a right-hander,
-        // the left for a left-hander): the leading hand, or the other one reaching across with a pouch
+        // the pouches hang at the leading hand's hip (the right one for a right-hander, the left for a
+        // left-hander), and only the OTHER hand reaches them, across the body, looking down at them
         const dom = g.dom || 'right', off = dom === 'right' ? 'left' : 'right';
-        const coinsIn = (s) => items.held[s]?.item.kind === 'coins';
-        const side = pose.purse?.dom === true ? dom : pose.purse?.cross === true && coinsIn(off) && !coinsIn(dom) ? off : null;
+        const side = pose.purse?.off === true && g.inventory?.headDown ? off : null;
         if (side) { this._away = 0; this._side = side; } else this._away += dt;
         if (this._away > AWAY_S) { this._left = true; this._open = false; this._tie = 0; return; }
         if (!side) return; // (lost for a moment: wait)
@@ -123,11 +125,10 @@ export class CoinBelt {
             return;
         }
         this._tie = 0;
-        if (side !== dom) return;
-        // taking one: looking down at it, the empty hand came open and closes on it
+        // taking one (looking down at it: above): the empty hand came open and closes on it
         if (curl < 0.4) this._open = true;
-        const free = !h && !g.weapons?.hands?.[dom]?.held;
-        if (free && this.count > 0 && this._open && curl > 0.45 && g.inventory?.belt?.lookingDown()) this._take(dom);
+        const free = !h && !g.weapons?.hands?.[side]?.held;
+        if (free && this.count > 0 && this._open && curl > 0.45) this._take(side);
     }
 
     _tieOn(side) {

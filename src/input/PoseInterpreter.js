@@ -133,33 +133,67 @@ export function mirrorPose(lm) {
 const mirrorHand = (h) => (h ? h.map((p) => ({ ...p, x: 1 - p.x })) : h);
 
 /**
+ * The OTHER hand (a right-hander's left) reaching across the body to the leading hand's hip, where
+ * the things' pocket and the coin pouches are (the author: a right-hander takes things out of the
+ * right pocket with the LEFT hand; the right hand is for the wand). Read as a right-hander's (the
+ * left hand at the right hip; a left-hander is read in a mirror). ONE answer, never both:
+ *   'pocket' — in front of the hip: the wrist from just inside the hip joint to a little outside it
+ *              (the pocket's opening), at the waist or a little lower; the hand gone in (not seen)
+ *              or its fingers pointing down into it;
+ *   'purse'  — further out, beside the hip (the pouches hang at the side, on the belt);
+ *   false    — neither (the hand at its own side, hanging, in front of the belly, the gap between
+ *              the two places); null — the hip or the shoulder not seen.
+ * Both places are well outside the belly's middle, so a hand going to the wand never touches them.
+ */
+export const OFF_POCKET = [-0.12, 0.08]; // (the wrist outward of the hip joint, torso heights)
+export const OFF_PURSE = [0.14, 0.6];
+export function offHip(lm, hand, aspect = 4 / 3) {
+    const sh = lm?.[11], el = lm?.[13], wr = lm?.[15], hip = lm?.[24];
+    if (!sh || !el || !wr || !hip) return null;
+    if ((hip.visibility ?? 1) < 0.5 || (sh.visibility ?? 1) < 0.5) return null;
+    if ((wr.visibility ?? 1) < 0.3) return false;
+    const T = hip.y - sh.y;
+    if (T < 0.05) return null;
+    const dy = (wr.y - hip.y) / T;
+    const wOut = ((hip.x - wr.x) * aspect) / T; // (the right hip's outside is the picture's left)
+    // the elbow bent (reaching across always bends it; a hanging arm is straight)
+    const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
+    const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
+    if (nu < 1e-4 || nf < 1e-4) return false;
+    if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < 0.45) return false;
+    if (wOut >= OFF_POCKET[0] && wOut <= OFF_POCKET[1] && dy > -0.3 && dy < 0.25) {
+        if (!hand || hand.length < 21) return 'pocket';
+        const dxh = (hand[9].x - hand[0].x) * aspect, dyh = hand[9].y - hand[0].y;
+        const len = Math.hypot(dxh, dyh);
+        // (fingers down into it, within ~55°: reaching across, the hand comes in at a slant)
+        return len > 1e-4 && dyh / len > 0.55 ? 'pocket' : false;
+    }
+    if (wOut >= OFF_PURSE[0] && wOut <= OFF_PURSE[1] && dy > -0.5 && dy < 0.2) return 'purse';
+    return false;
+}
+
+/**
  * The body's own places for the hands (the camera's skeleton), for a right- or a left-hander.
  * A right-hander: the wand in front, a little to the left (the right hand takes it across), the
- * coin pouches and the things' pocket on the right. A left-hander: all of it mirrored — read
- * here by mirroring the picture and reading it as a right-hander's.
+ * coin pouches and the things' pocket on the right — reached by the LEFT hand across the body.
+ * A left-hander: all of it mirrored — read here by mirroring the picture and reading it as a
+ * right-hander's.
  *   belt, place — by the REAL hand ({left, right}: beltPose, bodyPlace);
- *   pocket — {dom, off, cross}: the leading hand in its pocket (the things), the other hand in
- *            its own, the leading hand across into the other's pocket;
- *   purse — {dom, cross}: the leading hand at the pouches (its own hip), the other hand across.
+ *   pocket — {off}: the other hand in the things' pocket (offHip);
+ *   purse — {off}: the other hand at the coin pouches (offHip).
+ * The leading hand never takes from / puts into the pocket or the pouches (it is the wand's).
  */
 export function bodyPlaces(lm, leftHand, rightHand, aspect = 4 / 3, leftHanded = false) {
     const L = leftHanded ? mirrorPose(lm) : lm;
     // (in the mirror the person's left hand is the "right" one)
-    const hd = leftHanded ? mirrorHand(leftHand) : rightHand, ho = leftHanded ? mirrorHand(rightHand) : leftHand;
+    const ho = leftHanded ? mirrorHand(rightHand) : leftHand;
     const real = (o) => (leftHanded ? { left: o.right, right: o.left } : o);
     const belt = { left: beltPose(L, 'left', aspect), right: beltPose(L, 'right', aspect) };
     // which place each hand is at (the wand's in front, the pouches' at the leading hand's hip): one answer
     const place = { left: bodyPlace(L, 'left', aspect), right: bodyPlace(L, 'right', aspect) };
-    const pocket = {
-        dom: pocketPose(L, hd, 'right', aspect),
-        off: pocketPose(L, ho, 'left', aspect),
-        cross: pocketPose(L, hd, 'right', aspect, 'left'),
-    };
-    // (nor the leading hand's pocket: a hand at the wand's place takes the wand, not the next thing from a slot)
-    if (pocket.dom === true && place.right === 'wand') pocket.dom = false;
-    // (the leading hand at the pouches only when really at its hip — not reaching for the wand)
-    const pr = purseHand(L, 'right', aspect);
-    const purse = { dom: pr === true ? place.right === 'purse' : pr, cross: purseHand(L, 'left', aspect, 'right') };
+    const o = offHip(L, ho, aspect);
+    const pocket = { off: o == null ? null : o === 'pocket' };
+    const purse = { off: o == null ? null : o === 'purse' };
     return { belt: real(belt), place: real(place), pocket, purse };
 }
 
