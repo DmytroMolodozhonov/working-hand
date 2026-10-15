@@ -156,3 +156,24 @@ test('a tower wizard loses the wand (it flies off), a knight his sword; a wander
     assert.equal(disarmVillager(g, wanderer, () => ({})), null);
     assert.equal(wanderer.model.toolKind, 'staff');
 });
+
+test('disarming a wizard (or a knight) is an attack: the castle takes it as one — he fights back once his wand is back', () => {
+    const hits = [];
+    const g = {
+        localId: 'me', authority: true, scene: new THREE.Scene(), remotes: new Map(), zombies: [], zombieById: new Map(),
+        fx: { spark() {}, lightFlash() {} }, hud: { setVoice() {} },
+        items: { spawnLoose() {} },
+        creatureImpact: { spellHit() {} },
+        castleLife: { wardOff: () => false, _say() {}, hit: (v, dmg, dir, by, opts) => hits.push([v.id, dmg, by, opts.kind]) },
+    };
+    const d = new Duel(g);
+    d._burst = () => {};
+    const model = (tool) => ({ toolKind: tool, tool: null, setHeldTool(k) { this.toolKind = k; } });
+    const wiz = { id: 'w1', isVillager: true, wizard: true, role: 'teacher', x: 0, y: 0, z: -5, model: model('wand') };
+    d.applyToCreature('Expelliarmus', wiz, 'me', new THREE.Vector3(0, 3, 0));
+    assert.ok(wiz.lostWand, 'the wand flew off');
+    assert.deepEqual(hits, [['w1', 0, 'me', 'Expelliarmus']], 'an offence against him by me (no damage)');
+    // nothing knocked out (no wand any more): only the push, no new offence
+    d.applyToCreature('Expelliarmus', wiz, 'me', new THREE.Vector3(0, 3, 0));
+    assert.equal(hits.length, 1);
+});

@@ -996,6 +996,9 @@ export class Duel {
             // a wizard's wand / a knight's sword flies off; everybody else (animals, sailors,
             // villagers with tools, an unarmed one) is only jolted back a little
             const out = !c.isAnimal && !c.isSailor ? disarmVillager(g, c, wizardWandOf) : null;
+            // knocking the wand / the sword out is an attack: he (and whoever saw it) fights the one who did it —
+            // a wizard runs for his wand first (WizardLife._fetchWand), then turns on him
+            if (out) hit(0, { kind: 'Expelliarmus' });
             if (out === 'wand') this.game.castleLife?._say?.(c, 'Моя палочка!', 3);
             g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
         } else if (spell === 'Disarmor') {
