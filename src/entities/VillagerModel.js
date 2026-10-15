@@ -452,7 +452,7 @@ function bodyBoxes(L) {
         b(B, 0.86, 0.06, 0.09, 0, -0.1, -0.43, GOLD_DARK);
         b(B, 0.34, 0.34, 0.04, 0, 0.25, -0.47, cc, 0, 0, Math.PI / 4); // castle emblem
         b(B, 0.12, 0.12, 0.04, 0, 0.25, -0.5, RUBY);
-        b(B, 1.26, 0.55, 0.86, 0, -0.95, 0, cc); // surcoat skirt
+        b(B, 1.25, 0.55, 0.85, 0, -0.95, 0, cc); // surcoat skirt (inside the belt's faces: flush, they flickered)
         b(B, 1.3, 0.1, 0.9, 0, -1.2, 0, GOLD);
         b(B, 1.5, 0.32, 1.0, 0, 0.72, 0.02, 0xf4f2ec); // ermine mantle
         for (const [x, z] of [[-0.55, -0.51], [-0.2, -0.51], [0.2, -0.51], [0.55, -0.51], [-0.4, 0.53], [0.4, 0.53]]) b(B, 0.08, 0.14, 0.02, x, 0.7, z, 0x111111);
@@ -492,7 +492,7 @@ function bodyBoxes(L) {
         if (L.role === 'seller' || L.role === 'wanderer') { b(B, 0.3, 0.34, 0.2, -0.42, -0.84, -0.38, 0x8b5a2b); b(B, 0.2, 0.08, 0.22, -0.42, -0.66, -0.38, tr); } // a satchel of scrolls
     } else { // merchant: vest, gold trim, coin pouch
         const v = L.accent;
-        b(B, 1.24, 1.3, 0.84, 0, 0.08, 0, v);
+        b(B, 1.23, 1.3, 0.83, 0, 0.08, 0, v); // (a hair narrower than the belt: their faces were flush and flickered)
         b(B, 0.36, 1.3, 0.02, 0, 0.08, -0.425, L.shirt);
         b(B, 0.06, 1.3, 0.03, -0.21, 0.08, -0.43, GOLD); b(B, 0.06, 1.3, 0.03, 0.21, 0.08, -0.43, GOLD);
         for (const y of [0.4, 0.1, -0.2]) b(B, 0.07, 0.07, 0.03, 0, y, -0.44, GOLD);

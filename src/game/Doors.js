@@ -63,8 +63,9 @@ export function doorModel(color, { mirror = false, gate = false } = {}) {
     const g = new THREE.Group();
     const { wood, dark, gold } = doorMats(color);
     const m = mirror ? -1 : 1;
-    // frame
-    if (!gate) for (const [w, h, x, y] of [[0.16, H + 0.16, -W / 2 - 0.08, H / 2], [0.16, H + 0.16, W / 2 + 0.08, H / 2], [W + 0.32, 0.16, 0, H + 0.08]]) {
+    // frame (its inner faces a hair inside the opening: a house door is scaled to fill its doorway
+    // exactly, and faces flush with the stone of the doorway flickered through it)
+    if (!gate) for (const [w, h, x, y] of [[0.17, H + 0.17, -W / 2 - 0.075, H / 2 + 0.005], [0.17, H + 0.17, W / 2 + 0.075, H / 2 + 0.005], [W + 0.32, 0.17, 0, H + 0.075]]) {
         const fm = new THREE.Mesh(new THREE.BoxGeometry(w, h, T + 0.08), dark);
         fm.position.set(x, y, 0);
         fm.castShadow = true;

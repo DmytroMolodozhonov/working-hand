@@ -44,7 +44,8 @@ function shared() {
         lid: new THREE.BoxGeometry(1.25, 0.2, 0.85),
         band: new THREE.BoxGeometry(1.3, 0.08, 0.9),
         lock: new THREE.BoxGeometry(0.15, 0.2, 0.05),
-        corner: new THREE.BoxGeometry(0.1, 0.6, 0.1),
+        // (a little bigger than 0.1 so its outer faces stand off the box's sides: flush, they flickered)
+        corner: new THREE.BoxGeometry(0.11, 0.6, 0.11),
         hollow: new THREE.BoxGeometry(1.08, 0.02, 0.68),
     };
     return SHARED;

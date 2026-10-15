@@ -120,9 +120,14 @@ float cobbleEdge(vec2 p, float layer) {
     float kFine = 1.0 - smoothstep(0.05, 0.14, fp);
     float kCoarse = 1.0 - smoothstep(0.07, 0.22, fp);
     vec3 voxBase = diffuseColor.rgb;
+    // Which block (across the face) the face belongs to: taken half a block inside it. The face
+    // itself lies exactly on a whole number there, and floor() of the interpolated position
+    // jumped between the two neighbouring layers pixel by pixel — the pattern of two different
+    // blocks showed through each other in flickering patches (planks, stones, cobbles…).
+    float layerId = floor(dot(q - 0.5 * vVoxNormal, n));
     // 8x8 pixels per face
     vec2 px = floor(f * 8.0);
-    float r = vhash(vec3(cell * 8.0 + px, floor(dot(q, n))));
+    float r = vhash(vec3(cell * 8.0 + px, layerId));
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
     bool green = diffuseColor.g > diffuseColor.r * 1.15 && diffuseColor.g > diffuseColor.b * 1.1;
     float pat = floor(vVoxPat + 0.5);
@@ -130,7 +135,6 @@ float cobbleEdge(vec2 p, float layer) {
     if (pat < 0.5 && green && n.y > 0.5) detail += (r > 0.9 ? 0.07 : 0.0) - (r < 0.08 ? 0.06 : 0.0); // grass speckles
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides
     diffuseColor.rgb *= 1.0 + detail * kFine;
-    float layerId = floor(dot(q, n));
     if (pat == 1.0) {
         // cut stone: blocks half a metre high, every row shifted by half
         vec2 s = n.y > 0.5 ? uv : uv * vec2(1.0, 2.0);

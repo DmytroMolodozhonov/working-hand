@@ -46,10 +46,10 @@ export function bedModel(color = 'white') {
     const wood = mat(0x8b5a2b), dark = mat(0x5a3a1e), sheet = mat(0xe2dac8), pillow = mat(0xffffff);
     const blanket = blanketMaterial(color);
     const stripe = mat(new THREE.Color(bedColorHex(color)).multiplyScalar(0.72).getHex());
-    // legs and the frame
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.26, 0.5, 0.26, dark, sx * (W / 2 - 0.13), 0.25, sz * (L / 2 - 0.13)));
-    g.add(box(W, 0.3, L, wood, 0, 0.55, 0));
-    for (const sx of [-1, 1]) g.add(box(0.14, 0.2, L, dark, sx * (W / 2 - 0.07), 0.78, 0, false));
+    // legs and the frame (each part a little inside the next: faces flush with each other flickered)
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.26, 0.5, 0.26, dark, sx * (W / 2 - 0.14), 0.25, sz * (L / 2 - 0.14)));
+    g.add(box(W, 0.3, L - 0.02, wood, 0, 0.55, 0));
+    for (const sx of [-1, 1]) g.add(box(0.14, 0.2, L - 0.04, dark, sx * (W / 2 - 0.08), 0.78, 0, false));
     // headboard (with a carved top) and footboard
     g.add(box(W + 0.1, head, 0.22, wood, 0, head / 2, -L / 2 + 0.11));
     g.add(box(W + 0.3, 0.22, 0.3, dark, 0, head + 0.06, -L / 2 + 0.11));
