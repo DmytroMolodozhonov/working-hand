@@ -85,5 +85,90 @@ class Paths(unittest.TestCase):
         os.environ.pop("ZNS_VOICE_MODELS", None)
 
 
+class Integrity(unittest.TestCase):
+    """A model file is used only if it is the published one (SHA-256); checked once, then remembered."""
+
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        os.environ["ZNS_VOICE_MODELS"] = self.dir
+        self.saved = dict(vn.FILES)
+        self.good = b"tokens of the network\n"
+        import hashlib
+        vn.FILES["tokens.txt"] = (len(self.good), hashlib.sha256(self.good).hexdigest())
+
+    def tearDown(self):
+        import shutil
+        vn.FILES.clear()
+        vn.FILES.update(self.saved)
+        os.environ.pop("ZNS_VOICE_MODELS", None)
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def write(self, name, data):
+        path = os.path.join(self.dir, name)
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+
+    def test_the_published_file_is_used_and_remembered(self):
+        path = self.write("tokens.txt", self.good)
+        self.assertTrue(vn.CHECK.ok(path, "tokens.txt"))
+        self.assertTrue(os.path.isfile(os.path.join(self.dir, vn.CHECKED)))
+        real = vn.sha256_of
+        vn.sha256_of = lambda p: self.fail("checked again although nothing changed")
+        try:
+            self.assertTrue(vn.CHECK.ok(path, "tokens.txt"))
+        finally:
+            vn.sha256_of = real
+
+    def test_a_changed_file_is_never_used_and_is_deleted(self):
+        path = self.write("tokens.txt", self.good)
+        self.assertTrue(vn.CHECK.ok(path, "tokens.txt"))
+        bad = bytearray(self.good)
+        bad[0] ^= 1  # one byte, same size
+        st = os.stat(path)
+        self.write("tokens.txt", bytes(bad))
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
+        self.assertFalse(vn.CHECK.ok(path, "tokens.txt"))
+        self.assertFalse(os.path.exists(path))
+
+    def test_a_download_that_differs_is_deleted_with_an_error(self):
+        final = os.path.join(self.dir, "tokens.txt")
+        part = self.write("tokens.txt.part", self.good[:-1] + b"?")
+        with self.assertRaises(ValueError):
+            vn.save_checked(part, final, "tokens.txt")
+        self.assertFalse(os.path.exists(part))
+        self.assertFalse(os.path.exists(final))
+        part = self.write("tokens.txt.part", self.good)
+        vn.save_checked(part, final, "tokens.txt")
+        self.assertTrue(vn.CHECK.ok(final, "tokens.txt"))
+
+    def test_the_real_hashes_are_written_down(self):
+        for name, (size, sha) in self.saved.items():
+            self.assertGreater(size, 0, name)
+            self.assertRegex(sha, r"^[0-9a-f]{64}$", name)
+
+
+class OnlyThisComputer(unittest.TestCase):
+    """The microphone and the camera: only the game page of this very computer."""
+
+    def test_who_may_listen(self):
+        import server
+        own = {"Host": "localhost:8000", "Sec-Fetch-Site": "same-origin"}
+        self.assertTrue(server.is_own_page("127.0.0.1", own))
+        self.assertTrue(server.is_own_page("::1", {"Host": "[::1]:8000"}))
+        self.assertTrue(server.is_own_page("127.0.0.1", {"Host": "127.0.0.1:8001"}))
+        # another computer on the network
+        self.assertFalse(server.is_own_page("192.168.1.20", own))
+        self.assertFalse(server.is_own_page("10.0.0.5", {"Host": "192.168.1.10:8000"}))
+        # another site's page in this computer's browser
+        self.assertFalse(server.is_own_page("127.0.0.1", {"Host": "localhost:8000", "Sec-Fetch-Site": "cross-site"}))
+        self.assertFalse(server.is_own_page("127.0.0.1", {"Host": "localhost:8000", "Origin": "https://evil.example"}))
+        # a site that points its own name at this computer (DNS rebinding)
+        self.assertFalse(server.is_own_page("127.0.0.1", {"Host": "evil.example:8000"}))
+        self.assertFalse(server.is_own_page("127.0.0.1", {}))
+        self.assertTrue(all(p in server.PRIVATE_PATHS for p in ("/api/voice/", "/api/pose/")))
+
+
 if __name__ == "__main__":
     unittest.main()

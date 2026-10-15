@@ -27,6 +27,7 @@ them the game simply uses the browser's recognizer as before.
 
 import base64
 import collections
+import hashlib
 import io
 import json
 import os
@@ -50,6 +51,17 @@ MODEL_DIR = "speech-ru"
 MODEL_OLD_DIR = "sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16"  # (where the first version kept it)
 MODEL_SIZE = 224721476  # model.int8.onnx
 VAD_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
+VAD_FILE = "silero_vad.onnx"
+# Every file used, its size and its SHA-256 (counted from the files of that same release): a file
+# that differs in a single byte (spoilt on the way, or swapped for another) is never used.
+FILES = {
+    "model.int8.onnx": (MODEL_SIZE, "f86ebfa0429ced91be6054fc344827e9c6c2572f3c318416cd974b06f66437ec"),
+    "tokens.txt": (196, "17cc514451bcceac9c280068c71502f8448f99e9fb1456b8d0761651fd0392f2"),
+    "LICENSE": (1070, "f00de6715714c7a63d08639cdbfaa40224eefc407302614bd19f1a8b98c875aa"),
+    VAD_FILE: (643854, "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"),
+}
+ARCHIVE_MAX = 200 * 1024 * 1024  # the archive is ≈156 MB: no more than this is ever read
+CHECKED = "checked.json"  # the files already checked: their size and time (so 225 MB aren't read every start)
 
 # Speech segments: how they start and end (silero's probability of speech per 32 ms)
 SEG = {
@@ -73,6 +85,80 @@ def models_dir():
     if sys.platform == "darwin":
         return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "Volshebstvo", "voice-models")
     return os.path.join(os.path.expanduser("~"), ".cache", "volshebstvo", "voice-models")
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+class Checked:
+    """Which model files were checked (SHA-256) — remembered with their size and time of change: a file
+    changed since is checked again. A file that is not the published one is deleted (downloaded anew)."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+
+    def _path(self):
+        return os.path.join(models_dir(), CHECKED)
+
+    def _load(self):
+        try:
+            with open(self._path(), encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def remember(self, path, sha):
+        st = os.stat(path)
+        with self.lock:
+            d = self._load()
+            d[os.path.abspath(path)] = [sha, st.st_size, st.st_mtime_ns]
+            tmp = self._path() + ".part"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(d, f)
+            os.replace(tmp, self._path())
+
+    def ok(self, path, name):
+        """Is this file the published one? (False: missing, or wrong — then it is deleted.)"""
+        size, sha = FILES[name]
+        try:
+            st = os.stat(path)
+        except OSError:
+            return False
+        if st.st_size != size:
+            return False
+        if self._load().get(os.path.abspath(path)) == [sha, st.st_size, st.st_mtime_ns]:
+            return True
+        with self.lock:
+            good = sha256_of(path) == sha
+        if not good:
+            print(f"  Голос: файл {name} не совпал с опубликованным (повреждён или подменён) — удаляю, скачаю заново")
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return False
+        self.remember(path, sha)
+        return True
+
+
+CHECK = Checked()
+
+
+def save_checked(part, final, name):
+    """A downloaded file (part) → its place (final), only if it is the published one; else deleted and an error."""
+    size, sha = FILES[name]
+    got = sha256_of(part) if os.path.getsize(part) == size else ""
+    if got != sha:
+        os.remove(part)
+        raise ValueError(f"скачанный файл {name} не совпал с опубликованным — не используется")
+    os.replace(part, final)
+    CHECK.remember(final, sha)
 
 
 # ---------------------------------------------------------------- the networks
@@ -235,6 +321,18 @@ class Stream:
         return None if self.t0 is None else int((t - self.t0) * SR)
 
 
+_ERRORS = collections.Counter()
+
+
+def say_error(kind, e):
+    """An error to the log — the first few and then one in a thousand (an error 100 times a second
+    must not fill the disk with the log)."""
+    _ERRORS[kind] += 1
+    k = _ERRORS[kind]
+    if k <= 5 or k % 1000 == 0:
+        print(f"  Голос: ошибка {kind} (раз {k}):", e)
+
+
 def _mono16(data, channels, np):
     x = np.frombuffer(data, dtype=np.int16)
     if channels > 1:
@@ -274,7 +372,7 @@ class WinCapture:
             try:
                 fn(_mono16(data, ch, np), time.perf_counter())
             except Exception as e:  # noqa: BLE001
-                print("  Голос: ошибка звука:", e)
+                say_error("звука", e)
             return (None, pyaudio.paContinue)
 
         return self.pa.open(format=pyaudio.paInt16, channels=ch, rate=rate, input=True,
@@ -411,13 +509,13 @@ class NativeVoice:
             try:
                 os.replace(old, new)  # (downloaded by the first version: moved, not downloaded again)
             except OSError:
-                return old, os.path.join(d, "silero_vad.onnx")
-        return new, os.path.join(d, "silero_vad.onnx")
+                return old, os.path.join(d, VAD_FILE)
+        return new, os.path.join(d, VAD_FILE)
 
     def models_ready(self):
         ctc, vad = self.model_paths()
-        m = os.path.join(ctc, "model.int8.onnx")
-        return os.path.isfile(m) and os.path.getsize(m) == MODEL_SIZE and os.path.isfile(os.path.join(ctc, "tokens.txt")) and os.path.isfile(vad)
+        return all([CHECK.ok(os.path.join(ctc, "model.int8.onnx"), "model.int8.onnx"),
+                    CHECK.ok(os.path.join(ctc, "tokens.txt"), "tokens.txt"), CHECK.ok(vad, VAD_FILE)])
 
     def available(self):
         if self._ready is None or (not self._ready and self.state not in ("installing", "downloading")):
@@ -438,53 +536,73 @@ class NativeVoice:
         }
 
     def download_models(self):
-        """Once: the speech network (≈225 MB, from a ≈165 MB archive) and silero VAD, into the user's folder."""
+        """Once: the speech network (≈225 MB, from a ≈165 MB archive) and silero VAD, into the user's folder.
+        Every file is checked (SHA-256) before it is used; out of the archive only the 3 files needed,
+        each into this folder under its own fixed name (whatever paths or links the archive holds)."""
         ctc_dir, vad_path = self.model_paths()
         os.makedirs(os.path.dirname(vad_path), exist_ok=True)
-        if not os.path.isfile(vad_path):
+        if not CHECK.ok(vad_path, VAD_FILE):
+            limit = FILES[VAD_FILE][0]
             with urllib.request.urlopen(urllib.request.Request(VAD_URL, headers={"User-Agent": "Volshebstvo"}), timeout=60) as r:
-                data = r.read()
+                data = r.read(limit + 1)
+            if len(data) > limit:
+                raise ValueError(f"скачанный файл {VAD_FILE} больше ожидаемого — не используется")
             with open(vad_path + ".part", "wb") as f:
                 f.write(data)
-            os.replace(vad_path + ".part", vad_path)
+            save_checked(vad_path + ".part", vad_path, VAD_FILE)
         if self.models_ready():
             return True
         self.state = "downloading"
         req = urllib.request.Request(MODEL_URL, headers={"User-Agent": "Volshebstvo"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            total = int(r.headers.get("Content-Length") or 163286197)
-            voice = self
+        parts = []
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                total = int(r.headers.get("Content-Length") or 163286197)
+                voice = self
 
-            class Counting(io.RawIOBase):
-                def __init__(self):
-                    self.got = 0
+                class Counting(io.RawIOBase):
+                    def __init__(self):
+                        self.got = 0
 
-                def readable(self):
-                    return True
+                    def readable(self):
+                        return True
 
-                def readinto(self, b):
-                    chunk = r.read(len(b))
-                    n = len(chunk)
-                    b[:n] = chunk
-                    self.got += n
-                    voice.progress = min(0.99, self.got / total)
-                    voice.detail = f"Нейросеть голоса: скачано {self.got / 1048576:.0f} из {total / 1048576:.0f} МБ"
-                    return n
+                    def readinto(self, b):
+                        chunk = r.read(min(len(b), ARCHIVE_MAX + 1 - self.got))
+                        n = len(chunk)
+                        b[:n] = chunk
+                        self.got += n
+                        if self.got > ARCHIVE_MAX:
+                            raise ValueError("архив нейросети больше ожидаемого — не используется")
+                        voice.progress = min(0.99, self.got / total)
+                        voice.detail = f"Нейросеть голоса: скачано {self.got / 1048576:.0f} из {total / 1048576:.0f} МБ"
+                        return n
 
-            os.makedirs(ctc_dir, exist_ok=True)
-            with tarfile.open(fileobj=io.BufferedReader(Counting(), 1 << 20), mode="r|bz2") as tar:
-                for m in tar:
-                    name = os.path.basename(m.name)
-                    if name in ("model.int8.onnx", "tokens.txt", "LICENSE") and m.isfile():
+                os.makedirs(ctc_dir, exist_ok=True)
+                with tarfile.open(fileobj=io.BufferedReader(Counting(), 1 << 20), mode="r|bz2") as tar:
+                    for m in tar:
+                        name = os.path.basename(m.name)
+                        # (only plain files — no links — with names we know, of their known size)
+                        if name not in FILES or name == VAD_FILE or not m.isreg() or m.size != FILES[name][0]:
+                            continue
                         src = tar.extractfile(m)
                         part = os.path.join(ctc_dir, name + ".part")
+                        parts.append(part)
                         with open(part, "wb") as f:
-                            while True:
-                                b = src.read(1 << 20)
+                            left = m.size
+                            while left > 0:
+                                b = src.read(min(1 << 20, left))
                                 if not b:
                                     break
                                 f.write(b)
-                        os.replace(part, os.path.join(ctc_dir, name))
+                                left -= len(b)
+                        save_checked(part, os.path.join(ctc_dir, name), name)
+        finally:
+            for part in parts:  # (a download cut short leaves nothing behind)
+                try:
+                    os.remove(part)
+                except OSError:
+                    pass
         self.progress = 1.0
         self.detail = ""
         self._ready = None
@@ -544,20 +662,21 @@ class NativeVoice:
                 cap = WinCapture(on_mic, on_ref)
             else:
                 cap = SdCapture(on_mic, on_ref)
-            mic_box["s"] = Stream(cap.mic_rate, "mic")
-            if cap.ref_rate:
-                ref_box["s"] = Stream(cap.ref_rate, "ref", continuous=False)
-            self.mic_name, self.ref_name = cap.mic_name, cap.ref_name
-            self.aec = bool(cap.ref_rate) and os.environ.get("ZNS_VOICE_AEC", "1") != "0"
-            apm = rtc.AudioProcessingModule(echo_cancellation=self.aec, noise_suppression=False, high_pass_filter=True)
-            self.state = "running"
-            self._emit({"type": "status", **self.status()})
-            print(f"  Голос: нейросеть на компьютере работает (микрофон: {self.mic_name or '?'}; "
-                  f"звук колонок: {self.ref_name or 'нет'}; эхо убирается: {'да' if self.aec else 'нет'})")
-            try:
+            try:  # (whatever happens from here on, the microphone is let go)
+                mic_box["s"] = Stream(cap.mic_rate, "mic")
+                if cap.ref_rate:
+                    ref_box["s"] = Stream(cap.ref_rate, "ref", continuous=False)
+                self.mic_name, self.ref_name = cap.mic_name, cap.ref_name
+                self.aec = bool(cap.ref_rate) and os.environ.get("ZNS_VOICE_AEC", "1") != "0"
+                apm = rtc.AudioProcessingModule(echo_cancellation=self.aec, noise_suppression=False, high_pass_filter=True)
+                self.state = "running"
+                self._emit({"type": "status", **self.status()})
+                print(f"  Голос: нейросеть на компьютере работает (микрофон: {self.mic_name or '?'}; "
+                      f"звук колонок: {self.ref_name or 'нет'}; эхо убирается: {'да' if self.aec else 'нет'})")
                 self._loop(np, rtc, ctc, vad, apm, mic_box["s"], ref_box.get("s"), cap)
             finally:
                 cap.close()
+                print("  Голос: микрофон отпущен")
         except Exception as e:  # noqa: BLE001
             import traceback
             traceback.print_exc()
@@ -573,9 +692,10 @@ class NativeVoice:
         jobs = collections.deque()
         busy = threading.Event()
         lag = 0.06 + LEAD  # s a microphone sample waits: the speakers' copy of that moment has come by then
+        over = threading.Event()  # (this loop is over: its worker ends with it)
 
         def worker():
-            while not self._stop.is_set():
+            while not self._stop.is_set() and not over.is_set():
                 if not jobs:
                     time.sleep(0.01)
                     continue
@@ -586,10 +706,16 @@ class NativeVoice:
                     self.cost = ev.get("cost", 0)
                     self._emit(ev)
                 except Exception as e:  # noqa: BLE001
-                    print("  Голос: ошибка распознавания:", e)
+                    say_error("распознавания", e)
                 busy.clear()
 
         threading.Thread(target=worker, name="voice-ctc", daemon=True).start()
+        try:
+            self._listen(np, pipe, jobs, busy, lag, mic, ref, cap)
+        finally:
+            over.set()
+
+    def _listen(self, np, pipe, jobs, busy, lag, mic, ref, cap):
         n = 0  # next microphone sample to process
         lv_t = time.perf_counter()
         idle_since = None

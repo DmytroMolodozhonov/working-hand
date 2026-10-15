@@ -255,6 +255,31 @@ def adopt_app_launcher():
         print(f"  (новый значок игры не создан: {e})")
 
 
+LOCAL_ADDRS = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+LOCAL_NAMES = ("localhost", "127.0.0.1", "::1")
+PRIVATE_PATHS = ("/api/voice/", "/api/pose/")  # the microphone and the camera
+
+
+def is_own_page(client_ip, headers):
+    """Is the request from this computer's own game page? The microphone and the camera (what they
+    heard, saw) are for it alone — the server listens on the network too, so: not another computer
+    (address), not another site's page in this computer's browser (Origin / Sec-Fetch-Site), not a
+    site that names itself «localhost» through its own DNS (Host)."""
+    if client_ip not in LOCAL_ADDRS:
+        return False
+    host = (headers.get("Host") or "").strip().lower()
+    host = host[1:host.find("]")] if host.startswith("[") else host.split(":")[0]
+    if host not in LOCAL_NAMES:
+        return False
+    site = headers.get("Sec-Fetch-Site")
+    if site and site not in ("same-origin", "none"):
+        return False
+    origin = headers.get("Origin")
+    if origin and origin != "null" and (urlparse(origin).hostname or "") not in LOCAL_NAMES:
+        return False
+    return True
+
+
 def safe_map_name(name):
     if not isinstance(name, str):
         return ""
@@ -339,7 +364,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         try:
             while True:
                 with POSE.cond:
-                    POSE.cond.wait_for(lambda: POSE.seq != seen or POSE.state in ("error", "idle", "unavailable"), timeout=2)
+                    POSE.cond.wait_for(lambda: POSE.seq != seen or POSE.state in ("error", "unavailable"), timeout=2)
                     seq, data, state = POSE.seq, POSE.latest, POSE.state
                 if state in ("error", "unavailable"):
                     self.wfile.write(("event: fail\ndata: " + json.dumps({"error": POSE.error}, ensure_ascii=False) + "\n\n").encode("utf-8"))
@@ -368,21 +393,24 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _voice_stream(self):
         """Server-Sent Events: every phrase heard (and the microphone's level) as one 'data:' line each."""
         from voice_native import VOICE
-        if not VOICE.start():
-            return self._json(503, VOICE.status())
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.end_headers()
-        VOICE.clients += 1
-        seen = VOICE.seq
+        with VOICE.cond:
+            VOICE.clients += 1  # (before start: a listener that stops for want of clients never misses this one)
         try:
+            if not VOICE.start():
+                return self._json(503, VOICE.status())
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            seen = VOICE.seq
             while True:
                 with VOICE.cond:
-                    VOICE.cond.wait_for(lambda: VOICE.seq != seen or VOICE.state in ("error", "idle"), timeout=2)
+                    VOICE.cond.wait_for(lambda: VOICE.seq != seen or VOICE.state == "error", timeout=2)
                     seq, state = VOICE.seq, VOICE.state
                     new = list(VOICE.events)[-(seq - seen):] if seq - seen <= len(VOICE.events) else list(VOICE.events)
+                if state == "idle":
+                    VOICE.start()  # (it stopped while nobody listened: listen again)
                 if state == "error":
                     self.wfile.write(("event: fail\ndata: " + json.dumps({"error": VOICE.error}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                     self.wfile.flush()
@@ -396,7 +424,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
             return
         finally:
-            VOICE.clients -= 1
+            with VOICE.cond:
+                VOICE.clients -= 1
             VOICE.last_client = time.time()
 
     def _alive(self):
@@ -417,6 +446,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     # ---------- GET ----------
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith(PRIVATE_PATHS) and not is_own_page(self.client_address[0], self.headers):
+            return self._json(403, {"status": "error", "message": "only the game on this computer"})
         if path == "/api/pose/status":
             return self._pose_status()
         if path == "/api/pose/stream":
@@ -763,7 +794,10 @@ def ensure_voice_native():
             pass
         try:
             r = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", "-q", *pkgs],
+                # (only these packages, only from PyPI over HTTPS, only ready-built ones: nothing is compiled
+                # from sources on this computer)
+                [sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", "-q",
+                 "--index-url", "https://pypi.org/simple", "--only-binary", ":all:", *pkgs],
                 capture_output=True, text=True, timeout=1800,
             )
             ok = r.returncode == 0
