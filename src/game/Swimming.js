@@ -94,7 +94,7 @@ export class Swimming {
 
         // on a surfboard: the board holds you up (SurfBoards places the body)
         if (g.boards?.mounted) { this.swimming = false; this.underwater = false; this._leave(dt); this.air = Math.min(AIR_MAX, this.air + dt * 5); this._renderHud(); return; }
-        this.swimming = !!w && w.depth >= SWIM_DEPTH && p.y - FEET < w.surface && !g.up?.rising && !g.levitation?.lifted; // («Up»: thrown up out of it; «Левиоса»: the caster's hand lifts me out of the water)
+        this.swimming = !!w && w.depth >= SWIM_DEPTH && p.y - FEET < w.surface && !g.up?.rising && !g.levitation?.lifted && !g.ledge?.active; // («Up»: thrown up out of it; «Левиоса»: the caster's hand lifts me out of the water; the palms on the bank: the arms pull me out — LedgeClimb)
         if (this.swimming) this._swim(dt, w, pose);
         else this._leave(dt);
         this._updateRipples(dt);

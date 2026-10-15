@@ -54,9 +54,9 @@ test('a low box (a stone foot, a chest) is a step for a body that stands on boxe
 });
 
 /** A small pit: floor top y −0.5 for x ≤ 1, the ground two blocks higher (y 1.5) from x = 2 on. */
-function pitGame({ high = 2, roof = false } = {}) {
+function pitGame({ high = 2, roof = false, top = null } = {}) {
     const col = new CollisionWorld();
-    col.setTerrain(terrain((ix) => (ix <= 1 ? 0 : high), (ix) => (roof && ix >= 2 ? high + 2 : null)));
+    col.setTerrain(terrain(top || ((ix) => (ix <= 1 ? 0 : high)), (ix) => (roof && ix >= 2 ? high + 2 : null)));
     const p = new THREE.Vector3(1.0, -0.5 + 2, 0); // standing at the pit's wall (feet −0.5)
     const voice = [];
     const g = {
@@ -97,8 +97,8 @@ test('one hand can not lift the body; a ledge too high or with no room on top is
         assert.ok(Math.abs(p.y - 1.5) < 1e-6, 'one hand: the body stays down');
     }
     {
-        const { L, rel } = pitGame({ high: 4 }); // three blocks up: the palms there are far above the edge
-        rel.left.y = rel.right.y = 2.05;
+        const { L, rel } = pitGame({ high: 5 }); // five blocks up: the arms stretched up (palms ~4.7 over the feet) fall short
+        rel.left.y = rel.right.y = 2.7;
         L.update(1 / 60);
         assert.ok(!L.climb, 'too high');
     }
@@ -107,4 +107,45 @@ test('one hand can not lift the body; a ledge too high or with no room on top is
         L.update(1 / 60);
         assert.ok(!L.climb, 'no room to stand on top');
     }
+});
+
+/** Palms put on the edge at `y` (over the feet), then pulled down to the hips and lower: climbed out? */
+function pullOut(L, rel, y) {
+    rel.left.y = rel.right.y = y - 2;
+    L.update(1 / 60);
+    if (!(L.climb?.holds.left && L.climb?.holds.right)) return false;
+    for (let i = 0; i < 400 && L.climb; i++) {
+        rel.left.y = rel.right.y = Math.max(-1.7, y - 2 - i * 0.03);
+        L.update(1 / 60);
+    }
+    return !L.climb;
+}
+
+test('out of a deeper pit (three, four blocks — as deep as the raised arms reach) the same way', () => {
+    for (const high of [3, 4]) {
+        const { L, p, rel } = pitGame({ high });
+        assert.ok(pullOut(L, rel, high + 0.05), `climbed out of ${high} blocks`);
+        assert.ok(Math.abs(p.y - (high - 0.5 + 2)) < 1e-6 && p.x > 1.5, `on the top: ${p.x}, ${p.y}`);
+    }
+});
+
+test('an uneven, broken edge (a crack): one palm a block higher than the other still holds — up onto it', () => {
+    // the edge at x = 2: 2 blocks up where z < 0 (the left palm), 3 blocks up where z ≥ 0 (the right)
+    const { L, p, rel } = pitGame({ top: (ix, iz) => (ix <= 1 ? 0 : iz < 0 ? 2 : 3) });
+    rel.left.y = 2.05 - 2; rel.right.y = 3.05 - 2;
+    L.update(1 / 60);
+    assert.ok(L.climb?.holds.left && L.climb?.holds.right, 'both palms hold, each on its own column');
+    for (let i = 0; i < 400 && L.climb; i++) {
+        rel.left.y = Math.max(-1.7, 0.05 - i * 0.03); rel.right.y = Math.max(-1.7, 1.05 - i * 0.03);
+        L.update(1 / 60);
+    }
+    assert.ok(!L.climb, 'climbed out');
+    assert.ok(p.x > 1.5 && p.y >= 1.5 + 2 - 1e-6, `on the broken top: ${p.x}, ${p.y}`);
+});
+
+test('afloat in a deep pit of water: the palms on the bank, the same pull — out of the water', () => {
+    const { g, L, p, rel } = pitGame({ high: 5 });
+    g.character.swimY = p.y; // (the water holds the body: the bank five blocks over the feet — out of reach on foot)
+    assert.ok(pullOut(L, rel, 4.7), 'pulled out onto the bank');
+    assert.ok(Math.abs(p.y - (4.5 + 2)) < 1e-6, 'standing on it: ' + p.y);
 });
