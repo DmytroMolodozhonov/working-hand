@@ -1038,6 +1038,13 @@ export class Game {
         this._manaLater = false;
         const name = this._castLocalSpell(text, isFinal);
         if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
+        // (how late after the word was said the spell came — the journal, zns-perf.log: «голос»)
+        const vm = this._voiceMeta;
+        if (name && vm && Number.isFinite(vm.to)) {
+            const lag = performance.now() - vm.to;
+            if (lag >= 0 && lag < 6000) { const v = this.stats.voice || (this.stats.voice = { n: 0, sum: 0, max: 0, final: 0 }); v.n++; v.sum += lag; v.max = Math.max(v.max, lag); if (isFinal) v.final++; }
+            this._voiceMeta = null;
+        }
         // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom) — except Lumos: a light on the wand tip is no spell in the way
         if (name && name !== 'Protection' && name !== 'ProtectionMaxima' && name !== 'Lumos' && name !== 'LumosMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
         if (name && name !== 'Invisibility' && name !== 'Stand') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)

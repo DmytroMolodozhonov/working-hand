@@ -479,6 +479,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         }
     }
     if (game && game.active) {
+        game._voiceMeta = meta; // (when the words were said: the journal counts how late the spell came — Game.castLocalSpell)
         // the words being caught: a big short line, only in Creative (partly a developer mode)
         hud.heard(command, game.config?.mode === 'creative' && !!$('show-heard-toggle')?.checked); // (off by default; switched in the settings or the pause menu)
         // talking to a villager near me, the hand not raised to cast: words they understand are words,

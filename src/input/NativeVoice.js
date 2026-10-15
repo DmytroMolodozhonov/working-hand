@@ -167,6 +167,8 @@ export class NativeVoice {
         if (d.type === 'lv') { this._clock(d.t); this.onLevel?.(d); return; }
         if (d.type !== 'seg') return;
         this._clock(d.t1);
+        // (the network's time per look at a phrase: the journal shows it — zns-perf.log «голос»)
+        if (Number.isFinite(d.cost)) { const c = this.cost || (this.cost = { n: 0, sum: 0, max: 0 }); c.n++; c.sum += d.cost; c.max = Math.max(c.max, d.cost); }
         const r = lookAt(d, this.segs.get(d.id));
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);

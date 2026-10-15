@@ -67,12 +67,18 @@ export class PerfLog {
         const st = ps?.stats || {};
         const ai = ps ? `ИИ ${st.mode === 'native' ? `отдельная программа (${st.backend || '…'})` : st.mode === 'holistic' ? (st.thread === 'process' ? 'Holistic, отдельный процесс' : 'Holistic, ПОТОК ИГРЫ') : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.thread === 'process' && st.latency ? ` (задержка ${st.latency} мс)` : ''}${st.handHelper ? ', помощник рук' : ''}${st.handsEngine === 'v5' ? (st.v5Engine === 'rtm' ? ', кисти V5 (видеокарта)' : ', кисти V5') : ''}${st.delegate ? ', ' + st.delegate : ''}${st.thread === 'main' && st.nativeWhy ? ` (программа-нейросеть: ${st.nativeWhy})` : ''}` : 'ИИ —';
         this._aiPrev = st.results || 0;
+        // the voice: which hears (the program on this computer / the browser's Google), the program's time per
+        // look at a phrase, and how late after the word the spells came (average / worst)
+        const vs = g.voice, nv = vs?.native, vc = nv?.cost, vl = g.stats?.voice;
+        const voice = vs ? `голос ${vs.engine === 'native' ? 'на компьютере' : 'в браузере'}${vc?.n ? `, взгляд ${Math.round(vc.sum / vc.n)}/${Math.round(vc.max)} мс` : ''}${vl?.n ? `, заклинания через ${Math.round(vl.sum / vl.n)}/${Math.round(vl.max)} мс после слова (${vl.n}, после конца фразы ${vl.final})` : ''}` : '';
+        if (nv) nv.cost = null;
+        if (g.stats) g.stats.voice = null;
         const info = g.renderer?.info;
         const mem = globalThis.performance?.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} МБ` : '';
         const spikes = (g.stats?.spikes || []).slice(this._spikesSeen).map((s) => `${s.ms}мс:${s.reason}`);
         this._spikesSeen = (g.stats?.spikes || []).length;
         if (this._spikesSeen >= 30) { g.stats.spikes.length = 0; this._spikesSeen = 0; }
-        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${ai} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
+        const line = `${((performance.now() - this._t0) / 1000).toFixed(0)}с | FPS ${(n / Math.max(secs, 0.001)).toFixed(0)} | кадр ${q(0.5)}/${q(0.95)}/${Math.round(sorted[n - 1])} мс (обычн/медл/худш) | ${parts} | ${ai}${voice ? ' | ' + voice : ''} | вызовов ${info?.render.calls ?? '?'}, треуг ${Math.round((info?.render.triangles || 0) / 1000)}k, геом ${info?.memory.geometries ?? '?'}, шейд ${info?.programs?.length ?? '?'} | графика ${g.quality?.current?.name || '?'} | зомби ${g.zombies?.length ?? 0}, жителей ${g.castleLife?.byId?.size ?? 0}, игроков ${(g.remotes?.size ?? 0) + 1}${mem ? ' | память ' + mem : ''}${spikes.length ? ' | рывки: ' + spikes.join(' ') : ''}${this.events.length ? ' | события: ' + this.events.join('; ') : ''}`;
         this.gaps.length = 0;
         this.parts = {};
         this.events.length = 0;
