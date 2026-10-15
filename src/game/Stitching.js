@@ -378,7 +378,7 @@ export class Stitching {
                         _w.copy(iris.u).multiplyScalar(Math.cos(a) * 3).addScaledVector(iris.v, Math.sin(a) * 3);
                         g.fx.spark(mid, k % 2 ? 0xd8d0ff : 0x9f8cff, 0.09, _w, 0.5);
                     }
-                    g.sound?.playSapira?.() ?? g.sound?.playWhoosh?.();
+                    g.sound?.playSeal?.(mid); // (stone meeting stone, a soft low chime — not a duel charge's sound)
                     spell.life = 0;
                 }
             },

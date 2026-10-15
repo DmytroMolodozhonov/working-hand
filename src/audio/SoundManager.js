@@ -532,6 +532,7 @@ export class SoundManager {
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
+            ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -837,6 +838,15 @@ export class SoundManager {
             this.sounds.houseBreak.copyToChannel(data, 0);
         }
         this._playAt(this.sounds.houseBreak, position || v.position, 1.2, 14);
+    }
+
+    /** «Stitching»: the stone iris shuts — a deep thud of stone meeting stone under a soft, low chime. */
+    playSeal(position, volume = 1) {
+        if (!this.enabled || !this.context) return;
+        if (!this.sounds.seal) this.sounds.seal = this._synthKnock(90, 0.5);
+        if (!this.sounds.sealChime) this.sounds.sealChime = this._synthChime([392, 587, 784], 1.4, 3.5);
+        this._playAt(this.sounds.seal, position, 1.4 * volume, 10, 0.95 + Math.random() * 0.1);
+        this._playAt(this.sounds.sealChime, position, 0.55 * volume, 10, 1);
     }
 
     /** The house's sounds while it rises: 'wood' a log knocking into place, 'sand' the sand melting into glass, 'block' a block laid. */
