@@ -480,7 +480,8 @@ test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked 
     const notLookingP = await state();
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40);
     await look(-0.8);
-    await page.waitForFunction(() => { const g = window.__zns.game; return g.inventory.headDown; }, null, { timeout: 30000 }); // (the view eases down)
+    await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 10, 40);
+    await page.waitForFunction(() => window.__zns.game.inventory.headDown, null, { timeout: 30000 }); // (the view eases down)
     // the right hand in the right pocket, looking down: nothing (it is the wand's hand)
     await feed(page, { arms: 'hang', pocket: 'right', leftCurl: 0 }, 25, 40);
     const rightHandP = await state();
@@ -515,7 +516,7 @@ test('coin pouches on the belt\'s right side: the LEFT hand across, looking down
     const give = (n, side = 'left') => page.evaluate(([c, sd]) => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.items.takeIntoHand({ kind: 'coins', uid: 'pc' + c, count: c }, sd); }, [n, side]);
     const look = async (pitch) => {
         await page.evaluate((p) => { window.__zns.poseService.interpreter.lastHead.pitch = p; }, pitch);
-        await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 4, 40);
+        await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 10, 40);
         await page.waitForFunction((d) => window.__zns.game.inventory.headDown === d, pitch < 0, { timeout: 30000 }); // (the view eases)
     };
     const state = () => page.evaluate(() => { const g = window.__zns.game, p = g.inventory.purse; return { r: g.items.held.right ? g.items.held.right.item.count : null, l: g.items.held.left ? g.items.held.left.item.count : null, belt: p.count, bags: p.model ? p.model.children.length : 0, size: p.model ? +p.model.children[0].scale.x.toFixed(2) : 0, coins: g.inventory.coins(), shown: document.getElementById('coin-count')?.textContent, log: p.log.join(',') }; });

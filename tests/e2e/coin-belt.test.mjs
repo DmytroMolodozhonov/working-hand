@@ -36,7 +36,7 @@ test('coin pouches with a jittering camera: the LEFT hand across, looking down, 
     const state = () => page.evaluate(() => { const g = window.__zns.game, p = g.inventory.purse; return { r: g.items.held.right?.item.count ?? null, l: g.items.held.left?.item.count ?? null, belt: p.count, shown: document.getElementById('coin-count')?.textContent, log: p.log.join(',') }; });
     const look = async (pitch) => {
         await page.evaluate((p) => { window.__zns.poseService.interpreter.lastHead.pitch = p; }, pitch);
-        await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 4);
+        await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 10);
         await page.waitForFunction((d) => window.__zns.game.inventory.headDown === d, pitch < 0, { timeout: 30000 });
     };
     await page.evaluate(() => { const g = window.__zns.game; g.inventory.select(-1); g.inventory.purse.count = 0; g.__coinSounds = 0; const s = g.sound; if (s) { const f = s.playCoins.bind(s); s.playCoins = () => { g.__coinSounds++; f(); }; } });
