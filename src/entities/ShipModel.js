@@ -269,7 +269,7 @@ export class SailMesh {
         this.group = new THREE.Group();
         this.group.add(this.mesh, this.bundle);
         this.maxBulge = 0;
-        if (lateen) this.setYard({ x: 0, y: spec.yardY, z: spec.center.z - spec.w / 2 }, { x: 0, y: spec.yardY, z: spec.center.z + spec.w / 2 }, { x: 0, y: spec.yardY - spec.h, z: spec.center.z });
+        if (lateen) this.setYard(spec.tack, spec.head, spec.clew);
         this.setState(0, 0, 1, 0, 0);
     }
 
@@ -578,13 +578,10 @@ export class ShipModel {
         for (const sp of L.sails) {
             const sail = new SailMesh(sp);
             if (sp.kind === 'lateen') {
-                const m = L.masts.find((q) => q.id === sp.mast);
-                const half = sp.w / 2, ang = 0.7; // ~40° yard
-                const a = { x: 0.6, y: sp.yardY - Math.sin(ang) * half, z: m.z - Math.cos(ang) * half };
-                const b = { x: 0.6, y: sp.yardY + Math.sin(ang) * half, z: m.z + Math.cos(ang) * half };
-                const clew = { x: 0.6, y: m.deck + 3.2, z: m.z + half * 0.85 };
-                sail.setYard(a, b, clew);
-                hull.cyl(0.28, 0.28, sp.w, 0.6, sp.yardY, m.z, 0x5a3a20, Math.PI / 2 - ang, 0, 0, 6);
+                // the yard along the sail's head (the cloth hangs from it), slung beside the mast
+                const a = sp.tack, b = sp.head;
+                const ang = Math.atan2(b.y - a.y, b.z - a.z);
+                hull.cyl(0.28, 0.2, sp.w + 1.2, a.x, (a.y + b.y) / 2 + 0.25, (a.z + b.z) / 2, 0x5a3a20, Math.PI / 2 - ang, 0, 0, 6);
             }
             sail.setState(0, 0, 1, 0, 0);
             this.group.add(sail.group);

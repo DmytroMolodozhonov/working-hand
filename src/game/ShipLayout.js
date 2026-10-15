@@ -181,10 +181,21 @@ function makeLayout(C) {
         const mast = { id: m.id, z: m.z, base: lowest, deck: deckY, top, r: 0.9, yards: [] };
         solids.push({ x0: -1, x1: 1, y0: lowest - 0.5, y1: top, z0: m.z - 1, z1: m.z + 1, kind: 'mast' });
         if (m.id === 'mizzen' && C.lateenFrac > 0) {
-            // a lateen sail: a long slanting yard along the ship, the sail fore-and-aft
-            const yy = deckY + 0.42 * m.h, w = 0.62 * m.h, h = 0.4 * m.h;
+            // a lateen sail: a long yard slung slantwise along the ship beside the mast, its fore end
+            // (the tack) low, lashed down forward of the mast, the after end high over the stern; the
+            // cloth a triangle down to the clew aft, its foot above the heads at the wheel, fore-and-aft
+            const w = 0.62 * m.h, ang = 0.75, x = 1.15; // (beside the mast, not through it)
+            const foot = deckY + 4.2;
+            let z0 = m.z - 0.3 * w * Math.cos(ang);
+            z0 -= Math.max(0, z0 + w * Math.cos(ang) - (C.L / 2 - 1.5)); // (the high end stays over the stern)
+            const tack = { x, y: foot, z: z0 }, head = { x, y: foot + w * Math.sin(ang), z: z0 + w * Math.cos(ang) };
+            const clew = { x, y: foot, z: head.z - 0.6 };
+            const h = head.y - foot, yy = (tack.y + head.y) / 2;
             mast.yards.push({ y: yy, w, h, kind: 'lateen' });
-            sails.push({ id: m.id + ':lateen', mast: m.id, kind: 'lateen', yardY: yy, w, h, area: 0.5 * w * h, center: { x: 0.6, y: yy - h * 0.45, z: m.z + w * 0.12 }, normal: { x: 1, y: 0, z: 0 } });
+            sails.push({
+                id: m.id + ':lateen', mast: m.id, kind: 'lateen', yardY: yy, w, h, area: 0.5 * (clew.z - tack.z) * h, tack, head, clew,
+                center: { x, y: (tack.y + head.y + clew.y) / 3, z: (tack.z + head.z + clew.z) / 3 }, normal: { x: 1, y: 0, z: 0 },
+            });
         } else {
             for (const [k, fy, fw, fh] of [['course', 0.42, 0.5, 0.26], ['topsail', 0.70, 0.35, 0.23]]) {
                 const yy = D + fy * m.h, w = fw * m.h, h = fh * m.h;

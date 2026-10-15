@@ -7,10 +7,11 @@
  * bulkheads stop bodies, and everyone standing on it is carried along when it
  * moves, turns and rides the waves (players, zombies, animals, things, weapons).
  *
- * Sails are furled by default: «Анфёрл» (point at the sails) lets a mast's sails
- * down, «Анфёрл Максима» all of them, «Фёрл» rolls them up again. A ship only
- * moves when wind fills its sails: «Вайнд» / «Вайнд Максима» at the sails (they
- * bulge at once), and that wind dies down; now and then a natural breeze blows.
+ * Sails are furled by default: «Анфёрл» / «Анфёрл Максима» (point at the ship) lets all
+ * her sails down, «Фёрл» rolls them up again. A ship only moves when wind fills her
+ * sails: «Вайнд» / «Вайнд Максима» at the sails (they bulge forward at once; the ship is
+ * driven ahead, wherever the spell came from; Maxima jerks her forward and draws ~3× faster),
+ * and that wind dies down; now and then a natural breeze blows.
  * A ship is heavy: slow to gather way, slow to turn, it coasts for a long time.
  * The wheel is turned by a real hand on its spokes (Helm.js); the crew (Sailors.js)
  * defends its ship; Bombardo, fire and cannonballs (Cannons.js) make holes, the
@@ -45,6 +46,7 @@ const SCAN = 650; // m: ports this far are looked at
 const UNFURL_RATE = 1 / 3; // sails unroll in 3 s
 const WIND_PLAIN = 21; // m/s into the sails while «Вайнд» blows (3× the old gust)
 const WIND_MAXIMA = 42; // «Вайнд Максима» (6× the old «Вайнд»)
+const MAXIMA_KICK = 1.5; // m/s: the jerk forward when «Вайнд Максима» slams into the sails (a pinnace; less for a big ship)
 const BLOW_MANA = 1; // a second, while the wind blows into the sails
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -52,6 +54,7 @@ const _d = new THREE.Vector3();
 const _cam = new THREE.Vector3();
 const _l = { x: 0, y: 0, z: 0 };
 const _o = { x: 0, y: 0, z: 0 };
+const _gurgle = new THREE.Vector3();
 
 const angleDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -471,12 +474,8 @@ export class Ships {
         const blowing = this.auth ? !!s.blow : !!s.net?.blowing;
         // a wind cast into the sails bellies them its own way at once (its push builds up slowly,
         // and till then the sea's own wind — often from ahead in a port — must not show them aback)
-        let bx = 0, bz = 0;
-        if (blowing) {
-            const B = this.auth && s.blow ? s.blow : null;
-            const dx = B ? B.dx : s.st.spellWind?.x || 0, dz = B ? B.dz : s.st.spellWind?.z || 0;
-            if (Math.hypot(dx, dz) > 1e-3) { s.pose.dirToLocal(dx, dz, _o); bx = _o.x; bz = _o.z; }
-        }
+        // (the spell's wind drives her ahead, wherever it was cast from: the sails belly forward)
+        const bx = 0, bz = blowing ? -1 : 0;
         for (const sl of s.sails) {
             if (blowing && sl.open > 0.5 && sl.burnt < 1) sl.gust = Math.max(sl.gust, 0.9);
             const want = sl.burnt >= 1 ? sl.open : sl.target;
@@ -753,7 +752,7 @@ export class Ships {
         const hit = this.raySails(o, d, 110);
         if (!hit) return say('⛵ Покажите рукой (палочкой) на паруса корабля');
         const open = name === 'Furl' ? 0 : 1;
-        const pick = name === 'UnfurlMaxima' ? hit.ship.sails : hit.ship.sails.filter((sl) => sl.mast === hit.sail.mast);
+        const pick = hit.ship.sails; // (all the ship's sails, on every mast)
         const ids = pick.filter((sl) => sl.target !== open && sl.burnt < 1).map((sl) => sl.id);
         if (!ids.length) return say(open ? '⛵ Эти паруса уже раскрыты' : '⛵ Эти паруса уже свёрнуты');
         g.combat.pay(name);
@@ -813,7 +812,16 @@ export class Ships {
             const gain = (power > 1 ? WIND_MAXIMA : WIND_PLAIN) * Math.min(1, hitA / (0.5 * s.layout.sailArea));
             if (this.auth) {
                 const by = mine ? g.localId : casterId;
+                const fresh = !s.blow || s.blow.power < power;
                 s.blow = { by, power, gain, dx: dir.x / hl, dz: dir.z / hl, at: performance.now() };
+                // «Вайнд Максима»: a huge rush of air slams into the sails at once — the ship jerks forward
+                // and its wind is half there already (the plain «Вайнд» only starts to draw, slowly)
+                if (fresh && power > 1 && s.state !== 'wreck' && s.state !== 'sinking') {
+                    const c = Math.cos(s.st.yaw), sn = Math.sin(s.st.yaw), sw = s.st.spellWind;
+                    const k = 0.6 * gain;
+                    if (-sn * sw.x - c * sw.z < k) { sw.x = -sn * k; sw.z = -c * k; }
+                    s.st.u += MAXIMA_KICK * Math.min(1, 50 / s.layout.L);
+                }
                 s.st.tau = Infinity;
                 s.changed = true;
                 if (!this.loyalTo(s, by)) this.crew.provoke(s, by, '🏴 Вы дуете в паруса чужого корабля — матросы к бою!');
@@ -858,9 +866,13 @@ export class Ships {
         if (!b) return;
         if (performance.now() - b.at > 3000) { s.blow = null; s.st.tau = 20; return; } // (the caster went quiet)
         const sw = s.st.spellWind;
-        const k = Math.min(1, dt / 6); // (the wind in the sails builds up over several seconds)
-        sw.x += (b.dx * b.gain - sw.x) * k;
-        sw.z += (b.dz * b.gain - sw.z) * k;
+        // (the wind in the sails builds up: slowly for «Вайнд», ~3× faster for «Вайнд Максима»)
+        const k = Math.min(1, dt / (b.power > 1 ? 2 : 6));
+        // the yards are braced to the spell's wind, so wherever it is cast from, it drives the ship
+        // ahead along her own course (the sails belly forward) — never astern
+        const fx = -Math.sin(s.st.yaw), fz = -Math.cos(s.st.yaw);
+        sw.x += (fx * b.gain - sw.x) * k;
+        sw.z += (fz * b.gain - sw.z) * k;
         s.st.tau = Infinity;
     }
 
@@ -1212,7 +1224,9 @@ export class Ships {
             const n = Math.floor(rate * dt + Math.random());
             if (wy > W - 2.2) {
                 // the sea pours in over the lower edge of the hole: a thick jet into the hull
-                loud = Math.max(loud, h.r);
+                // (heard only where water really comes in — the same holes leakRate counts; a hole
+                // the waves just lick from above is silent, else it gurgled on forever)
+                if (wy < W + 0.3 && wy > W - 2.2) { loud = Math.max(loud, h.r); _gurgle.copy(_o); }
                 for (let i = 0; i < n; i++) {
                     const u = (Math.random() - 0.5) * h.r * 1.4;
                     const y = Math.min(W + 0.05, wy + h.r * 0.4) - Math.random() * 0.5;
@@ -1229,7 +1243,8 @@ export class Ships {
             }
         }
         // the gurgle of the water coming in (now and then, close by)
-        if (loud && near && (s._gurgleT = (s._gurgleT || 0) - dt) <= 0) { s._gurgleT = 1.6 + Math.random() * 1.6; this.game.sound?.playSplash?.(); }
+        // (from the hole itself: it fades with the distance, and falls silent once the hull is full)
+        if (loud && near && (s.flood || 0) < 0.98 && (s._gurgleT = (s._gurgleT || 0) - dt) <= 0) { s._gurgleT = 1.6 + Math.random() * 1.6; this.game.sound?.playSplashAt?.(_gurgle, 0.6 + 0.4 * Math.min(1, loud)); }
     }
 
     _plankFallFx(s, dt) {

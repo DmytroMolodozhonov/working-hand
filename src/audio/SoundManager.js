@@ -643,6 +643,13 @@ export class SoundManager {
         this._spell(this.sounds.splash, 1.2, 0.85 + Math.random() * 0.3);
     }
 
+    /** A splash at a place in the world (water pouring into a ship's hole): it fades with the distance. */
+    playSplashAt(position, volume = 1) {
+        if (!this.context) return;
+        if (!this.sounds.splash) this.sounds.splash = this._synthWater(0.7, true);
+        this._playAt(this.sounds.splash, position, volume, 6, 0.85 + Math.random() * 0.3);
+    }
+
     playChestOpen(position) {
         if (!this.sounds.chest) this.sounds.chest = this._synthCreak();
         this._playAt(this.sounds.chest, position, 1.2, 6);

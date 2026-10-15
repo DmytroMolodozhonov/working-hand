@@ -173,13 +173,9 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
         const sp = s.sails.find((x) => x.target === 1);
         return { masts: [...new Set(open)], opened: s.sails.filter((x) => x.target === 1).map((x) => x.open), h: m.clothHeight(), spec: sp ? sp.h : 0, all: s.sails.length };
     });
-    assert.equal(st.masts.length, 1, `one mast's sails (${st.masts})`);
+    assert.equal(st.opened.length, st.all, `all the ship's sails, on every mast (${st.masts})`);
     assert.ok(st.opened.every((o) => o > 0.99), 'they are down');
     assert.ok(st.h > 0.85 * st.spec, `the cloth hangs its full height (${st.h.toFixed(1)} of ${st.spec.toFixed(1)})`);
-    // «Анфёрл Максима»: all of them
-    assert.equal(await page.evaluate(() => window.__zns.game.castLocalSpell('анфёрл максима', true)), 'UnfurlMaxima');
-    await until(page, () => window.__ship.sails.every((s) => s.open > 0.99));
-    assert.ok(await page.evaluate(() => window.__ship.sails.every((s) => s.open > 0.99)), 'all the sails are down');
 
     // «Вайнд Максима» into the sails: they bulge, the ship moves — slowly
     await page.evaluate(() => { const g = window.__zns.game, s = window.__ship; g.cameraBaseRotation = s.st.yaw; g.character.group.rotation.y = s.st.yaw; g._lastWind = 0; });
@@ -217,8 +213,8 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
         void t0;
         return { u5: out[0], u25: out[1], held, stopped, decay: w11 / w5, w: w5 };
     });
-    assert.ok(speeds.u5 > 0.2 && speeds.u5 < 4, `slow to gather way: ${speeds.u5.toFixed(2)} m/s after 5 s`);
-    assert.ok(speeds.u25 > 5, `but it goes: ${speeds.u25.toFixed(2)} m/s after 25 s`);
+    assert.ok(speeds.u5 > 3, `«Вайнд Максима» slams into the sails: the ship jerks ahead (${speeds.u5.toFixed(2)} m/s after 5 s)`);
+    assert.ok(speeds.u25 > 10, `and goes: ${speeds.u25.toFixed(2)} m/s after 25 s`);
     assert.ok(speeds.w > 30, `«Вайнд Максима» blows hard into the sails (${speeds.w.toFixed(1)} m/s)`);
     assert.ok(speeds.held > 0.97, 'the wind keeps blowing while the spell lasts');
     assert.ok(speeds.stopped, '«стоп» stops it');
@@ -232,6 +228,27 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
         return { u0, u: s.st.u };
     });
     assert.ok(coast.u > 0.6 * coast.u0, `a heavy ship coasts (${coast.u0.toFixed(2)} → ${coast.u.toFixed(2)} in 10 s)`);
+    // a plain «Вайнд» cast from ahead of the bow (as out of a port): the sails still belly forward,
+    // the ship goes ahead — never astern — and only slowly
+    const ahead = await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship, T = window.__zns.THREE, h = window.__home;
+        s.st.x = h.x; s.st.z = h.z; s.st.yaw = h.yaw; s.st.u = s.st.v = s.st.r = 0; s.st.spellWind.x = s.st.spellWind.z = 0; s.blow = null;
+        g.ships._place(s);
+        const o = window.__w(0, s.layout.deck + 20, -s.layout.L / 2 - 15), d = s.pose.dirToWorld(0, 1, { x: 0, z: 0 });
+        g.spells.cast('Wind', new T.Vector3(o.x, o.y, o.z), new T.Vector3(d.x, 0, d.z), 'right', g.localId);
+        const blew = !!s.blow;
+        for (let i = 0; i < 50; i++) { if (s.blow) s.blow.at = performance.now(); g.ships._simulate(s, 0.1); g.ships._sails(s, 0.1, 0); }
+        const u5 = s.st.u;
+        for (let i = 0; i < 100; i++) { if (s.blow) s.blow.at = performance.now(); g.ships._simulate(s, 0.1); g.ships._sails(s, 0.1, 0); }
+        const main = s.sails.find((x) => x.id === 'main:course');
+        const r = { blew, u5, u15: s.st.u, side: main.side, bulge: s.model.sails.get('main:course').maxBulge };
+        g.stopSpells();
+        return r;
+    });
+    assert.ok(ahead.blew, 'the wind from ahead reached the sails');
+    assert.equal(ahead.side, 1, 'the sails belly forward');
+    assert.ok(ahead.u5 > 0 && ahead.u5 < 2, `a plain «Вайнд» draws slowly (${ahead.u5.toFixed(2)} m/s after 5 s)`);
+    assert.ok(ahead.u15 > 1.5, `and the ship goes ahead, not astern (${ahead.u15.toFixed(2)} m/s)`);
     // «Фёрл»: rolled up again (the ship back where I stand: the fast simulation above sailed it away without me)
     await page.evaluate(() => { const s = window.__ship, h = window.__home; s.st.x = h.x; s.st.z = h.z; s.st.yaw = h.yaw; s.st.u = s.st.v = s.st.r = 0; window.__zns.game.ships._place(s); });
     await standAt(page, 2, q.z0 + 6, 0, q.y);
@@ -240,7 +257,7 @@ test('ships: «Анфёрл» lets the sails down, «Вайнд» fills them, th
     assert.equal(furl.r, 'Furl', JSON.stringify(furl));
     await until(page, () => window.__ship.sails.filter((s) => s.target === 0).every((s) => s.open < 0.02));
     const furled = await page.evaluate(() => window.__ship.sails.filter((s) => s.target === 0).map((s) => s.open));
-    assert.ok(furled.length >= 1 && furled.every((o) => o < 0.02), 'a mast\'s sails are rolled up');
+    assert.ok(furled.length >= 1 && furled.every((o) => o < 0.02), 'the sails are rolled up');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
