@@ -28,6 +28,7 @@ import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
 import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
 import { crystalItemModel } from './CrystalModel.js';
+import { pouchModel } from './PouchModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
 import { DRAGON_KINDS } from './DragonKinds.js';
@@ -389,6 +390,7 @@ export function rollKeyItem(r = Math.random) {
     if (x < 0.76) { const t = randInt(r, 0, 2); return { kind: 'shield', uid: newUid(), type: t, magic: true, max: randInt(r, 20, 50) }; }
     if (x < 0.86) return { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) };
     if (x < 0.96) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: true, bonus: randInt(r, 1, 60), arrows: 10 };
+    if (x < 0.975) return { kind: 'coins', uid: newUid(), magic: true, count: randInt(r, 0, 40) }; // (the magic pouch: no end of coins in it — CoinBelt)
     return { kind: 'hammer', uid: newUid(), charges: 0 };
 }
 
@@ -471,7 +473,8 @@ export function describeItem(it) {
         case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Инферно», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
         case 'steak': return { title: `🍖 Жареное мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xb5651d, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`] };
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна рядом и «Create a Bed»'] };
-        case 'coins': return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу: глядя вниз, левой рукой с мешочком к правому боку (левша — наоборот)', 'Платите ими на рынке замка'] };
+        case 'coins': if (it.magic) return { title: '✨ Магический мешочек', color: 0xd4243a, lines: [`Монет: <b>${it.count || 0}</b> — влезает сколько угодно (незримое расширение)`, 'Привяжите к поясу, как обычный: монеты из обычных мешочков пересыпаются в него', 'Платите им на рынке замка — сам мешочек остаётся вашим'] };
+            return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу: глядя вниз, левой рукой с мешочком к правому боку (левша — наоборот)', 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
         case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмитесь за него <b>обеими руками</b> и разломите (разведите руки или поверните) — мана +<b>5</b> к максимуму'] };
         case 'flask': return { title: '⚗️ Пустая колба', color: 0xcfe9f2, lines: [`Колб: <b>${it.count || 1}</b>`, 'Окуните её в котёл с готовым зельем — она наполнится'] };
@@ -768,17 +771,6 @@ function appleModel(it, red = false) {
     return g;
 }
 
-/** A pouch of coins (tied at the neck: the coins are inside, not seen). */
-function coinsModel() {
-    const g = new THREE.Group();
-    const sack = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), mat(0x8b5a2b));
-    sack.scale.set(1, 0.85, 1);
-    g.add(sack);
-    g.add(cyl(0.05, 0.07, 0.07, mat(0x7a4a22), 0, 0.12));
-    g.add(cyl(0.055, 0.055, 0.015, mat(0xc9a227), 0, 0.1)); // (the cord)
-    return g;
-}
-
 function breadModel() {
     const g = new THREE.Group();
     g.add(box(0.3, 0.12, 0.15, mat(0xc68a3e)));
@@ -838,7 +830,7 @@ function buildItemModel(it) {
         case 'meat': return meatModel(false);
         case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.12, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);
-        case 'coins': return coinsModel();
+        case 'coins': return pouchModel(it); // (the plain leather pouch / the magic velvet one: PouchModel.js)
         case 'bread': return breadModel();
         case 'cheese': return cheeseModel();
         case 'pie': return pieModel();

@@ -550,6 +550,7 @@ export class Game {
                     { kind: 'scroll', uid: 'cr2', stat: 'spell', spell: 'Thunderwave' },
                     { kind: 'scroll', uid: 'cr3', stat: 'hp', amount: 3 },
                     { kind: 'crystal', uid: 'cmc0', count: 1 }, // a mana crystal (break it with both hands)
+                    { kind: 'coins', uid: 'cmp0', magic: true, count: 50 }, // the magic coin pouch (no end of coins in it: CoinBelt)
                 ];
                 magic.forEach((it, i) => {
                     const x = -12.5 + i * 5, z = -18;
@@ -2608,10 +2609,10 @@ export class Game {
         this.active = true;
         this.lastTime = performance.now();
         this.inventory?.ensureStarterWand(); // (every wizard has a wand — the plain wooden one at least)
-        // Creative: a pouch of 100 coins on the belt to start with (once; a world played before keeps its own coins)
+        // Creative: the magic pouch with 100 coins on the belt to start with (once; a world played before keeps its own coins)
         if (this.config.mode === 'creative' && !this._playerRestored && !this._startCoins && this.inventory?.purse && this.inventory.coins() === 0) {
             this._startCoins = true;
-            this.inventory.purse.add(100);
+            this.inventory.purse.tieMagic({ kind: 'coins', magic: true, uid: 'cmp-start', count: 100 });
         }
         this.prewarm();
         // The microphone listens all game long: shield (arm forward), water

@@ -29,7 +29,7 @@ import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand } from './ItemTypes.js';
 import { WandBelt } from './WandBelt.js';
-import { CoinBelt, BELT_MAX } from './CoinBelt.js';
+import { CoinBelt } from './CoinBelt.js';
 import { armorIcon } from './Armor.js';
 import { armorName } from './ArmorTypes.js';
 
@@ -198,14 +198,14 @@ export class Inventory {
             if (!h || h.item.kind !== 'coins' || left <= 0) continue;
             const k = Math.min(left, h.item.count || 0);
             h.item.count -= k; left -= k;
-            if (h.item.count <= 0) this.game.items.releaseHand(side);
+            if (h.item.count <= 0 && !h.item.magic) this.game.items.releaseHand(side); // (the magic pouch stays, empty: a thing of its own)
         }
         for (let i = 0; i < this.slots.length && left > 0; i++) {
             const s = this.slots[i];
             if (!s || s.kind !== 'coins') continue;
             const k = Math.min(left, s.count || 0);
             s.count -= k; left -= k;
-            if (s.count <= 0) this.slots[i] = null;
+            if (s.count <= 0 && !s.magic) this.slots[i] = null;
         }
         if (left > 0) left -= this.purse.spend(left); // (the last pouch on the belt first)
         this._render();
@@ -229,10 +229,10 @@ export class Inventory {
 
     /** A found thing into a slot (food stacks up to 10, coins up to 500). */
     storeItem(item) {
-        const max = ITEM_INFO[item.kind]?.stack;
+        const max = item.magic && item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack; // (the magic pouch: a thing of its own, never stacked)
         if (max) {
             for (const s of this.slots) {
-                if (s && s.kind === item.kind && (s.count || 1) < max) {
+                if (s && s.kind === item.kind && !s.magic && (s.count || 1) < max) {
                     const n = Math.min(max - (s.count || 1), item.count || 1);
                     s.count = (s.count || 1) + n;
                     item.count = (item.count || 1) - n;
@@ -344,7 +344,7 @@ export class Inventory {
         for (const side of sides) {
             const h = g.items?.held[side];
             if (!h || h.item.kind === 'wand') continue; // (the wand goes only to the waistband: WandBelt)
-            if (h.item.kind === 'coins' && this.purse.count < BELT_MAX) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
+            if (h.item.kind === 'coins' && this.purse.canTie(h.item)) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
             if (this.storeItem(it)) this._fx('🎒 ' + (ITEM_INFO[it.kind]?.name || 'Предмет') + ' в ячейке');

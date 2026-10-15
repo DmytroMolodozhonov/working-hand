@@ -34,6 +34,7 @@ import * as THREE from 'three';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
+import { MAGIC_POUCH_PRICE, makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
 import { detectOrder, toolsFor } from '../ai/TalkActions.js';
@@ -47,8 +48,8 @@ const VOICE = 18; // m: a villager's voice carries this far
 const SHOUT_RANGE = 55; // m: a battle cry / a call for help carries much farther
 /** The master of cauldrons and potions (a wizards' house's stall): flasks and ingredients (the cauldron stands beside: Cauldrons.js). */
 const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', price: 35 }, { kind: 'crystal', price: 70 }];
-/** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, or a piece of magic armour (ArmorTypes). */
-const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }];
+/** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, a piece of magic armour (ArmorTypes), a magic coin pouch (CoinBelt). */
+const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }, { kind: 'magicPouch', price: MAGIC_POUCH_PRICE, fixed: true }];
 const _v = new THREE.Vector3();
 
 /**
@@ -98,12 +99,13 @@ export function restAfter(reply, head) {
 }
 
 /** Words a good is called by (its name's words, and what people say for it). */
-const ALIAS = { steak: ['мяс', 'стейк', 'жарен'], meat: ['сыро'], redApple: ['яблок', 'красн'], wool: ['шерст', 'пряж'], glass: ['стекл', 'осколк'], flask: ['колб', 'фляг', 'бутыл', 'склян'], crystal: ['кристал'], apple: ['яблок', 'золот'], arrows: ['стрел'], bow: ['лук'], shield: ['щит'], cheese: ['сыр'], bread: ['хлеб'], pie: ['пирог', 'пирож'] };
+const ALIAS = { magicPouch: ['мешоч', 'магич', 'кошел', 'кошел'], steak: ['мяс', 'стейк', 'жарен'], meat: ['сыро'], redApple: ['яблок', 'красн'], wool: ['шерст', 'пряж'], glass: ['стекл', 'осколк'], flask: ['колб', 'фляг', 'бутыл', 'склян'], crystal: ['кристал'], apple: ['яблок', 'золот'], arrows: ['стрел'], bow: ['лук'], shield: ['щит'], cheese: ['сыр'], bread: ['хлеб'], pie: ['пирог', 'пирож'] };
 const normWords = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
 /** How well this text names this good: the letters of its words matched (0 — not named). */
 export function nameScore(text, item) {
     const words = normWords(text);
-    const stems = [...(ALIAS[item.kind] || normWords(ITEM_INFO[item.kind]?.name || '').filter((w) => w.length >= 3).map((w) => w.slice(0, Math.max(3, w.length - 2))))];
+    const kind = item.kind === 'coins' && item.magic ? 'magicPouch' : item.kind;
+    const stems = [...(ALIAS[kind] || normWords(ITEM_INFO[item.kind]?.name || '').filter((w) => w.length >= 3).map((w) => w.slice(0, Math.max(3, w.length - 2))))];
     if (item.kind === 'weapon') stems.push(item.type === 'axe' ? 'топор' : 'меч');
     let n = 0;
     for (const st of stems) if (words.some((w) => w.startsWith(st) && (st.length > 3 || w.length <= st.length + 2))) n += st.length;
@@ -121,7 +123,7 @@ export function namedGood(text, goods) {
     return best;
 }
 
-const nameOf = (it) => (it.kind === 'armor' || it.kind === 'robe' ? armorName(it).toLowerCase() : it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
+const nameOf = (it) => (it.kind === 'coins' && it.magic ? 'магический мешочек' : it.kind === 'armor' || it.kind === 'robe' ? armorName(it).toLowerCase() : it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
 
 export class CastleTalk {
     constructor(game, life) {
@@ -566,7 +568,7 @@ export class CastleTalk {
         const st = def.stalls?.[i], out = [];
         if (!st?.counter) return out;
         for (const L of this.game.items.loose.values()) {
-            if (L.item.kind === 'coins' && !L.hover && !L.accio && onCounter(st, L.model.position) && L.vel.lengthSq() <= 0.05) out.push(L);
+            if (L.item.kind === 'coins' && !L.item.shop && !L.hover && !L.accio && onCounter(st, L.model.position) && L.vel.lengthSq() <= 0.05) out.push(L);
         }
         return out;
     }
@@ -620,10 +622,11 @@ export class CastleTalk {
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
                     // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
-                    const pick = stall.potions ? (k === 2 ? WIZARD_RARE[((n % 3) + 3) % 3] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
+                    const pick = stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
                     const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
-                    const item = pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
+                    const item = pick.kind === 'magicPouch' ? { ...makeMagicPouch(newUid()), shop: { stall: key, price } }
+                        : pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
                         : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
                             : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
                     if (pick.kind === 'shield') { item.type = pick.type || 0; item.magic = false; item.max = 0; delete item.count; }
@@ -735,7 +738,7 @@ export class CastleTalk {
     _pursePay(v) {
         const P = this.purse;
         const L = P && P.v === v ? this.game.items.loose.get(P.uid) : null;
-        if (L && L.item.kind === 'coins') return L;
+        if (L && L.item.kind === 'coins' && !L.item.shop) return L;
         // (any pouch lying still on his counter: the one he greeted may have been taken back, another put)
         return this._trader(v) ? this._counterCoins(v.cs.def, v.entry.stall)[0] || null : null;
     }
@@ -759,7 +762,7 @@ export class CastleTalk {
     pay(coinUid, goodUid, by) {
         const g = this.game, I = g.items;
         const C = I.loose.get(coinUid), G = I.loose.get(goodUid);
-        if (!C || !G || C.item.kind !== 'coins' || !G.item.shop || G.item.shop.paid) return;
+        if (!C || !G || C.item.kind !== 'coins' || C.item.shop || !G.item.shop || G.item.shop.paid) return;
         const [cid, s] = G.item.shop.stall.split(':s');
         const cs = this.life.castles.get(cid);
         const v = cs ? this._merchantOf(cs.def, +s) : null;
@@ -774,10 +777,15 @@ export class CastleTalk {
             return;
         }
         // he takes the money with his hand (the whole pouch — or what it costs, the rest left lying)
-        const at = C.model.position.clone();
+        // (a magic pouch is never his: he takes the coins out of it, and it stays lying there with the change in it)
+        const at = C.model.position.clone(), magic = purses.find((L) => L.item.magic), mAt = magic?.model.position.clone();
+        const others = purses.filter((L) => L !== magic && L.item.magic);
         for (const L of purses) I.pickUp(L.item.uid, '#merchant', 'right');
         const rest = have - price;
-        if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
+        if (magic) {
+            I.spawnLoose(makeMagicPouch(newUid(), rest), mAt);
+            for (const L of others) I.spawnLoose(makeMagicPouch(newUid(), 0), L.model.position.clone()); // (two magic pouches put there: both stay his buyer's)
+        } else if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
         v.giveT = 1.2;
         G.item.shop.paid = true;
         // he pushes it to the very edge of the counter, before the buyer: there a hand takes it
@@ -852,7 +860,7 @@ export class CastleTalk {
                 let found = null;
                 // my pouch of coins put down on the counter: «what do you want?»
                 for (const L of g.items.loose.values()) {
-                    if (L.item.kind !== 'coins' || L.hover || !on(L.model.position) || L.vel.lengthSq() > 0.05) continue;
+                    if (L.item.kind !== 'coins' || L.item.shop || !(L.item.count > 0) || L.hover || !on(L.model.position) || L.vel.lengthSq() > 0.05) continue;
                     if (this.purse?.uid !== L.item.uid) {
                         this.purse = { uid: L.item.uid, v };
                         if (performance.now() - (v.talkedAt || -1e9) < 6000) break; // (the change he just left: no new question)

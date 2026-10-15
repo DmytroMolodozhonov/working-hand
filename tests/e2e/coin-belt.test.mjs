@@ -39,7 +39,7 @@ test('coin pouches with a jittering camera: the LEFT hand across, looking down, 
         await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 10);
         await page.waitForFunction((d) => window.__zns.game.inventory.headDown === d, pitch < 0, { timeout: 30000 });
     };
-    await page.evaluate(() => { const g = window.__zns.game; g.inventory.select(-1); g.inventory.purse.count = 0; g.__coinSounds = 0; const s = g.sound; if (s) { const f = s.playCoins.bind(s); s.playCoins = () => { g.__coinSounds++; f(); }; } });
+    await page.evaluate(() => { const g = window.__zns.game; g.inventory.select(-1); g.inventory.purse.takeAll(); g.__coinSounds = 0; const s = g.sound; if (s) { const f = s.playCoins.bind(s); s.playCoins = () => { g.__coinSounds++; f(); }; } });
     await give(40);
     // lowered, hanging arms, arms swinging as in walking (the hand passing the hip), across NOT looking down: it stays in the hand
     await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 30);
@@ -77,7 +77,7 @@ test('coin pouches with a jittering camera: the LEFT hand across, looking down, 
     const sounds = await page.evaluate(() => window.__zns.game.__coinSounds);
     // a left-hander (the setting): the right hand across to the LEFT hip ties it on; the left hand at its own hip never
     await look(0);
-    await page.evaluate(() => { const g = window.__zns.game; for (const x of ['left', 'right']) g.items.releaseHand(x); g.inventory.purse.count = 0; const sel = document.getElementById('handedness'); sel.value = 'left'; sel.dispatchEvent(new Event('change')); });
+    await page.evaluate(() => { const g = window.__zns.game; for (const x of ['left', 'right']) g.items.releaseHand(x); g.inventory.purse.takeAll(); const sel = document.getElementById('handedness'); sel.value = 'left'; sel.dispatchEvent(new Event('change')); });
     await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 10);
     await look(-0.8);
     await give(15, 'left');
@@ -96,6 +96,28 @@ test('coin pouches with a jittering camera: the LEFT hand across, looking down, 
     assert.ok(sounds >= 2 || !(await page.evaluate(() => !!window.__zns.game.sound?.enabled)), 'the coins jingle when tied on (' + sounds + ')');
     assert.ok(lefty1.l === 15 && lefty1.belt === 0, 'a left-hander\'s left hand never ties it on ' + JSON.stringify(lefty1));
     assert.ok(lefty2.r === null && lefty2.belt === 15, 'a left-hander\'s right hand across to the left hip: tied on ' + JSON.stringify(lefty2));
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('the magic pouch: on the belt from the start in Creative; a plain pouch tied on is emptied into it (no 300 limit); taken off whole; seen by the others', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const start = await page.evaluate(() => { const p = window.__zns.game.inventory.purse; return { magic: p.magic, count: p.count, model: p.model?.children.length ?? 0 }; });
+    await page.evaluate(() => { window.__zns.poseService.interpreter.lastHead.pitch = -0.8; });
+    await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0.9 }, 10);
+    await page.waitForFunction(() => window.__zns.game.inventory.headDown === true, null, { timeout: 30000 });
+    await page.evaluate(() => { const g = window.__zns.game; g.inventory.select(-1); g.inventory.purse.count = 400; g.items.takeIntoHand({ kind: 'coins', uid: 'mp-plain', count: 60 }, 'left'); });
+    await feedNoisy(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 20);
+    const tied = await page.evaluate(() => { const g = window.__zns.game; return { l: g.items.held.left?.item.uid ?? null, belt: g.inventory.purse.count, sent: g.inventory.purse.model?.children.length ?? 0 }; });
+    await feedNoisy(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 15);
+    await feedNoisy(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0 }, 8);
+    await feedNoisy(page, { arms: 'hang', purse: 'cross', rightCurl: 0, leftCurl: 0.9 }, 25);
+    const taken = await page.evaluate(() => { const g = window.__zns.game, it = g.items.held.left?.item; return { magic: !!it?.magic, count: it?.count ?? null, belt: g.inventory.purse.count, onBelt: g.inventory.purse.any }; });
+    assert.deepEqual(start, { magic: true, count: 100, model: 1 }, 'Creative: the magic pouch with 100 coins on the belt');
+    assert.deepEqual(tied, { l: null, belt: 460, sent: 1 }, 'the plain pouch emptied into it, no limit: ' + JSON.stringify(tied));
+    assert.deepEqual(taken, { magic: true, count: 460, belt: 0, onBelt: false }, 'taken off whole: ' + JSON.stringify(taken));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

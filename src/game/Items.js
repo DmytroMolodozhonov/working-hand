@@ -86,7 +86,7 @@ const GRIPPED = {
     bronzeHorn: { axis: 'body', pose: 'thick', at: [0.13, -0.155], turn: true },
     minotaurHorn: { axis: 'body', pose: 'ball', at: [0.2, -0.272] },
     arrows: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true },
-    coins: { axis: 'hang', pose: 'neck', at: [0.13, -0.17], top: 0.02, off: 0.25 },
+    coins: { axis: 'hang', pose: 'neck', at: [0.13, -0.17], top: 0.086, off: 0.12 }, // (the fist round the neck, under the cord: PouchModel — the frill out above it)
     backpack: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.032 }, // (by its loop)
     armor: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.08 }, // (by the leather loop on its top: ArmorLook)
     robe: { axis: 'hang', pose: 'hook', at: [0.34, -0.145], top: 0.08 }, // (by its collar's loop)
@@ -851,13 +851,14 @@ export class ItemSystem {
         }
         // a pouch of money: into the hand (to be tied on the belt's right side: CoinBelt); «Gather»
         // or both hands busy — straight onto the belt (what does not fit — into a slot)
-        if (item.kind === 'coins') {
+        if (item.kind === 'coins' && !item.shop) { // (a magic pouch for sale on a counter: a good, not money)
             const g = this.game, purse = g.inventory.purse;
             const n = item.count || 0;
             const busy = (s) => !!(this.held[s] || g.weapons?.hands?.[s]?.held);
             if (purse && (side === 'slot' || (busy('right') && busy('left')))) {
+                if (item.magic && purse.tieMagic(item)) { g.hud.setVoice?.(`✨ Магический мешочек на поясе (всего ${g.inventory.coins()} монет)`, true); return; }
                 item.count = purse.add(n);
-                if (item.count <= 0 || g.inventory.storeItem(item)) { g.hud.setVoice?.(`💰 +${n} монет (всего ${g.inventory.coins()})`, true); return; }
+                if ((item.count <= 0 && !item.magic) || g.inventory.storeItem(item)) { g.hud.setVoice?.(`💰 +${n} монет (всего ${g.inventory.coins()})`, true); return; } // (a second magic pouch, emptied: into a slot)
             } else if (this.takeIntoHand(item, side) || this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
                 g.hud.setVoice?.(`💰 Мешочек: ${n} монет — приложите руку с ним к поясу справа, чтобы привязать`, true);
                 return;
@@ -1099,7 +1100,7 @@ export class ItemSystem {
         if (!r) return;
         const cur = this.remoteHeld.get(id) || {};
         if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); cur[side].model.parent?.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
-        if (item && side === 'purse') { const model = makePurseModel(item.count || 0, !!item.left); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body)
+        if (item && side === 'purse') { const model = makePurseModel(item.count || 0, !!item.left, !!item.magic); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body; the magic pouch — one)
         else if (item) { const model = makeItemModel(item); g.scene.add(model); cur[side] = { item, model }; }
         this.remoteHeld.set(id, cur);
     }
@@ -1150,7 +1151,7 @@ export class ItemSystem {
 
     /** One model of each kind, for compiling the shaders while loading. */
     sampleModels() {
-        return [{ kind: 'armor', piece: 'helmet', magic: true }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true }, { kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'iceRod' }, { kind: 'apple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
+        return [{ kind: 'armor', piece: 'helmet', magic: true }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true }, { kind: 'wand', model: 4, color: 0x8844ff }, { kind: 'scroll' }, { kind: 'shield', type: 2, magic: true }, { kind: 'backpack', color: 0x7a4a24 }, { kind: 'bow', type: 0, magic: true }, { kind: 'hammer' }, { kind: 'iceRod' }, { kind: 'apple' }, { kind: 'meat' }, { kind: 'coins' }, { kind: 'coins', magic: true }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }].map((it) => makeItemModel(it));
     }
 
     /** Everything this player carries (for the save). */

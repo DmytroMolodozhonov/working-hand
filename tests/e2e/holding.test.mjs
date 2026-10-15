@@ -525,7 +525,7 @@ test('coin pouches on the belt\'s right side: the LEFT hand across, looking down
         await page.waitForFunction((d) => window.__zns.game.inventory.headDown === d, pitch < 0, { timeout: 30000 }); // (the view eases)
     };
     const state = () => page.evaluate(() => { const g = window.__zns.game, p = g.inventory.purse; return { r: g.items.held.right ? g.items.held.right.item.count : null, l: g.items.held.left ? g.items.held.left.item.count : null, belt: p.count, bags: p.model ? p.model.children.length : 0, size: p.model ? +p.model.children[0].scale.x.toFixed(2) : 0, coins: g.inventory.coins(), shown: document.getElementById('coin-count')?.textContent, log: p.log.join(',') }; });
-    await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.inventory.select(-1); g.inventory.purse.count = 0; });
+    await page.evaluate(() => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.inventory.select(-1); g.inventory.purse.takeAll(); });
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 20, 40);
     const empty = await state();
     // a pouch in the RIGHT hand at the pouches, looking down: the right hand never ties it on

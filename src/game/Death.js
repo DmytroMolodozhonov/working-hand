@@ -26,7 +26,6 @@
 
 import * as THREE from 'three';
 import { RESOURCE } from './Inventory.js';
-import { purseBags } from './CoinBelt.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
 import { newUid } from './ItemTypes.js';
@@ -180,7 +179,8 @@ export class DeathSystem {
         const keep = []; // (the High Mage's suit stays with its owner: Achievements.js)
         if (it) for (const side of ['right', 'left']) if (it.held[side]) { const x = it.releaseHand(side); (x?.archmage ? keep : held).push(x); }
         // the coin pouches on the belt drop too, each as it was (CoinBelt)
-        if (inv?.purse?.count > 0) { for (const c of purseBags(inv.purse.count)) held.push({ kind: 'coins', count: c }); inv.purse.count = 0; }
+        // (the magic pouch drops whole, with all its coins in it)
+        if (inv?.purse?.any) held.push(...inv.purse.takeAll());
         const slots = inv ? inv.slots.map((x) => (x?.archmage ? (keep.push(x), null) : x)) : [];
         held.push(...(g.armor?.takeOffAll() || [])); // (the armour and the robe worn drop too)
         let backpack = null;

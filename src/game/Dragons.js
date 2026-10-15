@@ -613,13 +613,13 @@ export class Dragons {
         const near = (p) => p && hp.distanceTo(p) < 0.4;
         let put = 0, where = '';
         if (pouch?.kind === 'coins' && near(g.character.getHandWorldPosition(other, _v2))) {
-            const k = Math.max(0, Math.min(n, POUCH - (pouch.count || 0)));
+            const k = pouch.magic ? n : Math.max(0, Math.min(n, POUCH - (pouch.count || 0))); // (the magic pouch: no end to it)
             pouch.count = (pouch.count || 0) + k;
-            put = k; where = `в мешочек (в нём ${pouch.count})`;
+            put = k; where = `в ${pouch.magic ? 'магический ' : ''}мешочек (в нём ${pouch.count})`;
             inv?._render?.();
-        } else if (inv?.purse && inv.purse.count > 0 && g.currentPose?.purse?.off === true && inv.headDown && side !== (g.dom || 'right')) { // (the pouches are the other hand's: CoinBelt)
+        } else if (inv?.purse && inv.purse.any && g.currentPose?.purse?.off === true && inv.headDown && side !== (g.dom || 'right')) { // (the pouches are the other hand's: CoinBelt)
             const rest = inv.purse.add(n);
-            put = n - rest; where = `в мешочки на поясе (${inv.purse.count})`;
+            put = n - rest; where = inv.purse.magic ? `в магический мешочек на поясе (${inv.purse.count})` : `в мешочки на поясе (${inv.purse.count})`;
             inv._render?.();
         }
         n -= put;
