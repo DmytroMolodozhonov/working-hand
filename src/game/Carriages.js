@@ -40,6 +40,8 @@
 import * as THREE from 'three';
 import { Chest } from '../entities/Chest.js';
 import { BLOCK } from '../world/Terrain.js';
+import { crowdNear } from './CrowdSources.js';
+import { avoidStep } from './Avoid.js';
 
 export const CART = {
     LEN: 6.6, WID: 3.6, FLOOR: 1.75, SIDE: 0.85, WHEEL_R: 1.2,
@@ -406,6 +408,7 @@ export class Carriages {
         if (c.thinkT <= 0 && want > 0) {
             c.thinkT = 0.5;
             c.aim = this._chooseHeading(c, tx, tz, o);
+            if (c.aim != null) c.aim = this._roundOthers(c, c.aim, d);
         }
         // somebody in front of the horses: wait
         if (want > 0 && this._blockedAhead(c)) { want = 0; c.waitT = (c.waitT || 0) + dt; } else c.waitT = 0;
@@ -448,6 +451,21 @@ export class Carriages {
     }
 
     /** A body (a player, a person, an animal that is not its own horse) right in front of the horses. */
+    /**
+     * Somebody on the road ahead (a man, a beast, another cart, a monster): the driver steers round
+     * them early, with the cart's width to spare (Avoid.js); no way past — _blockedAhead stops it.
+     */
+    _roundOthers(c, aim, d) {
+        const ux = -Math.sin(aim), uz = -Math.cos(aim);
+        const near = crowdNear(this.game, c.x, c.y ?? 0, c.z, 16, c, 3, this._near || (this._near = []))
+            .filter((b) => b.ref !== c && b.ref?.cart !== c && b.ref?.cart?.id !== c.id);
+        if (!near.length) return aim;
+        // (from the horses' heads: the front of the team is what meets them first)
+        const f = cartToWorld(c.x, c.z, c.yaw, 0, CART.HORSE_Z);
+        const a = avoidStep(f, { x: ux, z: uz }, near, { r: CART.WID / 2, speed: Math.max(1, c.spd), look: 12, maxF: d });
+        return a.wait || !a.by ? aim : Math.atan2(-a.x, -a.z);
+    }
+
     _blockedAhead(c) {
         const g = this.game;
         const f = cartToWorld(c.x, c.z, c.yaw, 0, CART.HORSE_Z - 4.2);

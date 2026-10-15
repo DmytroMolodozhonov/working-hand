@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, BASE_COLORS } from '../world/Terrain.js';
 import { creditKill } from './Mana.js';
 import { avoidStep } from './Avoid.js';
+import { crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget } from './FaceTarget.js';
 import { skeletonModel, skeletonDamage, graveOnRay, graveClosed, SKEL } from './Skeletons.js';
 
@@ -796,6 +797,8 @@ export class LivingTrees {
                 to.normalize();
                 // round the people in its way (its master above all), never through them
                 const people = this._people(t, mp);
+                // (and every other creature on its way: villagers, beasts, zombies, other trees — Crowd.js)
+                for (const b of crowdNear(g, p.x, p.y, p.z, 6 + 3 * s, t, 3, this._crowdNear || (this._crowdNear = []))) if (b.kind !== 'player') people.push(b);
                 if (people.length) { const a = avoidStep(p, to, people, { r: ALIVE.BODY_R * s, look: 3 + 2 * s, maxF: d }); if (!a.wait) to.set(a.x, 0, a.z); else to.set(0, 0, 0); }
                 p.addScaledVector(to, step);
                 g.collision?.resolveCylinder?.(p, 0.95 * s, p.y, 3.0, 1.05);

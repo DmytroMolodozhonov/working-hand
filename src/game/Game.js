@@ -6,6 +6,7 @@
  * ones from main.js; see the README for the list of fixes.
  */
 
+import { crowdStep } from './CrowdSources.js';
 import * as THREE from 'three';
 import { VoiceGate } from './VoiceGate.js';
 import { VoxelWorld, MAP_CELL } from '../world/World.js';
@@ -3072,6 +3073,7 @@ export class Game {
             // held up by «Вингардиум Левиоса»: Levitation carries it (it can't walk or bite)
             if (z.lev) { z._spinHalo?.(dt); continue; }
             const target = z.dummy ? null : this._zombieTarget(z);
+            if (!z.steer) z.steer = (me, p, ux, uz, d, speed, sdt) => crowdStep(this, me, p, ux, uz, d, { r: 0.5, speed, dt: sdt });
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
             if (z.dummy && !z.isDead && !z.isFrozen && !z.isStunned && !(z.stunTimer > 0)) {
                 // pushed by a blow, it steps back to its place (stands on the spot)

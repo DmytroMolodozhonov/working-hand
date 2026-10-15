@@ -27,6 +27,8 @@
  *    (`drg` messages). Every computer burns its own player in the flame. Saved with the world.
  */
 
+import { crowdStep } from './CrowdSources.js';
+import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { DRAGON_HP, DRAGON_KINDS, KIND_IDS, DRAGON, rollDragon, flameReach, dragonDamage, isFire, rollHoard, HANDFUL, dragonWand, dragonEgg } from './DragonKinds.js';
 import { dragonModel, poseDragon, BODY, SCALE } from './DragonModel.js';
@@ -889,8 +891,15 @@ export class Dragons {
      */
     _walkTo(d, x, z, speed, dt, L, level, stopAt = 0) {
         const p = d.model.position;
-        const dx = x - p.x, dz = z - p.z, dist = Math.hypot(dx, dz);
+        let dx = x - p.x, dz = z - p.z;
+        const dist = Math.hypot(dx, dz);
         if (dist <= stopAt) return 0;
+        // a great body on its feet goes round the others on its way too (Crowd.js); in its lair it keeps to it
+        if (speed > 0 && dist > 0.1) {
+            const a = crowdStep(this.game, d, p, dx / dist, dz / dist, dist - stopAt, { r: BODY_R.dragon * (d.size || 1) / 1.25, speed, dt, look: 6, dy: 5 });
+            if (!a) return dist;
+            dx = a.x * dist; dz = a.z * dist;
+        }
         const want = Math.atan2(-dx, -dz);
         const a = wrap(want - d.model.rotation.y);
         const step = DRAGON.TURN * d.react * dt;

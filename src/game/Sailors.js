@@ -29,6 +29,7 @@ import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { registerKind } from './CreatureImpact.js';
 import { avoidStep } from './Avoid.js';
+import { numId, makeWayStep, askWay } from './Crowd.js';
 import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 const SAILOR_TURN = 7; // rad/s — a sailor turning to his foe on deck (FaceTarget: «лицом к цели»)
@@ -1003,9 +1004,15 @@ export class Sailors {
         const others = this._others(s, v);
         if (others.length) {
             const room = (x, z) => { const f = floorAt(L, x, z, v.l.y + 1.1); return f !== null && Math.abs(f - v.l.y) < 1.2 && Math.abs(x) < hullHalfWidth(L, z, Math.max(0.2, f)) - 0.9; };
-            const a = avoidStep(v.l, { x: ux, z: uz }, others, { maxF: d, room });
-            if (a.wait && (v.waitT = (v.waitT || 0) + dt) < 1.6) { v.speed = 0; v.lyaw = Math.atan2(-dx, -dz); return; }
-            if (!a.wait) v.waitT = 0;
+            // (sees where his mates are going: two meeting both keep right — Avoid.js; one standing in
+            // the way is asked to step aside — «посторонись»; the deck is narrow and moving, so after a
+            // moment he edges past anyway, the bodies' push keeping them apart)
+            const a = avoidStep(v.l, { x: ux, z: uz }, others, { maxF: d, room, speed });
+            if (a.wait) {
+                v.waitT = (v.waitT || 0) + dt;
+                if (v.waitT > 0.4 && a.by?.ref) askWay(a.by, v.l, { x: ux, z: uz });
+                if (v.waitT < 1.6) { v.speed = 0; v.lyaw = Math.atan2(-dx, -dz); return; }
+            } else v.waitT = 0;
             ux = a.x; uz = a.z;
         }
         // stuck against something (a bulkhead, the stair's side, a gun) and getting nowhere: he notices,
@@ -1252,7 +1259,9 @@ export class Sailors {
         for (const o of this.crews.get(s.id) || []) {
             if (o === v || o.dead || o.overboard || Math.abs(o.l.y - v.l.y) > 2.5) continue;
             if (Math.abs(o.l.x - v.l.x) > 4 || Math.abs(o.l.z - v.l.z) > 4) continue;
-            out.push({ x: o.l.x, z: o.l.z, r: 0.5 });
+            // (where he's going too, and who he is: two meeting both keep right; in a narrow spot one gives way)
+            const sp = o.speed || 0;
+            out.push({ x: o.l.x, z: o.l.z, r: 0.5, vx: -Math.sin(o.lyaw || 0) * sp, vz: -Math.cos(o.lyaw || 0) * sp, id: numId(o.id), ref: o });
         }
         const g = this.game;
         if (this.ships.me?.ship === s) { const m = this.ships.me.l; if (Math.abs(m.y - 2 - v.l.y) < 2.5) out.push({ x: m.x, z: m.z, r: 1.1 }); } // (round a player wide: clear of his hands)
@@ -1266,7 +1275,7 @@ export class Sailors {
             if (b.y1 <= v.l.y + 0.6 || b.y0 >= v.l.y + 3.5) continue;
             const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
             if (Math.abs(cx - v.l.x) > 4 || Math.abs(cz - v.l.z) > 4) continue;
-            out.push({ x: cx, z: cz, r: Math.hypot(b.x1 - b.x0, b.z1 - b.z0) / 2 });
+            out.push({ x: cx, z: cz, r: Math.hypot(b.x1 - b.x0, b.z1 - b.z0) / 2, thing: true }); // (a thing: its own walls stop him — Crowd.steer)
         }
         return out;
     }
@@ -1573,7 +1582,15 @@ export class Sailors {
      * Bodies are solid: sailors never walk through each other (or through a player on the deck);
      * the one in the way is stepped round.
      */
-    _separate(s, list) {
+    _separate(s, list, dt = 1 / 60) {
+        // asked to make way (standing in a mate's way on a narrow deck): a step aside, where there's deck
+        for (const v of list) {
+            if (v.dead || v.overboard || !v._makeWay) continue;
+            const mw = makeWayStep(v, dt);
+            const l = mw ? Math.hypot(mw.x, mw.z) : 0;
+            const mv = l > 0 && this._tryMove(v, s.layout, mw.x / l, mw.z / l, l, _m1);
+            if (mv && Math.abs(mv.x) < hullHalfWidth(s.layout, mv.z, Math.max(0.2, mv.y)) - 0.7) { v.l.x = mv.x; v.l.y = mv.y; v.l.z = mv.z; }
+        }
         const bodies = [];
         for (const p of this._playersOn(s)) bodies.push({ l: p, fixed: true, id: p.id });
         for (const v of list) if (!v.dead && !v.overboard) bodies.push({ l: v.l, v });

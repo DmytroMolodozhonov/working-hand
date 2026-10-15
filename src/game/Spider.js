@@ -19,6 +19,8 @@
  * Multiplayer: the host moves it and decides; everybody sees it.
  */
 
+import { crowdStep } from './CrowdSources.js';
+import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { rollWand, rollLoot, newUid } from './ItemTypes.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
@@ -382,7 +384,9 @@ export class Spiders {
             moving = true;
         } else if (tp && near.d > STOP * SIZE) {
             const to = _v.set(tp.x - p.x, 0, tp.z - p.z).normalize();
-            p.addScaledVector(to, SPEED * (s.legK ?? 1) * dt); // (legs cut off: slower)
+            // (round the others on its way — trees that walk, beasts, people it isn't after; Crowd.js)
+            const a = crowdStep(g, s, p, to.x, to.z, near.d - STOP * SIZE, { r: BODY_R.spider, speed: SPEED * (s.legK ?? 1), dt, look: 5, dy: 4 });
+            if (a) { to.set(a.x, 0, a.z); p.addScaledVector(to, SPEED * (s.legK ?? 1) * dt); } // (legs cut off: slower)
             s.model.rotation.y = turnToward(s.model.rotation.y, Math.atan2(-to.x, -to.z), SPIDER_TURN * dt);
             moving = true;
         } else if (tp) s.model.rotation.y = turnToward(s.model.rotation.y, yawTo(p.x, p.z, tp.x, tp.z), SPIDER_TURN * dt); // (a big body: it turns, never spins round at once)

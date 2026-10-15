@@ -288,7 +288,9 @@ export class Zombie {
             if (Number.isFinite(distance)) {
                 if (distance > 1.8) {
                     if (distance > 0.1) _v.divideScalar(distance);
-                    pos.addScaledVector(_v, this.speed * slowFactor(this) * dt);
+                    // round the others on its way (zombies, people, beasts — Crowd.js; the host's game sets it)
+                    const st = this.steer ? this.steer(this, pos, _v.x, _v.z, distance - 1.8, this.speed * slowFactor(this), dt) : _v;
+                    if (st) { _v.x = st.x; _v.z = st.z; pos.addScaledVector(_v, this.speed * slowFactor(this) * dt); }
                     this.group.lookAt(targetPos.x, pos.y, targetPos.z);
                     this.group.rotation.x = 0;
                     this.group.rotation.z = 0;

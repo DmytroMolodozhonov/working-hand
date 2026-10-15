@@ -41,6 +41,7 @@ import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
 import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, idleTime, pickSpot, wrapAngle, animatePose, foldLegs, bodySpan, rayToSpan } from './AnimalHerd.js';
 import { slowFactor, tickSlow } from './Slow.js';
+import { crowdStep, crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 
 export { animalModel };
@@ -166,6 +167,7 @@ export class Animals {
     constructor(game) {
         this.game = game;
         this.list = []; // living and dead animals
+        if (!game.animals) game.animals = this; // (the crowd finds the beasts there — CrowdSources.js; a test's game too)
         this.byId = new Map();
         this.trees = new Map(); // golden trees: key -> {x, z, y, model, apples: [{until}]}
         this._spawnT = 3;
@@ -1301,12 +1303,23 @@ export class Animals {
             wx /= d; wz /= d;
             want = speed * Math.min(1, d / Math.max(1, speed * 0.6)); // (slows down to stop at the spot)
         } else { wx = 0; wz = 0; }
+        // somebody on its way (a man, a player, another beast, a cart, a monster): round them early, on
+        // the side with room, two meeting keep to the right; no way past — it waits (Crowd.js)
+        if (want > 0 && !bunch) {
+            const body = a.dims?.len ? Math.max(0.4, a.dims.len * 0.42) : 0.9;
+            // (another beast standing grazing near: its personal space below keeps them apart, the herd's way)
+            const s = crowdStep(this.game, a, p, wx, wz, d, { r: body, speed: want, dt, look: 2 + body * 1.5, skip: (b) => b.kind === 'animal' && !(Math.hypot(b.vx, b.vz) > 0.3 && b.vx * wx + b.vz * wz < 0) });
+            if (!s) want = 0; else { wx = s.x; wz = s.z; }
+        }
         // personal space: the others too near push it away (when frightened: only enough not to touch)
         let sx = 0, sz = 0, brake = 1;
         const room = this._room(a);
         const fx = -Math.sin(a.group.rotation.y), fz = -Math.cos(a.group.rotation.y);
-        for (const o of this.list) {
-            if (o === a || o.dead) continue;
+        // (only the beasts round it, from the crowd's grid — never all with all)
+        for (const b of crowdNear(this.game, p.x, p.y, p.z, 12, a, 3, this._sepNear || (this._sepNear = []))) {
+            if (b.kind !== 'animal') continue;
+            const o = b.ref;
+            if (o.dead) continue;
             const op = o.group.position;
             const dx = p.x - op.x, dz = p.z - op.z;
             if (Math.abs(dx) > 30 || Math.abs(dz) > 30 || Math.abs(p.y - op.y) > 3) continue;

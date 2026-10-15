@@ -24,7 +24,8 @@
 
 import { treeAt } from './Carriages.js';
 import { shareFoes } from './CrewTactics.js';
-import { avoidStep } from './Avoid.js';
+import { crowdStep, crowdNear } from './CrowdSources.js';
+import { makeWayStep } from './Crowd.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
 import { BLOCK } from '../world/Terrain.js';
 import * as THREE from 'three';
@@ -546,11 +547,25 @@ export class CastleLife {
         const d = Math.hypot(dx, dz);
         if (d < 0.6) { v.node = v.path[v.pathI]; v.pathI++; return v.pathI >= v.path.length; }
         const s = Math.min(d, speed * slowFactor(v) * dt);
-        v.x += dx / d * s; v.z += dz / d * s;
-        v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 8);
+        // somebody on the way (a man, a player, an animal, a monster): round them early, on the side
+        // with room; two meeting keep to the right; a narrow spot — wait / give way (Crowd.js)
+        let ux = dx / d, uz = dz / d;
+        if (speed > 0) {
+            const a = crowdStep(this.game, v, v, ux, uz, last ? d : d + 3, { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y) });
+            if (!a) { v.speed = 0; return false; }
+            // (off the path only where one can walk; else the path's own way)
+            if (a.x !== ux || a.z !== uz) {
+                if (this._walkable(v.x + a.x * (s + BODY_R), v.z + a.z * (s + BODY_R), v.y)) { ux = a.x; uz = a.z; }
+            }
+        }
+        v.x += ux * s; v.z += uz * s;
+        v.yaw = turn(v.yaw, Math.atan2(-ux, -uz), dt * 8);
         v.speed = speed;
         return false;
     }
+
+    /** How wide one is (m): others keep this clear of it. */
+    _bodyR(v) { return v.role === 'knight' || v.role === 'king' ? 0.7 : 0.5; }
 
     /** Inside the castle walls (where paths are narrow: doors, stairs, rooms). */
     _inWalls(def, p) {
@@ -573,13 +588,9 @@ export class CastleLife {
         // in a narrow spot wait a moment for them to move (then squeeze past)
         let ux = dx / d, uz = dz / d;
         if (speed > 0) {
-            const others = this._othersNear(v);
-            if (others.length) {
-                const a = avoidStep(v, { x: ux, z: uz }, others, { maxF: d - stopAt - 0.2, room: (x, z) => this._walkable(x, z, v.y) });
-                if (a.wait && (v.waitT = (v.waitT || 0) + dt) < 1.6) { v.speed = 0; return d; }
-                if (!a.wait) v.waitT = 0;
-                ux = a.x; uz = a.z;
-            }
+            const a = crowdStep(this.game, v, v, ux, uz, Math.max(0.1, d - stopAt - 0.2), { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y) });
+            if (!a) { v.speed = 0; return d; }
+            ux = a.x; uz = a.z;
         }
         const nx = v.x + ux * s, nz = v.z + uz * s;
         // (the body has a thickness: the shoulder never goes into a wall — a step's room is looked at a little ahead)
@@ -599,27 +610,6 @@ export class CastleLife {
             }
         }
         return d;
-    }
-
-    /** Bodies near this walker it must not walk into: people, players, animals (once a frame, then filtered). */
-    _othersNear(v) {
-        const g = this.game;
-        const f = g.frameCount ?? 0;
-        if (this._bodiesF !== f || !this._bodies) {
-            this._bodiesF = f;
-            const B = this._bodies = [];
-            for (const o of this.byId.values()) if (!o.dead && !o.seated && !o.climb && o.group?.visible !== false) B.push({ x: o.x, y: o.y, z: o.z, r: o.role === 'knight' || o.role === 'king' ? 0.7 : 0.5, ref: o });
-            const me = g.character?.group.position;
-            if (me && !g.isDeadLocal) B.push({ x: me.x, y: me.y - 1.95, z: me.z, r: 0.6, ref: null });
-            for (const [, r] of g.remotes || []) if (!r.dead) B.push({ x: r.position.x, y: r.position.y - 1.95, z: r.position.z, r: 0.6, ref: null });
-            for (const a of g.animals?.list || []) if (!a.dead) B.push({ x: a.group.position.x, y: a.group.position.y, z: a.group.position.z, r: 0.9 * (a.group.scale.x || 1), ref: a });
-        }
-        const out = [];
-        for (const b of this._bodies) {
-            if (b.ref === v || Math.abs(b.x - v.x) > 3.5 || Math.abs(b.z - v.z) > 3.5 || Math.abs(b.y - v.y) > 2.5) continue;
-            out.push(b);
-        }
-        return out;
     }
 
     /**
@@ -1710,13 +1700,20 @@ export class CastleLife {
 
     /** People don't walk through each other: the near ones push apart. */
     _separate(dt) {
-        const list = [];
-        for (const v of this.byId.values()) if (!v.dead && !v.climb && !v.seated && v.group.visible) list.push(v);
         const k = Math.min(1, dt * 10);
-        for (let a = 0; a < list.length; a++) {
-            const p = list[a];
-            for (let b = a + 1; b < list.length; b++) {
-                const q = list[b];
+        const near = this._sepNear || (this._sepNear = []);
+        for (const p of this.byId.values()) {
+            if (p.dead || p.climb || p.seated || !p.group.visible) continue;
+            // asked to make way (one stands in another's way — talking too): a step aside, where one can stand
+            const mw = makeWayStep(p, dt);
+            if (mw) {
+                const l = Math.hypot(mw.x, mw.z) || 1;
+                if (this._walkable(p.x + mw.x + mw.x / l * BODY_R, p.z + mw.z + mw.z / l * BODY_R, p.y)) { p.x += mw.x; p.z += mw.z; }
+            }
+            // (only the ones round it, from the crowd's grid — never all with all; each pair once)
+            for (const b of crowdNear(this.game, p.x, p.y, p.z, 2, p, 2.5, near)) {
+                const q = b.ref;
+                if (b.kind !== 'man' || !(String(q.id) > String(p.id))) continue;
                 const dx = q.x - p.x, dz = q.z - p.z;
                 if (Math.abs(dx) > 2 || Math.abs(dz) > 2 || Math.abs(q.y - p.y) > 2.5) continue;
                 const R = p.role === 'knight' || q.role === 'knight' || p.role === 'king' || q.role === 'king' ? 1.8 : 1.35;
