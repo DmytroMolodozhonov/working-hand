@@ -365,6 +365,8 @@ export class LivingTrees {
         };
         this.list.push(t);
         this.byId.set(t.id, t);
+        // (host, a new tree: who of the people saw its caster wake it — only they will know it is his, Blame.js)
+        if (this.auth && id == null) g.castleLife?.witnessCast?.(owner, 'Alive');
         return t;
     }
 
@@ -671,7 +673,7 @@ export class LivingTrees {
                 const tp = g.servants?.pos(t.swing.target.k, t.swing.target.id);
                 if (tp && Math.hypot(tp.x - p.x, tp.z - p.z) < reach * 1.3) {
                     const dir = new THREE.Vector3(tp.x - p.x, 0, tp.z - p.z).normalize();
-                    g.servants.damage(t.swing.target, ALIVE.DMG, dir, t.master, 'tree');
+                    g.servants.damage(t.swing.target, ALIVE.DMG, dir, t.master, 'tree', { x: p.x, z: p.z, ref: { k: 't', id: t.id } });
                     for (let i = 0; i < 10; i++) g.fx?.spark(_v.set(tp.x, tp.y + 1.2, tp.z), 0x9a7040, 0.12, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.6);
                 }
             }

@@ -2945,6 +2945,7 @@ export class Game {
     noteCaster(name, by) {
         if (by != null && name !== 'Invisibility') this.invis?.noted(by); // (an invisible caster: the world knows about where)
         if (/^(Inferno|Fire|Bombardo|Lightning|Earthquake)/.test(name || '')) this._fireBy = { by, at: performance.now() };
+        if (this.authority) this.castleLife?.witnessCast?.(by, name); // (who of the people saw this cast: Blame.js)
     }
 
     /** A castle / village block burnt down: the guards come; the last fire-caster near is blamed. */
@@ -2954,7 +2955,7 @@ export class Game {
         this._burnNoteAt = now;
         const f = this._fireBy;
         const by = f && now - f.at < 120000 ? f.by : null;
-        this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false, { r: 8 }); // (a house burning: its whole place)
+        this.castleLife?.damaged({ x, y: L - 1, z }, by, 1, false, { r: 8, via: 'fire' }); // (a house burning: its whole place; whose fire — only who saw the cast knows)
     }
 
     /** Lightning at a protected house from outside: it strikes the top of its sphere (and wears it down). */

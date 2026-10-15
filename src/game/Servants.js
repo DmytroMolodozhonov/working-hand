@@ -213,14 +213,15 @@ export class Servants {
 
     // -------------------------------------------------------------- blows
     /** (authority) A servant's blow lands on {k, id}. */
-    damage(target, dmg, dir, by, kind = 'servant') {
+    damage(target, dmg, dir, by, kind = 'servant', src = null) {
         const g = this.game;
         const c = this.find(target.k, target.id);
         if (!c) return;
         const d = dir || new THREE.Vector3(0, 0, 1);
         if (target.k === 'z') g.damageZombie(c, dmg, false, d.clone(), by);
         else if (target.k === 'a') g.animals.hit(c, dmg, d.clone(), by);
-        else if (target.k === 'v') g.castleLife.hit(c, dmg, d.clone(), by);
+        // (a castle person hit by a servant / a living tree: whose it is — only who saw the cast knows, Blame.js)
+        else if (target.k === 'v') g.castleLife.hit(c, dmg, d.clone(), by, { via: kind === 'tree' ? 'alive' : 'servant', src: src ? { x: src.x, z: src.z } : null, srcRef: src?.ref || null });
         else if (target.k === 't') g.livingTrees.hit(c, dmg, kind, by);
         else if (target.k === 's') g.spiders.hit(c, dmg, 'melee');
         else if (target.k === 'D') g.dragons.hit(c, dmg, 'servant', by);

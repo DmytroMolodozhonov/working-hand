@@ -33,3 +33,21 @@ test('wizard tower: a closed great door in the doorway; the wizards lock their d
     assert.ok(doorHeld(t, tower.doorRec), 'it hangs in its doorway');
     assert.equal(TARGETS.wizardDoor.plain, 'unlock');
 });
+
+test('blame: nobody reads minds — a tree woken unseen is blamed on the tree; a seen cast or a plain sight tells', async () => {
+    const { knowsCulprit, spellFamily } = await import('../../src/game/Blame.js');
+    // the player far off, unseen: nobody knows (the tree is the enemy)
+    assert.equal(knowsCulprit({ via: 'alive', seesPlayer: false }), false);
+    // seen, but 20 m from the tree: a villager doesn't connect them; a wizard neither
+    assert.equal(knowsCulprit({ via: 'alive', seesPlayer: true, dPlayer: 15, dSource: 20 }), false);
+    assert.equal(knowsCulprit({ via: 'alive', wizard: true, seesPlayer: true, dPlayer: 15, dSource: 20 }), false);
+    // right by the tree, steering it: a wizard understands, a villager doesn't
+    assert.equal(knowsCulprit({ via: 'alive', wizard: true, seesPlayer: true, dPlayer: 15, dSource: 5 }), true);
+    assert.equal(knowsCulprit({ via: 'alive', seesPlayer: true, dPlayer: 15, dSource: 5 }), false);
+    // saw him cast «Alive»: knows
+    assert.equal(knowsCulprit({ via: spellFamily('Alive'), sawCast: true }), true);
+    // a direct blow: seen in sight; at night the sight is short
+    assert.equal(knowsCulprit({ seesPlayer: true, dPlayer: 25 }), true);
+    assert.equal(knowsCulprit({ seesPlayer: true, dPlayer: 25, night: true }), false);
+    assert.equal(spellFamily('InfernoMaxima'), 'fire');
+});

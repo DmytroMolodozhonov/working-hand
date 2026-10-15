@@ -444,7 +444,7 @@ export class WizardFight {
     }
 
     /** A duel charge from the wand at a player (the charge itself: Duel.js, seen by everybody). */
-    _cast(v, spell, foeId, fp, vs = null) {
+    _cast(v, spell, foeId, fp, vs = null, at = null) {
         const g = this.game, duel = g.duel;
         if (!duel?._addBolt) return false;
         if (v.group.visible) v.model.getWandTip(_o);
@@ -452,13 +452,13 @@ export class WizardFight {
         // (the wand's tip through a wall he stands against: no — the charge would start on the other side)
         const c = g.collision;
         if (c?.lineOfSight && (!c.lineOfSight(v.x, v.y + 3.0, v.z, _o.x, _o.y, _o.z, 0.15) || c.pointBlocked?.(_o.x, _o.y, _o.z))) return false;
-        const body = duel._bodyOf?.('p', foeId, duel._tmpBody());
+        const body = at ? null : duel._bodyOf?.('p', foeId, duel._tmpBody()); // (`at`: a creature {k, id} instead of a player)
         if (body) _d.copy(body.a).lerp(body.b, 0.55); else _d.set(fp.x, fp.y, fp.z);
         _d.sub(_o).normalize();
         const err = 0.06 / (v.W.skill || 1) * (v.dazeT > 0 ? 6 : 1); // (not a perfect hand; dizzy after a «Джолт»: far off)
         _d.x += (Math.random() - 0.5) * 2 * err; _d.y += (Math.random() - 0.5) * err; _d.z += (Math.random() - 0.5) * 2 * err;
         _d.normalize();
-        const b = duel._addBolt({ id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: 'p', tid: foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true, vs });
+        const b = duel._addBolt({ id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: at ? at.k : 'p', tid: at ? at.id : foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true, vs });
         if (spell === 'AvadaKedavra') this.life._say(v, 'Авада Кедавра!', 2); // (the killing words are heard)
         g.sync?.duelCast?.(b);
         v.yaw = Math.atan2(-_d.x, -_d.z);
@@ -522,6 +522,25 @@ export class WizardFight {
     _caught(v, b) {
         v.readyUntil = Date.now() + 20000;
         if (!v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; }
+    }
+
+    /**
+     * (host) Hurt by a creature whose master he didn't see (a living tree, a servant): he defends himself
+     * from it — a «Джолт» at it to throw it back (a tree only reels; CreatureImpact), now and then.
+     */
+    threat(v, ref) {
+        if (!v.W || v.noWand || v.dead || (v.castCd ?? 0) > 0 || v.stunT > 0) return false;
+        const duel = this.game.duel;
+        const c = duel?._creature?.(ref.k, ref.id);
+        if (!c) return false;
+        const at = duel._creaturePoint(c, _d.clone());
+        const fp = { x: at.x, y: at.y - 0.3, z: at.z };
+        if (!this.clearShot(v, fp)) return false;
+        const spell = v.role === 'master' ? 'JoltMaxima' : 'Jolt';
+        const cost = NPC_COST[spell] ?? 5;
+        if (v.mana < cost) return false;
+        if (this._cast(v, spell, null, fp, null, ref)) { v.mana -= cost; v.castCd = v.W.cast; return true; }
+        return false;
     }
 
     /** A spell straight back at the one who cast at him: the two charges meet (Duel.js: a clash). */

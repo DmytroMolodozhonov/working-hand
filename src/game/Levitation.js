@@ -805,15 +805,15 @@ export class Levitation {
                 ...(hard ? { toss: 3 + Math.min(4, (speed - THROW.ROLL_V) * 0.3), fly: true, tumble: 1, daze: 2 } : {}),
             });
         }
-        if (d) this._hurt(ck, c, d, f.by, vel);
+        if (d) this._hurt(ck, c, d, f.by, vel, centre);
     }
 
-    _hurt(ck, c, d, by, vel) {
+    _hurt(ck, c, d, by, vel, at = null) {
         const g = this.game;
         if (ck === 'z') g.damageZombie(c, d, false, _h4.set(vel.x, 0, vel.z).normalize(), by);
         else if (ck === 'a') g.animals?.hit(c, d, null, by);
-        else if (ck === 'c') g.ships?.crew?.hit?.(c, d, null, by, { spell: true });
-        else g.castleLife?.hit(c, d, null, by, { spell: true }); // (a knight's armour takes most of it)
+        else if (ck === 'c') g.ships?.crew?.hit?.(c, d, null, by, { spell: true, via: 'leviosa', src: at ? { x: at.x, z: at.z } : null });
+        else g.castleLife?.hit(c, d, null, by, { spell: true, via: 'leviosa', src: at ? { x: at.x, z: at.z } : null }); // (a knight's armour takes most of it; whose thing it was — Blame.js)
     }
 
     /** The creature its flight from `a` to `b` ran into (not itself, not one held up), or null: {kind, id, c|null}. */
@@ -858,7 +858,7 @@ export class Levitation {
             return;
         }
         if (speed >= THROW.KNOCK_V * 0.5) g.creatureImpact?.apply(o.c, { v: push.clone().setLength(Math.min(8, 2 + speed * 0.4)), by: f.by, kind: 'thrown', always: { down: 1.5 + Math.min(2, speed * 0.1) } });
-        if (d) this._hurt(o.kind, o.c, d, f.by, vel);
+        if (d) this._hurt(o.kind, o.c, d, f.by, vel, o.c);
     }
 
     /** (host) A body thrown by a spell («Overgrown»): if it comes down from up high, the fall hurts. */

@@ -46,6 +46,7 @@ import { VillagerFear } from './VillagerFear.js';
 import { Rebuild } from './Rebuild.js';
 import { NightLife } from './NightLife.js';
 import { Wanted, wreckPoints, wantedTactics } from './Wanted.js';
+import { knowsCulprit, sightRange, spellFamily } from './Blame.js';
 import { BodyFound } from './BodyFound.js';
 
 const WAKE = 90; // m beyond the castle land: its people appear
@@ -109,6 +110,8 @@ const SHOUT = {
 };
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+/** Harm whose kind is done through something else, not straight from the hand (Blame.js: the culprit is not plain). */
+export const viaOfKind = (kind) => (kind === 'quake' ? 'quake' : kind === 'fire' ? 'fire' : null);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
@@ -1769,6 +1772,14 @@ export class CastleLife {
         this.wanted.add(by, kind, Date.now() / 1000, extra);
     }
 
+    /** (host) Does anybody of site `def` know `by` did what happened at `pos`? */
+    _anyKnows(def, by, pos, via = null) {
+        const cs = this.castles.get(def.id);
+        if (!cs?.awake) return false;
+        for (const w of cs.active.values()) if (Math.hypot(w.x - pos.x, w.z - pos.z) < 60 && this._knows(w, by, pos, via)) return true;
+        return false;
+    }
+
     /** (host) How wanted this player is: 0…3 (Wanted.js). */
     wantedLevel(id) { return this._isPlayer(id) ? this.wanted.level(id, Date.now() / 1000) : 0; }
 
@@ -1813,13 +1824,71 @@ export class CastleLife {
         const killed = v.hp <= 0;
         const pos = { x: v.x, y: v.y, z: v.z };
         if (killed) this._die(v, by);
-        // the hidden wanted level: a kill, or a real blow (not a bump in a crowd)
-        if (by && (killed || opts.spell || opts.weapon || opts.magic || opts.pierce || opts.fire || dmg > 1)) this.deed(by, killed ? (v.role === 'king' || v.role === 'master' ? 'killChief' : 'kill') : 'hurt');
+        // the hidden wanted level: a kill, or a real blow (not a bump in a crowd) — only what somebody saw (Blame.js)
+        const real = killed || opts.spell || opts.weapon || opts.magic || opts.pierce || opts.fire || dmg > 1;
+        const deed = () => { if (by && real) this.deed(by, killed ? (v.role === 'king' || v.role === 'master' ? 'killChief' : 'kill') : 'hurt'); };
         // a blow without magic (a fist, a slap, a blade) on one person is between the two of them:
         // they tell you off, take offence, or — a hard blow — fight YOU; no guards (only a rampage brings them)
-        if (!killed && by && !opts.spell && !opts.pierce && !opts.magic && !(opts.weapon && v.role === 'king') && this._personal(v, by, dmg, opts)) return;
+        if (!killed && by && !opts.via && !opts.spell && !opts.pierce && !opts.magic && !(opts.weapon && v.role === 'king') && this._personal(v, by, dmg, opts)) { deed(); return; }
         if (!killed && v.role !== 'knight' && v.role !== 'king') this._say(v, pick(SHOUT.hurt));
-        if (by) this._offence(v.cs, by, v, killed, pos);
+        if (by && this._offence(v.cs, by, v, killed, pos, opts)) deed();
+    }
+
+    /**
+     * Does person `w` know player `by` did this (Blame.js)? `src`: where the thing doing it is (the
+     * tree, the fire…); `via`: its kind (null — the player's own hand / charge).
+     */
+    _knows(w, by, src = null, via = null) {
+        if (!w || w.dead || w.sleep?.phase === 'lie') return false;
+        return this.knowsFrom(w, by, src, via, w.cs?.castSeen);
+    }
+
+    /** The same for anybody standing at `w` {x, y, z, wizard, id} (a sailor on his deck too). */
+    knowsFrom(w, by, src = null, via = null, castSeen = null) {
+        if (!this._isPlayer(by)) return false;
+        const rec = via ? castSeen?.get(by + '|' + via) : null;
+        const sawCast = !!rec && Date.now() - rec.t < 180000 && rec.ids.has(w.id);
+        const bp = this._playerPos(by);
+        const dPlayer = bp ? Math.hypot(bp.x - w.x, bp.z - w.z) : Infinity;
+        const night = !!this.game.isNight;
+        const seesPlayer = !!bp && dPlayer <= sightRange(!!w.wizard, night) && this._sees(w, bp);
+        const dSource = bp && src ? Math.hypot(bp.x - src.x, bp.z - src.z) : Infinity;
+        return knowsCulprit({ wizard: !!w.wizard, night, seesPlayer, dPlayer, via, dSource, sawCast });
+    }
+
+    /**
+     * (host) Player `by` casts `name` now: the people who see him cast remember it — later harm by
+     * what he made (the tree he woke, a fire he lit) is known to be his by them (Blame.js).
+     */
+    witnessCast(by, name) {
+        if (!this.auth || !this._isPlayer(by)) return;
+        const bp = this._playerPos(by);
+        if (!bp || !this.index) return;
+        const fam = spellFamily(name), now = Date.now(), night = !!this.game.isNight;
+        for (const def of this.index.near(bp.x, bp.z, 0)) {
+            const cs = this.castles.get(def.id);
+            if (!cs?.awake) continue;
+            let ids = null;
+            for (const w of cs.active.values()) {
+                if (w.dead || w.sleep?.phase === 'lie' || w.stunT > 0) continue;
+                if (Math.hypot(bp.x - w.x, bp.z - w.z) > sightRange(!!w.wizard, night) || !this._sees(w, bp)) continue;
+                (ids || (ids = new Set())).add(w.id);
+            }
+            if (!ids) continue;
+            const m = cs.castSeen || (cs.castSeen = new Map());
+            m.set(by + '|' + fam, { t: now, ids });
+        }
+    }
+
+    /**
+     * Hurt by a thing whose master nobody saw (a tree come alive, a servant, a flying thing, a fire):
+     * `w` defends himself from the thing — the brave back off facing it (a wizard casts at a creature),
+     * the rest run (fear()).
+     */
+    _defend(w, src, opts = {}) {
+        if (!w || w.dead || !src) return;
+        this.fear(w, src.x, src.z, 0.4);
+        if (w.wizard && opts.srcRef) this.wizards.fight.threat(w, opts.srcRef);
     }
 
     /**
@@ -1938,20 +2007,27 @@ export class CastleLife {
     }
 
     /** Who saw it? If anyone did (or the victim lives to tell), the castle turns on `by`. */
-    _offence(cs, by, victim, killed, pos) {
+    _offence(cs, by, victim, killed, pos, opts = {}) {
         const g = this.game;
         const st = this.state(cs.def.id);
-        if (by === st.owner) return; // (the king may do as he likes)
+        if (by === st.owner) return false; // (the king may do as he likes)
         const isPlayer = by === g.localId || g.remotes.has(by);
-        if (!isPlayer) return;
-        const witnesses = [];
+        if (!isPlayer) return false;
+        const saw = [];
         for (const w of cs.active.values()) {
             if (w.dead || w === victim || w.sleep?.phase === 'lie') continue; // (asleep: saw nothing)
             if (Math.hypot(w.x - pos.x, w.z - pos.z) > SEE) continue;
-            if (this._sees(w, { x: pos.x, y: pos.y + 1.5, z: pos.z })) witnesses.push(w);
+            if (this._sees(w, { x: pos.x, y: pos.y + 1.5, z: pos.z })) saw.push(w);
         }
-        if (!killed && victim) witnesses.push(victim);
-        if (!witnesses.length) return; // nobody saw it
+        if (!killed && victim) saw.push(victim);
+        // who of them knows it was this player (Blame.js): saw him do it / saw the cast / it is plain
+        const via = opts.via || null, src = opts.src || pos;
+        const witnesses = saw.filter((w) => this._knows(w, by, src, via));
+        if (!witnesses.length) {
+            // nobody knows whose: they defend themselves from the thing itself (the tree, the fire, the flying thing)
+            if (via) for (const w of saw) this._defend(w, src, opts);
+            return false;
+        }
         const was = cs.hostile.get(by) > Date.now();
         cs.hostile.set(by, Date.now() + HOSTILE_MS);
         const kingHit = victim && victim.role === 'king';
@@ -1969,6 +2045,7 @@ export class CastleLife {
         const road = cs.def.kind === 'wander' || cs.def.kind === 'errant' || cs.def.kind === 'folk';
         if (!was && by === g.localId) g.hud.setVoice(road ? '⚔️ Путники видели, что вы сделали' : '⚔️ Вас заметили! Стража замка идёт за вами', true);
         else if (!was) g.sync?.villagerAlarm?.(by, cs.def.name);
+        return true;
     }
 
     /** Hit the king: every knight of the castle comes (from the barracks, the gate, the walls). */
@@ -2019,8 +2096,8 @@ export class CastleLife {
         if (!this.auth) { this.game.sync?.villagerDanger?.([Math.round(pos.x), Math.round(pos.y ?? 0), Math.round(pos.z)], kind, r); return; }
         this.fright.add(kind, pos, { by, r });
         this.wizards.danger(pos, kind, by, r); // (the wizards of a tower: the brave go to see, the timid run)
-        // (something dreadful cast among the people: a little on the wanted level — once in a while)
-        if (by && this._isPlayer(by) && this.index?.near(pos.x, pos.z, 0).some((def) => this._inLand(def, pos, 20))) {
+        // (something dreadful cast among the people: a little on the wanted level — once in a while, if somebody saw whose)
+        if (by && this._isPlayer(by) && this.index?.near(pos.x, pos.z, 0).some((def) => this._inLand(def, pos, 20) && this._anyKnows(def, by, pos, viaOfKind(kind)))) {
             const sc = this._scareAt || (this._scareAt = new Map());
             if (!(Date.now() - (sc.get(by) || 0) < 5000)) { sc.set(by, Date.now()); this.deed(by, 'scare'); }
         }
@@ -2035,13 +2112,13 @@ export class CastleLife {
      * @param {number} blocks  castle blocks destroyed
      * @param {boolean} [loud]  a blast (heard far) or quiet work (seen near)
      */
-    damaged(pos, by, blocks, loud = true, { r = null, kind = null } = {}) {
+    damaged(pos, by, blocks, loud = true, { r = null, kind = null, via = viaOfKind(kind) } = {}) {
         if (!this.enabled || !this.index) return;
         const g = this.game;
         if (!this.auth) { if (by === g.localId) g.sync?.villagerVandal?.([Math.round(pos.x), Math.round(pos.y), Math.round(pos.z)], blocks, loud ? 1 : 0, r); return; }
         this.night?.noise(pos, loud ? 40 : 14); // (a pane breaking, a wall coming down: the sleepers near wake)
         // (a blast: the people near take fright — VillagerFear; whatever broke is put back later — Rebuild)
-        if (loud) { this.fright.add(kind || 'blast', pos, { r: r ?? 4, by }); this.wizards.danger(pos, kind || 'blast', by, r ?? 4); }
+        if (loud) { this.fright.add(kind || 'blast', pos, { r: r ?? 4, by }); this.wizards.danger(pos, kind || 'blast', by, r ?? 4, via); }
         if (blocks > 0 || loud) this.rebuild.damaged(pos, r ?? (loud ? 6 : 2), by, loud); // (a crater in the street too)
         const isPlayer = !!by && (by === g.localId || g.remotes.has(by));
         let counted = false;
@@ -2053,7 +2130,7 @@ export class CastleLife {
             if (by && by === st.owner) continue; // (the king may pull down his own walls)
             const bp = isPlayer ? this._playerPos(by) : null;
             // a quiet little damage (a pane, a block or two): whoever sees it grumbles at that player — no guards
-            if (!loud && isPlayer && blocks > 0 && this._petty(cs, by, blocks, bp, pos)) continue;
+            if (!loud && isPlayer && blocks > 0 && !via && this._petty(cs, by, blocks, bp, pos)) continue;
             const hear = loud ? HEAR_BOOM : 30;
             let seen = false;
             let comers = 0;
@@ -2061,17 +2138,18 @@ export class CastleLife {
                 if (v.dead) continue;
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
                 if (d > hear) continue;
-                // a blast draws every eye: whoever sees the culprit knows who it was
-                if (bp && blocks > 0 && Math.hypot(bp.x - v.x, bp.z - v.z) < SEE * 1.6 && this._sees(v, bp)) seen = true;
+                // a blast draws every eye: whoever saw the culprit do it knows who it was (Blame.js: not a fire that spread)
+                if (bp && blocks > 0 && !seen && this._knows(v, by, pos, via)) seen = true;
                 if (v.role === 'knight') {
-                    if (!v.foe) { v.investigate = { x: pos.x, y: pos.y, z: pos.z, by: isPlayer ? by : null, t: 45 }; v.path = null; v.lookT = 0; comers++; }
+                    // (a blast from a charge: one seen about with a wand is suspect; a fire, the ground — nobody to look for)
+                    if (!v.foe) { v.investigate = { x: pos.x, y: pos.y, z: pos.z, by: isPlayer && !via ? by : null, t: 45 }; v.path = null; v.lookT = 0; comers++; }
                 }
             }
             if (!isPlayer || blocks <= 0) continue;
-            if (!counted) { counted = true; this.deed(by, wreckPoints(blocks)); }
+            if (!counted && seen) { counted = true; this.deed(by, wreckPoints(blocks)); }
             st.wrecked = (st.wrecked || 0) + blocks;
             // a big blast: more knights run out of the barracks and the gate to see
-            if (loud && comers < 4) this._sendGuards(cs, pos, by, 4 - comers);
+            if (loud && comers < 4) this._sendGuards(cs, pos, via ? null : by, 4 - comers);
             if (seen) this._catch(cs, by, pos);
         }
     }

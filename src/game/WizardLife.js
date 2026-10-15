@@ -197,7 +197,7 @@ export class WizardLife {
      * who: the culprit seen near — the whole tower goes for him, CastleLife._catch); the timid
      * students run from it. (Asleep: NightLife wakes them by the noise first.)
      */
-    danger(pos, kind, by = null, r = null) {
+    danger(pos, kind, by = null, r = null, via = kind === 'quake' ? 'quake' : kind === 'fire' ? 'fire' : null) {
         const L = this.life, now = Date.now();
         const D = DANGERS[kind] || DANGERS.blast;
         const isPlayer = L._isPlayer(by);
@@ -211,11 +211,11 @@ export class WizardLife {
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
                 if (d > D.hear) continue;
                 v.practice = null;
-                if (bp && Math.hypot(bp.x - v.x, bp.z - v.z) < 40 && L._sees(v, bp)) seen = true;
+                if (bp && !seen && L._knows(v, by, pos, via)) seen = true; // (only who saw him do it knows: no mind-reading — Blame.js)
                 if (L._fights(v)) {
                     // (the Master keeps his place unless it is close; the others come — a tower has paths)
                     if ((v.role === 'master' && d > 30) || !cs.graph.nodes.length || (v.investigate && v.investigate.t > 10) || comers >= 5) { v.yaw = Math.atan2(-(pos.x - v.x), -(pos.z - v.z)); continue; }
-                    v.investigate = { x: pos.x, y: pos.y ?? v.y, z: pos.z, by: isPlayer ? by : null, t: 45 };
+                    v.investigate = { x: pos.x, y: pos.y ?? v.y, z: pos.z, by: isPlayer && !via ? by : null, t: 45 };
                     v.path = null; v.lookT = 0; v.seated = false; comers++;
                     if (!said) { said = true; L._say(v, pick(DANGER_LINES.brave), 3); }
                 } else if (d < (r ?? D.r) + D.near + 8) {

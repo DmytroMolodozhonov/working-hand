@@ -342,9 +342,18 @@ export class Sailors {
         }
         const s = v.ship;
         g.castleLife?.night?.wakeSailor(v, 'hit');
-        if (by) this.provoke(s, by === 'local' ? g.localId : by, '⚔️ Вы напали на матроса — команда к бою!');
+        // (hurt through something else — a thing thrown by «Левиоса»: the crew turns on the player only if somebody saw whose it was, Blame.js)
+        const who = by === 'local' ? g.localId : by;
+        if (by && (!opts.via || this._crewKnows(s, who, opts.src, opts.via))) this.provoke(s, who, '⚔️ Вы напали на матроса — команда к бою!');
         if (v.hp <= 0) this._die(v, by === 'local' ? g.localId : by);
         else if (Math.random() < 0.5) this._say(v, pick(SHOUT.hurt));
+    }
+
+    /** Does anybody of this ship's crew know `by` did it (Blame.js — CastleLife.knowsFrom)? */
+    _crewKnows(s, by, src, via) {
+        const L = this.game.castleLife;
+        if (!L?.knowsFrom) return true;
+        return (this.crews.get(s.id) || []).some((o) => !o.dead && L.knowsFrom(o, by, src, via));
     }
 
     /** (host) A guest's blow ('shit'). */
@@ -1594,5 +1603,13 @@ registerKind('c', {
     toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
     hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },
     frozen: () => false,
-    struck(g, c, o) { if (o.by) c.hitBy = { id: o.by === 'local' ? g.localId : o.by, t: performance.now() }; if (o.by) g.ships?.crew.provoke(c.ship, o.by === 'local' ? g.localId : o.by, '🏴 Вы напали на матроса — команда к бою!'); },
+    struck(g, c, o) {
+        if (!o.by) return;
+        const by = o.by === 'local' ? g.localId : o.by;
+        c.hitBy = { id: by, t: performance.now() };
+        // (a body thrown by «Левиоса» into him: whose — only if the crew saw, Blame.js)
+        const via = o.kind === 'fall' || o.kind === 'thrown' ? 'leviosa' : null;
+        if (via && !g.ships?.crew._crewKnows(c.ship, by, { x: c.x, z: c.z }, via)) return;
+        g.ships?.crew.provoke(c.ship, by, '🏴 Вы напали на матроса — команда к бою!');
+    },
 });
