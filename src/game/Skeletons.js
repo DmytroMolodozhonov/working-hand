@@ -58,7 +58,7 @@ export function graveOnRay(index, o, d, max = SKEL.AIM) {
             if (along < 0.5 || along > max) continue;
             const off = Math.sqrt(Math.max(0, dx * dx + dy * dy + dz * dz - along * along));
             if (off > Math.max(1.3, along * 0.17)) continue;
-            if (!best || along < best.dist) best = { grave: q, dist: along };
+            if (!best || along < best.dist) best = { grave: q, dist: along, castle: c };
         }
     }
     return best;

@@ -59,6 +59,10 @@ export const ALIVE = {
     SLACK: 1.2, // m either side of that distance it just stands
     BODY_R: 1.1, // m: its trunk with the root legs at s = 1 (nobody walks through it, it walks through nobody)
     NEAR: 1.5, // m: even fighting, at least this much between its body and its master's
+    // «Alive Maxima»: twice the mana; every grave of the graveyard / the trees round come alive
+    MAX_R: 14, // m round the tree pointed at
+    MAX_N: 6, // trees at most (the one pointed at too)
+    MAX_DRAIN: 1, // mana a second for each of them
 };
 const PLAYER_R = 0.48; // (Game's PLAYER_RADIUS)
 
@@ -91,7 +95,9 @@ const TEARS = new Set(['Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalD
 /** How much of a blow of `kind` a living tree takes. */
 export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has(kind) ? dmg : 0);
 /** The caster's mana after dt seconds of their living tree (Creative: no limit). */
-export const aliveDrain = (mana, dt, creative = false) => (creative ? mana : Math.max(0, mana - ALIVE.DRAIN * dt));
+export const aliveDrain = (mana, dt, creative = false, rate = ALIVE.DRAIN) => (creative ? mana : Math.max(0, mana - rate * dt));
+/** How fast my servants drain my mana: «Alive» 0.5 a second, each one of «Alive Maxima» 1. */
+export const aliveRate = (list) => list.reduce((a, t) => a + (t.d?.max ? ALIVE.MAX_DRAIN : ALIVE.DRAIN), 0);
 
 const PHASES = ['rise', 'alive', 'stiff', 'fall', 'burn'];
 const WHY = ['', 'mana', 'far', 'stop', 'focus'];
@@ -236,35 +242,43 @@ export class LivingTrees {
     targets() { return this.list.filter((t) => t.phase === 'rise' || t.phase === 'alive' || t.phase === 'stiff'); }
 
     // ================================================================ cast
-    /** «Alive» said with the hand pointing at a tree. */
-    cast(isFinal = true) {
+    /**
+     * «Alive» said with the hand pointing at a tree (or at a grave: its dead rises — a skeleton).
+     * «Alive Maxima» (`maxima`): the same, twice the mana — and everything round comes alive at once:
+     * every closed grave of that graveyard, or the trees within ALIVE.MAX_R of the one pointed at
+     * (up to ALIVE.MAX_N); each of them then drains ALIVE.MAX_DRAIN mana a second.
+     */
+    cast(isFinal = true, maxima = false) {
         const g = this.game;
+        const name = maxima ? 'AliveMaxima' : 'Alive';
         const now = Date.now();
         const early = g._interimCast;
-        if (isFinal && early && early.name === 'Alive' && now - early.at < 3000) { g._interimCast = null; return null; }
+        if (isFinal && early && early.name === name && now - early.at < 3000) { g._interimCast = null; return null; }
         if (now - this._last < 1500) return null;
         const say = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
-        if (this.mine().length) return say(this.mine()[0].skel ? '💀 Ваш скелет уже ходит за вами. Скажите «стоп», чтобы отпустить его' : '🌳 Ваше живое дерево уже ходит за вами. Скажите «стоп», чтобы отпустить его');
+        if (this.mine().length) return say(this.mine()[0].skel ? '💀 Ваши мертвецы уже ходят за вами. Скажите «стоп», чтобы отпустить их' : '🌳 Ваше живое дерево уже ходит за вами. Скажите «стоп», чтобы отпустить его');
         const h = g.builder?._hand();
-        if (!h) return say('🌳 Поднимите руку, направьте её на дерево и скажите «Alive»');
+        if (!h) return say('🌳 Поднимите руку, направьте её на дерево или могилу и скажите «Alive»');
+        const data = g.terrain?.data || g.builder?.data;
+        const taken = (q) => this.list.some((t) => t.d.gid === q.id);
+        const open = (q) => !graveClosed(data, q) || taken(q);
         // a grave pointed at (nearer than any tree on the line): its dead rises
         const grave = graveOnRay(g.castleLife?.index, h.o, h.d);
-        if (grave && grave.grave && (graveClosed(g.terrain?.data || g.builder?.data, grave.grave) || this.list.some((t) => t.d.gid === grave.grave.id))) {
-            const tree = this.aimAt(h.o, h.d);
-            if (!tree || tree.dist > grave.dist) {
-                if (this.list.some((t) => t.d.gid === grave.grave.id)) return say('💀 Эта могила уже разрыта');
-                return this._raise(grave.grave, h, isFinal, now, say);
-            }
-        }
-        if (grave && !this.aimAt(h.o, h.d)) return say('💀 Эта могила уже разрыта — в ней никого нет');
         const aim = this.aimAt(h.o, h.d);
-        if (aim?.golden) return say(aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
-        if (!aim) return say('🌳 Направьте руку на дерево (не дальше 14 м) и скажите «Alive»');
+        let graves = null, trees = null;
+        if (grave && (!aim || aim.dist > grave.dist)) {
+            graves = maxima ? (grave.castle?.graves || [grave.grave]).filter((q) => !open(q)) : open(grave.grave) ? [] : [grave.grave];
+            if (!graves.length) return say(maxima ? '💀 На этом кладбище все могилы уже разрыты' : '💀 Эта могила уже разрыта — в ней никого нет');
+        } else {
+            if (aim?.golden) return say(aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
+            if (!aim) return say('🌳 Направьте руку на дерево или могилу (не дальше 14 м) и скажите «Alive»');
+            trees = maxima ? [aim, ...this._treesRound(aim)] : [aim];
+        }
         // mana
         const c = g.combat;
-        const cost = c?.costOf ? c.costOf('Alive') : ALIVE.COST;
+        const cost = c?.costOf ? c.costOf(name) : ALIVE.COST * (maxima ? 2 : 1);
         if (!this.creative) {
-            if (c?.frozen || c?.stunned) return say(c.check('Alive'));
+            if (c?.frozen || c?.stunned) return say(c.check(name));
             if ((c?.fatigue ?? 0) < cost) {
                 const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(c?.fatigue ?? 0)}`;
                 g.hud.toast?.(msg);
@@ -273,49 +287,63 @@ export class LivingTrees {
             c.fatigue = Math.max(0, c.fatigue - cost);
         }
         this._last = now;
-        g._interimCast = isFinal ? null : { name: 'Alive', at: now };
-        const d = this._takeTree(aim);
+        g._interimCast = isFinal ? null : { name, at: now };
         const me = g.character.group.position;
-        d.ry = Math.atan2(-(me.x - d.x), -(me.z - d.z)); // (it wakes facing its caster)
-        // the magic flies from the hand into the tree
-        for (let i = 0; i < 30; i++) {
-            const p = _v.copy(h.o).lerp(_v2.set(d.x, d.y + 4, d.z), Math.random());
-            g.fx?.spark(p, i % 2 ? 0x9cff6b : 0xffd23a, 0.12, new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
-        }
-        if (this.auth) this.spawn(d, g.localId);
-        else g.sync?.aliveCast?.(d);
-        g.mana?.success?.('Alive'); // (mana: the tree really came alive)
-        g.hud.setVoice('🌳 <b>Alive!</b> Дерево оживает… Оно живёт, пока у вас есть мана', true);
-        return 'Alive';
+        const list = graves
+            ? graves.map((q) => ({ skel: 1, gid: q.id, x: q.x, y: q.y, z: q.z, ry: q.yaw, ex: q.exit.x, ez: q.exit.z, kind: 0, trunk: SKEL.BONE, leaf: 0, h: 2 }))
+            : trees.map((t) => { const d = this._takeTree(t); d.ry = Math.atan2(-(me.x - d.x), -(me.z - d.z)); return d; }); // (it wakes facing its caster)
+        list.forEach((d, i) => {
+            if (maxima) { d.max = 1; d.delay = i ? 0.4 + Math.random() * 1.6 : 0; } // (not all in one breath)
+            // the magic flies from the hand into the tree / the grave
+            for (let k = 0; k < (maxima ? 14 : 30); k++) {
+                const p = _v.copy(h.o).lerp(_v2.set(d.x, d.y + (d.skel ? 0.3 : 4), d.z), Math.random());
+                g.fx?.spark(p, k % 2 ? (d.skel ? 0x7dff9a : 0x9cff6b) : (d.skel ? 0xb06bff : 0xffd23a), 0.12, new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
+            }
+            if (this.auth) this.spawn(d, g.localId);
+            else g.sync?.aliveCast?.(d);
+        });
+        g.mana?.success?.(name); // (mana: it really came alive)
+        const n = list.length;
+        g.hud.setVoice(graves
+            ? (maxima ? `💀 <b>Alive Максима!</b> Кладбище оживает — встают мертвецы: ${n}. Каждый тратит 1 ману в секунду` : '💀 <b>Alive!</b> Могила дрожит… Мертвец встаёт и живёт, пока у вас есть мана')
+            : (maxima ? `🌳 <b>Alive Максима!</b> Лес оживает — деревьев: ${n}. Каждое тратит 1 ману в секунду` : '🌳 <b>Alive!</b> Дерево оживает… Оно живёт, пока у вас есть мана'), true);
+        return name;
     }
 
-    /** «Alive» at a closed grave: the mana, then the dead begins to rise (the host decides). */
-    _raise(q, h, isFinal, now, say) {
-        const g = this.game;
-        const c = g.combat;
-        const cost = c?.costOf ? c.costOf('Alive') : ALIVE.COST;
-        if (!this.creative) {
-            if (c?.frozen || c?.stunned) return say(c.check('Alive'));
-            if ((c?.fatigue ?? 0) < cost) {
-                const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(c?.fatigue ?? 0)}`;
-                g.hud.toast?.(msg);
-                return say(msg);
+    /** «Alive Maxima» in a wood: the other trees within ALIVE.MAX_R of the one pointed at (nearest first, up to MAX_N − 1). */
+    _treesRound(aim) {
+        const g = this.game, data = g.builder?.data;
+        const at = aim.inst ? { x: aim.inst.x, z: aim.inst.z, L: null } : { x: aim.cell.x, z: aim.cell.z, L: aim.cell.L };
+        const out = [];
+        // spawn-area trees (drawn apart from the blocks)
+        for (const t of g.world?.trees || []) {
+            if (!t.alive || t === aim.inst) continue;
+            const d = Math.hypot(t.x - at.x, t.z - at.z);
+            if (d > 0.5 && d <= ALIVE.MAX_R) out.push({ inst: t, d });
+        }
+        // voxel trees: the feet of their trunks (wood with no wood under it)
+        if (data) {
+            const L0 = at.L ?? (data.topLayer?.(Math.round(at.x), Math.round(at.z)) ?? 0);
+            const feet = [];
+            for (let x = Math.round(at.x - ALIVE.MAX_R); x <= Math.round(at.x + ALIVE.MAX_R); x++) for (let z = Math.round(at.z - ALIVE.MAX_R); z <= Math.round(at.z + ALIVE.MAX_R); z++) {
+                if (Math.hypot(x - at.x, z - at.z) > ALIVE.MAX_R) continue;
+                for (let L = L0 - 12; L <= L0 + 12; L++) {
+                    const type = data.get(x, L, z);
+                    const kind = TREE_KINDS.findIndex((k) => k.wood === type);
+                    if (kind < 0 || data.get(x, L - 1, z) === type) continue;
+                    feet.push({ cell: { x, L, z, type }, kind, x, z });
+                    break;
+                }
             }
-            c.fatigue = Math.max(0, c.fatigue - cost);
+            // (the aimed tree's own trunk, and one trunk per tree)
+            const aimFoot = aim.cell ? { x: aim.cell.x, z: aim.cell.z } : at;
+            for (const f of feet) {
+                if (Math.hypot(f.x - aimFoot.x, f.z - aimFoot.z) < 3) continue;
+                if (out.some((o) => Math.hypot((o.inst?.x ?? o.cell.x) - f.x, (o.inst?.z ?? o.cell.z) - f.z) < 3)) continue;
+                out.push({ cell: f.cell, kind: f.kind, d: Math.hypot(f.x - at.x, f.z - at.z) });
+            }
         }
-        this._last = now;
-        g._interimCast = isFinal ? null : { name: 'Alive', at: now };
-        const d = { skel: 1, gid: q.id, x: q.x, y: q.y, z: q.z, ry: q.yaw, ex: q.exit.x, ez: q.exit.z, kind: 0, trunk: SKEL.BONE, leaf: 0, h: 2 };
-        // the magic flies from the hand into the grave
-        for (let i = 0; i < 30; i++) {
-            const p = _v.copy(h.o).lerp(_v2.set(d.x, d.y + 0.3, d.z), Math.random());
-            g.fx?.spark(p, i % 2 ? 0x7dff9a : 0xb06bff, 0.12, new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
-        }
-        if (this.auth) this.spawn(d, g.localId);
-        else g.sync?.aliveCast?.(d);
-        g.mana?.success?.('Alive');
-        g.hud.setVoice('💀 <b>Alive!</b> Могила дрожит… Мертвец встаёт и живёт, пока у вас есть мана', true);
-        return 'Alive';
+        return out.sort((a, b) => a.d - b.d).slice(0, ALIVE.MAX_N - 1);
     }
 
     /**
@@ -409,9 +437,10 @@ export class LivingTrees {
         g.scene.add(model);
         const t = {
             id: id ?? (g.localId || 'h') + ':' + (++this._seq), owner, master: owner, masterUntil: 0, isLivingTree: true,
-            model, group: model, d: { x: d.x, y: d.y, z: d.z, kind: d.kind | 0, trunk: d.trunk, leaf: d.leaf, h: d.h || 10, skel: skel ? 1 : 0, gid: d.gid || '', ex: d.ex ?? d.x, ez: d.ez ?? d.z, ry: d.ry || 0 },
+            model, group: model, d: { x: d.x, y: d.y, z: d.z, kind: d.kind | 0, trunk: d.trunk, leaf: d.leaf, h: d.h || 10, skel: skel ? 1 : 0, gid: d.gid || '', ex: d.ex ?? d.x, ez: d.ez ?? d.z, ry: d.ry || 0, max: d.max ? 1 : 0 },
             skel, // (a skeleton raised from a grave: Skeletons.js)
-            hp: ALIVE.HP, phase: 'rise', form: 0, theta: 0, omega: 0, pt: 0, why: '',
+            hp: ALIVE.HP, phase: 'rise', form: -(Math.min(3, +d.delay || 0)) / (skel ? SKEL.RISE : ALIVE.GROW), // («Alive Maxima»: one after another)
+            theta: 0, omega: 0, pt: 0, why: '',
             walkT: 0, speed: 0, swing: null, swingSide: 0, nextSwing: 0.5, burnT: 0, fireCd: 0, damageCooldown: 0,
             get isDead() { return this.phase === 'fall' || this.phase === 'burn' || this.gone; },
             get position() { return this.model.position; },
@@ -651,7 +680,7 @@ export class LivingTrees {
         const mine = this.mine();
         const max = c.maxFatigue || 30;
         if (mine.length && !this.creative) {
-            c.fatigue = aliveDrain(c.fatigue, dt, false);
+            c.fatigue = aliveDrain(c.fatigue, dt, false, aliveRate(mine));
             if (c.fatigue <= 0) for (const t of mine) this.requestEnd(t, 'mana');
         } else if (!c.enabled && !this.creative && c.fatigue < max && !c.dead) c.fatigue = Math.min(max, c.fatigue + ALIVE.REGEN * dt);
         // (outside the free world the mana bar shows while it matters)
@@ -1026,7 +1055,7 @@ export class LivingTrees {
         const r = (v) => Math.round(v * 100) / 100;
         const list = this.list.map((t) => [t.id, r(t.model.position.x), r(t.model.position.y), r(t.model.position.z), r(t.model.rotation.y), PHASES.indexOf(t.phase), r(t.form), r(t.theta), r(t.hp), t.owner, t.master,
             t.d.trunk, t.d.leaf, t.d.h, t.d.kind, t.swing ? r(t.swing.t) : -1, t.swingSide, t.burnT > 0 ? 1 : 0, WHY.indexOf(t.why), r(t.speed), r(t.pt),
-            t.skel ? 1 : 0, t.d.gid, r(t.d.x), r(t.d.y), r(t.d.z), r(t.d.ex), r(t.d.ez), t.broken ? 1 : 0]);
+            t.skel ? 1 : 0, t.d.gid, r(t.d.x), r(t.d.y), r(t.d.z), r(t.d.ex), r(t.d.ez), t.broken ? 1 : 0, t.d.max]);
         if (!list.length && !this._sentSome && !g.servants?.netList?.length) return;
         this._sentSome = list.length > 0;
         g.sync.livingTrees(list, g.servants?.netList || []);
@@ -1038,10 +1067,10 @@ export class LivingTrees {
         const me = this.game.localId;
         for (const e of list || []) {
             if (!Array.isArray(e) || e.length < 21) continue;
-            const [id, x, y, z, ry, ph, form, theta, hp, owner, master, trunk, leaf, h, kind, sw, side, burning, why, speed, pt, skel, gid, gx, gy, gz, ex, ez, broken] = e;
+            const [id, x, y, z, ry, ph, form, theta, hp, owner, master, trunk, leaf, h, kind, sw, side, burning, why, speed, pt, skel, gid, gx, gy, gz, ex, ez, broken, max] = e;
             seen.add(id);
             let t = this.byId.get(id);
-            if (!t) { t = this.spawn(skel ? { skel: 1, gid, x: gx, y: gy, z: gz, ex, ez, ry, trunk, leaf, h, kind } : { x, y, z, ry, trunk, leaf, h, kind }, owner, id); t.model.position.set(x, y, z); }
+            if (!t) { t = this.spawn(skel ? { skel: 1, gid, x: gx, y: gy, z: gz, ex, ez, ry, trunk, leaf, h, kind, max } : { x, y, z, ry, trunk, leaf, h, kind, max }, owner, id); t.model.position.set(x, y, z); }
             t.broken = !!broken;
             t.net = (t.net || new THREE.Vector3()).set(x, y, z);
             t.model.rotation.y = ry;

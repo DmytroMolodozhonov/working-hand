@@ -37,7 +37,7 @@ export const HELD = {
     Waterball: { ru: 'Водяной шар', icon: '💧', own: ['Waterball', 'WaterForming', 'Maxima', 'Frozen', 'Ice'] },
     Levitation: { ru: 'Левиоса', icon: '🪶', own: ['Levitation', 'Attack'] },
     LevitationMaxima: { ru: 'Левиоса Максима', icon: '🪶', own: ['LevitationMaxima', 'Attack'] },
-    Alive: { ru: 'Живое дерево', icon: '🌳', own: ['Alive', 'Attack'] },
+    Alive: { ru: 'Живое дерево', icon: '🌳', own: ['Alive', 'AliveMaxima', 'Attack'] },
     Hellfire: { ru: 'Адский огонь', icon: '🔥', own: ['Hellfire'] },
     Inferno: { ru: 'Инферно', icon: '🔥', own: ['Inferno'] },
     Drawdown: { ru: 'Drawdown', icon: '⬇️', own: ['Drawdown', 'DrawdownMaxima'] },

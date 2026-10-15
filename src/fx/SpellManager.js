@@ -134,7 +134,7 @@ export function matchSpell(text) {
     // Duel magic
     if (has('авада', 'кедавр', 'кидавр', 'avada', 'kedavr', 'kadavr', 'водокидавр', 'адакедавр')) return 'AvadaKedavra';
     // «Alive»: a tree comes alive (its sounds before the short Ice / Sands / Flight tokens)
-    if (has('alive', 'a live', 'alife', 'алайв', 'алаив', 'алайф', 'элайв', 'элаив', 'элайф', 'эллайв', 'аллайв', 'олайв', 'алив', 'элив', 'алайве', 'оживи', 'оживай', 'оживл')) return 'Alive';
+    if (has('alive', 'a live', 'alife', 'алайв', 'алаив', 'алайф', 'элайв', 'элаив', 'элайф', 'эллайв', 'аллайв', 'олайв', 'алив', 'элив', 'алайве', 'оживи', 'оживай', 'оживл')) return has('макс', 'max', 'мах', 'maks', 'мекс', 'мэкс') ? 'AliveMaxima' : 'Alive'; // («…Максима»: everything near comes alive)
     if (has('остолбен', 'остолбин', 'столбен', 'ступеф', 'stupef', 'stupif', 'ступиф')) return 'Stupefy';
     if (has('вингард', 'вингард', 'wingard', 'левиос', 'левиоз', 'leviosa', 'leviose', 'левиоc', 'вин гард')) return has('макс', 'max', 'мах', 'maks', 'мекс', 'мэкс') ? 'LevitationMaxima' : 'Levitation'; // («…Максима»: LevitationMaxima.js)
     if (has('паузин', 'паузен', 'паузи', 'пауза', 'паузу', 'pausin', 'pauzin', 'pause', 'повзин')) return 'Pause';

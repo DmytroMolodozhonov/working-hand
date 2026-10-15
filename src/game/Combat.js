@@ -119,6 +119,7 @@ export const SPELL_COST = {
     VortexBubble: 0, // «Bubble» on the one the vortex hit: part of the vortex (already paid)
     FireMaxima: 20, // the only way out of the vortex's ice
     Alive: 25, // a living tree (then it drains the mana while it lives)
+    AliveMaxima: 50, // twice «Alive»: every grave of a graveyard / the trees round (each then drains 1 mana a second)
     TotalDestruction: 80, // the whole area falls into ruins (only with a mana maximum of 100+)
     TotalDestructionMaxima: 160, // twice as strong (only with a mana maximum of 200+)
     CircleAttack: 80, // a great wave all round the wizard — as «Total Destruction» (a mana maximum of 100+; CircleAttack.js)

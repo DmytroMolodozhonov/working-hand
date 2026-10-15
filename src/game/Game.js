@@ -1166,7 +1166,7 @@ export class Game {
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
-        if (name === 'Alive') return this.livingTrees.cast(isFinal);
+        if (name === 'Alive' || name === 'AliveMaxima') return isFinal ? this.livingTrees.cast(isFinal, name === 'AliveMaxima') : null; // (unfinished «Alive…»: it may be «Alive Maxima»)
         if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'TotalDestruction' || name === 'TotalDestructionMaxima') return this.destruction.cast(isFinal, name);
         if (name === 'CircleAttack' || name === 'CircleAttackMaxima') return this.circleAttack.cast(isFinal, name);

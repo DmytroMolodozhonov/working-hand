@@ -86,7 +86,7 @@ test('creative: «Alive» at a tree — its blocks are gone, a tree monster stan
     assert.equal(r.stood.phase, 'alive');
     assert.ok(Math.abs(r.stood.rig) < 0.15, `it stood up on its root legs (${r.stood.rig.toFixed(2)})`);
     assert.ok(r.stood.eyes > 0.3 && r.stood.mouth > 0.6 && r.stood.arm > 0.95, `glowing eyes, an open mouth, grown arms (${JSON.stringify(r.stood)})`);
-    assert.deepEqual(r.afterAvada, { hp: 15, phase: 'alive' }, 'Avada, a sword and Bombardo do nothing');
+    assert.deepEqual(r.afterAvada, { hp: 7, phase: 'alive' }, 'Avada and a sword do nothing; Bombardo tears it (−8)');
     assert.equal(r.burnt.phase, 'burn', 'Inferno burnt it');
     assert.ok(r.removed, 'it collapsed and is gone');
     assert.equal(r.laid, 0, 'burnt: no fallen tree is left');

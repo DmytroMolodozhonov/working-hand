@@ -102,3 +102,41 @@ test('the skeleton: concentration as the tree (mine, «стоп»), the host\'s 
     assert.equal(u.legs.length, 2);
     assert.ok(u.head && u.mouth && u.glow && u.knees.length === 2);
 });
+
+test('«Alive Maxima»: heard, twice the mana, the whole graveyard rises, each drains 1 mana a second', async () => {
+    const { matchSpell } = await import('../../src/fx/SpellManager.js');
+    const { SPELL_COST } = await import('../../src/game/Combat.js');
+    const { aliveRate } = await import('../../src/game/LivingTrees.js');
+    for (const w of ['alive maxima', 'алайв максима', 'элайв максима']) assert.equal(matchSpell(w), 'AliveMaxima', w);
+    assert.equal(matchSpell('алайв'), 'Alive');
+    assert.equal(SPELL_COST.AliveMaxima, SPELL_COST.Alive * 2);
+    const g = fakeGame({ mode: 'freeworld', mana: 30 });
+    g.combat.costOf = (n) => SPELL_COST[n];
+    const G2 = { ...GRAVE, id: 'cs1_2_g1', x: 8, cells: [[8, 0], [8, 1]], exit: { x: 8, z: -1 } };
+    g.blocks.set('8,1,0', BLOCK.DIRT); g.blocks.set('8,1,1', BLOCK.DIRT);
+    g.castleLife.index.near = () => [{ id: 'cs1_2', graves: [GRAVE, G2] }];
+    g.combat.fatigue = 60; g.combat.maxFatigue = 60;
+    assert.equal(g.livingTrees.cast(true, true), 'AliveMaxima');
+    assert.equal(g.combat.fatigue, 10, '50 mana');
+    assert.equal(g.livingTrees.list.length, 2, 'every closed grave');
+    assert.equal(aliveRate(g.livingTrees.mine()), 2, '1 mana a second each');
+    assert.equal(aliveRate([{ d: {} }]), 0.5, 'plain «Alive»: as before');
+    run(g, 2);
+    assert.ok(Math.abs(g.combat.fatigue - 6) < 0.1, `drained 2/s (${g.combat.fatigue})`);
+    run(g, 4);
+    assert.ok(g.livingTrees.list.every((t) => t.phase !== 'rise' && t.phase !== 'alive'), 'mana gone: they all let go');
+});
+
+test('«Alive Maxima» in a wood: the trees round the one pointed at come alive too (up to 6, within 14 m)', async () => {
+    const { TREE_KINDS } = await import('../../src/world/Terrain.js');
+    const g = fakeGame();
+    const W = TREE_KINDS[0].wood;
+    const trunks = [[6, 0], [10, 4], [3, -8], [12, -6], [30, 0], [6, 9], [-6, 6], [0, 13]];
+    for (const [x, z] of trunks) for (let L = 1; L <= 4; L++) g.blocks.set(`${x},${L},${z}`, W);
+    const aim = { cell: { x: 6, L: 2, z: 0, type: W }, kind: 0, dist: 6 };
+    const round = g.livingTrees._treesRound(aim);
+    assert.equal(round.length, 5, 'the nearest ones, 6 with the one pointed at');
+    assert.ok(round.every((r) => Math.hypot(r.cell.x - 6, r.cell.z) <= 14), 'within 14 m');
+    assert.ok(!round.some((r) => r.cell.x === 30), 'not the far one');
+    assert.ok(round.every((r) => r.cell.L === 1), 'found by the foot of the trunk');
+});
