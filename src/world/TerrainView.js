@@ -238,12 +238,21 @@ export class Terrain {
             if (c && c.modified) { const { rev, ...copy } = c; chunks.push(copy); } // eslint-disable-line no-unused-vars
         }
         const hid = d._hidden?.get(key);
+        // the lit land round it (rooms made by magic — HouseMagic, CastleMagic, IceMagic: data.litLand lives
+        // only here): the worker's sky light keeps them lit as rooms, never a cave's dark
+        let lit = null;
+        if (d.litLand) {
+            const P = 15, RW = CHUNK + 2 * P, x0 = entry.cx * CHUNK - P, z0 = entry.cz * CHUNK - P;
+            let a = null;
+            for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) if (d.litLand(x0 + rx, z0 + rz)) (a || (a = new Uint8Array(RW * RW)))[rz * RW + rx] = 1;
+            if (a) lit = { x0, z0, RW, a };
+        }
         let w = this._workers[0];
         for (const o of this._workers) if (o.load < w.load) w = o;
         w.load++;
         const id = ++this._jobId;
         this._rebuilding.set(key, id);
-        w.postMessage({ type: 'rebuild', id, key, cx: entry.cx, cz: entry.cz, chunks, hidden: hid ? [...hid] : null });
+        w.postMessage({ type: 'rebuild', id, key, cx: entry.cx, cz: entry.cz, chunks, hidden: hid ? [...hid] : null, lit });
     }
 
     _applyRebuilt(m) {

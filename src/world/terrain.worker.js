@@ -41,6 +41,8 @@ self.onmessage = (e) => {
         const hidden = data._hidden;
         data._hidden = m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null;
         data._last = null;
+        const litWas = data.litLand, L = m.lit; // (the lit land of the main thread: rooms made by magic)
+        data.litLand = L ? (x, z) => { const rx = x - L.x0, rz = z - L.z0; return rx >= 0 && rz >= 0 && rx < L.RW && rz < L.RW && L.a[rz * L.RW + rx] === 1; } : litWas;
         let arrays, sky;
         try {
             arrays = data.buildChunkArrays(m.cx, m.cz);
@@ -48,6 +50,7 @@ self.onmessage = (e) => {
         } finally {
             for (const [k, c] of keep) { if (c) data.chunks.set(k, c); else data.chunks.delete(k); }
             data._hidden = hidden;
+            data.litLand = litWas;
             data._last = null;
         }
         const transfer = [];
