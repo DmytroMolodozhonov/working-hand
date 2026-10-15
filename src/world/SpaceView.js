@@ -59,12 +59,16 @@ void main() {
 }`;
 
 const ATMO_FS = /* glsl */ `
-uniform vec3 uSun; uniform vec3 uAtmo; uniform float uK; uniform vec3 uCenter;
+uniform vec3 uSun; uniform vec3 uAtmo; uniform float uK; uniform vec3 uCenter; uniform float uRatio;
 varying vec3 vObj; varying vec3 vN; varying vec3 vW;
 void main() {
     vec3 n = normalize(vN), V = normalize(-vW), L = normalize(uSun - vW);
-    float f = 1.0 - abs(dot(n, V));
-    float glow = pow(f, 3.0) * 1.4;
+    // how close the line of sight passes to the planet: brightest just over its edge, fading out to the
+    // shell's edge; over the disc only a faint tint (a haze, not a ring)
+    float c = abs(dot(n, V));
+    float s = sqrt(max(0.0, 1.0 - c * c));
+    float h = (s - uRatio) / (1.0 - uRatio);
+    float glow = h < 0.0 ? 0.25 * exp(h * 4.0) : exp(-h * 4.5) * (1.0 - h);
     float day = smoothstep(-0.35, 0.3, dot(normalize(vW - uCenter), L));
     gl_FragColor = vec4(uAtmo * glow * day * uK, glow * day * uK);
 }`;
@@ -131,14 +135,16 @@ void main() { vec2 c = gl_PointCoord - 0.5; float d = dot(c, c); if (d > 0.25) d
 const MILKY_FS = /* glsl */ `
 uniform float uK; varying vec3 vObj;
 ${GLSL_NOISE}
+float fbmL(vec3 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 3; i++) { v += a * n3(p); p *= 2.03; a *= 0.5; } return v; }
 void main() {
     vec3 d = normalize(vObj);
     vec3 bandN = normalize(vec3(0.35, 0.82, -0.45));
     float b = dot(d, bandN);
     float band = exp(-b * b / 0.025);
+    if (band < 0.01) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; } // (off the band: only black — cheap)
     float core = exp(-pow(length(d - normalize(vec3(-0.8, -0.1, -0.55))), 2.0) / 0.2);
-    float n = fbm3(d * 6.0) * 0.8 + fbm3(d * 22.0) * 0.4;
-    float dust = smoothstep(0.55, 0.75, fbm3(d * 9.0 + 3.0)) * exp(-b * b / 0.004);
+    float n = fbmL(d * 6.0) * 0.8 + n3(d * 22.0) * 0.3;
+    float dust = smoothstep(0.55, 0.75, fbmL(d * 9.0 + 3.0)) * exp(-b * b / 0.004);
     vec3 col = mix(vec3(0.35, 0.38, 0.55), vec3(0.75, 0.65, 0.5), core) * band * n * (0.5 + core);
     col *= 1.0 - dust * 0.8;
     gl_FragColor = vec4(col * 0.45 * uK, 1.0);
@@ -325,9 +331,10 @@ export class SpaceView {
         tilt.add(mesh);
         const b = { def, group, tilt, mesh, u, atmo: null, clouds: null, rings: null };
         if (def.atmosphere || def.clouds) {
-            const au = { uSun: u.uSun, uAtmo: { value: new THREE.Color(def.atmosphere ?? def.clouds) }, uK: { value: def.look === 'earth' ? 1.0 : 0.7 }, uCenter: { value: new THREE.Vector3() } };
+            const k = def.look === 'earth' ? 1.05 : def.kind === 'gas' ? 1.03 : 1.05;
+            const au = { uSun: u.uSun, uAtmo: { value: new THREE.Color(def.atmosphere ?? def.clouds) }, uK: { value: def.look === 'earth' ? 1.0 : 0.6 }, uCenter: { value: new THREE.Vector3() }, uRatio: { value: 1 / k } };
             b.atmo = new THREE.Mesh(this.geoLo, new THREE.ShaderMaterial({ uniforms: au, vertexShader: PLANET_VS, fragmentShader: ATMO_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-            b.atmo.scale.setScalar(def.look === 'earth' ? 1.045 : 1.06);
+            b.atmo.scale.setScalar(k);
             b.au = au;
             tilt.add(b.atmo);
         }
@@ -359,8 +366,8 @@ export class SpaceView {
         }
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        this._orbitMat = this._orbitMat || new THREE.LineBasicMaterial({ color: 0x6f8fc8, transparent: true, opacity: 0.28, depthWrite: false });
-        this._earthOrbitMat = this._earthOrbitMat || new THREE.LineBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.55, depthWrite: false });
+        this._orbitMat = this._orbitMat || new THREE.LineBasicMaterial({ color: 0x6f8fc8, transparent: true, opacity: 0.22, depthWrite: false });
+        this._earthOrbitMat = this._earthOrbitMat || new THREE.LineBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.45, depthWrite: false });
         b.orbit = new THREE.LineLoop(g, def.look === 'earth' ? this._earthOrbitMat : this._orbitMat);
         b.orbit.frustumCulled = false;
         b.orbitA = def.a;
@@ -441,6 +448,9 @@ export class SpaceView {
             m.position.set(_p.x - cam.x, _p.y - cam.y, _p.z - cam.z);
             m.rotation.y = t * 0.01;
         }
+        // (close to a planet the orbits' lines would cross the whole view: they fade away)
+        const ok = o.orbitK ?? 1;
+        this._orbitMat.opacity = 0.22 * ok; this._earthOrbitMat.opacity = 0.45 * ok;
         const k = o.k ?? 1;
         this.starU.uK.value = k;
         this.milkyU.uK.value = k;

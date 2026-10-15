@@ -583,6 +583,16 @@ export class SoundManager {
         this._spell(this.sounds[kind], volume, rate);
     }
 
+    /** The silence of space: the music fades away there (and comes back off it). */
+    spaceQuiet(on) {
+        const cur = this.music?.current;
+        if (!this.context || !cur?.gain) return;
+        const t = this.context.currentTime, g = cur.gain.gain;
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(g.value, t);
+        g.linearRampToValueAtTime(on ? 0 : this.music.volume, t + (on ? 2.5 : 4));
+    }
+
     /** A looping sound of space (Venus' wind, the Sun's heat) at loudness k (0: stopped). */
     spaceLoop(kind, k) {
         if (!this.enabled || !this.context || !this.sounds[kind]) return;

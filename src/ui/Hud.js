@@ -15,7 +15,7 @@ export function lastWords(text, n = HEARD_WORDS) {
     const words = String(text ?? '').trim().split(/\s+/).filter(Boolean);
     return words.slice(-n).join(' ');
 }
-import { BLOCK, BASE_COLORS, CHUNK, chunkKey } from '../world/Terrain.js';
+import { BLOCK, BASE_COLORS, CHUNK, chunkKey, isPlanetBlock } from '../world/Terrain.js';
 
 /**
  * The minimap's size, % of 240 × 160 (settings → «Размер мини-карты»): the same picture,
@@ -490,7 +490,8 @@ export class Hud {
                     col = 0x3a8fd8;
                     shade = 1.1 - depth * 0.08;
                 } else {
-                    col = BASE_COLORS[d.get(wx, top, wz)] ?? 0x4CAF50;
+                    const bt = d.get(wx, top, wz);
+                    col = isPlanetBlock(bt) ? d.faceColor(bt, wx, top, wz, true) : BASE_COLORS[bt] ?? 0x4CAF50; // (another planet's ground: its own colours)
                     // hill shading: light from the north-west
                     const hw = H[(z + 1) * (size + 1) + x], hn = H[z * (size + 1) + (x + 1)];
                     shade = 1 + Math.max(-0.25, Math.min(0.25, ((top - hw) + (top - hn)) * 0.07)) + Math.min(0.15, Math.max(0, top) * 0.004);

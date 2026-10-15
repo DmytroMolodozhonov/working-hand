@@ -41,6 +41,9 @@ export function planetTexture(def, w, h, terrain = null) {
     return { w, h, data };
 }
 
+/** A noise over the sphere with no seam: sampled on two planes through the unit direction d. */
+const sph = (n, d, f, sy = 1) => 0.5 * (n(d.x * f, d.y * f * sy) + n(d.z * f + 17.3, d.y * f * sy + 4.1)) * 1.4;
+
 function put(data, i, c, a = 255) { data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = a; }
 
 /** A rocky body: heights of its own ground, lit from the west, coloured by what lies on top. */
@@ -104,7 +107,7 @@ function cloudMap(def, data, w, h) {
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const d = lonLat(i, j, w, h, _d);
         const u = d.lon, v = d.lat;
-        const swirl = n(u * 3 + v * 6, v * 9) * 0.5 + n2(u * 9, v * 20) * 0.25;
+        const swirl = sph(n, d, 2.2, 3) * 0.5 + sph(n2, d, 7, 2.5) * 0.25;
         const y = Math.abs(v) < 0.5 ? Math.cos(u * 1 + Math.abs(v) * 4) * 0.25 : 0;
         let c = mixc(a, b, Math.max(0, Math.min(1, 0.5 + swirl + y)));
         c = mixc(c, c2, Math.max(0, Math.abs(v) / (Math.PI / 2) - 0.6) * 1.5);
@@ -126,12 +129,12 @@ function gasMap(def, data, w, h) {
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const d = lonLat(i, j, w, h, _d);
         const u = d.lon, v = d.lat;
-        const warp = n(u * 4, v * 12) * turb * 0.12 + n2(u * 14, v * 40) * turb * 0.03;
+        const warp = sph(n, d, 3, 4) * turb * 0.12 + sph(n2, d, 11, 4) * turb * 0.03;
         const bf = ((v + warp) / Math.PI + 0.5) * bands;
         const b0 = Math.floor(bf), t = bf - b0;
         const ca = pal[((b0 % 5) + 5) % 5], cb = pal[(((b0 + 1) % 5) + 5) % 5];
         let c = mixc(ca, cb, t * t * (3 - 2 * t));
-        c = mixc(c, [255, 255, 255], Math.max(0, n2(u * 30, v * 60)) * 0.08 * turb);
+        c = mixc(c, [255, 255, 255], Math.max(0, sph(n2, d, 24, 2)) * 0.08 * turb);
         // storms
         if (def.look === 'jupiter') {
             const du = ((u - 0.9 + Math.PI) % (2 * Math.PI)) - Math.PI, dv = v + 0.39;
@@ -156,7 +159,7 @@ function sunMap(def, data, w, h) {
     const n = createNoise2D(911), n2 = createNoise2D(377);
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const d = lonLat(i, j, w, h, _d);
-        const g = n(d.lon * 40, d.lat * 40) * 0.5 + n2(d.lon * 120, d.lat * 120) * 0.3;
+        const g = sph(n, d, 30) * 0.5 + sph(n2, d, 90) * 0.3;
         const c = mixc([255, 214, 120], [255, 160, 60], Math.max(0, Math.min(1, 0.5 - g)));
         put(data, (j * w + i) * 4, c);
     }

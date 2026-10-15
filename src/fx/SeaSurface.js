@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { waveGlsl, seaDepth, waveAmp, WAVES } from '../world/Sea.js';
+import { SPACE } from '../world/Planets.js';
 
 const TEX = 256; // texels per side
 const TEXEL = 5; // m per texel → 1280 m covered
@@ -185,6 +186,8 @@ varying vec3 vSeaWorld;`)
 
     update(dt, focus) {
         if (!this.sea) return;
+        // (space and the other planets — Space.js: no sea of the Earth's there)
+        if (focus.x >= SPACE.ZONE_X || focus.y >= SPACE.FLOOR_Y) { this.mesh.visible = false; this.active = false; return; }
         const g = this.game;
         this.uniforms.uTime.value = this.sea.time();
         this.uniforms.uStorm.value = this.sea.storm || 0;
@@ -203,6 +206,18 @@ varying vec3 vSeaWorld;`)
         this.mesh.visible = this.ready;
         const cam = g.camera ? g.camera.getWorldPosition(_v) : focus;
         this.mesh.position.set(Math.round(cam.x / 2) * 2, WATER_LEVEL_Y, Math.round(cam.z / 2) * 2);
+    }
+
+    /**
+     * A jump far away is coming (Space.js: the fall back into the Earth's air): the shore texture of that
+     * place made ahead, a little a frame — on arrival nothing is left to make at once.
+     */
+    prepareAt(x, z, ms = 2) {
+        if (!this.sea) return;
+        const ox = Math.round(x / TEXEL) * TEXEL, oz = Math.round(z / TEXEL) * TEXEL, o = this.uniforms.uOrigin.value;
+        if (this.ready && Math.hypot(ox - o.x, oz - o.y) < 128) return; // (made already)
+        if (!this._job || Math.hypot(this._job.ox - ox, this._job.oz - oz) > 64) this._startJob(x, z);
+        this._runJob(SLICE * 4, ms);
     }
 
     /** Build the texture now (tests, teleports). */

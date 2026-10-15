@@ -16,6 +16,9 @@
  * (and in which top group), the page's JS memory, and the size of EVERY array/Map/Set the game's
  * systems hold (two levels deep). At the end: what grew between the first and the last third.
  *
+ * --space: each round also goes to space and back («Космос», Space.js): Flying Maxima out of the air, a
+ * flight through space, then back into the Earth's air to a new place.
+ *
  * --check: fail when something grows without end (scene objects, geometries, textures, shaders,
  * a collection over 500 that kept growing) or when the game's work in a frame grew by more than half.
  */
@@ -29,13 +32,14 @@ const EVERY = parseFloat(opt('every', '30'));
 const SEED = parseInt(opt('seed', '20261015'), 10);
 const OUT = opt('out', null);
 const CHECK = args.includes('--check');
+const SPACE = args.includes('--space');
 const [W, H] = opt('size', '480x270').split('x').map(Number);
 /** Draw the picture only every N-th frame: here the processor draws it (seconds a frame), so without
  *  this the game itself would go 2–3 frames a second and 15 minutes would be 3 minutes of play. */
 const RENDER_EVERY = parseInt(opt('render-every', '15'), 10);
 
 /** In the page: the autopilot (the rounds) and the sampler. */
-function install({ EVERY, RENDER_EVERY }) {
+function install({ EVERY, RENDER_EVERY, SPACE }) {
     const g = window.__zns.game;
     const T = window.__zns.THREE;
     const ch = g.character;
@@ -59,14 +63,41 @@ function install({ EVERY, RENDER_EVERY }) {
     const R = 1400; // m: the flight's circle round the start
     const SPELLS = ['Bombardo', 'Inferno', 'Stupefy', 'Ice', 'Sands', 'Sapira', 'Thunderwave', 'Wind', 'Earthquake', 'WallRise', 'Overgrown', 'AvadaKedavra', 'BombardoMaxima', 'WindImpulse', 'Firefighting'];
     let si = 0;
-    const plan = [{ name: 'полёт', time: 40 }, { name: 'бой', time: 40 }];
+    const plan = [{ name: 'полёт', time: 40 }, { name: 'бой', time: 40 }, ...(SPACE ? [{ name: 'космос', time: 50 }] : [])];
+    let sp = null; // (the space round's own steps)
     const origFlight = g._updateFlight.bind(g);
     let pi = 0;
     const tick = (dt) => { // (the game's own time: the rounds last as long in play however slow the frames)
         const P = plan[pi];
         S.phase = P.name;
         phaseT += dt;
-        if (P.name === 'полёт') {
+        if (P.name === 'космос') {
+            const Sx = g.space;
+            if (!sp) sp = { t: 0, step: 'out' };
+            sp.t += dt;
+            if (sp.step === 'out' && Sx.state === 'off' && Sx.realm === 'earth') {
+                if (g.flight.active === false) g.startFlight(true);
+                g.flight.state = 'cruise'; g.flight.t = 5;
+                Sx.cast(true);
+                sp.step = 'up';
+            } else if (sp.step === 'up' && Sx.realm === 'space') { sp.step = 'fly'; sp.t = 0; }
+            else if (sp.step === 'fly' && sp.t > 20) {
+                // back: from close over the Earth, straight down into its air (a new place each round)
+                const e = window.__planetPos(Sx.planets.get('earth'), Sx.now(), { x: 0, y: 0, z: 0 }, Sx.planets), R = Sx.planets.get('earth').radius;
+                const a = S.round * 1.3;
+                Sx.P.x = e.x + Math.cos(a) * 120; Sx.P.y = e.y + R + 400; Sx.P.z = e.z + Math.sin(a) * 120;
+                Sx.O.x = Sx.P.x; Sx.O.y = Sx.P.y; Sx.O.z = Sx.P.z; Sx._exitDir = null;
+                Sx.pitch = -1.4; Sx.speed = 300; Sx.vel.x = 0; Sx.vel.y = -300; Sx.vel.z = 0; g.flight.hovering = false;
+                Sx._place();
+                sp.step = 'down';
+            }
+            if (phaseT + dt >= P.time) {
+                // (the round ends at home: wherever it got to)
+                if (Sx.realm !== 'earth' || Sx.state !== 'off') { Sx.state = 'off'; ch.group.position.set(home.x, home.y + 20, home.z); }
+                home.copy(ch.group.position); home.y = Math.max(home.y, g.collision.groundY(home.x, home.z) + 2);
+                sp = null;
+            }
+        } else if (P.name === 'полёт') {
             if (!g.flight.active) g.startFlight(true);
             angle += dt * 26 / R;
             const p = ch.group.position;
@@ -180,7 +211,8 @@ try {
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     await sleep(3000);
-    await page.evaluate(install, { EVERY, RENDER_EVERY });
+    if (SPACE) await page.evaluate(async () => { const m = await import('/src/world/Planets.js'); window.__planetPos = m.planetPosition; });
+    await page.evaluate(install, { EVERY, RENDER_EVERY, SPACE });
     // (minutes of PLAY: the game's own time; at most four times as long by the clock)
     const end = Date.now() + MINUTES * 4 * 60000;
     let shown = 0;

@@ -10,6 +10,9 @@
  *   --check             fail (exit code 1) when the flight is not smooth (LIMITS below)
  *   --profile           also record a CPU profile of the max run (scratch/flight.cpuprofile)
  *   --size 640x360      the window (small: here the picture is drawn by the processor)
+ *   --space             then the space route too («Космос», Space.js): «выход» — Flying Maxima out of the
+ *                       air, «космос» — full speed through space, «посадка» — into Mars' air and down to its
+ *                       ground, «марс» — a flight over it, «домой» — out again and back into the Earth's air
  *
  * The route (the same every run, real flight speed 26 m/s, the player's own flight):
  *   1. «прямой»   — straight fast flight away from spawn;
@@ -35,6 +38,7 @@ const SEED = parseInt(opt('seed', '20261015'), 10);
 const OUT = opt('out', null);
 const PROFILE = args.includes('--profile');
 const CHECK = args.includes('--check');
+const SPACE_ROUTE = args.includes('--space');
 /** --check: what a flight must keep (the game's own work in a frame; no shader made in flight). */
 const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0 };
 const [W, H] = opt('size', '640x360').split('x').map(Number);
@@ -212,6 +216,68 @@ async function flyRoute() {
     };
 }
 
+/** Runs in the page: the space route (Space.js), every frame recorded like the flight's. */
+async function flySpaceRoute() {
+    const g = window.__zns.game, S = g.space, ch = g.character;
+    const frames = [];
+    const newProgs = [];
+    let seg = 'выход', nProg = g.renderer.info.programs.length;
+    const origFrame = g.frame.bind(g);
+    let prev = null, done = false;
+    g.frame = function () {
+        const t0 = performance.now();
+        origFrame();
+        const t1 = performance.now();
+        const progs = g.renderer.info.programs;
+        if (progs.length > nProg) for (let i = nProg; i < progs.length; i++) newProgs.push(`${seg} ${(t1 - t0).toFixed(0)}мс ${progs[i].name}`);
+        nProg = progs.length;
+        if (prev != null && !done) {
+            const parts = {};
+            for (const k in g._parts) parts[k] = +g._parts[k].toFixed(2);
+            frames.push({ seg, gap: +(t0 - prev).toFixed(2), cpu: +(t1 - t0).toFixed(2), game: +(t1 - t0 - (g._parts['графика'] || 0)).toFixed(2), parts });
+        }
+        prev = t0;
+    };
+    const wait = async (cond, maxMs) => { const t0 = performance.now(); while (!cond() && performance.now() - t0 < maxMs) await new Promise((r) => setTimeout(r, 100)); };
+    const gameSecs = async (secs) => { let tt = 0, last = performance.now(); while (tt < secs) { await new Promise((r) => setTimeout(r, 100)); const n = performance.now(); tt += Math.min(0.1 * 6, (n - last) / 1000); last = n; } };
+    // (the game's time: frames are slow here — a second of play is a few frames)
+    const playSecs = async (secs) => { const f0 = g.frameCount; await wait(() => g.frameCount - f0 >= secs * 10, secs * 20000); };
+    void gameSecs;
+    // 1. out: in flight, «Flying Maxima», up through the sky into space
+    if (!g.flight.active) g.startFlight(true);
+    g.flight.state = 'cruise'; g.flight.t = 5;
+    S.cast(true);
+    await wait(() => S.realm === 'space', 120000);
+    // 2. space: full speed away (towards Mars), the planets and the belts passing
+    seg = 'космос';
+    const P = (id) => window.__planetPos(S.planets.get(id), S.now(), { x: 0, y: 0, z: 0 }, S.planets);
+    await playSecs(25);
+    // 3. into Mars' air: from close by, straight at it
+    seg = 'посадка';
+    const m = P('mars'), R = S.planets.get('mars').radius;
+    S.P.x = m.x; S.P.y = m.y + R + 400; S.P.z = m.z; S.O.x = S.P.x; S.O.y = S.P.y; S.O.z = S.P.z; S._exitDir = null;
+    S.pitch = -1.4; S.speed = 300; S.vel.x = 0; S.vel.y = -300; S.vel.z = 0; g.flight.hovering = false;
+    S._place();
+    await wait(() => S.realm === 'mars' && S.state === 'off', 120000);
+    // 4. a flight over Mars
+    seg = 'марс';
+    await playSecs(25);
+    // 5. home: out again, then straight into the Earth's air
+    seg = 'домой';
+    g.flight.state = 'cruise'; g.flight.t = 5; g.flight.hovering = false;
+    S.cast(true);
+    await wait(() => S.realm === 'space', 120000);
+    const e = P('earth'), Re = S.planets.get('earth').radius;
+    S.P.x = e.x + 200; S.P.y = e.y + Re + 500; S.P.z = e.z - 300; S.O.x = S.P.x; S.O.y = S.P.y; S.O.z = S.P.z; S._exitDir = null;
+    S.pitch = -1.4; S.speed = 300; S.vel.x = 0; S.vel.y = -300; S.vel.z = 0;
+    S._place();
+    await wait(() => S.realm === 'earth' && S.state === 'off', 120000);
+    await playSecs(15);
+    done = true;
+    g.frame = origFrame;
+    return { frames, newProgs };
+}
+
 function metrics(frames, key) {
     const v = frames.map((f) => f[key]);
     const n = v.length;
@@ -276,6 +342,12 @@ async function runLevel(browser, url, level) {
         await cdp.send('Profiler.start');
     }
     const r = await page.evaluate(flyRoute);
+    if (SPACE_ROUTE) {
+        await page.evaluate(async () => { const m = await import('/src/world/Planets.js'); window.__planetPos = m.planetPosition; });
+        const sr = await page.evaluate(flySpaceRoute);
+        r.frames.push(...sr.frames);
+        r.newProgs.push(...sr.newProgs);
+    }
     if (cdp) {
         const { profile } = await cdp.send('Profiler.stop');
         const out = path.join(ROOT, 'tools', 'flight.cpuprofile');
@@ -284,7 +356,7 @@ async function runLevel(browser, url, level) {
     }
     const res = { level, warmAtTakeoff: r.warmAtTakeoff, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, total: {}, segs: {} };
     res.total = { frame: metrics(r.frames, 'gap'), cpu: metrics(r.frames, 'cpu'), game: metrics(r.frames, 'game'), parts: partsAvg(r.frames) };
-    for (const s of ['прямой', 'разворот', 'замок', 'горы']) {
+    for (const s of ['прямой', 'разворот', 'замок', 'горы', ...(SPACE_ROUTE ? ['выход', 'космос', 'посадка', 'марс', 'домой'] : [])]) {
         const f = r.frames.filter((x) => x.seg === s);
         res.segs[s] = { frame: metrics(f, 'gap'), cpu: metrics(f, 'cpu'), game: metrics(f, 'game'), parts: partsAvg(f) };
     }

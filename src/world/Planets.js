@@ -24,8 +24,9 @@
  *   slotRect(def)                              a rocky planet's surface in the voxel world: {x0, z0, w, h, cx, cz}
  *   surfaceToDir(def, x, z) / dirToSurface     a place on the surface ↔ a unit direction from the planet's centre
  *                                              (in the planet's own turning frame)
- *   game.space.surfaceSpot(id, kind)           a deterministic spot on a planet (e.g. 'temple' on Venus)
- *   Space.TEMPLE_HOOK                          (src/game/Space.js) where the Gods' temple stands on Venus
+ *   game.space.surfaceSpot(id, kind)           a deterministic spot on a planet: {x, z, y} in the world
+ *   game.space.templeSpot()                    THE place of the Gods' temple on Venus (the same in a world);
+ *   game.space.registerTemple({x, z, name})    the temple stands: its mark on Venus' map (GodsTemple.js calls it)
  *
  * ── How the worlds fit together ──────────────────────────────────────────────────────────────
  *   The game's Earth is the endless voxel world. Other planets' surfaces are far regions of the very

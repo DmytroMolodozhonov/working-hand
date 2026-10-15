@@ -221,7 +221,7 @@ export function generatePlanetChunk(cx, cz, def, bedrock) {
         for (let L = h + 1; L <= h + wat[i0]; L++) blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = BLOCK.WATER;
         // scattered boulders (Mars most of all): a rock or two on the dust
         const g = def.ground || {};
-        const rk = (g.rocks || 0.15) * 0.012;
+        const rk = (g.rocks || 0.15) * 0.007;
         if (!wat[i0] && slope < 2 && hash(x0 + lx, z0 + lz, s + 99) < rk && h + 2 <= MAX_LAYER) {
             blocks[((h + 1 - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = BLOCK.PLANET_ROCK;
             ht = h + 1;
