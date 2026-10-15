@@ -198,7 +198,7 @@ export class IceCastleLife {
         this._gates = null;
         this.chandelier = null;
         this.mapMark = null;
-        this.layers = new Map(); // (my rod's ice) surface cell → layers laid there
+        void this.plan; // (worked out now, while loading — never in a frame of play)
     }
 
     get auth() { return this.game.authority; }
@@ -208,7 +208,8 @@ export class IceCastleLife {
     get plan() {
         if (this._plan !== undefined) return this._plan;
         const t = this.game.world?.terrain?.data;
-        this._plan = t?.iceCastle?.plan || null;
+        if (!t) return null; // (no world yet: asked again later)
+        this._plan = t.iceCastle?.plan || null;
         return this._plan;
     }
 

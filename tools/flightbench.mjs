@@ -135,7 +135,7 @@ async function flyRoute() {
     wrap(g.destruction, 'update', 'разрушение');
     wrap(g.circleAttack, 'update', 'circleAttack');
     wrap(g.inspirius, 'update', 'inspirius');
-    for (const k of ['castleLife', 'travelers', 'carriages', 'animals', 'dragons', 'ships', 'fx', 'livingTrees', 'phoenixes', 'spiders', 'houses', 'campfires', 'fire', 'items', 'weapons', 'duel', 'storm', 'sun']) wrap(g[k], 'update', k);
+    for (const k of ['castleLife', 'travelers', 'carriages', 'animals', 'dragons', 'iceCastle', 'ships', 'fx', 'livingTrees', 'phoenixes', 'spiders', 'houses', 'campfires', 'fire', 'items', 'weapons', 'duel', 'storm', 'sun']) wrap(g[k], 'update', k);
     // record frames
     const origFrame = g.frame.bind(g);
     let prev = null;
