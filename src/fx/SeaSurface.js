@@ -156,12 +156,15 @@ varying vec3 vSeaWorld;`)
         this._job = { ox, oz, i: 0 };
     }
 
-    _runJob(count) {
+    /** Work on the shore texture: `count` texels at most, and no longer than `ms` (a fast flight: no spike). */
+    _runJob(count, ms = Infinity) {
         const j = this._job;
         const half = TEX * TEXEL / 2;
         const sea = this.sea;
         const end = Math.min(TEX * TEX, j.i + count);
+        const t0 = ms < Infinity ? performance.now() : 0;
         for (; j.i < end; j.i++) {
+            if ((j.i & 255) === 255 && ms < Infinity && performance.now() - t0 > ms) break;
             const tx = j.i % TEX, tz = (j.i / TEX) | 0;
             const x = j.ox - half + (tx + 0.5) * TEXEL, z = j.oz - half + (tz + 0.5) * TEXEL;
             const s = sea.s(x, z);
@@ -196,7 +199,7 @@ varying vec3 vSeaWorld;`)
         // the first time synchronously in big slices (the sea comes into view far away, fog hides it)
         // (a jump far away — a teleport, a respawn: the old texture does not reach here, build it now, never a gap)
         if (this._job && this.ready && Math.hypot(focus.x - o.x, focus.z - o.y) > TEX * TEXEL / 2 - 200) this._runJob(TEX * TEX);
-        if (this._job) this._runJob(this.ready ? SLICE : SLICE * 4);
+        if (this._job) this._runJob(this.ready ? SLICE : SLICE * 4, this.ready ? 2 : 6);
         this.mesh.visible = this.ready;
         const cam = g.camera ? g.camera.getWorldPosition(_v) : focus;
         this.mesh.position.set(Math.round(cam.x / 2) * 2, WATER_LEVEL_Y, Math.round(cam.z / 2) * 2);

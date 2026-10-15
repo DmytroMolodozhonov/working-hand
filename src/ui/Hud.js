@@ -412,9 +412,27 @@ export class Hud {
         }
         const px = ti.img.data;
         const H = ti.heights;
-        for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) H[(z + 1) * (size + 1) + (x + 1)] = d.topLayer(cx - half + x, cz - half + z);
+        // In flight the window moves every few frames: what it already shows is moved over and
+        // only the new strip is worked out (each pixel depends only on its own place in the world)
+        const sx = cx - ti.cx, sz = cz - ti.cz;
+        // (a changed world — a crater, a wall — draws it all again)
+        const shift = ti.cx != null && ti.version === d.version && Math.abs(sx) < size && Math.abs(sz) < size;
+        if (shift) {
+            const S1 = size + 1;
+            const ox = Math.max(0, sx), oz = Math.max(0, sz), w = size - Math.abs(sx), h = size - Math.abs(sz);
+            const dx = Math.max(0, -sx), dz = Math.max(0, -sz);
+            const tmpH = ti.tmpH || (ti.tmpH = new Int16Array(H.length));
+            const tmpP = ti.tmpP || (ti.tmpP = new Uint8ClampedArray(px.length));
+            tmpH.set(H); tmpP.set(px);
+            for (let z = 0; z <= h; z++) H.set(tmpH.subarray((z + oz) * S1 + ox, (z + oz) * S1 + ox + w + 1), (z + dz) * S1 + dx);
+            for (let z = 0; z < h; z++) px.set(tmpP.subarray(((z + oz) * size + ox) * 4, ((z + oz) * size + ox + w) * 4), ((z + dz) * size + dx) * 4);
+        }
+        // (with a shift: only the columns / rows that came into the window)
+        const fresh = (x, z) => !shift || x < Math.max(0, -sx) || x >= size - Math.max(0, sx) || z < Math.max(0, -sz) || z >= size - Math.max(0, sz);
+        for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) if (fresh(x, z)) H[(z + 1) * (size + 1) + (x + 1)] = d.topLayer(cx - half + x, cz - half + z);
         for (let z = 0; z < size; z++) {
             for (let x = 0; x < size; x++) {
+                if (!fresh(x, z)) continue;
                 const wx = cx - half + x, wz = cz - half + z;
                 const top = H[(z + 1) * (size + 1) + (x + 1)];
                 const i = (z * size + x) * 4;
