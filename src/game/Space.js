@@ -944,7 +944,10 @@ export class Space {
      * The Gods' temple on Venus (the other session's src/world/GodsTemple.js): its place — always the same
      * in a world — and its mark on Venus' map once it stands (`registerTemple`).
      */
-    templeSpot() { return this.surfaceSpot('venus', 'temple'); }
+    templeSpot() {
+        const site = FLYMAX.TEMPLE_HOOK?.(this.planets.get('venus')); // (Temple.js: the place its ground is levelled for)
+        return site ? { x: site.x, z: site.z, y: site.y ?? site.F ?? this._ground(site.x, site.z), rot: site.rot | 0 } : this.surfaceSpot('venus', 'temple');
+    }
 
     /** The temple stands (GodsTemple.js calls this): {x, z, name} — shown on Venus' map. */
     registerTemple(t) {
@@ -953,7 +956,9 @@ export class Space {
 
     /** The marks for the minimap on a planet (the temple on Venus). */
     mapMarks() {
-        return this.realm === 'venus' && this.temple ? [this.temple] : [];
+        if (this.realm !== 'venus') return [];
+        if (!this.temple && FLYMAX.TEMPLE_HOOK) { const s = this.templeSpot(); if (s) this.temple = { x: s.x, z: s.z, name: 'Храм богов', icon: '🏛️', def: null }; }
+        return this.temple ? [this.temple] : [];
     }
 
     /** A deterministic spot on a planet's surface (e.g. kind 'temple' on Venus): {x, z, y} in the world. */
