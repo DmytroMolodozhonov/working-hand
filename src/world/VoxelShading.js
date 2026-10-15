@@ -111,6 +111,23 @@ float cobbleEdge(vec2 p, float layer) {
         if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
     }
     return d2 - d1;
+}
+// the Ice Castle's floor (pattern 16): how much of a snowflake drawn every 3 m lies at this point (0…1)
+float snowflakeAt(vec2 uv) {
+    vec2 c = fract(uv / 3.0) - 0.5;
+    float r = length(c), a = atan(c.y, c.x);
+    float sec = 1.0471976;
+    float aa = mod(a + sec * 0.5, sec) - sec * 0.5;
+    vec2 q = vec2(cos(aa), sin(aa)) * r;
+    float arm = (1.0 - smoothstep(0.01, 0.026, abs(q.y))) * step(r, 0.43);
+    float br = 0.0;
+    for (int k = 0; k < 2; k++) {
+        float o = k == 0 ? 0.2 : 0.31;
+        float vv = abs(abs(q.y) - (q.x - o) * 0.85);
+        br = max(br, (1.0 - smoothstep(0.008, 0.022, vv)) * step(o, q.x) * step(q.x, o + 0.09));
+    }
+    float hex = 1.0 - smoothstep(0.008, 0.024, abs(r * cos(aa) - 0.1));
+    return max(max(arm, br), hex * step(r, 0.13));
 }`)
             .replace('#include <color_fragment>', `#include <color_fragment>
 {
@@ -231,6 +248,17 @@ float cobbleEdge(vec2 p, float layer) {
     } else if (pat == 12.0) {
         // crystal lamp: faceted bands
         diffuseColor.rgb *= 0.8 + 0.4 * step(0.5, fract((uv.x + uv.y) * 2.0));
+    } else if (pat == 15.0) {
+        // glacier ice (the Ice Castle): big facets of lighter and deeper blue, a few white cracks
+        float fac = vhash(vec3(floor(uv * 1.5), layerId + 7.0));
+        float band = step(0.5, fract((uv.x * 0.7 - uv.y * 1.3) * 1.2 + fac));
+        diffuseColor.rgb *= 0.86 + 0.24 * fac + 0.07 * band;
+        float ck = abs(fract((uv.x + 0.6 * uv.y) * 1.1 + fac * 2.0) - 0.5);
+        if (ck < 0.018) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.99, 1.0), 0.65 * kFine);
+    } else if (pat == 16.0) {
+        // the snowflake floor: frosty ice, a glowing snowflake every 3 m
+        diffuseColor.rgb *= 0.94 + 0.08 * vhash(vec3(cell, layerId + 2.0));
+        if (n.y > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.99, 1.0), snowflakeAt(uv) * 0.9 * kCoarse);
     } else if (pat == 13.0) {
         // runes: a faint glowing circle cut into dark stone
         float ring = 1.0 - smoothstep(0.02, 0.04, abs(length(f - 0.5) - 0.32));
@@ -249,6 +277,11 @@ float cobbleEdge(vec2 p, float layer) {
 {
     float vp = floor(vVoxPat + 0.5);
     if (vp == 11.0 || vp == 12.0) totalEmissiveRadiance += diffuseColor.rgb * 0.9; // lanterns and crystal lamps glow at night
+    else if (vp == 15.0) totalEmissiveRadiance += diffuseColor.rgb * 0.32; // glacier ice glows from within
+    else if (vp == 16.0) {
+        vec3 sn = abs(vVoxNormal);
+        totalEmissiveRadiance += diffuseColor.rgb * (0.2 + (sn.y > 0.5 ? 0.6 * snowflakeAt((vVoxPos + vec3(0.5)).xz) : 0.0));
+    }
     else if (vp == 13.0) {
         vec3 rn = abs(vVoxNormal);
         vec3 rq = vVoxPos + vec3(0.5);

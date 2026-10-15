@@ -5,7 +5,7 @@
  * (Pure: imports nothing from Terrain.js.)
  */
 export class SiteIndex {
-    constructor(castles, towers) { this.castles = castles; this.towers = towers; }
+    constructor(castles, towers, ice = null) { this.castles = castles; this.towers = towers; this.ice = ice; }
 
     near(x, z, r = 0) {
         const a = this.castles.near(x, z, r), b = this.towers.near(x, z, r);
@@ -31,11 +31,14 @@ export class SiteIndex {
         return true;
     }
 
-    landAt(ix, iz) { return this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz); }
+    // (the Ice Castle — IceCastle.js — levels its summit and is built into the chunks like a castle;
+    //  it is not one of `near`'s: nobody lives there but the Ice Queen and her creatures, IceQueen.js)
+    landAt(ix, iz) { return this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || (this.ice ? this.ice.landAt(ix, iz) : null); }
 
     partsForChunk(cx, cz, C) {
         const a = this.castles.partsForChunk(cx, cz, C), b = this.towers.partsForChunk(cx, cz, C);
-        return b.length ? a.concat(b) : a;
+        const c = this.ice ? this.ice.partsForChunk(cx, cz, C) : [];
+        return b.length || c.length ? a.concat(b, c) : a;
     }
 
     /** The site of an id: castles «cs…», towers «wt…», the people of the roads: wandering wizards «ww…», knights errant «wk…», travelling folk «wc…». */

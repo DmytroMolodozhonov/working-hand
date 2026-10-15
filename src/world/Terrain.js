@@ -27,6 +27,7 @@ import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
+import { IceCastleSite, ICE_BLOCK } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 
 export const BLOCK = {
@@ -45,11 +46,16 @@ export const BLOCK = {
     ARCANE: 49, ARCANE_DARK: 50, ROOF_PURPLE: 51, ARCANE_LAMP: 52, ARCANE_LAMP_VIOLET: 53, CARPET_PURPLE: 54, POTION: 55, RUNE: 56,
     // underground (generation 4 caves): gravel and dark deep stone in the rock round the caves
     GRAVEL: 57, DEEPSTONE: 58,
+    // the Ice Queen's palace (src/world/IceCastle.js) and the Ice Rod's ice (IceQueen.js): glacier ice,
+    // glowing ice, the snowflake floor, deep blue ice — melted by fire, never by the sun
+    ICE_WALL: 59, ICE_GLOW: 60, ICE_FLOOR: 61, ICE_DARK: 62,
 };
+/** The palace's / the Ice Rod's ice (melts in fire: IceQueen.melt). */
+export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -144,6 +150,10 @@ export const BASE_COLORS = {
     [BLOCK.RUNE]: 0x2e3150,
     [BLOCK.GRAVEL]: 0x8b8580,
     [BLOCK.DEEPSTONE]: 0x56575e,
+    [BLOCK.ICE_WALL]: 0x9fd6f2,
+    [BLOCK.ICE_GLOW]: 0xd6f4ff,
+    [BLOCK.ICE_FLOOR]: 0xc4e8fa,
+    [BLOCK.ICE_DARK]: 0x5ea8d8,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -156,6 +166,7 @@ Object.assign(PATTERN_OF, {
     [BLOCK.ARCANE]: PATTERN.ASHLAR, [BLOCK.ARCANE_DARK]: PATTERN.ASHLAR, [BLOCK.ROOF_PURPLE]: PATTERN.TILES,
     [BLOCK.ARCANE_LAMP]: PATTERN.CRYSTAL, [BLOCK.ARCANE_LAMP_VIOLET]: PATTERN.CRYSTAL, [BLOCK.CARPET_PURPLE]: PATTERN.CLOTH,
     [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES, [BLOCK.GRAVEL]: PATTERN.COBBLE,
+    [BLOCK.ICE_WALL]: PATTERN.GLACIER, [BLOCK.ICE_DARK]: PATTERN.GLACIER, [BLOCK.ICE_GLOW]: PATTERN.CRYSTAL, [BLOCK.ICE_FLOOR]: PATTERN.SNOWFLAKE,
 });
 /** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
 const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
@@ -452,12 +463,16 @@ export class TerrainData {
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
         this.land = raw.land || null;
-        this.castles = this.towers = this.sites = null;
+        this.castles = this.towers = this.sites = this.iceCastle = null;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
             this.castles = new CastleIndex(seed, raw, this.seas, this.test);
             this.towers = new TowerIndex(seed, raw, this.castles);
-            const idx = this.sites = new SiteIndex(this.castles, this.towers);
+            // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
+            const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz)); };
+            const ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test ? { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 } : null) : null;
+            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice);
+            this.iceCastle = ice;
             const fn = (ix, iz) => {
                 const h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach, kind = raw.kind; // (read before landAt: finding a site re-samples raw)
                 const mesa = raw.mesa, emer = raw.emer, moon = raw.moon, fant = raw.fant;
