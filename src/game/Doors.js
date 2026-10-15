@@ -25,8 +25,10 @@
  * across the leaf turns it round its hinges — the stronger, the faster — and the hinges'
  * friction slows it; it stops on the frame (a slam) and on its full opening (it bounces
  * back a little), and on a body standing in its way (the leaf doesn't go through anybody).
- * Which way it goes is where the push comes from: from the front it opens, from behind a
- * door it is shut. «Вайнд» / «… Максима», «Overgrown» / «… Максима», a «Джолт» charge
+ * A leaf swings BOTH ways (a > 0: towards the door's local −Z, a < 0: towards +Z), each side
+ * with its own stop (openLimit: a wall, a bed, a chest on that side), and a latch at 0 that
+ * catches it coming shut from either side (a fast one slams — it never shoots through).
+ * Which way it goes is where the push comes from: away from the push, whichever face it hits. «Вайнд» / «… Максима», «Overgrown» / «… Максима», a «Джолт» charge
  * (it bursts on the leaf), a blast's wave; any new pushing spell calls blow() / impulse().
  * Every door: the houses', the wizards' towers', the throne rooms' gates, «Create a Door»'s
  * (ships have doorways without doors). A LOCKED door only rattles in its frame: the lock
@@ -71,7 +73,7 @@ function doorMats(color) {
  * A door: the frame and a leaf turning round its hinge. `mirror`: the hinge on the right
  * (the right leaf of a gate); `gate`: a leaf of a castle gate — planks with iron bands,
  * a ring for a handle, no frame of its own (the stone doorway is its frame).
- * Both kinds open towards their local −Z.
+ * Both kinds swing both ways: a positive angle towards their local −Z, a negative one towards +Z.
  */
 export function doorModel(color, { mirror = false, gate = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
     const g = new THREE.Group();
@@ -129,7 +131,7 @@ export const DOOR_HAND = { GRAB_R: 0.42, CLOSE_CURL: 0.55, OPEN_CURL: 0.35, RELE
 
 /**
  * The angle of a point round a door's hinge (door-local, the hinge at the origin): 0 = along the
- * closed leaf, growing as it goes round to the side the door opens to (local −Z).
+ * closed leaf, positive round to local −Z, negative round to local +Z (the leaf swings both ways).
  */
 export function hingeAngle(lx, lz, mirror = false) {
     return Math.atan2(-lz, mirror ? -lx : lx);
@@ -137,14 +139,15 @@ export function hingeAngle(lx, lz, mirror = false) {
 
 /**
  * A free hand against a leaf: it can't pass through it. `was` — the side of the leaf the hand was on
- * (+1: the side the door opens to, −1: behind it), `h` — the hand's angle round the hinge now,
- * `a` — the leaf's angle. Returns the leaf's new angle (pushed by the hand, held by the frame and
- * the full opening) — or null when the hand didn't cross it.
+ * (+1: the side of growing angles, −1: the other), `h` — the hand's angle round the hinge now,
+ * `a` — the leaf's angle. Returns the leaf's new angle (pushed away from the hand, either way; held
+ * by the stops on each side — maxP / maxN — and caught by the latch when it comes shut) — or null
+ * when the hand didn't cross it.
  */
-export function leafPushed(was, h, a, max = DOOR_HAND.MAX_A) {
-    if (was > 0 && h < a) return Math.max(0, Math.min(max, h)); // pushed shut (from the opening side)
-    if (was < 0 && h > a) return Math.max(0, Math.min(max, h)); // pushed open (from behind)
-    return null;
+export function leafPushed(was, h, a, maxP = DOOR_HAND.MAX_A, maxN = maxP) {
+    if (!((was > 0 && h < a) || (was < 0 && h > a))) return null;
+    if (a !== 0 && Math.sign(h) !== Math.sign(a)) return 0; // (pushed shut: the latch catches it — a push more opens it the other way)
+    return Math.max(-maxN, Math.min(maxP, h));
 }
 
 /** A push swinging a leaf: Δω = K · (push across the leaf, m/s) / leaf width; the hinges' friction. */
@@ -152,7 +155,7 @@ export const DOOR_PUSH = {
     K: 0.55,
     DAMP: 1.6, // 1/s: the hinges' viscous friction
     DRY: 0.6, // rad/s²: their dry friction (a slow leaf stops)
-    BOUNCE_OPEN: 0.3, // … off its full opening (the stop)
+    BOUNCE_OPEN: 0.3, // … off its full opening (the stop, either side)
     SLAM: 1.2, // rad/s: shut faster than this — a slam
     REST: 0.05, // rad/s: slower — it stands
     RATTLE: 0.35, // rad/s: a push this strong on a locked door rattles it
@@ -162,17 +165,22 @@ export const DOOR_PUSH = {
 export const DOOR_SPELLS = { Wind: 13, WindMaxima: 39, Overgrown: 16, OvergrownMaxima: 32, Jolt: 20, JoltMaxima: 60 };
 
 /**
- * The swing of a leaf over dt (pure): angle a, angular speed w → {a, w, hit} (hit: 'frame' when it
- * came against the frame, 'open' at its full opening). Friction: viscous and dry.
+ * The swing of a leaf over dt (pure): angle a, angular speed w → {a, w, hit} (hit: 'frame' when the
+ * latch caught it shut, 'slam' — shut hard, 'open' at a full opening). It swings both ways: maxP — its
+ * stop on the positive side, maxN — on the negative. Coming shut from either side the latch catches it
+ * at 0 (a fast one slams: it never shoots through the frame); from 0 a push swings it either way.
+ * Friction: viscous and dry.
  */
-export function swingStep(a, w, dt, max = DOOR_HAND.MAX_A) {
+export function swingStep(a, w, dt, maxP = DOOR_HAND.MAX_A, maxN = maxP) {
     let hit = null;
+    const a0 = a;
     a += w * dt;
     w *= Math.exp(-DOOR_PUSH.DAMP * dt);
     const dry = DOOR_PUSH.DRY * dt;
     w = Math.abs(w) <= dry ? 0 : w - Math.sign(w) * dry;
-    if (a <= 0) { hit = w < -DOOR_PUSH.SLAM ? 'slam' : 'frame'; a = 0; w = Math.max(0, w); } // (shut: the latch catches it)
-    else if (a >= max) { hit = 'open'; a = max; w = w > 0 ? -w * DOOR_PUSH.BOUNCE_OPEN : w; }
+    if (a0 !== 0 && (a === 0 || Math.sign(a) !== Math.sign(a0))) { hit = Math.abs(w) > DOOR_PUSH.SLAM ? 'slam' : 'frame'; a = 0; w = 0; } // (shut: the latch catches it)
+    else if (a >= maxP) { hit = 'open'; a = maxP; w = w > 0 ? -w * DOOR_PUSH.BOUNCE_OPEN : w; }
+    else if (a <= -maxN) { hit = 'open'; a = -maxN; w = w < 0 ? -w * DOOR_PUSH.BOUNCE_OPEN : w; }
     if (Math.abs(w) < DOOR_PUSH.REST && (a === 0 || hit || Math.abs(w) < DOOR_PUSH.REST * 0.5)) w = 0;
     return { a, w, hit };
 }
@@ -254,14 +262,15 @@ export class Doors {
         this._setAngle(door, door.a || 0);
     }
 
-    /** Swing the leaf; a closed door blocks the way. */
+    /** Swing the leaf (either way); a closed door blocks the way. */
     _setAngle(door, a) {
-        if (a > 0.15) a = Math.min(a, this.openLimit(door)); // (a wall, a bed, a chest behind it: the leaf stops on it)
-        door.a = Math.max(0, Math.min(DOOR_HAND.MAX_A, a));
+        if (a > 0.15) a = Math.min(a, this.openLimit(door, 1)); // (a wall, a bed, a chest on that side: the leaf stops on it)
+        else if (a < -0.15) a = Math.max(a, -this.openLimit(door, -1));
+        door.a = Math.max(-DOOR_HAND.MAX_A, Math.min(DOOR_HAND.MAX_A, a)) || 0;
         door.model.userData.hinge.rotation.y = door.mirror ? -door.a : door.a;
         const g = this.game;
         if (door.boxId != null) { g.collision.removeBox(door.boxId); door.boxId = null; }
-        if (door.a < 0.35 && !door.lifted) {
+        if (Math.abs(door.a) < 0.35 && !door.lifted) {
             // the box of the closed door (in world space, axis-aligned around it)
             const c = Math.cos(door.ry), s = Math.sin(door.ry);
             const dw = door.w || W;
@@ -307,6 +316,8 @@ export class Doors {
         }
         // leaves swung by a push (a spell, a blast)
         this._swing(dt);
+        // a body walking into an open leaf pushes it away from itself (it doesn't go through)
+        this._bodiesPush();
         // the hands on the doors: the handle held by closed fingers, a free hand against a leaf
         if (g.currentPose && !g.isDeadLocal) this._hands(dt);
         else this.releaseAll();
@@ -365,7 +376,7 @@ export class Doors {
                 const L = this._local(door, h.G, _l);
                 const r = Math.hypot(L.x, L.z), lw = door.w || W;
                 if (this._relT[side] > DOOR_HAND.RELEASE_MS || r > lw + DOOR_HAND.SLIP || r < lw * 0.35) { this.release(side); continue; }
-                const want = Math.max(0, Math.min(DOOR_HAND.MAX_A, hingeAngle(L.x, L.z, door.mirror)));
+                const want = Math.max(-this.openLimit(door, -1), Math.min(this.openLimit(door, 1), hingeAngle(L.x, L.z, door.mirror))); // (pull or push it: either way)
                 if (locked(door)) {
                     // the handle doesn't give: the leaf only rattles in its frame
                     if (Math.abs(want - door.a) > 0.06) this._rattle(door);
@@ -396,9 +407,10 @@ export class Doors {
                 const was = door.hand[side];
                 door.hand[side] = Math.sign(across) || was;
                 if (!was) continue;
-                const to = leafPushed(was, ha, door.a);
+                const to = leafPushed(was, ha, door.a, this.openLimit(door, 1), this.openLimit(door, -1));
                 if (to == null) continue;
                 if (locked(door)) { this._rattle(door); door.hand[side] = was; continue; } // (it holds: the hand stays on its side)
+                if (to === 0 && door.a !== 0) this.game.sound?.playClang?.(0.08); // (the latch clicks)
                 this._setAngle(door, to);
                 door.hand[side] = was;
                 if (Math.abs(door.a - (door._sentA ?? 0)) > 0.05) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); }
@@ -409,19 +421,20 @@ export class Doors {
             if (!(door.shakeT > 0)) continue;
             door.shakeT -= dt;
             const j = door.shakeT > 0 ? Math.sin(now * 0.09) * 0.025 : 0;
-            door.model.userData.hinge.rotation.y = (door.mirror ? -1 : 1) * (door.a + Math.max(0, j));
+            door.model.userData.hinge.rotation.y = (door.mirror ? -1 : 1) * (door.a + Math.abs(j) * (door.a < 0 ? -1 : 1));
         }
     }
 
     /**
-     * How far this leaf can open before it meets something behind it (the wall inside, furniture,
-     * a chest, a bed — never goes through them). Looked at again every couple of seconds (a blast,
-     * a bed moved).
+     * How far this leaf can open to one side (dir +1: towards local −Z, −1: towards +Z) before it
+     * meets something there (a wall, furniture, a chest, a bed — never goes through them). Looked at
+     * again every couple of seconds (a blast, a bed moved).
      */
-    openLimit(door) {
+    openLimit(door, dir = 1) {
         const now = this.game.now?.() ?? performance.now();
-        if (door._limAt != null && now - door._limAt < 2000) return door.maxA;
-        door._limAt = now;
+        const key = dir < 0 ? '_limAtN' : '_limAt';
+        if (door[key] != null && now - door[key] < 2000) return dir < 0 ? door.maxN : door.maxA;
+        door[key] = now;
         const g = this.game, col = g.collision, t = g.world?.terrain?.data || g.terrain?.data;
         const m = door.mirror ? -1 : 1, lw = door.w || W, dh = door.h || H;
         const c = Math.cos(door.ry), s = Math.sin(door.ry);
@@ -433,12 +446,12 @@ export class Doors {
         let lim = DOOR_HAND.MAX_A;
         outer: for (let a = 0.2; a <= DOOR_HAND.MAX_A + 1e-6; a += 0.05) {
             for (const r of [lw * 0.35, lw * 0.7, lw - 0.1]) {
-                const lx = -m * lw / 2 + m * Math.cos(a) * r, lz = -Math.sin(a) * r;
+                const lx = -m * lw / 2 + m * Math.cos(a) * r, lz = -dir * Math.sin(a) * r;
                 const x = door.x + c * lx + s * lz, z = door.z - s * lx + c * lz;
                 for (const y of [door.y + 0.7, door.y + dh * 0.55]) if (blocked(x, y, z)) { lim = Math.max(0.15, a - 0.08); break outer; }
             }
         }
-        door.maxA = lim;
+        if (dir < 0) door.maxN = lim; else door.maxA = lim;
         return lim;
     }
 
@@ -480,17 +493,16 @@ export class Doors {
      */
     impulse(door, v, k = 0.5) {
         if (!door || door.lifted || door.holdSide || this.carried?.door === door) return false;
-        // the leaf opens towards its opening side: a push going that way opens it, the other way shuts it
+        // the leaf goes away from the push, whichever face it hits (it swings both ways; shut, the latch catches it)
         const dw = DOOR_PUSH.K * v.dot(this._leafNormal(door, _n)) * (k / 0.5) / (door.w || W);
         if (Math.abs(dw) < 0.02) return false;
         if (this.game.locks?.doorLocked?.(door)) { if (Math.abs(dw) > DOOR_PUSH.RATTLE) this._rattle(door, true); return false; }
-        if (door.a <= 0 && dw < 0) return false; // (pushed shut against its frame: it is shut already)
         door.spin = (door.spin || 0) + dw;
         return true;
     }
 
     /**
-     * A doorway's leaf: hung on the side where it opens furthest into the room (a wall, a bed or a chest
+     * A doorway's leaf: hung on the side where it opens furthest (into the room (a wall, a bed or a chest
      * close to one jamb: the hinges go on the other). Returns the record with `mirror` set.
      */
     hangBest(d) {
@@ -544,7 +556,7 @@ export class Doors {
             if (!door.spin) continue;
             if (door.holdSide || door.lifted || g.locks?.doorLocked?.(door)) { door.spin = 0; continue; }
             const was = door.a;
-            const r = swingStep(door.a, door.spin, Math.min(dt, 0.05), this.openLimit(door));
+            const r = swingStep(door.a, door.spin, Math.min(dt, 0.05), this.openLimit(door, 1), this.openLimit(door, -1));
             // a body in its way (me, the others, people, zombies, animals): the leaf stops on it
             const stop = this._bodyInSwing(door, was, r.a);
             if (stop != null) { r.a = stop; r.w = -r.w * 0.2; r.hit = 'body'; if (Math.abs(r.w) < DOOR_PUSH.REST * 4) r.w = 0; }
@@ -556,9 +568,66 @@ export class Doors {
         }
     }
 
+    /** Every body near a door (me, the others, people, zombies, animals): fn(x, y, z, radius, mine). */
+    _eachBody(fn) {
+        const g = this.game;
+        const me = g.character?.group.position;
+        if (me && !g.isDeadLocal) fn(me.x, me.y - 1, me.z, 0.4, true);
+        for (const [, r] of g.remotes || []) if (r.position) fn(r.position.x, r.position.y - 1, r.position.z, 0.4, false);
+        for (const v of g.castleLife?.byId?.values() || []) if (!v.dead) fn(v.x, v.y + 1, v.z, 0.4, false);
+        for (const z of g.zombies || []) if (!z.isDead) fn(z.group.position.x, z.group.position.y + 1, z.group.position.z, 0.4, false);
+        for (const a of g.animals?.list || []) if (!a.dead) fn(a.group.position.x, a.group.position.y + 0.8, a.group.position.z, 0.7, false);
+    }
+
+    /**
+     * Somebody walking through a doorway into an open leaf pushes it away from themselves (either
+     * way, as far as its stop on that side) — the leaf never goes through a body. A shut leaf is a
+     * wall (its box): the latch holds it, it is opened by the handle (or by the people who live there).
+     * Every computer pushes it the same; my own body and the host (for everybody else) tell the others.
+     */
+    _bodiesPush() {
+        const g = this.game, me = g.character?.group.position;
+        if (!me) return;
+        for (const door of this.list.values()) {
+            if (Math.abs(door.a) < 0.35 || door.lifted || door.holdSide || this.carried?.door === door) continue;
+            if (Math.abs(door.x - me.x) + Math.abs(door.z - me.z) > 60) continue;
+            if (g.locks?.doorLocked?.(door)) continue;
+            const lw = door.w || W, dh = door.h || H;
+            let mine = false, moved = false;
+            this._eachBody((x, y, z, rad, isMe) => {
+                if (Math.abs(x - door.x) > lw + 1.5 || Math.abs(z - door.z) > lw + 1.5) return;
+                if (y < door.y - 2.5 || y > door.y + dh + 0.5) return;
+                const L = this._local(door, _q.set(x, y, z), _q);
+                const r = Math.hypot(L.x, L.z);
+                if (r < 0.45 || r > lw + rad * 0.5) return;
+                const ha = hingeAngle(L.x, L.z, door.mirror), pad = Math.min(1.2, (rad + T / 2) / r);
+                const off = ha - door.a;
+                if (Math.abs(off) >= pad) return;
+                // pushed away from the body: to the far side of it
+                const to = off > 0 ? ha - pad : ha + pad;
+                if (Math.sign(to) !== Math.sign(door.a) || Math.abs(to) < 0.4) return; // (not pushed shut by walking: the leaf holds)
+                const was = door.a;
+                this._setAngle(door, to);
+                if (door.a !== was) { moved = true; mine ||= isMe; door.spin = 0; }
+            });
+            if (moved && (mine || g.authority) && Math.abs(door.a - (door._sentA ?? 0)) > 0.05) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); }
+        }
+    }
+
+    /**
+     * The way a leaf opens AWAY from somebody at (x, z) (+1 / −1: the sign of its angle): the people
+     * push it open in the direction they walk. A leaf already open keeps its way (they go through it).
+     */
+    awaySign(door, x, z) {
+        if (Math.abs(door.a) > 0.05) return Math.sign(door.a);
+        const c = Math.cos(door.ry), s = Math.sin(door.ry);
+        const lz = s * (x - door.x) + c * (z - door.z); // (which face of the doorway they stand at)
+        return lz >= 0 ? 1 : -1; // (at +Z: it opens towards −Z, away from them — and the other way round)
+    }
+
     /** Is there a body between the leaf's angles a0 → a1? The angle the leaf stops at, or null. */
     _bodyInSwing(door, a0, a1) {
-        const g = this.game, lw = door.w || W;
+        const lw = door.w || W;
         const lo = Math.min(a0, a1), hi = Math.max(a0, a1);
         let stop = null;
         const test = (x, y, z, rad) => {
@@ -573,12 +642,7 @@ export class Doors {
             const at = a1 > a0 ? Math.max(a0, ha - pad) : Math.min(a0, ha + pad);
             if (stop == null || Math.abs(at - a0) < Math.abs(stop - a0)) stop = at;
         };
-        const me = g.character?.group.position;
-        if (me && !g.isDeadLocal) test(me.x, me.y - 1, me.z, 0.4);
-        for (const [, r] of g.remotes || []) if (r.position) test(r.position.x, r.position.y - 1, r.position.z, 0.4);
-        for (const v of g.castleLife?.byId?.values() || []) if (!v.dead) test(v.x, v.y + 1, v.z, 0.4);
-        for (const z of g.zombies || []) if (!z.isDead) test(z.group.position.x, z.group.position.y + 1, z.group.position.z, 0.4);
-        for (const a of g.animals?.list || []) if (!a.dead) test(a.group.position.x, a.group.position.y + 0.8, a.group.position.z, 0.7);
+        this._eachBody(test);
         return stop;
     }
 

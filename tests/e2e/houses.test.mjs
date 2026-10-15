@@ -67,8 +67,8 @@ test('houses: a door in the doorway, glass that breaks, beds, a chest of food th
         const v = [...g.castleLife.byId.values()].find((x) => x.job === 'home' && x.house === window.__hi);
         v.homeAt = { x: d.x, y: d.y, z: d.z }; v.x = d.x; v.z = d.z; v.waitT = 30;
         const t0 = performance.now();
-        while (d.a < 1 && performance.now() - t0 < 6000) await frames(2);
-        return { a: d.a, open: d.boxId == null };
+        while (Math.abs(d.a) < 1 && performance.now() - t0 < 6000) await frames(2);
+        return { a: Math.abs(d.a), open: d.boxId == null };
     });
     assert.ok(door.a >= 1 && door.open, `the door opens for its people (${door.a.toFixed(2)})`);
 

@@ -297,7 +297,7 @@ export class Alohomora {
         const D = this.game.doors;
         for (const id of this.spelled) {
             const d = D?.list.get(id);
-            if (!d || d.lifted || d.a >= 0.35) continue;
+            if (!d || d.lifted || Math.abs(d.a) >= 0.35) continue;
             if (y != null && (y < d.y - 1.5 || y > d.y + (d.h || 3.6))) continue;
             const w = (d.w || 1.6) / 2 + pad;
             const c = Math.cos(d.ry), s = Math.sin(d.ry), dx = x - d.x, dz = z - d.z;
@@ -317,11 +317,12 @@ export class Alohomora {
             const d = D?.list.get(id);
             if (!d || !this.spelled.has(id) || d.lifted) { this.closing.delete(id); continue; }
             if (d.holdSide) continue; // (a hand on the handle: the leaf waits for it to let go)
-            let a = Math.max(0, d.a - dt * 1.6);
+            const sg = Math.sign(d.a); // (it swings shut from whichever side it is open to)
+            let a = sg * Math.max(0, Math.abs(d.a) - dt * 1.6);
             const stop = D._bodyInSwing ? D._bodyInSwing(d, d.a, a) : null;
-            if (stop != null) a = Math.max(a, Math.min(d.a, stop)); // (somebody in the doorway: it waits)
+            if (stop != null) a = sg > 0 ? Math.max(a, Math.min(d.a, stop)) : Math.min(a, Math.max(d.a, stop)); // (somebody in the doorway: it waits)
             D._setAngle(d, a);
-            if (a <= 0) {
+            if (a === 0) {
                 this.closing.delete(id);
                 this._clicked(d);
             }
@@ -386,13 +387,13 @@ export class Alohomora {
         } else if (m.k === 'door') {
             this.picked.add(m.id);
             const d = g.doors?.list.get(m.id);
-            if (d) { if (d.a < 0.2) g.doors._setAngle(d, 0.2); this._flash(d.model.userData.knob.getWorldPosition(new THREE.Vector3())); }
+            if (d) { if (Math.abs(d.a) < 0.2) g.doors._setAngle(d, 0.2 * (Math.sign(d.a) || 1)); this._flash(d.model.userData.knob.getWorldPosition(new THREE.Vector3())); }
             if (this.auth && d && m.by) this._witnessDoor(d, m.by);
         } else if (m.k === 'gate') {
             const st = this._gate(m.id);
             st.unlocked = true;
             const rec = this.gateRecs.get(m.id);
-            for (const id of rec?.ids || []) { const d = g.doors?.list.get(id); if (d) { if (d.a < 0.2) g.doors._setAngle(d, 0.2); } }
+            for (const id of rec?.ids || []) { const d = g.doors?.list.get(id); if (d) { if (Math.abs(d.a) < 0.2) g.doors._setAngle(d, 0.2 * (Math.sign(d.a) || 1)); } }
             const d0 = rec && g.doors?.list.get(rec.ids[0]);
             if (d0) this._flash(_v.set(rec.def.throneGate.x, d0.y + 3.2, rec.def.throneGate.z), true);
             if (this.auth && m.by) this._witnessGate(m.id, m.by);
@@ -404,7 +405,7 @@ export class Alohomora {
                 const d = g.doors?.list.get(id);
                 if (!d) continue;
                 d.spin = 0;
-                if (d.a > 0) this.closing.add(id);
+                if (d.a !== 0) this.closing.add(id);
                 else this._clicked(d);
             }
             if (mine) g.hud?.setVoice('🔒 Дверь закрывается и запирается. Откроет её только «Алохомора»', true);
@@ -416,7 +417,7 @@ export class Alohomora {
             for (const id of m.ids || []) {
                 const d = g.doors?.list.get(id);
                 if (!d) continue;
-                if (!this.doorLocked(d) && d.a < 0.2) g.doors._setAngle(d, 0.2);
+                if (!this.doorLocked(d) && Math.abs(d.a) < 0.2) g.doors._setAngle(d, 0.2 * (Math.sign(d.a) || 1));
                 this._flash(d.model.userData.knob.getWorldPosition(new THREE.Vector3()));
             }
             const d0 = g.doors?.list.get(m.ids?.[0]);
@@ -562,17 +563,19 @@ export class Alohomora {
             const leaves = rec.ids.map((x) => D.list.get(x)).filter(Boolean);
             if (!leaves.length || leaves.some((d) => d.holdSide || this.spelled.has(d.id))) continue; // («Lock»: shut for its own people too)
             const R = G.w / 2 + 3;
-            let someone = false;
-            for (const v of people) if (!v.dead && v.cs?.def?.id === id && Math.abs(v.x - G.x) < R && Math.abs(v.z - G.z) < R && Math.abs(v.y - G.y) < 4) { someone = true; break; }
+            let someone = null;
+            for (const v of people) if (!v.dead && v.cs?.def?.id === id && Math.abs(v.x - G.x) < R && Math.abs(v.z - G.z) < R && Math.abs(v.y - G.y) < 4) { someone = v; break; }
             if (someone) {
                 rec.auto = true; rec.openT = 0;
-                for (const d of leaves) if (d.a < 1.45) D.swing(d.id, Math.min(1.45, d.a + dt * 1.6));
+                // pushed open away from them, the way they walk (both leaves the same way)
+                const sg = D.awaySign ? D.awaySign(leaves[0], someone.x, someone.z) : 1;
+                for (const d of leaves) if (Math.abs(d.a) < 1.45) D.swing(d.id, sg * Math.min(1.45, Math.abs(d.a) + dt * 1.6));
             } else if (rec.auto) {
                 rec.openT += dt;
                 const clear = Math.abs(me.x - G.x) > R || Math.abs(me.z - G.z) > R; // (never shut onto me)
                 if (clear && rec.openT > 2.5) {
                     let shut = true;
-                    for (const d of leaves) { const a = Math.max(0, d.a - dt * 1.2); D.swing(d.id, a); if (a > 0) shut = false; }
+                    for (const d of leaves) { const a = Math.sign(d.a) * Math.max(0, Math.abs(d.a) - dt * 1.2); D.swing(d.id, a); if (a !== 0) shut = false; }
                     if (shut) rec.auto = false;
                 }
             }
@@ -658,7 +661,7 @@ export class Alohomora {
             if (st.broken && this.gateRecs.has(id)) for (const did of this.gateRecs.get(id).ids) this.game.doors?.remove(did);
         }
         for (const id of s.l || []) this.doorLocks.set(id, true);
-        for (const id of s.s || []) { this.spelled.add(id); const d = this.game.doors?.list.get(id); if (d && d.a > 0) this.closing.add(id); }
+        for (const id of s.s || []) { this.spelled.add(id); const d = this.game.doors?.list.get(id); if (d && d.a !== 0) this.closing.add(id); }
     }
 
     /** A message from the others: {t: 'lock', k, id, by} / {t: 'dlk', id, l}. */
