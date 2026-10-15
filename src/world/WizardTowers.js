@@ -759,15 +759,20 @@ export class TowerIndex {
         return this._mapList;
     }
 
-    /** A wandering wizards' «site» of a 700 m cell (no land, no blocks): their people. */
-    wanderDef(gx, gz) {
-        const key = this._key(gx, gz);
+    /**
+     * The people of the roads of a 700 m cell (no land, no blocks): `type` 'ww' wandering wizards,
+     * 'wk' knights errant (their roster: knights from number 1 on), 'wc' travelling folk (farmers,
+     * builders, merchants from number 1 on). Travelers.js leads them; the site follows its party.
+     */
+    wanderDef(gx, gz, type = 'ww') {
+        const key = type + this._key(gx, gz);
         let d = this._wander.get(key);
         if (!d) {
+            const kind = type === 'wk' ? 'errant' : type === 'wc' ? 'folk' : 'wander';
             d = {
-                id: 'ww' + gx + '_' + gz, kind: 'wander', gx, gz, x: (gx + 0.5) * WANDER_CELL, z: (gz + 0.5) * WANDER_CELL, F: 0,
-                population: 3, knights: 0, stalls: [], houses: [], chests: [], nodes: [], edges: [], pens: [], fields: [], rooms: [], posts: [],
-                wallWalk: [], zone: 0, color: 0x7a6a55, colorName: 'серые', name: 'Дороги', king: '', parts: [], _byChunk: new Map(),
+                id: type + gx + '_' + gz, kind, gx, gz, x: (gx + 0.5) * WANDER_CELL, z: (gz + 0.5) * WANDER_CELL, F: 0,
+                population: type === 'ww' ? 3 : 40, knights: type === 'wk' ? 99 : 0, stalls: [], houses: [], chests: [], nodes: [], edges: [], pens: [], fields: [], rooms: [], posts: [],
+                wallWalk: [], zone: 0, color: type === 'wk' ? 0x6b4a2a : 0x7a6a55, colorName: 'серые', name: kind === 'errant' ? 'Странствующие рыцари' : kind === 'folk' ? 'Путники' : 'Дороги', king: '', parts: [], _byChunk: new Map(),
             };
             this._wander.set(key, d);
         }

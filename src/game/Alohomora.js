@@ -41,6 +41,7 @@ export const TARGETS = {
     // ---- things with locks
     settlementChest: { plain: 'unlock', maxima: 'unlock', why: 'сундуки замков, деревень, домов жителей, порта — заперты; открыть их — кража, если кто-то видит' },
     caveChest: { plain: 'none', maxima: 'none', why: 'сундуки пещер, тестовый сундук и пьедесталы не заперты: открываются, когда подходишь' },
+    cartChest: { plain: 'unlock', maxima: 'unlock', why: 'сундук в повозке путников (волшебников или людей) заперт; взломать его при них — нападение: волшебники защищают сундук, люди убегают (Travelers.js)' },
     shipChest: { plain: 'none', maxima: 'none', why: 'сундуки кораблей не заперты: их стережёт команда (Ships.lootChest)' },
     towerChest: { plain: 'none', maxima: 'none', why: 'сундуки академии волшебников заперты чарами Мастера — пока не открыть (позже), откроются, когда он падёт' },
     villagerDoor: { plain: 'unlock', maxima: 'unlock', why: 'дверь дома жителя: заперта ночью или когда никого нет дома; открывается щелью, дальше — рукой' },
@@ -68,6 +69,7 @@ export const TARGETS = {
 export function chestKind(c) {
     if (!c) return null;
     if (c.ship) return 'shipChest';
+    if (c.cart) return 'cartChest';
     if (c.castle?.kind === 'tower' || c.house?.def?.kind === 'tower') return 'towerChest';
     if (c.house || c.castle) return 'settlementChest';
     return 'caveChest';
@@ -277,6 +279,7 @@ export class Alohomora {
         if (!L) return;
         if (c.house) L.theft?.(c.house.def, c.house.i, by, L._playerPos?.(by) || c.getPosition());
         else if (c.castle) L.forced?.(c.castle.id, by, c.getPosition());
+        else if (c.cart) { const k = this.game.carriages?.list.get(c.cart.id); if (k?.party) this.game.travelers?.trouble(k.party, by); } // (the travellers' chest)
     }
 
     _witnessDoor(d, by) {

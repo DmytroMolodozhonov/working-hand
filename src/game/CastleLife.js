@@ -675,6 +675,7 @@ export class CastleLife {
         const L = Math.round(y + 1.5);
         const f = t.floorBelow(ix, iz, L + 1);
         if (f > L || f < L - 3) return false;
+        if (this.game.carriages?.list.size && this.game.carriages.blocksAt(x, z, y)) return false; // (a cart on the road: round it)
         return !t.solidIn(ix, iz, f + 1, f + 5);
     }
 
@@ -716,6 +717,8 @@ export class CastleLife {
             return;
         }
         if (v.climb) { this._climbStep(v, dt); return; }
+        // riding on a cart: on its seat (the cart's people get down when trouble comes — Travelers.js)
+        if (v.seated && v.job === 'cart' && !v.foe && !v.fear && !(v.fleeT > 0) && g.travelers?.step(v, dt)) return;
         // got inside a wall somehow (a shove, a blink, a blast that moved the blocks): out to the nearest free place
         if (!v.seated && (v.wallT = (v.wallT || 0) - dt) <= 0) { v.wallT = 0.5; this._unwall(v); }
         // a great fire close by (the Hellfire): back off from it behind the shield, or run (fear())
@@ -882,6 +885,10 @@ export class CastleLife {
                 v.mode = v.path ? 'walk' : 'idle';
                 break;
             }
+            case 'road':
+            case 'cart': // (the people of the roads: on foot or on a cart — Travelers.js)
+                if (g.travelers?.step(v, dt)) return;
+                break;
             case 'farm': {
                 if (v.waitT > 0) { v.waitT -= dt; v.mode = 'work'; v.speed = 0; break; }
                 if (!v.path) {
@@ -1913,7 +1920,8 @@ export class CastleLife {
         }
         if (kingHit) this._reinforce(cs, by);
         else if (!was && cs.def.knights > 0 && this.wantedLevel(by) >= 2) this._sendGuards(cs, pos, by, 3); // (a known killer: more of the guard come out)
-        if (!was && by === g.localId) g.hud.setVoice('⚔️ Вас заметили! Стража замка идёт за вами', true);
+        const road = cs.def.kind === 'wander' || cs.def.kind === 'errant' || cs.def.kind === 'folk';
+        if (!was && by === g.localId) g.hud.setVoice(road ? '⚔️ Путники видели, что вы сделали' : '⚔️ Вас заметили! Стража замка идёт за вами', true);
         else if (!was) g.sync?.villagerAlarm?.(by, cs.def.name);
     }
 

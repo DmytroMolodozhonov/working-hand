@@ -109,6 +109,7 @@ export const JOLT_TARGETS = {
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
+    carts: 'no effect on a cart on the road: far too heavy, its horses in the shafts; the charge bursts on its boards (Carriages.js — a mover); its horses and riders: as animals and castle people',
     looseThings: 'shoved along the charge as it passes (where their physics runs)',
     heldThings: 'stay in the hand: a hand opens only when the person opens it',
     world: 'no effect on ships, houses, walls, trees, water, the ground: the charge bursts on the rock / a house\'s sphere',

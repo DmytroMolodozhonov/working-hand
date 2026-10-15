@@ -183,4 +183,23 @@ test('«Circle Attack» and «Inspirius»: their waves reach every creature; the
     const net = src('src/net/NetSync.js');
     assert.match(net, /case 'circ'/);
     assert.match(net, /case 'insp'/);
+
+test('carts on the roads (Carriages.js, Travelers.js): blasts, rays, lightning, «Инферно», water, «Алохомора», «Джолт» know them', async () => {
+    const g = src('src/game/Game.js');
+    const blast = g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode(')));
+    assert.match(blast, /carriages\?\.hitAt/, 'Game.explode breaks a cart');
+    assert.match(body(g, 'birdRay: (o, d, len, width, name) =>'), /carriages\?\.hitRay/, 'rays chip a cart');
+    assert.match(body(g, 'lightningAt: (point, casterId) =>'), /carriages\?\.hitAt/, 'lightning breaks a cart');
+    assert.match(body(g, '    _burnRay(o, d, len, casterId) {'), /carriages\?\.burnAlong/, '«Инферно» sets a cart on fire');
+    assert.match(src('src/game/Firefighting.js'), /carriages\?\.douse/, 'water puts a burning cart out');
+    const { TARGETS, chestKind } = await import('../../src/game/Alohomora.js');
+    assert.equal(chestKind({ cart: { id: 'k1' } }), 'cartChest');
+    assert.equal(TARGETS.cartChest.plain, 'unlock');
+    const { JOLT_TARGETS } = await import('../../src/game/Duel.js');
+    assert.ok(JOLT_TARGETS.carts);
+    const { FIREFIGHT_TARGETS } = await import('../../src/game/Firefighting.js');
+    assert.ok(FIREFIGHT_TARGETS.carts?.why);
+    // the horses are real animals; the riders real castle people (every spell finds them there)
+    assert.match(src('src/game/Carriages.js'), /animals\._spawn\('horse'/);
+    assert.match(src('src/game/Travelers.js'), /L\._activate\(cs, i/);
 });

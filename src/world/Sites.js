@@ -19,11 +19,11 @@ export class SiteIndex {
         return b.length ? a.concat(b) : a;
     }
 
-    /** The site of an id: castles «cs…», towers «wt…», wandering wizards «ww…». */
+    /** The site of an id: castles «cs…», towers «wt…», the people of the roads: wandering wizards «ww…», knights errant «wk…», travelling folk «wc…». */
     byId(id) {
-        const m = /^(cs|wt|ww)(-?\d+)_(-?\d+)$/.exec(id);
+        const m = /^(cs|wt|ww|wk|wc)(-?\d+)_(-?\d+)$/.exec(id);
         if (!m) return null;
-        return m[1] === 'cs' ? this.castles.cellOf(+m[2], +m[3]) : m[1] === 'wt' ? this.towers.cellOf(+m[2], +m[3]) : this.towers.wanderDef(+m[2], +m[3]);
+        return m[1] === 'cs' ? this.castles.cellOf(+m[2], +m[3]) : m[1] === 'wt' ? this.towers.cellOf(+m[2], +m[3]) : this.towers.wanderDef(+m[2], +m[3], m[1]);
     }
 
     /** Castles and towers for the minimap, nearest first ({x, z, name, icon, def}); cached while they don't change. */

@@ -67,6 +67,8 @@ import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Dragons } from './Dragons.js';
+import { Carriages } from './Carriages.js';
+import { Travelers } from './Travelers.js';
 import { DRAGON_WAND_FIRE } from './DragonKinds.js';
 import { Phoenixes, phoenixModel } from './Phoenixes.js';
 import { LivingTrees } from './LivingTrees.js';
@@ -242,7 +244,7 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); } },
+            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             birdRay: (o, d, len, width, name) => {
                 len = this.wards?.clipRay(o, d, len) ?? len; // (a house's sphere stops it from outside)
                 this.books?.hitRay(o, d, len, width);
@@ -253,6 +255,7 @@ export class Game {
                 if (this.authority) this.phoenixes?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (fire and ice: no harm to a phoenix — Phoenixes.TARGETS)
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
                 if (this.authority) this.ships?.crew.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId); // (the ships' crews)
+                if (this.authority) this.carriages?.hitRay(o, d, len, width, name === 'Thunderwave' ? 6 : 3, this.localId, name === 'Inferno'); // (the carts on the roads: wood — chipped, fire sets them burning)
             },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); if (this.authority) this.livingTrees?.burnAlong(o, d, len); },
             // «Инферно» (src/fx/InfernoStream.js): what its stream burns, what stops it, its mana
@@ -323,6 +326,8 @@ export class Game {
         this.dismember = new Dismemberment(this); // a blade's edge cuts off arms, legs, heads (any creature)
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
+        this.carriages = new Carriages(this); // carts and the wizards' carriages on the roads (Carriages.js)
+        this.travelers = new Travelers(this); // the people of the roads: wanderers, knights errant, carts (Travelers.js)
         this.ships = new Ships(this); // the ships of the sea castles: decks, sails, the wheel, crews, cannons
         this.onFlame.push((o, d, len, casterId) => this.ships.igniteAlong(o, d, len, casterId)); // («Инферно» sets sails and decks on fire)
         this.onFlame.push((o, d, len, casterId) => this._flameBurnsPaper(o, d, len, casterId)); // (scrolls and books in it burn)
@@ -676,7 +681,7 @@ export class Game {
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
-        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, 10 * power, 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId); }
+        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, 10 * power, 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); }
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -784,7 +789,7 @@ export class Game {
 
     /** A chest's pouch of coins (a castle's treasury holds much more; a poor house — little or nothing). */
     _chestPouch(chest) {
-        const coins = chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
+        const coins = chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
             : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
             : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
         return coins > 0 ? [{ kind: 'coins', uid: newUid(), count: coins }] : [];
@@ -1907,6 +1912,7 @@ export class Game {
             this.phoenixes?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId); // (fire: no harm to a phoenix, but an attack)
             if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId)) hit = true; // villagers, knights, wizards
             if (this.livingTrees?.burnAlong(o, d, len, casterId)) hit = true; // (fire is what kills a living tree)
+            if (this.carriages?.burnAlong(o, d, len, casterId)) hit = true; // (a cart on the road catches fire)
         }
         for (const f of this.onFlame) { try { if (f(o, d, len, casterId)) hit = true; } catch (e) { console.warn('onFlame', e); } }
         return hit;
@@ -2393,6 +2399,8 @@ export class Game {
         this.bleeding.update(dt);
         this.animals.update(dt);
         this.runner.update(dt);
+        this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
+        this.carriages?.update(dt);
         this.castleLife.update(dt);
         this.doors.update(dt);
         this.locks.update(dt);
@@ -3142,6 +3150,8 @@ export class Game {
         this.beds?.dispose();
         this.spiders?.dispose();
         this.dragons?.dispose();
+        this.travelers?.dispose();
+        this.carriages?.dispose();
         this.phoenixes?.dispose();
         this.livingTrees?.dispose();
         this.servants?.dispose();

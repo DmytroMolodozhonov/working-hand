@@ -830,6 +830,7 @@ export class NetSync {
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'lock': case 'dlk': g.locks?.applyNet(m); break; // («Алохомора» — Alohomora.js)
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
+            case 'cart': if (!this.net.isHost) g.carriages?.onNet(m); break; // (carts on the roads: Carriages.js)
             case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
             case 'bed': g.beds?.onNet(m); break;

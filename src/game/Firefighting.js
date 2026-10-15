@@ -69,6 +69,7 @@ export const FIREFIGHT_TARGETS = {
     fireMaxima: { does: 'огненная спираль «Fire Maxima» гаснет в полёте и не распускается; цветок гаснет', why: 'вода' },
     hellfire: { does: 'обычный всплеск только сбивает его (меньше и не растёт пару секунд); Maxima, пока на нём, заливает: он уменьшается и гаснет (и кольцо тоже)', why: 'адский огонь сильнее обычной воды' },
     hellfireLeft: { does: 'брошенные огни адского огня: маленькие (части кольца) гаснут от всплеска, большой — уменьшается; Maxima гасит все', why: 'вода' },
+    carts: { does: 'горящая повозка путников гаснет (Carriages.douse); на людей и коней на ней — как на всех', why: 'вода гасит пламя на досках' },
     ships: { does: 'пожар на палубе и на парусах гаснет; корпус, паруса и палуба не ломаются', why: 'вода' },
     items: { does: 'вещи на земле и в руках не двигаются и не портятся', why: 'струя мягкая' },
     water: { does: 'не действует', why: 'вода в воду' },
@@ -173,6 +174,7 @@ export class Firefighting {
             const r = 0.6 + k * tan;
             if ((g.fire?.douse?.(_a, r) || 0) > 0) did = true;
             if (auth && (g.ships?.douse?.(_a, r + 0.5) || 0) > 0) did = true;
+            if (auth && (g.carriages?.douse?.(_a, r + 0.5) || 0) > 0) did = true; // (a burning cart on the road)
         }
         if (auth) {
             // campfires
