@@ -2759,6 +2759,7 @@ export class Game {
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
+        this._snowSteps(ch);
 
         // Explosion knockback (decays; a body lying on the ground slides less far) — in short steps
         // against the walls: a blast throws the body at the rock, never into it (a cave, a house)
@@ -3324,6 +3325,17 @@ export class Game {
         const f = p.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
         if (!ch.onGround || ch.swimY != null || this.flight?.active || this.ledge?.active) return f;
         return Math.max(f, Math.min(ch.groundY, f + 1.05));
+    }
+
+    /** Walking on snow: a soft crunch at every step (a step is ~0.8 m walking, longer running). */
+    _snowSteps(ch) {
+        const p = ch.group.position, last = this._stepAt || (this._stepAt = p.clone());
+        const d = Math.hypot(p.x - last.x, p.z - last.z);
+        if (!ch.onGround || ch.swimY != null || d > 4) { last.copy(p); return; }
+        if (d < 0.8 + 0.5 * (ch.runIntensity || 0)) return;
+        last.copy(p);
+        const data = this.terrain?.data;
+        if (data && data.get(Math.round(p.x), Math.round(ch.groundY + 0.5), Math.round(p.z)) === BLOCK.SNOW) this.sound?.playSnowStep?.(ch.isCrouching ? 0.5 : 1);
     }
 
     _bodyInRock(p) {

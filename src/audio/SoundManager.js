@@ -533,6 +533,7 @@ export class SoundManager {
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
+            ['snowStep', () => this._synthSnowStep()],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -912,6 +913,29 @@ export class SoundManager {
             lp += ((Math.random() * 2 - 1) - lp) * 0.4;
             const s = lp * Math.exp(-t * 120) + Math.sin(2 * Math.PI * f * t) * Math.exp(-t * 22) * 0.8 + Math.sin(2 * Math.PI * f * 2.7 * t) * Math.exp(-t * 45) * 0.25;
             d[i] = Math.max(-1, Math.min(1, s * Math.min(1, t * 3000)));
+        }
+        return buf;
+    }
+
+    /** A step on snow: a soft muffled crunch (the crystals giving under the foot). */
+    playSnowStep(volume = 1) {
+        if (!this.context) return;
+        if (!this.sounds.snowStep) this.sounds.snowStep = this._synthSnowStep();
+        this._play(this.sounds.snowStep, 0.55 * volume, 0.85 + Math.random() * 0.3);
+    }
+
+    _synthSnowStep() {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * 0.26);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let lp = 0, lp2 = 0, grain = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const env = Math.min(1, t * 90) * Math.exp(-t * 14);
+            lp += ((Math.random() * 2 - 1) - lp) * 0.22; // (muffled: no hiss)
+            lp2 += (lp - lp2) * 0.3;
+            if (Math.random() < 0.012) grain = (Math.random() * 2 - 1) * 0.9; // (the crunch: many tiny cracks)
+            grain *= 0.93;
+            d[i] = Math.max(-1, Math.min(1, (lp2 * 1.3 + grain * 0.5) * env));
         }
         return buf;
     }

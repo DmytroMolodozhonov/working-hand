@@ -55,7 +55,7 @@ export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -89,6 +89,24 @@ const _mesh = { pad: null }; // (reused buffer of buildChunkArrays)
 const _SKY_DX = [1, -1, 0, 0, 0, 0], _SKY_DY = [0, 0, 1, -1, 0, 0], _SKY_DZ = [0, 0, 0, 0, 1, -1]; // (the six neighbours, _skyLight)
 // (reused buffers of _generateLush)
 const _lush = { hh: null, flags: null, kinds: null, water: null, T: new Float32Array(32 * 32), fx: {}, fx2: {}, clim: {}, clim2: {}, w: new Float32Array(16), w2: new Float32Array(16), col3: {} };
+/** Layers below the snow line where the snow lies in patches (generation 5): the higher, the more. */
+export const SNOW_BAND = 8;
+/**
+ * Generation 5: is the top of a column snow? The snow line (Landscape.snowLine: lower in the cold,
+ * ragged) moved by the ground itself — the snow lies lower on the shaded northern (−z) slopes and
+ * in the hollows, higher on the sunny ones and the humps, and slides off steep rock (a cliff stays
+ * bare well above the line). Below it, in a band of SNOW_BAND layers, patches: a few metres across
+ * (`patch`, Landscape.snowPatch) and here and there a single block (`r`), more of them higher up.
+ * `hh`: the heights round the column (row length P), `i` the column's own.
+ */
+export function snowAt(h, line, hh, i, P, slope, patch, r) {
+    const north = Math.max(-3, Math.min(3, hh[i + P] - hh[i - P])); // (the ground rising to the south: the slope faces north)
+    const hollow = Math.max(-2, Math.min(2, (hh[i + 1] + hh[i - 1] + hh[i + P] + hh[i - P]) / 4 - h));
+    const s = h - line + 0.8 * north + 1.6 * hollow - (slope >= 3 ? 7 : slope === 2 ? 2 : 0);
+    if (s >= 0) return true;
+    if (s <= -SNOW_BAND) return false;
+    return 0.8 * patch + 0.2 * r < 1.05 * smoothstep(0, 1, 1 + s / SNOW_BAND);
+}
 /** Top of the water surface (water fills layers up to 0, drawn a little lower than the ground). */
 export const WATER_LEVEL_Y = -0.62;
 
@@ -166,7 +184,7 @@ Object.assign(PATTERN_OF, {
     [BLOCK.ARCANE]: PATTERN.ASHLAR, [BLOCK.ARCANE_DARK]: PATTERN.ASHLAR, [BLOCK.ROOF_PURPLE]: PATTERN.TILES,
     [BLOCK.ARCANE_LAMP]: PATTERN.CRYSTAL, [BLOCK.ARCANE_LAMP_VIOLET]: PATTERN.CRYSTAL, [BLOCK.CARPET_PURPLE]: PATTERN.CLOTH,
     [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES, [BLOCK.GRAVEL]: PATTERN.COBBLE,
-    [BLOCK.ICE_WALL]: PATTERN.GLACIER, [BLOCK.ICE_DARK]: PATTERN.GLACIER, [BLOCK.ICE_GLOW]: PATTERN.CRYSTAL, [BLOCK.ICE_FLOOR]: PATTERN.SNOWFLAKE,
+    [BLOCK.ICE_WALL]: PATTERN.GLACIER, [BLOCK.ICE_DARK]: PATTERN.GLACIER, [BLOCK.ICE_GLOW]: PATTERN.CRYSTAL, [BLOCK.ICE_FLOOR]: PATTERN.SNOWFLAKE, [BLOCK.SNOW]: PATTERN.SNOW,
 });
 /** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
 const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
@@ -185,7 +203,8 @@ const SHADES = {
     [BLOCK.DARK]: [0x3e2716, 0x352113, 0x452c19, 0x3a2414, 0x3e2716],
     [BLOCK.DARK_LEAVES]: [0x2d4f1e, 0x26441a, 0x335822, 0x2a4a1c, 0x385e26],
 };
-const GRASS_SIDE = 0x6b4a2a; // dirt-coloured sides under a grass top
+const GRASS_SIDE = 0x6b4a2a;
+const SNOW_CAP = 0xe4ecf0, FROST = 0xd8e0e4; // (snow on a crown's top; a thin frost of snow on rock and grass) // dirt-coloured sides under a grass top
 
 export const MIN_LAYER = -17; // the lowest layer: bedrock (indestructible); the deep sea's floor is at -16
 /** Bedrock top of old worlds (generation 1, and every world without seas): lakes reach down to -7. */
@@ -585,6 +604,7 @@ export class TerrainData {
         const hh = _lush.hh || (_lush.hh = new Int16Array(P * P));
         const cols = CHUNK * CHUNK;
         const grass = new Int32Array(cols), leaf = new Int32Array(cols), leafK = new Uint8Array(cols), mesa = new Uint8Array(cols), bio = new Uint8Array(cols);
+        const snowL = new Int16Array(cols); // (the snow line of each column: the snowy crowns and the frost, faceColor)
         const flags = _lush.flags || (_lush.flags = new Uint8Array(cols)); // 1 water, 2 sea, 4 beach
         const kinds = _lush.kinds || (_lush.kinds = new Uint8Array(cols));
         const fx = _lush.fx, clim = _lush.clim, w = _lush.w, col3 = _lush.col3;
@@ -621,8 +641,9 @@ export class TerrainData {
                 // the top block
                 let surf = BLOCK.GRASS, soil = BLOCK.DIRT, deep = 3;
                 const snow = land.snowLine(x, z, _lush.T[col]);
+                snowL[col] = Math.round(snow);
                 const m = mesa[col] / 255;
-                if (h >= snow + (slope >= 3 ? 7 : 0)) { surf = BLOCK.SNOW; soil = slope >= 2 ? BLOCK.STONE : BLOCK.DIRT; deep = 2; }
+                if (h >= snow - SNOW_BAND - 6 && snowAt(h, snow, hh, i0, P, slope, land.snowPatch(x, z), r)) { surf = BLOCK.SNOW; soil = slope >= 2 ? BLOCK.STONE : BLOCK.DIRT; deep = 2; }
                 else if (kind === KIND.MESA && r < smoothstep(0.15, 0.5, m) * 1.1) { /* (at its edge the scarlet sand and the grass mingle) */ surf = slope >= 2 ? BLOCK.STONE : r < 0.12 * (1 - m) + 0.05 ? BLOCK.GRASS : BLOCK.SAND; soil = surf === BLOCK.SAND ? BLOCK.SAND : BLOCK.STONE; deep = 2; }
                 else if (slope >= 3 || (slope >= 2 && h > 24)) { surf = r < 0.12 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; deep = 0; }
                 else if (h > 36 && r < smoothstep(36, 60, h) * 0.55) { surf = r < 0.06 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; }
@@ -645,7 +666,7 @@ export class TerrainData {
         }
         let minOpen = MAX_LAYER;
         for (let i = 0; i < top.length; i++) if (top[i] + 1 < minOpen) minOpen = top[i] + 1;
-        const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen, sea: seaMask, grass, leaf, leafK, mesa, bio, wet: flags };
+        const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen, sea: seaMask, grass, leaf, leafK, mesa, bio, snowL, wet: flags };
         this._carveCaves(c); this._buildCastles(c); this._plantLush(c); this._floatIslands(c);
         c.wet = undefined;
         return c;
@@ -804,13 +825,13 @@ export class TerrainData {
         if (!isles.length) return;
         const B = c.blocks;
         let bot = null;
-        const snowAt = (x, z) => this.land.snowLine(x, z, this.land.climate(x, z, _lush.clim2).T);
+        const lineAt = (x, z) => this.land.snowLine(x, z, this.land.climate(x, z, _lush.clim2).T);
         for (const s of isles) {
             for (const p of s.parts) {
                 const ax = Math.max(x0, p.x - p.r * 1.3 - 1), bx = Math.min(x0 + CHUNK - 1, p.x + p.r * 1.3 + 1);
                 const az = Math.max(z0, p.z - p.r * 1.3 - 1), bz = Math.min(z0 + CHUNK - 1, p.z + p.r * 1.3 + 1);
                 if (ax > bx || az > bz) continue;
-                const snow = p.Y >= snowAt(p.x, p.z);
+                const snow = p.Y >= lineAt(p.x, p.z);
                 for (let z = Math.ceil(az); z <= bz; z++) for (let x = Math.ceil(ax); x <= bx; x++) {
                     const cl = this._isleColumn(p, x, z);
                     if (!cl) continue;
@@ -828,7 +849,7 @@ export class TerrainData {
             // a tree on the main island (its trunk on the island's middle)
             if (s.tree) {
                 const p = s.parts[0], cl = this._isleColumn(p, p.x, p.z);
-                if (cl && !(p.Y >= snowAt(p.x, p.z))) {
+                if (cl && !(p.Y >= lineAt(p.x, p.z))) {
                     const b = BIOMES[this.biomeAt(p.x, p.z)];
                     const kinds = b.kinds.filter((k) => k !== 0 && k !== 4); // (a one-column trunk: the island's top is not quite flat)
                     const kind = kinds.length ? kinds[Math.floor(hashLand(p.x, p.z, this.seed + 330) * kinds.length)] : 1;
@@ -1537,6 +1558,18 @@ export class TerrainData {
             // shader draws earth under a fringe of grass hanging over the edge)
             const g = c.grass[col];
             return ((((g >> 16) & 255) >> 2) << 18) | ((((g >> 8) & 255) >> 2) << 10) | (((g & 255) >> 2) << 2);
+        }
+        // under the snow line: snow on the crowns' tops (the spruces up the slopes) and a thin frost
+        // of snow on the bare rock and the grass in patches — more of it the higher (as the patches
+        // of snow blocks, snowAt; a block of snow itself is drawn as snow)
+        if (isTop && c.snowL && (isLeaves(type) || type === BLOCK.STONE || type === BLOCK.GRAVEL || type === BLOCK.GRASS)) {
+            const d = L - c.snowL[col];
+            if (d > -SNOW_BAND - 6) {
+                const k = Math.min(1, (d + SNOW_BAND + 6) / (SNOW_BAND + 4));
+                let hsh = ((ix >> (isLeaves(type) ? 0 : 1)) * 73856093) ^ (L * 19349663) ^ ((iz >> (isLeaves(type) ? 0 : 1)) * 83492791);
+                hsh = ((hsh ^ (hsh >>> 13)) >>> 0) % 1000 / 1000;
+                if (hsh < k * (isLeaves(type) ? 0.85 : 0.45)) return this._jitter(isLeaves(type) ? SNOW_CAP : FROST, ix, L, iz, true, BLOCK.SNOW);
+            }
         }
         if (isLeaves(type)) {
             const k = c.leafK[col];

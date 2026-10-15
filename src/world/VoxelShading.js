@@ -158,6 +158,19 @@ float snowflakeAt(vec2 uv) {
     // generation 5's grass (pattern 14): grass whatever its colour (golden steppe, autumn, moonlit teal)
     bool lushGrass = pat == 14.0;
     if (lushGrass) pat = 0.0;
+    // snow (pattern 17): soft, without the pixels' grain — wind-blown drifts in faint waves, a
+    // glitter of crystals in the light; on a side a thin crust under the top
+    bool snowy = pat == 17.0;
+    if (snowy) {
+        pat = 0.0;
+        vec2 sp = n.y > 0.5 ? q.xz : vec2(uv.x, q.y * 2.0);
+        float drift = vnoise(sp * vec2(0.9, 2.6) + 3.0) * 0.6 + vnoise(sp * 2.3 - 11.0) * 0.4;
+        diffuseColor.rgb *= 0.95 + 0.07 * drift;
+        float spark = vhash(vec3(floor(uv * 16.0), layerId + 23.0));
+        if (spark > 0.985) diffuseColor.rgb *= 1.0 + 0.1 * kFine;
+        if (n.y < 0.5 && fract(q.y) > 0.86) diffuseColor.rgb *= 1.03; // (the crust of the top on the side)
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.9, 1.0) * lum, 0.12 * (1.0 - n.y)); // (bluish in the shade of a side)
+    }
     bool green = lushGrass ? n.y > 0.5 : diffuseColor.g > diffuseColor.r * 1.15 && diffuseColor.g > diffuseColor.b * 1.1;
     if (lushGrass && n.y < 0.5) {
         // the side of a grass block: earth, the grass of the top hanging over its edge in a ragged fringe
@@ -175,7 +188,7 @@ float snowflakeAt(vec2 uv) {
         diffuseColor.rgb *= 1.0 + (g1 - 0.5) * 0.24 + (g2 - 0.5) * 0.1 * (0.4 + 0.6 * kCoarse);
         diffuseColor.rgb *= mix(vec3(0.9, 1.0, 1.1), vec3(1.1, 1.03, 0.82), smoothstep(0.2, 0.8, g3)); // (cool … warm)
     }
-    float detail = pat > 0.5 ? 0.0 : (r - 0.5) * 0.08;
+    float detail = pat > 0.5 ? 0.0 : (r - 0.5) * (snowy ? 0.02 : 0.08);
     if (pat < 0.5 && green && n.y > 0.5) detail += (r > 0.9 ? 0.07 : 0.0) - (r < 0.08 ? 0.06 : 0.0); // grass speckles
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides
     diffuseColor.rgb *= 1.0 + detail * kFine;
@@ -268,7 +281,7 @@ float snowflakeAt(vec2 uv) {
     vec2 e = min(f, 1.0 - f);
     float edge = smoothstep(0.0, 0.09, min(e.x, e.y));
     // (very light on flat grass so a meadow doesn't look like tiles)
-    float edgeAmt = green && n.y > 0.5 ? 0.05 : 0.14;
+    float edgeAmt = (green || snowy) && n.y > 0.5 ? 0.05 : snowy ? 0.08 : 0.14;
     diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
     // far: the patterned blocks (stone, planks, bricks…) take their average tone
     if (pat > 0.5) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);

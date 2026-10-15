@@ -22,7 +22,21 @@ export const FIRE = {
     MAX_BLOCKS: 260, // burning blocks at once (performance)
 };
 
+/**
+ * The snow block (the mountains' snow, generation 5): what acts on it, and how.
+ */
+export const SNOW_TARGETS = {
+    fire: { does: 'melt', why: 'любой огонь мира (FireSystem: «Инферно», огонь рукой, Hellfire, огонь драконов и стражей, горящий феникс) — снег тает облачком пара, вода стекает' },
+    Bombardo: { does: 'blast + melt', why: 'воронка, как в любой земле (World.explode), а жар вокруг неё (fire.ignite) растапливает снег по краю' },
+    hands: { does: 'dig', why: 'копается и ломается руками, как другие блоки земли; кладётся снова (ресурс «Снег»)' },
+    water: { does: 'none', why: 'вода и лёд («Айс», водные заклинания) снегу ничего не делают: он и так холодный, не горит' },
+    lightning: { does: 'as fire', why: 'где молния поджигает (через FireSystem), там и топит' },
+    creatures: { does: 'none', why: 'по снегу ходят все, как по земле; шаг игрока по снегу — мягкий хруст' },
+    collapse: { does: 'fall', why: 'снег — земля: проседает и падает с тем, что под ним (Collapse, Drawdown, Quake)' },
+};
+
 const _v = new THREE.Vector3();
+const MELT_AROUND = [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]];
 const _c = new THREE.Color();
 
 function hash01(a, b, c) {
@@ -62,7 +76,9 @@ export class FireSystem {
             const x = Math.round(p.x) + dx, z = Math.round(p.z) + dz, L = Math.floor(p.y + 1.5) + dy;
             const b = terrain.get(x, L, z);
             if (isFlammable(b) && this._igniteBlock(x, L, z)) hit = true;
+            else if (b === BLOCK.SNOW) this._melt(terrain, x, L, z);
         }
+        this._meltDone();
         return hit;
     }
 
@@ -82,9 +98,14 @@ export class FireSystem {
                 const x = Math.round(_v.x), z = Math.round(_v.z), L = Math.floor(_v.y + 1.5);
                 const b = terrain.get(x, L, z);
                 if (isFlammable(b)) { this._igniteBlock(x, L, z); hit = true; }
+                if (b === BLOCK.SNOW) {
+                    // the stream melts the snow it hits (and round it: it is half a metre wide and hot)
+                    for (const [dx, dy, dz] of MELT_AROUND) if (terrain.get(x + dx, L + dy, z + dz) === BLOCK.SNOW) this._melt(terrain, x + dx, L + dy, z + dz);
+                }
                 if (b !== BLOCK.AIR && b !== BLOCK.WATER) break; // the stream stops at solid things
             }
         }
+        this._meltDone();
         return hit;
     }
 
@@ -116,6 +137,29 @@ export class FireSystem {
             n++;
         }
         return n;
+    }
+
+    /**
+     * Fire melts snow (any fire: «Инферно», a burning hand, «Бомбардо»'s blast, Hellfire…): the
+     * block is gone in a puff of steam, its water runs off. Like the burning blocks it happens the
+     * same on every computer (no chance in it); kept in the world's changes (a save).
+     */
+    _melt(terrain, x, L, z) {
+        if (this.game.wards?.protects?.(x, L - 1, z)) return;
+        terrain.set(x, L, z, BLOCK.AIR);
+        (this._melted || (this._melted = [])).push([x, L, z, BLOCK.AIR]);
+        this.onBlockGone?.(x, L, z); // (what stood on it falls)
+        const fx = this.game.fx;
+        if (fx?.smoke && (this._melted.length & 3) === 1) fx.smoke.spawn(x, L - 0.6, z, (Math.random() - 0.5) * 0.4, 1.6 + Math.random(), (Math.random() - 0.5) * 0.4, 0xe8eef2, 0.9 + Math.random() * 0.5, 1.6, { shrink: -0.5 });
+    }
+
+    _meltDone() {
+        const m = this._melted;
+        if (!m || !m.length) return;
+        const g = this.game;
+        g.blockEdits = g.blockEdits || [];
+        for (const e of m) g.blockEdits.push(e);
+        m.length = 0;
     }
 
     _igniteTree(t) {

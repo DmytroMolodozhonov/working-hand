@@ -210,6 +210,8 @@ export function createLandscape(seed) {
 
     /** The snow line at a column (lower in the cold, a little ragged). */
     L.snowLine = (x, z, T) => LUSH.SNOW + 6 * nSnow(x / 23, z / 23) + 3 * nSnow(x / 7 + 3, z / 7) - 16 * Math.max(0, -T) + 6 * Math.max(0, T);
+    /** Snow patches below the line: 0…1, a few metres across (low: snow lies here first). */
+    L.snowPatch = (x, z) => 0.5 + 0.5 * (0.7 * nSnow(x / 5.3 + 211, z / 5.3 - 77) + 0.3 * nSnow(x / 2.1 - 40, z / 2.1 + 19));
 
     /**
      * The kinds of land at a column: their weights into `w` (Float32Array(BIOMES.length), summing
