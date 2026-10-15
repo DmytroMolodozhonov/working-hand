@@ -70,7 +70,7 @@ test('a whole castle in 30 s: −500 mana, its gate towards the caster, doors, b
     assert.equal([...g.doors.list.values()].filter((d) => d.metal).length, 5);
     assert.equal(g.beds.list.size, 4);
     assert.equal(g.chests.length, 3);
-    assert.ok(Object.values(rec.store).every((l) => l.length >= 2), 'useful things in every chest');
+    assert.ok(Object.values(rec.store).every((l) => !l.length), 'the chests are empty: made, not found');
     assert.ok(g.houses.panes.length > 10);
     const P = g.castleMagic.cells(rec);
     let solid = 0, have = 0;

@@ -16,7 +16,7 @@
  *     - the tune of the house magic, in its grandest form, for the whole 30 s (made ahead).
  *   Then: the gate (two leaves, opened by the hand), the throne hall with the throne, iron doors (both ways,
  *   by the hand), four beds (lie down; you come back to life there — Beds.js), three chests in the treasury
- *   with useful things (rollHouseLoot of a rich house) — open by the hand, put things in them.
+ *   — empty, as a magic house's (the castle is made, not found: nothing lies in it) — open by the hand, put things in them.
  *
  * The castle is real: its walls, floors, towers, roofs are terrain blocks (solid; collisions for the
  * hands, the players and every creature; the creatures walk round them as round any wall). A blast,
@@ -43,7 +43,6 @@ import { faceTowards, HOUSE_REACH } from '../world/MagicHouse.js';
 import { castleLayout, castleCells, CASTLE, PART } from '../world/MagicCastle.js';
 import { HouseMagic, HOUSE_MAGIC } from './HouseMagic.js';
 import { Chest } from '../entities/Chest.js';
-import { rollHouseLoot, rollKeyItem } from './ItemTypes.js';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const _v = new THREE.Vector3();
@@ -381,10 +380,8 @@ export class CastleMagic extends HouseMagic {
         const g = this.game;
         this.magic = null;
         const rec = { ...m.rec, level: 1, t: Date.now() };
-        // the treasury's chests: useful things of a rich house in each (the first time only)
-        const lay = this.plan(rec);
+        // the treasury's chests: empty (the author: the castle is made by magic, not found — no treasure in it)
         rec.store = this.list.get(rec.id)?.store || {};
-        for (const c of lay.chests) if (!rec.store[c.k]) rec.store[c.k] = [...rollHouseLoot(Math.random, true), ...(c.k === 1 ? [rollKeyItem()] : [])]; // (the middle one: a precious thing too)
         if (m.wait.length) (this._waiting = this._waiting || []).push(...m.wait);
         this.list.set(rec.id, rec);
         this._hookLight();
