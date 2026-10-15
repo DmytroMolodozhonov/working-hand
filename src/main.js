@@ -18,7 +18,7 @@ import { renderSpellsTab, renderItemsTab, renderMechanicsTab } from './ui/Codex.
 import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
-import { gameSaid } from './audio/GameVoices.js';
+import { fromGame } from './audio/GameVoices.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
@@ -471,8 +471,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         const spoken = matchSpell(command);
         if (spoken) {
             const now = performance.now();
-            if (gameSaid(spoken, meta?.from ?? now - 2500, meta?.to ?? now)) {
-                hud.setVoice(`🔇 «${escapeHtml(lastWords(command))}» — это сказал житель из колонок, а не вы`);
+            if (fromGame(spoken, { ...meta, from: meta?.from ?? now - 2500, to: meta?.to ?? now })) {
+                hud.setVoice(`🔇 «${escapeHtml(lastWords(command))}» — в этот миг говорил житель из колонок: похоже, это его голос. Скажите ещё раз`);
                 if (isFinal) netLog(`заклинание «${command}» не моё: его слова только что сказал голос игры`);
                 return;
             }

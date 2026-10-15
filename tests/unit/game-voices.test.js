@@ -2,7 +2,11 @@
 // the game knows what its villagers said and when (src/audio/GameVoices.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aired, clearAired, gameSaid, editsInside } from '../../src/audio/GameVoices.js';
+import fs from 'node:fs';
+import { aired, clearAired, gameSaid, fromGame, editsInside } from '../../src/audio/GameVoices.js';
+import { threshold } from '../../src/audio/SpellSpotter.js';
+import { lookAt } from '../../src/input/NativeVoice.js';
+import { matchSpell } from '../../src/fx/SpellManager.js';
 
 test('a spell\'s words in a villager\'s line, heard while it sounded, are the villager\'s', () => {
     clearAired();
@@ -22,12 +26,52 @@ test('my own spell is mine: another spell, or the same one said long after the l
     assert.equal(gameSaid('Fire', 0, 600), null, 'said before the line');
 });
 
-test('a short spell word is a whole word of the line («ап» is not inside «капуста»)', () => {
+test('a spell word inside a villager\'s word counts too, while it sounds («приятного аппетита» holds «ап»)', () => {
     clearAired();
-    aired('Капуста свежая, лук и репа!', 0, 3000);
-    assert.equal(gameSaid('Up', 1000, 1400), null);
-    aired('Ап! Вставай!', 5000, 6000);
-    assert.ok(gameSaid('Up', 5200, 5600));
+    aired('Держи! Приятного аппетита.', 0, 3000);
+    assert.ok(gameSaid('Up', 1000, 1400));
+    assert.equal(gameSaid('Up', 6000, 6400), null);
+});
+
+// The network's real hearing (voice_native.py) of the game's own lines that read as a spell — «Жареный
+// стейк» as «файр», «Не продаётся» as «даст», «Стой, негодяй!» as «стоп» — with no speakers' copy at all
+const lines = JSON.parse(fs.readFileSync(new URL('../fixtures/game-lines.json', import.meta.url), 'utf8'));
+const spells = JSON.parse(fs.readFileSync(new URL('../fixtures/voice-spells.json', import.meta.url), 'utf8')).filter((r) => r.kind === 'spell');
+const heard = (r) => {
+    const res = lookAt({ type: 'seg', id: 1, T: r.T, lp: r.lp, far: 0, final: true }, {});
+    const spell = res.say && matchSpell(res.say.text);
+    const meta = { native: true, from: 1000, to: 2000, sure: !!res.heard.sure };
+    const sp = res.heard.sure && res.heard.spell;
+    if (sp) { meta.fit = sp.avg - threshold(sp.len, 0); meta.len = sp.len; }
+    return { spell, meta };
+};
+
+test('the game\'s own lines from the speakers never cast — even the ones only heard like a spell', () => {
+    let read = 0;
+    for (const r of lines) {
+        const { spell, meta } = heard(r);
+        if (!spell) continue;
+        read++;
+        clearAired();
+        aired(r.text, 900, 2100);
+        assert.ok(fromGame(spell, meta), `«${r.text}» cast ${spell}`);
+    }
+    assert.ok(read >= 25, `${read}`);
+});
+
+test('my spells: all cast when no villager speaks, and most even over a villager\'s voice', () => {
+    let n = 0, quiet = 0, over = 0;
+    for (const [i, r] of spells.entries()) {
+        const { spell, meta } = heard(r);
+        if (!spell || spell !== matchSpell(r.text)) continue;
+        n++;
+        clearAired();
+        if (!fromGame(spell, meta)) quiet++;
+        aired(lines[i % lines.length].text, 900, 2100);
+        if (!fromGame(spell, meta)) over++;
+    }
+    assert.equal(quiet, n);
+    assert.ok(over / n >= 0.75, `${over}/${n}`);
 });
 
 test('letters a little off still count: a swap of two neighbours is one change', () => {

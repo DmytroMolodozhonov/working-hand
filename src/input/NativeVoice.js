@@ -16,7 +16,7 @@
  * one heard it very clearly), and never right at the cut edge of the look (SpellSpotter.EDGE).
  */
 
-import { unpack, hear } from '../audio/SpellSpotter.js';
+import { unpack, hear, threshold } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
 
 /** A spell this clear is cast from one look at the phrase (avg cost per letter)… */
@@ -167,6 +167,9 @@ export class NativeVoice {
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
         const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, ...this._when(d, r.heard) };
+        // (how much better than needed the spell fit: over a villager's voice only a clear one is mine — GameVoices)
+        const sp = r.heard.sure && r.heard.spell;
+        if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
         if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure });
     }

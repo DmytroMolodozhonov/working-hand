@@ -63,22 +63,30 @@ export function editsInside(p, s) {
     return best;
 }
 
-// (a short spell word is a whole word of the line — «ап» is inside «капуста»; a longer one may differ a little:
-// «костре» is «костёр» said in a sentence)
-const allowed = (n) => (n <= 5 ? 0 : n <= 8 ? 1 : 2);
+// (anywhere in the line, across its words too — «приятного аппетита» holds «ап», «не продаётся» «даст»,
+// «на костре» «костёр»: the network hears them there. It only matters while that line sounds.)
+const allowed = (n) => (n <= 3 ? 0 : n <= 8 ? 1 : 2);
 
 /** Does the line hold one of the ways that spell is said (SpellSpotter's), near enough to sound like it? */
 export function soundsIn(spell, text) {
-    const words = norm(text).split(' ');
     const flat = letters(text);
     for (const w of VOCAB) {
         if (w.spell !== spell) continue;
         const p = letters(w.phrase);
-        if (!p) continue;
-        if (p.length <= 3) { if (words.includes(p)) return true; continue; }
-        if (editsInside(p, flat) <= allowed(p.length)) return true;
+        if (p && editsInside(p, flat) <= allowed(p.length)) return true;
     }
     return false;
+}
+
+/** The game's lines sounding while the phrase (from…to, performance.now() ms) was heard. */
+function sounding(from, to) {
+    const out = [];
+    for (let i = LINES.length - 1; i >= 0; i--) {
+        const l = LINES[i];
+        if (l.from - HEARD_BEFORE > to || l.to + HEARD_AFTER < from) continue;
+        out.push(l);
+    }
+    return out;
 }
 
 /**
@@ -87,10 +95,33 @@ export function soundsIn(spell, text) {
  */
 export function gameSaid(spell, from, to) {
     if (!spell) return null;
-    for (let i = LINES.length - 1; i >= 0; i--) {
-        const l = LINES[i];
-        if (l.from - HEARD_BEFORE > to || l.to + HEARD_AFTER < from) continue;
-        if (spellsIn(l.text).has(spell) || soundsIn(spell, l.text)) return l.text;
-    }
+    for (const l of sounding(from, to)) if (spellsIn(l.text).has(spell) || soundsIn(spell, l.text)) return l.text;
     return null;
+}
+
+/** How much better than needed a spell must fit (SpellSpotter: avg − threshold) while a villager speaks… */
+export const GAME_FIT = 0.7;
+/** …a short word («ап», «айс») more still. */
+export const GAME_FIT_SHORT = 0.3;
+
+/**
+ * Is this spell the game's own voice? → the line it came from, or null (it is mine).
+ *  - its words were in a line the game said while the phrase was heard (whatever heard it);
+ *  - or, heard by the network on this computer (which tells how well the spell fit), a line was
+ *    sounding then and the spell was only just made out: «Жареный стейк» heard as «файр», «Стой!» as
+ *    «стоп». A spell I really say fits far better. Tested with no speakers' copy at all (the worst
+ *    setup): of 1300 of the game's lines heard by the microphone 131 read as a spell — none casts now;
+ *    of 400 spells said over a villager's voice 86% still cast (said at any other time: all, as before).
+ * @param {string} spell  the spell (matchSpell)
+ * @param {{from:number, to:number, native?:boolean, sure?:boolean, fit?:number, len?:number}} heard
+ */
+export function fromGame(spell, { from, to, native = false, sure = false, fit = NaN, len = 0 } = {}) {
+    if (!spell) return null;
+    const lines = sounding(from, to);
+    if (!lines.length) return null;
+    for (const l of lines) if (spellsIn(l.text).has(spell) || soundsIn(spell, l.text)) return l.text;
+    if (!native) return null;
+    // (not the spell's own sound, only the written words — a villager's)
+    if (!sure) return lines[0].text;
+    return Number.isFinite(fit) && fit >= GAME_FIT + (len <= 3 ? GAME_FIT_SHORT : 0) ? null : lines[0].text;
 }
