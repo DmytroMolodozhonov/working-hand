@@ -122,7 +122,8 @@ export class WandBelt {
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 0;
             // (the hand came to it open and closes on it — however long that takes; taking is
             // as easy as in reality: anywhere by the waist, looking down)
-            const reach = near || !!rb?.near;
+            // (never at the coin pouches' place: PoseInterpreter.bodyPlace — reaching for the wand takes the wand only)
+            const reach = (near || !!rb?.near) && g.currentPose.place?.[side] !== 'purse';
             if (!reach) { this._open[side] = false; continue; }
             if (curl < 0.4) this._open[side] = true;
             const free = !h && !g.weapons?.hands?.[side]?.held;

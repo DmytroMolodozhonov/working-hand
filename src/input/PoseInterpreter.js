@@ -93,6 +93,35 @@ export function beltPose(lm, side, aspect = 4 / 3) {
     return { at, near, dy, u, bend };
 }
 
+/**
+ * Which of the body's own places a hand is at, as the camera sees it — ONE answer, so reaching
+ * for the wand never takes a coin pouch (the places used to overlap: the pouches' zone began
+ * just right of the belly's middle, where the right hand reaching for the wand is):
+ *   'wand'  — in front of the belly (the wand's place: WandBelt), beltPose's zone;
+ *   'purse' — the coin pouches' place: really at the right hip — at or outside the hip joint,
+ *             never towards the middle (purseHand, and the wrist no further in than the hip);
+ *   null    — neither, or a doubtful point between them (the nearest place must be clearly
+ *             nearer: in doubt, nothing).
+ * `side` is the hand; the right hand's own hip is its pouches'. Pure.
+ */
+export function bodyPlace(lm, side, aspect = 4 / 3) {
+    const b = beltPose(lm, side, aspect);
+    if (!b) return null;
+    const sh = lm[side === 'left' ? 11 : 12], lh = lm[23], rh = lm[24];
+    const T = (lh.y + rh.y) / 2 - sh.y;
+    const hw = (Math.abs(lh.x - rh.x) * aspect) / (2 * T); // (the hip joints' half spread, torso heights)
+    // (u: towards the person's left from the hips' middle — the right hip is at −hw)
+    const purse = side === 'right' && purseHand(lm, 'right', aspect) === true && b.u <= -hw + 0.02;
+    const wand = b.near;
+    if (purse === wand) {
+        if (!purse) return null;
+        const dW = Math.abs(b.u - 0.03), dP = Math.abs(b.u + hw + 0.1); // (the wand's handle a little left of the middle; the pouches just outside the hip)
+        if (Math.abs(dW - dP) < 0.08) return null;
+        return dW < dP ? 'wand' : 'purse';
+    }
+    return purse ? 'purse' : 'wand';
+}
+
 export function purseHand(lm, side, aspect = 4 / 3, hipSide = side) {
     const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
     const h = hipSide === 'left' ? 23 : 24; // (the left hand can reach across to the RIGHT hip)
@@ -277,7 +306,13 @@ export class PoseInterpreter {
                 cross: pocketPose(lm, results.rightHandLandmarks, 'right', data.aspect, 'left'), // (the right hand in the LEFT pocket)
             };
             data.belt = { left: beltPose(lm, 'left', data.aspect), right: beltPose(lm, 'right', data.aspect) }; // (WandBelt)
-            data.purse = { right: purseHand(lm, 'right', data.aspect), cross: purseHand(lm, 'left', data.aspect, 'right') }; // (CoinBelt: the right hip; the left hand across)
+            // which place each hand is at (the wand's in front, the pouches' at the right hip): one answer
+            data.place = { left: bodyPlace(lm, 'left', data.aspect), right: bodyPlace(lm, 'right', data.aspect) };
+            // (the right hand at the pouches only when really at the right hip — not reaching for the wand)
+            const pr = purseHand(lm, 'right', data.aspect);
+            data.purse = { right: pr === true ? data.place.right === 'purse' : pr, cross: purseHand(lm, 'left', data.aspect, 'right') }; // (CoinBelt: the right hip; the left hand across)
+            // (nor the right pocket: a hand at the wand's place takes the wand, not the next thing from a slot)
+            if (data.pocket.right === true && data.place.right === 'wand') data.pocket.right = false;
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
             data.bodyTouch = { left: bodyTouch(lm, 'left', data.aspect), right: bodyTouch(lm, 'right', data.aspect) }; // (armour put on by hand: Armor.js)
 

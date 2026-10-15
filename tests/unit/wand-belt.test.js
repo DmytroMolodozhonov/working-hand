@@ -69,3 +69,27 @@ test('first person: the eyes are in the head, ahead of the neck; the whole torso
     ch.setFirstPerson(false);
     assert.ok(ch.body.layers.test(camLayers) && ch.head.layers.test(camLayers) && !d.visible, 'from outside: the hero as it is');
 });
+
+test('one place for a hand at the belt: reaching for the wand is never the coin pouches; the pouches only really at the right hip; in doubt nothing', async () => {
+    const { bodyPlace } = await import('../../src/input/PoseInterpreter.js');
+    const { frame } = await import('../e2e/poses.mjs');
+    const place = (o, side = 'right') => bodyPlace(frame(o).poseLandmarks, side);
+    assert.equal(place({ arms: 'hang', belt: 'right' }), 'wand', 'the right hand reaching across to the wand');
+    assert.equal(place({ arms: 'hang', belt: 'left' }, 'left'), 'wand', 'the left hand at the wand');
+    assert.equal(place({ arms: 'hang', purse: 'right' }), 'purse', 'at the right side of the belt');
+    assert.equal(place({ arms: 'hang', purse: 'hip' }), 'purse', 'the fist at the belt by the hip');
+    for (const o of [{ arms: 'hang' }, { arms: 'down' }, { arms: 'forward' }]) assert.equal(place(o), null, JSON.stringify(o));
+    // the right wrist moved from the wand (the belly's middle) out to the hip, the elbow bent: wand … nothing … pouches, never back and forth
+    const seen = [];
+    for (let x = 0.53; x >= 0.33; x -= 0.005) {
+        const f = frame({ arms: 'hang', belt: 'right' }).poseLandmarks;
+        f[16] = { ...f[16], x }; f[14] = { ...f[14], x: x - 0.09 };
+        const p = bodyPlace(f, 'right');
+        if (seen[seen.length - 1] !== p) seen.push(p);
+    }
+    assert.deepEqual(seen.filter((p) => p !== null), ['wand', 'purse'], `the way out: ${JSON.stringify(seen)}`);
+    // the middle-right of the belly (left of the right hip joint) is never the pouches
+    const f = frame({ arms: 'hang', belt: 'right' }).poseLandmarks;
+    f[16] = { ...f[16], x: 0.46 }; f[14] = { ...f[14], x: 0.38 };
+    assert.notEqual(bodyPlace(f, 'right'), 'purse', 'right of the middle, still in front of the belly: not the pouches');
+});
