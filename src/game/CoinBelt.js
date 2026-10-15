@@ -150,8 +150,9 @@ export class CoinBelt {
 
     _take(side) {
         const g = this.game, inv = g.inventory;
-        const bags = purseBags(this.count);
-        const c = bags[bags.length - 1];
+        // the fullest pouch (not the last small one: 101 coins on the belt gave a pouch of ONE coin —
+        // put on a counter, it paid for nothing, and the coins seemed to be just gone)
+        const c = purseBags(this.count)[0];
         if (!c || !g.items.takeIntoHand({ kind: 'coins', uid: newUid(), count: c }, side)) { this.log.push('take-failed:' + side); return; }
         this.count -= c;
         this.log.push('take:' + side);
