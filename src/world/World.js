@@ -86,10 +86,13 @@ const SPAWN_TREE_TINTS = [
     { leaf: [0.75, 0.62, 0.55], trunk: [0.48, 0.45, 0.42] },
 ];
 const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
-const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows
+const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows (on the ground)
+const _defaultSun = new THREE.Vector3(50, 100, 50).normalize();
+const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _c = new THREE.Vector3();
 import { CollisionWorld } from './Collision.js';
 import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
 import { applyTreeDetail, applySkyComp, SKY_LIGHT } from './VoxelShading.js';
+import '../core/Shadows.js'; // (the sun shadow's soft edge: patched into the shaders before they compile)
 
 const GRASS_COLORS = [0x4CAF50, 0x66BB6A, 0x43A047, 0x81C784, 0x388E3C];
 export const MAP_CELL = 5; // metres per editor cell (original: 2.5x bigger than 2m)
@@ -731,17 +734,44 @@ export class VoxelWorld {
         if (this.terrain) this.terrain.update(focus);
     }
 
-    /** Keep the sun's shadow box centred on the player. */
-    followShadow(pos) {
-        // Move in whole shadow-map texels so the shadow edges don't shimmer
-        const texel = (SHADOW_EXTENT * 2) / this.dirLight.shadow.mapSize.width;
-        const x = Math.round(pos.x / texel) * texel, z = Math.round(pos.z / texel) * texel;
-        if (x === this._shadowX && z === this._shadowZ) return;
-        this._shadowX = x; this._shadowZ = z;
-        const s = this.sunDir;
-        if (s) this.dirLight.position.set(x + s.x * 120, s.y * 120, z + s.z * 120);
-        else this.dirLight.position.set(x + 50, 100, z + 50);
-        this.dirLight.target.position.set(x, 0, z);
+    /**
+     * Keep the sun's shadow box on the player. On the ground it is centred on
+     * him; in flight (`flying` 0..1 = the view boost, `look` = where the camera
+     * looks) the box grows (per graphics level, `shadowFlyExtent`) and moves
+     * ahead, so a village is already in the shadow long before it is reached.
+     * The box's edge fades (core/Shadows.js) — no line sweeping over the land.
+     */
+    followShadow(pos, flying = 0, look = null) {
+        const shadow = this.dirLight.shadow;
+        const fly = this.shadowFlyExtent || SHADOW_EXTENT;
+        // (one jump on take-off / landing, not a slow growth: a changing size would shimmer every frame)
+        const ext = flying > 0.5 && fly > SHADOW_EXTENT ? fly : SHADOW_EXTENT;
+        const cam = shadow.camera;
+        if (cam.right !== ext) {
+            cam.left = -ext; cam.right = ext; cam.top = ext; cam.bottom = -ext;
+            cam.updateProjectionMatrix();
+            this._shadowX = null;
+        }
+        let cx = pos.x, cz = pos.z;
+        if (ext > SHADOW_EXTENT && look) {
+            const l = Math.hypot(look.x, look.z);
+            if (l > 1e-3) { cx += (look.x / l) * ext * 0.45; cz += (look.z / l) * ext * 0.45; }
+        }
+        // Move in whole shadow-map texels — counted along the shadow map's own
+        // axes (it looks along the sun, not straight down) — so edges don't shimmer.
+        const s = this.sunDir || _defaultSun;
+        const texel = (ext * 2) / shadow.mapSize.width;
+        _ax.set(0, 1, 0).cross(s);
+        if (_ax.lengthSq() < 1e-6) _ax.set(1, 0, 0); else _ax.normalize();
+        _ay.copy(s).cross(_ax).normalize();
+        _c.set(cx, 0, cz);
+        const a = _c.dot(_ax), b = _c.dot(_ay);
+        _c.addScaledVector(_ax, Math.round(a / texel) * texel - a).addScaledVector(_ay, Math.round(b / texel) * texel - b);
+        if (_c.x === this._shadowX && _c.z === this._shadowZ && _c.y === this._shadowY) return;
+        this._shadowX = _c.x; this._shadowY = _c.y; this._shadowZ = _c.z;
+        // (the light far enough back that mountains and a high-flying player are inside its depth range)
+        this.dirLight.position.copy(_c).addScaledVector(s, 200);
+        this.dirLight.target.position.copy(_c);
         this.dirLight.target.updateMatrixWorld();
     }
 

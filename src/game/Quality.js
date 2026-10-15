@@ -15,10 +15,10 @@
 import * as THREE from 'three';
 
 export const QUALITY_LEVELS = [
-    { name: 'очень низкая', pixelRatio: 0.6, shadowSize: 512, shadowEvery: 3, view: 0.65, shadows: false, soft: false, clouds: false },
-    { name: 'низкая', pixelRatio: 0.8, shadowSize: 1024, shadowEvery: 2, view: 0.8, shadows: true, soft: false, clouds: false },
-    { name: 'средняя', pixelRatio: 1.0, shadowSize: 1024, shadowEvery: 1, view: 1.0, shadows: true, soft: false, clouds: true },
-    { name: 'высокая', pixelRatio: 1.5, shadowSize: 2048, shadowEvery: 1, view: 1.0, shadows: true, soft: true, clouds: true },
+    { name: 'очень низкая', pixelRatio: 0.6, shadowSize: 512, shadowEvery: 3, shadowFly: 45, view: 0.65, shadows: false, soft: false, clouds: false },
+    { name: 'низкая', pixelRatio: 0.8, shadowSize: 1024, shadowEvery: 2, shadowFly: 45, view: 0.8, shadows: true, soft: false, clouds: false },
+    { name: 'средняя', pixelRatio: 1.0, shadowSize: 1024, shadowEvery: 1, shadowFly: 70, view: 1.0, shadows: true, soft: false, clouds: true },
+    { name: 'высокая', pixelRatio: 1.5, shadowSize: 2048, shadowEvery: 1, shadowFly: 110, view: 1.0, shadows: true, soft: true, clouds: true },
 ];
 
 /**
@@ -120,6 +120,8 @@ export class QualityManager {
         }
         if (world) { world._cloudsWanted = q.clouds; world.sky?.setClouds(q.clouds || (world.storm || 0) > 0.1); }
         if (world) world.viewScale = q.view;
+        // (in flight the sun's shadow covers a bigger box ahead: the cheap levels keep the small one)
+        if (world) world.shadowFlyExtent = q.shadowFly;
         if (this.auto) { try { localStorage.setItem('zns-quality-level', String(this.level)); } catch (e) { /* not remembered */ } }
     }
 

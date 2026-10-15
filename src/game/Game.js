@@ -2388,7 +2388,7 @@ export class Game {
         this.falling?.update(Math.min(0.05, dt));
         this.destruction?.update(Math.min(0.05, dt));
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
-        this.world.followShadow(this.character.group.position);
+        this.world.followShadow(this.character.group.position, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
         this.seaSurface?.update(dt, this.character.group.position);
         mark('мир');
         this._updateCamera(dt);
