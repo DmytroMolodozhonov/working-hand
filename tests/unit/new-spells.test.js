@@ -87,3 +87,69 @@ test('«Invisibility»: the minds see an invisible player only where they did so
     assert.ok(pointsUp(new THREE.Vector3(0, 1, 0)) && !pointsUp(new THREE.Vector3(1, 0, 0)));
     assert.ok(pointsAtSelf(new THREE.Vector3(0, 1, -0.5), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)));
 });
+
+test('«Stitching» on real places: a villager\'s doorway (every kind, every facing, the hand off by up to 12°, from the side), a hole blown by «Бомбардо» in a castle wall, a cave\'s tunnel', async () => {
+    const { Plan, buildHouse } = await import('../../src/world/Castles.js');
+    const { createRng } = await import('../../src/core/math.js');
+    const { TerrainData, TEST_CAVE } = await import('../../src/world/Terrain.js');
+    const { stitchHint } = await import('../../src/game/Stitching.js');
+    const Y = new THREE.Vector3(0, 1, 0);
+    const aimAt = (o, target, yaw, pitch) => {
+        const d = target.clone().sub(o).normalize().applyAxisAngle(Y, yaw * Math.PI / 180);
+        return d.applyAxisAngle(new THREE.Vector3().crossVectors(d, Y).normalize(), pitch * Math.PI / 180);
+    };
+    // a villager's house (the real builder): the doorway — 3 wide, 5–6 high — is what is sewn
+    const S = { houseStone: BLOCK.COBBLE, villageRoof: BLOCK.ROOF_RED, poorRoof: BLOCK.ROOF_RED, poorWall: BLOCK.PLASTER, roof: BLOCK.ROOF_RED, carpet: BLOCK.CLOTH_WHITE, bedRich: 'red' };
+    for (const kind of ['hut', 'cottage', 'stone', 'brick', 'manor']) for (let face = 0; face < 4; face++) {
+        const p = new Plan(100, 200, 0, 1), out = { houses: [] };
+        buildHouse(p, kind, 3, -5, face, createRng(7 + face), S, out);
+        const h = out.houses[0], dr = h.doorRec;
+        const blocks = new Map();
+        for (const q of p.parts) for (let x = q.x0; x <= q.x1; x++) for (let z = q.z0; z <= q.z1; z++) for (let L = q.L0; L <= q.L1; L++) blocks.set(x + ',' + L + ',' + z, q.t);
+        const get = (x, L, z) => blocks.get(x + ',' + L + ',' + z) ?? (L <= -1 ? BLOCK.GRASS : BLOCK.AIR);
+        const out1 = new THREE.Vector3(h.door.x - dr.x, 0, h.door.z - dr.z).normalize();
+        for (const [side, yaw, pitch, dist] of [[0, 0, 0, 5], [0, 10, -8, 8], [30, -6, 6, 6], [-40, 12, 0, 4]]) {
+            const feet = new THREE.Vector3(dr.x, dr.y, dr.z).addScaledVector(out1.clone().applyAxisAngle(Y, side * Math.PI / 180), dist);
+            const o = feet.add(new THREE.Vector3(0, 2.4, 0));
+            const f = findPassage(get, o, aimAt(o, new THREE.Vector3(dr.x, dr.y + 2, dr.z), yaw, pitch));
+            const where = `${kind} face ${face} (${side}°, off ${yaw}°/${pitch}°)`;
+            assert.ok(f.cells, `${where}: ${f.why}`);
+            // (the doorway: in the wall's own plane, at the door — a hut's windows beside it are one hole with it)
+            const alongX = Math.abs(out1.x) < 0.5; // (the wall runs along x: its plane is z = const)
+            for (const c of f.cells) {
+                assert.ok(alongX ? c.z === Math.round(dr.z) : c.x === Math.round(dr.x), `${where}: ${c.x},${c.L},${c.z} is not in the wall`);
+                assert.ok(Math.hypot(c.x - dr.x, c.z - dr.z) <= 2.6 && c.L - 1 >= dr.y - 0.6 && c.L - 1 <= dr.y + dr.h + 1, `${where}: ${c.x},${c.L},${c.z} is not at the door`);
+            }
+            assert.ok(f.cells.length >= 12, `${where}: the whole doorway (${f.cells.length})`);
+        }
+    }
+    // a hole blown by «Бомбардо» in a castle wall (2 thick) — looked at straight and from the side
+    const w = new TerrainData(); w.generate({ seed: 1 });
+    const top = w.topLayer(10, 0);
+    for (let x = 10; x <= 11; x++) for (let z = -10; z <= 10; z++) for (let L = top + 1; L <= top + 8; L++) w.set(x, L, z, BLOCK.CS_GREY);
+    const hole = w.removeSphere(10.5, top + 2, 0, 2.2).map((b) => `${b.x},${Math.round(b.y + 1)},${b.z}`);
+    for (const side of [0, 35]) {
+        const o = new THREE.Vector3(10.5, top - 0.5, 0).add(new THREE.Vector3(-6, 0, 0).applyAxisAngle(Y, side * Math.PI / 180)).add(new THREE.Vector3(0, 2.4, 0));
+        const f = findPassage((x, L, z) => w.get(x, L, z), o, aimAt(o, new THREE.Vector3(10.5, top + 2, 0), 6, -5));
+        assert.ok(f.cells, `the blown hole (${side}°): ${f.why}`);
+        assert.equal(f.block, BLOCK.CS_GREY);
+        for (const c of f.cells) assert.ok(c.x === 10 || c.x === 11, `the hole is sewn in the wall (${c.x},${c.L},${c.z})`);
+        assert.ok(f.cells.length >= 9);
+    }
+    // a cave of the world (generation 4): standing in a tunnel, the wand along it
+    const cv = new TerrainData(); cv.generate({ seed: 12345, mountains: true, seas: true, test: true, deepCaves: true });
+    let found = 0, tried = 0;
+    for (const sys of cv.cavesNear(TEST_CAVE.X, TEST_CAVE.Z, 300).slice(0, 3)) for (const g of sys.segs.slice(3, 10)) {
+        const o = new THREE.Vector3(g.ax, g.ay, g.az);
+        if (cv.get(Math.round(o.x), Math.floor(o.y + 1.5), Math.round(o.z)) !== BLOCK.AIR) continue;
+        tried++;
+        const f = findPassage((x, L, z) => cv.get(x, L, z), o, new THREE.Vector3(g.bx - g.ax, g.by - g.ay, g.bz - g.az).normalize());
+        if (f.cells) found++;
+    }
+    assert.ok(tried >= 10 && found >= tried * 0.9, `cave tunnels sewn: ${found} of ${tried}`);
+    // nothing round it: the hint says why
+    assert.equal(findPassage(() => BLOCK.AIR, new THREE.Vector3(), new THREE.Vector3(1, 0, 0)).why, 'open');
+    assert.match(stitchHint('open'), /не окружена/);
+    assert.match(stitchHint('none'), /упирается/);
+    assert.match(stitchHint('wide'), /широкий/);
+});
