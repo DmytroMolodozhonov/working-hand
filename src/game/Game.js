@@ -1075,7 +1075,10 @@ export class Game {
             if (performance.now() - (this._levDuelAt || -1e9) < LEV_SAME_PHRASE * 1000) return null;
             if (L.active && L.state.age < LEV_SAME_PHRASE) return null;
             // (a wizard: a charge flies — the duel decides; an animal / zombie / villager is lifted like a thing)
-            const aim = L.active ? null : this.duel.pickSide(true);
+            // (a wizard pointed at right on the line — or as loosely as at a thing, when no thing
+            //  is pointed at more truly: Levitation.aimWizard; a fighting spell's narrow aim alone
+            //  missed a friend a little beside the hand's line, and «Левиоса» then lifted nothing)
+            const aim = L.active ? null : this.duel.pickSide(true) || L.aimWizard();
             if (aim && aim.t.kind === 'p') {
                 const r = this._castDuel('Levitation', 'LevitateDuel', isFinal, aim);
                 if (r) this._levDuelAt = performance.now();

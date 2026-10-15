@@ -58,7 +58,10 @@ export const DUEL_SPELLS = {
     AvadaKedavra: { color: 0x2dff5a, name: 'Авада Кедавра' },
     // «Айс»: a thin frosty beam (no crackling) with a spinning ice crystal at its head (IceLook.js)
     IceDuel: { color: 0x8fdcff, name: 'Айс', speed: 17, core: 0.035, glow: 0.15, coreColor: 0xf2fbff },
-    LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса' },
+    // («Левиоса» on a wizard is aimed as loosely as at a thing — Levitation.aimWizard: the charge
+    //  turns after the body pointed at much more than a fighting spell, so a friend who moves
+    //  on, or stands a little beside the hand's line, is still reached)
+    LevitateDuel: { color: 0xffd36e, name: 'Вингардиум Левиоса', bend: 0.8, turn: 6 },
     // Slower and thicker: a dark-violet ball of force rolling through the air
     SapiraDuel: { color: 0x8e2de2, name: 'Сапира', speed: 7, core: 0.09, glow: 0.42, coreColor: 0xe6c8ff },
     // «Даст»: a sandy charge — whoever it hits is slowed for 5 s
@@ -569,7 +572,10 @@ export class Duel {
         const t = aim ? aim.t : (() => { const f = pickBody(origin, dir, this._bodies(this.me)); return f ? { kind: f.body.kind, id: f.body.id } : null; })();
         const body = t ? this._bodyOf(t.kind, t.id, this._tmpBody()) : null;
         if (body) { tk = t.kind; tid = t.id; ak = rayToSegment(origin, dir, body.a, body.b).k; }
+        // («Левиоса» lifts the body by its middle: pointed at the feet, it must not dive into the ground beside them)
+        if (spell === 'LevitateDuel') ak = Math.max(0.3, Math.min(0.75, ak));
         const b = this._addBolt({ id: `${this.me}:${nextId++}`, by: this.me, spell, side, tk, tid, ak, o: origin, d: dir });
+        b.aim = tk === 'p' ? tid : null; // (whom it was cast at: Leviosa tells why it did not lift them)
         const g = this.game;
         if (g.sync) g.sync.duelCast(b);
         if (spell === 'IceDuel') { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
@@ -656,7 +662,7 @@ export class Duel {
             const want = tp ? _v2.subVectors(tp, b.front) : null;
             // the target is gone, or the charge has flown past it: it just flies on straight
             if (!want || want.dot(b.d0) <= 0) { b.tk = 'n'; b.tid = null; }
-            else bendToward(b.dir, b.d0, want.normalize(), AIM.TURN * dt);
+            else { const sp = DUEL_SPELLS[b.spell]; bendToward(b.dir, b.d0, want.normalize(), (sp?.turn || AIM.TURN) * dt, sp?.bend ?? AIM.BEND); }
         }
         const step = (DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED) * dt;
         const from = _vFrom.copy(b.front);
@@ -679,6 +685,7 @@ export class Duel {
             b.state = 'arrived';
             b.tk = hit.body.kind;
             b.tid = hit.body.id;
+            if (b.aim && b.by === this.me && b.spell === 'LevitateDuel' && !(b.tk === 'p' && b.tid === b.aim)) g.levitation?.missed?.(b.aim, 'levBlocked');
             b.waitT = 0;
             this._note({ ev: 'touch', id: b.id, kind: b.tk, tid: b.tid });
             return true;
@@ -946,6 +953,8 @@ export class Duel {
         this.bolts.delete(b.id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
         if (res === 'blocked' || res === 'fizzle') this._hitBurst(b.spell, b.front, 15);
+        // (my «Левиоса» at a wizard: why it did not lift them — a house's sphere, or it flew past)
+        if (b.aim && b.by === this.me && b.spell === 'LevitateDuel' && res !== 'hit') this.game.levitation?.missed?.(b.aim, res === 'blocked' ? 'levWard' : 'levMiss');
         if (broadcast && this.game.sync && (b.by === this.me || res === 'hit' || res === 'blocked')) this.game.sync.duelEnd(b.id, res);
     }
 
@@ -955,6 +964,8 @@ export class Duel {
         if (!b) return;
         this.bolts.delete(id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
+        // (my «Левиоса»: the wizard's own computer found it on its shield)
+        if (res === 'blocked' && b.aim && b.by === this.me && b.spell === 'LevitateDuel') this.game.levitation?.missed?.(b.aim, 'levShield');
         this._hitBurst(b.spell, b.front, res === 'hit' ? 30 : 15);
         // (another computer froze a creature: its ice is seen here too)
         if (res === 'hit' && b.spell === 'IceDuel' && (b.tk === 'a' || b.tk === 'v')) this._encase(b.tk, b.tid, ICE.CREATURE_T);

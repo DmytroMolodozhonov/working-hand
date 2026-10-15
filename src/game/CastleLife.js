@@ -674,7 +674,7 @@ export class CastleLife {
         if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.vy) this._fallStep(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
         if (v.sleep && this.night?.step(v, dt)) return; // (going to bed, asleep, getting up — NightLife.js)
         // held up by «Вингардиум Левиоса»: Levitation carries the body
-        if (v.lev) { v.mode = 'idle'; v.speed = 0; return; }
+        if (v.lev) { v.mode = v.lev.body ? 'dead' : 'flail'; v.speed = 0; return; } // (kicking in the air: VillagerModel 'flail')
         // stunned / frozen / thrown up by a spell
         if (v.stunT > 0 || v.vy) {
             v.stunT = (v.stunT || 0) - dt;
@@ -2242,7 +2242,7 @@ export class CastleLife {
         for (const v of [...this.byId.values()]) {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             const visible = d < VIEW && !(v.wizard && d < 20 && Math.abs(v.y - (me.y - 1.95)) > 9); // (a wizard on another floor of the tower: not drawn)
-            v.group.visible = visible;
+            v.group.visible = visible && !(v.dead && v.bodyMoved); // (its body carried off by «Левиоса»: Death's copy is it now)
             v.group.position.set(v.x, v.y + (v.seated ? VILLAGER_SIT_OFFSET : VILLAGER_FOOT_OFFSET), v.z);
             v.group.rotation.y = v.yaw;
             if (visible) {

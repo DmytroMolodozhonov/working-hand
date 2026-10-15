@@ -66,7 +66,7 @@ export function lyingMessage(kind) {
 
 /**
  * Why a recognized spell did not work (the cases the spell itself does not explain).
- * code: 'handDown' | 'cooldown' | 'maximaAlone' | 'busy' | 'dead' | 'ward…' (the house's protection)
+ * code: 'handDown' | 'cooldown' | 'maximaAlone' | 'busy' | 'dead' | 'ward…' (the house's protection) | 'lev…' (Leviosa on a wizard)
  */
 export function refusal(code, d = {}) {
     const name = d.name ? `«${d.name}»` : 'заклинание';
@@ -89,6 +89,12 @@ export function refusal(code, d = {}) {
         case 'wardGrantFar': return '🛡️ «Protection House Grant»: встаньте у своего защищённого дома (или внутри него)';
         case 'wardGrantAim': return '🛡️ «Protection House Grant»: направьте руку на игрока, которого пускаете в дом';
         case 'wardGrantDone': return `🛡️ ${d.who || 'Этот игрок'} уже может входить в ваш дом`;
+        // «Вингардиум Левиоса» on another wizard (Levitation.js)
+        case 'levMiss': return `🪶 Левиоса не долетела до ${d.who || 'волшебника'} — держите руку (палочку) на нём и скажите ещё раз`;
+        case 'levShield': return `🛡️ ${d.who || 'Волшебник'} закрыт щитом «Protection» (или защитой дома) — Левиоса отскочила`;
+        case 'levWard': return '🛡️ Левиоса разбилась о защиту дома';
+        case 'levHeld': return `🪶 ${d.who || 'Этого волшебника'} уже держит в воздухе другой`;
+        case 'levBlocked': return `🪶 Левиоса попала не в ${d.who || 'волшебника'}: на пути был кто-то другой`;
         default: return '';
     }
 }

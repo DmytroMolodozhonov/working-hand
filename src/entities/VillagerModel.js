@@ -25,7 +25,7 @@ import { SKIN_TONES } from './Appearance.js';
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
@@ -1122,6 +1122,38 @@ export class VillagerModel {
                 T.aLX = 2.4 + Math.sin(t * 2) * 0.2; T.aRX = 1.6; T.aLZ = -0.2; T.aRZ = 0.3; T.wrist = -1.6;
                 rate = 6;
                 break;
+            case 'flail': {
+                // held up in the air by «Вингардиум Левиоса» (Levitation.js): nothing under the
+                // feet — each kind of person struggles in its own way
+                const r = this.role;
+                if (r === 'knight' || r === 'king') {
+                    // a fighter: twists and pulls hard, the legs kicking for the ground
+                    const c = Math.sin(t * 3.2), s2 = Math.sin(t * 1.7), l = Math.sin(t * 4);
+                    T.hy = c * 0.45; T.hx = -0.15 + s2 * 0.15;
+                    T.aRX = 1.4 + c * 0.6; T.aRZ = -0.4 - s2 * 0.3; T.aLX = 1.4 - c * 0.6; T.aLZ = 0.4 + s2 * 0.3;
+                    T.lL = 0.5 * l; T.lR = -0.5 * l; T.kL = -0.4 - Math.max(0, l) * 0.6; T.kR = -0.4 - Math.max(0, -l) * 0.6;
+                    T.headX = 0.2; T.headY = -c * 0.3;
+                    rate = 14;
+                } else if (WIZARD_LOOK_ROLES.has(r)) {
+                    // a wizard: the wand arm out, jabbing about for a spell to get free; the other hand grabs the air
+                    const l = Math.sin(t * 5);
+                    T.aRX = 1.7 + Math.sin(t * 6) * 0.35; T.aRZ = Math.sin(t * 2.3) * 0.4; T.wrist = -Math.PI + Math.sin(t * 9) * 0.3;
+                    T.aLX = 2.2 + Math.sin(t * 5 + 1) * 0.5; T.aLZ = -0.5;
+                    T.lL = l * 0.4; T.lR = -l * 0.4; T.kL = -0.5; T.kR = -0.5;
+                    T.headY = Math.sin(t * 2.5) * 0.5; T.headX = 0.15;
+                    rate = 18;
+                } else {
+                    // anyone else: panic — the arms windmill over the head, the legs run on nothing, the head turns about
+                    const a = t * 11, l = Math.sin(t * 9);
+                    T.aLX = 2.3 + Math.sin(a) * 0.7; T.aRX = 2.3 + Math.sin(a + 2) * 0.7;
+                    T.aLZ = -0.5 - Math.cos(a) * 0.3; T.aRZ = 0.5 + Math.cos(a + 2) * 0.3;
+                    T.lL = l * 0.7; T.lR = -l * 0.7; T.kL = -0.3 - Math.max(0, l) * 1.1; T.kR = -0.3 - Math.max(0, -l) * 1.1;
+                    T.headY = Math.sin(t * 3.3) * 0.5; T.headX = 0.25; T.hx = Math.sin(t * 4) * 0.1;
+                    rate = 30;
+                }
+                breathe = 0;
+                break;
+            }
             case 'sit':
                 T.lL = T.lR = Math.PI / 2; T.kL = T.kR = -Math.PI / 2;
                 T.hx = 0.08;
@@ -1132,7 +1164,7 @@ export class VillagerModel {
                 break;
             default: break;
         }
-        if (this._lookYaw != null && mode !== 'bow') T.headY = this._lookYaw;
+        if (this._lookYaw != null && mode !== 'bow' && mode !== 'flail') T.headY = this._lookYaw;
         if (this._flickT > 0) this._flickT -= dt;
         if (this.hat) {
             // the hat folds back under a low ceiling and stands up again (soft cloth)

@@ -17,6 +17,8 @@
  */
 
 import * as THREE from 'three';
+import { rayToSegment, BODY } from './Duel.js';
+import { refusal } from './Hints.js';
 
 export const LEVITATE = {
     RANGE: 30, // m (the heroes are big: 10 was only a few real steps — a thing on the ground was out of reach)
@@ -78,6 +80,35 @@ export function applyAimOffset(dir, off, out) {
 /** Strength a second it costs to hold a living body (free world): light, heavy (a cow, a knight), a wizard. */
 export const HOLD_FATIGUE = { light: 2, heavy: 3, wizard: 4 };
 
+/**
+ * A living body held up does not hang still: it is frightened and struggles to get free —
+ * every `every` s (a random part of it) it jerks in the magic's hold this hard (m/s).
+ * A castle wizard tries spells: after `free` s it breaks the hold and comes down softly.
+ */
+export const STRUGGLE = {
+    villager: { every: [0.5, 1.1], jerk: 1.4 },
+    knight: { every: [0.35, 0.8], jerk: 3 }, // (a knight, the king: strong and angry)
+    wizard: { every: [0.6, 1.2], jerk: 1, free: [3, 5] },
+    animal: { every: [0.3, 0.8], jerk: 2.2 },
+    zombie: { every: [0.4, 0.9], jerk: 1.8 },
+};
+
+/** What a held body shouts (castle people; a frightened person, a fighter, a wizard). */
+export const LEV_CRIES = {
+    villager: ['Ааа! Опустите меня!', 'Помогите!', 'Мамочки!', 'Я боюсь высоты!'],
+    knight: ['Отпусти, колдун!', 'Стража!', 'Ты за это ответишь!'],
+    king: ['Опустите короля!', 'Стража! Схватить его!'],
+    wizard: ['Как ты смеешь!', 'Фините Инкантатем!', 'Сейчас я тебя…'],
+};
+
+/** Which way a living body struggles (STRUGGLE / LEV_CRIES key). */
+export function struggleKind(ck, c) {
+    if (ck === 'a') return 'animal';
+    if (ck === 'z') return 'zombie';
+    if (c.wizard) return 'wizard';
+    return c.role === 'knight' || c.role === 'king' ? 'knight' : 'villager';
+}
+
 /** Damage of a fall from `h` m (a short fall does nothing). */
 export function fallDamage(h) {
     return h > 3.5 ? Math.round((h - 3.5) * 2) : 0;
@@ -101,6 +132,7 @@ export class Levitation {
         this._t = 0;
         this.carried = new Map(); // (host) 'k:id' -> {ck, c}: living bodies held up (c.lev) for any caster
         this.falls = []; // (host) bodies let go up high: {ck, c, top, by, t} — hurt when they land
+        this.bodyDrops = []; // (host) a dead zombie let go: {c, vel} — falls to the ground (its corpse has no fall of its own)
         this.lifted = null; // my own body held up by another wizard {by, side, hold, target, vel, top, age}
         this.fallTop = null; // my fall from up there (hurts when I land)
         this.fallBy = null;
@@ -132,7 +164,9 @@ export class Levitation {
         // a phoenix: caught, it hangs where the hand holds it, beating its wings (let go: it flies off)
         for (const f of g.phoenixes?.targets() || []) if (!f.lev) out.push({ kind: 'phoenix', obj: f, pos: f.model.position, r: 1 });
         // living bodies (not wizards: a charge flies at them — see Game)
-        for (const z of g.zombies || []) if (!z.isDead && !z.isDying && !z.isFrozen && !z.lev) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 });
+        for (const z of g.zombies || []) if (!z.isDying && !z.isFrozen && !z.lev && (!z.isDead || (!z.removable && z.group.visible))) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 }); // (a zombie's body too)
+        // the bodies of the dead (players, castle people — wizards too, knights…; Death.js): lifted like a thing
+        for (const b of g.death?.bodies.values() || []) if (!b.lev && (b.model || b.bones)) out.push({ kind: 'corpse', obj: b, pos: new THREE.Vector3(b.x, b.y + 0.5, b.z), r: 1.2 });
         for (const a of g.animals?.targets() || []) if (!a.rider && !a.lev && g.animals.riding !== a) out.push({ kind: 'creature', ck: 'a', obj: a, pos: this._centreOf('a', a), r: g.duel?._animalBody(a).r || 1 });
         for (const v of g.castleLife?.targets() || []) if (!v.lev && !v.seated && !v.climb) out.push({ kind: 'creature', ck: 'v', obj: v, pos: this._centreOf('v', v), r: 1.2 });
         // a dead animal's body (a cow, a running book…) is a thing like any other
@@ -142,24 +176,36 @@ export class Levitation {
 
     /** The object's own model (for things, books and birds). */
     _model(s) {
+        if (s.kind === 'corpse') return s.obj.model || s.obj.bones || null;
         return s.kind === 'item' || s.kind === 'book' || s.kind === 'bird' || s.kind === 'phoenix' ? s.obj.model : null;
     }
 
     /**
-     * Cast: the hand pointing best at a loose object picks it up.
-     * @returns {string|null} hint when nothing is pointed at
+     * What the hands point at best: a thing, a body, a dragon (only to say no) — or another
+     * player's wizard (`kind: 'wizard'`, obj: their id): a wizard is pointed at as loosely as
+     * a thing (LEVITATE.CONE), not with a fighting spell's narrow aim — the hand on a friend
+     * a little beside his body, or the friend walking on, still means him.
      */
-    cast() {
-        if (this.state) { this.release(true); return null; }
-        const ch = this.game.character;
+    _pick() {
+        const g = this.game, ch = g.character;
         let best = null;
+        const cands = this._candidates();
+        // (a dragon is pointed at too — only to say it can't be lifted: DragonKinds.ON_DRAGON.Levitation)
+        for (const dr of g.dragons?.targets() || []) cands.push({ kind: 'dragon', obj: dr, pos: dr.model.position.clone().add(new THREE.Vector3(0, 3 * dr.size, 0)), r: 3 * dr.size });
+        const wizards = [];
+        for (const [id, r] of g.remotes || []) if (!r.dead && r.character?.group) wizards.push({ id, r });
         for (const side of ['right', 'left']) {
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
-            // (a dragon is pointed at too — only to say it can't be lifted: DragonKinds.ON_DRAGON.Levitation)
-            const cands = this._candidates();
-            for (const dr of this.game.dragons?.targets() || []) cands.push({ kind: 'dragon', obj: dr, pos: dr.model.position.clone().add(new THREE.Vector3(0, 3 * dr.size, 0)), r: 3 * dr.size });
-            for (const c of cands) {
+            // a wizard: the point of his body (soles to hair) nearest to the line of the hand
+            const list = cands.slice();
+            for (const { id, r } of wizards) {
+                const grp = r.character.group, up = _v2.set(0, 1, 0).applyQuaternion(grp.quaternion);
+                const a = grp.position.clone().addScaledVector(up, -BODY.HERO.DOWN), b = grp.position.clone().addScaledVector(up, BODY.HERO.UP);
+                const k = rayToSegment(hand, dir, a, b).k;
+                list.push({ kind: 'wizard', obj: id, pos: a.lerp(b, k), r: BODY.HERO.R + 0.3 });
+            }
+            for (const c of list) {
                 const to = _v1.subVectors(c.pos, hand);
                 const d = to.length();
                 if (d > LEVITATE.RANGE || d < 0.3) continue;
@@ -171,8 +217,26 @@ export class Levitation {
                 if (!best || score < best.score) best = { ...c, side, score, d };
             }
         }
+        return best;
+    }
+
+    /** Another player's wizard the hand points at (more truly than at any thing): {side, t: {kind: 'p', id}} for the duel charge, or null. */
+    aimWizard() {
+        if (this.state || !this.game.remotes?.size) return null;
+        const best = this._pick();
+        return best?.kind === 'wizard' ? { side: best.side, t: { kind: 'p', id: best.obj, miss: 0 } } : null;
+    }
+
+    /**
+     * Cast: the hand pointing best at a loose object picks it up.
+     * @returns {string|null} hint when nothing is pointed at
+     */
+    cast() {
+        if (this.state) { this.release(true); return null; }
+        let best = this._pick();
+        if (best?.kind === 'wizard') best = null; // (a wizard is lifted by a duel charge: Game → aimWizard)
         if (best?.kind === 'dragon') return '🐉 Дракона «Левиоса» не поднимет — он слишком тяжёлый';
-        if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар) или на животное, зомби, жителя — не дальше 30 м — и скажите «Вингардиум Левиоса»';
+        if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар, тело), на животное, зомби, жителя или на другого волшебника — не дальше 30 м — и скажите «Вингардиум Левиоса»';
         const s = {
             kind: best.kind,
             obj: best.obj,
@@ -211,6 +275,8 @@ export class Levitation {
             this.game.phoenixes.hold(s.obj, true);
         } else if (s.kind === 'cauldron') {
             this.game.cauldrons.levStart(s.obj);
+        } else if (s.kind === 'corpse') {
+            this.game.death.liftBody(s.obj); // (the caster's hand carries it; the others see it — Death.onNetMove)
         } else if (s.kind === 'weapon') {
             const w = s.obj;
             w.hover = null;
@@ -232,9 +298,11 @@ export class Levitation {
         this._t += dt;
         if (this.carried.size) for (const e of [...this.carried.values()]) this._carry(e, dt);
         if (this.falls.length) this._landings(dt);
+        if (this.bodyDrops.length) this._dropBodies(dt);
         if (this.lifted) this._updateLifted(dt);
         if (this.fallTop != null) this._myLanding();
         if (this.myWatch) this._myWatchLanding();
+        if (this.miss && performance.now() >= this.miss.at) this._sayMissed();
         const s = this.state;
         if (!s) return;
         const ch = this.game.character;
@@ -247,6 +315,7 @@ export class Levitation {
         if (s.kind === 'bird' && (s.obj.state !== 'held' || !this.game.books.birds.has(s.obj.id))) { this.state = null; return; }
         if (s.kind === 'phoenix' && (s.obj.dead || s.obj.state !== 'held' || !this.game.phoenixes?.list.includes(s.obj))) { this.state = null; return; }
         if (s.kind === 'cauldron' && (!s.obj.lev || !this.game.cauldrons?.list.has(s.obj.id))) { this.state = null; return; }
+        if (s.kind === 'corpse' && (!this.game.death?.bodies.has(s.obj.id) || !this._model(s))) { if (s.obj) s.obj.lev = false; this.state = null; return; }
         if (s.attack) { this._updateAttack(s, dt); return; }
 
         // Where the object should float: in front of the hand, following it slowly
@@ -278,6 +347,7 @@ export class Levitation {
             if (s.kind === 'bird') this.game.books.heldAt(s.obj, m.position);
             else if (s.kind === 'phoenix') this.game.phoenixes.heldAt(s.obj, m.position);
             else m.quaternion.slerp(_q2.copy(turn).multiply(s.objQ0), Math.min(1, dt * 10));
+            if (s.kind === 'corpse') this.game.death.heldAt(s.obj, m, dt);
         } else {
             const b = s.obj;
             _v1.subVectors(s.target, b.pos);
@@ -425,6 +495,8 @@ export class Levitation {
             this.game.phoenixes.hold(s.obj, false); // free: it flies off
         } else if (s.kind === 'cauldron') {
             this.game.cauldrons?.levDrop(s.obj, vel, gentle); // (it falls; let down gently it comes down slowly)
+        } else if (s.kind === 'corpse') {
+            this.game.death?.dropBody(s.obj, vel, gentle); // (it falls limp to the ground and lies there)
         } else {
             const b = s.obj;
             const iceVel = gentle ? new THREE.Vector3() : b.vel.clone().multiplyScalar(1.5);
@@ -436,7 +508,7 @@ export class Levitation {
     // ================================================================ living bodies
     /** A body's middle (where the magic holds it); returns how high that is above its feet. */
     _centre(ck, c, out) {
-        if (ck === 'z') { out.copy(c.group.position); return 1.0; } // (a zombie stands 1 m above the ground)
+        if (ck === 'z') { out.copy(c.group.position); return c.isDead ? 0.8 : 1.0; } // (a zombie stands 1 m above the ground; its body lies 0.8)
         if (ck === 'a') { const y = this.game.duel?._animalBody(c).y ?? 0.8; out.copy(c.group.position); out.y += y; return y + 0.5; }
         out.set(c.x, c.y + 2.4, c.z); // a villager: (x, y, z) are its feet
         return 2.4;
@@ -464,7 +536,8 @@ export class Levitation {
         const c = ck === 'z' ? g.zombieById?.get(id) : ck === 'a' ? g.animals?.byId.get(id) : ck === 'v' ? g.castleLife?.byId.get(id) : null;
         if (!c) return null;
         // (a dead animal's body is a thing: it can be lifted — but one that died while held falls)
-        if ((c.dead || c.isDead || c.isDying) && !(ck === 'a' && c.dead && (!c.lev || c.lev.body))) return null;
+        const body = (ck === 'a' && c.dead) || (ck === 'z' && c.isDead && !c.isDying && !c.removable);
+        if ((c.dead || c.isDead || c.isDying) && !(body && (!c.lev || c.lev.body))) return null;
         return c;
     }
 
@@ -501,7 +574,15 @@ export class Levitation {
         }
         if (ck === 'a') { c.vel?.set(0, 0, 0); c.airborne = false; }
         if (ck === 'z') { c.vy = 0; c.windVel = null; }
-        if (ck === 'v') { c.vy = 0; c.mode = 'idle'; c.speed = 0; g.castleLife?.reportCrime?.(c, by, 'magic'); }
+        if (ck === 'v' && !c.lev.body) {
+            c.vy = 0; c.mode = 'flail'; c.speed = 0; g.castleLife?.reportCrime?.(c, by, 'magic');
+            this._cry(c, true);
+        }
+        if (!c.lev.body) {
+            const S = STRUGGLE[struggleKind(ck, c)];
+            c.lev.jerkT = S.every[0] + Math.random() * (S.every[1] - S.every[0]);
+            if (S.free) c.lev.freeT = S.free[0] + Math.random() * (S.free[1] - S.free[0]);
+        }
         this.carried.set(ck + ':' + c.id, { ck, c });
         this._sparkle(p, 20);
         return true;
@@ -529,6 +610,7 @@ export class Levitation {
         }
         _h3.subVectors(L.target, centre);
         L.vel.lerp(_h3.multiplyScalar(4), Math.min(1, dt * 6));
+        if (!L.body && !L.lower && this._struggle(ck, c, L, dt)) return;
         this._moveBody(ck, c, _h3.copy(L.vel).multiplyScalar(dt));
         // walls and trees stop it as they would stop the thing
         if (ck !== 'v') g.collision.resolveCylinder(c.group.position, ck === 'z' ? 0.45 : 0.6, c.group.position.y - up + 0.1, 2.5, 1.05);
@@ -536,12 +618,51 @@ export class Levitation {
         L.top = Math.max(L.top, _h3.y - up);
         // kicking in the air
         if (ck === 'a' && !L.body) { c.walkT = (c.walkT || 0) + dt * 14; g.animals?._animate?.(c, 1); c.stunT = Math.max(c.stunT || 0, 0.5); } // (a dead body hangs limp)
-        if (ck === 'z') { const k = Math.sin(performance.now() * 0.012) * 0.6; if (c.leftLeg) c.leftLeg.rotation.x = k; if (c.rightLeg) c.rightLeg.rotation.x = -k; }
-        if (ck === 'v') { c.mode = 'idle'; c.speed = 0; }
+        if (ck === 'z' && !L.body) {
+            // legs kicking, the arms clawing at the air
+            const t = performance.now() * 0.001, k = Math.sin(t * 12) * 0.6;
+            if (c.leftLeg) c.leftLeg.rotation.x = k;
+            if (c.rightLeg) c.rightLeg.rotation.x = -k;
+            if (c.leftArm) { c.leftArm.rotation.x = -Math.PI / 2 + Math.sin(t * 9) * 0.7; c.leftArm.rotation.z = Math.sin(t * 6) * 0.4; }
+            if (c.rightArm) { c.rightArm.rotation.x = -Math.PI / 2 + Math.sin(t * 9 + 2) * 0.7; c.rightArm.rotation.z = -Math.sin(t * 6 + 1) * 0.4; }
+        }
+        if (ck === 'v') { c.mode = L.body ? 'dead' : 'flail'; c.speed = 0; }
         if (Math.random() < 0.5) this.game.fx?.spark(_h3.set(centre.x + (Math.random() - 0.5) * 1.4, centre.y + (Math.random() - 0.5) * 1.4, centre.z + (Math.random() - 0.5) * 1.4), Math.random() < 0.5 ? 0xffe9a8 : 0xc9a8ff, 0.08, _h4.set(0, 0.6, 0), 0.6);
     }
 
+    /**
+     * (host) A living body held up struggles: now and then it jerks in the hold (the magic pulls
+     * it back), a castle person cries out; a castle wizard breaks free after a while. true: let go.
+     */
+    _struggle(ck, c, L, dt) {
+        const kind = struggleKind(ck, c), S = STRUGGLE[kind];
+        if (L.freeT != null && (L.freeT -= dt) <= 0) {
+            // a wizard's own counter-spell: the hold breaks, he comes down softly
+            this.game.castleLife?._say?.(c, 'Фините Инкантатем!', 3);
+            this._centre(ck, c, _h4);
+            this._sparkle(_h4, 30);
+            this.letGo(ck, c, true);
+            return true;
+        }
+        L.jerkT = (L.jerkT ?? 0) - dt;
+        if (L.jerkT > 0) return false;
+        L.jerkT = S.every[0] + Math.random() * (S.every[1] - S.every[0]);
+        const a = Math.random() * Math.PI * 2;
+        L.vel.x += Math.cos(a) * S.jerk; L.vel.z += Math.sin(a) * S.jerk; L.vel.y += (Math.random() - 0.3) * S.jerk * 0.6;
+        if (ck === 'v' && Math.random() < 0.35) this._cry(c);
+        return false;
+    }
+
+    /** A held castle person cries out (frightened / angry / a wizard's threat). */
+    _cry(c, first = false) {
+        const cl = this.game.castleLife;
+        if (!cl?._say) return;
+        const list = c.wizard ? LEV_CRIES.wizard : c.role === 'king' ? LEV_CRIES.king : c.role === 'knight' ? LEV_CRIES.knight : LEV_CRIES.villager;
+        cl._say(c, list[Math.floor(Math.random() * list.length)], 2.5, true, first);
+    }
+
     _endCarry(ck, c) {
+        if (ck === 'z' && !c.isDead) { for (const a of [c.leftArm, c.rightArm]) if (a) { a.rotation.x = -Math.PI / 2; a.rotation.z = 0; } }
         c.lev = null;
         this.carried.delete(ck + ':' + c.id);
     }
@@ -555,8 +676,23 @@ export class Levitation {
         const v = L.vel.clone().multiplyScalar(1.5);
         this.falls.push({ ck, c, top: L.top, by: L.by, t: 0, v: v.clone() });
         if (ck === 'a') { c.attacker = L.by; c.levFall = true; c.vel = new THREE.Vector3(); this.game.animals?.push(c, v, 1.5); c.airborne = true; }
+        else if (ck === 'z' && c.isDead) this.bodyDrops.push({ c, vel: v });
         else if (ck === 'z') { c.vy = v.y || -0.1; c.windVel = new THREE.Vector3(v.x, 0, v.z); c.stunTimer = Math.max(c.stunTimer || 0, 0.6); }
         else { c.vy = v.y || -0.1; c.vx = v.x; c.vz = v.z; c.stunT = Math.max(c.stunT || 0, 1); }
+    }
+
+    /** (host) Dead zombies let go fall until they lie on the ground again. */
+    _dropBodies(dt) {
+        const g = this.game;
+        for (let i = this.bodyDrops.length - 1; i >= 0; i--) {
+            const { c, vel } = this.bodyDrops[i], p = c.group.position;
+            if (c.lev || c.removable) { this.bodyDrops.splice(i, 1); continue; }
+            vel.y -= 25 * dt;
+            vel.x *= 0.98; vel.z *= 0.98;
+            p.addScaledVector(vel, dt);
+            const rest = g.collision.surfaceY(p.x, p.z) + 0.8;
+            if (p.y <= rest) { p.y = rest; this.bodyDrops.splice(i, 1); }
+        }
     }
 
     /** Is there deep water (a soft landing) at (x, z)? */
@@ -651,7 +787,8 @@ export class Levitation {
     /** (my computer) A Leviosa charge landed on me: my body hangs at `by`'s hand. */
     liftMe(by, side = 'right') {
         const g = this.game;
-        if (this.lifted || g.combat.dead) return;
+        if (this.lifted?.by === by || g.combat.dead) return;
+        if (this.lifted) { g.sync?.lift?.(by, side, 0, false, false, 'levHeld'); return; } // (another holds me: tell the caster why)
         const c = g.combat.center(new THREE.Vector3());
         if (!g.duel?._handOf(by, side, _h1, _h2)) return;
         if (this.state) this.release(false);
@@ -731,11 +868,30 @@ export class Levitation {
         } else if (c?.lev?.by === m.by) this.letGo(m.k, c, !!m.g);
     }
 
-    /** A wizard tells everyone: «I am held up by `by`» (or let go / broke free). */
+    /**
+     * My «Левиоса» at a wizard did not lift him (`code`: Hints.refusal 'lev…'). Said a moment
+     * later, and only if no word that he is up comes meanwhile (over the network the wizard's
+     * own computer decides — its «yes» may come after my charge has given up waiting).
+     */
+    missed(id, code) {
+        if (this.state?.kind === 'player' && this.state.id === id) return;
+        this.miss = { id, code, at: performance.now() + 1200 };
+    }
+
+    _sayMissed() {
+        const M = this.miss;
+        this.miss = null;
+        if (this.state?.kind === 'player' && this.state.id === M.id) return;
+        this.game.hud?.setVoice(refusal(M.code, { who: this.game.playerName?.(M.id) }), true);
+    }
+
+    /** A wizard tells everyone: «I am held up by `by`» (or let go / broke free; `r`: why not lifted). */
     onNetLift(m) {
         const g = this.game;
         if (m.by !== g.localId) return;
+        if (m.r) { if (m.r === 'levHeld') { this.missed(m.to, 'levHeld'); if (this.miss) this.miss.at = 0; } return; } // (he is held by another already)
         if (m.on) {
+            this.miss = null;
             if (this.state && !(this.state.kind === 'player' && this.state.id === m.to)) { g.sync?.lev?.('p', m.to, m.side, m.h, false); return; }
             this.state = { kind: 'player', id: m.to, side: m.side || 'right', hold: +m.h || 3, target: new THREE.Vector3(), age: 0, history: [], weight: 'wizard' };
             g.hud.setVoice(`🪶 ${g.playerName?.(m.to) || 'Волшебник'} в воздухе — держите руку на нём`, true);

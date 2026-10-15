@@ -137,6 +137,7 @@ export class DeathSystem {
     constructor(game) {
         this.game = game;
         this.bodies = new Map(); // id -> {id, k, who, name, x, y, z, yaw, age, look, role, model, bones}
+        this.falling = new Map(); // id -> {b, vel, gentle}: a body let go by «Левиоса» falls to the ground
         // body makers: (b) => {pivot, len} or null — one per kind of creature
         this.makers = {
             p: (b) => this._playerBody(b),
@@ -366,10 +367,90 @@ export class DeathSystem {
             if (st === 'bones') { if (!b.bones) this._toBones(b); continue; }
             if (b.model && b.k === 'v') {
                 // the villager itself still lies there (its own model): the copy waits
+                // (lifted by «Левиоса», the copy is the body: the villager's own model hides — CastleLife)
                 const v = g.castleLife?.byId?.get(b.who);
-                b.model.visible = !(v && v.dead);
+                b.model.visible = !!b.moved || !(v && v.dead);
+            }
+            // (another computer's «Левиоса» carries it: it follows the word smoothly)
+            if (b.netAt && !b.lev) {
+                const o = b.model || b.bones;
+                if (o) {
+                    const k = Math.min(1, dt * 10);
+                    o.position.lerp(_v.set(b.x, b.y, b.z), k);
+                    if (b.netQ) o.quaternion.slerp(b.netQ, k);
+                }
+                if (performance.now() - b.netAt > 1500) { b.netAt = 0; if (o) { o.position.set(b.x, b.y, b.z); if (b.netQ) o.quaternion.copy(b.netQ); } }
             }
         }
+        for (const f of [...this.falling.values()]) this._fall(f, dt);
+    }
+
+    // ------------------------------------------------------------ «Вингардиум Левиоса»
+    /** The body is taken up by my «Левиоса» (Levitation.js): it is the copy that moves now. */
+    liftBody(b) {
+        b.lev = true;
+        this.falling.delete(b.id);
+        this._moved(b);
+        const o = b.model || b.bones;
+        if (o) o.visible = true;
+    }
+
+    /** (my hand) The held body is here now: remember it and tell the others now and then. */
+    heldAt(b, o, dt) {
+        b.x = o.position.x; b.y = o.position.y; b.z = o.position.z;
+        b.sendT = (b.sendT || 0) - dt;
+        if (b.sendT > 0) return;
+        b.sendT = 0.1;
+        this.game.sync?.bodyMove?.(b, o.quaternion, true);
+    }
+
+    /** Let go: the body falls limp (gently: slowly) and lies on the ground where it lands. */
+    dropBody(b, vel, gentle = false) {
+        b.lev = false;
+        this.falling.set(b.id, { b, vel: (vel || new THREE.Vector3()).clone(), gentle });
+    }
+
+    _fall(f, dt) {
+        const { b } = f;
+        const o = b.model || b.bones;
+        if (!o || !this.bodies.has(b.id) || b.lev) { this.falling.delete(b.id); return; }
+        if (f.gentle) f.vel.set(f.vel.x * 0.9, -2.5, f.vel.z * 0.9);
+        else { f.vel.y -= 25 * dt; f.vel.x *= 0.99; f.vel.z *= 0.99; }
+        o.position.addScaledVector(f.vel, dt);
+        const ground = this._ground(o.position.x, o.position.z, o.position.y + 0.5);
+        // lying flat again (only its heading kept), as a body lies
+        const yaw = Math.atan2(_v.set(0, 0, 1).applyQuaternion(o.quaternion).x, _v.z);
+        if (o.position.y <= ground) {
+            o.position.y = ground;
+            o.rotation.set(0, yaw, 0);
+            b.x = o.position.x; b.y = ground; b.z = o.position.z; b.yaw = yaw;
+            this.falling.delete(b.id);
+            this.game.sync?.bodyMove?.(b, o.quaternion, false);
+            return;
+        }
+        b.x = o.position.x; b.y = o.position.y; b.z = o.position.z;
+    }
+
+    /** The body was moved from where it died: the villager's own (lying) model must not stay there too. */
+    _moved(b) {
+        b.moved = true;
+        if (b.k !== 'v') return;
+        const v = this.game.castleLife?.byId?.get(b.who);
+        if (v && v.dead) v.bodyMoved = true;
+    }
+
+    /** (network) Somebody's «Левиоса» carries a body / it has landed (`air` 0). */
+    onNetMove(m) {
+        const b = this.bodies.get(m.id);
+        if (!b || b.lev) return;
+        this.falling.delete(b.id);
+        this._moved(b);
+        b.x = +m.x || 0; b.y = +m.y || 0; b.z = +m.z || 0;
+        if (Array.isArray(m.q) && m.q.length === 4) b.netQ = (b.netQ || new THREE.Quaternion()).set(+m.q[0] || 0, +m.q[1] || 0, +m.q[2] || 0, +m.q[3] || 1).normalize();
+        const o = b.model || b.bones;
+        if (o) o.visible = true;
+        if (!m.a && b.netQ) b.yaw = new THREE.Euler().setFromQuaternion(b.netQ, 'YXZ').y;
+        b.netAt = performance.now();
     }
 
     // ------------------------------------------------------------ «Gather»

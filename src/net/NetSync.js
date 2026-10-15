@@ -403,8 +403,8 @@ export class NetSync {
     }
 
     /** My body is held up by `by` (or let go / I broke free). */
-    lift(by, side, hold, on, free = false) {
-        this.net.send({ t: 'lift', by, to: this.me, side, h: r3(hold), on: on ? 1 : 0, f: free ? 1 : 0 }, true);
+    lift(by, side, hold, on, free = false, why = null) {
+        this.net.send({ t: 'lift', by, to: this.me, side, h: r3(hold), on: on ? 1 : 0, f: free ? 1 : 0, ...(why ? { r: why } : {}) }, true);
     }
 
     /** (host) That body is held by someone else already. */
@@ -506,6 +506,11 @@ export class NetSync {
     /** A body stays where somebody died (Death.js). */
     deathBody(b) {
         this.net.send({ t: 'dbody', b }, true);
+    }
+
+    /** A body carried by my «Левиоса» (air) / where it landed. */
+    bodyMove(b, q, air) {
+        this.net.send({ t: 'bmv', id: b.id, x: r3(b.x), y: r3(b.y), z: r3(b.z), q: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)], a: air ? 1 : 0 }, true);
     }
 
     /** I'm back in the game. */
@@ -959,6 +964,7 @@ export class NetSync {
                 break;
             }
             case 'dbody': if (m.b) g.death?.onNetBody(m.b); break;
+            case 'bmv': if (typeof m.id === 'string') g.death?.onNetMove(m); break;
             case 'pdead': {
                 if (m.by === this.me) break;
                 g.castleLife?.playerDied(m.by);
