@@ -2,7 +2,7 @@
  * Concentration.js — «правило концентрации» (the author's rule).
  *
  *   A spell that acts while it is held (the water in the hands, a thing lifted by «Левиоса», a tree kept
- *   alive, the fire held on the wand…) takes the caster's concentration. While it is held NO other spell
+ *   alive, the fire held on the wand, the beams' clash of a duel while it goes…) takes the caster's concentration. While it is held NO other spell
  *   works — however well its words are said, in every mode, Creative too: first «стоп» (or the spell ends
  *   by itself: mana, time), then a new one. The held spell's own words stay its part (the vortex's
  *   «Bubble» / «Frozen» / «Fire Maxima», the water ball's «Максима» / «Frozen», «Атака» for a lifted
@@ -12,7 +12,8 @@
  *   the shield in one hand, the wand casts in the other — another spell from the shield's own wand
  *   knocks it down, Combat.castFrom), «Up» (getting up is the body's), «Паузин» and «Флайн» in the air
  *   (the flight's own words: flying is moving, not holding).
- *   Not held (they don't take concentration, but casting them is an ordinary spell): the flight,
+ *   Not held (they don't take concentration, but casting them is an ordinary spell): «Акцио» (it flies by
+ *   itself), «To the Sun» (the beam lives on by itself), the flight,
  *   «Invisibility» (your spells are seen under it — so you cast under it), the air bubble under water,
  *   the shield and the dome, Lumos, drawing, charges, blasts and every other spell that is cast and gone.
  *
@@ -43,7 +44,7 @@ export const HELD = {
     House: { ru: 'Магия дома', icon: '🏠', own: ['CreateHouse', 'ImproveHouse'] },
     Ward: { ru: 'Защита дома', icon: '🛡️', own: ['WardGrow', 'Maxima', 'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant'] },
     Build: { ru: 'Стройка', icon: '🧱', own: [] },
-    Accio: { ru: 'Акцио', icon: '🧲', own: ['Accio'] },
+    Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'] }, // (the beams' clash, while it goes: only «Максима» — and the shield)
     Wave: { ru: 'Волна', icon: '🌊', own: ['WaveAttack', 'WaveAttackMaxima'] },
     Lightning: { ru: 'Молния', icon: '⚡', own: ['LightningStrike', 'Hammer'] },
     SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'UnfurlMaxima', 'Furl'] },
@@ -86,7 +87,7 @@ export class Concentration {
         if (g.houseMagic?.magic && g.houseMagic.magic.by === g.localId) return 'House';
         if (g.wards?.setting) return 'Ward';
         if (g.builder?.build) return 'Build';
-        if (g.accio?.active) return 'Accio';
+        if (g._inDuel?.()) return 'Duel';
         if (g.waves?.busy) return 'Wave';
         if (g.lightning) return 'Lightning';
         if (g.ships?.blowing) return 'SailWind';
@@ -104,7 +105,8 @@ export class Concentration {
         const held = this.held();
         if (mayCast(held, name, { hovering: !!this.game.flight?.hovering, isBuild })) return null;
         const ru = HELD[held]?.ru || held;
-        if (isFinal && this._gate.pass(held + ':' + name)) this.game.hud?.setVoice?.(`🧘 Сначала «стоп» — вы держите «${ru}»`, true);
+        const say = held === 'Duel' ? '⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)' : `🧘 Сначала «стоп» — вы держите «${ru}»`;
+        if (isFinal && this._gate.pass(held + ':' + name)) this.game.hud?.setVoice?.(say, true);
         return held;
     }
 
@@ -132,7 +134,6 @@ export class Concentration {
         if (g.hellfire?.busy && g.hellfire.stop('focus')) done.push('адский огонь');
         if (g.waterStorm?.busy && g.waterStorm.stop('focus')) done.push('водяная буря');
         if (g.waves?.stop?.()) done.push('волна');
-        if (g.accio?.stop?.()) done.push('Акцио');
         if (g.lightning) { if (g.lightning.hammer) g.gear?.hammerResult?.(false); g.lightning = null; g.hud?.setTimer?.(null); done.push('молния'); }
         if (g.spells?.stopBy?.(g.localId)) done.push('огонь / луч');
         if (g.livingTrees?.stopMine?.('focus')) done.push('живое дерево');

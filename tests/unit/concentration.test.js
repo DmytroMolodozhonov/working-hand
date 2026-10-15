@@ -75,3 +75,16 @@ test('concentration: lying after the fall, a new spell can be held again', () =>
     f.update();
     assert.equal(g.water.active, true);
 });
+
+test('concentration: instant spells hold nothing; the beams\' clash holds', () => {
+    const g = fakeGame();
+    g.water.active = false; g.livingTrees.n = 0;
+    g.accio = { active: true };
+    const f = new Concentration(g);
+    assert.equal(f.held(), null); // (Accio flies by itself)
+    g._inDuel = () => true;
+    assert.equal(f.held(), 'Duel');
+    assert.equal(mayCast('Duel', 'Maxima'), true);
+    assert.equal(mayCast('Duel', 'Protection'), true);
+    assert.equal(mayCast('Duel', 'Bombardo'), false);
+});
