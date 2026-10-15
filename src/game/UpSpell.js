@@ -30,8 +30,9 @@ export function isUpWord(text) {
     return w.every((x) => UP_WORDS.has(x));
 }
 
-/** The leap: up speed and the most sideways speed (hero m/s). */
-export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOWN: 0.85, LIFT_UP: 1.3 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
+/** The leap: up speed and the most sideways speed (hero m/s). AGAIN_MS: the same «Up» heard again that soon
+ * (the voice gives a phrase while it is said, then once more when it is over) is the same «Up». */
+export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOWN: 0.85, LIFT_UP: 1.3, AGAIN_MS: 2500 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
 
 /**
  * What «Up» does now. `armUp`: a hand raised up. → 'rise' | 'leap' | a hint (string) | null (nothing to do).
@@ -89,6 +90,9 @@ export class UpSpell {
     /** «Up» heard (Game.castLocalSpell). Returns 'Up' or null. */
     cast(isFinal) {
         const g = this.game, ch = g.character;
+        // the phrase that just worked, heard once more (said → over): already done — no «not in the air»
+        // note while it throws me up, no second leap right after getting up
+        if (performance.now() - (this.castAt ?? -1e9) < UP.AGAIN_MS) return null;
         const down = g.knock.state === 'falling' || g.knock.state === 'down';
         const swimming = !!g.swim?.swimming && !this.leap;
         const arm = this.raisedArm();
@@ -105,6 +109,7 @@ export class UpSpell {
         const tired = g.combat.check('Up');
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay('Up');
+        this.castAt = performance.now();
         if (what === 'rise') {
             g.knock.standNow();
             g.hud.setVoice('⬆️ <span style="color:#7fe3ff">Up!</span> Вы встаёте', true);
@@ -136,5 +141,5 @@ export class UpSpell {
         if (imp) imp.gentleUntil = Math.max(imp.gentleUntil || 0, performance.now() + 250);
     }
 
-    reset() { this.leap = null; }
+    reset() { this.leap = null; this.castAt = null; }
 }

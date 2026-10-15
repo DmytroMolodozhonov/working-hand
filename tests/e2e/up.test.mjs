@@ -49,8 +49,18 @@ test('«Up»: knocked down, a hand up + «Up» — back on the feet at once; 7 m
     assert.equal(r.state, 'rising', 'getting up now, not after 30 s');
     assert.ok(Math.abs(r.paid - 7) < 0.01 || Math.abs(r.paid - 6) < 0.01, `7 mana (a wand saves 15%): ${r.paid}`);
     await page.waitForFunction(() => window.__zns.game.knock.state === 'up', null, { timeout: 20000 });
-    // standing: «Up» does nothing
-    assert.equal(await page.evaluate(() => window.__zns.game.castLocalSpell('Up', true)), null);
+    // the same phrase heard once more (said → over): the same «Up» — no leap right after getting up, no note
+    const again = await page.evaluate(() => { const g = window.__zns.game, said = []; const sv = g.hud.setVoice.bind(g.hud); g.hud.setVoice = (t, ...a) => { said.push(t); return sv(t, ...a); }; const name = g.castLocalSpell('стендап', true); g.hud.setVoice = sv; return { name, leap: !!g.up.leap, said }; });
+    assert.deepEqual(again, { name: null, leap: false, said: [] });
+    // standing on the ground, a while later: a hand up + «Stand up» throws me up — and its echo says nothing
+    await new Promise((r) => setTimeout(r, 2700));
+    await feedRaw(page, armsUp(), 5);
+    const leap = await page.evaluate(() => { const g = window.__zns.game, said = []; const sv = g.hud.setVoice.bind(g.hud); g.hud.setVoice = (t, ...a) => { said.push(t); return sv(t, ...a); }; const ground = g.character.onGround; const name = g.castLocalSpell('Stand up', false); const echo = g.castLocalSpell('стендап', true); g.hud.setVoice = sv; return { ground, name, echo, vy: g.character.verticalVelocity, said }; });
+    assert.ok(leap.ground, 'standing on the ground');
+    assert.equal(leap.name, 'Up');
+    assert.ok(leap.vy > 15, `thrown up: ${leap.vy}`);
+    assert.equal(leap.echo, null);
+    assert.ok(!leap.said.some((t) => /в воздухе/.test(t)), 'no «not in the air» note: ' + leap.said.join(' | '));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
