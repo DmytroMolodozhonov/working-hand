@@ -41,6 +41,20 @@ export const SHIP_CLASSES = {
         cannons: 4,
         pierLayer: 5,
     },
+    // Captain Black Moustache's black ship (Blackbeard.js): one in the world, out on the open sea, never in a
+    // port. Bigger than a galleon, a towering stern, a long forecastle; its crew — the captain and his
+    // skeletons. `magic`: while it is not taken, no spell harms it (Ships.cursed).
+    blackship: {
+        id: 'blackship', ru: 'Чёрный корабль', L: 92, B: 22, draft: 5.6, deck: 6.6, lower: 0.6,
+        quarter: { y: 13.2, z0: 14, z1: 46 }, poop: { y: 19.8, z0: 30, z1: 46 }, fore: { y: 12.6, z0: -46, z1: -31 },
+        masts: [{ id: 'fore', z: -24, h: 62 }, { id: 'main', z: -2, h: 74 }, { id: 'mizzen', z: 24, h: 44 }],
+        crew: { blackbeard: 1, skeleton: 12 },
+        hp: 600, floodVol: 1.2,
+        sailK: 0.0024, c1: 0.02, c2: 0.0002, turnR: 85, yawD1: 0.22, lateenFrac: 0.15, waveLag: 1.6,
+        cannons: 5,
+        pierLayer: 5,
+        magic: true, look: 'black', // (ShipModel SHIP_LOOKS.black)
+    },
 };
 
 export const RAIL = 2.4; // the bulwark above every deck

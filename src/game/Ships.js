@@ -57,6 +57,7 @@ const _cam = new THREE.Vector3();
 const _l = { x: 0, y: 0, z: 0 };
 const _o = { x: 0, y: 0, z: 0 };
 const _gurgle = new THREE.Vector3();
+const _cv = new THREE.Vector3();
 
 const angleDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -73,6 +74,16 @@ export const INSP_SHIP = {
     MAST_R: 10, // m: a mast this near the blast breaks
     SAIL_R: 14, // m: sails torn
 };
+
+/**
+ * The black ship's curse (ShipTypes `magic`, Blackbeard.js): while it is not taken, no spell harms it —
+ * fire goes out on it, «Бомбардо», «Инспириус», lightning, cannonballs leave only sparks and scratches
+ * (no holes, no torn sails, no broken masts), «Левиоса Максима» does not lift it, nobody else's wind
+ * fills its sails. What it still feels: the sea (waves, «Wave Attack», a water vortex rock and push it),
+ * the shock of a great blast (it heels), the ground under its keel. Taken (its captain and crew dead) —
+ * the curse is gone: an ordinary (black) ship.
+ */
+export const isCursed = (s) => !!(s?.cls?.magic && !s.owner);
 
 export function packShip(s) {
     const st = s.st;
@@ -170,13 +181,14 @@ export class Ships {
         if (!s.model) {
             // (built ahead a little a frame while it slept — Ships._pre: what is left of it, now)
             if (s.preModel) s.preModel.finish();
-            s.model = s.preModel || new ShipModel(s.layout, { color: s.color, name: s.name });
+            s.model = s.preModel || new ShipModel(s.layout, { color: s.color, name: s.name, look: s.cls.look });
             s.preModel = null;
             s.preReady = false;
             g.scene.add(s.model.group);
             for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
             for (const id of s.broken) s.model.breakMast(id, 1, true);
         }
+        s.model.setCursed?.(isCursed(s));
         s.model.group.visible = true;
         g.collision.addMover(s.collider);
         this._makePlank(s);
@@ -397,7 +409,7 @@ export class Ships {
         if ((this._scanT -= dt) <= 0) { this._scanT = 1; this._scan(); }
         const pre = this._pre;
         if (pre && !pre.awake && !pre.model) {
-            if (!pre.preModel) pre.preModel = new ShipModel(pre.layout, { color: pre.color, name: pre.name, lazy: true });
+            if (!pre.preModel) pre.preModel = new ShipModel(pre.layout, { color: pre.color, name: pre.name, look: pre.cls.look, lazy: true });
             if (!pre.preModel.ready) pre.preModel.buildSome(3);
             else if (this.crew.prebuildOne?.(pre) ?? true) { pre.preReady = true; this._pre = null; } // (then its sailors, one a frame)
         } else this._pre = null;
@@ -819,6 +831,7 @@ export class Ships {
         d.normalize();
         const hit = this.raySails(o, d, 110);
         if (!hit) return say('⛵ Покажите рукой (палочкой) на паруса корабля');
+        if (isCursed(hit.ship)) { this.curseSpark(hit.ship, hit.sail.center.x, hit.sail.center.y, hit.sail.center.z); return say('🏴‍☠️ Чёрные паруса заколдованы — они слушаются только своего капитана'); }
         const open = name === 'Furl' ? 0 : 1;
         const pick = hit.ship.sails; // (all the ship's sails, on every mast)
         const ids = pick.filter((sl) => sl.target !== open && sl.burnt < 1).map((sl) => sl.id);
@@ -858,6 +871,7 @@ export class Ships {
         const mine = casterId === 'local' || casterId === g.localId;
         const hl = Math.hypot(dir.x, dir.z) || 1;
         for (const s of this.awake) {
+            if (isCursed(s)) continue; // (the black ship's sails answer only to their captain's wind)
             let hitA = 0, furled = false;
             for (const sl of s.sails) {
                 s.pose.toWorld(sl.center.x, sl.center.y, sl.center.z, _o);
@@ -971,6 +985,7 @@ export class Ships {
     // ================================================================= damage
     damage(s, dmg, by) {
         if (!this.auth || !s || dmg <= 0 || s.state === 'wreck') return;
+        if (isCursed(s)) { if (by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null); return; } // (the black ship: nothing harms it — but its crew saw who tried)
         s.hp = Math.max(0, s.hp - dmg);
         s.changed = true;
         if (by) {
@@ -1008,6 +1023,7 @@ export class Ships {
     /** (host) A hole in the hull at a ship-local point. */
     hole(s, lx, ly, lz, r, by = null, deck = false) {
         if (s.holes.length > 40) return null;
+        if (isCursed(s)) { this.curseSpark(s, lx, ly, lz); return null; } // (the black ship: a scratch, never a hole)
         const L = s.layout;
         const side = lx >= 0 ? 1 : -1;
         const hy = deck ? ly : Math.max(keelY(L, lz) + 0.3, Math.min(L.deck - 0.4, ly));
@@ -1023,6 +1039,12 @@ export class Ships {
     /** (host) Fire on board at a ship-local point (a sail id: the sail burns). */
     ignite(s, lx, ly, lz, sail = null, by = null) {
         if (!s || s.state === 'wreck' || s.fires.length >= DMG.MAX_FIRES) return;
+        if (isCursed(s)) { // (the black ship: the flame goes out on it with a green hiss)
+            const sl = sail && s.sails.find((x) => x.id === sail);
+            if (sl) this.curseSpark(s, sl.center.x, sl.center.y, sl.center.z, true); else this.curseSpark(s, lx, ly, lz, true);
+            if (by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null);
+            return;
+        }
         if (sail && s.fires.some((f) => f.sail === sail)) return;
         if (!sail && s.fires.some((f) => !f.sail && Math.hypot(f.lx - lx, f.lz - lz) < 1.5)) return;
         const f = { lx, ly, lz, k: 0.3, age: 0, sail };
@@ -1043,6 +1065,10 @@ export class Ships {
             s.pose.toLocal(pos.x, pos.y, pos.z, _l);
             const L = s.layout;
             if (_l.z < -L.L / 2 - radius - 3 || _l.z > L.L / 2 + radius + 3) continue;
+            if (isCursed(s)) { // (the black ship: the blast bursts on its wood in green sparks — no harm)
+                if (this._hullDist(s, _l).dist < radius + 1) { this.curseSpark(s, _l.x, _l.y, _l.z); if (by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null); }
+                continue;
+            }
             // distance from the hull's surface
             const half = hullHalfWidth(L, Math.max(-L.L / 2, Math.min(L.L / 2, _l.z)), Math.max(-L.draft + 0.1, Math.min(L.deck, _l.y)));
             const top = L.railTopAt(_l.z);
@@ -1091,6 +1117,7 @@ export class Ships {
         if (!this.auth) return;
         for (const s of this.awake) {
             s.pose.toLocal(p.x, p.y, p.z, _l);
+            if (isCursed(s)) { if (Math.abs(_l.z) < s.layout.L / 2 + 4 && Math.abs(_l.x) < s.layout.B) this.curseSpark(s, _l.x, Math.max(_l.y, s.layout.deck), _l.z); continue; } // (green sparks run down its masts into the sea)
             for (const m of s.layout.masts) {
                 if (Math.hypot(_l.x, _l.z - m.z) < 6 && _l.y > s.layout.deck) {
                     this.damage(s, 25, casterId);
@@ -1128,6 +1155,22 @@ export class Ships {
             any = true;
         }
         return any;
+    }
+
+    /**
+     * The black ship's curse at a ship-local point: green sparks and a hiss — a spell, a flame or a ball
+     * meets its wood and is turned away (every computer that runs it; the host's blasts are seen by all).
+     * fire: the flame dies on it.
+     */
+    curseSpark(s, lx, ly, lz, fire = false) {
+        const g = this.game;
+        if (!g.fx?.spark) return;
+        s.pose.toWorld(lx, ly, lz, _o);
+        _cv.set(_o.x, _o.y, _o.z);
+        for (let i = 0; i < 22; i++) g.fx.spark(_cv, i % 3 ? 0x6dff8a : (fire ? 0xff8a2a : 0xd8ffe0), 0.16 + Math.random() * 0.18, _w.set((Math.random() - 0.5) * 6, 1 + Math.random() * 4, (Math.random() - 0.5) * 6), 0.6 + Math.random() * 0.5);
+        g.fx.lightFlash?.(_cv, 0x6dff8a, 2.5, 0.25, 18);
+        if (fire) g.sound?.playWhoosh?.();
+        if (this.auth && g.sync) g.sync.net.send({ t: 'shipev', id: s.id, k: 'curse', l: [r2(lx), r2(ly), r2(lz)], f: fire ? 1 : 0 });
     }
 
     /** Rain / a wave / a water ball put fires out (within r of a world point, or the whole ship). */
@@ -1388,7 +1431,8 @@ export class Ships {
                 st.v += (-_l.x / ll) * push;
                 s.changed = true;
             }
-            // the wood torn out where it struck (each computer its own boards and smoke)
+            // the wood torn out where it struck (each computer its own boards and smoke) — not the black ship's
+            if (isCursed(s)) { if (d.dist < 12) this.curseSpark(s, d.x, d.y, d.z); continue; }
             if (d.dist < 12 && g.fx?.shipBreak) {
                 s.pose.toWorld(d.x, d.y, d.z, _o);
                 const at = new THREE.Vector3(_o.x, _o.y, _o.z);
@@ -1464,7 +1508,7 @@ export class Ships {
 
     /** (host) A sail torn to rags: it hangs useless (as a burnt one: no wind in it). */
     tearSail(s, sl) {
-        if (sl.burnt >= 1) return;
+        if (sl.burnt >= 1 || isCursed(s)) return;
         sl.burnt = 1;
         sl.target = 0;
         s.changed = true;
@@ -1473,7 +1517,7 @@ export class Ships {
 
     /** (host) A mast broken off: it falls over the side `side`; its sails are lost with it. */
     breakMast(s, id, side, by = null) {
-        if (s.broken.has(id)) return;
+        if (s.broken.has(id) || isCursed(s)) return;
         this._mastDown(s, id, side);
         this.damage(s, 20, by);
         s.changed = true;
@@ -1506,6 +1550,7 @@ export class Ships {
     cannonHit(s, p, dir, by) {
         s.pose.toLocal(p.x, p.y, p.z, _l);
         const L = s.layout;
+        if (isCursed(s)) { this.curseSpark(s, _l.x, _l.y, _l.z); this.damage(s, 1, by); return; } // (a ball bounces off the black wood: a scratch)
         this.damage(s, DMG.BALL_DMG, by);
         const half = hullHalfWidth(L, _l.z, Math.max(-L.draft + 0.1, Math.min(L.deck, _l.y)));
         if (_l.y < L.deck + 0.3 && Math.abs(_l.x) > half - 1.2) this.hole(s, _l.x, _l.y, Math.max(-L.L / 2 + 1, Math.min(L.L / 2 - 1, _l.z)), DMG.BALL_HOLE, by);
@@ -1648,6 +1693,7 @@ export class Ships {
             case 'flooded': s.flooded = true; s.fires = []; break;
             case 'wreck': s.state = 'wreck'; break;
             case 'gun': this.cannons.applyEvent(s, m); break;
+            case 'curse': if (Array.isArray(m.l)) this.curseSpark(s, +m.l[0], +m.l[1], +m.l[2], !!m.f); break; // (a guest: only the sparks)
             default: break;
         }
     }

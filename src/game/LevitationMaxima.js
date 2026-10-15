@@ -49,6 +49,7 @@ import { createRng } from '../core/math.js';
 import { aimOffset, applyAimOffset, steadyDir, fallDamage, levBlocked } from './Levitation.js';
 import { spiderCenter } from './Spider.js';
 import { keelY } from './ShipLayout.js';
+import { isCursed } from './Ships.js';
 
 export const LEV_MAX = {
     NAME: 'LevitationMaxima',
@@ -171,7 +172,7 @@ export const MAXIMA_TARGETS = {
     dragon: { why: 'не действует: дракон вырывается из любой Левиосы — он сильнее магии' },
     iceCastle: { why: 'не действует: ледяная магия королевы держит её, монстров и снеговиков на земле' },
     servants: { why: 'слуги «Брейнрота» — это жители/зомби/животные: поднимаются как они' },
-    ships: { why: 'корабль целиком поднимается из воды с экипажем и всем на палубе; брошенный в море — пробоины по высоте, на суше — обломки' },
+    ships: { why: 'корабль целиком поднимается из воды с экипажем и всем на палубе; брошенный в море — пробоины по высоте, на суше — обломки; чёрный корабль капитана Чёрные Усы, пока его не взяли, — не поднимается: он заколдован (Ships.isCursed)' },
     houses: { why: 'дом шатается, трещит и отрывается от земли целиком (без корней) — те же блоки, дверь, окна, кровати, сундуки; замахом руки его бросают; упав или ударившись о стену, дом, существо — разлетается на блоки в груду, сундуки выпадают, кто под ним — ранен; поставленный — стоит целый с мебелью на новом месте' },
     trees: { why: 'дерево раскачивается, игрок тянет вверх — вырывается с корнями и комом земли (остаётся яма); брошенное — лежит поваленным, поставленное — растёт стоя' },
     castleWalls: { why: 'кусок стены, башни, забора (то, во что упёрлась палочка, ~3×3 блока): расшатывается палочкой и выламывается, дальше несётся как дом; брошенный — груда камней; поставленный — встаёт куском. Жители пугаются, строители замка потом закладывают дыру (Rebuild). Под сферой защиты чужого дома — нет. Стена самого дома — это дом: он вырывается целиком' },
@@ -605,6 +606,7 @@ export class LevitationMaxima {
             for (let t = 2; t <= R && (!best || t < best.dist); t += 1) {
                 _v1.copy(o).addScaledVector(d, t);
                 const s = g.ships.shipAt(_v1.x, _v1.y, _v1.z);
+                if (s && isCursed(s)) return { no: '🏴‍☠️ Чёрный корабль заколдован — «Левиоса Максима» его не поднимет' }; // (Ships.isCursed)
                 if (s && !s.lifted) { best = { kind: 'ship', dist: t, s, at: _v1.clone() }; break; }
             }
         }
@@ -707,7 +709,7 @@ export class LevitationMaxima {
         }
         if (desc.k === 'ship') {
             const s = g.ships?.list?.get(desc.id);
-            if (!s || s.lifted || !s.awake) return this._refuse(id, by);
+            if (!s || s.lifted || !s.awake || isCursed(s)) return this._refuse(id, by);
             this.lifts.set(id, L);
             this._shipStart(L, s);
             return true;

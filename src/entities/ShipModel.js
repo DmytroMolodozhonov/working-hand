@@ -34,13 +34,14 @@ function unitGeo(key, make) {
 
 /** Many coloured primitives merged into one geometry (vertex colours). */
 class Batch {
-    constructor() { this.pos = []; this.nor = []; this.col = []; }
+    /** tint: a colour → the colour drawn (the black ship: every plank darkened — ShipModel.look) */
+    constructor(tint = null) { this.pos = []; this.nor = []; this.col = []; this.tint = tint; }
 
     add(geo, matrix, color) {
         const g = geo.index ? geo.toNonIndexed() : geo;
         const p = g.attributes.position, n = g.attributes.normal;
         const nm = _nm.getNormalMatrix(matrix);
-        _c.set(color);
+        _c.set(this.tint ? this.tint(color) : color);
         const v = _v3;
         for (let i = 0; i < p.count; i++) {
             v.fromBufferAttribute(p, i).applyMatrix4(matrix);
@@ -73,7 +74,7 @@ class Batch {
 
     /** Raw triangles (already in local space): flat list of [x,y,z] triples, with a colour per triangle. */
     tri(a, b, c, color) {
-        _c.set(color);
+        _c.set(this.tint ? this.tint(color) : color);
         const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
         const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
         let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
@@ -227,6 +228,12 @@ function shared() {
         lit: new THREE.MeshBasicMaterial({ color: 0xffc860 }),
         iron: new THREE.MeshLambertMaterial({ color: 0x2b2b2e }),
         ball: new THREE.SphereGeometry(0.32, 10, 8),
+        // the black ship (Blackbeard.js): tarred black deck, green fire in its lanterns, the black flag
+        deckBlack: new THREE.MeshLambertMaterial({ map: deckTex, color: 0x4a3c34, side: THREE.DoubleSide }),
+        greenFire: new THREE.MeshBasicMaterial({ color: 0x6dff8a }),
+        greenDim: new THREE.MeshBasicMaterial({ color: 0x2c7a3c }),
+        jolly: new THREE.MeshLambertMaterial({ map: dom ? new THREE.CanvasTexture(jollyCanvas()) : null, color: 0xffffff, side: THREE.DoubleSide }),
+        bundleBlack: new THREE.MeshLambertMaterial({ color: 0x1e1b1d }),
     };
     SHARED.solid.userData.shared = true;
     return SHARED;
@@ -235,13 +242,66 @@ function shared() {
 const WOOD = 0x8a5a33, DARK = 0x4a3020, BOTTOM = 0x5a3b2a, WALE = 0x2b1d14, GOLD = 0xd4a63a, IRON = 0x2f2f33, ROPE = 0x5b4630;
 
 /**
+ * The looks of ships. 'black' — Captain Black Moustache's ship: tarred black wood, dark red bands and
+ * trim, tarnished brass for the gold, black ragged sails, bone-white skulls, green fire in the lanterns.
+ */
+export const SHIP_LOOKS = {
+    black: { band: 0x5c0f14, gold: 0x6e5626, bone: 0xd8cfb4, sail: 0x221f22, ragged: true, deck: 'deckBlack' },
+};
+const _tc = new THREE.Color();
+/** The black ship's planks: every colour pulled down to near-black (a hint of its own hue kept). */
+function blackTint(band, gold, bone) {
+    const cache = new Map();
+    return (c) => {
+        if (c === band || c === bone || c === 0xffffff || c === 0x050302 || c === 0x161008) return c;
+        if (c === GOLD) return gold;
+        let t = cache.get(c);
+        if (t === undefined) { _tc.set(c); _tc.lerp(_tc.clone().set(0x0d0b0b), 0.8); t = _tc.getHex(); cache.set(c, t); }
+        return t;
+    };
+}
+
+/** The black flag: a white skull with a great curled moustache over its teeth, crossed sabres below. */
+function jollyCanvas() {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 148;
+    const x = cv.getContext('2d');
+    x.fillStyle = '#0d0c0d'; x.fillRect(0, 0, 256, 148);
+    x.fillStyle = '#efe9da'; x.strokeStyle = '#efe9da';
+    // the crossed sabres
+    x.lineWidth = 7; x.lineCap = 'round';
+    for (const s of [-1, 1]) { x.beginPath(); x.moveTo(128 - s * 70, 136); x.quadraticCurveTo(128, 100, 128 + s * 74, 66); x.stroke(); }
+    // the skull
+    x.beginPath(); x.ellipse(128, 58, 34, 36, 0, 0, Math.PI * 2); x.fill();
+    x.fillRect(108, 74, 40, 24);
+    x.fillStyle = '#0d0c0d';
+    for (const s of [-1, 1]) { x.beginPath(); x.ellipse(128 + s * 14, 54, 9, 10, 0, 0, Math.PI * 2); x.fill(); }
+    x.beginPath(); x.moveTo(128, 64); x.lineTo(122, 76); x.lineTo(134, 76); x.closePath(); x.fill();
+    for (let i = 0; i < 5; i++) x.fillRect(112 + i * 7.5, 90, 2.5, 8);
+    // the moustache: two great curls over the teeth
+    x.fillStyle = '#efe9da'; x.strokeStyle = '#0d0c0d'; x.lineWidth = 2.5;
+    for (const s of [-1, 1]) {
+        x.beginPath();
+        x.moveTo(128, 80);
+        x.bezierCurveTo(128 + s * 18, 74, 128 + s * 42, 86, 128 + s * 50, 74);
+        x.bezierCurveTo(128 + s * 58, 62, 128 + s * 46, 56, 128 + s * 42, 66);
+        x.bezierCurveTo(128 + s * 44, 76, 128 + s * 24, 92, 128, 86);
+        x.closePath(); x.fill(); x.stroke();
+    }
+    return cv;
+}
+
+/**
  * A sail: a cloth hanging from its yard. It unrolls downwards (a bundle at its lower
  * edge while it is being let down), bulges to the wind's side, flutters when the
  * wind is too weak to fill it, burns from the bottom up.
  */
 export class SailMesh {
-    constructor(spec, color = 0xf1e8d2) {
+    constructor(spec, color = 0xf1e8d2, opts = {}) {
         this.spec = spec;
+        // ragged (the black ship): the foot torn — each column of the cloth a little shorter than the next
+        this.cut = null;
+        if (opts.ragged) { const r = rng(Math.abs(Math.round(spec.center.z * 31 + spec.yardY * 7)) + 3); this.cut = []; for (let i = 0; i <= 10; i++) this.cut.push(r() < 0.35 ? 0.06 + r() * 0.2 : r() * 0.05); }
         const lateen = spec.kind === 'lateen';
         this.lateen = lateen;
         this.cols = 10; this.rows = 8;
@@ -268,7 +328,7 @@ export class SailMesh {
         this.base = new THREE.Color(color);
         // the rolled-up bundle along the yard
         const len = lateen ? spec.w : spec.w * 0.92;
-        this.bundle = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, len, 8), new THREE.MeshLambertMaterial({ color: 0xe0d5bb }));
+        this.bundle = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, len, 8), opts.ragged ? shared().bundleBlack : new THREE.MeshLambertMaterial({ color: 0xe0d5bb }));
         this.bundle.rotation.z = Math.PI / 2;
         if (lateen) this.bundle.rotation.set(0, Math.PI / 2, 0);
         this.group = new THREE.Group();
@@ -313,7 +373,7 @@ export class SailMesh {
             const char = burnt > 0 && j >= this.rows - 1 ? 0.25 : 1;
             for (let i = 0; i <= this.cols; i++) {
                 const u = i / this.cols;
-                this._at(u, v, p);
+                this._at(u, this.cut ? v * (1 - this.cut[i] * (j / this.rows)) : v, p);
                 const across = 1 - (2 * u - 1) * (2 * u - 1);
                 let b = side * fill * 0.18 * s.w * across * Math.sin(Math.PI * Math.min(1, (v / Math.max(0.05, vis)) * 1.15)) * Math.min(1, vis * 1.5);
                 if (this.lateen) b = side * fill * 0.16 * s.h * across * Math.sin(Math.PI * Math.min(1, v * 1.1));
@@ -356,7 +416,7 @@ export class SailMesh {
     dispose() {
         this.geometry.dispose();
         this.bundle.geometry.dispose();
-        this.bundle.material.dispose();
+        if (this.bundle.material !== SHARED?.bundleBlack) this.bundle.material.dispose();
     }
 }
 
@@ -368,6 +428,10 @@ export class ShipModel {
     constructor(layout, opts = {}) {
         this.L = layout;
         this.color = opts.color ?? 0x2a5aa0;
+        // (opts.look: 'black' — Captain Black Moustache's ship, SHIP_LOOKS)
+        this.look = opts.look ? SHIP_LOOKS[opts.look] || null : null;
+        if (this.look) this.color = this.look.band;
+        this.cursed = !!this.look; // (its green fires burn while the curse holds: setCursed)
         this.group = new THREE.Group();
         this.group.rotation.order = 'YXZ';
         this.near = new THREE.Group(); // rigging, interior, guns: hidden far away
@@ -402,8 +466,10 @@ export class ShipModel {
     *_buildSteps() {
         const L = this.L, S = shared();
         const hw = (z, y) => hullHalfWidth(L, z, y);
-        const hull = new Batch();
-        const near = new Batch();
+        const look = this.look;
+        const tint = look ? blackTint(look.band, look.gold, look.bone) : null;
+        const hull = new Batch(tint);
+        const near = new Batch(tint);
         const D = L.deck, R = L.rail;
         // ------------------------------------------------------ hull loft
         const NZ = 34, NY = 12;
@@ -484,6 +550,7 @@ export class ShipModel {
         const bz = -L.L / 2;
         hull.boxAt(0, D - 0.6, bz - 2.2, 0.8, 1.2, 5, DARK, 0.25);
         hull.cyl(0.55, 0.3, L.L * 0.32, 0, D + 2.6, bz - L.L * 0.1, WOOD, -Math.PI / 2 + 0.32);
+        if (look) this._blackDetail(hull, glow, L, D, R, hw, top, bz);
         // gun ports: dark squares on the outside at every gun, lids hinged up
         for (const g of L.cannons) {
             const s = g.side, w = hw(g.z, g.muzzle.y);
@@ -520,7 +587,7 @@ export class ShipModel {
             }
         }
         const dg = deckGeo.build(); // (its planks run along the ship: Batch.build's texture coordinates)
-        const deck = new THREE.Mesh(dg, S.deck);
+        const deck = new THREE.Mesh(dg, look ? S[look.deck] : S.deck);
         deck.receiveShadow = true;
         this.group.add(deck);
         this.deckMesh = deck;
@@ -600,7 +667,7 @@ export class ShipModel {
             const by = Math.min(m.top - 4, m.deck + 2.5);
             const rb = Math.round((0.95 - 0.5 * (by - m.base) / h) * 100) / 100;
             hull.cyl(0.95, rb, by - m.base, 0, (m.base + by) / 2, m.z, 0x6b4526, 0, 0, 0, 10);
-            const up = new Batch();
+            const up = new Batch(tint);
             parts.set(m.id, { up, by, z: m.z });
             up.cyl(rb, 0.45, m.top - by, 0, (m.top + by) / 2 - by, 0, 0x6b4526, 0, 0, 0, 10);
             // the tops (platforms)
@@ -614,7 +681,7 @@ export class ShipModel {
         yield;
         // ------------------------------------------------------------------ sails
         for (const sp of L.sails) {
-            const sail = new SailMesh(sp);
+            const sail = look ? new SailMesh(sp, look.sail, { ragged: look.ragged }) : new SailMesh(sp);
             if (sp.kind === 'lateen') {
                 // the yard along the sail's head (the cloth hangs from it), slung beside the mast
                 const a = sp.tack, b = sp.head;
@@ -676,7 +743,7 @@ export class ShipModel {
         const helm = L.helm;
         const wheel = new THREE.Group();
         wheel.position.set(helm.x, helm.y, helm.z);
-        const wb = new Batch();
+        const wb = new Batch(tint);
         const torus = new THREE.TorusGeometry(helm.rimR, 0.09, 6, 28);
         wb.add(torus, new THREE.Matrix4(), 0x6b4526);
         torus.dispose();
@@ -708,7 +775,7 @@ export class ShipModel {
         yield;
         // ------------------------------------------------------------- the guns
         // (the carriages are part of the inside; each barrel is one mesh: it jumps back when it fires)
-        const bg = new Batch();
+        const bg = new Batch(tint);
         bg.cyl(0.55, 0.36, 3.0, 0, 0, 0, IRON, 0, 0, Math.PI / 2, 12);
         bg.cyl(0.62, 0.62, 0.3, -1.45, 0, 0, IRON, 0, 0, Math.PI / 2, 12);
         bg.cyl(0.45, 0.45, 0.25, 1.4, 0, 0, IRON, 0, 0, Math.PI / 2, 12);
@@ -761,7 +828,7 @@ export class ShipModel {
         for (const m of L.masts) {
             const fg = new THREE.PlaneGeometry(4.5, 2.6, 6, 1);
             fg.translate(2.25, 0, 0);
-            const flag = new THREE.Mesh(fg, new THREE.MeshLambertMaterial({ color: this.color, side: THREE.DoubleSide }));
+            const flag = new THREE.Mesh(fg, look ? S.jolly : new THREE.MeshLambertMaterial({ color: this.color, side: THREE.DoubleSide }));
             flag.position.set(0, m.top + 1.2, m.z);
             const pt = parts.get(m.id);
             if (pt) pt.up.cyl(0.08, 0.08, 2.6, 0, m.top + 1.0 - pt.by, 0, DARK);
@@ -775,7 +842,7 @@ export class ShipModel {
             hull.box(s * 2.4 - 0.05, s * 2.4 + 0.05, top + L.rail, y, L.L / 2 - 0.6, L.L / 2 - 0.5, DARK);
             glow.box(s * 2.4 - 0.4, s * 2.4 + 0.4, y, y + 0.8, L.L / 2 - 0.95, L.L / 2 - 0.15, 0xffffff);
         }
-        this.glow = new THREE.Mesh(glow.build(), S.glass);
+        this.glow = new THREE.Mesh(glow.build(), look ? S.greenFire : S.glass);
         this.group.add(this.glow);
 
         // the masts above their stumps (each turns about its break when it falls)
@@ -877,7 +944,17 @@ export class ShipModel {
         const S = shared();
         if (this._night === on) return;
         this._night = on;
-        this.glow.material = on ? S.lit : S.glass;
+        // (the black ship: green fire while the curse holds — day and night; taken, its lanterns are dark)
+        this.glow.material = this.look ? (this.cursed ? (on ? S.greenFire : S.greenDim) : on ? S.lit : S.glass) : on ? S.lit : S.glass;
+    }
+
+    /** The black ship's curse holds (green fire in the lanterns) or is gone (it was taken). */
+    setCursed(on) {
+        if (!this.look || this.cursed === !!on) return;
+        this.cursed = !!on;
+        const n = this._night;
+        this._night = null;
+        this.setNight(!!n);
     }
 
     /** Flags flutter along the apparent wind (a cue where the wind blows); windLocal: {x, z} in the ship frame. */
@@ -1121,6 +1198,7 @@ export class ShipModel {
         }
         // the taffrail: the castle's arms (a shield in its colour) under a gilt crown, scrolls either side
         const tw = hw(zt - 0.1, crownY) * 0.85;
+        if (this.look) { this._sternSkull(hull, glow, zt, crownY, tw); return; }
         hull.box(-tw, tw, crownY - 0.35, crownY, zt - 0.2, zt + 0.2, GOLD);
         hull.box(-1.3, 1.3, crownY, crownY + 2.0, zt - 0.05, zt + 0.15, this.color); // the shield
         hull.box(-1.45, 1.45, crownY, crownY + 0.15, zt - 0.1, zt + 0.25, GOLD);
@@ -1139,13 +1217,73 @@ export class ShipModel {
         }
     }
 
+    /**
+     * The black ship's own look (on top of a ship's): a bone-white skull for a figurehead on the beak (green
+     * fire in its eyes, a great moustache under its nose), lanterns of green fire on posts along the rails
+     * and on the castles, a dark red rail cap.
+     */
+    _blackDetail(hull, glow, L, D, R, hw, top, bz) {
+        const bone = this.look.bone, band = this.look.band;
+        // the figurehead: a skull on the beak
+        const sz = bz - 4.4, sy = D + 0.2;
+        hull.box(-1.15, 1.15, sy - 0.2, sy + 1.9, sz - 1.1, sz + 1.1, bone); // the cranium
+        hull.box(-1.25, 1.25, sy + 0.6, sy + 1.6, sz - 0.9, sz + 0.9, bone); // the temples
+        hull.box(-0.8, 0.8, sy - 0.9, sy - 0.2, sz - 1.0, sz + 0.5, bone); // the jaw
+        for (const s of [-1, 1]) {
+            hull.box(s * 0.5 - 0.32, s * 0.5 + 0.32, sy + 0.85, sy + 1.45, sz - 1.16, sz - 1.1, 0x050302); // the sockets
+            glow.box(s * 0.5 - 0.14, s * 0.5 + 0.14, sy + 1.0, sy + 1.3, sz - 1.2, sz - 1.14, 0xffffff); // green fire in them
+            // the moustache: a curl each side under the nose
+            hull.boxAt(s * 0.62, sy + 0.25, sz - 1.18, 0.9, 0.24, 0.16, 0x161008, 0, 0, s * -0.35);
+            hull.boxAt(s * 1.05, sy + 0.5, sz - 1.18, 0.22, 0.4, 0.16, 0x161008, 0, 0, s * 0.4);
+        }
+        hull.box(-0.14, 0.14, sy + 0.45, sy + 0.8, sz - 1.16, sz - 1.1, 0x050302); // the nose
+        for (let i = 0; i < 6; i++) hull.box(-0.6 + i * 0.24, -0.5 + i * 0.24, sy - 0.25, sy + 0.05, sz - 1.06, sz - 1.0, bone); // the teeth
+        // a dark red cap along the rails
+        for (const s of [-1, 1]) for (let z = -L.L / 2 + 6; z < L.L / 2 - 1; z += 4) {
+            const w = hw(z + 2, D + R);
+            hull.box(s * w - 0.25, s * w + 0.05, L.railTopAt(z + 2) - 0.12, L.railTopAt(z + 2) + 0.06, z, z + 4, band);
+        }
+        // lanterns of green fire on posts: along the main deck's rails, on the forecastle and the castles
+        const posts = [];
+        for (const z of [-L.L * 0.36, -L.L * 0.12, L.L * 0.08]) posts.push(z);
+        for (const f of L.floors) if (f.y > D) posts.push(f.id === 'fore' ? f.z1 - 1.5 : f.z0 + 1.5);
+        for (const z of posts) for (const s of [-1, 1]) {
+            const ry = L.railTopAt(z), x = s * (hw(z, Math.min(ry, D + 12)) - 0.35);
+            hull.box(x - 0.08, x + 0.08, ry, ry + 1.5, z - 0.08, z + 0.08, DARK);
+            hull.box(x - 0.42, x + 0.42, ry + 1.5, ry + 1.62, z - 0.42, z + 0.42, DARK);
+            glow.box(x - 0.3, x + 0.3, ry + 1.62, ry + 2.3, z - 0.3, z + 0.3, 0xffffff);
+            hull.box(x - 0.36, x + 0.36, ry + 2.3, ry + 2.45, z - 0.36, z + 0.36, DARK);
+        }
+        void top;
+    }
+
+    /** The black ship's taffrail: a great skull over crossed bones, green fire in its eyes. */
+    _sternSkull(hull, glow, zt, crownY, tw) {
+        const bone = this.look.bone;
+        hull.box(-tw, tw, crownY - 0.35, crownY, zt - 0.2, zt + 0.2, GOLD);
+        // the crossed bones
+        for (const s of [-1, 1]) {
+            hull.boxAt(0, crownY + 0.9, zt + 0.15, 4.6, 0.32, 0.28, bone, 0, 0, s * 0.55);
+            for (const e of [-1, 1]) hull.boxAt(e * 2.0 * Math.cos(0.55), crownY + 0.9 + s * e * 2.0 * Math.sin(0.55), zt + 0.15, 0.55, 0.55, 0.3, bone);
+        }
+        // the skull over them
+        const y = crownY + 2.3;
+        hull.box(-1.1, 1.1, y - 0.9, y + 1.0, zt - 0.05, zt + 0.35, bone);
+        hull.box(-0.75, 0.75, y - 1.4, y - 0.9, zt - 0.05, zt + 0.3, bone);
+        for (const s of [-1, 1]) {
+            hull.box(s * 0.45 - 0.28, s * 0.45 + 0.28, y - 0.1, y + 0.45, zt + 0.35, zt + 0.4, 0x050302);
+            glow.box(s * 0.45 - 0.12, s * 0.45 + 0.12, y + 0.05, y + 0.3, zt + 0.4, zt + 0.44, 0xffffff);
+        }
+        for (let i = 0; i < 5; i++) hull.box(-0.5 + i * 0.22, -0.4 + i * 0.22, y - 1.3, y - 1.05, zt + 0.3, zt + 0.36, 0x050302);
+    }
+
     dispose() {
         this.group.traverse((o) => {
             if (o.isMesh || o.isLineSegments) {
                 if (o.geometry !== shared().ball && o.geometry !== this._barrelGeo) o.geometry.dispose();
                 const m = o.material;
                 const S = shared();
-                if (m && m !== S.solid && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron) m.dispose();
+                if (m && m !== S.solid && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.deckBlack && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundleBlack) m.dispose();
             }
         });
         for (const s of this.sails.values()) s.dispose?.();

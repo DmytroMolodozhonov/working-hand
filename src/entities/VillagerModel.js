@@ -24,7 +24,7 @@ import { SKIN_TONES } from './Appearance.js';
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
-export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket'];
+export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
 export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
@@ -58,6 +58,8 @@ const TORCH_STICK = new THREE.BoxGeometry(0.14, 1.1, 0.14);
 const TORCH_FLAME = new THREE.BoxGeometry(0.3, 0.42, 0.3);
 const STICK_MAT = new THREE.MeshLambertMaterial({ color: 0x5a3a1e });
 const FLAME_MAT = new THREE.MeshBasicMaterial({ color: 0xffb030 });
+const EYE_GEO = new THREE.BoxGeometry(0.15, 0.12, 0.03);
+const EYE_MAT = new THREE.MeshBasicMaterial({ color: 0x7dff9a });
 HIT_MAT.name = 'villager-hit';
 const HL_MAT = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x303030 });
 HL_MAT.name = 'villager-highlight';
@@ -277,9 +279,25 @@ function wizardLook(L, r, pick) {
 
 // ==================================================================== parts
 /** Head pivot at the neck: the head box is 1.2³ centred at y 0.6, face at z −0.6. */
+/** A skeleton's bones (Blackbeard.js: the black ship's crew) — pale bone and older, yellowed bone. */
+export const BONE = 0xe2d9bf, BONE_OLD = 0xb3a682, BONE_HOLE = 0x0a0806;
+
+/** A skull: the cranium, the cheekbones, a jaw, dark sockets (their green fire is its own mesh), the teeth. */
+function skullBoxes(L, B) {
+    b(B, 1.08, 0.72, 1.14, 0, 0.78, 0.02, BONE);
+    b(B, 0.96, 0.42, 1.0, 0, 0.34, -0.03, BONE);
+    b(B, 0.72, 0.2, 0.84, 0, 0.04, -0.06, BONE_OLD); // the jaw
+    for (const sx of [-1, 1]) b(B, 0.3, 0.28, 0.05, sx * 0.24, 0.6, -0.55, BONE_HOLE);
+    b(B, 0.12, 0.18, 0.05, 0, 0.36, -0.54, BONE_HOLE); // the nose
+    b(B, 0.62, 0.11, 0.05, 0, 0.17, -0.53, 0xeee6cf);
+    for (let i = 0; i < 4; i++) b(B, 0.025, 0.11, 0.055, -0.21 + i * 0.14, 0.17, -0.535, BONE_HOLE);
+    b(B, 0.08, 0.3, 0.08, 0, -0.12, 0.08, BONE_OLD); // the neck's bones
+}
+
 function headBoxes(L) {
     const B = [];
     const s = L.skin, hc = L.hairColor, cc = L.castleColor;
+    if (L.skeleton) { skullBoxes(L, B); hatBoxes(L, B, cc); return B; }
     b(B, 1.2, 1.2, 1.2, 0, 0.6, 0, s);
     const helm = L.hat === 'helm', open = L.hat === 'openhelm';
     if (!helm) {
@@ -315,6 +333,22 @@ function headBoxes(L) {
             b(B, 0.3, 0.3, 0.12, 0, -1.05, -0.63, shade(bc, 0.95));
             b(B, 0.1, 0.55, 0.8, -0.62, 0.35, -0.15, bc); b(B, 0.1, 0.55, 0.8, 0.62, 0.35, -0.15, bc);
             b(B, 0.62, 0.12, 0.08, 0, 0.38, -0.67, shade(bc, 0.9));
+        } else if (L.beard === 'blackbeard') {
+            // Captain Black Moustache: a great black beard down onto the chest, plaited at the end with red
+            // ribbons, and the moustache that gave him his name — thick, curled up at both ends
+            b(B, 1.24, 0.5, 0.14, 0, 0.16, -0.6, bc);
+            b(B, 1.06, 0.55, 0.16, 0, -0.32, -0.62, bc);
+            b(B, 0.76, 0.5, 0.16, 0, -0.82, -0.63, bc);
+            b(B, 0.1, 0.62, 0.86, -0.62, 0.34, -0.14, bc); b(B, 0.1, 0.62, 0.86, 0.62, 0.34, -0.14, bc);
+            for (const sx of [-1, 1]) {
+                b(B, 0.16, 0.42, 0.16, sx * 0.22, -1.25, -0.63, bc);
+                b(B, 0.2, 0.08, 0.2, sx * 0.22, -1.08, -0.63, 0xb0202a);
+                // the moustache: out to the side and curled up
+                b(B, 0.42, 0.17, 0.12, sx * 0.24, 0.39, -0.69, bc, 0, 0, sx * 0.12);
+                b(B, 0.3, 0.14, 0.12, sx * 0.55, 0.46, -0.69, bc, 0, 0, sx * 0.45);
+                b(B, 0.13, 0.26, 0.12, sx * 0.72, 0.62, -0.69, bc);
+                b(B, 0.16, 0.1, 0.12, sx * 0.66, 0.77, -0.69, bc);
+            }
         } else if (L.beard === 'moustache') {
             b(B, 0.56, 0.1, 0.08, 0, 0.38, -0.65, bc);
             b(B, 0.1, 0.16, 0.08, -0.28, 0.31, -0.65, bc); b(B, 0.1, 0.16, 0.08, 0.28, 0.31, -0.65, bc);
@@ -359,7 +393,12 @@ function headBoxes(L) {
                 break;
         }
     }
-    // hats and helmets
+    hatBoxes(L, B, cc);
+    return B;
+}
+
+/** Hats and helmets (on a head or on a skull). */
+function hatBoxes(L, B, cc) {
     const hcol = L.hatColor;
     switch (L.hat) {
         case 'straw': {
@@ -374,6 +413,20 @@ function headBoxes(L) {
             b(B, 1.0, 0.07, 0.5, 0, 1.13, -0.85, shade(hcol, 0.7));
             b(B, 0.2, 0.1, 0.2, 0, 1.43, 0, shade(hcol, 0.7));
             break;
+        case 'tricorn': {
+            // a pirate's three-cornered hat: the brim turned up on three sides, gold lace, a skull at the front
+            b(B, 1.36, 0.42, 1.36, 0, 1.42, 0.04, hcol);
+            b(B, 1.9, 0.08, 1.8, 0, 1.24, 0.04, shade(hcol, 0.9));
+            for (const sx of [-1, 1]) {
+                b(B, 1.12, 0.5, 0.1, sx * 0.48, 1.46, -0.62, hcol, 0, sx * 0.62, 0);
+                b(B, 1.14, 0.06, 0.12, sx * 0.48, 1.72, -0.62, GOLD, 0, sx * 0.62, 0);
+            }
+            b(B, 1.7, 0.5, 0.1, 0, 1.46, 0.9, hcol);
+            b(B, 1.72, 0.06, 0.12, 0, 1.72, 0.9, GOLD);
+            b(B, 0.24, 0.24, 0.05, 0, 1.4, -0.72, 0xeee6cf);
+            b(B, 0.06, 0.06, 0.03, -0.05, 1.44, -0.75, 0x111111); b(B, 0.06, 0.06, 0.03, 0.05, 1.44, -0.75, 0x111111);
+            break;
+        }
         case 'beret':
             b(B, 1.42, 0.24, 1.42, 0, 1.3, 0.05, hcol);
             b(B, 1.3, 0.1, 1.3, 0, 1.17, 0.02, GOLD);
@@ -418,7 +471,6 @@ function headBoxes(L) {
         }
         default: break;
     }
-    return B;
 }
 
 /**
@@ -457,6 +509,41 @@ function bodyBoxes(L) {
         b(B, 1.42, 0.12, 1.02, 0, -1.9, 0, shade(dc, 0.7));
         b(B, 1.26, 0.16, 0.86, 0, -0.62, 0, shade(dc, 0.75));
     };
+    if (L.skeleton) {
+        // the spine, the ribs, the breastbone, the shoulders, the pelvis; rags of what he once wore
+        b(B, 0.18, 1.5, 0.18, 0, 0, 0.24, BONE_OLD);
+        for (let k = 0; k < 5; k++) b(B, 1.0 - Math.abs(k - 1.5) * 0.08, 0.09, 0.72, 0, 0.52 - k * 0.18, 0, BONE);
+        b(B, 0.14, 0.8, 0.06, 0, 0.2, -0.37, BONE);
+        b(B, 1.36, 0.14, 0.3, 0, 0.66, 0.02, BONE);
+        b(B, 0.9, 0.3, 0.52, 0, -0.62, 0, BONE_OLD);
+        if (L.rags) {
+            b(B, 1.12, 0.32, 0.8, 0, -0.42, 0, L.rags);
+            b(B, 0.3, 0.9, 0.06, -0.38, 0.25, -0.4, L.rags, 0, 0, 0.35); // a torn strip over the ribs
+            b(B, 0.24, 0.18, 0.05, 0.25, -0.62, -0.42, shade(L.rags, 0.7));
+        }
+        b(B, 1.0, 0.12, 0.6, 0, -0.66, 0, LEATHER); // the belt still holds
+        return B;
+    }
+    if (L.coat) {
+        // a pirate captain's long coat: open over a white shirt, gold lapels and buttons, a red sash, a
+        // baldric across, the skirts down to the knees
+        const c = L.coat;
+        b(B, 1.26, 1.5, 0.86, 0, 0.05, 0, c);
+        b(B, 0.36, 1.1, 0.03, 0, 0.28, -0.44, 0xf2ecd8);
+        b(B, 0.3, 0.2, 0.06, 0, 0.62, -0.44, 0xffffff); // the jabot
+        for (const sx of [-1, 1]) {
+            b(B, 0.08, 1.42, 0.04, sx * 0.22, 0.05, -0.45, GOLD);
+            for (const y of [0.45, 0.15, -0.15]) b(B, 0.08, 0.08, 0.03, sx * 0.32, y, -0.46, GOLD);
+        }
+        b(B, 1.3, 0.24, 0.9, 0, -0.55, 0, 0x8e1620); // the sash
+        b(B, 0.24, 0.5, 0.1, 0.45, -0.8, -0.44, 0x8e1620);
+        b(B, 1.34, 0.85, 0.94, 0, -1.08, 0.04, c); // the skirts
+        b(B, 1.36, 0.06, 0.96, 0, -1.48, 0.04, GOLD);
+        b(B, 0.16, 1.75, 0.05, 0, 0.02, -0.47, LEATHER, 0, 0, 0.62); // the baldric
+        b(B, 0.12, 0.12, 0.52, -0.3, -0.52, -0.52, 0x3a2414); // a pistol in the sash
+        b(B, 0.1, 0.1, 0.36, -0.3, -0.48, -0.86, IRON);
+        return B;
+    }
     if (L.unarmored || L.robeOff) { // (the steel / the robe gone: a padded gambeson / the shirt)
         b(B, 1.2, 1.5, 0.8, 0, 0, 0, L.shirt);
         if (L.unarmored) for (const y of [0.45, 0.1, -0.25]) b(B, 1.22, 0.05, 0.82, 0, y, 0, shade(L.shirt, 0.85)); // the quilting
@@ -542,6 +629,24 @@ function bodyBoxes(L) {
 /** Shoulder pivot; the arm hangs along −Y (top +0.2, hand down to −1.35). side −1 = left. */
 function armBoxes(L, side) {
     const B = [];
+    if (L.skeleton) {
+        b(B, 0.3, 0.26, 0.3, 0, 0.06, 0, BONE);
+        b(B, 0.15, 0.6, 0.15, 0, -0.22, 0, BONE);
+        b(B, 0.22, 0.16, 0.22, 0, -0.55, 0, BONE_OLD);
+        b(B, 0.07, 0.56, 0.07, -0.05, -0.86, 0, BONE); b(B, 0.07, 0.56, 0.07, 0.05, -0.86, 0, BONE);
+        b(B, 0.26, 0.2, 0.18, 0, -1.16, 0, BONE);
+        for (let i = 0; i < 4; i++) b(B, 0.045, 0.2, 0.045, -0.09 + i * 0.06, -1.34, -0.03, BONE_OLD);
+        if (L.rags && side > 0) b(B, 0.38, 0.3, 0.38, 0, -0.05, 0, L.rags); // a torn sleeve
+        return B;
+    }
+    if (L.coat) {
+        b(B, 0.44, 1.0, 0.44, 0, -0.3, 0, L.coat);
+        b(B, 0.58, 0.34, 0.58, 0, -0.86, 0, 0x8e1620); // the great cuff
+        b(B, 0.6, 0.05, 0.6, 0, -0.7, 0, GOLD);
+        b(B, 0.42, 0.12, 0.42, 0, -1.06, 0, 0xffffff); // lace
+        b(B, 0.36, 0.3, 0.36, 0, -1.2, 0, L.skin);
+        return B;
+    }
     if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
         const king = L.role === 'king';
         b(B, 0.42, 1.15, 0.42, 0, -0.375, 0, STEEL);
@@ -572,6 +677,11 @@ function armBoxes(L, side) {
 
 function thighBoxes(L) {
     const B = [];
+    if (L.skeleton) {
+        b(B, 0.16, LEG_UP, 0.16, 0, -LEG_UP / 2, 0, BONE);
+        if (L.rags) b(B, 0.46, 0.38, 0.46, 0, -0.18, 0, L.rags);
+        return B;
+    }
     if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
         b(B, 0.5, LEG_UP, 0.5, 0, -LEG_UP / 2, 0, STEEL);
         b(B, 0.56, 0.22, 0.58, 0, -0.92, -0.02, L.role === 'king' ? GOLD : STEEL_LIGHT);
@@ -584,6 +694,17 @@ function thighBoxes(L) {
 /** Knee pivot; the shin + foot go down to −0.95 (= group y −1.95). */
 function shinBoxes(L) {
     const B = [];
+    if (L.skeleton) {
+        b(B, 0.24, 0.18, 0.24, 0, -0.04, 0, BONE_OLD);
+        b(B, 0.13, 0.66, 0.13, 0, -0.42, 0, BONE);
+        b(B, 0.28, 0.12, 0.5, 0, -0.84, -0.08, BONE);
+        return B;
+    }
+    if (L.coat) { // (tall black boots with wide tops)
+        b(B, 0.5, 0.95, 0.56, 0, -0.47, -0.03, L.boots);
+        b(B, 0.62, 0.22, 0.66, 0, -0.1, 0, shade(L.boots, 1.3));
+        return B;
+    }
     if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
         b(B, 0.5, 0.62, 0.5, 0, -0.31, 0, STEEL);
         b(B, 0.54, 0.34, 0.66, 0, -0.78, -0.06, STEEL_DARK);
@@ -715,6 +836,33 @@ function toolBoxes(kind) {
             b(B, 0.02, 0.24, 0.1, 0.05, -0.12, 0, 0xf2f2f2);
             break;
         }
+        case 'rapier': // Captain Black Moustache's: a cup hilt, a long slim blade (he thrusts with it, parries spells with it)
+            b(B, 0.14, 0.14, 0.14, 0, -0.26, 0, GOLD);
+            b(B, 0.09, 0.36, 0.09, 0, -0.04, 0, 0x2a1a10);
+            b(B, 0.36, 0.12, 0.36, 0, 0.19, 0, GOLD); // the cup
+            b(B, 0.6, 0.06, 0.06, 0, 0.27, 0, GOLD_DARK); // the quillons
+            b(B, 0.04, 0.42, 0.04, 0.19, 0.0, 0, GOLD); // the knuckle bow
+            b(B, 0.06, 2.1, 0.04, 0, 1.32, 0, 0xe8eef4);
+            b(B, 0.03, 0.2, 0.03, 0, 2.45, 0, 0xc8d0d8);
+            break;
+        case 'cutlass': // a sailor's short curved sabre
+            b(B, 0.13, 0.13, 0.13, 0, -0.22, 0, IRON);
+            b(B, 0.1, 0.32, 0.1, 0, -0.02, 0, LEATHER);
+            b(B, 0.36, 0.1, 0.24, 0, 0.18, -0.04, 0x8a7a4a); // the shell guard
+            b(B, 0.18, 0.75, 0.05, 0, 0.6, 0, 0xc8d0d8);
+            b(B, 0.19, 0.55, 0.05, -0.05, 1.15, 0, 0xc8d0d8, 0, 0, 0.16);
+            b(B, 0.1, 0.18, 0.05, -0.12, 1.46, 0, 0xc8d0d8, 0, 0, 0.5);
+            break;
+        case 'axe': // a boarding axe
+            b(B, 0.1, 1.5, 0.1, 0, 0.5, 0, WOOD);
+            b(B, 0.08, 0.5, 0.42, 0, 1.08, -0.24, 0x9aa3ad);
+            b(B, 0.1, 0.2, 0.16, 0, 1.08, 0.1, IRON);
+            break;
+        case 'pistol': // a flintlock: the barrel along the hand's line
+            b(B, 0.14, 0.4, 0.2, 0, -0.06, 0.06, WOOD, 0.35, 0, 0);
+            b(B, 0.1, 0.8, 0.1, 0, 0.48, 0, IRON);
+            b(B, 0.06, 0.18, 0.12, 0.07, 0.12, 0, GOLD_DARK);
+            break;
         case 'pouch':
             b(B, 0.16, 0.1, 0.14, 0, -0.1, 0, 0x6b3e1e);
             b(B, 0.2, 0.05, 0.18, 0, -0.14, 0, GOLD);
@@ -838,6 +986,9 @@ export class VillagerModel {
             this.shield.position.set(-0.33, -0.78, 0);
             this.shield.quaternion.copy(_qShieldIdle);
         }
+
+        // a skeleton: green fire in its eye sockets (its own meshes — they glow in the dark, a blow's red flash leaves them)
+        if (look.skeleton) for (const sx of [-1, 1]) { const e = new THREE.Mesh(EYE_GEO, EYE_MAT); e.position.set(sx * 0.24, 0.6, -0.585); this.head.add(e); }
 
         this.tool = null;
         this.toolKind = 'none';
