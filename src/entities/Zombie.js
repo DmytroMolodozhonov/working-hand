@@ -54,6 +54,8 @@ export class Zombie {
         this.group = new THREE.Group();
         this.group.position.set(startPos.x, 0.5, startPos.z);
         this.group.scale.set(1, 1.12, 1);
+        this.sizeK = 1; // (the training dummy is bigger: setDummy)
+        this.gOff = ZOMBIE_GROUND_OFFSET; // origin height over the feet's ground
 
         this.baseSpeed = 3.5;
         this.speed = this.baseSpeed;
@@ -186,7 +188,7 @@ export class Zombie {
             this.deathAnimTimer -= dt;
             const targetRot = -Math.PI / 2;
             this.group.rotation.x += (targetRot - this.group.rotation.x) * 5 * dt;
-            const restY = ground + 0.8;
+            const restY = ground + 0.8 * this.sizeK;
             if (pos.y > restY) {
                 this.vy -= 25 * dt;
                 pos.y = Math.max(restY, pos.y + Math.min(this.vy, -2) * dt);
@@ -207,7 +209,7 @@ export class Zombie {
             this.corpseTimer += dt;
             // (the ground under it broken — a blast, a ruin: the body falls down to what is left)
             if (this.corpseTimer <= CORPSE_LIFETIME) {
-                const restY = ground + 0.8;
+                const restY = ground + 0.8 * this.sizeK;
                 if (pos.y > restY + 0.05) { this.vy = (this.vy || 0) - 25 * dt; pos.y = Math.max(restY, pos.y + this.vy * dt); } else this.vy = 0;
             }
             if (this.corpseTimer > CORPSE_LIFETIME) {
@@ -225,7 +227,7 @@ export class Zombie {
         // «Остолбеней»: stands still
         if (this.stunTimer > 0) {
             this.stunTimer -= dt;
-            if (pos.y > ground + 1.0 + 0.01) { this.vy = (this.vy || 0) - 25 * dt; pos.y = Math.max(ground + 1.0, pos.y + this.vy * dt); }
+            if (pos.y > ground + this.gOff + 0.01) { this.vy = (this.vy || 0) - 25 * dt; pos.y = Math.max(ground + this.gOff, pos.y + this.vy * dt); }
             return;
         }
 
@@ -306,6 +308,17 @@ export class Zombie {
         if (this.isAttacking) this._animateAttack(dt, targetPos);
     }
 
+    /** Makes this zombie the training dummy: 25% bigger — model, body parts, hits and collision all follow the one scale. */
+    setDummy() {
+        if (this.dummy) return;
+        this.dummy = true;
+        this.sizeK = 1.25;
+        this.group.scale.set(1.25, 1.12 * 1.25, 1.25);
+        // the feet stay where they were relative to the ground: the origin rises with the legs' length
+        this.gOff = ZOMBIE_GROUND_OFFSET - 0.6 * 1.12 + 0.6 * 1.12 * 1.25;
+        this.group.position.y += this.gOff - ZOMBIE_GROUND_OFFSET;
+    }
+
     /** Training dummy: a slight sway so that it looks alive. */
     _sway() {
         const t = performance.now() * 0.001 + this.animVariation;
@@ -318,7 +331,7 @@ export class Zombie {
     /** Stand on the ground, or fly/fall with gravity when thrown or stepping off a ledge. */
     _settleY(dt, ground) {
         const pos = this.group.position;
-        const floor = ground + ZOMBIE_GROUND_OFFSET;
+        const floor = ground + this.gOff;
         if (this.vy !== 0 || pos.y > floor + 0.05) {
             this.vy -= 25 * dt;
             pos.y += this.vy * dt;
@@ -568,7 +581,7 @@ export class Zombie {
         if ((flags & 16) && !this.isAttacking) this.triggerAttack();
         if ((flags & 32) && this.group.visible) this.group.visible = false;
         this.setThrall(!!(flags & 64));
-        this.dummy = !!(flags & 128);
+        if ((flags & 128) && !this.dummy) this.setDummy();
         const frozen = !!(flags & 2);
         if (frozen && !this.isFrozen) { this.freezeProgress = 1; this.freeze(); this._restoreColor(); }
         else if (!frozen && this.isFrozen) this.unfreeze();

@@ -574,7 +574,7 @@ export class Game {
             this._dummyGone = 0;
             const y = (this.collision?.groundY ? this.collision.groundY(h.x, h.z) : -0.5) + 1.0;
             d = this.dummy = this._createZombie(new THREE.Vector3(h.x, y, h.z));
-            d.dummy = true;
+            d.setDummy();
             d.group.rotation.y = 0;
         }
     }
@@ -3072,13 +3072,13 @@ export class Game {
             if (z.removable) { this.removeZombie(z); continue; }
             if (z.isDead || z.isSleeping) continue;
 
-            this.collision.resolveCylinder(z.group.position, ZOMBIE_RADIUS, z.group.position.y - 1.0, 3.5, 1.05);
+            this.collision.resolveCylinder(z.group.position, ZOMBIE_RADIUS * z.sizeK, z.group.position.y - z.gOff, 3.5 * z.sizeK, 1.05);
 
             // Player–zombie separation (local player)
             const dx = charPos.x - z.group.position.x, dz = charPos.z - z.group.position.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist < 1.3 && dist > 1e-4) {
-                const overlap = 1.3 - dist;
+            if (dist < 1.3 * z.sizeK && dist > 1e-4) {
+                const overlap = 1.3 * z.sizeK - dist;
                 charPos.x += (dx / dist) * overlap * 0.6;
                 charPos.z += (dz / dist) * overlap * 0.6;
                 z.group.position.x -= (dx / dist) * overlap * 0.4;
