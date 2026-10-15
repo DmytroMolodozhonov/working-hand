@@ -18,6 +18,7 @@ API:
   GET    /api/pose/status     — нейросеть камеры вне браузера (pose_native.py): есть ли, работает ли
   GET    /api/pose/stream     — её точки тела, рук и лица (Server-Sent Events)
   GET    /api/pose/snap       — её последний кадр камеры (JPEG; для записи руки)
+  GET    /api/pose/pace       — FPS игры: нейросеть камеры работает не быстрее (лишние кадры игра не берёт)
   GET    /api/voice/status    — нейросеть голоса вне браузера (voice_native.py): есть ли, скачана ли, работает ли
   GET    /api/voice/stream    — что она услышала (Server-Sent Events)
   GET    /api/voice/devices   — микрофоны, которые она может слушать
@@ -347,6 +348,15 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(jpg)
 
+    def _pose_pace(self, query):
+        """The game's frames a second: the camera program works no faster (its results beyond are unused)."""
+        try:
+            from pose_native import POSE
+            POSE.pace(float(parse_qs(query).get("fps", ["0"])[0]))
+        except Exception:  # noqa: BLE001
+            pass
+        return self._json(200, {"ok": True})
+
     def _pose_status(self):
         try:
             from pose_native import POSE
@@ -479,6 +489,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._voice_devices()
         if path == "/api/pose/snap":
             return self._pose_snap()
+        if path == "/api/pose/pace":
+            return self._pose_pace(urlparse(self.path).query)
         if path == "/api/version":
             return self._json(200, game_version())
         if path == "/api/update":

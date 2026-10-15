@@ -200,6 +200,8 @@ class NativePose:
         self.last_frame = None
         self.hands_mode = ""  # "" — MediaPipe's own hands; "v5" — hand_v5.py (Settings → V5)
         self._cam_hd = False  # (the camera opened at 1280×720)
+        self.game_fps = 0.0  # the game's frames a second (pace()), and when it said so
+        self.game_fps_at = 0.0
         self._hd_slow = False
         self.v5 = _V5Hands()
 
@@ -276,6 +278,19 @@ class NativePose:
 
     def stop(self):
         self._stop.set()
+
+    def pace(self, fps):
+        """The game's frames a second (the page says it every few seconds)."""
+        self.game_fps = max(0.0, float(fps))
+        self.game_fps_at = time.time()
+
+    def _min_interval(self):
+        """The shortest time between two pictures: the game takes only the newest result each frame,
+        so while it is slow (in flight it builds the world) the network goes at its pace (+ a little),
+        never below 12 a second — the processor stays for the game."""
+        if not self.game_fps or time.time() - self.game_fps_at > 6 or self.game_fps >= 40:
+            return 0.0
+        return 1.0 / max(12.0, self.game_fps + 4)
 
     # ------------------------------------------------------------ the camera
     def _open_camera(self):
@@ -490,11 +505,18 @@ class NativePose:
             # works on one, the next ones wait there — the hands were shown as they were
             # several pictures ago. (A test video is read picture by picture.)
             grab = None if os.environ.get("ZNS_CAMERA_FILE") else _LatestFrame(cap, self._stop)
+            t_last = 0.0
             while not self._stop.is_set():
                 if grab:
                     ok, frame = grab.next(timeout=1.0)
                 else:
                     ok, frame = cap.read()
+                if ok and frame is not None and t_last and (gap := self._min_interval() - (time.perf_counter() - t_last)) > 0:
+                    self._stop.wait(gap)  # (the game is slow: wait, then take the newest picture)
+                    if grab:
+                        ok2, f2 = grab.next(timeout=0)
+                        if ok2:
+                            frame = f2
                 if not ok or frame is None:
                     if os.environ.get("ZNS_CAMERA_FILE"):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # (the test video: round again)
@@ -512,7 +534,8 @@ class NativePose:
                     grab = _LatestFrame(cap, self._stop)
                     print(f"  [Камера] камера {self.width}x{self.height}")
                     continue
-                t0 = time.perf_counter()
+                t0 = t_last = time.perf_counter()
+                t_wall = time.time()  # (when the picture was taken into work: the game measures the hands' delay)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 small = None
                 if rgb.shape[1] > 800:
@@ -532,7 +555,7 @@ class NativePose:
                     frames = 0
                     t_rate = now
                 v5on = self.hands_mode == "v5" and self.v5.state == "ready"
-                out.update({"cost": round(cost, 1), "w": self.width, "h": self.height, "backend": self.backend,
+                out.update({"t": round(t_wall * 1000), "cost": round(cost, 1), "w": self.width, "h": self.height, "backend": self.backend,
                             "handsEngine": "v5" if v5on else "mp"})
                 if v5on:
                     out["v5Engine"] = self.v5.hands.engine  # ("rtm": RTMPose on the video card; "mp": the processor)

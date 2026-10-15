@@ -369,7 +369,7 @@ class HandsV5:
                   (which way the palm faces) and how sure it is that a hand is there.
     """
 
-    def __init__(self, path=None, threads=2, engine="mp", rtm_path=None):
+    def __init__(self, path=None, threads=1, engine="mp", rtm_path=None):
         # one network for each hand: both hands are looked at at once (in two threads)
         self.nets = {"left": HandNet(path, threads), "right": HandNet(path, threads)}
         self.rtm = {s: RTMNet(rtm_path, threads) for s in ("left", "right")} if engine == "rtm" else None

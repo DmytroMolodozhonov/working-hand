@@ -13,6 +13,8 @@ python tools/handbench/fetch.py            # один раз: разметка +
 python tools/handbench/bench.py            # все проверки → tools/handbench/RESULTS.md (около часа на 4 ядрах)
 python tools/handbench/bench.py --quick    # маленькая часть, пара минут
 python tools/handbench/tune.py             # подбор чисел V5 только на части «dev»
+python tools/handbench/load.py             # нагрузка всей программы камеры: V3 против V5
+node tools/handbench/flight.mjs v3,v5      # полёт над новым миром: FPS игры и задержка кисти
 ```
 
 RTMPose для сравнения: положите `rtmpose_hand.onnx` в `.handbench/models/` (или его скачает сама игра при

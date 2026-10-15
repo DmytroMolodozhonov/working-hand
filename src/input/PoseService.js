@@ -463,10 +463,21 @@ export class PoseService {
             let first = true;
             const timeout = setTimeout(() => { if (first) { es.close(); this.stats.nativeWhy = 'программа не ответила за 40 с'; resolve(false); } }, 40000);
             es.onmessage = (ev) => {
-                let r;
-                try { r = JSON.parse(ev.data); } catch (e) { return; }
                 if (first) { first = false; clearTimeout(timeout); this._native = es; resolve(true); }
-                this._onNative(r);
+                // Only the NEWEST result is used. While the game is busy (in flight it builds the world),
+                // the results pile up waiting for it; taken one by one, oldest first, the hands showed
+                // what they did seconds ago. Now a waiting one is replaced by the newer, never queued.
+                if (this._nativeData != null) this.stats.nativeSkipped = (this.stats.nativeSkipped || 0) + 1;
+                this._nativeData = ev.data;
+                if (this._nativeTimer) return;
+                this._nativeTimer = setTimeout(() => {
+                    this._nativeTimer = 0;
+                    const data = this._nativeData;
+                    this._nativeData = null;
+                    let r;
+                    try { r = JSON.parse(data); } catch (e) { return; }
+                    if (this._native === es) this._onNative(r);
+                }, 0);
             };
             es.addEventListener('fail', (ev) => {
                 let msg = '';
@@ -492,7 +503,12 @@ export class PoseService {
             this._notice(busy ? `Кисти V5 ${r.v5} — пока работают кисти V4` : `Кисти V5 не запустились (${r.v5}) — работают кисти V4`);
         } else if (this.handsWanted === 'v5' && r.handsEngine === 'v5' && this._noticed && !this._noticed.startsWith('Кисти V5 включились')) this._notice('Кисти V5 включились');
         this._nativeVideo = { videoWidth: r.w || 640, videoHeight: r.h || 480 };
-        if (r.hands) this._handleResult({ ts: performance.now(), cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks });
+        // (the picture's own time, not when it reached the game: the hand filters see its real speed
+        // even when results come unevenly — the program's clock is this computer's)
+        const age = r.t ? Math.max(0, Math.min(500, Date.now() - r.t)) : 0;
+        this.stats.handAge = age;
+        const ts = this._nativeTs = Math.max((this._nativeTs || 0) + 1, performance.now() - age); // (never back in time)
+        if (r.hands) this._handleResult({ ts, cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks });
         else this._onHolistic(r);
     }
 
@@ -623,6 +639,21 @@ export class PoseService {
         if (this.stream) { for (const t of this.stream.getTracks()) t.stop(); this.stream = null; }
         this.isRunning = false;
         if (wasRunning) await this.start();
+    }
+
+    /** The game's frames a second (set by the game). The camera program is told it: results faster
+     * than the game's frames are never used (only the newest is), so it then works no faster —
+     * the processor stays for the game (in flight it builds the world). */
+    get gameFps() { return this._gameFps; }
+
+    set gameFps(fps) {
+        this._gameFps = fps;
+        if (!this._native || !this.native) return;
+        const now = performance.now();
+        if (Math.abs(fps - (this._pacedFps || 0)) < 4 && now - (this._pacedAt || 0) < 3000) return;
+        this._pacedFps = fps;
+        this._pacedAt = now;
+        fetch(new URL(`api/pose/pace?fps=${Math.round(fps)}`, this.baseUrl)).catch(() => {});
     }
 
     /** The hand finder for the camera program ('' or 'v5'); a running stream is reopened with it. */
