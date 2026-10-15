@@ -265,7 +265,7 @@ def adopt_app_launcher():
 
 LOCAL_ADDRS = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
 LOCAL_NAMES = ("localhost", "127.0.0.1", "::1")
-PRIVATE_PATHS = ("/api/voice/", "/api/pose/", "/api/llm/")  # the microphone, the camera, the villagers' network
+PRIVATE_PATHS = ("/api/voice/", "/api/pose/", "/api/llm/", "/api/tts/")  # the microphone, the camera, the villagers' network
 
 
 def is_own_page(client_ip, headers):
@@ -513,6 +513,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_stream(urlparse(self.path).query)
         if path == "/api/voice/status":
             return self._voice_status()
+        if path == "/api/tts/status":
+            from tts_native import TTS
+            return self._json(200, TTS.status())
         if path == "/api/llm/status":
             from llm_native import LLM
             return self._json(200, LLM.status())
@@ -566,6 +569,21 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 local = self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")  # (only this computer's own window)
                 ok = local and window_action(str(data.get("action", "")), data)
                 return self._json(200, {"ok": ok})
+
+            if path.startswith("/api/tts/"):
+                # the villagers' neural voices as a program of its own (tts_native.py): this computer's game only
+                if not is_own_page(self.client_address[0], self.headers):
+                    return self._json(403, {"status": "error", "message": "only the game on this computer"})
+                from tts_native import TTS
+                if path == "/api/tts/load":
+                    TTS.start()
+                    return self._json(200, TTS.status())
+                if path == "/api/tts/synth":
+                    try:
+                        return self._json(200, TTS.synth(self._read_json() or {}))
+                    except Exception as e:  # noqa: BLE001
+                        return self._json(503, {"error": str(e)})
+                return self._json(404, {"status": "error"})
 
             if path.startswith("/api/llm/"):
                 # the villagers' conversation network as a program of its own (llm_native.py): this computer's game only

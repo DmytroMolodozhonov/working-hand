@@ -12,6 +12,8 @@
  * Supertone files, which are bigger).
  */
 
+import { NativeTTSPort } from './NativeTTS.js';
+
 const HF = 'https://huggingface.co/';
 const INT8_FILES = {
     cfg: 'tts.json', indexer: 'unicode_indexer.bin', voices: 'voice.bin',
@@ -48,6 +50,8 @@ export class NeuralVoice {
         this.sources = opts.sources || VOICE_SOURCES;
         this.steps = opts.steps ?? 5;
         this._createWorker = opts.createWorker || (() => new Worker(opts.workerUrl || new URL('./tts.worker.js', import.meta.url), { type: 'module' }));
+        // (first the program on this computer — tts_native.py — then, if it can't run, the browser's worker)
+        this._tryNative = !opts.createWorker && !opts.workerUrl;
         this.state = 'idle'; // idle | loading | ready | failed
         this.error = null;
         this.source = null;
@@ -67,9 +71,11 @@ export class NeuralVoice {
     load(onProgress = () => {}) {
         if (this._loading) return this._loading;
         this.state = 'loading';
-        this._loading = new Promise((resolve, reject) => {
+        this._loading = new Promise((resolve, reject) => { (async () => {
+            let native = this._tryNative && await NativeTTSPort.available();
             let w;
-            try { w = this._worker = this._createWorker(); } catch (e) { this._fail(e); reject(e); return; }
+            try { w = this._worker = native ? new NativeTTSPort() : this._createWorker(); } catch (e) { this._fail(e); reject(e); return; }
+            const wire = (w) => {
             w.onmessage = (ev) => {
                 const m = ev.data || {};
                 switch (m.type) {
@@ -84,6 +90,16 @@ export class NeuralVoice {
                         resolve(this);
                         break;
                     case 'load_error': {
+                        if (native) {
+                            // (the program did not start here: the browser's voices instead)
+                            console.warn('[NeuralVoice] the program on this computer failed, the browser takes over:', m.message);
+                            native = false;
+                            try { w.terminate(); } catch (e) { /* ignore */ }
+                            try { w = this._worker = this._createWorker(); } catch (e) { this._fail(e); reject(e); break; }
+                            wire(w);
+                            send(w);
+                            break;
+                        }
                         const e = new Error(m.message || 'voice model failed to load');
                         this._fail(e);
                         reject(e);
@@ -122,7 +138,8 @@ export class NeuralVoice {
                 if (this.state === 'loading') reject(e);
                 this._fail(e);
             };
-            w.postMessage({
+            };
+            const send = (w) => w.postMessage({
                 type: 'load',
                 sources: this.sources,
                 ortUrl: new URL('../../vendor/onnxruntime/ort.webgpu.min.mjs', import.meta.url).href,
@@ -131,7 +148,9 @@ export class NeuralVoice {
                     wasm: new URL('../../vendor/transformers/ort-wasm-simd-threaded.asyncify.wasm', import.meta.url).href,
                 },
             });
-        });
+            wire(w);
+            send(w);
+        })(); });
         this._loading.catch(() => {});
         return this._loading;
     }
