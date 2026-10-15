@@ -185,6 +185,7 @@ export class ZombieSpawn {
             const ix = Math.round(P.x + Math.cos(a) * r), iz = Math.round(P.z + Math.sin(a) * r);
             if (t.isSeaColumn?.(ix, iz)) continue;
             if ((t.sites || t.castles)?.landAt?.(ix, iz)) continue; // (a castle, a village, a tower: lit and guarded)
+            if (t.isIsland?.(ix, iz)) continue; // (not up on a floating island)
             const top = t.topLayer(ix, iz);
             if (t.isWaterAt?.(ix, top - 1, iz) || t.isWaterAt?.(ix, top, iz)) continue; // (a pond, a river)
             const fy = top - 0.5;

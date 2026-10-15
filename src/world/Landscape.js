@@ -197,10 +197,12 @@ export function createLandscape(seed) {
         // shattered land: tall stone spires out of broken ground
         if (L.shat > 0) {
             const C = 11, gx = Math.floor(x / C), gz = Math.floor(z / C);
+            // (spires stand in groups, with open glades between: no forest of stone pillars)
+            const group = smoothstep(-0.1, 0.45, nS(x / 70 + 33, z / 70 - 21)) * L.shat * 0.32;
             let best = 0;
             for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
                 const cx = gx + dx, cz = gz + dz;
-                if (hashLand(cx, cz, s + 61) > L.shat * 0.3) continue;
+                if (hashLand(cx, cz, s + 61) > group) continue;
                 const px = (cx + 0.2 + 0.6 * hashLand(cz, cx, s + 62)) * C, pz = (cz + 0.2 + 0.6 * hashLand(cx + 7, cz - 3, s + 63)) * C;
                 const r = 1.8 + 2.9 * hashLand(cx - 5, cz + 9, s + 64);
                 const ddx = x - px, ddz = z - pz, d2 = ddx * ddx + ddz * ddz;

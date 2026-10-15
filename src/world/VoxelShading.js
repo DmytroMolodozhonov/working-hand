@@ -142,6 +142,14 @@ float cobbleEdge(vec2 p, float layer) {
     bool lushGrass = pat == 14.0;
     if (lushGrass) pat = 0.0;
     bool green = lushGrass ? n.y > 0.5 : diffuseColor.g > diffuseColor.r * 1.15 && diffuseColor.g > diffuseColor.b * 1.1;
+    if (lushGrass && n.y < 0.5) {
+        // the side of a grass block: earth, the grass of the top hanging over its edge in a ragged fringe
+        float fy = fract(q.y);
+        float fringe = 0.74 + 0.16 * vhash(vec3(floor(f.x * 8.0) + cell.x * 8.0, cell.y, layerId + 11.0));
+        // (far away a step's side is mostly the grass hanging over it: the slopes don't stripe brown)
+        if (fy < mix(0.42, fringe, kFine)) diffuseColor.rgb = vec3(0.42, 0.29, 0.165) * (0.92 + 0.16 * vhash(vec3(cell, layerId + 3.0)));
+        else diffuseColor.rgb *= 0.86;
+    }
     if (lushGrass && n.y > 0.5) {
         // patches of lighter and darker grass, warmer and cooler, a few metres to tens of metres across —
         // a meadow shimmers from above instead of lying one flat colour (the land's own colour is the vertex's)

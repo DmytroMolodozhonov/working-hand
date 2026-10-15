@@ -1313,6 +1313,14 @@ export class TerrainData {
         return c.top[(iz & MASK) * CHUNK + (ix & MASK)];
     }
 
+    /** Is the top of this column a floating island (generation 5)? (Herds and zombies are not set down there.) */
+    isIsland(ix, iz) {
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        if (!c.isleBot) return false;
+        const col = (iz & MASK) * CHUNK + (ix & MASK);
+        return c.isleBot[col] < 32767 && c.top[col] >= c.isleBot[col];
+    }
+
     /** Is this column sea water (a sea or a sea castle's harbour), as generated? */
     isSeaColumn(ix, iz) {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
@@ -1510,9 +1518,9 @@ export class TerrainData {
         if (!c.grass) return -1;
         const col = (iz & MASK) * CHUNK + (ix & MASK);
         if (type === BLOCK.GRASS) {
-            if (!isTop) return -1;
             // (in steps of 4: a meadow of one colour is still one big quad; the shader's own
-            // flecks and patches hide the steps)
+            // flecks and patches hide the steps; a side face carries the grass colour too — the
+            // shader draws earth under a fringe of grass hanging over the edge)
             const g = c.grass[col];
             return ((((g >> 16) & 255) >> 2) << 18) | ((((g >> 8) & 255) >> 2) << 10) | (((g & 255) >> 2) << 2);
         }

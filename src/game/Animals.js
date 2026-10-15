@@ -235,6 +235,7 @@ export class Animals {
         const top = t.topLayer(Math.round(cx), Math.round(cz));
         if (t.get(Math.round(cx), top, Math.round(cz)) !== BLOCK.GRASS || t.get(Math.round(cx), top + 1, Math.round(cz)) === BLOCK.WATER) return; // only on grass
         if ((t.sites || t.castles)?.landAt(Math.round(cx), Math.round(cz))) return; // (not in castles, villages, wizards' towers)
+        if (t.isIsland?.(Math.round(cx), Math.round(cz))) return; // (not up on a floating island: they would walk off its edge)
         this.spawnHerdAt(type, n, cx, cz);
     }
 
