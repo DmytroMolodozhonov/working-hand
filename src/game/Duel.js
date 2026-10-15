@@ -814,7 +814,12 @@ export class Duel {
         this._hitBurst(spell, p, 30);
         if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
         // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
-        if (c.isVillager && c.robe && ROBE_BLOCKS.has(spell)) { this._burst(p, 0xc39bff, 20); if (spell === 'Disarmor') g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); return; }
+        if (c.isVillager && c.robe && ROBE_BLOCKS.has(spell)) {
+            this._burst(p, 0xc39bff, 20);
+            // («Disarmor»: the robe stays on, but the bolt still throws him back as a «Джолт» does)
+            if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._joltCreature(c, 'Jolt', src, byId); }
+            return;
+        }
         // a book-bird: any charge knocks it out of the air (it falls as a book)
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
@@ -858,8 +863,9 @@ export class Duel {
             g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
         } else if (spell === 'Disarmor') {
             // a knight's / the king's plates, a wizard's plain robe fly off as things (Armor.js); the others only reel
+            // …and the bolt throws the one it hit back off the feet, tumbling, as «Джолт» does (the author: «так реалистичнее»)
             if (c.isVillager && !c.isSailor) g.armor?.stripVillager(c, byId);
-            if (!c.dead) g.creatureImpact?.spellHit(c, 'Expelliarmus', src, byId);
+            if (!c.dead) this._joltCreature(c, 'Jolt', src, byId);
         }
     }
 
@@ -890,7 +896,11 @@ export class Duel {
         // «Disarmor»: my plain steel flies off (magic stays); my armour / robe may turn the simplest magic away (Armor.js)
         if (spell === 'Disarmor') {
             g.armor?.disarmorMe(byId);
-            g.impact?.apply({ v: push(3), from, by: byId, spell: 'Expelliarmus', jolt: 1.5, noShield: true });
+            // thrown back off the feet, a flip in the air, down — as by «Джолт»
+            const J = JOLT.Jolt;
+            g.hud.flashColor?.('rgba(200, 230, 255, 0.45)');
+            g.impact?.apply({ v: push(J.push), from, by: byId, spell: 'Jolt', jolt: J.jolt, always: { down: J.down }, toss: J.toss, fly: true, tumble: J.turns, noShield: true });
+            g.levitation?.watchMyFall?.(byId, 0.7 + J.toss * J.toss / 40 + 1.45);
             return;
         }
         if (g.armor?.guard(spell)) return;
@@ -979,8 +989,10 @@ export class Duel {
             z.slowT = Math.max(z.slowT || 0, SLOW.TIME);
             this._sand(p);
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'SandsDuel', src, byId);
-        } else if (spell === 'Expelliarmus' || spell === 'Disarmor') {
-            g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon, no armour: a small push)
+        } else if (spell === 'Expelliarmus') {
+            g.creatureImpact?.spellHit(z, 'Expelliarmus', src, byId); // (no wand, no weapon: a small push)
+        } else if (spell === 'Disarmor') {
+            this._joltCreature(z, 'Jolt', src, byId); // (no armour to take: only thrown back as by «Джолт»)
         } else if (isJolt(spell)) {
             this._joltCreature(z, spell, src, byId);
         }

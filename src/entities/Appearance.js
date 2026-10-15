@@ -16,8 +16,18 @@ export const HAIR_STYLES = ['Короткие', 'Длинные', 'Пучок', 
 export const HATS = ['Без шапки', 'Кепка', 'Шапка', 'Шляпа волшебника', 'Цилиндр', 'Корона', 'Капюшон', 'Повязка', 'Ковбойская', 'Шлем'];
 export const TOPS = ['Футболка', 'Худи', 'Мантия мага', 'Жилет', 'Куртка', 'Латы', 'Свитер в полоску', 'Туника с поясом', 'Плащ', 'Рубашка с галстуком'];
 export const BOTTOMS = ['Джинсы', 'Шорты', 'Юбка', 'Брюки', 'Карго', 'В полоску', 'Килт', 'Леггинсы', 'Поножи', 'Широкие штаны'];
-/** Hats no hero may wear: the crown (5) — only kings have one. Its number stays (old saves), it is shown as no hat. */
-export const HAT_HIDDEN = new Set([5]);
+/**
+ * Not in the editor (CLAUDE.md: the editor is the look only): the crown — only kings have one — and the
+ * special things that have powers and are found / put on in the game (Armor.js): the helmet, the wizard's
+ * robe, the plate, the greaves, the steel shoes. Their numbers stay (old saves): shown as the plain first one.
+ */
+export const LOOK_HIDDEN = { hat: new Set([5, 9]), top: new Set([2, 5]), bottom: new Set([8]), shoes: new Set([6]) };
+export const HAT_HIDDEN = LOOK_HIDDEN.hat;
+/** A look with no hidden thing in it (a saved hero that had one has it taken off). */
+export function cleanLook(look) {
+    for (const [k, set] of Object.entries(LOOK_HIDDEN)) if (set.has(look[k])) look[k] = 0;
+    return look;
+}
 export const SHOES = ['Кеды', 'Сапоги', 'Сандалии', 'Туфли', 'Резиновые сапоги', 'Остроносые', 'Латные', 'Тапочки', 'Высокие кеды', 'Босиком'];
 export const SKIN_TONES = [0xffdbb4, 0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a21, 0xfde0d9];
 
@@ -30,11 +40,11 @@ export function randomLook(r = Math.random) {
     // pleasant colours (not too bright, not too grey)
     const col = () => new THREE.Color().setHSL(r(), 0.3 + r() * 0.4, 0.25 + r() * 0.35).getHex();
     const hairCols = [0x2b1d14, 0x4a3728, 0x8b5a2b, 0xd9b46c, 0xe8e2d6, 0xa83e2a, 0x111111];
-    return {
+    return cleanLook({
         skin: SKIN_TONES[pick(SKIN_TONES.length)], face: pick(FACE_COUNT), eyes: [0x3b6ea5, 0x5a3a1e, 0x2f6b3a, 0x555555][pick(4)], brows: hairCols[pick(hairCols.length)],
-        hair: pick(HAIR_STYLES.length), hairColor: hairCols[pick(hairCols.length)], hat: ((h) => (HAT_HIDDEN.has(h) ? 0 : h))(r() < 0.5 ? 0 : pick(HATS.length)), hatColor: col(),
+        hair: pick(HAIR_STYLES.length), hairColor: hairCols[pick(hairCols.length)], hat: r() < 0.5 ? 0 : pick(HATS.length), hatColor: col(),
         top: pick(TOPS.length), topColor: col(), bottom: pick(BOTTOMS.length), bottomColor: col(), shoes: pick(SHOES.length), shoesColor: col(),
-    };
+    }); // (no crown, no steel, no wizard's robe: cleanLook)
 }
 
 const hex = (c) => '#' + ((c >>> 0) & 0xffffff).toString(16).padStart(6, '0');
@@ -158,7 +168,7 @@ const _box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.Box
 /** Dress a VoxelCharacter in a look (can be called again to change it). */
 export function applyLook(ch, look) {
     look = { ...defaultLook(), ...(look || {}) };
-    if (HAT_HIDDEN.has(look.hat)) look.hat = 0; // (a crown is the kings' only — a hero has none, an old save neither)
+    cleanLook(look); // (no crown, helmet, plate, wizard's robe… — a hero has none, an old save neither)
     ch.look = look;
     // remove the extras of the previous look
     for (const m of ch._lookParts || []) { m.parent?.remove(m); m.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose?.(); } }); }

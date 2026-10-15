@@ -8,14 +8,14 @@
 
 import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
-import { defaultLook, randomLook, FACE_COUNT, HAIR_STYLES, HATS, HAT_HIDDEN, TOPS, BOTTOMS, SHOES, SKIN_TONES } from '../entities/Appearance.js';
+import { defaultLook, randomLook, FACE_COUNT, HAIR_STYLES, HATS, LOOK_HIDDEN, cleanLook, TOPS, BOTTOMS, SHOES, SKIN_TONES } from '../entities/Appearance.js';
 
 const KEY = 'zns-characters';
 
 function load() {
     try {
         const d = JSON.parse(localStorage.getItem(KEY) || 'null');
-        if (d && Array.isArray(d.list) && d.list.length) return d;
+        if (d && Array.isArray(d.list) && d.list.length) { for (const c of d.list) if (c?.look) cleanLook(c.look); return d; } // (a saved hero with a crown / steel / a wizard's robe: taken off)
     } catch (e) { /* fresh */ }
     const first = { id: 'c' + Date.now().toString(36), name: 'Мой герой', look: defaultLook() };
     return { list: [first], active: first.id };
@@ -140,7 +140,7 @@ export class CharacterEditor {
     _renderOptions() {
         const L = this.current.look;
         const box = this.root.querySelector('#ce-options');
-        if (HAT_HIDDEN.has(L.hat)) L.hat = 0; // (no crown: only kings have one)
+        cleanLook(L); // (only the look: no crown, helmet, plate, wizard's robe — those are things with powers, found in the game)
         const stepper = (key, label, names, count) => {
             const n = names ? names.length : count;
             const v = L[key] ?? 0;
@@ -167,7 +167,7 @@ export class CharacterEditor {
             b.onclick = () => {
                 const k = b.dataset.k, n = +b.dataset.n;
                 L[k] = (((L[k] ?? 0) + +b.dataset.d) % n + n) % n;
-                if (k === 'hat' && HAT_HIDDEN.has(L[k])) L[k] = ((L[k] + +b.dataset.d) % n + n) % n; // (the crown is skipped)
+                for (let i = 0; i < n && LOOK_HIDDEN[k]?.has(L[k]); i++) L[k] = ((L[k] + +b.dataset.d) % n + n) % n; // (the special things are skipped)
                 this._changed();
             };
         }

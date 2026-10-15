@@ -104,5 +104,5 @@ test('«Suit Up» and «Disarmor»: said, priced; the crown is not for heroes', 
     assert.ok(SPELL_COST.Disarmor > 0);
     assert.equal(HATS[5], 'Корона');
     assert.ok(HAT_HIDDEN.has(5));
-    for (let i = 0; i < 300; i++) assert.ok(!HAT_HIDDEN.has(randomLook().hat));
+    for (let i = 0; i < 300; i++) { const L = randomLook(); assert.ok(!HAT_HIDDEN.has(L.hat) && L.hat !== 9 && L.top !== 2 && L.top !== 5 && L.bottom !== 8 && L.shoes !== 6, 'the editor: the look only, no things with powers'); }
 });
