@@ -135,8 +135,12 @@ try {
         g._updateCamera = (dt) => {
             orig(dt);
             if (window.__pin) { g.character.group.position.set(...window.__pin); g.character.verticalVelocity = 0; }
-            const s = window.__shotCam;
-            if (s) { g.camera.position.set(...s.cam); g.camera.lookAt(new THREE.Vector3(...s.at)); }
+            const s = window.__shotCam, F = window.__follow;
+            if (s && F) {
+                const p = F.model.getWorldPosition(new THREE.Vector3());
+                g.camera.position.copy(p).add(F.dc);
+                g.camera.lookAt(p.add(F.da));
+            } else if (s) { g.camera.position.set(...s.cam); g.camera.lookAt(new THREE.Vector3(...s.at)); }
         };
         window.__h = {
             g, THREE, frames, until,
@@ -189,7 +193,10 @@ try {
                             const c = Math.cos(a), s = Math.sin(a);
                             const dir = new THREE.Vector3(f.x * c - f.z * s, 0, f.z * c + f.x * s);
                             const cam = p.clone().addScaledVector(dir, d * k).add(new THREE.Vector3(0, u, 0));
-                            if (clear(cam)) return { cam: cam.toArray(), at: look.toArray(), found: { k, u, a } };
+                            if (clear(cam)) {
+                                window.__follow = { model, dc: cam.clone().sub(p), da: look.clone().sub(p) }; // (a sailing ship carries its captain: the camera goes with him)
+                                return { cam: cam.toArray(), at: look.toArray(), found: { k, u, a } };
+                            }
                         }
                     }
                 }
@@ -205,7 +212,7 @@ try {
     });
     for (const [name, scene] of Object.entries(SCENES)) {
         if (only.length && !only.includes(name)) continue;
-        const r = await page.evaluate(`(async () => { const h = window.__h; window.__shotCam = null; window.__pin = null; window.__h.g.character.group.visible = true; window.__h.time(0.3); return (${scene.toString()})(h); })()`).catch((e) => ({ skip: e.message }));
+        const r = await page.evaluate(`(async () => { const h = window.__h; window.__shotCam = null; window.__follow = null; window.__pin = null; window.__h.g.character.group.visible = true; window.__h.time(0.3); return (${scene.toString()})(h); })()`).catch((e) => ({ skip: e.message }));
         if (r?.skip) { console.log(name, 'skipped:', r.skip); continue; }
         await page.evaluate((c) => {
             window.__shotCam = c;
