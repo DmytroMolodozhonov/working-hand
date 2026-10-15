@@ -34,6 +34,8 @@ import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
 import { SwingMeter } from './WaterVortex.js';
 import { blazeReach, inBlaze } from './Hellfire.js';
+import { WaterFlow, WaterSpray } from '../fx/WaterFlow.js';
+import { createWaterMaterial } from '../fx/WaterMaterial.js';
 
 export const STORM = {
     NAME: 'WaterVortexSuperMaxima',
@@ -135,17 +137,11 @@ export function waterInReach(data, src) {
 }
 
 // ------------------------------------------------------------------ the look
-const WATER = [0x7cc4ff, 0xa9dcff, 0xe6f6ff, 0x5aaef0];
-const FOAM = [0xffffff, 0xeaf6ff, 0xd9efff];
-const pick = (a) => a[(Math.random() * a.length) | 0];
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _e = new THREE.Vector3();
-const _m = new THREE.Matrix4();
-const _q = new THREE.Quaternion();
-const _s = new THREE.Vector3();
 const r2 = (v) => Math.round(v * 100) / 100;
 
 /** Closest distance from p to the segment a–b. */
@@ -154,16 +150,6 @@ function segDist(p, a, b) {
     const L = ab.lengthSq();
     const k = L > 1e-9 ? clamp(_e.subVectors(p, a).dot(ab) / L, 0, 1) : 0;
     return _e.copy(a).addScaledVector(ab, k).distanceTo(p);
-}
-
-// the mass's water: fixed places in a ball (the same every frame: it churns, it does not flicker)
-const BALL = [];
-for (let i = 0; i < 360; i++) {
-    const h = Math.sin(i * 12.9898) * 43758.5453, u = h - Math.floor(h);
-    const h2 = Math.sin(i * 78.233) * 12345.6789, v = h2 - Math.floor(h2);
-    const h3 = Math.sin(i * 39.425) * 24634.6345, w = h3 - Math.floor(h3);
-    const y = 1 - 2 * u, rr = Math.sqrt(1 - y * y), a = v * TAU;
-    BALL.push({ x: Math.cos(a) * rr, y, z: Math.sin(a) * rr, r: Math.cbrt(0.15 + 0.85 * w), a, ph: w * TAU });
 }
 
 export class WaterStorm {
@@ -179,16 +165,19 @@ export class WaterStorm {
         this._sendT = 0;
         this._sent = false;
         this._acc = { spray: 0, foam: 0, mist: 0, flow: 0 };
-        this.blobs = null;
-        // the vortex's own water material (the same shader: nothing compiles mid-game)
-        const mat = game.vortex?.blobMat, geo = game.vortex?.blobGeo;
-        if (game.scene && mat && geo) {
-            this.blobs = new THREE.InstancedMesh(geo, mat, 2400);
-            this.blobs.count = 0;
-            this.blobs.visible = false;
-            this.blobs.frustumCulled = false;
-            this.blobs.renderOrder = 2;
-            game.scene.add(this.blobs);
+        // the water is one body: a churning mass (a living sphere of water wrapped in currents), the river
+        // pouring up into it, bands of water and waterspouts racing round (WaterFlow.js), spray and mist
+        this.flow = null;
+        this._masses = []; // pooled living spheres of water (one per storm drawn)
+        this._nm = 0;
+        this._P = [];
+        this._rad = [];
+        if (game.scene) {
+            this.flow = new WaterFlow(game.scene, { maxVerts: 60000, radial: 12 });
+            this.spray = new WaterSpray(game.scene, 1800);
+            this._massGeo = new THREE.SphereGeometry(1, 48, 32);
+            this._massMat = createWaterMaterial();
+            this._massMat.userData.uniforms.uWobble.value = 0.2;
         }
     }
 
@@ -282,7 +271,9 @@ export class WaterStorm {
     update(dt) {
         if (!(dt > 0)) return;
         this._t += dt;
-        this._n = 0;
+        this._nm = 0;
+        this.flow?.begin(dt);
+        if (this._massMat) this._massMat.userData.uniforms.uTime.value += dt;
         if (this.state) this._updateMine(dt);
         for (const [by, f] of this.remote) {
             if (this._t - f.at > STORM.STALE) { this._fall(by, f, f.body); this.remote.delete(by); continue; }
@@ -290,10 +281,10 @@ export class WaterStorm {
         }
         this._updateFloods(dt);
         this._updateRefills();
-        if (this.blobs) {
-            this.blobs.count = this._n;
-            this.blobs.visible = this._n > 0;
-            if (this._n) this.blobs.instanceMatrix.needsUpdate = true;
+        if (this.flow) {
+            this.flow.end();
+            this.spray.update(dt, this.game.camera);
+            for (let i = this._nm; i < this._masses.length; i++) this._masses[i].visible = false;
         }
     }
 
@@ -513,7 +504,7 @@ export class WaterStorm {
     }
 
     _updateFloods(dt) {
-        const g = this.game, fx = g.fx;
+        const g = this.game;
         for (let i = this.floods.length - 1; i >= 0; i--) {
             const fl = this.floods[i];
             fl.t += dt;
@@ -523,13 +514,27 @@ export class WaterStorm {
             // the wave: a ring of water running out over the ground, sinking as it goes
             const n = Math.min(140, Math.ceil(TAU * r / 0.45));
             const h = (1 - k) * 1.2;
-            for (let j = 0; j < n; j++) {
-                const a = j * (TAU / n) + Math.sin(j * 3.1) * 0.05;
-                this._put(fl.c.x + Math.cos(a) * r, fl.c.y + h * (0.6 + 0.4 * Math.sin(a * 5 + fl.t * 6)), fl.c.z + Math.sin(a) * r, 0.45 * (1 - k * 0.6));
-            }
-            if (fx?.sparks) for (let j = 0; j < 10; j++) {
-                const a = Math.random() * TAU;
-                fx.sparks.spawn(fl.c.x + Math.cos(a) * r, fl.c.y + h, fl.c.z + Math.sin(a) * r, Math.cos(a) * 4, 2 + Math.random() * 3, Math.sin(a) * 4, pick(FOAM), 0.1 + Math.random() * 0.1, 0.6, { gravity: -14 });
+            if (this.flow) {
+                // (a closed wall of water, its crest breaking into foam)
+                const P = this._P, rad = this._rad;
+                for (const crest of [0, 1]) {
+                    rad.length = 0;
+                    for (let j = 0; j < n; j++) {
+                        const a = j * (TAU / n);
+                        const o = P[j] || (P[j] = { x: 0, y: 0, z: 0 });
+                        const rr = r - crest * 0.15;
+                        o.x = fl.c.x + Math.cos(a) * rr; o.z = fl.c.z + Math.sin(a) * rr;
+                        o.y = fl.c.y + h * (0.6 + 0.4 * Math.sin(a * 5 + fl.t * 6)) + crest * 0.35 * (1 - k);
+                        rad.push((crest ? 0.18 : 0.45) * (1 - k * 0.6) * (1 + 0.15 * Math.sin(a * 9 - fl.t * 4)));
+                    }
+                    P.length = n;
+                    this.flow.tube(P, rad, { closed: true, speed: -4, foam: crest ? 0.8 : 0.3, offset: crest * 2 });
+                }
+                for (let j = 0; j < 10; j++) {
+                    const a = Math.random() * TAU;
+                    this.spray.add(fl.c.x + Math.cos(a) * r, fl.c.y + h, fl.c.z + Math.sin(a) * r, Math.cos(a) * 4, 2 + Math.random() * 3, Math.sin(a) * 4, 0.1 + Math.random() * 0.1, 0.6);
+                }
+                if (Math.random() < 0.5) { const a = Math.random() * TAU; this.spray.add(fl.c.x + Math.cos(a) * r, fl.c.y + 0.3, fl.c.z + Math.sin(a) * r, Math.cos(a), 0.3, Math.sin(a), 1.5, 1.2, 1); }
             }
             // it puts out fires and knocks down whoever it runs over (the host: creatures; me: myself)
             g.fire?.douse?.(fl.c, r);
@@ -620,11 +625,19 @@ export class WaterStorm {
     }
 
     // ============================================================= drawing
-    _put(x, y, z, s) {
-        const mesh = this.blobs;
-        if (!mesh || this._n >= 2400) return;
-        _m.compose(_e.set(x, y, z), _q.identity(), _s.set(s, s, s));
-        mesh.setMatrixAt(this._n++, _m);
+    /** A living sphere of water for this frame (pooled). */
+    _mass() {
+        let m = this._masses[this._nm];
+        if (!m) {
+            m = new THREE.Mesh(this._massGeo, this._massMat);
+            m.renderOrder = 2;
+            m.frustumCulled = false;
+            this.game.scene.add(m);
+            this._masses.push(m);
+        }
+        this._nm++;
+        m.visible = true;
+        return m;
     }
 
     _rate(key, rate, dt, max) {
@@ -635,70 +648,101 @@ export class WaterStorm {
     }
 
     _draw(dt, f, body) {
-        const fx = this.game.fx, t = this._t;
+        const flow = this.flow;
+        if (!flow) return;
+        const spray = this.spray, t = this._t;
         const wb = 1 - f.k, wr = f.k;
-        const c = f.c;
+        const c = f.c, P = this._P, rad = this._rad;
+        let pi = 0;
+        const pt = (x, y, z) => { const o = P[pi] || (P[pi] = { x: 0, y: 0, z: 0 }); pi++; o.x = x; o.y = y; o.z = z; };
         // ----------------------------------------------------------- the mass
         if (wb > 0.03) {
             const R = f.R * (1 + 0.07 * Math.sin(t * 4.1) + 0.04 * Math.sin(t * 9.7 + 1));
-            const n = Math.min(BALL.length, Math.ceil((80 + R * R * 9) * wb));
-            const size = 0.42 + R * 0.08;
-            for (let i = 0; i < n; i++) {
-                const p = BALL[i];
-                const sw = t * (1.6 + (1 - p.r) * 2.2) + p.ph; // (the inside churns faster)
-                const ca = Math.cos(sw), sa = Math.sin(sw);
-                const x = p.x * ca - p.z * sa, z = p.x * sa + p.z * ca;
-                const rr = R * p.r * (1 + 0.08 * Math.sin(t * 3 + p.ph * 3));
-                this._put(c.x + x * rr, c.y + p.y * rr * 0.85 + 0.15 * Math.sin(t * 5 + p.ph), c.z + z * rr, size * (0.75 + 0.35 * Math.sin(p.ph + t * 2)));
+            // the body of the water: one heaving, churning sphere (squashed a little, as heavy water is)
+            const m = this._mass();
+            m.position.set(c.x, c.y + 0.1 * Math.sin(t * 5), c.z);
+            m.scale.set(R * 0.92 * wb, R * 0.8 * wb, R * 0.92 * wb);
+            // currents racing round it at every tilt: the water inside it whirls
+            const nb = Math.min(9, 4 + Math.floor(R));
+            for (let k = 0; k < nb; k++) {
+                const tilt = (k / nb) * Math.PI + 0.3, ct = Math.cos(tilt), st = Math.sin(tilt);
+                const spin = t * (2.2 + 0.4 * (k % 3)) * (k % 2 ? 1 : -1) + k * 1.9;
+                const rr = R * (0.86 + 0.1 * Math.sin(t * 2 + k)) * wb;
+                const arc = TAU * (0.45 + 0.25 * Math.sin(t * 0.7 + k * 2.3));
+                pi = 0; rad.length = 0;
+                for (let j = 0; j <= 22; j++) {
+                    const u = j / 22, a = spin + u * arc * (k % 2 ? 1 : -1);
+                    const x = Math.cos(a) * rr, y0 = Math.sin(a * 3 + t * 3) * R * 0.08, z = Math.sin(a) * rr;
+                    pt(c.x + x, c.y + (y0 * ct - z * st) * 0.82, c.z + z * ct + y0 * st);
+                    rad.push((0.18 + R * 0.06) * Math.sin(Math.PI * Math.min(1, u * 1.05 + 0.02)) * wb);
+                }
+                P.length = pi;
+                flow.tube(P, rad, { speed: (k % 2 ? 1 : -1) * R * 2.5, foam: 0.35, offset: k * 3 });
             }
-            // spray and foam off its surface
+            // spray and foam torn off its surface, mist round it
             for (let i = this._rate('spray', 120 * wb * Math.min(2, R / 2), dt, 6); i > 0; i--) {
                 const a = Math.random() * TAU, e = (Math.random() - 0.3) * 1.4;
                 const ux = Math.cos(a) * Math.cos(e), uy = Math.sin(e), uz = Math.sin(a) * Math.cos(e);
-                fx?.sparks?.spawn(c.x + ux * R, c.y + uy * R, c.z + uz * R, ux * 3 - uz * 2, 2 + Math.random() * 3, uz * 3 + ux * 2, pick(WATER), 0.08 + Math.random() * 0.1, 0.7, { gravity: -12 });
+                spray.add(c.x + ux * R, c.y + uy * R * 0.8, c.z + uz * R, ux * 3 - uz * 2, 2 + Math.random() * 3, uz * 3 + ux * 2, 0.08 + Math.random() * 0.1, 0.7);
             }
-            // the river pours up into it while it is drawn
+            for (let i = this._rate('mist', 6 * wb, dt, 1); i > 0; i--) {
+                const a = Math.random() * TAU;
+                spray.add(c.x + Math.cos(a) * R, c.y - R * 0.5, c.z + Math.sin(a) * R, Math.cos(a) * 0.6, 0.3, Math.sin(a) * 0.6, R * 0.9, 1.6, 1);
+            }
+            // the river pours up into it while it is drawn: a thick twisting jet
             if (f.src && f.drawn < (f.list?.length || 0)) {
                 const L = f.src.distanceTo(c);
-                for (let j = 0; j < 22; j++) {
-                    const k = ((j / 22) + t * 1.4) % 1;
-                    const x = f.src.x + (c.x - f.src.x) * k, z = f.src.z + (c.z - f.src.z) * k;
-                    const y = f.src.y + (c.y - f.src.y) * k + Math.sin(k * Math.PI) * Math.min(3, L * 0.2);
-                    this._put(x + Math.cos(k * 20 + t * 9) * 0.3, y, z + Math.sin(k * 20 + t * 9) * 0.3, 0.38);
-                }
+                flow.stream(f.src, c, Math.min(1.1, 0.35 + R * 0.09), { lift: Math.min(3, L * 0.2), strands: 3, speed: 12, foam: 0.3 });
+                if (Math.random() < 0.6) spray.burst(f.src.x, f.src.y + 0.1, f.src.z, 2, 2, 2.5, 0.12);
             }
         }
         // ---------------------------------------------------------- the storm
         if (wr > 0.03) {
             const rr = f.rr, gy = body.y - 1.95, sp = f.spin;
+            // bands of water racing round (heaving like waves)
             for (let band = 0; band < 4; band++) {
                 const r = rr + (band - 1.5) * 0.6;
-                const cnt = Math.ceil((TAU * r / 0.42) * wr);
+                const steps = Math.ceil((TAU * r) / 0.42);
+                const full = wr > 0.98;
                 const a0 = f.ang * (1 + band * 0.08) + band * 1.3;
                 const base = gy + 0.6 + band * 0.75;
-                for (let j = 0; j < cnt; j++) {
-                    const a = a0 - j * (TAU / Math.ceil(TAU * r / 0.42));
-                    const y = base + 0.55 * Math.sin(a * 3 + t * 3.2 + band) + 0.3 * Math.sin(a * 7 - t * 5);
-                    this._put(body.x + Math.cos(a) * r, y, body.z + Math.sin(a) * r, 0.36 + 0.06 * Math.sin(a * 5 + band));
+                const n = full ? steps - 1 : Math.max(3, Math.ceil(steps * wr));
+                pi = 0; rad.length = 0;
+                for (let j = 0; j <= n; j++) {
+                    const a = a0 - (j / steps) * TAU;
+                    pt(body.x + Math.cos(a) * r, base + 0.55 * Math.sin(a * 3 + t * 3.2 + band) + 0.3 * Math.sin(a * 7 - t * 5), body.z + Math.sin(a) * r);
+                    rad.push((0.3 + 0.07 * Math.sin(a * 5 + band - t * 4)) * (full ? 1 : 0.3 + 0.7 * Math.sqrt(1 - j / n)));
                 }
+                P.length = pi;
+                flow.tube(P, rad, { closed: full, speed: -Math.abs(sp) * r, foam: 0.3 + band * 0.08, offset: band * 4, caps: full ? undefined : 'tail' });
             }
-            // waterspouts racing round with it
+            // waterspouts racing round with it: twisting columns of water, thick at the foot, sucked up from
+            // the ground (spray and mist at the foot, water flung off the top)
             for (let s = 0; s < 4; s++) {
                 const a = f.ang * 1.25 + s * (TAU / 4);
-                for (let j = 0; j < 14; j++) {
-                    const h = j * 0.33, tw = a + h * 0.6 + t * 6;
-                    this._put(body.x + Math.cos(a) * rr + Math.cos(tw) * 0.35 * (1 + h * 0.15), gy + h, body.z + Math.sin(a) * rr + Math.sin(tw) * 0.35 * (1 + h * 0.15), 0.42 - j * 0.012);
+                const fx0 = body.x + Math.cos(a) * rr, fz0 = body.z + Math.sin(a) * rr;
+                for (let strand = 0; strand < 2; strand++) {
+                    pi = 0; rad.length = 0;
+                    for (let j = 0; j <= 16; j++) {
+                        const h = j * 0.3, tw = a + h * 0.9 + t * 7 + strand * Math.PI;
+                        const w = (strand ? 0.32 : 0.12) * (1 + h * 0.18);
+                        pt(fx0 + Math.cos(tw) * w, gy + h, fz0 + Math.sin(tw) * w);
+                        rad.push((strand ? 0.12 : 0.34) * (1.25 - j * 0.035) * wr);
+                    }
+                    P.length = pi;
+                    flow.tube(P, rad, { speed: 9, foam: strand ? 0.6 : 0.25, offset: s * 2 + strand });
                 }
+                if (Math.random() < 0.5 * wr) spray.add(fx0, gy + 0.2, fz0, -Math.sin(a) * sp * 0.5, 0.4, Math.cos(a) * sp * 0.5, 1.6, 1.4, 1);
+                if (Math.random() < 0.6 * wr) spray.add(fx0, gy + 4.8, fz0, (Math.random() - 0.5) * 4, 1 + Math.random() * 2, (Math.random() - 0.5) * 4, 0.12, 0.9);
             }
-            for (let i = this._rate('foam', 260 * wr, dt, 10); i > 0; i--) {
+            for (let i = this._rate('foam', 200 * wr, dt, 10); i > 0; i--) {
                 const a = Math.random() * TAU, r = rr + (Math.random() - 0.5) * STORM.RING_W;
                 const ca = Math.cos(a), sa = Math.sin(a);
-                fx?.sparks?.spawn(body.x + ca * r, gy + Math.random() * STORM.RING_H, body.z + sa * r, -sa * sp * r * 0.7 + ca * 2, 1 + Math.random() * 3, ca * sp * r * 0.7 + sa * 2,
-                    Math.random() < 0.5 ? pick(FOAM) : pick(WATER), 0.09 + Math.random() * 0.12, 0.7, { gravity: -12 });
+                spray.add(body.x + ca * r, gy + Math.random() * STORM.RING_H, body.z + sa * r, -sa * sp * r * 0.7 + ca * 2, 1 + Math.random() * 3, ca * sp * r * 0.7 + sa * 2, 0.09 + Math.random() * 0.12, 0.7);
             }
-            for (let i = this._rate('mist', 10 * wr, dt, 1); i > 0; i--) {
+            for (let i = this._rate('flow', 8 * wr, dt, 1); i > 0; i--) {
                 const a = Math.random() * TAU;
-                fx?.smoke?.spawn(body.x + Math.cos(a) * rr, gy + 1 + Math.random() * 2, body.z + Math.sin(a) * rr, -Math.sin(a) * sp, 0.6, Math.cos(a) * sp, 0xdfeef8, 0.8 + Math.random() * 0.6, 1.2, { shrink: -0.6, spin: 1 });
+                spray.add(body.x + Math.cos(a) * rr, gy + 0.5 + Math.random() * 2, body.z + Math.sin(a) * rr, -Math.sin(a) * sp, 0.4, Math.cos(a) * sp, 1.8 + Math.random(), 1.6, 1);
             }
         }
     }
@@ -718,6 +762,12 @@ export class WaterStorm {
 
     dispose() {
         this.clear();
-        if (this.blobs) { this.game.scene?.remove(this.blobs); this.blobs.dispose?.(); }
+        if (this.flow) {
+            this.flow.dispose();
+            this.spray.dispose();
+            for (const m of this._masses) this.game.scene?.remove(m);
+            this._massGeo.dispose();
+            this._massMat.dispose();
+        }
     }
 }

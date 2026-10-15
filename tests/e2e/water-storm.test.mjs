@@ -58,10 +58,10 @@ test('Water Vortex Super Maxima: water taken from the river, a storm round the c
     const drawn = await page.evaluate(() => {
         const S = window.__zns.game.waterStorm, s = S.state, t = window.__zns.game.terrain.data;
         const holes = s.list.slice(0, s.drawn).filter((b) => b && t.get(b[0], b[1], b[2]) === 0).length;
-        return { drawn: s.drawn, holes, R: s.R, blobs: S.blobs.count };
+        return { drawn: s.drawn, holes, R: s.R, blobs: S.flow.tubes };
     });
     assert.ok(drawn.drawn > 40 && drawn.holes === drawn.drawn, `the water is taken out of the river: ${JSON.stringify(drawn)}`);
-    assert.ok(drawn.blobs > 60, 'a mass of water is drawn');
+    assert.ok(drawn.blobs >= 4, "a mass of water is drawn");
     // the hand goes round: the storm round the caster; a zombie in it is swept away
     await feed(page, circling(0.09, 1.3), 70, 33);
     const ring = await page.evaluate(() => { const s = window.__zns.game.waterStorm.state; return s && { k: s.k, rr: s.rr }; });
