@@ -53,6 +53,8 @@ POSE_SCALE = 4.0  # its side: POSE_SCALE × |wrist→knuckles| ...
 FOREARM_SCALE = 0.75  # ... at least FOREARM_SCALE × the forearm (the pose's knuckles are a guess)
 TRACK_SCALE = 2.0  # a followed hand: its palm's box × TRACK_SCALE (MediaPipe's own)
 TRACK_SHIFT = -0.1  # ... moved towards the fingers by this much of the side
+RETRY = 2  # a lost hand is looked for every RETRY-th picture
+STICKY = 0.05  # a followed hand's square stays while the new one is within this much of its side
 PRESENCE = 0.3  # how sure the network must be that a hand is in the square
 RTM_GATE = 0.3  # ... or RTMPose about its points (engine "rtm")
 RTM_POSE_BOX = 0.9  # RTMPose's upright box round the body's square: this much of its side
@@ -373,11 +375,13 @@ class HandsV5:
         self.rtm = {s: RTMNet(rtm_path, threads) for s in ("left", "right")} if engine == "rtm" else None
         self.engine = engine
         self.rtm_error = ""
-        self.track = {"left": None, "right": None}  # {pts, vel}
+        self.track = {"left": None, "right": None}  # {pts, vel, sq, box}
+        self.miss = {}
         self.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0}
 
     def reset(self):
         self.track = {"left": None, "right": None}
+        self.miss = {}
 
     def use_rtm(self, rtm):
         """Switch to RTMPose (one RTMNet / RTMRemote for both hands — it keeps its own lock), or back (None)."""
@@ -401,11 +405,22 @@ class HandsV5:
             if tr.get("vel") is not None:
                 pts = pts + tr["vel"]  # (where the hand will be: it goes on as it went)
             sq = square_from_hand(pts)
+            # (a hand that barely moved keeps its square: the network then sees the same picture, and
+            # its points don't tremble with a square that trembles with them)
+            last = tr.get("sq")
+            if STICKY and last is not None and math.hypot(sq.cx - last.cx, sq.cy - last.cy) < STICKY * last.side \
+                    and abs(sq.side / last.side - 1) < STICKY * 1.5 and abs(math.remainder(sq.rot - last.rot, math.tau)) < STICKY * 1.5:
+                sq = last
             # the body's wrist far from the followed hand: the hand was lost or swapped — start again
             if wrist is not None and np.hypot(*(pts[0] - wrist)) > sq.side * 0.9:
                 sq = pts = None
         fresh = sq is None
         if fresh:
+            # (a hand not found in the last picture is looked for again only every RETRY-th picture:
+            # a hand behind the back must not cost the processor every picture)
+            self.miss[side] = self.miss.get(side, 0) + 1 if tr is None else 0
+            if self.miss[side] % RETRY != 1 and RETRY > 1 and tr is None and self.miss[side] > 1:
+                return None
             sq = square_from_pose(pose, side, w, h)
             if sq is None:
                 self.track[side] = None
@@ -413,9 +428,17 @@ class HandsV5:
             self.stats["from_pose"] += 1
         rtm = self.rtm
         r = None
+        box = None
         if rtm:
+            # RTMPose's upright box: from the followed hand's own points (kept while it barely moves,
+            # as the square), or — found anew — round the body's square
+            if pts is not None:
+                box = box_of(pts)
+                lb = tr.get("box")
+                if STICKY and lb is not None and math.hypot(box[0] - lb[0], box[1] - lb[1]) < STICKY * lb[2] and abs(box[2] / lb[2] - 1) < STICKY * 1.5:
+                    box = lb
             try:
-                r = self._rtm(rgb, side, sq, pts, fresh and refine)
+                r = self._rtm(rgb, side, sq, box, fresh and refine)
             except Exception as e:  # noqa: BLE001
                 # the video card's program died: MediaPipe's joint network alone from now on (never the camera)
                 self.rtm_error = str(e) or type(e).__name__
@@ -434,8 +457,9 @@ class HandsV5:
             vel = v if tr.get("vel") is None else tr["vel"] * 0.5 + v * 0.5
             if np.hypot(*vel) > sq.side * 0.5:
                 vel = None
-        self.track[side] = {"pts": xy, "vel": vel}
+        self.track[side] = {"pts": xy, "vel": vel, "sq": sq if not fresh else None, "box": box}
         self.stats["found"] += 1
+        self.miss[side] = 0
         return xy, z, pres
 
     def _mp(self, rgb, side, sq, refine):
@@ -453,10 +477,9 @@ class HandsV5:
                 xy, z, pres = xy2, z2, pres2
         return xy, z, pres
 
-    def _rtm(self, rgb, side, sq, pts, refine):
+    def _rtm(self, rgb, side, sq, box, refine):
         rtm = self.rtm[side]
-        # the box: from the followed hand's own points, or (found anew) round the body's square
-        cx, cy, s = box_of(pts) if pts is not None else (sq.cx, sq.cy, sq.side * RTM_POSE_BOX)
+        cx, cy, s = box if box is not None else (sq.cx, sq.cy, sq.side * RTM_POSE_BOX)
         self.stats["runs"] += 1
         p, conf = rtm.run(rgb, cx, cy, s)
         if refine and conf >= RTM_GATE * 0.5:

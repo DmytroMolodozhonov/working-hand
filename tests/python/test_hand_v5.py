@@ -72,6 +72,7 @@ class Following(unittest.TestCase):
         h.engine = "mp"
         h.rtm_error = ""
         h.track = {"left": None, "right": None}
+        h.miss = {}
         h.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0}
         return h
 
@@ -95,6 +96,19 @@ class Following(unittest.TestCase):
         pose = pose_with_hand("left", (300, 300), (300, 270), (300, 400))
         self.assertIsNone(h.one(np.zeros((480, 640, 3), np.uint8), pose, "left"))
         self.assertIsNone(h.track["left"])
+
+    def test_a_lost_hand_is_looked_for_every_other_picture(self):
+        h = self.make()
+        h.nets["left"].pres = 0.05
+        pose = pose_with_hand("left", (300, 300), (300, 270), (300, 400))
+        rgb = np.zeros((480, 640, 3), np.uint8)
+        for _ in range(6):
+            h.one(rgb, pose, "left")
+        self.assertEqual(h.nets["left"].calls, 3)
+        h.nets["left"].pres = 0.9
+        for _ in range(2):
+            h.one(rgb, pose, "left")
+        self.assertIsNotNone(h.track["left"], "found again within two pictures")
 
     def test_the_video_cards_program_dies_the_hands_go_on(self):
         h = self.make()

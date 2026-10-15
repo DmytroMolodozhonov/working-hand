@@ -199,6 +199,8 @@ class NativePose:
         self._cv2 = None
         self.last_frame = None
         self.hands_mode = ""  # "" — MediaPipe's own hands; "v5" — hand_v5.py (Settings → V5)
+        self._cam_hd = False  # (the camera opened at 1280×720)
+        self._hd_slow = False
         self.v5 = _V5Hands()
 
     # ------------------------------------------------------------ availability
@@ -297,8 +299,13 @@ class NativePose:
                 if cap:
                     cap.release()
                 continue
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            hd = self._want_hd()
+            if hd:
+                # V5: 1280×720 — the far player's hands get 1.5× the pixels (tools/handbench); most
+                # webcams give it 30 a second only as MJPG
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280 if hd else 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720 if hd else 480)
             cap.set(cv2.CAP_PROP_FPS, 30)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # (no queue of old pictures)
             ok = False
@@ -307,12 +314,28 @@ class NativePose:
                 if ok and frame is not None and frame.size:
                     break
                 time.sleep(0.05)
+            if ok and hd and frame.shape[1] > 800:
+                # a camera that gives 720p only slowly (< 20 a second): back to 640×480 — the hands
+                # would lag more than the pixels help
+                t = time.perf_counter()
+                for _ in range(8):
+                    cap.read()
+                if (time.perf_counter() - t) / 8 > 0.05:
+                    print("  [Камера] 1280×720 у этой камеры медленно — беру 640×480")
+                    self._hd_slow = True
+                    cap.release()
+                    return self._open_camera()
             if ok:
                 self.camera_index = i
                 self.height, self.width = frame.shape[:2]
+                self._cam_hd = hd
                 return cap
             cap.release()
         return None
+
+    def _want_hd(self):
+        """V5 wants the camera's 1280×720 (unless this camera gives it too slowly)."""
+        return self.hands_mode == "v5" and not self._hd_slow and not os.environ.get("ZNS_V5_SD")
 
     # ------------------------------------------------------------ the networks
     def _make_holistic(self):
@@ -333,8 +356,8 @@ class NativePose:
             min_tracking_confidence=0.5,
         )
 
-        def run(rgb, ts):
-            r = h.process(rgb)
+        def run(rgb, ts, small=None):
+            r = h.process(small if small is not None else rgb)
             out = {
                 "poseLandmarks": _pts(r.pose_landmarks.landmark if r.pose_landmarks else None, True),
                 "faceLandmarks": _pts(r.face_landmarks.landmark if r.face_landmarks else None),
@@ -372,8 +395,10 @@ class NativePose:
         hand_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hand-v5")  # (V5: both hands at once)
         last_pose = [None]
 
-        def run(rgb, ts):
-            img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        def run(rgb, ts, small=None):
+            # (the body and the face from a 640-wide copy of a 720p picture: as cheap as before;
+            # the V5 hands are cut out of the whole picture)
+            img = mp.Image(image_format=mp.ImageFormat.SRGB, data=small if small is not None else rgb)
             n[0] += 1
             v5 = self._v5()
             jp = pool.submit(pose.detect_for_video, img, ts)
@@ -472,10 +497,23 @@ class NativePose:
                         raise RuntimeError("камера перестала отдавать картинку")
                     time.sleep(0.01)
                     continue
+                # V5 switched on or off: the camera again at its size (720p for V5)
+                if grab and self._want_hd() != self._cam_hd:
+                    grab.close()
+                    cap.release()
+                    cap = self._open_camera()
+                    if cap is None:
+                        raise RuntimeError("камера не открылась заново")
+                    grab = _LatestFrame(cap, self._stop)
+                    print(f"  [Камера] камера {self.width}x{self.height}")
+                    continue
                 t0 = time.perf_counter()
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                small = None
+                if rgb.shape[1] > 800:
+                    small = cv2.resize(rgb, (640, round(640 * rgb.shape[0] / rgb.shape[1])), interpolation=cv2.INTER_AREA)
                 ts = int((time.time() - t_start) * 1000)
-                out = run(rgb, ts)
+                out = run(rgb, ts, small)
                 # a real stick (a pen, a brush) held in a hand: its direction (stick_detect.py)
                 sticks = _sticks(frame, out)
                 if sticks:
