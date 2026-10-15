@@ -297,7 +297,8 @@ class RTMRemote:
         import subprocess
         import struct
         self.struct = struct
-        flags = 0x08000000 if sys.platform.startswith("win") else 0  # (CREATE_NO_WINDOW)
+        # (CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS: the game and the voice go first)
+        flags = 0x08000000 | 0x00004000 if sys.platform.startswith("win") else 0
         self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, "hand_v5_gpu.py"), model, ort_dir or ""],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)
         self.lock = threading.Lock()

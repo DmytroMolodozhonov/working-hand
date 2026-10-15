@@ -22,7 +22,7 @@ const VIDEO = process.env.ZNS_TEST_VIDEO || path.join(ROOT, '.handbench', 'load_
 const versions = (process.argv[2] || 'v3,v5').split(',');
 
 async function run(version, port) {
-    const srv = await startServer(port, { python: process.env.ZNS_TEST_PYTHON || 'python3', env: { ZNS_CAMERA_FILE: VIDEO, ZNS_V5_ENGINE: process.env.ZNS_V5_ENGINE || 'auto' } });
+    const srv = await startServer(port, { python: process.env.ZNS_TEST_PYTHON || 'python3', env: { ZNS_CAMERA_FILE: VIDEO, ZNS_V5_ENGINE: process.env.ZNS_V5_ENGINE || "mp" } });
     const browser = await launch({});
     try {
         const page = await browser.newPage({ viewport: { width: Number(process.env.FLY_W || 640), height: Number(process.env.FLY_H || 360) } }); // (software drawing here: small, so the game is not 1 fps)

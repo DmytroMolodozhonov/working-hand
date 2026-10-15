@@ -155,9 +155,11 @@ class _V5Hands:
             self.state = "error"
             print(f"  [Камера] Кисти V5 не запустились (работают прежние кисти): {self.why}")
             return
-        # A video card: RTMPose on it, in a program of its own (more exact on small hands and fists —
-        # tools/handbench). On the processor it would be too heavy next to the game: then not.
-        if os.environ.get("ZNS_V5_ENGINE", "auto") == "mp":
+        # RTMPose on the video card (a program of its own; more exact on small hands and fists —
+        # tools/handbench) only when asked for (ZNS_V5_ENGINE=rtm): the author's game lost frames
+        # with it — the video card is the game's. By default V5 is MediaPipe's joint network on the
+        # processor, one thread a hand (measured: no more processor than V3's hands).
+        if os.environ.get("ZNS_V5_ENGINE", "mp") != "rtm":
             return
         try:
             self.gpu = "готовится"
@@ -346,6 +348,12 @@ class NativePose:
                 self._cam_hd = hd
                 return cap
             cap.release()
+        if self._want_hd():
+            # no camera gave 1280×720 (some won't open in it at all): again at 640×480 — never
+            # «no camera» because of V5 (the game would fall back to the browser's slow network)
+            print("  [Камера] 1280×720 не открылась — беру 640×480")
+            self._hd_slow = True
+            return self._open_camera()
         return None
 
     def _want_hd(self):

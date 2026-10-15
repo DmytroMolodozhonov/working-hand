@@ -549,6 +549,8 @@ export class PoseService {
             if (await this._startNative()) { this.isRunning = true; return; }
             // the program couldn't (no camera for it, an error): the browser's network as before
             console.warn('[PoseService] camera network program unavailable, using the browser:', this.stats.nativeWhy);
+            // (said to the player: the browser's network runs on the game's own thread — the game slows down)
+            if (this.handsWanted !== 'v5') this._notice(`Нейросеть камеры работает в браузере — игра медленнее (${this.stats.nativeWhy || 'программа камеры не запустилась'})`);
             if (this.handsWanted === 'v5') this._notice(`Кисти V5 не запустились (нет программы камеры: ${this.stats.nativeWhy || 'ошибка'}) — работают кисти V4`);
             const q = this.native.quality;
             this.native = null;
