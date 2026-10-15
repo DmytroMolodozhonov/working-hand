@@ -125,8 +125,11 @@ export class HouseMagic {
     /** (the terrain's light: a magic house's rooms are lit like a village house's, never a cave's dark) */
     _hookLight() {
         const data = this.data;
-        if (!data || data.litLand) return;
+        if (!data || data._houseLit) return;
+        data._houseLit = true;
+        const prev = data.litLand; // (the castles of ice light their halls too — IceMagic._hookLight)
         data.litLand = (x, z) => {
+            if (prev?.(x, z)) return true;
             for (const rec of this.list.values()) { const rc = this.plan(rec).rect; if (x >= rc.x0 && x <= rc.x1 && z >= rc.z0 && z <= rc.z1) return true; }
             return false;
         };

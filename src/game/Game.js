@@ -116,6 +116,7 @@ import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
 import { ZombieSpawn, worldLights, litAt } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
+import { IceMagic } from './IceMagic.js';
 import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
@@ -130,7 +131,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
+const MANA_LATER = new Set(['IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -391,6 +392,7 @@ export class Game {
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
         this.houseMagic = new HouseMagic(this); // «Create a House», «Improve a House» (HouseMagic.js)
         this.castleMagic = new CastleMagic(this); // «Create a Castle» (CastleMagic.js)
+        this.iceMagic = new IceMagic(this); // «Create an Ice Castle», «Ice Bridge» (IceMagic.js)
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
         this.burnWreck = new BurnWreck(this); // a house burning down: what loses its support falls, chests burn (BurnWreck.js)
@@ -1213,6 +1215,7 @@ export class Game {
         if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
         if (name === 'CreateHouse' || name === 'ImproveHouse') return this.houseMagic.cast(name, isFinal); // (HouseMagic.js)
         if (name === 'CreateCastle') return this.castleMagic.cast(name, isFinal); // (CastleMagic.js)
+        if (name === 'IceCastle' || name === 'IceBridge') return this.iceMagic.cast(name, isFinal); // (IceMagic.js)
         if (isWardSpell(name)) return this._castWard(name, isFinal, text); // «Защита дома» (HouseWards.js)
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
@@ -1443,6 +1446,7 @@ export class Game {
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
+        if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
         if (!done.length) return false;
         this.sync?.stopSpells?.();
         if ((hf === true || ws === true) && done.length === 1) return true; // (its own words: the fire left / the water fallen)
@@ -2482,6 +2486,7 @@ export class Game {
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
+        for (const m of this.iceMagic?.sampleModels?.() || []) zoo.add(m); // (the gloss of a castle of ice)
         for (const v of prewarmVillagers()) zoo.add(v);
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
@@ -2684,6 +2689,7 @@ export class Game {
         this.wards?.update(dt);
         this.houseMagic?.update(dt);
         this.castleMagic?.update(dt);
+        this.iceMagic?.update(dt);
         this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
         this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
         this.scrolls.update(dt);

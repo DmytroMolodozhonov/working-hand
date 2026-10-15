@@ -236,6 +236,7 @@ export class WorldKeeper {
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
             magicCastles: g.castleMagic?.snapshot() || null, // castles made by magic and what is in their chests (CastleMagic.js)
             magicHouses: g.houseMagic?.snapshot() || null, // houses made by magic and what is in their chests (HouseMagic.js)
+            iceMagic: g.iceMagic?.snapshot() || null, // castles and bridges of ice (IceMagic.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // what the builders put back (Rebuild.js)
@@ -300,6 +301,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.guns) g.ships?.cannons.restore(save.guns);
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses);
     if (save.magicCastles) g.castleMagic?.restore(save.magicCastles); // («Create a Castle») // (after the beds, the doors and the things lying about)
+    if (save.iceMagic) g.iceMagic?.restore(save.iceMagic);
     // (Creative always opens in the full day; the other modes go on from the hour they were left at)
     if (Number.isFinite(save.dayPhase) && g.config?.mode !== 'creative') g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());

@@ -161,6 +161,7 @@ export class NetSync {
             wards: g.wards?.netList() || [], // houses' spheres of protection
             mhouses: g.houseMagic?.netList() || [], // houses made by magic (HouseMagic.js)
             mcastles: g.castleMagic?.netList() || [], // castles made by magic (CastleMagic.js)
+            icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
@@ -195,6 +196,7 @@ export class NetSync {
         if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.mhouses) g.houseMagic?.applyNet(msg.mhouses);
         if (msg.mcastles) g.castleMagic?.applyNet(msg.mcastles);
+        if (msg.icemagic) g.iceMagic?.applyNet(msg.icemagic);
         if (msg.castles) g.castleLife?.restore(msg.castles);
         if (msg.ships) g.ships?.restore(msg.ships);
         if (msg.guns) g.ships?.cannons.restore(msg.guns);
@@ -816,6 +818,7 @@ export class NetSync {
             case 'wardop': if (this.net.isHost) g.wards?.apply(m.op, m.from); break;
             case 'mcastle': g.castleMagic?.onNet(m, this.net.isHost); break; // («Create a Castle»)
             case 'mhouse': g.houseMagic?.onNet(m, this.net.isHost); break; // («Create a House», «Improve a House»)
+            case 'icemagic': g.iceMagic?.onNet(m, this.net.isHost); break; // («Create an Ice Castle», «Ice Bridge»)
             case 'bice': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.hitBird(b, 99, 'ice'); } break;
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;

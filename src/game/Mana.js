@@ -53,6 +53,7 @@ export const FIRST_SPELL = {
     Snowman: 3, WaterVortex: 8, Alive: 8, AliveMaxima: 12, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8, CreateCastle: 20,
+    IceCastle: 15, IceBridge: 3,
 };
 
 /** Not spells (or nothing to learn): never grow the maximum. */
@@ -251,6 +252,7 @@ const TITLES = {
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle',
     WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility',
+    IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge',
 };
 
 export function spellTitle(name) {

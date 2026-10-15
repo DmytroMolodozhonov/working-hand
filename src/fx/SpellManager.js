@@ -19,6 +19,7 @@ import { isUpWord } from '../game/UpSpell.js';
 import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
 import { FIREFIGHT, firefightWords } from '../game/Firefighting.js';
 import { IMPULSE, impulsePush } from '../game/WindImpulse.js';
+import { iceMagicWords } from '../game/IceMagic.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -43,6 +44,10 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Create an Ice Castle» / «Ice Bridge» («айс касл», «айс бридж», «создай ледяной замок / мост»): the ice
+    // word AND the castle / bridge word — first, before «castle» of any other castle and the lone «Айс» (IceMagic.js)
+    const iceMagic = iceMagicWords(s);
+    if (iceMagic) return iceMagic;
     // «Inspirius» («Инспириус»): the mightiest — its whole word (never «инспирация» / «inspiration» in talk)
     if (has('inspir', 'инспир', 'инспайр', 'энспир', 'инспер') && !has('inspirat', 'инспирац')) return 'Inspirius';
     // «Snowman» («Сноумен», «Снеговик»): a friendly snowman out of the snow pointed at — before Sands' «man»-free

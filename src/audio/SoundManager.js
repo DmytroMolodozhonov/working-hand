@@ -552,6 +552,9 @@ export class SoundManager {
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
             ['snowStep', () => this._synthSnowStep()], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
+            // («Create an Ice Castle», «Ice Bridge» — IceMagic.js)
+            ['iceBell', () => this._synthIceBell()], ['iceFloor', () => this._synthIceFloor(2.6)],
+            ['iceDone', () => this._synthChime([523, 659, 784, 1047, 1319, 1568, 2093], 3.2, 1.5)], ['iceChime', () => this._synthChime([1568, 2093, 2637, 3136], 1.4, 3)],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -759,6 +762,61 @@ export class SoundManager {
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
+    }
+
+    /**
+     * The ice of «Create an Ice Castle» / «Ice Bridge» (IceMagic.js): 'iceBell' (one crystal note —
+     * `rate` makes the rising tune), 'iceFloor' (the frost running from the foot), 'iceCrack', 'iceDone',
+     * 'iceChime'. Made ahead (prewarmStep); heard by everyone near.
+     */
+    playIce(kind, position, volume = 1, rate = 1) {
+        if (!this.enabled || !this.context || !this.loaded || !position) return;
+        const key = kind === 'iceCrack' ? 'crack' : kind;
+        if (!this.sounds[key]) {
+            const make = { iceBell: () => this._synthIceBell(), iceFloor: () => this._synthIceFloor(2.6), crack: () => this._synthCrack(),
+                iceDone: () => this._synthChime([523, 659, 784, 1047, 1319, 1568, 2093], 3.2, 1.5), iceChime: () => this._synthChime([1568, 2093, 2637, 3136], 1.4, 3) }[key];
+            if (!make) return;
+            this.sounds[key] = make();
+        }
+        this._playAt(this.sounds[key], position, volume, key === 'iceFloor' || key === 'iceDone' ? 14 : 9, kind === 'iceCrack' ? 1.6 + Math.random() * 0.6 : rate);
+    }
+
+    /** A crystal bell: a clear note (C6) with the glassy inharmonic partials of a struck ice rod, a long shimmer. */
+    _synthIceBell() {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * 1.6);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const f = 1046.5, P = 2 * Math.PI;
+        const parts = [[1, 1, 3], [2.76, 0.35, 5], [5.4, 0.18, 8], [8.93, 0.08, 12], [1.003, 0.5, 2.6]];
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            let v = 0;
+            for (const [k, a, dec] of parts) v += Math.sin(P * f * k * t) * a * Math.exp(-t * dec);
+            d[i] = v * Math.min(1, t * 900) * 0.3;
+        }
+        return buf;
+    }
+
+    /** The frost spreading: a shimmering sweep of tiny crystal notes rising over a hiss of ice, `seconds` long. */
+    _synthIceFloor(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const P = 2 * Math.PI;
+        const notes = [];
+        for (let k = 0; k < 26; k++) notes.push({ at: (k / 26) * seconds * 0.85 + Math.random() * 0.05, f: 1200 * Math.pow(2, (k / 26) * 1.6 + Math.random() * 0.15) });
+        let lp = 0, hp = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const env = Math.min(1, t * 6) * Math.min(1, (seconds - t) * 3);
+            lp += ((Math.random() * 2 - 1) - lp) * 0.6;
+            hp = lp - hp * 0.2; // (a bright hiss: the crackle of freezing)
+            d[i] = hp * 0.12 * env * (0.6 + 0.4 * Math.sin(P * 13 * t));
+        }
+        for (const n of notes) { // (each note only over its own half second)
+            const i0 = Math.floor(n.at * sr), i1 = Math.min(len, i0 + Math.floor(sr * 0.5));
+            for (let i = i0; i < i1; i++) { const tk = (i - i0) / sr; d[i] += Math.sin(P * n.f * tk) * Math.exp(-tk * 9) * 0.22; }
+        }
+        for (let i = 0; i < len; i++) d[i] = Math.max(-1, Math.min(1, d[i]));
+        return buf;
     }
 
     /** The hum stops (the magic broke). */
