@@ -1617,7 +1617,7 @@ export class TerrainData {
             const wx = x0 + rx, wz = z0 + rz;
             const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
             let top = k.top[(wz & MASK) * CHUNK + (wx & MASK)];
-            if (k.caved && this.sites?.landAt(wx, wz)) top = MIN_LAYER - 1; // (houses and castles: their rooms as they are)
+            if (k.caved && (this.sites?.landAt(wx, wz) || this.litLand?.(wx, wz))) top = MIN_LAYER - 1; // (houses and castles — and the houses made by magic, HouseMagic.js: their rooms as they are)
             else if (k.isleBot && k.isleBot[(wz & MASK) * CHUNK + (wx & MASK)] < 32767) top = this._underIsle(k, wx & MASK, wz & MASK); // (under a floating island: the open sky)
             else if (top > MIN_LAYER && isTree(k.blocks[((top - MIN_LAYER) * CHUNK + (wz & MASK)) * CHUNK + (wx & MASK)])) {
                 // (a tree's crown is no cave's roof: the daylight comes through the leaves to the ground)

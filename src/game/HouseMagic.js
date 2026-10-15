@@ -52,6 +52,7 @@ import { housePlan, faceTowards, HOUSE_LEVELS, MAX_LEVEL, MAGIC_TIME, TREE_RADIU
 import { Chest } from '../entities/Chest.js';
 import { KINDS } from './CreatureImpact.js';
 import { newUid } from './ItemTypes.js';
+import { HouseMagicFx } from '../fx/HouseMagicFx.js';
 
 export const HOUSE_MAGIC = {
     PILE_R: 4.5, // m: the heap — wool and sand this near the point the wand shows
@@ -108,6 +109,7 @@ export class HouseMagic {
         this._holdT = 0;
         this._noWand = 0;
         this.testAim = null; // (tests) a point to aim at instead of the wand
+        this.look = new HouseMagicFx(game.scene); // the logs and planks flying in, the melting sand, the spun wool (HouseMagicFx.js)
     }
 
     get auth() { return this.game.authority; }
@@ -115,6 +117,16 @@ export class HouseMagic {
 
     /** Cost of a level: upfront mana and mana a second. */
     static cost(level) { const L = HOUSE_LEVELS[level]; return L ? { mana: L.mana, drain: L.drain } : null; }
+
+    /** (the terrain's light: a magic house's rooms are lit like a village house's, never a cave's dark) */
+    _hookLight() {
+        const data = this.data;
+        if (!data || data.litLand) return;
+        data.litLand = (x, z) => {
+            for (const rec of this.list.values()) { const rc = this.plan(rec).rect; if (x >= rc.x0 && x <= rc.x1 && z >= rc.z0 && z <= rc.z1) return true; }
+            return false;
+        };
+    }
 
     plan(rec, level = rec.level) {
         const key = rec.id + ':' + level + ':' + (rec.woods || []).join('.');
@@ -354,8 +366,10 @@ export class HouseMagic {
             id: next.id, level, by, t: 0, x: next.x, z: next.z, y: next.G + 1, G: next.G, rect: plan.rect,
             rec: next, plan, clear, build, fill: plan.fill, ci: 0, bi: 0, fi: 0, wait: [],
             trees: take, ti: 0, piles, flashT: 0, soundT: 0, beat: 0,
+            win: plan.windows.map((w) => [r2(w.x), r2(w.y), r2(w.z)]), beds: plan.beds.map((b) => [r2(b.x), r2(b.y), r2(b.z)]),
         };
-        g.sync?.net?.send({ t: 'mhouse', a: 'go', id: next.id, level, by, x: next.x, z: next.z, G: next.G, rect: plan.rect, trees: take.map((t) => [r2(t.x), r2(t.y), r2(t.z)]), piles });
+        const M = this.magic;
+        g.sync?.net?.send({ t: 'mhouse', a: 'go', id: next.id, level, by, x: next.x, z: next.z, G: next.G, rect: plan.rect, trees: take.map((t) => [r2(t.x), r2(t.y), r2(t.z), t.wood]), piles, win: M.win, beds: M.beds });
         this._go(by, level, next.x, next.z);
         g.castleLife?.alarm?.({ x: next.x, y: next.G, z: next.z }, 'housemagic', by, 10);
         return true;
@@ -373,7 +387,7 @@ export class HouseMagic {
             const use = Math.min(n, need[k]);
             need[k] -= use;
             const pos = L.model.position.clone();
-            at.push([r2(pos.x), r2(pos.y), r2(pos.z)]);
+            at.push([r2(pos.x), r2(pos.y), r2(pos.z), k === 'sand' ? 1 : 0]); // (0 wool, 1 sand: how it flies — HouseMagicFx)
             g.items.removeLoose(L.item.uid);
             g.sync?.itemGone?.(L.item.uid, null, null);
             if (n - use > 0) g.items.spawnLoose({ ...L.item, uid: newUid(), count: n - use }, pos.add(_v.set(0, 0.3, 0)));
@@ -398,8 +412,11 @@ export class HouseMagic {
     // =================================================================== frame
     update(dt) {
         const g = this.game;
+        if (this._repairAfter > 0 && (this._repairAfter -= dt) <= 0) this._repair();
         const m = this.magic;
+        if (!m) this.look.idle(dt, g.fx);
         if (m) {
+            this._last = m;
             m.t += dt;
             this._whirl(m, dt);
             if (m.by === g.localId) this._casterHold(m, dt);
@@ -549,6 +566,7 @@ export class HouseMagic {
         rec.store = this.list.get(rec.id)?.store || rec.store || {};
         if (m.wait.length) (this._waiting = this._waiting || []).push(...m.wait);
         this.list.set(rec.id, rec);
+        this._hookLight();
         this._furnish(rec, true);
         if (rec.level === 1) this.found.add(rec.owner);
         g.sync?.net?.send({ t: 'mhouse', a: 'done', rec: this._net(rec), by: m.by });
@@ -558,6 +576,7 @@ export class HouseMagic {
     /** (every computer) The magic is over: the last flash; the caster's mana grows. */
     _finished(rec, by) {
         const g = this.game;
+        if (this._last) this.look.finish(this._last, g.fx);
         this.magic = null;
         for (let i = 0; i < 60; i++) {
             const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 8;
@@ -600,6 +619,7 @@ export class HouseMagic {
     _whirl(m, dt) {
         const g = this.game, fx = g.fx;
         if (!fx) return;
+        this.look.update(m, dt, fx); // (the trees' logs and planks, the sand, the wool, the pillar of light)
         const t = m.t, rc = m.rect || { x0: m.x - 6, x1: m.x + 6, z0: m.z - 6, z1: m.z + 6 };
         const R = Math.max(rc.x1 - rc.x0, rc.z1 - rc.z0) / 2;
         // a whirl of light round the house, rising
@@ -607,11 +627,7 @@ export class HouseMagic {
             const a = t * 3 + i * 1.256 + Math.random() * 0.3, r = R * (0.6 + 0.4 * Math.sin(t * 1.3 + i));
             fx.spark(_v.set(m.x + Math.cos(a) * r, m.y + ((t * 2 + i * 1.7) % 12), m.z + Math.sin(a) * r), i % 2 ? 0xfff2a8 : 0xc9a8ff, 0.16, _v2.set(-Math.sin(a) * 6, 1.5, Math.cos(a) * 6), 0.7);
         }
-        // the trees and the heap flow into it
-        for (const s of m.trees || []) {
-            const sx = s.x ?? s[0], sy = s.y ?? s[1], sz = s.z ?? s[2];
-            if (Math.random() < 0.35) fx.spark(_v.set(sx + (Math.random() - 0.5) * 2, sy + Math.random() * 4, sz + (Math.random() - 0.5) * 2), Math.random() < 0.5 ? 0x8b5a2b : 0x4f9a3a, 0.2, _v2.set(m.x - sx, m.y + 3 - sy, m.z - sz).multiplyScalar(0.9), 1.1);
-        }
+        // the heap flows into it
         for (const s of m.piles || []) {
             if (Math.random() < 0.5) fx.spark(_v.set(s[0], s[1] + 0.3, s[2]), Math.random() < 0.5 ? 0xd6c48a : 0xf6f4ee, 0.15, _v2.set(m.x - s[0], m.y + 4 - s[1], m.z - s[2]).multiplyScalar(0.8), 1.2);
         }
@@ -623,7 +639,7 @@ export class HouseMagic {
         // flashes of light
         m.flashT -= dt;
         if (m.flashT <= 0) {
-            m.flashT = 0.5 + Math.random() * 0.6;
+            m.flashT = 0.3 + Math.random() * 0.35;
             fx.lightFlash?.(_v.set(rc.x0 + Math.random() * (rc.x1 - rc.x0), m.y + 2 + Math.random() * 8, rc.z0 + Math.random() * (rc.z1 - rc.z0)), Math.random() < 0.5 ? 0xfff2c4 : 0xc9a8ff, 3, 0.35, 40);
         }
         m.soundT -= dt;
@@ -828,18 +844,64 @@ export class HouseMagic {
     }
 
     // ============================================================ net / save
-    _net(rec) { const { store, ...r } = rec; return r; } // eslint-disable-line no-unused-vars
+    _net(rec) { const { store, ...r } = rec; return { ...r, miss: this._missing(rec) }; } // eslint-disable-line no-unused-vars
 
     netList() { return [...this.list.values()].map((r) => this._net(r)); }
 
     applyNet(list) {
         for (const r of list || []) this._accept(r);
+        this._repairAfter = 2; // (after the guest's welcome has replayed the old blasts too)
+    }
+
+    /**
+     * The house's blocks that are not there now (blown away, gathered…): kept with the record, so that a
+     * loaded world (or a friend's computer) puts back exactly the house as it stood — no more, no less.
+     */
+    _missing(rec) {
+        const data = this.data;
+        if (!data || (this.magic && this.magic.id === rec.id)) return rec.miss || [];
+        const p = this.plan(rec), out = [];
+        for (const c of p.cells) {
+            if (c[3] === BLOCK.AIR) continue;
+            if (data.get(c[0], c[1], c[2]) !== c[3]) { out.push(c[0] + ',' + c[1] + ',' + c[2]); if (out.length >= 6000) break; }
+        }
+        return out;
+    }
+
+    /**
+     * After a world is loaded (or a guest joined): the house stands block for block as it was saved.
+     * The old block edits are replayed before the old blasts (a crater dug before the house was built
+     * would eat into its walls), and the oldest edits of a very busy world are dropped from the save —
+     * so the house's own blocks are put back from its plan, all but the ones that were really gone, and
+     * its piece of the world is drawn (and lit) again.
+     */
+    _repair() {
+        const data = this.data;
+        if (!data) return 0;
+        let n = 0;
+        for (const rec of this.list.values()) {
+            const miss = new Set(rec.miss || []);
+            const edits = [];
+            const p = this.plan(rec);
+            for (const c of p.cells) {
+                if (c[3] === BLOCK.AIR || miss.has(c[0] + ',' + c[1] + ',' + c[2])) continue;
+                if (data.get(c[0], c[1], c[2]) === c[3]) continue;
+                data.set(c[0], c[1], c[2], c[3]);
+                edits.push([c[0], c[1], c[2], c[3]]);
+            }
+            if (edits.length) { n += edits.length; if (this.auth) this.game.builder?._sendEdits(edits); else this.game.blockEdits?.push?.(...edits); }
+            // draw it again: its chunks (and their light)
+            for (let x = Math.floor(p.rect.x0) - 1; x <= Math.ceil(p.rect.x1) + 1; x += 8) for (let z = Math.floor(p.rect.z0) - 1; z <= Math.ceil(p.rect.z1) + 1; z += 8) data._markDirty?.(x, z);
+            data._markDirty?.(Math.ceil(p.rect.x1) + 1, Math.ceil(p.rect.z1) + 1);
+        }
+        return n;
     }
 
     _accept(r) {
         if (!r || !r.id || !(r.level >= 1)) return;
+        this._hookLight();
         const was = this.list.get(r.id);
-        const rec = { ...r, store: was?.store || r.store || {} };
+        const rec = { ...r, store: was?.store || r.store || {}, miss: Array.isArray(r.miss) ? r.miss.slice(0, 6000) : was?.miss || [] };
         this.list.set(rec.id, rec);
         if (!was || was.level !== rec.level || !this._chestsOf(rec.id).length) this._furnish(rec, false);
     }
@@ -857,7 +919,7 @@ export class HouseMagic {
             case 'no': if (m.to === g.localId) g.hud?.setVoice?.(m.msg, true); break;
             case 'go': {
                 if (isHost) break;
-                this.magic = { id: m.id, level: m.level, by: m.by, t: 0, x: m.x, z: m.z, y: (m.G | 0) + 1, G: m.G, rect: m.rect, trees: m.trees || [], piles: m.piles || [], flashT: 0, soundT: 0 };
+                this.magic = { id: m.id, level: m.level, by: m.by, t: 0, x: m.x, z: m.z, y: (m.G | 0) + 1, G: m.G, rect: m.rect, trees: m.trees || [], piles: m.piles || [], win: m.win || [], beds: m.beds || [], flashT: 0, soundT: 0 };
                 this._go(m.by, m.level, m.x, m.z);
                 break;
             }
@@ -871,7 +933,7 @@ export class HouseMagic {
     }
 
     snapshot() {
-        return { list: [...this.list.values()].map((r) => ({ ...r, store: r.store || {} })), found: [...this.found] };
+        return { list: [...this.list.values()].map((r) => ({ ...r, store: r.store || {}, miss: this._missing(r) })), found: [...this.found] };
     }
 
     restore(s) {
@@ -879,6 +941,8 @@ export class HouseMagic {
         for (const k of s.found || []) this.found.add(k);
         for (const r of s.list || []) this._accept(r);
         if (this.auth) for (const r of this.list.values()) this._furnish(r, true); // (beds and the door too)
+        this._repair(); // (the walls exactly as saved — _repair)
+        this._repairAfter = 2; // (and once more when everything else of the save is in)
         // (things of a chest saved floating over it go back in)
         this._sweepT = 2;
         this._restoredSweep = true;

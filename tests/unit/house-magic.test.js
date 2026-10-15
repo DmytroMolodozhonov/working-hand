@@ -151,3 +151,29 @@ test('the first «Create a House» scroll is easy to find — for each player on
     assert.equal(g.houseMagic.scrollFor('P2', () => 0.1).length, 1);
     assert.equal(g.houseMagic.scrollFor('P2', () => 0.1).length, 0);
 });
+
+test('created → saved → loaded: the house stands block for block as it was saved (a replayed old blast or dropped old edits do not eat its walls; what was really broken stays broken)', () => {
+    const { g, data, G, drop, run } = world();
+    drop('wool', 3, 0, 0); drop('blocks', 10, 0, 1);
+    g.houseMagic._hostStart(ask('CreateHouse', [0, G, 0]), 'local');
+    run(MAGIC_TIME + 0.5);
+    const rec = [...g.houseMagic.list.values()][0];
+    const p = g.houseMagic.plan(rec);
+    const walls = p.cells.filter((c) => c[3] !== BLOCK.AIR && c[1] > G + 1);
+    // really broken before the save: one wall block
+    const broken = walls[5];
+    data.set(broken[0], broken[1], broken[2], BLOCK.AIR);
+    const save = JSON.parse(JSON.stringify(g.houseMagic.snapshot()));
+    assert.deepEqual(save.list[0].miss, [broken.slice(0, 3).join(',')]);
+    // the load: the world replays its edits wrongly (half the walls missing — as after an old blast replayed later)
+    for (const c of walls.slice(0, 200)) data.set(c[0], c[1], c[2], BLOCK.AIR);
+    const g2 = world().g;
+    g2.terrain.data = data;
+    g2.houseMagic.restore(save);
+    for (const c of walls) {
+        const want = c === broken ? BLOCK.AIR : c[3];
+        assert.equal(data.get(c[0], c[1], c[2]), want, `block ${c.slice(0, 3)}`);
+    }
+    assert.equal(g2.chests.length, 1);
+    assert.ok(g2.doors.list.has(rec.id + 'd'));
+});
