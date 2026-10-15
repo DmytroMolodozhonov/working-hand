@@ -43,7 +43,7 @@ const TAU = Math.PI * 2;
 const BONES_R = 5.2;
 const POUCH = 100;
 /** Wandering dragons: checked this often (s) by the host; this chance a check brings one. */
-const WANDER = { EVERY: 60, CHANCE: 0.075, /* (half as often as before — the author asked) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
+const WANDER = { EVERY: 60, CHANCE: 0.02, FIRST: 600, /* (rare: about one in 50 minutes of play, none in the first 10 — «dragons fly too often», the author) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
 /** Lairs: their dragons come out when a player is this near (m); go back to rest beyond FAR. */
 const LAIR_NEAR = 170, LAIR_FAR = 320;
 const STATES = ['sleep', 'watch', 'chase', 'exit', 'air', 'enter', 'landed', 'dead'];
@@ -93,7 +93,7 @@ export class Dragons {
         this.hands = { right: { open: false, n: 0, model: null, was: 0 }, left: { open: false, n: 0, model: null, was: 0 } };
         this._t = 0;
         this._lairT = 0;
-        this._wanderT = WANDER.EVERY * 0.5;
+        this._wanderT = WANDER.FIRST;
         this._netT = 0;
         this._hurtT = 0;
         this.log = []; // (tests) what happened
