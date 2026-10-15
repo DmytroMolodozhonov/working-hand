@@ -24,14 +24,14 @@ export const SURE_AT_ONCE = -0.6;
 /** …if it is long enough: a short one («гром», «вайнд») hides in the start of a longer word still being said. */
 export const AT_ONCE_LEN = 6;
 /** …or when the speaker has clearly stopped after it (ms of quiet heard after the spell). */
-export const QUIET_AT_ONCE = 200;
+export const QUIET_AT_ONCE = 280;
 /**
  * A spell another one goes on from («Protection» → «Protection House», «Бомбардо» → «… Максима»: GOES_ON)
  * is cast only after this much quiet after it (ms) — or at the phrase's end: the time a «Хаус» or a
  * «Максима» needs to begin. The longer one is cast as soon as it is heard; spells nothing goes on
  * from never wait. (voice_native.py keeps a phrase open a little longer than this: SEG «end».)
  */
-export const MORE_WAIT = 600;
+export const MORE_WAIT = 700;
 
 /**
  * What one look at a phrase gives the game (pure: tests).

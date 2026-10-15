@@ -67,7 +67,7 @@ CHECKED = "checked.json"  # the files already checked: their size and time (so 2
 SEG = {
     "on": 0.5,         # speech starts above this…
     "off": 0.35,       # …and is over after END of this much below it
-    "end": 0.75,       # s of quiet that end a phrase (longer than NativeVoice MORE_WAIT: «Protection… Хаус» is one phrase)
+    "end": 0.85,       # s of quiet that end a phrase (longer than NativeVoice MORE_WAIT: «Protection… Хаус» is one phrase)
     "pre": 0.3,        # s of sound kept before the speech started (the first letters)
     "max": 12.0,       # s: a phrase this long is cut into pieces
     "partial": 0.18,   # s between the looks at a phrase still being said

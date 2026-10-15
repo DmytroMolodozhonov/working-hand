@@ -184,7 +184,9 @@ test('a spell nothing goes on from is cast from the first look that hears it who
     for (const text of ['инферно', 'экспеллиармус', 'нокс']) {
         for (const voice of ['irina', 'ruslan']) {
             const r = one(text, voice);
-            const res = lookAt(ev(r, { final: false }), {});
+            // (the speaker has stopped: a little quiet after the word)
+            const b = rowsOf(r), quiet = Buffer.concat([b, ...Array(8).fill(b.subarray((r.T - 1) * 34))]);
+            const res = lookAt({ type: 'seg', id: 1, T: r.T + 8, lp: quiet.toString('base64'), far: 0, final: false }, {});
             assert.equal(matchSpell(res.say?.text), matchSpell(text), `${text} ${voice}: ${JSON.stringify(res.heard.spell?.avg)} tail ${res.heard.tail}`);
             assert.ok(res.say.settled);
         }
