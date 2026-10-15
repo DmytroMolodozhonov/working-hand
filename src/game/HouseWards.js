@@ -5,11 +5,12 @@
  *   «Protection House»        point the hand (the wand) at a house and say it: −20 mana, a charge
  *                             of protection (silver-blue, like a duel charge) flies from the hand
  *                             into the house — it breaks nothing: where it lands a dome of
- *                             protection lights up (2.5 m). It is a ball cut by the ground: its
+ *                             protection lights up (1.5 m). It is a ball cut by the ground: its
  *                             centre is on the ground under the house (the house's floor), the
  *                             upper half stands over it as a dome, the lower half goes on under the
  *                             ground (nobody digs in from below). Now, while the hand (the wand)
- *                             stays on it, it grows by itself, 1 m a second (−3 mana a metre) —
+ *                             stays on it (on the dome or on the house under it), it grows by
+ *                             itself, 1 m a second (−3 mana a metre) —
  *                             no «Максима» to shout. The hand taken off it / lowered: it waits;
  *                             back on it: it grows on. «стоп» (free), no mana left, 24 m, or 30 s
  *                             without growing: it stays as big as it grew. «Protection House
@@ -55,14 +56,15 @@ import { KINDS } from './CreatureImpact.js';
 import { refusal } from './Hints.js';
 
 export const WARD = {
-    COST: 20, // «Protection House»: the charge and the first 2.5 m
+    COST: 20, // «Protection House»: the charge and the first 1.5 m
     GROW_MANA: 3, // mana a metre it grows (SPELL_COST.WardGrow; the old «Максима»: 5 for 1.5 m)
     GROW_V: 1, // m a second while the hand is on it
     GROW_V_MAX: 2, // … «Protection House Maxima» (the same mana a metre)
-    START_R: 2.5, // m
+    START_R: 1.5, // m (small at first: it is seen growing from the spot)
     STEP: 1.5, // m a «Максима» (worlds saved before it grew by itself)
     MAX_R: 24, // m
     AIM: 40, // m: how far a house may be aimed at
+    AIM_TOL: 0.1, // the hand a little beside the growing dome still holds it (≈6°; never less than 0.8 m)
     SET_IDLE: 30, // s not growing (the hand off it): it is set by itself
     BOLT_V: 32, // m/s: the charge from the hand to the house
     SEND_GAP: 0.25, // s between the sizes sent while it grows
@@ -96,7 +98,7 @@ export const wardCost = (r) => WARD.COST + WARD.GROW_MANA * Math.max(0, Math.min
 /** Seconds of the hand on it to grow to radius `r` (twice as fast with «Maxima»). */
 export const growTime = (r, fast = false) => Math.max(0, Math.min(WARD.MAX_R, r) - WARD.START_R) / (fast ? WARD.GROW_V_MAX : WARD.GROW_V);
 /** (worlds saved before it grew by itself) its radius after `n` «Максима». */
-export const wardRadius = (n) => Math.min(WARD.MAX_R, WARD.START_R + WARD.STEP * Math.max(0, n));
+export const wardRadius = (n) => Math.min(WARD.MAX_R, 2.5 + WARD.STEP * Math.max(0, n)); // (it started at 2.5 m then)
 
 /** May the one with this key (lasting id) pass through the sphere? The owner and the granted. */
 export const mayPass = (w, key) => !!key && (w.owner === key || (w.grant || []).includes(key));
@@ -191,7 +193,7 @@ void main() {
 // flowing (blue → violet → sea-green), a flickering rim and a bright ring where it meets the ground;
 // under the ground the same ball goes on, dim (seen only from a cave / a pit dug under it).
 const DOME_FS = `
-uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet; uniform float uCrack; uniform float uHell;
+uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet; uniform float uGrow; uniform float uCrack; uniform float uHell;
 varying vec3 vN; varying vec3 vW; varying vec3 vL;
 float hexDist(vec2 p) { p = abs(p); return max(dot(p, vec2(0.5, 0.866)), p.x); }
 float hexEdge(vec2 uv) {
@@ -221,8 +223,10 @@ void main() {
     float ce = hexEdge(cu);
     float pick = fract(sin(dot(floor(cu * 1.7), vec2(12.9898, 78.233))) * 43758.5453);
     float crack = uCrack > 0.0 && pick < uCrack ? ce : 0.0;
-    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04 + hx * 0.12 + sweep * (0.1 + hx * 0.35) + ground * 0.5) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25 + crack * 0.6;
-    if (n.y < 0.0) a *= 0.3; // (the half under the ground)
+    // while it is set: the whole dome glimmers, its hexes flicker, the ring on the ground blazes while it grows
+    float glim = uSet * (0.07 + hx * (0.12 + 0.1 * sin(uTime * 7.0 + lon * 5.0 + n.y * 9.0)) + ground * (0.25 + 0.6 * uGrow));
+    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04 + hx * 0.12 + sweep * (0.1 + hx * 0.35) + ground * 0.5 + glim) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25 + crack * 0.6;
+    if (n.y < 0.0) a *= 0.3 * (1.0 - 0.85 * uSet); // (the half under the ground; while it is set — seen through walls — hardly)
     // the colours flow over it (the Hellfire's red stays red)
     float hue = 0.5 + 0.5 * sin(uTime * 0.7 + lon * 2.0 + n.y * 4.0);
     vec3 col = mix(uColor, mix(vec3(0.62, 0.55, 1.0), vec3(0.5, 1.0, 0.9), hue), 0.35 * (1.0 - uHell));
@@ -242,6 +246,7 @@ export class HouseWards {
         this._hidden = new Map(); // object -> its own visible before it was hidden
         this._nextId = 1;
         this._domeGeo = new THREE.SphereGeometry(1, 48, 24);
+        this._domeGeo.userData.keep = true; // (shared: Game.prewarm must not dispose it)
         this.log = []; // (tests) what happened
     }
 
@@ -286,7 +291,8 @@ export class HouseWards {
         const side = g.wandSide?.() || (ch.isArmRaised?.(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised?.(s))) || null;
         if (!side) return null;
         const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side, new THREE.Vector3());
-        return { side, o: o.clone ? o.clone() : o, d: ch.getHandDirection(side, new THREE.Vector3()) };
+        const d = ch.getPointingDirection ? ch.getPointingDirection(side, new THREE.Vector3()) : ch.getHandDirection(side, new THREE.Vector3());
+        return { side, o: o.clone ? o.clone() : o, d };
     }
 
     /** The first sphere the ray goes into (or the one I stand in): {w, t}. */
@@ -472,9 +478,7 @@ export class HouseWards {
         if (s.wait > 0) { s.wait -= dt; return; } // (the charge is still flying)
         s.idle += dt;
         if (s.idle > WARD.SET_IDLE) { this.fix(); return; }
-        const h = this._hand();
-        const on = h && this._wardOnRay(h.o, h.d);
-        s.aimed = !!on && on.w === w;
+        s.aimed = this._onMine(w, s, dt);
         if (!s.aimed) return;
         s.idle = 0;
         if (w.r >= WARD.MAX_R - 1e-6) { this._no('wardMax', { r: WARD.MAX_R }); this.fix(); return; }
@@ -497,6 +501,32 @@ export class HouseWards {
             if (this.auth) this._changed();
             else this.game.sync?.wardOp?.({ op: 'grow', id: w.id, r: r2(w.r) });
         }
+    }
+
+    /**
+     * Is the hand (the wand) on my growing dome? On the dome itself (or a little beside it — a
+     * hand is never quite still), on the house under it (its walls hide the dome inside), or I
+     * stand in it.
+     */
+    _onMine(w, s, dt) {
+        const h = this._hand();
+        if (!h) return false;
+        const { o, d } = h;
+        if (inWard(w, o)) return true;
+        const fx = w.c.x - o.x, fy = w.c.y - o.y, fz = w.c.z - o.z;
+        const along = fx * d.x + fy * d.y + fz * d.z;
+        if (along > 0 && along < WARD.AIM + w.r) {
+            const off = Math.sqrt(Math.max(0, fx * fx + fy * fy + fz * fz - along * along));
+            if (off < w.r + Math.max(0.8, WARD.AIM_TOL * along)) return true;
+        }
+        // the house (or the land) the hand shows: under the dome or what it is to cover
+        s.rayT = (s.rayT ?? 0) - dt;
+        if (s.rayT > 0) return !!s.rayOn;
+        s.rayT = 0.15;
+        const hit = this.game.terrain?.data?.raycast?.(o, d, WARD.AIM);
+        const R = Math.max(w.r, s.need || 0) + 1.5;
+        s.rayOn = !!hit && Math.hypot(hit.x - w.c.x, hit.z - w.c.z) < R && hit.y > w.c.y - 2 && hit.y < w.c.y + R + 1;
+        return s.rayOn;
     }
 
     // ------------------------------------------------------------ the charge
@@ -1053,14 +1083,14 @@ export class HouseWards {
         if (L) return L;
         const mat = new THREE.ShaderMaterial({
             vertexShader: DOME_VS, fragmentShader: DOME_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 }, uCrack: { value: 0 }, uHell: { value: 0 } },
+            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 }, uGrow: { value: 0 }, uCrack: { value: 0 }, uHell: { value: 0 } },
         });
         const dome = new THREE.Mesh(this._domeGeo, mat);
         dome.renderOrder = 3;
         dome.userData.noWardHide = true;
         dome.frustumCulled = true;
         this.game.scene?.add(dome);
-        L = { dome, disc: null, k: 1, flash: 0, pulse: 0, discR: 0, near: 0, show: 0, wasSetting: !!w.setting };
+        L = { dome, disc: null, k: 1, flash: 0, pulse: 0, discR: 0, near: 0, show: 0, wasSetting: !!w.setting, lastR: w.r, grow: 0, sparkAcc: 0 };
         this.looks.set(w.id, L);
         return L;
     }
@@ -1127,11 +1157,21 @@ export class HouseWards {
             L.dome.scale.setScalar(w.r * (1 + 0.04 * L.pulse));
             u.uTime.value = this._t;
             u.uSet.value = w.setting ? 1 : 0;
+            // growing now (on every computer: its size goes up): sparks run along its edge on the ground
+            // and over it, the ring blazes, the hum rises
+            const dr = w.r - L.lastR;
+            L.lastR = w.r;
+            L.grow = w.setting && dr > 1e-5 ? 1 : Math.max(0, L.grow - dt * 3);
+            u.uGrow.value = L.grow;
+            if (L.grow > 0.5 && !coming) this._growSparks(w, L, dt);
             u.uHell.value = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
             // not seen — but while it is being set (and a moment after «стоп»), where one who may not
             // come in is close, where magic hits it, while it is cracked or the Hellfire burns on it
-            if (L.wasSetting && !w.setting) L.show = WARD.SHOW_AFTER_SET;
+            if (L.wasSetting && !w.setting) this._setDone(w, L);
             L.wasSetting = !!w.setting;
+            // while it is set (and a moment after) it is seen through the walls: the house's own walls
+            // hid a dome growing inside it (only a state of drawing: no shader is made again)
+            L.dome.material.depthTest = !(w.setting || L.show > 0);
             L.show = Math.max(0, L.show - dt);
             const crack = Math.max(0, 1 - w.hp / WARD.HP), hell = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
             L.flash = Math.max(0, L.flash - dt * 1.5);
@@ -1183,17 +1223,80 @@ export class HouseWards {
         for (const o of want) { if (!this._hidden.has(o)) this._hidden.set(o, o.visible); o.visible = false; }
     }
 
+    /** Sparks along the growing edge: on the ground ring (the floor) and over the dome. */
+    _growSparks(w, L, dt) {
+        const fx = this.game.fx;
+        if (!fx?.spark) return;
+        L.sparkAcc = Math.min(6, L.sparkAcc + dt * (30 + w.r * 3));
+        for (; L.sparkAcc >= 1; L.sparkAcc--) {
+            const an = Math.random() * Math.PI * 2;
+            if (Math.random() < 0.7) {
+                _v2.set(w.c.x + Math.cos(an) * w.r, w.c.y + 0.08, w.c.z + Math.sin(an) * w.r);
+                _v3.set(Math.cos(an) * 0.8, 1 + Math.random() * 1.8, Math.sin(an) * 0.8);
+            } else {
+                const up = 0.15 + Math.random() * 0.85, ring = Math.sqrt(1 - up * up);
+                _v2.set(w.c.x + Math.cos(an) * ring * w.r, w.c.y + up * w.r, w.c.z + Math.sin(an) * ring * w.r);
+                _v3.set(Math.cos(an) * ring, up, Math.sin(an) * ring).multiplyScalar(0.6 + Math.random());
+            }
+            fx.spark(_v2, Math.random() < 0.5 ? 0x9fd8ff : Math.random() < 0.5 ? 0xcfe8ff : 0xb7a6ff, 0.06 + Math.random() * 0.06, _v3, 0.5 + Math.random() * 0.3);
+        }
+    }
+
+    /** «стоп» (or it stopped by itself): the dome is set — a flash running over it, a click and a chime. */
+    _setDone(w, L) {
+        const g = this.game;
+        L.show = WARD.SHOW_AFTER_SET;
+        L.pulse = 1;
+        L.flash = 1;
+        L.flashAt = (L.flashAt || new THREE.Vector3()).set(w.c.x, w.c.y + w.r, w.c.z);
+        for (let i = 0; i < 40; i++) {
+            const an = (i / 40) * Math.PI * 2;
+            g.fx?.spark?.(_v2.set(w.c.x + Math.cos(an) * w.r, w.c.y + 0.1, w.c.z + Math.sin(an) * w.r), i % 2 ? 0xcfe8ff : 0xffffff, 0.1, _v3.set(Math.cos(an) * 0.5, 2 + Math.random() * 2, Math.sin(an) * 0.5), 0.8);
+        }
+        g.fx?.lightFlash?.(_v2.set(w.c.x, w.c.y + w.r * 0.6, w.c.z), 0xcfe8ff, 2.5, 0.4, Math.max(10, w.r * 2));
+        g.sound?.playWardSet?.(_v2);
+    }
+
+    /** The hum of a dome growing (the nearest one being set): louder and higher the bigger it is. */
+    _hum() {
+        const snd = this.game.sound;
+        if (!snd?.wardHum) return;
+        const eye = this.game.character?.group.position;
+        let best = null, bd = Infinity;
+        for (const w of this.list.values()) {
+            if (!w.setting) continue;
+            const L = this.looks.get(w.id);
+            const d = eye ? Math.hypot(eye.x - w.c.x, eye.y - w.c.y, eye.z - w.c.z) : 0;
+            if (L && d < bd) { bd = d; best = { w, L }; }
+        }
+        if (!best) { if (this._humOn) { snd.wardHum(null, 0); this._humOn = false; } return; }
+        const { w, L } = best;
+        const big = Math.min(1, w.r / 12);
+        snd.wardHum(_v2.set(w.c.x, w.c.y + w.r * 0.5, w.c.z), (0.25 + 0.75 * L.grow) * (0.35 + 0.65 * big), 0.85 + 0.5 * big);
+        this._humOn = true;
+    }
+
+    /** One dome to compile its shader on the loading screen (Game.prewarm): no hitch at the first cast. */
+    sampleModels() {
+        const L = this._look({ id: '__sample', r: 1, setting: true });
+        this.looks.delete('__sample');
+        this.game.scene?.remove(L.dome);
+        L.dome.material.uniforms.uAlpha.value = 0.5;
+        return [L.dome];
+    }
+
     // ------------------------------------------------------------ frame
     update(dt) {
         this._t += dt;
         // my dome grows while the hand is on it
         if (this.setting) this._grow(dt);
         if (this.bolts.length) this._updateBolts(dt);
-        if (!this.list.size && !this.looks.size && !this._hidden.size) return;
+        if (!this.list.size && !this.looks.size && !this._hidden.size) { if (this._humOn) this._hum(); return; }
         if (this.auth) { this._creatures(dt); this._heal(dt); }
         for (const w of this.list.values()) this._look(w);
         this._intruders();
         const hidden = this._updateLooks(dt);
+        this._hum();
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 0.25; if (this._hidden.size || hidden.length) this._hideObjects(hidden); }
         else for (const o of this._hidden.keys()) o.visible = false; // (others may have shown it again this frame)
@@ -1215,6 +1318,7 @@ export class HouseWards {
     }
 
     dispose() {
+        if (this._humOn) { this.game.sound?.wardHum?.(null, 0); this._humOn = false; }
         for (const B of this.bolts) if (B.mesh) this.game.scene?.remove(B.mesh);
         this.bolts = [];
         for (const id of [...this.list.keys()]) this._remove(id);

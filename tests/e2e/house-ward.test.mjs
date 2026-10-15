@@ -83,7 +83,7 @@ test('«Protection House» + «Максима» ×3 + «стоп»: the guest ca
     const w = await ev(host.page, () => { const w = [...window.__zns.game.wards.list.values()][0]; return { r: w.r, c: w.c, setting: w.setting, mana: window.__zns.game.combat.fatigue }; });
     assert.ok(w.r >= 7 && w.r < 8, `${w.r}`);
     assert.equal(w.setting, false);
-    assert.ok(Math.abs(mana0 - w.mana - (20 + 3 * (w.r - 2.5))) < 2.5, `20 + 3 a metre: ${mana0 - w.mana}`);
+    assert.ok(Math.abs(mana0 - w.mana - (20 + 3 * (w.r - 1.5))) < 2.5, `20 + 3 a metre: ${mana0 - w.mana}`);
     // the guest's computer has the same sphere
     await wf(guest.page, (r) => { const W = window.__zns.game.wards; return W.list.size === 1 && Math.abs([...W.list.values()][0].r - r) < 0.02; }, w.r, 20000);
 

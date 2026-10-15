@@ -1063,7 +1063,7 @@ export class Game {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
         // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
         if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
-        return !!(this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
+        return !!(this.wards?.setting || this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
     }
 
     _castLocalSpell(text, isFinal = true) {
@@ -2394,6 +2394,7 @@ export class Game {
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
         zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), this.campfires.sampleModel());
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
+        for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
         for (const v of prewarmVillagers()) zoo.add(v);
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture

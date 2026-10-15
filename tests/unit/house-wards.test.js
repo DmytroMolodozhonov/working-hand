@@ -21,16 +21,16 @@ test('the three spells are heard as whole phrases — and the plain shield stays
     assert.equal(matchSpell('максима'), 'Maxima');
 });
 
-test('costs: 20 for the charge and the first 2.5 m, then 3 a metre while it grows 1 m a second (2 with «Maxima»)', () => {
+test('costs: 20 for the charge and the first 1.5 m, then 3 a metre while it grows 1 m a second (2 with «Maxima»)', () => {
     assert.equal(SPELL_COST.ProtectionHouse, 20);
     assert.equal(SPELL_COST.WardGrow, WARD.GROW_MANA);
     assert.equal(SPELL_COST.ProtectionInvisible, 15);
     assert.equal(SPELL_COST.ProtectionHouseGrant, 5);
     assert.equal(wardCost(WARD.START_R), 20);
-    assert.equal(wardCost(7.5), 35, 'about what 3 «Максима» cost before (35)');
+    assert.equal(wardCost(7.5), 38, 'about what 3 «Максима» cost before (35)');
     assert.equal(wardCost(1000), 20 + 3 * (WARD.MAX_R - WARD.START_R));
-    assert.equal(growTime(7.5), 5);
-    assert.equal(growTime(7.5, true), 2.5);
+    assert.equal(growTime(7.5), 6);
+    assert.equal(growTime(7.5, true), 3);
     assert.equal(wardRadius(3), 7, 'worlds saved before: their size');
     assert.equal(wardRadius(1000), WARD.MAX_R);
 });
@@ -472,4 +472,45 @@ test('«Protection Invisible» said again on an invisible house: it is seen agai
     assert.equal(W.cast('ProtectionInvisible'), 'ProtectionInvisible');
     assert.equal(w.inv, false);
     assert.equal(g.combat.fatigue, m0 - 15);
+});
+
+test('the dome grows from a small one while the wand is on it — or on the house under it; seen through the walls while it grows; «стоп» sets it with a flash and a click', () => {
+    const g = fakeGame();
+    let sparks = 0, set = 0;
+    const hum = [];
+    g.fx.spark = () => sparks++;
+    g.sound = { playWhoosh() {}, playWardSet: () => set++, wardHum: (p, k) => hum.push(k) };
+    const W = new HouseWards(g);
+    assert.equal(W.cast('ProtectionHouse'), 'ProtectionHouse');
+    const w = [...W.list.values()][0];
+    assert.ok(w.r <= 2, `small at first: ${w.r}`);
+    run(W, 0.6); // (the charge lands)
+    // the wand on the house's wall (its top corner, far from the small dome inside): it grows
+    g.character.getHandDirection = (s, out) => out.set(10 - 0, 2.3 - 2, 0 - 2).normalize();
+    const r0 = w.r;
+    run(W, 2);
+    assert.ok(w.r > r0 + 1.8, `on the house: grew ${w.r - r0}`);
+    const L = W.looks.get(w.id);
+    assert.ok(L.dome.visible && L.dome.material.uniforms.uAlpha.value > 0.5, 'seen while it grows');
+    assert.equal(L.dome.material.depthTest, false, 'seen through the walls (and from inside the house)');
+    assert.ok(L.dome.material.uniforms.uGrow.value > 0.5 && sparks > 20, `growing: the ring blazes, sparks (${sparks})`);
+    assert.ok(hum.length && hum.at(-1) > 0, 'it hums');
+    // a little beside the dome (a hand is never still): it still grows; quite away: it waits
+    g.character.getHandDirection = (s, out) => out.set(12, -0.5 + w.r + 0.9 - 2, 0).normalize();
+    const r1 = w.r;
+    run(W, 1);
+    assert.ok(w.r > r1 + 0.9, `beside it: ${w.r - r1}`);
+    g.character.getHandDirection = (s, out) => out.set(-1, 0.3, 0).normalize();
+    const r2 = w.r;
+    run(W, 1);
+    assert.equal(w.r, r2, 'the wand away: it waits');
+    // «стоп»: it stays this big — a flash, a click, the hum stops
+    assert.ok(W.fix());
+    run(W, 0.2);
+    assert.equal(set, 1, 'the click');
+    assert.ok(L.flash > 0.5 && L.dome.visible, 'it flashes');
+    assert.equal(hum.at(-1), 0, 'the hum stops');
+    run(W, WARD.SHOW_AFTER_SET + 1);
+    assert.equal(w.r, r2, 'it stays as big as it grew');
+    assert.equal(L.dome.material.depthTest, true, 'then hidden again behind the walls');
 });

@@ -531,6 +531,7 @@ export class SoundManager {
             ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)],
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
+            ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -742,6 +743,47 @@ export class SoundManager {
 
     /** The hum stops (the magic broke). */
     stopHouseHum() { if (this._hum?.isPlaying) this._hum.stop(); }
+
+    /**
+     * «Protection House»: the dome's quiet hum while it grows (looped) at `position`; `k` its loudness
+     * (0: silent), `rate` its pitch (higher as it grows).
+     */
+    wardHum(position, k, rate = 1) {
+        if (!this.context) return;
+        const v = this._wardHumV;
+        if (!(k > 0) || !this.enabled || !this.loaded) { if (v?.isPlaying) v.stop(); return; }
+        if (!this.sounds.wardHum) this.sounds.wardHum = this._synthWardHum();
+        if (!v) { this._wardHumV = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._wardHumV); return this.wardHum(position, k, rate); }
+        if (!v.isPlaying) { v.setBuffer(this.sounds.wardHum); v.setLoop(true); v.setRefDistance(10); v.play(); }
+        v.setVolume(0.7 * k * this.globalVolume);
+        v.setPlaybackRate(rate);
+        if (position) { v.position.copy(position); v.updateMatrixWorld(true); }
+    }
+
+    /** «стоп» on a growing dome: a click and a bright chime — it is set. */
+    playWardSet(position) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        if (this._wardHumV?.isPlaying) this._wardHumV.stop();
+        if (!this.sounds.wardClick) this.sounds.wardClick = this._synthKnock(1400, 0.07);
+        if (!this.sounds.wardChime) this.sounds.wardChime = this._synthChime([1047, 1568, 2093], 1.2, 4);
+        this._playAt(this.sounds.wardClick, position, 1.2, 10);
+        this._playAt(this.sounds.wardChime, position, 0.8, 12);
+    }
+
+    /** A 2 s loop of a soft magic hum (every tone whole cycles in it: no seam where it loops). */
+    _synthWardHum() {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * 2);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const P = 2 * Math.PI;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const trem = 0.75 + 0.25 * Math.sin(P * 3 * t);
+            const v = Math.sin(P * 110 * t) * 0.35 + Math.sin(P * 110.5 * t) * 0.3 + Math.sin(P * 220 * t) * 0.12
+                + Math.sin(P * 660 * t) * 0.06 * (0.5 + 0.5 * Math.sin(P * 5 * t)) + Math.sin(P * 1320 * t) * 0.03 * Math.sin(P * 2 * t) ** 2;
+            d[i] = v * trem * 0.6;
+        }
+        return buf;
+    }
 
     /** The tune of the house magic (HouseTheme.js) for `seconds` and a level, made once (≈70 ms — made ahead in idle time). */
     _houseTheme(seconds, level) {
