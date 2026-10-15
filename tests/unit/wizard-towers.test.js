@@ -71,9 +71,11 @@ test('wizard tower: a round stone tower of 7 floors, 14 rooms, a door, lamps, a 
     assert.equal(t.topLayer(Math.round(door.x), Math.round(door.z)), w.F);
     const din = w.nodes.find((n) => n.tag === 'towerIn');
     for (let L = w.F + 1; L <= w.F + 5; L++) assert.equal(t.get(Math.round((door.x + din.x) / 2), L, Math.round((door.z + din.z) / 2)), BLOCK.AIR, 'doorway');
-    assert.ok(w.parts.every((p) => p.L1 <= MAX_LAYER));
-    assert.equal(t.get(w.x, MAX_LAYER, w.z), BLOCK.ARCANE_LAMP_VIOLET, 'the crystal on the tip');
-    assert.equal(t.get(w.x, MAX_LAYER - 8, w.z), BLOCK.ROOF_PURPLE, 'the pointed roof');
+    // (the tip at layer 56 — the world's old limit; the world is higher now, 120, for generation 5's mountains)
+    const tip = Math.max(...w.parts.map((p) => p.L1));
+    assert.ok(tip <= 56 && tip <= MAX_LAYER, `${tip}`);
+    assert.equal(t.get(w.x, tip, w.z), BLOCK.ARCANE_LAMP_VIOLET, 'the crystal on the tip');
+    assert.equal(t.get(w.x, tip - 8, w.z), BLOCK.ROOF_PURPLE, 'the pointed roof');
     // stone walls, lamps inside, no trees on the land
     let lamps = 0, leaves = 0;
     for (let dz = -18; dz <= 18; dz++) for (let dx = -18; dx <= 18; dx++) for (let L = -6; L <= 40; L++) {

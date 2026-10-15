@@ -672,13 +672,18 @@ export class Dragons {
         if (from.distanceTo(g.character.group.position) < 600) g.hud?.notify?.('🐉 Высоко в небе пролетает дракон…');
     }
 
-    /** The highest ground under / near a point (to fly over it). */
-    _skyFloor(x, z) {
+    /**
+     * The highest ground under / near a point (to fly over it). `fly`: also the floating islands
+     * (generation 5) and the tree on one — a dragon flies over them, never through; for landing
+     * (`fly` false) the ground itself.
+     */
+    _skyFloor(x, z, fly = true) {
         // (the world's height field — no chunk is made for it: a dragon flies far from the players)
-        const H = this.game.terrain?.data?.heightAt;
+        const data = this.game.terrain?.data, H = data?.heightAt;
         if (!H) return this.game.collision?.groundY?.(x, z) ?? 0;
-        let y = H(Math.round(x), Math.round(z));
-        for (const [ox, oz] of [[8, 0], [-8, 0], [0, 8], [0, -8]]) y = Math.max(y, H(Math.round(x + ox), Math.round(z + oz)));
+        const top = fly && data.lush ? (ix, iz) => data.skyTopAt(ix, iz) : H;
+        let y = top(Math.round(x), Math.round(z));
+        for (const [ox, oz] of [[8, 0], [-8, 0], [0, 8], [0, -8]]) y = Math.max(y, top(Math.round(x + ox), Math.round(z + oz)));
         return y - 0.5;
     }
 
@@ -968,7 +973,9 @@ export class Dragons {
         // cruising: high over the world from far away to far away (maybe landing on the way)
         if (!d.dest) { d.dest = p.clone().add(_v.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize().multiplyScalar(WANDER.FAR * 2)); d.cruiseY = p.y; }
         if (d.landAt) {
-            const gy = this._skyFloor(d.landAt.x, d.landAt.z);
+            const gy = this._skyFloor(d.landAt.x, d.landAt.z, false);
+            // (never down under a floating island: it flies on)
+            if (this._skyFloor(d.landAt.x, d.landAt.z) > gy + 2) { d.landAt = null; return; }
             const hd = Math.hypot(p.x - d.landAt.x, p.z - d.landAt.z);
             const goal = _v3.set(d.landAt.x, hd < 30 ? gy : gy + 30, d.landAt.z);
             this._flyTo(d, goal, DRAGON.FLY * 0.8, dt, hd > 30);

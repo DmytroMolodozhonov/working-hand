@@ -17,7 +17,7 @@ const GOLDEN = {
 };
 
 test('higher world: wild heights, mountains and castles of old worlds are unchanged', () => {
-    assert.equal(MAX_LAYER, 56);
+    assert.equal(MAX_LAYER, 120); // (56 → 120 for generation 5's mountains: old worlds' land and castles stay the same — the digests below)
     assert.equal(MOUNTAIN_TOP, 36);
     for (const seed of [1, 4242, 12345]) {
         const raw = createHeightField(seed, true);

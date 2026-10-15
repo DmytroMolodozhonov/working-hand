@@ -92,6 +92,14 @@ varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
 varying float vVoxPat;
 float vhash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+// smooth value noise over the ground (the grass's patches and shimmer of colour, generation 5)
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = vhash(vec3(i, 5.0)), b = vhash(vec3(i + vec2(1.0, 0.0), 5.0));
+    float c = vhash(vec3(i + vec2(0.0, 1.0), 5.0)), d = vhash(vec3(i + vec2(1.0, 1.0), 5.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 // distance to the nearest edge of a jittered cell grid (cobbles)
 float cobbleEdge(vec2 p, float layer) {
     vec2 i = floor(p), f = fract(p);
@@ -129,8 +137,19 @@ float cobbleEdge(vec2 p, float layer) {
     vec2 px = floor(f * 8.0);
     float r = vhash(vec3(cell * 8.0 + px, layerId));
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-    bool green = diffuseColor.g > diffuseColor.r * 1.15 && diffuseColor.g > diffuseColor.b * 1.1;
     float pat = floor(vVoxPat + 0.5);
+    // generation 5's grass (pattern 14): grass whatever its colour (golden steppe, autumn, moonlit teal)
+    bool lushGrass = pat == 14.0;
+    if (lushGrass) pat = 0.0;
+    bool green = lushGrass ? n.y > 0.5 : diffuseColor.g > diffuseColor.r * 1.15 && diffuseColor.g > diffuseColor.b * 1.1;
+    if (lushGrass && n.y > 0.5) {
+        // patches of lighter and darker grass, warmer and cooler, a few metres to tens of metres across —
+        // a meadow shimmers from above instead of lying one flat colour (the land's own colour is the vertex's)
+        vec2 gp = q.xz;
+        float g1 = vnoise(gp / 9.0), g2 = vnoise(gp / 3.3 + 17.0), g3 = vnoise(gp / 26.0 - 31.0);
+        diffuseColor.rgb *= 1.0 + (g1 - 0.5) * 0.24 + (g2 - 0.5) * 0.1 * (0.4 + 0.6 * kCoarse);
+        diffuseColor.rgb *= mix(vec3(0.9, 1.0, 1.1), vec3(1.1, 1.03, 0.82), smoothstep(0.2, 0.8, g3)); // (cool … warm)
+    }
     float detail = pat > 0.5 ? 0.0 : (r - 0.5) * 0.08;
     if (pat < 0.5 && green && n.y > 0.5) detail += (r > 0.9 ? 0.07 : 0.0) - (r < 0.08 ? 0.06 : 0.0); // grass speckles
     if (pat < 0.5 && !green && n.y < 0.5 && lum < 0.65) detail += (mod(px.y, 3.0) == 0.0 ? -0.05 : 0.0); // strata on rock/dirt sides

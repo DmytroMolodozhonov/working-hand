@@ -626,16 +626,17 @@ export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
 export function flatDryGround(raw, X, Z) {
     let wet = 0, all = 0;
     const hs = [];
+    const lush = !!raw.land; // (generation 5's plains roll a little more: see CastleIndex)
     for (let dz = -TOWER_ZONE; dz <= TOWER_ZONE; dz += 8) for (let dx = -TOWER_ZONE; dx <= TOWER_ZONE; dx += 8) {
         const h = raw(X + dx, Z + dz);
         all++;
         if (raw.water) { wet++; continue; }
-        if (h > 9) return false;
+        if (h > (lush ? 11 : 9)) return false;
         hs.push(h);
     }
     if (wet > all * 0.15 || hs.length < 10) return false;
     hs.sort((a, b) => a - b);
-    return hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] <= 6;
+    return hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] <= (lush ? 7 : 6);
 }
 
 /** Finds and remembers the towers (the same shape of answers as CastleIndex). */

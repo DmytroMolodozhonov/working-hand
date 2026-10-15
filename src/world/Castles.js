@@ -1505,6 +1505,9 @@ export class CastleIndex {
             if (Math.hypot(X, Z) < MIN_SPAWN_DIST + zone) continue;
             // plains (rivers and lakes may cross: the castle land is raised over them),
             // no mountains, a gentle ground
+            // (generation 5's plains roll a little more: its castles may stand on a little rougher land —
+            // the castle's land is levelled all the same and slopes gently into the wild round it)
+            const lush = !!H.land, hiMax = lush ? 12 : 10, spread = lush ? 8 : 7;
             let ok = true, wet = 0, all = 0;
             const hs = [];
             for (let dz = -zone; dz <= zone && ok; dz += 12) {
@@ -1512,13 +1515,13 @@ export class CastleIndex {
                     const h = H(X + dx, Z + dz);
                     all++;
                     if (H.water) { wet++; continue; }
-                    if (h > 10) { ok = false; break; }
+                    if (h > hiMax) { ok = false; break; }
                     hs.push(h);
                 }
             }
             if (!ok || wet > all * 0.35 || hs.length < 10) continue;
             hs.sort((a, b) => a - b);
-            if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > 7) continue;
+            if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > spread) continue;
             const sum = hs[Math.floor(hs.length / 2)], n = 1;
             const F = Math.max(0, Math.min(5, Math.round(sum / n)));
             return this._buildCastle(gx, gz, X, Z, F, s, rng, zone);

@@ -90,6 +90,7 @@ const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows 
 const _defaultSun = new THREE.Vector3(50, 100, 50).normalize();
 const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _c = new THREE.Vector3();
 import { CollisionWorld } from './Collision.js';
+import { Flora } from './Flora.js';
 import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
 import { applyTreeDetail, applySkyComp, SKY_LIGHT } from './VoxelShading.js';
 import '../core/Shadows.js'; // (the sun shadow's soft edge: patched into the shaders before they compile)
@@ -121,7 +122,7 @@ export class VoxelWorld {
         if (opts.map) {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush);
             this.createSkybox();
         }
     }
@@ -294,9 +295,10 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false, deepCaves = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush });
+        if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
         this.collision.setTerrain(this.terrain);
 
         // Decorative grass cubes (1000, instanced) — same look as before.

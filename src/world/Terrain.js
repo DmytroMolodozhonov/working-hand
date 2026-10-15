@@ -29,6 +29,7 @@ import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
+import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -50,7 +51,7 @@ export const BLOCK = {
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -62,6 +63,13 @@ export const TREE_KINDS = [
 ];
 export const isWood = (t) => t === BLOCK.WOOD || t === BLOCK.BIRCH || t === BLOCK.SPRUCE || t === BLOCK.CHERRY || t === BLOCK.DARK || t === BLOCK.PLANKS || t === BLOCK.PLANKS_DARK;
 export const isLeaves = (t) => t === BLOCK.LEAVES || t === BLOCK.BIRCH_LEAVES || t === BLOCK.SPRUCE_LEAVES || t === BLOCK.CHERRY_LEAVES || t === BLOCK.DARK_LEAVES;
+/** A column's highest possible hollow (air under its top: caves, rooms, digging) rises to L. */
+function hollowAt(c, col, L) {
+    const h = c.hollow || (c.hollow = new Int16Array(CHUNK * CHUNK).fill(MIN_LAYER));
+    if (L > h[col]) h[col] = L;
+}
+/** A tree's own blocks (its trunk and its leaves — not planks). */
+const isTree = (t) => isLeaves(t) || t === BLOCK.WOOD || t === BLOCK.BIRCH || t === BLOCK.SPRUCE || t === BLOCK.CHERRY || t === BLOCK.DARK;
 /** Burns (wood and leaves of every tree). */
 export const isFlammable = (t) => isWood(t) || isLeaves(t) || t === BLOCK.THATCH || t === BLOCK.HAY || t === BLOCK.WHEAT || t === BLOCK.BOOKS || t === BLOCK.FENCE || t === BLOCK.VEG;
 // ICE_SHAPE: solid space inside frozen water shapes (drawn by WaterMagic, not as cubes)
@@ -73,6 +81,10 @@ const drawn = (type) => type !== BLOCK.AIR && type !== BLOCK.WATER && type !== B
 /** Daylight left at a darkness 0…15 (Minecraft's light levels: a step down is a fifth less). */
 export const skyFactor = (dark) => (dark <= 0 ? 1 : Math.max(0.035, Math.pow(0.8, dark)));
 const _sky = { light: null, queue: null, tops: null }; // (reused buffers of _skyLight)
+const _mesh = { pad: null }; // (reused buffer of buildChunkArrays)
+const _SKY_DX = [1, -1, 0, 0, 0, 0], _SKY_DY = [0, 0, 1, -1, 0, 0], _SKY_DZ = [0, 0, 0, 0, 1, -1]; // (the six neighbours, _skyLight)
+// (reused buffers of _generateLush)
+const _lush = { hh: null, flags: null, kinds: null, water: null, T: new Float32Array(32 * 32), fx: {}, fx2: {}, clim: {}, clim2: {}, w: new Float32Array(16), w2: new Float32Array(16), col3: {} };
 /** Top of the water surface (water fills layers up to 0, drawn a little lower than the ground). */
 export const WATER_LEVEL_Y = -0.62;
 
@@ -147,6 +159,8 @@ Object.assign(PATTERN_OF, {
     [BLOCK.ARCANE_LAMP]: PATTERN.CRYSTAL, [BLOCK.ARCANE_LAMP_VIOLET]: PATTERN.CRYSTAL, [BLOCK.CARPET_PURPLE]: PATTERN.CLOTH,
     [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES, [BLOCK.GRAVEL]: PATTERN.COBBLE,
 });
+/** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
+const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
 /** The shader pattern of a block type. */
 export const patternOf = (t) => PATTERN_OF[t] || 0;
 // a few shades per kind so crowns and trunks don't look like plastic boxes
@@ -173,7 +187,11 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 4;
+export const WORLD_GEN = 5;
+// 5: the new landscape (src/world/Landscape.js): big mountain ranges with sharp snowy peaks, no flat
+//    tops (the world is 120 layers high), kinds of land with their own grass and leaves, scarlet
+//    canyons, stone spires, moonlit groves, floating islands; flowers and tall grass (Flora.js).
+//    A world made before keeps its generation (its saved changes lie on the land they were made on).
 // 4: caves as in Minecraft (src/world/CaveSystems.js): winding, branching, deep, chests in their chambers.
 // 3: a creative world has a test ground — a river right past the pedestals and a castle close by.
 
@@ -235,9 +253,10 @@ export function testHillHeight(ix, iz) {
     return sc > h ? sc : h;
 }
 
-// (56 = room for the wizards' tower with its pointed roof; mountains stay as they always were,
-// capped at MOUNTAIN_TOP, so old worlds and saves are unchanged)
-export const MAX_LAYER = 56;
+// (120 = room for generation 5's mountains — no ceiling they flatten against (Landscape.js) — and
+// the floating islands; the wizards' tower reaches 56. Old worlds' mountains stay as they always
+// were, capped at MOUNTAIN_TOP, so old worlds and saves are unchanged)
+export const MAX_LAYER = 120;
 export const MOUNTAIN_TOP = 36;
 export const CHUNK = 32;
 const SHIFT = 5; // log2(CHUNK)
@@ -257,7 +276,7 @@ export function chunkKey(cx, cz) {
  * Further out there are rivers and lakes: the returned function also sets
  * `fn.water` = how many water layers sit on that column (0 = dry).
  */
-export function createHeightField(seed, mountains, seas = null, test = false) {
+export function createHeightField(seed, mountains, seas = null, test = false, lush = false) {
     if (!mountains) {
         const flat = () => 0;
         flat.water = 0;
@@ -268,8 +287,11 @@ export function createHeightField(seed, mountains, seas = null, test = false) {
     const region = createNoise2D(seed ^ 0x2c1b3c6d);
     const lakes = createNoise2D(seed ^ 0x6a09e667);
     const rivers = createNoise2D(seed ^ 0x3c6ef372);
+    // generation 5: the far land is the new landscape (Landscape.js); the spawn's land as it was
+    const land = lush ? createLandscape(seed) : null;
     const fn = (ix, iz) => {
-        fn.water = 0; fn.sea = false; fn.beach = false;
+        fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+        fn.mesa = fn.shat = fn.moon = fn.fant = 0;
         // the creative test ground's river: water just past the pedestals, a valley through the hills
         let rcap = Infinity;
         if (test) {
@@ -284,17 +306,34 @@ export function createHeightField(seed, mountains, seas = null, test = false) {
         const dist = Math.sqrt(ix * ix + iz * iz);
         const near = smoothstep(38, 70, dist); // flat play area around spawn
         if (near <= 0) return 0;
-        const n = 0.6 * noise(ix / 46, iz / 46) + 0.3 * noise2(ix / 17, iz / 17) + 0.1 * noise(ix / 6 + 31, iz / 6 - 17);
-        const ridge = Math.max(0, (n + 0.05) / 0.65);
-        // Far away: wide plains alternate with big mountain ranges
-        const far = smoothstep(130, 220, dist);
-        let amp = 1, cap = NEAR_CAP;
-        if (far > 0) {
-            const r = region(ix / 260, iz / 260);
-            amp = 1 + (0.12 + 1.3 * smoothstep(-0.25, 0.55, r) - 1) * far;
-            cap = NEAR_CAP + (MOUNTAIN_TOP - NEAR_CAP) * far;
+        let h;
+        if (land && dist >= LUSH.FAR) {
+            // (generation 5, far out: only the new landscape — the spawn's old hills not worked out)
+            h = Math.round(land.height(ix, iz, dist));
+            fn.kind = land.kind;
+            fn.mesa = land.mesa; fn.shat = land.shat; fn.moon = land.moon; fn.fant = land.fant;
+        } else {
+            const n = 0.6 * noise(ix / 46, iz / 46) + 0.3 * noise2(ix / 17, iz / 17) + 0.1 * noise(ix / 6 + 31, iz / 6 - 17);
+            const ridge = Math.max(0, (n + 0.05) / 0.65);
+            // Far away: wide plains alternate with big mountain ranges
+            const far = smoothstep(130, 220, dist);
+            let amp = 1, cap = NEAR_CAP;
+            if (far > 0) {
+                const r = region(ix / 260, iz / 260);
+                amp = 1 + (0.12 + 1.3 * smoothstep(-0.25, 0.55, r) - 1) * far;
+                cap = NEAR_CAP + (MOUNTAIN_TOP - NEAR_CAP) * far;
+            }
+            h = Math.min(Math.floor(cap), Math.floor(ridge * ridge * 30 * near * amp));
+            if (land) {
+                // (generation 5: the spawn's land melts into the new landscape)
+                const lf = smoothstep(LUSH.NEAR, LUSH.FAR, dist);
+                if (lf > 0) {
+                    h = Math.round(h + (land.height(ix, iz, dist) - h) * lf);
+                    if (lf > 0.5) fn.kind = land.kind;
+                    fn.mesa = land.mesa; fn.shat = land.shat; fn.moon = land.moon; fn.fant = land.fant;
+                }
+            }
         }
-        let h = Math.min(Math.floor(cap), Math.floor(ridge * ridge * 30 * near * amp));
 
         // The sea (generation 2): a deep basin; the land sinks gently to a sandy beach
         if (seas) {
@@ -318,8 +357,9 @@ export function createHeightField(seed, mountains, seas = null, test = false) {
         // River: a winding band where the river noise crosses zero; it cuts a
         // valley (and a gorge through mountains). Beds deepen in steps of one
         // block so you can always walk in and out.
-        const rv = Math.abs(rivers(ix / 230, iz / 230) + 0.18 * rivers(ix / 45 + 50, iz / 45 - 20));
-        const width = 0.032 * wet;
+        // (generation 5: the rivers further apart — the land between them wider)
+        const rv = land ? Math.abs(rivers(ix / 380, iz / 380) + 0.16 * rivers(ix / 60 + 50, iz / 60 - 20)) : Math.abs(rivers(ix / 230, iz / 230) + 0.18 * rivers(ix / 45 + 50, iz / 45 - 20));
+        const width = (land ? 0.022 : 0.032) * wet;
         if (rv < width * 3) {
             if (rv < width) {
                 const depth = rv < width * 0.5 ? 2 : 1;
@@ -328,6 +368,11 @@ export function createHeightField(seed, mountains, seas = null, test = false) {
             }
             // Valley sides rise gently from the banks
             h = Math.min(h, Math.floor(((rv - width) / (width * 2)) * 6));
+        } else if (land && wet >= 1) {
+            // (generation 5: through high land a river runs in a valley, its sides rising steeper
+            // and steeper — not a slot cut straight down through a mountain)
+            const e = rv - width * 3;
+            h = Math.min(h, 6 + Math.floor(e * 110 + e * e * 2600));
         }
         // Lakes in low land (not on a beach)
         if (h <= 1 && !fn.beach) {
@@ -342,17 +387,20 @@ export function createHeightField(seed, mountains, seas = null, test = false) {
         }
         return h;
     };
-    fn.water = 0; fn.sea = false; fn.beach = false;
+    fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+    fn.land = land;
     if (!test) return fn;
     // the test ground's hill (with its cave, see TerrainData.caveOf)
     const hill = (ix, iz) => {
         let h = fn(ix, iz);
-        hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach;
+        hill.water = fn.water; hill.sea = fn.sea; hill.beach = fn.beach; hill.kind = fn.kind;
+        hill.mesa = fn.mesa; hill.shat = fn.shat; hill.moon = fn.moon; hill.fant = fn.fant;
         const m = fn.water ? -Infinity : testHillHeight(ix, iz); // (the river keeps its bed: its water's top stays level, no raised channel)
         if (m > h) h = m;
         return h;
     };
-    hill.water = 0; hill.sea = false; hill.beach = false;
+    hill.water = 0; hill.sea = false; hill.beach = false; hill.kind = KIND.LAND;
+    hill.land = land;
     return hill;
 }
 
@@ -374,6 +422,8 @@ function hash01(a, b, seed) {
 const TREE_CELL = 12; // one possible tree per 12×12 m cell
 const CAVE_CELL = 90; // at most one cave per 90×90 m
 const TREE_MIN_DIST = 128; // trees closer to spawn are the original (instanced) ones
+/** Generation 5's floating islands: at most one (with its small ones) per CELL×CELL m. */
+export const ISLE = { CELL: 112, R_MIN: 6, R_MAX: 15 };
 
 export class TerrainData {
     /**
@@ -390,9 +440,10 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
+        this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
@@ -400,7 +451,8 @@ export class TerrainData {
         const spot = mountains && seas && test ? testSeaCastleSpot(seed) : null;
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
-        const raw = createHeightField(seed, mountains, this.seas, this.test);
+        const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
+        this.land = raw.land || null;
         this.castles = this.towers = this.sites = null;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
@@ -408,9 +460,11 @@ export class TerrainData {
             this.towers = new TowerIndex(seed, raw, this.castles);
             const idx = this.sites = new SiteIndex(this.castles, this.towers);
             const fn = (ix, iz) => {
-                const h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)
+                const h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach, kind = raw.kind; // (read before landAt: finding a site re-samples raw)
+                const mesa = raw.mesa, shat = raw.shat, moon = raw.moon, fant = raw.fant;
                 const land = idx.landAt(ix, iz);
-                fn.sea = sea; fn.beach = beach;
+                fn.sea = sea; fn.beach = beach; fn.kind = kind;
+                fn.mesa = mesa; fn.shat = shat; fn.moon = moon; fn.fant = fant;
                 if (land && land.side === 'sea') {
                     // beyond a sea castle's quay: the sea (dug deep in the harbour)
                     const k = land.castle.port;
@@ -420,15 +474,17 @@ export class TerrainData {
                 }
                 if (!land || (land.w < 1 && wet)) { fn.water = wet; return h; } // (rivers keep their banks)
                 fn.water = 0; fn.sea = false;
-                if (land.w >= 1) fn.beach = false;
+                if (land.w >= 1) { fn.beach = false; fn.kind = KIND.LAND; }
                 const F = land.castle.F;
                 return land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w));
             };
-            fn.water = 0; fn.sea = false; fn.beach = false;
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+            fn.mesa = fn.shat = fn.moon = fn.fant = 0;
             this.heightAt = fn;
         } else this.heightAt = raw;
         this._caves = new Map();
         this._lairs = new Map(); // (dragons' lairs high in the mountains: DragonLairs.js)
+        this._isles = new Map(); // (generation 5: the floating islands)
         this.chunks.clear();
         this._last = null;
         this.version++;
@@ -453,6 +509,7 @@ export class TerrainData {
     }
 
     _generateChunk(cx, cz) {
+        if (this.lush) return this._generateLush(cx, cz);
         const blocks = new Uint8Array(CHUNK * CHUNK * HEIGHT);
         const top = new Int16Array(CHUNK * CHUNK);
         const x0 = cx * CHUNK, z0 = cz * CHUNK;
@@ -498,6 +555,287 @@ export class TerrainData {
         return c;
     }
 
+    /**
+     * Generation 5 (Landscape.js): the ground of a chunk by its slopes and heights — bare rock on
+     * cliffs and steep slopes, snow above the snow line (lower in the cold), alpine grass high up,
+     * the scarlet canyons' sand and striped rock, stone spires; every column's colours (its grass,
+     * its leaves' tint, its rock) kept in the chunk for the mesher (faceColor).
+     */
+    _generateLush(cx, cz) {
+        const blocks = new Uint8Array(CHUNK * CHUNK * HEIGHT);
+        const top = new Int16Array(CHUNK * CHUNK);
+        const x0 = cx * CHUNK, z0 = cz * CHUNK;
+        const H = this.heightAt, land = this.land;
+        const bedrock = this.bedrockTop ?? OLD_BEDROCK;
+        const P = CHUNK + 2;
+        const hh = _lush.hh || (_lush.hh = new Int16Array(P * P));
+        const cols = CHUNK * CHUNK;
+        const grass = new Int32Array(cols), leaf = new Int32Array(cols), leafK = new Uint8Array(cols), mesa = new Uint8Array(cols), bio = new Uint8Array(cols);
+        const flags = _lush.flags || (_lush.flags = new Uint8Array(cols)); // 1 water, 2 sea, 4 beach
+        const kinds = _lush.kinds || (_lush.kinds = new Uint8Array(cols));
+        const fx = _lush.fx, clim = _lush.clim, w = _lush.w, col3 = _lush.col3;
+        const water = _lush.water || (_lush.water = new Int16Array(cols));
+        let seaMask = null;
+        for (let pz = 0; pz < P; pz++) {
+            for (let px = 0; px < P; px++) {
+                const x = x0 + px - 1, z = z0 + pz - 1;
+                const h = H(x, z);
+                hh[pz * P + px] = h;
+                if (px === 0 || pz === 0 || px === P - 1 || pz === P - 1) continue;
+                const col = (pz - 1) * CHUNK + (px - 1);
+                water[col] = H.water;
+                flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0);
+                kinds[col] = H.kind || 0;
+                fx.mesa = H.mesa || 0; fx.shat = H.shat || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
+                land.climate(x, z, clim);
+                const spawn = 1 - smoothstep(60, 260, Math.sqrt(x * x + z * z));
+                bio[col] = land.biomes(clim, w, spawn, fx);
+                land.colours(x, z, h, w, clim, col3);
+                grass[col] = col3.grass; leaf[col] = col3.leaf; leafK[col] = Math.round(col3.leafK * 255); mesa[col] = Math.round(col3.mesa * 255);
+                _lush.T[col] = clim.T;
+            }
+        }
+        let maxTop = 0;
+        for (let lz = 0; lz < CHUNK; lz++) {
+            for (let lx = 0; lx < CHUNK; lx++) {
+                const col = lz * CHUNK + lx, x = x0 + lx, z = z0 + lz;
+                const i0 = (lz + 1) * P + (lx + 1), h = hh[i0];
+                const f = flags[col], wet = water[col], sea = f & 2, beach = f & 4, kind = kinds[col];
+                if (sea) (seaMask ||= new Uint8Array(cols))[col] = 1;
+                const slope = Math.max(Math.abs(hh[i0 + 1] - h), Math.abs(hh[i0 - 1] - h), Math.abs(hh[i0 + P] - h), Math.abs(hh[i0 - P] - h));
+                const r = hashLand(x, z, this.seed + 5);
+                // the top block
+                let surf = BLOCK.GRASS, soil = BLOCK.DIRT, deep = 3;
+                const snow = land.snowLine(x, z, _lush.T[col]);
+                const m = mesa[col] / 255;
+                if (h >= snow + (slope >= 3 ? 7 : 0)) { surf = BLOCK.SNOW; soil = slope >= 2 ? BLOCK.STONE : BLOCK.DIRT; deep = 2; }
+                else if (kind === KIND.SPIRE) { surf = slope <= 1 && h - Math.min(hh[i0 + 1], hh[i0 - 1], hh[i0 + P], hh[i0 - P]) < 2 && r < 0.75 ? BLOCK.GRASS : BLOCK.STONE; soil = BLOCK.STONE; deep = 1; }
+                else if (kind === KIND.MESA && r < smoothstep(0.15, 0.5, m) * 1.1) { /* (at its edge the scarlet sand and the grass mingle) */ surf = slope >= 2 ? BLOCK.STONE : r < 0.12 * (1 - m) + 0.05 ? BLOCK.GRASS : BLOCK.SAND; soil = surf === BLOCK.SAND ? BLOCK.SAND : BLOCK.STONE; deep = 2; }
+                else if (slope >= 3 || (slope >= 2 && h > 24)) { surf = r < 0.12 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; deep = 0; }
+                else if (h > 36 && r < smoothstep(36, 60, h) * 0.55) { surf = r < 0.06 ? BLOCK.GRAVEL : BLOCK.STONE; soil = BLOCK.STONE; }
+                for (let L = MIN_LAYER; L <= h; L++) {
+                    let type;
+                    if (L <= bedrock) type = BLOCK.BEDROCK;
+                    else if (wet && L === h) type = BLOCK.SAND;
+                    else if (sea && L >= h - 3) type = BLOCK.SAND; // the seabed
+                    else if (L === h && beach) type = BLOCK.SAND; // the beach
+                    else if (L === h) type = surf;
+                    else if (L >= h - deep && L >= h - 3) type = soil;
+                    else if (L >= -1 && L <= 1 && h <= 6) type = BLOCK.DIRT;
+                    else type = BLOCK.STONE;
+                    blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = type;
+                }
+                for (let L = h + 1; L <= h + wet; L++) blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = BLOCK.WATER;
+                top[col] = h;
+                if (h > maxTop) maxTop = h;
+            }
+        }
+        let minOpen = MAX_LAYER;
+        for (let i = 0; i < top.length; i++) if (top[i] + 1 < minOpen) minOpen = top[i] + 1;
+        const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen, sea: seaMask, grass, leaf, leafK, mesa, bio, wet: flags };
+        this._carveCaves(c); this._buildCastles(c); this._plantLush(c); this._floatIslands(c);
+        c.wet = undefined;
+        return c;
+    }
+
+    /**
+     * The kind of land (BIOMES index) at a column, worked out from the recipe (for a tree whose
+     * crown reaches into a chunk from its neighbour: the same answer whichever chunk asks).
+     */
+    biomeAt(x, z) {
+        const c = this.chunks.get(chunkKey(x >> SHIFT, z >> SHIFT));
+        if (c && c.bio) return c.bio[(z & MASK) * CHUNK + (x & MASK)];
+        const H = this.heightAt, land = this.land;
+        H(x, z);
+        const fx = _lush.fx2;
+        fx.mesa = H.mesa || 0; fx.shat = H.shat || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
+        land.climate(x, z, _lush.clim2);
+        return land.biomes(_lush.clim2, _lush.w2, 1 - smoothstep(60, 260, Math.sqrt(x * x + z * z)), fx);
+    }
+
+    /**
+     * Generation 5: trees by the kind of land — forests, groves and clearings, single trees on the
+     * meadows, autumn birches, pink cherries, spruces up the cold slopes. Only on ground that holds
+     * the trunk (a 2×2 trunk on four columns of one height; the ground round it a step at most).
+     */
+    _plantLush(c) {
+        const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK, C = 7;
+        const put = (x, L, z, type, onlyAir) => {
+            const lx = x - x0, lz = z - z0;
+            if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || L > MAX_LAYER) return;
+            const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+            if (onlyAir && c.blocks[i] !== BLOCK.AIR) return;
+            c.blocks[i] = type;
+            const col = lz * CHUNK + lx;
+            if (L > c.top[col]) c.top[col] = L;
+            if (L > c.maxTop) c.maxTop = L;
+        };
+        const H = this.heightAt, grove = this.land.grove;
+        for (let gz = Math.floor((z0 - 5) / C); gz <= Math.floor((z0 + CHUNK + 4) / C); gz++) {
+            for (let gx = Math.floor((x0 - 5) / C); gx <= Math.floor((x0 + CHUNK + 4) / C); gx++) {
+                const tx = gx * C + 1 + Math.floor(hashLand(gz, gx, this.seed + 7) * (C - 2));
+                const tz = gz * C + 1 + Math.floor(hashLand(gx + 911, gz - 37, this.seed + 8) * (C - 2));
+                if (tx * tx + tz * tz < TREE_MIN_DIST * TREE_MIN_DIST) continue;
+                const roll = hashLand(gx, gz, this.seed + 9);
+                if (roll > 0.7) continue; // (cheap first: most cells hold no tree)
+                const b = BIOMES[this.biomeAt(tx, tz)];
+                if (roll > b.trees * grove(tx, tz)) continue;
+                const h = H(tx, tz);
+                if (h < 1 || H.water || H.beach || H.kind === KIND.SPIRE || H.kind === KIND.MESA) continue;
+                const kind = b.kinds[Math.floor(hashLand(gx * 3 + 1, gz * 5 + 2, this.seed + 13) * b.kinds.length)];
+                if (h > LUSH.TREE_LINE + (kind === 2 ? 8 : 0)) continue;
+                if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
+                if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue;
+                const wide = kind === 0 || kind === 4; // (oak and dark oak: a 2×2 trunk)
+                let ok = true;
+                for (let dz = -1; dz <= 2 && ok; dz++) for (let dx = -1; dx <= 2; dx++) {
+                    const trunk = dx >= 0 && dz >= 0 && (wide ? dx <= 1 && dz <= 1 : dx === 0 && dz === 0);
+                    const g = H(tx + dx, tz + dz);
+                    if (H.water || (trunk ? g !== h : Math.abs(g - h) > 1)) { ok = false; break; }
+                }
+                if (!ok) continue;
+                // (on grass: not in the snow, nor on the bare rock high up — the same rules as the
+                // ground's, worked out from the recipe so every chunk the crown reaches agrees)
+                if (h >= this.land.snowLine(tx, tz, this.land.climate(tx, tz, _lush.clim2).T) - 1) continue;
+                if (h > 36 && hashLand(tx, tz, this.seed + 5) < smoothstep(36, 60, h) * 0.55) continue;
+                this._tree(put, tx, tz, h, kind);
+            }
+        }
+    }
+
+    /**
+     * Generation 5: the floating island of an island cell (or null) — mostly over the fantastic
+     * lands, now and then anywhere far from the spawn; never over a castle, a village or a tower,
+     * always high above the ground under it (a mountain never touches it). A main island and up to
+     * two small ones beside it: grass on top, earth, then rock tapering down to a point.
+     */
+    islandOf(gx, gz) {
+        if (!this.lush) return null;
+        const m = this._isles || (this._isles = new Map());
+        const key = gx * 100003 + gz;
+        if (m.has(key)) return m.get(key);
+        let isle = null;
+        const S = this.seed, C = ISLE.CELL, H = this.heightAt;
+        const x = Math.round((gx + 0.2 + 0.6 * hashLand(gx, gz, S + 301)) * C), z = Math.round((gz + 0.2 + 0.6 * hashLand(gz, gx, S + 302)) * C);
+        if (x * x + z * z >= LUSH.ISLE_MIN * LUSH.ISLE_MIN) {
+            H(x, z);
+            const chance = 0.025 + 0.55 * ((H.moon || 0) + (H.shat || 0)) + 0.15 * (H.mesa || 0);
+            const R = ISLE.R_MIN + Math.floor(hashLand(gx + 5, gz - 2, S + 303) * (ISLE.R_MAX - ISLE.R_MIN + 1));
+            if (hashLand(gx - 9, gz + 4, S + 304) < chance && !(this.sites && this.sites.near(x, z, R * 2 + 40).length)) {
+                // the highest ground under it and round it
+                let g = 0;
+                for (let k = 0; k < 13; k++) {
+                    const a = k === 12 ? 0 : (k * TAU) / 12, rr = k === 12 ? 0 : R * 2.2;
+                    g = Math.max(g, H(Math.round(x + Math.cos(a) * rr), Math.round(z + Math.sin(a) * rr)));
+                }
+                const Y = Math.min(Math.max(g + 24, 44) + Math.floor(hashLand(gx + 3, gz + 8, S + 305) * 22), MAX_LAYER - 16);
+                if (Y - g >= 18) {
+                    const parts = [{ x, z, r: R, Y }];
+                    const n = Math.floor(hashLand(gx - 4, gz - 6, S + 306) * 3);
+                    for (let k = 0; k < n; k++) {
+                        const a = hashLand(gx + k, gz - k, S + 307) * TAU, d = R * (1.45 + 0.5 * hashLand(gx - k, gz + k, S + 308));
+                        parts.push({ x: Math.round(x + Math.cos(a) * d), z: Math.round(z + Math.sin(a) * d), r: Math.max(3, Math.round(R * (0.3 + 0.2 * hashLand(k, gx, S + 309)))), Y: Y + Math.floor(hashLand(gz, k, S + 310) * 9) - 4 });
+                    }
+                    const reach = R * 2.6 + 6;
+                    isle = { id: 'isle' + gx + '_' + gz, x, z, R, Y, parts, x0: x - reach, x1: x + reach, z0: z - reach, z1: z + reach, tree: R >= 8 };
+                }
+            }
+        }
+        m.set(key, isle);
+        return isle;
+    }
+
+    /** The floating islands reaching within `r` of a point. */
+    islandsNear(x, z, r) {
+        const out = [];
+        if (!this.lush) return out;
+        const C = ISLE.CELL, R = r + ISLE.R_MAX * 2.6 + 6;
+        for (let gz = Math.floor((z - R) / C); gz <= Math.floor((z + R) / C); gz++) {
+            for (let gx = Math.floor((x - R) / C); gx <= Math.floor((x + R) / C); gx++) {
+                const s = this.islandOf(gx, gz);
+                if (s && x + r >= s.x0 && x - r <= s.x1 && z + r >= s.z0 && z - r <= s.z1) out.push(s);
+            }
+        }
+        return out;
+    }
+
+    /** The highest thing at a column from the recipe: the ground or a floating island over it (fliers fly above). */
+    skyTopAt(ix, iz) {
+        let y = this.heightAt(ix, iz);
+        if (this.lush) for (const s of this.islandsNear(ix, iz, 0)) for (const p of s.parts) {
+            const dx = ix - p.x, dz = iz - p.z;
+            if (dx * dx + dz * dz <= p.r * p.r * 1.6) y = Math.max(y, p.Y + 14); // (+ a tree on it)
+        }
+        return y;
+    }
+
+    /** The column of an island part at (x, z): [top, bottom] layers, or null (not under it). */
+    _isleColumn(p, x, z) {
+        const dx = x - p.x, dz = z - p.z;
+        const wob = this.land.wobble(x, z);
+        const rr = p.r * (1 + 0.2 * wob);
+        const d2 = (dx * dx + dz * dz) / (rr * rr);
+        if (d2 >= 1) return null;
+        const k = 1 - d2;
+        const topL = p.Y + Math.round(1.6 * k + 0.8 * wob);
+        // the rock under it hangs down to a point (and a few spikes of rock lower still)
+        const spike = hashLand(x >> 1, z >> 1, this.seed + 320) < 0.12 ? 2 + Math.floor(hashLand(x, z, this.seed + 321) * 4) : 0;
+        const depth = 1 + Math.round(p.r * 1.15 * k * Math.sqrt(k) * (0.8 + 0.25 * this.land.wobble(z + 40, x - 40)) + spike * k);
+        return [topL, topL - depth];
+    }
+
+    /** Generation 5: the floating islands' blocks in a chunk (and their trees). */
+    _floatIslands(c) {
+        const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
+        const isles = this.islandsNear(x0 + CHUNK / 2, z0 + CHUNK / 2, CHUNK * 0.75);
+        if (!isles.length) return;
+        const B = c.blocks;
+        let bot = null;
+        const snowAt = (x, z) => this.land.snowLine(x, z, this.land.climate(x, z, _lush.clim2).T);
+        for (const s of isles) {
+            for (const p of s.parts) {
+                const ax = Math.max(x0, p.x - p.r * 1.3 - 1), bx = Math.min(x0 + CHUNK - 1, p.x + p.r * 1.3 + 1);
+                const az = Math.max(z0, p.z - p.r * 1.3 - 1), bz = Math.min(z0 + CHUNK - 1, p.z + p.r * 1.3 + 1);
+                if (ax > bx || az > bz) continue;
+                const snow = p.Y >= snowAt(p.x, p.z);
+                for (let z = Math.ceil(az); z <= bz; z++) for (let x = Math.ceil(ax); x <= bx; x++) {
+                    const cl = this._isleColumn(p, x, z);
+                    if (!cl) continue;
+                    const [t, b] = cl;
+                    const lx = x - x0, lz = z - z0, col = lz * CHUNK + lx;
+                    for (let L = Math.max(b, MIN_LAYER + 1); L <= Math.min(t, MAX_LAYER); L++) {
+                        B[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = L === t ? (snow ? BLOCK.SNOW : BLOCK.GRASS) : L >= t - 2 ? BLOCK.DIRT : BLOCK.STONE;
+                    }
+                    if (!bot) { bot = new Int16Array(CHUNK * CHUNK); bot.fill(32767); }
+                    if (b < bot[col]) bot[col] = b;
+                    if (t > c.top[col]) c.top[col] = t;
+                    if (t > c.maxTop) c.maxTop = t;
+                }
+            }
+            // a tree on the main island (its trunk on the island's middle)
+            if (s.tree) {
+                const p = s.parts[0], cl = this._isleColumn(p, p.x, p.z);
+                if (cl && !(p.Y >= snowAt(p.x, p.z))) {
+                    const b = BIOMES[this.biomeAt(p.x, p.z)];
+                    const kinds = b.kinds.filter((k) => k !== 0 && k !== 4); // (a one-column trunk: the island's top is not quite flat)
+                    const kind = kinds.length ? kinds[Math.floor(hashLand(p.x, p.z, this.seed + 330) * kinds.length)] : 1;
+                    const put = (x, L, z, type, onlyAir) => {
+                        const lx = x - x0, lz = z - z0;
+                        if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || L > MAX_LAYER) return;
+                        const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+                        if (onlyAir && B[i] !== BLOCK.AIR) return;
+                        B[i] = type;
+                        const col = lz * CHUNK + lx;
+                        if (L > c.top[col]) c.top[col] = L;
+                        if (L > c.maxTop) c.maxTop = L;
+                    };
+                    this._tree(put, p.x, p.z, cl[0], kind);
+                }
+            }
+        }
+        if (bot) { c.isleBot = bot; c.isle = true; }
+    }
+
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
         const lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
@@ -527,6 +865,7 @@ export class TerrainData {
                         }
                         const col = (z - z0) * CHUNK + (x - x0);
                         for (let L = L0; L <= L1; L++) blocks[(L - MIN_LAYER) * CHUNK * CHUNK + col] = t;
+                        if (t === BLOCK.AIR) hollowAt(c, col, L1); // (rooms: hollows under a roof)
                     }
                 }
                 if (t !== BLOCK.AIR) { if (L1 > maxTop) maxTop = L1; } else if (L0 < minOpen) minOpen = L0;
@@ -709,23 +1048,24 @@ export class TerrainData {
             for (let lx = 0; lx < CHUNK; lx++) {
                 const x = x0 + lx, z = z0 + lz;
                 const col = lz * CHUNK + lx;
-                H(x, z);
-                if (H.water || H.sea || this.sites?.landAt(x, z)) continue;
+                if (c.wet) { if (c.wet[col] & 3) continue; } // (generation 5: the flags the ground was made with)
+                else { H(x, z); if (H.water || H.sea) continue; }
+                if (this.sites?.landAt(x, z)) continue;
                 const top0 = c.top[col];
-                let carved = false;
+                let carved = false, hiCut = MIN_LAYER;
                 const cut = (L0, L1, open) => {
                     const hi = Math.min(L1, open ? top0 : top0 - CAVES.ROOF);
                     for (let L = Math.max(L0, MIN_LAYER + 1); L <= hi; L++) {
                         const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
                         const b = c.blocks[i];
-                        if (b !== BLOCK.WATER && b !== BLOCK.BEDROCK && b !== BLOCK.AIR) { c.blocks[i] = BLOCK.AIR; carved = true; if (L < c.minOpen) c.minOpen = L; }
+                        if (b !== BLOCK.WATER && b !== BLOCK.BEDROCK && b !== BLOCK.AIR) { c.blocks[i] = BLOCK.AIR; carved = true; if (L < c.minOpen) c.minOpen = L; if (L > hiCut) hiCut = L; }
                     }
                 };
                 // (where systems cross, a chamber's floor stays whole under the other's tunnels too)
                 let keep = -Infinity;
                 if (sys.length > 1) for (const s of sys) keep = Math.max(keep, chamberFloor(s, x, z));
                 for (const s of sys) carveColumn(s, x, z, cut, keep);
-                if (carved) { (this._walls || (this._walls = [])).push(col); c.caved = true; } // (its sky light: _skyLight)
+                if (carved) { (this._walls || (this._walls = [])).push(col); c.caved = true; hollowAt(c, col, hiCut); } // (its sky light: _skyLight)
                 if (carved) {
                     let top = MIN_LAYER - 1;
                     for (let L = c.top[col]; L >= MIN_LAYER; L--) {
@@ -754,7 +1094,8 @@ export class TerrainData {
                 if (lx < 0 || lz < 0 || lx >= CHUNK || lz >= CHUNK || done.has(lz * CHUNK + lx)) continue;
                 done.add(lz * CHUNK + lx);
                 const top = c.top[lz * CHUNK + lx];
-                for (let L = MIN_LAYER + 1; L < top - 2; L++) {
+                // (from just under the chunk's lowest hollow: all rock below touches no air)
+                for (let L = Math.max(MIN_LAYER + 1, c.minOpen - 1); L < top - 2; L++) {
                     const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
                     if (B[i] !== BLOCK.STONE) continue;
                     if (at(lx, L + 1, lz) !== BLOCK.AIR && at(lx, L - 1, lz) !== BLOCK.AIR && at(lx + 1, L, lz) !== BLOCK.AIR && at(lx - 1, L, lz) !== BLOCK.AIR && at(lx, L, lz + 1) !== BLOCK.AIR && at(lx, L, lz - 1) !== BLOCK.AIR) continue;
@@ -798,7 +1139,7 @@ export class TerrainData {
                     if (!hgt) continue;
                     for (let L = cv.F + 1; L <= cv.F + hgt && L <= c.top[col]; L++) {
                         const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
-                        if (c.blocks[i] !== BLOCK.WATER) { c.blocks[i] = BLOCK.AIR; carved = true; if (L < c.minOpen) c.minOpen = L; }
+                        if (c.blocks[i] !== BLOCK.WATER) { c.blocks[i] = BLOCK.AIR; carved = true; if (L < c.minOpen) c.minOpen = L; hollowAt(c, col, L); }
                     }
                 }
                 if (carved) {
@@ -920,7 +1261,11 @@ export class TerrainData {
         if (!drawn(type) && L < c.minOpen) c.minOpen = L;
         if (type !== BLOCK.AIR && L > c.maxTop) c.maxTop = L;
         if (type === BLOCK.ICE) this.version++;
+        const col = (iz & MASK) * CHUNK + (ix & MASK), before = c.top[col];
         this._refreshTop(c, ix & MASK, iz & MASK);
+        // (a hollow: air let in under the top, or a roof put over the air)
+        if (!drawn(type)) hollowAt(c, col, L);
+        else if (c.top[col] > before + 1) hollowAt(c, col, c.top[col] - 1);
         this._markDirty(ix, iz);
     }
 
@@ -1085,6 +1430,7 @@ export class TerrainData {
                     if (keep && keep(ix, by, iz)) continue; // (inside a house's sphere of protection)
                     c.blocks[idx] = BLOCK.AIR;
                     if (L < c.minOpen) c.minOpen = L;
+                    hollowAt(c, lz * CHUNK + lx, L);
                     removed.push({ x: ix, y: by, z: iz, type });
                     touched = true;
                 }
@@ -1153,8 +1499,65 @@ export class TerrainData {
         return null;
     }
 
+    /**
+     * Generation 5: a face's colour by the kind of land under it (−1: as in every world) — the
+     * grass of its place (Landscape.colours, kept per column), the leaves' tint (autumn, the
+     * moonlit groves…), the scarlet lands' striped rock and their sand.
+     */
+    _lushColour(type, ix, L, iz, isTop) {
+        let c = this._meshChunk;
+        if (!c || c.cx !== ix >> SHIFT || c.cz !== iz >> SHIFT) c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        if (!c.grass) return -1;
+        const col = (iz & MASK) * CHUNK + (ix & MASK);
+        if (type === BLOCK.GRASS) {
+            if (!isTop) return -1;
+            // (in steps of 4: a meadow of one colour is still one big quad; the shader's own
+            // flecks and patches hide the steps)
+            const g = c.grass[col];
+            return ((((g >> 16) & 255) >> 2) << 18) | ((((g >> 8) & 255) >> 2) << 10) | (((g & 255) >> 2) << 2);
+        }
+        if (isLeaves(type)) {
+            const k = c.leafK[col];
+            if (!k) return -1;
+            const shade = this._shade(type, ix, L, iz), base = BASE_COLORS[type];
+            const lum = (v) => ((v >> 16) & 255) * 0.3 + ((v >> 8) & 255) * 0.59 + (v & 255) * 0.11;
+            const rel = lum(shade) / Math.max(1, lum(base)), t = c.leaf[col];
+            const tinted = (Math.min(255, Math.round(((t >> 16) & 255) * rel)) << 16) | (Math.min(255, Math.round(((t >> 8) & 255) * rel)) << 8) | Math.min(255, Math.round((t & 255) * rel));
+            return mixColour(shade, tinted, Math.round((k / 255) * 4) / 4);
+        }
+        const m = c.mesa[col];
+        if (m > 40 && (type === BLOCK.STONE || type === BLOCK.SAND)) {
+            const k = Math.round((m / 255) * 4) / 4; // (a few steps: the stripes still merge along a wall)
+            if (type === BLOCK.STONE) return this._jitter(mesaRock(L, k, BASE_COLORS[BLOCK.STONE]), ix, L, iz, isTop, type);
+            return this._jitter(mixColour(BASE_COLORS[BLOCK.SAND], MESA_SAND_COLOUR, k), ix, L, iz, isTop, type);
+        }
+        return -1;
+    }
+
+    /** One of a tree kind's shades (a few per kind so crowns and trunks don't look like plastic boxes). */
+    _shade(type, ix, L, iz) {
+        let k = ((ix >> 1) * 73856093) ^ (((L) >> 1) * 19349663) ^ ((iz >> 1) * 83492791);
+        if (type === BLOCK.BIRCH) k = (ix * 73856093) ^ (L * 19349663) ^ (iz * 83492791); // birch: small dark marks
+        k = ((k ^ (k >>> 13)) >>> 0) % 5;
+        return SHADES[type][k];
+    }
+
+    /** A small brightness jitter: tops per 2×2 patch, sides per layer (rock strata; greedy meshing still merges runs). */
+    _jitter(base, ix, L, iz, isTop, type) {
+        let h = isTop
+            ? ((ix >> 1) * 73856093) ^ (L * 19349663) ^ ((iz >> 1) * 83492791)
+            : (L * 19349663) ^ (type * 83492791);
+        h = (h ^ (h >>> 13)) >>> 0;
+        const j = ((h % 1000) / 1000 - 0.5) * 0.12;
+        const r = Math.min(255, Math.max(0, ((base >> 16) & 255) * (1 + j)));
+        const g = Math.min(255, Math.max(0, ((base >> 8) & 255) * (1 + j)));
+        const b = Math.min(255, Math.max(0, (base & 255) * (1 + j)));
+        return ((r & 255) << 16) | ((g & 255) << 8) | (b & 255);
+    }
+
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
+        if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }
         let base = BASE_COLORS[type] ?? 0xff00ff;
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;
         if (L <= 0 && type === BLOCK.GRASS) return base; // flat ground: exact original colour
@@ -1210,26 +1613,34 @@ export class TerrainData {
             const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
             let top = k.top[(wz & MASK) * CHUNK + (wx & MASK)];
             if (k.caved && this.sites?.landAt(wx, wz)) top = MIN_LAYER - 1; // (houses and castles: their rooms as they are)
+            else if (k.isleBot && k.isleBot[(wz & MASK) * CHUNK + (wx & MASK)] < 32767) top = this._underIsle(k, wx & MASK, wz & MASK); // (under a floating island: the open sky)
+            else if (top > MIN_LAYER && isTree(k.blocks[((top - MIN_LAYER) * CHUNK + (wz & MASK)) * CHUNK + (wx & MASK)])) {
+                // (a tree's crown is no cave's roof: the daylight comes through the leaves to the ground)
+                const kb = k.blocks, cb = (wz & MASK) * CHUNK + (wx & MASK);
+                while (top > MIN_LAYER) { const b = kb[(top - MIN_LAYER) * CHUNK * CHUNK + cb]; if (b !== BLOCK.AIR && !isTree(b)) break; top--; }
+            }
             tops[rz * RW + rx] = top;
             if (top > maxTop) maxTop = top;
         }
         // open: at or above the column's top, and light passes there (air, water)
         const open = (rx, L, rz) => { const t = tops[rz * RW + rx]; return L > t || (L === t && !drawn(blockAt(rx, L, rz))); };
-        const D = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+        const DX = _SKY_DX, DY = _SKY_DY, DZ = _SKY_DZ;
         let tail = 0;
         // the hollows' cells next to the open air get the daylight
         for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) {
             const wx = x0 + rx, wz = z0 + rz;
-            if (!chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)].caved) continue; // (no hollows there)
+            const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
+            if (!k.caved) continue; // (no hollows there)
             const top = tops[rz * RW + rx];
-            for (let L = MIN_LAYER + 1; L < top; L++) {
-                if (drawn(blockAt(rx, L, rz))) continue;
-                let lit = false;
-                for (const [dx, dy, dz] of D) {
-                    const nx = rx + dx, nz = rz + dz, nL = L + dy;
-                    if (nx < 0 || nz < 0 || nx >= RW || nz >= RW) continue;
-                    if (open(nx, nL, nz)) { lit = true; break; }
-                }
+            const kb = k.blocks, cb = (wz & MASK) * CHUNK + (wx & MASK);
+            // (only where hollows may be: above the chunk's lowest open layer, up to the column's highest
+            // hollow — the solid rock of a tall mountain is not walked through layer by layer)
+            const hi = k.hollow ? Math.min(top - 1, k.hollow[cb]) : top - 1;
+            for (let L = Math.max(MIN_LAYER + 1, k.minOpen ?? MIN_LAYER); L <= hi; L++) {
+                const t = kb[(L - MIN_LAYER) * CHUNK * CHUNK + cb];
+                if (t !== BLOCK.AIR && t !== BLOCK.WATER && t !== BLOCK.ICE_SHAPE) continue; // (rock: drawn)
+                const lit = (rx + 1 < RW && open(rx + 1, L, rz)) || (rx > 0 && open(rx - 1, L, rz)) || open(rx, L + 1, rz) || open(rx, L - 1, rz) ||
+                    (rz + 1 < RW && open(rx, L, rz + 1)) || (rz > 0 && open(rx, L, rz - 1));
                 if (lit) { const i = ((L - MIN_LAYER) * RW + rz) * RW + rx; light[i] = 14; queue[tail++] = i; }
             }
         }
@@ -1238,8 +1649,8 @@ export class TerrainData {
             const i = queue[head], v = light[i];
             if (v <= 1) continue;
             const rx = i % RW, rz = ((i - rx) / RW) % RW, L = Math.floor(i / (RW * RW)) + MIN_LAYER;
-            for (const [dx, dy, dz] of D) {
-                const nx = rx + dx, nz = rz + dz, nL = L + dy;
+            for (let q = 0; q < 6; q++) {
+                const nx = rx + DX[q], nz = rz + DZ[q], nL = L + DY[q];
                 if (nx < 0 || nz < 0 || nx >= RW || nz >= RW || nL <= MIN_LAYER || nL > MAX_LAYER) continue;
                 if (nL >= tops[nz * RW + nx]) continue; // (the open air: lit anyway)
                 const j = ((nL - MIN_LAYER) * RW + nz) * RW + nx;
@@ -1256,11 +1667,25 @@ export class TerrainData {
         };
         // the chunk's own cells, kept (how dark it is where the player stands: skyAt)
         const own = c.sky && c.sky.length === CHUNK * CHUNK * HEIGHT ? c.sky : new Uint8Array(CHUNK * CHUNK * HEIGHT);
-        for (let L = MIN_LAYER; L <= Math.min(MAX_LAYER, maxTop); L++) for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
-            own[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = dark(cx * CHUNK + lx, L, cz * CHUNK + lz);
+        const Lmax = Math.min(MAX_LAYER, maxTop);
+        for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
+            const rx = lx + P, rz = lz + P, t = tops[rz * RW + rx];
+            for (let L = MIN_LAYER; L <= Lmax; L++) {
+                own[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = L <= MIN_LAYER || L >= t ? 0 : 15 - light[((L - MIN_LAYER) * RW + rz) * RW + rx];
+            }
         }
         c.sky = own;
         return dark;
+    }
+
+    /** The ground's top under a floating island's column (the island's rock is not a cave's roof). */
+    _underIsle(c, lx, lz) {
+        const col = lz * CHUNK + lx;
+        for (let L = Math.min(c.isleBot[col], c.top[col] + 1) - 1; L >= MIN_LAYER; L--) {
+            const b = c.blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx];
+            if (b !== BLOCK.AIR && b !== BLOCK.WATER) return L;
+        }
+        return MIN_LAYER - 1;
     }
 
     /** How much daylight reaches a point (1: the open sky … ~0.04: deep in a cave). */
@@ -1280,7 +1705,7 @@ export class TerrainData {
      */
     buildChunkArrays(cx, cz) {
         const c = this.chunk(cx, cz);
-        const out = { ground: newBuffers(), raised: newBuffers(), water: newBuffers() };
+        const out = { ground: newBuffers(0), raised: newBuffers(1), water: newBuffers(2) };
         const x0 = cx * CHUNK, z0 = cz * CHUNK;
         // Only the layers that can hold faces of this chunk's blocks: from just
         // below the lowest open (non-rock) layer here or next door, to the top
@@ -1297,18 +1722,37 @@ export class TerrainData {
         const hid = this._hidden?.get(chunkKey(cx, cz)) || null; // (a falling piece not landed yet: not drawn there)
         // (a cave's dark: a face is as lit as the air in front of it — _skyLight; null: all lit)
         const sky = this._skyLight(cx, cz);
-        // Fast access inside this chunk; neighbours only for border occlusion
-        const at = (gx, gy, gz) => {
-            if (gy < 0) return below;
-            if (gy + G0 >= HEIGHT) return BLOCK.AIR;
-            if (gx >= 0 && gx < CHUNK && gz >= 0 && gz < CHUNK) {
-                const i = ((gy + G0) * CHUNK + gz) * CHUNK + gx;
-                return hid && hid.has(i) ? BLOCK.AIR : blocks[i];
+        this._meshChunk = c;
+        const PAT = this.lush ? PATTERN_OF_LUSH : PATTERN_OF; // (generation 5: the grass gets its own look in the shader)
+        // The blocks round the chunk in one padded box (gx, gz −1…CHUNK, gy −1…layers): the chunk's
+        // own, its four neighbours' border columns for occlusion (not the corners: never looked at),
+        // all rock under `lowest`, air above the world — read straight, no lookups in the sweeps.
+        const PX = CHUNK + 2, PY = layers + 2, PXZ = PX * PX;
+        const pad = _mesh.pad && _mesh.pad.length >= PXZ * PY ? _mesh.pad : (_mesh.pad = new Uint8Array(PXZ * PY));
+        pad.fill(BLOCK.AIR, 0, PXZ * PY);
+        pad.fill(below, 0, PXZ); // (gy = −1)
+        const yTop = Math.min(layers, HEIGHT - G0 - 1); // (the highest gy inside the world)
+        for (let gz = 0; gz < CHUNK; gz++) for (let gx = 0; gx < CHUNK; gx++) {
+            let i = (G0 * CHUNK + gz) * CHUNK + gx, o = PXZ + (gz + 1) * PX + gx + 1;
+            for (let gy = 0; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) pad[o] = blocks[i];
+        }
+        if (hid) for (const i of hid) {
+            const gx = i % CHUNK, gz = ((i - gx) / CHUNK) % CHUNK, gy = Math.floor(i / (CHUNK * CHUNK)) - G0;
+            if (gy >= 0 && gy <= yTop) pad[(gy + 1) * PXZ + (gz + 1) * PX + gx + 1] = BLOCK.AIR;
+        }
+        for (const [nx, nz] of [[-1, 0], [CHUNK, 0], [0, -1], [0, CHUNK]]) {
+            const n = this.chunk(cx + (nx < 0 ? -1 : nx >= CHUNK ? 1 : 0), cz + (nz < 0 ? -1 : nz >= CHUNK ? 1 : 0)), nb = n.blocks;
+            for (let k = 0; k < CHUNK; k++) {
+                const gx = nx === 0 ? k : nx, gz = nz === 0 ? k : nz;
+                let i = (G0 * CHUNK + (gz & MASK)) * CHUNK + (gx & MASK), o = PXZ + (gz + 1) * PX + gx + 1;
+                for (let gy = 0; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) pad[o] = nb[i];
             }
-            return this.get(x0 + gx, lowest + gy, z0 + gz);
-        };
+        }
 
         const x = [0, 0, 0];
+        const cc = [0, 0, 0];
+        const AIR = BLOCK.AIR, WATER = BLOCK.WATER, ICE_SHAPE = BLOCK.ICE_SHAPE;
+        const stride = [1, PXZ, PX]; // (x, y, z in the padded box)
         // Greedy meshing over the three axes (Mikola Lysenko's algorithm).
         for (let d = 0; d < 3; d++) {
             const u = (d + 1) % 3, v = (d + 2) % 3;
@@ -1317,37 +1761,45 @@ export class TerrainData {
             const maskKind = new Int8Array(su * sv); // 0 ground, 1 raised, 2 water
             const maskDark = new Int8Array(su * sv); // 0 open sky … 15 deep in a cave
             const qx = d === 0 ? 1 : 0, qy = d === 1 ? 1 : 0, qz = d === 2 ? 1 : 0;
+            const step = stride[d], ustep = stride[u], vstep = stride[v];
             for (x[d] = -1; x[d] < sizes[d];) {
                 let n = 0;
                 const aIn = x[d] >= 0;
                 const bIn = x[d] + 1 < sizes[d];
-                for (x[v] = 0; x[v] < sv; x[v]++) {
-                    for (x[u] = 0; x[u] < su; x[u]++, n++) {
-                        const ax = x[0], ay = x[1], az = x[2];
+                const base = PXZ + PX + 1 + x[d] * step;
+                cc[d] = x[d];
+                for (let j = 0; j < sv; j++) {
+                    let ia = base + j * vstep;
+                    for (let i = 0; i < su; i++, n++, ia += ustep) {
+                        const aRaw = pad[ia];
+                        const bRaw = pad[ia + step];
+                        // (the usual case: rock against rock, air against air — no face)
+                        const aOpen = aRaw === AIR || aRaw === WATER || aRaw === ICE_SHAPE, bOpen = bRaw === AIR || bRaw === WATER || bRaw === ICE_SHAPE;
+                        if (aOpen === bOpen && aRaw !== WATER && bRaw !== WATER) { mask[n] = 0; maskKind[n] = 0; maskDark[n] = 0; continue; }
+                        cc[u] = i; cc[v] = j;
+                        const ax = cc[0], ay = cc[1], az = cc[2];
                         // Only emit faces whose solid block lies inside this chunk;
                         // neighbours outside it still occlude.
-                        const aRaw = at(ax, ay, az);
-                        const bRaw = at(ax + qx, ay + qy, az + qz);
-                        const a = aIn ? aRaw : BLOCK.AIR;
-                        const b = bIn ? bRaw : BLOCK.AIR;
+                        const a = aIn ? aRaw : AIR;
+                        const b = bIn ? bRaw : AIR;
                         // Solid faces show wherever the neighbour is air or (see-through) water;
                         // water shows its surface only towards air.
                         let key = 0, kind = 0;
-                        if (drawn(a) && !drawn(bRaw)) {
+                        if (aIn && !aOpen && bOpen) {
                             const L = ay + lowest;
-                            key = this.faceColor(a, x0 + ax, L, z0 + az, d === 1) + 1 + (PATTERN_OF[a] || 0) * 0x1000000;
+                            key = this.faceColor(a, x0 + ax, L, z0 + az, d === 1) + 1 + (PAT[a] || 0) * 0x1000000;
                             kind = L >= 1 ? 1 : 0;
-                        } else if (drawn(b) && !drawn(aRaw)) {
+                        } else if (bIn && !bOpen && aOpen) {
                             const L = ay + qy + lowest;
                             // skip the bottom of the bedrock layer
                             if (!(d === 1 && L === MIN_LAYER)) {
-                                key = -(this.faceColor(b, x0 + ax + qx, L, z0 + az + qz, false) + 1 + (PATTERN_OF[b] || 0) * 0x1000000);
+                                key = -(this.faceColor(b, x0 + ax + qx, L, z0 + az + qz, false) + 1 + (PAT[b] || 0) * 0x1000000);
                                 kind = L >= 1 ? 1 : 0;
                             }
-                        } else if (a === BLOCK.WATER && (bRaw === BLOCK.AIR || bRaw === BLOCK.ICE_SHAPE)) {
+                        } else if (a === WATER && (bRaw === AIR || bRaw === ICE_SHAPE)) {
                             // (the sea's top is drawn by the moving wave surface instead)
                             if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) { key = BASE_COLORS[BLOCK.WATER] + 1; kind = 2; }
-                        } else if (b === BLOCK.WATER && (aRaw === BLOCK.AIR || aRaw === BLOCK.ICE_SHAPE)) {
+                        } else if (b === WATER && (aRaw === AIR || aRaw === ICE_SHAPE)) {
                             key = -(BASE_COLORS[BLOCK.WATER] + 1); kind = 2;
                         }
                         mask[n] = key;
@@ -1388,37 +1840,64 @@ export class TerrainData {
                 }
             }
         }
-        return out;
+        return { ground: finishBuffers(out.ground), raised: finishBuffers(out.raised), water: finishBuffers(out.water) };
     }
 }
 
-function newBuffers() {
-    return { positions: [], normals: [], colors: [], indices: [], patterns: [], skies: [], patterned: false };
+/**
+ * A mesh's vertex buffers while it is built: typed arrays reused from chunk to chunk (no garbage, no
+ * growing JS arrays); finishBuffers copies out exactly what was written.
+ */
+function newBuffers(slot) {
+    const b = _quadBufs[slot] || (_quadBufs[slot] = { pos: new Float32Array(4096 * 12), nor: new Float32Array(4096 * 12), col: new Float32Array(4096 * 12), pat: new Float32Array(4096 * 4), sky: new Float32Array(4096 * 4), idx: new Uint32Array(4096 * 6), cap: 4096 });
+    b.nv = 0; b.ni = 0; b.patterned = false;
+    return b;
+}
+const _quadBufs = [];
+
+function growBuffers(b) {
+    const cap = b.cap * 2;
+    const re = (a, n) => { const t = new a.constructor(cap * n); t.set(a); return t; };
+    b.pos = re(b.pos, 12); b.nor = re(b.nor, 12); b.col = re(b.col, 12); b.pat = re(b.pat, 4); b.sky = re(b.sky, 4); b.idx = re(b.idx, 6);
+    b.cap = cap;
+}
+
+/** The finished arrays of a mesh (positions, normals, colours, indices, patterns, skies). */
+function finishBuffers(b) {
+    const nv = b.nv;
+    return {
+        positions: b.pos.slice(0, nv * 3), normals: b.nor.slice(0, nv * 3), colors: b.col.slice(0, nv * 3),
+        indices: nv <= 65535 ? Uint16Array.from(b.idx.subarray(0, b.ni)) : b.idx.slice(0, b.ni),
+        patterns: b.pat.slice(0, nv), skies: b.sky.slice(0, nv), patterned: b.patterned,
+    };
 }
 
 /** Convert grid-space quad to world space and append it. */
 function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1) {
+    if ((buf.nv >> 2) + 1 > buf.cap) growBuffers(buf);
     // grid -> world: x_w = gx - 0.5, y_w = gy - 1.5, z_w = gz - 0.5 (gx = origin + local)
-    const base = buf.positions.length / 3;
+    const base = buf.nv, P = buf.pos, N = buf.nor, C = buf.col;
     const px = origin[0] + pos[0] - 0.5, py = origin[1] + pos[1] - 1.5 - drop, pz = origin[2] + pos[2] - 0.5;
     const nx = d === 0 ? (positive ? 1 : -1) : 0, ny = d === 1 ? (positive ? 1 : -1) : 0, nz = d === 2 ? (positive ? 1 : -1) : 0;
     const r = ((color >> 16) & 255) / 255, g = ((color >> 8) & 255) / 255, b = (color & 255) / 255;
-    buf.positions.push(
-        px, py, pz,
-        px + du[0], py + du[1], pz + du[2],
-        px + du[0] + dv[0], py + du[1] + dv[1], pz + du[2] + dv[2],
-        px + dv[0], py + dv[1], pz + dv[2],
-    );
-    for (let k = 0; k < 4; k++) {
-        buf.normals.push(nx, ny, nz);
-        buf.colors.push(r, g, b);
-        buf.patterns.push(pattern);
-        buf.skies.push(sky);
+    let o = base * 3;
+    P[o] = px; P[o + 1] = py; P[o + 2] = pz;
+    P[o + 3] = px + du[0]; P[o + 4] = py + du[1]; P[o + 5] = pz + du[2];
+    P[o + 6] = px + du[0] + dv[0]; P[o + 7] = py + du[1] + dv[1]; P[o + 8] = pz + du[2] + dv[2];
+    P[o + 9] = px + dv[0]; P[o + 10] = py + dv[1]; P[o + 11] = pz + dv[2];
+    for (let k = 0; k < 4; k++, o += 3) {
+        N[o] = nx; N[o + 1] = ny; N[o + 2] = nz;
+        C[o] = r; C[o + 1] = g; C[o + 2] = b;
+        buf.pat[base + k] = pattern;
+        buf.sky[base + k] = sky;
     }
+    buf.nv += 4;
     if (pattern) buf.patterned = true;
     // Winding: (u, v, d) is a right-handed cyclic triple, so u×v = +d.
-    if (positive) buf.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
-    else buf.indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    const I = buf.idx, i = buf.ni;
+    if (positive) { I[i] = base; I[i + 1] = base + 1; I[i + 2] = base + 2; I[i + 3] = base; I[i + 4] = base + 2; I[i + 5] = base + 3; }
+    else { I[i] = base; I[i + 1] = base + 2; I[i + 2] = base + 1; I[i + 3] = base; I[i + 4] = base + 3; I[i + 5] = base + 2; }
+    buf.ni += 6;
 }
 
 /** Original mountain height (kept for tests / tools). */
@@ -1432,10 +1911,10 @@ export function mountainHeight(ix, iz, seed = 1) {
  * touched chunks, a couple per frame, so nothing ever causes a hitch.
  */
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains, seas, test, deepCaves });
+        this.data.generate({ seed, mountains, seas, test, deepCaves, lush });
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
@@ -1513,17 +1992,31 @@ export class Terrain {
             if (++n >= this.maxRebuildsPerFrame) break;
         }
 
-        // 2) New chunks, nearest first, within the time budget
+        // 2) New chunks, nearest first, within the time budget. A chunk's mesh needs its ground and
+        // its neighbours' (borders, a cave's light); those are made first, one chunk of ground at a
+        // time — so one frame never makes the ground of nine chunks and a mesh on top of it all.
         const t0 = performance.now();
         while (this._queue.length) {
-            const job = this._queue.pop();
-            if (this.meshes.has(job.key)) continue;
-            this._load(job);
+            const job = this._queue[this._queue.length - 1];
+            if (this.meshes.has(job.key)) { this._queue.pop(); continue; }
+            const miss = this._missingGround(job.cx, job.cz);
+            if (miss) this.data.chunk(miss[0], miss[1]);
+            else { this._queue.pop(); this._load(job); }
             if (performance.now() - t0 > this.budgetMs) break;
         }
 
+        // (generation 5: tall grass and flowers round the player)
+        if (this.flora) this.flora.update(focus);
+
         // 3) Forget far, untouched chunk data now and then (it regenerates identically)
         if (this._frame % 120 === 0) this.data.evictFar(Math.floor(fx / CHUNK), Math.floor(fz / CHUNK), this.radiusChunks + 4);
+    }
+
+    /** A chunk round (cx, cz) whose ground is not made yet (its mesh needs all nine), or null. */
+    _missingGround(cx, cz) {
+        if (!this.data.hasChunk(cx, cz)) return [cx, cz];
+        for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!this.data.hasChunk(cx + dx, cz + dz)) return [cx + dx, cz + dz];
+        return null;
     }
 
     /** Recompute which chunks to show when the player enters another chunk. */
@@ -1572,6 +2065,8 @@ export class Terrain {
 
     _build(entry) {
         const t0 = performance.now();
+        const c = this.data.chunk(entry.cx, entry.cz);
+        c.rev = (c.rev || 0) + 1; // (its ground changed: the flowers and grass on it are made again — Flora.js)
         const arrays = this.data.buildChunkArrays(entry.cx, entry.cz);
         this._fill(entry.ground, arrays.ground);
         this._fill(entry.raised, arrays.raised);
@@ -1602,13 +2097,14 @@ export class Terrain {
             return;
         }
         const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(buf.positions, 3));
-        geo.setAttribute('normal', new THREE.Float32BufferAttribute(buf.normals, 3));
-        geo.setAttribute('color', new THREE.Float32BufferAttribute(buf.colors, 3));
+        // (the arrays are the chunk's own typed arrays: used as they are, not copied again)
+        geo.setAttribute('position', new THREE.BufferAttribute(buf.positions, 3));
+        geo.setAttribute('normal', new THREE.BufferAttribute(buf.normals, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(buf.colors, 3));
         // castle stone, planks, roof tiles... (always set: one shader for every chunk)
-        geo.setAttribute('voxPat', new THREE.Float32BufferAttribute(buf.patterns, 1));
-        geo.setAttribute('voxSky', new THREE.Float32BufferAttribute(buf.skies, 1)); // (daylight reaching it: a cave's dark)
-        geo.setIndex(buf.indices);
+        geo.setAttribute('voxPat', new THREE.BufferAttribute(buf.patterns, 1));
+        geo.setAttribute('voxSky', new THREE.BufferAttribute(buf.skies, 1)); // (daylight reaching it: a cave's dark)
+        geo.setIndex(new THREE.BufferAttribute(buf.indices, 1));
         geo.computeBoundingSphere();
         geo.computeBoundingBox();
         mesh.geometry = geo;
@@ -1625,6 +2121,7 @@ export class Terrain {
     removeSphere(x, y, z, r, keep = null) { return this.data.removeSphere(x, y, z, r, keep); }
 
     dispose() {
+        this.flora?.dispose();
         for (const e of [...this.meshes.values(), ...this.pool]) {
             e.ground.geometry.dispose();
             e.raised.geometry.dispose();
