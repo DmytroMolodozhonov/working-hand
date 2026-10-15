@@ -37,7 +37,10 @@
  */
 
 import * as THREE from 'three';
-import { BLOCK, TREE_KINDS, BASE_COLORS, WATER_LEVEL_Y } from '../world/Terrain.js';
+import { BLOCK, TREE_KINDS, BASE_COLORS, WATER_LEVEL_Y, patternOf } from '../world/Terrain.js';
+import { applyVoxelDetail } from '../world/VoxelShading.js';
+import { Chest } from '../entities/Chest.js';
+import { createRng } from '../core/math.js';
 import { aimOffset, applyAimOffset, steadyDir, fallDamage, levBlocked } from './Levitation.js';
 import { spiderCenter } from './Spider.js';
 import { keelY } from './ShipLayout.js';
@@ -58,7 +61,7 @@ export const LEV_MAX = {
 };
 
 /** Pulling it out: metres the hand must pull up in all (with the pitch of the hand), and the least time it takes. */
-export const PULL = { tree: 2.6, house: 1.8 };
+export const PULL = { tree: 2.6, house: 1.5 };
 export const LOOSEN = { tree: 3, house: 2.2 };
 /** Unpulled, the pull settles back this much a second (one has to keep pulling). */
 export const PULL_DECAY = 0.12;
@@ -81,7 +84,7 @@ export const MAXIMA_TARGETS = {
     dragon: { why: 'не действует: дракон вырывается из любой Левиосы — он сильнее магии' },
     servants: { why: 'слуги «Брейнрота» — это жители/зомби/животные: поднимаются как они' },
     ships: { why: 'корабль целиком поднимается из воды с экипажем и всем на палубе; брошенный в море — пробоины по высоте, на суше — обломки' },
-    houses: { why: 'дом шатается, трещит и отрывается от земли целиком (без корней); брошенный — груда обломков, давит тех, кто под ним; поставленный — стоит целый на новом месте' },
+    houses: { why: 'дом шатается, трещит и отрывается от земли целиком (без корней) — те же блоки, дверь, окна, кровати, сундуки; замахом руки его бросают; упав или ударившись о стену, дом, существо — разлетается на блоки в груду, сундуки выпадают, кто под ним — ранен; поставленный — стоит целый с мебелью на новом месте' },
     trees: { why: 'дерево раскачивается, игрок тянет вверх — вырывается с корнями и комом земли (остаётся яма); брошенное — лежит поваленным, поставленное — растёт стоя' },
     castleWalls: { why: 'не действует: стены и башни замков — не дома, их не оторвать (Максима поднимает дома деревень и замков)' },
     looseThings: { why: 'не поднимаются Максимой (её дело — существа и большое); вещи на палубе едут с кораблём; вещи — обычной «Левиосой»' },
@@ -175,6 +178,26 @@ export function pullStep(prev, now) {
     return Math.max(0, now.rel - prev.rel) + Math.max(0, now.pitch - prev.pitch) * 0.6;
 }
 
+/** A throw: the hand moves this far (m) within WINDOW s, each step a real move (no camera jump). */
+export const THROW = { DIST: 1.1, WINDOW: 0.25, JUMP: 0.6, AFTER: 0.8, MAX: 38 };
+
+/**
+ * Was that a swing and a throw? `hist` keeps the hand's last positions; → the hand's speed (m/s,
+ * a vector) when it swung far and fast enough (not in the first AFTER s of carrying), else null.
+ */
+export function throwOf(hist, t, p, carried) {
+    const last = hist[hist.length - 1];
+    if (last && Math.hypot(p.x - last.x, p.y - last.y, p.z - last.z) > THROW.JUMP) hist.length = 0; // (the camera lost the hand)
+    hist.push({ t, x: p.x, y: p.y, z: p.z });
+    while (hist.length && t - hist[0].t > THROW.WINDOW) hist.shift();
+    if (carried < THROW.AFTER || hist.length < 3) return null;
+    const o = hist[0], dt = t - o.t;
+    const dx = p.x - o.x, dy = p.y - o.y, dz = p.z - o.z;
+    if (dt < 0.1 || Math.hypot(dx, dy, dz) < THROW.DIST) return null;
+    hist.length = 0;
+    return new THREE.Vector3(dx / dt, dy / dt, dz / dt);
+}
+
 /** Hurt by what fell on it: by the height and how heavy it is. */
 export function crushDamage(kind, h) {
     const base = kind === 'ship' ? 10 : kind === 'house' ? 8 : 5;
@@ -225,6 +248,74 @@ export function felledOf(cells, foot, dir, top, rnd = Math.random) {
     return { set, broken };
 }
 const isLeafType = (t) => TREE_KINDS.some((k) => k.leaves === t);
+
+/** The six faces of a block: [normal, its four corners from the block's low corner (counter-clockwise seen from outside)]. */
+const FACES = [
+    [[1, 0, 0], [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]],
+    [[-1, 0, 0], [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]],
+    [[0, 1, 0], [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]]],
+    [[0, -1, 0], [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]],
+    [[0, 0, 1], [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]],
+    [[0, 0, -1], [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]]],
+];
+
+/**
+ * The blocks' outer faces as one geometry, in the carried thing's own frame (its foot's middle at
+ * (ax, baseL, az) = 0): the same colours (data.faceColor) and patterns (voxPat) the world draws
+ * them with, so it looks exactly like the house / tree it was.
+ */
+export function voxelGeometry(cells, ax, baseL, az, data = null) {
+    const has = new Set(cells.map((c) => c[0] + ',' + c[1] + ',' + c[2]));
+    const pos = [], nor = [], col = [], pat = [], sky = [], idx = [];
+    const c3 = new THREE.Color();
+    for (const [x, L, z, t] of cells) {
+        const ox = x - ax - 0.5, oy = L - baseL, oz = z - az - 0.5;
+        for (const [n, corners] of FACES) {
+            if (has.has((x + n[0]) + ',' + (L + n[1]) + ',' + (z + n[2]))) continue;
+            const hex = data?.faceColor ? data.faceColor(t, x, L, z, n[1] === 1) : (BASE_COLORS[t] ?? 0x888888);
+            c3.setHex(hex);
+            const b = pos.length / 3;
+            for (const k of corners) {
+                pos.push(ox + k[0], oy + k[1], oz + k[2]);
+                nor.push(n[0], n[1], n[2]);
+                col.push(c3.r, c3.g, c3.b);
+                pat.push(patternOf(t));
+                sky.push(1);
+            }
+            idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+        }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('voxPat', new THREE.Float32BufferAttribute(pat, 1));
+    geo.setAttribute('voxSky', new THREE.Float32BufferAttribute(sky, 1));
+    geo.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
+    geo.computeBoundingSphere();
+    return geo;
+}
+
+/**
+ * The world's block material (VoxelShading) for a moving piece of it: its patterns are worked out
+ * from where each block WAS (`origin` + its own frame), so they stay on the blocks as it flies,
+ * instead of sliding over them.
+ */
+export function voxelMaterial(origin) {
+    const mat = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
+    const base = mat.onBeforeCompile;
+    const o = { value: new THREE.Vector3().copy(origin) };
+    mat.onBeforeCompile = (shader, r) => {
+        base(shader, r);
+        shader.uniforms.uVoxOrigin = o;
+        shader.vertexShader = shader.vertexShader
+            .replace('varying vec3 vVoxPos;', 'varying vec3 vVoxPos;\nuniform vec3 uVoxOrigin;')
+            .replace('vVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;', 'vVoxPos = transformed + uVoxOrigin;')
+            .replace('vVoxNormal = normalize(mat3(modelMatrix) * normal);', 'vVoxNormal = normal;');
+    };
+    mat.customProgramCacheKey = () => 'levmax-voxel';
+    return mat;
+}
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -545,7 +636,6 @@ export class LevitationMaxima {
             if (cells.length < 8) return false;
             L.house = h;
             h.lifted = true;
-            g.houses?.liftedAway?.(h);
         } else if (desc.k === 'tree') {
             if (desc.i != null) {
                 const t = g.world?.trees?.find((x) => x.index === desc.i);
@@ -571,27 +661,99 @@ export class LevitationMaxima {
         L.phase = 'loosen';
         L.pull = 0;
         L.sway = { x: 0, z: 0 };
-        // the mesh (one draw call; rocks round its foot)
+        // the mesh: the very same blocks with the world's own look (its faces, colours and the
+        // voxel patterns of stone, planks, roof tiles…) — one draw call; it rocks round its foot
         const group = new THREE.Group();
-        const mesh = new THREE.InstancedMesh(BOX, this.mat, cells.length);
+        group.position.copy(L.pos);
+        const mat = voxelMaterial(L.base);
+        const mesh = new THREE.Mesh(voxelGeometry(cells, ax, baseL, az, data), mat);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        cells.forEach((c, i) => {
-            _m.makeTranslation(c[0] - ax, c[1] - baseL + 0.5, c[2] - az);
-            mesh.setMatrixAt(i, _m);
-            mesh.setColorAt(i, _c.setHex(BASE_COLORS[c[3]] ?? 0x888888));
-        });
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         mesh.frustumCulled = false;
         group.add(mesh);
+        L.mat = mat;
         if (tree) group.add(this._roots(tree, baseL));
-        group.position.copy(L.pos);
         g.scene?.add(group);
+        group.updateMatrixWorld(true);
         L.group = group;
+        // what is in the house goes with it: its door, glass, beds, chests (then it no longer lives there)
+        if (L.house) { L.furn = this._takeFurniture(L, group); g.houses?.liftedAway?.(L.house); }
         L.boxes = [];
         this._boxes(L);
         return true;
+    }
+
+    /**
+     * The house's door, glass, beds and chests: copies of their models ride in the carried house
+     * (the real ones leave the world with it — Houses.liftedAway). → what to put back / drop when it lands.
+     */
+    _takeFurniture(L, group) {
+        const g = this.game;
+        const rec = g.houses?.active?.get(L.house.id);
+        const furn = { chests: [], beds: [], door: null };
+        if (!rec) return furn;
+        const carry = (obj) => {
+            if (!obj) return;
+            obj.updateWorldMatrix(true, true);
+            const c = obj.clone(true);
+            obj.matrixWorld.decompose(c.position, c.quaternion, c.scale);
+            group.attach(c);
+        };
+        const door = rec.doorId && g.doors?.list.get(rec.doorId);
+        if (door) { carry(door.model); furn.door = { ...L.house.doorRec }; }
+        for (const id of rec.bedIds) {
+            const b = g.beds?.list.get(id);
+            if (!b) continue;
+            carry(b.model);
+            furn.beds.push({ x: b.model.position.x, y: b.model.position.y, z: b.model.position.z, ry: b.model.rotation.y, color: b.color });
+        }
+        for (const c of rec.chests) {
+            carry(c.mesh);
+            furn.chests.push({ id: c.id, x: c.mesh.position.x, y: c.mesh.position.y, z: c.mesh.position.z, ry: c.mesh.rotation.y, scale: c.scale, open: !!c.isOpen });
+        }
+        // the glass of its windows (not the broken ones)
+        const panes = (g.houses.panes || []).filter((p) => p.house === rec);
+        if (panes.length && g.houses.glassMat) {
+            const glass = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 0.08), g.houses.glassMat, panes.length);
+            panes.forEach((p, k) => {
+                _q.setFromAxisAngle(_v2.set(0, 1, 0), p.ry);
+                _m.compose(_v1.set(p.x - L.base.x, p.y - L.base.y, p.z - L.base.z), _q, _s.set(p.w, p.h, 1));
+                glass.setMatrixAt(k, _m);
+            });
+            glass.renderOrder = 2;
+            glass.frustumCulled = false;
+            group.add(glass);
+        }
+        return furn;
+    }
+
+    /**
+     * (every computer) It came down: set down whole — its door, beds and chests stand in it again where
+     * it now is; broken — the chests fall out on the ground beside the heap (with what was in them),
+     * the door and the beds are smashed.
+     */
+    _putFurniture(L, d, broken) {
+        const g = this.game;
+        const F = L.furn;
+        if (!F || L.furnDone) return;
+        L.furnDone = true;
+        const [dx, dy, dz] = d;
+        const k = L.id + 'f'; // (the same on every computer)
+        if (!broken) {
+            if (F.door && g.doors) g.doors._place({ id: k + 'd', ...F.door, x: F.door.x + dx, y: F.door.y + dy, z: F.door.z + dz, color: 0x7a4f2a, a: 0 });
+            F.beds.forEach((b, i) => g.beds?.spawnBed?.({ x: b.x + dx, y: b.y + dy, z: b.z + dz }, b.ry, b.color, { id: k + 'b' + i, broadcast: false }));
+        }
+        F.chests.forEach((c, i) => {
+            let x = c.x + dx, z = c.z + dz;
+            if (broken) { const a = Math.atan2(c.z - L.base.z, c.x - L.base.x) || i; x = L.pos.x + Math.cos(a) * ((L.ext.x1 - L.ext.x0) / 2 + 1.5); z = L.pos.z + Math.sin(a) * ((L.ext.z1 - L.ext.z0) / 2 + 1.5); }
+            const y = broken ? (g.collision?.groundY?.(x, z) ?? c.y + dy) : c.y + dy;
+            const chest = new Chest(g.scene, new THREE.Vector3(x, y, z), 'loot', c.ry, k + 'c' + i, { scale: c.scale });
+            chest.mesh.rotation.y = c.ry + (broken ? (i % 2 ? 0.5 : -0.4) : 0);
+            chest.mesh.updateMatrixWorld(true);
+            chest.boxId = g.collision?.addBox(chest.getCollisionBox());
+            if (c.open) chest.setOpenInstant?.();
+            g.chests?.push(chest);
+        });
     }
 
     /** Roots under a torn-out tree's lump of earth (hidden in the ground until it comes out). */
@@ -821,6 +983,19 @@ export class LevitationMaxima {
             L.sway.x += (-L.vel.z * 0.012 - L.sway.x) * Math.min(1, dt * 2);
             L.sway.z += (L.vel.x * 0.012 - L.sway.z) * Math.min(1, dt * 2);
             if (L.kind === 'tree' && Math.random() < 0.2) this._crumbs(L, 0.3, true);
+            // a swing of the arm and a throw: it flies off with the swing (the hand is far nearer than it)
+            L.carryT = (L.carryT || 0) + dt;
+            const v = throwOf(L.hist || (L.hist = []), L.t, hand.p, L.carryT);
+            if (v) {
+                const k = Math.max(3, Math.min(10, L.hold / 1.2));
+                L.vel.addScaledVector(v, k);
+                if (L.vel.length() > THROW.MAX) L.vel.setLength(THROW.MAX);
+                L.vel.y = Math.max(L.vel.y, 2);
+                L.phase = 'fall';
+                L.thrown = true;
+                g.sound?.playWhoosh?.();
+                if (L.by === g.localId) g.hud?.setVoice?.(L.kind === 'tree' ? '🌳 Дерево брошено!' : '🏠 Дом брошен!', true);
+            }
             return;
         }
         // (let go while still rocking: it settles back into its own place)
@@ -837,8 +1012,31 @@ export class LevitationMaxima {
             L.pos.addScaledVector(L.vel, dt);
             L.sway.x += L.vel.z * 0.002 * dt; L.sway.z -= L.vel.x * 0.002 * dt;
             const g2 = this._groundUnder(L, data) - L.ext.y0;
-            if (L.pos.y <= g2) { L.pos.y = g2; this._landBig(L, false); }
+            if (L.pos.y <= g2) { L.pos.y = g2; this._landBig(L, false); return; }
+            // flying into a wall, another house, a tree, a hill — or into somebody: it breaks there
+            if (this._strikes(L, data)) this._landBig(L, false);
         }
+    }
+
+    /** (host) Does the flying house / tree run into a block or a body now? */
+    _strikes(L, data) {
+        const e = L.ext, p = L.pos, v = L.vel;
+        if (data && Math.hypot(v.x, v.z) > 1) {
+            // its leading side, low, middle and high
+            const fx = v.x > 0.5 ? [1] : v.x < -0.5 ? [0] : [0.2, 0.8], fz = v.z > 0.5 ? [1] : v.z < -0.5 ? [0] : [0.2, 0.8];
+            for (const a of fx) for (const b of fz) for (const hy of [0.15, 0.5, 0.85]) {
+                const x = p.x + e.x0 + (e.x1 - e.x0) * a + Math.sign(v.x) * 0.4, z = p.z + e.z0 + (e.z1 - e.z0) * b + Math.sign(v.z) * 0.4;
+                if (data.isSolidAt(x, p.y + e.y0 + (e.y1 - e.y0) * hy, z)) return true;
+            }
+        }
+        const g = this.game;
+        const inside = (q, up = 1) => q && q.x > p.x + e.x0 && q.x < p.x + e.x1 && q.z > p.z + e.z0 && q.z < p.z + e.z1 && q.y + up > p.y + e.y0 && q.y - up < p.y + e.y1;
+        if (inside(g.character?.group?.position, 1.5) && L.by !== g.localId) return true;
+        for (const r of g.remotes?.values?.() || []) if (!r.dead && r.id !== L.by && inside(r.position, 1.5)) return true;
+        for (const z of g.zombies || []) if (!z.isDead && !z.lev && inside(z.group.position)) return true;
+        for (const a of g.animals?.list || []) if (!a.dead && !a.lev && inside(a.group.position)) return true;
+        for (const c of g.castleLife?.targets?.() || []) if (!c.dead && !c.lev && inside({ x: c.x, y: c.y + 1.5, z: c.z })) return true;
+        return false;
     }
 
     /** The highest ground (any solid block) under its footprint, world y. */
@@ -897,54 +1095,138 @@ export class LevitationMaxima {
     _landBig(L, gentle) {
         const g = this.game;
         const data = g.world?.terrain?.data || g.terrain?.data;
-        const h = Math.max(0, (L.top ?? L.pos.y) - L.pos.y);
-        const dx = Math.round(L.pos.x - L.base.x), dz = Math.round(L.pos.z - L.base.z);
-        const top = (x, z) => data.topLayer(x, z);
-        let res;
+        const h = Math.max(0, (L.top ?? L.pos.y) - L.pos.y) + (L.thrown ? Math.min(12, L.vel.length() * 0.4) : 0);
+        // let go while still rocking: back into its own place; set down: whole where it is; else broken
+        const mode = L.phase === 'settle' || (gentle && L.top == null) ? 'back' : gentle ? 'whole' : 'broken';
+        const d = mode === 'back' ? [0, 0, 0] : [Math.round(L.pos.x - L.base.x), mode === 'whole' ? Math.round(L.pos.y + 1.5) - L.baseL : 0, Math.round(L.pos.z - L.base.z)];
         const edits = [];
-        // set down where it was before it ever came out (let go while still rocking): back in place
-        const back = L.phase === 'settle' || (gentle && L.top == null);
-        if (back || gentle) {
-            // whole: every block shifted, its foot on the highest ground under it
-            const dL = back ? 0 : Math.round(L.pos.y + 1.5) - L.baseL;
-            res = { set: [], broken: [] };
-            for (const c of L.cells) {
-                const x = c[0] + dx, Lc = c[1] + dL, z = c[2] + dz;
-                const was = data.get(x, Lc, z);
-                if (was && was !== BLOCK.WATER) { res.broken.push([x, Lc, z, c[3]]); continue; }
-                res.set.push([x, Lc, z, c[3]]);
-            }
-        } else {
-            // broken: it crushes what it lands on first (a roof, a fence, a wall — not the ground)
-            if (h > 3) {
-                const e = L.ext;
-                for (let x = Math.round(L.pos.x + e.x0 + 0.5); x <= Math.round(L.pos.x + e.x1 - 0.5); x++) for (let z = Math.round(L.pos.z + e.z0 + 0.5); z <= Math.round(L.pos.z + e.z1 - 0.5); z++) {
-                    for (let k = 0; k < 2; k++) {
-                        const Lt = data.topLayer(x, z), t = data.get(x, Lt, z);
-                        if (!t || GROUND.has(t)) break;
-                        data.set(x, Lt, z, BLOCK.AIR);
-                        edits.push([x, Lt, z, BLOCK.AIR]);
-                    }
+        // broken: it crushes what it lands on first (a roof, a fence, a wall — not the ground)
+        if (mode === 'broken' && h > 3) {
+            const e = L.ext;
+            for (let x = Math.round(L.pos.x + e.x0 + 0.5); x <= Math.round(L.pos.x + e.x1 - 0.5); x++) for (let z = Math.round(L.pos.z + e.z0 + 0.5); z <= Math.round(L.pos.z + e.z1 - 0.5); z++) {
+                for (let k = 0; k < 2; k++) {
+                    const Lt = data.topLayer(x, z), t = data.get(x, Lt, z);
+                    if (!t || GROUND.has(t)) break;
+                    data.set(x, Lt, z, BLOCK.AIR);
+                    edits.push([x, Lt, z, BLOCK.AIR]);
                 }
             }
-            if (L.kind === 'house') res = rubbleOf(L.cells, dx, dz, top);
-            else {
-                const v = L.vel;
-                const dir = Math.abs(v.x) > Math.abs(v.z) ? (v.x > 0 ? 'x' : '-x') : (v.z > 0 ? 'z' : v.z < 0 ? '-z' : ['x', '-x', 'z', '-z'][Math.floor(Math.random() * 4)]);
-                const foot = [L.tree.foot[0] + dx, L.tree.foot[1], L.tree.foot[2] + dz];
-                res = felledOf(L.cells.map((c) => [c[0] + dx, c[1], c[2] + dz, c[3]]), foot, dir, top);
-            }
+            if (edits.length) g.builder?._sendEdits?.(edits.splice(0));
         }
-        for (const c of res.set) { data.set(c[0], c[1], c[2], c[3]); edits.push(c); }
-        if (edits.length) g.builder?._sendEdits?.(edits);
+        const v = L.vel;
+        const dir = Math.abs(v.x) > Math.abs(v.z) ? (v.x > 0 ? 'x' : '-x') : (v.z > 0 ? 'z' : v.z < 0 ? '-z' : ['x', '-x', 'z', '-z'][Math.floor(Math.random() * 4)]);
+        const seed = (Math.random() * 1e9) | 0;
         const e = L.ext;
         const box = { x0: L.pos.x + e.x0, x1: L.pos.x + e.x1, z0: L.pos.z + e.z0, z1: L.pos.z + e.z1, y0: L.pos.y + e.y0 };
-        const dmg = gentle || back ? 0 : crushDamage(L.kind, h);
-        g.sync?.levMax?.({ a: 'land', id: L.id, b: [box.x0, box.x1, box.z0, box.z1, box.y0].map((v) => Math.round(v * 10) / 10), dmg, by: L.by, br: res.broken.length });
-        this._landFx(L, box, res.broken, dmg);
+        const dmg = mode === 'broken' ? crushDamage(L.kind, h) : 0;
+        const r1 = (x) => Math.round(x * 100) / 100;
+        const msg = { a: 'land', id: L.id, mode, d, dir, seed, p: [r1(L.pos.x), r1(L.pos.y), r1(L.pos.z)], v: [r1(v.x), r1(v.y), r1(v.z)], b: [box.x0, box.x1, box.z0, box.z1, box.y0].map(r1), dmg, by: L.by };
+        const res = this._comeDown(L, msg);
+        // the world gets its blocks: at once (whole), or as the pieces settle (broken: they fly first)
+        if (mode === 'broken') this.pending.push({ at: this._clock + res.T, edits: res.set.slice() });
+        else { for (const c of res.set) { data.set(c[0], c[1], c[2], c[3]); edits.push(c); } }
+        g.sync?.levMax?.(msg); // (before the blocks: the others work out the same from the same world)
+        if (edits.length) g.builder?._sendEdits?.(edits);
         if (dmg) this.crush(box, dmg, L.by, L.kind);
-        if (!gentle && !back) g.castleLife?.alarm?.(L.pos, 'uproot', L.by, Math.max(4, (e.x1 - e.x0) / 2));
+        if (mode === 'broken') g.castleLife?.alarm?.(L.pos, 'uproot', L.by, Math.max(4, (e.x1 - e.x0) / 2));
         this._finish(L);
+    }
+
+    /**
+     * (every computer, the same from the host's message) It comes down: where its blocks end up
+     * (whole / a heap / a felled tree), its furniture, and — broken — every block flying apart and
+     * falling into the heap (Shards). → {set, broken, T}
+     */
+    _comeDown(L, m) {
+        const g = this.game;
+        const data = g.world?.terrain?.data || g.terrain?.data;
+        const [dx, dL, dz] = m.d;
+        const top = (x, z) => data.topLayer(x, z);
+        if (Array.isArray(m.p)) L.pos.set(+m.p[0], +m.p[1], +m.p[2]);
+        let res;
+        if (m.mode !== 'broken') {
+            res = { set: [], broken: [], T: 0 };
+            for (const c of L.cells) {
+                const x = c[0] + dx, Lc = c[1] + dL, z = c[2] + dz, was = data.get(x, Lc, z);
+                if (was && was !== BLOCK.WATER) res.broken.push([x, Lc, z, c[3]]); else res.set.push([x, Lc, z, c[3]]);
+            }
+            const box = { x0: L.pos.x + L.ext.x0, x1: L.pos.x + L.ext.x1, z0: L.pos.z + L.ext.z0, z1: L.pos.z + L.ext.z1, y0: L.pos.y + L.ext.y0 };
+            this._landFx(L, box, res.broken, 0);
+        } else {
+            const rnd = createRng(m.seed | 0);
+            if (L.kind === 'house') res = rubbleOf(L.cells, dx, dz, top, rnd);
+            else res = felledOf(L.cells.map((c) => [c[0] + dx, c[1], c[2] + dz, c[3]]), [L.tree.foot[0] + dx, L.tree.foot[1], L.tree.foot[2] + dz], m.dir, top, rnd);
+            res.T = this._shatter(L, res, m, rnd);
+            const box = { x0: L.pos.x + L.ext.x0, x1: L.pos.x + L.ext.x1, z0: L.pos.z + L.ext.z0, z1: L.pos.z + L.ext.z1, y0: L.pos.y + L.ext.y0 };
+            this._landFx(L, box, [], Math.max(1, m.dmg | 0));
+        }
+        if (L.house) this._putFurniture(L, [dx, (dL || 0), dz], m.mode === 'broken');
+        return res;
+    }
+
+    /**
+     * It breaks apart: each block of it flies off from where it was in the air (spinning, in an arc)
+     * and drops into its place in the heap; the broken ones fly further and crumble to dust.
+     * One instanced mesh, a couple of seconds. → seconds until it has all settled
+     */
+    _shatter(L, res, m, rnd) {
+        const g = this.game;
+        const n = Math.min(L.cells.length, 6000);
+        if (!g.scene || !n) return 0.8;
+        // where each block is now (in the air) — in the same order as the heap was worked out
+        const [dx, , dz] = m.d;
+        const ax = L.base.x, az = L.base.z, oy = L.pos.y - (L.baseL - 1.5);
+        const startOf = new Map();
+        for (const c of L.cells) startOf.set((c[0] + dx) + ',' + c[1] + ',' + (c[2] + dz), c);
+        const from = (c) => [L.pos.x + (c[0] - ax), c[1] - 1 + oy, L.pos.z + (c[2] - az)];
+        const items = [];
+        const v = Array.isArray(m.v) ? m.v.map(Number) : [0, 0, 0];
+        const sorted = L.cells.slice().sort((a, b) => a[1] - b[1]);
+        const minL = sorted[0][1], maxL = sorted[sorted.length - 1][1];
+        // (the heap's blocks: matched back to the block they came from, by kind, nearest first)
+        const pool = new Map();
+        for (const c of res.set) { const k = c[3]; if (!pool.has(k)) pool.set(k, []); pool.get(k).push(c); }
+        for (const c of sorted) {
+            if (items.length >= n) break;
+            const S = from(c);
+            const list = pool.get(c[3]);
+            const E = list?.length ? list.shift() : null;
+            const up = (c[1] - minL) / Math.max(1, maxL - minL);
+            const it = {
+                S, broken: !E, color: BASE_COLORS[c[3]] ?? 0x888888,
+                E: E ? [E[0], E[1] - 1, E[2]] : [S[0] + (rnd() - 0.5) * 9 + v[0] * 0.15, S[1] - 2 - rnd() * 3, S[2] + (rnd() - 0.5) * 9 + v[2] * 0.15],
+                delay: up * 0.35 + rnd() * 0.15, T: 0.55 + rnd() * 0.6 + up * 0.3, h: 0.6 + rnd() * 2.2,
+                ax: new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(), spin: (rnd() - 0.5) * 9,
+            };
+            items.push(it);
+        }
+        const mesh = new THREE.InstancedMesh(BOX, this.mat, items.length);
+        items.forEach((it, i) => mesh.setColorAt(i, _c.setHex(it.color)));
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        mesh.castShadow = true;
+        mesh.frustumCulled = false;
+        g.scene.add(mesh);
+        const T = Math.max(...items.map((it) => it.delay + it.T));
+        this.shards.push({ mesh, items, t: 0, T, dust: 0 });
+        this._shardStep(this.shards[this.shards.length - 1], 0);
+        return T;
+    }
+
+    _shardStep(S, dt) {
+        S.t += dt;
+        const { mesh, items, t } = S;
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            const u = Math.max(0, Math.min(1, (t - it.delay) / it.T));
+            const e = u * u; // (falling: faster and faster)
+            const arc = 4 * it.h * u * (1 - u);
+            _v1.set(it.S[0] + (it.E[0] - it.S[0]) * u, it.S[1] + (it.E[1] - it.S[1]) * e + arc, it.S[2] + (it.E[2] - it.S[2]) * u);
+            _q.setFromAxisAngle(it.ax, it.spin * u * (1 - u) * 2);
+            const k = it.broken ? Math.max(0, 1 - Math.max(0, u - 0.55) / 0.45) : 1;
+            _m.compose(_v1, _q, _s.set(k, k, k));
+            mesh.setMatrixAt(i, _m);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
     }
 
     /** (every computer) Dust, flying rubble and the thud as it lands. */
@@ -954,7 +1236,7 @@ export class LevitationMaxima {
         const debris = broken.slice(0, 300).map(([x, Lb, z, t]) => ({ x, y: Math.min(Lb - 1, box.y0 + 2), z, color: BASE_COLORS[t] ?? 0x888888 }));
         for (let i = 0; i < 30; i++) debris.push({ x: box.x0 + Math.random() * (box.x1 - box.x0), y: box.y0 + 0.2, z: box.z0 + Math.random() * (box.z1 - box.z0), color: 0x9a8f80, size: 0.6 });
         g.fx?.debrisFrom?.(debris, c, dmg ? 220 : 60);
-        if (dmg) { g.sound?.playExplosion?.(c, g.character?.group?.position, Math.min(0.8, 0.2 + dmg * 0.02)); if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 0.6); }
+        if (dmg) { g.sound?.playExplosion?.(c, g.character?.group?.position, Math.min(0.8, 0.25 + dmg * 0.02)); if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 0.6); }
         else g.sound?.playCrack?.(c, 0.6);
     }
 
@@ -1095,8 +1377,28 @@ export class LevitationMaxima {
     }
 
     // ================================================================ frame
+    get shards() { return this._shards || (this._shards = []); }
+    get pending() { return this._pending || (this._pending = []); }
+
     update(dt) {
         const g = this.game;
+        this._clock = (this._clock || 0) + dt;
+        // pieces flying apart; the heap's blocks go into the world as they settle (host)
+        for (let i = this.shards.length - 1; i >= 0; i--) {
+            const S = this.shards[i];
+            this._shardStep(S, dt);
+            if (S.t > S.T + 0.6) { g.scene?.remove(S.mesh); S.mesh.dispose?.(); this.shards.splice(i, 1); }
+        }
+        for (let i = this.pending.length - 1; i >= 0; i--) {
+            const P = this.pending[i];
+            if (this._clock < P.at) continue;
+            this.pending.splice(i, 1);
+            const data = g.world?.terrain?.data || g.terrain?.data;
+            if (!data) continue;
+            const edits = [];
+            for (const c of P.edits) { const was = data.get(c[0], c[1], c[2]); if (!was || was === BLOCK.WATER) { data.set(c[0], c[1], c[2], c[3]); edits.push(c); } }
+            if (edits.length) g.builder?._sendEdits?.(edits);
+        }
         // my mana: 2 a second while it holds (nothing comes back meanwhile)
         const M = this.mine;
         if (M) {
@@ -1126,6 +1428,15 @@ export class LevitationMaxima {
         // every computer: the house / tree where it is, and its collision boxes
         for (const L of this.lifts.values()) {
             if (!L.group) continue;
+            // my hand pulls it: how far it has come loose
+            if (L.by === g.localId && (this.auth ? L.phase === 'loosen' : L.netPull >= 0)) {
+                L.hintT = (L.hintT || 0) - dt;
+                if (L.hintT <= 0) {
+                    L.hintT = 0.6;
+                    const p = Math.round(100 * (this.auth ? Math.min(1, L.pull / (PULL[L.kind] || 2)) : L.netPull));
+                    g.hud?.setVoice?.(`${L.kind === 'tree' ? '🌳' : '🏠'} Тяните руку вверх, ещё и ещё — ${L.kind === 'tree' ? 'дерево' : 'дом'} поддаётся: ${p}%`, true);
+                }
+            }
             L.group.position.copy(L.pos);
             L.group.rotation.set(L.sway.x, 0, L.sway.z);
             if (!L.boxAt || L.boxAt.distanceToSquared(L.pos) > 0.01) this._boxes(L);
@@ -1140,7 +1451,7 @@ export class LevitationMaxima {
         this._netT = 0;
         const l = [];
         const r2 = (v) => Math.round(v * 100) / 100;
-        for (const L of this.lifts.values()) if (L.group) l.push([L.id, r2(L.pos.x), r2(L.pos.y), r2(L.pos.z), r2(L.sway.x * 100) / 100, r2(L.sway.z * 100) / 100]);
+        for (const L of this.lifts.values()) if (L.group) l.push([L.id, r2(L.pos.x), r2(L.pos.y), r2(L.pos.z), r2(L.sway.x * 100) / 100, r2(L.sway.z * 100) / 100, L.phase === 'loosen' ? r2(Math.min(1, L.pull / (PULL[L.kind] || 2))) : -1]);
         if (l.length) g.sync.levMaxState?.(l);
     }
 
@@ -1173,7 +1484,7 @@ export class LevitationMaxima {
                 const [x0, x1, z0, z1, y0] = m.b.map(Number);
                 const box = { x0, x1, z0, z1, y0 };
                 const L = this.lifts.get(m.id);
-                if (L) this._landFx(L, box, [], +m.dmg || 0);
+                if (L && Array.isArray(m.d)) { this._comeDown(L, { ...m, d: m.d.map((v) => v | 0) }); this.lifts.delete(m.id); this._dropVisual(L); }
                 if (+m.dmg > 0) this.crush(box, Math.min(45, +m.dmg), m.by, L?.kind || 'house');
                 return;
             }
@@ -1191,6 +1502,7 @@ export class LevitationMaxima {
             L.net = L.net || { p: new THREE.Vector3() };
             L.net.p.set(+a[1] || 0, +a[2] || 0, +a[3] || 0);
             L.net.sx = +a[4] || 0; L.net.sz = +a[5] || 0;
+            L.netPull = +a[6];
             if (!L.pos) L.pos = L.net.p.clone();
         }
     }

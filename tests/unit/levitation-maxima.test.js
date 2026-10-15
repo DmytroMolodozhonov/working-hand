@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchSpell } from '../../src/fx/SpellManager.js';
-import { LEV_MAX, PULL, LOOSEN, MAXIMA_TARGETS, levBlocked, houseCells, treeCells, pullStep, crushDamage, rubbleOf, felledOf } from '../../src/game/LevitationMaxima.js';
+import { LEV_MAX, PULL, LOOSEN, MAXIMA_TARGETS, levBlocked, houseCells, treeCells, pullStep, crushDamage, rubbleOf, felledOf, throwOf, voxelGeometry } from '../../src/game/LevitationMaxima.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { SCROLL_SPELL_COLOR } from '../../src/game/ItemTypes.js';
 import { BLOCK } from '../../src/world/Terrain.js';
@@ -91,4 +91,21 @@ test('landing: a dropped house is a heap (half breaks), a felled tree lies along
     assert.ok(f.set.every((c) => c[1] === 5), 'lying on the ground');
     assert.ok(crushDamage('house', 10) > crushDamage('house', 1));
     assert.ok(crushDamage('ship', 30) <= 45);
+});
+
+test('a throw is a real swing of the arm: far and fast, not a slow move, not a camera jump, not at once', () => {
+    const swing = (step, carried = 2) => { const h = []; let v = null; for (let i = 0; i <= 8; i++) v = throwOf(h, i * 0.03, { x: i * step, y: 1, z: 0 }, carried) || v; return v; };
+    assert.ok(swing(0.2)?.x > 4, 'a fast swing throws');
+    assert.equal(swing(0.02), null, 'a slow move carries');
+    assert.equal(swing(0.2, 0.3), null, 'not in the first moment');
+    const h = []; let v = null;
+    for (let i = 0; i <= 8; i++) v = throwOf(h, i * 0.03, { x: i === 4 ? 3 : 0, y: 1, z: 0 }, 2) || v;
+    assert.equal(v, null, 'the camera losing the hand for a frame is no throw');
+});
+
+test('the carried house is drawn from its own blocks: only the outer faces, with the world\'s patterns', () => {
+    const cells = [[0, 10, 0, BLOCK.PLANKS], [1, 10, 0, BLOCK.PLANKS]];
+    const geo = voxelGeometry(cells, 0, 10, 0);
+    assert.equal(geo.getAttribute('position').count, 10 * 4, 'two blocks side by side: 10 faces');
+    assert.ok(geo.getAttribute('voxPat').array.some((p) => p > 0), 'planks keep their pattern');
 });
