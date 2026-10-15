@@ -24,12 +24,13 @@
         </div>
         <div id="stats-container">
             <p id="coin-counter" title="Монеты">🪙 <span id="coin-count">0</span></p>
-            <p>Убито: <span id="kill-count">0</span></p>
-            <p>Ударов: <span id="punch-count">0</span></p>
-            <p id="fps-counter" style="color: #00ff00; font-family: monospace;">FPS: 60</p>
+            <!-- (kill / punch counters stay in the page, hidden: Hud.update still writes them) -->
+            <p hidden>Убито: <span id="kill-count">0</span></p>
+            <p hidden>Ударов: <span id="punch-count">0</span></p>
         </div>
         <div id="mp-hud" class="hidden"></div>
     </div>
+    <div id="fps-counter" class="hidden" style="color: #00ff00; font-family: monospace;">FPS: 60</div>
     <div id="damage-flash" class="hidden"></div>
     <!-- «Выживание» (internal 'freeworld'): fatigue, status, frozen frame, death screen -->
     <div id="frozen-overlay"></div>
@@ -260,6 +261,13 @@
                             <input type="checkbox" id="show-hands-toggle" checked>
                             Показывать Кисти Рук
                         </label>
+                    </div>
+                    <div class="settings-group">
+                        <label>
+                            <input type="checkbox" id="show-fps-toggle">
+                            Показывать FPS
+                        </label>
+                        <div class="setting-hint">В Творческом по умолчанию включено, в остальных режимах выключено; выбор запоминается отдельно для Творческого и для остальных.</div>
                     </div>
                     <div class="settings-group">
                         <label>

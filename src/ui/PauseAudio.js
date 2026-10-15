@@ -10,7 +10,7 @@
 /** The settings shown in the pause menu (ids of the controls in «Настройки → Звук»). */
 export const PAUSE_AUDIO_IDS = ['music-vol', 'zombie-vol', 'spell-vol', 'talk-vol', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'voice-engine', 'voice-mic', 'voice-filter'];
 /** The «🖥 Графика» tab: the same, for «Настройки → Графика». */
-export const PAUSE_GRAPHICS_IDS = ['view-distance', 'graphics-quality', 'fps-limit', 'antialias'];
+export const PAUSE_GRAPHICS_IDS = ['show-fps-toggle', 'view-distance', 'graphics-quality', 'fps-limit', 'antialias'];
 
 function labelOf(src) {
     const lab = src.closest('.settings-group')?.querySelector('label');
@@ -37,7 +37,10 @@ export function setupPauseAudio(box, ids = PAUSE_AUDIO_IDS, doc = document) {
         name.textContent = labelOf(src);
         row.appendChild(name);
         let ctl, val = null;
-        if (src.tagName === 'SELECT') {
+        if (src.type === 'checkbox') {
+            ctl = doc.createElement('input');
+            ctl.type = 'checkbox';
+        } else if (src.tagName === 'SELECT') {
             ctl = doc.createElement('select');
             for (const o of src.options) ctl.appendChild(new Option(o.textContent, o.value));
         } else {
@@ -50,9 +53,9 @@ export function setupPauseAudio(box, ids = PAUSE_AUDIO_IDS, doc = document) {
         ctl.id = 'pause-' + id;
         ctl.dataset.for = id;
         name.htmlFor = ctl.id;
-        const evt = src.tagName === 'SELECT' ? 'change' : 'input';
+        const evt = src.tagName === 'SELECT' || src.type === 'checkbox' ? 'change' : 'input';
         ctl.addEventListener(evt, () => {
-            src.value = ctl.value;
+            if (src.type === 'checkbox') src.checked = ctl.checked; else src.value = ctl.value;
             src.dispatchEvent(new Event(evt, { bubbles: true }));
             if (val) val.textContent = ctl.value + '%';
         });
@@ -81,7 +84,7 @@ export function setupPauseAudio(box, ids = PAUSE_AUDIO_IDS, doc = document) {
                 r.ctl.innerHTML = '';
                 for (const o of r.src.options) r.ctl.appendChild(new Option(o.textContent, o.value));
             }
-            r.ctl.value = r.src.value;
+            if (r.src.type === 'checkbox') r.ctl.checked = r.src.checked; else r.ctl.value = r.src.value;
             if (r.h) r.h.textContent = r.hint.textContent; // (a hint that tells the state: «слушается сейчас…»)
             if (r.val) r.val.textContent = r.src.value + '%';
         }

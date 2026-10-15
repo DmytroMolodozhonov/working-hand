@@ -308,6 +308,7 @@ async function updateGameMapList(forceRefresh = false) {
             pickingMap = id === 'maps';
             selectedMap = null;
             selectedMode = pickingMap ? 'survival' : id;
+            applyFps();
             updateGameMapList();
         };
         card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.onclick(); } };
@@ -784,6 +785,7 @@ async function startGameInner(config, welcome) {
             loadingScreen.classList.add('hidden');
             loadingScreen.style.display = 'none';
             hud.show(true);
+            applyFps();
         };
         const started = performance.now(), frame0 = game.frameCount;
         const waitPose = setInterval(() => {
@@ -907,6 +909,26 @@ if (!window.__ZNS_NO_FULLSCREEN__) becomeAppWindow({ bar: document.querySelector
 
 // ------------------------------------------------------------------ pause menu (Escape)
 // (in a game with others the world goes on; alone it waits)
+// «Показывать FPS»: by default on in Creative, off elsewhere; the choice is remembered apart for Creative and for the other modes
+const fpsKey = (mode) => 'zns-show-fps-' + (mode === 'creative' ? 'creative' : 'other');
+const fpsMode = () => (game?.active ? game.config?.mode : selectedMode);
+function fpsPref(mode) {
+    let v = null;
+    try { v = localStorage.getItem(fpsKey(mode)); } catch (e) { /* not remembered */ }
+    return v === null ? mode === 'creative' : v === '1';
+}
+function applyFps() {
+    const mode = fpsMode();
+    const on = fpsPref(mode);
+    const box = $('show-fps-toggle');
+    if (box) box.checked = on;
+    if (game) hud.setFpsShown(on, mode === 'creative');
+}
+$('show-fps-toggle')?.addEventListener('change', (e) => {
+    try { localStorage.setItem(fpsKey(fpsMode()), e.target.checked ? '1' : '0'); } catch (err) { /* not remembered */ }
+    applyFps();
+});
+applyFps();
 // «🔊 Звук» in the pause menu: the sound settings without leaving the game
 const pauseAudio = setupPauseAudio($('pause-audio'));
 // «🖥 Графика» in the pause menu: the same graphics settings, applied at once
@@ -990,6 +1012,7 @@ function togglePauseMenu(show) {
     const el = $('pause-menu');
     const open = show ?? el.classList.contains('hidden');
     if (open) {
+        applyFps();
         pauseAudio.sync();
         pauseGraphics.sync();
         // «✨ Заклинания» — only in Creative (not on a map)

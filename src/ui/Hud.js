@@ -104,6 +104,8 @@ export class Hud {
 
     show(visible) {
         this.el.hud.classList.toggle('hidden', !visible);
+        this._hudOn = !!visible;
+        this.el.fps?.classList.toggle('hidden', !(visible && this._fpsOn));
     }
 
     setHpVisible(v) {
@@ -123,22 +125,20 @@ export class Hud {
      */
     setMinimal(on) {
         this.minimal = !!on;
-        for (const id of ['kill-count', 'punch-count']) {
-            const p = document.getElementById(id)?.parentElement;
-            if (p) p.style.display = on ? 'none' : '';
-        }
         this._lastFps = null;
     }
 
-    setFps(fps, aiFps = 0, quality = '', spike = '') {
-        if (this.minimal) { aiFps = 0; quality = ''; if (fps >= 30) spike = ''; } // (when it's slow, say why — even here)
-        const key = `${fps}|${aiFps}|${quality}|${spike}`;
-        if (key === this._lastFps) return;
-        this._lastFps = key;
-        // "ИИ" = how many times per second the camera pose is recognised; then the graphics level
-        const gpu = globalThis.__zns?.gpu;
-        this.el.fps.innerText = `FPS: ${fps}` + (aiFps ? ` | ИИ: ${aiFps}` : '') + (quality ? ` | графика: ${quality}` : '') + (spike ? ` | ${spike}` : '')
-            + (gpu?.short && (!this.minimal || fps < 30 || gpu.weak) ? ` | ${gpu.weak ? '⚠️ ' : ''}${gpu.short}` : '');
+    /** The FPS number (top left): shown or not, twice the size in Creative. */
+    setFpsShown(on, big = false) {
+        this._fpsOn = !!on;
+        this.el.fps.classList.toggle('hidden', !(on && this._hudOn));
+        this.el.fps.classList.toggle('big', !!big);
+    }
+
+    setFps(fps) {
+        if (fps === this._lastFps) return;
+        this._lastFps = fps;
+        this.el.fps.innerText = `FPS: ${fps}`;
         this.el.fps.style.color = fps > 50 ? '#00ff00' : (fps > 25 ? '#ffff00' : '#ff0000');
     }
 
