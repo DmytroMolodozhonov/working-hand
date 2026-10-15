@@ -38,6 +38,11 @@ Order of decisions for one sentence:
 - **Model: Qwen3.5 0.8B** (March 2026; Apache 2.0; 201 languages incl. Russian; tool calling;
   non-thinking by default), text-only ONNX build `onnx-community/Qwen3.5-0.8B-Text-ONNX`.
   Fallback chain: Qwen3 0.6B ONNX (the old «smart») → the rule brain.
+- **October 2026: Gemma 4 E2B** (`onnx-community/gemma-4-E2B-it-ONNX`, q4f16, WebGPU only — `gpuOnly`)
+  is the default with a graphics card (much better Russian; English answers to English speech);
+  E4B in the menu for strong cards; it fails → Qwen3.5 0.8B. Transformers.js 4.3.1 maps `gemma4` →
+  `Gemma4ForCausalLM` (text-only sessions: embed_tokens + decoder). Its calls `<|tool_call>call:f{a:<|"|>b<|"|>}<tool_call|>`
+  are parsed in TalkActions. Thinking words are made in each voice in advance (`Speech.prepare`).
 - Not chosen: llama.cpp / llama-cpp-python in `server.py` (one more native install on every PC, the
   Mac launcher too; the browser path already works offline after the first download); LFM2.5 1.2B
   (no Russian in the official list); 8B Russian models like T-lite (far too heavy for a gaming PC

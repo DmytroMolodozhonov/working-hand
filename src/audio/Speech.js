@@ -59,6 +59,9 @@ export class Speech {
         this._current = null; // { voiceKey, opts, stop() }
         this._pending = null; // { text, opts }
         this._cache = new Map(); // short lines already made: voice|speed|pitch|text -> {pcm, sr}
+        this._keep = new Set(); // lines made in advance (the thinking words): kept in the cache whatever their length
+        this._prep = []; // [{text, opts}] waiting to be made in advance (one at a time, only while nobody speaks)
+        this._prepBusy = false;
         this.history = []; // the last lines: { engine, voice, female, pitch, speed, text }
         if (!this.systemSupported) return;
         this._refreshVoices();
@@ -116,6 +119,62 @@ export class Speech {
     _status(s) {
         if (typeof this.onStatus !== 'function') return;
         try { this.onStatus(s); } catch (e) { /* ignore */ }
+    }
+
+    /** The cache key of a short line in this voice (null: not kept). */
+    _ckey(cast, piece) {
+        if (piece.length > 12 && !this._keep.has(piece)) return null;
+        return `${cast.voice}|${cast.speed.toFixed(3)}|${cast.pitch.toFixed(3)}|${piece}`;
+    }
+
+    /** Is this line already made in this villager's voice (said with no wait)? */
+    isReady(text, opts = {}) {
+        if (!this.neuralUsable || !this.neural.ready) return false;
+        const clean = speakable(text);
+        const cast = castNeural({ ...opts, voiceKey: opts.voiceKey ?? 'default', female: isFemale(opts) });
+        const k = clean && this._ckey(cast, clean);
+        return !!(k && this._cache.has(k));
+    }
+
+    /**
+     * Makes short lines (the thinking words: «Хм…», «Я понял…») in this villager's voice in advance,
+     * one at a time and only while nobody is speaking — then say() plays them at once.
+     * @param {string[]} lines
+     * @param {{voiceKey?:string|number, role?:string, female?:boolean}} opts
+     */
+    prepare(lines, opts = {}) {
+        if (!this.neuralUsable || !this.neural.ready || !Array.isArray(lines)) return;
+        const o = { ...opts, voiceKey: opts.voiceKey ?? 'default', female: isFemale(opts) };
+        for (const l of lines) {
+            const clean = speakable(l);
+            if (!clean || clean.length > 40) continue;
+            this._keep.add(clean);
+            if (this.isReady(clean, o) || this._prep.some((p) => p.text === clean && p.opts.voiceKey === o.voiceKey)) continue;
+            this._prep.push({ text: clean, opts: o });
+        }
+        if (this._prep.length > 80) this._prep.splice(0, this._prep.length - 80);
+        this._prepNext();
+    }
+
+    _prepNext() {
+        if (this._prepBusy || !this._prep.length) return;
+        // (a line being said goes first: try again a little later)
+        if (this._current) { if (!this._prepT) this._prepT = setTimeout(() => { this._prepT = null; this._prepNext(); }, 400); return; }
+        const { text, opts } = this._prep.shift();
+        const cast = castNeural(opts);
+        const k = this._ckey(cast, text);
+        if (!k || this._cache.has(k)) { this._prepNext(); return; }
+        this._prepBusy = true;
+        const done = () => { this._prepBusy = false; this._prepNext(); };
+        this.neural.synth(text, { voice: cast.voice, speed: cast.speed / cast.pitch }).then(({ pcm, sampleRate }) => {
+            if (pcm?.length) this._store(k, { pcm, sr: sampleRate });
+            done();
+        }, done);
+    }
+
+    _store(k, v) {
+        this._cache.set(k, v);
+        if (this._cache.size > 260) this._cache.delete(this._cache.keys().next().value);
     }
 
     /**
@@ -234,13 +293,14 @@ export class Speech {
             const close = () => { if (!closed) { closed = true; open--; } };
             this._remember({ engine: 'neural', voice: cast.voice, female: cast.female, pitch: cast.pitch, speed: cast.speed, f0: cast.f0, text: piece });
             // (a short line said often — «Хм…», «Так…» — is made once per voice and kept)
-            const ck = piece.length <= 12 ? `${cast.voice}|${cast.speed.toFixed(3)}|${cast.pitch.toFixed(3)}|${piece}` : null;
+            const ck = this._ckey(cast, piece);
             const hit = ck && this._cache.get(ck);
+            if (hit) { this._cache.delete(ck); this._cache.set(ck, hit); } // (said often: kept longest)
             if (hit) { Promise.resolve().then(() => { if (this._current !== entry) return; close(); play(hit.pcm, hit.sr, piece); maybeDone(); }); return; }
             const onChunk = (pcm, sampleRate, last) => {
                 if (this._current !== entry) return;
                 if (last) close();
-                if (ck && last && pcm?.length) { this._cache.set(ck, { pcm, sr: sampleRate }); if (this._cache.size > 120) this._cache.delete(this._cache.keys().next().value); }
+                if (ck && last && pcm?.length) this._store(ck, { pcm, sr: sampleRate });
                 play(pcm, sampleRate, piece);
                 maybeDone();
             };

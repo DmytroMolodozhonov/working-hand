@@ -119,6 +119,12 @@ function pythonic(s) {
     return out;
 }
 
+/** Gemma 4 call arguments: {target:<|"|>zombies<|"|>,all:true} → an object. */
+function gemmaArgs(body) {
+    const json = String(body).replace(/<\|"\|>/g, '"').replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":');
+    try { const o = JSON.parse(json); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (_) { return {}; }
+}
+
 /**
  * Finds the tool calls in a model's output.
  * @param {string} raw
@@ -144,6 +150,11 @@ export function parseToolCalls(raw) {
         }
         return ' ';
     });
+    // <|tool_call>call:attack{target:<|"|>zombies<|"|>}<tool_call|> (Gemma 4); the closing tag may be cut off
+    s = s.replace(/<\|tool_call>\s*call:([a-z_]+)\s*(\{[\s\S]*?\})?\s*(<tool_call\|>|$)/g, (_, name, body) => {
+        calls.push({ name, args: gemmaArgs(body || '{}') });
+        return ' ';
+    });
     // <|tool_call_start|>[f(a="b")]<|tool_call_end|> (LFM2)
     s = s.replace(/<\|tool_call_start\|>([\s\S]*?)(<\|tool_call_end\|>|$)/g, (_, body) => {
         const j = firstJson(body);
@@ -157,7 +168,7 @@ export function parseToolCalls(raw) {
         const c = j && fromObject(j.obj);
         if (c && TOOL_NAMES.has(c.name)) { calls.push(c); s = s.slice(0, j.start) + ' ' + s.slice(j.end); }
     }
-    s = s.replace(/<\/?(tool_call|tool_response|function[^>]*|parameter[^>]*)>/g, ' ').replace(/<\|[^|]*\|>/g, ' ').replace(/\s+/g, ' ').trim();
+    s = s.replace(/<\/?(tool_call|tool_response|function[^>]*|parameter[^>]*)>/g, ' ').replace(/<\|[^|]*\|>/g, ' ').replace(/<\|?[a-z_]+\|?>/g, (t) => (t.includes('|') ? ' ' : t)).replace(/\s+/g, ' ').trim();
     return { text: s, calls };
 }
 

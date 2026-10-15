@@ -29,6 +29,13 @@ const REPLACE = [
     ['«', '"'], ['»', '"'], ['„', '"'],
 ];
 
+/** 'en' for a line in English (a villager answering an English-speaking player), else 'ru'. */
+export function langOf(text) {
+    const letters = String(text ?? '').match(/[a-zа-яё]/gi) || [];
+    const lat = letters.filter((c) => /[a-z]/i.test(c)).length;
+    return letters.length >= 2 && lat / letters.length >= 0.7 ? 'en' : LANG;
+}
+
 /** The text exactly as the model was trained to read it (Supertone's own preprocessing). */
 export function preprocessText(text, lang = LANG) {
     let t = String(text ?? '').normalize('NFKD').replace(EMOJI, '');
@@ -144,7 +151,7 @@ export async function synthChunk(ort, s, cfg, indexer, style, text, o = {}) {
     const base = cfg.ae.base_chunk_size;
     const ccf = cfg.ttl.chunk_compress_factor;
     const ldim = cfg.ttl.latent_dim * ccf;
-    const ids = textToIds(indexer, preprocessText(text));
+    const ids = textToIds(indexer, preprocessText(text, langOf(text)));
     const L = ids.length;
     const textIds = new ort.Tensor('int64', BigInt64Array.from(ids, (x) => BigInt(x)), [1, L]);
     const textMask = new ort.Tensor('float32', new Float32Array(L).fill(1), [1, 1, L]);

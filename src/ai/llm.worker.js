@@ -58,14 +58,17 @@ async function setupLibrary() {
 async function pickDevice(pref) {
     if (pref === 'wasm') return { device: 'wasm', f16: false };
     const gpu = self.navigator && self.navigator.gpu;
-    if (!gpu) return { device: 'wasm', f16: false };
-    try {
-        const adapter = await gpu.requestAdapter();
-        if (!adapter) return { device: 'wasm', f16: false };
-        return { device: 'webgpu', f16: adapter.features.has('shader-f16') };
-    } catch (e) {
+    if (!gpu) {
+        if (pref === 'webgpu') throw new Error('no WebGPU');
         return { device: 'wasm', f16: false };
     }
+    try {
+        const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
+        if (adapter) return { device: 'webgpu', f16: adapter.features.has('shader-f16') };
+    } catch (e) { /* no adapter */ }
+    // (a big model only on the graphics card: on the processor it is far too slow — the smaller one is loaded instead)
+    if (pref === 'webgpu') throw new Error('no WebGPU adapter');
+    return { device: 'wasm', f16: false };
 }
 
 function dtypeFor(model, device, f16) {
@@ -131,7 +134,7 @@ async function load({ model, device: pref = 'auto' }) {
             ({ gen: generator, dtype } = await createAny(model, device, dtype));
             await warmup(model.noThink);
         } catch (e) {
-            if (device !== 'webgpu') throw e;
+            if (device !== 'webgpu' || model.gpuOnly) throw e;
             // WebGPU failed (driver, memory, unsupported op) → try the CPU path once
             try { await generator?.dispose?.(); } catch (_) { /* ignore */ }
             generator = null;
@@ -153,6 +156,8 @@ function stripThink(s) {
     return String(s ?? '')
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/<think>[\s\S]*$/i, '')
+        .replace(/<\|channel>[\s\S]*?(<channel\|>|$)/g, '') // (Gemma 4's thoughts, if any)
+        .replace(/<\|?(turn|eos|end_of_turn)\|?>/g, '')
         .trim();
 }
 

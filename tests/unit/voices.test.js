@@ -376,3 +376,22 @@ test('Speech: the next piece of an answer (append) is made at once and played ri
     assert.equal(nv.calls.length, n0 + 1, '«Хм…» synthesized once');
     assert.equal(played.length, 5);
 });
+
+test('Speech.prepare: thinking words made in advance in each villager\'s own voice, then said with no wait', async () => {
+    const { ctx, played } = fakeAudio();
+    const nv = fakeNeural();
+    const s = new Speech({ neural: nv, audioContext: () => ctx });
+    const man = { voiceKey: 'v1', role: 'farmer', female: false }, woman = { voiceKey: 'v2', role: 'farmer', female: true };
+    s.prepare(['Сейчас подумаю…', 'Я понял…'], man);
+    s.prepare(['Я поняла…'], woman);
+    for (let i = 0; i < 10; i++) await tick();
+    assert.equal(nv.calls.length, 3);
+    assert.equal(nv.calls[2].voice[0], 'F'); // (a woman's words in a woman's voice)
+    assert.ok(nv.calls.slice(0, 2).every((c) => c.voice[0] === 'M'));
+    assert.ok(s.isReady('Сейчас подумаю…', man) && s.isReady('Я поняла…', woman));
+    assert.ok(!s.isReady('Я поняла…', man));
+    s.say('Сейчас подумаю…', { ...man, volume: 1 });
+    await tick();
+    assert.equal(nv.calls.length, 3, 'from the cache, not made again');
+    assert.equal(played.length, 1);
+});

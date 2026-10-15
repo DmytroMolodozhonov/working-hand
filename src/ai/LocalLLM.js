@@ -22,7 +22,31 @@ export class LocalLLM {
      * Sizes are the approximate one-time download (ONNX graph + weights).
      */
     static MODELS = {
-        // the villagers' conversation net (tool calling, 201 languages, Russian too): Qwen3.5 0.8B, text only
+        // the villagers' conversation net on a graphics card: Gemma 4 E2B (~2.3B working parameters, 140 languages,
+        // a much better Russian than the small Qwen: whole correct sentences in character; game actions too).
+        // Only on the graphics card (on the processor a model this big is too slow for a talk): it fails → Qwen3.5.
+        gemma4: {
+            id: 'onnx-community/gemma-4-E2B-it-ONNX',
+            label: 'Gemma 4 E2B',
+            dtype: { webgpu: 'q4f16', webgpuNoF16: 'q4', wasm: 'q4' },
+            sizeMB: { webgpu: 2600, wasm: 3000 },
+            noThink: true,
+            tools: true,
+            gpuOnly: true,
+            fallback: 'qwen35',
+        },
+        // a strong computer (≥ 8 GB on the graphics card): Gemma 4 E4B — the cleverest and liveliest, but bigger and slower
+        gemma4big: {
+            id: 'onnx-community/gemma-4-E4B-it-ONNX',
+            label: 'Gemma 4 E4B',
+            dtype: { webgpu: 'q4f16', webgpuNoF16: 'q4', wasm: 'q4' },
+            sizeMB: { webgpu: 4500, wasm: 5000 },
+            noThink: true,
+            tools: true,
+            gpuOnly: true,
+            fallback: 'gemma4',
+        },
+        // the small conversation net (tool calling, 201 languages, Russian too): Qwen3.5 0.8B, text only
         qwen35: {
             id: 'onnx-community/Qwen3.5-0.8B-Text-ONNX',
             label: 'Qwen3.5 0.8B',
@@ -55,8 +79,8 @@ export class LocalLLM {
     static pick(setting, hasGPU = LocalLLM.hasWebGPU) {
         if (!setting || setting === 'off') return null;
         // (always on: with a graphics card the conversation net; without one the light net, quick on the processor)
-        if (setting === 'auto') return hasGPU ? 'qwen35' : 'light';
-        return LocalLLM.MODELS[setting] ? setting : 'qwen35';
+        if (setting === 'auto') return hasGPU ? 'gemma4' : 'light';
+        return LocalLLM.MODELS[setting] ? setting : 'gemma4';
     }
 
     /** A worker + WebAssembly are available (a browser). */
@@ -144,7 +168,7 @@ export class LocalLLM {
                     case 'gen_error': this._finish(m.id, null, new Error(m.message)); break;
                 }
             };
-            worker.postMessage({ type: 'load', model: { ...this.model }, device: this.preferredDevice });
+            worker.postMessage({ type: 'load', model: { ...this.model }, device: this.model.gpuOnly ? 'webgpu' : this.preferredDevice });
         });
         // allow a later retry after a failure
         this._loading.catch(() => { this._loading = null; this._terminate(); });

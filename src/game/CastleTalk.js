@@ -34,9 +34,10 @@ import * as THREE from 'three';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
-import { TalkMind, fillerLine } from '../ai/TalkMind.js';
+import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
 import { detectOrder, toolsFor } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
+import { DANGERS } from './Danger.js';
 
 export const HEAR = 7; // m: a villager hears you this far
 const VOICE = 18; // m: a villager's voice carries this far
@@ -143,6 +144,9 @@ export class CastleTalk {
         const held = g.items?.held.right || g.items?.held.left;
         if (held) ctx.heldItem = { name: nameOf(held.item), magic: isMagicItem(held.item), value: itemValue(held.item) };
         if (this.offer && this.offer.v === v) ctx.lastOffer = { item: { name: nameOf(this.offer.item) }, price: this.offer.price, kind: this.offer.kind };
+        // (what just happened round him: the net answers about it — «что это грохнуло?»)
+        const fk = v.fear?.danger?.kind;
+        if (fk && DANGERS[fk]) ctx.recent = `рядом ${DANGERS[fk].ru}${v.fear.state === 'look' ? ' — ты насторожился' : ' — тебе страшно'}`;
         return ctx;
     }
 
@@ -213,15 +217,41 @@ export class CastleTalk {
     }
 
     /** «Хм…» while the net thinks: over the head only. */
-    _sayThinking(v, text = '') {
+    _sayThinking(v, text = '', intent = '') {
         v.talkedAt = performance.now();
         this._partner = v;
-        // (his own words while he thinks — by role, a woman's own, by the question; never the same twice running)
-        const line = fillerLine({ role: v.role, female: !!v.entry?.female, wizard: !!v.wizard, text, last: v.lastFiller || this._lastFiller }, Math.random);
+        // (his own words while he thinks — by role, a woman's own, by the question, in my language; never the same
+        // twice running; those already made in his voice first: heard at once, not after a wait)
+        const vo = this._voiceOpts(v);
+        const line = fillerLine({ role: v.role, female: vo.female, wizard: !!v.wizard, text, intent, last: v.lastFiller || this._lastFiller, ready: (l) => this.speech.isReady?.(l, vo) }, Math.random);
         v.lastFiller = line; this._lastFiller = line;
         this._filler = { v, at: performance.now() };
         this._urgent = true; // (said at once, cutting other talk; the answer follows it)
         try { this.life._say(v, line, 3); } finally { this._urgent = false; }
+    }
+
+    /** How this villager's voice is chosen (the same for a line said and a line made in advance). */
+    _voiceOpts(v) { return { voiceKey: v.id, role: v.role, female: !!v.entry?.female }; }
+
+    /**
+     * The thinking words of the villagers near me are made in their own voices in advance (a few each, of every
+     * kind: a question, a request, a trade, a greeting) — so «Хм…» / «Я понял…» is heard the moment I stop speaking.
+     */
+    _prepareFillers() {
+        const sp = this.speech;
+        if (!this.voiceOn || !sp?.prepare || !sp.neural?.ready || !this.llm?.ready) return;
+        const me = this.game.character.group.position;
+        const lang = this._en ? 'en' : 'ru';
+        const near = this.life.targets().filter((v) => !v.dead && Math.hypot(v.x - me.x, v.z - me.z) < 12)
+            .sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z)).slice(0, 2);
+        for (const v of near) {
+            if (v._fillersMade === lang) continue;
+            v._fillersMade = lang;
+            const vo = this._voiceOpts(v);
+            const base = { role: v.role, female: vo.female, wizard: !!v.wizard, lang };
+            const take = (kind, n) => fillerPool({ ...base, kind }).sort(() => Math.random() - 0.5).slice(0, n);
+            sp.prepare([...take(null, 4), ...take('question', 3), ...take('request', 3), ...take(v.role === 'merchant' ? 'trade' : 'greet', 2)], vo);
+        }
     }
 
     /** The answer's first words: right after his «Дай-ка подумать…» (no cut, no gap) — or at once. */
@@ -274,6 +304,7 @@ export class CastleTalk {
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
         const v = this._listener();
         if (!v) return false;
+        this._en = isEnglishText(text); // (my language: the thinking words made in advance follow it)
         if (this.life.night?.heard(v, text)) return true; // (asleep: a mumble; a merchant at night: «come in the morning»)
         // (a coin pouch on his counter and a good named: the purchase — VillagerBrain is not asked)
         if (this._trader(v) && this._payByName(v, text)) { v.talking = 4; v.talkTo = g.localId; return true; }
@@ -297,7 +328,7 @@ export class CastleTalk {
         if (!this.mind.llm) this._whyNoNet();
         const first = this.mind.first(b, text, ctx);
         if (first.done) { done(first.res); return true; } // (the rules: at once)
-        const thinking = () => this._sayThinking(v, text);
+        const thinking = () => this._sayThinking(v, text, first.res?.intent);
         const t0 = performance.now();
         // (the first sentence of the net's answer is said as soon as it is written)
         const onSentence = (line, i) => (i > 0 ? this._sayMore(v, line) : this._sayAnswer(v, line));
@@ -867,6 +898,7 @@ export class CastleTalk {
             const close = this._age < 20 && this.life.targets().some((v) => Math.hypot(v.x - g.character.group.position.x, v.z - g.character.group.position.z) < 25);
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
             if (this.voiceOn && this.life.castles.size && (this._age >= 8 || close)) this.speech.preload?.();
+            this._prepareFillers();
             // (always on — loaded in the background soon after the start; meanwhile the rules answer)
             if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled && (this._age >= 15 || close)) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
         }

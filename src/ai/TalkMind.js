@@ -57,31 +57,89 @@ export function orderLine(kind, role, rng = Math.random) {
 const RULES_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'haggle', 'insult', 'threat', 'claim_king', 'bow', 'follow', 'stop_follow', 'thanks', 'bye', 'tell_name', 'ask_my_name']);
 
 /**
- * The words a villager says at once while thinking — by role, by a woman's voice, by the kind of question;
- * never the same as the last one (`last`).
+ * The words a villager says at once while the net thinks («Хм…», «Я понял», «Так-так…») — so the talk feels
+ * live: the answer follows right after them. By language, by kind of question (a question, a trade, a greeting,
+ * a request), by role, by a woman's or a man's word forms; never the same as the last one (`last`).
+ * They are short and made in each villager's voice in advance (Speech.prepare): heard with no wait at all.
+ * [man's form, woman's form] — or one string for both.
  */
 const FILLERS = {
-    common: ['Дай-ка подумать…', 'Хороший вопрос…', 'Так-так…', 'Ммм… ну смотри…', 'Эх, как тебе сказать…', 'Погоди…', 'Хм… сейчас…', 'Дай вспомнить…', 'Ну-у…'],
-    female: ['Ой, дай-ка подумать…', 'Ох, даже не знаю, как сказать…', 'Погоди-ка…', 'Ой, сейчас…', 'Ммм… дай вспомнить…'],
-    knight: ['Так…', 'Хм. Слушай…', 'Погоди-ка…', 'Значит, так…', 'Скажу так…'],
-    king: ['Гм… Изволь…', 'Что ж…', 'Хм… Слушай же…'],
-    advisor: ['Позвольте… минутку…', 'Хм… если позволите…', 'Видите ли…', 'Дайте подумать…'],
-    merchant: ['Так-так, дай прикину…', 'Ммм… ну смотри…', 'Слушай…', 'Эх, как тебе сказать…'],
-    wizard: ['Хм… любопытно…', 'Дай-ка подумать…', 'Мм… видишь ли…', 'Любопытный вопрос…'],
-    why: ['Почему? Хм…', 'Хороший вопрос…', 'Эх, как тебе сказать…'],
-    how: ['Как бы тебе объяснить…', 'Ммм… ну смотри…'],
-    who: ['Дай вспомнить…', 'Погоди, сейчас вспомню…'],
+    ru: {
+        common: ['Хм…', 'Так-так…', 'Ага…', 'Ну-у…', 'Сейчас…', 'Погоди…', 'Дай подумать…', 'Хм, сейчас…', 'Так…', 'Ммм…', 'Э-э…', 'Ну смотри…', 'Хм, ну…', 'Сейчас скажу…', 'Так, погоди…', 'Ага, сейчас…'],
+        question: ['Хороший вопрос…', 'Хм, как бы сказать…', 'Дай-ка подумать…', 'Дай вспомнить…', 'Ох, вопрос…', 'Хм, интересно…', 'Как тебе сказать…', 'Сейчас вспомню…', 'Ммм, ну смотри…', 'Хм, дай соображу…'],
+        request: [['Я понял…', 'Я поняла…'], ['Понял, понял…', 'Поняла, поняла…'], 'Ага, ясно…', 'Так, ясно…', ['Понял тебя…', 'Поняла тебя…'], 'Хм, ладно…', 'Ага, слышу…', 'Так-так, ясно…'],
+        trade: ['Так-так, дай прикину…', 'Хм, прикинем…', 'Ммм, посмотрим…', 'Сейчас прикину…', 'Ну, смотри…', 'Хм, товар…', 'Так, погоди-ка…'],
+        greet: ['О!', 'А, это ты…', 'О, здравствуй…', 'Ага…', 'Хм, гость…', 'О, путник…'],
+        female: ['Ой, сейчас…', 'Ой, погоди-ка…', 'Ох, дай подумать…', 'Ой, дай вспомнить…', 'Ох, ну…'],
+        knight: ['Так…', 'Хм. Слушай…', 'Значит, так…', 'Так точно…', 'Скажу так…', 'Хм. Ясно…'],
+        king: ['Гм…', 'Что ж…', 'Хм… Изволь…', 'Гм, слушай же…', 'Хм, так…'],
+        advisor: ['Позвольте… минутку…', 'Хм… если позволите…', 'Видите ли…', 'Минутку…', 'Хм, извольте…'],
+        merchant: ['Так-так…', 'Ммм, ну смотри…', 'Слушай…', 'Хе, ну…', 'Ага, сейчас…'],
+        wizard: ['Хм… любопытно…', 'Мм… видишь ли…', 'Любопытный вопрос…', 'Хм, занятно…', 'Так-так… магия…'],
+    },
+    en: {
+        common: ['Hmm…', 'Well…', 'Let me see…', 'Uh…', 'Right…', 'Hold on…', 'Hm, well…', 'One moment…', 'Let me think…', 'Okay…'],
+        question: ['Good question…', 'Hmm, let me think…', 'How to put it…', 'Let me remember…', 'Hmm, interesting…', 'Well, you see…'],
+        request: ['I see…', 'I understand…', 'Got it…', 'Right, right…', 'Alright…', 'I hear you…'],
+        trade: ['Let me see…', 'Hmm, let me reckon…', 'Well, look…', 'Let me think…'],
+        greet: ['Oh!', 'Ah, hello…', 'Oh, a traveller…', 'Well, well…'],
+        female: ['Oh, let me see…', 'Oh, hold on…'],
+        knight: ['Right…', 'Listen…', 'Well then…', 'Understood…'],
+        king: ['Hmm…', 'Well then…', 'Very well…'],
+        advisor: ['If I may…', 'One moment…', 'You see…'],
+        merchant: ['Let me see…', 'Well, look…'],
+        wizard: ['Curious…', 'Hmm… you see…', 'Interesting…'],
+    },
 };
 
-export function fillerLine({ role = 'farmer', female = false, wizard = false, text = '', last = '' } = {}, rng = Math.random) {
+/** What kind of words the player said (by the rules' intent and the words): the thinking word fits it. */
+export function fillerKind(text = '', intent = '') {
     const t = String(text).toLowerCase();
-    const kind = /(почему|зачем|отчего)/.test(t) ? 'why' : /(^|\s)как(?![а-я])/.test(t) ? 'how' : /(кто|где|когда|куда)(?![а-я])/.test(t) ? 'who' : null;
-    let pool = wizard ? FILLERS.wizard : FILLERS[role] || (female ? [...FILLERS.female, ...FILLERS.common] : FILLERS.common);
-    if (female && !FILLERS[role] && !wizard) pool = [...FILLERS.female, ...FILLERS.common];
-    if (kind && role !== 'king' && rng() < 0.5) pool = [...FILLERS[kind], ...pool];
-    const fresh = pool.filter((l) => l !== last);
-    return pickFrom(fresh.length ? fresh : pool, rng);
+    if (/^(greet|how_are_you)$/.test(intent)) return 'greet';
+    if (/^(haggle|price|browse|buy|sell|money|food)$/.test(intent)) return 'trade';
+    if (/^(help|follow|quest|stop_follow)$/.test(intent) || /(сделай|помоги|принеси|пойдем|пойдём|иди|покажи|давай|можешь|please|help|could you|can you|bring|show me)/.test(t)) return 'request';
+    if (/\?|(почему|зачем|отчего|как(?![а-я])|кто|где|когда|куда|что(?![а-я])|сколько|какой|какая|why|how|who|where|when|what)/.test(t)) return 'question';
+    return null;
 }
+
+/** The words this villager may say while thinking (in his language, his gender's forms) — to be made in his voice in advance. */
+export function fillerPool({ role = 'farmer', female = false, wizard = false, lang = 'ru', kind = null } = {}) {
+    const F = FILLERS[lang] || FILLERS.ru;
+    const form = (l) => (Array.isArray(l) ? l[female ? 1 : 0] : l);
+    const own = wizard ? F.wizard : F[role] || [];
+    let pool = [...own, ...F.common];
+    if (female && !wizard && role !== 'king') pool = [...F.female, ...pool];
+    if (kind && F[kind] && !(role === 'king' && kind !== 'request')) pool = [...F[kind], ...F[kind], ...own]; // (fits the question)
+    return [...new Set(pool.map(form))];
+}
+
+/**
+ * One thinking word. `ready` (optional): the lines already made in this voice — taken first (heard at once).
+ */
+export function fillerLine({ role = 'farmer', female = false, wizard = false, text = '', intent = '', last = '', lang = null, ready = null } = {}, rng = Math.random) {
+    const lg = lang || (isEnglishText(text) ? 'en' : 'ru');
+    const pool = fillerPool({ role, female, wizard, lang: lg, kind: fillerKind(text, intent) });
+    let fresh = pool.filter((l) => l !== last);
+    if (!fresh.length) fresh = pool;
+    if (ready) { const r = fresh.filter((l) => ready(l)); if (r.length) fresh = r; }
+    return pickFrom(fresh, rng);
+}
+
+export function isEnglishText(s) {
+    const letters = String(s || '').match(/[a-zа-яё]/gi) || [];
+    if (letters.length < 3) return false;
+    return letters.filter((c) => /[a-z]/i.test(c)).length / letters.length >= 0.7;
+}
+
+/** Where a villager of this role stands (for the prompt: an answer about the world around him). */
+const PLACE = {
+    merchant: 'у своего прилавка на рынке у ворот замка',
+    knight: 'на страже в замке',
+    advisor: 'в тронном зале, у трона',
+    king: 'на троне в тронном зале',
+    builder: 'у стен замка, где идёт стройка',
+    farmer: 'у своего поля и дома в замке',
+};
 
 export const OPEN_TOPICS = new Set(['unknown', 'news', 'about_castle', 'about_king', 'zombies', 'magic', 'weather', 'money', 'family', 'flirt', 'quest', 'joke']);
 
@@ -104,6 +162,9 @@ export class TalkMind {
         const role = brain.role;
         const m = brain.memory || {};
         const king = !!ctx.playerIsKing;
+        const t = brain.traits || {};
+        const en = ctx.lang === 'en';
+        const goods = [...new Set((ctx.nearbyGoods || []).map((x) => String(x?.name || x || '').toLowerCase()).filter(Boolean))].slice(0, 8).join(', ');
         // (the wizards of the towers talk through the same brain: their own role and words)
         const wiz = WIZ_ROLE_RU[v.role];
         const lines = [
@@ -120,11 +181,23 @@ export class TalkMind {
             m.talks ? `Вы уже говорили ${m.talks} раз.${m.insults ? ' Он тебя оскорблял.' : ''}${m.trades ? ' Вы торговали.' : ''}${m.lastOrder ? ` Последний приказ: ${m.lastOrder}.` : ''}` : '',
             ctx.following ? 'Сейчас ты идёшь следом за собеседником.' : '',
             ctx.lastOffer ? `Ты сейчас предлагаешь сделку: ${ctx.lastOffer.item?.name || 'вещь'} за ${ctx.lastOffer.price} монет.` : '',
+            // where he is, what he has, what the traveller has and did — answers about THIS moment, not general words
+            !wiz && PLACE[role] ? `Ты стоишь ${PLACE[role]}.` : '',
+            goods ? `На твоём прилавке сейчас: ${goods}. Цены назовёт игра, не ты.` : '',
+            ctx.heldItem?.name ? `У собеседника в руке ${String(ctx.heldItem.name).toLowerCase()}${ctx.heldItem.magic ? ' (волшебная вещь)' : ''}.` : '',
+            ctx.coins != null && role === 'merchant' ? `Монет у него ${ctx.coins > 30 ? 'много' : ctx.coins > 0 ? 'немного' : 'нет совсем'}.` : '',
+            m.trades ? 'Он уже покупал у тебя — ты к нему расположен.' : '',
+            m.insults ? 'Он тебя оскорблял — ты это помнишь.' : '',
+            ctx.recent ? `Недавно: ${ctx.recent}.` : '',
+            v.female ? 'О себе говори в женском роде («я рада», «я видела»).' : 'О себе говори в мужском роде («я рад», «я видел»).',
+            `Твой характер: ${t.smart > 0.7 ? 'умный, рассудительный' : t.smart < 0.45 ? 'простоватый' : 'здравомыслящий'}, ${t.talkative > 0.7 ? 'разговорчивый' : t.talkative < 0.45 ? 'немногословный' : 'в меру общительный'}, ${t.brave > 0.7 ? 'смелый' : t.brave < 0.35 ? 'боязливый' : 'осторожный'}.`,
             // what this villager knows of the world: answers come from it, not from nowhere
             'Что ты знаешь: в замке есть король, его советник у трона, рыцари стражи, рынок у ворот с хлебом, сыром, мясом, яблоками и стрелами, дома жителей. По ночам из-под земли лезут зомби. В пещерах живёт гигантский паук. В Башне волшебников учатся маги. У моря есть порт с кораблями и моряками.',
             'Отвечай ПО СУТИ того, что спросил собеседник, и не меняй тему. Если не знаешь ответа — так и скажи просто, по-своему, и подскажи, у кого спросить (маги в башне, советник короля, торговцы на рынке, стражники у ворот).',
             'Если собеседник просит или приказывает что-то сделать и ты согласен — вызови подходящую функцию. Если не согласен — не вызывай, просто откажи словами.',
-            'Отвечай по-русски, одной-двумя короткими фразами, от первого лица, без кавычек, без чисел и без пояснений.',
+            'Говори как живой человек своего времени: просто, тепло или резко — по характеру, с живыми словечками, без канцелярита и без перечислений. Можешь в ответ спросить что-то короткое.',
+            en ? 'Собеседник говорит по-английски: отвечай ТОЛЬКО по-английски (простыми словами), одной-двумя короткими фразами, от первого лица, без кавычек, без чисел и без пояснений.'
+                : 'Отвечай ТОЛЬКО по-русски, грамотно, одной-двумя короткими законченными фразами, от первого лица, без кавычек, без чисел и без пояснений.',
         ];
         return lines.filter(Boolean).join('\n');
     }
@@ -217,6 +290,9 @@ export class TalkMind {
                 if (/[.!?…]$/.test(line) && ++ends >= 2) { stopped = true; return; } // (an answer is at most two sentences)
             }
         } : null;
+        const en = isEnglishText(text);
+        this._en = en;
+        ctx = { ...ctx, lang: en ? 'en' : 'ru' };
         try {
             opts.onThinking?.();
             let timer;
@@ -224,7 +300,8 @@ export class TalkMind {
                 this.llm.chat({
                     system: this.systemPrompt(brain, ctx),
                     history: this._history(brain),
-                    user: normalize(text) || '...',
+                    // (the words as said, with their «?» and «!» — the net reads a question better than a bare string)
+                    user: String(text || '').replace(/\s+/g, ' ').trim().slice(0, 300) || '...',
                     tools: toolsFor(brain.role, ctx),
                     maxTokens: 60,
                     ...(onPartial ? { onPartial } : {}),
@@ -304,10 +381,10 @@ export class TalkMind {
 
     _acceptText(s, userText) {
         if (!s || s.length < 2 || s.length > 240) return false;
-        if (!isMostlyRussian(s)) return false;
+        if (this._en ? isMostlyRussian(s) : !isMostlyRussian(s)) return false; // (the player's own language)
         if (normalize(s) === normalize(userText)) return false;
         const words = s.split(/\s+/);
-        if (words.some((w) => w.replace(/[^а-яё]/gi, '').length > 22)) return false;
+        if (words.some((w) => w.replace(/[^а-яёa-z]/gi, '').length > 22)) return false;
         if (words.length >= 4 && new Set(words.map((w) => w.toLowerCase())).size < words.length / 2) return false;
         if (/(языков(ая|ой) модел|искусственн|нейросет|ассистент|chatgpt|qwen|gemma|функци[юяи]|tool)/i.test(s)) return false;
         if (/\d/.test(s)) return false; // (numbers — prices — are the game's business)

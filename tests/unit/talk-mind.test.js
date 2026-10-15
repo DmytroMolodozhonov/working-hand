@@ -307,9 +307,25 @@ test('thinking words: his own, by role and by a woman\'s voice, never the same t
     for (let i = 0; i < 40; i++) {
         const l = fillerLine({ role: i % 3 ? 'farmer' : 'knight', female: i % 2 === 0, text: 'почему так', last }, rng);
         assert.notEqual(l, last);
-        assert.match(l, /…$/);
+        assert.match(l, /[…!]$/);
         last = l;
     }
     const seen = new Set(Array.from({ length: 60 }, () => fillerLine({ role: 'farmer' }, rng)));
     assert.ok(seen.size >= 6, `varied: ${[...seen].join(' | ')}`);
+});
+
+test('thinking words by the kind of words and the language; Gemma 4 game actions are read', async () => {
+    const { fillerKind, fillerPool, isEnglishText } = await import('../../src/ai/TalkMind.js');
+    const { parseToolCalls } = await import('../../src/ai/TalkActions.js');
+    assert.equal(fillerKind('почему так темно?'), 'question');
+    assert.equal(fillerKind('помоги мне, пожалуйста'), 'request');
+    assert.equal(fillerKind('', 'haggle'), 'trade');
+    assert.equal(fillerKind('', 'greet'), 'greet');
+    assert.ok(fillerPool({ female: true, kind: 'request' }).includes('Я поняла…'));
+    assert.ok(!fillerPool({ female: false, kind: 'request' }).includes('Я поняла…'));
+    assert.ok(fillerPool({ lang: 'en' }).every((l) => isEnglishText(l) || l.length < 4));
+    assert.ok(isEnglishText('where is the market?') && !isEnglishText('где рынок?'));
+    const r = parseToolCalls('Слушаюсь!<|tool_call>call:attack{target:<|"|>zombies<|"|>}<tool_call|><turn|>');
+    assert.equal(r.text, 'Слушаюсь!');
+    assert.deepEqual(r.calls, [{ name: 'attack', args: { target: 'zombies' } }]);
 });
