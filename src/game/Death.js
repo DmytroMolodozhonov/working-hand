@@ -388,6 +388,37 @@ export class DeathSystem {
             }
         }
         for (const f of [...this.falling.values()]) this._fall(f, dt);
+        this._unsupported(dt);
+    }
+
+    /**
+     * (host) A body lying where the ground or the floor was broken (a blast, a ruin, a fallen
+     * roof) is never left in the air: it falls by the same physics as one let go — down to the
+     * ground, the water or a floor that still stands (everybody sees it land: bodyMove).
+     */
+    _unsupported(dt) {
+        const g = this.game;
+        if (!g.authority) return;
+        this._supT = (this._supT || 0) - dt;
+        if (this._supT > 0) return;
+        this._supT = 0.4;
+        for (const b of this.bodies.values()) {
+            if (b.lev || b.netAt || this.falling.has(b.id)) continue;
+            const o = b.model || b.bones;
+            if (!o) continue;
+            if (b.k === 'v' && !b.moved) { const v = g.castleLife?.byId?.get(b.who); if (v && v.dead && !v.bodyMoved) continue; } // (the villager's own body falls itself: CastleLife._deadFall)
+            if (this._ground(b.x, b.z, b.y + 0.5) < b.y - 0.3) this.falling.set(b.id, { b, vel: new THREE.Vector3(), gentle: false });
+        }
+    }
+
+    /** A creature's own dead body has come to rest at x, y, z: its body here lies there too. */
+    settle(k, who, x, y, z) {
+        for (const b of this.bodies.values()) {
+            if (b.k !== k || b.who !== who || b.lev || b.moved) continue;
+            b.x = x; b.y = y; b.z = z;
+            if (b.model) b.model.position.set(x, y, z);
+            if (b.bones) b.bones.position.set(x, y, z);
+        }
     }
 
     // ------------------------------------------------------------ «Вингардиум Левиоса»

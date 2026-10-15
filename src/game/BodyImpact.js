@@ -39,6 +39,7 @@ export class BodyImpact {
         const g = this.game, c = g.combat, ch = g.character;
         if (!c || c.dead || g.isDeadLocal || g.spiders?.held) return 'none';
         if (g.levitation?.lifted) { this._kickHead(o); return 'none'; }      // (the magic holds the body)
+        if (g.circleAttack?.holdsMe?.()) return 'none'; // (my «Circle Attack»: I stand on my island — nothing pushes me off)
         const dome = !!(c.shield && c.shield.type === 2 && c.shield.left > 0);
         const facing = !o.noShield && !!o.from && !dome && c.shieldFactor(o.from) >= 1;
         const swim = ch.swimY != null, frozen = !!c.frozen;

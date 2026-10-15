@@ -205,6 +205,11 @@ export class Zombie {
             // Corpse: lie for a while, then sink into the ground and get removed.
             if (!this.group.visible) { this.removable = this.corpseTimer > 6; this.corpseTimer += dt; return; }
             this.corpseTimer += dt;
+            // (the ground under it broken — a blast, a ruin: the body falls down to what is left)
+            if (this.corpseTimer <= CORPSE_LIFETIME) {
+                const restY = ground + 0.8;
+                if (pos.y > restY + 0.05) { this.vy = (this.vy || 0) - 25 * dt; pos.y = Math.max(restY, pos.y + this.vy * dt); } else this.vy = 0;
+            }
             if (this.corpseTimer > CORPSE_LIFETIME) {
                 pos.y -= dt * 0.6;
                 if (this.corpseTimer > CORPSE_LIFETIME + 4) this.removable = true;

@@ -694,6 +694,26 @@ export class CastleLife {
         v.y += (gy - v.y) * (gy > v.y ? 1 : 0.5);
     }
 
+    /**
+     * A dead body is never left in the air: killed while flying, or the floor under it broken
+     * (a blast, a ruin) — it falls by the same physics down to the ground, the water or a floor
+     * that still stands, and lies there (its body in Death.js goes with it).
+     */
+    _deadFall(v, dt) {
+        if (v.lev) return; // (held up by «Левиоса»: the magic carries it)
+        if (!v.vy) {
+            v.supT = (v.supT || 0) - dt;
+            if (v.supT > 0) return;
+            v.supT = 0.25;
+            const c = this.game.collision;
+            const gy = c?.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c?.groundY?.(v.x, v.z);
+            if (gy == null || v.y <= gy + 0.05) return;
+            v.vy = -0.01; // (nothing under it: it starts to fall)
+        }
+        this._fallStep(v, dt);
+        if (!v.vy) this.game.death?.settle?.('v', v.id, v.x, v.y, v.z); // (it lies here now)
+    }
+
     /** Thrown up / let go in the air: flies on with its swing and falls. */
     _fallStep(v, dt) {
         const g = this.game;
@@ -718,7 +738,7 @@ export class CastleLife {
         v.damageCooldown -= dt;
         v.sayT -= dt;
         tickSlow(v, dt); // («Даст»: slowed for a while)
-        if (v.dead) { v.deadT = (v.deadT || 0) + dt; if (v.vy) this._fallStep(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
+        if (v.dead) { v.deadT = (v.deadT || 0) + dt; this._deadFall(v, dt); if (v.deadT > 50) this._deactivate(v); return; }
         if (v.sleep && this.night?.step(v, dt)) return; // (going to bed, asleep, getting up — NightLife.js)
         // held up by «Вингардиум Левиоса»: Levitation carries the body
         if (v.lev) { v.mode = v.lev.body ? 'dead' : 'flail'; v.speed = 0; return; } // (kicking in the air: VillagerModel 'flail')

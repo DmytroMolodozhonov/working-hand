@@ -77,14 +77,14 @@ export function circleFront(t, R) {
 
 /** The harm at distance `d` (0: the island, or out of the circle). */
 export function circleDamage(d, f) {
-    if (d < f.island || d > f.R + 1) return 0;
+    if (d > f.R + 1) return 0; // (the island keeps only the wizard: whoever stands on it by him is struck at once)
     return d <= f.R / 3 ? f.zones[0] : d <= 2 * f.R / 3 ? f.zones[1] : f.zones[2];
 }
 
 /** How hard it throws at distance `d`: the closer, the further one flies. */
 export function circleThrow(d, f) {
     const k = Math.max(0, 1 - d / f.R);
-    return { speed: (4 + 18 * k) * f.fly, toss: (3 + 11 * k) * f.fly };
+    return { speed: (6 + 24 * k) * f.fly, toss: (4 + 12 * k) * f.fly }; // (a knight in armour flies too — it is heavier, CreatureImpact)
 }
 
 /** Why it can't be cast now (null: it can): 'max' — the mana maximum is too small, 'mana' — not enough mana. */
@@ -173,7 +173,7 @@ export class CircleAttack {
     start(p, by, mine = false, max = false, rays = []) {
         const g = this.game;
         const f = circleForm(max);
-        const d = { p: p.clone(), by, mine, max, f, t: 0, front: 0, band: f.island, hit: new Set(), meDone: false, shipT: false, rays: (rays || []).map((r) => ({ ...r, done: false })), harmT: 0 };
+        const d = { p: p.clone(), c: p.clone(), by, mine, max, f, t: 0, front: 0, band: f.island, hit: new Set(), meDone: false, shipT: false, rays: (rays || []).map((r) => ({ ...r, done: false })), harmT: 0 };
         this._build(d);
         this.list.push(d);
         const me = g.character?.group.position;
@@ -192,6 +192,7 @@ export class CircleAttack {
         for (const d of [...this.list]) {
             d.t += dt;
             d.front = circleFront(d.t, d.f.R);
+            this._follow(d);
             this._ground(d);
             this._harm(d, dt);
             this._rays(d);
@@ -199,6 +200,22 @@ export class CircleAttack {
             if (d.t > CIRCLE.TIME + 0.8) this._end(d);
         }
     }
+
+    /**
+     * The ball, the rays and the island stay with the wizard: if he walks, they go with him (d.c);
+     * nothing can push him off his island while it lasts (holdsMe — BodyImpact). Only the ground
+     * breaks round the place where it began (d.p: the same blocks on every computer).
+     */
+    _follow(d) {
+        const g = this.game;
+        const at = d.by === g.localId ? g.character?.group.position : g.remotes?.get(d.by)?.position;
+        if (at) d.c.set(at.x, at.y - PLAYER_GROUND_OFFSET, at.z);
+        if (d.look) d.look.grp.position.copy(d.c);
+        if (d.mine) g.knockback?.set(0, 0, 0); // (no blast moves him either)
+    }
+
+    /** Is a wave of mine going on (then nothing pushes me: I stand on my island)? */
+    holdsMe() { return this.list.some((d) => d.mine); }
 
     // ------------------------------------------------------------------- the ground
     /** The ground comes down band after band behind the ball (one band a frame at most). */
@@ -212,7 +229,7 @@ export class CircleAttack {
 
     // ------------------------------------------------------------------- the harm
     _harm(d, dt) {
-        const g = this.game, p = d.p, f = d.f, front = d.front;
+        const g = this.game, p = d.c, f = d.f, front = d.front; // (round the wizard where he is now)
         // me: every computer its own player (the wizard himself: never — he stands on his island)
         if (!d.meDone && d.by !== g.localId && g.character) {
             const me = g.character.group.position;
@@ -230,22 +247,21 @@ export class CircleAttack {
             const dist = Math.hypot(q.x - p.x, q.z - p.z);
             if (dist > front || dist > f.R + 1 || Math.abs(q.y - p.y) > 25) return;
             d.hit.add(c);
-            if (dist < f.island) return; // (the island)
             if (g.wards?.shields(_a.set(p.x, p.y + 1, p.z), q)) return; // (in a house's sphere of protection)
             const dir = new THREE.Vector3(q.x - p.x, 0, q.z - p.z);
             if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
             dir.normalize();
-            const dmg = circleDamage(dist, f);
-            hitBody(g, kind, c, q, dmg, dir, f.name, d.by, f.name);
+            // thrown first (a body killed by the blow would no longer fly), then hurt
             const th = circleThrow(dist, f);
             throwBody(g, kind, c, dir.clone().multiplyScalar(th.speed), th.toss, f.name, d.by, p);
+            hitBody(g, kind, c, q, circleDamage(dist, f), dir, f.name, d.by, f.name);
         });
         // a ship in the circle takes the wave's blow; the weapons lying there jump
         if (!d.shipT && front >= f.R * 0.5) { d.shipT = true; g.ships?.blast?.(p, f.R, d.max ? 3 : 2, d.by); g.houses?.hitAt?.(p, f.R); }
         for (const w of g.weapons?.weapons || []) {
             if (w.holder || w._circle === d) continue;
             const dist = Math.hypot(w.position.x - p.x, w.position.z - p.z);
-            if (dist > front || dist < f.island || dist > f.R + 2) continue;
+            if (dist > front || dist > f.R + 2) continue;
             w._circle = d;
             w.hover = null;
             w.wake?.();
@@ -257,12 +273,12 @@ export class CircleAttack {
     _hurtMe(d, dist, me) {
         const g = this.game, f = d.f;
         if (g.isDeadLocal) return;
-        if (g.wards?.shields(_a.set(d.p.x, d.p.y + 1, d.p.z), me)) return; // (inside a house's sphere)
+        if (g.wards?.shields(_a.set(d.c.x, d.c.y + 1, d.c.z), me)) return; // (inside a house's sphere)
         const th = circleThrow(dist, f);
         if (!g.flight?.active) {
-            _v.set(me.x - d.p.x, 0, me.z - d.p.z);
+            _v.set(me.x - d.c.x, 0, me.z - d.c.z);
             if (_v.lengthSq() < 1e-6) _v.set(0, 0, 1);
-            g.impact?.apply({ v: _v.normalize().multiplyScalar(th.speed), from: d.p.clone(), by: d.by, spell: f.name, always: { down: 3 }, toss: th.toss, jolt: 3, down: 3 });
+            g.impact?.apply({ v: _v.normalize().multiplyScalar(th.speed), from: d.c.clone(), by: d.by, spell: f.name, always: { down: 3 }, toss: th.toss, jolt: 3, down: 3 });
         }
         if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 1.6);
         this._damageMe(circleDamage(dist, f), d);
@@ -289,7 +305,7 @@ export class CircleAttack {
                 else { const rem = g.remotes?.get(r.pl); if (rem?.position) end = _b.copy(rem.position); }
             } else if (r.p) end = _b.set(r.p[0], r.p[1], r.p[2]);
             if (!end) continue;
-            const from = _a.copy(d.p).setY(d.p.y + 1.5);
+            const from = _a.copy(d.c).setY(d.c.y + 1.5);
             if (g.fx?.straightBeam) {
                 g.fx.straightBeam(from, end, 0.09, 0xfff6c0, 1, 0.55, null, THREE.AdditiveBlending);
                 g.fx.straightBeam(from, end, 0.45, GOLD, 0.35, 0.7, null, THREE.AdditiveBlending);
@@ -301,7 +317,7 @@ export class CircleAttack {
             if (!r.pl && g.authority) {
                 let best = null, bd = 3;
                 eachBody(g, (kind, c, q) => { const dd = q.distanceTo(end); if (dd < bd) { bd = dd; best = { kind, c, q: q.clone() }; } });
-                if (best) hitBody(g, best.kind, best.c, best.q, d.f.rayDmg, _v.subVectors(best.q, d.p).setY(0).normalize(), d.f.name, d.by, null);
+                if (best) hitBody(g, best.kind, best.c, best.q, d.f.rayDmg, _v.subVectors(best.q, d.c).setY(0).normalize(), d.f.name, d.by, null);
             }
         }
     }
@@ -391,7 +407,7 @@ export class CircleAttack {
             L.beams.rotation.y += dt * 0.35;
             L.beamMat.opacity = 0.55 * fade * (0.8 + 0.2 * Math.sin(d.t * 11));
             for (const piv of L.beams.children) { const m = piv.children[0]; m.scale.set(1, r * m.userData.w, 1); }
-            if (fade > 0.05) g.fx?.lightFlash?.(_v.copy(d.p).setY(d.p.y + 2), GOLD, (d.max ? 9 : 6) * fade * (0.85 + 0.15 * Math.sin(d.t * 13)), 0.15, 80);
+            if (fade > 0.05) g.fx?.lightFlash?.(_v.copy(d.c).setY(d.c.y + 2), GOLD, (d.max ? 9 : 6) * fade * (0.85 + 0.15 * Math.sin(d.t * 13)), 0.15, 80);
         }
         if (!fx || d.front >= d.f.R + 0.5 && d.t > CIRCLE.FRONT_T + 0.3) return;
         // where the front runs now: the earth jumps up, dust, stones, golden sparks
@@ -400,9 +416,9 @@ export class CircleAttack {
         for (let i = 0; i < n; i++) {
             if (Math.random() > dt * 30) continue;
             const a = Math.random() * Math.PI * 2;
-            const x = d.p.x + Math.cos(a) * r, z = d.p.z + Math.sin(a) * r;
-            const y = data ? data.topLayer(Math.round(x), Math.round(z)) - 0.5 : d.p.y;
-            if (Math.abs(y - d.p.y) > 30) continue;
+            const x = d.c.x + Math.cos(a) * r, z = d.c.z + Math.sin(a) * r;
+            const y = data ? data.topLayer(Math.round(x), Math.round(z)) - 0.5 : d.c.y;
+            if (Math.abs(y - d.c.y) > 30) continue;
             const ox = Math.cos(a), oz = Math.sin(a);
             fx.smoke?.spawn(x, y + 0.3, z, ox * 2, 1 + Math.random() * 2.5, oz * 2, DUST[(Math.random() * DUST.length) | 0], 1 + Math.random() * 1.6, 1.8 + Math.random() * 1.2, { shrink: -0.35, spin: 1 });
             fx.debris?.spawn(x, y + 0.4, z, ox * (2 + Math.random() * 3), 4 + Math.random() * 6, oz * (2 + Math.random() * 3), 0x6b5f52, 0.18 + Math.random() * 0.25, 1.4, { shrink: 0.1, fade: false, spin: 8 });
@@ -411,12 +427,12 @@ export class CircleAttack {
         // the ground shakes under whoever the front is near (felt further away too)
         const me = g.character?.group.position;
         if (me) {
-            const dist = Math.hypot(me.x - d.p.x, me.z - d.p.z);
+            const dist = Math.hypot(me.x - d.c.x, me.z - d.c.z);
             const near = Math.max(0, 1 - Math.abs(dist - d.front) / 20);
             fx.shake = Math.max(fx.shake || 0, (d.by === g.localId ? 0.5 : 0) + near * (d.max ? 1.3 : 1));
         }
         // a crack of stone now and then
-        if (d.t > (d.crackT || 0)) { d.crackT = d.t + 0.35 + Math.random() * 0.4; const a = Math.random() * Math.PI * 2; g.sound?.playCrack?.(_v.set(d.p.x + Math.cos(a) * r, d.p.y, d.p.z + Math.sin(a) * r), 1.2); }
+        if (d.t > (d.crackT || 0)) { d.crackT = d.t + 0.35 + Math.random() * 0.4; const a = Math.random() * Math.PI * 2; g.sound?.playCrack?.(_v.set(d.c.x + Math.cos(a) * r, d.c.y, d.c.z + Math.sin(a) * r), 1.2); }
     }
 
     _end(d) {

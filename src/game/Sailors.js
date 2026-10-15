@@ -784,7 +784,7 @@ export class Sailors {
     /** (host) What a sailor does. */
     _think(v, s, dt) {
         const g = this.game;
-        if (v.dead) { v.mode = 'dead'; v.speed = 0; return; }
+        if (v.dead) { v.mode = 'dead'; v.speed = 0; if (!v.overboard && !v.lev) this._fall(v, s, dt); return; } // (a dead body falls to the deck / floor below — never left in the air)
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; } // (held up in the air by «Левиоса Максима»: it carries him)
         if (v.overboard) { this._swim(v, s, dt); return; }
         if (s.flooded) { this._overboard(v, Math.random() < 0.5 ? -1 : 1); return; }

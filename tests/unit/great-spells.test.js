@@ -26,7 +26,7 @@ test('Circle Attack: mana as «Total Destruction» (80 / 160), its zones 30 / 20
     assert.equal(SPELL_COST.CircleAttackMaxima, SPELL_COST.TotalDestructionMaxima);
     const f = circleForm(false), M = circleForm(true);
     assert.equal(f.R, 30);
-    assert.equal(circleDamage(1, f), 0, 'the island');
+    assert.equal(circleDamage(1, f), 30, 'the island keeps only the wizard: who stands by him is struck at once');
     assert.equal(circleDamage(5, f), 30);
     assert.equal(circleDamage(15, f), 20);
     assert.equal(circleDamage(28, f), 10);
@@ -74,12 +74,35 @@ test('Circle Attack: arms in a T; it hurts and throws every creature its front r
     assert.equal(C.cast(false), null, 'unfinished: maybe «…Максима»');
     assert.equal(C.cast(true), 'CircleAttack');
     assert.equal(g.combat.fatigue, 20);
+    C.update(0.05);
+    assert.deepEqual(hits.map((h) => h[0]), [isl], 'the one right by the wizard: at once');
     for (let t = 0; t < 1; t += 0.05) C.update(0.05);
-    assert.deepEqual(hits.map((h) => h[1]), [30], 'the near one at once');
+    assert.deepEqual(hits.map((h) => h[1]), [30, 30], 'the near ones at once');
     for (let t = 0; t < 7; t += 0.05) C.update(0.05);
-    assert.deepEqual(hits.map((h) => h[1]), [30, 10], 'the far one later; the island never');
-    assert.ok(thrown[0][1].toss > thrown[1][1].toss, 'the close one flies further');
+    assert.deepEqual(hits.map((h) => h[1]), [30, 30, 10], 'the far one later');
+    assert.ok(thrown[1][1].toss > thrown[2][1].toss, 'the close one flies further');
+    assert.ok(thrown.every(([, o]) => o.v.length() >= 6 && o.always), 'everyone is thrown off the feet');
     assert.equal(C.list.length, 0, 'over');
+});
+
+test('Circle Attack: the ball and the island go with the wizard; nothing pushes him off it while it lasts', () => {
+    const me = new THREE.Vector3(0, 2, 0);
+    const g = {
+        authority: true, localId: 'me', config: { mode: 'creative' }, remotes: new Map(), zombies: [],
+        character: { group: { position: me }, isTPose: () => true }, knockback: new THREE.Vector3(5, 0, 0),
+        hud: { setVoice() {} },
+    };
+    const C = new CircleAttack(g);
+    C._pickRays = () => [];
+    assert.equal(C.cast(true), 'CircleAttack');
+    assert.ok(C.holdsMe());
+    me.set(3, 2, 1);
+    C.update(0.05);
+    assert.deepEqual(C.list[0].c.toArray(), [3, 0, 1], 'the wave goes with him');
+    assert.deepEqual(C.list[0].p.toArray(), [0, 0, 0], 'the ground breaks where it began');
+    assert.equal(g.knockback.length(), 0, 'no blast moves him');
+    for (let t = 0; t < 8; t += 0.05) C.update(0.05);
+    assert.ok(!C.holdsMe());
 });
 
 test('Inspirius: 500 mana at once, only with the wand (Creative — without), a maximum of 500; zones 100 / 50 / 25', () => {

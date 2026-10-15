@@ -802,7 +802,7 @@ export class WaveAttacks {
                 w.hit.add(c);
                 this._splash(p, w);
                 if (!auth || !g.creatureImpact) continue;
-                const res = g.creatureImpact.apply(c, { v: wavePush(w, k, new THREE.Vector3()), by: w.by, spell: w.name, jolt: P.jolt || 0, from: front.clone(), down: P.down, toss: P.toss || 0 });
+                const res = g.creatureImpact.apply(c, { v: wavePush(w, k, new THREE.Vector3()), by: w.by, spell: w.name, jolt: P.jolt || 0, from: front.clone(), always: P.always ? { down: P.down } : null, down: P.down, toss: P.toss || 0 });
                 if (res !== 'none') any = true;
                 if (c.isPhoenix) g.phoenixes?.watered?.(c, null, w.by); // (a phoenix: drenched — its flame goes out; no harm)
             }

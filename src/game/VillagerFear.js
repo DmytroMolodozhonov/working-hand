@@ -126,7 +126,7 @@ export class VillagerFear {
         // «Total Destruction»: the ground shakes and rumbles before it all comes down
         for (const d of g.destruction?.list || []) if (!d.done) this.add('ruin', d.p, { key: 'ruin:' + (d.key || (d.key = ++this._seq)), ttl: d.collapsed ? 40 : 6, r: d.R, by: d.by });
         // «Circle Attack»: the wave all round the wizard; «Inspirius»: its ball flying, then the blast
-        for (const d of g.circleAttack?.list || []) this.add('circle', d.p, { key: 'circle:' + (d.key || (d.key = ++this._seq)), ttl: 30, r: d.f.R, by: d.by });
+        for (const d of g.circleAttack?.list || []) this.add('circle', d.c || d.p, { key: 'circle:' + (d.key || (d.key = ++this._seq)), ttl: 30, r: d.f.R, by: d.by });
         for (const o of g.inspirius?.orbs || []) this.add('inspirius', o.p, { key: 'insp:' + (o.key || (o.key = ++this._seq)), ttl: 4, r: 20, by: o.by });
         for (const b of g.inspirius?.blasts || []) this.add('inspirius', b.p, { key: 'inspb:' + (b.key || (b.key = ++this._seq)), ttl: 60, r: 60, by: b.by });
         // stones falling (a roof whose walls are gone)
