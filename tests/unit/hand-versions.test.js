@@ -1,7 +1,8 @@
 /**
  * Hand versions (settings): V3 (stable, the default) — the hand as it was before the
  * full hand (its turn from the knuckles, whole fingers, a wand in the fist); V4 (being
- * finished) — the palm's whole turn, every finger joint, a wand held like a pen.
+ * finished) — the palm's whole turn, every finger joint, a wand held like a pen; V5 — V4's
+ * hand with the camera program's own hand finder (hand_v5.py).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,6 +30,14 @@ test('hand versions: V3 is the default and the old stable hand; V4 is the full h
     ch.setHandVersion('v3');
     assert.equal(h.fullPose, false);
     assert.equal(h.gripOverride.pose, null, 'back to V3: the pen grip goes too');
+    ch.setHandVersion('v5');
+    assert.equal(ch.handVersion, 'v5');
+    assert.equal(h.fullPose, true, 'V5: the full hand of V4 (every joint, any turn)');
+    assert.equal(ch.getActiveHands().right, h);
+    h.setGrip(0.38, 'pen');
+    assert.equal(h.gripOverride.pose, PEN_GRIP, 'V5: the pen grip as V4');
+    h.setGrip(null);
+    ch.setHandVersion('v3');
     ch.setHandVersion('v9');
     assert.equal(ch.handVersion, 'v3', 'an unknown version is ignored');
 });

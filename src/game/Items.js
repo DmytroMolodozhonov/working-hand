@@ -262,7 +262,7 @@ export class ItemSystem {
         // The wand, V3 and V4 hands alike: in the fist, the arm's continuation (the author:
         // «V3's wand is very steady and good» — the pen grip of V4 was not; it is kept in
         // the code, off: PEN_WAND)
-        const v4 = g.character.handVersion === 'v4';
+        const v4 = g.character.fullHand();
         const penWand = v4 && PEN_WAND;
         const spec = h.item.kind === 'wand' && !penWand ? WAND_V3 : GRIPPED[h.item.kind];
         const s = h.thumb ?? (h.thumb = f.thumb); // (the side the thumb was on when taken)
@@ -342,7 +342,7 @@ export class ItemSystem {
         const now = performance.now();
         ch.realStick = ch.realStick || { left: null, right: null };
         // (the browser looks for one only round a hand holding a wand)
-        const v4 = ch.handVersion === 'v4'; // (a real stick in the hand: V4 hands only)
+        const v4 = ch.fullHand(); // (a real stick in the hand: V4 hands only)
         if (g.poseService) g.poseService.wantSticks = v4 ? { left: this.held.left?.item.kind === 'wand', right: this.held.right?.item.kind === 'wand' } : null;
         for (const side of ['left', 'right']) {
             ch.realStick[side] = pose && v4 ? st[side].update(pose[side + 'HandStick'] || null, now, fresh) : null;
@@ -1016,7 +1016,7 @@ export class ItemSystem {
         const spec = wand ? WAND_V3 : GRIPPED[h.item.kind];
         let x, y, z;
         if (wand) {
-            const wrist = ch.handVersion === 'v4' ? 0.7 : 0.4;
+            const wrist = ch.fullHand() ? 0.7 : 0.4;
             y = ch.getForearmDirection(side, _a).multiplyScalar(1 - wrist).addScaledVector(f.Y, wrist).normalize();
             x = _b.copy(f.X).addScaledVector(y, -f.X.dot(y));
             if (x.lengthSq() < 1e-4) x.set(1, 0, 0);

@@ -53,6 +53,11 @@ export class PoseService {
         this.wantSticks = null;
         this.recordSink = null; // (the hand recording, F9: every raw camera result)
         this.browserSticks = (l, r) => this._browserSticks(l, r);
+        // which hands the camera program finds: '' (MediaPipe's own, V2–V4) or 'v5' (hand_v5.py:
+        // the hands cut out where the body has them). onNotice: a line for the player (V5 couldn't).
+        this.handsWanted = '';
+        this.onNotice = null;
+        this._noticed = '';
     }
 
     _status(text) {
@@ -73,6 +78,7 @@ export class PoseService {
         const delegate = config.delegate === 'GPU' || config.delegate === 'CPU' ? config.delegate : null;
         // 'classic' = MediaPipe Holistic exactly as in the original game (default), 'tasks' = 3 separate networks
         const engine = config.engine || this._engine || globalThis.__ZNS_ENGINE__ || 'classic';
+        if (config.handVersion !== undefined) this._setHands(config.handVersion === 'v5' ? 'v5' : '');
         if (this.ready && quality === this._quality && engine === this._engine && (config.delegate === undefined || delegate === this._delegate)) return;
         this._quality = quality;
         this._engine = engine;
@@ -89,6 +95,7 @@ export class PoseService {
             return;
         }
         this.native = null;
+        if (this.handsWanted === 'v5') this._notice('Кисти V5 работают только с отдельной программой камеры — пока работают кисти V4');
         if (engine === 'classic' || engine === 'classic-main') {
             try {
                 await this._startHolistic(quality, engine === 'classic-main');
@@ -450,7 +457,9 @@ export class PoseService {
     _startNative() {
         return new Promise((resolve) => {
             this._status('Нейросеть камеры (отдельная программа) запускается...');
-            const es = new EventSource(new URL(`api/pose/stream?q=${this.native.quality}`, this.baseUrl));
+            const hands = this.handsWanted;
+            const es = new EventSource(new URL(`api/pose/stream?q=${this.native.quality}${hands ? '&hands=' + hands : ''}`, this.baseUrl));
+            es._hands = hands;
             let first = true;
             const timeout = setTimeout(() => { if (first) { es.close(); this.stats.nativeWhy = 'программа не ответила за 40 с'; resolve(false); } }, 40000);
             es.onmessage = (ev) => {
@@ -475,6 +484,12 @@ export class PoseService {
         this.stats.lastResultAt = performance.now();
         if (r.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + r.cost * 0.1 : r.cost;
         this.stats.backend = r.backend;
+        this.stats.handsEngine = r.handsEngine || 'mp';
+        // V5 asked for, but the program found the hands its old way: say so, once (honestly)
+        if (this.handsWanted === 'v5' && r.handsEngine !== 'v5' && r.v5) {
+            const busy = r.v5 === 'устанавливается' || r.v5 === 'загружается';
+            this._notice(busy ? `Кисти V5 ${r.v5} — пока работают кисти V4` : `Кисти V5 не запустились (${r.v5}) — работают кисти V4`);
+        } else if (this.handsWanted === 'v5' && r.handsEngine === 'v5' && this._noticed && !this._noticed.startsWith('Кисти V5 включились')) this._notice('Кисти V5 включились');
         this._nativeVideo = { videoWidth: r.w || 640, videoHeight: r.h || 480 };
         if (r.hands) this._handleResult({ ts: performance.now(), cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks });
         else this._onHolistic(r);
@@ -517,6 +532,7 @@ export class PoseService {
             if (await this._startNative()) { this.isRunning = true; return; }
             // the program couldn't (no camera for it, an error): the browser's network as before
             console.warn('[PoseService] camera network program unavailable, using the browser:', this.stats.nativeWhy);
+            if (this.handsWanted === 'v5') this._notice(`Кисти V5 не запустились (нет программы камеры: ${this.stats.nativeWhy || 'ошибка'}) — работают кисти V4`);
             const q = this.native.quality;
             this.native = null;
             await this._startHolistic(q, false);
@@ -606,6 +622,26 @@ export class PoseService {
         if (this.stream) { for (const t of this.stream.getTracks()) t.stop(); this.stream = null; }
         this.isRunning = false;
         if (wasRunning) await this.start();
+    }
+
+    /** The hand finder for the camera program ('' or 'v5'); a running stream is reopened with it. */
+    _setHands(hands) {
+        if (hands === this.handsWanted) return;
+        this.handsWanted = hands;
+        this._noticed = '';
+        if (hands === 'v5' && this.ready && !this.native) this._notice('Кисти V5 работают только с отдельной программой камеры — пока работают кисти V4');
+        if (this._native && this._native._hands !== hands && this.isRunning) {
+            this._native.close();
+            this._native = null;
+            this._startNative().then((ok) => { if (!ok) console.warn('[PoseService] camera network program: reopen failed'); });
+        }
+    }
+
+    _notice(text) {
+        if (this._noticed === text) return;
+        this._noticed = text;
+        console.warn('[PoseService]', text);
+        this.onNotice?.(text);
     }
 
     stop() {

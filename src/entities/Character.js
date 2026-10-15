@@ -839,13 +839,17 @@ export class VoxelCharacter {
         return Math.max(this.isCrouching ? 1.0 : 0, this.legDrop || 0);
     }
 
-    /** V3 (stable) and V4 (the full hand, being finished) are both the voxel SimplifiedHand. */
-    _simplified() { return this.handVersion === 'v3' || this.handVersion === 'v4'; }
+    /** V3 (stable), V4 and V5 (the full hand, being finished) are all the voxel SimplifiedHand. */
+    _simplified() { return this.handVersion === 'v3' || this.fullHand(); }
+
+    /** V4 and V5: the full hand (every joint, any turn, the pen grip). V5 is V4's hand with the
+     * camera program's own hand finder (hand_v5.py: the hands cut out where the body has them). */
+    fullHand() { return this.handVersion === 'v4' || this.handVersion === 'v5'; }
 
     setHandVersion(version) {
-        if (version !== 'v2' && version !== 'v3' && version !== 'v4') return;
+        if (version !== 'v2' && version !== 'v3' && version !== 'v4' && version !== 'v5') return;
         this.handVersion = version;
-        for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) h.setMode(version === 'v4' ? 'full' : 'stable');
+        for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) h.setMode(this.fullHand() ? 'full' : 'stable');
         if (this.handsVisible) this.setShowHands(true);
     }
 

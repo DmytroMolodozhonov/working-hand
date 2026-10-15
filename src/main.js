@@ -745,6 +745,8 @@ async function startGameInner(config, welcome) {
         if (!window.__ZNS_NO_CAMERA__) {
             try {
                 poseService.onStatus = (t) => updateProgress(75, t);
+                // (V5 hands couldn't start: the player is told — shown once the game is on)
+                poseService.onNotice = (t) => { if (game?.active && game.hud?.notify) game.hud.notify('✋ ' + t, 9000); };
                 await poseService.initialize('webcam', 'preview-video', config);
                 // No camera: a panel explains why, lists the cameras and keeps retrying
                 cameraOk = await startCamera(poseService);
@@ -758,6 +760,7 @@ async function startGameInner(config, welcome) {
         updateProgress(90, 'Компиляция шейдеров...');
         await new Promise((r) => requestAnimationFrame(r));
         game.start();
+        if (poseService._noticed) setTimeout(() => game.hud?.notify?.('✋ ' + poseService._noticed, 9000), 1500); // (said before the game was on)
         if (net.isHost && game.sync) net.broadcast(game.sync.welcomeMessage());
         net.info = { ...(net.info || {}), mode: config.mode, playing: true }; // (shown in other players' server lists)
         updateProgress(100, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...');
