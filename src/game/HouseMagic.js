@@ -423,7 +423,9 @@ export class HouseMagic {
             const hold = g.items?.heldOf?.('wand') || !this.free ? ' Держите палочку 10 секунд!' : ''; // (Creative without a wand: nothing to hold)
             g.hud?.setVoice?.(`✨ ${level === 1 ? 'Дом создаётся' : `Дом растёт до уровня ${level}`}…${hold}`, true);
         }
-        g.sound?.playHouseHum?.(new THREE.Vector3(x, (this.magic?.y ?? 0) + 3, z), MAGIC_TIME); // (every computer: heard near, faint far away)
+        const here = new THREE.Vector3(x, (this.magic?.y ?? 0) + 3, z);
+        g.sound?.playHouseHum?.(here, MAGIC_TIME); // (every computer: heard near, faint far away)
+        g.sound?.playHouseTheme?.(here, MAGIC_TIME, level); // (the tune: its last chord as the house is done)
         g.fx?.lightFlash?.(_v.set(x, this.magic?.y ?? 0, z), 0xfff2c4, 4, 0.6, 60);
     }
 
@@ -637,6 +639,7 @@ export class HouseMagic {
         this.magic = null;
         g.sound?.stopHouseHum?.();
         const c = _v.set(p[0], p[1], p[2]);
+        g.sound?.breakHouseTheme?.(c); // (the tune dies on a sour chord)
         const rc = m.rect;
         g.fx?.explosion?.(c, 2, 0.4);
         g.fx?.lightFlash?.(c, 0xff7a2b, 5, 0.8, 60);

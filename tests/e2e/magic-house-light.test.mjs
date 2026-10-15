@@ -37,8 +37,8 @@ test('magic house: lit rooms (levels 1 and 2), shining lanterns, its bed to lie 
     });
     assert.equal(start, true);
     assert.equal(await finish(page), true);
-    // it was heard: the hum, the logs, the blocks laid, the chord at the end
-    const heard = await page.evaluate(() => { const S = window.__zns.game.sound; return S.loaded ? ['houseHum100', 'house_wood', 'house_block', 'houseDone'].filter((k) => !S.sounds[k]) : []; });
+    // it was heard: the hum, the tune, the logs, the blocks laid, the chord at the end
+    const heard = await page.evaluate(() => { const S = window.__zns.game.sound; return S.loaded ? ['houseHum100', 'houseTheme100_1', 'house_wood', 'house_block', 'houseDone'].filter((k) => !S.sounds[k]) : []; });
     assert.deepEqual(heard, [], 'the sounds of the house magic were made');
 
     const inside = async (level) => page.evaluate(async (level) => {

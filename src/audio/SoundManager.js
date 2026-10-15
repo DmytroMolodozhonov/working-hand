@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three';
+import { houseTheme, houseThemeBreak } from './HouseTheme.js';
 
 const FILES = [
     { key: 'ambient', path: 'sounds/Звук зомби.wav' },
@@ -102,6 +103,7 @@ export class SoundManager {
         if (this.scene) this.setScene(this.scene);
         this.loaded = true;
         this.playAmbientMusic();
+        setTimeout(() => this.prepareHouseTheme(), 4000); // (the tune of «Create a House», made ahead)
     }
 
     loadBuffer(path) {
@@ -720,6 +722,58 @@ export class SoundManager {
     /** The hum stops (the magic broke). */
     stopHouseHum() { if (this._hum?.isPlaying) this._hum.stop(); }
 
+    /** The tune of the house magic (HouseTheme.js) for `seconds` and a level, made once (≈70 ms — made ahead in idle time). */
+    _houseTheme(seconds, level) {
+        const key = 'houseTheme' + Math.round(seconds * 10) + '_' + level;
+        if (!this.sounds[key]) {
+            const sr = 24000; // (the bells and the harp need no more: made twice as fast; played at the context's rate)
+            const data = houseTheme(sr, seconds, level);
+            const buf = this.context.createBuffer(1, data.length, sr);
+            buf.copyToChannel(data, 0);
+            this.sounds[key] = buf;
+        }
+        return this.sounds[key];
+    }
+
+    /** Make the tune ahead (no hitch when a house is made). */
+    prepareHouseTheme(seconds = 10, level = 1) { if (this.context) this._houseTheme(seconds, level); }
+
+    /**
+     * The main tune of the house magic from the place of the house: grows with it for `seconds`, its last
+     * chord rings exactly when the house is done. One at a time (its own voice; a new one replaces it).
+     */
+    playHouseTheme(position, seconds = 10, level = 1) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const buf = this._houseTheme(seconds, Math.max(1, Math.min(5, level | 0)));
+        if (!this._theme) { this._theme = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._theme); }
+        const v = this._theme;
+        this._themeRun = (this._themeRun || 0) + 1;
+        if (v.isPlaying) v.stop();
+        v.gain.gain.cancelScheduledValues(this.context.currentTime);
+        v.setBuffer(buf);
+        v.setRefDistance(14);
+        v.setVolume(1.1 * this.globalVolume);
+        v.position.copy(position);
+        v.updateMatrixWorld(true);
+        v.play();
+    }
+
+    /** The magic broke: the tune dies away on a sour falling chord (never plays on). */
+    breakHouseTheme(position) {
+        const v = this._theme;
+        if (!v?.isPlaying || !this.context) return;
+        const run = this._themeRun, now = this.context.currentTime;
+        v.gain.gain.cancelScheduledValues(now);
+        v.gain.gain.setTargetAtTime(0, now, 0.12);
+        setTimeout(() => { if (this._themeRun === run && v.isPlaying) v.stop(); }, 700);
+        if (!this.sounds.houseBreak) {
+            const sr = 24000, data = houseThemeBreak(sr);
+            this.sounds.houseBreak = this.context.createBuffer(1, data.length, sr);
+            this.sounds.houseBreak.copyToChannel(data, 0);
+        }
+        this._playAt(this.sounds.houseBreak, position || v.position, 1.2, 14);
+    }
+
     /** The house's sounds while it rises: 'wood' a log knocking into place, 'sand' the sand melting into glass, 'block' a block laid. */
     playHouseBit(kind, position, volume = 1) {
         if (!this.enabled || !this.context || !this.loaded) return;
@@ -733,7 +787,7 @@ export class SoundManager {
         if (!this.enabled || !this.context || !this.loaded) return;
         if (!this.sounds.houseDone) this.sounds.houseDone = this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2);
         if (this._hum?.isPlaying) this._hum.stop();
-        this._playAt(this.sounds.houseDone, position, 1.3, 14);
+        this._playAt(this.sounds.houseDone, position, 0.8, 14); // (over the tune's own last chord: the same C major)
     }
 
     /** Notes struck one after another and ringing (a chime); `decay` per second. */
