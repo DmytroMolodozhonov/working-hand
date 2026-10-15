@@ -77,17 +77,15 @@ test('«Protection House» + «Максима» ×3 + «стоп»: the guest ca
     });
     const mana0 = await ev(host.page, () => window.__zns.game.combat.fatigue);
     assert.equal(await ev(host.page, () => window.__zns.game._castLocalSpell('протекшн хаус', true)), 'ProtectionHouse');
-    for (let i = 0; i < 3; i++) {
-        await ev(host.page, () => { window.__zns.game._lastWardCast = {}; });
-        assert.equal(await ev(host.page, () => window.__zns.game._castLocalSpell('максима', true)), 'WardGrow');
-    }
+    // the charge lands; the dome grows by itself while the hand is on it (no «Максима»)
+    await wf(host.page, () => { const w = [...window.__zns.game.wards.list.values()][0]; return w && w.r >= 7; }, null, 20000);
     assert.equal(await ev(host.page, () => window.__zns.game._castLocalSpell('стоп', true)), 'Stand');
     const w = await ev(host.page, () => { const w = [...window.__zns.game.wards.list.values()][0]; return { r: w.r, c: w.c, setting: w.setting, mana: window.__zns.game.combat.fatigue }; });
-    assert.equal(w.r, 7);
+    assert.ok(w.r >= 7 && w.r < 8, `${w.r}`);
     assert.equal(w.setting, false);
-    assert.ok(Math.abs(mana0 - w.mana - 35) < 1.5, `20 + 3 × 5 mana: ${mana0 - w.mana}`);
+    assert.ok(Math.abs(mana0 - w.mana - (20 + 3 * (w.r - 2.5))) < 2.5, `20 + 3 a metre: ${mana0 - w.mana}`);
     // the guest's computer has the same sphere
-    await wf(guest.page, (r) => { const W = window.__zns.game.wards; return W.list.size === 1 && [...W.list.values()][0].r === r; }, w.r, 20000);
+    await wf(guest.page, (r) => { const W = window.__zns.game.wards; return W.list.size === 1 && Math.abs([...W.list.values()][0].r - r) < 0.02; }, w.r, 20000);
 
     // the guest walks at it: pushed back at the surface
     const tryIn = () => ev(guest.page, async (c) => {

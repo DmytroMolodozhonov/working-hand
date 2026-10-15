@@ -1,4 +1,4 @@
-// «Защита дома» (HouseWards.js): «Protection House» + «Максима» ×N + «стоп», who may come in,
+// «Защита дома» (HouseWards.js): «Protection House» — a charge, a dome that grows while the wand is on it, «стоп»; who may come in,
 // «Protection Invisible» seen only near, «Protection House Grant», and the book of protection
 // (BookBirds.js) that only fire or an ice ball brings down.
 import test from 'node:test';
@@ -6,13 +6,13 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
-import { HouseWards, WARD, WARD_SPELLS, wardCost, wardRadius, maximaFor, mayPass, crossInto, bodyPush, seenK, houseBounds, keepIn } from '../../src/game/HouseWards.js';
+import { HouseWards, WARD, WARD_SPELLS, wardCost, wardRadius, growTime, mayPass, crossInto, bodyPush, seenK, houseBounds, keepIn } from '../../src/game/HouseWards.js';
 import { BookBirds, bookSpells, isWardId, isSwiftId, WARD_ID, SWIFT_ID, rollBirdId, wardBookFalls } from '../../src/game/BookBirds.js';
 import { refusal } from '../../src/game/Hints.js';
 import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
 
 test('the three spells are heard as whole phrases — and the plain shield stays the plain shield', () => {
-    for (const w of ['Protection House', 'протекшн хаус', 'протекшен хаус', 'протекшн хауз']) assert.equal(matchSpell(w), 'ProtectionHouse', w);
+    for (const w of ['Protection House', 'протекшн хаус', 'протекшен хаус', 'протекшн хауз', 'Protection House Maxima', 'протекшн хаус максима']) assert.equal(matchSpell(w), 'ProtectionHouse', w);
     for (const w of ['Protection House Grant', 'протекшн хаус грант', 'протекшен хаус гранд']) assert.equal(matchSpell(w), 'ProtectionHouseGrant', w);
     for (const w of ['Protection Invisible', 'протекшн инвизибл', 'протекшен инвизибал']) assert.equal(matchSpell(w), 'ProtectionInvisible', w);
     assert.equal(matchSpell('протекшн'), 'Protection');
@@ -21,18 +21,18 @@ test('the three spells are heard as whole phrases — and the plain shield stays
     assert.equal(matchSpell('максима'), 'Maxima');
 });
 
-test('costs: 20 for the sphere, 5 for each «Максима»; it grows 1.5 m a «Максима» from 2.5 m', () => {
+test('costs: 20 for the charge and the first 2.5 m, then 3 a metre while it grows 1 m a second (2 with «Maxima»)', () => {
     assert.equal(SPELL_COST.ProtectionHouse, 20);
-    assert.equal(SPELL_COST.WardGrow, 5);
+    assert.equal(SPELL_COST.WardGrow, WARD.GROW_MANA);
     assert.equal(SPELL_COST.ProtectionInvisible, 15);
     assert.equal(SPELL_COST.ProtectionHouseGrant, 5);
-    assert.equal(wardCost(0), 20);
-    assert.equal(wardCost(4), 40);
-    assert.equal(wardRadius(0), 2.5);
-    assert.equal(wardRadius(3), 7);
+    assert.equal(wardCost(WARD.START_R), 20);
+    assert.equal(wardCost(7.5), 35, 'about what 3 «Максима» cost before (35)');
+    assert.equal(wardCost(1000), 20 + 3 * (WARD.MAX_R - WARD.START_R));
+    assert.equal(growTime(7.5), 5);
+    assert.equal(growTime(7.5, true), 2.5);
+    assert.equal(wardRadius(3), 7, 'worlds saved before: their size');
     assert.equal(wardRadius(1000), WARD.MAX_R);
-    assert.equal(maximaFor(7), 3);
-    assert.equal(maximaFor(2), 0);
 });
 
 test('geometry: going in from outside is caught, coming out is free; a body is pushed back to the surface', () => {
@@ -69,6 +69,8 @@ test('a house: its blocks give the centre and the radius that takes it in', () =
     const h = houseBounds(cells);
     assert.deepEqual(h.c, { x: 2, y: 1, z: 2 });
     assert.ok(Math.abs(h.r - Math.hypot(5, 3, 5) / 2) < 1e-9);
+    assert.equal(h.floor, -0.5, 'the dome stands on its floor');
+    assert.ok(Math.abs(h.need - Math.hypot(2.5, 3, 2.5)) < 1e-9, 'from there it takes in the top corners');
 });
 
 // ------------------------------------------------------------ the whole spell, on a small world
@@ -99,6 +101,7 @@ function fakeGame({ id = 'H', host = true } = {}) {
             fatigue: 100,
             check(n) { const c = SPELL_COST[n] ?? 5; return this.fatigue < c ? `😮‍💨 Не хватает маны: нужно ${c}` : null; },
             pay(n) { this.fatigue -= SPELL_COST[n] ?? 5; },
+            drain(n) { if (this.fatigue <= 0) return false; this.fatigue = Math.max(0, this.fatigue - n); return true; },
         },
         hud: { setVoice: (t) => voice.push(t), toast: (t) => voice.push(t) },
         fx: { spark() {}, lightFlash() {} },
@@ -110,8 +113,11 @@ function fakeGame({ id = 'H', host = true } = {}) {
     return g;
 }
 
-test('«Protection House» aimed at the house: −20; «Максима» ×3 −15 and 7 m; «стоп» fixes it; out of mana it stays', () => {
+const run = (W, t, dt = 0.05) => { for (let i = 0; i < Math.round(t / dt); i++) W.update(dt); };
+
+test('«Protection House» at the house: −20, a charge flies in, the dome stands on the floor and grows while the wand is on it; «стоп» / no mana stops it', () => {
     const g = fakeGame();
+    const aimHouse = g.character.getHandDirection;
     const W = new HouseWards(g);
     assert.equal(W.cast('ProtectionHouse'), 'ProtectionHouse');
     assert.equal(g.combat.fatigue, 80);
@@ -120,30 +126,106 @@ test('«Protection House» aimed at the house: −20; «Максима» ×3 −
     assert.equal(w.owner, 'pid-H');
     assert.equal(w.r, WARD.START_R);
     assert.ok(Math.abs(w.c.x - 12) < 1e-6 && Math.abs(w.c.z - 2) < 1e-6, 'centred on the house');
-    assert.ok(W.setting, 'being set');
-    for (let i = 0; i < 3; i++) assert.equal(W.maxima(), 'WardGrow');
-    assert.equal(g.combat.fatigue, 65);
-    assert.equal(w.r, 7);
+    assert.equal(w.c.y, -0.5, 'on its floor: the upper half a dome, the lower half under the ground');
+    assert.equal(W.bolts.length, 1, 'the charge flies');
+    assert.ok(W.setting && W.setting.wait > 0);
+    run(W, 0.6);
+    assert.equal(W.bolts.length, 0, 'it landed');
+    assert.ok(w.landed);
+    // the hand on it: 1 m a second, 3 mana a metre
+    const r0 = w.r, m0 = g.combat.fatigue;
+    run(W, 4);
+    assert.ok(Math.abs(w.r - r0 - 4) < 0.15, `grew ${w.r - r0}`);
+    assert.ok(Math.abs(m0 - g.combat.fatigue - 3 * (w.r - r0)) < 1e-6);
+    assert.ok(g.voice.some((t) => /накрыл весь дом/.test(t)), 'told when it takes in the whole house');
+    // the hand off it: it waits
+    g.character.getHandDirection = (s, out) => out.set(-1, 0.3, 0).normalize();
+    const r1 = w.r;
+    run(W, 2);
+    assert.equal(w.r, r1, 'not growing');
+    assert.ok(W.setting, 'still waiting for the hand');
+    g.character.getHandDirection = aimHouse;
+    run(W, 1);
+    assert.ok(w.r > r1 + 0.9, 'back on it: it grows on');
+    // «Максима» while it grows: twice as fast, nothing more to pay a metre
+    assert.equal(W.maxima(), 'WardGrow');
+    const r2 = w.r, m2 = g.combat.fatigue;
+    run(W, 1);
+    assert.ok(Math.abs(w.r - r2 - 2) < 0.15, `fast: ${w.r - r2}`);
+    assert.ok(Math.abs(m2 - g.combat.fatigue - 3 * (w.r - r2)) < 1e-6);
     assert.ok(W.fix());
     assert.equal(W.setting, null);
     assert.equal(w.setting, false);
-    assert.equal(W.maxima(), null, '«Максима» after «стоп» does nothing to it');
-    assert.equal(w.r, 7);
-    // a second time on the same house: no new sphere, go on making it bigger (free)
+    const rf = w.r;
+    run(W, 1);
+    assert.equal(w.r, rf, 'after «стоп» it stays');
+    // said again at my own dome: no new one, it grows on (nothing more for the charge)
+    const m3 = g.combat.fatigue;
     assert.equal(W.cast('ProtectionHouse'), 'ProtectionHouse');
     assert.equal(W.list.size, 1);
-    assert.equal(g.combat.fatigue, 65);
-    g.combat.fatigue = 7;
-    W.maxima(); // 7 → 2
-    W.maxima(); // no mana: it stays
-    assert.equal(w.r, 8.5);
-    assert.equal(W.setting, null, 'set by itself when the mana ran out');
+    assert.equal(g.combat.fatigue, m3);
+    g.combat.fatigue = 2;
+    run(W, 3);
+    assert.ok(w.r > rf + 0.5 && w.r < rf + 0.8, `grew while there was mana: ${w.r - rf}`);
+    assert.equal(W.setting, null, 'no mana: it stopped by itself');
+    assert.ok(g.voice.some((t) => /Мана кончилась/.test(t)));
     // the saved world gives it back
     const W2 = new HouseWards(g);
     W2.restore(JSON.parse(JSON.stringify(W.snapshot())));
     const w2 = [...W2.list.values()][0];
-    assert.equal(w2.r, 8.5);
+    assert.ok(Math.abs(w2.r - w.r) < 0.01);
     assert.equal(w2.owner, 'pid-H');
+    assert.equal(W2.bolts.length, 0, 'no charge flies when the world is loaded');
+    // a world saved before: «Максима» counted
+    const W3 = new HouseWards(g);
+    W3.restore([{ id: 'old', o: 'pid-H', on: 'Хозяин', c: [0, 2, 0], n: 3, inv: 0, g: [], gn: [], hp: 100 }]);
+    assert.equal(W3.list.get('old').r, 7);
+});
+
+test('«Protection House Maxima»: the same spell, its dome grows twice as fast', () => {
+    const g = fakeGame();
+    const W = new HouseWards(g);
+    assert.equal(W.cast('ProtectionHouse', true, true), 'ProtectionHouse');
+    run(W, 0.6);
+    const w = [...W.list.values()][0];
+    const r0 = w.r;
+    run(W, 1);
+    assert.ok(Math.abs(w.r - r0 - 2) < 0.15, `${w.r - r0}`);
+});
+
+test('the network: every computer sees the charge and the dome growing; the host never takes a jump', () => {
+    const g = fakeGame({ id: 'P2', host: false });
+    g.sync = { ops: [], wardOp(op) { this.ops.push(op); } };
+    const W = new HouseWards(g);
+    W.cast('ProtectionHouse');
+    const nw = g.sync.ops.find((o) => o.op === 'new');
+    assert.ok(nw && nw.f && nw.a, 'the charge\'s way goes with it');
+    // the host makes it and draws the charge too
+    const gh = fakeGame();
+    const H = new HouseWards(gh);
+    H.apply(nw, 'P2');
+    assert.equal(H.list.size, 1);
+    assert.equal(H.bolts.length, 1);
+    run(W, 2.6);
+    const grows = g.sync.ops.filter((o) => o.op === 'grow');
+    assert.ok(grows.length >= 6, `sent ${grows.length}`);
+    for (const o of grows) H.apply(o, 'P2');
+    const hw = H.list.get(nw.id), gw = W.list.get(nw.id);
+    assert.ok(Math.abs(hw.r - gw.r) < 0.3, `${hw.r} vs ${gw.r}`);
+    H.apply({ op: 'grow', id: nw.id, r: 24 }, 'P2');
+    assert.ok(hw.r <= gw.r + 3.01, 'no jump');
+    H.apply({ op: 'grow', id: nw.id, r: 30 }, 'P3');
+    assert.ok(hw.r <= gw.r + 3.01, 'only its owner grows it');
+    // a third computer: the host's list — the dome, and its charge flying
+    const g3 = fakeGame({ id: 'P3', host: false });
+    const W3 = new HouseWards(g3);
+    W3.applyNet(H.netList());
+    assert.equal(W3.bolts.length, 1);
+    // my own growing dome: the host's older list never makes it smaller here
+    const mine = gw.r;
+    hw.r = mine - 1;
+    W.applyNet(H.netList());
+    assert.equal(gw.r, mine);
 });
 
 test('not only a house: aimed at bare ground, the sphere stands round that spot', () => {
@@ -153,7 +235,7 @@ test('not only a house: aimed at bare ground, the sphere stands round that spot'
     assert.equal(W.cast('ProtectionHouse'), 'ProtectionHouse');
     const w = [...W.list.values()][0];
     assert.ok(w && Math.hypot(w.c.x - 0.5, w.c.z - 1.6) < 2, 'round the spot shown');
-    assert.ok(/Сфера защиты/.test(g.voice.at(-1)), g.voice.at(-1));
+    assert.ok(/Купол защиты/.test(g.voice.at(-1)), g.voice.at(-1));
 });
 
 test('refused: not aimed at a house, not enough mana — the hint says why', () => {
@@ -181,9 +263,9 @@ test('nobody comes in but the owner and the granted; a zombie is pushed out; Gra
     const g = fakeGame();
     const W = new HouseWards(g);
     W.cast('ProtectionHouse');
-    for (let i = 0; i < 2; i++) W.maxima();
+    const w = [...W.list.values()][0];
+    w.r = 5.5; // (grown round (12, −0.5, 2))
     W.fix();
-    const w = [...W.list.values()][0]; // r 5.5 round (12, ~2, 2)
     // the owner walks in
     const pos = new THREE.Vector3(12 - 4, 0, 2);
     W.keepOut(pos, pos.y, 3.5, 0.016);

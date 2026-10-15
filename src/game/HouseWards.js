@@ -2,13 +2,21 @@
  * HouseWards.js — the shield magic of a HOUSE (learned only from the book of protection, the
  * dark-blue book-bird — BookBirds.js; in Creative everybody knows it).
  *
- *   «Protection House»        point the hand (the wand) at a house and say it: −20 mana, a faint
- *                             sphere of protection appears round the house (2.5 m) — a house is
- *                             what it is mostly for, but aimed at anything else (a chest, a camp,
- *                             a tree, a piece of land) it stands round that spot. Now every
- *                             «Максима» (−5 mana) makes it 1.5 m wider — the wizard watches it take
- *                             in the whole house and says «стоп» (free). No mana left: it stays as
- *                             big as it grew. One sphere per house; its owner is the caster.
+ *   «Protection House»        point the hand (the wand) at a house and say it: −20 mana, a charge
+ *                             of protection (silver-blue, like a duel charge) flies from the hand
+ *                             into the house — it breaks nothing: where it lands a dome of
+ *                             protection lights up (2.5 m). It is a ball cut by the ground: its
+ *                             centre is on the ground under the house (the house's floor), the
+ *                             upper half stands over it as a dome, the lower half goes on under the
+ *                             ground (nobody digs in from below). Now, while the hand (the wand)
+ *                             stays on it, it grows by itself, 1 m a second (−3 mana a metre) —
+ *                             no «Максима» to shout. The hand taken off it / lowered: it waits;
+ *                             back on it: it grows on. «стоп» (free), no mana left, 24 m, or 30 s
+ *                             without growing: it stays as big as it grew. «Protection House
+ *                             Maxima» (or «Максима» while it grows): it grows twice as fast (the
+ *                             same mana a metre). Aimed at anything else (a chest, a camp, a tree,
+ *                             a piece of land) it stands round that spot. One per house; its owner
+ *                             is the caster; said again at my own dome — it grows on.
  *   «Protection Invisible»    on a house that already has its sphere (aimed at it, −15 mana): from
  *                             farther than ~6 m the house and everything inside the sphere is not
  *                             seen — only the land going on, grass as round it; coming closer it
@@ -31,7 +39,7 @@
  *     Сапира, Айс, Даст, Экспеллиармус…), rays, the Инферно flame, lightning, arrows, water / ice balls
  *     bounce, pushes don't reach inside, blasts don't eat into the blocks inside, fire doesn't catch
  *     inside, an earthquake's crack stops at it; what is cast from inside goes out freely;
- *   - only four spells break it (from outside): «Total Destruction» at once, «Бомбардо Максима» — one
+ *   - only these break it (from outside): «Total Destruction» and «Inspirius» at once, «Бомбардо Максима» — one
  *     blast on it, «Бомбардо» — about three (each cracks it; the cracks heal slowly if it is left
  *     alone for a minute), «Let the Hellfire Come» held against it for ~7 s (it glows red first).
  *     Broken: it falls apart in shards, «🛡️ Защита дома разрушена!» to the owner and to the one who
@@ -47,13 +55,17 @@ import { KINDS } from './CreatureImpact.js';
 import { refusal } from './Hints.js';
 
 export const WARD = {
-    COST: 20, // «Protection House»
-    MAXIMA: 5, // each «Максима» while it is being set
+    COST: 20, // «Protection House»: the charge and the first 2.5 m
+    GROW_MANA: 3, // mana a metre it grows (SPELL_COST.WardGrow; the old «Максима»: 5 for 1.5 m)
+    GROW_V: 1, // m a second while the hand is on it
+    GROW_V_MAX: 2, // … «Protection House Maxima» (the same mana a metre)
     START_R: 2.5, // m
-    STEP: 1.5, // m a «Максима»
+    STEP: 1.5, // m a «Максима» (worlds saved before it grew by itself)
     MAX_R: 24, // m
     AIM: 40, // m: how far a house may be aimed at
-    SET_IDLE: 30, // s without «Максима»: it is set by itself
+    SET_IDLE: 30, // s not growing (the hand off it): it is set by itself
+    BOLT_V: 32, // m/s: the charge from the hand to the house
+    SEND_GAP: 0.25, // s between the sizes sent while it grows
     INVIS_COST: 15,
     GRANT_COST: 5,
     GRANT_NEAR: 5, // m from the sphere: near enough to grant
@@ -79,12 +91,12 @@ export const WARD_SPELLS = ['ProtectionHouse', 'ProtectionInvisible', 'Protectio
 export const WARD_NAMES = { ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant' };
 export const isWardSpell = (n) => WARD_SPELLS.includes(n);
 
-/** Mana of a sphere set with `n` «Максима». */
-export const wardCost = (n) => WARD.COST + WARD.MAXIMA * Math.max(0, n);
-/** Its radius after `n` «Максима». */
+/** Mana of a dome grown to radius `r` (the charge + every metre it grew). */
+export const wardCost = (r) => WARD.COST + WARD.GROW_MANA * Math.max(0, Math.min(WARD.MAX_R, r) - WARD.START_R);
+/** Seconds of the hand on it to grow to radius `r` (twice as fast with «Maxima»). */
+export const growTime = (r, fast = false) => Math.max(0, Math.min(WARD.MAX_R, r) - WARD.START_R) / (fast ? WARD.GROW_V_MAX : WARD.GROW_V);
+/** (worlds saved before it grew by itself) its radius after `n` «Максима». */
 export const wardRadius = (n) => Math.min(WARD.MAX_R, WARD.START_R + WARD.STEP * Math.max(0, n));
-/** «Максима» needed for a sphere of radius `r`. */
-export const maximaFor = (r) => Math.max(0, Math.ceil((r - WARD.START_R) / WARD.STEP - 1e-9));
 
 /** May the one with this key (lasting id) pass through the sphere? The owner and the granted. */
 export const mayPass = (w, key) => !!key && (w.owner === key || (w.grant || []).includes(key));
@@ -137,7 +149,11 @@ export function seenK(w, p) {
     return t * t * (3 - 2 * t);
 }
 
-/** A house's centre and the radius that takes it in, from its blocks [x, L, z] (centre y = L − 1). */
+/**
+ * A house's centre and the radius that takes it in, from its blocks [x, L, z] (centre y = L − 1);
+ * floor: the bottom of its lowest blocks (the dome's centre stands there), need: the dome's radius
+ * from there that takes in the whole house (its top corners).
+ */
 export function houseBounds(cells) {
     if (!cells.length) return null;
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
@@ -147,7 +163,7 @@ export function houseBounds(cells) {
         z0 = Math.min(z0, z - 0.5); z1 = Math.max(z1, z + 0.5);
     }
     const c = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: (z0 + z1) / 2 };
-    return { c, r: Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2 };
+    return { c, r: Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2, floor: y0, need: Math.hypot((x1 - x0) / 2, y1 - y0, (z1 - z0) / 2) };
 }
 
 /** A block (centre x, y, z) inside one of the spheres [[x, y, z, r], …]? (y = null: the column x, z under / over it) */
@@ -158,6 +174,7 @@ export function keepIn(spheres) {
 
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const _c = new THREE.Color();
+const _Z = new THREE.Vector3(0, 0, 1);
 const r2 = (v) => Math.round(v * 100) / 100;
 
 // ------------------------------------------------------------ the look of the sphere
@@ -170,8 +187,11 @@ void main() {
     vN = normalize(mat3(modelMatrix) * normal);
     gl_Position = projectionMatrix * viewMatrix * w;
 }`;
+// A ball cut by the ground: over it a dome — silver-blue soft hexes, a light running up it, colours
+// flowing (blue → violet → sea-green), a flickering rim and a bright ring where it meets the ground;
+// under the ground the same ball goes on, dim (seen only from a cave / a pit dug under it).
 const DOME_FS = `
-uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet; uniform float uCrack;
+uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet; uniform float uCrack; uniform float uHell;
 varying vec3 vN; varying vec3 vW; varying vec3 vL;
 float hexDist(vec2 p) { p = abs(p); return max(dot(p, vec2(0.5, 0.866)), p.x); }
 float hexEdge(vec2 uv) {
@@ -182,11 +202,18 @@ float hexEdge(vec2 uv) {
 }
 void main() {
     vec3 v = normalize(cameraPosition - vW);
-    float rim = pow(1.0 - abs(dot(normalize(vN), v)), 2.5);
     vec3 n = normalize(vL);
-    vec2 uv = vec2(atan(n.z, n.x) * 6.0, asin(clamp(n.y, -1.0, 1.0)) * 6.0);
+    float flick = 0.85 + 0.15 * sin(uTime * 9.0 + vW.x * 2.3 + vW.z * 1.7) * sin(uTime * 5.3 + vW.y * 3.1);
+    float rim = pow(1.0 - abs(dot(normalize(vN), v)), 2.5) * flick;
+    float lon = atan(n.z, n.x);
+    vec2 uv = vec2(lon * 6.0, asin(clamp(n.y, -1.0, 1.0)) * 6.0);
     float hx = hexEdge(uv * 1.2);
     float shimmer = 0.5 + 0.5 * sin(uTime * 1.7 + vW.y * 1.3 + vW.x * 0.7);
+    // a light running up the dome, again and again (faster while it grows)
+    float sd = (n.y - fract(uTime * (0.22 + 0.25 * uSet))) * 9.0;
+    float sweep = exp(-sd * sd) * step(0.0, n.y);
+    // where it meets the ground
+    float ground = smoothstep(0.07, 0.0, abs(n.y));
     float f = 0.0;
     if (uFlash.w > 0.0) f = uFlash.w * smoothstep(3.0, 0.0, distance(vW, uFlash.xyz));
     // cracks: some edges of a coarser pattern light up white (more of them the more it is broken)
@@ -194,8 +221,13 @@ void main() {
     float ce = hexEdge(cu);
     float pick = fract(sin(dot(floor(cu * 1.7), vec2(12.9898, 78.233))) * 43758.5453);
     float crack = uCrack > 0.0 && pick < uCrack ? ce : 0.0;
-    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04 + hx * 0.12) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25 + crack * 0.6;
-    gl_FragColor = vec4(mix(uColor * (1.0 + f * 1.5), vec3(1.0), crack * 0.7), clamp(a, 0.0, 0.9));
+    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04 + hx * 0.12 + sweep * (0.1 + hx * 0.35) + ground * 0.5) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25 + crack * 0.6;
+    if (n.y < 0.0) a *= 0.3; // (the half under the ground)
+    // the colours flow over it (the Hellfire's red stays red)
+    float hue = 0.5 + 0.5 * sin(uTime * 0.7 + lon * 2.0 + n.y * 4.0);
+    vec3 col = mix(uColor, mix(vec3(0.62, 0.55, 1.0), vec3(0.5, 1.0, 0.9), hue), 0.35 * (1.0 - uHell));
+    col = col * (1.0 + f * 1.5 + sweep * 0.6 + ground * 0.8);
+    gl_FragColor = vec4(mix(col, vec3(1.0), crack * 0.7), clamp(a, 0.0, 0.9));
 }`;
 
 export class HouseWards {
@@ -203,7 +235,8 @@ export class HouseWards {
         this.game = game;
         this.list = new Map(); // id -> ward {id, owner, ownerName, c, r, n, inv, grant, grantNames, hp, gy, setting, ids}
         this.looks = new Map(); // id -> {dome, disc, k, flash}
-        this.setting = null; // my house being set: {id, idle}
+        this.setting = null; // my dome growing: {id, idle, wait, fast, need, covered, send}
+        this.bolts = []; // the charges flying to the houses (seen on every computer)
         this._t = 0;
         this._scanT = 0;
         this._hidden = new Map(); // object -> its own visible before it was hidden
@@ -353,77 +386,190 @@ export class HouseWards {
     }
 
     /**
-     * «Protection House» / «Protection Invisible» / «Protection House Grant».
+     * «Protection House» / «Protection Invisible» / «Protection House Grant» (fast: «Protection House
+     * Maxima» — the dome grows twice as fast).
      * @returns {string|null} the spell when it worked
      */
-    cast(name, isFinal = true) {
-        if (name === 'ProtectionHouse') return this._castHouse(isFinal);
+    cast(name, isFinal = true, fast = false) {
+        if (name === 'ProtectionHouse') return this._castHouse(isFinal, fast);
         if (name === 'ProtectionInvisible') return this._castInvisible(isFinal);
         if (name === 'ProtectionHouseGrant') return this._castGrant(isFinal);
         return null;
     }
 
-    _castHouse() {
+    _castHouse(isFinal = true, fast = false) {
         const g = this.game;
         const h = this._hand();
         if (!h) return this._no('wardNoHand', { name: 'Protection House' });
-        // a house that already has its sphere: mine — go on making it bigger
+        // a house that already has its dome: mine — the charge flies into it and it grows on
         const on = this._wardOnRay(h.o, h.d);
         if (on) {
             if (on.w.owner !== this.myKey) return this._no('wardNotYours', { owner: on.w.ownerName });
-            this.setting = { id: on.w.id, idle: 0 };
+            const at = on.t > 0 ? h.o.clone().addScaledVector(h.d, on.t) : null;
+            const T = at ? this._bolt(h.o, at) : 0;
+            if (at) this._landAt(on.w, at, T);
+            this.setting = { id: on.w.id, idle: 0, wait: T, fast, need: 0, covered: true, send: 0 };
             this._op({ op: 'set', id: on.w.id, on: true });
-            g.hud?.setVoice?.('🛡️ Дом уже под защитой. Кричите «Максима», чтобы расширить сферу, и «стоп», когда хватит', true);
+            g.hud?.setVoice?.('🛡️ Купол снова растёт, пока палочка на нём. Хватит — скажите «стоп»', true);
+            this.log.push({ ev: 'again', id: on.w.id });
             return 'ProtectionHouse';
         }
         const aim = this._aimHouse(h.o, h.d);
         // a house is what it is mostly for, but it guards anything the hand shows (a chest, a camp,
-        // a tree, a piece of land): then the sphere stands round that spot, 1 m above it
-        const spot = aim.house || (aim.at && { c: { x: aim.at.x, y: aim.at.y + 1, z: aim.at.z }, r: 0 });
+        // a tree, a piece of land): then the dome stands round that spot
+        const spot = aim.house ? { c: { x: aim.house.c.x, y: aim.house.floor, z: aim.house.c.z }, need: aim.house.need } : aim.at && { c: { x: aim.at.x, y: aim.at.y, z: aim.at.z }, need: 0 };
         if (!spot) return this._no('wardNoHouse');
         if (!this._pay('ProtectionHouse')) return null;
         const c = spot.c;
         const id = (g.localId || 'L') + '-' + Date.now().toString(36) + '-' + (this._nextId++);
-        this._op({ op: 'new', id, c: [r2(c.x), r2(c.y), r2(c.z)], name: g.net?.name || 'Игрок' });
-        this.setting = { id, idle: 0 };
-        const need = maximaFor(spot.r);
-        const what = aim.house ? 'весь дом' : 'всё, что нужно защитить';
-        g.hud?.setVoice?.(`🛡️ ${aim.house ? 'Защита дома' : 'Сфера защиты'} поставлена. Кричите «Максима» (−${WARD.MAXIMA} маны каждая), пока сфера не накроет ${what}${need ? ` (примерно ${need} ${need % 10 >= 2 && need % 10 <= 4 && (need % 100 < 12 || need % 100 > 14) ? 'раза' : 'раз'})` : ''}, потом скажите «стоп»`, true);
-        g.fx?.lightFlash?.(_v1.set(c.x, c.y, c.z), 0x8fc8ff, 2, 0.5, 20);
-        this.log.push({ ev: 'new', id, need });
+        const at = aim.at || c;
+        // (the charge's way: from the hand to where it lands — every computer draws it)
+        this._op({ op: 'new', id, c: [r2(c.x), r2(c.y), r2(c.z)], f: [r2(h.o.x), r2(h.o.y), r2(h.o.z)], a: [r2(at.x), r2(at.y), r2(at.z)], name: g.net?.name || 'Игрок' });
+        const w = this.list.get(id);
+        this.setting = { id, idle: 0, wait: w?.landIn ?? 0, fast, need: spot.need, covered: spot.need <= WARD.START_R, send: 0 };
+        g.hud?.setVoice?.(`🛡️ ${aim.house ? 'Защита дома' : 'Купол защиты'}: держите палочку на куполе — он растёт сам (${WARD.GROW_MANA} маны за метр). Хватит — скажите «стоп»`, true);
+        this.log.push({ ev: 'new', id, need: spot.need });
         return 'ProtectionHouse';
     }
 
-    /** «Максима» while my house's sphere is being set: −5 mana, 1.5 m wider. */
+    /** «Максима» while my dome grows: it grows twice as fast (the same mana a metre). */
     maxima() {
         const s = this.setting;
         const w = s && this.list.get(s.id);
         if (!w) { this.setting = null; return null; }
-        if (w.r >= WARD.MAX_R) return this._no('wardMax', { r: WARD.MAX_R });
-        if (!this._pay('WardGrow')) {
-            // no mana left: it stays as big as it is
-            this._no('wardNoMana', { r: w.r.toFixed(1) });
-            this.fix();
-            return null;
-        }
+        if (s.fast) return null;
+        s.fast = true;
         s.idle = 0;
-        this._op({ op: 'grow', id: w.id });
         this._pulse(w);
-        this.log.push({ ev: 'grow', id: w.id });
+        this.log.push({ ev: 'fast', id: w.id });
         return 'WardGrow';
     }
 
-    /** «стоп»: the sphere stays as it is now. */
+    /** «стоп»: the dome stays as it is now. */
     fix() {
         const s = this.setting;
         if (!s) return false;
         this.setting = null;
         const w = this.list.get(s.id);
         if (!w) return false;
+        if (!this.auth) this.game.sync?.wardOp?.({ op: 'grow', id: w.id, r: r2(w.r) }); // (its last size)
+        else w.gy = this._groundY(w.c, w.r);
+        this._rebuildDisc(w);
         this._op({ op: 'set', id: w.id, on: false });
-        this.game.hud?.toast?.(`🛡️ Защита готова: сфера ${w.r.toFixed(1)} м`, 3000);
+        this.game.hud?.toast?.(`🛡️ Защита готова: купол ${w.r.toFixed(1)} м`, 3000);
         this.log.push({ ev: 'fix', id: w.id, r: w.r });
         return true;
+    }
+
+    /**
+     * My dome grows while the hand (the wand) is on it: GROW_V m a second, GROW_MANA mana a metre.
+     * The hand off it: it waits. No mana: it stays as it is (and so at MAX_R).
+     */
+    _grow(dt) {
+        const s = this.setting;
+        const w = s && this.list.get(s.id);
+        if (!w) { this.setting = null; return; }
+        if (s.wait > 0) { s.wait -= dt; return; } // (the charge is still flying)
+        s.idle += dt;
+        if (s.idle > WARD.SET_IDLE) { this.fix(); return; }
+        const h = this._hand();
+        const on = h && this._wardOnRay(h.o, h.d);
+        s.aimed = !!on && on.w === w;
+        if (!s.aimed) return;
+        s.idle = 0;
+        if (w.r >= WARD.MAX_R - 1e-6) { this._no('wardMax', { r: WARD.MAX_R }); this.fix(); return; }
+        const dr = Math.min(WARD.MAX_R - w.r, (s.fast ? WARD.GROW_V_MAX : WARD.GROW_V) * dt);
+        const c = this.game.combat;
+        if (c && c.enabled !== false) {
+            const cost = (c.costOf ? c.costOf('WardGrow') : WARD.GROW_MANA) * dr;
+            const ok = c.fatigue >= cost && (c.drain ? c.drain(cost, dt) : ((c.fatigue -= cost), true));
+            if (!ok) { this._no('wardNoMana', { r: w.r.toFixed(1) }); this.fix(); return; }
+        }
+        w.r += dr;
+        if (!s.covered && s.need && w.r >= s.need) {
+            s.covered = true;
+            this.game.hud?.toast?.('🛡️ Купол накрыл весь дом — можно сказать «стоп»', 3000);
+        }
+        // the others see it grow (a few times a second)
+        s.send -= dt;
+        if (s.send <= 0) {
+            s.send = WARD.SEND_GAP;
+            if (this.auth) this._changed();
+            else this.game.sync?.wardOp?.({ op: 'grow', id: w.id, r: r2(w.r) });
+        }
+    }
+
+    // ------------------------------------------------------------ the charge
+    /** A charge of protection flies from `from` to `to`: how long it flies. */
+    _bolt(from, to) {
+        const a = new THREE.Vector3(from.x, from.y, from.z), b = new THREE.Vector3(to.x, to.y, to.z);
+        const T = Math.max(0.12, a.distanceTo(b) / WARD.BOLT_V);
+        const scene = this.game.scene;
+        let mesh = null;
+        if (scene) {
+            const mat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+            const G = HouseWards._boltGeo || (HouseWards._boltGeo = { core: new THREE.SphereGeometry(0.11, 12, 8), halo: new THREE.SphereGeometry(0.3, 16, 10), ring: new THREE.TorusGeometry(0.28, 0.025, 6, 24) });
+            mesh = new THREE.Group();
+            mesh.add(new THREE.Mesh(G.core, mat(0xffffff, 1)), new THREE.Mesh(G.halo, mat(0x8fd0ff, 0.55)), new THREE.Mesh(G.ring, mat(0xcfe8ff, 0.8)), new THREE.Mesh(G.ring, mat(0xb7a6ff, 0.6)));
+            for (const m of mesh.children) m.renderOrder = 5;
+            mesh.userData.noWardHide = true;
+            mesh.position.copy(a);
+            scene.add(mesh);
+        }
+        this.bolts.push({ a, b, t: 0, T, mesh, d: b.clone().sub(a).normalize() });
+        this.game.sound?.playWhoosh?.();
+        this.game.fx?.lightFlash?.(a, 0x9fd8ff, 1.5, 0.25, 8);
+        return T;
+    }
+
+    _updateBolts(dt) {
+        const fx = this.game.fx;
+        for (const B of [...this.bolts]) {
+            B.t += dt;
+            const k = Math.min(1, B.t / B.T);
+            const p = _v1.copy(B.a).lerp(B.b, k);
+            if (B.mesh) {
+                B.mesh.position.copy(p);
+                const pul = 1 + 0.2 * Math.sin(B.t * 40);
+                B.mesh.children[1].scale.setScalar(pul);
+                B.mesh.children[2].quaternion.setFromUnitVectors(_Z, B.d);
+                B.mesh.children[2].rotateZ(B.t * 14);
+                B.mesh.children[2].scale.setScalar(1 + 0.3 * Math.sin(B.t * 25));
+                B.mesh.children[3].rotation.set(B.t * 11, B.t * 7, 0);
+            }
+            // its trail: silver-blue sparks winding round its way
+            for (let i = 0; i < 3; i++) {
+                const ang = B.t * 30 + i * 2.1;
+                fx?.spark?.(p, i ? 0x9fd8ff : 0xffffff, 0.05 + Math.random() * 0.05, _v2.set(Math.cos(ang) * 0.8 - B.d.x * 1.5, Math.sin(ang) * 0.8 - B.d.y * 1.5, Math.sin(ang * 0.7) * 0.8 - B.d.z * 1.5), 0.35);
+            }
+            if (k < 1) continue;
+            // it lands: a flash, sparks every way — nothing is broken
+            for (let i = 0; i < 40; i++) {
+                const v = _v2.set(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize().multiplyScalar(2 + Math.random() * 4);
+                fx?.spark?.(B.b, i % 3 ? 0x9fd8ff : i % 2 ? 0xb7a6ff : 0xffffff, 0.08 + Math.random() * 0.08, v, 0.6);
+            }
+            fx?.lightFlash?.(B.b, 0x9fd8ff, 3, 0.45, 22);
+            if (B.mesh) {
+                this.game.scene?.remove(B.mesh);
+                for (const m of B.mesh.children) m.material.dispose();
+            }
+            this.bolts.splice(this.bolts.indexOf(B), 1);
+        }
+    }
+
+    /** The dome lights up at `at` when the charge lands there (in `T` s). */
+    _landAt(w, at, T) {
+        w.landIn = T;
+        w.landAt = this._t + T;
+        w.landP = { x: at.x, y: at.y, z: at.z };
+        w.landed = false;
+    }
+
+    /** A dome just made (on any computer): its charge flies from the hand that cast it. */
+    _arrive(w, f, a) {
+        if (!Array.isArray(f) || !f.every(Number.isFinite)) return;
+        const to = Array.isArray(a) && a.every(Number.isFinite) ? { x: a[0], y: a[1], z: a[2] } : w.c;
+        this._landAt(w, to, this._bolt({ x: f[0], y: f[1], z: f[2] }, to));
     }
 
     _castInvisible() {
@@ -492,10 +638,22 @@ export class HouseWards {
         const w = op.id != null ? this.list.get(String(op.id)) : null;
         if (op.op === 'new') {
             if (w || !Array.isArray(op.c) || !op.c.every(Number.isFinite)) return;
-            this._add({ id: String(op.id).slice(0, 60), owner: key, ownerName: String(op.name || this.game.playerName?.(from) || 'Игрок').slice(0, 16), c: { x: op.c[0], y: op.c[1], z: op.c[2] }, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, setting: true });
+            const nw = this._add({ id: String(op.id).slice(0, 60), owner: key, ownerName: String(op.name || this.game.playerName?.(from) || 'Игрок').slice(0, 16), c: { x: op.c[0], y: op.c[1], z: op.c[2] }, r: WARD.START_R, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, setting: true });
+            this._fresh(nw, op);
         } else if (!w) return;
-        else if (op.op === 'grow') { if (w.owner === key && w.r < WARD.MAX_R) { w.n++; w.r = wardRadius(w.n); w.gy = this._groundY(w.c, w.r); this._rebuildDisc(w); } }
-        else if (op.op === 'set') { if (w.owner === key) w.setting = !!op.on; }
+        else if (op.op === 'grow') {
+            // (its owner's computer grows it: the size it sent — never smaller, never far more at once)
+            if (w.owner !== key) return;
+            const r = Math.min(WARD.MAX_R, Number.isFinite(op.r) ? Math.min(op.r, w.r + 3) : w.r + WARD.STEP);
+            if (r <= w.r) return;
+            w.r = r;
+            if (!w.setting) { w.gy = this._groundY(w.c, w.r); this._rebuildDisc(w); }
+        }
+        else if (op.op === 'set') {
+            if (w.owner !== key) return;
+            w.setting = !!op.on;
+            if (!w.setting) { w.gy = this._groundY(w.c, w.r); this._rebuildDisc(w); }
+        }
         else if (op.op === 'inv') { if (w.owner === key) w.inv = true; }
         else if (op.op === 'vis') { if (w.owner === key) w.inv = false; }
         else if (op.op === 'grant') {
@@ -508,17 +666,24 @@ export class HouseWards {
 
     /** (guest) Seen at once on my own computer. */
     _applyLocal(op, from) {
-        if (op.op === 'new' && !this.list.has(op.id)) this._add({ id: op.id, owner: this.myKey, ownerName: op.name, c: { x: op.c[0], y: op.c[1], z: op.c[2] }, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, setting: true, ids: [from] });
+        if (op.op === 'new' && !this.list.has(op.id)) this._fresh(this._add({ id: op.id, owner: this.myKey, ownerName: op.name, c: { x: op.c[0], y: op.c[1], z: op.c[2] }, r: WARD.START_R, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, setting: true, ids: [from] }), op);
         const w = this.list.get(op.id);
         if (!w) return;
-        if (op.op === 'grow') { w.n++; w.r = wardRadius(w.n); w.gy = this._groundY(w.c, w.r); this._rebuildDisc(w); }
+        if (op.op === 'grow' && Number.isFinite(op.r) && op.r > w.r) w.r = Math.min(WARD.MAX_R, op.r);
         if (op.op === 'set') w.setting = !!op.on;
         if (op.op === 'inv') w.inv = true;
         if (op.op === 'vis') w.inv = false;
     }
 
+    /** A dome just made: where its charge came from and landed (kept while it grows: others draw it). */
+    _fresh(w, op) {
+        if (Array.isArray(op.f)) { w.f = op.f.slice(0, 3); w.a = Array.isArray(op.a) ? op.a.slice(0, 3) : null; }
+        this._arrive(w, w.f, w.a);
+    }
+
     _add(w) {
-        w.r = wardRadius(w.n);
+        if (!Number.isFinite(w.r)) w.r = wardRadius(w.n || 0);
+        w.r = Math.max(0.5, Math.min(WARD.MAX_R, w.r));
         w.gy = this._groundY(w.c, w.r);
         this.list.set(w.id, w);
         return w;
@@ -545,8 +710,8 @@ export class HouseWards {
 
     /** One sphere as it is sent and saved. */
     _rec(w, ids = false) {
-        const o = { id: w.id, o: w.owner, on: w.ownerName, c: [r2(w.c.x), r2(w.c.y), r2(w.c.z)], n: w.n, inv: w.inv ? 1 : 0, g: w.grant.slice(), gn: w.grantNames.slice(), hp: Math.round(w.hp) };
-        if (w.setting) o.s = 1;
+        const o = { id: w.id, o: w.owner, on: w.ownerName, c: [r2(w.c.x), r2(w.c.y), r2(w.c.z)], r: r2(w.r), inv: w.inv ? 1 : 0, g: w.grant.slice(), gn: w.grantNames.slice(), hp: Math.round(w.hp) };
+        if (w.setting) { o.s = 1; if (w.f) { o.f = w.f; if (w.a) o.a = w.a; } }
         if (w.hellT > 0) o.h = Math.round(w.hellT * 10) / 10;
         if (ids) o.ids = this._ids(w);
         return o;
@@ -554,7 +719,7 @@ export class HouseWards {
 
     _fromRec(o) {
         if (!o || !Array.isArray(o.c) || !o.c.every(Number.isFinite)) return null;
-        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null };
+        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, r: Number.isFinite(o.r) ? o.r : wardRadius(Math.max(0, o.n | 0)), n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null, ...(Array.isArray(o.f) ? { f: o.f.slice(0, 3), a: Array.isArray(o.a) ? o.a.slice(0, 3) : null } : {}) };
     }
 
     netList() { return [...this.list.values()].map((w) => this._rec(w, true)); }
@@ -569,9 +734,17 @@ export class HouseWards {
             if (!w) continue;
             seen.add(w.id);
             const old = this.list.get(w.id);
-            if (old && old.n === w.n && old.c.x === w.c.x) { Object.assign(old, { ...w, r: old.r, gy: old.gy }); continue; }
+            if (old && old.c.x === w.c.x && old.c.z === w.c.z) {
+                // (my own dome growing: my computer is ahead of the host's list)
+                const r = this.setting?.id === w.id ? Math.max(old.r, w.r) : w.r;
+                const moved = Math.abs(r - old.r) > 1e-3;
+                Object.assign(old, { ...w, r, gy: old.gy });
+                if (moved && !old.setting) { old.gy = this._groundY(old.c, old.r); this._rebuildDisc(old); }
+                continue;
+            }
             this._add(w);
             if (old) this._rebuildDisc(this.list.get(w.id));
+            else if (w.setting && w.f) this._arrive(w, w.f, w.a); // (a dome cast just now: its charge flies)
         }
         for (const id of [...this.list.keys()]) if (!seen.has(id)) this._remove(id);
         // I was let into somebody's house
@@ -580,10 +753,10 @@ export class HouseWards {
         }
     }
 
-    snapshot() { return [...this.list.values()].map((w) => { const o = this._rec(w); delete o.s; return o; }); }
+    snapshot() { return [...this.list.values()].map((w) => { const o = this._rec(w); delete o.s; delete o.f; delete o.a; return o; }); }
 
     restore(list) {
-        for (const o of list || []) { const w = this._fromRec(o); if (w) { w.setting = false; this._add(w); } }
+        for (const o of list || []) { const w = this._fromRec(o); if (w) { w.setting = false; delete w.f; delete w.a; this._add(w); } }
     }
 
     // ------------------------------------------------------------ what it stops
@@ -880,7 +1053,7 @@ export class HouseWards {
         if (L) return L;
         const mat = new THREE.ShaderMaterial({
             vertexShader: DOME_VS, fragmentShader: DOME_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 }, uCrack: { value: 0 } },
+            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 }, uCrack: { value: 0 }, uHell: { value: 0 } },
         });
         const dome = new THREE.Mesh(this._domeGeo, mat);
         dome.renderOrder = 3;
@@ -938,10 +1111,23 @@ export class HouseWards {
             L.k = k;
             const u = L.dome.material.uniforms;
             L.dome.position.set(w.c.x, w.c.y, w.c.z);
+            // the charge is still flying: not there yet; it lands — the dome lights up from that spot
+            const coming = w.landAt != null && this._t < w.landAt;
+            if (w.landAt != null && !coming && !w.landed) {
+                w.landed = true;
+                L.pulse = 1;
+                L.flash = 1;
+                L.flashAt = (L.flashAt || new THREE.Vector3()).set(w.landP.x, w.landP.y, w.landP.z);
+                for (let i = 0; i < 48; i++) {
+                    const an = (i / 48) * Math.PI * 2;
+                    g.fx?.spark?.(_v2.set(w.c.x + Math.cos(an) * w.r, w.c.y + 0.1, w.c.z + Math.sin(an) * w.r), i % 2 ? 0x9fd8ff : 0xcfe8ff, 0.1, _v3.set(0, 1.5 + Math.random() * 2, 0), 0.9);
+                }
+            }
             L.pulse = Math.max(0, L.pulse - dt * 2);
             L.dome.scale.setScalar(w.r * (1 + 0.04 * L.pulse));
             u.uTime.value = this._t;
             u.uSet.value = w.setting ? 1 : 0;
+            u.uHell.value = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
             // not seen — but while it is being set (and a moment after «стоп»), where one who may not
             // come in is close, where magic hits it, while it is cracked or the Hellfire burns on it
             if (L.wasSetting && !w.setting) L.show = WARD.SHOW_AFTER_SET;
@@ -958,7 +1144,7 @@ export class HouseWards {
             if (fp) u.uFlash.value.set(fp.x, fp.y, fp.z, Math.max(L.flash, L.near * 0.8));
             else u.uFlash.value.w = 0;
             L.near = Math.max(0, L.near - dt * 1.5);
-            L.dome.visible = k > 0.01 && seen > 0.005;
+            L.dome.visible = k > 0.01 && seen > 0.005 && !coming;
             if (w.inv && k < 0.999) hidden.push({ w, k, d: Math.hypot(eye.x - w.c.x, eye.z - w.c.z) });
             // the land over it, seen from far
             if (w.inv) {
@@ -1000,12 +1186,9 @@ export class HouseWards {
     // ------------------------------------------------------------ frame
     update(dt) {
         this._t += dt;
-        // my sphere being set: set by itself when I keep quiet too long
-        if (this.setting) {
-            this.setting.idle += dt;
-            if (!this.list.has(this.setting.id)) this.setting = null;
-            else if (this.setting.idle > WARD.SET_IDLE) this.fix();
-        }
+        // my dome grows while the hand is on it
+        if (this.setting) this._grow(dt);
+        if (this.bolts.length) this._updateBolts(dt);
         if (!this.list.size && !this.looks.size && !this._hidden.size) return;
         if (this.auth) { this._creatures(dt); this._heal(dt); }
         for (const w of this.list.values()) this._look(w);
@@ -1032,6 +1215,8 @@ export class HouseWards {
     }
 
     dispose() {
+        for (const B of this.bolts) if (B.mesh) this.game.scene?.remove(B.mesh);
+        this.bolts = [];
         for (const id of [...this.list.keys()]) this._remove(id);
         WARD_HIDE.n.value = 0;
         for (const [o, vis] of this._hidden) o.visible = vis;

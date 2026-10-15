@@ -85,8 +85,8 @@ export function refusal(code, d = {}) {
         case 'wardNoHand': return `✋ Не сработало ${name}: поднимите руку (или палочку) и направьте её на дом`;
         case 'wardNoHouse': return '🛡️ «Protection House»: направьте руку на то, что хотите защитить, — на дом, сундук, дерево или землю (не дальше 40 м)';
         case 'wardNotYours': return `🛡️ Это не ваш дом — его защита принадлежит игроку ${d.owner || 'другому'}`;
-        case 'wardMax': return `🛡️ Сфера уже самая большая (${d.r} м) — скажите «стоп»`;
-        case 'wardNoMana': return `😮‍💨 Мана кончилась — сфера осталась ${d.r} м`;
+        case 'wardMax': return `🛡️ Купол вырос до предела (${d.r} м) и остановился`;
+        case 'wardNoMana': return `😮‍💨 Мана кончилась — купол остановился на ${d.r} м`;
         case 'wardInvNone': return '🛡️ «Protection Invisible» работает только на доме с защитой: сначала «Protection House»';
         case 'wardVisible': return '👁️ Дом снова виден издалека';
         case 'wardBarrier': return '🛡️ Дом защищён — вас не пускает барьер';

@@ -1051,7 +1051,7 @@ export class Game {
         // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
         // (before the duel's block: nothing may keep you from stopping your own spells)
         if (name === 'Stand') {
-            if (this.wards?.setting) { this.wards.fix(); return 'Stand'; } // («стоп»: my house's sphere stays as big as it is)
+            if (this.wards?.setting) { this.wards.fix(); return 'Stand'; } // («стоп»: my house's dome stays as big as it grew)
             const placed = !!this.doors?.stand?.() || (this.builder.build ? (this.builder.finish(), true) : false);
             const stopped = (!placed || /стоп|stop/i.test(text)) && this.stopSpells();
             return placed ? 'Stand' : stopped ? 'Stop' : null;
@@ -1065,7 +1065,7 @@ export class Game {
         if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
-        // «Максима» while my house's sphere is being set: −5 mana, 1.5 m wider (before the water's / the duel's)
+        // «Максима» while my house's dome grows: it grows twice as fast (before the water's / the duel's)
         if (name === 'Maxima' && this.wards?.setting && !this._inDuel()) return this._castWard('WardGrow', isFinal);
         // «Максима» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
         if (name === 'Maxima' && this._inDuel() && !this.water?.active) return this.duel.maxima(isFinal);
@@ -1092,7 +1092,7 @@ export class Game {
         }
         if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
         if (name === 'CreateHouse' || name === 'ImproveHouse') return this.houseMagic.cast(name, isFinal); // (HouseMagic.js)
-        if (isWardSpell(name)) return this._castWard(name, isFinal); // «Защита дома» (HouseWards.js)
+        if (isWardSpell(name)) return this._castWard(name, isFinal, text); // «Защита дома» (HouseWards.js)
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
         this.perf?.note('заклинание ' + name);
@@ -1258,15 +1258,16 @@ export class Game {
     }
 
     /**
-     * «Protection House», its «Максима», «Protection Invisible», «Protection House Grant»: once per
-     * phrase (the recognizer repeats an unfinished phrase; each «Максима» shout costs mana).
+     * «Protection House» (with «Maxima» its dome grows twice as fast; a «Максима» alone while it
+     * grows does the same), «Protection Invisible», «Protection House Grant»: once per phrase (the
+     * recognizer repeats an unfinished phrase).
      */
-    _castWard(name, isFinal) {
+    _castWard(name, isFinal, text = '') {
         const now = Date.now();
         const early = this._interimCast;
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
         if (now - (this._lastWardCast?.[name] || 0) < (name === 'WardGrow' ? 600 : 1500)) return null;
-        const r = name === 'WardGrow' ? this.wards.maxima() : this.wards.cast(name, isFinal);
+        const r = name === 'WardGrow' ? this.wards.maxima() : this.wards.cast(name, isFinal, /макс|max|мах/i.test(text || ''));
         if (!r) return null;
         (this._lastWardCast || (this._lastWardCast = {}))[name] = now;
         this._interimCast = isFinal ? null : { name, at: now };
