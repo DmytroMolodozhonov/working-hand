@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { Game } from '../../src/game/Game.js';
-import { LivingTrees, ALIVE, aliveDamage, aliveDrain, livingTreeModel } from '../../src/game/LivingTrees.js';
+import { LivingTrees, ALIVE, aliveDamage, aliveDrain, livingTreeModel, treeFollowPlan } from '../../src/game/LivingTrees.js';
 import { Servants, servantPlan, SERVANT } from '../../src/game/Servants.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, rollKeyItem } from '../../src/game/ItemTypes.js';
@@ -150,6 +150,15 @@ test('the living tree walks after its master, beats the enemy «Атак» point
     run(g, 4);
     assert.ok(t.model.position.x < 12, `came after me (${t.model.position.x.toFixed(1)})`);
     assert.ok(t.model.position.x > SERVANT.FOLLOW - 0.5, 'not on top of me');
+    // a big tree keeps a comfortable distance (5 m from its crown's edge), and steps back when I come at it
+    run(g, 4);
+    const keep = ALIVE.KEEP + ALIVE.CROWN * t.model.userData.s;
+    assert.ok(t.model.position.x > keep - ALIVE.SLACK - 0.1, `keeps its distance (${t.model.position.x.toFixed(1)})`);
+    g.character.group.position.x = 4;
+    run(g, 3);
+    assert.ok(t.model.position.x - 4 > keep - ALIVE.SLACK - 0.1, `stepped back (${(t.model.position.x - 4).toFixed(1)})`);
+    g.character.group.position.x = 0;
+    assert.equal(treeFollowPlan({ x: 3, z: 0 }, { x: 0, z: 0 }, 1).mode, 'back');
     g.zombies.push(zombie); g.zombieById.set(7, zombie);
     zombie.group.position.set(-30, 0, 0);
     g.servants.command('me', { k: 'z', id: 7 });

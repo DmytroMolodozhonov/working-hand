@@ -25,6 +25,7 @@
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, BASE_COLORS } from '../world/Terrain.js';
 import { creditKill } from './Mana.js';
+import { avoidStep } from './Avoid.js';
 
 export const ALIVE = {
     COST: 25, // mana at once
@@ -45,7 +46,30 @@ export const ALIVE = {
     BURN: 5, // s it burns after the fire touched it
     BURN_DPS: 1.5,
     COLLAPSE: 2.6, // s burning down
+    // its distance from its master: a tree is big — it keeps KEEP m between its master and its crown's
+    // edge (CROWN × s from its middle), steps back when they come nearer, follows when they go on
+    KEEP: 5, // m
+    CROWN: 1.9, // m: half its width at s = 1 (the crown, the branch arms)
+    SLACK: 1.2, // m either side of that distance it just stands
+    BODY_R: 1.1, // m: its trunk with the root legs at s = 1 (nobody walks through it, it walks through nobody)
+    NEAR: 1.5, // m: even fighting, at least this much between its body and its master's
 };
+const PLAYER_R = 0.48; // (Game's PLAYER_RADIUS)
+
+/**
+ * Where a living tree with no enemy goes: to KEEP m from its master (from its crown's edge),
+ * back from them when they come too near, and nowhere while it is about right.
+ * me, master: {x, z}; s: the tree's size. → {mode: 'follow'|'chase'|'back'|'stay', x, z, d}
+ */
+export function treeFollowPlan(me, master, s = 1) {
+    const keep = ALIVE.KEEP + ALIVE.CROWN * s;
+    const dx = master.x - me.x, dz = master.z - me.z, d = Math.hypot(dx, dz);
+    if (d < 1e-4) return { mode: 'back', x: me.x + keep, z: me.z, d };
+    const k = (d - keep) / d; // (< 0: away from them)
+    if (d > keep + ALIVE.SLACK) return { mode: d > keep + 6 ? 'chase' : 'follow', x: me.x + dx * k, z: me.z + dz * k, d };
+    if (d < keep - ALIVE.SLACK) return { mode: 'back', x: me.x + dx * k, z: me.z + dz * k, d };
+    return { mode: 'stay', x: me.x, z: me.z, d };
+}
 
 /** Only fire hurts a living tree. */
 const FIRE = new Set(['Inferno', 'Hellfire', 'InfernoMaxima', 'FireMaxima', 'Fire', 'fire', 'campfire', 'burn', 'burning']);
@@ -563,7 +587,10 @@ export class LivingTrees {
         const p = t.model.position;
         const s = t.model.userData.s;
         const reach = ALIVE.REACH * s;
-        const plan = g.servants?.plan('t', t, p, reach) || { mode: 'stay', x: p.x, z: p.z };
+        let plan = g.servants?.plan('t', t, p, reach) || { mode: 'stay', x: p.x, z: p.z };
+        // (no enemy: a big tree keeps a comfortable distance from its master — never comes up close)
+        const mp = g.servants?._masterPos?.(t.master);
+        if (!plan.enemy && mp) plan = treeFollowPlan(p, mp, s);
         t.nextSwing -= dt;
         let speed = 0, face = null;
         if (plan.mode === 'strike') {
@@ -576,10 +603,10 @@ export class LivingTrees {
         } else if (plan.mode === 'chase' || plan.mode === 'follow') {
             speed = plan.mode === 'chase' ? ALIVE.RUN : ALIVE.SPEED;
             face = plan;
-        } else {
-            const mp = g.servants?._masterPos(t.master);
-            if (mp) face = mp;
-        }
+        } else if (plan.mode === 'back') {
+            speed = ALIVE.SPEED * 0.7; // (it steps back, still facing its master)
+            face = mp;
+        } else if (mp) face = mp;
         if (face) {
             const want = Math.atan2(-(face.x - p.x), -(face.z - p.z));
             let dy = want - t.model.rotation.y;
@@ -592,9 +619,19 @@ export class LivingTrees {
             const d = to.length();
             if (d > 0.2) {
                 const step = Math.min(d, speed * dt);
-                p.addScaledVector(to.normalize(), step);
+                to.normalize();
+                // round the people in its way (its master above all), never through them
+                const people = this._people(t, mp);
+                if (people.length) { const a = avoidStep(p, to, people, { r: ALIVE.BODY_R * s, look: 3 + 2 * s, maxF: d }); if (!a.wait) to.set(a.x, 0, a.z); else to.set(0, 0, 0); }
+                p.addScaledVector(to, step);
                 g.collision?.resolveCylinder?.(p, 0.95 * s, p.y, 3.0, 1.05);
             } else speed = 0;
+        }
+        // its body never goes into a player (a guard, whatever it is doing)
+        for (const o of this._people(t, mp)) {
+            const dx = p.x - o.x, dz = p.z - o.z, dd = Math.hypot(dx, dz), min = ALIVE.BODY_R * s + o.r;
+            if (dd >= min) continue;
+            if (dd > 1e-4) { p.x = o.x + dx / dd * min; p.z = o.z + dz / dd * min; } else p.x = o.x + min;
         }
         t.speed = t.swing ? 0 : speed;
         const gy = g.collision?.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1.2) : g.collision?.groundY(p.x, p.z) ?? p.y;
@@ -669,6 +706,20 @@ export class LivingTrees {
         }
     }
 
+    /** The players near a tree as round bodies {x, z, r} (its master's with a margin: it never comes up close). */
+    _people(t, mp) {
+        const g = this.game, out = this._ppl || (this._ppl = []);
+        out.length = 0;
+        const p = t.model.position, s = t.model.userData.s;
+        const add = (q, id) => {
+            if (!q || Math.abs(q.x - p.x) + Math.abs(q.z - p.z) > 20 || q.y > p.y + 9 * s || q.y < p.y - 4) return;
+            out.push({ x: q.x, z: q.z, r: PLAYER_R + (q === mp || id === t.master ? ALIVE.NEAR : 0.3) });
+        };
+        if (!g.isDeadLocal && !g.combat?.dead) add(g.character?.group.position, g.localId);
+        for (const [id, r] of g.remotes || []) if (!r.dead) add(r.position, id);
+        return out;
+    }
+
     /** It is solid: I can't walk through it. */
     _solid() {
         const g = this.game;
@@ -676,9 +727,10 @@ export class LivingTrees {
         if (!me) return;
         for (const t of this.list) {
             if (t.phase === 'fall' || t.phase === 'burn') continue;
-            const p = t.model.position, R = 1.4 * t.model.userData.s;
+            const p = t.model.position, R = ALIVE.BODY_R * t.model.userData.s + PLAYER_R;
             const dx = me.x - p.x, dz = me.z - p.z, d = Math.hypot(dx, dz);
-            if (d < R && d > 1e-4 && me.y < p.y + 9 * t.model.userData.s) { me.x = p.x + dx / d * R; me.z = p.z + dz / d * R; }
+            if (d >= R || me.y > p.y + 9 * t.model.userData.s) continue;
+            if (d > 1e-4) { me.x = p.x + dx / d * R; me.z = p.z + dz / d * R; } else me.x = p.x + R;
         }
     }
 
