@@ -33,7 +33,7 @@ void main() {
 }`;
 
 const PLANET_FS = /* glsl */ `
-uniform sampler2D map; uniform vec3 uSun; uniform vec3 uAtmo; uniform float uAtmoK; uniform float uAmb; uniform float uSpec;
+uniform sampler2D map; uniform vec3 uSun; uniform vec3 uAtmo; uniform float uAtmoK; uniform float uAmb; uniform float uSpec; uniform float uHeat;
 varying vec3 vObj; varying vec3 vN; varying vec3 vW;
 void main() {
     vec3 d = normalize(vObj);
@@ -55,6 +55,9 @@ void main() {
     // the air at the edge, on the day side
     float rim = pow(1.0 - max(dot(n, V), 0.0), 2.5);
     col += uAtmo * rim * uAtmoK * smoothstep(-0.2, 0.4, lam);
+    // red-hot (a planet just made of meteors — PlanetMagic): it glows by itself, cracks brighter, then cools
+    float cr = smoothstep(0.35, 0.75, tex.r + 0.25 * sin(d.x * 40.0 + d.y * 31.0) * sin(d.z * 37.0));
+    col = mix(col, mix(vec3(0.75, 0.16, 0.03), vec3(1.0, 0.72, 0.3), cr), clamp(uHeat, 0.0, 1.0));
     gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -166,13 +169,18 @@ void main() { float l = max(dot(normalize(vN), normalize(uSun - vW)), 0.0); gl_F
 const _v = new THREE.Vector3(), _p = { x: 0, y: 0, z: 0 };
 
 /** A soft round glow for the Sun (made once). */
-function glowTexture() {
+function glowTexture(white = false) {
     const c = document.createElement('canvas');
     c.width = c.height = 128;
     const x = c.getContext('2d');
     const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
-    g.addColorStop(0, 'rgba(255,240,200,1)'); g.addColorStop(0.18, 'rgba(255,200,110,0.65)');
-    g.addColorStop(0.45, 'rgba(255,150,60,0.18)'); g.addColorStop(1, 'rgba(255,120,40,0)');
+    if (white) { // (the planet spells' glows: white, tinted by the sprite's colour)
+        g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.2, 'rgba(255,255,255,0.55)');
+        g.addColorStop(0.45, 'rgba(255,255,255,0.15)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    } else {
+        g.addColorStop(0, 'rgba(255,240,200,1)'); g.addColorStop(0.18, 'rgba(255,200,110,0.65)');
+        g.addColorStop(0.45, 'rgba(255,150,60,0.18)'); g.addColorStop(1, 'rgba(255,120,40,0)');
+    }
     x.fillStyle = g; x.fillRect(0, 0, 128, 128);
     const t = new THREE.CanvasTexture(c);
     return t;
@@ -308,7 +316,7 @@ export class SpaceView {
      * the rest; each frame they go where an effect is (or hide).
      */
     _makeGlows() {
-        const tex = glowTexture();
+        const tex = glowTexture(true);
         this.glows = [];
         for (let i = 0; i < 3; i++) {
             const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, color: 0xffffff }));
@@ -389,7 +397,7 @@ export class SpaceView {
         group.add(tilt);
         const u = {
             map: { value: colorTex(def.color) }, uSun: { value: new THREE.Vector3() }, uAtmo: { value: new THREE.Color(def.atmosphere ?? def.clouds ?? 0x000000) },
-            uAtmoK: { value: def.atmosphere || def.clouds ? 0.55 : 0 }, uAmb: { value: def.look === 'earth' ? 0.035 : 0.02 }, uSpec: { value: def.look === 'earth' ? 1 : 0 },
+            uAtmoK: { value: def.atmosphere || def.clouds ? 0.55 : 0 }, uAmb: { value: def.look === 'earth' ? 0.035 : 0.02 }, uSpec: { value: def.look === 'earth' ? 1 : 0 }, uHeat: { value: 0 },
         };
         const mesh = new THREE.Mesh(this.geoLo, new THREE.ShaderMaterial({ uniforms: u, vertexShader: PLANET_VS, fragmentShader: PLANET_FS }));
         tilt.add(mesh);
@@ -487,7 +495,7 @@ export class SpaceView {
             // (the planet spells: a body being born, growing, given air, held — PlanetMagic.js)
             const rNow = this.radiusNow(def, t), heat = this._heat;
             if (b.group.scale.x !== rNow) b.group.scale.setScalar(rNow);
-            b.u.uAmb.value = (def.look === 'earth' ? 0.035 : 0.02) + heat * 0.9;
+            b.u.uHeat.value = heat;
             if (gi < this.glows.length) {
                 const gp = b.group.position;
                 if (heat > 0.01) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 4.5, 0xff8a3a, heat * 1.3);

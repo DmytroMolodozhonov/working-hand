@@ -17,7 +17,8 @@
  * systems hold (two levels deep). At the end: what grew between the first and the last third.
  *
  * --space: each round also goes to space and back («Космос», Space.js): Flying Maxima out of the air, a
- * flight through space, then back into the Earth's air to a new place.
+ * flight through space (a planet made of a meteor cluster, landed on and terraformed standing on it —
+ * PlanetMagic.js), then back into the Earth's air to a new place.
  *
  * --check: fail when something grows without end (scene objects, geometries, textures, shaders,
  * a collection over 500 that kept growing) or when the game's work in a frame grew by more than half.
@@ -63,7 +64,11 @@ function install({ EVERY, RENDER_EVERY, SPACE }) {
     const R = 1400; // m: the flight's circle round the start
     const SPELLS = ['Bombardo', 'Inferno', 'Stupefy', 'Ice', 'Sands', 'Sapira', 'Thunderwave', 'Wind', 'Earthquake', 'WallRise', 'Overgrown', 'AvadaKedavra', 'BombardoMaxima', 'WindImpulse', 'Firefighting'];
     let si = 0;
-    const plan = [{ name: 'полёт', time: 40 }, { name: 'бой', time: 40 }, ...(SPACE ? [{ name: 'космос', time: 50 }] : [])];
+    const plan = [{ name: 'полёт', time: 40 }, { name: 'бой', time: 40 }, ...(SPACE ? [{ name: 'космос', time: 64 }] : [])];
+    // (the planet spells: the hand pointed by the autopilot while they are said)
+    const origDir = ch.getHandDirection.bind(ch), origRaised = ch.isArmRaised.bind(ch);
+    ch.getHandDirection = (s, v) => (S.aim ? v.set(S.aim[0], S.aim[1], S.aim[2]).normalize() : origDir(s, v));
+    ch.isArmRaised = (s) => (S.aim ? true : origRaised(s));
     let sp = null; // (the space round's own steps)
     const origFlight = g._updateFlight.bind(g);
     let pi = 0;
@@ -81,7 +86,30 @@ function install({ EVERY, RENDER_EVERY, SPACE }) {
                 Sx.cast(true);
                 sp.step = 'up';
             } else if (sp.step === 'up' && Sx.realm === 'space') { sp.step = 'fly'; sp.t = 0; }
-            else if (sp.step === 'fly' && sp.t > 20) {
+            else if (sp.step === 'fly' && sp.t > 6 && !sp.planet) {
+                // the planet spells (PlanetMagic.js): a planet made of a meteor cluster, landed on, terraformed standing on it
+                const c = Sx.planets.clusters.find((q) => !q.used);
+                sp.planet = 'none';
+                if (c) {
+                    const q = window.__planetPos(c, Sx.now(), { x: 0, y: 0, z: 0 });
+                    Sx.P.x = q.x + c.r * 3; Sx.P.y = q.y; Sx.P.z = q.z; Sx.O.x = Sx.P.x; Sx.O.y = Sx.P.y; Sx.O.z = Sx.P.z; Sx._exitDir = null;
+                    Sx.vel.x = Sx.vel.y = Sx.vel.z = 0; Sx.speed = 0; g.flight.hovering = true; Sx._place();
+                    S.aim = [-1, 0, 0];
+                    try { if (g.planetMagic.cast('CreatePlanet', true)) { S.casts++; sp.planet = Sx.planets.list[Sx.planets.list.length - 1].id; } } catch (e) { S.errors++; }
+                    S.aim = null;
+                }
+            } else if (sp.step === 'fly' && sp.t > 14 && sp.planet && sp.planet !== 'none' && !sp.landed) {
+                const def = Sx.planets.get(sp.planet), r = window.__slotRect(def);
+                sp.landed = true;
+                Sx.state = 'off'; g.flight.land('debug');
+                const x = r.cx + (S.round % 5) * 300, z = r.cz + 800;
+                g.world.terrain.flushAround?.(x, z);
+                ch.group.position.set(x + 0.5, g.world.terrain.data.heightAt(x, z) + 2.5, z + 0.5);
+            } else if (sp.step === 'fly' && sp.landed && sp.t > 20 && !sp.tf) {
+                sp.tf = true;
+                try { S.aim = [0, -1, -0.3]; if (g.planetMagic.cast('TerraformPlanet', true)) S.casts++; } catch (e) { S.errors++; }
+                S.aim = null;
+            } else if (sp.step === 'fly' && sp.t > (sp.landed ? 34 : 20)) {
                 // back: from close over the Earth, straight down into its air (a new place each round)
                 const e = window.__planetPos(Sx.planets.get('earth'), Sx.now(), { x: 0, y: 0, z: 0 }, Sx.planets), R = Sx.planets.get('earth').radius;
                 const a = S.round * 1.3;
@@ -211,7 +239,7 @@ try {
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     await sleep(3000);
-    if (SPACE) await page.evaluate(async () => { const m = await import('/src/world/Planets.js'); window.__planetPos = m.planetPosition; });
+    if (SPACE) await page.evaluate(async () => { const m = await import('/src/world/Planets.js'); window.__planetPos = m.planetPosition; window.__slotRect = m.slotRect; });
     await page.evaluate(install, { EVERY, RENDER_EVERY, SPACE });
     // (minutes of PLAY: the game's own time; at most four times as long by the clock)
     const end = Date.now() + MINUTES * 4 * 60000;

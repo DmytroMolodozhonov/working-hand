@@ -267,10 +267,11 @@ export class PlanetMagic {
         const def = aim.def, no = planetRefusal('EnlargePlanet', def);
         if (no) return this._say(no);
         if (!this._pay('EnlargePlanet')) return null;
-        const r = Math.round(def.radius * PMAGIC.GROW);
-        S.change(def.id, { radius: r, radiusFrom: def.radius, grownAt: t, grown: (def.grown | 0) + 1, gravity: Math.round((def.gravity || 0.2) * PMAGIC.GROW * 1000) / 1000 });
+        const r0 = def.radius, g1 = Math.round((def.gravity || 0.2) * PMAGIC.GROW * 1000) / 1000, n = (def.grown | 0) + 1, name = def.name;
+        const r = Math.round(r0 * PMAGIC.GROW);
+        S.change(def.id, { radius: r, radiusFrom: r0, grownAt: t, grown: n, gravity: g1 });
         this._beam(side, 0xff6f3c);
-        this._say(`🪐 <b>Enlarge Planet!</b> «${def.name}» растёт: радиус ${fmt(def.radius)} → ${fmt(r)}, тяжесть ×${Math.round((def.gravity || 0.2) * PMAGIC.GROW * 100) / 100}${(def.grown | 0) + 1 >= PMAGIC.MAX_GROWS ? ' (больше она уже не вырастет)' : ''}`);
+        this._say(`🪐 <b>Enlarge Planet!</b> «${name}» растёт: радиус ${fmt(r0)} → ${fmt(r)}, тяжесть ×${Math.round(g1 * 100) / 100}${n >= PMAGIC.MAX_GROWS ? ' (больше она уже не вырастет)' : ''}`);
         this._worked('EnlargePlanet');
         return 'EnlargePlanet';
     }

@@ -88,6 +88,7 @@ export class Terrain {
                 m.chunk.rev = (c?.rev || 0) + 1;
                 d.chunks.set(m.key, m.chunk);
                 d._last = null;
+                d.version++; if (d.mapDirty && d.mapDirty.size < 64) d.mapDirty.add(m.key); // (the minimap draws it again)
                 this._fill(entry.ground, m.arrays.land);
                 this._fill(entry.water, m.arrays.water);
                 this.stats.built++;
@@ -112,6 +113,7 @@ export class Terrain {
         if (c && !c.modified) d.chunks.delete(job.key);
         d._last = null;
         this._build(entry);
+        d.version++; if (d.mapDirty && d.mapDirty.size < 64) d.mapDirty.add(job.key);
     }
 
     /**
