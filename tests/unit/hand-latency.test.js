@@ -13,7 +13,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, jitter, rot } from './hand-latency.mjs';
+import { measure, jitter, rot, waveLag } from './hand-latency.mjs';
 
 const N = 0.002; // (the network's jitter, in picture units)
 
@@ -66,4 +66,14 @@ test('hand steadiness with a real webcam\'s noise (640×480: the picture ±0.002
     }
     const r = measure({ ...real, R1: rot(0, 1.4, 0), moveMs: 120 });
     assert.ok(r.turnMs <= 50, `and a real quick turn still passes at once (${r.turnMs.toFixed(0)} ms)`);
+});
+
+test('hand latency: waving without stop (9 s back and forth) — the palm and the finger stay close behind to the end', (t) => {
+    // (a filter that learns a long movement as the camera's noise would fall further and further behind)
+    for (const version of ['v3', 'v4']) {
+        const r = waveLag({ R1: rot(0, 1.0, 0), b0: 0, b1: 1.0, noise: N, version });
+        t.diagnostic(`${version}: palm ${r.palm.lag} ms (${(r.palm.amp * 100).toFixed(0)}% of the swing), finger ${r.finger.lag} ms (${(r.finger.amp * 100).toFixed(0)}%)`);
+        assert.ok(r.palm.lag <= 120 && r.palm.amp > 0.85, `the palm trails a long wave by ${r.palm.lag} ms, ${(r.palm.amp * 100).toFixed(0)}% of it`);
+        assert.ok(r.finger.lag <= 120 && r.finger.amp > 0.85, `the finger trails a long wave by ${r.finger.lag} ms, ${(r.finger.amp * 100).toFixed(0)}% of it`);
+    }
 });

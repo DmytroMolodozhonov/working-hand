@@ -27,21 +27,22 @@ function gauss(seed) {
  * at t = 0), the index finger bends from `b0` to `b1`; `noise`: the jitter of every
  * point (picture units). Returns a row per drawn frame: {t, q (the palm's world turn), ix (index bend)}.
  */
-export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 0, b1 = 0, noise = 0, zNoise = null, poseNoise = 0, size = 0.1, side = 'right', cam = 1000 / 30, draw = 1000 / 60, until = 800 } = {}) {
+export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 0, b1 = 0, noise = 0, zNoise = null, poseNoise = 0, size = 0.1, side = 'right', cam = 1000 / 30, draw = 1000 / 60, until = 800, wave = 0, version = 'v4' } = {}) {
     const guard = new PoseStabilizer();
     const hg = new HandStabilizer();
     const interp = new PoseInterpreter();
     const smoother = new PoseSmoother();
     const ch = new VoxelCharacter(new THREE.Scene());
     ch.setShowHands(true);
-    ch.setHandVersion('v4'); // (the full hand)
+    ch.setHandVersion(version); // (v4: the full hand)
     const hand = side === 'right' ? ch.rightSimplifiedHand : ch.leftSimplifiedHand;
     const pose = frame({ arms: 'up', leftCurl: null, rightCurl: null }).poseLandmarks;
     const wr = pose[side === 'right' ? 16 : 15];
     const qa = new THREE.Quaternion().setFromRotationMatrix(R0), qb = new THREE.Quaternion().setFromRotationMatrix(R1);
     const g = gauss(12345);
     const lmAt = (t) => {
-        const k = moveMs ? Math.max(0, Math.min(1, t / moveMs)) : (t >= 0 ? 1 : 0);
+        // (wave: back and forth between R0 and R1 — and the finger — without end, a period of `wave` ms)
+        const k = wave ? 0.5 - 0.5 * Math.cos(2 * Math.PI * t / wave) : moveMs ? Math.max(0, Math.min(1, t / moveMs)) : (t >= 0 ? 1 : 0);
         const q = qa.clone().slerp(qb, k);
         const b = b0 + (b1 - b0) * k;
         const lm = synthHand(new THREE.Matrix4().makeRotationFromQuaternion(q), { side, at: [wr.x, wr.y], size, bends: { index: [b, b, b * 0.7] } });
@@ -63,7 +64,7 @@ export function run({ R0 = rot(0, 0, 0), R1 = rot(-1.0, 0, 0), moveMs = 0, b0 = 
         if (p) ch.updateArmsLookAt(p, draw / 1000);
         ch.group.updateMatrixWorld(true);
         hand.palm.getWorldQuaternion(qw);
-        rows.push({ t, q: qw.clone(), ix: hand.fingerMeshes.index[1].pivot.rotation.x });
+        rows.push({ t, q: qw.clone(), ix: hand.fingerMeshes.index[1].pivot.rotation.x, k: wave ? 0.5 - 0.5 * Math.cos(2 * Math.PI * t / wave) : null });
         t += draw;
     }
     return rows;
@@ -103,4 +104,31 @@ export function jitter(noise = 0.003, opts = {}) {
     }
     for (const r of rows) spread = Math.max(spread, r.q.angleTo(mean));
     return { step: step / (rows.length - 1), finger: ix / (rows.length - 1), spread };
+}
+
+/**
+ * A hand moving back and forth without stop (waving a wand, drawing circles) for `seconds`:
+ * how far behind the drawn palm and finger are in the last `last` seconds (ms, by the best match
+ * of the drawn swing to the real one) and how much of the swing they still show (1 = all).
+ */
+export function waveLag({ period = 1200, seconds = 9, last = 3, ...opts } = {}) {
+    const rows = run({ wave: period, moveMs: seconds * 1000, until: 0, ...opts });
+    const q0 = rows.find((r) => r.t >= 0).q.clone();
+    const tail = rows.filter((r) => r.t > (seconds - last) * 1000);
+    const swing = (get) => {
+        const v = tail.map(get), ref = tail.map((r) => r.k);
+        const m = v.reduce((a, b) => a + b, 0) / v.length, mr = ref.reduce((a, b) => a + b, 0) / ref.length;
+        let best = 0, bestS = -Infinity;
+        // (within half a period: a part that moves the other way — a bend's sign — is matched as it is)
+        for (let L = 0; L < period / 2 - 50; L += 5) {
+            let sum = 0;
+            for (let i = 0; i < tail.length; i++) sum += (v[i] - m) * (0.5 - 0.5 * Math.cos(2 * Math.PI * (tail[i].t - L) / period) - mr);
+            if (Math.abs(sum) > bestS) { bestS = Math.abs(sum); best = L; }
+        }
+        const amp = (Math.max(...v) - Math.min(...v)) / (Math.max(...ref) - Math.min(...ref));
+        return { lag: best, amp };
+    };
+    const full = rows.find((r) => r.t >= 0 && r.k > 0.999) || rows[rows.length - 1];
+    const span = q0.angleTo(full.q) || 1;
+    return { palm: swing((r) => r.q.angleTo(q0) / span), finger: swing((r) => r.ix) };
 }
