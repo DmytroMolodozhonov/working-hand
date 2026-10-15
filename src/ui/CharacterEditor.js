@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
-import { defaultLook, randomLook, FACE_COUNT, HAIR_STYLES, HATS, TOPS, BOTTOMS, SHOES, SKIN_TONES } from '../entities/Appearance.js';
+import { defaultLook, randomLook, FACE_COUNT, HAIR_STYLES, HATS, HAT_HIDDEN, TOPS, BOTTOMS, SHOES, SKIN_TONES } from '../entities/Appearance.js';
 
 const KEY = 'zns-characters';
 
@@ -140,6 +140,7 @@ export class CharacterEditor {
     _renderOptions() {
         const L = this.current.look;
         const box = this.root.querySelector('#ce-options');
+        if (HAT_HIDDEN.has(L.hat)) L.hat = 0; // (no crown: only kings have one)
         const stepper = (key, label, names, count) => {
             const n = names ? names.length : count;
             const v = L[key] ?? 0;
@@ -166,6 +167,7 @@ export class CharacterEditor {
             b.onclick = () => {
                 const k = b.dataset.k, n = +b.dataset.n;
                 L[k] = (((L[k] ?? 0) + +b.dataset.d) % n + n) % n;
+                if (k === 'hat' && HAT_HIDDEN.has(L[k])) L[k] = ((L[k] + +b.dataset.d) % n + n) % n; // (the crown is skipped)
                 this._changed();
             };
         }
