@@ -38,7 +38,7 @@ export function eachBody(g, fn) {
 /**
  * (host) One creature takes `dmg` from the wave of `spell` (its own rules: a dragon by
  * DragonKinds.ON_DRAGON, a phoenix by Phoenixes.TARGETS). `treeKind`: what a living tree
- * takes it as (only fire kills one — null: it stands, written in the spell's table).
+ * takes it as (LivingTrees.aliveDamage: fire, lightning and the mightiest spells break one).
  */
 export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
     const who = by === g.localId ? null : by;

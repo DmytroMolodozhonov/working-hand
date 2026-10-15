@@ -13,7 +13,8 @@
  *    few seconds (the limbs stiffen, the roots dig in) and then falls over: a fallen
  *    tree lies there, made of its own wood and leaves, and can be gathered.
  *    (In Creative mana doesn't limit: it lives until «стоп» or the 50 m rule.)
- *  - 15 HP, and only fire hurts it (Инферно, Fire Maxima, a campfire, burning).
+ *  - 15 HP; fire hurts it (Инферно, Fire Maxima, a campfire, burning), and so do lightning and the
+ *    mightiest spells (MIGHTY_ON_TREES: Total Destruction, Circle Attack, Inspirius)
  *    Swords, fists, Бомбардо, lightning, «Авада Кедавра» do nothing. Burnt, it
  *    blackens and collapses.
  *  - A golden apple tree doesn't come alive.
@@ -71,11 +72,17 @@ export function treeFollowPlan(me, master, s = 1) {
     return { mode: 'stay', x: me.x, z: me.z, d };
 }
 
-/** Only fire hurts a living tree. */
+/** Fire hurts a living tree (and sets it burning). */
 const FIRE = new Set(['Inferno', 'Hellfire', 'InfernoMaxima', 'FireMaxima', 'Fire', 'fire', 'campfire', 'burn', 'burning']);
 export const isFireDamage = (kind) => FIRE.has(kind);
+/**
+ * …and so do lightning (electricity) and the mightiest spells (80+ mana: they break a tree too —
+ * the author): «Lightning Strike», «Total Destruction» (+ Maxima), «Circle Attack» (+ Maxima),
+ * «Inspirius». Blades, fists, «Авада», «Бомбардо» and the other spells still do nothing.
+ */
+export const MIGHTY_ON_TREES = new Set(['Lightning', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius']);
 /** How much of a blow of `kind` a living tree takes. */
-export const aliveDamage = (kind, dmg) => (FIRE.has(kind) ? dmg : 0);
+export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has(kind) ? dmg : 0);
 /** The caster's mana after dt seconds of their living tree (Creative: no limit). */
 export const aliveDrain = (mana, dt, creative = false) => (creative ? mana : Math.max(0, mana - ALIVE.DRAIN * dt));
 
@@ -369,7 +376,7 @@ export class LivingTrees {
     }
 
     // ============================================================= damage
-    /** A blow / a spell reached it: only fire counts. */
+    /** A blow / a spell reached it: only fire, lightning and the mightiest spells count (aliveDamage). */
     hit(t, dmg, kind = null, by = null) {
         if (!t || t.isDead) return;
         const g = this.game;
@@ -378,14 +385,14 @@ export class LivingTrees {
             for (let i = 0; i < 6; i++) g.fx?.spark(_v.set(p.x, p.y + 3, p.z), t.model.userData.trunk.getHex(), 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.5);
             if (performance.now() - this._saidAt > 4000) {
                 this._saidAt = performance.now();
-                g.hud?.setVoice?.(kind === 'AvadaKedavra' ? '🌳 «Авада Кедавра» не берёт живое дерево — его убивает только огонь' : '🌳 Живому дереву это не вредит — только огонь', true);
+                g.hud?.setVoice?.(kind === 'AvadaKedavra' ? '🌳 «Авада Кедавра» не берёт живое дерево — его убивает только огонь' : '🌳 Живому дереву это не вредит — только огонь, молния или самые мощные заклинания', true);
             }
             return;
         }
         if (!this.auth) return; // (the host replays the fire too and decides)
         if (by != null) t.lastBy = by; // (who set it burning: the mana for it, if it burns down)
         t.hp = Math.max(0, t.hp - dmg);
-        this.ignite(t);
+        if (isFireDamage(kind) || kind === 'Lightning' || kind === 'LightningStrike') this.ignite(t); // (a mighty blast breaks it without setting it alight)
         if (t.hp <= 0) this._burnDown(t);
     }
 
@@ -414,9 +421,9 @@ export class LivingTrees {
         return burnt;
     }
 
-    /** Fire at a point (Fire Maxima and the like): only fire kinds do anything. */
+    /** Fire / lightning / a mighty spell at a point: only what aliveDamage counts does anything. */
     hitAt(p, radius, dmg, kind) {
-        if (!isFireDamage(kind)) return;
+        if (!aliveDamage(kind, 1)) return;
         for (const t of this.list) {
             if (t.isDead) continue;
             const q = t.model.position;

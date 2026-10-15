@@ -52,7 +52,7 @@ export const CIRCLE_TARGETS = {
     spider: 'гигантский паук: урон по зоне; слишком тяжёлый, чтобы улететь',
     dragons: 'урон по зоне (как взрыв); великан только качается',
     phoenixes: 'урон по зоне (свет и удар — не огонь), отбрасывает',
-    livingTrees: 'ожившее дерево отбрасывает, но не ранит: его убивает только огонь, а волна — земля и свет',
+    livingTrees: 'ожившее дерево: урон по зоне и отбрасывает — такое мощное заклинание ломает и живое дерево (не только огонь)',
     bookBirds: 'книги-птицы сбивает на землю',
     rays: 'лучи света: 3–5 случайных существ или игроков в круге, −10 каждому (Максима 5–8 по −15)',
     ground: 'земля рушится и вздымается кольцами вслед за шаром (как землетрясение), дома и замки обрушаются',
@@ -233,7 +233,7 @@ export class CircleAttack {
             if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
             dir.normalize();
             const dmg = circleDamage(dist, f);
-            hitBody(g, kind, c, q, dmg, dir, f.name, d.by, null);
+            hitBody(g, kind, c, q, dmg, dir, f.name, d.by, f.name);
             const th = circleThrow(dist, f);
             throwBody(g, kind, c, dir.clone().multiplyScalar(th.speed), th.toss, f.name, d.by, p);
         });

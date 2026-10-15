@@ -52,7 +52,7 @@ export const INSPIRIUS_TARGETS = {
     spider: 'гигантский паук: −100 / −50 / −25; слишком тяжёлый, чтобы улететь',
     dragons: 'дракон: −100 / −50 / −25 (это не огонь, а сама магия); только качается',
     phoenixes: 'феникс: −100 / −50 / −25 (не огонь), отбрасывает',
-    livingTrees: 'ожившее дерево: взрыв — это пламя, а живые деревья убивает только огонь — −100 / −50 / −25',
+    livingTrees: 'ожившее дерево: −100 / −50 / −25 — такая сила ломает и живое дерево (не только огонь)',
     bookBirds: 'книги-птицы сбивает на землю',
     ground: 'огромная яма (глубже к середине), всё построенное до 45 м рушится кольцами вслед за ударной волной, пещеры под ним обваливаются',
     houseSphere: 'сферу «Protection House» ломает сразу (сильнее «Total Destruction»)',
@@ -365,7 +365,7 @@ export class Inspirius {
                 const dir = new THREE.Vector3(q.x - p.x, 0, q.z - p.z);
                 if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
                 dir.normalize();
-                hitBody(g, kind, c, q, inspiriusDamage(dist), dir, INSP.NAME, b.by, 'fire');
+                hitBody(g, kind, c, q, inspiriusDamage(dist), dir, INSP.NAME, b.by, INSP.NAME);
                 const th = inspiriusThrow(dist);
                 throwBody(g, kind, c, dir.clone().multiplyScalar(th.speed), th.toss, INSP.NAME, b.by, p);
             });

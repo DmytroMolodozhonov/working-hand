@@ -21,7 +21,9 @@ test('«Alive»: 25 mana, 15 HP; only fire hurts the tree; its life drains the m
     assert.equal(ALIVE.DRAIN, 0.5);
     assert.equal(ALIVE.RANGE, 50);
     for (const k of ['Inferno', 'FireMaxima', 'campfire', 'burn']) assert.equal(aliveDamage(k, 3), 3, k);
-    for (const k of ['AvadaKedavra', 'melee', 'Bombardo', 'Lightning', 'Sapira', 'SapiraDuel', 'Stupefy', 'tree', null]) assert.equal(aliveDamage(k, 999), 0, String(k));
+    for (const k of ['AvadaKedavra', 'melee', 'Bombardo', 'Sapira', 'SapiraDuel', 'Stupefy', 'tree', null]) assert.equal(aliveDamage(k, 999), 0, String(k));
+    // (the author: lightning and the mightiest spells — 80+ mana — break a living tree too)
+    for (const k of ['Lightning', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius']) assert.equal(aliveDamage(k, 7), 7, k);
     assert.equal(aliveDrain(10, 2), 9);
     assert.equal(aliveDrain(0.2, 1), 0);
     assert.equal(aliveDrain(10, 2, true), 10, 'Creative: no limit');

@@ -304,6 +304,7 @@ export class TotalDestruction {
         g.dragons?.hitAt(at, R, 12 * P, 'TotalDestruction', by);
         g.phoenixes?.hitAt(at, R, 10 * P, d.name, by);
         g.castleLife?.hitAt(at, R, 8 * P, by);
+        g.livingTrees?.hitAt(at, R, 8 * P, d.name); // (the mightiest spells break a living tree too, not only fire)
         g.ships?.blast?.(at, R, P, by);
         g.ships?.crew?.hitAt(at, R, 8 * P, by);
         g.creatureImpact?.spellArea(d.name, by, (c) => {
