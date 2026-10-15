@@ -172,6 +172,8 @@ class CtcNet:
         o = ort.SessionOptions()
         o.intra_op_num_threads = threads
         o.inter_op_num_threads = 1
+        # (its threads sleep between the looks instead of spinning: the game's frames get those cores)
+        o.add_session_config_entry("session.intra_op.allow_spinning", "0")
         self.sess = ort.InferenceSession(os.path.join(folder, "model.int8.onnx"), o, providers=["CPUExecutionProvider"])
         # the network's own front end (torchaudio MelSpectrogram: n_fft 320, hop 160, 64 HTK mels, no norm)
         self.win = (0.5 - 0.5 * np.cos(2 * np.pi * np.arange(320) / 320)).astype(np.float32)
@@ -191,7 +193,9 @@ class CtcNet:
         n = 1 + (len(audio) - 320) // 160
         idx = np.arange(320)[None, :] + 160 * np.arange(n)[:, None]
         spec = np.abs(np.fft.rfft(audio[idx] * self.win, n=320)) ** 2
-        feats = np.log(np.clip(spec @ self.fb, 1e-9, 1e9)).astype(np.float32)
+        # (einsum, not «@»: numpy's maths library would wake a thread on every core of the computer for
+        # this small sum, and they spin on after it — the game's frames wait for them)
+        feats = np.log(np.clip(np.einsum("tf,fm->tm", spec, self.fb, optimize=False), 1e-9, 1e9)).astype(np.float32)
         out = self.sess.run(None, {"features": feats.T[None], "feature_lengths": np.array([n], dtype=np.int64)})[0][0]
         return out  # (T, 34)
 

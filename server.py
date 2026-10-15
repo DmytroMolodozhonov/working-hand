@@ -39,6 +39,10 @@ import threading
 import webbrowser
 from urllib.parse import parse_qs, urlparse
 
+# (numpy's maths library starts a thread on every core for any sum of some size, and they spin on
+# after it: the browser's frames wait for those cores. The voice and the camera need one each.)
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 os.chdir(ROOT)
 

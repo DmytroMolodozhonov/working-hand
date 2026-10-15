@@ -74,6 +74,27 @@ export class NativeVoice {
         this.segs = new Map();
         this.errors = 0;
         this.mic = ''; // the microphone chosen in the settings ('' — the system's default)
+        this.off = null; // the voice program's clock (ms) → the page's (performance.now()): + off
+    }
+
+    /**
+     * The two clocks: a message comes a little after the sound it tells of, never before — so the
+     * smallest «page time − its time» seen is the difference (let up slowly: the clocks drift a little;
+     * at once when the voice program started again and its clock with it).
+     */
+    _clock(t) {
+        if (!Number.isFinite(t)) return;
+        const off = performance.now() - t;
+        this.off = this.off == null || off - this.off > 5000 ? off : Math.min(this.off + 0.5, off);
+    }
+
+    /** When (page time, ms) the heard spell — or else the whole phrase — was said. */
+    _when(d, h) {
+        if (this.off == null || !Number.isFinite(d.t0)) return {};
+        const a = h.spell ? d.t0 + h.spell.a * 40 : d.t0;
+        const b = h.spell ? d.t0 + (h.spell.b + 1) * 40 : d.t1;
+        // (the program's clock tells when a sound was heard; its messages come ~0.1 s later still)
+        return { from: a + this.off - 200, to: b + this.off };
     }
 
     /** The microphones voice_native.py can listen to → {devices: [{key, name, default}], current, wanted, fallback} */
@@ -139,12 +160,13 @@ export class NativeVoice {
 
     _event(d) {
         if (d.type === 'status') { this.status = { ...(this.status || {}), ...d }; if (d.state === 'error') { this.stop(); this.onFail?.(); } return; }
-        if (d.type === 'lv') { this.onLevel?.(d); return; }
+        if (d.type === 'lv') { this._clock(d.t); this.onLevel?.(d); return; }
         if (d.type !== 'seg') return;
+        this._clock(d.t1);
         const r = lookAt(d, this.segs.get(d.id));
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
-        const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written };
+        const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, ...this._when(d, r.heard) };
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
         if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure });
     }

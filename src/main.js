@@ -18,6 +18,7 @@ import { renderSpellsTab, renderItemsTab, renderMechanicsTab } from './ui/Codex.
 import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
+import { gameSaid } from './audio/GameVoices.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
@@ -463,6 +464,18 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         // (the same with a ship's sailor near me)
         if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
             return;
+        }
+        // A spell's words in what the game itself said aloud just then — a merchant's «…на костре», a
+        // guard's «огонь!», a wizard's «Бомбардо!» from the speakers: their voice, not mine. The game knows
+        // its own lines and when they sounded (GameVoices.js) — whatever the microphone and the setup.
+        const spoken = matchSpell(command);
+        if (spoken) {
+            const now = performance.now();
+            if (gameSaid(spoken, meta?.from ?? now - 2500, meta?.to ?? now)) {
+                hud.setVoice(`🔇 «${escapeHtml(lastWords(command))}» — это сказал житель из колонок, а не вы`);
+                if (isFinal) netLog(`заклинание «${command}» не моё: его слова только что сказал голос игры`);
+                return;
+            }
         }
         // The native voice with the speakers' sound taken out of the microphone (voice_native.py): a
         // friend's voice from Discord / the speakers never got here at all, and a spell heard in the

@@ -26,6 +26,9 @@
 import { NeuralVoice } from './NeuralVoice.js';
 import { castNeural, isFemale, pickSystemVoice, systemVoiceParams } from './VoiceCast.js';
 import { speakable } from './ruText.js';
+import { aired } from './GameVoices.js';
+
+const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 /** A gain that brings a sentence to the same loudness as the others (RMS ≈ −20 dBFS, peaks kept under 1). */
 export function loudness(pcm) {
@@ -279,7 +282,11 @@ export class Speech {
             if (ctx.state === 'suspended') ctx.resume?.()?.catch?.(() => {});
             const now = ctx.currentTime || 0;
             const at = Math.max(now, nextAt);
-            nextAt = at + pcm.length / sampleRate / cast.pitch + (/[,;:—–]$/.test(piece) ? 0.06 : pause);
+            const dur = pcm.length / sampleRate / cast.pitch;
+            nextAt = at + dur + (/[,;:—–]$/.test(piece) ? 0.06 : pause);
+            // (when it sounds — the microphone hears it too: its spell words are not mine, GameVoices.js)
+            const from = clock() + (at - now + (ctx.outputLatency || ctx.baseLatency || 0)) * 1000;
+            aired(piece, from, from + dur * 1000);
             entry.sources.push(src);
             entry.started = true;
             playing++;
@@ -334,8 +341,11 @@ export class Speech {
         u.volume = opts.volume;
         const entry = { voiceKey: opts.voiceKey, opts, stop: null };
         this._remember({ engine: 'system', voice: voice.name, female: opts.female, pitch, speed: rate, text });
-        u.onend = () => this._finish(entry, true);
-        u.onerror = () => this._finish(entry, false);
+        // (when it sounds, as best the browser tells: its spell words are not mine, GameVoices.js)
+        const said = aired(text, clock(), clock() + 600 + text.length * 90 / Math.max(0.5, rate));
+        u.onstart = () => { const d = said.to - said.from; said.from = clock(); said.to = said.from + d; };
+        u.onend = () => { said.to = clock(); this._finish(entry, true); };
+        u.onerror = () => { said.to = clock(); this._finish(entry, false); };
         this._current = entry;
         try {
             if (this.synth.paused) this.synth.resume(); // Chrome sometimes gets stuck paused
