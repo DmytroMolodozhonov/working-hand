@@ -44,7 +44,7 @@ export class LegReader {
 
     /**
      * @param {Array} lm pose landmarks (33)
-     * @returns {{seen: boolean, hipsOnly: boolean, left: object, right: object}} each leg: {up, heel, planted, below, raise, lift (torso lengths up from the standing knee), lifts, plants, strokes, liftAt}
+     * @returns {{seen: boolean, hipsOnly: boolean, left: object, right: object}} each leg: {up, heel, planted, below, raise, lifts, plants, strokes, liftAt}
      */
     read(lm, now = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
         if (lm && lm !== this._last && lm[23] && lm[11]) {
@@ -79,7 +79,7 @@ export class LegReader {
         }
         const out = (S) => {
             const base = Math.max(LEGS.DOWN + 0.05, S.base ?? 0.5);
-            return { up: S.up || S.heel, heel: S.heel, planted: !(S.up || S.heel) && S.below > LEGS.DOWN, below: S.below, raise: Math.max(0, Math.min(1, (base - S.below) / LEGS.LIFT)), lift: base - S.below, lifts: S.lifts, plants: S.plants, strokes: S.strokes, liftAt: S.liftAt };
+            return { up: S.up || S.heel, heel: S.heel, planted: !(S.up || S.heel) && S.below > LEGS.DOWN, below: S.below, raise: Math.max(0, Math.min(1, (base - S.below) / LEGS.LIFT)), lifts: S.lifts, plants: S.plants, strokes: S.strokes, liftAt: S.liftAt };
         };
         return { seen: now - this.seenAt < LEGS.SEEN_MS, hipsOnly: this.hipsOnly, left: out(this.L.left), right: out(this.L.right) };
     }
