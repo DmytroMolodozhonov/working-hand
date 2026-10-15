@@ -79,16 +79,18 @@ export function* iceCastleMagicSteps(S) {
     const HR = ICE_MAGIC.HALL_R, FR = ICE_MAGIC.FLOOR_R, W1 = F + ICE_MAGIC.WALL_H;
     const ang = (u, v) => Math.atan2(u, v); // (0: the gates, ±π: the throne)
 
-    // ---- the snowflake floor: ice, its six arms of glowing ice with their branches, a glowing rim
+    // ---- the snowflake floor: pale ice, its six arms of deep blue ice with their branches (seen from
+    // high above as a snowflake), a deep blue rim, a glowing heart where the foot came down
     cyl(0, 0, FR, -1, F, F, FLOOR);
-    cyl(0, 0, FR, FR - 0.8, F, F, GLOW);
-    cyl(0, 0, 1.6, -1, F, F, GLOW);
+    cyl(0, 0, FR, FR - 0.8, F, F, DARK);
+    cyl(0, 0, 2.2, -1, F, F, DARK);
+    cyl(0, 0, 1.2, -1, F, F, GLOW);
     for (let k = 0; k < 6; k++) {
         const a = (k / 6) * TAU, su = Math.sin(a), cv = Math.cos(a);
-        for (let d = 2; d <= FR - 2; d += 0.5) { const p = [Math.round(su * d), Math.round(cv * d)]; box(p[0], p[0], p[1], p[1], F, F, GLOW); }
+        for (let d = 2; d <= FR - 2; d += 0.5) { const p = [Math.round(su * d), Math.round(cv * d)]; box(p[0], p[0], p[1], p[1], F, F, DARK); }
         for (const [d, len] of [[5, 2.5], [8.5, 3.2], [11.5, 2.2]]) for (const s of [-1, 1]) {
             const b = a + s * 0.75;
-            for (let e = 0.5; e <= len; e += 0.5) { const u = Math.round(su * d + Math.sin(b) * e), v = Math.round(cv * d + Math.cos(b) * e); box(u, u, v, v, F, F, GLOW); }
+            for (let e = 0.5; e <= len; e += 0.5) { const u = Math.round(su * d + Math.sin(b) * e), v = Math.round(cv * d + Math.cos(b) * e); box(u, u, v, v, F, F, e > len - 0.6 ? GLOW : DARK); }
         }
     }
     yield;

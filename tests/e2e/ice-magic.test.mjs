@@ -71,7 +71,7 @@ test('ice castle and ice bridge: a stamp, the floor, the hands up, the castle; a
 
     // 1. the snowflake floor spread from the foot
     await run(2.8, 0.1);
-    await view([x - 9, G + 22, z - 26], [x, G, z + 2]);
+    await view([x - 6, G + 30, z - 20], [x, G, z + 1]);
     await frames(25);
     await page.screenshot({ path: path.join(dir, '01-ice-floor-snowflake.png') });
     // 2. half risen, after the hands
@@ -94,27 +94,42 @@ test('ice castle and ice bridge: a stamp, the floor, the hands up, the castle; a
     await frames(40);
     await page.screenshot({ path: path.join(dir, '04-throne-hall.png') });
 
-    // 5. the bridge: from beside the castle, 34 m away
+    // 5. the bridge: from in front of the gates, 34 m the way the land is lowest (over a dip if there is one)
     const br = await page.evaluate(({ x, z }) => {
         const g = window.__zns.game, M = g.iceMagic;
-        const bx = x - 8, bz = z + 22; // (in front of the gates, out of the floor)
+        const bx = x, bz = z + 22; // (in front of the gates, out of the floor)
+        let best = null;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0.7, 0.7], [-0.7, 0.7]]) {
+            let hi = -1e9;
+            for (let k = 2; k <= 34; k += 2) hi = Math.max(hi, g.collision.groundY(bx + dx * k, bz + dz * k));
+            if (!best || hi < best.hi) best = { dx, dz, hi };
+        }
         g.character.group.position.set(bx, g.collision.groundY(bx, bz) + 3.6, bz);
         const edits = []; // (snow beside the start)
-        for (let sx = -2; sx <= 2; sx++) for (let sz = 3; sz <= 6; sz++) { const L = M._surface(bx + sx, bz + sz).L; g.world.terrain.data.set(bx + sx, L, bz + sz, 4); edits.push([bx + sx, L, bz + sz, 4]); }
+        for (let sx = -2; sx <= 2; sx++) for (let sz = 3; sz <= 6; sz++) { const L = M._surface(bx - sx, bz - sz).L; g.world.terrain.data.set(bx - sx, L, bz - sz, 4); edits.push([bx - sx, L, bz - sz, 4]); }
         g.builder?._sendEdits?.(edits);
         M._lastCast = 0;
-        M.testAim = { x: bx + 34, z: bz };
+        M.testAim = { x: bx + best.dx * 34, z: bz + best.dz * 34 };
         const r = M.cast('IceBridge');
         for (let t = 0; t < 8 && M.magic; t += 0.05) M.update(0.05);
-        return { r, on: !!M.magic, said: g.hud?._lastVoice, bx, bz, y: g.collision.groundY(bx, bz) };
+        const mx = bx + best.dx * 17, mz = bz + best.dz * 17;
+        // (the camera high over it, a little to its side: nothing in the way)
+        const side = best.dz === 0 ? -1 : 1;
+        const cx = mx + side * best.dz * 16, cz = mz - side * best.dx * 16;
+        g.world.terrain.flushAround?.(mx, mz);
+        return { r, on: !!M.magic, said: g.hud?._lastVoice, mx, mz, cx, cz, y: g.collision.groundY(bx, bz), cy: Math.max(g.collision.groundY(cx, cz), best.hi) + 28 };
     }, site);
     assert.equal(br.r, 'IceBridge', JSON.stringify(br));
     assert.equal(br.on, false, 'the bridge is done');
-    await view([br.bx + 17, br.y + 9, br.bz + 28], [br.bx + 17, br.y + 4, br.bz]);
+    await view([br.cx, br.cy, br.cz], [br.mx, br.y + 3, br.mz]);
     await frames(30);
-    await page.screenshot({ path: path.join(dir, '05-ice-bridge.png') });
-    // (and one can walk onto it: the ground in its middle is the deck, over the land)
-    const mid = await page.evaluate(({ bx, bz, y }) => window.__zns.game.collision.groundY(bx + 17, bz) - y, br);
-    assert.ok(mid > 2, `the deck in the middle is high: ${mid}`);
+    await page.screenshot({ path: path.join(dir, '05-ice-bridge-test.png') }); // (the world differs each run: 05-ice-bridge.png is a chosen picture)
+    // (and one walks on it: the ground in its middle is its deck)
+    const mid = await page.evaluate(() => {
+        const g = window.__zns.game, M = g.iceMagic, rec = [...M.list.values()].find((r) => r.k === 'bridge');
+        const c = M.plan(rec).cells.filter((c) => c[3] === 61 && Math.abs(c[4] - 0.5) < 0.03)[0];
+        return { deck: c[1] - 0.5, ground: g.collision.groundY(c[0], c[2]) };
+    });
+    assert.ok(Math.abs(mid.ground - mid.deck) < 0.3, `the deck is walked on: ${JSON.stringify(mid)}`);
     assert.deepEqual(realErrors(errors), []);
 });
