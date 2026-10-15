@@ -11,7 +11,7 @@
  */
 
 import { isExpelliarmus } from '../game/Expelliarmus.js';
-import { alohomoraWords } from '../game/Alohomora.js';
+import { alohomoraWords, isLockWord } from '../game/Alohomora.js';
 import * as THREE from 'three';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 import { thunderPush } from '../game/Impact.js';
@@ -67,6 +67,8 @@ export function matchSpell(text) {
     // «Алохомора» («…Максима»): whole words round «хомор» / «хамор» — before «Максима» alone, «мах»…
     const alo = alohomoraWords(s);
     if (alo) return alo === 2 ? 'AlohomoraMaxima' : 'Alohomora';
+    // «Lock» («Лок», «Lock door»): a short word — only the whole phrase (before «door» → «Create a Door»)
+    if (isLockWord(s)) return 'Lock';
     // «Up» («Ап»): a short word — only the whole phrase (UpSpell.js)
     if (isUpWord(s)) return 'Up';
     // «Джолт» («…Максима»): a short word — only as a word of its own (never inside another word)

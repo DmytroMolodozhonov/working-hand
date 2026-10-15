@@ -118,7 +118,7 @@ export class HeadJolt {
  * wet: water (a soft landing, never hurts).
  */
 export const SPELL_PHYSICS = {
-    Lumos: null, LumosMaxima: null, Nox: null, Draw: null, Reveal: null, Accio: null, Alohomora: null, AlohomoraMaxima: null, /* (a lock opens: nobody is pushed — Alohomora.js TARGETS) */ ChangeColor: null, CreateBed: null,
+    Lumos: null, LumosMaxima: null, Nox: null, Draw: null, Reveal: null, Accio: null, Alohomora: null, AlohomoraMaxima: null, Lock: null, /* (a lock opens / Lock shuts a door: nobody is pushed — Alohomora.js TARGETS) */ ChangeColor: null, CreateBed: null,
     Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, CreateBoard: null, Stand: null,
     Brainrot: null, ToTheSun: null, LetItRain: null, Storm: null, LightningCatch: null, LightningHold: null, Rescue: null, Pause: null, Flight: null, Up: null,
     AirBubble: null, AirBubbleMaxima: null, Waterball: null, Maxima: null, WaterForming: null, Frozen: null,

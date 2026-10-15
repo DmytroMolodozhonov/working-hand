@@ -1166,6 +1166,7 @@ export class Game {
         }
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Alohomora' || name === 'AlohomoraMaxima') return this.locks.cast(name, isFinal); // (a lock the hand points at — Alohomora.js)
+        if (name === 'Lock') return this.locks.castLock(isFinal); // (the door the hand points at shuts and locks — Alohomora.js)
         if (name === 'Unfurl' || name === 'UnfurlMaxima' || name === 'Furl') return this.ships ? this.ships.castSails(name, text, isFinal) : null; // (a ship's sails)
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') return this._castWind(name, isFinal);

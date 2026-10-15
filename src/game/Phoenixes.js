@@ -122,6 +122,7 @@ export const TARGETS = {
     Stitching: { does: 'none', why: '«Stitching»: не касается' },
     Invisibility: { does: 'none', why: 'невидимого игрока не видит: не лечит и не нападает' },
     Alohomora: { does: 'none', why: 'живое существо без замков' },
+    Lock: { does: 'none', why: '«Lock» запирает только двери' },
     Accio: { does: 'none', why: 'живое существо не притянуть; его ПЕРО — обычная вещь, «Акцио» его притягивает' },
     Rescue: { does: 'none', why: '«Rescue»: у него нет ран, которые надо останавливать' },
     ProtectionHouse: { does: 'push', why: 'сфера защиты дома не пускает его внутрь (вытесняет), не ранит — он улетает' },

@@ -16,6 +16,13 @@
  * of a village lock their door — at night, or while nobody of the family is at home. By day
  * with the family in, the door is open to a visitor. A door a player built is never locked.
  *
+ * «Lock» (3 маны, no scroll, instant — no concentration): the opposite word. Point at a door and say
+ * «Lock»: an open leaf swings shut by itself (it stops on a body in its way and goes on when it is
+ * clear), the lock clicks with a little light. Till somebody says «Алохомора» at it, nobody opens it:
+ * not the hand (it only rattles), not the family of the house, the knights, the wizards, the animals,
+ * the other players — the people who come to it knock, wait and go another way. It is a plain lock, not a
+ * ward: a blast, a blade, fire break the door as any other (Wreck.js). LOCK_TARGETS below.
+ *
  * ON WHOM AND ON WHAT IT ACTS (CLAUDE.md «На кого и на что») — TARGETS below, in code:
  * multiplayer: whoever casts unlocks it on their computer and tells everybody ('lock', relayed);
  * the host also judges the witnesses; the unlocked locks, the gates' state and the doors the
@@ -64,6 +71,48 @@ export const TARGETS = {
     // ---- the world
     world: { plain: 'none', maxima: 'none', why: 'земля, вода, деревья, стены, корабли, оружие и вещи — не действует' },
 };
+
+/**
+ * Who and what «Lock» acts on (and why not). `does`: 'lock' — shut and locked; 'none' — not touched.
+ */
+export const LOCK_TARGETS = {
+    villagerDoor: { does: 'lock', why: 'дверь дома жителя: закрывается и запирается; хозяева тоже не войдут, пока не скажут «Алохомора»' },
+    wizardDoor: { does: 'lock', why: 'дверь дома волшебника, большая дверь академии — запирается так же' },
+    playerDoor: { does: 'lock', why: 'дверь, поставленная игроком («Create a Door»), — запирается так же' },
+    throneGate: { does: 'lock', why: 'ворота тронного зала: обе створки закрываются и запираются — и для своих рыцарей и слуг' },
+    castleDoor: { does: 'none', why: 'дверей внутри замка как предметов нет (проходы) — запирать нечего' },
+    shipHatch: { does: 'none', why: 'на кораблях дверей нет, только проёмы' },
+    chests: { does: 'none', why: 'сундуки — не двери: «Lock» их не трогает (запертые и так заперты)' },
+    players: { does: 'none', why: 'на игроков (меня и других по сети) не действует: запирает только двери' },
+    zombies: { does: 'none', why: 'на зомби не действует' },
+    castlePeople: { does: 'none', why: 'жители, рыцари, король, волшебники, торговцы, слуги — не действует; к запертой двери они стучат, ждут и идут другой дорогой' },
+    animals: { does: 'none', why: 'животные — не действует (двери они и так не открывают)' },
+    sailors: { does: 'none', why: 'моряки (ships.crew) — не действует' },
+    spider: { does: 'none', why: 'гигантский паук — не действует' },
+    dragon: { does: 'none', why: 'дракон — не действует' },
+    phoenix: { does: 'none', why: 'феникс — не действует' },
+    livingTrees: { does: 'none', why: 'ожившие деревья — не действует' },
+    bookBirds: { does: 'none', why: 'книги-птицы — не действует' },
+    world: { does: 'none', why: 'земля, вода, деревья, стены, корабли, оружие и вещи — не действует. Это не магическая защита: дверь ломается взрывом, оружием, огнём как обычная' },
+};
+
+/**
+ * «Lock» in what the recognizer heard: only the whole phrase («Lock», «Лок», «Lock door», «Лок дор»,
+ * «Lock the door») — never a word inside talk («блок», «локоть», «лок» in a sentence).
+ */
+const LOCK_W = new Set(['lock', 'locke', 'lok', 'loc', 'locks', 'лок', 'локк', 'лока', 'лак']);
+const LOCK_ART = new Set(['the', 'a', 'зе', 'за', 'зэ', 'дзе', 'э', 'ze', 'де']);
+const LOCK_DOOR = new Set(['door', 'dor', 'doors', 'дор', 'доор', 'дорь', 'двер', 'дверь', 'дверку', 'дверь']);
+export function isLockWord(text) {
+    const w = String(text || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/).filter(Boolean);
+    if (!w.length || w.length > 4 || !LOCK_W.has(w[0])) return false;
+    if (w[0] === 'лак' && w.length === 1) return false; // («лак» alone: varnish — only «лак дор»)
+    let i = 1;
+    while (i < w.length && LOCK_W.has(w[i])) i++; // («лок лок»)
+    if (i < w.length && LOCK_ART.has(w[i])) i++;
+    if (i < w.length && LOCK_DOOR.has(w[i])) i++;
+    return i === w.length && (w[0] !== 'лак' || LOCK_DOOR.has(w[w.length - 1]));
+}
 
 /** The kind of a chest for TARGETS. */
 export function chestKind(c) {
@@ -122,6 +171,8 @@ export class Alohomora {
         this._lockT = 0;
         this._hintT = 0;
         this.lift = { left: null, right: null }; // the chest whose lid each hand lifts
+        this.spelled = new Set(); // door ids locked by «Lock» (till «Алохомора»)
+        this.closing = new Set(); // … of them, the leaves still swinging shut
     }
 
     get auth() { return this.game.authority; }
@@ -130,6 +181,7 @@ export class Alohomora {
     /** Is this door locked for me (the hand on its handle)? */
     doorLocked(d) {
         if (!d) return false;
+        if (this.spelled.has(d.id)) return true; // («Lock»: for everybody, the castle's owner too)
         if (d.gate) {
             const st = this.gates.get(d.castle) || {};
             if (st.unlocked || st.broken) return false;
@@ -158,6 +210,7 @@ export class Alohomora {
         const now = performance.now();
         if (now - this._hintT < 3500) return;
         this._hintT = now;
+        if (this.spelled.has(d.id)) { this.game.hud?.setVoice('🔒 Дверь заперта заклинанием «Lock» — откройте её «Алохоморой»', true); return; }
         this.game.hud?.setVoice(d.gate ? '🔒 Ворота тронного зала заперты. Простая «Алохомора» их не возьмёт — нужна «Алохомора Максима» (или взрыв)' : '🔒 Заперто — скажите «Алохомора», показав рукой на замок', true);
     }
 
@@ -172,6 +225,23 @@ export class Alohomora {
         const t = this._pick();
         if (!t) { if (isFinal) g.hud.setVoice('🗝️ Покажите рукой на замок (сундук, дверь, ворота) рядом — до 5 м — и скажите «Алохомора»', true); return null; }
         const kind = t.chest ? chestKind(t.chest) : doorKind(t.door);
+        // a door shut by «Lock»: any «Алохомора» takes that lock off (the door's own lock, if it has one, too — the plain word permitting)
+        const spelled = t.door && this._leaves(t.door).filter((d) => this.spelled.has(d.id));
+        if (spelled?.length) {
+            const tired = g.combat.check(name);
+            if (tired) { g.hud.setVoice(tired, true); return null; }
+            g.combat.pay(name);
+            g.mana?.success(name);
+            this._castAt = now;
+            this._interim = !isFinal;
+            const m = { k: 'unlock', ids: spelled.map((d) => d.id), by: g.localId };
+            for (const id of m.ids) this.spelled.delete(id); // (decide below on the door's own lock)
+            const own = TARGETS[kind]?.[maxima ? 'maxima' : 'plain'] === 'unlock' && this._isLocked(t);
+            if (own) m.own = t.door.gate ? { k: 'gate', id: t.door.castle } : { k: 'door', id: t.door.id };
+            this.apply(m, true);
+            g.sync?.net?.send({ t: 'lock', ...m }, true);
+            return name;
+        }
         const rule = TARGETS[kind]?.[maxima ? 'maxima' : 'plain'];
         if (rule === 'refuse') { if (isFinal) g.hud.setVoice('🔒 Слишком сильный замок — нужна «Алохомора Максима»', true); return null; }
         if (rule !== 'unlock' || !this._isLocked(t)) {
@@ -190,13 +260,88 @@ export class Alohomora {
         return name;
     }
 
+    /** Both leaves of the gates (one door otherwise). */
+    _leaves(d) {
+        if (!d.gate) return [d];
+        const ids = this.gateRecs.get(d.castle)?.ids || [d.id];
+        return ids.map((id) => this.game.doors?.list.get(id)).filter(Boolean);
+    }
+
+    // ---------------------------------------------------------------- «Lock»
+    /** «Lock» (Game.handleVoice): the door the hand points at shuts and locks. Instant (no concentration). */
+    castLock(isFinal) {
+        const g = this.game;
+        if (!isFinal) return null; // (a short word: the whole phrase only)
+        const now = performance.now();
+        if (now - (this._lockAt || -1e9) < 900) return null;
+        const t = this._pick(true);
+        if (!t) { g.hud.setVoice('🔒 Покажите рукой (палочкой) на дверь рядом — до 5 м — и скажите «Lock»', true); return null; }
+        const leaves = this._leaves(t.door).filter((d) => !d.lifted);
+        if (!leaves.length) return null;
+        if (leaves.every((d) => this.spelled.has(d.id))) { g.hud.setVoice('🔒 Эта дверь уже заперта', true); return null; }
+        const tired = g.combat.check('Lock');
+        if (tired) { g.hud.setVoice(tired, true); return null; }
+        g.combat.pay('Lock');
+        g.mana?.success('Lock');
+        this._lockAt = now;
+        const m = { k: 'shut', ids: leaves.map((d) => d.id), by: g.localId };
+        this.apply(m, true);
+        g.sync?.net?.send({ t: 'lock', ...m }, true);
+        return 'Lock';
+    }
+
+    /** A door shut by «Lock» standing closed in the way at (x, z) (feet at y): nobody walks through it. */
+    blocksAt(x, z, y, pad = 0.35) {
+        if (!this.spelled.size) return false;
+        const D = this.game.doors;
+        for (const id of this.spelled) {
+            const d = D?.list.get(id);
+            if (!d || d.lifted || d.a >= 0.35) continue;
+            if (y != null && (y < d.y - 1.5 || y > d.y + (d.h || 3.6))) continue;
+            const w = (d.w || 1.6) / 2 + pad;
+            const c = Math.cos(d.ry), s = Math.sin(d.ry), dx = x - d.x, dz = z - d.z;
+            const along = dx * c - dz * s, across = dx * s + dz * c; // (the leaf's own axes: along it / through it)
+            if (Math.abs(along) < w && Math.abs(across) < 0.1 + pad) return true;
+        }
+        return false;
+    }
+
+    /** Is this door shut by «Lock» (the people of the house don't open it)? */
+    spellLocked(id) { return this.spelled.has(id); }
+
+    /** The leaves still swinging shut after «Lock»: on, round their hinges, stopping on a body in the way. */
+    _closeLeaves(dt) {
+        const D = this.game.doors;
+        for (const id of [...this.closing]) {
+            const d = D?.list.get(id);
+            if (!d || !this.spelled.has(id) || d.lifted) { this.closing.delete(id); continue; }
+            if (d.holdSide) continue; // (a hand on the handle: the leaf waits for it to let go)
+            let a = Math.max(0, d.a - dt * 1.6);
+            const stop = D._bodyInSwing ? D._bodyInSwing(d, d.a, a) : null;
+            if (stop != null) a = Math.max(a, Math.min(d.a, stop)); // (somebody in the doorway: it waits)
+            D._setAngle(d, a);
+            if (a <= 0) {
+                this.closing.delete(id);
+                this._clicked(d);
+            }
+        }
+    }
+
+    /** The lock clicks shut: a sound, a little light at the handle. */
+    _clicked(d) {
+        const g = this.game;
+        g.sound?.playClang?.(0.22);
+        this._flash(d.model?.userData?.knob?.getWorldPosition(new THREE.Vector3()), false, 0xb8d8ff);
+        if (g.authority) g.sync?.doorAngle?.(d.id, 0);
+    }
+
     _isLocked(t) {
         if (t.chest) return t.chest.locked && !t.chest.picked && !t.chest.isOpen;
         return this.doorLocked(t.door);
     }
 
     /** The lock the hand (or the wand) points at: chests, doors, gates within reach. */
-    _pick() {
+    _pick(doorsOnly = false) {
         const g = this.game, ch = g.character;
         const sides = [g.wandSide?.(), 'right', 'left'].filter((s, i, a) => s && a.indexOf(s) === i);
         let best = null;
@@ -212,7 +357,7 @@ export class Alohomora {
                 const score = ang * 4 + d * 0.1;
                 if (!best || score < best.score) best = { ...target, score, side };
             };
-            for (const c of g.chests || []) {
+            for (const c of doorsOnly ? [] : g.chests || []) {
                 if (c.isOpen) continue;
                 const p = c.getPosition();
                 if (Math.abs(p.x - hand.x) + Math.abs(p.z - hand.z) > 10) continue;
@@ -250,6 +395,33 @@ export class Alohomora {
             const d0 = rec && g.doors?.list.get(rec.ids[0]);
             if (d0) this._flash(_v.set(rec.def.throneGate.x, d0.y + 3.2, rec.def.throneGate.z), true);
             if (this.auth && m.by) this._witnessGate(m.id, m.by);
+        } else if (m.k === 'shut') {
+            // «Lock»: shut (swinging) and locked
+            for (const id of m.ids || []) {
+                this.spelled.add(id);
+                this.picked.delete(id); // (an earlier «Алохомора» of its own lock is spent: the door is shut)
+                const d = g.doors?.list.get(id);
+                if (!d) continue;
+                d.spin = 0;
+                if (d.a > 0) this.closing.add(id);
+                else this._clicked(d);
+            }
+            if (mine) g.hud?.setVoice('🔒 Дверь закрывается и запирается. Откроет её только «Алохомора»', true);
+            return;
+        } else if (m.k === 'unlock') {
+            // «Алохомора» at a door shut by «Lock» (and, maybe, its own lock too)
+            for (const id of m.ids || []) { this.spelled.delete(id); this.closing.delete(id); }
+            if (m.own) { this.apply({ ...m.own, by: m.by }, mine); return; }
+            for (const id of m.ids || []) {
+                const d = g.doors?.list.get(id);
+                if (!d) continue;
+                if (!this.doorLocked(d) && d.a < 0.2) g.doors._setAngle(d, 0.2);
+                this._flash(d.model.userData.knob.getWorldPosition(new THREE.Vector3()));
+            }
+            const d0 = g.doors?.list.get(m.ids?.[0]);
+            if (mine) g.hud?.setVoice(d0 && this.doorLocked(d0) ? '🗝️ «Lock» снят, но у двери свой крепкий замок' : '🗝️ Щёлк! Дверь отперта и приоткрылась — возьмитесь за ручку', true);
+            g.sound?.playClang?.(0.2);
+            return;
         } else if (m.k === 'lift') {
             // (host) a guest's hand lifted the lid of an unlocked chest
             const c = g.chests?.find((x) => x.id === m.id);
@@ -260,10 +432,10 @@ export class Alohomora {
         g.sound?.playClang?.(0.2);
     }
 
-    _flash(p, big = false) {
+    _flash(p, big = false, color = 0xffe9a8) {
         const fx = this.game.fx;
         if (!fx?.spark || !p) return;
-        for (let i = 0; i < (big ? 26 : 14); i++) fx.spark(p, i % 3 ? 0xffe9a8 : 0xffffff, 0.05 + Math.random() * 0.05, _v2.set((Math.random() - 0.5) * 1.6, Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 0.6);
+        for (let i = 0; i < (big ? 26 : 14); i++) fx.spark(p, i % 3 ? color : 0xffffff, 0.05 + Math.random() * 0.05, _v2.set((Math.random() - 0.5) * 1.6, Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 0.6);
     }
 
     _gate(id) {
@@ -326,6 +498,7 @@ export class Alohomora {
         const g = this.game;
         if ((this._scanT -= dt) <= 0) { this._scanT = 0.5; this._scanGates(); }
         this._gatesPass(dt);
+        if (this.closing.size) this._closeLeaves(dt);
         if (this.auth && (this._lockT -= dt) <= 0) { this._lockT = 1; this._houseLocks(); }
         this._chestHands(dt);
     }
@@ -386,7 +559,7 @@ export class Alohomora {
         for (const [id, rec] of this.gateRecs) {
             const G = rec.def.throneGate;
             const leaves = rec.ids.map((x) => D.list.get(x)).filter(Boolean);
-            if (!leaves.length || leaves.some((d) => d.holdSide)) continue;
+            if (!leaves.length || leaves.some((d) => d.holdSide || this.spelled.has(d.id))) continue; // («Lock»: shut for its own people too)
             const R = G.w / 2 + 3;
             let someone = false;
             for (const v of people) if (!v.dead && v.cs?.def?.id === id && Math.abs(v.x - G.x) < R && Math.abs(v.z - G.z) < R && Math.abs(v.y - G.y) < 4) { someone = true; break; }
@@ -458,7 +631,7 @@ export class Alohomora {
     restoreChest(c) { if (this.chests.has(c.id) && !c.isOpen) c.setAjar(); }
 
     snapshot() {
-        return { c: [...this.chests], d: [...this.picked], g: [...this.gates], l: [...this.doorLocks].filter(([, v]) => v).map(([k]) => k) };
+        return { c: [...this.chests], d: [...this.picked], g: [...this.gates], l: [...this.doorLocks].filter(([, v]) => v).map(([k]) => k), s: [...this.spelled] };
     }
 
     restore(s) {
@@ -470,6 +643,7 @@ export class Alohomora {
             if (st.broken && this.gateRecs.has(id)) for (const did of this.gateRecs.get(id).ids) this.game.doors?.remove(did);
         }
         for (const id of s.l || []) this.doorLocks.set(id, true);
+        for (const id of s.s || []) { this.spelled.add(id); const d = this.game.doors?.list.get(id); if (d && d.a > 0) this.closing.add(id); }
     }
 
     /** A message from the others: {t: 'lock', k, id, by} / {t: 'dlk', id, l}. */

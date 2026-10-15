@@ -96,6 +96,7 @@ export class Wreck {
     _breakDoor(d) {
         const g = this.game;
         g.doors.remove(d.id);
+        g.locks?.spelled?.delete(d.id); // (a door shut by «Lock» breaks as any other: it's a lock, not a ward)
         if (d.gen) d.wrecked = true;
         const col = d.color ?? 0x7a4f2a;
         const debris = [];

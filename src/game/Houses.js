@@ -358,6 +358,7 @@ export class Houses {
         for (const rec of this.active.values()) {
             const d = rec.doorId && D.list.get(rec.doorId);
             if (!d || d.holdSide || d.lifted) continue;
+            if (g.locks?.spellLocked?.(d.id)) { rec.auto = false; continue; } // («Lock»: their key doesn't open it — only «Алохомора»)
             let someone = false;
             for (const v of people) if (!v.dead && Math.abs(v.x - d.x) < 3.6 && Math.abs(v.z - d.z) < 3.6) { someone = true; break; }
             if (someone) {

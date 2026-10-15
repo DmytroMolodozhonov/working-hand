@@ -558,10 +558,28 @@ export class CastleLife {
                 if (this._walkable(v.x + a.x * (s + BODY_R), v.z + a.z * (s + BODY_R), v.y)) { ux = a.x; uz = a.z; }
             }
         }
+        // a door shut by «Lock» on the way: knock, wait a little — then go some other way (never through it)
+        if (this.game.locks?.spelled?.size && this.game.locks.blocksAt(v.x + ux * (s + BODY_R), v.z + uz * (s + BODY_R), v.y)) return this._lockedOut(v, dt);
+        v.knockT = 0;
         v.x += ux * s; v.z += uz * s;
         v.yaw = turn(v.yaw, Math.atan2(-ux, -uz), dt * 8);
         v.speed = speed;
         return false;
+    }
+
+    /** At a door shut by «Lock»: stand and knock now and then; after a while give the way up (true: the path is over). */
+    _lockedOut(v, dt) {
+        v.speed = 0;
+        const t0 = v.knockT || 0;
+        v.knockT = t0 + dt;
+        if (Math.floor(v.knockT / 1.6) !== Math.floor(t0 / 1.6)) {
+            const me = this.game.character?.group?.position;
+            if (me && Math.hypot(me.x - v.x, me.z - v.z) < 25) this.game.sound?.playHammer?.({ x: v.x, y: v.y + 1.4, z: v.z }, 0.35);
+        }
+        if (v.knockT < 6) return false;
+        v.knockT = 0;
+        v.path = null; // (they go elsewhere: their day picks a new place)
+        return true;
     }
 
     /** How wide one is (m): others keep this clear of it. */
@@ -681,6 +699,7 @@ export class CastleLife {
         if (f > L || f < L - 3) return false;
         if (this.game.carriages?.list.size && this.game.carriages.blocksAt(x, z, y)) return false; // (a cart on the road: round it)
         if (treeAt(this.game, x, z, 0.45)) return false; // (a tree that is a model — an apple tree: never through its trunk)
+        if (this.game.locks?.spelled?.size && this.game.locks.blocksAt(x, z, y)) return false; // (a door shut by «Lock»)
         return !t.solidIn(ix, iz, f + 1, f + 5);
     }
 

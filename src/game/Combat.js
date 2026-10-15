@@ -80,6 +80,7 @@ export const SPELL_COST = {
     LevitationMaxima: 50, // «Вингардиум Левиоса Максима»: 50 at once, then 2 a second while it holds (LevitationMaxima.js)
     Accio: 5,
     Alohomora: 5, // a lock opens (Alohomora.js)
+    Lock: 3, // an open door shuts and locks (Alohomora.js: Lock)
     AlohomoraMaxima: 25, // … a strong lock: the gates of a throne room
     Wind: 8,
     Brainrot: 15,
