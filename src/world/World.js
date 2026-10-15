@@ -219,10 +219,11 @@ export class VoxelWorld {
         SKY_LIGHT.comp.value = 1 / dim;
         const ind = this.indoor || 0;
         // indoors: the sun is outside, the rooms are lit (brighter at night than the dark outside)
-        const lamp = 1 + ind * (b.night > 0.5 ? 2.6 : 1.1);
+        // (by day the walls away from the sun as lit as the others: the light of the windows fills the rooms)
+        const lamp = 1 + ind * (b.night > 0.5 ? 2.6 : 1.6);
         this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp;
         this.dirLight.intensity = b.dir * (1 - 0.8 * k) * dim * (1 - 0.6 * ind);
-        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * (1 + ind * 0.8);
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * (1 + ind * 1.0);
         if (this.scene.fog) {
             this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);

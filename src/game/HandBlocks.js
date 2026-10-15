@@ -9,8 +9,9 @@
  * wall can't be taken through it. The hand's speed (a throw, a punch) stays the player's own.
  *
  * Soft things a hand goes into are not blocks for it: leaves, wheat, flowers, vegetable beds,
- * water. Static furniture boxes (tables, beds) stop it too; chests, doors and cauldrons have
- * their own hand work (a lid, a handle, a rim) and are not touched here.
+ * water. Static furniture boxes (tables, beds) stop it too, and a shut chest (the hand lies on its
+ * lid, the fingers find its front edge — Alohomora._chestHands; an open one is reached into); doors
+ * and cauldrons have their own hand work (a handle, a rim) and are not touched here.
  * The same for other players' heroes, as this computer draws them.
  */
 
@@ -92,7 +93,7 @@ export class HandBlocks {
             const bs = col.queryBoxes(x, x, z, z);
             for (let i = 0; i < bs.length; i++) {
                 const b = bs[i];
-                if (FURNITURE.has(b.kind) && y >= b.minY && y <= b.maxY && x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return true;
+                if ((FURNITURE.has(b.kind) || (b.kind === 'chest' && !b.chest?.isOpen)) && y >= b.minY && y <= b.maxY && x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return true;
             }
         }
         return false;

@@ -4,11 +4,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { alohomoraWords, TARGETS, chestKind, doorKind } from '../../src/game/Alohomora.js';
+import { Alohomora, alohomoraWords, TARGETS, chestKind, doorKind } from '../../src/game/Alohomora.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { Doors, hingeAngle, leafPushed, DOOR_HAND } from '../../src/game/Doors.js';
-import { Chest, AJAR_ANGLE } from '../../src/entities/Chest.js';
+import { Chest, AJAR_ANGLE, CHEST_W, LID_LEN } from '../../src/entities/Chest.js';
 
 test('«Алохомора» as the recognizer hears it; «…Максима» is the strong one', () => {
     for (const s of ['Алохомора', 'аллохомора', 'алахомора', 'аллахамора', 'алохамора', 'лохомора', 'Alohomora', 'alohamora', 'алло хомора', 'ну алохомора же']) {
@@ -141,4 +141,20 @@ test('a chest unlocked by «Алохомора»: the lid stands a crack open; t
     assert.ok(-c.lidGroup.rotation.x > 1.0, 'it goes on up from where the hand left it (no snapping shut)');
     const edge = c.lidEdge();
     assert.ok(edge.y > 1, 'the lid\'s edge is up there');
+});
+
+test('the fingers find a big chest\'s lid anywhere along its front edge (its corner too), not over its middle or far off', () => {
+    const c = new Chest(new THREE.Scene(), new THREE.Vector3(0, 0, 0), 'loot', 0, 'mh1c0', { scale: 2 });
+    c.mesh.updateMatrixWorld(true);
+    c.setAjar();
+    const at = (x, y, z) => Alohomora.prototype._atLidEdge.call({}, c, new THREE.Vector3(x, y, z));
+    const k = 2, front = (-0.425 + LID_LEN) * k, top = 0.7 * k; // (the lid's front edge, chest-local × scale)
+    const local = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(c.mesh.matrixWorld);
+    const p = (x, y, z) => { const v = local(x / k, y / k, z / k); return at(v.x, v.y, v.z); };
+    assert.ok(p(0, top + 0.1, front + 0.05), 'the middle of the edge');
+    assert.ok(p(CHEST_W * k / 2 - 0.1, top - 0.05, front + 0.05), 'its corner');
+    assert.ok(p(-CHEST_W * k / 2 + 0.1, top + 0.15, front), 'the other corner');
+    assert.equal(p(0, top + 0.1, 0), false, 'over the middle of the lid');
+    assert.equal(p(0, top + 1.5, front + 1.5), false, 'far in front');
+    assert.equal(p(CHEST_W * k / 2 + 1, top, front), false, 'beside the chest');
 });

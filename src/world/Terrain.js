@@ -1617,7 +1617,9 @@ export class TerrainData {
             const wx = x0 + rx, wz = z0 + rz;
             const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
             let top = k.top[(wz & MASK) * CHUNK + (wx & MASK)];
-            if (k.caved && (this.sites?.landAt(wx, wz) || this.litLand?.(wx, wz))) top = MIN_LAYER - 1; // (houses and castles — and the houses made by magic, HouseMagic.js: their rooms as they are)
+            // (houses and castles — and the houses made by magic, HouseMagic.js: their rooms as they are, whether
+            // the chunk has caves or only its neighbour has: a house beside a cave is no cave)
+            if ((k.caved || k.hollow) && (this.sites?.landAt(wx, wz) || this.litLand?.(wx, wz))) top = MIN_LAYER - 1;
             else if (k.isleBot && k.isleBot[(wz & MASK) * CHUNK + (wx & MASK)] < 32767) top = this._underIsle(k, wx & MASK, wz & MASK); // (under a floating island: the open sky)
             else if (top > MIN_LAYER && isTree(k.blocks[((top - MIN_LAYER) * CHUNK + (wz & MASK)) * CHUNK + (wx & MASK)])) {
                 // (a tree's crown is no cave's roof: the daylight comes through the leaves to the ground)
@@ -1635,7 +1637,7 @@ export class TerrainData {
         for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) {
             const wx = x0 + rx, wz = z0 + rz;
             const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
-            if (!k.caved) continue; // (no hollows there)
+            if (!k.caved && !k.hollow) continue; // (no hollows there; a roof put over the air — eaves, a porch — is one)
             const top = tops[rz * RW + rx];
             const kb = k.blocks, cb = (wz & MASK) * CHUNK + (wx & MASK);
             // (only where hollows may be: above the chunk's lowest open layer, up to the column's highest

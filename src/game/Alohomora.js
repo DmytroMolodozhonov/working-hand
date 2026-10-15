@@ -30,6 +30,7 @@
  */
 
 import * as THREE from 'three';
+import { CHEST_W, LID_LEN } from '../entities/Chest.js';
 
 export const ALOHOMORA = {
     RANGE: 5.5, // m from the hand to the lock
@@ -596,7 +597,7 @@ export class Alohomora {
                     if (x.isOpen || !x.locked) continue;
                     const p = x.getPosition();
                     if (Math.abs(p.x - me.x) + Math.abs(p.z - me.z) > 8) continue;
-                    if (x.lidEdge(_v2).distanceTo(G) > 0.7) continue;
+                    if (!this._atLidEdge(x, G)) continue;
                     if (!x.picked) { if (!(x.shakeT > 0)) { x.rattle(); g.sound?.playClang?.(0.1); this._chestHint(x); } continue; }
                     c = this.lift[side] = x;
                     break;
@@ -606,13 +607,27 @@ export class Alohomora {
             // the lid follows the hand round its hinge (the hand off the lid's edge: it stays where it is)
             c.hingeOf(G, _h);
             // (the hand gone off the lid: it falls back onto the crack)
-            if (_h.r > 3.6 || _h.r < 1.4 || Math.abs(_h.x) > 2.2) { this.lift[side] = null; if (this.lift.left !== c && this.lift.right !== c) c.liftTo(0); continue; }
+            const R = LID_LEN * (c.scale || 1);
+            if (_h.r > R * 2 + 0.5 || _h.r < R * 0.45 || Math.abs(_h.x) > CHEST_W * (c.scale || 1) / 2 + 0.6) { this.lift[side] = null; if (this.lift.left !== c && this.lift.right !== c) c.liftTo(0); continue; }
             if (c.liftTo(_h.angle)) {
                 this.lift[side] = null;
                 if (this.auth) g.openChest(c, null, g.localId);
                 else if (!c._asked) { c._asked = true; g.sync?.net?.send({ t: 'lock', k: 'lift', id: c.id, by: g.localId }); }
             }
         }
+    }
+
+    /**
+     * Are the fingers at the lid's front edge — anywhere along it, a big chest's corner as well as its
+     * middle: at the edge's distance from the hinge, at its height or just under it (to lift it)?
+     */
+    _atLidEdge(c, G) {
+        const k = c.scale || 1, R = LID_LEN * k;
+        c.hingeOf(G, _h);
+        if (Math.abs(_h.x) > CHEST_W * k / 2 + 0.25) return false;
+        if (Math.abs(_h.r - R) > 0.2 * k + 0.15) return false;
+        const a = -c.lidGroup.rotation.x; // (the lid's angle now)
+        return _h.angle > a - 0.5 && _h.angle < a + 0.55;
     }
 
     _chestHint(c) {

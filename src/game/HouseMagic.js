@@ -423,7 +423,7 @@ export class HouseMagic {
             const hold = g.items?.heldOf?.('wand') || !this.free ? ' Держите палочку 10 секунд!' : ''; // (Creative without a wand: nothing to hold)
             g.hud?.setVoice?.(`✨ ${level === 1 ? 'Дом создаётся' : `Дом растёт до уровня ${level}`}…${hold}`, true);
         }
-        g.sound?.playMagic?.();
+        g.sound?.playHouseHum?.(new THREE.Vector3(x, (this.magic?.y ?? 0) + 3, z), MAGIC_TIME); // (every computer: heard near, faint far away)
         g.fx?.lightFlash?.(_v.set(x, this.magic?.y ?? 0, z), 0xfff2c4, 4, 0.6, 60);
     }
 
@@ -612,10 +612,10 @@ export class HouseMagic {
             g.fx?.spark(_v.set(rec.x + Math.cos(a) * r, rec.G + 1 + Math.random() * 10, rec.z + Math.sin(a) * r), i % 2 ? 0xfff2c4 : 0xc9a8ff, 0.16, _v2.set(0, 1.5, 0), 1.2);
         }
         g.fx?.lightFlash?.(_v.set(rec.x, rec.G + 6, rec.z), 0xffffff, 6, 0.8, 80);
-        g.sound?.playMagic?.();
+        g.sound?.playHouseDone?.(_v.set(rec.x, rec.G + 4, rec.z));
         if (by === g.localId) {
             g.mana?.success(rec.level === 1 ? 'CreateHouse' : 'ImproveHouse');
-            g.hud?.setVoice?.(rec.level === 1 ? '🏠 Дом готов! Дверь открывается рукой; чтобы лечь в кровать — присядьте рядом с ней; сундук пока пустой' : `🏠 Дом улучшен до уровня ${rec.level}!${rec.level < MAX_LEVEL ? ' Следующий уровень — «Improve a House» через 3 минуты' : ' Это самый большой, каменный дом'}`, true);
+            g.hud?.setVoice?.(rec.level === 1 ? '🏠 Дом готов! Дверь открывается рукой; чтобы лечь — запрыгните на кровать; сундук пока пустой' : `🏠 Дом улучшен до уровня ${rec.level}!${rec.level < MAX_LEVEL ? ' Следующий уровень — «Improve a House» через 3 минуты' : ' Это самый большой, каменный дом'}`, true);
         }
     }
 
@@ -635,6 +635,7 @@ export class HouseMagic {
         const m = this.magic;
         if (!m || m.id !== id) return;
         this.magic = null;
+        g.sound?.stopHouseHum?.();
         const c = _v.set(p[0], p[1], p[2]);
         const rc = m.rect;
         g.fx?.explosion?.(c, 2, 0.4);
@@ -671,8 +672,19 @@ export class HouseMagic {
             m.flashT = 0.3 + Math.random() * 0.35;
             fx.lightFlash?.(_v.set(rc.x0 + Math.random() * (rc.x1 - rc.x0), m.y + 2 + Math.random() * 8, rc.z0 + Math.random() * (rc.z1 - rc.z0)), Math.random() < 0.5 ? 0xfff2c4 : 0xc9a8ff, 3, 0.35, 40);
         }
+        // the sounds of the building (over the hum of _go): logs knocking into place, the sand melting
+        // into the windows' glass, blocks laid — at the walls, so they come from all round the house
         m.soundT -= dt;
-        if (m.soundT <= 0) { m.soundT = 2.5; g.sound?.playMagic?.(); }
+        const S = g.sound;
+        if (m.soundT <= 0 && S?.playHouseBit) {
+            const u = t / MAGIC_TIME;
+            const at = _v.set(rc.x0 + Math.random() * (rc.x1 - rc.x0), m.y + 1 + Math.random() * 5 * Math.min(1, u * 1.5), rc.z0 + Math.random() * (rc.z1 - rc.z0));
+            const r = Math.random();
+            if (u > 0.08 && u < 0.85 && r < 0.4) S.playHouseBit('wood', at, 0.9);
+            else if (u > 0.2 && u < 0.7 && r < 0.55 && m.piles?.length) S.playHouseBit('sand', at, 0.6);
+            else if (u > 0.2) S.playHouseBit('block', at, 0.7);
+            m.soundT = 0.18 + Math.random() * 0.3;
+        }
     }
 
     // ============================================================== furnishing

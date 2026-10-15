@@ -1,7 +1,7 @@
 /**
  * A house made by magic in a real browser: its rooms are lit as a house's (not a cave's dark) at
- * level 1 and 2, its lanterns really shine (a light at the nearest lanterns), and one lies down in
- * its bed as in a villager's.
+ * level 1 and 2, its lanterns really shine (a light at the nearest lanterns), and jumping up onto
+ * its bed one lies down at once, as on a villager's.
  * Run: node --test tests/e2e/magic-house-light.test.mjs
  */
 import test from 'node:test';
@@ -37,6 +37,9 @@ test('magic house: lit rooms (levels 1 and 2), shining lanterns, its bed to lie 
     });
     assert.equal(start, true);
     assert.equal(await finish(page), true);
+    // it was heard: the hum, the logs, the blocks laid, the chord at the end
+    const heard = await page.evaluate(() => { const S = window.__zns.game.sound; return S.loaded ? ['houseHum100', 'house_wood', 'house_block', 'houseDone'].filter((k) => !S.sounds[k]) : []; });
+    assert.deepEqual(heard, [], 'the sounds of the house magic were made');
 
     const inside = async (level) => page.evaluate(async (level) => {
         const g = window.__zns.game, hm = g.houseMagic, rec = [...hm.list.values()][0];
@@ -65,12 +68,16 @@ test('magic house: lit rooms (levels 1 and 2), shining lanterns, its bed to lie 
     assert.ok(l1.sky > 0.9, `level 1: the daylight of the rooms: ${JSON.stringify(l1)}`);
     assert.ok(l1.lit >= 1 && l1.near < 12, `level 1: a lantern shines at night: ${JSON.stringify(l1)}`);
 
-    // lie down in its bed (crouch beside it, as at a villager's bed)
-    await page.evaluate(() => window.__zns.game.character.setCrouching(true));
-    await waitFor(page, () => !!window.__zns.game.beds.lying, null, 15000);
+    // jumped up onto its bed: the hero lies down at once (as on a villager's bed)
+    await page.evaluate(() => {
+        const g = window.__zns.game, b = g.beds.list.get([...g.houseMagic.list.keys()][0] + 'b0');
+        g.beds._standAt = 0;
+        g.character.group.position.set(b.x + 0.3, b.y + 1.0 + 2.2 + 0.6, b.z - 0.4); // (in the air over the mattress)
+    });
+    await waitFor(page, () => !!window.__zns.game.beds.lying, null, 8000);
     const lying = await page.evaluate(() => { const g = window.__zns.game; return g.beds.lying; });
     assert.match(lying, /^mh.*b0$/);
-    await page.evaluate(() => { const g = window.__zns.game; g.character.setCrouching(false); g.beds.standUp(); });
+    await page.evaluate(() => { const g = window.__zns.game; g.beds.standUp(); });
 
     // level 2
     const up = await page.evaluate(() => {

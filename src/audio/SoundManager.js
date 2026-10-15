@@ -689,6 +689,119 @@ export class SoundManager {
         this._playAt(this.sounds.chest, position, 1.2, 6);
     }
 
+    // --------------------------------------------- «Create a House» (HouseMagic.js)
+    /** A short bright sparkle of magic (a spell takes hold); at a place it fades with the distance. */
+    playMagic(position = null, volume = 1) {
+        if (!this.enabled || !this.context) return;
+        if (!this.sounds.magic) this.sounds.magic = this._synthChime([880, 1320, 1760], 0.9, 6);
+        if (position) this._playAt(this.sounds.magic, position, volume, 8, 0.95 + Math.random() * 0.1);
+        else this._spell(this.sounds.magic, 0.7 * volume);
+    }
+
+    /**
+     * The magic of a house: a deep hum growing for `seconds` round the place (its own voice — the short
+     * sounds of the building never cut it), heard by everyone near, fainter far away.
+     */
+    playHouseHum(position, seconds = 10) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const key = 'houseHum' + Math.round(seconds * 10);
+        if (!this.sounds[key]) this.sounds[key] = this._synthHum(seconds);
+        if (!this._hum) { this._hum = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._hum); }
+        const v = this._hum;
+        if (v.isPlaying) v.stop();
+        v.setBuffer(this.sounds[key]);
+        v.setRefDistance(12);
+        v.setVolume(0.9 * this.globalVolume);
+        v.position.copy(position);
+        v.updateMatrixWorld(true);
+        v.play();
+    }
+
+    /** The hum stops (the magic broke). */
+    stopHouseHum() { if (this._hum?.isPlaying) this._hum.stop(); }
+
+    /** The house's sounds while it rises: 'wood' a log knocking into place, 'sand' the sand melting into glass, 'block' a block laid. */
+    playHouseBit(kind, position, volume = 1) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const key = 'house_' + kind;
+        if (!this.sounds[key]) this.sounds[key] = kind === 'wood' ? this._synthKnock(170, 0.3) : kind === 'sand' ? this._synthSizzle(0.9) : this._synthKnock(320, 0.12);
+        this._playAt(this.sounds[key], position, volume, kind === 'block' ? 6 : 8, 0.85 + Math.random() * 0.3);
+    }
+
+    /** The house is done: a warm rising chord. */
+    playHouseDone(position) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        if (!this.sounds.houseDone) this.sounds.houseDone = this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2);
+        if (this._hum?.isPlaying) this._hum.stop();
+        this._playAt(this.sounds.houseDone, position, 1.3, 14);
+    }
+
+    /** Notes struck one after another and ringing (a chime); `decay` per second. */
+    _synthChime(freqs, seconds, decay) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const gap = Math.min(0.12, seconds / (freqs.length * 3));
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            let v = 0;
+            freqs.forEach((f, k) => {
+                const tk = t - k * gap;
+                if (tk < 0) return;
+                const e = Math.min(1, tk * 400) * Math.exp(-tk * decay);
+                v += (Math.sin(2 * Math.PI * f * tk) + 0.3 * Math.sin(2 * Math.PI * f * 2.01 * tk)) * e;
+            });
+            d[i] = Math.max(-1, Math.min(1, v * 0.28 * Math.min(1, (seconds - t) * 8)));
+        }
+        return buf;
+    }
+
+    /** A hum of magic growing over `seconds`: low drones beating, a shimmer rising, the wind of the whirl. */
+    _synthHum(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let lp = 0, ph1 = 0, ph2 = 0, ph3 = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr, u = t / seconds;
+            const env = Math.min(1, t * 2) * (0.35 + 0.65 * u) * Math.min(1, (seconds - t) * 4);
+            ph1 += (2 * Math.PI * (70 + 30 * u)) / sr;
+            ph2 += (2 * Math.PI * (70.7 + 30.5 * u)) / sr;
+            ph3 += (2 * Math.PI * (440 + 440 * u * u)) / sr;
+            lp += ((Math.random() * 2 - 1) - lp) * (0.03 + 0.05 * u);
+            const shimmer = Math.sin(ph3) * (0.5 + 0.5 * Math.sin(2 * Math.PI * 6 * t)) * 0.12 * u;
+            d[i] = Math.max(-1, Math.min(1, (Math.sin(ph1) * 0.45 + Math.sin(ph2) * 0.35 + shimmer + lp * 1.6 * (0.4 + u)) * env));
+        }
+        return buf;
+    }
+
+    /** A wooden knock (a log, a block put down): a short click and a dull ringing body at `f` Hz. */
+    _synthKnock(f, seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            lp += ((Math.random() * 2 - 1) - lp) * 0.4;
+            const s = lp * Math.exp(-t * 120) + Math.sin(2 * Math.PI * f * t) * Math.exp(-t * 22) * 0.8 + Math.sin(2 * Math.PI * f * 2.7 * t) * Math.exp(-t * 45) * 0.25;
+            d[i] = Math.max(-1, Math.min(1, s * Math.min(1, t * 3000)));
+        }
+        return buf;
+    }
+
+    /** Sand melting into glass: a soft hiss with crackles. */
+    _synthSizzle(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let prev = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const env = Math.sin(Math.PI * t / seconds) ** 1.5;
+            const w = Math.random() * 2 - 1, hp = w - prev; prev = w; // (bright: a hiss)
+            const crackle = Math.random() < 0.002 ? (Math.random() * 2 - 1) * 2 : 0;
+            d[i] = Math.max(-1, Math.min(1, (hp * 0.35 + crackle) * env));
+        }
+        return buf;
+    }
+
     // ------------------------------------------------------- synthesised
     _synthExplosion() {
         const ctx = this.context;

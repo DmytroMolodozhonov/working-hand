@@ -220,7 +220,7 @@ export class Beds {
         }
         const res = this._hostCreate(at, yaw);
         if (res !== true) return res;
-        g.hud.setVoice('🛏️ Кровать готова! Сядьте на неё (присядьте рядом) — и герой ляжет. «Change a color …» — перекрасить', true);
+        g.hud.setVoice('🛏️ Кровать готова! Запрыгните на неё — и герой ляжет. «Change a color …» — перекрасить', true);
         return true;
     }
 
@@ -388,6 +388,18 @@ export class Beds {
         return Math.abs(lx) < BED.W / 2 + pad && Math.abs(lz) < BED.L / 2 + pad * 0.7 && Math.abs(p.y - PLAYER_GROUND_OFFSET - b.y) < 3;
     }
 
+    /** The bed whose mattress the hero is up on (the feet over it, at its top or just above in a jump). */
+    _onBed(p) {
+        const feet = p.y - PLAYER_GROUND_OFFSET;
+        for (const b of this.list.values()) {
+            const top = b.y + BED.top;
+            if (feet < top - 0.35 || feet > top + 1.3) continue;
+            const dx = p.x - b.x, dz = p.z - b.z, c = Math.cos(b.ry), s = Math.sin(b.ry);
+            if (Math.abs(dx * c - dz * s) < BED.W / 2 - 0.15 && Math.abs(dx * s + dz * c) < BED.L / 2 - 0.15) return b;
+        }
+        return null;
+    }
+
     _bedAt(p) {
         let best = null;
         for (const b of this.list.values()) {
@@ -489,9 +501,15 @@ export class Beds {
                 else if (!this._isNight() && !this.sleeping) this._heal(dt);
             }
         } else if (!dead && !g.flight?.active && performance.now() - this._standAt > 2000) {
-            const b = this._bedAt(ch.group.position);
-            this._crouchT = b && ch.isCrouching ? this._crouchT + dt : Math.max(0, this._crouchT - dt * 2);
-            if (b && this._crouchT >= LIE_AFTER) this.lieDown(b);
+            // up on a bed (jumped or stepped onto its mattress): the hero lies down at once
+            const on = this._onBed(ch.group.position);
+            if (on) this.lieDown(on);
+            else {
+                // (or sitting down beside it a moment)
+                const b = this._bedAt(ch.group.position);
+                this._crouchT = b && ch.isCrouching ? this._crouchT + dt : Math.max(0, this._crouchT - dt * 2);
+                if (b && this._crouchT >= LIE_AFTER) this.lieDown(b);
+            }
         } else this._crouchT = 0;
         // tell the others whether I lie (and sleep)
         const ready = !!this.lying && this._stillT >= STILL_NEEDED;
@@ -578,7 +596,7 @@ export class Beds {
             case 'create': {
                 if (!host || !Array.isArray(m.p)) break;
                 const res = this._hostCreate(new THREE.Vector3(m.p[0], m.p[1], m.p[2]), m.ry || 0);
-                g.sync?.bed?.({ a: 'msg', text: res === true ? '🛏️ Кровать готова! Присядьте рядом с ней — и герой ляжет' : res }, m.from);
+                g.sync?.bed?.({ a: 'msg', text: res === true ? '🛏️ Кровать готова! Запрыгните на неё — и герой ляжет' : res }, m.from);
                 break;
             }
             case 'color': if (host && BED_COLORS[m.color]) this.setColor(m.id, m.color); break;

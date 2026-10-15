@@ -21,7 +21,8 @@ const SCALE = 3; // (a treasure chest; a household one in a villager's house is 
 /** The chest's size in metres per unit of scale: across (its local X), deep (Z), high with the lid shut. */
 export const CHEST_W = 1.25, CHEST_D = 0.85, CHEST_H = 0.7;
 /** Lid: hinged on its own top-back edge (chest-local y, z), and how far it reaches from there. */
-const HINGE_Y = 0.7, HINGE_Z = -0.425, LID_LEN = 0.85;
+const HINGE_Y = 0.7, HINGE_Z = -0.425;
+export const LID_LEN = 0.85;
 const _lp = new THREE.Vector3();
 const OPEN_ANGLE = Math.PI * 0.62; // ~110°
 const OPEN_TIME = 0.9; // seconds
@@ -143,7 +144,7 @@ export class Chest {
         const swap = Math.abs(quarter) % 2 === 1;
         const hx = swap ? d : w, hz = swap ? w : d;
         const p = this.mesh.position;
-        return { minX: p.x - hx, maxX: p.x + hx, minY: p.y - 0.5, maxY: p.y + 0.75 * this.scale, minZ: p.z - hz, maxZ: p.z + hz, kind: 'chest' };
+        return { minX: p.x - hx, maxX: p.x + hx, minY: p.y - 0.5, maxY: p.y + 0.75 * this.scale, minZ: p.z - hz, maxZ: p.z + hz, kind: 'chest', chest: this }; // (chest: a shut one stops the hand — HandBlocks)
     }
 
     /** World position where the reward appears (just above the opening). */
