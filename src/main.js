@@ -19,6 +19,7 @@ import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel }
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame } from './audio/GameVoices.js';
+import { WORDY, wordsOf } from './audio/SpellSpotter.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
@@ -419,6 +420,13 @@ function holdSpell(command, isFinal) {
 const TALK_STILL = 700; // ms
 let talkWait = null, talkEarly = null;
 const talkKey = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim();
+/** The browser's recognizer wrote a whole sentence with a spell's word in it: talk, not that spell. */
+function spellInSentence(command) {
+    const sp = matchSpell(command);
+    if (!sp || WORDY.has(sp)) return false;
+    const n = talkKey(command).split(' ').filter(Boolean).length;
+    return n > Math.max(2, wordsOf(sp)) + 1;
+}
 function earlyTalk(command) {
     clearTimeout(talkWait);
     talkWait = setTimeout(() => {
@@ -443,7 +451,10 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         if (k === talkEarly.key || talkEarly.key.startsWith(k)) { if (isFinal) talkEarly = null; return; }
         talkEarly = null; // (more words after the answer: a new question)
     }
-    if (!isFinal && !held && game?.active && !matchSpell(command) && game.castleLife?.talk?._listener?.()) earlyTalk(command);
+    // Only words, never a spell: a spell's word inside a sentence («…огонь горит у ворот»). A spell is
+    // said on its own (NativeVoice tells; the browser's recognizer writes whole sentences — counted here).
+    const talkOnly = !!meta?.talkOnly || (!meta?.native && spellInSentence(command));
+    if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && game.castleLife?.talk?._listener?.()) earlyTalk(command);
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
         voiceTestText.style.color = '#55efc4';
@@ -466,6 +477,10 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         }
         // (the same with a ship's sailor near me)
         if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
+            return;
+        }
+        if (talkOnly) {
+            if (isFinal) game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command);
             return;
         }
         // A spell's words in what the game itself said aloud just then — a merchant's «…на костре», a

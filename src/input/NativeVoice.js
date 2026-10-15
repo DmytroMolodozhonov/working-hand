@@ -16,7 +16,7 @@
  * one heard it very clearly), and never right at the cut edge of the look (SpellSpotter.EDGE).
  */
 
-import { unpack, hear, threshold } from '../audio/SpellSpotter.js';
+import { unpack, hear, threshold, HEARD, WORDY } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
 
 /** A spell this clear is cast from one look at the phrase (avg cost per letter)… */
@@ -58,7 +58,11 @@ export function lookAt(d, seg = {}) {
         const faint = (d.far || 0) >= 0.25 && Number.isFinite(d.peak) && Number.isFinite(d.floor) && d.peak < d.floor + ((d.far || 0) >= 0.5 ? 22 : 15);
         // (and a look at a phrase still being said while the speakers play: its end will tell)
         const early = !d.final && (d.far || 0) >= 0.25;
-        if (h.written && !faint && !early && (!loose || (d.final && (d.far || 0) < 0.25))) say = { text: h.written, isFinal: !!d.final };
+        // a spell the sound knows but did not find there — only its word written in a sentence («…огонь
+        // горит у ворот»): words to a villager, never that spell (the sound is the judge: the written words
+        // found 1 of my spells in 100 it missed, and a spell in 127 of 1900 everyday sentences)
+        const talkOnly = !!loose && HEARD.has(loose) && !WORDY.has(loose);
+        if (h.written && !faint && !early && (!loose || talkOnly || (d.final && (d.far || 0) < 0.25))) say = { text: h.written, isFinal: !!d.final, talkOnly };
     }
     return { say, echo, heard: h, seg: next };
 }
@@ -171,6 +175,6 @@ export class NativeVoice {
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
-        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure });
+        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure, talkOnly: !!r.say.talkOnly });
     }
 }

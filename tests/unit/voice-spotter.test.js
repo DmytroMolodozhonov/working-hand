@@ -110,3 +110,18 @@ test('a friend\'s spell from the speakers: heard in the speakers\' sound too →
     const early = lookAt(ev(mine, { final: false, far: 0.9 }), { last: 'бомбардо' });
     assert.equal(early.say, null);
 });
+
+test('talk never casts: a spell is said on its own — a spell\'s word inside a sentence is words to a villager', () => {
+    for (const r of talk) {
+        const res = lookAt(ev(r, { final: true }), {});
+        const cast = res.say && !res.say.talkOnly && matchSpell(res.say.text);
+        assert.equal(cast || null, null, `«${r.text}» → ${res.say?.text}`);
+    }
+    // the spells said alone still cast
+    let ok = 0;
+    for (const r of spells) {
+        const res = lookAt(ev(r, { final: true }), {});
+        if (res.say && !res.say.talkOnly && matchSpell(res.say.text) === matchSpell(r.text)) ok++;
+    }
+    assert.ok(ok / spells.length >= 0.8, `${ok}/${spells.length}`);
+});

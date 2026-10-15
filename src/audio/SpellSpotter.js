@@ -270,7 +270,40 @@ export const ECHO_AFTER = [-0.08, 0.45];
 export const ECHO_LONGER = 0.3;
 
 // (spells whose words go on: the written words carry what follows — «поменяй цвет на синий»)
-const WORDY = new Set(['ChangeColor']);
+export const WORDY = new Set(['ChangeColor']);
+
+/** The spells this finds by their sound: for them the sound is the judge, never the written words. */
+export const HEARD = new Set(VOCAB.map((w) => w.spell));
+
+/**
+ * A spell is said on its own («Бомбардо!», «так… Инферно»); something like a spell inside a sentence
+ * («…к Мастеру, щиты!», «…огонь горит у ворот») is talk. Letters heard round the spell: up to ALONE —
+ * as it fits; up to ALONE_MAX — only a clear one (ALONE_FIT better than needed); more — talk.
+ * (Tested: of 400 spells said 399 have ≤ 2 letters round them, all ≤ 5; of 1900 everyday sentences 80
+ * held something like a spell — all but the ones that really are a spell's words have more round it.)
+ */
+export const ALONE = 2;
+export const ALONE_MAX = 5;
+export const ALONE_FIT = 0.5;
+
+/** The most words any way of saying that spell has (0: not one this knows). */
+export function wordsOf(spell) {
+    let n = 0;
+    for (const w of VOCAB) if (w.spell === spell) n = Math.max(n, w.phrase.split(' ').length);
+    return n;
+}
+
+/** Letters heard outside a span of the sound (repeats and «nothing new» left out). */
+export function lettersOutside(P, a, b) {
+    let n = 0, prev = -1;
+    for (let t = 0; t < P.T; t++) {
+        const v = P.am[t];
+        if (t >= a && t <= b) { prev = -1; continue; }
+        if (v !== BLANK && v !== SPACE && v !== prev) n++;
+        prev = v;
+    }
+    return n;
+}
 
 /**
  * What the microphone heard, made into what the game should hear.
@@ -291,7 +324,13 @@ export function hear(lp, T, o = {}) {
     const snr = Number.isFinite(o.snr) ? o.snr : Infinity;
     const open = { openStart: !o.cut, openEnd: o.final !== false };
     const best = bestSpell(P, far, open, VOCAB, snr);
-    if (!best || best.avg < threshold(best.len, far, snr)) return { text: written, written, spell: null, sure: false, echo: false, far, best };
+    const need = best ? threshold(best.len, far, snr) : 0;
+    if (!best || best.avg < need) return { text: written, written, spell: null, sure: false, echo: false, far, best };
+    // (said inside a sentence: talk — ALONE)
+    const extra = lettersOutside(P, best.a, best.b);
+    if (!WORDY.has(best.spell) && (extra > ALONE_MAX || (extra > ALONE && best.avg - need < ALONE_FIT))) {
+        return { text: written, written, spell: null, sure: false, echo: false, far, best, extra };
+    }
     let echo = false;
     if (o.ref && o.refT) {
         const R = prepare(o.ref, o.refT);
@@ -303,5 +342,5 @@ export function hear(lp, T, o = {}) {
         }
     }
     const text = WORDY.has(best.spell) ? written : best.canonical;
-    return { text, written, spell: best, sure: true, echo, far, tail: (T - 1 - best.b) * 40 };
+    return { text, written, spell: best, sure: true, echo, far, extra, tail: (T - 1 - best.b) * 40 };
 }

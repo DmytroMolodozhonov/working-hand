@@ -46,17 +46,19 @@ const heard = (r) => {
     return { spell, meta };
 };
 
-test('the game\'s own lines from the speakers never cast — even the ones only heard like a spell', () => {
-    let read = 0;
+test('the game\'s own lines heard by the microphone: a sentence is talk; what still reads as a spell is known as the game\'s', () => {
+    let casts = 0;
     for (const r of lines) {
+        const res = lookAt({ type: 'seg', id: 1, T: r.T, lp: r.lp, far: 0, final: true }, {});
         const { spell, meta } = heard(r);
-        if (!spell) continue;
-        read++;
+        if (!res.say || res.say.talkOnly || !spell) continue;
+        casts++;
         clearAired();
         aired(r.text, 900, 2100);
         assert.ok(fromGame(spell, meta), `«${r.text}» cast ${spell}`);
     }
-    assert.ok(read >= 25, `${read}`);
+    // (a spell is said on its own: of these 34 lines that once read as a spell only 1 still does by itself)
+    assert.ok(casts <= 2, `${casts}`);
 });
 
 test('my spells: all cast when no villager speaks, and most even over a villager\'s voice', () => {
