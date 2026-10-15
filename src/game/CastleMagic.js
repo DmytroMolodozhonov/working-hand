@@ -182,23 +182,21 @@ export class CastleMagic extends HouseMagic {
     _siteProblem(rec) {
         const g = this.game, data = this.data;
         const rc = this.plan(rec).rect;
-        let bad = 0, n = 0;
-        const low = [];
+        const low = [], high = [];
         for (let x = Math.floor(rc.x0); x <= Math.ceil(rc.x1); x += 2) for (let z = Math.floor(rc.z0); z <= Math.ceil(rc.z1); z += 2) {
-            n++;
             if (data.isSeaColumn?.(x, z)) return '🌊 Тут море — замок здесь не встанет';
             const G = this._ground(x, z);
             if (G == null) return '💧 Там вода — найдите для замка сухое место';
-            if (Math.abs(G - rec.G) > 6) bad++;
-            if (G < rec.G - 16 || G > rec.G + 13) return '⛰️ Там слишком неровно для замка — найдите место поровнее';
+            // (a slope is no matter: the low ground is raised with stone, a hump is cut away — but no cliff)
+            if (G < rec.G - 16 || G > rec.G + 24) return '⛰️ Там слишком неровно для замка — найдите место поровнее';
             if (G < rec.G - 6) low.push([x, z, G]);
+            if (G > rec.G + 14) high.push([x, z, G]);
             for (let L = rec.G - 1; L <= rec.G + 14; L += 2) if (isCastleBlock(data.get(x, L, z))) return '🏘️ Там уже что-то построено — замку нужно свободное место';
             if (g.ships?.footprintAt?.(x, rec.G, z)) return '⚓ Там корабль';
         }
-        if (bad > n * 0.3) return '⛰️ Там слишком неровно для замка — найдите место поровнее';
         const mid = _v.set(rec.x, rec.G + 1, rec.z);
         if (g.wards?.list?.size && g.wards.forbids?.(g.character.group.position, mid)) return '🛡️ Там чужая защита дома';
-        rec._low = low;
+        rec._low = low; rec._high = high;
         return null;
     }
 
@@ -244,7 +242,9 @@ export class CastleMagic extends HouseMagic {
         // the low ground under it is raised: stone up to the foundation (it grows out of the earth)
         const raise = [];
         for (const [cx, cz, cg] of rec._low || []) for (let L = cg + 1; L < G - 5; L++) for (const [ox, oz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) raise.push([cx + ox, L, cz + oz, BLOCK.STONE]);
-        delete rec._low;
+        for (const [cx, cz, cg] of rec._high || []) for (let L = cg; L > G + 15; L--) for (const [ox, oz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) raise.push([cx + ox, L, cz + oz, BLOCK.AIR]);
+        raise.sort((a, b) => (a[3] === BLOCK.AIR) - (b[3] === BLOCK.AIR) || (a[3] === BLOCK.AIR ? b[1] - a[1] : a[1] - b[1])); // (the stone from the bottom up; the cut from the top down)
+        delete rec._low; delete rec._high;
         this.cells(rec); // (made in the worker meanwhile)
         this.magic = {
             id, by, t: 0, x, z, y: G + 1, G, rect: lay.rect, rec, castle: true,
@@ -349,8 +349,8 @@ export class CastleMagic extends HouseMagic {
         }
         const goR = Math.floor(Math.min(1, Math.max(0, (f - 0.03) / 0.1)) * m.raise.length);
         for (; m.ri < goR && !busy(); m.ri++) {
-            const c = m.raise[m.ri];
-            if (isSolid(data.get(c[0], c[1], c[2]))) continue;
+            const c = m.raise[m.ri], cur = data.get(c[0], c[1], c[2]);
+            if (c[3] === BLOCK.AIR ? cur === BLOCK.AIR || cur === BLOCK.BEDROCK : isSolid(cur)) continue;
             data.set(c[0], c[1], c[2], c[3]); edits.push(c);
         }
         // the blocks: the rising ones (part 1), then the built ones (part 2), each by its own share of time
