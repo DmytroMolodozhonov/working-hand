@@ -184,6 +184,8 @@ export class CircleAttack {
     }
 
     update(dt) {
+        this._warmT = (this._warmT || 0) + dt;
+        if (!this._warmed && this._warmT > 2) this._warm();
         if (!this.list.length) return;
         dt = Math.min(dt, 0.05);
         for (const d of [...this.list]) {
@@ -304,6 +306,20 @@ export class CircleAttack {
     }
 
     // ------------------------------------------------------------------- the look
+    /** Its look built once early, off screen, its shaders compiled then (not on the first cast); kept. */
+    _warm() {
+        const g = this.game;
+        this._warmed = true;
+        if (!g.renderer?.compile || !g.camera || !g.scene) return;
+        const scene = g.scene, tmp = new THREE.Scene();
+        try {
+            g.scene = tmp;
+            this._build({ p: new THREE.Vector3(), f: circleForm(true), max: true });
+            g.renderer.compile(tmp, g.camera);
+        } catch (e) { /* (only a head start) */ } finally { g.scene = scene; }
+        this._warmKeep = tmp;
+    }
+
     _build(d) {
         const g = this.game;
         if (!g.scene) return;

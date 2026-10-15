@@ -213,6 +213,8 @@ export class Inspirius {
     // =========================================================== every frame
     update(dt) {
         dt = Math.min(dt, 0.05);
+        this._warmT = (this._warmT || 0) + dt;
+        if (!this._warmed && this._warmT > 1.5) this._warm();
         for (const o of [...this.orbs]) this._fly(o, dt);
         for (const b of [...this.blasts]) this._blast(b, dt);
     }
@@ -400,6 +402,25 @@ export class Inspirius {
         if (dmg <= 0 || g.config?.mode === 'creative') return;
         if (c?.enabled) c.damage(dmg, b.by === g.localId ? null : b.by, INSP.NAME);
         else g.damageLocalPlayer?.(dmg);
+    }
+
+    /**
+     * Its looks are built once early in the game, off screen, and their shaders compiled then —
+     * the first cast must not stop the game for a moment while they compile. (They are kept, so
+     * the compiled programs stay for every cast after.)
+     */
+    _warm() {
+        const g = this.game;
+        this._warmed = true;
+        if (!g.renderer?.compile || !g.camera || !g.scene) return;
+        const scene = g.scene, fx = g.fx, tmp = new THREE.Scene();
+        try {
+            g.scene = tmp; g.fx = null;
+            this._buildOrb({ p: new THREE.Vector3(), t: 0 });
+            this._buildBlast({ p: new THREE.Vector3(), t: 0, front: 0 });
+            g.renderer.compile(tmp, g.camera);
+        } catch (e) { /* (only a head start) */ } finally { g.scene = scene; g.fx = fx; }
+        this._warmKeep = tmp;
     }
 
     // =========================================================== the look of the ball
