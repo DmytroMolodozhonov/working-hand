@@ -164,7 +164,7 @@ varying vec3 vSeaWorld;`)
         const end = Math.min(TEX * TEX, j.i + count);
         const t0 = ms < Infinity ? performance.now() : 0;
         for (; j.i < end; j.i++) {
-            if ((j.i & 255) === 255 && ms < Infinity && performance.now() - t0 > ms) break;
+            if ((j.i & 31) === 31 && ms < Infinity && performance.now() - t0 > ms) break;
             const tx = j.i % TEX, tz = (j.i / TEX) | 0;
             const x = j.ox - half + (tx + 0.5) * TEXEL, z = j.oz - half + (tz + 0.5) * TEXEL;
             const s = sea.s(x, z);
