@@ -123,6 +123,13 @@ async function flyRoute() {
     wrap(g.world.sky, 'update', 'небо');
     wrap(g.renderer.shadowMap, 'render', 'тени');
     wrap(g.hud, 'drawMinimap', 'миникарта');
+    wrap(g.world, 'followShadow', 'тени:коробка');
+    wrap(g.world, 'setDayPhase', 'день/ночь');
+    wrap(g.swim, 'applyFog', 'туман воды');
+    wrap(g.falling, 'update', 'падающие блоки');
+    wrap(g.destruction, 'update', 'разрушение');
+    wrap(g.circleAttack, 'update', 'circleAttack');
+    wrap(g.inspirius, 'update', 'inspirius');
     for (const k of ['castleLife', 'travelers', 'carriages', 'animals', 'dragons', 'ships', 'fx', 'livingTrees', 'phoenixes', 'spiders', 'houses', 'campfires', 'fire', 'items', 'weapons', 'duel', 'storm', 'sun']) wrap(g[k], 'update', k);
     // record frames
     const origFrame = g.frame.bind(g);
@@ -132,6 +139,7 @@ async function flyRoute() {
     let nSeen = window.__compiled.length;
     g.frame = function () {
         for (const k in sub) sub[k] = 0;
+        const heapBefore = performance.memory ? performance.memory.usedJSHeapSize : 0;
         const t0 = performance.now();
         origFrame();
         const t1 = performance.now();
@@ -175,6 +183,9 @@ async function flyRoute() {
             for (const k in sub) if (sub[k] > 0.05) parts[k] = +sub[k].toFixed(2);
             // «игра»: the frame's work without handing the picture to the video card (here a slow software
             // one, whose waits land in «графика» — on a real card they don't): logic, the world, creatures
+            // (the memory the page holds dropped during the frame: the browser cleaned up — garbage collection)
+            const heap = performance.memory ? performance.memory.usedJSHeapSize : 0;
+            if (heapBefore && heap < heapBefore - 4e6) parts['уборка памяти, МБ'] = +((heapBefore - heap) / 1e6).toFixed(0);
             frames.push({ seg, gap: +(t0 - prev).toFixed(2), cpu: +(t1 - t0).toFixed(2), game: +(t1 - t0 - (g._parts['графика'] || 0)).toFixed(2), parts });
         }
         prev = t0;
@@ -245,10 +256,10 @@ async function runLevel(browser, url, level) {
     await sleep(4000); // (the first frames: shaders of what is on screen)
     // (Circle Attack and Inspirius compile their looks a couple of game seconds after the start, on the
     // ground; here the frames are slow, so wait for that before taking off — in a real game it is long done)
-    for (let i = 0; i < 240; i++) {
+    for (let i = 0; i < 480; i++) {
         const st = await page.evaluate(() => { const g = window.__zns.game; const c = typeof g.circleAttack?._warm === 'function' ? g.circleAttack : null, n = typeof g.inspirius?._warm === 'function' ? g.inspirius : null; /* (an older game has no warm-up) */ return { ok: (!c || !!c._warmed) && (!n || !!n._warmed), sound: (!c || !!c._soundReady) && (!n || !!n._soundsReady), frames: g.frameCount }; });
-        if (st.ok && (st.sound || i > 30)) break; // (their sounds: in a few seconds; with no sound card here, never)
-        if (i % 20 === 19) console.log('  (ждём прогрев эффектов…)', JSON.stringify(st));
+        if (st.ok && st.sound) break; // (their sounds: made a few ms a frame — here, with slow frames, it takes a while)
+        if (i % 40 === 39) console.log('  (ждём прогрев эффектов…)', JSON.stringify(st));
         await sleep(500);
     }
     await sleep(1500);
@@ -306,7 +317,7 @@ function table(results) {
 
 const port = 8700 + Math.floor(Math.random() * 200);
 const srv = await startServer(port);
-const browser = await launch();
+const browser = await launch({ extraArgs: ['--enable-precise-memory-info'] }); // (to see the browser's clean-ups)
 const results = [];
 try {
     for (const level of LEVELS) {

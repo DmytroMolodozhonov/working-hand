@@ -15,7 +15,7 @@ export function lastWords(text, n = HEARD_WORDS) {
     const words = String(text ?? '').trim().split(/\s+/).filter(Boolean);
     return words.slice(-n).join(' ');
 }
-import { BLOCK, BASE_COLORS, CHUNK } from '../world/Terrain.js';
+import { BLOCK, BASE_COLORS, CHUNK, chunkKey } from '../world/Terrain.js';
 
 /**
  * The minimap's size, % of 240 × 160 (settings → «Размер мини-карты»): the same picture,
@@ -427,17 +427,24 @@ export class Hud {
             for (let z = 0; z <= h; z++) H.set(tmpH.subarray((z + oz) * S1 + ox, (z + oz) * S1 + ox + w + 1), (z + dz) * S1 + dx);
             for (let z = 0; z < h; z++) px.set(tmpP.subarray(((z + oz) * size + ox) * 4, ((z + oz) * size + ox + w) * 4), ((z + dz) * size + dx) * 4);
         }
-        // (with a shift: only the columns / rows that came into the window)
-        const fresh = (x, z) => !shift || x < Math.max(0, -sx) || x >= size - Math.max(0, sx) || z < Math.max(0, -sz) || z >= size - Math.max(0, sz);
         // (land not made yet — in a fast flight it is being made in a worker — is not made here for the
-        // map: it stays plain green this time and the map is drawn again until it is all there)
+        // map: it stays plain green this time, and is drawn when it is there — it and the pixels next to it)
+        const ckey = (wx, wz) => chunkKey(Math.floor(wx / CHUNK), Math.floor(wz / CHUNK));
         const have = (wx, wz) => d.hasChunk(Math.floor(wx / CHUNK), Math.floor(wz / CHUNK));
+        const before = shift && ti.missing?.size ? ti.missing : null;
+        const later = ti.missing = new Set();
+        const wasMissing = (x, z) => {
+            const wx = cx - half + x, wz = cz - half + z;
+            return before.has(ckey(wx, wz)) || before.has(ckey(wx - 1, wz)) || before.has(ckey(wx, wz - 1)); // (its shade looks at the pixels west and north)
+        };
+        // (with a shift: only the columns / rows that came into the window, and what was missing)
+        const fresh = (x, z) => !shift || x < Math.max(0, -sx) || x >= size - Math.max(0, sx) || z < Math.max(0, -sz) || z >= size - Math.max(0, sz) || (before !== null && wasMissing(x, z));
         let missing = false;
         for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) {
             if (!fresh(x, z)) continue;
             const wx = cx - half + x, wz = cz - half + z;
             if (have(wx, wz)) H[(z + 1) * (size + 1) + (x + 1)] = d.topLayer(wx, wz);
-            else { H[(z + 1) * (size + 1) + (x + 1)] = 0; missing = true; }
+            else { H[(z + 1) * (size + 1) + (x + 1)] = 0; missing = true; later.add(ckey(wx, wz)); }
         }
         for (let z = 0; z < size; z++) {
             for (let x = 0; x < size; x++) {
@@ -468,7 +475,7 @@ export class Hud {
         ti.ctx.putImageData(ti.img, 0, 0);
         ti.cx = cx;
         ti.cz = cz;
-        ti.version = missing ? -1 : d.version; // (-1: all of it again next time)
+        ti.version = d.version;
     }
 
     drawMinimap(charPos, rotY, world, zombies, others = [], server = null, castles = []) {
@@ -491,7 +498,9 @@ export class Hud {
             // Redrawn only after changes to the world or when the player moved to another 16 m cell
             const cx = Math.round(charPos.x / 16) * 16, cz = Math.round(charPos.z / 16) * 16;
             const ti = this.terrainImage;
-            if (!ti || ti.cx !== cx || ti.cz !== cz || ti.version !== this.terrain.data.version) this._renderTerrainWindow(cx, cz);
+            let arrived = false; // (land that was missing on the map is made now)
+            if (ti?.missing?.size) for (const k of ti.missing) if (this.terrain.data.chunks.has(k)) { arrived = true; break; }
+            if (!ti || ti.cx !== cx || ti.cz !== cz || ti.version !== this.terrain.data.version || arrived) this._renderTerrainWindow(cx, cz);
             const t = this.terrainImage;
             const half = MINIMAP_WINDOW / 2;
             ctx.imageSmoothingEnabled = false;

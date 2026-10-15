@@ -42,7 +42,7 @@ export function fakeVideo(image = 'thumb_up.jpg') {
     return out;
 }
 
-export async function launch({ video = null } = {}) {
+export async function launch({ video = null, extraArgs = [] } = {}) {
     const args = [
         '--use-fake-ui-for-media-stream',
         '--use-fake-device-for-media-stream',
@@ -52,6 +52,7 @@ export async function launch({ video = null } = {}) {
         '--site-per-process', // (as in a desktop Chrome: the camera network's page runs in its own process)
     ];
     if (video) args.push(`--use-file-for-fake-video-capture=${video}`);
+    args.push(...extraArgs);
     const executablePath = fs.existsSync('/opt/pw-browsers/chromium') ? undefined : undefined;
     return chromium.launch({ args, executablePath });
 }
