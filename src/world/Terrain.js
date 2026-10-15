@@ -53,9 +53,12 @@ export const BLOCK = {
     ICE_WALL: 59, ICE_GLOW: 60, ICE_FLOOR: 61, ICE_DARK: 62,
     // other planets' ground (PlanetSurface.js): dust, rock, ice, the dark land — coloured by each planet's palette
     REGOLITH: 63, PLANET_ROCK: 64, PLANET_ICE: 65, PLANET_DARK: 66,
+    // a terraformed planet's own life (PlanetSurface.js, «Terraform Planet»): its moss / grass, the trunks and
+    // the crowns of its trees — coloured by that planet's palette (never the Earth's green)
+    PLANET_GRASS: 67, PLANET_WOOD: 68, PLANET_LEAF: 69,
 };
 /** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
-export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_DARK;
+export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_LEAF;
 /** The palace's / the Ice Rod's ice (melts in fire: IceQueen.melt). */
 export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
@@ -182,6 +185,9 @@ export const BASE_COLORS = {
     [BLOCK.PLANET_ROCK]: 0x6a6058,
     [BLOCK.PLANET_ICE]: 0xdedad2,
     [BLOCK.PLANET_DARK]: 0x4a4440,
+    [BLOCK.PLANET_GRASS]: 0x3fa08a,
+    [BLOCK.PLANET_WOOD]: 0x5a3a5a,
+    [BLOCK.PLANET_LEAF]: 0x9a5ad0,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -1697,7 +1703,7 @@ export class TerrainData {
 
     /** Colour of a block face (deterministic per-block variation on mountains). */
     faceColor(type, ix, L, iz, isTop) {
-        if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_DARK) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
+        if (type >= BLOCK.REGOLITH && type <= BLOCK.PLANET_LEAF) return planetFaceColor(this.planets?.bySlot(slotAt(ix, iz)), type, ix, L, iz, isTop);
         if (this.lush) { const v = this._lushColour(type, ix, L, iz, isTop); if (v >= 0) return v; }
         let base = BASE_COLORS[type] ?? 0xff00ff;
         if (type === BLOCK.GRASS && !isTop) base = GRASS_SIDE;

@@ -89,6 +89,7 @@ export const SPELL_COST = {
     LightningStrike: 25,
     ToTheSun: 12,
     GiveMyPower: 50, // your power back from your own skeleton (Legacy.js; the author: 50)
+    CreatePlanet: 500, EnlargePlanet: 100, TerraformPlanet: 1000, LevitationSuperMaxima: 100, // the gods' scrolls (PlanetMagic.js; the author: 500, 100, 1000; the Super Maxima then 3 a second)
     LetItRain: 20,
     Earthquake: 10,
     EarthquakeMaxima: 25,
@@ -451,7 +452,7 @@ export class Combat {
     costOf(name) {
         const base = (SPELL_COST[name] ?? 5) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper)
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Hellfire|WaterVortexSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name) {

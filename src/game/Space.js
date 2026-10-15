@@ -71,9 +71,13 @@ const _p = { x: 0, y: 0, z: 0 }, _p2 = { x: 0, y: 0, z: 0 }, _d = { x: 0, y: 0, 
 const A = { x: SPACE.ANCHOR_X, y: SPACE.ORIGIN_Y, z: SPACE.ANCHOR_Z };
 const EPOCH = 1.79e9; // (the shared clock: seconds since then — the same on every computer)
 
-/** Spells off the Earth: why one does not work here (or null). air: 'space' | 'none' | 'thin' | 'air'. */
-export function spaceSpellBlock(name, where, air) {
+/**
+ * Spells off the Earth: why one does not work here (or null). air: 'space' | 'none' | 'thin' | 'air'.
+ * def: the planet (a terraformed one in the green zone has water and clouds — PlanetMagic.js).
+ */
+export function spaceSpellBlock(name, where, air, def = null) {
     if (where === 'earth') return null;
+    if (def?.terraformed && def.climate === 'green' && /^(LightningStrike|LetItRain|Thunderwave|Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|Firefighting|FirefightingMaxima|AirBubble|AirBubbleMaxima|WaveAttack|WaveAttackMaxima|Frozen|Drawdown|DrawdownMaxima)$/.test(name)) return null;
     const vacuum = where === 'space' || air === 'none' || air === 'thin';
     const base = (name || '').replace(/Maxima$/, '');
     if (/^(Inferno|Fire|Hellfire|FireMaxima)$/.test(name) || base === 'Fire') {
@@ -202,7 +206,7 @@ export class Space {
     spellBlocked(name) {
         if (!this.offEarth) return null;
         const def = this.planets.get(this.realm);
-        return spaceSpellBlock(name, this.realm, this.realm === 'space' ? 'space' : def?.air || 'none');
+        return spaceSpellBlock(name, this.realm, this.realm === 'space' ? 'space' : def?.air || 'none', def);
     }
 
     // ─────────────────────────────────────────────────────────────── the frame
@@ -306,7 +310,7 @@ export class Space {
         if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < 60) { this.P.x += dx; this.P.y += dy; this.P.z += dz; }
         // a planet carries the hero near it along its orbit (the Moon round the Earth too)
         const near = this._nearest(t);
-        if (near && near.def.id !== 'sun') {
+        if (near && near.def.id !== 'sun' && near.def.id !== this.noCarry) { // (noCarry: the planet I drag myself — PlanetMagic)
             const pv = this._prev.get(near.def.id);
             if (pv && near.alt < near.def.radius * FLYMAX.SOI + 1500) { this.P.x += near.pos.x - pv.x; this.P.y += near.pos.y - pv.y; this.P.z += near.pos.z - pv.z; }
         }
@@ -659,6 +663,13 @@ export class Space {
                 u.uHorizon.value.setRGB(0.86, 0.66, 0.46).lerp(_c1.setRGB(0.05, 0.04, 0.06), 1 - day);
                 u.uGround.value.setRGB(0.45, 0.28, 0.18).lerp(_c1.setRGB(0.02, 0.02, 0.03), 1 - day);
                 u.uNight.value = 1 - day; u.uClouds.value = 0; u.uOvercast.value = 0;
+            } else if (def.sky === 'alien') {
+                // a terraformed planet (PlanetMagic.js): its own air's colours, its own clouds
+                const z = def.skyZ || [0.3, 0.45, 0.8], h = def.skyH || [0.75, 0.8, 0.9];
+                u.uZenith.value.setRGB(z[0], z[1], z[2]).lerp(_c1.setRGB(0.01, 0.01, 0.03), 1 - day);
+                u.uHorizon.value.setRGB(h[0], h[1], h[2]).lerp(_c1.setRGB(0.03, 0.03, 0.06), 1 - day);
+                u.uGround.value.setRGB(h[0] * 0.5, h[1] * 0.5, h[2] * 0.5).lerp(_c1.setRGB(0.02, 0.02, 0.03), 1 - day);
+                u.uNight.value = 1 - day; u.uClouds.value = def.climate === 'desert' ? 0 : 1; u.uOvercast.value = 0;
             } else if (def.sky === 'venus') {
                 u.uZenith.value.setRGB(0.66, 0.5, 0.26).multiplyScalar(0.3 + 0.7 * day);
                 u.uHorizon.value.setRGB(0.88, 0.7, 0.4).multiplyScalar(0.3 + 0.7 * day);
@@ -670,6 +681,7 @@ export class Space {
         if (f) {
             if (vac) { f.color.setRGB(0, 0, 0); f.near = Math.max(60, f.far * 0.75); }
             else if (def.sky === 'mars') { f.color.setRGB(0.78, 0.57, 0.4).multiplyScalar(0.25 + 0.75 * day); f.near = 30; }
+            else if (def.sky === 'alien') { const h = def.skyH || [0.75, 0.8, 0.9]; f.color.setRGB(h[0], h[1], h[2]).multiplyScalar(0.15 + 0.85 * day); f.near = 40; }
             else { f.color.setRGB(0.8, 0.62, 0.34).multiplyScalar(0.3 + 0.7 * day); f.near = 6; f.far = Math.min(f.far, 150); }
             if (g.scene.background?.isColor) g.scene.background.copy(f.color);
         }
@@ -681,10 +693,11 @@ export class Space {
             const sunDist = Math.hypot(c.x, c.y, c.z) || 1;
             const fall = clamp(Math.pow(SPACE.AU / sunDist, 0.6), 0.4, 1.6);
             const venus = def.sky === 'venus';
+            const alien = def.sky === 'alien';
             dl.intensity = (venus ? 0.35 : vac ? 0.85 : 1.0) * fall * day;
-            dl.color.set(venus ? 0xffd49a : def.sky === 'mars' ? 0xffe2c4 : 0xffffff);
-            w.ambientLight.intensity = venus ? 0.32 * (0.4 + 0.6 * day) + 0.05 : vac ? 0.07 + 0.05 * day : 0.16 + 0.1 * day;
-            w.ambientLight.color.set(venus ? 0xffc77a : def.sky === 'mars' ? 0xffc9a4 : 0xc8d4ff);
+            dl.color.set(venus ? 0xffd49a : def.sky === 'mars' ? 0xffe2c4 : alien && def.climate === 'desert' ? 0xffe0b8 : 0xffffff);
+            w.ambientLight.intensity = venus ? 0.32 * (0.4 + 0.6 * day) + 0.05 : vac ? 0.07 + 0.05 * day : alien ? 0.2 + 0.25 * day : 0.16 + 0.1 * day;
+            w.ambientLight.color.set(venus ? 0xffc77a : def.sky === 'mars' ? 0xffc9a4 : alien ? (def.atmosphere ?? 0xc8d4ff) : 0xc8d4ff);
             w.hemiLight.intensity = venus ? 0.25 * (0.3 + 0.7 * day) : vac ? 0.03 : 0.12 * day;
         }
         this._weather(dt, def);
@@ -917,12 +930,21 @@ export class Space {
 
     _planetsChanged() {
         const json = this.planets.toJSON();
-        this.game.world?.terrain?.planetsChanged?.(json);
+        // (only the planets whose ground changed — made, terraformed — have their land and map made again;
+        //  a bigger planet or a new orbit changes neither: nothing is remade for it)
+        const sig = this._groundSig || (this._groundSig = new Map()), changed = [];
+        for (const p of this.planets.list) {
+            if (p.kind === 'star') continue;
+            const k = `${p.seed}|${p.look}|${p.terraformed ? p.climate || 1 : 0}|${p.slot}`;
+            if (sig.has(p.id) && sig.get(p.id) !== k) changed.push(p.id);
+            else if (!sig.has(p.id) && sig.size && !p.base) changed.push(p.id);
+            sig.set(p.id, k);
+        }
+        if (changed.length || !this._sentGround) { this.game.world?.terrain?.planetsChanged?.(json, this._sentGround ? changed : null); this._sentGround = true; }
         if (this._worker) {
             this._worker.postMessage({ type: 'planets', s: json });
-            // (a changed planet's map made again)
-            for (const p of this.planets.list) if (!p.base || p.terraformed) this._tex.delete(p.id);
-            if (this._prepared) this._askTextures();
+            for (const id of changed) this._tex.delete(id); // (a changed planet's map made again)
+            if (this._prepared && changed.length) this._askTextures();
         }
         if (this.game.authority && this.game.sync?.net?.active) this.game.sync.net.send({ t: 'planets', s: json });
     }
@@ -992,6 +1014,7 @@ export class Space {
 
     /** The planets from the host / a guest's ask (NetSync 't: planets'). */
     onNet(m, isHost) {
+        if (m.op === 'move') { if (typeof m.id === 'string' && m.o) { this.planets.live(m.id, m.o); this.game.planetMagic?.netHold(m); } return; } // (a planet dragged: PlanetMagic)
         if (m.s && !isHost) { this.planets.applyJSON(m.s); return; }
         if (!isHost) return;
         if (m.op === 'create' && m.def && typeof m.def === 'object') this.planets.add({ ...m.def, created: m.def.created || true });

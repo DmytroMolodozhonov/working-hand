@@ -49,21 +49,29 @@ function put(data, i, c, a = 255) { data[i] = c[0]; data[i + 1] = c[1]; data[i +
 /** A rocky body: heights of its own ground, lit from the west, coloured by what lies on top. */
 function rockyMap(def, data, w, h) {
     const g = def.ground;
-    const H = new Float32Array(w * h), T = new Uint8Array(w * h);
+    const H = new Float32Array(w * h), T = new Uint8Array(w * h), Wt = new Uint8Array(w * h);
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const d = lonLat(i, j, w, h, _d);
         dirToSurface(def, d, _s);
         H[j * w + i] = planetHeight(def, Math.round(_s.x), Math.round(_s.z));
         T[j * w + i] = planetHeight.top;
+        Wt[j * w + i] = planetHeight.water;
     }
     const dust = rgb(g.dust), rock = rgb(g.rock), dark = rgb(g.dark), ice = rgb(g.ice);
+    const grass = rgb(g.grass ?? 0x3fa08a), leaf = rgb(g.leaf ?? 0x9a5ad0), sea = rgb(g.sea ?? 0x2a5aa8);
+    const forest = def.terraformed && def.climate !== 'desert' ? createNoise2D((def.seed | 0) ^ 0x7e57) : null;
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
         const k = j * w + i, hh = H[k];
         const e = H[j * w + ((i + 1) % w)], s = H[Math.min(h - 1, j + 1) * w + i];
         const slope = (hh - e) * 0.09 + (hh - s) * 0.05; // (lit from the north-west)
         const t = T[k];
-        let c = t === 65 ? ice : t === 66 ? dark : t === 64 ? rock : t === 1 ? [70, 140, 60] : t === 9 ? [200, 185, 130] : dust;
-        if (def.terraformed && t === 9 && hh < 1) c = [40, 90, 170]; // (water)
+        let c = t === 65 ? ice : t === 66 ? dark : t === 64 ? rock : t === 67 ? grass : t === 1 ? [70, 140, 60] : t === 9 ? [200, 185, 130] : dust;
+        if (t === 67 && forest) {
+            // (its forests seen from orbit: patches of the crowns' colour over the moss)
+            const d = lonLat(i, j, w, h, _d), f = sph(forest, d, 9) * 0.5 + 0.5;
+            if (f > 0.55) c = mixc(c, leaf, Math.min(0.75, (f - 0.55) * 3));
+        }
+        if (Wt[k] && def.climate !== 'ice') { put(data, k * 4, mixc(sea, [0, 0, 0], Math.min(0.4, Wt[k] * 0.06))); continue; } // (its seas and lakes)
         const lift = Math.max(-0.35, Math.min(0.35, slope + (hh - 4) * 0.012));
         c = lift > 0 ? mixc(c, [255, 255, 255], lift * 0.6) : mixc(c, [0, 0, 0], -lift);
         put(data, k * 4, c);

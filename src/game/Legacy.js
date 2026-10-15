@@ -7,7 +7,10 @@
  *    (health, strength, flight, the spells they taught), the books' spells, the mana grown with
  *    practice and crystals (and the firsts already counted), the achievements («Высший маг» with
  *    them). The things — the suit of the High Mage too — drop at the body (Death.takeEverything).
- *    The hero comes back as new, in the same world.
+ *    The hero comes back as new, in the same world. The gods' scrolls' +100 mana cells (the first «Create a
+ *    Planet», «Enlarge Planet», «Terraform Planet», «Wingardium Leviosa Super Maxima» — PlanetMagic.js) are
+ *    a part of the mana's growth and its list of firsts: they go into the body with it and come back with it
+ *    (until then they can be earned again).
  *  - All of it lies in the body (`b.lg`, Death.js): only its owner can take it back — the spell
  *    «Give Me My Power» (the author: 50 mana, learned only from its scroll — the dark-gold ribbon)
  *    cast at their own skeleton (Game._castGiveMyPower). Then it is all theirs again, added to what
@@ -48,6 +51,7 @@ export function captureLegacy(g) {
         flight: !!B.flight,
         spells: Object.keys(B.spells || {}).filter((k) => B.spells[k]),
         learned: g.books ? [...g.books.learned] : [],
+        // (the growth holds the gods' +100 cells too; `spells` — the firsts already counted, theirs among them)
         mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
     };
@@ -96,7 +100,7 @@ export function absorbLegacy(g, rec) {
     if (M && rec.mana) {
         for (const k of rec.mana.spells || []) M.spellsUsed.add(String(k));
         for (const k of rec.mana.kills || []) M.killsMade.add(String(k));
-        M.grow(Math.max(0, Math.min(10000, Number(rec.mana.growth) || 0)), 'legacy');
+        M.grow(Math.max(0, Math.min(20000, Number(rec.mana.growth) || 0)), 'legacy'); // (with the gods' +100s: up to 400 of it)
     }
     const A = g.achievements;
     let got = 0;

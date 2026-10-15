@@ -53,7 +53,7 @@ TREE_KINDS.forEach((k, i) => {
 });
 /** What a gathered block turns into (grass → earth). */
 export const resourceOf = (block) => (block === BLOCK.GRASS ? BLOCK.DIRT : block === BLOCK.GRAVEL || block === BLOCK.DEEPSTONE || block === BLOCK.PLANET_ROCK || block === BLOCK.PLANET_DARK ? BLOCK.STONE
-    : block === BLOCK.REGOLITH ? BLOCK.SAND : block === BLOCK.PLANET_ICE ? BLOCK.ICE : block); // (another planet's ground: its dust is sand, its rock stone — Space.js)
+    : block === BLOCK.REGOLITH ? BLOCK.SAND : block === BLOCK.PLANET_ICE ? BLOCK.ICE : block === BLOCK.PLANET_GRASS ? BLOCK.DIRT : block === BLOCK.PLANET_WOOD ? BLOCK.WOOD : block === BLOCK.PLANET_LEAF ? BLOCK.LEAVES : block); // (another planet's ground: its dust is sand, its rock stone — Space.js; a terraformed one's moss is earth, its trees wood and leaves)
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();

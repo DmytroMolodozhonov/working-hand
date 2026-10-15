@@ -37,6 +37,7 @@ export const HELD = {
     Waterball: { ru: 'Водяной шар', icon: '💧', own: ['Waterball', 'WaterForming', 'Maxima', 'Frozen', 'Ice'] },
     Levitation: { ru: 'Левиоса', icon: '🪶', own: ['Levitation', 'Attack'] },
     LevitationMaxima: { ru: 'Левиоса Максима', icon: '🪶', own: ['LevitationMaxima', 'Attack'] },
+    PlanetMove: { ru: 'Левиоса Супер Максима', icon: '🪐', own: ['LevitationSuperMaxima'] }, // (a planet held: PlanetMagic.js)
     Alive: { ru: 'Живое дерево', icon: '🌳', own: ['Alive', 'AliveMaxima', 'Attack'] },
     Hellfire: { ru: 'Адский огонь', icon: '🔥', own: ['Hellfire'] },
     Inferno: { ru: 'Инферно', icon: '🔥', own: ['Inferno'] },
@@ -84,6 +85,7 @@ export class Concentration {
         if (g.waterStorm?.busy) return 'WaterStorm';
         if (g.water?.active) return 'Waterball';
         if (g.levMax?.active) return 'LevitationMaxima';
+        if (g.planetMagic?.busy) return 'PlanetMove';
         if (g.levitation?.active || g.doors?.carried) return 'Levitation';
         if (g.hellfire?.busy) return 'Hellfire';
         if (g.houseMagic?.magic && g.houseMagic.magic.by === g.localId) return 'House';
@@ -133,6 +135,7 @@ export class Concentration {
         if (g.levitation?.active) { g.levitation.release(false); done.push('Левиоса'); }
         if (g.doors?.carried) { g.doors._putDown?.(); done.push('дверь'); }
         if (g.levMax?.stop?.()) done.push('Левиоса Максима');
+        if (g.planetMagic?.stop?.(why === 'dead' ? 'dead' : 'focus')) done.push('Левиоса Супер Максима');
         if (g.water?.active) { g.water.drop(); done.push('вода'); }
         if (g.vortex?.stop?.()) done.push('вихрь');
         if (g.hellfire?.busy && g.hellfire.stop('focus')) done.push('адский огонь');

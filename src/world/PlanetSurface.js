@@ -84,15 +84,30 @@ export function planetHeight(def, x, z) {
         h = templeGround(site, x, z, h);
         if (Math.hypot(x - site.x, z - site.z) < TEMPLE_FLAT.R) _c.dark = 0; // (no lava flow across the temple's ground)
     }
-    let water = 0, top = _c.top;
+    let water = 0, top = _c.top, ice = _c.ice;
     if (def.terraformed) {
-        // (the start of a terraformed planet: grass on the land, water in the low places — the planet spells
-        //  session gives each its own look)
-        if (h < 1) { water = Math.min(6, Math.round(1 - h)); top = BLOCK.SAND; }
-        else if (!_c.ice) top = BLOCK.GRASS;
+        // «Terraform Planet» (PlanetMagic.js): the same land, its own life by the planet's distance from the Sun
+        // (def.climate — Planets.climateAt). The relief stays (whatever stands on it stays standing).
+        const cl = def.climate || 'green';
+        const R = recipe(def), m = R.n4(x / 37, z / 37);
+        if (cl === 'green') {
+            if (h < 1) { water = Math.min(6, Math.round(1 - h)); top = BLOCK.REGOLITH; } // (its shore: its own soil)
+            else if (h < 1.6) top = BLOCK.REGOLITH;
+            else if (!_c.ice || h < 14) top = m > 0.55 ? BLOCK.PLANET_DARK : BLOCK.PLANET_GRASS;
+            ice = 0;
+        } else if (cl === 'ice') {
+            if (h < 1) { water = Math.min(6, Math.round(1 - h)); top = BLOCK.PLANET_ICE; ice = 1; } // (frozen lakes: ice to walk on)
+            else top = _c.ice || m > 0.35 ? BLOCK.PLANET_ICE : BLOCK.PLANET_GRASS;
+        } else {
+            // the hot desert: sand everywhere, dark baked rock in patches, no water
+            top = m > 0.45 ? BLOCK.PLANET_DARK : BLOCK.REGOLITH;
+            ice = 0;
+        }
+        planetHeight.top = top; planetHeight.dark = 0; planetHeight.ice = ice; planetHeight.water = water;
+        return Math.max(MIN_LAYER + 3, Math.min(MAX_LAYER - 12, Math.round(h)));
     }
     if (_c.dark && top === BLOCK.REGOLITH) top = BLOCK.PLANET_DARK;
-    planetHeight.top = top; planetHeight.dark = _c.dark; planetHeight.ice = _c.ice; planetHeight.water = water;
+    planetHeight.top = top; planetHeight.dark = _c.dark; planetHeight.ice = ice; planetHeight.water = water;
     return Math.max(MIN_LAYER + 3, Math.min(MAX_LAYER - 12, Math.round(h)));
 }
 const _c = { top: 0, dark: 0, ice: 0 };
@@ -202,12 +217,13 @@ export function generatePlanetChunk(cx, cz, def, bedrock) {
         tops[i] = planetHeight.top; wat[i] = planetHeight.water;
     }
     const s = def.seed | 0;
+    const frozen = !!def.terraformed && def.climate === 'ice';
     let maxTop = 0;
     for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
         const i0 = (lz + 1) * P + lx + 1, h = hh[i0];
         const slope = Math.max(Math.abs(hh[i0 + 1] - h), Math.abs(hh[i0 - 1] - h), Math.abs(hh[i0 + P] - h), Math.abs(hh[i0 - P] - h));
         let surf = tops[i0];
-        if (slope >= 3 && surf !== BLOCK.PLANET_ICE) surf = BLOCK.PLANET_ROCK; // (bare rock on the steep sides)
+        if (slope >= 3 && surf !== BLOCK.PLANET_ICE && !(frozen && wat[i0])) surf = BLOCK.PLANET_ROCK; // (bare rock on the steep sides)
         const col = lz * CHUNK + lx;
         for (let L = MIN_LAYER; L <= h; L++) {
             let type;
@@ -218,11 +234,12 @@ export function generatePlanetChunk(cx, cz, def, bedrock) {
             blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = type;
         }
         let ht = h;
-        for (let L = h + 1; L <= h + wat[i0]; L++) blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = BLOCK.WATER;
+        for (let L = h + 1; L <= h + wat[i0]; L++) blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = frozen ? BLOCK.PLANET_ICE : BLOCK.WATER;
+        if (frozen && wat[i0]) { ht = h + wat[i0]; wat[i0] = 0; } // (an ice world's lakes: solid ice up to the old water's level)
         // scattered boulders (Mars most of all): a rock or two on the dust
         const g = def.ground || {};
-        const rk = (g.rocks || 0.15) * 0.007;
-        if (!wat[i0] && slope < 2 && hash(x0 + lx, z0 + lz, s + 99) < rk && h + 2 <= MAX_LAYER) {
+        const rk = def.terraformed ? 0.0008 : (g.rocks || 0.15) * 0.007;
+        if (!wat[i0] && slope < 2 && ht === h && hash(x0 + lx, z0 + lz, s + 99) < rk && h + 2 <= MAX_LAYER) {
             blocks[((h + 1 - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = BLOCK.PLANET_ROCK;
             ht = h + 1;
             if (hash(x0 + lx, z0 + lz, s + 98) < 0.3) { blocks[((h + 2 - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = BLOCK.PLANET_ROCK; ht = h + 2; }
@@ -230,16 +247,107 @@ export function generatePlanetChunk(cx, cz, def, bedrock) {
         top[col] = ht;
         if (ht + wat[i0] > maxTop) maxTop = ht + wat[i0];
     }
+    if (def.terraformed) maxTop = Math.max(maxTop, alienTrees(def, x0, z0, blocks, top));
     let minOpen = MAX_LAYER;
     for (let i = 0; i < top.length; i++) if (top[i] + 1 < minOpen) minOpen = top[i] + 1;
     return { cx, cz, blocks, top, maxTop, modified: false, minOpen, sea: null, planet: def.id };
+}
+
+/**
+ * A terraformed planet's trees — not the Earth's: each climate its own shapes (PlanetMagic.js), coloured by
+ * the planet's palette (PLANET_WOOD / PLANET_LEAF). One tree a cell of TREE_CELL m at most, found from its
+ * cell alone (the same tree on every computer, whole across the chunks' borders: each chunk puts its part).
+ *   green   «umbrellas» (a tall bare trunk, a wide flat cap with a drooping rim) and «spires» (a thin trunk
+ *           with three round tufts up it)
+ *   ice     glassy frost-spikes: a short trunk, a pointed crown narrowing upwards
+ *   desert  ribbed «cacti» with two arms and a bright flower on top, rare
+ * @returns the highest layer put in this chunk
+ */
+const TREE_CELL = 9;
+const TREE_CHANCE = { green: 0.5, ice: 0.2, desert: 0.1 };
+function alienTrees(def, x0, z0, blocks, top) {
+    const cl = def.climate || 'green', s = (def.seed | 0) + 4242, chance = TREE_CHANCE[cl] ?? 0.3;
+    let hi = 0;
+    const put = (x, L, z, type) => {
+        const lx = x - x0, lz = z - z0;
+        if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || L > MAX_LAYER - 1 || L < MIN_LAYER) return;
+        const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+        if (blocks[i] !== BLOCK.AIR && type === BLOCK.PLANET_LEAF) return; // (a crown never eats the trunk)
+        blocks[i] = type;
+        const col = lz * CHUNK + lx;
+        if (L > top[col]) top[col] = L;
+        if (L > hi) hi = L;
+    };
+    const M = 6; // (the widest crown reaches this far from its trunk)
+    for (let gz = Math.floor((z0 - M) / TREE_CELL); gz <= Math.floor((z0 + CHUNK + M) / TREE_CELL); gz++) {
+        for (let gx = Math.floor((x0 - M) / TREE_CELL); gx <= Math.floor((x0 + CHUNK + M) / TREE_CELL); gx++) {
+            if (hash(gx, gz, s) > chance) continue;
+            const x = gx * TREE_CELL + 1 + Math.floor(hash(gx, gz, s + 1) * (TREE_CELL - 2)), z = gz * TREE_CELL + 1 + Math.floor(hash(gx, gz, s + 2) * (TREE_CELL - 2));
+            if (x < x0 - M || x >= x0 + CHUNK + M || z < z0 - M || z >= z0 + CHUNK + M) continue;
+            const h = planetHeight(def, x, z), surf = planetHeight.top;
+            if (planetHeight.water || (surf !== BLOCK.PLANET_GRASS && !(cl === 'desert' && surf === BLOCK.REGOLITH))) continue;
+            const hs = [planetHeight(def, x + 1, z), planetHeight(def, x - 1, z), planetHeight(def, x, z + 1), planetHeight(def, x, z - 1)];
+            if (hs.some((v) => Math.abs(v - h) > 1)) continue; // (never on a slope)
+            const r = hash(gx, gz, s + 3), b = h + 1;
+            if (cl === 'green' && r < 0.55) {
+                // the umbrella: a bare trunk, a flat round cap, its rim drooping
+                const H = 6 + Math.floor(hash(gx, gz, s + 4) * 5), R = 3 + (hash(gx, gz, s + 5) > 0.6 ? 1 : 0);
+                for (let L = b; L < b + H; L++) put(x, L, z, BLOCK.PLANET_WOOD);
+                for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) {
+                    const d2 = dx * dx + dz * dz;
+                    if (d2 > R * R + 1) continue;
+                    put(x + dx, b + H, z + dz, BLOCK.PLANET_LEAF);
+                    if (d2 <= (R - 2) * (R - 2) + 1) put(x + dx, b + H + 1, z + dz, BLOCK.PLANET_LEAF);
+                    if (d2 > (R - 1) * (R - 1) + 1) put(x + dx, b + H - 1, z + dz, BLOCK.PLANET_LEAF);
+                }
+            } else if (cl === 'green') {
+                // the spire: a thin tall trunk, three round tufts up it
+                const H = 9 + Math.floor(hash(gx, gz, s + 4) * 5);
+                for (let L = b; L < b + H; L++) put(x, L, z, BLOCK.PLANET_WOOD);
+                for (const k of [H - 6, H - 3, H]) {
+                    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+                        if (Math.abs(dx) + Math.abs(dz) + Math.abs(dy) > 2) continue;
+                        put(x + dx, b + k + dy, z + dz, BLOCK.PLANET_LEAF);
+                    }
+                }
+            } else if (cl === 'ice') {
+                // a frost-spike: a short trunk, a crown narrowing to a point
+                const H = 3 + Math.floor(hash(gx, gz, s + 4) * 3), C = 5 + Math.floor(hash(gx, gz, s + 5) * 3);
+                for (let L = b; L < b + H; L++) put(x, L, z, BLOCK.PLANET_WOOD);
+                for (let k = 0; k < C; k++) {
+                    const R = Math.max(0, Math.round(2.2 * (1 - k / C)));
+                    for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (Math.abs(dx) + Math.abs(dz) <= R) put(x + dx, b + H + k, z + dz, BLOCK.PLANET_LEAF);
+                }
+            } else {
+                // a desert «cactus»: a ribbed column, two arms, a flower
+                const H = 3 + Math.floor(hash(gx, gz, s + 4) * 3), ax = hash(gx, gz, s + 5) > 0.5;
+                for (let L = b; L < b + H; L++) put(x, L, z, BLOCK.PLANET_WOOD);
+                const m = b + 1 + Math.floor(H / 3);
+                for (const sg of [-1, 1]) {
+                    put(x + (ax ? sg : 0), m, z + (ax ? 0 : sg), BLOCK.PLANET_WOOD);
+                    put(x + (ax ? sg : 0), m + 1, z + (ax ? 0 : sg), BLOCK.PLANET_WOOD);
+                }
+                put(x, b + H, z, BLOCK.PLANET_LEAF);
+            }
+        }
+    }
+    return hi;
 }
 
 const _col = { r: 0, g: 0, b: 0 };
 /** The colour of a planet block's face (its planet's palette, a little jitter like the Earth's rock). */
 export function planetFaceColor(def, type, ix, L, iz, isTop) {
     const g = def?.ground || {};
-    let base = type === BLOCK.PLANET_ICE ? g.ice ?? 0xdedad2 : type === BLOCK.PLANET_DARK ? g.dark ?? 0x4a4440 : type === BLOCK.PLANET_ROCK ? g.rock ?? 0x6a6058 : g.dust ?? 0x8a7f74;
+    let base = type === BLOCK.PLANET_ICE ? g.ice ?? 0xdedad2 : type === BLOCK.PLANET_DARK ? g.dark ?? 0x4a4440 : type === BLOCK.PLANET_ROCK ? g.rock ?? 0x6a6058
+        : type === BLOCK.PLANET_GRASS ? g.grass ?? 0x3fa08a : type === BLOCK.PLANET_WOOD ? g.wood ?? 0x5a3a5a : type === BLOCK.PLANET_LEAF ? g.leaf ?? 0x9a5ad0 : g.dust ?? 0x8a7f74;
+    if (type === BLOCK.PLANET_GRASS && !isTop) base = g.dust ?? 0x8a7f74; // (its soil under the moss)
+    if (type === BLOCK.PLANET_LEAF) {
+        // (a few shades over a crown: not one plastic box)
+        let k = ((ix >> 1) * 73856093) ^ ((L >> 1) * 19349663) ^ ((iz >> 1) * 83492791);
+        k = ((k ^ (k >>> 13)) >>> 0) % 4;
+        if (k === 1 && g.leaf2 != null) base = g.leaf2;
+        else if (k === 2) base = mix(base, 0xffffff, 0.12);
+    }
     if (type === BLOCK.REGOLITH && !isTop) base = mix(base, g.rock ?? 0x6a6058, 0.35);
     let h = isTop ? ((ix >> 1) * 73856093) ^ (L * 19349663) ^ ((iz >> 1) * 83492791) : (L * 19349663) ^ (type * 83492791);
     h = (h ^ (h >>> 13)) >>> 0;

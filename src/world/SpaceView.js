@@ -178,6 +178,11 @@ function glowTexture() {
     return t;
 }
 
+/** The planet spells' times in the view (s): the meteors melt into a ball, it cools; a planet grows; its air comes. */
+export const VIEW_FX = { FORM: 5, BIRTH: 10, GROW: 3, TERRA: 8 };
+const smooth = (k) => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
+const _hot = new THREE.Color(0xff6a20);
+
 function colorTex(hex) {
     const t = new THREE.DataTexture(new Uint8Array([(hex >> 16) & 255, (hex >> 8) & 255, hex & 255, 255]), 1, 1);
     t.needsUpdate = true;
@@ -202,6 +207,7 @@ export class SpaceView {
         this._makeSky();
         this._makeSun();
         this._makeBelts();
+        this._makeGlows();
         this._sync();
         planets.onChange(() => this._sync());
     }
@@ -296,6 +302,52 @@ export class SpaceView {
         }
     }
 
+    /**
+     * The planet spells' light (PlanetMagic.js): a few soft glows (the meteors melting into a ball, a planet
+     * growing, its new air, the pearl hold of «Wingardium Leviosa Super Maxima»). Made once, compiled with
+     * the rest; each frame they go where an effect is (or hide).
+     */
+    _makeGlows() {
+        const tex = glowTexture();
+        this.glows = [];
+        for (let i = 0; i < 3; i++) {
+            const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, color: 0xffffff }));
+            s.visible = false;
+            s.renderOrder = 2;
+            this.root.add(s);
+            this.glows.push(s);
+        }
+        this.fx = { hold: null }; // (PlanetMagic: the planet held now, by anybody: {id})
+    }
+
+    _glow(i, x, y, z, size, color, k) {
+        const s = this.glows[i];
+        if (!s) return;
+        s.visible = k > 0.01;
+        if (!s.visible) return;
+        s.position.set(x, y, z);
+        s.scale.setScalar(size);
+        s.material.color.setHex(color).multiplyScalar(Math.min(1.6, k));
+    }
+
+    /**
+     * How big a body is drawn now: its radius, or on its way there — born of meteors (def.born: the
+     * shared time), grown by «Enlarge Planet» (def.grownAt, from def.radiusFrom). Also its heat (0..1).
+     */
+    radiusNow(def, t) {
+        this._heat = 0;
+        if (def.born && t - def.born < VIEW_FX.BIRTH) {
+            const a = t - def.born;
+            this._heat = 1 - smooth((a - VIEW_FX.FORM) / (VIEW_FX.BIRTH - VIEW_FX.FORM));
+            return def.radius * Math.max(0.04, smooth((a - 1.2) / (VIEW_FX.FORM - 1.2)));
+        }
+        if (def.grownAt && def.radiusFrom && t - def.grownAt < VIEW_FX.GROW && t >= def.grownAt) {
+            const k = smooth((t - def.grownAt) / VIEW_FX.GROW);
+            return def.radiusFrom + (def.radius - def.radiusFrom) * k;
+        }
+        return def.radius;
+    }
+
     _rockMat(color) {
         this._rockMats = this._rockMats || [];
         const m = new THREE.ShaderMaterial({ uniforms: { uSun: { value: new THREE.Vector3() }, uCol: { value: new THREE.Color(color) } }, vertexShader: ROCK_VS, fragmentShader: ROCK_FS });
@@ -310,14 +362,26 @@ export class SpaceView {
             if (def.kind === 'star') continue;
             seen.add(def.id);
             let b = this.bodies.get(def.id);
+            // (its air came or went — «Terraform Planet»: the body made again with it, its map kept)
+            if (b && (b.atmoCol ?? null) !== (def.atmosphere ?? def.clouds ?? null)) {
+                const map = b.u.map.value;
+                this.root.remove(b.group, b.orbit);
+                b.orbit?.geometry.dispose();
+                this.bodies.delete(def.id);
+                b = this._makeBody(def);
+                b.u.map.value.dispose?.();
+                b.u.map.value = map;
+                this.bodies.set(def.id, b);
+            }
             if (!b) { b = this._makeBody(def); this.bodies.set(def.id, b); }
             b.def = def;
             b.group.scale.setScalar(def.radius);
+            if (b.ru) b.ru.uR.value = def.radius; // (rings round a planet grown bigger)
             b.tilt.rotation.z = (def.kind === 'gas' ? def.tilt || 0 : 0) * Math.PI / 180; // (rocky bodies: their surface frame stays upright — Planets.js)
             this._orbitLine(b, def);
         }
         for (const [id, b] of this.bodies) if (!seen.has(id)) { this.root.remove(b.group, b.orbit); this.bodies.delete(id); }
-        for (const [id, m] of this.clusterMeshes) m.visible = !this.planets.cluster(id)?.used;
+        for (const [id, m] of this.clusterMeshes) { const c = this.planets.cluster(id); m.visible = !c?.used || !!c.usedAt; }
     }
 
     _makeBody(def) {
@@ -329,7 +393,7 @@ export class SpaceView {
         };
         const mesh = new THREE.Mesh(this.geoLo, new THREE.ShaderMaterial({ uniforms: u, vertexShader: PLANET_VS, fragmentShader: PLANET_FS }));
         tilt.add(mesh);
-        const b = { def, group, tilt, mesh, u, atmo: null, clouds: null, rings: null };
+        const b = { def, group, tilt, mesh, u, atmo: null, clouds: null, rings: null, atmoCol: def.atmosphere ?? def.clouds ?? null };
         if (def.atmosphere || def.clouds) {
             const k = def.look === 'earth' ? 1.05 : def.kind === 'gas' ? 1.03 : 1.05;
             const au = { uSun: u.uSun, uAtmo: { value: new THREE.Color(def.atmosphere ?? def.clouds) }, uK: { value: def.look === 'earth' ? 1.0 : 0.6 }, uCenter: { value: new THREE.Vector3() }, uRatio: { value: 1 / k } };
@@ -356,7 +420,7 @@ export class SpaceView {
     }
 
     _orbitLine(b, def) {
-        if (b.orbitA === def.a && b.orbit) return;
+        if (b.orbitA === def.a && b.orbitL === (def.lift || 0) && b.orbitI === (def.incl || 0) && b.orbit) return;
         if (b.orbit) { this.root.remove(b.orbit); b.orbit.geometry.dispose(); }
         const N = 256, pos = new Float32Array(N * 3);
         const d = { ...def, phase: 0, period: 1 };
@@ -370,7 +434,7 @@ export class SpaceView {
         this._earthOrbitMat = this._earthOrbitMat || new THREE.LineBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.45, depthWrite: false });
         b.orbit = new THREE.LineLoop(g, def.look === 'earth' ? this._earthOrbitMat : this._orbitMat);
         b.orbit.frustumCulled = false;
-        b.orbitA = def.a;
+        b.orbitA = def.a; b.orbitL = def.lift || 0; b.orbitI = def.incl || 0;
         this.root.add(b.orbit);
     }
 
@@ -415,10 +479,22 @@ export class SpaceView {
         this.sunGlow.scale.setScalar(Math.max(SPACE.SUN_R * 7, ds * 0.06));
         const sunRel = _v.set(sx, sy, sz);
         const pxK = (o.height || 720) / (2 * Math.tan((C.fov * Math.PI) / 360));
+        let gi = 0;
         for (const b of this.bodies.values()) {
             const def = b.def;
             planetPosition(def, t, _p, this.planets);
             b.group.position.set(_p.x - cam.x, _p.y - cam.y, _p.z - cam.z);
+            // (the planet spells: a body being born, growing, given air, held — PlanetMagic.js)
+            const rNow = this.radiusNow(def, t), heat = this._heat;
+            if (b.group.scale.x !== rNow) b.group.scale.setScalar(rNow);
+            b.u.uAmb.value = (def.look === 'earth' ? 0.035 : 0.02) + heat * 0.9;
+            if (gi < this.glows.length) {
+                const gp = b.group.position;
+                if (heat > 0.01) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 4.5, 0xff8a3a, heat * 1.3);
+                else if (rNow !== def.radius) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 3.2, 0xfff0d0, 0.6);
+                else if (def.terraAt && t - def.terraAt >= 0 && t - def.terraAt < VIEW_FX.TERRA) { const k = Math.sin(Math.PI * (t - def.terraAt) / VIEW_FX.TERRA); this._glow(gi++, gp.x, gp.y, gp.z, def.radius * 3.4, def.atmosphere ?? 0x9fe0ff, 0.9 * k); }
+                else if (this.fx.hold?.id === def.id) this._glow(gi++, gp.x, gp.y, gp.z, def.radius * 3, 0xf2e6ff, 0.75 + 0.15 * Math.sin(t * 5));
+            }
             b.mesh.rotation.y = spinAt(def, t);
             const d = b.group.position.length();
             b.group.visible = def.id !== o.hide;
@@ -447,7 +523,19 @@ export class SpaceView {
             planetPosition(c, t, _p);
             m.position.set(_p.x - cam.x, _p.y - cam.y, _p.z - cam.z);
             m.rotation.y = t * 0.01;
+            if (c.used) {
+                // «Create a Planet»: the rocks drawn in to one point, crashing, red-hot — then gone (the planet is there)
+                const a = c.usedAt ? t - c.usedAt : 1e9;
+                if (a > VIEW_FX.FORM + 0.5 || a < 0) { m.visible = false; continue; }
+                const k = smooth(a / VIEW_FX.FORM);
+                m.scale.setScalar(Math.max(0.02, 1 - k));
+                m.rotation.y = t * 0.01 + k * k * 9;
+                const u = m.material.uniforms.uCol.value, base = m.userData.base || (m.userData.base = u.getHex());
+                u.setHex(base).lerp(_hot, Math.min(1, k * 1.4));
+                if (gi < this.glows.length) this._glow(gi++, m.position.x, m.position.y, m.position.z, c.r * (1.6 - k), 0xff7a2a, 0.3 + k);
+            }
         }
+        for (; gi < this.glows.length; gi++) this.glows[gi].visible = false;
         // (close to a planet the orbits' lines would cross the whole view: they fade away)
         const ok = o.orbitK ?? 1;
         this._orbitMat.opacity = 0.22 * ok; this._earthOrbitMat.opacity = 0.45 * ok;
@@ -467,7 +555,9 @@ export class SpaceView {
         C.updateMatrixWorld(true);
         // (the far / near spheres both in use once, so both are uploaded too)
         for (const b of this.bodies.values()) { b.group.visible = true; b.group.position.set(0, 0, -b.def.radius * 3); }
+        for (const s of this.glows) { s.visible = true; s.position.set(0, 0, -500); }
         try { renderer.compile(this.scene, C); } catch (e) { /* (no GL in tests) */ }
+        for (const s of this.glows) s.visible = false;
     }
 
     dispose() {

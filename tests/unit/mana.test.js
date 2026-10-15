@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Combat } from '../../src/game/Combat.js';
-import { Mana, MANA, FIRST_SPELL, NOT_SPELLS, SAME_SPELL, MAGIC_KILL, firstSpellGain, duelGain, animalMagicKind, creditKill } from '../../src/game/Mana.js';
+import { Mana, MANA, FIRST_SPELL, NOT_SPELLS, SAME_SPELL, MAGIC_KILL, firstSpellGain, duelGain, animalMagicKind, creditKill, GOD_SPELLS } from '../../src/game/Mana.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { readFileSync } from 'node:fs';
 import { playerSnapshot, applyPlayerSnapshot } from '../../src/game/WorldSave.js';
@@ -50,7 +50,7 @@ test('mana: the table — every spell matchSpell / SPELL_COST knows has its bonu
     const names = new Set([...src.matchAll(/return '([A-Z][A-Za-z]+)'/g)].map((m) => m[1]).concat(Object.keys(SPELL_COST)));
     for (const m of src.matchAll(/'([A-Z][A-Za-z]+Maxima)'/g)) names.add(m[1]);
     for (const n of names) assert.ok(n in FIRST_SPELL || n in SAME_SPELL || NOT_SPELLS.has(n), `${n}: no first-success bonus in the table (or NOT_SPELLS)`);
-    for (const [n, v] of Object.entries(FIRST_SPELL)) assert.ok(v >= 1 && v <= 20, n);
+    for (const [n, v] of Object.entries(FIRST_SPELL)) assert.ok(v >= 1 && v <= (GOD_SPELLS.has(n) ? 100 : 20), n); // (the gods' scrolls: +100 — the author)
     for (const n of ['Lumos', 'Accio', 'Gather', 'CreateWall', 'Fire', 'Wind']) assert.equal(firstSpellGain(n), 1, n);
     for (const n of ['LightningStrike', 'TotalDestruction', 'Hellfire', 'WaterVortexSuperMaxima']) assert.ok(firstSpellGain(n) >= 12, n);
     assert.equal(firstSpellGain('Hellfire'), 20);

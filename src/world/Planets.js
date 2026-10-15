@@ -16,7 +16,10 @@
  *                                              created: playerName}; gets a seed and a surface slot of its own
  *       .update(id, patch)                     radius ×1.3 («Увеличить планету»), {terraformed: true, …}
  *                                              («Терраформировать»), {orbit: {…}} («Wingardium Leviosa Super Maxima»)
+ *       .live(id, orbit)                       a planet's orbit while it is dragged (quiet: no rebuild; PlanetMagic)
  *       .onChange(fn)                          called after any add / update / apply (the view rebuilds it)
+ *   climateAt(a) / ZONES / terraformPatch(def, climate)   «Terraform Planet»: what comes of a planet this far out
+ *   orbitThrough(x, z, t)                      a circular orbit through a point (a planet moved there)
  *   game.space.change(id, patch) / game.space.create(def)   the same from a spell: the host applies it,
  *                                              a guest asks the host; every computer and the save get it
  *   planetPosition(def, t, out, reg)           where a body is at the shared time t (s): heliocentric, space units
@@ -110,6 +113,55 @@ export const BELTS = {
     kuiper: { inner: AUd(30.5), outer: AUd(50), count: 1800, size: [10, 90], incl: 6 },
 };
 
+/**
+ * «Terraform Planet»: what comes of a planet by its distance from the Sun (its orbit's radius `a`, m).
+ *   < HOT       nothing: the air boils off at once — it does not work (closer than half-way Mercury → Venus)
+ *   HOT…WARM    a hot desert: air, no water, orange sand, low thorny plants
+ *   WARM…COLD   the green zone (Venus' orbit out to just past Mars): air, water, its own grass, trees
+ *   COLD…FAR    an ice world: air, the water frozen, snow-blue moss, glassy frosted trees (the asteroid
+ *               belt and the giants' orbits)
+ *   > FAR       nothing: the Sun does not warm it — the air would freeze and fall as snow (Pluto: move it
+ *               closer first — «Wingardium Leviosa Super Maxima»)
+ */
+export const ZONES = { HOT: 21000, WARM: 25000, COLD: 47000, FAR: 150000 };
+export function climateAt(a) {
+    if (!(a > 0)) return null;
+    if (a < ZONES.HOT || a > ZONES.FAR) return null;
+    return a < ZONES.WARM ? 'desert' : a <= ZONES.COLD ? 'green' : 'ice';
+}
+
+/**
+ * The new life of a terraformed planet (registry patch): air, its own sky, its own colours — never the Earth's.
+ * Three looks of the green zone (picked by the planet's seed), one of the desert, one of the ice world.
+ * ground: dust (soil / sand), rock, dark, ice, grass (moss), wood, leaf, leaf2 (crowns), sea (water from orbit).
+ */
+const TERRA = {
+    green: [
+        { ground: { grass: 0x2fa58f, dust: 0x6a5a48, dark: 0x1f7a6a, rock: 0x5a6070, ice: 0xe2eef2, wood: 0x4a3050, leaf: 0xb05ad8, leaf2: 0xd77ae8, sea: 0x1f6fa0 }, skyZ: [0.33, 0.42, 0.78], skyH: [0.78, 0.66, 0.88], atmosphere: 0xb7a2ff, name: 'бирюзовый мох, лиловые деревья-зонтики' },
+        { ground: { grass: 0xc0662a, dust: 0x7a5a3a, dark: 0x8a3a20, rock: 0x6a5a5a, ice: 0xe8eef0, wood: 0x3a2a20, leaf: 0x3fd0c0, leaf2: 0x2aa8d0, sea: 0x2a8a7a }, skyZ: [0.28, 0.55, 0.6], skyH: [0.86, 0.76, 0.6], atmosphere: 0x8fe8d8, name: 'рыжая трава, голубые кроны' },
+        { ground: { grass: 0x4a8ad8, dust: 0x5a5048, dark: 0x2a5aa0, rock: 0x707080, ice: 0xeef2f8, wood: 0x5a4a3a, leaf: 0xf0c040, leaf2: 0xe08a30, sea: 0x3a9a7a }, skyZ: [0.5, 0.6, 0.33], skyH: [0.92, 0.86, 0.6], atmosphere: 0xd8e890, name: 'синяя трава, золотые кроны' },
+    ],
+    desert: [{ ground: { grass: 0xb08a4a, dust: 0xd88a4a, dark: 0x6a3a2a, rock: 0x8a5a3a, ice: 0xf0e0c8, wood: 0x8a4a9a, leaf: 0xff4a6a, leaf2: 0xffb03a, sea: 0x8a6a4a }, skyZ: [0.72, 0.42, 0.28], skyH: [1.0, 0.74, 0.5], atmosphere: 0xffb070, name: 'жаркая пустыня, лиловые кактусы' }],
+    ice: [{ ground: { grass: 0x9ad8e8, dust: 0xb8c8d0, dark: 0x6a8aa0, rock: 0x7a8a9a, ice: 0xe8f4ff, wood: 0x8ab0d0, leaf: 0xd8f0ff, leaf2: 0xa8e0ff, sea: 0xcfe8f8 }, skyZ: [0.42, 0.58, 0.86], skyH: [0.86, 0.93, 1.0], atmosphere: 0xbfe8ff, name: 'льды, снежно-голубой мох, ледяные деревья' }],
+};
+export function terraformPatch(def, climate) {
+    const list = TERRA[climate];
+    if (!list) return null;
+    const v = list[((def.seed | 0) >>> 3) % list.length];
+    return { terraformed: true, climate, air: 'air', sky: 'alien', skyZ: v.skyZ, skyH: v.skyH, atmosphere: v.atmosphere, ground: { ...v.ground }, terraLook: v.name };
+}
+
+/**
+ * A circular orbit (in the ecliptic) through the heliocentric point (x, z) at time t: {a, phase, period,
+ * incl: 0, ecc: 0} — the body is exactly there now and goes on round the Sun from there.
+ */
+export function orbitThrough(x, z, t) {
+    const a = Math.max(1, Math.round(Math.hypot(x, z)));
+    const period = Tk(Math.pow(a / SPACE.AU, 1 / 0.7));
+    const phase = Math.atan2(z, x) - (2 * Math.PI * t) / period;
+    return { a, phase: ((phase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), period, incl: 0, ecc: 0, node: 0 };
+}
+
 /** Where in its orbit a body is (radians) at time t. */
 const angleAt = (def, t) => (def.phase || 0) + (2 * Math.PI * t) / (def.period || 1);
 const DEG = Math.PI / 180;
@@ -131,7 +183,7 @@ export function planetPosition(def, t, out = { x: 0, y: 0, z: 0 }, reg = null) {
     const vy = v * Math.sin(i), vv = v * Math.cos(i);
     out.x = u * cn - vv * sn;
     out.z = u * sn + vv * cn;
-    out.y = vy;
+    out.y = vy + (def.lift || 0); // (lift: a planet moved by «Wingardium Leviosa Super Maxima» keeps the height it was put at)
     if (def.parent && reg) {
         const p = reg.get(def.parent);
         if (p) { const px = out.x, py = out.y, pz = out.z; planetPosition(p, t, out, reg); out.x += px; out.y += py; out.z += pz; }
@@ -302,6 +354,7 @@ export class PlanetRegistry {
         let slot = -1;
         if ((def.kind || 'rocky') === 'rocky') { slot = 5; while (this._bySlot.has(slot)) slot++; if (slot >= SPACE.SLOT_COLS * SPACE.SLOT_ROWS) slot = -1; }
         const a = def.a || SPACE.AU * 2;
+        if (def.cluster) { const c = this.cluster(def.cluster); if (c) { c.used = true; c.usedAt = def.born ?? c.usedAt ?? null; } } // («Create a Planet»: its meteors are gone into it)
         const p = {
             kind: 'rocky', radius: 200, color: 0x8a7a6a, gravity: 0.2, air: 'none', tilt: 10, day: 1800, phase: 0, incl: 0, look: 'rock',
             ground: { dust: 0x8a7f74, rock: 0x6a6058, dark: 0x4a4440, ice: 0xdedad2, craters: 0.8, hills: 0.7 }, sky: 'vacuum',
@@ -355,7 +408,11 @@ export class PlanetRegistry {
             if (Object.keys(d).length) changed[p.id] = d;
         }
         const clusters = this.clusters.filter((c) => c.used).map((c) => c.id);
-        return { v: 1, changed, created, clusters };
+        const clusterAt = {};
+        for (const c of this.clusters) if (c.used && c.usedAt) clusterAt[c.id] = c.usedAt;
+        const out = { v: 1, changed, created, clusters };
+        if (Object.keys(clusterAt).length) out.clusterAt = clusterAt; // (when each was made into a planet: its end is seen everywhere)
+        return out;
     }
 
     /** Back from a save / the host. */
@@ -369,8 +426,20 @@ export class PlanetRegistry {
             this.list.push(p); this.byId.set(p.id, p);
             if (p.slot != null && p.slot >= 0) this._bySlot.set(p.slot, p);
         }
-        for (const id of Array.isArray(s.clusters) ? s.clusters : []) { const c = this.cluster(id); if (c) c.used = true; }
+        for (const id of Array.isArray(s.clusters) ? s.clusters : []) { const c = this.cluster(id); if (c) { c.used = true; const at = Number(s.clusterAt?.[id]); if (Number.isFinite(at)) c.usedAt = at; } }
         this._changed();
+    }
+
+    /**
+     * A planet's orbit while it is being moved («Wingardium Leviosa Super Maxima», PlanetMagic.js): the fields
+     * change at once, quietly — nothing is remade, nobody is told (the move itself goes by the network a few
+     * times a second); the end of the move is an ordinary update().
+     */
+    live(id, o) {
+        const p = this.byId.get(id);
+        if (!p || !o || p.kind === 'star') return false;
+        for (const k of ['a', 'phase', 'period', 'incl', 'ecc', 'node', 'lift']) if (Number.isFinite(o[k])) p[k] = o[k];
+        return true;
     }
 }
 

@@ -120,6 +120,7 @@ import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
 import { IceMagic } from './IceMagic.js';
 import { Space } from './Space.js';
+import { PlanetMagic, PLANET_SPELLS } from './PlanetMagic.js';
 import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
@@ -134,7 +135,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
+const MANA_LATER = new Set(['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -401,6 +402,7 @@ export class Game {
         this.castleMagic = new CastleMagic(this); // «Create a Castle» (CastleMagic.js)
         this.iceMagic = new IceMagic(this); // «Create an Ice Castle», «Ice Bridge» (IceMagic.js)
         this.space = new Space(this); // «Космос»: Flying Maxima, the Solar System, the planets (Space.js, world/Planets.js)
+        this.planetMagic = new PlanetMagic(this); // the gods' scrolls: «Create a Planet», «Enlarge Planet», «Terraform Planet», «Wingardium Leviosa Super Maxima»
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
         this.burnWreck = new BurnWreck(this); // a house burning down: what loses its support falls, chests burn (BurnWreck.js)
@@ -1158,7 +1160,7 @@ export class Game {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
         // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
         if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
-        return !!(this.wards?.setting || this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
+        return !!(this.wards?.setting || this.planetMagic?.busy || this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
     }
 
     _castLocalSpell(text, isFinal = true) {
@@ -1214,6 +1216,8 @@ export class Game {
             if (r) this.combat.pay(name);
             return r;
         }
+        // the gods' scrolls: the planets (PlanetMagic.js) — in space or on a planet
+        if (PLANET_SPELLS.includes(name)) return this.planetMagic.cast(name, isFinal);
         // off the Earth some spells have nothing to work with: no air for fire, no water, no ground in space (Space.js)
         const offEarth = this.space?.spellBlocked(name);
         if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
@@ -1463,6 +1467,7 @@ export class Game {
         if (this.combat.dropShield('🛑 Стоп — щит снят')) done.push('щит');
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
         if (this.levMax?.stop()) done.push('Левиоса Максима'); // (what it holds falls)
+        if (this.planetMagic?.stop()) done.push('Левиоса Супер Максима'); // (the planet stays on its new orbit)
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
         const hf = this.hellfire?.sayStop(); // («стоп» costs 50 mana for it)
@@ -2807,6 +2812,7 @@ export class Game {
         this.vortex.update(dt);
         this.hellfire?.update(dt);
         this.waterStorm?.update(dt);
+        this.planetMagic?.update(dt); // (a planet held by «Wingardium Leviosa Super Maxima» follows the hand)
         this.strikes.update(dt); // fists, slaps, pushes, shoves: real contact only
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;

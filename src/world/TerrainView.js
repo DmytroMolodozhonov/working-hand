@@ -51,12 +51,67 @@ export class Terrain {
      * The planets changed (Planets.js: made, terraformed, sent by the host): the workers make their ground
      * by the new recipe; the planets' chunks made before (not changed by anybody) are made again.
      */
-    planetsChanged(json) {
+    planetsChanged(json, ids = null) {
         if (this._workers) for (const w of this._workers) w.postMessage({ type: 'planets', s: json });
-        for (const [k, c] of this.data.chunks) if (c.planet && !c.modified) this.data.chunks.delete(k);
         this.data._last = null;
-        for (const [key, e] of [...this.meshes]) if (this.data.planetOfChunk(e.cx, e.cz)) this._unload(key, e);
-        this._center = null;
+        if (!ids) {
+            // (all of them, at once: the planets first came from a save / the host)
+            for (const [k, c] of this.data.chunks) if (c.planet && !c.modified) this.data.chunks.delete(k);
+            for (const [key, e] of [...this.meshes]) if (this.data.planetOfChunk(e.cx, e.cz)) this._unload(key, e);
+            this._center = null;
+            return;
+        }
+        if (!ids.length) return;
+        // only these planets (a new one, «Terraform Planet»): the ground not shown is forgotten (made by the new
+        // recipe when wanted); the shown ground is made again a few chunks a frame, the nearest first, the old one
+        // staying until its new one is in — no hole, no long frame. Ground a player changed (built, dug) stays.
+        const set = new Set(ids);
+        const ofSet = (cx, cz) => { const p = this.data.planetOfChunk(cx, cz); return !!p && set.has(p.id); };
+        for (const [k, c] of this.data.chunks) if (c.planet && set.has(c.planet) && !c.modified && !this.meshes.has(k)) this.data.chunks.delete(k);
+        const c0 = this._center, list = [];
+        for (const [key, e] of this.meshes) if (ofSet(e.cx, e.cz)) list.push({ key, cx: e.cx, cz: e.cz, d: c0 ? (e.cx - c0.cx) ** 2 + (e.cz - c0.cz) ** 2 : 0 });
+        list.sort((a, b) => b.d - a.d); // (popped from the end: the nearest first)
+        this._remake = list;
+        this._remakeFlight = new Map();
+        this._remade = [];
+    }
+
+    /** «Terraform Planet»: the shown ground of the planet made again, a little a frame (planetsChanged). */
+    _remakeStep(t0) {
+        const d = this.data;
+        if (this._workers) {
+            while (this._remade.length && performance.now() - t0 < this.budgetMs) {
+                const m = this._remade.shift(), entry = this.meshes.get(m.key);
+                if (!entry || entry.cx !== m.cx || entry.cz !== m.cz) continue;
+                const c = d.chunks.get(m.key);
+                if (c?.modified) continue; // (a player's work here: kept as it is)
+                m.chunk.rev = (c?.rev || 0) + 1;
+                d.chunks.set(m.key, m.chunk);
+                d._last = null;
+                this._fill(entry.ground, m.arrays.land);
+                this._fill(entry.water, m.arrays.water);
+                this.stats.built++;
+            }
+            while (this._remake.length && this._remakeFlight.size < 2) {
+                const job = this._remake.pop();
+                if (!this.meshes.has(job.key)) continue;
+                let w = this._workers[0];
+                for (const o of this._workers) if (o.load < w.load) w = o;
+                w.load++;
+                const id = ++this._jobId;
+                this._remakeFlight.set(job.key, id);
+                w.postMessage({ type: 'build', id, key: job.key, cx: job.cx, cz: job.cz, fcx: job.cx, fcz: job.cz, R: this.radiusChunks });
+            }
+            return;
+        }
+        // (no workers: here, one chunk a frame)
+        const job = this._remake.pop();
+        const entry = job && this.meshes.get(job.key);
+        if (!entry) return;
+        const c = d.chunks.get(job.key);
+        if (c && !c.modified) d.chunks.delete(job.key);
+        d._last = null;
+        this._build(entry);
     }
 
     /**
@@ -175,6 +230,7 @@ export class Terrain {
         }
         if (m.type !== 'built') return;
         w.load--;
+        if (this._remakeFlight?.get(m.key) === m.id) { this._remakeFlight.delete(m.key); this._remade.push(m); return; } // (a planet's ground made again)
         const f = this._inFlight.get(m.key);
         if (!f || f.id !== m.id) return; // (asked again since: an older answer)
         this._inFlight.delete(m.key);
@@ -386,6 +442,8 @@ export class Terrain {
                 if (performance.now() - t0 > this.budgetMs) break;
             }
         }
+
+        if (this._remake?.length || this._remade?.length || this._remakeFlight?.size) this._remakeStep(t0);
 
         // (generation 5: tall grass and flowers round the player)
         if (this.flora) this.flora.update(focus);

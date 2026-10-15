@@ -54,7 +54,12 @@ export const FIRST_SPELL = {
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8, CreateCastle: 20,
     IceCastle: 15, IceBridge: 3, FlyingMaxima: 10, GiveMyPower: 2,
+    // the gods' scrolls (the author: «за использование любого заклинания из этой библиотеки первый раз — 100 ячеек маны»)
+    CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100,
 };
+
+/** The spells of the gods' scrolls (PlanetMagic.js): +100 cells the first time, with a banner of its own. */
+export const GOD_SPELLS = new Set(['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima']);
 
 /** Not spells (or nothing to learn): never grow the maximum. */
 export const NOT_SPELLS = new Set(['Stand', 'Stop', 'Pause', 'Nox', 'Attack', 'Reveal', 'Hammer', 'WardGrow', 'ProtectionHouseGrant']);
@@ -150,8 +155,17 @@ export class Mana {
         const n = firstSpellGain(name);
         const key = SAME_SPELL[name] || name;
         if (!n || this.spellsUsed.has(key)) return 0;
+        if (GOD_SPELLS.has(key) && !this.combat?.enabled) return 0; // (Creative: mana does not count — nothing to earn)
         this.spellsUsed.add(key);
         this.grow(n, 'spell', key);
+        if (GOD_SPELLS.has(key)) {
+            // (a gift of the gods: cells added to the maximum for good — death takes them into the body, Legacy.js)
+            const g = this.game, title = `✨ +${n} ячеек маны!`, sub = `Первое «${spellTitle(key)}» — дар богов. Теперь ячеек маны: ${Math.round(this.max)}`;
+            if (g.achievements?._banner) g.achievements._banner(title, sub, true);
+            else this._say(`${title} ${sub}`);
+            g.sound?.playSpace?.('spaceGift', 0.7);
+            return n;
+        }
         this._say(`🔷 Первое «${spellTitle(key)}»! Мана +${n} к максимуму`);
         return n;
     }
@@ -253,6 +267,7 @@ const TITLES = {
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle',
     WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility',
     IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',
+    CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima',
 };
 
 export function spellTitle(name) {
