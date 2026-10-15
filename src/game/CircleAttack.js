@@ -186,7 +186,7 @@ export class CircleAttack {
     update(dt) {
         this._warmT = (this._warmT || 0) + dt;
         if (!this._warmed && this._warmT > 2) this._warm();
-        else if (this._warmed && !this._soundReady && this._warmT > 4) { this._soundReady = true; this.game.sound?.prepareCircleAttack?.(); } // (its music made early)
+        else if (this._warmed && !this._soundReady && this._warmT > 4) this._soundReady = this.game.sound?.prepareCircleAttack?.() ?? true; // (its music made early, a few ms a frame)
         if (!this.list.length) return;
         dt = Math.min(dt, 0.05);
         for (const d of [...this.list]) {
@@ -313,6 +313,7 @@ export class CircleAttack {
         this._warmed = true;
         if (!g.renderer?.compile || !g.camera || !g.scene) return;
         const scene = g.scene, tmp = new THREE.Scene();
+        tmp.fog = scene.fog; // (the same programs as in the world: with its fog)
         try {
             g.scene = tmp;
             this._build({ p: new THREE.Vector3(), f: circleForm(true), max: true });

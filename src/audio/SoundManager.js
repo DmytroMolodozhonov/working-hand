@@ -30,6 +30,9 @@ const FILES = [
     { key: 'battle', path: 'music/Музыка для начала битвы.mp3' },
 ];
 
+/** Runs a sound-making generator to its end (when it is needed now). */
+function finish(gen) { let r; do { r = gen.next(); } while (!r.done); return r.value; }
+
 export class SoundManager {
     constructor(camera) {
         this.camera = camera;
@@ -496,18 +499,32 @@ export class SoundManager {
         this.playRumble(position, listenerPos);
     }
 
-    /** «Circle Attack»'s music made ahead (early in the game, not on the first cast). */
-    prepareCircleAttack() {
-        if (this.context && !this.sounds.circleAttack) this.sounds.circleAttack = this._synthCircleAttack();
+    _synthCircleAttack() { return finish(this._synthCircleAttackGen()); }
+    _synthMegaBlast(seconds) { return finish(this._synthMegaBlastGen(seconds)); }
+
+    /** A long sound made ahead, a few ms a frame (never one long frame): @returns true when it is made. */
+    _prepare(key, make, budgetMs = 3) {
+        if (!this.context || this.sounds[key]) return true;
+        const gens = this._gens || (this._gens = {});
+        const gen = gens[key] || (gens[key] = make());
+        const t0 = performance.now();
+        let r;
+        do { r = gen.next(); } while (!r.done && performance.now() - t0 < budgetMs);
+        if (!r.done) return false;
+        this.sounds[key] = r.value;
+        delete gens[key];
+        return true;
     }
 
-    /** «Inspirius»' sounds made ahead, one a call: @returns true when all are made. */
+    /** «Circle Attack»'s music made ahead (early in the game, not on the first cast): call every frame until true. */
+    prepareCircleAttack() { return this._prepare('circleAttack', () => this._synthCircleAttackGen()); }
+
+    /** «Inspirius»' sounds made ahead, a little a frame: @returns true when all are made. */
     prepareInspirius() {
         if (!this.context) return true;
         if (!this.sounds.inspCast) { this.sounds.inspCast = this._synthElectric(1.4, true); return false; }
         if (!this.sounds.inspZap) { this.sounds.inspZap = this._synthElectric(0.3, false); return false; }
-        if (!this.sounds.inspBlast) { this.sounds.inspBlast = this._synthMegaBlast(6); return false; }
-        return true;
+        return this._prepare('inspBlast', () => this._synthMegaBlastGen(6));
     }
 
     /** «Inspirius»: the ball leaves the wand — a rising electric whine and crackle. */
@@ -534,7 +551,8 @@ export class SoundManager {
         if (this.sounds.explosion) this._spell(this.sounds.explosion, Math.max(0.3, 2.4 - d / 90), 0.55);
     }
 
-    _synthCircleAttack() {
+    /** (made a piece at a time — `yield` between pieces — so it can be made over many frames) */
+    * _synthCircleAttackGen() {
         const ctx = this.context, sr = ctx.sampleRate, T = 7.6, len = Math.floor(sr * T);
         const buf = ctx.createBuffer(1, len, sr), out = buf.getChannelData(0);
         // one period of a «choir» voice (soft harmonics), read by phase
@@ -545,6 +563,7 @@ export class SoundManager {
         const chords = [[0, 2.5, [50, 53, 57, 62]], [2.5, 4.6, [46, 50, 53, 58]], [4.6, T, [50, 54, 57, 62, 69]]];
         const ph = new Float64Array(64);
         for (let i = 0; i < len; i++) {
+            if ((i & 4095) === 0 && i) yield;
             const t = i / sr;
             let v = 0, k = 0;
             for (const [a, b, notes] of chords) {
@@ -598,11 +617,12 @@ export class SoundManager {
     }
 
     /** The mightiest blast: a crack, a colossal boom, thunder rolling away, the magic singing down. */
-    _synthMegaBlast(seconds) {
+    * _synthMegaBlastGen(seconds) {
         const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
         const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
         let lp = 0, lp2 = 0, ph = 0;
         for (let i = 0; i < len; i++) {
+            if ((i & 8191) === 0 && i) yield;
             const t = i / sr;
             const n = Math.random() * 2 - 1;
             lp += (n - lp) * 0.04;

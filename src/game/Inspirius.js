@@ -414,6 +414,7 @@ export class Inspirius {
         this._warmed = true;
         if (!g.renderer?.compile || !g.camera || !g.scene) return;
         const scene = g.scene, fx = g.fx, tmp = new THREE.Scene();
+        tmp.fog = scene.fog; // (the same programs as in the world: with its fog)
         try {
             g.scene = tmp; g.fx = null;
             this._buildOrb({ p: new THREE.Vector3(), t: 0 });
