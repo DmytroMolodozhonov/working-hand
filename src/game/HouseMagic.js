@@ -131,6 +131,13 @@ export class HouseMagic {
         };
     }
 
+    /** Its piece of the world drawn again — and lit as a house's (its blocks came before the record: a cave's dark). */
+    _relight(rec) {
+        const data = this.data, rc = rec && this.plan(rec).rect;
+        if (!data?._markDirty || !rc) return;
+        for (let x = Math.floor(rc.x0) - 1; x <= Math.ceil(rc.x1) + 9; x += 8) for (let z = Math.floor(rc.z0) - 1; z <= Math.ceil(rc.z1) + 9; z += 8) data._markDirty(Math.min(x, Math.ceil(rc.x1) + 1), Math.min(z, Math.ceil(rc.z1) + 1));
+    }
+
     plan(rec, level = rec.level) {
         const key = rec.id + ':' + level + ':' + (rec.woods || []).join('.');
         let p = this._plans.get(key);
@@ -588,6 +595,7 @@ export class HouseMagic {
         if (m.wait.length) (this._waiting = this._waiting || []).push(...m.wait);
         this.list.set(rec.id, rec);
         this._hookLight();
+        this._relight(rec);
         this._furnish(rec, true);
         if (rec.level === 1) this.found.add(rec.owner);
         g.sync?.net?.send({ t: 'mhouse', a: 'done', rec: this._net(rec), by: m.by });
@@ -607,7 +615,7 @@ export class HouseMagic {
         g.sound?.playMagic?.();
         if (by === g.localId) {
             g.mana?.success(rec.level === 1 ? 'CreateHouse' : 'ImproveHouse');
-            g.hud?.setVoice?.(rec.level === 1 ? '🏠 Дом готов! Дверь открывается рукой, в кровати можно спать, сундук пока пустой' : `🏠 Дом улучшен до уровня ${rec.level}!${rec.level < MAX_LEVEL ? ' Следующий уровень — «Improve a House» через 3 минуты' : ' Это самый большой, каменный дом'}`, true);
+            g.hud?.setVoice?.(rec.level === 1 ? '🏠 Дом готов! Дверь открывается рукой; чтобы лечь в кровать — присядьте рядом с ней; сундук пока пустой' : `🏠 Дом улучшен до уровня ${rec.level}!${rec.level < MAX_LEVEL ? ' Следующий уровень — «Improve a House» через 3 минуты' : ' Это самый большой, каменный дом'}`, true);
         }
     }
 
@@ -911,9 +919,7 @@ export class HouseMagic {
                 edits.push([c[0], c[1], c[2], c[3]]);
             }
             if (edits.length) { n += edits.length; if (this.auth) this.game.builder?._sendEdits(edits); else this.game.blockEdits?.push?.(...edits); }
-            // draw it again: its chunks (and their light)
-            for (let x = Math.floor(p.rect.x0) - 1; x <= Math.ceil(p.rect.x1) + 1; x += 8) for (let z = Math.floor(p.rect.z0) - 1; z <= Math.ceil(p.rect.z1) + 1; z += 8) data._markDirty?.(x, z);
-            data._markDirty?.(Math.ceil(p.rect.x1) + 1, Math.ceil(p.rect.z1) + 1);
+            this._relight(rec); // (draw it again: its chunks and their light)
         }
         return n;
     }
@@ -924,6 +930,7 @@ export class HouseMagic {
         const was = this.list.get(r.id);
         const rec = { ...r, store: was?.store || r.store || {}, miss: Array.isArray(r.miss) ? r.miss.slice(0, 6000) : was?.miss || [] };
         this.list.set(rec.id, rec);
+        if (!was || was.level !== rec.level) this._relight(rec);
         if (!was || was.level !== rec.level || !this._chestsOf(rec.id).length) this._furnish(rec, false);
     }
 

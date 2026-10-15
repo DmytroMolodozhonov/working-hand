@@ -49,6 +49,7 @@ import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Alohomora } from './Alohomora.js';
 import { Campfires } from './Campfires.js';
+import { LanternLights } from './LanternLights.js';
 import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
@@ -371,6 +372,7 @@ export class Game {
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
+        this.lanterns = new LanternLights(this); // the houses' lamps shine: lights at the nearest lanterns (made before prewarm too)
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
@@ -959,7 +961,8 @@ export class Game {
         for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) if (t.solidIn(Math.round(p.x) + dx, Math.round(p.z) + dz, head, head + 14)) n++;
         const covered = n >= 3 ? 1 : 0;
         // under the roof of a castle or a village house: lit rooms (lanterns, windows), not a dark cave
-        const built = covered && !!(t.sites || t.castles)?.landAt(Math.round(p.x), Math.round(p.z)); // (castles and wizards' towers)
+        // (castles and wizards' towers; the houses made by magic — HouseMagic._hookLight)
+        const built = covered && (!!(t.sites || t.castles)?.landAt(Math.round(p.x), Math.round(p.z)) || !!t.litLand?.(Math.round(p.x), Math.round(p.z)));
         // in a cave: as dark as the daylight reaching the head (the mouth lit, deeper in dark — the
         // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
         const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;
@@ -2553,6 +2556,7 @@ export class Game {
         this.doors.update(dt);
         this.locks.update(dt);
         this.campfires.update(dt);
+        this.lanterns?.update(dt);
         this.cauldrons?.update(dt);
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         this.crystals?.update(dt);
@@ -3320,6 +3324,7 @@ export class Game {
         this.doors?.dispose();
         this.boards?.dispose();
         this.campfires?.dispose();
+        this.lanterns?.dispose();
         this.cauldrons?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
