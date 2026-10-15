@@ -531,10 +531,11 @@ export class ShipModel {
             if (f.y <= D) continue;
             const zA = Math.max(f.z0, -L.L / 2 + 0.5), zB = Math.min(f.z1, L.L / 2 - 0.05);
             bulwark(zA, zB, D + R, f.y + R, f.id === 'fore' ? WOOD : WOOD);
-            // the castle's end wall above the transom
-            if (zB >= L.L / 2 - 0.2) {
-                const w0 = hw(zB, D + R), w1 = hw(zB, f.y + R);
-                hull.quad([-w0, D + R, zB], [w0, D + R, zB], [w1, f.y + R, zB], [-w1, f.y + R, zB], DARK);
+            // the castle's end wall above the transom — from the main deck up (the cabins under the castles are
+            // closed at the stern; it stood 0.4 m short of the end and was never drawn: the cabins were open to the sky)
+            if (zB >= L.L / 2 - 1) {
+                const w0 = hw(zB, D), w1 = hw(zB, f.y + R);
+                hull.quad([-w0, D, zB], [w0, D, zB], [w1, f.y + R, zB], [-w1, f.y + R, zB], DARK);
             }
         }
         // the stern windows (glowing at night) and gold carving
@@ -1224,20 +1225,22 @@ export class ShipModel {
      */
     _blackDetail(hull, glow, L, D, R, hw, top, bz) {
         const bone = this.look.bone, band = this.look.band;
-        // the figurehead: a skull on the beak
-        const sz = bz - 4.4, sy = D + 0.2;
-        hull.box(-1.15, 1.15, sy - 0.2, sy + 1.9, sz - 1.1, sz + 1.1, bone); // the cranium
-        hull.box(-1.25, 1.25, sy + 0.6, sy + 1.6, sz - 0.9, sz + 0.9, bone); // the temples
-        hull.box(-0.8, 0.8, sy - 0.9, sy - 0.2, sz - 1.0, sz + 0.5, bone); // the jaw
+        // the figurehead: a skull on the beak (K: its size — big enough to be seen from afar)
+        const K = 1.8, sz = bz - 4.4 - K, sy = D - 0.4;
+        const box = (x0, x1, y0, y1, z0, z1, c, g = hull) => g.box(x0 * K, x1 * K, sy + y0 * K, sy + y1 * K, sz + z0 * K, sz + z1 * K, c);
+        box(-1.15, 1.15, -0.2, 1.9, -1.1, 1.1, bone); // the cranium
+        box(-1.25, 1.25, 0.6, 1.6, -0.9, 0.9, bone); // the temples
+        box(-0.8, 0.8, -0.9, -0.2, -1.0, 0.5, bone); // the jaw
         for (const s of [-1, 1]) {
-            hull.box(s * 0.5 - 0.32, s * 0.5 + 0.32, sy + 0.85, sy + 1.45, sz - 1.16, sz - 1.1, 0x050302); // the sockets
-            glow.box(s * 0.5 - 0.14, s * 0.5 + 0.14, sy + 1.0, sy + 1.3, sz - 1.2, sz - 1.14, 0xffffff); // green fire in them
+            box(s * 0.5 - 0.32, s * 0.5 + 0.32, 0.85, 1.45, -1.16, -1.1, 0x050302); // the sockets
+            box(s * 0.5 - 0.14, s * 0.5 + 0.14, 1.0, 1.3, -1.2, -1.14, 0xffffff, glow); // green fire in them
             // the moustache: a curl each side under the nose
-            hull.boxAt(s * 0.62, sy + 0.25, sz - 1.18, 0.9, 0.24, 0.16, 0x161008, 0, 0, s * -0.35);
-            hull.boxAt(s * 1.05, sy + 0.5, sz - 1.18, 0.22, 0.4, 0.16, 0x161008, 0, 0, s * 0.4);
+            hull.boxAt(s * 0.62 * K, sy + 0.25 * K, sz - 1.18 * K, 0.9 * K, 0.24 * K, 0.16 * K, 0x161008, 0, 0, s * -0.35);
+            hull.boxAt(s * 1.05 * K, sy + 0.5 * K, sz - 1.18 * K, 0.22 * K, 0.4 * K, 0.16 * K, 0x161008, 0, 0, s * 0.4);
         }
-        hull.box(-0.14, 0.14, sy + 0.45, sy + 0.8, sz - 1.16, sz - 1.1, 0x050302); // the nose
-        for (let i = 0; i < 6; i++) hull.box(-0.6 + i * 0.24, -0.5 + i * 0.24, sy - 0.25, sy + 0.05, sz - 1.06, sz - 1.0, bone); // the teeth
+        box(-0.14, 0.14, 0.45, 0.8, -1.16, -1.1, 0x050302); // the nose
+        for (let i = 0; i < 6; i++) box(-0.6 + i * 0.24, -0.5 + i * 0.24, -0.25, 0.05, -1.06, -1.0, bone); // the teeth
+        hull.box(-0.5, 0.5, sy - 0.6, sy + 0.4, sz + K, bz - 1, DARK); // (its neck on the beak)
         // a dark red cap along the rails
         for (const s of [-1, 1]) for (let z = -L.L / 2 + 6; z < L.L / 2 - 1; z += 4) {
             const w = hw(z + 2, D + R);
