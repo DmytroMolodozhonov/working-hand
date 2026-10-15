@@ -75,9 +75,14 @@ function doorMats(color) {
  * a ring for a handle, no frame of its own (the stone doorway is its frame).
  * Both kinds swing both ways: a positive angle towards their local −Z, a negative one towards +Z.
  */
-export function doorModel(color, { mirror = false, gate = false, ice = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
+export function doorModel(color, { mirror = false, gate = false, ice = false, metal = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
     const g = new THREE.Group();
     let { wood, dark, gold } = doorMats(color);
+    // a door of iron («Create a Castle»'s doors — CastleMagic.js): a steel leaf and frame, iron bands
+    if (metal) {
+        wood = _mats.steel || (_mats.steel = new THREE.MeshStandardMaterial({ color: 0x6a6f78, metalness: 0.8, roughness: 0.38 }));
+        dark = _mats.steelDark || (_mats.steelDark = new THREE.MeshStandardMaterial({ color: 0x3c3f46, metalness: 0.75, roughness: 0.5 }));
+    }
     // the Ice Castle's gates (IceQueen.js): clear glowing ice with a frost snowflake on each leaf
     if (ice) {
         wood = _mats.ice || (_mats.ice = new THREE.MeshLambertMaterial({ color: 0xcdeffd, transparent: true, opacity: 0.78, emissive: 0x24597a }));
@@ -113,7 +118,7 @@ export function doorModel(color, { mirror = false, gate = false, ice = false, w:
             rim.position.set(m * W / 2, H * 0.97, z);
             hinge.add(rim);
         }
-    } else if (gate) {
+    } else if (gate || metal) {
         // iron bands across both faces
         const iron = _mats.iron || (_mats.iron = new THREE.MeshStandardMaterial({ color: 0x3a3a40, metalness: 0.7, roughness: 0.5 }));
         for (const y of [H * 0.15, H * 0.5, H * 0.85]) {
@@ -264,7 +269,7 @@ export class Doors {
         if (this.list.has(d.id)) { this._move(this.list.get(d.id), d); return; }
         // (a house door fills its opening: wider and taller than a made one — made to its size, not
         // stretched: a stretched model shears its leaf out of shape when it turns)
-        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate, ice: !!d.ice, w: d.w || W, h: d.h || H });
+        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate || !!d.banded, ice: !!d.ice, metal: !!d.metal, w: d.w || W, h: d.h || H }); // (banded: a gate's look without a castle's lock — CastleMagic.js)
         model.position.set(d.x, d.y, d.z);
         model.rotation.y = d.ry;
         g.scene.add(model);

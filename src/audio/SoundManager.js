@@ -116,7 +116,7 @@ export class SoundManager {
         const pause = () => new Promise((r) => setTimeout(r, 0));
         let n = 0;
         while (this.prewarmStep()) { onProgress?.(Math.min(0.6, ++n / 20)); await pause(); }
-        this.prepareHouseTheme(); onProgress?.(0.7); await pause();
+        this.prepareHouseTheme(); this.prepareCastleTheme(); onProgress?.(0.7); await pause(); // (the castle's long tune: in a worker)
         while (!this.prepareCircleAttack()) await pause();
         onProgress?.(0.85);
         while (!this.prepareInspirius()) await pause();
@@ -551,7 +551,7 @@ export class SoundManager {
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
-            ['snowStep', () => this._synthSnowStep()], ['snowman', () => this._synthSnowman()],
+            ['snowStep', () => this._synthSnowStep()], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -843,6 +843,42 @@ export class SoundManager {
         v.play();
     }
 
+    /** «Create a Castle»'s tune (the house's theme over 30 s, its grandest form): made ahead in a worker. */
+    prepareCastleTheme(seconds = 30) {
+        const key = 'castleTheme' + seconds;
+        if (!this.context || this.sounds[key] || this._castleWorking) return;
+        this._castleWorking = true;
+        const sr = 24000;
+        try {
+            const w = new Worker(new URL('./theme.worker.js', import.meta.url), { type: 'module' });
+            w.onmessage = (e) => {
+                const data = e.data?.data;
+                if (data) { const buf = this.context.createBuffer(1, data.length, sr); buf.copyToChannel(data, 0); this.sounds[key] = buf; }
+                w.terminate();
+            };
+            w.onerror = () => w.terminate();
+            w.postMessage({ sr, seconds, level: 5 });
+        } catch (e) { /* (no worker: the castle plays the house's grand tune) */ }
+    }
+
+    /** The castle's tune from its place: the long one when ready (else the house's grandest, shorter). */
+    playCastleTheme(position, seconds = 30) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const buf = this.sounds['castleTheme' + seconds];
+        if (!buf) { this.prepareCastleTheme(seconds); this.playHouseTheme(position, 10, 1); return; } // (the house's tune, made ahead)
+        if (!this._theme) { this._theme = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._theme); }
+        const v = this._theme;
+        this._themeRun = (this._themeRun || 0) + 1;
+        if (v.isPlaying) v.stop();
+        v.gain.gain.cancelScheduledValues(this.context.currentTime);
+        v.setBuffer(buf);
+        v.setRefDistance(40); // (a castle: loud far round it)
+        v.setVolume(Math.min(1.15, 1.8 * this.globalVolume));
+        v.position.copy(position);
+        v.updateMatrixWorld(true);
+        v.play();
+    }
+
     /** The magic broke: the tune dies away on a sour falling chord (never plays on). */
     breakHouseTheme(position) {
         const v = this._theme;
@@ -872,7 +908,7 @@ export class SoundManager {
     playHouseBit(kind, position, volume = 1) {
         if (!this.enabled || !this.context || !this.loaded) return;
         const key = 'house_' + kind;
-        if (!this.sounds[key]) this.sounds[key] = kind === 'wood' ? this._synthKnock(170, 0.3) : kind === 'sand' ? this._synthSizzle(0.9) : this._synthKnock(320, 0.12);
+        if (!this.sounds[key]) this.sounds[key] = kind === 'wood' ? this._synthKnock(170, 0.3) : kind === 'sand' ? this._synthSizzle(0.9) : kind === 'stone' ? this._synthKnock(110, 0.35) : this._synthKnock(320, 0.12);
         this._playAt(this.sounds[key], position, volume, kind === 'block' ? 6 : 8, 0.85 + Math.random() * 0.3);
     }
 

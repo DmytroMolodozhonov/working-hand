@@ -160,6 +160,7 @@ export class NetSync {
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.netList() || [], // houses' spheres of protection
             mhouses: g.houseMagic?.netList() || [], // houses made by magic (HouseMagic.js)
+            mcastles: g.castleMagic?.netList() || [], // castles made by magic (CastleMagic.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
@@ -193,6 +194,7 @@ export class NetSync {
         if (msg.wards) g.wards?.applyNet(msg.wards);
         if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.mhouses) g.houseMagic?.applyNet(msg.mhouses);
+        if (msg.mcastles) g.castleMagic?.applyNet(msg.mcastles);
         if (msg.castles) g.castleLife?.restore(msg.castles);
         if (msg.ships) g.ships?.restore(msg.ships);
         if (msg.guns) g.ships?.cannons.restore(msg.guns);
@@ -812,6 +814,7 @@ export class NetSync {
             case 'lumx': if (m.by !== this.me) g.wandMagic?.outBy(m.by); break;
             case 'wards': if (!this.net.isHost) g.wards?.applyNet(m.l, m.g); break;
             case 'wardop': if (this.net.isHost) g.wards?.apply(m.op, m.from); break;
+            case 'mcastle': g.castleMagic?.onNet(m, this.net.isHost); break; // («Create a Castle»)
             case 'mhouse': g.houseMagic?.onNet(m, this.net.isHost); break; // («Create a House», «Improve a House»)
             case 'bice': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.hitBird(b, 99, 'ice'); } break;
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;

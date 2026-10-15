@@ -77,6 +77,8 @@ export function matchSpell(text) {
     // «Джолт» («…Максима»): a short word — only as a word of its own (never inside another word)
     const jolt = joltWords(s);
     if (jolt) return jolt;
+    // «Create a Castle» («криейт э касл», «создай замок»): before the house (its own words)
+    if (castleWords(s)) return 'CreateCastle';
     // «Create a House» / «Improve a House» (before the beds and «Protection House»: its own words)
     const house = houseWords(s);
     if (house) return house;
@@ -221,6 +223,17 @@ export function houseWords(s) {
     if (IMPROVE_W.test(s)) return 'ImproveHouse';
     if (MAKE_W.test(s)) return 'CreateHouse';
     return null;
+}
+
+// «Create a Castle» («криейт э касл», «крейт э кастл», «создай замок», «сотвори замок»): a word of making
+// AND «castle» / «замок» — never «замок» alone (a lock in talk), never «Lock».
+const CASTLE_SAID = /(castl|castel|касл|кастл|кэсл|кэстл|кесл|кестл|касел|кассл|кастел|каст?ле|кастыл)/;
+const CASTLE_RU = /^(замок|замка|замочек|дворец|дворца)$/;
+const MAKE_CASTLE = /(creat|crate|крейт|криейт|криэйт|креит|кріейт|креэйт|криет|созда|сотвори|построй|построить|возведи)/;
+export function castleWords(s) {
+    s = String(s || '').toLowerCase().replace(/ё/g, 'е');
+    const castle = CASTLE_SAID.test(s) || s.split(/[^a-zа-я]+/).some((w) => CASTLE_RU.test(w));
+    return castle && MAKE_CASTLE.test(s);
 }
 
 // «Let the Hellfire Come» as the Russian recognizer writes it: «лет зе хеллфаер кам», «хелфайр кам»,

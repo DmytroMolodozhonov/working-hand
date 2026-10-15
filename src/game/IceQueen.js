@@ -66,7 +66,7 @@ const small = (type) => type === 'snowman' || type === 'friend';
 /** The spells only a scroll (or a spell book) teaches: they act on the queen as on anyone. */
 export const SCROLL_KINDS = new Set(['Lightning', 'LightningStrike', 'Thunderwave', 'ToTheSun', 'AvadaKedavra', 'TotalDestruction', 'TotalDestructionMaxima', 'LetItRain',
     'BombardoMaxima', 'Inspirius', 'LevitationMaxima', 'WindImpulse', 'WindImpulseMaxima', 'Invisibility', 'OvergrownMaxima', 'AlohomoraMaxima', 'FirefightingMaxima',
-    'Alive', 'AliveMaxima', 'servant', 'CreateHouse', 'ImproveHouse', 'WaterVortexSuperMaxima']);
+    'Alive', 'AliveMaxima', 'servant', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'WaterVortexSuperMaxima']);
 /** Not magic at all: blows, arrows, a cauldron bursting, a house's sphere shoving. */
 const PLAIN = { melee: 1, arrow: 1, fist: 1, punch: 1, Cauldron: 1, Ward: 1, fall: 1, crush: 1, snow: 1, Liquidation: 0 };
 

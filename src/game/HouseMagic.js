@@ -110,6 +110,7 @@ export class HouseMagic {
         this._holdT = 0;
         this._noWand = 0;
         this.testAim = null; // (tests) a point to aim at instead of the wand
+        this.netType = 'mhouse'; // (its messages; «Create a Castle» — CastleMagic.js — has its own)
         this.look = new HouseMagicFx(game.scene); // the logs and planks flying in, the melting sand, the spun wool (HouseMagicFx.js)
     }
 
@@ -176,7 +177,7 @@ export class HouseMagic {
         if (g.combat?.enabled && g.combat.fatigue < cost.mana) return say(`😮‍💨 Не хватает маны: нужно ${cost.mana}, есть ${Math.floor(g.combat.fatigue)}`);
         const ask = { kind: name, at: [r2(at.x), r2(at.y), r2(at.z)], c: [r2(me.x), r2(me.z)], hid, level };
         if (!this.auth) {
-            g.sync?.net?.send({ t: 'mhouse', a: 'ask', ...ask });
+            g.sync?.net?.send({ t: this.netType, a: 'ask', ...ask });
             say('🏠 …');
         } else {
             const res = this._hostStart(ask, g.localId);
@@ -386,7 +387,7 @@ export class HouseMagic {
             win: plan.windows.map((w) => [r2(w.x), r2(w.y), r2(w.z)]), beds: plan.beds.map((b) => [r2(b.x), r2(b.y), r2(b.z)]),
         };
         const M = this.magic;
-        g.sync?.net?.send({ t: 'mhouse', a: 'go', id: next.id, level, by, x: next.x, z: next.z, G: next.G, rect: plan.rect, trees: take.map((t) => [r2(t.x), r2(t.y), r2(t.z), t.wood]), piles, win: M.win, beds: M.beds });
+        g.sync?.net?.send({ t: this.netType, a: 'go', id: next.id, level, by, x: next.x, z: next.z, G: next.G, rect: plan.rect, trees: take.map((t) => [r2(t.x), r2(t.y), r2(t.z), t.wood]), piles, win: M.win, beds: M.beds });
         this._go(by, level, next.x, next.z);
         g.castleLife?.alarm?.({ x: next.x, y: next.G, z: next.z }, 'housemagic', by, 10);
         return true;
@@ -473,10 +474,10 @@ export class HouseMagic {
         if (why) {
             g.hud?.setVoice?.(why, true);
             if (this.auth) this._break(m);
-            else { g.sync?.net?.send({ t: 'mhouse', a: 'break', id: m.id }); this._broke(m.id, [m.x, m.y, m.z]); }
+            else { g.sync?.net?.send({ t: this.netType, a: 'break', id: m.id }); this._broke(m.id, [m.x, m.y, m.z]); }
             return;
         }
-        if (!this.auth) { this._holdT -= dt; if (this._holdT <= 0) { this._holdT = 1; g.sync?.net?.send({ t: 'mhouse', a: 'hold', id: m.id }); } }
+        if (!this.auth) { this._holdT -= dt; if (this._holdT <= 0) { this._holdT = 1; g.sync?.net?.send({ t: this.netType, a: 'hold', id: m.id }); } }
     }
 
     /** (host) The blocks appear: the old ones and the air go first (0–25 % of the time), then the house from the ground up. */
@@ -600,7 +601,7 @@ export class HouseMagic {
         this._relight(rec);
         this._furnish(rec, true);
         if (rec.level === 1) this.found.add(rec.owner);
-        g.sync?.net?.send({ t: 'mhouse', a: 'done', rec: this._net(rec), by: m.by });
+        g.sync?.net?.send({ t: this.netType, a: 'done', rec: this._net(rec), by: m.by });
         this._finished(rec, m.by);
     }
 
@@ -625,7 +626,7 @@ export class HouseMagic {
     _break(m) {
         if (this.magic !== m) return;
         const p = [m.x, m.y + 1, m.z];
-        this.game.sync?.net?.send({ t: 'mhouse', a: 'broke', id: m.id, p });
+        this.game.sync?.net?.send({ t: this.netType, a: 'broke', id: m.id, p });
         if (m.wait.length) (this._waiting = this._waiting || []).push(...m.wait);
         this._broke(m.id, p);
         this.game.castleLife?.alarm?.({ x: m.x, y: m.y, z: m.z }, 'fire', m.by, 8);
@@ -818,7 +819,7 @@ export class HouseMagic {
                 c.awayT = 0;
                 this._sweep(c, true);
                 this._shut(c);
-                g.sync?.net?.send({ t: 'mhouse', a: 'close', cid: c.id });
+                g.sync?.net?.send({ t: this.netType, a: 'close', cid: c.id });
             }
         }
     }
@@ -842,7 +843,7 @@ export class HouseMagic {
             for (const k of p.own) { const [x, L, z] = k.split(',').map(Number); if (data.get(x, L, z) !== BLOCK.AIR) have++; }
             if (have >= p.own.size * HOUSE_MAGIC.RUIN) continue;
             this._ruin(rec);
-            g.sync?.net?.send({ t: 'mhouse', a: 'gone', id: rec.id });
+            g.sync?.net?.send({ t: this.netType, a: 'gone', id: rec.id });
         }
     }
 
@@ -956,7 +957,7 @@ export class HouseMagic {
             case 'ask': {
                 if (!isHost) break;
                 const res = this._hostStart({ kind: m.kind === 'ImproveHouse' ? 'ImproveHouse' : 'CreateHouse', at: m.at || [0, 0, 0], c: m.c, hid: m.hid }, m.from);
-                if (res !== true) g.sync?.net?.send({ t: 'mhouse', a: 'no', to: m.from, msg: String(res).slice(0, 200) });
+                if (res !== true) g.sync?.net?.send({ t: this.netType, a: 'no', to: m.from, msg: String(res).slice(0, 200) });
                 break;
             }
             case 'no': if (m.to === g.localId) g.hud?.setVoice?.(m.msg, true); break;

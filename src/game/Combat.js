@@ -116,6 +116,7 @@ export const SPELL_COST = {
     LumosMaxima: 4,
     CreateBed: 6,
     CreateHouse: 20, // a house by magic: then 0.5 a second for its 10 s (HouseMagic.js; each level of «Improve a House» twice as much)
+    CreateCastle: 500, // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)
     ImproveHouse: 40, // (level 2; 80, 160, 320 for the next — HouseMagic pays it itself)
     ChangeColor: 2,
     WaterVortex: 25, // very strong: a whole vortex of water (see WaterVortex.js)

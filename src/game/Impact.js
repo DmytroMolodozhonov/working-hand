@@ -119,7 +119,7 @@ export class HeadJolt {
  */
 export const SPELL_PHYSICS = {
     Lumos: null, LumosMaxima: null, Nox: null, Draw: null, Reveal: null, Accio: null, Alohomora: null, AlohomoraMaxima: null, Lock: null, /* (a lock opens / Lock shuts a door: nobody is pushed — Alohomora.js TARGETS) */ ChangeColor: null, CreateBed: null,
-    Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, CreateBoard: null, Stand: null,
+    Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, CreateBoard: null, CreateCastle: null, /* (the castle waits for bodies to go — nobody is pushed: CastleMagic.js) */ Stand: null,
     Brainrot: null, ToTheSun: null, LetItRain: null, Storm: null, LightningCatch: null, LightningHold: null, Rescue: null, Pause: null, Flight: null, Up: null,
     AirBubble: null, AirBubbleMaxima: null, Waterball: null, Maxima: null, WaterForming: null, Frozen: null,
     Protection: null, ProtectionMaxima: null, ProtectionHouse: null, ProtectionInvisible: null, ProtectionHouseGrant: null, WardGrow: null, // (a house's sphere pushes only who walks into it: HouseWards.js)

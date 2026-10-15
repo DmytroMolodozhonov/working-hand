@@ -42,6 +42,7 @@ export const HELD = {
     Inferno: { ru: 'Инферно', icon: '🔥', own: ['Inferno'] },
     Drawdown: { ru: 'Drawdown', icon: '⬇️', own: ['Drawdown', 'DrawdownMaxima'] },
     House: { ru: 'Магия дома', icon: '🏠', own: ['CreateHouse', 'ImproveHouse'] },
+    Castle: { ru: 'Магия замка', icon: '🏰', own: ['CreateCastle'] },
     Ward: { ru: 'Защита дома', icon: '🛡️', own: ['WardGrow', 'Maxima', 'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant'] },
     Build: { ru: 'Стройка', icon: '🧱', own: [] },
     Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'] }, // (the beams' clash, while it goes: only «Максима» — and the shield)
@@ -85,6 +86,7 @@ export class Concentration {
         if (g.levitation?.active || g.doors?.carried) return 'Levitation';
         if (g.hellfire?.busy) return 'Hellfire';
         if (g.houseMagic?.magic && g.houseMagic.magic.by === g.localId) return 'House';
+        if (g.castleMagic?.magic && g.castleMagic.magic.by === g.localId) return 'Castle';
         if (g.wards?.setting) return 'Ward';
         if (g.builder?.build) return 'Build';
         if (g._inDuel?.()) return 'Duel';
@@ -141,6 +143,7 @@ export class Concentration {
         if (g.wards?.setting) { g.wards.fix?.(); done.push('защита дома'); }
         if (g.builder?.build) { g.builder.finish?.(); done.push('стройка'); }
         if (g.houseMagic?.breakMine?.()) done.push('магия дома');
+        if (g.castleMagic?.breakMine?.()) done.push('магия замка');
         // the hand can't hold a shield now (the dome is not in a hand: it stays — but not after death)
         const sh = g.combat?.shield;
         if (sh && (sh.type === 1 || why === 'dead')) { g.combat._shatter?.('', false); done.push('щит'); }
