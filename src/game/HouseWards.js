@@ -56,6 +56,7 @@ import { BLOCK, BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
 import { applyVoxelDetail, WARD_HIDE } from '../world/VoxelShading.js';
 import { KINDS } from './CreatureImpact.js';
 import { refusal } from './Hints.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 export const WARD = {
     COST: 20, // «Protection House»: the charge and the first 1.5 m
@@ -250,7 +251,7 @@ export class HouseWards {
         this._nextId = 1;
         this._domeGeo = new THREE.SphereGeometry(1, 48, 24);
         this._domeGeo.userData.keep = true; // (shared: Game.prewarm must not dispose it)
-        this.log = []; // (tests) what happened
+        this.log = new CappedLog(); // (tests) what happened
     }
 
     get auth() { return this.game.authority !== false; }

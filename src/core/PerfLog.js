@@ -10,6 +10,8 @@
  */
 
 const EVERY = 5000;
+/** Once a minute a line about what the game holds («рост»): if something piles up, it shows. */
+const GROWTH_EVERY = 60000;
 
 export class PerfLog {
     constructor(game) {
@@ -50,6 +52,42 @@ export class PerfLog {
         }
         const now = performance.now();
         if (now - this._last >= EVERY) { this._last = now; this._line(); }
+        else if (now - (this._lastGrowth ?? (this._lastGrowth = now)) >= GROWTH_EVERY) { this._lastGrowth = now; this._growth(); }
+    }
+
+    /**
+     * «рост»: the objects in the scene, the video card's geometries/textures/shaders, the page's memory,
+     * the world's pieces, the creatures — now and since the first such line (+/−). Played long, nothing
+     * of these should keep going up; whatever does is named (the scene's top groups that grew most).
+     */
+    _growth() {
+        const g = this.game;
+        const groups = {};
+        let objects = 0;
+        for (const top of g.scene?.children || []) {
+            let c = 0;
+            top.traverse(() => { c++; });
+            objects += c;
+            const k = top.name || top.type;
+            groups[k] = (groups[k] || 0) + c;
+        }
+        const info = g.renderer?.info;
+        const now = {
+            'объектов': objects,
+            'геом': info?.memory.geometries ?? 0,
+            'текстур': info?.memory.textures ?? 0,
+            'шейд': info?.programs?.length ?? 0,
+            'память МБ': globalThis.performance?.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : 0,
+            'чанков': g.terrain?.meshes?.size ?? 0,
+            'зомби': g.zombies?.length ?? 0,
+            'жителей': g.castleLife?.byId?.size ?? 0,
+        };
+        const first = this._growth0 || (this._growth0 = { now, groups });
+        const d = (a, b) => (a - b > 0 ? `+${a - b}` : `${a - b}`);
+        const parts = Object.entries(now).map(([k, v]) => `${k} ${v} (${d(v, first.now[k] ?? v)})`);
+        const grew = Object.entries(groups).map(([k, v]) => [k, v - (first.groups[k] || 0)]).filter(([, v]) => v > 50)
+            .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} +${v}`);
+        this._push(`${((performance.now() - this._t0) / 1000).toFixed(0)}с | рост (с начала игры): ${parts.join(', ')}${grew.length ? ' | выросло в сцене: ' + grew.join(', ') : ''}`);
     }
 
     _line() {

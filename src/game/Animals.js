@@ -504,6 +504,21 @@ export class Animals {
         const gx0 = Math.floor((p.x - 80) / CELL), gx1 = Math.floor((p.x + 80) / CELL);
         const gz0 = Math.floor((p.z - 80) / CELL), gz1 = Math.floor((p.z + 80) / CELL);
         const seed = this.game.seed || 1;
+        // (the trees far behind are put away — each was looked at every frame, its apples, and drawn:
+        // a long flight left hundreds; the apples picked there are remembered till they grow back)
+        const FAR = 3; // cells
+        const picked = this._applesPicked || (this._applesPicked = new Map());
+        for (const [key, tr] of this.trees) {
+            const [kx, kz] = key.split(',').map(Number);
+            if (kx >= gx0 - FAR && kx <= gx1 + FAR && kz >= gz0 - FAR && kz <= gz1 + FAR) continue;
+            this.trees.delete(key);
+            if (!tr) continue;
+            const until = tr.apples.map((a) => a.until);
+            if (until.some((u) => u > Date.now())) picked.set(key, until); else picked.delete(key);
+            this.game.scene.remove(tr.model);
+            this.game.collision.removeBox(tr.boxId);
+            tr.model.traverse((o) => { if (o.isMesh && !o.geometry.userData.keep) { o.geometry.dispose(); o.material.dispose(); } }); // (the trunk: shared)
+        }
         for (let gz = gz0; gz <= gz1; gz++) for (let gx = gx0; gx <= gx1; gx++) {
             const key = gx + ',' + gz;
             if (this.trees.has(key)) continue;
@@ -519,7 +534,9 @@ export class Animals {
             model.position.set(x, y, z);
             this.game.scene.add(model);
             const boxId = this.game.collision.addBox({ minX: x - 0.45, maxX: x + 0.45, minY: y, maxY: y + 4, minZ: z - 0.45, maxZ: z + 0.45, kind: 'tree', noSupport: true });
-            this.trees.set(key, { key, x, y, z, model, boxId, red: kind === 'red', apples: model.userData.apples.map(() => ({ until: 0 })) });
+            const was = picked.get(key);
+            picked.delete(key);
+            this.trees.set(key, { key, x, y, z, model, boxId, red: kind === 'red', apples: model.userData.apples.map((_, i) => ({ until: was?.[i] || 0 })) });
         }
     }
 

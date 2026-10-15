@@ -617,7 +617,16 @@ export class ItemSystem {
         const g = this.game;
         const ch = g.character;
         // loose things: fall, bounce, settle; hovering ones bob
-        for (const L of this.loose.values()) this._physics(L, dt);
+        const me = ch.group.position;
+        for (const L of this.loose.values()) {
+            // (far ones — a long game leaves many about the world — not drawn, and a still one not stepped:
+            // a hovering one's bobbing and sparks are for the eyes only)
+            const mp = L.model.position;
+            const far = Math.abs(mp.x - me.x) + Math.abs(mp.z - me.z) > 140;
+            L.model.visible = !far;
+            if (far && (L.hover || L.rest)) continue;
+            this._physics(L, dt);
+        }
         this._updateSticks();
         // held things follow the hand
         for (const side of ['right', 'left']) {

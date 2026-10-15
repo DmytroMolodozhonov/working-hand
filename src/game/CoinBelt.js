@@ -22,6 +22,7 @@
 
 import * as THREE from 'three';
 import { makeItemModel, disposeModel, newUid } from './ItemTypes.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 /** Coins one pouch holds; pouches on the belt. */
 export const POUCH_MAX = 100;
@@ -83,7 +84,7 @@ export class CoinBelt {
         this._open = false;
         this._left = true;
         this._at = 0;
-        this.log = []; // (what it did: tests)
+        this.log = new CappedLog(); // (what it did: tests)
     }
 
     /** Add coins straight onto the belt (picked up with both hands busy, «Gather»): what did not fit. */

@@ -35,6 +35,8 @@ import { VoxelCharacter } from '../entities/Character.js';
 export const DEATH = {
     BODY_S: 300, // s the body lies (5 minutes)
     BONES_S: 1200, // s the bones stay after that (20 minutes)
+    MAX_BODIES: 80, // at most this many bodies and skeletons lie about (the oldest go first)
+    DRAW_R: 160, // m (x+z) a body or a skeleton is drawn within
     SPREAD: 1.3, // m around the body the things fall
     GATHER_R: 3.5, // m around the pointed place «Gather» takes everything
     GATHER_RANGE: 14, // m how far «Gather» reaches
@@ -367,17 +369,26 @@ export class DeathSystem {
 
     update(dt) {
         const g = this.game;
+        // (a long war leaves many: the oldest beyond MAX_BODIES go — each is a whole model in the scene)
+        if (this.bodies.size > DEATH.MAX_BODIES) {
+            let old = null;
+            for (const b of this.bodies.values()) if (!b.lev && (!old || b.age > old.age)) old = b;
+            if (old) this.removeBody(old.id, false);
+        }
+        const me = g.character?.group.position;
         for (const b of [...this.bodies.values()]) {
             b.age += dt;
             const st = bodyStage(b.age);
             if (st === 'gone') { this.removeBody(b.id); continue; }
-            if (st === 'bones') { if (!b.bones) this._toBones(b); continue; }
+            // (far away a body is not drawn: no draw calls, no shadow for something nobody can see)
+            const near = !me || Math.abs(b.x - me.x) + Math.abs(b.z - me.z) < DEATH.DRAW_R;
+            if (st === 'bones') { if (!b.bones) this._toBones(b); if (b.bones) b.bones.visible = near; continue; }
             if (b.model && b.k === 'v') {
                 // the villager itself still lies there (its own model): the copy waits
                 // (lifted by «Левиоса», the copy is the body: the villager's own model hides — CastleLife)
                 const v = g.castleLife?.byId?.get(b.who);
-                b.model.visible = !!b.moved || !(v && v.dead);
-            }
+                b.model.visible = near && (!!b.moved || !(v && v.dead));
+            } else if (b.model) b.model.visible = near;
             // (another computer's «Левиоса» carries it: it follows the word smoothly)
             if (b.netAt && !b.lev) {
                 const o = b.model || b.bones;

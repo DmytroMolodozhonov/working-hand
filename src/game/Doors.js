@@ -746,6 +746,8 @@ export class Doors {
         if (this.carried?.door === d) this.carried = null;
         for (const side of ['left', 'right']) if (this.held[side] === d) this.release(side);
         this.game.scene.remove(d.model);
+        // (its boards and knobs are its own geometries — the video card's buffers go with it; the materials are shared)
+        d.model.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
         if (d.boxId != null) this.game.collision.removeBox(d.boxId);
         this.list.delete(id);
     }

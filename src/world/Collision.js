@@ -71,7 +71,7 @@ export class CollisionWorld {
         this.boxes.delete(id);
         this._forCells(box, (key) => {
             const set = this.hash.get(key);
-            if (set) set.delete(box);
+            if (set) { set.delete(box); if (!set.size) this.hash.delete(key); } // (no empty cells left over the whole world)
         });
     }
 

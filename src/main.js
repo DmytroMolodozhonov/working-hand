@@ -770,6 +770,8 @@ async function startGameInner(config, welcome) {
         if (welcome && game.sync) game.sync.applyWelcome(welcome);
         // the whole visible world is built on the loading screen (the first seconds of play stay smooth)
         await game.loadNearby((f) => updateProgress(66 + Math.round(f * 4), `Прорисовка мира... ${Math.round(f * 100)}%`));
+        // the sounds and the spells' looks otherwise made in the first seconds of play (each a hitch): now
+        await game.warmUp((f) => updateProgress(70, `Подготовка звуков... ${Math.round(f * 100)}%`));
 
         const preview = $('webcam-preview');
         if (preview) preview.style.display = config.showHands ? 'block' : 'none';

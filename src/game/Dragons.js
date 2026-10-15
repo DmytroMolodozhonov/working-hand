@@ -38,6 +38,7 @@ import { createRng } from '../core/math.js';
 import { skeletonModel } from './Death.js';
 import { creditKill } from './Mana.js';
 import { FACE, facesTarget, facingError } from './FaceTarget.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -99,7 +100,7 @@ export class Dragons {
         this._wanderT = WANDER.FIRST;
         this._netT = 0;
         this._hurtT = 0;
-        this.log = []; // (tests) what happened
+        this.log = new CappedLog(); // (tests) what happened
         this.enabled = !game.config?.map && game.config?.mode !== 'test';
         this._hud = typeof document !== 'undefined' ? this._makeHud() : null;
     }

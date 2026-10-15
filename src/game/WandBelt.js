@@ -19,6 +19,7 @@
 
 import * as THREE from 'three';
 import { makeItemModel, disposeModel } from './ItemTypes.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 /** The wand's handle on the hero (its own space: +X its right, −Z ahead; the waist at y≈0). */
 export const BELT_TOP = new THREE.Vector3(-0.12, 0.22, -0.52);
@@ -60,7 +61,7 @@ export class WandBelt {
         this._last = { left: null, right: null }; // (the real wrist a picture ago)
         this._hand = { left: null, right: null }; // (the hand in the hero's own space a frame ago)
         this._handV = { left: 0, right: 0 }; // (its speed against the body, m/s)
-        this.log = []; // (what it did: tests / the hand recording)
+        this.log = new CappedLog(); // (what it did: tests / the hand recording)
     }
 
     /** The wand on the belt (the first wand of the slots), or null. */

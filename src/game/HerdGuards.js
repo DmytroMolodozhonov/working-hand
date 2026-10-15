@@ -26,6 +26,7 @@
 import * as THREE from 'three';
 import { bronzeBull, setBronze, minotaurModel, animateMinotaur } from './AnimalModels.js';
 import { newUid } from './ItemTypes.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 export const GUARD = {
     BULL_CHANCE: 0.45,
@@ -52,7 +53,7 @@ const wrap = (d) => { while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI)
 export class HerdGuards {
     constructor(animals) {
         this.A = animals;
-        this.log = [];
+        this.log = new CappedLog();
     }
 
     get game() { return this.A.game; }

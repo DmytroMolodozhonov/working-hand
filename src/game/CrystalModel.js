@@ -20,31 +20,35 @@ function mats() {
     return MATS;
 }
 
-const GEO = new Map();
-/** One crystal's shape (unit-free: h tall, r across), standing on y = 0 along +Y. */
-export function crystalGeometry(h, r) {
-    const key = h.toFixed(2) + ':' + r.toFixed(3);
-    if (GEO.has(key)) return GEO.get(key);
+let GEO = null;
+/**
+ * One crystal's shape for every crystal: 1 tall, 1 across, standing on y = 0 along +Y — each crystal
+ * is this one shape scaled (r, h, r). (Each size its own shape piled up a new geometry for every
+ * crystal of every cave flown over — thousands in a long game.)
+ */
+export function crystalGeometry() {
+    if (GEO) return GEO;
     // a lathe with 6 sides = a hexagonal prism: a narrower foot, straight faces, a pointed tip
     const pts = [
         new THREE.Vector2(0, -0.02),
-        new THREE.Vector2(r * 0.82, 0),
-        new THREE.Vector2(r, h * 0.12),
-        new THREE.Vector2(r, h * 0.72),
-        new THREE.Vector2(0, h),
+        new THREE.Vector2(0.82, 0),
+        new THREE.Vector2(1, 0.12),
+        new THREE.Vector2(1, 0.72),
+        new THREE.Vector2(0, 1),
     ];
-    const g = new THREE.LatheGeometry(pts, 6);
-    g.userData.shared = true;
-    GEO.set(key, g);
-    return g;
+    GEO = new THREE.LatheGeometry(pts, 6);
+    GEO.userData.shared = true;
+    return GEO;
 }
 
 /** A single crystal mesh group (h, r in metres). */
 export function crystalMesh(h = 0.5, r = 0.1) {
     const M = mats();
     const g = new THREE.Group();
-    const shell = new THREE.Mesh(crystalGeometry(h, r), M.shell);
-    const core = new THREE.Mesh(crystalGeometry(h * 0.8, r * 0.45), M.core);
+    const shell = new THREE.Mesh(crystalGeometry(), M.shell);
+    shell.scale.set(r, h, r);
+    const core = new THREE.Mesh(crystalGeometry(), M.core);
+    core.scale.set(r * 0.45, h * 0.8, r * 0.45);
     core.position.y = h * 0.04;
     shell.renderOrder = 3;
     core.renderOrder = 3;

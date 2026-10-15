@@ -103,7 +103,25 @@ export class SoundManager {
         if (this.scene) this.setScene(this.scene);
         this.loaded = true;
         this.playAmbientMusic();
-        setTimeout(() => this.prepareHouseTheme(), 4000); // (the tune of «Create a House», made ahead)
+        // (the tune of «Create a House» and the other long sounds: made on the loading screen — warmAll)
+    }
+
+    /**
+     * Every sound otherwise made the first time it is heard (or a little a frame in the first seconds
+     * of play — each of them a frozen frame: a 10 s hum, a choir, a blast), made now, on the loading
+     * screen, with pauses between pieces so the loading screen still moves. Once per session (kept).
+     */
+    async warmAll(onProgress) {
+        if (!this.context || !this.loaded || this._allWarm) return;
+        const pause = () => new Promise((r) => setTimeout(r, 0));
+        let n = 0;
+        while (this.prewarmStep()) { onProgress?.(Math.min(0.6, ++n / 20)); await pause(); }
+        this.prepareHouseTheme(); onProgress?.(0.7); await pause();
+        while (!this.prepareCircleAttack()) await pause();
+        onProgress?.(0.85);
+        while (!this.prepareInspirius()) await pause();
+        onProgress?.(1);
+        this._allWarm = true;
     }
 
     loadBuffer(path) {

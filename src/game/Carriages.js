@@ -42,6 +42,7 @@ import { Chest } from '../entities/Chest.js';
 import { BLOCK } from '../world/Terrain.js';
 import { crowdNear } from './CrowdSources.js';
 import { avoidStep } from './Avoid.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 export const CART = {
     LEN: 6.6, WID: 3.6, FLOOR: 1.75, SIDE: 0.85, WHEEL_R: 1.2,
@@ -306,7 +307,7 @@ export class Carriages {
         this.list = new Map(); // id → cart
         this._netT = 0;
         this._nextId = 1;
-        this.log = []; // (tests: what happened)
+        this.log = new CappedLog(); // (tests: what happened)
         // ONE cold blue light for the nearest wizards' carriage at night: made now, before the shaders are compiled
         if (game.scene && typeof THREE.PointLight === 'function') {
             this.light = new THREE.PointLight(0x7fc0ff, 0, 12, 2);

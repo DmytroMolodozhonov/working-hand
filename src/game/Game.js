@@ -969,6 +969,7 @@ export class Game {
                     if (sp0.boss) chest.room = sp0.boss; // (a dragon's chest: the hoard's treasure — Items.lootChest)
                     chest.mesh.updateMatrixWorld(true);
                     chest.boxId = this.collision.addBox(chest.getCollisionBox());
+                    chest.cave = cv.id; // (put away again when the player is far — _unloadCaves)
                     this.chests.push(chest);
                     if (this._openedChests?.has(id)) chest.setOpenInstant();
                     if (this.authority && this.config.mode === 'freeworld' && !cv.lair) {
@@ -977,11 +978,13 @@ export class Game {
                             const a = (i / n) * Math.PI * 2;
                             const z = this._createZombie(new THREE.Vector3(sp.x + Math.cos(a) * 3, sp.y - 0.5, sp.z + Math.sin(a) * 3));
                             z.setSleeping?.(true);
+                            z.caveGuard = cv.id; // (asleep by its chest: put away with it)
                         }
                     }
                 });
             }
         }
+        if (this._caveChests?.size && (this._caveUnloadT = (this._caveUnloadT || 0) - dt) <= 0) { this._caveUnloadT = 5; this._unloadCaves(p); }
         // darkness: rock above the head
         const head = Math.floor(p.y + 2.4 + 1.5);
         // rock above the head here and around (so the light doesn't flicker at the edges)
@@ -999,6 +1002,32 @@ export class Game {
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
         this.world.setIndoor?.(this._indoorK);
+    }
+
+    /**
+     * The caves' chests (and their sleeping guards) far behind every player are put away — as the houses'
+     * chests are: a long flight over the world otherwise left every cave's chest in the scene, each looked
+     * at every frame. An opened one stays opened (_openedChests); come back and it is put there again.
+     */
+    _unloadCaves(p) {
+        const FAR = 260;
+        const players = this._playerPositions();
+        const far = (x, z) => players.every((q) => Math.abs(q.x - x) > FAR || Math.abs(q.z - z) > FAR);
+        const gone = new Set();
+        for (let i = this.chests.length - 1; i >= 0; i--) {
+            const c = this.chests[i];
+            if (c.cave == null || c.animating) continue;
+            const cp = c.mesh.position;
+            if (!far(cp.x, cp.z)) { gone.delete(c.cave); continue; }
+            if (c.isOpen) (this._openedChests = this._openedChests || new Set()).add(c.id);
+            if (c.boxId != null) this.collision.removeBox(c.boxId);
+            c.dispose();
+            this.chests.splice(i, 1);
+            gone.add(c.cave);
+        }
+        if (!gone.size) return;
+        for (const id of gone) this._caveChests.delete(id);
+        if (this.authority) for (const z of [...this.zombies]) if (z.caveGuard != null && gone.has(z.caveGuard) && z.isSleeping && !z.isDead) this.removeZombie(z);
     }
 
     // ============================================================== players
@@ -2480,7 +2509,7 @@ export class Game {
         this.camera.updateMatrixWorld(true);
         this.scene.remove(zoo);
         // (geometries only: many of these materials are shared caches used later — disposing them would recompile)
-        zoo.traverse((o) => { if (o.isMesh && !o.geometry.userData?.keep) o.geometry.dispose(); });
+        zoo.traverse((o) => { if (o.isMesh && !o.geometry.userData?.keep && !o.geometry.userData?.shared) o.geometry.dispose(); });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.prewarmedPrograms = this.renderer.info.programs.length;
@@ -2499,6 +2528,28 @@ export class Game {
         // build as far as the full day shows now (the extra ring is kept: no streaming then)
         if (this.dayCycle) t.viewDistance = Math.max(t.viewDistance, 90 * (this.world.viewScale ?? 1) * (this.world.viewDistance ?? 1) + 32);
         await t.flushAroundAsync(p.x, p.z, (f) => progress(f));
+    }
+
+    /**
+     * Loading screen: what the first seconds of play would otherwise make in a frame — the long
+     * sounds (SoundManager.warmAll) and the looks of Circle Attack and Inspirius (their shaders).
+     */
+    async warmUp(progress = () => {}) {
+        try { await this.sound?.warmAll?.(progress); } catch (e) { console.warn('[Game] sounds warm-up', e); }
+        // the ships of a harbour by the start: made and woken now (in play — up to 50 ms a frame each)
+        try {
+            const sh = this.ships;
+            if (sh?.enabled && typeof sh._scan === 'function') {
+                for (let i = 0; i < 60; i++) {
+                    sh._scanT = 1;
+                    sh._scan();
+                    if (sh._scanT >= 1) break; // (nothing left for later)
+                    await new Promise((r) => setTimeout(r, 0));
+                }
+            }
+        } catch (e) { console.warn('[Game] ships warm-up', e); }
+        try { if (this.circleAttack && !this.circleAttack._warmed) this.circleAttack._warm(); } catch (e) { /* (only a head start) */ }
+        try { if (this.inspirius && !this.inspirius._warmed) this.inspirius._warm(); } catch (e) { /* (only a head start) */ }
     }
 
     start() {

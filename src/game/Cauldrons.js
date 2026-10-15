@@ -244,7 +244,9 @@ export class Cauldrons {
                 if (st.phase === 'water' && st.win > 0) st.win = Math.max(0, st.win - dt);
             }
             this._holder(c);
-            if (c.pos.distanceToSquared(me) < 90 * 90) this._visual(c, dt, me);
+            const d2 = c.pos.distanceToSquared(me);
+            c.group.visible = d2 < 160 * 160; // (far ones — every cave's flown over — not drawn)
+            if (d2 < 90 * 90) this._visual(c, dt, me);
             // the countdown: all the ingredients in before it runs out
             if (c.st.phase === 'water' && c.st.win > 0 && ingCount(c.st) && this._near(c, 20)) this._hint(c, `⏳ ${Math.ceil(c.st.win)} с — бросьте остальные ингредиенты`, 'win', 900);
         }

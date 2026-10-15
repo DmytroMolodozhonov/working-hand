@@ -19,12 +19,14 @@
 import * as THREE from 'three';
 import { crystalMesh, crystalItemModel } from './CrystalModel.js';
 import { newUid, disposeModel } from './ItemTypes.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 export const CRYSTAL = {
     CHANCE: 0.4, // share of caves with a cluster (rare)
     MIN: 3,
     MAX: 5,
     NEAR: 90, // m: clusters are made for caves this close
+    FAR: 260, // m (x or z): a cluster this far is put away
     TOUCH: 0.16, // m from a crystal's surface: the hand touches it
     LIGHT_RANGE: 18, // m: the soft light shines at the nearest cluster this close
     OPEN: 0.35, // finger curl below this: an open hand
@@ -140,7 +142,7 @@ export class ManaCrystals {
         this._time = 0;
         this._touch = { right: null, left: null }; // an open hand on a crystal: {id, at}
         this._break = null; // both hands on a held crystal: {side, d0, ang0}
-        this.log = []; // (tests) what happened
+        this.log = new CappedLog(); // (tests) what happened
         // ONE soft light for the nearest cluster: made now, before the shaders are compiled
         if (game.scene) {
             this.light = new THREE.PointLight(0x4fa8ff, 0, 8, 2);
@@ -171,6 +173,14 @@ export class ManaCrystals {
         const t = this.game.terrain?.data;
         if (!t?.cavesNear) return;
         const p = this.game.character.group.position;
+        // (a cave's cluster far behind is put away — made again from the same seed when one comes back;
+        // the broken-off ones stay broken: `taken`. A long flight otherwise left every cave's crystals.)
+        for (const [id, cl] of this.clusters) {
+            const far = cl ? Math.abs(cl.data.x - p.x) > CRYSTAL.FAR || Math.abs(cl.data.z - p.z) > CRYSTAL.FAR : this.clusters.size > 400;
+            if (!far) continue;
+            if (cl) this.game.scene?.remove(cl.group);
+            this.clusters.delete(id);
+        }
         for (const cv of t.cavesNear(p.x, p.z, CRYSTAL.NEAR)) {
             if (this.clusters.has(cv.id)) continue;
             this.addCluster(cv.id, crystalCluster(cv, t.seed, t.heightAt));

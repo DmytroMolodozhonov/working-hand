@@ -29,6 +29,7 @@ import * as THREE from 'three';
 import { CART, wayFree } from './Carriages.js';
 import { outOfSight } from './Animals.js';
 import { WANDER_GRID } from '../world/WizardTowers.js';
+import { CappedLog } from '../core/CappedLog.js';
 
 export const ROAD = {
     EVERY: 20, // s between tries
@@ -76,7 +77,7 @@ export class Travelers {
         this._t = ROAD.EVERY * 0.5;
         this._checkT = 0;
         this._n = 0;
-        this.log = [];
+        this.log = new CappedLog();
     }
 
     get auth() { return this.game.authority; }
