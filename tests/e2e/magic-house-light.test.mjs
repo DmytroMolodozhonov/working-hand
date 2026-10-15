@@ -77,7 +77,16 @@ test('magic house: lit rooms (levels 1 and 2), shining lanterns, its bed to lie 
     await waitFor(page, () => !!window.__zns.game.beds.lying, null, 8000);
     const lying = await page.evaluate(() => { const g = window.__zns.game; return g.beds.lying; });
     assert.match(lying, /^mh.*b0$/);
-    await page.evaluate(() => { const g = window.__zns.game; g.beds.standUp(); });
+    // up again: beside the bed in its own room — not in a wall, nothing between the bed and the hero
+    const up1 = await page.evaluate(() => {
+        const g = window.__zns.game, col = g.collision, b = g.beds.list.get(g.beds.lying);
+        g.beds.standUp();
+        const p = g.character.group.position, feet = p.y - 2;
+        const inWall = [0.4, 1.6, 2.8, 4.2].some((h) => col.pointBlocked(p.x, feet + h, p.z));
+        const seen = col.lineOfSight(b.x, b.y + 1.4, b.z, p.x, b.y + 1.4, p.z, 0.2);
+        return { inWall, seen, d: Math.hypot(p.x - b.x, p.z - b.z) };
+    });
+    assert.ok(!up1.inWall && up1.seen && up1.d < 6, `stood up in the bed's room: ${JSON.stringify(up1)}`);
 
     // level 2
     const up = await page.evaluate(() => {

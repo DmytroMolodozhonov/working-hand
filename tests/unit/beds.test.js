@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseColor, bedColorHex, BED_COLORS, checkRecipe, planConsumption, countMaterials, everyoneAsleep, bedSpawnSpot, bedSpawnCandidates, homeBed } from '../../src/game/BedRules.js';
+import { parseColor, bedColorHex, BED_COLORS, checkRecipe, planConsumption, countMaterials, everyoneAsleep, bedSpawnSpot, bedSpawnCandidates, bedStandSpot, homeBed } from '../../src/game/BedRules.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 
 test('beds: colour words in Russian and English', () => {
@@ -103,4 +103,25 @@ test('beds: the respawn point — my bed, a free place beside it facing away, a 
     const s2 = bedSpawnSpot(bed, dims, (x, z) => (Math.hypot(x - first.x, z - first.z) < 0.5 ? null : 0));
     assert.ok(Math.hypot(s2.x - first.x, s2.z - first.z) > 2, 'not into the wall');
     assert.equal(bedSpawnSpot(bed, dims, () => null), null);
+});
+
+test('getting up from a bed against a wall: in the bed\'s own room, never in the wall or behind it in the next room', () => {
+    const dims = { W: 2.5, L: 5.5, top: 1 };
+    // a room x −4…1.9 (z −5…5), a wall of blocks x 2…3 (the bed's side 0.75 from it), the next room beyond;
+    // the room's other walls at x −4.5 and z ±5.5
+    const wall = (x, z) => (x >= 1.9 && x <= 3.1) || x <= -4.5 || Math.abs(z) >= 5.5;
+    const bedBox = (x, y, z) => Math.abs(x) <= 1.25 && Math.abs(z) <= 2.75 && y <= 1;
+    const blocked = (x, y, z) => wall(x, z) || bedBox(x, y, z);
+    const floorAt = (x, z) => (wall(x, z) ? 7 : 0); // (a wall's top: no floor there)
+    const bed = { x: 0, y: 0, z: 0, ry: 0 };
+    const s = bedStandSpot(bed, dims, floorAt, blocked);
+    assert.ok(s, 'a place');
+    assert.ok(s.x < 1.9 && s.x > -4.5 && Math.abs(s.z) < 5.5, `in the bed's room: ${JSON.stringify(s)}`);
+    for (const [a, c] of [[0, 0], [0.45, 0], [-0.45, 0], [0, 0.45], [0, -0.45]]) assert.equal(blocked(s.x + a, s.y + 1.5, s.z + c), false, 'not in the wall');
+    // the next room is free floor right behind the wall: still never chosen
+    const thin = (x, z) => (x >= 1.6 && x <= 1.95) || Math.abs(z) >= 5.5 || x <= -1.3; // (a thin partition; this side too narrow)
+    const s2 = bedStandSpot(bed, dims, (x, z) => (thin(x, z) ? 7 : 0), (x, y, z) => thin(x, z) || bedBox(x, y, z));
+    assert.ok(!s2 || (s2.x < 1.6 && s2.x > -1.3), `never behind the partition: ${JSON.stringify(s2)}`);
+    // the ends of the bed are free: it stands there (in the room) when its sides are not
+    assert.ok(s2 && Math.abs(s2.z) > 2.75, `at an end of the bed: ${JSON.stringify(s2)}`);
 });

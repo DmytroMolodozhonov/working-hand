@@ -161,6 +161,38 @@ export function bedSpawnSpot(bed, dims, floorAt) {
 }
 
 /**
+ * Where the hero stands up from a bed (and comes back to life at it): a free place beside it IN ITS
+ * ROOM — on the floor, nothing in the way from the feet to the head (a wall, a partition, a door,
+ * furniture: `blocked(x, y, z)`, the real blocks and boxes), and nothing between it and the bed (a
+ * wall the bed stands against is never stepped through into the next room). Nearest first.
+ * floorAt(x, z) → the floor there or null. → {x, y, z, ry} or null (no free place: stay by the bed).
+ */
+export function bedStandSpot(bed, dims, floorAt, blocked, { tall = 4.6, r = 0.45 } = {}) {
+    if (!bed) return null;
+    const H = [0.4, 1.6, 2.8, tall - 0.3];
+    const RING = [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]];
+    const free = (x, y, z) => H.every((h) => RING.every(([a, c]) => !blocked(x + a, y + h, z + c)));
+    // over the mattress from the bed's middle to the place: no wall between them
+    const sees = (x, y, z) => {
+        const d = Math.hypot(x - bed.x, z - bed.z), n = Math.max(1, Math.ceil(d / 0.2));
+        const hs = [Math.max(bed.y + (dims.top ?? 1) + 0.35, y + 0.6), y + 2.2];
+        for (let i = 1; i <= n; i++) {
+            const px = bed.x + ((x - bed.x) * i) / n, pz = bed.z + ((z - bed.z) * i) / n;
+            for (const h of hs) if (blocked(px, h, pz)) return false;
+        }
+        return true;
+    };
+    for (const p of bedSpawnCandidates(bed, dims, [0.75, 1.1, 1.6, 2.4])) {
+        const y = floorAt(p.x, p.z);
+        if (y == null || !Number.isFinite(y) || Math.abs(y - bed.y) > 1.2) continue; // (a drop, a wall's top, a step too high)
+        if (!free(p.x, y, p.z) || !sees(p.x, y, p.z)) continue;
+        const dx = p.x - bed.x, dz = p.z - bed.z;
+        return { x: p.x, y, z: p.z, ry: Math.atan2(-dx, -dz) };
+    }
+    return null;
+}
+
+/**
  * The bed a player respawns at: home {id, x, y, z, ry, gen} (the bed they lay
  * in). beds: Map id → bed (the beds in the world now). A house bed may be
  * unloaded because it is far away — genStands(home) says whether it still

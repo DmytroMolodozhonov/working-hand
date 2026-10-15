@@ -44,7 +44,7 @@ import { newUid } from './ItemTypes.js';
 import { PVP } from './Combat.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
-import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS, bedSpawnSpot, homeBed } from './BedRules.js';
+import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS, bedStandSpot, homeBed } from './BedRules.js';
 import { floorUnder } from './Wreck.js';
 import { ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 
@@ -402,8 +402,11 @@ export class Beds {
 
     _bedAt(p) {
         let best = null;
+        const col = this.game.collision;
         for (const b of this.list.values()) {
             if (!this._nearBed(b, p)) continue;
+            // (sitting down behind the wall the bed stands against is not at the bed)
+            if (col?.lineOfSight && !col.lineOfSight(p.x, b.y + BED.top + 0.4, p.z, b.x, b.y + BED.top + 0.4, b.z, 0.25)) continue;
             const d = Math.hypot(p.x - b.x, p.z - b.z);
             if (!best || d < best.d) best = { b, d };
         }
@@ -411,6 +414,13 @@ export class Beds {
     }
 
     _isNight() { const g = this.game; return !!g.dayCycle && g.world.nightAmount > 0.4; }
+
+    /** A free place beside a bed in its room (BedRules.bedStandSpot over the real blocks and boxes), or null. */
+    _standSpot(b) {
+        const col = this.game.collision;
+        const floorAt = (x, z) => { const y = col.groundAt ? col.groundAt(x, z, b.y + 1) : col.groundY(x, z); return Number.isFinite(y) ? y : null; };
+        return bedStandSpot(b, BED, floorAt, (x, y, z) => !!col.pointBlocked?.(x, y, z));
+    }
 
     /** The hero lies down in a bed. */
     lieDown(b) {
@@ -437,19 +447,14 @@ export class Beds {
      * forgotten), {blocked: true} — no free place beside it, or null — no bed.
      */
     respawnSpot() {
-        const g = this.game, col = g.collision;
+        const g = this.game;
         // a house bed far away is not loaded: it stands while the floor under it does (as Houses._activate)
         const t = g.world?.terrain?.data;
         const res = homeBed(this.home, this.list, (h) => !t || floorUnder(t, h.x, h.y, h.z) != null);
         if (!res) return null;
         if (res.gone) { this.home = null; return { gone: true }; }
         const b = res.bed;
-        const spot = bedSpawnSpot(b, BED, (x, z) => {
-            const y = col.groundAt ? col.groundAt(x, z, b.y + 1) : col.groundY(x, z);
-            if (!Number.isFinite(y) || Math.abs(y - b.y) > 1.2) return null; // a drop, a wall, a step too high
-            for (const h of [0.4, 1.2, 2.0]) if (col.pointBlocked?.(x, y + h, z)) return null; // (a wall, a chest, another bed)
-            return y;
-        });
+        const spot = this._standSpot(b); // (in its room: never behind the wall it stands against)
         return spot ? { spot } : { blocked: true };
     }
 
@@ -475,10 +480,10 @@ export class Beds {
         this._standAt = performance.now();
         ch.group.rotation.x = 0;
         if (b) {
-            const c = Math.cos(b.ry), s = Math.sin(b.ry), lx = BED.W / 2 + 1.2;
-            const x = b.x + lx * c, z = b.z - lx * s;
-            const gy = g.collision.groundAt ? g.collision.groundAt(x, z, b.y + 1) : g.collision.groundY(x, z);
-            ch.group.position.set(x, gy + PLAYER_GROUND_OFFSET, z);
+            // beside the bed in its room (never into the wall or the next room); no free place: on the bed itself
+            const spot = this._standSpot(b);
+            if (spot) { ch.group.position.set(spot.x, spot.y + PLAYER_GROUND_OFFSET, spot.z); ch.group.rotation.y = spot.ry; }
+            else ch.group.position.set(b.x, b.y + BED.top + PLAYER_GROUND_OFFSET, b.z);
         }
     }
 
