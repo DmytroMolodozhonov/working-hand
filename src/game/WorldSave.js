@@ -294,7 +294,8 @@ export function restoreWorld(game, save, THREE) {
     if (save.ships) g.ships?.restore(save.ships);
     if (save.guns) g.ships?.cannons.restore(save.guns);
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses); // (after the beds, the doors and the things lying about)
-    if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
+    // (Creative always opens in the full day; the other modes go on from the hour they were left at)
+    if (Number.isFinite(save.dayPhase) && g.config?.mode !== 'creative') g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());
     // things lying around: exactly what was there (a sword taken into a slot is not on its pedestal any more)
     if (Array.isArray(save.weapons)) {

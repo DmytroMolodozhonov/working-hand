@@ -226,7 +226,8 @@ export class Game {
         // Day and night (creative / free world): 24 min — 12 min day, 12 min night.
         // Everyone in a game shares the host's clock (sent in the welcome message).
         this.dayCycle = !config.map && !isTest && (config.mode === 'creative' || config.mode === 'freeworld');
-        this.dayStart = Date.now() - DAY_CYCLE_MS * 0.04; // a fresh world starts in the morning
+        // a fresh world starts in the morning; Creative — in the full day (the author: «просто обычный день»)
+        this.dayStart = Date.now() - DAY_CYCLE_MS * (config.mode === 'creative' ? 0.3 : 0.04);
         if (this.dayCycle) this.world.setDayPhase(this.dayPhase());
         this.collision = this.world.collision;
         this.terrain = this.world.terrain;
