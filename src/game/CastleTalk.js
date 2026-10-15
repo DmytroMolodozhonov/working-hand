@@ -1054,7 +1054,7 @@ export class CastleTalk {
                 this._llmWasReady = true;
                 this._warmLLM(llm);
                 journal(`✅ ГОТОВА: ${mk.label} ${nat ? 'отдельной программой на компьютере (llama.cpp, процессор — видеокарта остаётся игре)' : `на ${info.device === 'webgpu' ? `видеокарте${info.gpuName ? ` (${info.gpuName})` : ''}` : 'процессоре'}`}, ${info.dtype}, загрузка ${((performance.now() - t0) / 1000).toFixed(1)} с`
-                    + `${info.why ? `; ${info.why}` : ''}${tried.length ? `; до неё не загрузились: ${tried.join('; ')}` : ''}`
+                    + `${info.why ? `; ${info.why}` : ''}${llm.nativeWhy ? `; программа на компьютере не подошла (${llm.nativeWhy.slice(0, 160)}) — работает браузерная` : ''}${tried.length ? `; до неё не загрузились: ${tried.join('; ')}` : ''}`
                     + `${llm.strong ? ' — отвечает на любые слова' : ' — отвечает на то, что не поняли готовые правила'}`);
                 console.info('[CastleTalk]', '🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');
                 g.sync?.villagerAI?.(true);

@@ -59,7 +59,7 @@ def serve():
     """The voice program itself: reads {"id", "text", "voice", "speed", "steps", "lang"} lines, answers
     {"id", "sr", "pcm"(base64 int16)} or {"id", "error"} lines."""
     # (the answers go out on the real stdout; anything the libraries print goes to stderr — never into the answers)
-    out = os.fdopen(os.dup(1), "w", encoding="utf-8")
+    out = os.fdopen(os.dup(1), "w", encoding="utf-8", newline="\n")
     os.dup2(2, 1)
     import numpy as np
     import sherpa_onnx as so
@@ -85,20 +85,25 @@ def serve():
             g.extra = {"lang": "en" if job.get("lang") == "en" else "ru"}
         except Exception:  # noqa: BLE001
             pass
-        a = tts.generate(str(job.get("text") or ""), g)
+        text = str(job.get("text") or "").strip()
+        if not text:
+            return tts.sample_rate, ""  # (nothing to say: silence, at the voice's own rate — never a rate of 0)
+        a = tts.generate(text, g)
         x = np.clip(np.asarray(a.samples, dtype=np.float32), -1, 1)
-        return a.sample_rate, base64.b64encode((x * 32767).astype("<i2").tobytes()).decode("ascii")
+        return a.sample_rate or tts.sample_rate, base64.b64encode((x * 32767).astype("<i2").tobytes()).decode("ascii")
 
     make({"text": "Да, конечно.", "voice": "F1"})  # (the first run of a network is slow: warm up)
     say({"ready": True, "sr": tts.sample_rate, "voices": VOICES})
-    for line in sys.stdin:
+    # (the lines are read as bytes and decoded as UTF-8 here: on Windows the text stdin is in the console's
+    # code page — cp1251 — and the Russian words came out as «РЎРІРµР¶РёР№»: the voice read that gibberish aloud)
+    for raw in sys.stdin.buffer:
         try:
-            job = json.loads(line)
+            job = json.loads(raw.decode("utf-8"))
         except ValueError:
             continue
         try:
             sr, pcm = make(job)
-            say({"id": job.get("id"), "sr": sr, "pcm": pcm})
+            say({"id": job.get("id"), "sr": sr, "pcm": pcm, "heard": job.get("text")})  # (the text as read here: checked by the server)
         except Exception as e:  # noqa: BLE001
             say({"id": job.get("id"), "error": str(e) or type(e).__name__})
 
@@ -187,8 +192,9 @@ class NativeTTS:
                 kw["creationflags"] = 0x00004000 | 0x08000000  # BELOW_NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW
             else:
                 kw["preexec_fn"] = lambda: os.nice(10)
+            env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
             p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                 stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1, **kw)
+                                 stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1, env=env, **kw)
             hello = json.loads(p.stdout.readline() or "{}")
             if not hello.get("ready"):
                 raise RuntimeError("программа голосов не запустилась")
@@ -207,11 +213,19 @@ class NativeTTS:
             self.state = "error" if self.state == "ready" else self.state
             raise RuntimeError("voices are not ready")
         with self._lock:
-            self.proc.stdin.write(json.dumps(job, ensure_ascii=False) + "\n")
+            self.proc.stdin.write(json.dumps(job) + "\n")  # (ASCII only — \\u escapes: no code page can spoil it)
             self.proc.stdin.flush()
             ans = json.loads(self.proc.stdout.readline() or "{}")
         if ans.get("error") or "pcm" not in ans:
             raise RuntimeError(ans.get("error") or "no answer")
+        if ans.get("heard") != job.get("text"):
+            # (the program read other words than were sent — a broken text encoding: it would say gibberish.
+            # Never that: the page's own voices take over — the reason goes to the journal)
+            self.error = "программа голосов прочитала текст неверно (кодировка) — работают голоса браузера"
+            self.state = "error"
+            print("  [Голоса жителей] " + self.error)
+            self.stop()
+            raise RuntimeError(self.error)
         return {"sr": ans["sr"], "pcm": ans["pcm"]}
 
     def stop(self):

@@ -93,6 +93,8 @@ export class NeuralVoice {
                         if (native) {
                             // (the program did not start here: the browser's voices instead)
                             console.warn('[NeuralVoice] the program on this computer failed, the browser takes over:', m.message);
+                            this.nativeWhy = m.message || '';
+                            fetch(new URL('api/gamelog', location.href), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: "Голоса жителей", line: `программа на компьютере не подошла: ${this.nativeWhy} — работают голоса браузера` }) }).catch(() => {});
                             native = false;
                             try { w.terminate(); } catch (e) { /* ignore */ }
                             try { w = this._worker = this._createWorker(); } catch (e) { this._fail(e); reject(e); break; }

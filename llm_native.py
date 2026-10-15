@@ -73,6 +73,17 @@ def free_port():
         return s.getsockname()[1]
 
 
+def _sensible(reply):
+    """A reply in Russian words (mostly Cyrillic letters, no broken-encoding «РЎРІ» runs, not empty)."""
+    import re
+    letters = re.findall(r"[A-Za-zА-Яа-яЁё]", reply or "")
+    cyr = [c for c in letters if re.match(r"[А-Яа-яЁё]", c)]
+    # (UTF-8 read as cp1251: every other letter a capital «Р» or «С» — «РЎРІРµР¶РёР№»)
+    rs = sum(1 for c in cyr if c in "РС")
+    mojibake = rs >= 3 and rs > 0.3 * len(cyr)
+    return len(cyr) >= 3 and len(cyr) >= 0.6 * len(letters) and not mojibake
+
+
 def strip_think(s):
     """Thoughts out of an answer (the model was asked not to think — just in case)."""
     import re
@@ -96,6 +107,7 @@ class NativeLLM:
         self._log = []
         self._current = {}  # job id → the open answer stream (closed to interrupt it)
         self._key = ""
+        self._checking = False
 
     # ------------------------------------------------------------ status
     def available(self):
@@ -196,7 +208,7 @@ class NativeLLM:
             os.makedirs(cache, exist_ok=True)
             threads = max(2, min(8, (os.cpu_count() or 4) // 2))  # (half the cores: the game and the camera keep theirs)
             args = [self.binary(), "-hf", MODELS[model], "--host", "127.0.0.1", "--port", str(self.port),
-                    "-ngl", "0", "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "4096", "-t", str(threads),
+                    "-ngl", "0", "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "8192", "-t", str(threads),
                     "--no-ui", "-np", "1", "--api-key", self._key]
             env = {**os.environ, "LLAMA_CACHE": cache}
             kw = {}
@@ -217,6 +229,16 @@ class NativeLLM:
                 time.sleep(0.5)
             if self.proc.poll() is not None:
                 raise RuntimeError("программа нейросети остановилась: " + " | ".join(self._log[-3:]))
+            # a first question it must answer in sense, in Russian (a wrong chat format or a broken model gives
+            # gibberish: then the page's own network answers — the reason goes to the journal)
+            self._checking = True  # (still «loading» for the page meanwhile)
+            try:
+                reply = self.generate({"id": "check", "messages": [{"role": "user", "content": "Ответь одним коротким предложением по-русски: какого цвета трава летом?"}],
+                                       "maxTokens": 30, "temperature": 0.0}, lambda m: None)
+            finally:
+                self._checking = False
+            if not _sensible(reply):
+                raise RuntimeError(f"нейросеть ответила бессвязно на проверочный вопрос: «{reply[:80]}»")
             self.ms = int((time.time() - t0) * 1000)
             self.progress = 1.0
             self.detail = "готова"
@@ -259,7 +281,7 @@ class NativeLLM:
     def generate(self, job, emit):
         """One answer, as the old worker's 'generate' message: emit({'type': 'partial', 'text'}) while it
         writes (stream), then returns the whole text (tool calls as <tool_call>{json}</tool_call>)."""
-        if self.state != "ready":
+        if self.state != "ready" and not self._checking:
             raise RuntimeError("model not loaded")
         jid = job.get("id")
         tools = job.get("tools") or None
