@@ -123,6 +123,11 @@ export function lairOf(gx, gz, seed, H, blocked) {
         x0 = Math.min(x0, g.bx - q); x1 = Math.max(x1, g.bx + q); z0 = Math.min(z0, g.bz - q); z1 = Math.max(z1, g.bz + q);
     }
     Object.assign(s, { x0, x1, z0, z1 });
+    // the dragon's own chests: two against the back of the hall, either side of the hoard (the treasure it guards)
+    for (const side of [-1, 1]) {
+        const x = cx - dx * r * 0.55 - dz * side * r * 0.5, z = cz - dz * r * 0.55 + dx * side * r * 0.5;
+        s.chests.push({ x, y: F, z, a: Math.atan2(cx - x, cz - z), boss: 'dragon' });
+    }
     // where things are: the hoard against the back wall, away from the mouth; the mouth; the ledge
     // outside it (where a dragon takes off)
     s.lair = {

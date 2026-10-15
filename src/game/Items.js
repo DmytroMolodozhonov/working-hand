@@ -22,7 +22,7 @@
 
 import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollSpiderLoot, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
@@ -167,7 +167,10 @@ export class ItemSystem {
         // (a wizards' house: scrolls, sometimes a spell book — src/game/WizardShop.js)
         // (the king's own chest in the keep — his chambers, the treasury: mostly the fine things — ArmorTypes / rollLoot)
         const royal = !!chest?.castle && ROYAL_ROOMS.has(chest.room);
-        const items = (house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng, { key: royal ? 1 : key, royal })).concat(extra);
+        const boss = chest?.room;
+        const bossItems = boss === 'dragon' ? rollDragonLoot(rng) : boss === 'spider' ? rollSpiderLoot(rng)
+            : boss === 'study' && chest.castle ? rollWizardHouseLoot(rng, true).concat(rollKeyItem(rng), rollKeyItem(rng)) : null; // (the Master's study: rare scrolls, a strong wand, a robe, potions)
+        const items = (bossItems || (house ? (house.def?.kind === 'tower' ? rollWizardHouseLoot(rng, house.rich) : rollHouseLoot(rng, house.rich)) : kind === 'port' ? rollPortLoot(rng) : rollLoot(rng, { key: royal ? 1 : key, royal }))).concat(extra);
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
         const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();

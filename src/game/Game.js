@@ -864,7 +864,8 @@ export class Game {
     _chestPouch(chest) {
         const coins = chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
             : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
-            : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : 120)) : 5 + Math.floor(Math.random() * 30);
+            : chest.room === 'dragon' ? 400 + Math.floor(Math.random() * 600) : chest.room === 'spider' ? 15 + Math.floor(Math.random() * 45)
+            : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : chest.room === 'study' ? 200 : 120)) : 5 + Math.floor(Math.random() * 30);
         return coins > 0 ? [{ kind: 'coins', uid: newUid(), count: coins }] : [];
     }
 
@@ -939,7 +940,7 @@ export class Game {
         if (this._caveT <= 0) {
             this._caveT = 1;
             this._caveChests = this._caveChests || new Set();
-            for (const cv of t.cavesNear(p.x, p.z, 90)) {
+            for (const cv of t.cavesNear(p.x, p.z, 90).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90) : [])) {
                 if (this._caveChests.has(cv.id)) continue;
                 this._caveChests.add(cv.id);
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
@@ -949,11 +950,12 @@ export class Game {
                     if (!sp) return;
                     const id = k ? cv.id + ':' + k : cv.id;
                     const chest = new Chest(this.scene, new THREE.Vector3(sp.x, sp.y, sp.z), 'loot', sp.a, id);
+                    if (sp0.boss) chest.room = sp0.boss; // (a dragon's chest: the hoard's treasure — Items.lootChest)
                     chest.mesh.updateMatrixWorld(true);
                     chest.boxId = this.collision.addBox(chest.getCollisionBox());
                     this.chests.push(chest);
                     if (this._openedChests?.has(id)) chest.setOpenInstant();
-                    if (this.authority && this.config.mode === 'freeworld') {
+                    if (this.authority && this.config.mode === 'freeworld' && !cv.lair) {
                         const n = 2 + ((cv.r + k) % 3);
                         for (let i = 0; i < n; i++) {
                             const a = (i / n) * Math.PI * 2;

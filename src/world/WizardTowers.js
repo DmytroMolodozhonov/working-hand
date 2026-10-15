@@ -449,7 +449,7 @@ function furnishTower(p, room, rng, legs, o) {
             o.set('throneFront', p.pt(0, 3, l));
             box(-3, -2, 0, 1, 6, 7, B.PLANKS_DARK); box(-3, -3, 2, 2, 6, 6, B.GOLD); box(-2, -2, 2, 2, 7, 7, B.ARCANE_LAMP);
             for (const u of [-8, -7, 6, 7]) box(u, u, 0, 4, 2, 2, B.BOOKS);
-            firstOf([[5, 7], [-6, 4], [5, 4], [-5, 8]], (u, b) => chest(u, b, 0, -1, 'study'));
+            firstOf([[5, 7], [-6, 4], [5, 4], [-5, 8], [7, 5], [-7, 7], [6, 3], [-4, 3], [-8, 5]], (u, b) => chest(u, b, 0, -1, 'study'));
             for (let a = 0; a < 5; a++) { const u = Math.round(2 * Math.cos(a * TAU / 5)) - 5, b = Math.round(2 * Math.sin(a * TAU / 5)) + 5; floorMark(u, u, b, b, B.RUNE); }
             lamp(-4, 5); lamp(4, 5);
             break;

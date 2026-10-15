@@ -226,6 +226,23 @@ export function rollHouseLoot(r = Math.random, rich = false) {
  */
 export const LOOT_EXTRA = { fishingRod: null };
 
+/** A dragon's chest: the treasure it guards — two precious things, fine armour, a plain thing now and then (coins: Game._chestPouch). */
+export function rollDragonLoot(r = Math.random) {
+    const out = [rollKeyItem(r), rollKeyItem(r)];
+    if (r() < 0.5) out.push(rollKeyItem(r));
+    const arm = rollChestArmor(r, { royal: true });
+    if (arm) out.push(arm);
+    return out;
+}
+
+/** The giant spider's chest (cocoons of her prey): skeins of web and what travellers carried — food, arms, now and then a precious thing. */
+export function rollSpiderLoot(r = Math.random) {
+    const out = [{ kind: 'web', uid: newUid(), count: randInt(r, 2, 4) }];
+    for (let i = randInt(r, 2, 3); i > 0; i--) out.push(rollPlainItem(r));
+    if (r() < 0.5) out.push(rollKeyItem(r));
+    return out;
+}
+
 /** A chest in a sea castle's port: the sailors' stores — food, arrows, wool; sometimes a fishing rod, rarely something precious. */
 export function rollPortLoot(r = Math.random) {
     const out = [];
