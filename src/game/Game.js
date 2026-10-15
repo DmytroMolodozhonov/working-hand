@@ -44,6 +44,7 @@ import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
 import { Ships } from './Ships.js';
+import { sailorModels } from './Sailors.js';
 import { DeathSystem } from './Death.js';
 import { refusal, HintGate } from './Hints.js';
 import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
@@ -71,6 +72,7 @@ import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { IceCastleLife } from './IceQueen.js';
+import { Blackbeard } from './Blackbeard.js';
 import { sampleIceModels } from './IceModels.js';
 import { Dragons } from './Dragons.js';
 import { Carriages, cartModel } from './Carriages.js';
@@ -274,7 +276,7 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.livingTrees?.hitAt(point, 3, 20, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            lightningAt: (point, casterId) => { point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, 20, 'Lightning', casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.livingTrees?.hitAt(point, 3, 20, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             birdRay: (o, d, len, width, name) => {
                 len = this.wards?.clipRay(o, d, len) ?? len; // (a house's sphere stops it from outside)
                 this.books?.hitRay(o, d, len, width);
@@ -285,7 +287,7 @@ export class Game {
                 if (this.authority) this.phoenixes?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (fire and ice: no harm to a phoenix — Phoenixes.TARGETS)
                 if (this.authority) this.iceCastle?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (the Ice Castle: by IceQueen.iceDamage — fire melts, the plain spells nothing on the queen)
                 if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
-                if (this.authority) this.ships?.crew.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId); // (the ships' crews)
+                if (this.authority) this.ships?.crew.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId, name); // (the ships' crews; a black ship's skeleton — by the kind: Sailors.pirateBoneDamage)
                 if (this.authority) this.carriages?.hitRay(o, d, len, width, name === 'Thunderwave' ? 6 : 3, this.localId, name === 'Inferno'); // (the carts on the roads: wood — chipped, fire sets them burning)
             },
             ignite: (o, d, len) => { this.fire.igniteAlong(o, d, len); this.animals?.burnAlong(o, d, len); if (this.authority) this.livingTrees?.burnAlong(o, d, len); },
@@ -400,6 +402,7 @@ export class Game {
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
+        this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
         this.iceCastle = new IceCastleLife(this); // the one Ice Castle of the world: the Ice Queen, her snowmen and ice monsters, the Ice Rod (IceQueen.js)
         this.zombieSpawn = new ZombieSpawn(this); // zombies come out of the dark: caves, the night (ZombieSpawn.js)
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
@@ -681,7 +684,7 @@ export class Game {
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon, hard: !!hit?.hard }); return; }
-        if (z.isSailor) { this.ships.crew.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon }); return; }
+        if (z.isSailor) { this.ships.crew.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon, kind: isWeapon ? 'melee' : 'fist' }); return; }
         if (z.isDragon) { this.dragons.hit(z, dmg, isWeapon ? 'melee' : 'fist'); return; } // (its scales: a third of a blade's damage)
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         if (z.isIce) { this.iceCastle.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (the Ice Castle's creatures: IceQueen.iceDamage)
@@ -770,7 +773,7 @@ export class Game {
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
         if (authoritative && power >= 1) this.livingTrees?.hitAt(pos, radius, 8 * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); // (a burst tears a living tree apart — not a cannonball)
-        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, 10 * power, 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, 12 * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); }
+        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, 10 * power, 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, 12 * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); }
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -2481,6 +2484,8 @@ export class Game {
         try {
             const cls = Object.keys(SHIP_CLASSES)[0];
             if (this.ships && cls) zoo.add(new ShipModel(buildLayout(cls), { color: 0x8a5a33, name: 'prewarm' }).group);
+            if (this.ships && cls) zoo.add(new ShipModel(buildLayout(cls), { look: 'black', name: 'prewarm' }).group); // (the black ship's deck, black flag, green fire)
+            for (const v of sailorModels()) zoo.add(v.group); // (Captain Black Moustache, his skeletons)
             for (const k of KIND_IDS) zoo.add(dragonModel(k));
             zoo.add(cartModel(false), cartModel(true));
         } catch (e) { /* (a model that can't be made here: compiled on first sight, as before) */ }
@@ -2651,6 +2656,7 @@ export class Game {
 
         const isTest = this.config.mode === 'test';
         this.ships?.update(dt); // ships move first and carry everyone standing on them
+        this.blackbeard?.update(dt); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
         this._updatePlayer(dt);
         this.ledge.update(dt); // (palms on a ledge's edge, pulled down: the body up — before the hands are stopped at the rock)
         this.handBlocks.update(); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
@@ -3480,6 +3486,7 @@ export class Game {
         this.spiders?.dispose();
         this.dragons?.dispose();
         this.iceCastle?.dispose();
+        this.blackbeard?.dispose();
         this.travelers?.dispose();
         this.carriages?.dispose();
         this.phoenixes?.dispose();

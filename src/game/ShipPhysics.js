@@ -169,7 +169,7 @@ export function stepShip(st, cls, env, dt) {
         const M = mooringForces(st, cls, env.moorings, h);
         const delta = RUDDER_MAX * Math.max(-1, Math.min(1, (st.wheel || 0) / HELM_LOCK));
         // above its hull speed a ship drags its own bow wave: it can't be driven much faster, however hard the wind
-        const uh = 0.9 * Math.sqrt(cls.L), over = Math.abs(st.u) - uh;
+        const uh = 0.9 * Math.sqrt(cls.L) * (cls.hullK || 1), over = Math.abs(st.u) - uh; // (hullK: the black ship's cursed keel cuts its own bow wave)
         const wave = over > 0 ? 0.02 * over * over * Math.sign(st.u) : 0;
         st.u += (F.Fu + M.u - cls.c1 * st.u - cls.c2 * st.u * Math.abs(st.u) - wave) * h;
         st.v += (F.Fv + M.v - 10 * (cls.c1 * st.v + cls.c2 * st.v * Math.abs(st.v))) * h;

@@ -32,6 +32,7 @@ import { avoidStep } from './Avoid.js';
 import { numId, makeWayStep, askWay } from './Crowd.js';
 import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
+import { skeletonDamage } from './Skeletons.js';
 const SAILOR_TURN = 7; // rad/s — a sailor turning to his foe on deck (FaceTarget: «лицом к цели»)
 
 /** Damage of a drop from `h` m onto a deck (as Levitation.fallDamage). */
@@ -50,8 +51,44 @@ export const SAILOR_STATS = {
     captain: { hp: 20, armor: 30, dmg: 3 },
     boatswain: { hp: 14, armor: 10, dmg: 3 },
     sailor: { hp: 10, armor: 0, dmg: 2 },
+    // the black ship (Blackbeard.js): Captain Black Moustache — a boss, 100 HP, his rapier; his skeletons — no
+    // stronger than a castle's knights (20 HP behind 50 armour, 3 a blow): 12 HP, no armour, 2–3 a blow
+    blackbeard: { hp: 100, armor: 0, dmg: 5 },
+    skeleton: { hp: 12, armor: 0, dmg: 2 },
 };
-const TITLES = { captain: 'Капитан', boatswain: 'Боцман', sailor: 'Матрос' };
+const TITLES = { captain: 'Капитан', boatswain: 'Боцман', sailor: 'Матрос', blackbeard: 'Капитан', skeleton: 'Скелет' };
+/** The black ship's people (Blackbeard.js): always the players' foes; they never sleep, never chat, nobody saves them from the sea. */
+export const isPirate = (v) => v?.role === 'blackbeard' || v?.role === 'skeleton';
+/** Who stands at the wheel when idle and gives the orders in a fight. */
+const isCaptain = (v) => v?.role === 'captain' || v?.role === 'blackbeard';
+/** Captain Black Moustache's parry of duel charges (parryBolt). */
+export const PARRY = { ARC: 1.2, GAP: 1.1, COST: 0.34, REST: 0.12, CHANCE: 0.85 };
+/** What a skeleton says (it has no tongue: it rattles and hisses). */
+const RATTLE = ['Кх-х-х…', '*стук костей*', 'Х-р-р-р…', '*скрежет зубов*', 'С-с-с…'];
+/** The black ship's captain: his orders and his taunts. */
+const PIRATE = {
+    order: ['На абордаж, ржавые кости!', 'Взять его! Живым или мёртвым!', 'Окружай, мертвечина!'],
+    command: ['Руби канаты!', 'Не дай ему уйти к борту!', 'Шевелитесь, кости!'],
+    taunt: ['Ха! Ещё один храбрец на корм рыбам!', 'Тысяча чертей! Ты на моём корабле!', 'Мою шпагу не обманешь, сухопутная крыса!', 'Сдавайся — и, может, станешь юнгой. Мёртвым юнгой!'],
+    parry: ['Ха! Мимо!', 'Колдуй, колдуй — шпага быстрее!', 'Отбил! Ещё?'],
+};
+/**
+ * The black ship's skeletons and the duel charges (CLAUDE.md «на кого и на что»): they are dead already — there is
+ * no life in them for «Авада Кедавра» to take (it bursts on the bones, harmless, as on the risen dead — Skeletons.js);
+ * every other charge works on them as on a man (a stun, ice, a jolt, «Сапира»'s burn); fire, blades, axes, fists,
+ * cannonballs, «Бомбардо» and the mighty spells break their bones as any body's.
+ */
+export const SKELETON_AVADA = 'they are dead already: no life in them to take — «Авада Кедавра» bursts on the bones';
+/**
+ * How much of a blow of `kind` a black ship's skeleton takes — as the risen dead and the living trees are
+ * destroyed (the author: «по принципу того, как уничтожаются живые деревья» — Skeletons.skeletonDamage): fire,
+ * lightning, the bursting and the mightiest spells, and what breaks bones (blades, axes, fists, arrows,
+ * cannonballs, a crushing weight, a fall). The duel charges and the other spells: nothing.
+ * kind undefined: a blow (not a spell) — it breaks bones.
+ */
+const CRUSH = new Set(['crush', 'fall', 'Cauldron', 'thrown']);
+export const pirateBoneDamage = (kind, dmg, spell = false) => (kind == null ? (spell ? 0 : dmg) : CRUSH.has(kind) ? dmg : skeletonDamage(kind, dmg));
+const SKELETON_NAMES = ['Костлявый', 'Гремучий', 'Беззубый', 'Ржавый', 'Одноглазый', 'Хромой', 'Трухлявый', 'Шептун', 'Безносый', 'Сухарь', 'Пустоглазый', 'Утопленник'];
 const NAMES = ['Яков', 'Гаврила', 'Фома', 'Тимофей', 'Матвей', 'Савелий', 'Никита', 'Еремей', 'Захар', 'Остап', 'Мирон', 'Лука', 'Демьян', 'Аким', 'Гордей', 'Игнат', 'Кузьма', 'Прохор', 'Тарас', 'Ефим'];
 const SHOUT = {
     fight: ['На абордаж!', 'Полундра!', 'Свистать всех наверх!', 'Руби его!', 'Чужак на палубе!', 'К оружию, братва!'],
@@ -112,12 +149,15 @@ export function crewRoster(ship) {
     const rng = createRng(strHash(String(ship.id)) ^ 0x5a17);
     const add = (role) => {
         const idx = out.length;
-        const name = role === 'captain' ? 'Капитан ' + pick2(rng, ['Дрейк', 'Морган', 'Флинт', 'Сильвер', 'Беринг', 'Крузенштерн', 'Головнин', 'Лисянский']) : pick2(rng, NAMES);
+        const name = role === 'captain' ? 'Капитан ' + pick2(rng, ['Дрейк', 'Морган', 'Флинт', 'Сильвер', 'Беринг', 'Крузенштерн', 'Головнин', 'Лисянский'])
+            : role === 'blackbeard' ? 'Чёрные Усы' : role === 'skeleton' ? pick2(rng, SKELETON_NAMES) : pick2(rng, NAMES);
         out.push({ idx, role, name, seed: (rng() * 1e9) | 0 });
     };
     for (let i = 0; i < (C.captain || 0); i++) add('captain');
+    for (let i = 0; i < (C.blackbeard || 0); i++) add('blackbeard');
     for (let i = 0; i < (C.boatswain || 0); i++) add('boatswain');
     for (let i = 0; i < (C.sailor || 0); i++) add('sailor');
+    for (let i = 0; i < (C.skeleton || 0); i++) add('skeleton');
     return out;
 }
 const pick2 = (rng, a) => a[Math.floor(rng() * a.length) % a.length];
@@ -175,6 +215,25 @@ function railNear(L, side, z) {
 }
 
 function sailorLook(e, color) {
+    if (e.role === 'blackbeard') {
+        // Captain Black Moustache: a black tricorn, a long black coat with a red sash, tall boots, a great black
+        // plaited beard and the curled moustache, his rapier
+        const L = villagerLook(e.seed, 'merchant', false, { castleColor: color });
+        Object.assign(L, { coat: 0x17151b, hat: 'tricorn', hatColor: 0x121114, beard: 'blackbeard', hair: 'long', hairColor: 0x0e0d0f, boots: 0x111012, pants: 0x1e1c22, tool: 'rapier', skin: 0xc99a74, eyes: 0x222222, mouth: 'grin', dress: false });
+        return L;
+    }
+    if (e.role === 'skeleton') {
+        // a skeleton of the black ship's crew: rags of a sailor's clothes, a scarf or a hat on the skull; a
+        // cutlass, a boarding axe or a pistol
+        const L = villagerLook(e.seed, 'builder', false, { castleColor: color });
+        const k = (e.seed >>> 4) % 8;
+        Object.assign(L, {
+            skeleton: true, rags: [0x3a3033, 0x4a3a2a, 0x2a2d3a, 0x5a2a2a][(e.seed >>> 2) % 4], beard: 'none', hair: 'bald', dress: false,
+            hat: k < 3 ? 'scarf' : k < 4 ? 'tricorn' : 'none', hatColor: [0x6b1a1a, 0x1e1e1e, 0x2e3a5a, 0x4a3a2a][(e.seed >>> 6) % 4],
+            tool: e.idx % 4 === 3 ? 'pistol' : e.idx % 4 === 2 ? 'axe' : 'cutlass',
+        });
+        return L;
+    }
     const L = villagerLook(e.seed, e.role === 'captain' ? 'merchant' : 'builder', false, { castleColor: color });
     if (e.role === 'captain') {
         L.shirt = 0xf2ecd8; L.accent = color; L.pants = 0x2c2c3a; L.hat = 'beret'; L.hatColor = 0x1c1c22; L.tool = 'sword'; L.boots = 0x1a1a1a;
@@ -190,6 +249,12 @@ function sailorLook(e, color) {
         L.boots = 0x3a2a1a;
     }
     return L;
+}
+
+/** One model of each look of the crews (the shader prewarm): a sailor, a captain, Captain Black Moustache, skeletons with each weapon. */
+export function sailorModels() {
+    const ent = (role, idx, seed) => ({ role, idx, seed });
+    return [ent('sailor', 1, 3), ent('captain', 0, 5), ent('blackbeard', 0, 7), ent('skeleton', 1, 11), ent('skeleton', 2, 13), ent('skeleton', 3, 17)].map((e) => new VillagerModel(sailorLook(e, 0x5c0f14), { castleColor: 0x5c0f14 }));
 }
 
 /** Captain Black Moustache (a boss — made in another work): his achievement as soon as he is a sailor flagged so. */
@@ -222,7 +287,7 @@ export class Sailors {
             this.game.scene.add(model.group);
             // a station: the captain by the wheel; the others round the ship
             let home;
-            if (e.role === 'captain') home = tags('captain')[0];
+            if (isCaptain(e)) home = tags('captain')[0];
             else if (e.role === 'boatswain') home = tags('capstan')[0];
             else {
                 const st = [...tags('rig'), ...tags('bow'), ...tags('gangway'), ...tags('hammock'), ...tags('store')];
@@ -230,7 +295,8 @@ export class Sailors {
             }
             home = home || L.nodes[0];
             const v = {
-                id: s.id + ':c' + e.idx, ship: s, idx: e.idx, role: e.role, name: e.name, title: TITLES[e.role],
+                id: s.id + ':c' + e.idx, ship: s, crew: s, idx: e.idx, role: e.role, name: e.name, title: TITLES[e.role],
+                pirate: isPirate(e), // (ship: the deck he stands on; crew: his own ship — they differ while he boards another: Blackbeard.js)
                 model, group: model.group, isSailor: true, ck: 'c', removable: false, stunT: 0,
                 hp: S.hp, maxHp: S.hp, armor: S.armor, maxArmor: S.armor, dmg: S.dmg,
                 dead: false, get isDead() { return this.dead; }, damageCooldown: 0,
@@ -287,7 +353,7 @@ export class Sailors {
 
     captainAlive(s) {
         const list = this.crews.get(s.id);
-        if (list) return list.some((v) => v.role === 'captain' && !v.dead);
+        if (list) return list.some((v) => isCaptain(v) && !v.dead);
         return !s.crewKilled.has(0);
     }
 
@@ -341,7 +407,7 @@ export class Sailors {
         if (!v || v.dead) return;
         const g = this.game;
         if (!this.auth) {
-            g.sync?.net.send({ t: 'shit', id: v.id, dmg: Math.round(dmg * 10) / 10, d: dir ? [dir.x, dir.z] : null, mg: opts.magic ? 1 : 0 });
+            g.sync?.net.send({ t: 'shit', id: v.id, dmg: Math.round(dmg * 10) / 10, d: dir ? [dir.x, dir.z] : null, mg: opts.magic ? 1 : 0, ...(opts.kind ? { k: opts.kind } : {}), ...(opts.spell ? { sp: 1 } : {}) });
             v.model.flashHit?.(0.15);
             return;
         }
@@ -352,9 +418,14 @@ export class Sailors {
             g.sound?.playClang?.(0.7);
             if (g.fx?.spark) for (let i = 0; i < 8; i++) g.fx.spark(_w.set(v.x, v.y + 3.2, v.z), 0xfff1b0, 0.08, _v.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.35);
             if (v.fs) { v.fs.st = 'close'; v.fs.cd = 0; } // (and answers at once)
-            if (by) this.provoke(v.ship, by === 'local' ? g.localId : by, '⚔️ Вы напали на матроса — команда к бою!');
+            if (by) this.provoke(v.crew || v.ship, by === 'local' ? g.localId : by, '⚔️ Вы напали на матроса — команда к бою!');
             if (v.sayT <= 0 && Math.random() < 0.5) this._say(v, pick(SHOUT.parry), 2);
             return;
+        }
+        // a skeleton of the black ship: only what destroys a living tree, and what breaks bones (pirateBoneDamage)
+        if (v.role === 'skeleton' && !opts.pierce) {
+            dmg = pirateBoneDamage(opts.kind, dmg, !!opts.spell);
+            if (dmg <= 0) { if (by) this.provoke(v.crew || v.ship, by === 'local' ? g.localId : by, null); return; }
         }
         if (opts.pierce) v.hp = 0;
         else if (v.armor > 0) {
@@ -372,7 +443,7 @@ export class Sailors {
             v.ship.pose.dirToLocal(dir.x, dir.z, _o);
             v.l.x += _o.x * 0.3; v.l.z += _o.z * 0.3;
         }
-        const s = v.ship;
+        const s = v.crew || v.ship;
         g.castleLife?.night?.wakeSailor(v, 'hit');
         // (hurt through something else — a thing thrown by «Левиоса»: the crew turns on the player only if somebody saw whose it was, Blame.js)
         const who = by === 'local' ? g.localId : by;
@@ -394,20 +465,20 @@ export class Sailors {
         if (!v) return;
         const dmg = Math.max(0, Math.min(30, +m.dmg || 0));
         const dir = Array.isArray(m.d) ? _v.set(+m.d[0] || 0, 0, +m.d[1] || 0) : null;
-        this.hit(v, dmg, dir, m.from, { magic: !!m.mg });
+        this.hit(v, dmg, dir, m.from, { magic: !!m.mg, kind: typeof m.k === 'string' ? m.k : undefined, spell: !!m.sp });
     }
 
     /** A blast / a ray of a spell (from Game's hooks). */
-    hitAt(p, radius, dmg, by) {
+    hitAt(p, radius, dmg, by, kind = undefined) {
         if (!this.auth) return;
         for (const v of this.byId.values()) {
             if (v.dead) continue;
             const d = Math.hypot(v.x - p.x, v.y + 1.5 - p.y, v.z - p.z);
-            if (d < radius + 1 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 1.5, z: v.z })) this.hit(v, dmg * (1 - d / (radius + 2)), _v.set(v.x - p.x, 0, v.z - p.z).normalize(), by, { spell: true });
+            if (d < radius + 1 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 1.5, z: v.z })) this.hit(v, dmg * (1 - d / (radius + 2)), _v.set(v.x - p.x, 0, v.z - p.z).normalize(), by, { spell: true, kind });
         }
     }
 
-    hitRay(o, d, len, width, dmg, by) {
+    hitRay(o, d, len, width, dmg, by, kind = undefined) {
         if (!this.auth) return;
         for (const v of this.byId.values()) {
             if (v.dead) continue;
@@ -415,8 +486,39 @@ export class Sailors {
             const along = tx * d.x + ty * d.y + tz * d.z;
             if (along < 0 || along > len) continue;
             const off = Math.hypot(tx - d.x * along, ty - d.y * along, tz - d.z * along);
-            if (off < width + 1) this.hit(v, dmg, _v.set(d.x, 0, d.z).normalize(), by, { spell: true });
+            if (off < width + 1) this.hit(v, dmg, _v.set(d.x, 0, d.z).normalize(), by, { spell: true, kind });
         }
+    }
+
+    /**
+     * (host) Captain Black Moustache meets a duel charge with his rapier (Duel → deflected): he holds the blade
+     * straight up before him and beats it aside. Honest, so that he can be beaten:
+     *  - only from in front (within ~70° of where he faces) — from the side or behind it gets through;
+     *  - not while he swings himself, lies stunned, is frozen, flies, is in the sea;
+     *  - not twice in a row: after a parry the blade is out of line for PARRY.GAP s — a second charge right after
+     *    the first gets through; and he tires: each parry costs PARRY.COST of his wind (back PARRY.REST a second);
+     *  - and not every time (PARRY.CHANCE).
+     * Spells that are not duel charges (rays, blasts, fire, «Инспириус»…), blades, arrows — never parried this way.
+     */
+    parryBolt(v, from, now = performance.now()) {
+        if (!v || v.role !== 'blackbeard' || v.dead || v.overboard || v.lev || v.vy || v.stunT > 0 || v.frozenT > 0) return false;
+        if (v.fs?.st === 'swing') return false;
+        const P = PARRY;
+        const wind = Math.min(1, (v.wind ?? 1) + ((now - (v.windT ?? now)) / 1000) * P.REST);
+        v.wind = wind; v.windT = now;
+        if (now - (v.parryBoltT || -1e9) < P.GAP * 1000) return false;
+        if (wind < P.COST) return false;
+        // from in front?
+        const yaw = (v.ship?.st?.yaw || 0) + (v.lyaw || 0);
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        const dx = from.x - v.x, dz = from.z - v.z, d = Math.hypot(dx, dz) || 1;
+        if ((dx * fx + dz * fz) / d < Math.cos(P.ARC)) return false;
+        if (Math.random() >= P.CHANCE) return false;
+        v.parryBoltT = now;
+        v.wind = wind - P.COST;
+        v.parryShow = 0.45; // (the blade up: the guard pose a moment — _think keeps it)
+        if (v.sayT <= 0 && Math.random() < 0.5) this._say(v, pick(PIRATE.parry), 2);
+        return true;
     }
 
     /** A guard up, facing the blade (dir: the way the blow goes, world): turned aside? */
@@ -470,7 +572,7 @@ export class Sailors {
         if (v.l.y <= ground) {
             const vy = v.vy;
             v.l.y = ground; v.vy = 0;
-            if (vy < -15) this.hit(v, Math.min(8, 2 + (-vy - 15) * 0.5), null, null, { spell: true }); // (a fall from high up hurts)
+            if (vy < -15) this.hit(v, Math.min(8, 2 + (-vy - 15) * 0.5), null, null, { spell: true, kind: 'fall' }); // (a fall from high up hurts)
         }
     }
 
@@ -578,11 +680,13 @@ export class Sailors {
         let vx = vel ? vel.x * 0.5 : 0, vz = vel ? vel.z * 0.5 : 0;
         if (vx * out.x + vz * out.z < 2) { vx += out.x * 2; vz += out.z * 2; }
         v.overboard = { x: _o.x, y: _o.y, z: _o.z, vy: 3, vx, vz, t: 0, wet: false };
+        if (v.crew && v.ship !== v.crew) v.ship = v.crew; // (a boarder: in the sea he belongs to his own ship again)
         v.mode = 'run';
         v.fs = null; v.busy = false; v.stunT = 0; v.vy = 0; v.rescue = null; v.alert = null;
         this._say(v, pick(['А-а-а-а!', 'Полундра-а-а!', 'Спаси-и-ите!']));
         // the crew sees it: a man overboard (_overboardWatch: one throws him the buoy, others call to him)
-        (s.mob || (s.mob = [])).push({ v, by, t: 0, side });
+        // (not a pirate: the black ship's dead go down like stones, the captain swims for himself — Blackbeard.js)
+        if (!v.pirate) (s.mob || (s.mob = [])).push({ v, by, t: 0, side });
         g.castleLife?.night?.crewAlarm(s, false); // (the sleepers below jump up)
         if (by && (by === g.localId || g.remotes?.has?.(by))) {
             // a person did it: that one attacked the ship — the crew goes for him (CrewTactics) or at
@@ -806,10 +910,11 @@ export class Sailors {
         v.hp = 0;
         v.mode = 'dead';
         v.deadT = 0;
-        const s = v.ship;
+        const s = v.crew || v.ship;
         s.crewKilled.add(v.idx);
         s.changed = true;
-        if (v.role === 'captain') for (const c of s.chests) if (c.lockedBy === 'captain') c.locked = false;
+        if (isCaptain(v)) for (const c of s.chests) if (c.lockedBy === 'captain') c.locked = false;
+        if (v.pirate) this.game.blackbeard?.died(v, by);
         if (this.alive(s) <= 0) this.capture(s, s.helmBy || by);
     }
 
@@ -819,15 +924,19 @@ export class Sailors {
         for (const [sid, list] of this.crews) {
             const s = this.ships.list.get(sid);
             if (!s) continue;
+            // (the black ship's boarders on another deck — Blackbeard.js thinks for them there)
+            let home = list;
+            for (const v of list) if (v.ship !== s) { home = this._homeBuf || (this._homeBuf = []); home.length = 0; for (const o of list) if (o.ship === s) home.push(o); break; }
             for (const v of list) {
                 if (v.damageCooldown > 0) v.damageCooldown -= dt;
-                if (this.auth) this._think(v, s, dt);
-                else this._follow(v, dt);
+                if (!this.auth) this._follow(v, dt);
+                else if (v.ship === s) this._think(v, s, dt);
+                else if (!g.blackbeard?.thinkAway(v, dt)) { v.ship = s; this._toNode(v, s); } // (nobody to think for him there: back home)
             }
             if (this.auth) {
-                this._tactics(s, list, dt); this._separate(s, list, dt); this._chatter(s, list, dt);
-                this._overboardWatch(s, list, dt);
-                for (const v of list) this._ground(v, s);
+                this._tactics(s, home, dt); this._separate(s, home, dt); this._chatter(s, home, dt);
+                this._overboardWatch(s, home, dt);
+                for (const v of list) this._ground(v, v.ship);
             }
             this._place(s);
             this._drawBuoys(list);
@@ -844,14 +953,15 @@ export class Sailors {
         const list = this.crews.get(s.id);
         if (!list) return;
         for (const v of list) {
+            const d = v.ship || s; // (the deck he stands on: a boarder's is another ship's)
             if (v.overboard) {
                 v.x = v.overboard.x; v.y = v.overboard.y; v.z = v.overboard.z;
             } else {
-                s.pose.toWorld(v.l.x, v.l.y, v.l.z, _o);
+                d.pose.toWorld(v.l.x, v.l.y, v.l.z, _o);
                 v.x = _o.x; v.y = _o.y; v.z = _o.z;
             }
             v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
-            v.group.rotation.set(0, s.st.yaw + v.lyaw, 0);
+            v.group.rotation.set(0, (v.overboard && v.leapYaw != null ? v.leapYaw : d.st.yaw + v.lyaw), 0);
         }
     }
 
@@ -860,8 +970,9 @@ export class Sailors {
         const g = this.game;
         if (v.dead) { v.mode = 'dead'; v.speed = 0; if (!v.overboard && !v.lev) { this._fall(v, s, dt); this._offStair(v, s, dt); } return; } // (a dead body falls to the deck / floor below — never left in the air, never left lying on a stair)
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; } // (held up in the air by «Левиоса Максима»: it carries him)
-        if (v.overboard) { this._swim(v, s, dt); return; }
+        if (v.overboard) { if (!(v.pirate && this.game.blackbeard?.overboard(v, s, dt))) this._swim(v, s, dt); return; } // (a skeleton sinks: Blackbeard.js)
         if (s.flooded) { this._overboard(v, Math.random() < 0.5 ? -1 : 1); return; }
+        if (v.pirate && this.game.blackbeard?.thinkHome(v, s, dt)) return; // (the black ship's own business: going over to board, the guns)
         // knocked down, reeling, thrown up into the air: the body, not the mind
         if (v.stunT > 0 || v.vy) {
             if (v.stunT > 0) v.stunT -= dt;
@@ -871,6 +982,8 @@ export class Sailors {
             if (v.fs) v.fs.st = 'close';
             return;
         }
+        // (the rapier up — a duel charge just beaten aside: the guard a moment)
+        if (v.parryShow > 0) { v.parryShow -= dt; v.mode = 'block'; v.speed = 0; return; }
         // the foe: a hostile player aboard (or on the pier near the gangway)
         const now = performance.now();
         // a mate in the water and he is the one sent to save him (_overboardWatch): that first — the
@@ -906,7 +1019,7 @@ export class Sailors {
         }
         if (v.foe) { v.fp = null; v.fs = null; v.busy = false; v.tac = null; v.fpath = null; v.node = this._nearestNode(s, v.l); }
         v.foe = null;
-        if (onPier && v.role !== 'captain') {
+        if (onPier && !isCaptain(v)) {
             // they line up at the gangway and shout
             const gw = s.layout.nodes.find((n) => n.tag === 'gangway:' + ((s.berth?.side || 1) > 0 ? '+1' : '-1')) || s.layout.nodes[0];
             if (Math.hypot(gw.x - v.l.x, gw.z - v.l.z) > 2 + v.idx * 0.4) { this._steer(v, s, gw.x - Math.sign(gw.x) * 1.5, gw.z + (v.idx % 4 - 1.5) * 1.6, RUN, dt); v.mode = 'run'; }
@@ -918,10 +1031,10 @@ export class Sailors {
         // the side, say): to the rail on his side, blades up, shouting at him; aboard — the fight
         if (far && !v.nsleep) { this._threaten(v, s, far, dt); return; }
         if (v.alert) { v.alert = null; v.path = null; v.fpath = null; v.node = this._nearestNode(s, v.l); }
-        // the night: below asleep (the watch walks the deck) — NightLife.js
-        if (g.castleLife?.night?.sailor(v, s, dt)) return;
+        // the night: below asleep (the watch walks the deck) — NightLife.js (the dead do not sleep)
+        if (!v.pirate && g.castleLife?.night?.sailor(v, s, dt)) return;
         // a player right next to him (casting, reaching out): he steps back out of the way of the hands
-        if (this._makeRoom(v, s, dt)) return;
+        if (!v.pirate && this._makeRoom(v, s, dt)) return;
         // talking to somebody: stand and face them
         if (v.talking > 0) {
             v.talking -= dt;
@@ -954,7 +1067,7 @@ export class Sailors {
             return;
         }
         v.waitT -= dt;
-        if (v.role === 'captain') {
+        if (isCaptain(v)) {
             const n = s.layout.nodes.find((x) => x.tag === 'captain');
             if (n && Math.hypot(n.x - v.l.x, n.z - v.l.z) > 1) { v.path = this._route(s, v.node, n.id); v.pathI = 0; }
             else { v.mode = 'idle'; v.lyaw = Math.PI; }
@@ -1114,12 +1227,13 @@ export class Sailors {
             const narrow = hullHalfWidth(L, foe.z, Math.max(0.2, foe.y)) < 3.6 || !fits(foe.x + 2.2, foe.z) || !fits(foe.x - 2.2, foe.z);
             const res = assignRoles(group, foe, now, { fits, max: narrow ? 1 : TACTICS.MAX_ENGAGE });
             // the captain's orders: at the start, when one is sent in for another, and now and then
-            const capt = group.find((v) => v.role === 'captain') || (this.crews.get(s.id) || []).find((v) => v.role === 'captain' && !v.dead && !v.overboard);
+            const capt = group.find(isCaptain) || (this.crews.get(s.id) || []).find((v) => isCaptain(v) && !v.dead && !v.overboard);
             if (capt) {
+                const S = capt.pirate ? PIRATE : SHOUT;
                 m.orderT -= dt;
-                if (!m.ordered) { m.ordered = true; m.orderT = 6; this._say(capt, pick(SHOUT.order)); }
+                if (!m.ordered) { m.ordered = true; m.orderT = 6; this._say(capt, pick(S.order)); }
                 else if (res.swaps.length) { const w = res.swaps[0]; m.orderT = 5; this._say(capt, Math.random() < 0.5 ? `${w.in.name}, смени ${w.out.name}!` : `${w.out.name}, назад! ${w.in.name} — вперёд!`); }
-                else if (m.orderT <= 0 && group.length > 2) { m.orderT = 6 + Math.random() * 5; this._say(capt, pick(SHOUT.command)); }
+                else if (m.orderT <= 0 && group.length > 2) { m.orderT = 6 + Math.random() * 5; this._say(capt, pick(capt.pirate && Math.random() < 0.5 ? PIRATE.taunt : S.command)); }
             }
             for (const v of res.engage) this._engage(v, s, foe, dt, now, group, m);
             for (const v of res.wait) this._ring(v, s, foe, dt, res.engage);
@@ -1133,7 +1247,7 @@ export class Sailors {
      * the captain keeps an eye on the nearest.
      */
     _share(s, list) {
-        const men = list.filter((v) => !v.dead && !v.overboard && v.foe && v.fp && v.role !== 'captain');
+        const men = list.filter((v) => !v.dead && !v.overboard && v.foe && v.fp && v.role !== 'captain'); // (Captain Black Moustache fights as his men do)
         if (men.length < 2) return;
         const foes = [];
         const now = performance.now();
@@ -1220,7 +1334,7 @@ export class Sailors {
         if (d > 0.5) { const far = d > 3; this._steer(v, s, p.x, p.z, far ? RUN : WALK, dt); v.mode = far ? 'run' : 'block'; }
         else { v.speed = 0; v.mode = v.role === 'captain' ? 'idle' : 'block'; }
         if (d < 3) v.lyaw = Math.atan2(-(foe.x - v.l.x), -(foe.z - v.l.z));
-        if (v.role !== 'captain' && v.sayT <= 0 && engage.length && Math.random() < dt * 0.08) this._say(v, pick(SHOUT.cheer).replace('{n}', pick(engage).name));
+        if (!isCaptain(v) && v.sayT <= 0 && engage.length && Math.random() < dt * 0.08) this._say(v, pick(SHOUT.cheer).replace('{n}', pick(engage).name));
     }
 
     /** To the foe on another deck: by the walking graph (the ladders, the hatches). */
@@ -1395,14 +1509,15 @@ export class Sailors {
     _say(v, text, seconds = 4, broadcast = true) {
         const g = this.game;
         if (!text || (v.sayT > 0 && !broadcast)) return;
+        if (v.role === 'skeleton') { if (broadcast && Math.random() < 0.6) return; text = pick(RATTLE); } // (no tongue: a rattle, a hiss, now and then)
         v.sayT = 1.5;
         if (!g.scene || typeof document === 'undefined') return;
         if (!v.bubble) { v.bubble = new SpeechBubble(); g.scene.add(v.bubble.sprite); }
-        const shout = /!$/.test(text) && (!!v.foe || v.role === 'captain');
+        const shout = /!$/.test(text) && (!!v.foe || isCaptain(v));
         const talk = g.castleLife?.talk;
-        if (talk?.voiceCarries?.(v, shout)) v.bubble.hide?.();
-        else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.role === 'captain' ? '#1f3a6b' : '#2a4a5a' });
-        talk?.voice?.(v, text, shout);
+        if (v.role !== 'skeleton' && talk?.voiceCarries?.(v, shout)) v.bubble.hide?.();
+        else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.role === 'blackbeard' ? '#3a0a0e' : v.role === 'skeleton' ? '#24402a' : v.role === 'captain' ? '#1f3a6b' : '#2a4a5a' });
+        if (v.role !== 'skeleton') talk?.voice?.(v, text, shout);
         if (broadcast && this.auth) g.sync?.net.send({ t: 'screw', say: 1, id: v.id, text: String(text).slice(0, 200) });
     }
 
@@ -1415,7 +1530,7 @@ export class Sailors {
         const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
         let best = null, bs = Infinity;
         for (const v of this.byId.values()) {
-            if (v.dead || v.overboard) continue;
+            if (v.dead || v.overboard || v.role === 'skeleton') continue;
             const dx = v.x - me.x, dz = v.z - me.z, d = Math.hypot(dx, dz);
             // (a ship's deck stands well above the pier: one on the pier talks up to the sailors at the rail)
             if (d > HEAR || Math.abs(v.y - (me.y - 1.95)) > 5) continue;
@@ -1504,6 +1619,7 @@ export class Sailors {
         // asleep: a mumble first (a second word wakes him) — NightLife.js
         if (v.mode === 'sleepMat' || v.nsleep) { if (this.auth) g.castleLife?.night?.rouseSailor(v, g.localId); else g.sync?.net.send({ t: 'screw', talk: 1, id: v.id }); return true; }
         const s = v.ship;
+        if (v.role === 'blackbeard') { v.talkedAt = performance.now(); this._say(v, pick(PIRATE.taunt), 5); return true; } // (he talks with his rapier)
         const ctx = {
             playerName: g.net?.active ? g.net.name : null, playerIsKing: s.owner === g.localId,
             hostile: (s.hostile.get(g.localId) || 0) > performance.now(), coins: g.inventory?.coins?.() ?? 0,
@@ -1530,7 +1646,7 @@ export class Sailors {
         const g = this.game;
         const me = g.character.group.position;
         const now = performance.now();
-        return [...this.byId.values()].filter((v) => !v.dead && !v.overboard && !v.foe && !((v.ship.hostile.get(g.localId) || 0) > now)
+        return [...this.byId.values()].filter((v) => !v.dead && !v.overboard && !v.foe && !v.pirate && !((v.ship.hostile.get(g.localId) || 0) > now)
             && Math.hypot(v.x - me.x, v.z - me.z) < 14 && Math.abs(v.y - (me.y - 1.95)) < 5);
     }
 
@@ -1568,7 +1684,7 @@ export class Sailors {
     _chatter(s, list, dt) {
         const me = this.game.character.group.position;
         for (const v of list) {
-            if (v.dead || v.overboard || v.foe || v.talking > 0) continue;
+            if (v.dead || v.overboard || v.foe || v.talking > 0 || v.pirate) continue;
             if ((v.chatT -= dt) > 0) continue;
             v.chatT = 20 + Math.random() * 30;
             if (Math.hypot(v.x - me.x, v.z - me.z) > 40) continue;
@@ -1625,7 +1741,7 @@ export class Sailors {
         this._netT = (this._netT || 0) + 1;
         if (this._netT % 1 !== 0) return;
         for (const [sid, list] of this.crews) {
-            const l = list.map((v) => [v.idx, Math.round(v.l.x * 100) / 100, Math.round(v.l.y * 100) / 100, Math.round(v.l.z * 100) / 100, Math.round(v.lyaw * 100) / 100, Math.max(0, MODE_CODE.indexOf(v.mode)), v.hp, Math.round(v.armor), v.dead ? 1 : 0, v.overboard ? [Math.round(v.overboard.x * 10) / 10, Math.round(v.overboard.y * 10) / 10, Math.round(v.overboard.z * 10) / 10] : 0, v.rescue?.buoy ? [Math.round(v.rescue.buoy.x * 10) / 10, Math.round(v.rescue.buoy.y * 10) / 10, Math.round(v.rescue.buoy.z * 10) / 10] : 0]);
+            const l = list.map((v) => [v.idx, Math.round(v.l.x * 100) / 100, Math.round(v.l.y * 100) / 100, Math.round(v.l.z * 100) / 100, Math.round(v.lyaw * 100) / 100, Math.max(0, MODE_CODE.indexOf(v.mode)), v.hp, Math.round(v.armor), v.dead ? 1 : 0, v.overboard ? [Math.round(v.overboard.x * 10) / 10, Math.round(v.overboard.y * 10) / 10, Math.round(v.overboard.z * 10) / 10] : 0, v.rescue?.buoy ? [Math.round(v.rescue.buoy.x * 10) / 10, Math.round(v.rescue.buoy.y * 10) / 10, Math.round(v.rescue.buoy.z * 10) / 10] : 0, v.ship !== v.crew ? v.ship.id : 0]); // (the last: a boarder's deck — another ship)
             g.sync.net.send({ t: 'screw', id: sid, l });
         }
     }
@@ -1644,6 +1760,8 @@ export class Sailors {
             if (a[8] && !v.dead) { v.dead = true; s?.crewKilled.add(v.idx); }
             v.overboard = Array.isArray(a[9]) ? { x: a[9][0], y: a[9][1], z: a[9][2], vy: 0, t: 0 } : null;
             v.buoyNet = Array.isArray(a[10]) ? { x: +a[10][0] || 0, y: +a[10][1] || 0, z: +a[10][2] || 0 } : null; // (the lifebuoy he threw)
+            const deck = (a[11] && this.ships.list.get(a[11])) || s;
+            if (deck && deck !== v.ship) { v.ship = deck; v.net.x = v.l.x = a[1]; v.l.y = a[2]; v.net.z = v.l.z = a[3]; } // (he went over to another deck: no sliding across)
         }
     }
 
@@ -1679,7 +1797,7 @@ registerKind('c', {
     list: (g) => (g.ships ? [...g.ships.crew.byId.values()] : []),
     get: (g, id) => g.ships?.crew.byId.get(id),
     alive: (c) => !c.dead && !c.overboard,
-    body: (c) => (c.role === 'captain' ? 'knight' : 'person'),
+    body: (c) => (isCaptain(c) ? 'knight' : 'person'),
     centre: (c, out) => out.set(c.x, c.y + 2.6, c.z),
     pivot: (c) => ({ obj: c.model.root, base: c.model.root.userData.impBase ?? (c.model.root.userData.impBase = c.model.root.position.y), lie: 0.5 }),
     head: (c) => c.model.head, arms: (c) => [c.model.leftArm, c.model.rightArm], legs: (c) => [c.model.leftLeg, c.model.rightLeg],
@@ -1693,7 +1811,7 @@ registerKind('c', {
         c.hitBy = { id: by, t: performance.now() };
         // (a body thrown by «Левиоса» into him: whose — only if the crew saw, Blame.js)
         const via = o.kind === 'fall' || o.kind === 'thrown' ? 'leviosa' : null;
-        if (via && !g.ships?.crew._crewKnows(c.ship, by, { x: c.x, z: c.z }, via)) return;
-        g.ships?.crew.provoke(c.ship, by, '🏴 Вы напали на матроса — команда к бою!');
+        if (via && !g.ships?.crew._crewKnows(c.crew || c.ship, by, { x: c.x, z: c.z }, via)) return;
+        g.ships?.crew.provoke(c.crew || c.ship, by, '🏴 Вы напали на матроса — команда к бою!');
     },
 });

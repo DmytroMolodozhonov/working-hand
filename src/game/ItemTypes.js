@@ -235,6 +235,41 @@ export function rollDragonLoot(r = Math.random) {
     return out;
 }
 
+/**
+ * The chests of Captain Black Moustache's black ship (CLAUDE.md «Боссы»: the sea's things for a pirate): his own
+ * chest in his cabin ('captain' — locked while he lives) holds his gold and the best of his plunder; the officers'
+ * chest on the poop — gold and plunder; the stores below — ship's biscuit and meat, powder and shot, sabres and
+ * boarding axes, gold now and then. Magic sabres (swords and axes that hit harder), wands, scrolls, magic shields
+ * and bows taken from the ships he sank, cannonballs to throw, a fishing rod.
+ */
+export function rollPirateLoot(r = Math.random, room = 'store') {
+    const out = [];
+    const coins = (a, b) => out.push({ kind: 'coins', uid: newUid(), count: randInt(r, a, b) });
+    const sabre = (magic) => out.push({ kind: 'weapon', type: r() < 0.65 ? 'sword' : 'axe', magic, bonus: randInt(r, magic ? 30 : 1, 60), uid: newUid() });
+    if (room === 'captain') {
+        coins(250, 450); coins(150, 300);
+        out.push(rollKeyItem(r), rollKeyItem(r));
+        sabre(true);
+        if (r() < 0.5) out.push(rollKeyItem(r));
+        return out;
+    }
+    if (room === 'officers') {
+        coins(80, 180);
+        out.push(rollKeyItem(r));
+        sabre(r() < 0.6);
+        if (r() < 0.4) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 8, 16) });
+        return out;
+    }
+    if (LOOT_EXTRA.fishingRod && r() < 0.4) out.push(LOOT_EXTRA.fishingRod(r));
+    if (r() < 0.6) coins(20, 80);
+    out.push({ kind: 'cannonball', uid: newUid() });
+    if (r() < 0.5) out.push({ kind: 'cannonball', uid: newUid() });
+    out.push(r() < 0.5 ? { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) } : { kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
+    sabre(r() < 0.25);
+    if (r() < 0.2) out.push(rollKeyItem(r));
+    return out;
+}
+
 /** A chest in a sea castle's port: the sailors' stores — food, arrows, wool; sometimes a fishing rod, rarely something precious. */
 export function rollPortLoot(r = Math.random) {
     const out = [];

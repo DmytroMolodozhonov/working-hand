@@ -307,7 +307,7 @@ export class TotalDestruction {
         g.castleLife?.hitAt(at, R, 8 * P, by);
         g.livingTrees?.hitAt(at, R, 8 * P, d.name); // (the mightiest spells break a living tree too, not only fire)
         g.ships?.blast?.(at, R, P, by);
-        g.ships?.crew?.hitAt(at, R, 8 * P, by);
+        g.ships?.crew?.hitAt(at, R, 8 * P, by, d.name);
         g.creatureImpact?.spellArea(d.name, by, (c) => {
             const dd = Math.hypot(c.x - p.x, c.z - p.z);
             if (dd > reach || Math.abs(c.y - p.y) > 30) return null;

@@ -809,7 +809,7 @@ export class Cauldrons {
         for (const z of g.zombies || []) if (!z.isDead && z.group.position.distanceTo(at) < r + 0.6) g.damageZombie?.(z, dmg, false, _v2.set(0, 0, 1), null);
         g.animals?.hitAt?.(at, r, dmg, null);
         g.castleLife?.hitAt?.(at, r, dmg, null);
-        g.ships?.crew?.hitAt?.(at, r, dmg, null);
+        g.ships?.crew?.hitAt?.(at, r, dmg, null, 'Cauldron');
         g.spiders?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.dragons?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.iceCastle?.hitAt?.(at, r, dmg, 'Cauldron', null);

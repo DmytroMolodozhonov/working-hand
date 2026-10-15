@@ -641,7 +641,7 @@ export class Hellfire {
             }
         }
         // the ships' crews
-        if (auth && blaze && g.ships?.crew?.hitAt) { g.ships.crew.hitAt(f.c, f.R, D, by); g.ships.crew.hitAt(f.c, f.R + heatR * 0.5, HELLFIRE.HEAT_DMG * 0.5, by); } // (in it, and its heat)
+        if (auth && blaze && g.ships?.crew?.hitAt) { g.ships.crew.hitAt(f.c, f.R, D, by, HELLFIRE.NAME); g.ships.crew.hitAt(f.c, f.R + heatR * 0.5, HELLFIRE.HEAT_DMG * 0.5, by, HELLFIRE.NAME); } // (in it, and its heat)
         if (f.surgeT > 0) f.surgeT -= HELLFIRE.TICK;
         // dead animals in it get cooked
         if (blaze) for (const a of g.animals?.list || []) if (a.dead && !a.cooked && a.meat > 0 && inBlaze(f.c, f.R, a.group.position, 0.8)) { a.cooked = true; g.animals._tintCooked?.(a); }

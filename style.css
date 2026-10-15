@@ -1468,6 +1468,11 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #dragon-bar .boss-name { color: #ffb36b; font-weight: bold; text-shadow: 0 0 4px #000, 0 1px 2px #000; margin-bottom: 4px; }
 #dragon-bar .boss-track { height: 12px; background: rgba(0, 0, 0, 0.6); border: 2px solid rgba(255, 255, 255, 0.6); border-radius: 7px; overflow: hidden; }
 #dragon-bar .boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff9a1e, #8a0f14); transition: width 0.2s; }
+/* Captain Black Moustache's health (Blackbeard.js) */
+#bb-bar { position: fixed; top: 126px; left: 50%; transform: translateX(-50%); width: min(520px, 80vw); display: none; z-index: 1300; pointer-events: none; text-align: center; }
+#bb-bar .boss-name { color: #e8e0c8; font-weight: bold; text-shadow: 0 0 4px #000, 0 1px 2px #000; margin-bottom: 4px; }
+#bb-bar .boss-track { height: 12px; background: rgba(0, 0, 0, 0.6); border: 2px solid rgba(120, 255, 150, 0.6); border-radius: 7px; overflow: hidden; }
+#bb-bar .boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #6dff8a, #5c0f14); transition: width 0.2s; }
 /* the Ice Queen's health (IceQueen.js) */
 #ice-bar { position: fixed; top: 126px; left: 50%; transform: translateX(-50%); width: min(520px, 80vw); display: none; z-index: 1300; pointer-events: none; text-align: center; }
 #ice-bar .boss-name { color: #bfefff; font-weight: bold; text-shadow: 0 0 4px #000, 0 1px 2px #000; margin-bottom: 4px; }

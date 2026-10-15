@@ -50,7 +50,11 @@ export const SHIP_CLASSES = {
         masts: [{ id: 'fore', z: -24, h: 62 }, { id: 'main', z: -2, h: 74 }, { id: 'mizzen', z: 24, h: 44 }],
         crew: { blackbeard: 1, skeleton: 12 },
         hp: 600, floodVol: 1.2,
-        sailK: 0.0024, c1: 0.02, c2: 0.0002, turnR: 85, yawD1: 0.22, lateenFrac: 0.15, waveLag: 1.6,
+        // 40 % faster than any other ship under the same wind — always, whoever sails it (the author): its sails draw
+        // harder, its hull slips through the water, its cursed keel cuts its own bow wave (hullK, ShipPhysics) —
+        // tests/unit/blackbeard.test.js checks the 1.4
+        sailK: 0.008, c1: 0.012, c2: 0.00016, hullK: 1.3, turnR: 85, yawD1: 0.22, lateenFrac: 0.15, waveLag: 1.6,
+        shipName: 'Чёрный Призрак',
         cannons: 5,
         pierLayer: 5,
         magic: true, look: 'black', // (ShipModel SHIP_LOOKS.black)

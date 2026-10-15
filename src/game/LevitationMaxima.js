@@ -1425,7 +1425,7 @@ export class LevitationMaxima {
         for (const z of [...(g.zombies || [])]) if (!z.isDead && under({ x: z.group.position.x, y: z.group.position.y - 1, z: z.group.position.z })) g.damageZombie?.(z, dmg, false, _v2.set(0, -1, 0), by);
         g.castleLife?.hitAt?.(c, r, dmg, by);
         g.animals?.hitAt?.(c, r, dmg, by);
-        if (!ship) g.ships?.crew?.hitAt?.(c, r, dmg, by);
+        if (!ship) g.ships?.crew?.hitAt?.(c, r, dmg, by, 'crush');
         g.spiders?.hitAt?.(c, r, dmg, 'crush', by);
         g.phoenixes?.hitAt?.(c, r, dmg, 'crush', by);
         g.iceCastle?.hitAt?.(c, r, dmg, 'crush', by); // (a house falling on the queen: it is no spell — it hurts)

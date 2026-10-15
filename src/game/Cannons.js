@@ -298,21 +298,26 @@ export class Cannons {
         this._event(G.ship, { k: 'light', g: G.spec.id });
     }
 
-    /** (host) Bang: the ball (if loaded) flies. */
+    /** (host) Bang: the ball (if loaded) flies (st.pitch: the barrel raised — the black ship's gunners aim, Blackbeard.js). */
     fire(G) {
         const loaded = G.st.loaded;
         G.st.loaded = false;
         G.st.recoil = 1;
         if (G.ship) G.ship.changed = true;
         this._shot(G, loaded, G.st.by || null, true);
-        this._event(G.ship, { k: 'fire', g: G.spec.id, l: loaded ? 1 : 0 });
+        this._event(G.ship, { k: 'fire', g: G.spec.id, l: loaded ? 1 : 0, p: G.st.pitch ? Math.round(G.st.pitch * 1000) / 1000 : undefined });
+        G.st.pitch = 0;
     }
+
+    /** A ship's gun by its ship and id ({ship, spec, st}) — for the AI that fires it. */
+    gunOf(s, id) { return this._find(s.id, id); }
 
     /** The shot as everybody sees it; `real`: the host's ball, which breaks things. */
     _shot(G, loaded, by, real) {
         const g = this.game;
         const m = this._muzzle(G, new THREE.Vector3());
         const d = this._dir(G, new THREE.Vector3());
+        if (G.st.pitch) { const h = Math.hypot(d.x, d.z) || 1; const c = Math.cos(G.st.pitch); d.set((d.x / h) * c, Math.sin(G.st.pitch), (d.z / h) * c); } // (the barrel raised: the ball flies in an arc)
         G.st.recoil = 1;
         g.sound?.playExplosion?.(m, g.character.group.position, 0.5);
         g.fx?.lightFlash?.(m, 0xffc070, 3, 0.15, 30);
@@ -402,7 +407,7 @@ export class Cannons {
         }
         for (const v of this.ships.crew.targets?.() || []) {
             if (v.dead || !near(v.group.position, 1.2)) continue;
-            this.ships.crew.hit(v, 14, dir.clone(), b.by, {});
+            this.ships.crew.hit(v, 14, dir.clone(), b.by, { kind: 'cannon' });
             return true;
         }
         // players
@@ -426,7 +431,7 @@ export class Cannons {
     _event(ship, e) {
         const g = this.game;
         if (!g.sync || !this.auth) return;
-        const m = { gk: e.k, g: e.g, r: e.r, n: e.n, l: e.l };
+        const m = { gk: e.k, g: e.g, r: e.r, n: e.n, l: e.l, p: e.p };
         if (ship) g.sync.net.send({ t: 'shipev', id: ship.id, k: 'gun', ...m });
         else g.sync.net.send({ t: 'scan', port: 1, ...m });
     }
@@ -445,7 +450,7 @@ export class Cannons {
 
     /** A ship's gun event on a guest (from Ships._applyEvent). */
     applyEvent(s, m) {
-        this._guestEvent(s, { k: m.gk, g: m.g, r: m.r, n: m.n, l: m.l });
+        this._guestEvent(s, { k: m.gk, g: m.g, r: m.r, n: m.n, l: m.l, p: m.p });
     }
 
     /** 'scan' messages: guests ask the host; the host tells about the port's guns. */
@@ -478,7 +483,7 @@ export class Cannons {
         if (!G) return;
         if (m.k === 'load') G.st.loaded = true;
         else if (m.k === 'light') G.st.fuse = FUSE;
-        else if (m.k === 'fire') { G.st.fuse = 0; G.st.loaded = false; this._shot(G, !!m.l, null, false); }
+        else if (m.k === 'fire') { G.st.fuse = 0; G.st.loaded = false; G.st.pitch = +m.p || 0; this._shot(G, !!m.l, null, false); G.st.pitch = 0; }
     }
 
     // ------------------------------------------------------------ saving

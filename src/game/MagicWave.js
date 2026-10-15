@@ -47,7 +47,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'zombie': g.damageZombie?.(c, dmg, false, dir, who); break;
         case 'villager': g.castleLife?.hit(c, dmg, dir.clone(), by, { spell: true }); break;
         case 'animal': g.animals?.hit(c, dmg, dir.clone(), by); break;
-        case 'sailor': g.ships?.crew?.hit(c, dmg, dir.clone(), by, { spell: true }); break;
+        case 'sailor': g.ships?.crew?.hit(c, dmg, dir.clone(), by, { spell: true, kind: spell }); break;
         case 'spider': g.spiders?.hit(c, dmg, spell, by); break;
         case 'dragon': g.dragons?.hit(c, dmg, spell, by); break;
         case 'phoenix': g.phoenixes?.hit(c, dmg, spell, by); break;

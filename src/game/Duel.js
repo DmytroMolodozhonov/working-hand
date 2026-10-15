@@ -480,7 +480,7 @@ export class Duel {
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
         for (const v of g.castleLife?.targets() || []) if (v.id !== skip) this._villagerBody(v, put('v', v.id)); // (never the wizard who cast it)
         // the ships' crews (on their decks, or swimming)
-        for (const v of g.ships?.crew.byId.values() || []) if (!v.dead) this._villagerBody(v, put('c', v.id));
+        for (const v of g.ships?.crew.byId.values() || []) if (!v.dead && v.id !== skip) this._villagerBody(v, put('c', v.id)); // (never Captain Black Moustache by the charge he beat back himself)
         for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));
         for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall') this._roundBody('b', bd, put('b', bd.id));
         // the giant spider: its whole (big) body, nose to tail
@@ -910,8 +910,33 @@ export class Duel {
 
     _arriveAtCreature(b) {
         const c = this._creature(b.tk, b.tid);
+        // Captain Black Moustache: his rapier up before him — he may beat the charge aside (Sailors.parryBolt)
+        if (c?.isSailor && c.role === 'blackbeard' && this.game.ships?.crew.parryBolt(c, _v3.copy(b.front).addScaledVector(b.dir, -6))) { this._deflect(b, c); return; } // (where it comes from: along its own way)
         this._end(b, 'hit');
         if (c) this.applyToCreature(b.spell, c, b.by, b.o);
+    }
+
+    /**
+     * (host) Captain Black Moustache beat the charge aside with his rapier: it ends where it met the blade (the
+     * caster sees it blocked) and flies on from there as a new charge of the same spell — back the way it came,
+     * thrown to one side and a little up: it may hit whoever is there (the caster too), or fly off over the sea.
+     */
+    _deflect(b, c) {
+        const g = this.game;
+        const p = b.front.clone();
+        this._end(b, 'blocked');
+        g.sound?.playClang?.(0.9);
+        this._burst(p, 0xfff1b0, 16);
+        g.fx?.lightFlash?.(p, this.colors(b.spell, b.by).glow, 2.5, 0.2, 14);
+        const back = _v1.copy(b.dir).negate().setY(0);
+        if (back.lengthSq() < 1e-6) back.set(1, 0, 0);
+        back.normalize();
+        const k = (Math.random() - 0.5) * 1.8; // (beaten to one side or the other)
+        const d = new THREE.Vector3(back.x - back.z * k, 0.12 + Math.random() * 0.3, back.z + back.x * k).normalize();
+        const o = p.clone().addScaledVector(d, 1.4);
+        const nb = this._addBolt({ id: `${c.id}:p${nextId++}`, by: c.id, spell: b.spell, side: 'right', tk: 'n', tid: null, ak: 0.5, o, d });
+        if (g.sync) g.sync.duelCast(nb);
+        return nb;
     }
 
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
@@ -939,6 +964,9 @@ export class Duel {
         // («Джолт»: no damage — a rooted tree only reels from the shove: below)
         if (c.isLivingTree && !isJolt(spell)) { if (spell !== 'Expelliarmus' && spell !== 'Disarmor') g.livingTrees.hit(c, spell === 'AvadaKedavra' ? 999 : 10, spell, byId); return; }
         if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
+        // a skeleton of the black ship: dead already — «Авада Кедавра» finds no life in it (Sailors.SKELETON_AVADA),
+        // and like a living tree no duel charge harms it (only fire, the mighty spells, what breaks bones — Sailors.pirateBoneDamage)
+        if (c.isSailor && c.role === 'skeleton') { this._burst(p, spell === 'AvadaKedavra' ? 0x2dff5a : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);

@@ -1114,7 +1114,7 @@ export class WaterVortex {
         if (!c) return;
         if (b.tk === 'a') g.animals?.hit?.(c, dmg, null, b.by);
         else if (b.tk === 'v') g.castleLife?.hit?.(c, dmg, null, b.by, { spell: true });
-        else if (b.tk === 'c') g.ships?.crew.hit(c, dmg, null, b.by, { spell: true });
+        else if (b.tk === 'c') g.ships?.crew.hit(c, dmg, null, b.by, { spell: true, kind: 'WaterVortex' });
         // (a phoenix: the cold of the ice doesn't harm a fire bird — it waits inside for the bubble to end)
     }
 
@@ -1296,7 +1296,7 @@ export class WaterVortex {
                     if (!cr) continue;
                     if (b.kind === 'a') g.animals?.hit?.(cr, CD, dir.clone(), e.by, true);
                     else if (b.kind === 'v') g.castleLife?.hit?.(cr, CD, dir.clone(), e.by, { spell: true, magic: true });
-                    else if (b.kind === 'c') g.ships?.crew.hit(cr, CD, dir.clone(), e.by, { spell: true, magic: true });
+                    else if (b.kind === 'c') g.ships?.crew.hit(cr, CD, dir.clone(), e.by, { spell: true, magic: true, kind: 'FireMaxima' });
                     else if (b.kind === 't') g.livingTrees?.hit?.(cr, CD, 'FireMaxima'); // (a living tree: fire is the only thing that hurts it)
                     else if (b.kind === 'f') g.phoenixes?.hit?.(cr, 0, 'FireMaxima', e.by); // (a phoenix: fire doesn't harm it — an attack)
                 }

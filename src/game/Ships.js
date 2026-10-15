@@ -38,11 +38,14 @@ import { Helm } from './Helm.js';
 import { Cannons } from './Cannons.js';
 import { Sailors } from './Sailors.js';
 import { Rigging } from './Rigging.js';
-import { rollShipLoot } from './ItemTypes.js';
+import { rollShipLoot, rollPirateLoot } from './ItemTypes.js';
+
+const s0 = (chest) => chest?.ship || null;
 import { createRng } from '../core/math.js';
 
 const WAKE = 320; // m: a ship near any player is awake (moves, has its model)
 const SLEEP = 420;
+const SLEEP_FAR = 640; // (the black ship: Blackbeard.BB.LOSE)
 const SCAN = 650; // m: ports this far are looked at
 const PREBUILD = WAKE + 220; // m: a sleeping ship's model is built ahead (a little a frame) this near
 const UNFURL_RATE = 1 / 3; // sails unroll in 3 s
@@ -139,7 +142,7 @@ export class Ships {
         const layout = buildLayout(clsId);
         const st = newShipState(x, z, yaw);
         const ship = {
-            id, cls: C, layout, name: opts.name || shipName(id), color: opts.color ?? 0x2a5aa0,
+            id, cls: C, layout, name: opts.name || C.shipName || shipName(id), color: opts.color ?? 0x2a5aa0,
             castleId: opts.castleId || null, berth: opts.berth || null,
             st, pose: new ShipPose(), collider: new ShipCollider(layout), model: null,
             state: opts.state || (opts.berth ? 'moored' : 'free'),
@@ -169,7 +172,7 @@ export class Ships {
         s.pose.set(st.x, WATER_LEVEL_Y + (st.heave || 0) - (s.sinkY || 0) + (s.liftY || 0), st.z, st.yaw, (st.roll || 0) + (s.sinkRoll || 0), (st.pitch || 0) + (s.sinkPitch || 0));
         s.collider.setPose(s.pose);
         s.collider.flooded = s.flooded;
-        s.collider.gangwayOpen = s.plank?.state === 'laid';
+        s.collider.gangwayOpen = s.plank?.state === 'laid' || !!s.boardPlank; // (a boarding plank across to another ship: Blackbeard.js)
     }
 
     wake(s) {
@@ -242,7 +245,7 @@ export class Ships {
             let d = Infinity;
             for (const pl of players) d = Math.min(d, Math.hypot(pl.x - s.st.x, pl.z - s.st.z));
             if (!s.awake && d < WAKE) { if (!busy()) this.wake(s); }
-            else if (s.awake && d > SLEEP) this.sleep(s);
+            else if (s.awake && d > (s.cls.magic ? SLEEP_FAR : SLEEP)) this.sleep(s); // (the black ship hunting far off stays awake)
             // (asleep: soon woken — its model is built ahead, a little a frame; gone far again — dropped)
             if (!s.awake && s.preModel && d > PREBUILD + 150) { s.preModel.dispose(); s.preModel = null; s.preReady = false; this.crew.dropPre?.(s); }
             if (!s.awake && d < PREBUILD && d < preD && !s.preReady) { pre = s; preD = d; }
@@ -383,7 +386,7 @@ export class Ships {
     /** (host) A ship chest opens: food, money, weapons — and often a fishing rod. */
     lootChest(chest, pos) {
         const g = this.game;
-        const items = rollShipLoot(Math.random, chest.local?.room === 'captain');
+        const items = s0(chest)?.cls.magic ? rollPirateLoot(Math.random, chest.local?.room) : rollShipLoot(Math.random, chest.local?.room === 'captain'); // (the black ship: the pirates' treasure — ItemTypes.rollPirateLoot)
         items.forEach((it, i) => {
             const p = pos.clone().add(_v.set((i - (items.length - 1) / 2) * 0.8, 2.2, 0));
             if (it.kind === 'weapon') {
@@ -431,6 +434,7 @@ export class Ships {
             if (s.model) {
                 s.model.setPose(s.pose);
                 s.model.setWheel(s.st.wheel);
+                if (s.cls.magic) s.model.setCursed(isCursed(s)); // (the black ship taken: its green fires go out)
                 const d = Math.hypot(cam.x - s.pose.x, cam.z - s.pose.z);
                 s.model.setDetail(d);
                 setNearShadow(s.model.group, d < 120);
@@ -459,6 +463,7 @@ export class Ships {
         const st = s.st;
         const g = this.game;
         if (s.state === 'wreck' || s.lifted) { st.u = st.v = st.r = 0; return; } // (in the air: «Левиоса Максима» carries it)
+        if (s.lashTo && g.blackbeard?.lashStep(s, dt)) { this._damageStep(s, dt); return; } // (held alongside the black ship by its grapnels)
         const open = this._openFrac(s);
         const data = g.terrain?.data;
         const env = {
