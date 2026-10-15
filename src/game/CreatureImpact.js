@@ -97,9 +97,11 @@ export const KINDS = {
         head: (c) => c.model.head, arms: (c) => [c.model.leftArm, c.model.rightArm], legs: (c) => [c.model.leftLeg, c.model.rightLeg],
         move(g, c, dx, dz) {
             const cl = g.castleLife;
-            if (!cl?._walkable || cl._walkable(c.x + dx, c.z + dz, c.y)) { c.x += dx; c.z += dz; }
-            else if (cl._walkable(c.x + dx, c.z, c.y)) c.x += dx;
-            else if (cl._walkable(c.x, c.z + dz, c.y)) c.z += dz;
+            // (thrown up into the air: only a wall stops it — a walker's step test would hold it in place)
+            const ok = c.vy && cl?._airFree ? (x, z) => cl._airFree(x, z, c.y) : (x, z) => !cl?._walkable || cl._walkable(x, z, c.y);
+            if (ok(c.x + dx, c.z + dz)) { c.x += dx; c.z += dz; }
+            else if (ok(c.x + dx, c.z)) c.x += dx;
+            else if (ok(c.x, c.z + dz)) c.z += dz;
         },
         toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
         hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },

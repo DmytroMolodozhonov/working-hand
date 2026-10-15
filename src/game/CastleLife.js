@@ -688,6 +688,14 @@ export class CastleLife {
         return !t.solidIn(ix, iz, f + 1, f + 5);
     }
 
+    /** A body flying through the air may be at (x, z): no wall, no block where its body is. */
+    _airFree(x, z, y) {
+        const t = this.game.world?.terrain?.data;
+        if (!t) return true;
+        const L = Math.round(y + 1.5);
+        return !t.solidIn(Math.round(x), Math.round(z), L, L + 2);
+    }
+
     _ground(v) {
         const c = this.game.collision;
         const gy = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY(v.x, v.z);
