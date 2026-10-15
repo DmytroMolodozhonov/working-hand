@@ -595,6 +595,9 @@ export class ItemSystem {
         const pitch = Math.max(-0.6, Math.min(1.0, Math.asin(Math.max(-1, Math.min(1, look.y))) + 0.25));
         out.copy(flat).multiplyScalar(Math.cos(pitch)).setY(Math.sin(pitch));
         const body = _d.fromArray(thr.vWorld).sub(_e.fromArray(thr.vRel).applyQuaternion(ch.group.quaternion));
+        // aboard a ship: the speed over her deck (she carries the thing in flight — Ships.attach)
+        const sh = this.game.ships?.me?.ship;
+        if (sh) { const pv = this.game.ships.pointVel(sh, ch.group.position.x, ch.group.position.z, _e); body.x -= pv.x; body.z -= pv.z; }
         return out.multiplyScalar(thr.speed * THROW_GAIN * Math.sqrt(ARM_MASS / (ARM_MASS + m))).add(body).clampLength(0, 22);
     }
 

@@ -637,3 +637,42 @@ test('ships: a Bombardo cast at the deck breaks through it, the sea pours in, th
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });
+
+test('ships: a wand let fall on the deck of a moving, turning ship lands where it fell and sails with her', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await shipAtSea(page, 'pinnace', 'wand-ship');
+    await standAt(page, 2, 6, 0);
+    await feed(page, { arms: 'hang' }, 10, 40);
+    await page.evaluate(() => { window.__ship.st.forced = { u: 6, r: 0.04 }; });
+    await feed(page, { arms: 'hang' }, 10, 40);
+    // let fall from a still hand 1.5 m over the deck: as Items._throw makes it aboard — the speed over the
+    // deck (the hand's world speed less the ship's own), and the ship carries it in flight
+    await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship, THREE = window.__zns.THREE;
+        const w = window.__w(-2, s.layout.deck + 1.5, 4);
+        const pv = g.ships.pointVel(s, w.x, w.z), hand = new THREE.Vector3(pv.x, 0, pv.z);
+        const sh = g.ships.me?.ship, me = g.character.group.position;
+        const own = sh ? g.ships.pointVel(sh, me.x, me.z) : { x: 0, z: 0 };
+        g.items.spawnLoose({ kind: 'wand', uid: 'deck-wand', count: 1 }, new THREE.Vector3(w.x, w.y, w.z), { vel: hand.sub(new THREE.Vector3(own.x, 0, own.z)), broadcast: false });
+        g.ships.attach(); // (as after Items.update in a frame: aboard at once)
+    });
+    const at = (page) => page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship, L = g.items.loose.get('deck-wand');
+        if (!L) return null;
+        const l = s.pose.toLocal(L.model.position.x, L.model.position.y, L.model.position.z, { x: 0, y: 0, z: 0 });
+        return { ...l, rest: !!L.rest, deck: s.layout.deck };
+    });
+    await feed(page, { arms: 'hang' }, 40, 40);
+    const a = await at(page);
+    assert.ok(a, 'the wand is still there');
+    assert.ok(Math.hypot(a.x + 2, a.z - 4) < 0.6, `landed where it fell on the deck ${JSON.stringify(a)}`);
+    assert.ok(Math.abs(a.y - a.deck) < 0.4, `on the deck, not through it ${JSON.stringify(a)}`);
+    await feed(page, { arms: 'hang' }, 60, 40);
+    const b = await at(page);
+    assert.ok(Math.hypot(b.x - a.x, b.z - a.z) < 0.3 && Math.abs(b.y - a.y) < 0.3, `sails with the ship ${JSON.stringify({ a, b })}`);
+    await page.evaluate(() => { window.__ship.st.forced = { u: 0, r: 0 }; });
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

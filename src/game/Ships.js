@@ -624,11 +624,13 @@ export class Ships {
             })));
             for (const L of g.items?.loose.values() || []) out.push(this._adapter('i' + L.item.uid, () => ({
                 pos: () => (L.hover || L.model.position), turn: (d) => { L.model.rotation.y += d; }, free: () => !L.accio && !L.lev && !L.remote && g.items.loose.get(L.item.uid) === L, feet: () => (L.hover || L.model.position).y - 0.2,
-                moved: () => { if (L.hover) L.model.position.copy(L.hover); else L.rest = false; },
+                moved: () => { if (L.hover) L.model.position.copy(L.hover); else { L.rest = false; L.sentRest = false; } }, // (the guests see it ride along too)
+                vel: () => (!L.rest && !L.hover && !L.accio && !L.lev && !L.remote ? L.vel : null),
             })));
             for (const w of g.weapons?.weapons || []) out.push(this._adapter('w' + w.id, () => ({
                 pos: () => (w.hover ? w.hover.base : w.position), turn: (d) => { _q.setFromAxisAngle(_UP, d); w.quaternion.premultiply(_q); }, free: () => !w.holder && !w.remoteTarget && !w.drive && !w.stuckIn, feet: () => (w.hover ? w.hover.base : w.position).y - 0.3,
                 moved: () => { if (!w.hover && w.sleeping) w.wake(); },
+                vel: () => (!w.hover && !w.sleeping && w.velocity ? w.velocity : null),
             })));
         }
         if (this._adapters.size > 600) this._adapters.clear();
@@ -658,18 +660,46 @@ export class Ships {
         if (!this.awake.size) { if (this.riders.size) this.riders.clear(); this.me = null; return; }
         const seen = this._seen || (this._seen = new Set());
         seen.clear();
+        // A thing flying aboard flies in the ship's frame (the ship carries it, its speed is the speed over
+        // the deck): it leaves the ship in flight — the ship's own speed is added to it; it comes aboard
+        // in flight from outside — taken off. (A wand thrown or let fall on a moving ship used to get the
+        // ship's speed twice and flew off over the bow into the sea.)
+        const flying = this._flying || (this._flying = new Set());
         for (const ent of this._entities()) {
             seen.add(ent.key);
             const p = ent.pos();
-            const s = p && ent.free() ? this._shipUnder(p, ent.feet()) : null;
-            if (!s) { this.riders.delete(ent.key); continue; }
-            let r = this.riders.get(ent.key);
-            if (!r) { r = { ent, ship: s, l: { x: 0, y: 0, z: 0 } }; this.riders.set(ent.key, r); }
+            const free = !!p && ent.free();
+            const s = free ? this._shipUnder(p, ent.feet()) : null;
+            const was = this.riders.get(ent.key);
+            const v = free ? ent.vel?.() : null; // (in a hand, carried by a spell: not flying by itself)
+            if (!s) {
+                if (was && v) { const pv = this.pointVel(was.ship, p.x, p.z, _d); v.x += pv.x; v.z += pv.z; }
+                this.riders.delete(ent.key);
+                if (v) flying.add(ent.key); else flying.delete(ent.key);
+                continue;
+            }
+            let r = was;
+            if (!r) {
+                r = { ent, ship: s, l: { x: 0, y: 0, z: 0 } }; this.riders.set(ent.key, r);
+                if (v && flying.has(ent.key)) { const pv = this.pointVel(s, p.x, p.z, _d); v.x -= pv.x; v.z -= pv.z; }
+            }
+            flying.delete(ent.key);
             r.ship = s;
             s.pose.toLocal(p.x, p.y, p.z, r.l);
         }
         for (const k of this.riders.keys()) if (!seen.has(k)) this.riders.delete(k);
+        for (const k of flying) if (!seen.has(k)) flying.delete(k);
         this.me = this.riders.get('me') || null;
+    }
+
+    /** The world velocity (m/s, x and z) of a ship's point at world (x, z): her speed and her turning. */
+    pointVel(s, x, z, out = {}) {
+        const st = s.st, c = Math.cos(st.yaw), sn = Math.sin(st.yaw);
+        const dx = x - st.x, dz = z - st.z;
+        out.x = -sn * st.u + c * st.v + st.r * dz;
+        out.z = -c * st.u - sn * st.v - st.r * dx;
+        out.y = 0;
+        return out;
     }
 
     _shipUnder(pos, feetY) {

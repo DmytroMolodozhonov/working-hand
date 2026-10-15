@@ -344,7 +344,15 @@ export class WeaponSystem {
                 const gt = hs.clock = (hs.clock || 0) + dt * 1000; // (the game's clock: a stalled frame must not cut a swing in two)
                 // a real throw: wind-up, a fast swing, the fingers let go — it flies with the hand's speed
                 const thr = hs.thr.update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(this.game.currentPose, side), weight: w.mass || 1, blurOk: true }); // (a hand lost in the swing's blur after a wind-up behind the shoulder: thrown too)
-                if (thr) { this.release(side); w.velocity.fromArray(thr.vWorld).clampLength(0, 22); return; }
+                if (thr) {
+                    this.release(side);
+                    w.velocity.fromArray(thr.vWorld);
+                    // aboard a ship: the speed over her deck (she carries it in flight — Ships.attach)
+                    const sh = this.game.ships?.me?.ship;
+                    if (sh) { const pv = this.game.ships.pointVel(sh, w.position.x, w.position.z, {}); w.velocity.x -= pv.x; w.velocity.z -= pv.z; }
+                    w.velocity.clampLength(0, 22);
+                    return;
+                }
                 // the outstretched hand clearly opened: it falls out of it
                 if (hs.drop.update({ now: gt, curl, tracked, ...arm })) { this.release(side); return; }
             }
