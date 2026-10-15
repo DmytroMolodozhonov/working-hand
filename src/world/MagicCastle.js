@@ -256,6 +256,7 @@ export function castleCells(o) {
         for (let b = -5; b <= 17; b += 5) { put(s * (HALL_A - 1), b, 7, BLOCK.LANTERN); box(s * (HALL_A - 1), s * (HALL_A - 1), 8, 11, b + 2, b + 2, st.banner); }
         // pillars along the hall
         for (let b = -3; b <= 14; b += 5) box(s * 4, s * 4, 0, HALL_TOP, b, b, st.trim);
+        for (let b = -3; b <= 14; b += 5) put(s * 3, b, 5, BLOCK.LANTERN); // (a lantern on each pillar, at the height of the eyes: the hall lit all along)
     }
     for (const cb of [0, 10]) { // chandeliers of gold
         box(0, 0, 14, HALL_TOP, cb, cb, BLOCK.GOLD);
@@ -264,6 +265,7 @@ export function castleCells(o) {
     }
     // the wings inside: lanterns; a long table in the dining hall; carpets
     for (const s of [-1, 1]) for (let b = -4; b <= 16; b += 6) put(s * 11.5 | 0, b, WING_TOP, BLOCK.LANTERN);
+    for (const s of [-1, 1]) for (const b of [-6, 0, 6, 12, 18]) put(s * (KEEP_A - 1), b, 5, BLOCK.LANTERN); // (and on their outer walls, between the windows)
     box(10, 13, 0, 1, -4, 3, BLOCK.PLANKS_DARK);
     box(-14, -9, -1, -1, -6, 18, BLOCK.CARPET_BLUE);
     box(9, 15, -1, -1, 9, 19, BLOCK.CARPET_RED);

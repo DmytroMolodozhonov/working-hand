@@ -75,11 +75,18 @@ test('«Create a Castle»: a whole castle with its gate, iron doors, beds, chest
             cam.position.copy(eye); cam.lookAt(look);
             g.scene.updateMatrixWorld(true);
             g.renderer.render(g.scene, cam);
-            return g.renderer.domElement.toDataURL('image/png');
+            const lit = (g.lanterns?.lights || []).filter((l) => l.intensity > 0).map((l) => +l.position.distanceTo(g.character.group.position).toFixed(1));
+            const light = { cave: +(g._caveK || 0).toFixed(2), indoor: +(g._indoorK || 0).toFixed(2), sky: g.world.terrain.data.skyAt(eye.x, rec.G + 1, eye.z), lit };
+            return { url: g.renderer.domElement.toDataURL('image/png'), light };
         }, where);
-        fs.writeFileSync(path.join(dir, name), Buffer.from(url.split(',')[1], 'base64'));
+        fs.writeFileSync(path.join(dir, name), Buffer.from(url.url.split(',')[1], 'base64'));
+        return url.light;
     };
     await shot('castle-outside.png', 'out');
-    await shot('castle-throne-hall.png', 'in');
+    // the throne hall: lit rooms (never a cave's dark), its lanterns really shine near
+    const light = await shot('castle-throne-hall.png', 'in');
+    console.log('castle light', JSON.stringify(light));
+    assert.ok(light.cave < 0.1 && light.indoor > 0.9, `lit as a house's rooms: ${JSON.stringify(light)}`);
+    assert.ok(light.lit.length >= 2 && Math.min(...light.lit) < 9, `lanterns shine near: ${JSON.stringify(light)}`);
     assert.deepEqual(realErrors(errors), []);
 });
