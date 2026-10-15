@@ -496,6 +496,20 @@ export class SoundManager {
         this.playRumble(position, listenerPos);
     }
 
+    /** «Circle Attack»'s music made ahead (early in the game, not on the first cast). */
+    prepareCircleAttack() {
+        if (this.context && !this.sounds.circleAttack) this.sounds.circleAttack = this._synthCircleAttack();
+    }
+
+    /** «Inspirius»' sounds made ahead, one a call: @returns true when all are made. */
+    prepareInspirius() {
+        if (!this.context) return true;
+        if (!this.sounds.inspCast) { this.sounds.inspCast = this._synthElectric(1.4, true); return false; }
+        if (!this.sounds.inspZap) { this.sounds.inspZap = this._synthElectric(0.3, false); return false; }
+        if (!this.sounds.inspBlast) { this.sounds.inspBlast = this._synthMegaBlast(6); return false; }
+        return true;
+    }
+
     /** «Inspirius»: the ball leaves the wand — a rising electric whine and crackle. */
     playInspiriusCast(position, listenerPos) {
         if (!this.context) return;

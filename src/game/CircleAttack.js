@@ -37,7 +37,7 @@ export const CIRCLE = {
     FLY: 1,
     FRONT_T: 6, // s the ball takes to reach the edge
     TIME: 7, // s all of it
-    BAND: 3, // m: the ground comes down in bands this wide
+    BAND: 2, // m: the ground comes down in bands this wide (one a frame: a thin band — a light frame)
     MAXIMA: { NAME: 'CircleAttackMaxima', MIN_MAX_MANA: 200, COST: 160, RADIUS: 45, ISLAND: 4, ZONES: [45, 30, 15], RAYS: [5, 8], RAY_DMG: 15, FLY: 1.5 },
 };
 
@@ -186,6 +186,7 @@ export class CircleAttack {
     update(dt) {
         this._warmT = (this._warmT || 0) + dt;
         if (!this._warmed && this._warmT > 2) this._warm();
+        else if (this._warmed && !this._soundReady && this._warmT > 4) { this._soundReady = true; this.game.sound?.prepareCircleAttack?.(); } // (its music made early)
         if (!this.list.length) return;
         dt = Math.min(dt, 0.05);
         for (const d of [...this.list]) {

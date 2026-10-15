@@ -37,7 +37,7 @@ export const INSP = {
     HARM_R: 60, // m
     ZONES: [[20, 100], [40, 50], [60, 25]], // [up to m, harm]
     SHOCK_T: 1.6, // s the shock wave takes to reach HARM_R
-    BAND: 4, // m: the ruin goes in bands this wide
+    BAND: 3, // m: the ruin goes in bands this wide (one a frame: a thin band — a light frame)
     SCROLL_MANA: 500, // its scroll is found only by one with this mana maximum
 };
 
@@ -215,6 +215,7 @@ export class Inspirius {
         dt = Math.min(dt, 0.05);
         this._warmT = (this._warmT || 0) + dt;
         if (!this._warmed && this._warmT > 1.5) this._warm();
+        else if (this._warmed && !this._soundsReady && this._warmT > 3) this._soundsReady = this.game.sound?.prepareInspirius?.() ?? true; // (its sounds made early too, one a frame)
         for (const o of [...this.orbs]) this._fly(o, dt);
         for (const b of [...this.blasts]) this._blast(b, dt);
     }
@@ -319,7 +320,6 @@ export class Inspirius {
             const r = INSP.CRATER_R + 2 + (i % 4) * 5;
             g.fire?.ignite?.(_v.set(p.x + Math.cos(a) * r, p.y + 1, p.z + Math.sin(a) * r), 3);
         }
-        g.fire?.ignite?.(p, INSP.CRATER_R);
         if (g.authority) {
             g.castleLife?.alarm(p, 'inspirius', by, INSP.HARM_R); // (the strongest danger there is)
             g.ships?.blast?.(p, INSP.RUIN_R * 0.6, 9, by);
