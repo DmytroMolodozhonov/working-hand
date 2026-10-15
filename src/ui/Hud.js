@@ -420,8 +420,13 @@ export class Hud {
         // In flight the window moves every few frames: what it already shows is moved over and
         // only the new strip is worked out (each pixel depends only on its own place in the world)
         const sx = cx - ti.cx, sz = cz - ti.cz;
-        // (a changed world — a crater, a wall — draws it all again)
-        const shift = ti.cx != null && ti.version === d.version && Math.abs(sx) < size && Math.abs(sz) < size;
+        // (a changed world — a crater, a wall, a house rising: only the chunks that changed are drawn
+        // again, when the world says which — d.mapDirty; too many at once: all of it)
+        const changed = ti.version !== d.version ? d.mapDirty : null;
+        const partial = changed && changed.size < 64 && ti.version != null;
+        const shift = ti.cx != null && (ti.version === d.version || partial) && Math.abs(sx) < size && Math.abs(sz) < size;
+        const touched = partial && changed.size ? new Set(changed) : null;
+        if (d.mapDirty) d.mapDirty.clear();
         if (shift) {
             const S1 = size + 1;
             const ox = Math.max(0, sx), oz = Math.max(0, sz), w = size - Math.abs(sx), h = size - Math.abs(sz);
@@ -436,7 +441,7 @@ export class Hud {
         // map: it stays plain green this time, and is drawn when it is there — it and the pixels next to it)
         const ckey = (wx, wz) => chunkKey(Math.floor(wx / CHUNK), Math.floor(wz / CHUNK));
         const have = (wx, wz) => d.hasChunk(Math.floor(wx / CHUNK), Math.floor(wz / CHUNK));
-        const before = shift && ti.missing?.size ? ti.missing : null;
+        const before = shift && (ti.missing?.size || touched) ? new Set([...(ti.missing || []), ...(touched || [])]) : null;
         const later = ti.missing = new Set();
         const wasMissing = (x, z) => {
             const wx = cx - half + x, wz = cz - half + z;

@@ -430,6 +430,7 @@ export class TerrainData {
     constructor(_size) {
         this.chunks = new Map(); // key -> {cx, cz, blocks, top, maxTop, modified}
         this.dirtyChunks = new Set(); // chunk keys whose mesh must be rebuilt
+        this.mapDirty = new Set(); // chunk keys changed since the minimap last looked (Hud.js)
         this.version = 0;
         this.seed = 1;
         this.mountains = false;
@@ -1301,6 +1302,7 @@ export class TerrainData {
         if (lx === MASK) this.dirtyChunks.add(chunkKey(cx + 1, cz));
         if (lz === 0) this.dirtyChunks.add(chunkKey(cx, cz - 1));
         if (lz === MASK) this.dirtyChunks.add(chunkKey(cx, cz + 1));
+        if (this.mapDirty.size < 64) this.mapDirty.add(chunkKey(cx, cz));
         this.version++;
     }
 
