@@ -27,6 +27,11 @@
  *
  * «На кого и на что» — ICE_MAGIC_TARGETS below (tests/unit/spell-targets.test.js checks every kind).
  *
+ * Warm or cold: ice made in the mountains, where it is cold (at the snow line or above it — the snow band of
+ * Landscape.snowLine), stands for ever. Anywhere else it can be made too, but the sun melts it: a game day
+ * it stands whole (dripping more and more), and by the end of the second it has melted away block by block
+ * from the top down — the floor last (rec.cold, rec.age: saved with it).
+ *
  * Multiplayer: the caster's computer reads the feet and the hands and says how far it has grown; the host
  * decides (checks the place, puts the blocks — they travel as ordinary block edits — the gates, the bed);
  * every computer sees the same frost, sparkles and hears the same tune. The castles and bridges (their
@@ -34,7 +39,7 @@
  */
 
 import * as THREE from 'three';
-import { BLOCK, TREE_KINDS, isLeaves, isSolid, isCastleBlock, isPalaceIce } from '../world/Terrain.js';
+import { BLOCK, TREE_KINDS, isLeaves, isSolid, isCastleBlock, isPalaceIce, SNOW_BAND } from '../world/Terrain.js';
 import { iceLocal, iceYaw } from '../world/IceCastle.js';
 import { ICE_MAGIC, iceCastleMagicSteps, iceBridgePlan, rotTowards, waterOrSnowNear } from '../world/IceMagicPlan.js';
 import { chandelierModel } from './IceModels.js';
@@ -51,6 +56,9 @@ export const ICE_SPELL = {
     SLAM_UP: 0.8, SLAM_DOWN: 0.25, SLAM_MS: 800, // the stamp without legs: both hands from ≥ level to the hips
     BUDGET_MS: 2, MAX_EDITS: 380, // (blocks put a frame)
     RUIN: 0.3, // less than this share of its blocks left: gone (melted)
+    // (the author: «не в горах, не там, где холодно — через пару дней полностью растает; в горах не растает»)
+    MELT_START: 24 * 60, // s of play (a game day): ice made in the warm stands this long whole, dripping…
+    MELT_END: 2 * 24 * 60, // … and is all gone by two game days (block by block, from the top down)
 };
 
 /** What the spells do to whom (CLAUDE.md «кто/что × как действует»). */
@@ -283,6 +291,8 @@ export class IceMagic {
             if (why) return why;
             if (g.wards?.list?.size && g.wards.forbids?.(g.character.group.position, _v.set(bx, bL, bz))) return '🛡️ Здесь чужая защита дома';
         }
+        rec.cold = this.coldAt(rec.k === 'castle' ? rec.x : (rec.ax + rec.bx) / 2, rec.k === 'castle' ? rec.z : (rec.az + rec.bz) / 2, rec.k === 'castle' ? rec.G : Math.min(rec.aL, rec.bL) - 1);
+        rec.age = 0;
         rec.owner = g.houseMagic?._key?.(by) || String(by);
         rec.name = g.houseMagic?._name?.(by) || 'Игрок';
         g.sync?.net?.send({ t: 'icemagic', a: 'go', rec, by });
@@ -305,6 +315,24 @@ export class IceMagic {
         const c = this._centre(rec, _v);
         g.sound?.playIce?.(rec.k === 'castle' ? 'iceFloor' : 'iceChime', c, 1.2);
         g.fx?.lightFlash?.(c, 0xbfefff, 3, 0.5, 40);
+    }
+
+    /**
+     * Is it cold here — the mountains' snow (ice made here never melts)? At the snow line or in the band
+     * of snow patches under it (Landscape.snowLine: lower where the climate is cold). Without the world's
+     * landscape (tests): natural snow lying round about.
+     */
+    coldAt(x, z, G) {
+        const data = this.data;
+        const land = data?.land;
+        if (land?.snowLine && land.climate) {
+            const T = land.climate(x, z, this._clim || (this._clim = {})).T;
+            return G >= land.snowLine(x, z, T) - SNOW_BAND;
+        }
+        x = Math.round(x); z = Math.round(z);
+        let n = 0;
+        for (let dx = -12; dx <= 12; dx += 3) for (let dz = -12; dz <= 12; dz += 3) if (data && data.get(x + dx, data.topLayer(x + dx, z + dz), z + dz) === BLOCK.SNOW) n++;
+        return n >= 6;
     }
 
     _centre(rec, out) {
@@ -361,10 +389,14 @@ export class IceMagic {
         }
         if (this.auth) {
             if (this._waiting.length) this._placeWaiting(dt);
+            this._meltT = (this._meltT || 0) - dt;
+            if (this._meltT <= 0) { this._meltT = 1; this._warmth(1); }
             this._ruinT -= dt;
             if (this._ruinT <= 0) { this._ruinT = 5; this._ruinCheck(); }
         }
         if (this._repairQ.length) this._repairStep();
+        if (!this.auth) for (const r of this.list.values()) if (r.cold === false && this.magic?.id !== r.id) r.age = (r.age || 0) + dt; // (the drips: the host's clock decides)
+        this._drips(dt);
         for (const L of this.look.values()) if (L.fade < 1) { L.fade = Math.min(1, L.fade + dt); L.gloss.forEach((s) => s.scale.setScalar(1).multiply(s.userData.k).multiplyScalar(0.96 + 0.04 * L.fade)); }
     }
 
@@ -563,7 +595,8 @@ export class IceMagic {
         if (m.by === g.localId) {
             const name = rec.k === 'castle' ? 'IceCastle' : 'IceBridge';
             if (done) g.mana?.success?.(name);
-            if (done) g.hud?.setVoice?.(rec.k === 'castle' ? '🏰 Ледяной замок готов! Ворота открываются рукой; наверх — по лестнице слева; огонь растапливает лёд' : '🌉 Ледяной мост готов — по нему можно идти. Огонь его растапливает', true);
+            const warm = rec.cold === false ? ' Здесь тепло — через пару дней лёд растает (в горах, в снегах, он не тает)' : '';
+            if (done) g.hud?.setVoice?.((rec.k === 'castle' ? '🏰 Ледяной замок готов! Ворота открываются рукой; наверх — по лестнице слева; огонь растапливает лёд.' : '🌉 Ледяной мост готов — по нему можно идти. Огонь его растапливает.') + warm, true);
         }
     }
 
@@ -677,6 +710,7 @@ export class IceMagic {
         const me = g.character?.group?.position;
         for (const rec of [...this.list.values()]) {
             if (this.magic?.id === rec.id || rec.f <= 0) continue;
+            if (rec.cold === false && (rec.age || 0) > ICE_SPELL.MELT_START) continue; // (melting in the warm: _warmth takes it to the end)
             const c = this._centre(rec, _v);
             if (me && Math.hypot(me.x - c.x, me.z - c.z) > 150) continue;
             const p = this.plan(rec);
@@ -684,6 +718,62 @@ export class IceMagic {
             let n = 0, have = 0;
             for (let i = 0; i < p.cells.length && p.cells[i][4] <= rec.f; i += 3) { n++; if (isPalaceIce(data.get(p.cells[i][0], p.cells[i][1], p.cells[i][2]))) have++; }
             if (n && have < n * ICE_SPELL.RUIN) { this._gone(rec); g.sync?.net?.send({ t: 'icemagic', a: 'gone', id: rec.id }); }
+        }
+    }
+
+    /**
+     * (host) The warm melts the ice made in the warm: a game day whole, then block by block from the top
+     * down until, at two days, nothing is left (every computer gets the blocks; the record goes).
+     */
+    _warmth(dt) {
+        const g = this.game, data = this.data;
+        if (!data) return;
+        for (const rec of [...this.list.values()]) {
+            if (rec.cold !== false || this.magic?.id === rec.id || !(rec.f > 0)) continue;
+            rec.age = (rec.age || 0) + dt;
+            if (rec.age <= ICE_SPELL.MELT_START) continue;
+            const p = this.plan(rec);
+            if (!p) { this._startPlan(rec); continue; }
+            // (the order it melts in: the highest blocks first, the floor last)
+            const all = rec._melt || (rec._melt = [...p.cells.filter((c) => c[4] <= rec.f + 1e-6).sort((a, b) => b[1] - a[1]), ...(p.floor || [])]);
+            const k = Math.min(1, (rec.age - ICE_SPELL.MELT_START) / (ICE_SPELL.MELT_END - ICE_SPELL.MELT_START));
+            const want = Math.ceil(k * all.length);
+            const edits = [];
+            const t0 = performance.now();
+            rec.melted = rec.melted || 0;
+            for (; rec.melted < want && performance.now() - t0 < ICE_SPELL.BUDGET_MS; rec.melted++) {
+                const c = all[rec.melted];
+                if (data.get(c[0], c[1], c[2]) !== c[3]) continue;
+                data.set(c[0], c[1], c[2], AIR);
+                edits.push([c[0], c[1], c[2], AIR]);
+                if (edits.length < 4) g.fx?.spark?.(_v.set(c[0], c[1] - 1, c[2]), 0x9fd8ff, 0.08, _v2.set(0, -3, 0), 0.6);
+            }
+            if (edits.length) g.builder?._sendEdits(edits);
+            if (k >= 1 && rec.melted >= all.length) { this._gone(rec); g.sync?.net?.send({ t: 'icemagic', a: 'gone', id: rec.id }); }
+        }
+    }
+
+    /** (every computer) Ice in the warm drips — more and more as its time comes. */
+    _drips(dt) {
+        const g = this.game, fx = g.fx, me = g.character?.group?.position;
+        if (!fx?.spark || !me) return;
+        this._dripT = (this._dripT || 0) - dt;
+        if (this._dripT > 0) return;
+        this._dripT = 0.1;
+        for (const rec of this.list.values()) {
+            if (rec.cold !== false || !(rec.f > 0)) continue;
+            const c = this._centre(rec, _v);
+            if (Math.hypot(me.x - c.x, me.z - c.z) > 70) continue;
+            const k = Math.min(1, (rec.age || 0) / ICE_SPELL.MELT_START);
+            const n = Math.random() < 0.3 + 2.5 * k ? 1 + Math.floor(k * 2) : 0;
+            const R = rec.k === 'castle' ? ICE_MAGIC.HALL_R : 2;
+            for (let i = 0; i < n; i++) {
+                const a = Math.random() * Math.PI * 2;
+                const y = rec.k === 'castle' ? rec.G + 2 + Math.random() * ICE_MAGIC.WALL_H : c.y + 0.5;
+                const x = rec.k === 'castle' ? c.x + Math.cos(a) * (R + 0.3) : rec.ax + (rec.bx - rec.ax) * Math.random();
+                const z = rec.k === 'castle' ? c.z + Math.sin(a) * (R + 0.3) : rec.az + (rec.bz - rec.az) * Math.random();
+                fx.spark(_v2.set(x, y, z), 0x9fd8ff, 0.07, _v.set(0, -4, 0), 0.5);
+            }
         }
     }
 
@@ -735,10 +825,10 @@ export class IceMagic {
         this._repairQ.push(rec);
     }
 
-    netList() { return [...this.list.values()].filter((r) => this.magic?.id !== r.id).map((r) => ({ ...r, miss: this._missing(r) })); }
+    netList() { return [...this.list.values()].filter((r) => this.magic?.id !== r.id).map(({ _melt, ...r }) => ({ ...r, miss: this._missing(r) })); } // eslint-disable-line no-unused-vars
     applyNet(list) { for (const r of list || []) this._accept(r); }
 
-    snapshot() { return { list: [...this.list.values()].filter((r) => r.f > 0 || this.magic?.id === r.id).map((r) => ({ ...r, f: this.magic?.id === r.id ? this.magic.f : r.f, miss: this._missing(r) })) }; }
+    snapshot() { return { list: [...this.list.values()].filter((r) => r.f > 0 || this.magic?.id === r.id).map(({ _melt, ...r }) => ({ ...r, f: this.magic?.id === r.id ? this.magic.f : r.f, miss: this._missing(r) })) }; } // eslint-disable-line no-unused-vars
     restore(s) { for (const r of s?.list || []) this._accept(r); }
 
     /** Messages ('icemagic'). */

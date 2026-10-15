@@ -165,3 +165,36 @@ test('the plans: the castle has a dome, spires, a throne, gates; the bridge an a
     const br = iceBridgePlan({ ax: 0, aL: 11, az: 0, bx: 20, bL: 11, bz: 0 });
     assert.ok(br.top > 11 + 2);
 });
+
+test('ice made in the warm stands a game day, then melts away by two days; in the mountains\' snow it never melts', () => {
+    const build = (cold) => {
+        const w = world();
+        if (cold) for (let x = -14; x <= 14; x++) for (let z = -14; z <= 30; z++) w.data.set(x, w.G, z, BLOCK.SNOW);
+        const M = w.g.iceMagic;
+        M.testAim = { x: 0, z: 25 };
+        M.cast('IceBridge');
+        w.run(6);
+        const rec = [...M.list.values()][0], plan = M.plan(rec);
+        return { ...w, M, rec, plan };
+    };
+    const warm = build(false);
+    assert.equal(warm.rec.cold, false);
+    const n0 = iceCount(warm.data, warm.plan.cells);
+    assert.ok(n0 > warm.plan.cells.length * 0.9);
+    warm.M._warmth(ICE_SPELL.MELT_START - 10);
+    assert.equal(iceCount(warm.data, warm.plan.cells), n0, 'a day: whole');
+    warm.M._warmth((ICE_SPELL.MELT_END - ICE_SPELL.MELT_START) / 2 + 10);
+    const half = iceCount(warm.data, warm.plan.cells);
+    assert.ok(half < n0 * 0.7 && half > n0 * 0.3, `half melted: ${half} / ${n0}`);
+    // (the highest blocks went first)
+    const top = Math.max(...warm.plan.cells.map((c) => c[1]));
+    assert.ok(!warm.plan.cells.some((c) => c[1] === top && isPalaceIce(warm.data.get(c[0], c[1], c[2]))));
+    for (let i = 0; i < 20; i++) warm.M._warmth(ICE_SPELL.MELT_END / 20);
+    assert.equal(iceCount(warm.data, warm.plan.cells), 0, 'two days: all gone');
+    assert.equal(warm.M.list.size, 0);
+    const cold = build(true);
+    assert.equal(cold.rec.cold, true);
+    const c0 = iceCount(cold.data, cold.plan.cells);
+    for (let i = 0; i < 10; i++) cold.M._warmth(ICE_SPELL.MELT_END);
+    assert.equal(iceCount(cold.data, cold.plan.cells), c0, 'in the cold: never melts');
+});
