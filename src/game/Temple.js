@@ -277,6 +277,7 @@ export class Temple {
             this.pedestals.push({ spell: p.spell, at: new THREE.Vector3(w.x, w.y + top + 0.9, w.z), n: 0, uid: null, goneT: 0 });
         }
         for (const p of this.pedestals) this._putScroll(p);
+        if (s.venus) g.space?.registerTemple?.({ x: s.x, z: s.z, name: 'Храм богов', icon: '🏛️' }); // (on Venus' map)
     }
 
     _putScroll(p) {
