@@ -43,6 +43,8 @@
  *   - only these break it (from outside): «Total Destruction» and «Inspirius» at once, «Бомбардо Максима» — one
  *     blast on it, «Бомбардо» — about three (each cracks it; the cracks heal slowly if it is left
  *     alone for a minute), «Let the Hellfire Come» held against it for ~7 s (it glows red first).
+ *     Each such blow tells its owner at once, wherever in the world they are: «🛡️⚠️ Ваш дом пытаются
+ *     разрушить — кто! Защита: N% (сколько км отсюда)» (every few seconds while it goes on).
  *     Broken: it falls apart in shards, «🛡️ Защита дома разрушена!» to the owner and to the one who
  *     broke it; the house is unprotected (and seen again); the owner may cast it anew.
  * Saved with the world (owner, centre, radius, invisible, granted, strength) and kept by the host:
@@ -76,6 +78,7 @@ export const WARD = {
     HP: 100,
     BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100 }, // strength taken (nothing else breaks it)
     HELL_T: 7, // s of «Let the Hellfire Come» held against it: burnt through
+    WARN_EVERY: 6, // s: its owner is told again that it is being broken (anywhere in the world)
     HEAL_AFTER: 60, // s left alone: its cracks heal…
     HEAL_RATE: 5, // …this much strength a second
     NEAR: 1.5, // m from it: one who may not come in wakes it (it shows)
@@ -743,13 +746,14 @@ export class HouseWards {
         const o = { id: w.id, o: w.owner, on: w.ownerName, c: [r2(w.c.x), r2(w.c.y), r2(w.c.z)], r: r2(w.r), inv: w.inv ? 1 : 0, g: w.grant.slice(), gn: w.grantNames.slice(), hp: Math.round(w.hp) };
         if (w.setting) { o.s = 1; if (w.f) { o.f = w.f; if (w.a) o.a = w.a; } }
         if (w.hellT > 0) o.h = Math.round(w.hellT * 10) / 10;
+        if (w.hitKey || w.hitBy) { o.hk = w.hitKey || ''; o.hb = w.hitBy || ''; }
         if (ids) o.ids = this._ids(w);
         return o;
     }
 
     _fromRec(o) {
         if (!o || !Array.isArray(o.c) || !o.c.every(Number.isFinite)) return null;
-        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, r: Number.isFinite(o.r) ? o.r : wardRadius(Math.max(0, o.n | 0)), n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null, ...(Array.isArray(o.f) ? { f: o.f.slice(0, 3), a: Array.isArray(o.a) ? o.a.slice(0, 3) : null } : {}) };
+        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, r: Number.isFinite(o.r) ? o.r : wardRadius(Math.max(0, o.n | 0)), n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, hitKey: String(o.hk || ''), hitBy: String(o.hb || '').slice(0, 16), setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null, ...(Array.isArray(o.f) ? { f: o.f.slice(0, 3), a: Array.isArray(o.a) ? o.a.slice(0, 3) : null } : {}) };
     }
 
     netList() { return [...this.list.values()].map((w) => this._rec(w, true)); }
@@ -768,7 +772,10 @@ export class HouseWards {
                 // (my own dome growing: my computer is ahead of the host's list)
                 const r = this.setting?.id === w.id ? Math.max(old.r, w.r) : w.r;
                 const moved = Math.abs(r - old.r) > 1e-3;
+                // (struck: weaker, or the Hellfire burning on it longer — my own house: I am told)
+                const hurt = w.hp < old.hp || (w.hellT || 0) > (old.hellT || 0) + 0.3;
                 Object.assign(old, { ...w, r, gy: old.gy });
+                if (hurt) this._attacked(old);
                 if (moved && !old.setting) { old.gy = this._groundY(old.c, old.r); this._rebuildDisc(old); }
                 continue;
             }
@@ -887,13 +894,37 @@ export class HouseWards {
                 if (!broken) this.game.sound?.playCrack?.(_v1.set(p.x, p.y, p.z), 1.2);
             }
             w.hitAt = this._t;
+            // (who: its owner is told, wherever they are — the host's list carries it)
+            w.hitKey = by != null ? this.keyOf(by) : '';
+            w.hitBy = by != null ? String(this.game.playerName?.(by) || '').slice(0, 16) : '';
             this.log.push({ ev: 'hit', id: w.id, spell, hp: w.hp, hellT: w.hellT || 0 });
+            if (!broken) this._attacked(w);
             if (broken) {
                 this._broken(w.id, by);
                 this._changed([{ id: w.id, by }]);
             } else this._changed();
         }
         return any;
+    }
+
+    /**
+     * Somebody is breaking a house's protection: its owner is told at once, however far away (every
+     * computer has the host's list). Not when the owner struck it; at most every few seconds per house.
+     */
+    _attacked(w) {
+        const g = this.game;
+        if (w.owner !== this.myKey || (w.hitKey && w.hitKey === this.myKey)) return;
+        const now = performance.now();
+        if (now - (w.warnAt || -1e9) < WARD.WARN_EVERY * 1000) return;
+        w.warnAt = now;
+        const hell = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
+        const left = Math.max(0, Math.round(Math.min(w.hp / WARD.HP, 1 - hell) * 100));
+        const me = g.character?.group?.position;
+        const far = me ? Math.hypot(me.x - w.c.x, me.z - w.c.z) : 0;
+        const where = far > 60 ? ` (${far >= 1000 ? (far / 1000).toFixed(1) + ' км' : Math.round(far) + ' м'} отсюда)` : '';
+        g.hud?.setVoice?.(`🛡️⚠️ Ваш дом пытаются разрушить${w.hitBy ? ` — ${w.hitBy}` : ''}! Защита: ${left}%${where}`, true);
+        g.sound?.playCrack?.(me || _v1.set(w.c.x, w.c.y, w.c.z), 0.6);
+        this.log.push({ ev: 'warned', id: w.id, by: w.hitBy || null, left });
     }
 
     /** The sphere is broken: it falls apart in shards; the owner and the one who broke it are told. */

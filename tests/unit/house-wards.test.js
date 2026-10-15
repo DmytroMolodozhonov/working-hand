@@ -514,3 +514,42 @@ test('the dome grows from a small one while the wand is on it — or on the hous
     assert.equal(w.r, r2, 'it stays as big as it grew');
     assert.equal(L.dome.material.depthTest, true, 'then hidden again behind the walls');
 });
+
+test('somebody breaking my house\'s protection: I am told at once, however far away — on the host and on a guest', () => {
+    // the host's own house, the owner 3 km away
+    const h = warded();
+    h.g.character.group.position.set(3000, 0, 0);
+    h.W.struck(h.at, 3, 'Bombardo', 'P3');
+    const said = h.g.voice.find((t) => t.includes('Ваш дом пытаются разрушить'));
+    assert.ok(said && said.includes('Чужой') && said.includes('3.0 км'), said);
+    h.W.struck(h.at, 3, 'Bombardo', 'P3');
+    assert.equal(h.g.voice.filter((t) => t.includes('пытаются разрушить')).length, 1, 'not every blast: every few seconds');
+    // my own blast on my own dome: no alarm
+    const self = warded();
+    self.W.struck(self.at, 3, 'Bombardo', 'H');
+    assert.ok(!self.g.voice.some((t) => t.includes('пытаются разрушить')));
+    // a spell that can't harm it: no alarm
+    const o = warded();
+    o.W.struck(o.at, 3, 'Sapira', 'P3');
+    assert.ok(!o.g.voice.some((t) => t.includes('пытаются разрушить')));
+    // a guest's house: the host's list tells the guest (its strength fell, the one who struck it)
+    const H = warded();
+    H.W.list.get('w').owner = 'pid-P2';
+    const g2 = fakeGame({ id: 'P2', host: false });
+    const W2 = new HouseWards(g2);
+    W2.applyNet(H.W.netList());
+    assert.ok(!g2.voice.some((t) => t.includes('пытаются разрушить')), 'nothing yet');
+    H.W.struck(H.at, 3, 'Bombardo', 'P3');
+    W2.applyNet(H.W.netList());
+    assert.ok(g2.voice.some((t) => t.includes('Ваш дом пытаются разрушить — Чужой')), g2.voice.join(' | '));
+    // the Hellfire held on it: told too
+    const F = warded();
+    F.W.list.get('w').owner = 'pid-P2';
+    const g3 = fakeGame({ id: 'P2', host: false });
+    const W3 = new HouseWards(g3);
+    W3.applyNet(F.W.netList());
+    F.W._t = 0; F.W.struck(F.at, 3, 'Hellfire', 'P3');
+    F.W._t = 1; F.W.struck(F.at, 3, 'Hellfire', 'P3');
+    W3.applyNet(F.W.netList());
+    assert.ok(g3.voice.some((t) => t.includes('пытаются разрушить')));
+});
