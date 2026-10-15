@@ -23,7 +23,7 @@ import { createRng } from '../core/math.js';
 
 export const LAIR = {
     CELL: 480, // m: at most one lair per cell
-    CHANCE: 0.45, // a cell with a big enough mountain holds one this often
+    CHANCE: 0.22, // a cell with a big enough mountain holds one this often (half as many lairs as before — the author asked; the ones left stay where they were)
     MIN_SPAWN: 320, // m: never nearer the spawn
     PEAK_MIN: 25, // the peak's top layer (a big mountain: they reach 36 far from the spawn)
     DROP: 9, // layers from the peak down to the mouth's floor (at least…)

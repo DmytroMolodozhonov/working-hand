@@ -10,7 +10,7 @@
  * soaring high in wide circles (by day and by night), now and then perching on the highest place
  * around (a mountain top, a tall crown), then off again.
  *   Spawn: the host, every SPAWN_MIN…SPAWN_MAX s, with SPAWN_CHANCE, makes one far out (60–110 m)
- *   round a player who has none in his area (never in the «test» mode). Farther than FORGET from
+ *   round a player who has none within FORGET (at most MAX in the world; never in the «test» mode). Farther than FORGET from
  *   every player it is gone (streamed out) — a wild bird: phoenixes are not saved with the world
  *   (like book-birds and the spider); its feather is a thing and is saved like any thing.
  *
@@ -64,8 +64,10 @@ export const PHOENIX = {
     GRUDGE_T: 300, // s: it doesn't come to one who attacked a phoenix
     RAGE_ATTACKS: 3, RAGE_WINDOW: 40, RAGE_CHANCE: 0.35,
     DIVES: 3, STRIKE_DMG: 5, STRIKE_R: 2.6, // (a hero has 20 HP)
-    AREA: 300, FORGET: 420, MAX: 4,
-    SPAWN_MIN: 40, SPAWN_MAX: 120, SPAWN_CHANCE: 0.6, FIRST: [15, 45],
+    AREA: 300, FORGET: 420, MAX: 2,
+    // (4 times rarer than before, as the author asked: a check every 40–120 s brings one with 15%
+    //  — about one in 9 minutes round a player who has none; the first not before 2 minutes)
+    SPAWN_MIN: 40, SPAWN_MAX: 120, SPAWN_CHANCE: 0.15, FIRST: [120, 300],
     ALT: [40, 62], RADIUS: [28, 46], // soaring: m above the ground, circle radius
     SPEED: 11, FAST: 22, DIVE: 30, WALK: 1.3, // m/s
     REGEN: 0.2, // HP/s while it is left alone
@@ -1227,7 +1229,9 @@ export class Phoenixes {
         if (this._spawnT > 0) return;
         this._spawnT = rnd(PHOENIX.SPAWN_MIN, PHOENIX.SPAWN_MAX);
         const players = this._players();
-        const lonely = players.filter((P) => !this.list.some((f) => !f.dead && hdist(f.model.position, P.pos) < PHOENIX.AREA));
+        // (a phoenix still in the world round a player — even one that flew off out of his AREA — keeps
+        //  him from getting another: they never pile up as he walks on)
+        const lonely = players.filter((P) => !this.list.some((f) => !f.dead && hdist(f.model.position, P.pos) < PHOENIX.FORGET));
         if (!lonely.length || this.list.length >= PHOENIX.MAX || Math.random() > PHOENIX.SPAWN_CHANCE) return;
         const P = lonely[Math.floor(Math.random() * lonely.length)];
         const a = Math.random() * Math.PI * 2, r = rnd(60, 110);

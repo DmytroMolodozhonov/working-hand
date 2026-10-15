@@ -95,6 +95,7 @@ import { HandBlocks } from './HandBlocks.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
 import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
+import { ZombieSpawn, worldLights, litAt } from './ZombieSpawn.js';
 
 const SPELL_COOLDOWN = 1000;
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
@@ -348,6 +349,7 @@ export class Game {
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
+        this.zombieSpawn = new ZombieSpawn(this); // zombies come out of the dark: caves, the night (ZombieSpawn.js)
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
         this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
         this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
@@ -526,22 +528,33 @@ export class Game {
         return z;
     }
 
-    /** Original frontal spawn: 50–80 m ahead of the player within ±45°. */
+    /**
+     * Original frontal spawn: 50–80 m ahead of the player within ±45° (Хардкор's hordes, the
+     * Creative slider) — never by a light (a campfire, a «Люмос»: ZombieSpawn.litAt).
+     */
     spawnZombieWave() {
         const ch = this.character;
-        const angle = ch.group.rotation.y + Math.PI + (Math.random() - 0.5) * (Math.PI / 2);
-        const dist = 50 + Math.random() * 30;
-        let x = ch.group.position.x + Math.sin(angle) * dist;
-        let z = ch.group.position.z + Math.cos(angle) * dist;
-        // Keep inside the world and out of mountains
-        x = Math.max(-115, Math.min(115, x));
-        z = Math.max(-115, Math.min(115, z));
-        if (this.terrain) {
-            for (let i = 0; i < 12 && this.terrain.topLayer(Math.round(x), Math.round(z)) > 1; i++) {
-                x *= 0.85; z *= 0.85;
+        const lights = worldLights(this);
+        let x, z;
+        for (let k = 0; k < 8; k++) {
+            const angle = ch.group.rotation.y + Math.PI + (Math.random() - 0.5) * (Math.PI / (k < 4 ? 2 : 1));
+            const dist = 50 + Math.random() * 30;
+            x = ch.group.position.x + Math.sin(angle) * dist;
+            z = ch.group.position.z + Math.cos(angle) * dist;
+            // Keep inside the small world of «Хардкор» and out of mountains (the endless worlds: anywhere)
+            if (this.config.mode === 'survival') {
+                x = Math.max(-115, Math.min(115, x));
+                z = Math.max(-115, Math.min(115, z));
+                if (this.terrain) {
+                    for (let i = 0; i < 12 && this.terrain.topLayer(Math.round(x), Math.round(z)) > 1; i++) {
+                        x *= 0.85; z *= 0.85;
+                    }
+                }
             }
+            if (!litAt(lights, x, ch.group.position.y, z)) break;
         }
-        return this._createZombie(new THREE.Vector3(x, 0.5, z));
+        const y = this.config.mode === 'survival' || !this.terrain ? 0.5 : this.terrain.surfaceY(x, z) + 0.5;
+        return this._createZombie(new THREE.Vector3(x, y, z));
     }
 
     removeZombie(z) {
@@ -2424,7 +2437,7 @@ export class Game {
         this.spells.update(dt);
         this._updateMagicGesture();
         this._updatePendingSpell();
-        if (!isTest) this._spawnWaves();
+        if (!isTest) this._spawnWaves(dt);
 
         for (const r of this.remotes.values()) r.update(dt, this.ships);
         this.handBlocks.updateRemotes(); // (their hands neither go into the walls here)
@@ -2966,8 +2979,9 @@ export class Game {
         }
     }
 
-    _spawnWaves() {
+    _spawnWaves(dt) {
         if (!this.authority || this.config.map) return;
+        this.zombieSpawn?.update(dt); // (zombies out of the dark: caves, the night — ZombieSpawn.js)
         if (this.config.mode === 'creative') {
             const desired = this.config.zombieCount || 0;
             let live = 0;

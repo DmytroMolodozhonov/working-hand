@@ -40,7 +40,7 @@ const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
 const TAU = Math.PI * 2;
 const POUCH = 100;
 /** Wandering dragons: checked this often (s) by the host; this chance a check brings one. */
-const WANDER = { EVERY: 60, CHANCE: 0.15, FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
+const WANDER = { EVERY: 60, CHANCE: 0.075, /* (half as often as before — the author asked) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
 /** Lairs: their dragons come out when a player is this near (m); go back to rest beyond FAR. */
 const LAIR_NEAR = 170, LAIR_FAR = 320;
 const STATES = ['sleep', 'watch', 'chase', 'exit', 'air', 'enter', 'landed', 'dead'];
