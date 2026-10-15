@@ -78,7 +78,7 @@ export class PoseService {
         const delegate = config.delegate === 'GPU' || config.delegate === 'CPU' ? config.delegate : null;
         // 'classic' = MediaPipe Holistic exactly as in the original game (default), 'tasks' = 3 separate networks
         const engine = config.engine || this._engine || globalThis.__ZNS_ENGINE__ || 'classic';
-        if (config.handVersion !== undefined) this._setHands(config.handVersion === 'v5' ? 'v5' : '');
+        if (config.handVersion !== undefined) this._setHands(config.handVersion === 'v5' ? (config.v5gpu ? 'v5rtm' : 'v5') : '');
         if (this.ready && quality === this._quality && engine === this._engine && (config.delegate === undefined || delegate === this._delegate)) return;
         this._quality = quality;
         this._engine = engine;
@@ -95,7 +95,7 @@ export class PoseService {
             return;
         }
         this.native = null;
-        if (this.handsWanted === 'v5') this._notice('Кисти V5 работают только с отдельной программой камеры — пока работают кисти V4');
+        if (this.handsWanted.startsWith('v5')) this._notice('Кисти V5 работают только с отдельной программой камеры — пока работают кисти V4');
         if (engine === 'classic' || engine === 'classic-main') {
             try {
                 await this._startHolistic(quality, engine === 'classic-main');
@@ -498,10 +498,10 @@ export class PoseService {
         this.stats.handsEngine = r.handsEngine || 'mp';
         this.stats.v5Engine = r.v5Engine || null; // ('rtm': RTMPose on the video card, 'mp': the processor)
         // V5 asked for, but the program found the hands its old way: say so, once (honestly)
-        if (this.handsWanted === 'v5' && r.handsEngine !== 'v5' && r.v5) {
+        if (this.handsWanted.startsWith('v5') && r.handsEngine !== 'v5' && r.v5) {
             const busy = r.v5 === 'устанавливается' || r.v5 === 'загружается';
             this._notice(busy ? `Кисти V5 ${r.v5} — пока работают кисти V4` : `Кисти V5 не запустились (${r.v5}) — работают кисти V4`);
-        } else if (this.handsWanted === 'v5' && r.handsEngine === 'v5' && this._noticed && !this._noticed.startsWith('Кисти V5 включились')) this._notice('Кисти V5 включились');
+        } else if (this.handsWanted.startsWith('v5') && r.handsEngine === 'v5' && this._noticed && !this._noticed.startsWith('Кисти V5 включились')) this._notice('Кисти V5 включились');
         this._nativeVideo = { videoWidth: r.w || 640, videoHeight: r.h || 480 };
         // (the picture's own time, not when it reached the game: the hand filters see its real speed
         // even when results come unevenly — the program's clock is this computer's)
@@ -550,8 +550,8 @@ export class PoseService {
             // the program couldn't (no camera for it, an error): the browser's network as before
             console.warn('[PoseService] camera network program unavailable, using the browser:', this.stats.nativeWhy);
             // (said to the player: the browser's network runs on the game's own thread — the game slows down)
-            if (this.handsWanted !== 'v5') this._notice(`Нейросеть камеры работает в браузере — игра медленнее (${this.stats.nativeWhy || 'программа камеры не запустилась'})`);
-            if (this.handsWanted === 'v5') this._notice(`Кисти V5 не запустились (нет программы камеры: ${this.stats.nativeWhy || 'ошибка'}) — работают кисти V4`);
+            if (!this.handsWanted.startsWith('v5')) this._notice(`Нейросеть камеры работает в браузере — игра медленнее (${this.stats.nativeWhy || 'программа камеры не запустилась'})`);
+            if (this.handsWanted.startsWith('v5')) this._notice(`Кисти V5 не запустились (нет программы камеры: ${this.stats.nativeWhy || 'ошибка'}) — работают кисти V4`);
             const q = this.native.quality;
             this.native = null;
             await this._startHolistic(q, false);
@@ -658,12 +658,12 @@ export class PoseService {
         fetch(new URL(`api/pose/pace?fps=${Math.round(fps)}`, this.baseUrl)).catch(() => {});
     }
 
-    /** The hand finder for the camera program ('' or 'v5'); a running stream is reopened with it. */
+    /** The hand finder for the camera program ('', 'v5' or 'v5rtm' — V5 by RTMPose on the video card); a running stream is reopened with it. */
     _setHands(hands) {
         if (hands === this.handsWanted) return;
         this.handsWanted = hands;
         this._noticed = '';
-        if (hands === 'v5' && this.ready && !this.native) this._notice('Кисти V5 работают только с отдельной программой камеры — пока работают кисти V4');
+        if (hands.startsWith('v5') && this.ready && !this.native) this._notice('Кисти V5 работают только с отдельной программой камеры — пока работают кисти V4');
         if (this._native && this._native._hands !== hands && this.isRunning) {
             this._native.close();
             this._native = null;

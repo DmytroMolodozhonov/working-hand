@@ -115,14 +115,41 @@ class _V5Hands:
         self.gpu = ""  # what the video card does for V5 (RTMPose), or why nothing
         self.hands = None
         self._lock = threading.Lock()
+        self.rtm_wanted = False
+        self._remote = None  # RTMPose's program, once started
+        self._rtm_started = False
 
-    def want(self):
-        """Asked for: start getting ready (never waits). True once it can be used."""
+    def want(self, rtm=None):
+        """Asked for: start getting ready (never waits). True once it can be used. `rtm`: its more
+        exact finder, RTMPose on the video card (Settings → «V5 точнее»), on or off."""
         with self._lock:
+            changed = rtm is not None and (bool(rtm) or os.environ.get("ZNS_V5_ENGINE", "mp") == "rtm") != self.rtm_wanted
+            if rtm is not None:  # (asked every picture without it: only the setting changes it)
+                self.rtm_wanted = bool(rtm) or os.environ.get("ZNS_V5_ENGINE", "mp") == "rtm"
             if self.state == "off":
+                self.rtm_wanted = self.rtm_wanted or os.environ.get("ZNS_V5_ENGINE", "mp") == "rtm"
                 self.state = "loading"
                 threading.Thread(target=self._prepare, name="hand-v5", daemon=True).start()
+            elif self.state == "ready" and changed:
+                self._apply_rtm()
         return self.state == "ready"
+
+    def _apply_rtm(self):
+        """RTMPose on or off as asked (started once, in the background; kept for when it is asked again)."""
+        if not self.hands:
+            return
+        if not self.rtm_wanted:
+            if self.hands.engine == "rtm":
+                self.hands.use_rtm(None)
+                print("  [Камера] Кисти V5: RTMPose выключен — MediaPipe по участкам (процессор)")
+            return
+        if self._remote is not None:
+            if self.hands.engine != "rtm":
+                self.hands.use_rtm(self._remote)
+            return
+        if not self._rtm_started:
+            self._rtm_started = True
+            threading.Thread(target=self._start_rtm, name="hand-v5-rtm", daemon=True).start()
 
     def _prepare(self):
         try:
@@ -156,11 +183,13 @@ class _V5Hands:
             print(f"  [Камера] Кисти V5 не запустились (работают прежние кисти): {self.why}")
             return
         # RTMPose on the video card (a program of its own; more exact on small hands and fists —
-        # tools/handbench) only when asked for (ZNS_V5_ENGINE=rtm): the author's game lost frames
-        # with it — the video card is the game's. By default V5 is MediaPipe's joint network on the
-        # processor, one thread a hand (measured: no more processor than V3's hands).
-        if os.environ.get("ZNS_V5_ENGINE", "mp") != "rtm":
-            return
+        # tools/handbench) only when asked for (Settings → «V5 точнее (на видеокарте)», or
+        # ZNS_V5_ENGINE=rtm): the author's game once lost frames with it — the video card is the
+        # game's. By default V5 is MediaPipe's joint network on the processor, one thread a hand.
+        with self._lock:
+            self._apply_rtm()
+
+    def _start_rtm(self):
         try:
             self.gpu = "готовится"
             import hand_v5
@@ -168,7 +197,10 @@ class _V5Hands:
             probe = hand_v5.RTMRemote("--probe", ort_dir, probe=True)
             del probe
             remote = hand_v5.RTMRemote(hand_v5.rtm_path(), ort_dir)
-            self.hands.use_rtm(remote)
+            with self._lock:
+                self._remote = remote
+                if self.rtm_wanted:
+                    self.hands.use_rtm(remote)
             self.gpu = f"RTMPose на видеокарте ({remote.info.get('provider')}, {remote.info.get('ms')} мс)"
             print(f"  [Камера] Кисти V5: {self.gpu}")
         except Exception as e:  # noqa: BLE001
@@ -259,9 +291,10 @@ class NativePose:
         if not self.available():
             return False
         if hands is not None:
-            self.hands_mode = "v5" if hands == "v5" else ""  # (switched at once, the camera goes on)
+            # ("v5rtm": V5 found by RTMPose on the video card — Settings → «V5 точнее»)
+            self.hands_mode = "v5" if hands in ("v5", "v5rtm") else ""  # (switched at once, the camera goes on)
             if self.hands_mode:
-                self.v5.want()
+                self.v5.want(rtm=hands == "v5rtm")
         with self.cond:
             self.quality = int(quality) if str(quality).isdigit() else 1
             if camera is not None:
