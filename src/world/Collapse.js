@@ -45,7 +45,7 @@ function hash01(x, L, z) {
  * The groups of blocks near a blast that hang in the air.
  * @returns {Array<{cells: Array<[number, number, number, number]>}>}  [x, L, z, type]
  */
-export function findHanging(data, cx, cy, cz, radius) {
+export function findHanging(data, cx, cy, cz, radius, inner = 0) {
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
     const known = new Map(); // key -> 1 standing, 2 hanging
     const pieces = [];
@@ -53,12 +53,15 @@ export function findHanging(data, cx, cy, cz, radius) {
     const x0 = Math.floor(cx - R), x1 = Math.ceil(cx + R), z0 = Math.floor(cz - R), z1 = Math.ceil(cz + R);
     const Lc = cy + 1.5;
     const L0 = Math.max(floor, Math.floor(Lc - R)), L1 = Math.ceil(Lc + R);
-    for (let L = L0; L <= L1; L++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
-        const dx = x - cx, dy = L - 1 - cy, dz = z - cz;
-        if (dx * dx + dy * dy + dz * dz > R * R) continue;
+    // (a band of a wave — `inner`: what is inside was looked at by the bands before; only the new
+    // band is searched — far fewer blocks a frame. A whole circle keeps its old order.)
+    const skip = inner > 0 ? Math.max(0, inner - 2 * COLLAPSE.SHELL) : 0;
+    const cols = [];
+    if (skip > 0) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) { const h = (x - cx) ** 2 + (z - cz) ** 2; if (h <= R * R && h >= skip * skip) cols.push(x, z, h); }
+    const visit = (x, L, z) => {
         const t = data.get(x, L, z);
-        if (!movable(t) || isGround(t)) continue;
-        if (known.has(key(x, L, z))) continue;
+        if (!movable(t) || isGround(t)) return;
+        if (known.has(key(x, L, z))) return;
         // a depth-first search, downwards first
         const seen = new Map();
         const stack = [x, L, z];
@@ -91,6 +94,19 @@ export function findHanging(data, cx, cy, cz, radius) {
                 cells.push([xx, L2, zz, tt]);
             }
             pieces.push({ cells });
+        }
+    };
+    if (skip > 0) {
+        // (a column of a band: from the caves under it (as deep as a ruin caves them in) up to its top block — above it all is air)
+        const lo = Math.max(L0, Math.floor(Lc - 32));
+        for (let i = 0; i < cols.length; i += 3) {
+            const x = cols[i], z = cols[i + 1], h = cols[i + 2], hi = Math.min(L1, data.topLayer ? data.topLayer(x, z) : L1);
+            for (let L = lo; L <= hi; L++) if (h + (L - 1 - cy) ** 2 <= R * R) visit(x, L, z);
+        }
+    } else {
+        for (let L = L0; L <= L1; L++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+            const dx = x - cx, dy = L - 1 - cy, dz = z - cz;
+            if (dx * dx + dy * dy + dz * dz <= R * R) visit(x, L, z);
         }
     }
     return pieces;
@@ -135,9 +151,9 @@ export function dropPiece(data, piece) {
 }
 
 /** After a blast: everything left hanging falls. Returns the falls [{cells, d, landed, broken}]. */
-export function collapseAfter(data, cx, cy, cz, radius) {
+export function collapseAfter(data, cx, cy, cz, radius, inner = 0) {
     const out = [];
-    for (const piece of findHanging(data, cx, cy, cz, radius)) {
+    for (const piece of findHanging(data, cx, cy, cz, radius, inner)) {
         const r = dropPiece(data, piece);
         out.push({ cells: piece.cells, ...r });
     }

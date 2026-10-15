@@ -202,7 +202,7 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null, ri
     }
     out.push(...caveRubble);
     // the rest of what hangs at the edge falls down
-    const falls = collapseAfter(data, cx, cy, cz, radius * (1 + RUIN.EDGE));
+    const falls = collapseAfter(data, cx, cy, cz, radius * (1 + RUIN.EDGE), ring?.inner > 0 ? ring.inner * (1 - RUIN.EDGE) : 0); // (a band: only the new band)
     return { removed, rubble: out, falls, sunk: dips.length, heaved };
 }
 

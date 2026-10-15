@@ -352,11 +352,8 @@ export class CircleAttack {
             m.userData.w = 0.7 + Math.random() * 0.6;
         }
         grp.add(beams);
-        const light = new THREE.PointLight(GOLD, 0, 80, 1.5);
-        light.position.y = 2;
-        grp.add(light);
         g.scene.add(grp);
-        d.look = { grp, shell, shellMat, ring, ringMat, island, islandMat, dome, domeMat, beams, beamMat, light };
+        d.look = { grp, shell, shellMat, ring, ringMat, island, islandMat, dome, domeMat, beams, beamMat }; // (its light: the game's one flash light — a new light makes every material rebuild)
     }
 
     _look(d, dt) {
@@ -376,12 +373,12 @@ export class CircleAttack {
             L.beams.rotation.y += dt * 0.35;
             L.beamMat.opacity = 0.55 * fade * (0.8 + 0.2 * Math.sin(d.t * 11));
             for (const piv of L.beams.children) { const m = piv.children[0]; m.scale.set(1, r * m.userData.w, 1); }
-            L.light.intensity = (d.max ? 9 : 6) * fade * (0.85 + 0.15 * Math.sin(d.t * 13));
+            if (fade > 0.05) g.fx?.lightFlash?.(_v.copy(d.p).setY(d.p.y + 2), GOLD, (d.max ? 9 : 6) * fade * (0.85 + 0.15 * Math.sin(d.t * 13)), 0.15, 80);
         }
         if (!fx || d.front >= d.f.R + 0.5 && d.t > CIRCLE.FRONT_T + 0.3) return;
         // where the front runs now: the earth jumps up, dust, stones, golden sparks
         const data = g.world?.terrain?.data;
-        const n = Math.min(40, Math.ceil(r * (d.max ? 1.4 : 1)));
+        const n = Math.min(24, Math.ceil(r * (d.max ? 1 : 0.8))); // (capped: the particle pools and the frame)
         for (let i = 0; i < n; i++) {
             if (Math.random() > dt * 30) continue;
             const a = Math.random() * Math.PI * 2;

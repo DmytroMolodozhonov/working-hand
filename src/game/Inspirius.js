@@ -308,7 +308,7 @@ export class Inspirius {
             const debris = [];
             for (const b of blocks) debris.push({ x: b.x, y: b.y, z: b.z, color: b.type === BLOCK.GRASS ? 0x4caf50 : BASE_COLORS[b.type] ?? 0x7a6a58 });
             for (const q of out.props || []) debris.push(q);
-            g.fx?.debrisFrom?.(debris, p, 600);
+            g.fx?.debrisFrom?.(debris, p, 260); // (capped: the pool and the frame)
         }
         g.water?.explode?.(p, INSP.CRATER_R);
         // fires round the rim (the same places on every computer)
@@ -432,11 +432,9 @@ export class Inspirius {
             grp.add(line);
             arcs.push(line);
         }
-        const light = new THREE.PointLight(BLUE, 5, 30, 1.6);
-        grp.add(light);
         grp.position.copy(o.p);
         g.scene.add(grp);
-        o.look = { grp, core, skin, skinMat, halo, haloMat, arcs, arcMat, light, arcT: 0 };
+        o.look = { grp, core, skin, skinMat, halo, haloMat, arcs, arcMat, arcT: 0 }; // (its light: the game's one flash light — a new light makes every material rebuild)
     }
 
     _orbLook(o, dt, prev) {
@@ -449,7 +447,7 @@ export class Inspirius {
         L.skin.scale.setScalar(pulse);
         L.halo.scale.setScalar(1 + 0.2 * Math.sin(o.t * 5));
         L.core.scale.setScalar(0.85 + Math.random() * 0.3);
-        L.light.intensity = 4 + Math.random() * 3;
+        g.fx?.lightFlash?.(o.p, BLUE, 4 + Math.random() * 3, 0.15, 30);
         L.arcT -= dt;
         if (L.arcT <= 0) {
             L.arcT = 0.045;
@@ -499,7 +497,7 @@ export class Inspirius {
             const dist = me ? me.distanceTo(p) : 0;
             fx.shake = Math.max(fx.shake || 0, Math.max(0.4, 3.2 - dist / 70));
             // a burst of electric sparks every way
-            for (let i = 0; i < 260; i++) {
+            for (let i = 0; i < 160; i++) {
                 const a = Math.random() * Math.PI * 2, c = Math.acos(2 * Math.random() - 1), sp = 10 + Math.random() * 40;
                 fx.glow?.spawn(p.x, p.y + 1, p.z, Math.sin(c) * Math.cos(a) * sp, Math.abs(Math.cos(c)) * sp * 0.8 + 3, Math.sin(c) * Math.sin(a) * sp,
                     [WHITE, BLUE, 0x6a5cff, 0xffe9a0][i % 4], 0.5 + Math.random() * 1.2, 0.6 + Math.random() * 0.9, { shrink: 0.9, spin: 6 });
@@ -554,11 +552,8 @@ export class Inspirius {
             grp.add(line);
             arcs.push({ line, dir: new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize(), len: 12 + Math.random() * 26 });
         }
-        const light = new THREE.PointLight(0xcfe8ff, 60, 260, 1.2);
-        light.position.y = 6;
-        grp.add(light);
         g.scene.add(grp);
-        b.look = { grp, core, coreMat, ball, ballMat, fire, fireMat, ring, ringMat, shell, shellMat, pillar, pillarMat, arcs, arcMat, light, arcT: 0 };
+        b.look = { grp, core, coreMat, ball, ballMat, fire, fireMat, ring, ringMat, shell, shellMat, pillar, pillarMat, arcs, arcMat, arcT: 0 };
     }
 
     _blastLook(b, dt) {
@@ -586,7 +581,7 @@ export class Inspirius {
             // the pillar of light
             L.pillar.scale.set(3 + 6 * Math.min(1, t / 0.3) - 4 * Math.min(1, t / 3), 30 + 220 * Math.min(1, t / 0.5), 3 + 6 * Math.min(1, t / 0.3) - 4 * Math.min(1, t / 3));
             L.pillarMat.opacity = 0.9 * Math.max(0, 1 - t / 3.2);
-            L.light.intensity = 60 * Math.max(0, 1 - t / 2.5) * (0.85 + Math.random() * 0.3);
+            if (t < 2.5) g.fx?.lightFlash?.(_a.set(p.x, p.y + 6, p.z), 0xcfe8ff, 40 * (1 - t / 2.5) * (0.85 + Math.random() * 0.3), 0.15, 260); // (the one flash light)
             // the lightnings jump about while the light lasts
             L.arcT -= dt;
             if (L.arcT <= 0 && t < 2.2) {

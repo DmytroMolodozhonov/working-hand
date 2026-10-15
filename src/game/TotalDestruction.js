@@ -320,7 +320,7 @@ export class TotalDestruction {
     _startFall(d, out) {
         const g = this.game, data = g.world.terrain?.data;
         const all = out.removed || [];
-        const step = Math.max(1, all.length / TOTAL.MAX_BLOCKS);
+        const step = Math.max(1, all.length / (d.maxBlocks || TOTAL.MAX_BLOCKS));
         const cells = [];
         for (let i = 0; i < all.length; i += step) cells.push(all[Math.floor(i)]);
         // the rubble is in the data already: drawn when the blocks have come down on it
@@ -328,7 +328,7 @@ export class TotalDestruction {
         if (d.rubbleKeys.length) data?.hideCells?.(d.rubbleKeys);
         if (!cells.length) return;
         const mesh = new THREE.InstancedMesh(this.geo, this.mat, cells.length);
-        mesh.castShadow = true;
+        mesh.castShadow = !d.band; // (a wave's bands: many at once — no shadows)
         mesh.frustumCulled = false;
         d.blocks = cells.map(([x, L, z, t], i) => {
             mesh.setColorAt(i, _c.setHex(BASE_COLORS[t] ?? 0x888888));

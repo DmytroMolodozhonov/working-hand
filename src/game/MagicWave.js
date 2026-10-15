@@ -87,7 +87,7 @@ export function ruinBand(g, p, r0, r1, full, by, kind = 'ruin') {
     // the blocks are seen falling (Total Destruction's falling blocks: the same look)
     const D = g.destruction;
     if (D && (out.removed?.length || out.rubble?.length)) {
-        const d = { p: p.clone(), by, R: r1, t: 0, collapsed: true, crash: 3, done: false, mine: false, band: true };
+        const d = { p: p.clone(), by, R: r1, t: 0, collapsed: true, crash: 3, done: false, mine: false, band: true, maxBlocks: 700 }; // (a band: fewer blocks, no shadows)
         D._startFall(d, out);
         D.list.push(d);
     }
