@@ -44,7 +44,7 @@ export const NIGHT = { START: 0.75, PACK: HOUR, HOME: HOUR / 2, DAWN: HOUR / 2 }
 /** Bit of a knight's v.fx: a burning torch in the hand (the night watch; sent to guests). */
 export const FX_TORCH = 256;
 const WALK = 2.3;
-const LOUD = new Set(['blast', 'ruin', 'quake', 'fall']);
+const LOUD = new Set(['blast', 'ruin', 'quake', 'fall', 'circle', 'inspirius']);
 const BACK_TO_BED = 25; // s calm after waking: back to bed (still night)
 const NEAR_BEDS = 45; // m: castle beds (barracks, bedrooms) get their sleepers when a player is this near
 const FAR_BEDS = 75;

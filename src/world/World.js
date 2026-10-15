@@ -630,11 +630,11 @@ export class VoxelWorld {
      * «Total Destruction»: everything built around `center` falls apart (Ruin.js) —
      * no crater; the start area's trees, grass and tables just break.
      */
-    ruin(center, radius, keep = null) {
+    ruin(center, radius, keep = null, ring = null) {
         const out = { blocks: [], props: [], tables: [], falls: [], removed: [], rubble: [] };
         if (!this.destructible) return out;
         const terrain = this.terrain;
-        if (terrain) Object.assign(out, ruinArea(terrain.data, center.x, center.y, center.z, radius, keep));
+        if (terrain) Object.assign(out, ruinArea(terrain.data, center.x, center.y, center.z, radius, keep, ring)); // (ring: one band of a wave — Ruin.js)
         this.terrain = null; // (the props only: the ground is not blown away)
         try { const p = this.explode(center, radius); out.props = p.props; out.tables = p.tables; } finally { this.terrain = terrain; }
         return out;

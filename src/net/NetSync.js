@@ -17,6 +17,8 @@
  *   lift     wizard→all   I am held up by `by` (or let go / broke free)
  *   boom     host→all     explosion (terrain + effects)
  *   tdes     any→all      «Total Destruction» begins at a place (each computer ruins the same blocks)
+ *   circ     any→all      «Circle Attack» (k: Maxima) at the caster's feet, with its rays (each computer: the same wave)
+ *   insp     any→all      «Inspirius»: the ball launched (go), where it flies (at, 10×/s), where it burst (boom)
  *   chest    host→all     chest opened;  wspawn: reward weapon
  *   grab/rel client→host  weapon picked up / thrown;  wown: owner changed
  *   w        host→all     free weapon poses 10×/s
@@ -192,7 +194,7 @@ export class NetSync {
         if (msg.bodies) g.death?.restore(msg.bodies);
         if (msg.vai && g.castleLife) g.castleLife.talk.hostSmart = true;
         for (const e of msg.explosions || []) {
-            if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k)); // («Total Destruction»)
+            if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave — «Circle Attack», «Inspirius»)
             else g.world.explode(vec(e.p), e.r, keepIn(e.k)); // (k: houses' spheres it could not eat into)
             g.explosions.push(e);
         }
@@ -245,7 +247,7 @@ export class NetSync {
             if (floating) held.push(floating.serialize());
             this.net.send({
                 t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP,
-                c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, dc: g.duel.myContact(), w: held,
+                c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, mm: Math.floor(g.combat.maxFatigue || 30), dc: g.duel.myContact(), w: held,
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
                 sh: g.ships?.myNet(), // (standing on a ship: my place on its deck)
@@ -523,6 +525,16 @@ export class NetSync {
         this.net.send({ t: 'tdes', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], k: max ? 1 : 0 }, true);
     }
 
+    /** «Circle Attack» of mine at `p` (my feet): every computer runs the same wave, the same rays. */
+    circleAttack(p, max = false, rays = []) {
+        this.net.send({ t: 'circ', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], k: max ? 1 : 0, rays }, true);
+    }
+
+    /** «Inspirius» of mine: {e: 'go'|'at'|'boom', …} (the flight 'at' 10×/s). */
+    inspirius(m) {
+        this.net.send({ t: 'insp', by: this.me, ...m }, true);
+    }
+
     explosion(pos, radius, power = 1, casterId = null) {
         if (this.net.isHost) this.net.send({ t: 'boom', p: [r3(pos.x), r3(pos.y), r3(pos.z)], r: radius, k: power, by: casterId === 'local' ? this.me : casterId });
     }
@@ -791,6 +803,13 @@ export class NetSync {
                 g.destruction?.start(vec(m.p), m.by, false, !!m.k);
                 break;
             }
+            case 'circ': {
+                if (m.by === this.me) break;
+                g.voiceGate?.noteRemote(m.k ? 'CircleAttackMaxima' : 'CircleAttack', performance.now()); // (my microphone may hear their voice)
+                g.circleAttack?.start(vec(m.p), m.by, false, !!m.k, Array.isArray(m.rays) ? m.rays.slice(0, 12) : []);
+                break;
+            }
+            case 'insp': g.inspirius?.onNet(m); break;
             case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;
             case 'chest': {
                 (g._openedChests = g._openedChests || new Set()).add(m.id);

@@ -161,3 +161,26 @@ test('the phoenix: blades, arrows, fists, «Левиоса», water, fire and «
     assert.match(src('src/game/TotalDestruction.js'), /phoenixes\?\.hitAt/, '«Total Destruction»');
     assert.match(src('src/net/NetSync.js'), /case 'phx'/, 'the network');
 });
+
+test('«Circle Attack» and «Inspirius»: their waves reach every creature; their tables say what they do to everyone and everything', async () => {
+    // (MagicWave.eachBody: where both waves look for whom to hurt and throw)
+    check('MagicWave.eachBody (Circle Attack, Inspirius)', body(src('src/game/MagicWave.js'), 'export function eachBody(g, fn) {'), ALL);
+    const hb = body(src('src/game/MagicWave.js'), 'export function hitBody(');
+    for (const k of ['zombie', 'villager', 'animal', 'sailor', 'spider', 'dragon', 'phoenix', 'tree', 'book']) assert.match(hb, new RegExp(`case '${k}'`), `hitBody forgets ${k}`);
+    const { CIRCLE_TARGETS } = await import('../../src/game/CircleAttack.js');
+    const { INSPIRIUS_TARGETS } = await import('../../src/game/Inspirius.js');
+    for (const T of [CIRCLE_TARGETS, INSPIRIUS_TARGETS]) {
+        for (const k of ['me', 'players', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'dragons', 'phoenixes', 'livingTrees', 'bookBirds', 'ground', 'houseSphere', 'ships', 'items', 'water']) assert.ok(T[k], k);
+    }
+    // a dragon and a phoenix know them by name; the people fear them; the network carries them
+    const { ON_DRAGON } = await import('../../src/game/DragonKinds.js');
+    const { TARGETS } = await import('../../src/game/Phoenixes.js');
+    for (const n of ['CircleAttack', 'Inspirius']) { assert.ok(ON_DRAGON[n]?.why, n); assert.ok(TARGETS[n]?.why, n); }
+    const { DANGERS } = await import('../../src/game/Danger.js');
+    assert.ok(DANGERS.circle?.ru && DANGERS.inspirius?.ru);
+    assert.match(src('src/game/CircleAttack.js'), /castleLife\?\.alarm\(d\.p, 'circle'/);
+    assert.match(src('src/game/Inspirius.js'), /castleLife\?\.alarm\(p, 'inspirius'/);
+    const net = src('src/net/NetSync.js');
+    assert.match(net, /case 'circ'/);
+    assert.match(net, /case 'insp'/);
+});

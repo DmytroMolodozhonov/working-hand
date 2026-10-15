@@ -95,7 +95,7 @@ export class VillagerFear {
         let R = 0;
         for (const d of this.list.values()) {
             if (this._t - d.at > 4) continue; // (only what is going on right now)
-            if (d.kind !== 'ruin' && d.kind !== 'fire' && d.kind !== 'fall' && d.kind !== 'blast') continue;
+            if (d.kind !== 'ruin' && d.kind !== 'fire' && d.kind !== 'fall' && d.kind !== 'blast' && d.kind !== 'circle' && d.kind !== 'inspirius') continue;
             if (Math.hypot(p.x - d.x, p.z - d.z) < d.r + 3) R = Math.max(R, d.r + 3);
         }
         return R;
@@ -125,6 +125,10 @@ export class VillagerFear {
         for (const [by, f] of H?.remote || []) if (f.c && f.R > 0.5) this.add('fire', f.c, { key: 'hell:' + by, ttl: 3, r: f.R + 2 });
         // «Total Destruction»: the ground shakes and rumbles before it all comes down
         for (const d of g.destruction?.list || []) if (!d.done) this.add('ruin', d.p, { key: 'ruin:' + (d.key || (d.key = ++this._seq)), ttl: d.collapsed ? 40 : 6, r: d.R, by: d.by });
+        // «Circle Attack»: the wave all round the wizard; «Inspirius»: its ball flying, then the blast
+        for (const d of g.circleAttack?.list || []) this.add('circle', d.p, { key: 'circle:' + (d.key || (d.key = ++this._seq)), ttl: 30, r: d.f.R, by: d.by });
+        for (const o of g.inspirius?.orbs || []) this.add('inspirius', o.p, { key: 'insp:' + (o.key || (o.key = ++this._seq)), ttl: 4, r: 20, by: o.by });
+        for (const b of g.inspirius?.blasts || []) this.add('inspirius', b.p, { key: 'inspb:' + (b.key || (b.key = ++this._seq)), ttl: 60, r: 60, by: b.by });
         // stones falling (a roof whose walls are gone)
         for (const p of g.falling?.pieces || []) {
             const c = p.fall.cells[0];
@@ -147,7 +151,7 @@ export class VillagerFear {
 
     _sees(v, d) {
         // (a blast, a rumble, a scream are heard through walls; a fire, a spider, a fight must be seen)
-        if (d.kind === 'blast' || d.kind === 'ruin' || d.kind === 'quake' || d.kind === 'fall') return true;
+        if (d.kind === 'blast' || d.kind === 'ruin' || d.kind === 'quake' || d.kind === 'fall' || d.kind === 'circle' || d.kind === 'inspirius') return true;
         const D = DANGERS[d.kind];
         const dist = Math.hypot(d.x - v.x, d.z - v.z);
         if (dist < D.hear + d.r) return true;

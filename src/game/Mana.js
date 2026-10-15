@@ -51,6 +51,7 @@ export const FIRST_SPELL = {
     // strong: up to +20
     WaterVortex: 8, Alive: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
+    CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20,
 };
 
 /** Not spells (or nothing to learn): never grow the maximum. */
@@ -243,7 +244,7 @@ const TITLES = {
     Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', Frozen: 'Frozen', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Тандервейв',
-    WaterVortex: 'Water Vortex', Alive: 'Alive', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction',
+    WaterVortex: 'Water Vortex', Alive: 'Alive', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
 };
 

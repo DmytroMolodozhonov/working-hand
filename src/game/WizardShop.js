@@ -39,7 +39,7 @@ export function scrollShopPrice(it) {
         case 'hp': return 70 + 10 * n;
         case 'fatigue': return 65 + 5 * n;
         case 'flight': return 380;
-        case 'spell': return { ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, AvadaKedavra: 500, TotalDestruction: 900 }[it.spell] ?? 300;
+        case 'spell': return { ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, AvadaKedavra: 500, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
         default: return 100;
     }
 }

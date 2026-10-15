@@ -55,6 +55,9 @@ import { Wreck } from './Wreck.js';
 import { BurnWreck, burnsInFire } from './BurnWreck.js';
 import { WaveAttacks } from './WaveAttack.js';
 import { TotalDestruction } from './TotalDestruction.js';
+import { LOOT_FOR } from './ItemTypes.js';
+import { CircleAttack } from './CircleAttack.js';
+import { Inspirius } from './Inspirius.js';
 import { Hellfire } from './Hellfire.js';
 import { Firefighting } from './Firefighting.js';
 import { WaterStorm } from './WaterStorm.js';
@@ -98,7 +101,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima']);
+const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -335,6 +338,8 @@ export class Game {
         this.burnWreck = new BurnWreck(this); // a house burning down: what loses its support falls, chests burn (BurnWreck.js)
         this.waves = new WaveAttacks(this); // «Wave Attack»: a real wave raised from the water, aimed by the hand
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
+        this.circleAttack = new CircleAttack(this); // «Circle Attack» / «… Maxima»: a great wave all round the wizard (arms in a T)
+        this.inspirius = new Inspirius(this); // «Inspirius»: the ball of electric light from the wand — the mightiest blast
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
         this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
@@ -798,6 +803,9 @@ export class Game {
             if (this.authority) {
                 chest.mesh.updateMatrixWorld(true);
                 const rp = chest.getRewardPosition(new THREE.Vector3());
+                // (who opens it: his mana maximum — «Inspirius»' scroll is only for 500+)
+                const opener = by && by !== this.localId ? this.remotes.get(by) : null;
+                LOOT_FOR.maxMana = opener ? (opener.maxMana || 0) : (this.combat?.maxFatigue || 0);
                 const pouch = this._chestPouch(chest);
                 if (chest.ship) {
                     chest._openedBy = by; this.ships.lootChest(chest, rp); // (a ship's chest: often a fishing rod)
@@ -808,6 +816,7 @@ export class Game {
                     this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null, { chest, extra: pouch, key: testing ? 1 : undefined });
                 } // (a port chest: the sailors' stores; all in one row along the chest, within reach)
                 // (a house chest opening is no theft by itself: taking a thing out of it is — Items.pickUp)
+                LOOT_FOR.maxMana = 0;
                 if (this.sync) this.sync.chestOpenedLoot?.(chest);
             }
             return;
@@ -1064,6 +1073,8 @@ export class Game {
         if (name === 'Alive') return this.livingTrees.cast(isFinal);
         if (name === 'LightningStrike') return this._castLightning(isFinal);
         if (name === 'TotalDestruction' || name === 'TotalDestructionMaxima') return this.destruction.cast(isFinal, name);
+        if (name === 'CircleAttack' || name === 'CircleAttackMaxima') return this.circleAttack.cast(isFinal, name);
+        if (name === 'Inspirius') return this.inspirius.cast(isFinal);
         if (name === 'Hellfire') return this.hellfire.cast(isFinal);
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
@@ -2426,6 +2437,8 @@ export class Game {
         this.swim.applyFog(); // (under the water: murky and blue)
         this.falling?.update(Math.min(0.05, dt));
         this.destruction?.update(Math.min(0.05, dt));
+        this.circleAttack?.update(dt);
+        this.inspirius?.update(dt);
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(this.character.group.position, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
         this.seaSurface?.update(dt, this.character.group.position);
@@ -3114,6 +3127,8 @@ export class Game {
         this.phoenixes?.dispose();
         this.livingTrees?.dispose();
         this.servants?.dispose();
+        this.circleAttack?.clear();
+        this.inspirius?.clear();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

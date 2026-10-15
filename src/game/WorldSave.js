@@ -269,7 +269,7 @@ export function restoreWorld(game, save, THREE) {
     for (const i of save.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
     for (const e of save.explosions || []) {
         // (k: the houses' spheres of protection it could not eat into — HouseWards.js)
-        if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k)); // («Total Destruction»)
+        if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave)
         else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k));
         g.explosions.push(e);
     }

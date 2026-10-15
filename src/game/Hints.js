@@ -32,6 +32,8 @@ const CAUSES = [
     [/^(avada|AvadaKedavra)$/i, '💚 Вас отбросило «Авадой Кедаврой»'],
     [/^Earthquake/, '🌋 Вас сбило землетрясением — земля ушла из-под ног'],
     [/^TotalDestruction/, '🏚️ Вас сбило «Total Destruction» — земля ушла из-под ног'],
+    [/^CircleAttack/, '🌟 Вас отбросило волной «Circle Attack»'],
+    [/^Inspirius/, '⚡ Вас отбросило взрывом «Inspirius»'],
     [/^(Breakthrough|WallRise)/, '🪨 Вас подбросило каменной стеной'],
     [/^Attack$/, '🗡️ Вас сбил летящий предмет («Атак»)'],
     [/^(IceBall|IceBallBig)$/, '🧊 Вас сбило ледяным шаром'],

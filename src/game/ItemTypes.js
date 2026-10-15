@@ -44,16 +44,16 @@ export const SPELL_RU = {
     Inferno: 'Инферно', Thunderwave: 'Тандервейв', Sapira: 'Сапира', Ice: 'Айс', Sands: 'Даст', Bombardo: 'Бомбардо', Earthquake: 'Earthquake',
     Wind: 'Вайнд', Stupefy: 'Остолбеней', AvadaKedavra: 'Авада Кедавра', Levitation: 'Вингардиум Левиоса', Accio: 'Акцио', Protection: 'Protection',
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
-    WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', LetItRain: 'Let it rain', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
+    WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', Inspirius: 'Inspirius', LetItRain: 'Let it rain', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
     Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Alohomora: 'Алохомора', AlohomoraMaxima: 'Алохомора Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
     ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant',
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
-export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff }; // («Firefighting» itself is known too: only its Maxima hose comes from a scroll) // («Алохомора» itself is known; only its Maxima comes from a scroll)
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff }; // («Firefighting» itself is known too: only its Maxima hose comes from a scroll) // («Алохомора» itself is known; only its Maxima comes from a scroll)
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
 export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
-export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', FirefightingMaxima: 'голубая' };
+export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
@@ -257,11 +257,20 @@ export function rollShipLoot(r = Math.random, captain = false) {
 /** A chest holds something precious only now and then (one thing at most). */
 export const KEY_CHANCE = 0.25;
 
+/**
+ * Who opens the chest now (Game.openChest sets it, then clears it): his mana maximum. The scroll
+ * of «Inspirius» turns up only for one whose maximum is already 500 (the author) — for anyone
+ * else it never does.
+ */
+export const LOOT_FOR = { maxMana: 0 };
+
 /** The precious thing of a chest: a wand, a scroll, a magic weapon, shield or bow, a backpack, Thor's hammer. */
 export function rollKeyItem(r = Math.random) {
     const x = r();
     if (x < 0.26) return rollWand(r);
     if (x < 0.52) {
+        // «Inspirius»: only for a great wizard (the chance asked only then: nothing else changes for the rest)
+        if ((LOOT_FOR.maxMana || 0) >= 500 && r() < 0.06) return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Inspirius' };
         const y = r();
         // (no scroll of flight any more: «Флайн» is learned only from the swift book-bird's book)
         // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;

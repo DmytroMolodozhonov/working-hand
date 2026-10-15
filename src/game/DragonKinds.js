@@ -106,6 +106,9 @@ export const ON_DRAGON = {
     // blasts, rays, lightning (Game.explode / birdRay / lightningAt), Total Destruction, a cauldron's blast
     Bombardo: { mult: 1, why: 'взрыв ранит (взрыв — не огонь)' },
     TotalDestruction: { mult: 1, why: 'разрушение ранит' },
+    CircleAttack: { mult: 1, why: '«Circle Attack»: волна и лучи света ранят (это не огонь); великан только качается' },
+    CircleAttackMaxima: { mult: 1, why: '«Circle Attack Maxima»: ранит, как волна' },
+    Inspirius: { mult: 1, why: '«Inspirius»: сама магия, а не огонь — ранит по зоне (−100 / −50 / −25)' },
     Cauldron: { mult: 1, why: 'взрыв котла ранит' },
     Lightning: { dmg: 40, why: 'молния бьёт сильно (−40)' },
     Thunderwave: { mult: 1, why: 'громовая волна ранит' },

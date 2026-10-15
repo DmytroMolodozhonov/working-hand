@@ -484,6 +484,126 @@ export class SoundManager {
         this._spell(this.sounds.rumble, Math.max(0.12, 1.9 - d / 70), 0.9 + Math.random() * 0.1);
     }
 
+    /**
+     * «Circle Attack»: its own music — a choir of light swells while the golden ball grows
+     * (dark at first, then lifting into a triumphant major chord), drums as the ground breaks.
+     */
+    playCircleAttack(position, listenerPos, max = false) {
+        if (!this.context) return;
+        if (!this.sounds.circleAttack) this.sounds.circleAttack = this._synthCircleAttack();
+        const d = listenerPos ? position.distanceTo(listenerPos) : 0;
+        this._spell(this.sounds.circleAttack, Math.max(0.2, (max ? 2.2 : 1.8) - d / 90), max ? 0.94 : 1);
+        this.playRumble(position, listenerPos);
+    }
+
+    /** «Inspirius»: the ball leaves the wand — a rising electric whine and crackle. */
+    playInspiriusCast(position, listenerPos) {
+        if (!this.context) return;
+        if (!this.sounds.inspCast) this.sounds.inspCast = this._synthElectric(1.4, true);
+        const d = listenerPos ? position.distanceTo(listenerPos) : 0;
+        this._spell(this.sounds.inspCast, Math.max(0.15, 1.6 - d / 50), 0.95 + Math.random() * 0.1);
+    }
+
+    /** «Inspirius»: the ball crackles as it flies by. */
+    playInspiriusZap(position) {
+        if (!this.context) return;
+        if (!this.sounds.inspZap) this.sounds.inspZap = this._synthElectric(0.3, false);
+        this._playAt(this.sounds.inspZap, position, 1.4, 7, 0.8 + Math.random() * 0.5);
+    }
+
+    /** «Inspirius»: the burst — a blinding crack, a colossal boom, a long rolling thunder. */
+    playInspiriusBlast(position, listenerPos) {
+        if (!this.context) return;
+        if (!this.sounds.inspBlast) this.sounds.inspBlast = this._synthMegaBlast(6);
+        const d = listenerPos ? position.distanceTo(listenerPos) : 0;
+        this._spell(this.sounds.inspBlast, Math.max(0.4, 3 - d / 120), 0.95 + Math.random() * 0.05);
+        if (this.sounds.explosion) this._spell(this.sounds.explosion, Math.max(0.3, 2.4 - d / 90), 0.55);
+    }
+
+    _synthCircleAttack() {
+        const ctx = this.context, sr = ctx.sampleRate, T = 7.6, len = Math.floor(sr * T);
+        const buf = ctx.createBuffer(1, len, sr), out = buf.getChannelData(0);
+        // one period of a «choir» voice (soft harmonics), read by phase
+        const W = 2048, wave = new Float32Array(W);
+        for (let i = 0; i < W; i++) { const a = (i / W) * Math.PI * 2; wave[i] = Math.sin(a) + 0.5 * Math.sin(2 * a) + 0.33 * Math.sin(3 * a) + 0.18 * Math.sin(4 * a) + 0.1 * Math.sin(5 * a) + 0.06 * Math.sin(6 * a); }
+        const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+        // D minor → B♭ → D major (the light breaks through)
+        const chords = [[0, 2.5, [50, 53, 57, 62]], [2.5, 4.6, [46, 50, 53, 58]], [4.6, T, [50, 54, 57, 62, 69]]];
+        const ph = new Float64Array(64);
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            let v = 0, k = 0;
+            for (const [a, b, notes] of chords) {
+                const fadeIn = Math.min(1, (t - a + 0.35) / 0.35), fadeOut = Math.min(1, (b + 0.35 - t) / 0.35);
+                const env = Math.max(0, Math.min(fadeIn, fadeOut));
+                for (const n of notes) {
+                    for (let c = 0; c < 3; c++, k++) {
+                        if (env <= 0) continue;
+                        const f = hz(n) * (1 + (c - 1) * 0.004) * (1 + 0.006 * Math.sin(2 * Math.PI * (5 + c * 0.7) * t));
+                        ph[k] = (ph[k] + f / sr) % 1;
+                        v += wave[(ph[k] * W) | 0] * env * 0.05;
+                    }
+                }
+            }
+            // it swells, then holds, then fades
+            const swell = Math.min(1, 0.25 + t / 3) * Math.min(1, (T - t) / 1.2);
+            v *= swell;
+            // the drums as the ground breaks
+            for (const h of [0, 1.2, 2.5, 3.5, 4.6, 5.3, 6.0]) {
+                const dt = t - h;
+                if (dt >= 0 && dt < 0.9) v += Math.sin(2 * Math.PI * (55 - 20 * dt) * dt) * Math.exp(-dt * 5) * 0.55 + (Math.random() * 2 - 1) * Math.exp(-dt * 30) * 0.12;
+            }
+            // bells of light rising when the major chord comes
+            if (t > 4.6) {
+                const step = Math.floor((t - 4.6) / 0.18), dt = (t - 4.6) - step * 0.18;
+                const bell = [74, 78, 81, 86, 90, 93][step % 6];
+                v += Math.sin(2 * Math.PI * hz(bell) * dt) * Math.exp(-dt * 9) * 0.12 * Math.min(1, (T - t) / 1.2);
+            }
+            out[i] = Math.max(-1, Math.min(1, v));
+        }
+        return buf;
+    }
+
+    /** Electric crackle (rising: the whine of the ball being born). */
+    _synthElectric(seconds, rising) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let prev = 0, burst = 0, ph = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            if (Math.random() < 0.004) burst = 0.6 + Math.random() * 0.4;
+            burst *= 0.9993;
+            const n = Math.random() * 2 - 1, hp = n - prev; prev = n; // (crackle: the high part of noise)
+            const f = rising ? 180 + 1600 * (t / seconds) ** 2 : 900;
+            ph += f / sr;
+            const whine = Math.sin(2 * Math.PI * ph) * (rising ? 0.25 : 0.1) * (0.6 + 0.4 * Math.sin(t * 90));
+            const env = Math.min(1, t / 0.02) * Math.min(1, (seconds - t) / (rising ? 0.3 : 0.1));
+            d[i] = Math.max(-1, Math.min(1, (hp * burst * 0.7 + whine + (rising ? Math.sin(2 * Math.PI * 45 * t) * 0.3 * (t / seconds) : 0)) * env));
+        }
+        return buf;
+    }
+
+    /** The mightiest blast: a crack, a colossal boom, thunder rolling away, the magic singing down. */
+    _synthMegaBlast(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let lp = 0, lp2 = 0, ph = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const n = Math.random() * 2 - 1;
+            lp += (n - lp) * 0.04;
+            lp2 += (lp - lp2) * 0.04;
+            const crack = n * Math.exp(-t * 40) * 0.9;
+            const boom = lp * 6 * Math.exp(-t * 1.6) + Math.sin(2 * Math.PI * (38 - 12 * Math.min(1, t)) * t) * Math.exp(-t * 0.9) * 0.9;
+            const roll = lp2 * 14 * (0.6 + 0.4 * Math.sin(t * 5.3) * Math.sin(t * 2.1)) * Math.exp(-t * 0.5) * Math.min(1, t / 0.3);
+            ph += (2200 * Math.exp(-t * 1.4) + 120) / sr; // (the magic singing down)
+            const sing = Math.sin(2 * Math.PI * ph) * 0.18 * Math.exp(-t * 0.8) * (0.5 + 0.5 * Math.sin(t * 60));
+            const env = Math.min(1, t * 400) * Math.min(1, (seconds - t) / 1.5);
+            d[i] = Math.max(-1, Math.min(1, (crack + boom + roll + sing) * env));
+        }
+        return buf;
+    }
+
     /** Stone cracking (a wall about to give way). */
     playCrack(position, volume = 1) {
         if (!this.context) return;

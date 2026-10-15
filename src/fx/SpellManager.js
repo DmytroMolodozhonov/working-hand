@@ -42,6 +42,13 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Inspirius» («Инспириус»): the mightiest — its whole word (never «инспирация» / «inspiration» in talk)
+    if (has('inspir', 'инспир', 'инспайр', 'энспир', 'инспер') && !has('inspirat', 'инспирац')) return 'Inspirius';
+    // «Circle Attack» («Сёркл Аттак», «…Максима»): the circle word AND the attack word — before Wave Attack, Attack
+    if ((has('circle', 'cirkle', 'circl', 'сёркл', 'серкл', 'серкл', 'сёркол', 'серкол', 'сиркл', 'церкл', 'сёркал', 'серкал', 'сёрк', 'серк', 'круговая', 'круговую', 'круговой') &&
+        has('attack', 'atack', 'attac', 'атак', 'аттак', 'атэк', 'этак', 'атек', 'аттек', 'эттек', 'аттэк', 'эттак')) || has('circleattack', 'сёрклаттак', 'серклаттак', 'серкалатак')) {
+        return has('макс', 'max', 'мах', 'maks') ? 'CircleAttackMaxima' : 'CircleAttack';
+    }
     // «Firefighting» («файрфайтинг», «фаер файтинг»…): the fire word AND «fighting» — before Hellfire, Fire, Fire Maxima
     const ff = firefightWords(s);
     if (ff) return ff;

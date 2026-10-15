@@ -82,6 +82,7 @@ export class RemoteAvatar {
         this.lastUpdate = performance.now();
         if (s.hp !== undefined) this.hp = s.hp;
         if (s.ft !== undefined) this.fatigue = s.ft;
+        if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)
         this.dragonWand = !!s.dw; // (the dragon's wand in their hand: their fire spells are 60% stronger)
         this.lumos = !!s.lm; // (their wand's tip shines: a sleeping dragon sees it from farther)
         this.duelContact = s.dc ? s.dc[0] : 1;

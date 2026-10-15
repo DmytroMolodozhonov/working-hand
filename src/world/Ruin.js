@@ -81,6 +81,14 @@ export function hollows(data, x, z, L0, top) {
 
 const deepFrom = (data, cy, floor) => Math.max(floor - 1, Math.round(cy + 1.5) - RUIN.DEEP); // (from the bedrock up)
 
+/** The ragged edge of a circle of `radius` at the column (x, z) (in 2×2 patches). */
+const raggedR = (x, z, radius) => radius * (1 - RUIN.EDGE + 2 * RUIN.EDGE * hash01(x >> 1, 7, z >> 1, 3));
+
+/** Is the column (x, z) inside the ragged circle of `radius` round (cx, cz)? (as ruinColumns takes it) */
+export function inRuin(x, z, cx, cz, radius) {
+    return Math.hypot(x - cx, z - cz) <= raggedR(x, z, radius);
+}
+
 /** The columns of the area: [x, z, e] (e: 0 at the centre, 1 at the edge). */
 export function ruinColumns(cx, cz, radius = RUIN.RADIUS) {
     const out = [];
@@ -88,7 +96,7 @@ export function ruinColumns(cx, cz, radius = RUIN.RADIUS) {
     const x0 = Math.floor(cx - R), x1 = Math.ceil(cx + R), z0 = Math.floor(cz - R), z1 = Math.ceil(cz + R);
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
         const d = Math.hypot(x - cx, z - cz);
-        const r = radius * (1 - RUIN.EDGE + 2 * RUIN.EDGE * hash01(x >> 1, 7, z >> 1, 3)); // (ragged, in 2×2 patches)
+        const r = raggedR(x, z, radius); // (ragged, in 2×2 patches)
         if (d > r) continue;
         out.push([x, z, d / r]);
     }
@@ -117,17 +125,26 @@ export function ruinSample(data, cx, cz, radius = RUIN.RADIUS, max = 400, cy = n
 
 /**
  * Bring everything built in the area down (changes the data).
+ * `ring` {inner, full}: only the band between the circle of `inner` (it came down already — or the
+ * caster's island) and this one, as a wave rolling outwards does it («Circle Attack», «Inspirius»);
+ * the stubs and the sinking are reckoned from the whole circle (`full`), and the ground heaves up
+ * in a ridge at the band's outer edge (the earth thrown up by the wave).
  * @returns {{removed: Array, rubble: Array, falls: Array, sunk: number}}  (sunk: blocks of ground gone)
  *   removed [x, L, z, type] — the blocks that came down (from where they stood),
  *   rubble [x, L, z, type] — the heaps where they lie now, falls — Collapse.js pieces
  */
-export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null) {
+export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null, ring = null) {
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
     const cols = ruinColumns(cx, cz, radius);
     const removed = [], rubble = [], heavy = [];
-    const dips = [], caveRubble = [];
-    for (const [x, z, e] of cols) {
+    const dips = [], caveRubble = [], ridge = [];
+    for (let [x, z, e] of cols) {
         if (hold && hold(x, null, z)) continue; // (a house's sphere of protection holds: HouseWards.js)
+        if (ring) {
+            if (ring.inner > 0 && inRuin(x, z, cx, cz, ring.inner)) continue; // (done already / the island)
+            if (e > 0.82 && hash01(x, 5, z, 17) < 0.4) ridge.push([x, z]); // (the wave's crest)
+            e = Math.min(1, Math.hypot(x - cx, z - cz) / (ring.full || radius));
+        }
         const top = data.topLayer(x, z);
         const g = groundTop(data, x, z, top, floor);
         const base = g ?? floor - 1;
@@ -165,6 +182,15 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null) {
         }
     }
     data._flood?.(dips); // (a dip next to a lake or the sea fills with its water)
+    // the wave's crest: the ground is thrown up one block (never on water, never under a sphere)
+    const heaved = [];
+    for (const [x, z] of ridge) {
+        const g = groundTop(data, x, z, data.topLayer(x, z), floor);
+        if (g == null || g !== data.topLayer(x, z) || nearWater(data, x, z, g)) continue;
+        if (data.get(x, g + 1, z) !== BLOCK.AIR) continue;
+        data.set(x, g + 1, z, data.get(x, g, z));
+        heaved.push([x, g + 1, z]);
+    }
     // the heaps (after everything came down and sank: they lie on what is left)
     const out = [];
     for (const [x, z, t] of rubble) {
@@ -177,7 +203,7 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null) {
     out.push(...caveRubble);
     // the rest of what hangs at the edge falls down
     const falls = collapseAfter(data, cx, cy, cz, radius * (1 + RUIN.EDGE));
-    return { removed, rubble: out, falls, sunk: dips.length };
+    return { removed, rubble: out, falls, sunk: dips.length, heaved };
 }
 
 /**

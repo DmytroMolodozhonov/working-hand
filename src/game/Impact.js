@@ -145,6 +145,9 @@ export const SPELL_PHYSICS = {
     Earthquake: { push: 3, always: true, down: 1.5, toss: 4 }, EarthquakeMaxima: { push: 5, always: true, down: 2.5, toss: 6 },
     TotalDestruction: { push: 6, always: true, down: 3, toss: 6, jolt: 3 }, // (the ground jumps, the walls fall)
     TotalDestructionMaxima: { push: 9, always: true, down: 6, toss: 8.5, jolt: 4 },
+    // (the great waves throw by distance themselves — CircleAttack.circleThrow / Inspirius.inspiriusThrow: the closer, the further)
+    CircleAttack: { push: 10, always: true, down: 3, toss: 8, jolt: 3 }, CircleAttackMaxima: { push: 15, always: true, down: 4, toss: 12, jolt: 4 },
+    Inspirius: { push: 25, always: true, down: 5, toss: 16, jolt: 5 },
     Lightning: { push: 8, always: true, down: 2, jolt: 2 }, LightningStrike: { push: 8, always: true, down: 2, jolt: 2 },
     Breakthrough: { push: 8, toss: 6 }, BreakthroughMaxima: { push: 12, toss: 8 },
     WallRise: { push: 8, toss: 6 }, WallRiseMaxima: { push: 12, toss: 8 },

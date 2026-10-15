@@ -105,6 +105,8 @@ export const TARGETS = {
     FireMaxima: { does: 'none', why: '«Fire Maxima»: огонь не берёт; нападение' },
     Bombardo: { does: 'hit', why: 'взрывы (Бомбардо, пушки, Total Destruction): урон 10 × сила, отбрасывает' },
     Lightning: { does: 'hit', why: 'молния: −20 (это не огонь)' },
+    CircleAttack: { does: 'hit', why: '«Circle Attack» (и Максима): волна света — урон по зоне, отбрасывает (это не огонь)' },
+    Inspirius: { does: 'hit', why: '«Inspirius»: сама магия, не огонь — −100 / −50 / −25, отбрасывает' },
     Wind: { does: 'push', why: '«Вайнд», «Вайнд Максима»: лёгкую птицу сдувает далеко (CreatureImpact, масса 0.4), без урона; нападение' },
     Earthquake: { does: 'push', why: 'землетрясение: только если стоит на земле — шатается и взлетает' },
     Levitation: { does: 'hold', why: '«Вингардиум Левиоса»: поймана, висит и бьёт крыльями, где держит рука; отпустили — улетает' },

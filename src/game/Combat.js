@@ -116,6 +116,9 @@ export const SPELL_COST = {
     Alive: 25, // a living tree (then it drains the mana while it lives)
     TotalDestruction: 80, // the whole area falls into ruins (only with a mana maximum of 100+)
     TotalDestructionMaxima: 160, // twice as strong (only with a mana maximum of 200+)
+    CircleAttack: 80, // a great wave all round the wizard — as «Total Destruction» (a mana maximum of 100+; CircleAttack.js)
+    CircleAttackMaxima: 160, // … much stronger (a mana maximum of 200+)
+    Inspirius: 500, // the mightiest: 500 at once, only with the wand (Inspirius.js)
     WaterVortexSuperMaxima: 80, // the great water storm: 2 a second while held, «стоп» 50 (only with a mana maximum of 100+; WaterStorm.js)
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
 };
@@ -424,7 +427,7 @@ export class Combat {
     costOf(name) {
         const base = SPELL_COST[name] ?? 5;
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|Hellfire|WaterVortexSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Hellfire|WaterVortexSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name) {
