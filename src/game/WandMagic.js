@@ -422,42 +422,83 @@ export class WandMagic {
     _showHologram(info, at) {
         const g = this.game;
         this._closeHolo();
+        // Readable on any background (bright sky, a white wall, night): a dark, almost opaque plate
+        // under the text, normal (not additive) blending, the letters outlined in black; the glow stays
+        // on the frame and the letters' edges — the holographic look without washed-out text.
+        const W = 1024, PAD = 56, MAXX = W - PAD, LH = 52, GAP = 18, TOP = 150;
         const c = document.createElement('canvas');
-        c.width = 512; c.height = 300;
         const x = c.getContext('2d');
-        const col = '#' + ((info.color ?? 0x9fd8ff) >>> 0).toString(16).padStart(6, '0');
-        x.fillStyle = 'rgba(10, 40, 70, 0.55)';
-        x.fillRect(0, 0, 512, 300);
-        x.strokeStyle = '#7fe3ff'; x.lineWidth = 4; x.strokeRect(6, 6, 500, 288);
-        x.strokeStyle = col; x.lineWidth = 2; x.strokeRect(14, 14, 484, 272);
-        for (let y = 0; y < 300; y += 4) { x.fillStyle = 'rgba(127, 227, 255, 0.06)'; x.fillRect(0, y, 512, 1); }
-        x.fillStyle = '#dff8ff'; x.font = 'bold 30px sans-serif'; x.textAlign = 'center';
-        x.fillText(info.title.replace(/<[^>]+>/g, ''), 256, 56);
-        x.font = '21px sans-serif'; x.textAlign = 'left';
-        let y = 100;
+        const bodyFont = (bold) => (bold ? 'bold ' : '') + '40px sans-serif';
+        // lay the words out first: the card is as tall as its text (long lists used to fall off the bottom)
+        c.width = W; c.height = 64;
+        const words = [];
+        let y = 0;
         for (const line of info.lines) {
-            const parts = line.split(/(<b>.*?<\/b>)/);
-            let px = 34;
-            for (const part of parts) {
+            let px = PAD;
+            for (const part of line.split(/(<b>.*?<\/b>)/)) {
                 const bold = part.startsWith('<b>');
-                const txt = part.replace(/<\/?b>/g, '');
-                x.font = (bold ? 'bold ' : '') + '21px sans-serif';
-                x.fillStyle = bold ? '#ffe066' : '#cfefff';
-                // wrap long lines
-                for (const word of txt.split(/(\s+)/)) {
+                x.font = bodyFont(bold);
+                for (const word of part.replace(/<\/?b>/g, '').split(/(\s+)/)) {
+                    if (!word) continue;
                     const w = x.measureText(word).width;
-                    if (px + w > 478) { y += 28; px = 34; if (!word.trim()) continue; }
-                    x.fillText(word, px, y);
+                    if (px + w > MAXX && px > PAD) { y += LH; px = PAD; if (!word.trim()) continue; }
+                    words.push({ word, bold, px, y });
                     px += w;
                 }
             }
-            y += 36;
+            y += LH + GAP;
+        }
+        const H = Math.max(300, Math.ceil(TOP + y - GAP + 30));
+        c.height = H;
+        // the item's colour, lifted so a dark one (a dragon wand's deep red) still shows on the dark plate
+        const frame = new THREE.Color(info.color ?? 0x9fd8ff), hsl = {};
+        frame.getHSL(hsl); frame.setHSL(hsl.h, hsl.s, Math.max(hsl.l, 0.62));
+        const col = '#' + frame.getHexString();
+        const round = (r, inset) => {
+            x.beginPath();
+            if (x.roundRect) x.roundRect(inset, inset, W - inset * 2, H - inset * 2, r);
+            else x.rect(inset, inset, W - inset * 2, H - inset * 2);
+        };
+        // the plate: deep blue-black, nearly opaque, a little lighter at the top
+        const bg = x.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, 'rgba(8, 34, 58, 0.93)'); bg.addColorStop(1, 'rgba(2, 10, 20, 0.93)');
+        round(26, 6); x.fillStyle = bg; x.fill();
+        for (let sy = 12; sy < H - 12; sy += 6) { x.fillStyle = 'rgba(127, 227, 255, 0.045)'; x.fillRect(12, sy, W - 24, 2); } // faint scan lines
+        // glowing frames: the outer cyan, the inner in the item's colour
+        x.save(); x.shadowColor = '#7fe3ff'; x.shadowBlur = 18;
+        round(26, 6); x.strokeStyle = '#9ff0ff'; x.lineWidth = 7; x.stroke();
+        x.restore();
+        round(18, 20); x.strokeStyle = col; x.lineWidth = 4; x.stroke();
+        // every letter: a black outline, then the bright fill with a soft coloured glow
+        const text = (t, px, py, fill, glow) => {
+            x.lineJoin = 'round'; x.lineWidth = 8; x.strokeStyle = 'rgba(0, 0, 0, 0.95)'; x.strokeText(t, px, py);
+            x.save(); x.shadowColor = glow; x.shadowBlur = 10; x.fillStyle = fill; x.fillText(t, px, py); x.restore();
+        };
+        x.textAlign = 'center'; x.font = 'bold 58px sans-serif';
+        let title = info.title.replace(/<[^>]+>/g, '');
+        while (title.length > 4 && x.measureText(title).width > W - PAD * 2) title = title.slice(0, -2) + '…';
+        text(title, W / 2, 96, '#ffffff', '#7fe3ff');
+        x.fillStyle = col; x.fillRect(PAD, 118, W - PAD * 2, 4); // a bright rule under the title
+        x.textAlign = 'left';
+        for (const t of words) {
+            x.font = bodyFont(t.bold);
+            text(t.word, t.px, TOP + t.y, t.bold ? '#ffe14d' : '#eefaff', t.bold ? '#ffb000' : '#5fd0ff');
         }
         const tex = new THREE.CanvasTexture(c);
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-        mesh.position.copy(at).add(_v.set(0, 1.1, 0));
+        tex.anisotropy = g.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
+        const PW = 2.4, PH = PW * H / W;
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({
+            map: tex, transparent: true, opacity: 0, side: THREE.DoubleSide,
+            depthWrite: false, depthTest: false, // (a wall, the hand or a tree never cut through the words)
+            fog: false, toneMapped: false, // (night fog and tone mapping don't dim it)
+        }));
+        mesh.renderOrder = 1000;
+        mesh.frustumCulled = false;
+        mesh.name = 'reveal-hologram';
+        const lift = 0.4 + PH / 2; // (its bottom edge where the old card's was, however tall it is)
+        mesh.position.copy(at).add(_v.set(0, lift, 0));
         g.scene.add(mesh);
-        this.holo = { mesh, until: performance.now() + 9000, t: 0, at: at.clone() };
+        this.holo = { mesh, until: performance.now() + 9000, t: 0, at: at.clone(), lift };
         g.ships?.pin(mesh, () => !!mesh.parent);
         for (let i = 0; i < 20; i++) g.fx.spark(at, 0x7fe3ff, 0.06, _v2.set((Math.random() - 0.5), 1 + Math.random() * 1.5, (Math.random() - 0.5)), 0.8);
         g.hud.setVoice('🔮 Раскрой свои секреты…', true);
@@ -544,7 +585,7 @@ export class WandMagic {
             h.t += dt;
             const left = (h.until - performance.now()) / 1000;
             h.mesh.material.opacity = Math.min(1, h.t * 3) * Math.min(1, Math.max(0, left));
-            h.mesh.position.y = h.at.y + 1.1 + Math.sin(h.t * 2) * 0.05;
+            h.mesh.position.y = h.at.y + h.lift + Math.sin(h.t * 2) * 0.05;
             h.mesh.quaternion.copy(g.camera.getWorldQuaternion(_q));
             if (left <= 0) this._closeHolo();
         }
