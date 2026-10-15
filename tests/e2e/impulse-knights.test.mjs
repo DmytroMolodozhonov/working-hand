@@ -39,7 +39,15 @@ test('«Wind Impulse»: knights round me fly off and fall (plain and Maxima)', a
             const knights = [...cs.active.values()].filter((v) => v.role === 'knight' && !v.dead && !v.seated).slice(0, dists.length);
             const me = g.character.group.position;
             // the knights stand round me, at these distances (between my body's middle and theirs)
-            knights.forEach((k, i) => { const a = i * 2.1; k.x = me.x + Math.cos(a) * dists[i]; k.z = me.z + Math.sin(a) * dists[i]; k.y = g.collision.groundY(k.x, k.z); k.path = null; });
+            // (on the ground at my level — not up on the gate's wall)
+            const feet = g.collision.groundY(me.x, me.z);
+            knights.forEach((k, i) => {
+                for (let a = i * 2.1, n = 0; n < 24; n++, a += 0.26) {
+                    const x = me.x + Math.cos(a) * dists[i], z = me.z + Math.sin(a) * dists[i];
+                    if (Math.abs(g.collision.groundY(x, z) - feet) < 0.6) { k.x = x; k.z = z; break; }
+                }
+                k.y = g.collision.groundY(k.x, k.z); k.path = null;
+            });
             await frames(3);
             const p0 = knights.map((k) => ({ x: k.x, z: k.z, d: Math.hypot(k.x - me.x, k.z - me.z) }));
             const log0 = g.creatureImpact.log.length;
