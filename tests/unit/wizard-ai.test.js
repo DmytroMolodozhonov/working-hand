@@ -9,7 +9,7 @@ const top = (m) => { m.group.updateMatrixWorld(true); return new THREE.Box3().se
 const run = (m, s, state) => { for (let i = 0; i < Math.round(s * 60); i++) m.update(1 / 60, state); };
 const seq = (...xs) => { let i = 0; return () => xs[Math.min(i++, xs.length - 1)]; };
 
-test('wizards look like wizards: robes, pointed hats, wands (a staff on the road), the Master with a long grey beard', () => {
+test('wizards look like wizards: robes, pointed hats, wands (a staff on the road), the Master — an old man with a long white beard to the belt (as Dumbledore)', () => {
     // (wizards are appended to the roles: every older look stays the same)
     assert.deepEqual(ROLES.slice(0, 5), ['builder', 'farmer', 'merchant', 'knight', 'king']);
     for (const role of WIZARD_ROLES) {
@@ -24,7 +24,8 @@ test('wizards look like wizards: robes, pointed hats, wands (a staff on the road
         }
     }
     const M = villagerLook(3, 'master', false);
-    assert.equal(M.beard, 'long');
+    assert.equal(M.beard, 'sage'); assert.equal(M.female, false);
+    assert.equal(villagerLook(4, 'master', true).beard, 'sage', 'never a woman Master: always the beard');
     assert.equal(M.hat, 'wizardTall');
 });
 

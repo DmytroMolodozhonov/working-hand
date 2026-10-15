@@ -59,9 +59,10 @@ const FLOOR_ROOMS = [['vault', 'store'], ['hall', 'shop'], ['library', 'reading'
 
 const NAMES_A = ['Звёздный', 'Лунный', 'Туманный', 'Сапфировый', 'Аметистовый', 'Северный', 'Хрустальный', 'Сумеречный', 'Небесный', 'Старый'];
 const NAMES_B = ['Шпиль', 'Купол', 'Свиток', 'Посох', 'Пик'];
-const MASTER_A = ['Элдрин', 'Корвин', 'Северин', 'Аурелий', 'Мирабель', 'Ингвар', 'Октавиан', 'Велимира', 'Радомир', 'Мелисандра'];
+// (the author: a tower's Master is always an old man with a long white beard, as Dumbledore — no women Masters)
+const MASTER_A = ['Элдрин', 'Корвин', 'Северин', 'Аурелий', 'Мельхиор', 'Ингвар', 'Октавиан', 'Велимир', 'Радомир', 'Мирослав'];
 const MASTER_B = ['Седобородый', 'Звездочёт', 'Мудрый', 'Огненный', 'Тихий', 'Всевидящий', 'Лунный'];
-export const FEMALE_MASTERS = new Set(['Мирабель', 'Велимира', 'Мелисандра']);
+export const FEMALE_MASTERS = new Set();
 
 /** Distance from point (x, z) to segment a–b. */
 function segDist(x, z, ax, az, bx, bz) {

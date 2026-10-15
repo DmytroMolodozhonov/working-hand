@@ -271,8 +271,10 @@ function wizardLook(L, r, pick) {
     L.tool = role === 'wanderer' ? 'staff' : 'wand';
     L.boots = pick([0x3a2a1a, 0x2b2b2b, 0x4a3020]);
     if (role === 'master') {
+        // (the author: the Master — an old man with a long white beard down to the belt, as Dumbledore)
+        L.female = false;
         L.hairColor = GREY_HAIR;
-        if (!L.female) { L.beard = 'long'; L.hair = 'long'; } else L.hair = 'long';
+        L.beard = 'sage'; L.hair = 'long';
     } else if (role === 'wanderer' && !L.female && r() < 0.7) L.beard = 'long';
     else if (role === 'student') L.beard = 'none';
 }
@@ -331,6 +333,16 @@ function headBoxes(L) {
             b(B, 0.9, 0.5, 0.14, 0, -0.25, -0.6, bc);
             b(B, 0.6, 0.45, 0.14, 0, -0.7, -0.62, bc);
             b(B, 0.3, 0.3, 0.12, 0, -1.05, -0.63, shade(bc, 0.95));
+            b(B, 0.1, 0.55, 0.8, -0.62, 0.35, -0.15, bc); b(B, 0.1, 0.55, 0.8, 0.62, 0.35, -0.15, bc);
+            b(B, 0.62, 0.12, 0.08, 0, 0.38, -0.67, shade(bc, 0.9));
+        } else if (L.beard === 'sage') {
+            // the Master's beard (as Dumbledore's): white, broad at the cheeks, down past the chest to the belt
+            b(B, 1.22, 0.42, 0.12, 0, 0.18, -0.6, bc);
+            b(B, 0.96, 0.55, 0.14, 0, -0.27, -0.6, bc);
+            b(B, 0.78, 0.5, 0.14, 0, -0.78, -0.62, bc);
+            b(B, 0.56, 0.5, 0.14, 0, -1.26, -0.64, shade(bc, 0.97));
+            b(B, 0.34, 0.4, 0.12, 0, -1.7, -0.66, shade(bc, 0.94));
+            b(B, 0.18, 0.12, 0.13, 0, -1.55, -0.72, 0xd8b04a); // (a little gold clasp near its end)
             b(B, 0.1, 0.55, 0.8, -0.62, 0.35, -0.15, bc); b(B, 0.1, 0.55, 0.8, 0.62, 0.35, -0.15, bc);
             b(B, 0.62, 0.12, 0.08, 0, 0.38, -0.67, shade(bc, 0.9));
         } else if (L.beard === 'blackbeard') {

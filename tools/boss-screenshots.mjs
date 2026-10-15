@@ -31,8 +31,7 @@ const SCENES = {
         const k = find();
         if (!k) return { skip: 'no king' };
         await h.go(k.x, k.y + 2, k.z, true);
-        await h.until(() => k.seated, 8000);
-        h.hold([k]);
+        await h.until(() => k.seated, 8000); // (not held still: a stunned man stands up — his legs would go into the throne)
         return h.view(k.group, { d: 4.5, up: 1.6, at: 1.3 });
     },
     master: async (h) => {
