@@ -25,6 +25,9 @@ const _n = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _q = new THREE.Vector3();
+const _sT = new THREE.Vector3();
+const _sN = new THREE.Vector3();
+const _sB = new THREE.Vector3();
 const TAU = Math.PI * 2;
 
 const VERT_HEAD = /* glsl */ `
@@ -229,6 +232,39 @@ export class WaterFlow {
                 this.idx[this.ni++] = a; this.idx[this.ni++] = c; this.idx[this.ni++] = b;
                 this.idx[this.ni++] = b; this.idx[this.ni++] = c; this.idx[this.ni++] = d;
             }
+        }
+    }
+
+    /**
+     * A stream of water from `a` to `b` (a jet pulled through the air): one body bowing a little
+     * (`lift`), swaying, and `strands` thin threads winding round it. Thin at the start (where it
+     * tears off its source), full where it pours in.
+     */
+    stream(a, b, radius, { lift = 0.4, strands = 2, speed = 7, foam = 0.25, phase = 0, wave = 0.18 } = {}) {
+        const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+        if (L < 0.05 || radius <= 0.002) return;
+        const steps = Math.max(6, Math.min(48, Math.ceil(L / 0.3)));
+        const base = arcPoints(a, b, { lift, wave, phase: this.time * 3 + phase, steps, out: this._sa || (this._sa = []) });
+        const rad = this._sr || (this._sr = []);
+        rad.length = base.length;
+        for (let i = 0; i < base.length; i++) { const k = i / steps; rad[i] = radius * (0.55 + 0.45 * Math.min(1, k * 3)) * (1 + 0.12 * Math.sin(k * L * 2.5 - this.time * 9 + phase)); }
+        this.tube(base, rad, { speed, foam, offset: phase });
+        if (!strands) return;
+        _sT.set(b.x - a.x, b.y - a.y, b.z - a.z).divideScalar(L);
+        _sN.set(0, 1, 0);
+        if (Math.abs(_sT.y) > 0.9) _sN.set(1, 0, 0);
+        _sB.crossVectors(_sT, _sN).normalize();
+        _sN.crossVectors(_sB, _sT).normalize();
+        const pts = this._st || (this._st = []);
+        pts.length = base.length;
+        for (let s = 0; s < strands; s++) {
+            for (let i = 0; i < base.length; i++) {
+                const k = i / steps, ang = k * L * 1.8 - this.time * 10 + s * (TAU / strands) + phase;
+                const w = rad[i] * 1.05, c = Math.cos(ang) * w, sn = Math.sin(ang) * w;
+                const o = pts[i] || (pts[i] = { x: 0, y: 0, z: 0 });
+                o.x = base[i].x + _sN.x * c + _sB.x * sn; o.y = base[i].y + _sN.y * c + _sB.y * sn; o.z = base[i].z + _sN.z * c + _sB.z * sn;
+            }
+            this.tube(pts, radius * 0.28, { speed: speed * 1.2, foam: 0.55, offset: phase + s * 3 });
         }
     }
 

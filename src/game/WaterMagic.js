@@ -25,6 +25,7 @@
 import * as THREE from 'three';
 import { BLOCK, WATER_LEVEL_Y } from '../world/Terrain.js';
 import { createWaterMaterial } from '../fx/WaterMaterial.js';
+import { WaterFlow, WaterSpray } from '../fx/WaterFlow.js';
 
 export const WATER = {
     REACH: 6, // m from the spot in front of the hand to the water
@@ -91,27 +92,15 @@ export class WaterMagic {
         this.core.visible = false;
         this.core.renderOrder = 3;
         this.scene.add(this.core);
-        // Droplets that orbit the ball, break away and get pulled back
-        this.droplets = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), this.dropMat, 18);
-        this.droplets.count = 0;
-        this.droplets.visible = false;
-        this.droplets.frustumCulled = false;
-        this.droplets.renderOrder = 2;
-        this.scene.add(this.droplets);
-        this._dropSeeds = Array.from({ length: 18 }, (_, i) => ({ a: Math.random() * 6.28, e: (Math.random() - 0.5) * 2.2, sp: 0.6 + Math.random() * 1.4, ph: Math.random() * 6.28, sz: 0.5 + Math.random() * 0.8, i }));
+        // The water that moves: streams rising from the river, currents running over the ball, the water
+        // pouring out of it into a shape (continuous flowing tubes — WaterFlow.js), drops and mist
+        this.flow = new WaterFlow(this.scene, { maxVerts: 26000, radial: 10 });
+        this.spray = new WaterSpray(this.scene, 900);
+        this._pts = [];
         // Hidden ice ball so its shader is compiled during loading (no hitch on «Frozen»)
         this.iceTemplate = new THREE.Mesh(this.ballGeo, this.iceMat);
         this.iceTemplate.visible = false;
         this.scene.add(this.iceTemplate);
-
-        // Water column rising from the river into the ball / feeding stream
-        const col = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
-        col.translate(0, 0.5, 0);
-        col.rotateX(Math.PI / 2); // along +Z
-        this.column = new THREE.Mesh(col, this.blockMat);
-        this.column.visible = false;
-        this.column.renderOrder = 2;
-        this.scene.add(this.column);
 
         // Formed water: overlapping living blobs that read as one flowing mass
         this.blobGeo = new THREE.SphereGeometry(1, 28, 18);
@@ -316,9 +305,13 @@ export class WaterMagic {
     update(dt) {
         this._t += dt;
         for (const m of this._mats) m.userData.uniforms.uTime.value += dt;
+        this.flow.begin(dt);
         if (this.state) this._updateHeld(dt);
         this._updateFalling(dt);
         this._updateFallingShapes(dt);
+        this._drawFormed(dt);
+        this.flow.end();
+        this.spray.update(dt, this.game.camera);
     }
 
     _handTarget(side, out) {
@@ -346,9 +339,12 @@ export class WaterMagic {
             const e = k * k * (3 - 2 * k);
             s.pos.copy(s.source).lerp(target, e);
             s.shown = WATER.START_VOLUME * (0.08 + 0.92 * e);
-            this._showColumn(s.source, s.pos, radiusOf(s.shown) * 0.45 * (1 - e * 0.6));
-            if (Math.random() < 0.8) this._drop(s.source, 0.2, _v2.set(0, 4 + Math.random() * 3, 0));
-            if (k >= 1) { s.phase = 'held'; this.column.visible = false; }
+            // the water is pulled out of the river: a twisting stream from the surface up into the ball
+            // (the ball is the head of that stream and grows as it comes)
+            this._showColumn(s.source, s.pos, Math.max(0.1, radiusOf(WATER.START_VOLUME) * 0.5 * (1 - e * 0.5)), 0.15);
+            if (Math.random() < 0.6) this._drop(s.source, 0.3, _v2.set((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2));
+            if (Math.random() < 0.15) this.spray.add(s.source.x, s.source.y + 0.1, s.source.z, 0, 0.3, 0, 0.8, 1.1, 1);
+            if (k >= 1) s.phase = 'held';
         } else {
             // Follow the hand smoothly — a big ball is heavy and drifts after it more slowly
             s.pos.lerp(target, 1 - Math.exp(-dt * (s.frozen ? 10 : 9 / (1 + radiusOf(s.shown) * 0.9))));
@@ -359,7 +355,7 @@ export class WaterMagic {
             if (s.streamT > 0) {
                 s.streamT -= dt;
                 feedFrom = s.streamFrom;
-                if (!feedFrom) this._condense(s.pos, r);
+                if (!feedFrom) this._condense(s.pos, r, s.streamT);
             }
             if (!s.frozen && s.volume < WATER.MAX_VOLUME) {
                 const other = s.side === 'left' ? 'right' : 'left';
@@ -376,17 +372,13 @@ export class WaterMagic {
                         s.volume = Math.min(WATER.MAX_VOLUME, s.volume + WATER.FEED_RATE * dt);
                         s.feeding = 0.2;
                         // water flows from the river to the open hand and into the ball
-                        if (Math.random() < 0.7) this._flowParticle(s.feedSource, oh);
-                        if (Math.random() < 0.7) this._flowParticle(oh, s.pos);
+                        this.flow.stream(s.feedSource, oh, 0.1, { lift: 1 + 0.08 * s.feedSource.distanceTo(oh), strands: 1, speed: 8, phase: 1 });
+                        this.flow.stream(oh, s.pos, 0.09, { lift: 0.15, strands: 0, speed: 6, phase: 2 });
                     }
                 }
             }
             s.feeding = Math.max(0, s.feeding - dt);
-            if (feedFrom) {
-                this._showColumn(feedFrom, s.pos, 0.22 + r * 0.12);
-            } else {
-                this.column.visible = false;
-            }
+            if (feedFrom) this._showColumn(feedFrom, s.pos, (0.22 + r * 0.12) * Math.min(1, s.streamT * 2));
 
             if (s.forming && !s.frozen) this._form();
         }
@@ -415,12 +407,11 @@ export class WaterMagic {
                 this.core.position.copy(s.pos);
                 this.core.scale.setScalar(rr * (0.55 + 0.06 * Math.sin(this._t * 2.7)));
                 this.core.rotation.set(this._t * 0.9, -this._t * 1.3, this._t * 0.5);
-                this._updateDroplets(s.pos, rr);
+                this._currents(s.pos, rr);
                 if (Math.random() < 0.12) this._drop(s.pos, rr, _v2.set((Math.random() - 0.5) * 2, -1, (Math.random() - 0.5) * 2));
             }
         } else {
             this.core.visible = false;
-            this.droplets.visible = false;
         }
         this._prevBall.copy(s.pos);
         if (!vis && !s.formed.length && s.phase === 'held') this._end();
@@ -466,8 +457,7 @@ export class WaterMagic {
             s.lastBlob = _v2.clone();
             s.volume -= cost;
             s.shown = Math.min(s.shown, s.volume + 0.3);
-            // the water visibly flows out of the ball into the shape
-            for (let k = 0; k < 3; k++) this._flowParticle(s.pos, _v3.set(b.x, b.y, b.z));
+            s.pourT = 0.3; // (the water visibly pours out of the ball into the shape — _drawFormed)
         }
         s.lastPos = s.pos.clone();
         this._syncFormed();
@@ -509,26 +499,53 @@ export class WaterMagic {
         m.computeBoundingSphere?.();
     }
 
-    /** Droplets circling the ball; now and then one flies off and is pulled back. */
-    _updateDroplets(c, r) {
-        const m = this.droplets;
-        const n = Math.min(m.instanceMatrix.count, 6 + Math.floor(r * 6));
-        const t = this._t;
-        for (let i = 0; i < n; i++) {
-            const d = this._dropSeeds[i];
-            const a = d.a + t * d.sp;
-            const e = d.e + Math.sin(t * 0.7 + d.ph) * 0.4;
-            // breaking away: a slow pulse pushes the droplet out, then back
-            const away = Math.max(0, Math.sin(t * 0.9 + d.ph * 3)) ** 6;
-            const R = r * (1.12 + 0.12 * Math.sin(t * 1.7 + d.ph) + 0.9 * away);
-            const sz = r * 0.07 * d.sz * (1 - 0.4 * away) + 0.03;
-            _v2.set(Math.cos(a) * Math.cos(e), Math.sin(e), Math.sin(a) * Math.cos(e)).multiplyScalar(R).add(c);
-            _m.makeScale(sz, sz, sz).setPosition(_v2);
-            m.setMatrixAt(i, _m);
+    /**
+     * The ball is never still water: currents run over its surface (thin streams spiralling round it),
+     * now and then one lifts off a little and is pulled back in.
+     */
+    _currents(c, r) {
+        const P = this._pts, t = this._t;
+        const n = 2 + Math.min(2, Math.floor(r));
+        for (let k = 0; k < n; k++) {
+            const tilt = 0.7 + k * 0.9, spin = t * (1.6 + 0.3 * k) + k * 2.1;
+            const lift = 1.06 + 0.12 * Math.max(0, Math.sin(t * 0.9 + k * 2.3)) ** 4;
+            const ct = Math.cos(tilt), st = Math.sin(tilt);
+            P.length = 13;
+            for (let j = 0; j < 13; j++) {
+                const a = spin + j * 0.26;
+                const x = Math.cos(a) * r * lift, y0 = Math.sin(a * 2 + k) * r * 0.12, z = Math.sin(a) * r * lift;
+                const o = P[j] || (P[j] = { x: 0, y: 0, z: 0 });
+                o.x = c.x + x; o.y = c.y + y0 * ct - z * st * 0.6; o.z = c.z + z * ct + y0 * st;
+            }
+            this.flow.tube(P, 0.025 + r * 0.07, { speed: r * 2.5, foam: 0.3, offset: k * 2 });
         }
-        m.count = n;
-        m.visible = true;
-        m.instanceMatrix.needsUpdate = true;
+    }
+
+    /** Formed water: the pieces poured one after another are joined into continuous flowing bands. */
+    _drawFormed(dt) {
+        const s = this.state;
+        if (!s) return;
+        const P = this._pts;
+        const f = s.formed;
+        let pi = 0, rad = this._rad || (this._rad = []);
+        rad.length = 0;
+        const flush = () => {
+            if (pi >= 2) { P.length = pi; this.flow.tube(P, rad, { speed: 0.6, foam: 0.15 }); }
+            pi = 0; rad.length = 0;
+        };
+        for (let i = 0; i < f.length; i++) {
+            const b = f[i], p = f[i - 1];
+            if (p && Math.hypot(b.x - p.x, b.y - p.y, b.z - p.z) > (b.r + p.r) * 1.3) flush();
+            const o = P[pi] || (P[pi] = { x: 0, y: 0, z: 0 });
+            o.x = b.x; o.y = b.y; o.z = b.z; pi++;
+            rad.push(b.r * 0.82);
+            if (pi >= 60) { flush(); const o2 = P[0]; o2.x = b.x; o2.y = b.y; o2.z = b.z; pi = 1; rad.push(b.r * 0.82); }
+        }
+        flush();
+        if (s.pourT > 0 && s.lastBlob && !s.frozen) {
+            s.pourT -= dt;
+            this.flow.stream(s.pos, s.lastBlob, Math.max(0.08, radiusOf(s.shown) * 0.3), { lift: 0.1, strands: 1, speed: 6 });
+        }
     }
 
     _syncFormed() {
@@ -576,10 +593,8 @@ export class WaterMagic {
         this.ball.visible = false;
         this.ball.material = this.liquidMat;
         this.core.visible = false;
-        this.droplets.visible = false;
         this.liquidMat.userData.uniforms.uStretch.value = 0;
         this._ballVel.set(0, 0, 0);
-        this.column.visible = false;
         this._syncFormed();
     }
 
@@ -768,49 +783,30 @@ export class WaterMagic {
     }
 
     // ============================================================= visuals
-    _showColumn(a, b, radius) {
-        const c = this.column;
-        const len = a.distanceTo(b);
-        if (len < 0.05) { c.visible = false; return; }
-        c.visible = true;
-        c.position.copy(a);
-        c.lookAt(b);
-        c.scale.set(radius, radius, len);
+    /** A stream of water from `a` up into the ball (out of the river, or the «Максима» stream). */
+    _showColumn(a, b, radius, lift = 0.6) {
+        this.flow.stream(a, b, radius, { lift, strands: 2, speed: 8 });
     }
 
     _drop(pos, spread, vel) {
-        const fx = this.game.fx;
-        if (!fx?.sparks) return;
-        fx.sparks.spawn(pos.x + (Math.random() - 0.5) * spread, pos.y + (Math.random() - 0.5) * spread, pos.z + (Math.random() - 0.5) * spread,
-            vel.x, vel.y, vel.z, Math.random() < 0.5 ? 0x7cc4ff : 0xbfe6ff, 0.08 + Math.random() * 0.08, 0.5 + Math.random() * 0.4, { gravity: -12 });
+        this.spray.add(pos.x + (Math.random() - 0.5) * spread, pos.y + (Math.random() - 0.5) * spread, pos.z + (Math.random() - 0.5) * spread,
+            vel.x, vel.y, vel.z, 0.07 + Math.random() * 0.07, 0.5 + Math.random() * 0.4);
     }
 
-    _flowParticle(from, to) {
-        const fx = this.game.fx;
-        if (!fx?.sparks) return;
-        const d = _v2.subVectors(to, from);
-        const life = 0.45;
-        fx.sparks.spawn(from.x, from.y, from.z, d.x / life, d.y / life + 2, d.z / life, 0x7cc4ff, 0.12 + Math.random() * 0.08, life, { gravity: -8 });
-    }
-
-    _condense(pos, r) {
-        const fx = this.game.fx;
-        if (!fx?.sparks) return;
-        const a = Math.random() * Math.PI * 2, e = (Math.random() - 0.5) * Math.PI;
-        const R = r + 2.5;
-        const ox = Math.cos(a) * Math.cos(e) * R, oy = Math.sin(e) * R, oz = Math.sin(a) * Math.cos(e) * R;
-        fx.sparks.spawn(pos.x + ox, pos.y + oy, pos.z + oz, -ox * 2.5, -oy * 2.5, -oz * 2.5, 0xbfe6ff, 0.1, 0.4, {});
+    /** «Максима» far from water: the water condenses out of the air — thin streams curl in from all round. */
+    _condense(pos, r, left = 1) {
+        const t = this._t, k = Math.min(1, left / 0.9);
+        for (let i = 0; i < 6; i++) {
+            const a = i * 1.047 + t * 0.7, e = Math.sin(i * 2.1) * 0.8;
+            const R = r + 0.4 + 2.2 * k;
+            _v2.set(pos.x + Math.cos(a) * Math.cos(e) * R, pos.y + Math.sin(e) * R, pos.z + Math.sin(a) * Math.cos(e) * R);
+            this.flow.stream(_v2, pos, 0.035 + 0.04 * (1 - k), { lift: 0.4 * Math.sin(i), strands: 0, speed: 5, foam: 0.4, phase: i });
+        }
+        if (Math.random() < 0.3) this.spray.add(pos.x + (Math.random() - 0.5) * 4, pos.y + (Math.random() - 0.5) * 3, pos.z + (Math.random() - 0.5) * 4, 0, 0, 0, 0.9, 0.8, 1);
     }
 
     _splash(pos, size, count) {
-        const fx = this.game.fx;
-        if (!fx?.sparks) return;
-        for (let i = 0; i < count; i++) {
-            const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 3 * size;
-            fx.sparks.spawn(pos.x + Math.cos(a) * 0.3 * size, pos.y + 0.1, pos.z + Math.sin(a) * 0.3 * size,
-                Math.cos(a) * sp, 3 + Math.random() * 5 * Math.sqrt(size), Math.sin(a) * sp,
-                Math.random() < 0.5 ? 0x7cc4ff : 0xe6f6ff, 0.1 + Math.random() * 0.12, 0.6 + Math.random() * 0.5, { gravity: -14 });
-        }
+        this.spray.burst(pos.x, pos.y + 0.1, pos.z, count, 1.5 + 3 * size, 3 + 4 * Math.sqrt(size), 0.1 + 0.03 * size);
     }
 
     _sparkle(pos, count) {
@@ -829,12 +825,12 @@ export class WaterMagic {
         this.falling = [];
         this.resting = [];
         this.remotes.clear();
-        for (const o of [this.ball, this.core, this.droplets, this.iceTemplate, this.column, this.formedMesh, this.iceMesh]) this.scene.remove(o);
+        for (const o of [this.ball, this.core, this.iceTemplate, this.formedMesh, this.iceMesh]) this.scene.remove(o);
+        this.flow.dispose();
+        this.spray.dispose();
         this.ballGeo.dispose();
-        this.column.geometry.dispose();
         this.blobGeo.dispose();
         this.iceShapeMat.dispose();
-        this.droplets.geometry.dispose();
         for (const m of [...this._mats, this.iceMat]) m.dispose();
     }
 }
