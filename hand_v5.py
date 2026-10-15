@@ -394,8 +394,26 @@ class HandsV5:
             return None
         return np.array([pose[i]["x"] * w, pose[i]["y"] * h])
 
-    def one(self, rgb, pose, side, now=None, refine=True):
-        """One hand: (pts 21×2 picture pixels, z 21, how sure) or None."""
+    def _seed(self, seeds, wrist, side):
+        """A hand the palm detector found (21×2 picture pixels) that is this side's, or None."""
+        best, bd = None, 1e9
+        for i, q in enumerate(seeds or []):
+            if q is None:
+                continue
+            size = np.ptp(q, axis=0).max() + 1
+            d = np.hypot(*(q[0] - wrist)) / size if wrist is not None else 0.0
+            if d < bd and d < 1.5:
+                best, bd = i, d
+        if best is None:
+            return None
+        q = seeds[best]
+        seeds[best] = None  # (one hand for one side)
+        return q
+
+    def one(self, rgb, pose, side, now=None, refine=True, seeds=None):
+        """One hand: (pts 21×2 picture pixels, z 21, how sure) or None. seeds: hands found by
+        MediaPipe's palm detector (21×2 picture pixels) — a hand too near the camera for the body's
+        wrist to be right (close up, the body network puts the wrist anywhere on a big hand)."""
         h, w = rgb.shape[:2]
         tr = self.track[side]
         wrist = self._wrist(pose, side, w, h)
@@ -419,9 +437,13 @@ class HandsV5:
             # (a hand not found in the last picture is looked for again only every RETRY-th picture:
             # a hand behind the back must not cost the processor every picture)
             self.miss[side] = self.miss.get(side, 0) + 1 if tr is None else 0
-            if self.miss[side] % RETRY != 1 and RETRY > 1 and tr is None and self.miss[side] > 1:
+            seed = self._seed(seeds, wrist, side) if seeds else None
+            if seed is not None:
+                sq = square_from_hand(seed)
+            elif self.miss[side] % RETRY != 1 and RETRY > 1 and tr is None and self.miss[side] > 1:
                 return None
-            sq = square_from_pose(pose, side, w, h)
+            else:
+                sq = square_from_pose(pose, side, w, h)
             if sq is None:
                 self.track[side] = None
                 return None
@@ -498,14 +520,25 @@ class HandsV5:
         """Are both hands followed (their squares come from themselves, not from the body)?"""
         return self.track["left"] is not None and self.track["right"] is not None
 
-    def process(self, rgb, pose, now=None, pool=None):
+    def process(self, rgb, pose, now=None, pool=None, seeds=None):
+        """seeds: hands from MediaPipe's palm detector (normalized landmark lists), for hands lost."""
         h, w = rgb.shape[:2]
         sides = ("left", "right")
+        if seeds:
+            seeds = [np.array([[p["x"] * w, p["y"] * h] for p in lm]) for lm in seeds]
+            # (each side takes its own seed first — then the two threads can't take the same one)
+            got_seed = {}
+            for sd in sides:
+                if self.track[sd] is None:
+                    got_seed[sd] = [self._seed(seeds, self._wrist(pose, sd, w, h), sd)]
+            seeds = got_seed
+        else:
+            seeds = {}
         if pool is not None:
-            jobs = [pool.submit(self.one, rgb, pose, s, now) for s in sides]
+            jobs = [pool.submit(self.one, rgb, pose, s, now, True, seeds.get(s)) for s in sides]
             got = [j.result() for j in jobs]
         else:
-            got = [self.one(rgb, pose, s, now) for s in sides]
+            got = [self.one(rgb, pose, s, now, True, seeds.get(s)) for s in sides]
         hands = []
         for side, r in zip(sides, got):
             if r is None:

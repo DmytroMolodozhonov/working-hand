@@ -367,7 +367,8 @@ class NativePose:
             v5 = self._v5()
             if v5:
                 # V5: the hands from the body's wrists (the stream then carries "hands", as the Tasks way)
-                out["hands"] = v5.process(rgb, out["poseLandmarks"])
+                seeds = [lm for lm in (out["leftHandLandmarks"], out["rightHandLandmarks"]) if lm]
+                out["hands"] = v5.process(rgb, out["poseLandmarks"], seeds=seeds)
                 out.pop("leftHandLandmarks")
                 out.pop("rightHandLandmarks")
             return out
@@ -414,9 +415,13 @@ class NativePose:
                     pl = _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None
                     hands_out = jh.result()
                 else:
+                    # a hand not followed: every 3rd picture MediaPipe's palm detector looks too —
+                    # close to the camera the body's wrist is wrong, the palm detector right
+                    js = pool.submit(hands.detect_for_video, img, ts) if n[0] % 3 == 0 else None
                     p = jp.result()
                     pl = _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None
-                    hands_out = v5.process(rgb, pl or last_pose[0], pool=hand_pool)
+                    seeds = [_pts(lm) for lm in (js.result().hand_landmarks or [])] if js is not None else None
+                    hands_out = v5.process(rgb, pl or last_pose[0], pool=hand_pool, seeds=seeds)
                 last_pose[0] = pl or last_pose[0]
                 out = {"poseLandmarks": pl, "hands": hands_out}
             else:
