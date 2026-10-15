@@ -169,7 +169,7 @@ export const BASE_COLORS = {
     [BLOCK.GRAVEL]: 0x8b8580,
     [BLOCK.DEEPSTONE]: 0x56575e,
     [BLOCK.ICE_WALL]: 0x9fd6f2,
-    [BLOCK.ICE_GLOW]: 0xd6f4ff,
+    [BLOCK.ICE_GLOW]: 0x9ee4ff,
     [BLOCK.ICE_FLOOR]: 0xc4e8fa,
     [BLOCK.ICE_DARK]: 0x5ea8d8,
 };

@@ -448,13 +448,22 @@ export class IceCastleLife {
     /** Players as targets: {id, p (feet), c (centre)} (the dead, the invisible far off not). */
     _players() {
         const g = this.game, out = this._pl || (this._pl = []);
+        // (once a frame, into the same objects: no garbage — every mind asks it)
+        if (this._plFrame === g.frameCount && g.frameCount != null) return out;
+        this._plFrame = g.frameCount;
+        const pool = this._plPool || (this._plPool = []);
         out.length = 0;
         const seen = (id, p) => (g.invis ? g.invis.aiPos(id, p) : p);
-        if (!g.isDeadLocal && !g.combat?.dead) { const p = seen(g.localId, g.character.group.position); if (p) out.push({ id: g.localId, p: _feet(p, new THREE.Vector3()), rod: !!g.items?.heldOf('iceRod') }); }
+        const put = (id, p, rod) => {
+            const e = pool[out.length] || (pool[out.length] = { id: null, p: new THREE.Vector3(), rod: false });
+            e.id = id; _feet(p, e.p); e.rod = rod;
+            out.push(e);
+        };
+        if (!g.isDeadLocal && !g.combat?.dead) { const p = seen(g.localId, g.character.group.position); if (p) put(g.localId, p, !!g.items?.heldOf('iceRod')); }
         for (const [id, r] of g.remotes || []) {
             if (r.dead || !r.position) continue;
             const p = seen(id, r.position);
-            if (p) out.push({ id, p: _feet(p, new THREE.Vector3()), rod: this._remoteRod(id) });
+            if (p) put(id, p, this._remoteRod(id));
         }
         return out;
     }
@@ -510,7 +519,12 @@ export class IceCastleLife {
         const a = crowdStep(g, c, p, dx / d, dz / d, d - stop, { r: c.r, speed: sp, dt, look: 2 + c.r * 2, dy: c.h * 0.6 });
         c.moving = !!a;
         if (!a) return true;
-        p.x += a.x * sp * dt; p.z += a.z * sp * dt;
+        // (never into water, nor off a cliff: the castle's creatures keep to its mountain)
+        const nx = p.x + a.x * sp * dt, nz = p.z + a.z * sp * dt;
+        const t = g.world?.terrain?.data;
+        if (t && t.get(Math.round(nx + a.x * c.r), Math.floor(p.y + 1.5), Math.round(nz + a.z * c.r)) === BLOCK.WATER) { c.moving = false; return true; }
+        if (p.y - this._floor(nx + a.x * c.r, nz + a.z * c.r, p.y + 1.05) > 3.2) { c.moving = false; c.roam = null; return true; }
+        p.x = nx; p.z = nz;
         g.collision?.resolveCylinder?.(p, c.r, p.y, c.h, 1.05);
         c.model.rotation.y = turnToward(c.model.rotation.y, Math.atan2(-a.x, -a.z), c.turn * dt);
         return true;
@@ -538,7 +552,7 @@ export class IceCastleLife {
             if (q.rod && c.type === 'snowman' && this.state.queenDead) continue; // (the rod's holder: the snowmen obey him)
             const d = Math.hypot(q.p.x - from.x, q.p.z - from.z);
             const r = q.id === c.foe ? range * 1.6 : range;
-            if (d < r && (!best || d < best.d)) best = { k: 'p', id: q.id, p: q.p, d };
+            if (d < r && (!best || d < best.d)) best = { k: 'p', id: q.id, p: q.p.clone(), d };
         }
         return best;
     }
@@ -968,8 +982,9 @@ export class IceCastleLife {
             el.innerHTML = '<div class="boss-name">❄️ Ледяная Королева</div><div class="boss-track"><div class="boss-fill"></div></div>';
             document.body.appendChild(el);
         }
-        this._hud.style.display = show ? 'block' : 'none';
-        if (show) this._hud.querySelector('.boss-fill').style.width = (100 * q.hp / ICE.QUEEN.HP).toFixed(1) + '%';
+        if (this._hudShown !== show) { this._hudShown = show; this._hud.style.display = show ? 'block' : 'none'; }
+        const w = show ? (100 * q.hp / ICE.QUEEN.HP).toFixed(1) + '%' : null;
+        if (show && w !== this._hudW) { this._hudW = w; (this._fill || (this._fill = this._hud.querySelector('.boss-fill'))).style.width = w; }
     }
 
     // ================================================================ the gates and the chandelier
@@ -1301,7 +1316,7 @@ export class IceCastleLife {
         for (const f of this.fxs) for (const s of f.meshes || []) this.game.scene.remove(s.m);
         this.fxs.length = 0;
         this._dropGates();
-        if (this._hud) this._hud.style.display = 'none';
+        if (this._hud) { this._hud.style.display = 'none'; this._hudShown = false; }
     }
 }
 

@@ -265,5 +265,7 @@ export function iceSpikeModel() { const m = new THREE.Mesh(merged([['cone', 1, 1
 
 /** One of everything, for compiling the shaders while loading (Game.prewarm). */
 export function sampleIceModels() {
-    return [iceQueenModel(), snowmanModel(), iceMonsterModel(), chandelierModel(), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel()];
+    const hurt = snowmanModel();
+    hurt.traverse((o) => { if (o.isMesh && o.material === MAT.solid) o.material = MAT.hit; }); // (the red flash of a hurt one)
+    return [iceQueenModel(), snowmanModel(), hurt, iceMonsterModel(), chandelierModel(), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel()];
 }
