@@ -34,6 +34,7 @@ import { creditKill } from './Mana.js';
 import { hitBody } from './MagicWave.js';
 import { registerKind } from './CreatureImpact.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
+import { Chest } from '../entities/Chest.js';
 
 export const ICE = {
     ACTIVE: 220, // m from the castle: a player this near wakes it (its creatures come out)
@@ -384,7 +385,7 @@ export class IceCastleLife {
                 g.achievements?.killed('iceQueen', c.id, killer, p); // (the achievement: to all who fought her)
                 // her rod falls where she stood (one in the world: she never comes back)
                 const at = c.model.position.clone().add(_v.set(0, 2.5, 0));
-                g.items?.spawnLoose({ kind: 'iceRod', uid: newUid() }, at, { hover: true });
+                g.items?.spawnLoose({ kind: 'iceRod', uid: newUid(), godGift: true }, at, { hover: true }); // (a gift of the gods: no spell destroys it — ItemTypes.isGodGift)
                 for (const s of this.list) if (s.type === 'snowman') s.foe = null; // (her snowmen: nobody's now — the rod's)
             }
         } else if (c.type === 'monster') {
@@ -412,6 +413,7 @@ export class IceCastleLife {
             // the gates and the chandelier: whoever is near (each computer its own; the doors sync themselves)
             const near = dMe < ICE.ACTIVE + 60;
             if (near && !this._gates) this._makeGates();
+        if (this._chests) for (const c of this._chests) c.locked = !this.state.queenDead; // (open to all once she is gone)
             if (!near && this._gates && dMe > ICE.SLEEP + 60) this._dropGates();
             if (this.auth) {
                 let dNear = dMe;
@@ -1292,6 +1294,17 @@ export class IceCastleLife {
         const ch = this.chandelier = chandelierModel();
         ch.position.set(P.chandelier.x, P.chandelier.y, P.chandelier.z);
         g.scene.add(ch);
+        // her chests by the throne: locked while she lives (Game.openChest → Items.lootChest 'iceQueen')
+        this._chests = (P.chests || []).map((c, i) => {
+            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y, c.z), 'loot', ry, 'iceChest' + i);
+            chest.room = 'iceQueen';
+            chest.locked = !this.state.queenDead;
+            chest.mesh.updateMatrixWorld(true);
+            chest.boxId = g.collision?.addBox(chest.getCollisionBox());
+            if (g._openedChests?.has(chest.id)) chest.setOpenInstant();
+            g.chests?.push(chest);
+            return chest;
+        });
     }
 
     _dropGates() {
@@ -1299,6 +1312,14 @@ export class IceCastleLife {
         for (const id of this._gates || []) g.doors?.remove?.(id);
         this._gates = null;
         if (this.chandelier) { g.scene.remove(this.chandelier); this.chandelier = null; }
+        for (const c of this._chests || []) {
+            if (c.isOpen) (g._openedChests = g._openedChests || new Set()).add(c.id);
+            if (c.boxId != null) g.collision?.removeBox(c.boxId);
+            c.dispose();
+            const i = g.chests?.indexOf(c);
+            if (i >= 0) g.chests.splice(i, 1);
+        }
+        this._chests = null;
     }
 
     /** (host) The gates swing open before the castle's own creatures. */

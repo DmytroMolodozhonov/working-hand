@@ -170,7 +170,7 @@ export function describeArmor(it) {
         const lines = ['Холод не берёт', 'Простейшие заклинания на вас не действуют: «Инферно», «Остолбеней», «Левиоса», «Айс», «Сапира», «Даст», «Экспеллиармус»'];
         for (const s of it.strong || []) lines.push(`«${STRONG_RU[s]}» ранит вдвое слабее`);
         lines.push('Надевается на всё тело, с колпаком — приложите её к груди');
-        return { title: '🧙 Волшебная мантия', color: 0xb58cff, lines };
+        return { title: it.named ? `❄️ ${it.named}` : '🧙 Волшебная мантия', color: it.named ? 0xbfe9ff : 0xb58cff, lines };
     }
     const title = it.named ? `✨ ${it.named}` : `${it.magic ? '✨ Волшебный' : '🪖'} ${it.magic ? PIECE_OF[it.piece] : PIECE_RU[it.piece]}`;
     const lines = [`Прочность: <b>${Math.round(it.hp ?? pieceMax(it))}</b> из ${pieceMax(it)}${it.magic ? ' (сама восстанавливается)' : ''}`];
@@ -185,7 +185,7 @@ export function describeArmor(it) {
 export function armorName(it) {
     if (!it) return '';
     if (it.archmage) return 'Костюм Высшего мага';
-    if (it.kind === 'robe') return it.magic ? 'Волшебная мантия' : 'Мантия';
+    if (it.kind === 'robe') return it.named || (it.magic ? 'Волшебная мантия' : 'Мантия');
     return it.named || (it.magic ? `Волшебный ${PIECE_OF[it.piece]}` : PIECE_RU[it.piece]);
 }
 

@@ -242,6 +242,8 @@ export function iceCastlePlan(S) {
         gate: { ...at(0, gv, P), w: 5, h: 6, inner: at(0, gv - 4, P), out: at(0, front + 8, F) },
         guard: [at(-5, front + 9, F), at(5, front + 9, F)],
         chandelier: { ...at(0, HV, P), y: W1 + 4 },
+        // the queen's chests either side of her throne (CLAUDE.md «Боссы»: every boss has chests — IceQueen.js)
+        chests: [at(-5, tv + 2, P), at(5, tv + 2, P)],
         x0: Math.min(...parts.map((p) => p.x0)), x1: Math.max(...parts.map((p) => p.x1)),
         z0: Math.min(...parts.map((p) => p.z0)), z1: Math.max(...parts.map((p) => p.z1)),
     };

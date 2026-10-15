@@ -87,3 +87,19 @@ test('the castle stands high up on bare rock and snow: no grass, no trees round 
         assert.equal(grass, 0, `seed ${seed}: grass on the castle's mountain`);
     }
 });
+
+test('the Ice Queen\'s chests (every boss has chests): ice things — her robe, mana crystals, potions, treasure', async () => {
+    const { rollIceQueenLoot, isGodGift } = await import('../../src/game/ItemTypes.js');
+    const P = world(12345).iceCastle.plan;
+    assert.equal(P.chests.length, 2, 'two chests by the throne');
+    const a = rollIceQueenLoot(Math.random, true);
+    assert.ok(a.some((it) => it.kind === 'robe' && it.magic), 'her robe');
+    assert.ok(a.some((it) => it.kind === 'crystal'), 'mana crystals');
+    assert.ok(a.some((it) => it.kind === 'potion'), 'potions');
+    // gifts of the gods: the Ice Rod — no spell destroys it
+    assert.ok(isGodGift({ kind: 'iceRod' }));
+    assert.ok(!isGodGift({ kind: 'wand' }));
+    const fs = await import('node:fs');
+    assert.match(fs.readFileSync(new URL('../../src/game/Liquidation.js', import.meta.url), 'utf8'), /isGodGift\(L\.item\)/, '«Liquidation» never takes it');
+    assert.match(fs.readFileSync(new URL('../../src/world/World.js', import.meta.url), 'utf8'), /godGift: true/, 'the creative pedestals');
+});

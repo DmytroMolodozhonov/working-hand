@@ -469,7 +469,9 @@ export class VoxelWorld {
         this.collision.addBox({ minX: x - 1.4, maxX: x + 1.4, minY: -0.5, maxY: -0.03, minZ: z - 1.4, maxZ: z + 1.4, kind: 'table' });
         this.collision.addBox({ minX: x - 1.0, maxX: x + 1.0, minY: -0.5, maxY: surfaceY, minZ: z - 1.0, maxZ: z + 1.0, kind: 'table' });
         this.pedestals = this.pedestals || [];
-        this.pedestals.push({ ring, disc, t: Math.random() * 6 });
+        // (a gift of the gods — CLAUDE.md «Дары богов»: no spell breaks or moves it; it is no block: blasts,
+        //  fire, «Inspirius», «Total Destruction», quakes, «Gather» take the ground round it, never it — it stands as it was)
+        this.pedestals.push({ ring, disc, t: Math.random() * 6, x, z, group: g, godGift: true });
         return surfaceY;
     }
 

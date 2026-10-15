@@ -95,7 +95,37 @@ test('the Ice Castle: its queen, snowmen, monsters; the Ice Rod', async () => {
         // fire melts it
         I.meltAt(new THREE.Vector3(gx, top + 1, gz), 3, g.localId, 3);
         out.melted = t.get(gx, top + 2, gz) === 0;
-        // the rod at a creature: a snowman is not frozen (it is ice) — a living animal / villager would be
+        // her chests: locked while she lives; she falls — her rod drops, the chests open to whoever comes
+        const chests = g.chests.filter((c) => c.room === 'iceQueen');
+        out.chests = chests.length;
+        out.lockedAlive = chests.every((c) => c.locked);
+        for (const c of I.list) c.stunT = 0;
+        I.hit(q, 9999, 'Hellfire', g.localId);
+        await frames(5);
+        out.queenDead = I.state.queenDead;
+        const rodL = [...g.items.loose.values()].find((L) => L.item.kind === 'iceRod');
+        out.rodDropped = !!rodL;
+        out.unlocked = chests.every((c) => !c.locked);
+        const c0 = chests[0];
+        ch.group.position.set(c0.mesh.position.x, c0.mesh.position.y + 2.2, c0.mesh.position.z);
+        await until(() => c0.isOpen, 6000);
+        await frames(10);
+        out.chestOpen = c0.isOpen;
+        out.robe = [...g.items.loose.values()].some((L) => L.item.kind === 'robe' && L.item.named);
+        // gifts of the gods: Bombardo, fire on the rod and a creative pedestal — nothing happens to them
+        if (rodL) {
+            const rp = rodL.model.position.clone();
+            g.explode(rp.clone(), 4, g.localId, 2);
+            g._burnRay(rp.clone().add(new THREE.Vector3(3, 0, 0)), new THREE.Vector3(-1, 0, 0), 6, g.localId);
+            await frames(5);
+            out.rodSurvives = [...g.items.loose.values()].some((L) => L.item.kind === 'iceRod');
+        }
+        const ped = g.world.pedestals?.[0];
+        if (ped) {
+            g.explode(new THREE.Vector3(ped.x, 1, ped.z), 4, g.localId, 2);
+            await frames(5);
+            out.pedestal = !!ped.group.parent && ped.godGift;
+        }
         return out;
     });
     assert.ok(r.plan && r.near < 150, 'Creative: the castle is by the start');
@@ -118,5 +148,12 @@ test('the Ice Castle: its queen, snowmen, monsters; the Ice Rod', async () => {
     assert.equal(r.layer1, r.iceBlock, 'a layer of ice where the rod points');
     assert.equal(r.layer2, r.iceBlock, '…and the next layer on it');
     assert.ok(r.melted, 'fire melts it');
+    assert.equal(r.chests, 2, 'the queen\'s two chests');
+    assert.ok(r.lockedAlive, 'locked while she lives');
+    assert.ok(r.queenDead && r.rodDropped, 'she falls, her rod drops');
+    assert.ok(r.unlocked && r.chestOpen, 'her chest opens');
+    assert.ok(r.robe, 'her robe in it');
+    assert.ok(r.rodSurvives, 'the rod: a gift of the gods — Bombardo and fire do nothing to it');
+    assert.ok(r.pedestal, 'a pedestal stands as it was');
     assert.deepEqual(realErrors(errors), []);
 });

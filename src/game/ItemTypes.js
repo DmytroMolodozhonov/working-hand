@@ -113,6 +113,7 @@ export const ITEM_INFO = {
     // ingredients of the invisibility potion: the giant spider's web (Spider.js), glass of a broken window (Houses.js)
     web: { name: 'Связка паутины', icon: '🕸️', weight: 0.3, stack: 5 },
     glass: { name: 'Осколки стекла', icon: '🔷', weight: 0.3, stack: 10 },
+    // (the Ice Queen's chests — IceQueen.js — rollIceQueenLoot)
     // the dragons' lairs (Dragons.js): one egg per dragon on its hoard — for potions later (no hatching)
     dragonEgg: { name: 'Яйцо дракона', icon: '🥚', weight: 4 },
     // the phoenix (Phoenixes.js): what it leaves when it is killed — for potions later (no effect yet)
@@ -162,6 +163,13 @@ export function itemValue(it) {
 }
 
 /** Is it a magic thing? (for the merchant and the conversation) */
+/**
+ * Gifts of the gods (CLAUDE.md «Дары богов»): no spell ever destroys or harms them — fire, blasts, «Inspirius»,
+ * «Total Destruction», lightning, ice, «Liquidation»… («не действует — дар богов»). Taken, carried, thrown, called
+ * by «Акцио» like any thing. The Ice Rod; the creative pedestals are another (World.createPedestal).
+ */
+export const GOD_GIFTS = new Set(['iceRod']);
+export const isGodGift = (it) => !!it && (it.godGift === true || GOD_GIFTS.has(it.kind));
 export const isMagicItem = (it) => !!it && (it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'iceRod' || it.kind === 'book' || it.magic === true || (it.kind === 'scroll'));
 
 const SHIELD_KINDS = [
@@ -227,6 +235,20 @@ export function rollHouseLoot(r = Math.random, rich = false) {
 export const LOOT_EXTRA = { fishingRod: null };
 
 /** A dragon's chest: the treasure it guards — two precious things, fine armour, a plain thing now and then (coins: Game._chestPouch). */
+/**
+ * The Ice Queen's chests by her throne (CLAUDE.md «Боссы»: what fits the boss — the ice): the Ice Queen's robe
+ * (a magic robe the colour of ice: never cold, the simplest magic does nothing on it), mana crystals out of her
+ * ice, healing potions, the best of her treasure (wands, scrolls…). (Her coins: Game._chestPouch.)
+ */
+export function rollIceQueenLoot(r = Math.random, first = true) {
+    const out = [rollKeyItem(r), rollKeyItem(r)];
+    out.push({ kind: 'crystal', uid: newUid(), count: randInt(r, 2, 4) });
+    out.push({ kind: 'potion', uid: newUid(), rec: 'heal', color: 0x9fe8ff }, { kind: 'potion', uid: newUid(), rec: 'heal', color: 0xc8f4ff });
+    if (first) out.push({ kind: 'robe', uid: newUid(), magic: true, color: 0xbfe9ff, named: 'Мантия Ледяной Королевы', strong: ['Hellfire', 'LightningStrike'] });
+    else if (r() < 0.5) out.push(rollKeyItem(r));
+    return out;
+}
+
 export function rollDragonLoot(r = Math.random) {
     const out = [rollKeyItem(r), rollKeyItem(r)];
     if (r() < 0.5) out.push(rollKeyItem(r));

@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
-import { isMagicItem } from './ItemTypes.js';
+import { isMagicItem, isGodGift } from './ItemTypes.js';
 
 export const LIQ = {
     SPEED: 26, // m/s
@@ -73,6 +73,7 @@ export const LIQUIDATION_TARGETS = {
     phoenix: { does: 'hurt', why: '−3, это нападение' },
     servants: { does: 'hurt', why: 'свои слуги тоже живые: −3, если попасть' },
     looseThings: { does: 'dust', why: 'любая неживая вещь на земле (еда, оружие, щит, лук, мешочек…) рассыпается в прах; волшебная — только «Максимой»' },
+    godGifts: { does: 'none', why: 'дары богов (Ледяной Жезл, пьедесталы Творческого) — не действует даже «Максима»: их защита слишком сильна' },
     heldThings: { does: 'none', why: 'вещь в руке не трогает — всплеск попадает в руку (живое: −3 HP тому, кто держит)' },
     blocks: { does: 'dust', why: 'блок стены, доска, камень, кирпич рассыпается (один блок); волшебный камень башен — только «Максимой»; у замка — это порча: стража заметит' },
     trees: { does: 'none', why: 'дерево живое: всплеск разбивается о ствол, ничего не рассыпается' },
@@ -230,6 +231,7 @@ export class Liquidation {
         if (h.kind === 'item') {
             const L = g.items?.loose.get(h.uid);
             if (!L) { this._burst(h.at, max, 10); return; }
+            if (isGodGift(L.item)) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; }
             if (liquidationNeedsMaxima(L.item) && !max) { this._burst(h.at, max, 12); say('✨ Эта вещь волшебная — её возьмёт только «Liquidation Максима»'); return; }
             this._dust(L.model.position, 0xb9a77f);
             if (auth) { g.items.removeLoose(h.uid); g.sync?.itemGone?.(h.uid, null, null); }
