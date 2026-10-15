@@ -14,7 +14,7 @@ import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
-import { renderSpellsTab, renderItemsTab, renderMechanicsTab } from './ui/Codex.js';
+import { renderSpellsTab, renderItemsTab, renderMechanicsTab, renderBossesTab } from './ui/Codex.js';
 import { achievementsHtml } from './game/Achievements.js';
 import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
@@ -154,6 +154,16 @@ tabBtns.forEach((btn) => {
         if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-character') { window.__charEditor = window.__charEditor || new CharacterEditor($('tab-character')); window.__charEditor.show(); }
         else window.__charEditor?.hide();
+    });
+});
+// «Механика игры» sub-tabs: «Как игра работает» / «Боссы»
+document.querySelectorAll('#tab-mechanics [data-mech]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('#tab-mechanics [data-mech]').forEach((b) => {
+            b.classList.toggle('active', b === btn);
+            $(b.dataset.mech).hidden = b !== btn;
+        });
+        if (btn.dataset.mech === 'bosses-list') renderBossesTab('bosses-list');
     });
 });
 // Settings sub-tabs
@@ -1047,11 +1057,12 @@ function renderMenuAchievements() {
 function showPauseTab(id) {
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
-    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells'); // (the spell book needs room)
+    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses'); // (the spell book and the bosses need room)
     if (id === 'pause-audio') pauseAudio.sync();
     if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-creative') pauseCreative.sync();
     if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid');
+    if (id === 'pause-bosses') renderBossesTab('pause-bosses-list');
     if (id === 'pause-ach' && $('pause-ach-list')) $('pause-ach-list').innerHTML = achievementsHtml(game?.achievements?.done || new Set());
 }
 document.querySelectorAll('.pause-tab').forEach((b) => { b.onclick = () => showPauseTab(b.dataset.pauseTab); });

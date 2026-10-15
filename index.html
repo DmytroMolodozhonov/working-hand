@@ -52,6 +52,7 @@
                 <button class="pause-tab" data-pause-tab="pause-audio" role="tab">🔊 Звук</button>
                 <button class="pause-tab" data-pause-tab="pause-graphics" role="tab">🖥 Графика</button>
                 <button class="pause-tab" data-pause-tab="pause-ach" role="tab">🏆 Ачивки</button>
+                <button class="pause-tab" data-pause-tab="pause-bosses" role="tab">👑 Боссы</button>
                 <button class="pause-tab" data-pause-tab="pause-creative" role="tab" hidden>🛠 Творческий</button>
                 <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Заклинания</button>
             </div>
@@ -63,6 +64,7 @@
             </div>
             <div id="pause-audio" class="pause-pane"></div>
             <div id="pause-graphics" class="pause-pane"></div>
+            <div id="pause-bosses" class="pause-pane"><div id="pause-bosses-list" class="bosses-list"></div></div>
             <div id="pause-ach" class="pause-pane"><div id="pause-ach-list" class="ach-list"></div></div>
             <!-- Creative only: hand version and the «what you said» line, changed on the go -->
             <div id="pause-creative" class="pause-pane"></div>
@@ -252,7 +254,12 @@
 
                 <!-- GAME MECHANICS: how the game works (not items) -->
                 <div id="tab-mechanics" class="tab-pane">
+                    <div class="sub-tabs mech-subtabs">
+                        <button class="sub-tab active" data-mech="mechanics-list">🧩 Как игра работает</button>
+                        <button class="sub-tab" data-mech="bosses-list">👑 Боссы</button>
+                    </div>
                     <div id="mechanics-list" class="mech-list"></div>
+                    <div id="bosses-list" class="bosses-list" hidden></div>
                 </div>
 
                 <!-- SETTINGS with sub-tabs -->

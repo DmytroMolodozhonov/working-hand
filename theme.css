@@ -352,6 +352,19 @@ button, input, select, textarea { font-family: inherit; }
 .mech-lead { margin: 0 0 6px; color: var(--ui-text); font-weight: 700; line-height: 1.4; }
 .mech-points { margin: 0; padding-left: 18px; color: rgba(241, 237, 255, 0.82); line-height: 1.45; font-size: 0.92rem; }
 .mech-points li { margin: 3px 0; }
+
+/* «Механика игры» → «👑 Боссы»: a picture and a few words per boss (Codex.renderBossesTab) */
+.mech-list[hidden], .bosses-list[hidden] { display: none; }
+.boss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; text-align: left; }
+.boss-card { display: flex; flex-direction: column; overflow: hidden; background: rgba(5, 3, 18, 0.42); border: 1px solid var(--ui-border); border-top: 3px solid var(--ui-gold); border-radius: 12px; }
+.boss-img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; background: rgba(5, 3, 18, 0.6); }
+.boss-body { display: flex; flex-direction: column; flex: 1; padding: 10px 14px 12px; }
+.boss-name { margin: 0 0 6px; color: var(--ui-gold); font-family: var(--ui-font-title); font-size: 1.15rem; font-weight: 700; }
+.boss-about { margin: 0 0 5px; color: rgba(241, 237, 255, 0.85); line-height: 1.42; font-size: 0.92rem; }
+.boss-reward { margin-top: auto; padding-top: 8px; color: var(--ui-text); font-size: 0.88rem; }
+.boss-reward b, .boss-high b { color: var(--ui-gold); }
+.boss-high { margin: 12px 0 4px; padding: 10px 14px; text-align: center; color: var(--ui-text); background: rgba(255, 211, 110, 0.08); border: 1px solid rgba(255, 211, 110, 0.35); border-radius: 12px; }
+#pause-bosses { max-height: min(64vh, 620px); overflow-y: auto; padding-right: 4px; }
 .stat-val { color: var(--ui-gold); text-align: right; }
 .max-badge { background: var(--ui-grad-magic); }
 
@@ -468,10 +481,10 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 /* ------------------------------------------------------------ pause: tabs «Меню» / «Звук» */
-.pause-box { width: min(440px, calc(100vw - 32px)); }
+.pause-box { width: min(520px, calc(100vw - 32px)); }
 .pause-tabs { display: flex; gap: 4px; padding: 4px; margin: 0 0 12px; background: rgba(5, 3, 18, 0.5); border: 1px solid var(--ui-border); border-radius: 14px; }
 /* (Creative has five tabs: a wider window, and a tab never sticks out of the bar) */
-.pause-box:has(.pause-tab[data-pause-tab="pause-spells"]:not([hidden])) { width: min(600px, calc(100vw - 32px)); }
+.pause-box:has(.pause-tab[data-pause-tab="pause-spells"]:not([hidden])) { width: min(700px, calc(100vw - 32px)); }
 .pause-box .pause-tab {
     flex: 1 1 0; min-width: 0; overflow-wrap: anywhere;
     width: auto; margin: 0; padding: 8px 6px; font-size: 0.9rem; border-radius: 10px; border: 1px solid transparent;

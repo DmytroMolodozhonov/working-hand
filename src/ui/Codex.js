@@ -8,6 +8,8 @@
  * cost: mana there (internally still «fatigue»); max: the Maxima form.
  */
 
+import { ACH, ACH_BY_ID } from '../game/Achievements.js';
+
 export const SPELL_CATEGORIES = [
     { id: 'fight', name: '🔥 Боевые' },
     { id: 'duel', name: '⚡ Дуэльные' },
@@ -433,4 +435,55 @@ export function renderMechanicsTab() {
             <p class="mech-lead">${m.lead}</p>
             <ul class="mech-points">${m.points.map((p) => `<li>${p}</li>`).join('')}</ul>
         </section>`).join('');
+}
+
+/**
+ * «Механика игры» → «👑 Боссы» (the author: a screenshot of each boss and a few words who it is —
+ * where it lives, who guards it — not its powers and weaknesses). The reward is read from
+ * ACHIEVEMENTS (Achievements.js), never written here. Pictures: assets/bosses/ (tools/boss-screenshots.mjs).
+ */
+export const BOSSES = [
+    { ach: 'king', img: 'assets/bosses/king.webp', name: 'Король замка', about: [
+        'В каждом замке свой король (или королева). Он живёт в тронном зале, а замок полон его рыцарей, стражи, слуг и волшебников.',
+        'Где-то в замке хранится королевский сундук.',
+    ] },
+    { ach: 'tower', img: 'assets/bosses/master.webp', name: 'Мастер башни волшебников', about: [
+        'Глава высокой каменной башни, где живут и учатся волшебники. Самый сильный маг башни — и вся башня встанет на его защиту.',
+        'Ачивка — когда побеждён Мастер и разрушена сама башня.',
+    ] },
+    { ach: 'spider', img: 'assets/bosses/spider.webp', name: 'Гигантская паучиха', about: [
+        'Огромная паучиха, вдвое выше человека. Днём прячется, а ночью выходит на охоту — и сама находит героя.',
+    ] },
+    { ach: 'dragon', img: 'assets/bosses/dragon.webp', name: 'Дракон', about: [
+        'Драконы редки. Они живут в логовах высоко в больших горах и спят на горах золота; иногда пролетают над миром.',
+        'Драконы бывают разных видов — одни сильнее, другие слабее.',
+    ] },
+    { ach: 'iceQueen', img: 'assets/bosses/ice-queen.webp', name: 'Ледяная Королева', about: [
+        'Живёт во дворце изо льда на вершине снежной горы — такой замок один на весь мир.',
+        'Ворота стерегут огромные ледяные монстры, а вокруг бродят злые снеговики.',
+    ] },
+    { ach: 'blackbeard', img: 'assets/bosses/blackbeard.webp', name: 'Капитан Чёрные Усы', about: [
+        'Пират. Плавает по морю на своём чёрном корабле с рваными парусами и никогда не заходит в порт.',
+        'Его команда — скелеты.',
+    ] },
+];
+
+/** «👑 Боссы»: a card per boss (lazy pictures — they load only when the tab is opened). */
+export function renderBossesTab(boxId = 'bosses-list') {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    const cards = BOSSES.map((b) => {
+        const a = ACH_BY_ID[b.ach];
+        return `
+        <section class="boss-card">
+            <img class="boss-img" src="${b.img}" alt="${b.name}" loading="lazy" decoding="async" width="800" height="450" onerror="this.style.visibility='hidden'">
+            <div class="boss-body">
+                <h3 class="boss-name">${a.icon} ${b.name}</h3>
+                ${b.about.map((t) => `<p class="boss-about">${t}</p>`).join('')}
+                <div class="boss-reward">🏆 Ачивка «${a.title}»: <b>+${a.mana}</b> ячеек маны навсегда</div>
+            </div>
+        </section>`;
+    }).join('');
+    box.innerHTML = `<div class="boss-grid">${cards}</div>
+        <div class="boss-high">🌟 Победите всех — станете <b>Высшим магом</b>: ещё <b>+${ACH.HIGH_MANA}</b> ячеек маны и костюм Высшего мага.</div>`;
 }
