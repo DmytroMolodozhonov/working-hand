@@ -128,3 +128,19 @@ test('a man overboard from a ship under way: caught by the buoy, hauled in along
     assert.equal(v.overboard, null, 'back aboard');
     assert.ok(!v.dead);
 });
+
+test('a body lying on a stair (dead or knocked down) slides down off it — the stair stays free', () => {
+    const { layout, list, crew, run } = world();
+    const r = layout.ramps.find((x) => x.id.startsWith('quarter'));
+    const [a, b] = list.filter((x) => x.role === 'sailor');
+    for (const [v, k] of [[a, 'dead'], [b, 'stun']]) {
+        v.path = null; v.waitT = 100;
+        v.l.x = r.ax; v.l.z = (r.az + r.bz) / 2; v.l.y = (r.ay + r.by) / 2;
+        if (k === 'dead') crew._die(v, null); else v.stunT = 4;
+        run(3);
+        const lowY = Math.min(r.ay, r.by);
+        assert.ok(Math.abs(v.l.y - lowY) < 0.05, `${k}: down on the deck (${v.l.y.toFixed(2)})`);
+        assert.equal(floorAt(layout, v.l.x, v.l.z, v.l.y + 1.1), v.l.y, `${k}: on the floor`);
+        assert.ok(Math.abs(v.l.x - r.ax) > r.half || Math.abs(v.l.z - (r.ay < r.by ? r.az : r.bz)) > 1, `${k}: clear of the stair's foot`);
+    }
+});

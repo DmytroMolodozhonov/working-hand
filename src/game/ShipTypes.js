@@ -5,7 +5,8 @@
  * the way the hero faces −Z). Everything is built to the hero's scale (~2.2× real).
  *
  * Physics numbers (per unit mass): sailK — thrust per (apparent wind)² per open sail,
- * c1/c2 — linear/quadratic water drag, kRud — rudder turning, yawD1 — yaw damping,
+ * c1/c2 — linear/quadratic water drag, turnR — the turning circle's radius (m) with the wheel hard over,
+ * yawD1 — how quickly the yaw follows the rudder at rest (faster under way),
  * waveLag — how slowly the hull follows the waves (heavier = slower).
  */
 
@@ -16,7 +17,7 @@ export const SHIP_CLASSES = {
         masts: [{ id: 'fore', z: -9, h: 34 }, { id: 'main', z: 3, h: 40 }],
         crew: { captain: 1, boatswain: 0, sailor: 3 },
         hp: 160, floodVol: 0.35,
-        sailK: 0.0045, c1: 0.015, c2: 0.00138, kRud: 0.0026, yawD1: 0.30, lateenFrac: 0, waveLag: 0.8,
+        sailK: 0.0045, c1: 0.015, c2: 0.00138, turnR: 50, yawD1: 0.30, lateenFrac: 0, waveLag: 0.8,
         cannons: 2, // per side (main deck)
         pierLayer: 3,
     },
@@ -26,7 +27,7 @@ export const SHIP_CLASSES = {
         masts: [{ id: 'fore', z: -16, h: 44 }, { id: 'main', z: 1, h: 52 }, { id: 'mizzen', z: 19, h: 30 }],
         crew: { captain: 1, boatswain: 1, sailor: 4 },
         hp: 260, floodVol: 0.6,
-        sailK: 0.003, c1: 0.015, c2: 0.00116, kRud: 0.0016, yawD1: 0.24, lateenFrac: 0.15, waveLag: 1.1,
+        sailK: 0.003, c1: 0.015, c2: 0.00116, turnR: 70, yawD1: 0.24, lateenFrac: 0.15, waveLag: 1.1,
         cannons: 3,
         pierLayer: 4,
     },
@@ -36,14 +37,15 @@ export const SHIP_CLASSES = {
         masts: [{ id: 'fore', z: -22, h: 56 }, { id: 'main', z: -1, h: 66 }, { id: 'mizzen', z: 23, h: 36 }],
         crew: { captain: 1, boatswain: 1, sailor: 8 },
         hp: 420, floodVol: 1.0,
-        sailK: 0.002, c1: 0.02, c2: 0.00022, kRud: 0.0011, yawD1: 0.20, lateenFrac: 0.15, waveLag: 1.5,
+        sailK: 0.002, c1: 0.02, c2: 0.00022, turnR: 90, yawD1: 0.20, lateenFrac: 0.15, waveLag: 1.5,
         cannons: 4,
         pierLayer: 5,
     },
 };
 
 export const RAIL = 2.4; // the bulwark above every deck
-export const HELM_LOCK = 1.25 * Math.PI; // the wheel turns ±⅝ of a turn (hard over in one long sweep of the hand)
+export const HELM_LOCK = 0.75 * Math.PI; // the wheel turns ±⅜ of a turn: hard over in one sweep of the hand round the rim
+// (at ±⅝ a natural quarter turn of the hand gave hardly any rudder — the ship barely answered)
 
 export const SHIP_NAMES = [
     'Золотая Лань', 'Морская Звезда', 'Буревестник', 'Святая Анна', 'Северный Ветер', 'Чёрный Лебедь',

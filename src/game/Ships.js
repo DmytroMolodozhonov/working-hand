@@ -27,6 +27,7 @@ import { SHIP_CLASSES, PORT_SHIPS, shipName, strHash, HELM_LOCK } from './ShipTy
 import { buildLayout, floorAt as layoutFloorAt, roomAt, hullHalfWidth, keelY } from './ShipLayout.js';
 import { ShipPose, ShipCollider, PlankCollider } from './ShipCollision.js';
 import { stepShip, waveResponse, newShipState } from './ShipPhysics.js';
+import { steer } from './HelmMath.js';
 import { DMG, blastDamage, holeRadius, leakRate, stepFire, stepSinking } from './ShipDamage.js';
 import { ShipModel } from '../entities/ShipModel.js';
 import { Chest } from '../entities/Chest.js';
@@ -443,6 +444,8 @@ export class Ships {
             onHit: (dmg) => this._grounded(s, dmg),
         };
         st.y0 = WATER_LEVEL_Y - (s.sinkY || 0);
+        // nobody at the wheel: the water on the rudder of a moving ship brings it back amidships
+        if (!s.helmBy && st.wheel) st.wheel = steer(st.wheel, [], dt, st.u);
         this._applyBlow(s, dt);
         const before = s.lines.map((l) => l.state);
         stepShip(st, s.cls, env, dt);

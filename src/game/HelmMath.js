@@ -6,14 +6,15 @@
  * + = clockwise as the helmsman sees it). The wheel follows the hands: each
  * held hand wants the wheel at (its angle when it took hold) + (how far the hand
  * has gone round since). A moving ship's rudder pushes back, so the wheel turns
- * slower the faster the ship goes, and with no hands it eases back to the middle.
+ * slower the faster the ship goes, and let go on a moving ship the water on the rudder
+ * brings it back amidships (she goes straight on, holding her course); at rest it stays put.
  */
 
 import { HELM_LOCK } from './ShipTypes.js';
 
 export const HELM = {
     GRAB_R: 0.45, CLOSE_CURL: 0.55, OPEN_CURL: 0.35, RELEASE_CURL: 0.28, RELEASE_MS: 160, CLOSE_WINDOW_MS: 900,
-    LOCK: HELM_LOCK, MAX_RATE: 4.8, SLIP: 0.9, RETURN: 0.04, GAIN: 1, // (the wheel turns exactly as far as the hand goes round it: the hand stays where it holds)
+    LOCK: HELM_LOCK, MAX_RATE: 4.8, SLIP: 0.9, RETURN: 0.12, GAIN: 1, // (the wheel turns exactly as far as the hand goes round it: the hand stays where it holds)
 };
 
 /** The polar angle of a point in the wheel's plane (0 = top, + = clockwise for the helmsman). */

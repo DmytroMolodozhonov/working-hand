@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
-import { floorAt, hullHalfWidth } from './ShipLayout.js';
+import { floorAt, hullHalfWidth, stairUnder } from './ShipLayout.js';
 import { strHash } from './ShipTypes.js';
 import { createRng } from '../core/math.js';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
@@ -469,6 +469,38 @@ export class Sailors {
         }
     }
 
+    /**
+     * (host) A body lying on a stair (dead, knocked down) doesn't stay on the steps: it slides and
+     * tumbles down them onto the floor below and a little aside — the stair stays free for the others.
+     */
+    _offStair(v, s, dt) {
+        if (v.vy) return;
+        const L = s.layout;
+        let m = v.slide;
+        if (m && Math.hypot(m.x - v.l.x, m.z - v.l.z) > 8) m = v.slide = null; // (an old slide, from an earlier fall)
+        if (!m) {
+            const r = stairUnder(L, v.l.x, v.l.y, v.l.z);
+            if (!r) return;
+            const lowA = r.ay < r.by;
+            const lowZ = lowA ? r.az : r.bz, dir = Math.sign(lowZ - (lowA ? r.bz : r.az)) || 1;
+            // past the foot of the stair, off its line (towards the middle of the deck for a stair along a side)
+            m = v.slide = { z: lowZ + dir * 1.4, x: r.ax ? r.ax - Math.sign(r.ax) * 1.6 : v.l.x, lowZ, dir };
+        }
+        const onSteps = (v.l.z - m.lowZ) * m.dir < 0; // (still above the foot)
+        const sp = 3 * dt;
+        let nx = v.l.x, nz = v.l.z;
+        if (onSteps) nz += m.dir * sp;
+        else {
+            const dx = m.x - v.l.x, dz = m.z - v.l.z, d = Math.hypot(dx, dz);
+            if (d < 0.05) { v.slide = null; return; }
+            nx += (dx / d) * Math.min(d, sp); nz += (dz / d) * Math.min(d, sp);
+        }
+        const f = floorAt(L, nx, nz, v.l.y + 0.3);
+        if (f === null || f < v.l.y - 3) { v.slide = null; return; } // (nowhere to go: stays where it is)
+        v.l.x = nx; v.l.z = nz; v.l.y = f;
+        if (!onSteps) this._solids(v, L); // (down on the floor: out of the masts, the guns, the stair's own side)
+    }
+
     /** «Overgrown» (host): the sailors it reaches are thrown apart along the deck — near the rail, overboard. */
     scatter(origin, pushAt, casterId) {
         if (!this.auth) return;
@@ -820,7 +852,7 @@ export class Sailors {
     /** (host) What a sailor does. */
     _think(v, s, dt) {
         const g = this.game;
-        if (v.dead) { v.mode = 'dead'; v.speed = 0; if (!v.overboard && !v.lev) this._fall(v, s, dt); return; } // (a dead body falls to the deck / floor below — never left in the air)
+        if (v.dead) { v.mode = 'dead'; v.speed = 0; if (!v.overboard && !v.lev) { this._fall(v, s, dt); this._offStair(v, s, dt); } return; } // (a dead body falls to the deck / floor below — never left in the air, never left lying on a stair)
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; } // (held up in the air by «Левиоса Максима»: it carries him)
         if (v.overboard) { this._swim(v, s, dt); return; }
         if (s.flooded) { this._overboard(v, Math.random() < 0.5 ? -1 : 1); return; }
@@ -828,6 +860,7 @@ export class Sailors {
         if (v.stunT > 0 || v.vy) {
             if (v.stunT > 0) v.stunT -= dt;
             this._fall(v, s, dt);
+            this._offStair(v, s, dt);
             v.mode = 'idle'; v.speed = 0; v.busy = false;
             if (v.fs) v.fs.st = 'close';
             return;

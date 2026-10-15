@@ -332,6 +332,17 @@ function rampY(r, lx, lz) {
     return r.ay + (r.by - r.ay) * t;
 }
 
+/** The stair (ramp) a body at (lx, ly, lz) lies or stands on — on its steps, not at its flush ends — or null. */
+export function stairUnder(L, lx, ly, lz) {
+    for (const r of L.ramps) {
+        const y = rampY(r, lx, lz);
+        if (y === null || Math.abs(y - ly) > 0.4) continue;
+        if (y - Math.min(r.ay, r.by) < 0.15 || Math.max(r.ay, r.by) - y < 0.15) continue;
+        return r;
+    }
+    return null;
+}
+
 /** The highest floor or stair surface under (lx, lz) not above reachLy (ship-local), or null. */
 export function floorAt(L, lx, lz, reachLy) {
     let best = null;

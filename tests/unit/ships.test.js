@@ -211,3 +211,34 @@ test('ships: every crew path can be walked (never in under a stair, never throug
         }
     }
 });
+
+test('the rudder: wheel to starboard turns her to starboard, amidships she holds her course (no spin, no skid)', () => {
+    for (const id of ['pinnace', 'fluyt', 'galleon']) {
+        const C = SHIP_CLASSES[id];
+        const env = { openFrac: 1, wind: { x: 6, z: 0 } }; // (a breeze on the beam as well)
+        const st = newShipState(0, 0, 0); st.tau = Infinity; st.spellWind = { x: 0, z: -14 };
+        stepShip(st, C, env, 60);
+        // amidships: she goes straight on (the lateen and the spell's wind don't spin her)
+        const y0 = st.yaw;
+        stepShip(st, C, env, 30);
+        assert.ok(Math.abs(st.yaw - y0) < 0.05, `${id}: drifted ${(st.yaw - y0).toFixed(3)} rad with the wheel amidships`);
+        // half a wheel to starboard: a firm turn to starboard (yaw −)
+        st.wheel = HELM_LOCK / 2;
+        const y1 = st.yaw;
+        stepShip(st, C, env, 10);
+        assert.ok(st.yaw - y1 < -0.2, `${id}: turned only ${(st.yaw - y1).toFixed(3)} rad`);
+        assert.ok(Math.abs(st.v) < 1, `${id}: no skid (${st.v.toFixed(2)} m/s sideways)`);
+        // to port: the other way
+        st.wheel = -HELM_LOCK / 2;
+        const y2 = st.yaw;
+        stepShip(st, C, env, 15);
+        assert.ok(st.yaw > y2, `${id}: the wheel to port turns her to port`);
+        // amidships again: the turn dies out
+        st.wheel = 0;
+        stepShip(st, C, env, 10);
+        assert.ok(Math.abs(st.r) < 0.004, `${id}: still turning ${st.r.toFixed(4)} rad/s`);
+    }
+    // let go on a moving ship: the water on the rudder brings the wheel back amidships; at rest it stays put
+    assert.ok(Math.abs(steer(HELM_LOCK, [], 6, 6)) < 1e-9);
+    assert.equal(steer(1, [], 6, 0), 1);
+});

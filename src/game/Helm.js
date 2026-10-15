@@ -232,7 +232,7 @@ export class Helm {
             let onSpoke = r < 0.3;
             if (!onSpoke) {
                 for (let k = 0; k < H.spokes; k++) {
-                    const a = (k / H.spokes) * Math.PI * 2 + s.wheel * -1;
+                    const a = (k / H.spokes) * Math.PI * 2 + s.wheel; // (a spoke goes round with the wheel, clockwise for + — as drawn)
                     const sx = Math.sin(a), sy = Math.cos(a);
                     const along = _l.x * sx + _l.y * sy;
                     if (along > 0 && Math.abs(_l.x * sy - _l.y * sx) < 0.12) { onSpoke = true; break; }

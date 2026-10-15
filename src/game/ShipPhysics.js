@@ -24,7 +24,10 @@ export function sailForce(cls, openFrac, along, across) {
     const eff = Math.max(0, (co + 0.35) / 1.35);
     const aback = co < -0.5 ? -(-co - 0.5) : 0;
     const q = cls.sailK * openFrac * va2;
-    return { Fu: q * (eff + aback), Fv: q * 0.3 * Math.sin(ang) * Math.max(eff, 0.2), N: 0.15 * q * (cls.lateenFrac || 0) * Math.sin(ang) };
+    // the lateen mizzen gives only a little weather helm: the hull's lateral resistance and the rudder hold
+    // her (it used to out-turn the rudder itself and spun a ship with the wheel amidships)
+    const N = Math.max(-0.001, Math.min(0.001, 0.02 * q * (cls.lateenFrac || 0) * Math.sin(ang)));
+    return { Fu: q * (eff + aback), Fv: q * 0.3 * Math.sin(ang) * Math.max(eff, 0.2), N };
 }
 
 /** The spells' wind dies down. */
@@ -153,20 +156,29 @@ export function stepShip(st, cls, env, dt) {
         const c = Math.cos(st.yaw), s = Math.sin(st.yaw);
         const fx = -s, fz = -c, rx = c, rz = -s; // forward, starboard (world)
         const sw = st.spellWind || { x: 0, z: 0 };
+        // the spells' wind drives her ahead along her own course (the yards braced to it): it turns with her.
+        // (left behind in the world it became a cross wind in a turn that pushed the stern round further —
+        // the ship skidded and kept spinning)
+        const swm = Math.hypot(sw.x, sw.z);
+        if (swm > 0) { const m = sw.x * fx + sw.z * fz >= 0 ? swm : -swm; sw.x = fx * m; sw.z = fz * m; }
         const Wx = (env.wind?.x || 0) + sw.x, Wz = (env.wind?.z || 0) + sw.z;
         const vx = fx * st.u + rx * st.v, vz = fz * st.u + rz * st.v;
         const ax = Wx - vx, az = Wz - vz; // apparent wind (where it blows to)
         const along = ax * fx + az * fz, across = ax * rx + az * rz;
         const F = sailForce(cls, env.openFrac || 0, along, across);
         const M = mooringForces(st, cls, env.moorings, h);
-        const delta = RUDDER_MAX * (st.wheel || 0) / HELM_LOCK;
+        const delta = RUDDER_MAX * Math.max(-1, Math.min(1, (st.wheel || 0) / HELM_LOCK));
         // above its hull speed a ship drags its own bow wave: it can't be driven much faster, however hard the wind
         const uh = 0.9 * Math.sqrt(cls.L), over = Math.abs(st.u) - uh;
         const wave = over > 0 ? 0.02 * over * over * Math.sign(st.u) : 0;
         st.u += (F.Fu + M.u - cls.c1 * st.u - cls.c2 * st.u * Math.abs(st.u) - wave) * h;
         st.v += (F.Fv + M.v - 10 * (cls.c1 * st.v + cls.c2 * st.v * Math.abs(st.v))) * h;
-        // wheel > 0 (clockwise) → the bow goes to starboard → yaw decreases
-        st.r += (-cls.kRud * delta * st.u * Math.abs(st.u) + F.N + M.r - cls.yawD1 * st.r) * h;
+        // wheel > 0 (clockwise) → the bow goes to starboard → yaw decreases. The rudder turns the ship
+        // towards a rate u·δ/turnR (the same turning circle at any speed, like a real hull), the yaw
+        // follows it with inertia — quicker the faster she goes; amidships the yaw dies out: she holds her course
+        const want = -st.u * (delta / RUDDER_MAX) / cls.turnR;
+        const follow = cls.yawD1 * (1 + Math.abs(st.u) / 4);
+        st.r += ((want - st.r) * follow + F.N + M.r) * h;
         if (st.forced) {
             if (st.forced.u != null) st.u = st.forced.u;
             if (st.forced.r != null) st.r = st.forced.r;
