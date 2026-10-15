@@ -27,6 +27,8 @@ export class Effects {
         this.shards = new ParticlePool(scene, { geometry: new THREE.ConeGeometry(0.4, 1, 4), capacity: 500, transparent: true, gravity: -9.8, ground, friction: 0.5 });
         this.debris = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 1600, lit: true, gravity: -22, ground, bounce: 0.25, friction: 0.6 });
         this.smoke = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 700, transparent: true, depthWrite: false });
+        // broken planks of a ship (a long thin board: the same material as the debris — no new shader)
+        this.planks = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 0.1, 0.22), capacity: 240, lit: true, gravity: -16, ground, bounce: 0.2, friction: 0.5 });
         this.bolts = new SegmentPool(scene, { capacity: 240, radius: 0.15, color: 0xaaddff });
 
         this.iceBeams = [0, 1, 2, 3].map(() => new CurvedBeam(scene));
@@ -222,6 +224,29 @@ export class Effects {
     }
 
     /**
+     * A ship's side or deck torn open at `p`: broken boards, splinters and dust thrown out along
+     * `dir` (out of the hull), `n` boards (pooled: no garbage, capped by the pools).
+     */
+    shipBreak(p, dir, n = 24) {
+        for (let i = 0; i < n; i++) {
+            const sp = 6 + Math.random() * 16;
+            this.planks.spawn(p.x + (Math.random() - 0.5) * 2.5, p.y + (Math.random() - 0.5) * 1.5, p.z + (Math.random() - 0.5) * 2.5,
+                dir.x * sp + (Math.random() - 0.5) * 9, Math.abs(dir.y) * sp + 4 + Math.random() * 9, dir.z * sp + (Math.random() - 0.5) * 9,
+                i % 3 ? 0x7a4e2a : 0x5a3a20, 0.8 + Math.random() * 1.8, 3 + Math.random() * 2, { shrink: 0.05, fade: false, spin: 9 });
+        }
+        for (let i = 0; i < n * 2; i++) {
+            this.debris.spawn(p.x + (Math.random() - 0.5) * 2, p.y + (Math.random() - 0.5) * 1.5, p.z + (Math.random() - 0.5) * 2,
+                dir.x * 12 + (Math.random() - 0.5) * 12, 5 + Math.random() * 10, dir.z * 12 + (Math.random() - 0.5) * 12,
+                i % 2 ? 0xd1a468 : 0x8a5a33, 0.12 + Math.random() * 0.18, 2 + Math.random() * 1.5, { shrink: 0.08, fade: false, spin: 14 });
+        }
+        for (let i = 0; i < n; i++) {
+            this.smoke.spawn(p.x + (Math.random() - 0.5) * 3, p.y + Math.random() * 2, p.z + (Math.random() - 0.5) * 3,
+                dir.x * 2 + (Math.random() - 0.5) * 2, 2 + Math.random() * 3, dir.z * 2 + (Math.random() - 0.5) * 2,
+                i % 2 ? 0x4a4440 : 0x6e6660, 1.4 + Math.random() * 1.8, 2.5 + Math.random() * 2, { shrink: -0.4, spin: 1 });
+        }
+    }
+
+    /**
      * @param {number} [power] 1 = Bombardo, 3 = Bombardo Maxima (bigger, brighter, a shock wave)
      */
     explosion(center, radius, power = 1) {
@@ -337,6 +362,7 @@ export class Effects {
         this.sand.update(dt);
         this.shards.update(dt);
         this.debris.update(dt);
+        this.planks.update(dt);
         this.smoke.update(dt);
         this.bolts.update(dt);
         this._updateBlood(dt);
@@ -357,7 +383,7 @@ export class Effects {
     }
 
     clear() {
-        for (const p of [this.sparks, this.glow, this.sand, this.shards, this.debris, this.smoke]) p.clear();
+        for (const p of [this.sparks, this.glow, this.sand, this.shards, this.debris, this.planks, this.smoke]) p.clear();
         this.bolts.clear();
         for (const b of this.iceBeams) this.releaseIceBeam(b);
         for (const s of this.straight) { s.life = 0; s.mesh.visible = false; }

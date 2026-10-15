@@ -189,6 +189,12 @@ test('«Circle Attack» and «Inspirius»: their waves reach every creature; the
     assert.ok(DANGERS.circle?.ru && DANGERS.inspirius?.ru);
     assert.match(src('src/game/CircleAttack.js'), /castleLife\?\.alarm\(d\.p, 'circle'/);
     assert.match(src('src/game/Inspirius.js'), /castleLife\?\.alarm\(p, 'inspirius'/);
+    // the ball never flies through a creature or a ship: it touches every body (Duel._bodies) and every ship
+    const ins = src('src/game/Inspirius.js');
+    assert.match(body(ins, '    _touch(a, b, o) {'), /inspiriusBodies\(/);
+    assert.match(body(ins, '    _touch(a, b, o) {'), /ships\?\.segmentHit/);
+    assert.match(body(ins, 'export function inspiriusBodies('), /_bodies/);
+    assert.match(body(ins, '    explode(p, by) {'), /ships\?\.shock/);
     const net = src('src/net/NetSync.js');
     assert.match(net, /case 'circ'/);
     assert.match(net, /case 'insp'/);

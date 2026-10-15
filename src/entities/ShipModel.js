@@ -592,15 +592,23 @@ export class ShipModel {
         yield;
         // ------------------------------------------------------- masts and yards
         this.mastTops = [];
+        // (each mast above a stump over its deck is a mesh of its own, with its top, yards and flag
+        // pole: a mighty blow breaks it there and it falls over the side — breakMast)
+        const parts = new Map();
         for (const m of L.masts) {
             const h = m.top - m.base;
-            hull.cyl(0.95, 0.45, h, 0, m.base + h / 2, m.z, 0x6b4526, 0, 0, 0, 10);
+            const by = Math.min(m.top - 4, m.deck + 2.5);
+            const rb = Math.round((0.95 - 0.5 * (by - m.base) / h) * 100) / 100;
+            hull.cyl(0.95, rb, by - m.base, 0, (m.base + by) / 2, m.z, 0x6b4526, 0, 0, 0, 10);
+            const up = new Batch();
+            parts.set(m.id, { up, by, z: m.z });
+            up.cyl(rb, 0.45, m.top - by, 0, (m.top + by) / 2 - by, 0, 0x6b4526, 0, 0, 0, 10);
             // the tops (platforms)
             const ty = L.deck + (m.top - L.deck) * 0.6;
-            hull.cyl(2.2, 2.2, 0.35, 0, ty, m.z, DARK, 0, 0, 0, 10);
+            up.cyl(2.2, 2.2, 0.35, 0, ty - by, 0, DARK, 0, 0, 0, 10);
             this.mastTops.push({ id: m.id, y: m.top, z: m.z });
             for (const y of m.yards) {
-                if (y.kind === 'square') hull.cyl(0.32, 0.32, y.w, 0, y.y + 0.2, m.z - 0.9, 0x5a3a20, 0, 0, Math.PI / 2, 6);
+                if (y.kind === 'square') up.cyl(0.32, 0.32, y.w, 0, y.y + 0.2 - by, -0.9, 0x5a3a20, 0, 0, Math.PI / 2, 6);
             }
         }
         yield;
@@ -611,7 +619,9 @@ export class ShipModel {
                 // the yard along the sail's head (the cloth hangs from it), slung beside the mast
                 const a = sp.tack, b = sp.head;
                 const ang = Math.atan2(b.y - a.y, b.z - a.z);
-                hull.cyl(0.28, 0.2, sp.w + 1.2, a.x, (a.y + b.y) / 2 + 0.25, (a.z + b.z) / 2, 0x5a3a20, Math.PI / 2 - ang, 0, 0, 6);
+                const pt = parts.get(sp.mast);
+                if (pt) pt.up.cyl(0.28, 0.2, sp.w + 1.2, a.x, (a.y + b.y) / 2 + 0.25 - pt.by, (a.z + b.z) / 2 - pt.z, 0x5a3a20, Math.PI / 2 - ang, 0, 0, 6);
+                else hull.cyl(0.28, 0.2, sp.w + 1.2, a.x, (a.y + b.y) / 2 + 0.25, (a.z + b.z) / 2, 0x5a3a20, Math.PI / 2 - ang, 0, 0, 6);
             }
             sail.setState(0, 0, 1, 0, 0);
             this.group.add(sail.group);
@@ -620,7 +630,10 @@ export class ShipModel {
         yield;
         // ---------------------------------------------------------- rigging
         const lines = [];
+        const mastLines = new Map(); // mast id → [[from, to) in `lines`] (they fall with it)
+        const mark = (id, from) => { const a = mastLines.get(id) || []; a.push([from, lines.length]); mastLines.set(id, a); };
         for (const m of L.masts) {
+            const from = lines.length;
             const topY = m.top - 2;
             for (const s of [1, -1]) {
                 for (let k = 0; k < 6; k++) {
@@ -636,12 +649,16 @@ export class ShipModel {
                     lines.push(s * w0, y, m.z - 2.5 + 2.5 * t, s * w5, y, m.z + 2.5 - 2.5 * t);
                 }
             }
+            mark(m.id, from);
         }
         // stays: from each mast top forward
         for (let i = 0; i < L.masts.length; i++) {
             const m = L.masts[i];
             const to = i === 0 ? { y: L.deck + 2, z: -L.L / 2 - L.L * 0.2 } : { y: L.deck + (L.masts[i - 1].top - L.deck) * 0.6, z: L.masts[i - 1].z };
+            const from = lines.length;
             lines.push(0, m.top - 1, m.z, 0, to.y, to.z);
+            mark(m.id, from);
+            if (i > 0) mark(L.masts[i - 1].id, from);
         }
         // the rope ladders at the gangways
         for (const ld of L.ladders) {
@@ -651,6 +668,7 @@ export class ShipModel {
         const lg = new THREE.BufferGeometry();
         lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
         this.rigging = new THREE.LineSegments(lg, S.rope);
+        this._mastLines = mastLines;
         this.near.add(this.rigging);
 
         yield;
@@ -745,9 +763,11 @@ export class ShipModel {
             fg.translate(2.25, 0, 0);
             const flag = new THREE.Mesh(fg, new THREE.MeshLambertMaterial({ color: this.color, side: THREE.DoubleSide }));
             flag.position.set(0, m.top + 1.2, m.z);
-            hull.cyl(0.08, 0.08, 2.6, 0, m.top + 1.0, m.z, DARK);
+            const pt = parts.get(m.id);
+            if (pt) pt.up.cyl(0.08, 0.08, 2.6, 0, m.top + 1.0 - pt.by, 0, DARK);
+            else hull.cyl(0.08, 0.08, 2.6, 0, m.top + 1.0, m.z, DARK);
             this.group.add(flag);
-            this.flags.push({ mesh: flag, base: fg.attributes.position.array.slice() });
+            this.flags.push({ mesh: flag, base: fg.attributes.position.array.slice(), mast: m.id });
         }
         // stern lanterns
         for (const s of [-1, 1]) {
@@ -758,6 +778,18 @@ export class ShipModel {
         this.glow = new THREE.Mesh(glow.build(), S.glass);
         this.group.add(this.glow);
 
+        // the masts above their stumps (each turns about its break when it falls)
+        this.masts = new Map();
+        for (const [id, pt] of parts) {
+            const pivot = new THREE.Group();
+            pivot.position.set(0, pt.by, pt.z);
+            const mesh = new THREE.Mesh(pt.up.build(), S.solid);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            pivot.add(mesh);
+            this.group.add(pivot);
+            this.masts.set(id, { pivot, mesh, by: pt.by, z: pt.z, broken: false, fall: null });
+        }
         const hullMesh = new THREE.Mesh(hull.build(), S.solid);
         hullMesh.castShadow = true;
         hullMesh.receiveShadow = true;
@@ -773,6 +805,55 @@ export class ShipModel {
         // holes (Bombardo, cannonballs): dark patches added at run time
         this.holes = new THREE.Group();
         this.group.add(this.holes);
+    }
+
+    /**
+     * A mast broken at its stump: it falls over the side `side` (+1 starboard, −1 port) with its
+     * yards, sails and flag, its rigging gone slack (`now`: already down — loading, waking).
+     */
+    breakMast(id, side = 1, now = false) {
+        const M = this.masts?.get(id);
+        if (!M || M.broken) return false;
+        M.broken = true;
+        const pv = M.pivot;
+        // its sails and flag go with it
+        for (const [sid, sail] of this.sails) {
+            if (this.L.sails.find((x) => x.id === sid)?.mast !== id) continue;
+            pv.add(sail.group);
+            sail.group.position.set(0, -M.by, -M.z);
+        }
+        for (const f of this.flags || []) if (f.mast === id) { pv.add(f.mesh); f.mesh.position.set(0, f.mesh.position.y - M.by, 0); }
+        // its rigging: the lines fall slack (drawn as nothing)
+        const arr = this.rigging?.geometry.attributes.position;
+        for (const [a, b] of this._mastLines?.get(id) || []) {
+            for (let i = a; i < b; i += 3) { arr.array[i] = 0; arr.array[i + 1] = M.by; arr.array[i + 2] = M.z; }
+        }
+        if (arr) arr.needsUpdate = true;
+        if (now) { pv.visible = false; return true; }
+        M.fall = { side: side >= 0 ? 1 : -1, ang: 0, w: 0.15, t: 0, twist: (Math.random() - 0.5) * 0.4 };
+        this.falling = (this.falling || 0) + 1;
+        return true;
+    }
+
+    /** Broken masts falling: over the side, then down into the sea. */
+    stepMasts(dt) {
+        if (!this.falling) return;
+        for (const M of this.masts.values()) {
+            const f = M.fall;
+            if (!f) continue;
+            f.t += dt;
+            if (f.ang < 1.7) {
+                // it tips slowly, then faster and faster (its weight swings it down)
+                f.w += (0.9 + 3.2 * Math.sin(Math.max(0.05, f.ang))) * dt;
+                f.ang = Math.min(1.7, f.ang + f.w * dt);
+                M.pivot.rotation.set(f.twist * f.ang, 0, -f.side * f.ang);
+            } else {
+                // in the water: it sinks away
+                M.pivot.position.y -= dt * 0.8;
+                M.pivot.position.x += f.side * dt * 0.6;
+            }
+            if (f.t > 9) { M.pivot.visible = false; M.fall = null; this.falling--; }
+        }
     }
 
     setPose(pose) {

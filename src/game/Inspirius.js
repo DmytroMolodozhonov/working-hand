@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import { keepIn } from './HouseWards.js';
 import { isCastleBlock, BLOCK, BASE_COLORS } from '../world/Terrain.js';
 import { eachBody, hitBody, throwBody, ruinBand } from './MagicWave.js';
+import { segmentToSegment } from './Duel.js';
 
 export const INSP = {
     NAME: 'Inspirius',
@@ -39,16 +40,27 @@ export const INSP = {
     SHOCK_T: 1.6, // s the shock wave takes to reach HARM_R
     BAND: 3, // m: the ruin goes in bands this wide (one a frame: a thin band — a light frame)
     SCROLL_MANA: 500, // its scroll is found only by one with this mana maximum
+    ORB_R: 0.55, // m: the ball touches a body this far from it (its glowing skin)
 };
+
+/**
+ * Every body the ball can touch (the caster `skip` never): players, zombies, castle people,
+ * sailors, animals, living trees, book-birds, the spider, dragons, phoenixes — the duel's
+ * capsules (Duel._bodies), the same bodies every spell charge hits.
+ */
+export function inspiriusBodies(g, skip = null) {
+    return g.duel?._bodies ? g.duel._bodies(skip) : [];
+}
 
 /** Who and what it touches — and how (CLAUDE.md). «Не действует» is written too, with why. */
 export const INSPIRIUS_TARGETS = {
+    body: 'шар НЕ проходит сквозь существ: коснувшись тела (игрока, зомби, жителя, моряка, животного, паука, дракона, феникса, ожившего дерева, книги-птицы — их капсулы из Duel._bodies) он взрывается прямо на нём: этому существу −100 и самый сильный отброс',
     me: 'сам волшебник — тоже: взорвать шар рядом с собой — получить −100 (щиты уменьшают, как у других)',
     players: 'все игроки: −100 / −50 / −25 по расстоянию (20 / 40 / 60 м), сбивает с ног и отбрасывает (ближе — дальше); щит «Protection» — половина, купол «Protection Maxima» — четверть; каждый компьютер решает за своего игрока',
     zombies: '−100 / −50 / −25, отбрасывает',
     castlePeople: 'жители, рыцари, король, волшебники: −100 / −50 / −25, отбрасывает; самая сильная опасность — все бегут и прячутся (castleLife.alarm «inspirius»)',
     animals: '−100 / −50 / −25, отбрасывает',
-    sailors: 'моряки (ships.crew): −100 / −50 / −25, отбрасывает, за борт',
+    sailors: 'моряки (ships.crew): −100 / −50 / −25, сбивает с ног, отбрасывает, за борт (в координатах корабля — CreatureImpact)',
     spider: 'гигантский паук: −100 / −50 / −25; слишком тяжёлый, чтобы улететь',
     dragons: 'дракон: −100 / −50 / −25 (это не огонь, а сама магия); только качается',
     phoenixes: 'феникс: −100 / −50 / −25 (не огонь), отбрасывает',
@@ -58,7 +70,7 @@ export const INSPIRIUS_TARGETS = {
     houseSphere: 'сферу «Protection House» ломает сразу (сильнее «Total Destruction»)',
     fire: 'по краю ямы загораются деревья и дома',
     water: 'яма у реки, озера или моря заливается водой; шар, коснувшись воды, взрывается',
-    ships: 'корабль рядом — страшный удар (как десяток «Бомбардо Максима»), загорается',
+    ships: 'шар не пролетает сквозь корабль: взрывается о корпус, палубу, мачту или открытый парус (Ships.segmentHit). Прямое попадание — борт разорван в месте удара, ниже ватерлинии ещё пробоины, вода хлещет внутрь: корабль кренится на пробитый борт и тонет (обычное затопление и гибель корабля); мачта рядом ломается и падает за борт с парусами; паруса вокруг — в клочья; палуба горит; летят доски, щепки, дым. Дальше (до 40 м) — урон, крен и толчок от взрыва, рваные паруса. Решает хост (shipev), видят все',
     items: 'вещи на земле разлетаются',
     shield: 'щит «Protection» шар не останавливает — взрыв за ним всё равно',
 };
@@ -257,7 +269,12 @@ export class Inspirius {
         this._orbLook(o, dt, prev);
     }
 
-    /** Did the ball touch anything between `a` and `b`? @returns the point, or null */
+    /**
+     * Did the ball touch anything between `a` and `b`? The first thing on its way: the ground, a
+     * wall, a tree, water, a ship (its hull, deck, a mast or a sail — Ships.segmentHit) or a body
+     * (every creature and player as its capsule — Duel._bodies; never through one: it bursts on it).
+     * @returns the point, or null
+     */
     _touch(a, b, o) {
         const g = this.game;
         const seg = _v.subVectors(b, a), len = seg.length();
@@ -266,18 +283,28 @@ export class Inspirius {
         // a house's sphere of protection: it bursts on it
         const ward = g.wards?.segmentHit?.(a, b);
         if (ward) return ward;
+        let best = 2; // (0…1 along a→b)
         // the ground, a wall, a tree, a roof
         const T = g.world?.terrain;
         const hit = T?.raycast?.(a, dir, len + 0.3);
-        if (hit) return new THREE.Vector3(hit.x, hit.y, hit.z);
+        if (hit) best = Math.min(1, Math.hypot(hit.x - a.x, hit.y - a.y, hit.z - a.z) / len);
         // water
         const data = T?.data;
-        if (data && data.get(Math.round(b.x), Math.round(b.y + 1), Math.round(b.z)) === BLOCK.WATER) return b.clone();
-        // a creature or a player
-        let best = null;
-        eachBody(g, (kind, c, q) => { if (!best && q.distanceTo(b) < (kind === 'dragon' ? 4 : 1.4)) best = b.clone(); });
-        if (best) return best;
-        for (const r of g.remotes?.values() || []) if (r.position && _b.copy(r.position).setY(r.position.y - 0.8).distanceTo(b) < 1.3) return b.clone();
+        if (best > 1 && data && data.get(Math.round(b.x), Math.round(b.y + 1), Math.round(b.z)) === BLOCK.WATER) best = 1;
+        // a ship: hull, deck, mast, sail
+        const sh = g.ships?.segmentHit?.(a, b);
+        if (sh && sh.s < best) best = sh.s;
+        // a creature or a player: it does not go through a body — it bursts on it
+        const bodies = inspiriusBodies(g, o?.mine ? g.duel?.me : o?.by);
+        const c = {};
+        for (const body of bodies) {
+            segmentToSegment(a, b, body.a, body.b, c);
+            const R = body.r + INSP.ORB_R;
+            if (c.dist > R) continue;
+            const s0 = Math.max(0, c.s - Math.sqrt(R * R - c.dist * c.dist) / len); // (where it first touches it)
+            if (s0 < best) best = s0;
+        }
+        if (best <= 1) return new THREE.Vector3().copy(a).addScaledVector(seg, best);
         // the ground under it as the flat world knows it (no terrain: a map)
         const gy = g.collision?.surfaceY?.(b.x, b.z);
         if (!T && gy != null && b.y <= gy + 0.2) return new THREE.Vector3(b.x, gy, b.z);
@@ -322,9 +349,9 @@ export class Inspirius {
         }
         if (g.authority) {
             g.castleLife?.alarm(p, 'inspirius', by, INSP.HARM_R); // (the strongest danger there is)
-            g.ships?.blast?.(p, INSP.RUIN_R * 0.6, 9, by);
             g.dragons?.noise?.(p, by);
         }
+        g.ships?.shock?.(p, by); // (every computer: rocked, the wood torn out; the host — holes, masts, sails)
         g.books?.hitAt?.(p, INSP.RUIN_R, by);
         g.houses?.hitAt?.(p, INSP.RUIN_R);
         g.boards?.blast?.(p, INSP.RUIN_R * 0.5, 9);

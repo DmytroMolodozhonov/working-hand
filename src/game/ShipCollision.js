@@ -79,6 +79,7 @@ function pushOut(p, r, x0, x1, z0, z1) {
 export class ShipCollider {
     constructor(layout) {
         this.L = layout;
+        this.solids = null; // (its own solids once a mast is broken off: the shared layout's are kept)
         this.pose = new ShipPose();
         this.aabb = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
         this.flooded = false;
@@ -193,7 +194,7 @@ export class ShipCollider {
         }
         this._side.set(pos, side);
         // masts, bulkheads, the wheel, guns, chests, the stairs' undersides (a step of 0.6 is climbed)
-        const S = L.solids;
+        const S = (this.solids || L.solids);
         const top = l.y + h;
         for (let pass = 0; pass < 2; pass++) {
             let moved = false;
@@ -223,7 +224,7 @@ export class ShipCollider {
         if (l.y < keel) return false;
         const top = L.railTopAt(l.z);
         if (l.y > top + 0.05) {
-            for (const b of L.solids) if (b.kind !== 'helmspace' && l.x >= b.x0 && l.x <= b.x1 && l.y >= b.y0 && l.y <= b.y1 && l.z >= b.z0 && l.z <= b.z1) return true;
+            for (const b of (this.solids || L.solids)) if (b.kind !== 'helmspace' && l.x >= b.x0 && l.x <= b.x1 && l.y >= b.y0 && l.y <= b.y1 && l.z >= b.z0 && l.z <= b.z1) return true;
             return false;
         }
         const half = hullHalfWidth(L, l.z, Math.max(keel + 0.01, Math.min(l.y, L.deck)));
@@ -234,7 +235,7 @@ export class ShipCollider {
         const lowest = L.floors.reduce((m, f) => Math.min(m, f.y), Infinity);
         if (l.y < lowest - 0.4 && !this.flooded) return true;
         for (const f of L.floors) if (l.y <= f.y && l.y >= f.y - 0.4 && floorAt(L, l.x, l.z, f.y) === f.y) return true;
-        for (const b of L.solids) if (b.kind !== 'helmspace' && l.x >= b.x0 && l.x <= b.x1 && l.y >= b.y0 && l.y <= b.y1 && l.z >= b.z0 && l.z <= b.z1) return true;
+        for (const b of (this.solids || L.solids)) if (b.kind !== 'helmspace' && l.x >= b.x0 && l.x <= b.x1 && l.y >= b.y0 && l.y <= b.y1 && l.z >= b.z0 && l.z <= b.z1) return true;
         return false;
     }
 
@@ -263,7 +264,7 @@ export class ShipCollider {
             const d = f + r - l.y;
             if (d > best && d < r * 2 + 0.2) { best = d; nx = 0; ny = 1; nz = 0; }
         }
-        for (const b of L.solids) {
+        for (const b of (this.solids || L.solids)) {
             if (b.kind === 'helmspace') continue; // (room for the body only: hands and blades pass)
             if (l.x < b.x0 - r || l.x > b.x1 + r || l.y < b.y0 - r || l.y > b.y1 + r || l.z < b.z0 - r || l.z > b.z1 + r) continue;
             const cx = Math.max(b.x0, Math.min(b.x1, l.x)), cy = Math.max(b.y0, Math.min(b.y1, l.y)), cz = Math.max(b.z0, Math.min(b.z1, l.z));

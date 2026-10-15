@@ -638,6 +638,41 @@ test('ships: a Bombardo cast at the deck breaks through it, the sea pours in, th
     await page.close();
 });
 
+test('ships: «Inspirius» flown at a mast bursts on it (not through the ship): the mast falls, the hull is torn open, she goes down', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await shipAtSea(page, 'fluyt', 'insp-ship', 0);
+    const r = await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship, T = window.__zns.THREE, L = s.layout;
+        const m = L.masts[0];
+        // the ball comes in from the starboard beam, a little over the deck, at the foremast
+        const o = window.__w(40, L.deck + 3, m.z), t = window.__w(0, L.deck + 3, m.z);
+        g.character.group.position.set(o.x + 60, o.y + 20, o.z);
+        g.ships.wake(s); // (it slept while the player was far)
+        const orb = g.inspirius._launch(new T.Vector3(o.x, o.y, o.z), new T.Vector3(t.x - o.x, t.y - o.y, t.z - o.z), g.localId, false);
+        orb.mine = true; // (flown by this computer, unsteered)
+        let at = null;
+        const ex = g.inspirius.explode.bind(g.inspirius);
+        g.inspirius.explode = (p, by) => { at = p.clone(); return ex(p, by); };
+        for (let i = 0; i < 200 && !at; i++) g.inspirius.update(0.05);
+        s.pose.toLocal(at.x, at.y, at.z, window.__l = {});
+        return { half: L.B / 2, at: window.__l, mast: m.id, broken: [...s.broken], holes: s.holes.length, hp: s.hp, model: s.model?.masts.get(m.id)?.broken };
+    });
+    assert.ok(r.at.x > -1 && r.at.x < r.half + 1, `it burst on the ship's near side, not beyond it (local x ${r.at.x.toFixed(1)})`);
+    assert.ok(r.broken.includes(r.mast) && r.model, 'the mast is broken and falls');
+    assert.ok(r.holes >= 3 && r.hp === 0, `the hull torn open: ${r.holes} holes`);
+    const sink = await page.evaluate(() => {
+        const g = window.__zns.game, s = window.__ship;
+        let t = 0;
+        while (s.state !== 'wreck' && t < 200) { g.ships._simulate(s, 0.1); g.ships._place(s); s.model?.stepMasts(0.1); t += 0.1; }
+        return { t, state: s.state };
+    });
+    assert.equal(sink.state, 'wreck', 'she goes down');
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
 test('ships: a wand let fall on the deck of a moving, turning ship lands where it fell and sails with her', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');

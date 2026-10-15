@@ -63,6 +63,17 @@ const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 /** A ship's state for the network: [id, x, z, yaw, u, v, r, wheel, sinkY, flags, hp, flood100, roll, pitch, liftY]. */
+/** «Inspirius» and the ships (Ships.shock / inspiriusHarm). */
+export const INSP_SHIP = {
+    REACH: 40, // m from the hull: rocked, harmed
+    DIRECT: 3, // m: a direct hit
+    HOLE: 9, // m: closer — the hull is torn open
+    BREACH: 6, // the breach's blast radius (_breach: down to the water)
+    HOLES: 3, // holes below the water line round a direct hit
+    MAST_R: 10, // m: a mast this near the blast breaks
+    SAIL_R: 14, // m: sails torn
+};
+
 export function packShip(s) {
     const st = s.st;
     const flags = (s.state === 'moored' ? 1 : 0) | (s.state === 'sinking' ? 2 : 0) | (s.state === 'wreck' ? 4 : 0) | (s.plank?.state === 'laid' ? 8 : 0) | (s.plank?.state === 'fallen' ? 16 : 0) | (s.flooded ? 32 : 0) | (s.blow ? 64 : 0);
@@ -122,7 +133,7 @@ export class Ships {
             st, pose: new ShipPose(), collider: new ShipCollider(layout), model: null,
             state: opts.state || (opts.berth ? 'moored' : 'free'),
             hp: C.hp, flood: 0, sinkY: 0, sinkRoll: 0, sinkPitch: 0, flooded: false, holes: [], fires: [],
-            sails: layout.sails.map((sp) => ({ ...sp, open: 0, target: 0, fill: 0, side: 1, gust: 0, burnt: 0 })),
+            sails: layout.sails.map((sp) => ({ ...sp, open: 0, target: 0, fill: 0, side: 1, gust: 0, burnt: 0 })), broken: new Set(), // (masts broken off)
             helmBy: null, hostile: new Map(), owner: null, ownerName: null, crewKilled: new Set(),
             lines: [], plank: null, chests: [], awake: false, changed: false, lastBy: null,
             guns: new Map(layout.cannons.map((g) => [g.id, { loaded: false, fuse: 0, recoil: 0 }])),
@@ -164,6 +175,7 @@ export class Ships {
             s.preReady = false;
             g.scene.add(s.model.group);
             for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
+            for (const id of s.broken) s.model.breakMast(id, 1, true);
         }
         s.model.group.visible = true;
         g.collision.addMover(s.collider);
@@ -418,6 +430,7 @@ export class Ships {
                 }
                 this._fireFx(s, dt);
                 this._leakFx(s, dt, t, cam);
+                s.model.stepMasts(dt);
             }
             this._placeChests(s);
             if (s.plank?.fall) this._plankFallFx(s, dt);
@@ -1310,6 +1323,184 @@ export class Ships {
         if (t > 10) { this.game.scene.remove(f.m); f.m.geometry.dispose(); s.plank.mesh = null; s.plank.fall = null; s.plank.state = 'gone'; }
     }
 
+    // ============================================================ «Inspirius»
+    /**
+     * What of a ship the segment a→b first touches: its hull or deck, a mast, an open sail
+     * (Inspirius's ball bursts there — it never flies through a ship).
+     * @returns {{ship, part: 'hull'|'mast'|'sail', id, s}|null} (s: 0…1 along a→b)
+     */
+    segmentHit(a, b) {
+        if (!this.awake.size) return null;
+        const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+        const n = Math.max(1, Math.ceil(len / 0.3));
+        for (let i = 0; i <= n; i++) {
+            const k = i / n;
+            const x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k, z = a.z + (b.z - a.z) * k;
+            for (const s of this.awake) {
+                const L = s.layout;
+                if (Math.hypot(x - s.pose.x, z - s.pose.z) > L.L / 2 + L.B + 4) continue;
+                if (s.state === 'wreck' && s.flooded) continue; // (under the water: the water stops it)
+                s.pose.toLocal(x, y, z, _l);
+                for (const m of L.masts) {
+                    if (s.broken.has(m.id)) continue;
+                    if (Math.hypot(_l.x, _l.z - m.z) < 1.1 && _l.y > m.deck && _l.y < m.top + 2.5) return { ship: s, part: 'mast', id: m.id, s: k };
+                }
+                for (const sl of s.sails) {
+                    if (sl.open < 0.3 || sl.burnt >= 1) continue;
+                    const c = sl.center;
+                    const inSail = sl.kind === 'lateen'
+                        ? Math.abs(_l.x - c.x) < 1.2 && _l.z > Math.min(sl.tack.z, sl.clew.z) - 0.5 && _l.z < sl.head.z + 0.5 && _l.y > sl.tack.y - 0.5 && _l.y < sl.head.y + 0.5
+                        : Math.abs(_l.x - c.x) < sl.w / 2 && Math.abs(_l.y - c.y) < sl.h / 2 && Math.abs(_l.z - c.z) < 1.2;
+                    if (inSail) return { ship: s, part: 'sail', id: sl.id, s: k };
+                }
+                if (Math.abs(_l.z) > L.L / 2 + 0.6) continue;
+                if (Math.abs(_l.x) > hullHalfWidth(L, _l.z, Math.max(-L.draft + 0.1, Math.min(L.deck, _l.y))) + 0.4) continue;
+                if (_l.y < keelY(L, _l.z) - 0.3 || _l.y > L.railTopAt(_l.z) + 0.6) continue;
+                return { ship: s, part: 'hull', id: null, s: k };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * «Inspirius» bursts at `pos` — every computer: the ships near it are rocked and heel away
+     * from it, and where it struck the wood is torn out (boards, splinters, smoke). The host
+     * decides the harm (inspiriusHarm) and sends the holes, the masts and the sails.
+     */
+    shock(pos, by) {
+        const g = this.game;
+        for (const s of this.awake) {
+            s.pose.toLocal(pos.x, pos.y, pos.z, _l);
+            const L = s.layout;
+            const d = this._hullDist(s, _l);
+            if (d.dist > INSP_SHIP.REACH) continue;
+            const k = 1 - d.dist / INSP_SHIP.REACH;
+            const st = s.st;
+            // it heels away and heaves (the waves' response settles it back): the near side lifts
+            const sx = _l.x >= 0 ? 1 : -1, sz = Math.max(-1, Math.min(1, _l.z / (L.L / 2)));
+            st.roll = (st.roll || 0) + sx * 0.42 * k;
+            st.pitch = (st.pitch || 0) + sz * 0.12 * k;
+            st.heave = (st.heave || 0) + 1.6 * k;
+            if (this.auth) {
+                // and is shoved away (a heavy ship less)
+                const ll = Math.hypot(_l.x, _l.z) || 1, push = 6 * k * Math.min(1.5, 20 / L.L);
+                st.u += (_l.z / ll) * push;
+                st.v += (-_l.x / ll) * push;
+                s.changed = true;
+            }
+            // the wood torn out where it struck (each computer its own boards and smoke)
+            if (d.dist < 12 && g.fx?.shipBreak) {
+                s.pose.toWorld(d.x, d.y, d.z, _o);
+                const at = new THREE.Vector3(_o.x, _o.y, _o.z);
+                const out = new THREE.Vector3(at.x - s.pose.x, 0, at.z - s.pose.z);
+                if (out.lengthSq() < 1e-6) out.set(1, 0, 0);
+                out.normalize().setY(0.35);
+                g.fx.shipBreak(at, out, Math.round(14 + 26 * k));
+            }
+        }
+        if (this.auth) this.inspiriusHarm(pos, by);
+    }
+
+    /** The nearest point of a ship's hull to a ship-local point (ship-local) and how far it is. */
+    _hullDist(s, l) {
+        const L = s.layout;
+        const z = Math.max(-L.L / 2, Math.min(L.L / 2, l.z));
+        const yy = Math.max(-L.draft + 0.1, Math.min(L.deck, l.y));
+        const half = hullHalfWidth(L, z, yy);
+        const top = L.railTopAt(z), keel = keelY(L, z);
+        const x = Math.max(-half, Math.min(half, l.x)), y = Math.max(keel, Math.min(top, l.y));
+        const dx = Math.max(0, Math.abs(l.x) - half), dy = Math.max(0, l.y - top, keel - l.y), dz = Math.abs(l.z - z);
+        return { dist: Math.hypot(dx, dy, dz), x: Math.abs(x) < half - 0.1 && l.y > L.deck - 0.5 ? x : (l.x >= 0 ? 1 : -1) * half, y, z, half };
+    }
+
+    /**
+     * (host) What «Inspirius» does to the ships (CLAUDE.md «на кого и на что»): struck straight
+     * (or within a few metres) — the hull torn open where it hit and holes below the water
+     * line round it (the sea pours in: the ship lists that way and goes down — the sinking we
+     * have), a mast near the blast breaks and falls over the side, the sails round it are torn
+     * to rags, fire on deck; further — harm, a hole if close, torn sails. Sailors: MagicWave
+     * (thrown, overboard). Everything is sent to the others (shipev).
+     */
+    inspiriusHarm(pos, casterId) {
+        if (!this.auth) return;
+        const g = this.game;
+        const by = casterId === 'local' ? g.localId : casterId;
+        for (const s of this.awake) {
+            if (s.state === 'wreck') continue;
+            s.pose.toLocal(pos.x, pos.y, pos.z, _l);
+            const l = { x: _l.x, y: _l.y, z: _l.z };
+            const L = s.layout;
+            const d = this._hullDist(s, l);
+            if (d.dist > INSP_SHIP.REACH) continue;
+            const k = 1 - d.dist / INSP_SHIP.REACH;
+            const direct = d.dist < INSP_SHIP.DIRECT;
+            this.damage(s, Math.round(s.cls.hp * (direct ? 2 : 1.1 * k * k)), by);
+            // the hull torn open
+            if (direct || d.dist < INSP_SHIP.HOLE) {
+                this._breach(s, l, INSP_SHIP.BREACH, d.half, by);
+                const side = l.x >= 0 ? 1 : -1;
+                const n = direct ? INSP_SHIP.HOLES : 1;
+                for (let i = 0; i < n; i++) {
+                    const lz = Math.max(-L.L / 2 + 1.5, Math.min(L.L / 2 - 1.5, d.z + (i - (n - 1) / 2) * 3.2 + (Math.random() - 0.5)));
+                    this.hole(s, side, -0.2 - Math.random() * 0.9, lz, (direct ? 2.6 : 1.8) + Math.random() * 0.9, by);
+                }
+            }
+            // masts: the one struck, or near the blast, breaks and falls away from it
+            for (const m of L.masts) {
+                if (s.broken.has(m.id)) continue;
+                const ay = Math.max(m.deck, Math.min(m.top, l.y));
+                const dm = Math.hypot(l.x, l.z - m.z, l.y - ay);
+                if (dm < (direct ? INSP_SHIP.MAST_R : INSP_SHIP.MAST_R * 0.6)) this.breakMast(s, m.id, l.x >= 0 ? -1 : 1, by);
+            }
+            // the sails round it torn to rags
+            for (const sl of s.sails) {
+                if (sl.burnt >= 1) continue;
+                const c = sl.center;
+                if (Math.hypot(l.x - c.x, l.y - c.y, l.z - c.z) < INSP_SHIP.SAIL_R * (0.5 + k)) this.tearSail(s, sl);
+            }
+            if (direct || k > 0.6) this.ignite(s, Math.max(-d.half + 0.5, Math.min(d.half - 0.5, l.x)), layoutFloorAt(L, 0, d.z, l.y + 2) ?? L.deck, Math.max(-L.L / 2 + 2, Math.min(L.L / 2 - 2, d.z)), null, by);
+        }
+    }
+
+    /** (host) A sail torn to rags: it hangs useless (as a burnt one: no wind in it). */
+    tearSail(s, sl) {
+        if (sl.burnt >= 1) return;
+        sl.burnt = 1;
+        sl.target = 0;
+        s.changed = true;
+        this._event(s, { k: 'burnt', s: sl.id });
+    }
+
+    /** (host) A mast broken off: it falls over the side `side`; its sails are lost with it. */
+    breakMast(s, id, side, by = null) {
+        if (s.broken.has(id)) return;
+        this._mastDown(s, id, side);
+        this.damage(s, 20, by);
+        s.changed = true;
+        this._event(s, { k: 'mast', m: id, d: side });
+    }
+
+    /** Every computer: a mast goes down (its sails useless; the model falls). */
+    _mastDown(s, id, side) {
+        if (s.broken.has(id)) return;
+        s.broken.add(id);
+        for (const sl of s.sails) if (sl.mast === id) { sl.burnt = 1; sl.target = 0; }
+        s.model?.breakMast(id, side || 1);
+        this._cutMasts(s);
+        if (this._riderShip() === s) this.game.hud?.setVoice('🪓 Мачта сломана!', true);
+    }
+
+    /** The broken masts stand no higher than their stumps (the collider: nothing invisible in the way). */
+    _cutMasts(s) {
+        const L = s.layout;
+        if (!s.broken.size) { s.collider.solids = null; return; }
+        s.collider.solids = L.solids.map((b) => {
+            if (b.kind !== 'mast') return b;
+            const m = L.masts.find((x) => s.broken.has(x.id) && Math.abs(x.z - (b.z0 + b.z1) / 2) < 0.01);
+            return m ? { ...b, y1: Math.min(b.y1, Math.min(m.top - 4, m.deck + 2.5)) } : b;
+        });
+    }
+
     // =================================================================== hooks
     /** Cannon / port: a cannonball hits a ship at a world point (host). */
     cannonHit(s, p, dir, by) {
@@ -1448,6 +1639,7 @@ export class Ships {
                 if (Array.isArray(m.b)) s.sails.forEach((x, i) => { x.burnt = m.b[i] ?? x.burnt; });
                 break;
             case 'burnt': { const sl = s.sails.find((x) => x.id === m.s); if (sl) { sl.burnt = 1; sl.target = 0; } break; }
+            case 'mast': this._mastDown(s, m.m, m.d); break;
             case 'line': if (s.lines[m.i]) s.lines[m.i].state = m.s; break;
             case 'plank': if (m.s === 'fallen') this._plankFalls(s, false); break;
             case 'owner': s.owner = m.o; s.ownerName = m.n || null; s.hostile.clear(); if (m.o === this.game.localId) this.game.hud.setVoice(`⚓ Корабль «${s.name}» ваш!`, true); break;
@@ -1494,7 +1686,7 @@ export class Ships {
         return {
             id: s.id, cls: s.cls.id, x: r2(st.x), z: r2(st.z), yaw: r3(st.yaw), u: r2(st.u), wheel: r2(st.wheel),
             hp: Math.round(s.hp), flood: r3(s.flood), holes: s.holes.map((h) => [r2(h.lx), r2(h.ly), r2(h.lz), r2(h.r), h.deck ? 1 : 0]),
-            burnt: s.sails.filter((x) => x.burnt >= 1).map((x) => x.id), open: s.sails.filter((x) => x.target > 0).map((x) => x.id),
+            burnt: s.sails.filter((x) => x.burnt >= 1).map((x) => x.id), ...(s.broken.size ? { masts: [...s.broken] } : {}), open: s.sails.filter((x) => x.target > 0).map((x) => x.id),
             owner: s.owner, ownerName: s.ownerName, crewKilled: [...s.crewKilled], lines: s.lines.map((l) => l.state),
             plank: s.plank?.state || null, state: s.state, sink: s.state === 'sinking' || s.state === 'wreck' ? { y: r2(s.sinkY), roll: r3(s.sinkRoll), pitch: r3(s.sinkPitch), t: r2(s.sinkT || 0), side: s.listSide || 1 } : null,
             fires: s.fires.filter((f) => !f.sail).slice(0, 12).map((f) => [r2(f.lx), r2(f.ly), r2(f.lz), r2(f.k)]),
@@ -1522,6 +1714,9 @@ export class Ships {
         for (const h of s.holes) if (h.mesh) h.mesh.parent?.remove(h.mesh);
         s.holes = (sv.holes || []).map(([lx, ly, lz, r, dk]) => ({ lx, ly, lz, r, wy: 0, deck: !!dk }));
         if (s.model) for (const h of s.holes) h.mesh = s.model.addHole(h.lx, h.ly, h.lz, h.r, h.deck);
+        s.broken = new Set(Array.isArray(sv.masts) ? sv.masts : []);
+        if (s.model) for (const id of s.broken) s.model.breakMast(id, 1, true);
+        this._cutMasts(s);
         for (const x of s.sails) {
             x.burnt = (sv.burnt || []).includes(x.id) ? 1 : 0;
             x.target = x.open = (sv.open || []).includes(x.id) && x.burnt < 1 ? 1 : 0;
