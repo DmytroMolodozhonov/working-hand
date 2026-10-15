@@ -814,8 +814,10 @@ export class SoundManager {
         if (v.isPlaying) v.stop();
         v.gain.gain.cancelScheduledValues(this.context.currentTime);
         v.setBuffer(buf);
-        v.setRefDistance(14);
-        v.setVolume(1.1 * this.globalVolume);
+        // (louder than at first — the author: «it's quiet»: ~+4 dB, and loud as far as 26 m from the house;
+        // capped so the loudest setting never clips)
+        v.setRefDistance(26);
+        v.setVolume(Math.min(1.15, 1.8 * this.globalVolume));
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
