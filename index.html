@@ -111,13 +111,16 @@
 
     <div id="main-menu">
         <div class="menu-container">
-            <!-- the left column: the window's buttons, the name, the sections, the version — no strip on top -->
-            <aside class="menu-side">
+            <!-- the window's own bar: drags the window; its buttons on the right, as in Windows (✕ last) -->
+            <div class="menu-top">
                 <div class="win-controls" role="group" aria-label="Окно игры">
-                    <button id="win-close" class="win-btn win-close" title="Закрыть игру" aria-label="Закрыть игру">✕</button>
                     <button id="win-min" class="win-btn" title="Свернуть" aria-label="Свернуть">—</button>
                     <button id="win-full" class="win-btn" title="Во весь экран" aria-label="Во весь экран">⛶</button>
+                    <button id="win-close" class="win-btn win-close" title="Закрыть игру" aria-label="Закрыть игру">✕</button>
                 </div>
+            </div>
+            <!-- the left column: the name, the sections, the version -->
+            <aside class="menu-side">
                 <header class="brand">
                     <img class="brand-logo" src="assets/logo/logo-128.png" srcset="assets/logo/logo-256.png 2x" alt="" width="72" height="72">
                     <div class="brand-text">

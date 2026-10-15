@@ -97,7 +97,7 @@ export async function becomeAppWindow({ bar } = {}, doc = document) {
     appWindow = true;
     appFull = false;
     doc.documentElement.classList.add('app-window');
-    if (bar) dragBy(bar);
+    for (const b of [].concat(bar || [])) if (b) dragBy(b);
     // the game's full screen covers the taskbar only while the game is in front
     window.addEventListener('focus', () => { if (appFull) askServer('focus'); });
     window.addEventListener('blur', () => { if (appFull) askServer('blur'); });

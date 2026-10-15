@@ -18,17 +18,34 @@ page can ever be outside the visible area.
 Only the window whose title is exactly the game's name is ever touched (the app window; a
 browser with tabs has « - Google Chrome» in its title), and only for requests from this computer.
 Only the Python standard library.
+
+The strip on top that still showed (Windows 11): Windows draws its own frame of the window — the
+rounded corners, the thin border and the title bar's backdrop — and it did not keep to the cut, and
+the cut could be lost. So now:
+  - the page's place is taken from Chrome's own window over the page («Chrome_RenderWidgetHostHWND»,
+    exactly the page's rect) — the frame's size is only guessed when it is not there;
+  - Windows is told not to draw its frame for this window at all (no non-client rendering, no
+    rounded corners, no border, no backdrop);
+  - the cut is kept: every half second the window's cut is checked and put back if it was lost or no
+    longer is the page (the wanted cut and who made it are written on the window itself: only the
+    program that cut it last — the launcher's loading screen, then the game — keeps it).
 """
 
+import os
 import sys
+import threading
+import time
 
 GAME_TITLE = "Волшебство только начинается"
 ACTIONS = ("minimize", "close", "frameless", "fullscreen", "moveby", "focus", "blur")
+PAGE_CLASS = "Chrome_RenderWidgetHostHWND"  # (Chrome's / Edge's child window over the web page)
 
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
 HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
 
 _full = {"on": False}  # (the game is in full screen: kept on top while in front)
+_lock = threading.Lock()  # (a cut is never checked while it is being made)
+_keeper = {"thread": None}
 
 
 def _user32():
@@ -81,13 +98,35 @@ def frame_offsets(win, vis, inner_w, inner_h):
     return left, top, (wr - wl) - inner_w, (wb - wt) - inner_h
 
 
-def clip_layout(win, vis, inner_w, inner_h, target_w, target_h, area):
+def page_offsets(win, page, inner_w, inner_h):
+    """The same, exactly, from Chrome's window over the page (`page`: its rect on the screen) — when it
+    really is the page (its size is the page's size); else None (then the frame is measured)."""
+    if not page:
+        return None
+    pl, pt, pr, pb = page
+    if abs((pr - pl) - inner_w) > 2 or abs((pb - pt) - inner_h) > 2:
+        return None
+    wl, wt, wr, wb = win
+    if not (wl <= pl and wt <= pt and pr <= wr and pb <= wb):
+        return None
+    return pl - wl, pt - wt, (wr - wl) - (pr - pl), (wb - wt) - (pb - pt)
+
+
+def page_region(win, page):
+    """The cut that is exactly the page (window coordinates), from the page's rect on the screen."""
+    wl, wt, _, _ = win
+    pl, pt, pr, pb = page
+    return (pl - wl, pt - wt, pr - wl, pb - wt)
+
+
+def clip_layout(win, vis, inner_w, inner_h, target_w, target_h, area, offsets=None):
     """Pure geometry (tested anywhere). win: the window rect, vis: its visible frame (DWM),
     inner_*: the page's size now, target_*: the page's size wanted (all real pixels), area: where it
-    must fit (the work area, or the monitor for full screen) — rects are (left, top, right, bottom).
+    must fit (the work area, or the monitor for full screen) — rects are (left, top, right, bottom);
+    offsets: the page's place in the window when it is known exactly (page_offsets).
     Returns (x, y, w, h, region): where to put the window and the part of it to keep (in window
     coordinates) — exactly the page, never larger than the area, in its middle."""
-    left, top, over_w, over_h = frame_offsets(win, vis, inner_w, inner_h)
+    left, top, over_w, over_h = offsets or frame_offsets(win, vis, inner_w, inner_h)
     al, at, ar, ab = area
     target_w = max(1, min(target_w, ar - al))
     target_h = max(1, min(target_h, ab - at))
@@ -109,6 +148,151 @@ def fit_after_move(actual, offsets, target, area):
     px = min(max(wl + left, al), ar - pw)  # the page's place on the screen, kept inside the area
     py = min(max(wt + top, at), ab - ph)
     return px - left, py - top, (left, top, left + pw, top + ph)
+
+
+def keep_needed(now, want):
+    """The window's cut now (`now`; None: no cut — lost) is not the one wanted: cut again."""
+    return want is not None and (now is None or tuple(now) != tuple(want))
+
+
+def pack_cut(region):
+    """The cut written on the window (two numbers: each fits a 32-bit handle, never 0)."""
+    l, t, r, b = (max(0, min(0x7FFF, int(v))) for v in region)
+    return ((l << 16) | t) + 1, ((r << 16) | b) + 1
+
+
+def unpack_cut(lt, rb):
+    if not lt or not rb:
+        return None
+    lt, rb = int(lt) - 1, int(rb) - 1
+    return (lt >> 16, lt & 0xFFFF, rb >> 16, rb & 0xFFFF)
+
+
+# ---------------------------------------------------------------- Windows only (ctypes)
+
+def _rect_of(user32, hwnd):
+    import ctypes
+    from ctypes import wintypes
+    r = wintypes.RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(r))
+    return (r.left, r.top, r.right, r.bottom)
+
+
+def _page_rect(user32, hwnd):
+    """The page's rect on the screen: Chrome's own (invisible) window over the web page; None if not there."""
+    import ctypes
+    from ctypes import wintypes
+    found = []
+    proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def cb(h, _):
+        if h:
+            buf = ctypes.create_unicode_buffer(64)
+            user32.GetClassNameW(ctypes.c_void_p(h), buf, 64)
+            if buf.value == PAGE_CLASS and user32.IsWindowVisible(ctypes.c_void_p(h)):
+                r = wintypes.RECT()
+                if user32.GetWindowRect(ctypes.c_void_p(h), ctypes.byref(r)) and r.right > r.left and r.bottom > r.top:
+                    found.append((r.left, r.top, r.right, r.bottom))
+        return True
+
+    user32.EnumChildWindows(hwnd, proc(cb), 0)
+    return max(found, key=lambda r: (r[2] - r[0]) * (r[3] - r[1])) if found else None
+
+
+def _dwm_plain(hwnd):
+    """Windows draws nothing of its own around this window: no frame rendering, no rounded corners,
+    no border, no backdrop (Windows 11 drew them over the cut — the grey strip on top)."""
+    import ctypes
+    dwm = ctypes.windll.dwmapi
+    # DWMWA_NCRENDERING_POLICY = DISABLED, WINDOW_CORNER_PREFERENCE = DONOTROUND,
+    # BORDER_COLOR = COLOR_NONE, SYSTEMBACKDROP_TYPE = NONE (the last three: Windows 11 only)
+    for attr, value in ((2, 1), (33, 1), (34, 0xFFFFFFFE), (38, 1)):
+        v = ctypes.c_uint(value)
+        try:
+            dwm.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(v), ctypes.sizeof(v))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _props(user32):
+    import ctypes
+    user32.GetPropW.restype = ctypes.c_void_p
+    user32.GetPropW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+    user32.SetPropW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_void_p]
+
+
+def _set_cut(user32, hwnd, region, redraw):
+    """Cut the window to `region` (window coordinates) and write it on the window (for the keeper)."""
+    import ctypes
+    gdi32 = ctypes.windll.gdi32
+    gdi32.CreateRectRgn.restype = ctypes.c_void_p
+    user32.SetWindowRgn(hwnd, ctypes.c_void_p(gdi32.CreateRectRgn(*region)), redraw)  # (the window owns it now)
+    _props(user32)
+    lt, rb = pack_cut(region)
+    user32.SetPropW(hwnd, "ZNS_CUT_LT", ctypes.c_void_p(lt))
+    user32.SetPropW(hwnd, "ZNS_CUT_RB", ctypes.c_void_p(rb))
+    # (who cut it last keeps it: the launcher's loading screen and then the game cut the same window)
+    user32.SetPropW(hwnd, "ZNS_CUT_BY", ctypes.c_void_p(os.getpid()))
+
+
+def _wanted_cut(user32, hwnd):
+    """The cut this program made on the window (None: never cut, or cut since by the other program)."""
+    _props(user32)
+    if (user32.GetPropW(hwnd, "ZNS_CUT_BY") or 0) != os.getpid():
+        return None
+    return unpack_cut(user32.GetPropW(hwnd, "ZNS_CUT_LT") or 0, user32.GetPropW(hwnd, "ZNS_CUT_RB") or 0)
+
+
+def _cut_now(user32, hwnd):
+    """The window's cut now (window coordinates), None when it has none."""
+    import ctypes
+    from ctypes import wintypes
+    r = wintypes.RECT()
+    kind = user32.GetWindowRgnBox(hwnd, ctypes.byref(r))  # (2 / 3: a region; 0 / 1: none)
+    return (r.left, r.top, r.right, r.bottom) if kind in (2, 3) else None
+
+
+def _check_cut():
+    """The game's window keeps its cut (put back when lost). False when there is no game window."""
+    import ctypes
+    user32 = _user32()
+    found = find_game_window(user32)
+    if not found:
+        return False
+    hwnd = ctypes.c_void_p(found)
+    if user32.IsIconic(hwnd) or user32.IsZoomed(hwnd):
+        return True
+    want = _wanted_cut(user32, hwnd)
+    if want is None:
+        return True  # (not cut by this program: not its to keep)
+    page = _page_rect(user32, hwnd)
+    if page and abs((page[2] - page[0]) - (want[2] - want[0])) <= 2 and abs((page[3] - page[1]) - (want[3] - want[1])) <= 2:
+        want = page_region(_rect_of(user32, hwnd), page)  # (exactly where the page is now)
+    if keep_needed(_cut_now(user32, hwnd), want):
+        _dwm_plain(hwnd)
+        _set_cut(user32, hwnd, want, True)
+    return True
+
+
+def _keep_cut(poll=0.5):
+    missing = 0
+    while missing < 60:  # (the window gone for half a minute: stop)
+        time.sleep(poll)
+        try:
+            with _lock:
+                missing = 0 if _check_cut() else missing + 1
+        except Exception:  # noqa: BLE001
+            missing += 1
+    _keeper["thread"] = None
+
+
+def _start_keeper():
+    t = _keeper.get("thread")
+    if t is not None and t.is_alive():
+        return
+    t = threading.Thread(target=_keep_cut, daemon=True, name="zns-window-cut")
+    _keeper["thread"] = t
+    t.start()
 
 
 def window_action(action, data=None):
@@ -158,6 +342,7 @@ def window_action(action, data=None):
             if user32.IsZoomed(hwnd):
                 user32.ShowWindow(hwnd, 9)  # SW_RESTORE
                 return False  # (measured again on the page's next ask, at the window's normal size)
+            _dwm_plain(hwnd)  # (first: Windows' own frame never drawn — then measured)
             win = rect()
             v = wintypes.RECT()
             if ctypes.windll.dwmapi.DwmGetWindowAttribute(hwnd, 9, ctypes.byref(v), ctypes.sizeof(v)) == 0:
@@ -177,25 +362,22 @@ def window_action(action, data=None):
                 target = (area[2] - area[0], area[3] - area[1])
             else:
                 target = (round(float(data.get("width") or 1180) * dpr), round(float(data.get("height") or 780) * dpr))
-            offsets = frame_offsets(win, vis, inner_w, inner_h)
-            x, y, w, h, region = clip_layout(win, vis, inner_w, inner_h, target[0], target[1], area)
-            gdi32 = ctypes.windll.gdi32
-            gdi32.CreateRectRgn.restype = ctypes.c_void_p
-
-            def cut(r, redraw):
-                user32.SetWindowRgn(hwnd, ctypes.c_void_p(gdi32.CreateRectRgn(*r)), redraw)  # (the window owns it now)
-
-            # the cut first (not drawn yet), then the move: the frame is never seen
-            cut(region, False)
-            user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST if full else HWND_NOTOPMOST), x, y, w, h, SWP_NOACTIVATE)
-            # what Windows really did (a refused size): the cut follows, the page stays inside the area
-            fx, fy, fregion = fit_after_move(rect(), offsets, (region[2] - region[0], region[3] - region[1]), area)
-            if fregion != region or (fx, fy) != (x, y):
-                cut(fregion, True)
-                user32.SetWindowPos(hwnd, None, fx, fy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
+            # the page's place: exactly from Chrome's window over the page; else measured from the frame
+            offsets = page_offsets(win, _page_rect(user32, hwnd), inner_w, inner_h) or frame_offsets(win, vis, inner_w, inner_h)
+            x, y, w, h, region = clip_layout(win, vis, inner_w, inner_h, target[0], target[1], area, offsets)
+            with _lock:
+                # the cut first (not drawn yet), then the move: the frame is never seen
+                _set_cut(user32, hwnd, region, False)
+                user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST if full else HWND_NOTOPMOST), x, y, w, h, SWP_NOACTIVATE)
+                # what Windows really did (a refused size): the cut follows, the page stays inside the area
+                fx, fy, fregion = fit_after_move(rect(), offsets, (region[2] - region[0], region[3] - region[1]), area)
+                if fregion != region or (fx, fy) != (x, y):
+                    _set_cut(user32, hwnd, fregion, True)
+                    user32.SetWindowPos(hwnd, None, fx, fy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
             _full["on"] = full
             if full:
                 user32.SetForegroundWindow(hwnd)
+            _start_keeper()  # (the cut is kept from now on: put back whenever it is lost)
         return True
     except Exception:  # noqa: BLE001
         return False

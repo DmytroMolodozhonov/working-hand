@@ -60,7 +60,7 @@
     body.dragging { cursor: grabbing; }
     button, input { cursor: pointer; user-select: text; }
     input { cursor: text; }
-    #winbtns { position: fixed; top: 12px; left: 12px; z-index: 5; display: flex; gap: 6px; }
+    #winbtns { position: fixed; top: 12px; right: 12px; z-index: 5; display: flex; gap: 6px; }
     #winbtns button { width: 30px; height: 26px; padding: 0; border-radius: 9px; font-size: 13px; font-weight: 800;
         display: grid; place-items: center; color: var(--dim); background: rgba(255, 255, 255, 0.05); }
     #winbtns button:hover { color: var(--text); background: rgba(167, 139, 255, 0.2); border-color: #a78bff; }
@@ -71,8 +71,8 @@
 <body>
 <div id="stars"></div>
 <div id="winbtns">
-    <button id="win-close" class="x" title="Закрыть" aria-label="Закрыть">✕</button>
     <button id="win-min" title="Свернуть" aria-label="Свернуть">—</button>
+    <button id="win-close" class="x" title="Закрыть" aria-label="Закрыть">✕</button>
 </div>
 <main>
     <img class="logo" src="/__launcher/logo.png" alt="" onerror="this.style.visibility='hidden'">

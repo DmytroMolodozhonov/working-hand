@@ -905,7 +905,7 @@ setupWindowControls({
     onNote: (t) => { const n = $('win-note'); if (!n) return; n.textContent = t; n.classList.add('on'); clearTimeout(n._t); n._t = setTimeout(() => n.classList.remove('on'), 4000); },
 });
 // the game's own window (shortcut / .bat): no Windows frame, exactly the menu's size
-if (!window.__ZNS_NO_FULLSCREEN__) becomeAppWindow({ bar: document.querySelector('#main-menu .menu-side') });
+if (!window.__ZNS_NO_FULLSCREEN__) becomeAppWindow({ bar: [document.querySelector('#main-menu .menu-top'), document.querySelector('#main-menu .menu-side')] });
 
 // ------------------------------------------------------------------ pause menu (Escape)
 // (in a game with others the world goes on; alone it waits)

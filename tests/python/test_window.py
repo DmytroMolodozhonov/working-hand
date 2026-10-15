@@ -48,6 +48,33 @@ class Clip(unittest.TestCase):
         fx, fy, (l, t, r, b) = W.fit_after_move((100, 700, 1298, 1569), offsets, (1180, 780), (0, 0, 1920, 1032))
         self.assertLessEqual(fy + b, 1032)
 
+    def test_the_page_place_from_chromes_window_over_it(self):
+        # the window's frame tells a wrong place (the page is 30 px lower than the bottom-of-frame
+        # guess would say, e.g. Windows 11's own frame): Chrome's window over the page is believed
+        win = (100, 50, 1296, 869)
+        page = (109, 81, 1287, 860)  # 1178×779 — the page's size: it is the page
+        offsets = W.page_offsets(win, page, 1178, 779)
+        self.assertEqual(offsets, (9, 31, 18, 40))
+        x, y, w, h, region = W.clip_layout(win, (108, 50, 1288, 861), 1178, 779, 1180, 780, (0, 0, 1920, 1040), offsets)
+        self.assertEqual(region, (9, 31, 9 + 1180, 31 + 780))
+        self.assertEqual((x + 9, y + 31), ((1920 - 1180) // 2, (1040 - 780) // 2))
+        # a child window of another size (not the page) or outside the window: not believed
+        self.assertIsNone(W.page_offsets(win, (109, 81, 600, 400), 1178, 779))
+        self.assertIsNone(W.page_offsets(win, (9, 81, 1187, 860), 1178, 779))
+        self.assertIsNone(W.page_offsets(win, None, 1178, 779))
+        self.assertEqual(W.page_region(win, page), (9, 31, 1187, 810))
+
+    def test_the_cut_is_kept(self):
+        want = (9, 31, 1189, 811)
+        self.assertTrue(W.keep_needed(None, want))  # lost: put back
+        self.assertTrue(W.keep_needed((0, 0, 1198, 820), want))  # someone changed it
+        self.assertFalse(W.keep_needed(want, want))
+        self.assertFalse(W.keep_needed(None, None))  # never cut by the game: not touched
+        for region in [want, (0, 0, 1920, 1080), (9, 40, 2569, 1480)]:
+            self.assertEqual(W.unpack_cut(*W.pack_cut(region)), region)
+            self.assertTrue(all(0 < v < 2 ** 31 for v in W.pack_cut(region)))  # (a 32-bit handle, never 0)
+        self.assertIsNone(W.unpack_cut(0, 5))
+
     def test_not_on_windows_or_unknown_action_does_nothing(self):
         self.assertFalse(W.window_action("explode"))
         if sys.platform != "win32":
