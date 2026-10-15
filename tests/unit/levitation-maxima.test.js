@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchSpell } from '../../src/fx/SpellManager.js';
-import { LEV_MAX, PULL, LOOSEN, MAXIMA_TARGETS, levBlocked, houseCells, treeCells, pullStep, crushDamage, rubbleOf, felledOf, throwOf, voxelGeometry } from '../../src/game/LevitationMaxima.js';
+import { LEV_MAX, WIGGLE, effortNeed, wiggleStep, tearReady, wallCells, earthCells, MAXIMA_TARGETS, levBlocked, houseCells, treeCells, crushDamage, rubbleOf, felledOf, throwOf, voxelGeometry } from '../../src/game/LevitationMaxima.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { SCROLL_SPELL_COLOR } from '../../src/game/ItemTypes.js';
 import { BLOCK } from '../../src/world/Terrain.js';
@@ -28,7 +28,7 @@ test('magic armour stops the plain «Левиоса», never the Maxima', () => 
 });
 
 test('«на кого и на что»: every creature and thing is decided, with why', () => {
-    for (const k of ['me', 'players', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'livingTrees', 'bookBirds', 'phoenix', 'dragon', 'servants', 'ships', 'houses', 'trees', 'looseThings', 'water', 'ground']) {
+    for (const k of ['me', 'players', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'livingTrees', 'bookBirds', 'phoenix', 'dragon', 'servants', 'ships', 'houses', 'trees', 'castleWalls', 'looseThings', 'water', 'ground']) {
         assert.ok(MAXIMA_TARGETS[k]?.why, k);
     }
 });
@@ -68,12 +68,89 @@ test('a tree: its wood and leaves and a lump of earth on its roots', () => {
     assert.equal(treeCells(world(cells), 0, 9, 0), null, 'grass is no tree');
 });
 
-test('pulling a tree out: only a hand going UP pulls; it takes several tugs and some seconds', () => {
-    assert.equal(pullStep(null, { rel: 1, pitch: 0 }), 0);
-    assert.equal(pullStep({ rel: 1, pitch: 0 }, { rel: 0.5, pitch: 0 }), 0, 'down pulls nothing');
-    assert.ok(Math.abs(pullStep({ rel: 1, pitch: 0 }, { rel: 1.4, pitch: 0 }) - 0.4) < 1e-9);
-    assert.ok(PULL.tree > 1.5 && PULL.tree > PULL.house);
-    assert.ok(LOOSEN.tree >= 2.5, 'not at once');
+/** Rock the wand for `sec` s: side to side by ±amp rad at `hz`, pointing `up` rad higher than at first. */
+function rock(W, { amp = 0.15, hz = 1, up = 0.4, sec = 10, t0 = 0, axis = 'yaw' } = {}) {
+    const dt = 1 / 30;
+    let t = t0;
+    W.base || wiggleStep(W, { yaw: 0, pitch: 0, rel: 1 }, t, dt);
+    for (let i = 0; i < sec / dt; i++) {
+        t += dt;
+        const w = amp * Math.sin(2 * Math.PI * hz * t);
+        wiggleStep(W, { yaw: axis === 'yaw' ? w : 0, pitch: up + (axis === 'pitch' ? w : 0), rel: 1 }, t, dt);
+    }
+    return t;
+}
+
+test('like pulling a tooth: rocking the wand to and fro and pulling up loosens it — nothing by itself', () => {
+    // held still (even pulled up hard): nothing
+    const still = {};
+    rock(still, { amp: 0, up: 0.6, sec: 20 });
+    assert.equal(still.effort, 0, 'no rocking — no loosening');
+    assert.equal(tearReady(still, effortNeed('tree', 60)), false);
+    // a slow steady pull without rocking: nothing either
+    const pull = {};
+    wiggleStep(pull, { yaw: 0, pitch: 0, rel: 1 }, 0, 0.1);
+    for (let i = 1; i <= 100; i++) wiggleStep(pull, { yaw: 0, pitch: i * 0.006, rel: 1 + i * 0.004 }, i * 0.1, 0.1);
+    assert.equal(pull.effort, 0, 'pulling alone does not tear it out');
+    // rocking and pulling: a tree comes out in some seconds, not at once
+    const W = {};
+    rock(W, { sec: 1.5 });
+    assert.equal(tearReady(W, effortNeed('tree', 60)), false, 'not at once');
+    rock(W, { sec: 12, t0: 1.5 });
+    assert.ok(tearReady(W, effortNeed('tree', 60)), 'rocked and pulled — it comes out');
+    // up and down works too
+    const V = {};
+    rock(V, { axis: 'pitch', sec: 14 });
+    assert.ok(V.effort > 0);
+});
+
+test('the harder one rocks (bigger, brisker swings, pulling up), the faster it loosens; a tremble does nothing', () => {
+    const e = (o) => { const W = {}; rock(W, { sec: 6, ...o }); return W.effort; };
+    assert.ok(e({ amp: 0.2 }) > e({ amp: 0.08 }), 'bigger swings');
+    assert.ok(e({ up: 0.4 }) > e({ up: 0 }) * 2, 'pulling up');
+    assert.ok(e({ hz: 1 }) > e({ hz: 0.2 }), 'brisk, not dawdling');
+    assert.equal(e({ amp: 0.015, hz: 4 }), 0, 'the camera\'s tremble is no rocking');
+});
+
+test('stop rocking: it settles back; not pulling at the end: it stays in', () => {
+    const W = {};
+    const t = rock(W, { sec: 8 });
+    const had = W.effort;
+    rock(W, { amp: 0, sec: 6, t0: t });
+    assert.ok(W.effort < had, 'settles back');
+    const U = {};
+    rock(U, { sec: 30, up: 0 });
+    assert.equal(tearReady(U, 0.1), false, 'loose, but not pulled up');
+});
+
+test('heavier — more effort: a house more than a tree, a tree more than a piece of a wall or a lump of earth', () => {
+    assert.ok(effortNeed('house', 400) > effortNeed('tree', 60));
+    assert.ok(effortNeed('tree', 60) > effortNeed('wall', 20));
+    assert.ok(effortNeed('wall', 50) > effortNeed('wall', 10));
+    assert.ok(effortNeed('earth', 16) > 0);
+});
+
+test('a piece of a wall: the built blocks round the one pointed at — not the ground, not a house', () => {
+    const cells = [];
+    for (let x = -4; x <= 4; x++) for (let z = -2; z <= 2; z++) cells.push([x, 9, z, BLOCK.DIRT]);
+    for (let x = -4; x <= 4; x++) for (let L = 10; L <= 16; L++) cells.push([x, L, 0, BLOCK.CS_GREY]);
+    const got = wallCells(world(cells), 0, 13, 0);
+    assert.ok(got.length >= 9 && got.length <= 20, 'a piece, not the whole wall: ' + got.length);
+    assert.ok(got.every((c) => c[3] === BLOCK.CS_GREY));
+    assert.equal(wallCells(world(cells), 0, 9, 0), null, 'the ground is no wall');
+    const noHouse = wallCells(world(cells), 0, 13, 0, (x) => x > 0);
+    assert.ok(noHouse.every((c) => c[0] <= 0), 'a house\'s blocks stay');
+});
+
+test('a lump of earth: a bowl of the ground; where something stands — left', () => {
+    const cells = [];
+    for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) { cells.push([x, 7, z, BLOCK.BEDROCK], [x, 8, z, BLOCK.DIRT], [x, 9, z, BLOCK.DIRT], [x, 10, z, BLOCK.GRASS]); }
+    cells.push([1, 11, 0, BLOCK.CS_GREY]); // a wall stands there
+    const e = earthCells(world(cells), 0, 10, 0);
+    assert.ok(e.cells.length >= 8);
+    assert.ok(e.cells.some((c) => c[0] === 0 && c[2] === 0 && c[1] === 8), 'deeper in the middle');
+    assert.ok(!e.cells.some((c) => c[0] === 1 && c[2] === 0), 'not from under the wall');
+    assert.ok(!e.cells.some((c) => c[3] === BLOCK.BEDROCK));
 });
 
 test('landing: a dropped house is a heap (half breaks), a felled tree lies along its fall, the higher the worse it hurts', () => {

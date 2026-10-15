@@ -10,12 +10,17 @@
  *              at once — players, villagers, knights, wizards, sailors, zombies, animals, the giant
  *              spider, living trees — each hanging where it was against the hand's line and
  *              following the hand (kicking, struggling). Let go: they fall and get hurt (Levitation).
- *   A tree     pointed at, it does not come at once: it rocks, and the hand must pull UP, again
- *              and again — like pulling a tooth. When it has been pulled enough (PULL.tree, and
- *              not before LOOSEN.tree seconds) it tears out with its roots and a lump of earth
- *              (a hole is left), then floats after the hand.
+ *   A tree     pointed at, it does not come by itself: the caster works it loose with the wand —
+ *              rocks it to and fro (side to side or up and down) and pulls up, like pulling a tooth
+ *              (wiggleStep: every swing loosens it by its size × briskness × the pull; no rocking —
+ *              nothing, and it settles back). It leans with the wand, creaks, earth crumbles off;
+ *              loose enough (effortNeed: heavier — more) and pulled up, it tears out with its roots
+ *              and a lump of earth (a hole is left), then floats after the hand.
  *   A house    the same, without roots: it creaks and cracks, then tears off the ground whole with
  *              what is inside (the people inside rise with it; the beds, chests, door and glass break).
+ *   A wall     a piece of a castle wall / tower / fence (~3×3 round where the wand points; a house's
+ *              own wall is the house) — worked loose the same way, carried, thrown, set down.
+ *   Earth      a lump of the ground (a bowl ~3 m, deeper in the middle) — the same; a pit is left.
  *   A ship     rises out of the water at once (the sea pours off its keel) with its crew and all on
  *              its deck — they ride it in its own coordinates (Ships._carry).
  *   Let go     a house / a tree falls by gravity and breaks where it lands: a heap of rubble / a
@@ -60,11 +65,93 @@ export const LEV_MAX = {
     SAME_PHRASE: 2.5, // s: the same words again within this are the same phrase (not «let it down»)
 };
 
-/** Pulling it out: metres the hand must pull up in all (with the pitch of the hand), and the least time it takes. */
-export const PULL = { tree: 2.6, house: 1.5 };
-export const LOOSEN = { tree: 3, house: 2.2 };
-/** Unpulled, the pull settles back this much a second (one has to keep pulling). */
-export const PULL_DECAY = 0.12;
+/**
+ * Working it loose — like pulling a tooth (CLAUDE.md: nothing «by itself», no timer). Only the
+ * wand's own movement does it: the hand rocks it to and fro (side to side, or up and down) while
+ * pulling up. Each swing of the wand that turns back (WIGGLE.MIN rad or more) loosens it by its
+ * size (up to WIGGLE.MAX) × how brisk it was (a turn every FAST…SLOW s is right; trembling or
+ * dawdling counts little) × how hard the hand pulls up against where it started (TENSE rad of
+ * the wand's pitch, or the hand raised). Not rocked for IDLE s — it settles back (DECAY a second).
+ * Heavier — more effort (effortNeed). Loose enough, it tears out only on a pull (TEAR) and after
+ * ROCKS swings at least.
+ */
+export const WIGGLE = { MIN: 0.05, MAX: 0.35, FAST: 0.15, SLOW: 1.2, IDLE: 0.8, DECAY: 0.1, TENSE: 0.3, SLACK: 0.25, TEAR: 0.5, ROCKS: 4 };
+/** The effort (Σ swing × briskness × pull) for a thing of the usual size (REF blocks) of each kind. */
+export const EFFORT = { tree: 3.2, house: 4.2, wall: 1.8, earth: 1.6 };
+export const EFFORT_REF = { tree: 60, house: 400, wall: 20, earth: 16 };
+/** How far it leans with the wand when loose (rad), and how much it rises on a pull (m). */
+const TILT = { tree: 0.2, house: 0.035, wall: 0.08, earth: 0.06 };
+const LIFT = { tree: 0.35, house: 0.15, wall: 0.2, earth: 0.25 };
+const KIND_RU = {
+    tree: { icon: '🌳', name: 'дерево', thrown: 'Дерево брошено!' },
+    house: { icon: '🏠', name: 'дом', thrown: 'Дом брошен!' },
+    wall: { icon: '🧱', name: 'кусок стены', thrown: 'Кусок стены брошен!' },
+    earth: { icon: '🪨', name: 'глыба земли', thrown: 'Глыба земли брошена!' },
+};
+
+/** How much rocking a thing of this kind and size (blocks) takes: heavier — more. */
+export function effortNeed(kind, n) {
+    const base = EFFORT[kind] ?? 2;
+    const k = Math.sqrt(Math.max(1, n) / (EFFORT_REF[kind] ?? 60));
+    return base * Math.min(2.5, Math.max(0.7, k));
+}
+
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/**
+ * One frame of the wand working it loose. `W` is its state ({} at first), `s` the hand now:
+ * {yaw, pitch (rad, where the wand points), rel (the hand's height against the body, m)}, `t` the
+ * time (s). → the swing counted this frame (rad, 0 if none). W.effort grows, W.lean is how far the
+ * wand is off the middle of its rocking (side, up), W.tension how hard it pulls (0…1). Pure.
+ */
+export function wiggleStep(W, s, t, dt) {
+    if (!W.base) {
+        W.base = { yaw: s.yaw, pitch: s.pitch, rel: s.rel };
+        W.effort = 0; W.rocks = 0; W.idle = 0; W.tension = 0;
+        W.mid = { x: 0, y: 0 }; W.lean = { x: 0, y: 0 };
+        W.ax = { x: { dir: 0, peak: null, last: null, t: null }, y: { dir: 0, peak: null, last: null, t: null } };
+    }
+    const x = wrapA(s.yaw - W.base.yaw), y = s.pitch - W.base.pitch;
+    const up = y + (s.rel - W.base.rel) * 0.8;
+    W.tension = Math.max(0, Math.min(1, up / WIGGLE.TENSE));
+    let got = 0;
+    for (const [k, v] of [['x', x], ['y', y]]) {
+        const A = W.ax[k];
+        if (!A.dir) {
+            if (A.peak == null) { A.peak = A.last = v; continue; }
+            if (Math.abs(v - A.peak) > WIGGLE.MIN * 0.5) { A.dir = Math.sign(v - A.peak); A.last = A.peak; A.peak = v; }
+            continue;
+        }
+        if ((A.dir > 0 && v > A.peak) || (A.dir < 0 && v < A.peak)) { A.peak = v; continue; }
+        if (Math.abs(v - A.peak) < WIGGLE.MIN * 0.5) continue; // (not turned back yet — or only a tremble)
+        // it turned back at the peak: one swing, the size of last → peak
+        const amp = Math.abs(A.peak - A.last);
+        const gap = A.t != null ? t - A.t : null;
+        A.last = A.peak; A.peak = v; A.dir = -A.dir; A.t = t;
+        if (amp < WIGGLE.MIN) continue;
+        const brisk = gap == null ? 0.6 : gap < WIGGLE.FAST ? gap / WIGGLE.FAST : gap > WIGGLE.SLOW ? Math.max(0, 1 - (gap - WIGGLE.SLOW) / WIGGLE.SLOW) : 1;
+        const e = Math.min(amp, WIGGLE.MAX) * brisk * (WIGGLE.SLACK + (1 - WIGGLE.SLACK) * W.tension);
+        if (e <= 0) continue;
+        W.effort += e;
+        W.rocks++;
+        got = Math.max(got, amp);
+    }
+    if (got) W.idle = 0;
+    else {
+        W.idle += dt;
+        if (W.idle > WIGGLE.IDLE) W.effort = Math.max(0, W.effort - WIGGLE.DECAY * dt);
+    }
+    // the middle of the rocking follows the hand slowly; the lean is the wand off it
+    const k = 1 - Math.exp(-dt * 1.5);
+    W.mid.x += (x - W.mid.x) * k; W.mid.y += (y - W.mid.y) * k;
+    W.lean.x = x - W.mid.x; W.lean.y = y - W.mid.y;
+    return got;
+}
+
+/** Loose enough and pulled up now: out it comes. */
+export function tearReady(W, need) {
+    return !!W.base && W.effort >= need && W.rocks >= WIGGLE.ROCKS && W.tension >= WIGGLE.TEAR;
+}
 
 /**
  * «На кого и на что» (CLAUDE.md) — what «Вингардиум Левиоса Максима» does to every creature and thing.
@@ -86,10 +173,10 @@ export const MAXIMA_TARGETS = {
     ships: { why: 'корабль целиком поднимается из воды с экипажем и всем на палубе; брошенный в море — пробоины по высоте, на суше — обломки' },
     houses: { why: 'дом шатается, трещит и отрывается от земли целиком (без корней) — те же блоки, дверь, окна, кровати, сундуки; замахом руки его бросают; упав или ударившись о стену, дом, существо — разлетается на блоки в груду, сундуки выпадают, кто под ним — ранен; поставленный — стоит целый с мебелью на новом месте' },
     trees: { why: 'дерево раскачивается, игрок тянет вверх — вырывается с корнями и комом земли (остаётся яма); брошенное — лежит поваленным, поставленное — растёт стоя' },
-    castleWalls: { why: 'не действует: стены и башни замков — не дома, их не оторвать (Максима поднимает дома деревень и замков)' },
+    castleWalls: { why: 'кусок стены, башни, забора (то, во что упёрлась палочка, ~3×3 блока): расшатывается палочкой и выламывается, дальше несётся как дом; брошенный — груда камней; поставленный — встаёт куском. Жители пугаются, строители замка потом закладывают дыру (Rebuild). Под сферой защиты чужого дома — нет. Стена самого дома — это дом: он вырывается целиком' },
     looseThings: { why: 'не поднимаются Максимой (её дело — существа и большое); вещи на палубе едут с кораблём; вещи — обычной «Левиосой»' },
     water: { why: 'не действует: воду поднимают водяные заклинания' },
-    ground: { why: 'не действует: земля остаётся — только ком земли на корнях дерева' },
+    ground: { why: 'глыба земли (дёрн, земля, камень, песок — чашей ~3 м): расшатывается и выдирается палочкой, остаётся яма; что стоит на ней (дом, стена, дерево) — не берёт: тогда вырывается то, что стоит. Коренная порода и лёд не выдираются. Брошенная — рассыпается грудой; в замке строители засыпают яму' },
 };
 
 /** Magic armour stops the plain «Левиоса» — never the Maxima: Levitation.levBlocked. */
@@ -169,13 +256,62 @@ export function instTreeCells(t, groundL) {
     return { cells, kind: t.kind || 0, foot: [x, groundL, z], earth: 0 };
 }
 
+/** A piece of a wall / of the ground: how big (m round the block pointed at) and at most how many blocks. */
+export const FRAG = { WALL_R: 1.6, WALL_MAX: 60, EARTH_R: 1.8, EARTH_DEEP: 3, EARTH_MAX: 60, MIN: 4 };
+/** Earth that can be torn out (not bedrock, deep stone, ice, water). */
+const EARTH = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.GRAVEL, BLOCK.PATH, BLOCK.FARMLAND, BLOCK.WHEAT, BLOCK.VEG, BLOCK.FLOWERS]);
+export const isEarth = (t) => EARTH.has(t);
+/** Built (a wall, a tower, a fence…): not the ground, the yard, a tree, water or bedrock. */
+const isBuilt = (t) => !!t && !GROUND.has(t) && !YARD.has(t) && !isTreeBlock(t);
+
 /**
- * How much a hand pulled UP this frame (m): the rise of the hand against the body plus the rise
- * of its pointing (rad → m at arm's length). A hand going down pulls nothing.
+ * A piece of a wall: the built blocks joined to the one pointed at, within FRAG.WALL_R of it
+ * (`skip(x, L, z)` — a block that must stay, e.g. a house's). → [[x, L, z, t]] or null.
  */
-export function pullStep(prev, now) {
-    if (!prev) return 0;
-    return Math.max(0, now.rel - prev.rel) + Math.max(0, now.pitch - prev.pitch) * 0.6;
+export function wallCells(data, x0, L0, z0, skip = null) {
+    if (!isBuilt(data.get(x0, L0, z0))) return null;
+    const out = [], seen = new Set([x0 + ',' + L0 + ',' + z0]), q = [[x0, L0, z0]];
+    while (q.length && out.length < FRAG.WALL_MAX) {
+        const [x, L, z] = q.shift();
+        const t = data.get(x, L, z);
+        if (!isBuilt(t) || skip?.(x, L, z)) continue;
+        out.push([x, L, z, t]);
+        for (const [dx, dL, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+            const nx = x + dx, nL = L + dL, nz = z + dz, key = nx + ',' + nL + ',' + nz;
+            if (seen.has(key) || Math.hypot(nx - x0, nL - L0, nz - z0) > FRAG.WALL_R) continue;
+            seen.add(key);
+            q.push([nx, nL, nz]);
+        }
+    }
+    return out.length >= FRAG.MIN - 1 ? out : null;
+}
+
+/**
+ * A lump of the ground: a bowl round the column pointed at (deeper in the middle). A column with
+ * anything standing on it (a house, a wall, a tree), water or rock that won't come is left.
+ * → {cells, foot: [x, L, z]} or null. Pure.
+ */
+export function earthCells(data, x0, L0, z0) {
+    const cells = [];
+    let top0 = -Infinity;
+    const R = Math.ceil(FRAG.EARTH_R);
+    for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
+        const r = Math.hypot(dx, dz);
+        if (r > FRAG.EARTH_R) continue;
+        const x = x0 + dx, z = z0 + dz;
+        const top = data.topLayer(x, z);
+        if (Math.abs(top - L0) > 2 || !EARTH.has(data.get(x, top, z))) continue; // (something stands there, or water)
+        const deep = r < 1 ? FRAG.EARTH_DEEP : r < 1.5 ? 2 : 1;
+        for (let d = 0; d < deep; d++) {
+            const t = data.get(x, top - d, z);
+            if (!EARTH.has(t)) break;
+            cells.push([x, top - d, z, t]);
+        }
+        if (!dx && !dz) top0 = top;
+    }
+    if (cells.length < FRAG.MIN || cells.length > FRAG.EARTH_MAX * 2) return null;
+    if (!Number.isFinite(top0)) top0 = Math.max(...cells.map((c) => c[1]));
+    return { cells: cells.slice(0, FRAG.EARTH_MAX), foot: [x0, top0, z0] };
 }
 
 /** A throw: the hand moves this far (m) within WINDOW s, each step a real move (no camera jump). */
@@ -368,7 +504,7 @@ export class LevitationMaxima {
         const h = g.builder?._hand?.();
         if (!h) return say('✋ Поднимите руку (или палочку) и направьте её на то, что хотите поднять');
         const aim = this.pick(h.o, h.d);
-        if (!aim) return say('🪶 Направьте руку на людей, животных, дерево, дом или корабль — не дальше 60 м — и скажите «Вингардиум Левиоса Максима»');
+        if (!aim) return say('🪶 Направьте руку на людей, животных, дерево, дом, стену, землю или корабль — не дальше 60 м — и скажите «Вингардиум Левиоса Максима»');
         if (aim.no) return say(aim.no);
         const tired = g.combat?.check?.(LEV_MAX.NAME);
         if (tired) return say(tired);
@@ -387,8 +523,10 @@ export class LevitationMaxima {
         }
         g.sound?.playBombardoCast?.();
         const k = aim.desc.k;
-        g.hud?.setVoice?.(k === 'tree' ? '🌳 <b>Левиоса Максима!</b> Дерево раскачивается — тяните руку вверх, ещё и ещё, пока не вырвется с корнями'
-            : k === 'house' ? '🏠 <b>Левиоса Максима!</b> Дом трещит — тяните руку вверх, пока он не оторвётся от земли'
+        g.hud?.setVoice?.(k === 'tree' ? '🌳 <b>Левиоса Максима!</b> Дерево держится корнями — раскачивайте его палочкой туда-сюда, как зуб, и тяните вверх'
+            : k === 'house' ? '🏠 <b>Левиоса Максима!</b> Дом трещит — раскачивайте палочку туда-сюда и тяните вверх, пока он не оторвётся от земли'
+            : k === 'wall' ? '🧱 <b>Левиоса Максима!</b> Кусок стены держится — раскачивайте его палочкой туда-сюда и тяните на себя вверх'
+            : k === 'earth' ? '🪨 <b>Левиоса Максима!</b> Земля держит глыбу — раскачивайте палочкой туда-сюда и тяните вверх'
             : k === 'ship' ? '⛵ <b>Левиоса Максима!</b> Корабль поднимается из воды'
             : `🪶 <b>Левиоса Максима!</b> Поднято: ${aim.n}. Держится, пока есть мана (2 в секунду); «стоп» — отпустить, слова ещё раз — опустить`, true);
         return LEV_MAX.NAME;
@@ -477,7 +615,9 @@ export class LevitationMaxima {
             else {
                 const h = this._houseAt(cell.x, cell.L, cell.z);
                 if (h) best = { kind: 'house', dist, h, at: cell.point.clone() };
-                else if (!best && !GROUND.has(cell.type) && cell.type !== BLOCK.WATER) return { no: '🏰 Стены и башни замков «Левиоса Максима» не отрывает — только дома, деревья, корабли и живых' };
+                // (the ground: only when nothing living is pointed at — the hand at a creature's feet lifts the creature)
+                else if (isEarth(cell.type)) { if (!cr) best = { kind: 'earth', dist, cell }; }
+                else if (isBuilt(cell.type)) best = { kind: 'wall', dist, cell };
             }
         }
         const inst = g.builder?._treeOnRay?.(o, d, R);
@@ -497,6 +637,12 @@ export class LevitationMaxima {
         if (best.kind === 'house') {
             const h = best.h;
             return { desc: { k: 'house', id: h.id, x: h.c.x, z: h.c.z }, at: best.at, players: this._playersNear(h.c, h.r + 0.5, false), n: 1 };
+        }
+        if (best.kind === 'wall' || best.kind === 'earth') {
+            const c = best.cell;
+            // (a house's sphere of protection: only its owner and the ones let in — HouseWards.js)
+            if (g.wards?.forbids?.(o, _v1.set(c.x, c.L - 1, c.z))) return { no: '🛡️ Здесь сфера защиты чужого дома — не выломать' };
+            return { desc: { k: best.kind, c: [c.x, c.L, c.z] }, at: c.point.clone(), players: [], n: 1 };
         }
         if (best.kind === 'inst') return { desc: { k: 'tree', i: best.inst.index }, at: new THREE.Vector3(best.inst.x, o.y, best.inst.z), players: [], n: 1 };
         return { desc: { k: 'tree', c: [best.cell.x, best.cell.L, best.cell.z] }, at: best.cell.point.clone(), players: [], n: 1 };
@@ -646,6 +792,11 @@ export class LevitationMaxima {
             if (!tree) return false;
             cells = tree.cells;
             L.tree = tree;
+        } else if ((desc.k === 'wall' || desc.k === 'earth') && Array.isArray(desc.c)) {
+            const [x, Lc, z] = desc.c.map((v) => v | 0);
+            // (a house's own wall stays with its house — that one is torn out whole)
+            cells = desc.k === 'wall' ? wallCells(data, x, Lc, z, (bx, bL, bz) => !!this._houseAt(bx, bL, bz)) : earthCells(data, x, Lc, z)?.cells;
+            if (!cells) return false;
         } else return false;
         // the anchor: the middle of its foot (houses: the floor; trees: the trunk's foot)
         let minL = Infinity, maxL = -Infinity, x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
@@ -659,7 +810,7 @@ export class LevitationMaxima {
         L.vel = new THREE.Vector3();
         L.ext = { x0: x0 - ax - 0.5, x1: x1 - ax + 0.5, z0: z0 - az - 0.5, z1: z1 - az + 0.5, y0: minL - baseL, y1: maxL - baseL + 1 };
         L.phase = 'loosen';
-        L.pull = 0;
+        L.loose = 0;
         L.sway = { x: 0, z: 0 };
         // the mesh: the very same blocks with the world's own look (its faces, colours and the
         // voxel patterns of stone, planks, roof tiles…) — one draw call; it rocks round its foot
@@ -790,6 +941,8 @@ export class LevitationMaxima {
             add(e.x0, e.x0 + 1, 0, h, e.z0, e.z1); add(e.x1 - 1, e.x1, 0, h, e.z0, e.z1);
             add(e.x0, e.x1, 0, h, e.z0, e.z0 + 1); add(e.x0, e.x1, 0, h, e.z1 - 1, e.z1);
             add(e.x0, e.x1, h - 1.5, h, e.z0, e.z1); // the roof
+        } else if (L.kind !== 'tree') {
+            add(e.x0, e.x1, e.y0, e.y1, e.z0, e.z1); // a piece of a wall / a lump of earth: one block of it
         } else {
             const t = L.tree;
             add(-0.6, 0.6, Math.min(0, e.y0), Math.max(4, e.y1 * 0.55), -0.6, 0.6); // the trunk (and its lump of earth)
@@ -808,6 +961,8 @@ export class LevitationMaxima {
         for (const c of L.cells) { data.set(c[0], c[1], c[2], BLOCK.AIR); edits.push([c[0], c[1], c[2], BLOCK.AIR]); }
         g.builder?._sendEdits?.(edits);
         if (L.house) g.castleLife?.damaged?.(L.base, L.by, edits.length, true, { r: 10, kind: 'uproot' });
+        // (a piece of a castle wall / its ground: the guards come, the builders put it back later — Rebuild)
+        else if (L.kind === 'wall' || L.kind === 'earth') g.castleLife?.damaged?.(L.base, L.by, edits.length, true, { r: 4, kind: 'uproot' });
         else g.castleLife?.alarm?.(L.base, 'uproot', L.by, 6);
     }
 
@@ -940,7 +1095,7 @@ export class LevitationMaxima {
         if (!g.duel?._handOf(L.by, L.side, _hp, _hd)) return null;
         const body = L.by === g.localId ? g.character.group.position : g.remotes?.get(L.by)?.position;
         if (!body) return null;
-        return { rel: _hp.y - body.y, pitch: Math.asin(Math.max(-1, Math.min(1, _hd.y))) };
+        return { rel: _hp.y - body.y, pitch: Math.asin(Math.max(-1, Math.min(1, _hd.y))), yaw: Math.atan2(_hd.x, _hd.z), hx: _hp.x, hz: _hp.z };
     }
 
     // ---------------------------------------------------------------- houses and trees
@@ -948,23 +1103,30 @@ export class LevitationMaxima {
         const g = this.game;
         const data = g.world?.terrain?.data || g.terrain?.data;
         if (L.phase === 'loosen') {
-            // it rocks; the hand pulls it up, again and again (like a tooth)
+            // only the wand works it loose: rocked to and fro and pulled up, like a tooth
             const now = this._handRise(L);
             if (!now) { L.phase = 'settle'; return; }
-            const step = pullStep(L.prevRise, now);
-            L.prevRise = now;
-            const need = PULL[L.kind] || 2;
-            L.pull = Math.max(0, L.pull + step - PULL_DECAY * dt);
-            const p = Math.min(1, L.pull / need);
-            L.kick = Math.max(0, (L.kick || 0) - dt * 2) + step * 2;
-            const A = (L.kind === 'tree' ? 0.03 : 0.012) + p * (L.kind === 'tree' ? 0.13 : 0.035) + Math.min(0.08, L.kick * 0.1);
-            const w = L.kind === 'tree' ? 5 : 9;
-            L.sway.x = A * Math.sin(L.t * w);
-            L.sway.z = A * 0.7 * Math.sin(L.t * w * 1.27 + 1);
-            L.pos.set(L.base.x, L.base.y + p * (L.kind === 'tree' ? 0.35 : 0.15), L.base.z);
-            if (Math.random() < 0.15 + p) this._crumbs(L, p);
-            if (step > 0.05 && Math.random() < 0.5) g.sound?.playCrack?.(L.pos, 0.3 + p * 0.5);
-            if (L.pull >= need && L.t >= (LOOSEN[L.kind] || 2)) this._tearOut(L);
+            const W = L.wig || (L.wig = {});
+            const swing = wiggleStep(W, now, L.t, dt);
+            const need = L.need || (L.need = effortNeed(L.kind, L.cells.length));
+            const p = Math.min(1, W.effort / need);
+            L.loose = p;
+            // it leans with the wand: sideways across the caster's line, towards them when the wand rises
+            let fx = L.base.x - now.hx, fz = L.base.z - now.hz;
+            const fl = Math.hypot(fx, fz) || 1;
+            fx /= fl; fz /= fl;
+            const tilt = (TILT[L.kind] || 0.05) * (0.15 + 0.85 * p);
+            const lx = Math.max(-1, Math.min(1, W.lean.x / 0.25)) * tilt, ly = Math.max(-1, Math.min(1, W.lean.y / 0.25)) * tilt;
+            const vx = fz * lx - fx * ly, vz = -fx * lx - fz * ly;
+            const k = Math.min(1, dt * 12);
+            L.sway.x += (vz - L.sway.x) * k;
+            L.sway.z += (-vx - L.sway.z) * k;
+            L.pos.set(L.base.x, L.base.y + p * W.tension * (LIFT[L.kind] || 0.2), L.base.z);
+            if (swing) {
+                for (let i = 0, n = 1 + Math.round(p * 4); i < n; i++) this._crumbs(L, p);
+                if (Math.random() < 0.7) g.sound?.playCrack?.(L.pos, 0.3 + p * 0.5);
+            } else if (Math.random() < 0.04 * p) this._crumbs(L, p);
+            if (tearReady(W, need)) this._tearOut(L);
             return;
         }
         if (L.phase === 'carry') {
@@ -994,7 +1156,7 @@ export class LevitationMaxima {
                 L.phase = 'fall';
                 L.thrown = true;
                 g.sound?.playWhoosh?.();
-                if (L.by === g.localId) g.hud?.setVoice?.(L.kind === 'tree' ? '🌳 Дерево брошено!' : '🏠 Дом брошен!', true);
+                if (L.by === g.localId) g.hud?.setVoice?.(`${KIND_RU[L.kind]?.icon || '🏠'} ${KIND_RU[L.kind]?.thrown || 'Брошено!'}`, true);
             }
             return;
         }
@@ -1083,7 +1245,8 @@ export class LevitationMaxima {
         const r = L.kind === 'tree' ? 2 : Math.max(2.5, (L.ext.x1 - L.ext.x0) / 2);
         for (let i = 0; i < 40; i++) {
             const a = Math.random() * Math.PI * 2, d = Math.random() * r;
-            items.push({ x: L.base.x + Math.cos(a) * d, y: L.base.y + 0.2, z: L.base.z + Math.sin(a) * d, color: i % 3 ? 0x6b4a2a : 0x4a7a2a });
+            const own = L.kind === 'wall' || L.kind === 'earth' ? BASE_COLORS[L.cells[(i * 7) % L.cells.length][3]] : null;
+            items.push({ x: L.base.x + Math.cos(a) * d, y: L.base.y + 0.2, z: L.base.z + Math.sin(a) * d, color: own ?? (i % 3 ? 0x6b4a2a : 0x4a7a2a) });
         }
         g.fx?.debrisFrom?.(items, _v1.set(L.base.x, L.base.y - 1, L.base.z), 80);
         g.sound?.playCrack?.(L.base, 1);
@@ -1154,7 +1317,7 @@ export class LevitationMaxima {
             this._landFx(L, box, res.broken, 0);
         } else {
             const rnd = createRng(m.seed | 0);
-            if (L.kind === 'house') res = rubbleOf(L.cells, dx, dz, top, rnd);
+            if (L.kind !== 'tree') res = rubbleOf(L.cells, dx, dz, top, rnd);
             else res = felledOf(L.cells.map((c) => [c[0] + dx, c[1], c[2] + dz, c[3]]), [L.tree.foot[0] + dx, L.tree.foot[1], L.tree.foot[2] + dz], m.dir, top, rnd);
             res.T = this._shatter(L, res, m, rnd);
             const box = { x0: L.pos.x + L.ext.x0, x1: L.pos.x + L.ext.x1, z0: L.pos.z + L.ext.z0, z1: L.pos.z + L.ext.z1, y0: L.pos.y + L.ext.y0 };
@@ -1251,7 +1414,7 @@ export class LevitationMaxima {
         // (on the ship's own deck one is not under it)
         if (me && !g.isDeadLocal && !(ship && g.ships?.me?.ship === ship) && under({ x: me.x, y: me.y - 1.95, z: me.z })) {
             if (g.combat?.enabled) g.combat.damage(dmg, by, 'crush'); else g.damageLocalPlayer?.(dmg);
-            g.hud?.setVoice?.(`${kind === 'tree' ? '🌳 На вас упало дерево' : kind === 'ship' ? '⛵ На вас упал корабль' : '🏚️ На вас рухнул дом'}: −${dmg}`, true);
+            g.hud?.setVoice?.(`${kind === 'tree' ? '🌳 На вас упало дерево' : kind === 'ship' ? '⛵ На вас упал корабль' : kind === 'wall' ? '🧱 На вас рухнул кусок стены' : kind === 'earth' ? '🪨 На вас упала глыба земли' : '🏚️ На вас рухнул дом'}: −${dmg}`, true);
         }
         if (!this.auth) return;
         const c = new THREE.Vector3((b.x0 + b.x1) / 2, b.y0 - 1, (b.z0 + b.z1) / 2);
@@ -1433,8 +1596,9 @@ export class LevitationMaxima {
                 L.hintT = (L.hintT || 0) - dt;
                 if (L.hintT <= 0) {
                     L.hintT = 0.6;
-                    const p = Math.round(100 * (this.auth ? Math.min(1, L.pull / (PULL[L.kind] || 2)) : L.netPull));
-                    g.hud?.setVoice?.(`${L.kind === 'tree' ? '🌳' : '🏠'} Тяните руку вверх, ещё и ещё — ${L.kind === 'tree' ? 'дерево' : 'дом'} поддаётся: ${p}%`, true);
+                    const p = Math.round(100 * (this.auth ? L.loose || 0 : L.netPull));
+                    const K = KIND_RU[L.kind] || KIND_RU.house;
+                    g.hud?.setVoice?.(`${K.icon} Раскачивайте палочкой туда-сюда и тяните вверх — ${K.name} поддаётся: ${p}%`, true);
                 }
             }
             L.group.position.copy(L.pos);
@@ -1451,7 +1615,7 @@ export class LevitationMaxima {
         this._netT = 0;
         const l = [];
         const r2 = (v) => Math.round(v * 100) / 100;
-        for (const L of this.lifts.values()) if (L.group) l.push([L.id, r2(L.pos.x), r2(L.pos.y), r2(L.pos.z), r2(L.sway.x * 100) / 100, r2(L.sway.z * 100) / 100, L.phase === 'loosen' ? r2(Math.min(1, L.pull / (PULL[L.kind] || 2))) : -1]);
+        for (const L of this.lifts.values()) if (L.group) l.push([L.id, r2(L.pos.x), r2(L.pos.y), r2(L.pos.z), r2(L.sway.x * 100) / 100, r2(L.sway.z * 100) / 100, L.phase === 'loosen' ? r2(L.loose || 0) : -1]);
         if (l.length) g.sync.levMaxState?.(l);
     }
 
