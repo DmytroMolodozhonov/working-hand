@@ -441,6 +441,8 @@ def window_args(exe, url):
         # (opened off the screen: the page cuts the frame away and brings it to the middle — the
         # Windows title bar is never seen; zns_window.rescue_offscreen brings back one that never asks)
         exe, f"--app={url}", "--window-size=1180,780", "--window-position=-6000,-6000",
+        # (hidden while it is cut, the window must keep drawing: never «asleep» and grey when shown)
+        "--disable-backgrounding-occluded-windows", "--disable-features=CalculateNativeWinOcclusion",
         "--force_high_performance_gpu", "--ignore-gpu-blocklist",
         "--site-per-process",
         "--disable-background-timer-throttling", "--disable-renderer-backgrounding",

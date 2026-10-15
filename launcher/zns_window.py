@@ -314,7 +314,36 @@ def _show(user32, hwnd, pos=None):
         user32.SetForegroundWindow(hwnd)
     except Exception:  # noqa: BLE001
         pass
+    # Chrome stopped drawing a window it could not see: shown again it may stay grey until it is
+    # minimised and restored (the author did that by hand) — it is made to draw now, and once more soon
+    _repaint(user32, hwnd)
+    found = hwnd.value if isinstance(hwnd, ctypes.c_void_p) else hwnd
+    t = threading.Timer(0.35, lambda: _repaint_later(found))
+    t.daemon = True
+    t.start()
     return True
+
+
+def _repaint(user32, hwnd):
+    """Make the browser draw the page again now: a 1 px resize and back (it lays out and draws a new
+    frame, as after a restore) and a full redraw — the cut keeps the extra pixel unseen."""
+    try:
+        wl, wt, wr, wb = _rect_of(user32, hwnd)
+        flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+        user32.SetWindowPos(hwnd, None, 0, 0, wr - wl, wb - wt + 1, flags)
+        user32.SetWindowPos(hwnd, None, 0, 0, wr - wl, wb - wt, flags)
+        user32.RedrawWindow(hwnd, None, None, 0x0001 | 0x0080 | 0x0100 | 0x0400)  # INVALIDATE | ALLCHILDREN | UPDATENOW | FRAME
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _repaint_later(found):
+    try:
+        import ctypes
+        with _lock:
+            _repaint(_user32(), ctypes.c_void_p(found))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _reveal_later(found, pos):
