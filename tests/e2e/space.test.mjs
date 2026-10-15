@@ -1,6 +1,6 @@
 /**
  * «Космос» in a real browser (Creative): «Flying Maxima» in flight — the sky darkens, space; the round
- * Earth from orbit, the Solar System, Saturn's rings, Jupiter; landing on Venus, Mars and the Moon (the
+ * Earth from orbit, the Solar System, Saturn's rings, Jupiter; landing on Venus, Mars, Jupiter and the Moon (the
  * Earth in its sky); the space map. Pictures of each go to docs/space/.
  * Run: node --test tests/e2e/space.test.mjs
  */
@@ -24,7 +24,7 @@ test.after(async () => {
     srv?.stop();
 });
 
-test('space: Flying Maxima, the round Earth, the planets, landing on Venus, Mars and the Moon, the map', async () => {
+test('space: Flying Maxima, the round Earth, the planets, landing on Venus, Mars, Jupiter and the Moon, the map', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 1280, height: 720 } });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -147,6 +147,13 @@ test('space: Flying Maxima, the round Earth, the planets, landing on Venus, Mars
     await frames(90);
     assert.equal((await state()).realm, 'mars');
     await shot('07-mars-surface.png');
+    // a giant: its ground of hard cloud in bands, its own sky, its heavy pull (the author: one stands there)
+    at = await land('jupiter');
+    await frames(90);
+    s = await state();
+    assert.equal(s.realm, 'jupiter');
+    assert.ok(await page.evaluate(() => window.__zns.game.character.gravityK) > 1.5, 'Jupiter pulls hard');
+    await shot('10-jupiter-surface.png');
     // the Moon: the Earth in its black sky
     at = await land('moon');
     await frames(60);

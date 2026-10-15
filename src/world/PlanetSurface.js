@@ -155,6 +155,22 @@ function column(def, R, u, v) {
             const c = N(R.n4, 1 / 600);
             h += smoothstep(-0.02, 0.02, c) * 9 * g.scarps;
         }
+    } else if (def.kind === 'gas') {
+        // a giant's ground (the author: one stands on it, no poison gas): wide plains of hard cloud in bands
+        // across the latitudes, rounded billows like piled clouds, pale crests; Jupiter's and Neptune's
+        // great storms a raised dark swirl
+        const wob = N(R.n4, 1 / 260) * 60;
+        const bw = 110 / Math.max(0.2, g.bands || 0.5);
+        const band = Math.floor((v + wob) / bw);
+        const billow = Math.abs(N(R.n2, 1 / 38)) * 5 + Math.abs(N(R.n3, 1 / 95)) * 6;
+        h = 3 + billow * hills + N(R.n1, 1 / 400) * 4;
+        const k = ((band % 3) + 3) % 3;
+        top = k === 0 ? BLOCK.REGOLITH : k === 1 ? BLOCK.PLANET_DARK : BLOCK.PLANET_ROCK;
+        if (billow > 8.5) top = BLOCK.PLANET_ICE; // (the pale crests)
+        if (g.storm) {
+            const sx = u - rect.w * 0.12, sz = v + rect.h * 0.18, d = Math.hypot(sx / 1.6, sz);
+            if (d < 520) { const a = Math.atan2(sz, sx) + d / 90; h += (1 - d / 520) * 9 + Math.sin(a * 3) * 2; top = Math.sin(a * 2) > 0 ? BLOCK.PLANET_DARK : BLOCK.PLANET_ROCK; }
+        }
     } else if (look === 'mars') {
         const m = N(R.n3, 1 / 520);
         if (g.mesas && m > 0.28) h += Math.min(16, Math.floor(smoothstep(0.28, 0.36, m) * 16 / 4) * 4) * g.mesas; // (flat tops, stepped sides)

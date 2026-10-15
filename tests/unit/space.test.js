@@ -76,7 +76,7 @@ test('the planets\' ground: by their own recipe, the same every time; no castles
     d.generate({ seed: 7, mountains: true, seas: true, deepCaves: true, lush: true });
     const d2 = new TerrainData();
     d2.generate({ seed: 7, mountains: true, seas: true, deepCaves: true, lush: true });
-    for (const id of ['moon', 'mercury', 'venus', 'mars', 'pluto']) {
+    for (const id of ['moon', 'mercury', 'venus', 'mars', 'pluto', 'jupiter', 'saturn', 'uranus', 'neptune']) {
         const r = slotRect(d.planets.get(id));
         const cx = Math.floor(r.cx / CHUNK), cz = Math.floor(r.cz / CHUNK);
         const c = d.chunk(cx, cz), c2 = d2.chunk(cx, cz);
@@ -84,7 +84,7 @@ test('the planets\' ground: by their own recipe, the same every time; no castles
         assert.deepEqual([...c.top], [...c2.top], `${id}: deterministic`);
         const kinds = new Set(c.blocks);
         for (const t of [BLOCK.GRASS, BLOCK.WOOD, BLOCK.LEAVES, BLOCK.WATER, BLOCK.CS_GREY]) assert.ok(!kinds.has(t), `${id}: no ${t}`);
-        assert.ok(kinds.has(BLOCK.REGOLITH) || kinds.has(BLOCK.PLANET_ICE) || kinds.has(BLOCK.PLANET_DARK), `${id}: its own ground`);
+        assert.ok([BLOCK.REGOLITH, BLOCK.PLANET_ICE, BLOCK.PLANET_DARK, BLOCK.PLANET_ROCK].some((t) => kinds.has(t)), `${id}: its own ground`);
         assert.equal(d.sites.near(r.cx, r.cz, 600).length, 0, `${id}: no castles`);
         assert.equal(d.cavesNear(r.cx, r.cz, 300).length, 0, `${id}: no caves`);
     }
@@ -110,14 +110,16 @@ test('spells off the Earth: what has nothing to work with says why (who / what �
     assert.equal(spaceSpellBlock('Inferno', 'earth', 'air'), null);
     assert.match(spaceSpellBlock('Inferno', 'space', 'space'), /не горит/);
     assert.match(spaceSpellBlock('Inferno', 'moon', 'none'), /не горит/);
-    assert.match(spaceSpellBlock('FireMaxima', 'mars', 'thin'), /не горит/);
+    assert.match(spaceSpellBlock('FireMaxima', 'pluto', 'none'), /не горит/);
+    assert.equal(spaceSpellBlock('Inferno', 'mars', 'air'), null, 'Mars has air (the author)');
     assert.equal(spaceSpellBlock('Inferno', 'venus', 'air'), null, 'Venus has air: fire burns');
     assert.equal(spaceSpellBlock('LightningStrike', 'venus', 'air'), null, 'Venus: storm clouds');
-    assert.match(spaceSpellBlock('LightningStrike', 'mars', 'thin'), /туч/);
+    assert.match(spaceSpellBlock('LightningStrike', 'mars', 'air'), /туч/);
+    assert.equal(spaceSpellBlock('LightningStrike', 'jupiter', 'air', { kind: 'gas' }), null, 'the giants: storm clouds');
     assert.match(spaceSpellBlock('Waterball', 'space', 'space'), /замерзает/);
     assert.match(spaceSpellBlock('Wind', 'moon', 'none'), /ветру/);
     assert.match(spaceSpellBlock('Earthquake', 'space', 'space'), /ничего нет/);
-    assert.equal(spaceSpellBlock('Earthquake', 'mars', 'thin'), null, 'on a planet: ground to shake');
+    assert.equal(spaceSpellBlock('Earthquake', 'mars', 'air'), null, 'on a planet: ground to shake');
     for (const ok of ['Stupefy', 'Jolt', 'Protection', 'ProtectionMaxima', 'Lumos', 'Levitation', 'Accio', 'AvadaKedavra', 'Expelliarmus']) assert.equal(spaceSpellBlock(ok, 'space', 'space'), null, ok);
 });
 
@@ -133,4 +135,21 @@ test('other players in space are drawn where they really are in space (each hero
     me.realm = 'mars';
     assert.equal(me.remoteWorld(you.netPos()), null, 'not while I am elsewhere');
     assert.equal(me.netPos(), undefined);
+});
+
+test('the author: where one breathes (no mana for it) and where by magic; every planet its own gravity', async () => {
+    const { breathable } = await import('../../src/game/Space.js');
+    const reg = new PlanetRegistry(1);
+    for (const id of ['earth', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']) assert.ok(breathable(reg.get(id)), id);
+    for (const id of ['mercury', 'moon', 'pluto']) assert.ok(!breathable(reg.get(id)), id);
+    const p = reg.get(reg.add({ name: 'Новая', a: 60000 }));
+    assert.ok(!breathable(p), 'a new planet: no air until terraformed');
+    reg.update(p.id, { terraformed: true });
+    assert.ok(breathable(reg.get(p.id)));
+    // the giants can be stood on: each has its ground
+    for (const id of ['jupiter', 'saturn', 'uranus', 'neptune']) assert.ok(slotRect(reg.get(id)), id);
+    assert.ok(p.slot > 8, 'a new planet takes a free slot');
+    const g = Object.fromEntries(reg.list.map((d) => [d.id, d.gravity]));
+    assert.ok(g.jupiter > g.neptune && g.neptune > g.saturn && g.saturn > g.earth && g.earth > g.venus && g.venus > g.uranus);
+    assert.ok(g.mars === g.mercury && g.mars < 0.5 && g.moon < g.mars && g.pluto < g.moon);
 });

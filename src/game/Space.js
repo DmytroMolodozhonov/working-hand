@@ -72,18 +72,20 @@ const A = { x: SPACE.ANCHOR_X, y: SPACE.ORIGIN_Y, z: SPACE.ANCHOR_Z };
 const EPOCH = 1.79e9; // (the shared clock: seconds since then — the same on every computer)
 
 /**
- * Spells off the Earth: why one does not work here (or null). air: 'space' | 'none' | 'thin' | 'air'.
- * def: the planet (a terraformed one in the green zone has water and clouds — PlanetMagic.js).
+ * Spells off the Earth: why one does not work here (or null). air: 'space' | 'none' | 'air'.
+ * def: the planet (a terraformed one in the green zone has water and clouds — PlanetMagic.js; Venus and the
+ * giants have storm clouds: lightning and rain have something to come from).
  */
 export function spaceSpellBlock(name, where, air, def = null) {
     if (where === 'earth') return null;
     if (def?.terraformed && def.climate === 'green' && /^(LightningStrike|LetItRain|Thunderwave|Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|Firefighting|FirefightingMaxima|AirBubble|AirBubbleMaxima|WaveAttack|WaveAttackMaxima|Frozen|Drawdown|DrawdownMaxima)$/.test(name)) return null;
-    const vacuum = where === 'space' || air === 'none' || air === 'thin';
+    const vacuum = where === 'space' || air === 'none';
+    const clouds = where === 'venus' || !!def?.storms || def?.kind === 'gas';
     const base = (name || '').replace(/Maxima$/, '');
     if (/^(Inferno|Fire|Hellfire|FireMaxima)$/.test(name) || base === 'Fire') {
-        if (vacuum) return where === 'space' ? '🔥 В космосе нет воздуха — огонь не горит' : `🔥 Здесь ${air === 'thin' ? 'почти ' : ''}нет воздуха — огонь не горит`;
+        if (vacuum) return where === 'space' ? '🔥 В космосе нет воздуха — огонь не горит' : '🔥 Здесь нет воздуха — огонь не горит';
     }
-    if (/^(LightningStrike|LetItRain|Thunderwave)$/.test(name) && where !== 'venus') return '⛈️ Здесь нет туч — молнии и дождю неоткуда взяться';
+    if (/^(LightningStrike|LetItRain|Thunderwave)$/.test(name) && !clouds) return '⛈️ Здесь нет туч — молнии и дождю неоткуда взяться';
     if (/^(Wind|WindMaxima|WindImpulse|WindImpulseMaxima|Unfurl|UnfurlMaxima|Furl)$/.test(name) && vacuum) return '🌬️ Без воздуха ветру нечем дуть';
     if (/^(Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|Firefighting|FirefightingMaxima|AirBubble|AirBubbleMaxima|WaveAttack|WaveAttackMaxima|Frozen|Drawdown|DrawdownMaxima)$/.test(name)) {
         return where === 'space' ? '💧 В космосе вода мгновенно замерзает — водяная магия не работает' : '💧 Здесь нет воды';
@@ -206,7 +208,7 @@ export class Space {
     spellBlocked(name) {
         if (!this.offEarth) return null;
         const def = this.planets.get(this.realm);
-        return spaceSpellBlock(name, this.realm, this.realm === 'space' ? 'space' : def?.air || 'none', def);
+        return spaceSpellBlock(name, this.realm, this.realm === 'space' ? 'space' : breathable(def) ? 'air' : 'none', def);
     }
 
     // ─────────────────────────────────────────────────────────────── the frame
@@ -275,7 +277,7 @@ export class Space {
         const def = this.planets.get(from === 'earth' ? 'earth' : from) || this.planets.get('earth');
         planetPosition(def, t, _p, this.planets);
         if (from === 'earth') earthToDir(p.x, p.z, _d);
-        else { surfaceToDir(def, p.x, p.z, _d); rotY(_d, spinAt(def, t)); }
+        else { surfaceToDir(def, p.x, p.z, _d); toSpace(_d, def, t); }
         const R = def.radius;
         this.P.x = _p.x + _d.x * (R + 45); this.P.y = _p.y + _d.y * (R + 45); this.P.z = _p.z + _d.z * (R + 45);
         this.O.x = this.P.x; this.O.y = this.P.y; this.O.z = this.P.z;
@@ -414,7 +416,7 @@ export class Space {
         return best;
     }
 
-    /** Close to a body: the burning air of a planet with ground, a gas giant's push, the Sun's heat. */
+    /** Close to a body: the burning air of its fall to the ground, the Sun's heat. */
     _bodiesCheck(dt, t, near) {
         const g = this.game;
         let heat = 0;
@@ -427,20 +429,8 @@ export class Space {
             }
             const nx = (this.P.x - b.pos.x) / b.dist, ny = (this.P.y - b.pos.y) / b.dist, nz = (this.P.z - b.pos.z) / b.dist;
             const inward = -(this.vel.x * nx + this.vel.y * ny + this.vel.z * nz);
-            if (def.kind === 'gas') {
-                if (b.alt < def.radius * 0.07) {
-                    // no ground: the deeper, the thicker the clouds — the pressure throws the hero back out
-                    this.P.x = b.pos.x + nx * (def.radius * 1.07 + 2); this.P.y = b.pos.y + ny * (def.radius * 1.07 + 2); this.P.z = b.pos.z + nz * (def.radius * 1.07 + 2);
-                    const out = Math.max(120, inward * 0.6);
-                    this.vel.x = nx * out; this.vel.y = ny * out; this.vel.z = nz * out;
-                    this.speed = Math.min(this.speed, 150);
-                    g.fx.shake = Math.max(g.fx.shake || 0, 1.2);
-                    this._overlay('amber', 0.6);
-                    this._say(`🌪️ У ${def.name === 'Юпитер' ? 'Юпитера' : def.name === 'Сатурн' ? 'Сатурна' : def.name === 'Уран' ? 'Урана' : 'Нептуна'} нет поверхности — только всё более плотные облака. Давление выталкивает вас обратно!`, 'gas' + def.id, 5000);
-                }
-                continue;
-            }
-            // a body with ground: into its air (or straight down to it, without air)
+            // into its air and down to its ground (straight down without air; the giants too — the author:
+            // they have a ground of hard cloud, one stands on it)
             const entryAlt = 40 + def.radius * 0.04;
             if (b.alt < entryAlt && (inward > 0 || b.alt < 8)) { this._startEntry(def, b); return; }
         }
@@ -452,14 +442,14 @@ export class Space {
         this.state = 'entry';
         this._entryDef = def;
         this._t = 0;
-        const air = def.id === 'earth' || def.air === 'air' || def.air === 'thin';
+        const air = def.id === 'earth' || breathable(def);
         this._entryT = air ? FLYMAX.ENTRY_T : 0.8;
         this._entryAir = air;
         // where: the very place flown at (the surface under the hero in the planet's own frame)
         const t = this.now();
         _d.x = this.P.x - b.pos.x; _d.y = this.P.y - b.pos.y; _d.z = this.P.z - b.pos.z;
         if (def.id === 'earth') dirToEarth(_d, _s);
-        else { rotY(_d, -spinAt(def, t)); dirToSurface(def, _d, _s); }
+        else { toPlanet(_d, def, t); dirToSurface(def, _d, _s); }
         this.dest = { id: def.id, x: Math.round(_s.x), z: Math.round(_s.z) };
         if (air) g.sound?.playSpace?.('spaceEntry', 1);
         this._say(def.id === 'earth' ? '🔥 Вход в атмосферу Земли!' : air ? `🔥 Вход в атмосферу: ${def.name}` : `🪐 Посадка: ${def.name}`, 'entry', 3000);
@@ -670,6 +660,11 @@ export class Space {
                 u.uHorizon.value.setRGB(h[0], h[1], h[2]).lerp(_c1.setRGB(0.03, 0.03, 0.06), 1 - day);
                 u.uGround.value.setRGB(h[0] * 0.5, h[1] * 0.5, h[2] * 0.5).lerp(_c1.setRGB(0.02, 0.02, 0.03), 1 - day);
                 u.uNight.value = 1 - day; u.uClouds.value = def.climate === 'desert' ? 0 : 1; u.uOvercast.value = 0;
+            } else if (def.sky === 'gas' && def.skyCol) {
+                // a giant: a sky of its own colour (Jupiter's tan, Saturn's pale gold, Uranus' cyan, Neptune's blue)
+                const [zc, hc, gc] = def.skyCol, dk = 0.12 + 0.88 * day;
+                u.uZenith.value.set(zc).multiplyScalar(dk); u.uHorizon.value.set(hc).multiplyScalar(dk); u.uGround.value.set(gc).multiplyScalar(dk);
+                u.uNight.value = (1 - day) * 0.8; u.uClouds.value = 0; u.uOvercast.value = 0;
             } else if (def.sky === 'venus') {
                 u.uZenith.value.setRGB(0.66, 0.5, 0.26).multiplyScalar(0.3 + 0.7 * day);
                 u.uHorizon.value.setRGB(0.88, 0.7, 0.4).multiplyScalar(0.3 + 0.7 * day);
@@ -681,6 +676,7 @@ export class Space {
         if (f) {
             if (vac) { f.color.setRGB(0, 0, 0); f.near = Math.max(60, f.far * 0.75); }
             else if (def.sky === 'mars') { f.color.setRGB(0.78, 0.57, 0.4).multiplyScalar(0.25 + 0.75 * day); f.near = 30; }
+            else if (def.sky === 'gas' && def.skyCol) { f.color.set(def.skyCol[1]).multiplyScalar(0.15 + 0.85 * day); f.near = 25; }
             else if (def.sky === 'alien') { const h = def.skyH || [0.75, 0.8, 0.9]; f.color.setRGB(h[0], h[1], h[2]).multiplyScalar(0.15 + 0.85 * day); f.near = 40; }
             else { f.color.setRGB(0.8, 0.62, 0.34).multiplyScalar(0.3 + 0.7 * day); f.near = 6; f.far = Math.min(f.far, 150); }
             if (g.scene.background?.isColor) g.scene.background.copy(f.color);
@@ -696,7 +692,7 @@ export class Space {
             const alien = def.sky === 'alien';
             dl.intensity = (venus ? 0.35 : vac ? 0.85 : 1.0) * fall * day;
             dl.color.set(venus ? 0xffd49a : def.sky === 'mars' ? 0xffe2c4 : alien && def.climate === 'desert' ? 0xffe0b8 : 0xffffff);
-            w.ambientLight.intensity = venus ? 0.32 * (0.4 + 0.6 * day) + 0.05 : vac ? 0.07 + 0.05 * day : alien ? 0.2 + 0.25 * day : 0.16 + 0.1 * day;
+            w.ambientLight.intensity = venus ? 0.32 * (0.4 + 0.6 * day) + 0.05 : vac ? 0.07 + 0.05 * day : alien ? 0.2 + 0.25 * day : def.kind === 'gas' ? 0.24 + 0.12 * day : 0.16 + 0.1 * day;
             w.ambientLight.color.set(venus ? 0xffc77a : def.sky === 'mars' ? 0xffc9a4 : alien ? (def.atmosphere ?? 0xc8d4ff) : 0xc8d4ff);
             w.hemiLight.intensity = venus ? 0.25 * (0.3 + 0.7 * day) : vac ? 0.03 : 0.12 * day;
         }
@@ -711,11 +707,12 @@ export class Space {
     localSun(def, x, z, t = this.now()) {
         const c = planetPosition(def, t, _p, this.planets);
         surfaceToDir(def, x, z, _d);
-        rotY(_d, spinAt(def, t));
+        toSpace(_d, def, t);
         const n = _v1.set(_d.x, _d.y, _d.z).normalize();
         const s = _v2.set(-c.x - n.x * def.radius, -c.y - n.y * def.radius, -c.z - n.z * def.radius).normalize();
-        // the local frame: up = n, east = Y × n, north = n × east (the world's x east, −z north)
-        const east = _v3.set(0, 1, 0).cross(n);
+        // the local frame: up = n, east = axis × n, north = n × east (the world's x east, −z north)
+        _d.x = 0; _d.y = 1; _d.z = 0; tiltZ(_d, def);
+        const east = _v3.set(_d.x, _d.y, _d.z).cross(n);
         if (east.lengthSq() < 1e-6) east.set(1, 0, 0); else east.normalize();
         const north = _v4.copy(n).cross(east).normalize();
         return _v5.set(s.dot(east), s.dot(n), -s.dot(north)).normalize();
@@ -752,17 +749,19 @@ export class Space {
     _breath(dt) {
         const g = this.game, c = g.combat;
         const def = this.planets.get(this.realm);
-        const airless = this.realm === 'space' || (def && this.realm !== 'earth' && def.air !== 'air');
+        const airless = this.realm === 'space' || (def && this.realm !== 'earth' && !breathable(def));
         this.breathing = airless;
         if (!airless || g.isDeadLocal || c?.dead) { this.suffocate = 0; this._panel(); return; }
         if (c?.enabled) {
-            const ok = c.drain(FLYMAX.BREATH * dt, dt);
-            if (!ok || c.fatigue <= 0) {
+            // (the author: the mana comes back as always, 1 a second × the bonuses — breathing takes half of
+            //  that, so one stays in plus; only mana spent on spells down to nothing leaves nothing to breathe with)
+            c.fatigue = Math.max(0, c.fatigue - FLYMAX.BREATH * dt);
+            if (c.fatigue < 0.05) {
                 this.suffocate += dt;
                 this._overlay('suffocate', clamp(this.suffocate / FLYMAX.SUFFOCATE, 0.15, 0.9));
-                this._say(`🫁 Мана кончилась — нечем дышать! Скорее в воздух (Земля или Венера): ${Math.max(0, Math.ceil(FLYMAX.SUFFOCATE - this.suffocate))} с`, 'suff' + Math.ceil(FLYMAX.SUFFOCATE - this.suffocate), 900);
+                this._say(`🫁 Мана кончилась — нечем дышать! Скорее туда, где есть воздух (Земля, Венера, Марс, планеты-гиганты): ${Math.max(0, Math.ceil(FLYMAX.SUFFOCATE - this.suffocate))} с`, 'suff' + Math.ceil(FLYMAX.SUFFOCATE - this.suffocate), 900);
                 if (this.suffocate >= FLYMAX.SUFFOCATE) this._die(this.realm === 'space' ? '🫁 Вы задохнулись в космосе: кончилась мана, а без неё там не дышат' : `🫁 Вы задохнулись: на планете «${def?.name}» нет воздуха, а мана кончилась`);
-            } else this.suffocate = 0;
+            } else this.suffocate = Math.max(0, this.suffocate - dt * 2);
         }
         this._panel();
     }
@@ -1218,6 +1217,25 @@ const _c1 = new THREE.Color();
 const _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 
+/** Can one breathe there? (the author: the Earth, Venus, Mars, the giants, any terraformed planet) */
+export function breathable(def) {
+    return !!def && (def.air === 'air' || !!def.terraformed);
+}
+
+const DEG = Math.PI / 180;
+/** A giant's axis is tilted (Uranus lies on its side): turn round z by its tilt (the view does the same). */
+function tiltZ(d, def, sign = 1) {
+    const a = def.kind === 'gas' ? (def.tilt || 0) * DEG * sign : 0;
+    if (!a) return d;
+    const c = Math.cos(a), s = Math.sin(a);
+    const x = d.x * c - d.y * s, y = d.x * s + d.y * c;
+    d.x = x; d.y = y;
+    return d;
+}
+/** A direction in a planet's own frame → space (its spin, then its tilt), and back. */
+function toSpace(d, def, t) { return tiltZ(rotY(d, spinAt(def, t)), def); }
+function toPlanet(d, def, t) { return rotY(tiltZ(d, def, -1), -spinAt(def, t)); }
+
 /** Turn a direction round the y axis (a planet's spin). */
 function rotY(d, a) {
     const c = Math.cos(a), s = Math.sin(a);
@@ -1235,7 +1253,7 @@ export function dist(m) {
 /** One line about a planet on arrival. */
 function planetLine(def) {
     if (!def) return '';
-    const air = def.air === 'air' ? 'воздух есть' : def.air === 'thin' ? 'воздух слишком редкий — дышите магией' : 'воздуха нет — дышите магией';
+    const air = breathable(def) ? 'воздух есть' : 'воздуха нет — дышите магией';
     return `тяжесть ×${def.gravity}, ${air}${def.storms ? ', бури и сильный ветер' : ''}`;
 }
 

@@ -41,7 +41,7 @@ test('zones from the Sun: Mercury no, Venus–Mars green, the belt / Jupiter ice
     assert.match(planetRefusal('EnlargePlanet', r.get('sun')), /Солнце/);
     assert.match(planetRefusal('LevitationSuperMaxima', r.get('earth')), /Землю/);
     assert.match(planetRefusal('EnlargePlanet', r.get('venus')), /богов/);
-    assert.match(planetRefusal('TerraformPlanet', r.get('jupiter')), /нет земли/);
+    assert.match(planetRefusal('TerraformPlanet', r.get('jupiter')), /гигант/); // (the author: a giant has its own ground and air already)
     assert.match(planetRefusal('LevitationSuperMaxima', r.get('moon')), /Земли/);
     assert.equal(planetRefusal('EnlargePlanet', r.get('jupiter')), null);
     assert.ok(PLANET_TARGETS.creatures && PLANET_TARGETS.things, 'creatures and things: written down as «не действует»');

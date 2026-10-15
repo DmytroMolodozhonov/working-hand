@@ -78,8 +78,12 @@ const Tk = (au) => SPACE.YEAR * Math.pow(au, 1.5);
 const DAY = (d) => Math.sign(d) * 1440 * Math.sqrt(Math.abs(d));
 
 /**
- * The bodies. kind: 'star' | 'rocky' (can land) | 'gas' (no surface) | 'moon' (rocky, round a planet).
- * air: 'none' (vacuum: magic to breathe), 'thin' (Mars: not breathable either), 'air' (breathable).
+ * The bodies. kind: 'star' | 'rocky' | 'gas' (a giant: its own ground of hard cloud bands — the author: one can
+ * stand there, no poison gas) | 'moon' (rocky, round a planet). Every body but the Sun has a surface slot.
+ * air (the author): 'air' — breathable: the Earth, Venus, Mars, the giants, any terraformed planet; 'none' —
+ * vacuum, breathing by magic (−0.5 mana/s): Mercury, the Moon, Pluto, a new planet until terraformed.
+ * gravity: the real one (NASA), softened at the ends so one can walk on Jupiter (2.53 → 2.0) and Pluto keeps
+ * the feet on the ground (0.063 → 0.1).
  * look: how its picture from space is made (PlanetTextures.js); ground: its surface recipe (PlanetSurface.js).
  */
 export const PLANETS = [
@@ -91,15 +95,19 @@ export const PLANETS = [
     { id: 'earth', name: 'Земля', kind: 'home', a: AUd(1), radius: SPACE.EARTH_R, color: 0x4f86c6, gravity: 1, air: 'air', tilt: 23.4, day: 1440, phase: 0.4, incl: 0, look: 'earth', atmosphere: 0x6fb2ff },
     { id: 'moon', name: 'Луна', kind: 'moon', parent: 'earth', a: 3200, radius: Rr(0.273), color: 0xb9b6b0, gravity: 0.165, air: 'none', tilt: 6.7, day: 0, period: 600, phase: 0.9, incl: 5.1,
         look: 'moon', ground: { dust: 0xa9a6a0, rock: 0x86837e, dark: 0x5e5c59, ice: 0xdedcd8, craters: 1.3, maria: 1.0, hills: 0.6 }, slot: 2, sky: 'vacuum' },
-    { id: 'mars', name: 'Марс', kind: 'rocky', a: AUd(1.524), radius: Rr(0.532), color: 0xc1562e, gravity: 0.38, air: 'thin', tilt: 25.2, day: DAY(1.03), phase: 4.2, incl: 1.85,
+    { id: 'mars', name: 'Марс', kind: 'rocky', a: AUd(1.524), radius: Rr(0.532), color: 0xc1562e, gravity: 0.38, air: 'air', tilt: 25.2, day: DAY(1.03), phase: 4.2, incl: 1.85,
         look: 'mars', atmosphere: 0xd99a6c, ground: { dust: 0xb5522a, rock: 0x7e3a20, dark: 0x5a2a18, ice: 0xf1ece6, rocks: 1.0, dunes: 0.8, mesas: 0.8, hills: 0.8, caps: 1 }, slot: 3, sky: 'mars' },
-    { id: 'jupiter', name: 'Юпитер', kind: 'gas', a: AUd(5.204), radius: Rr(11.21), color: 0xd2b48c, gravity: 2.53, air: 'gas', tilt: 3.1, day: DAY(0.41), phase: 0.3, incl: 1.3, look: 'jupiter', atmosphere: 0xe8c9a0 },
-    { id: 'saturn', name: 'Сатурн', kind: 'gas', a: AUd(9.58), radius: Rr(9.45), color: 0xe3cf9a, gravity: 1.07, air: 'gas', tilt: 26.7, day: DAY(0.44), phase: 5.1, incl: 2.5, look: 'saturn', atmosphere: 0xf0dcae,
+    { id: 'jupiter', name: 'Юпитер', kind: 'gas', a: AUd(5.204), radius: Rr(11.21), color: 0xd2b48c, gravity: 2.0, air: 'air', tilt: 3.1, day: DAY(0.41), phase: 0.3, incl: 1.3, look: 'jupiter', atmosphere: 0xe8c9a0,
+        ground: { dust: 0xe2cfae, rock: 0xb07a52, dark: 0x8e5a3a, ice: 0xf2e6d0, bands: 1.0, storm: 1, hills: 0.6 }, slot: 5, sky: 'gas', skyCol: [0xb98a5a, 0xe6c9a0, 0x7a5638] },
+    { id: 'saturn', name: 'Сатурн', kind: 'gas', a: AUd(9.58), radius: Rr(9.45), color: 0xe3cf9a, gravity: 1.07, air: 'air', tilt: 26.7, day: DAY(0.44), phase: 5.1, incl: 2.5, look: 'saturn', atmosphere: 0xf0dcae,
+        ground: { dust: 0xeedcb0, rock: 0xcfb582, dark: 0xb4986a, ice: 0xfaf0d6, bands: 0.7, hills: 0.5 }, slot: 6, sky: 'gas', skyCol: [0xc9ad78, 0xf2e2bc, 0x8e7a52],
         rings: { inner: 1.24, outer: 2.27, color: 0xd8c49a, alpha: 0.85 } },
-    { id: 'uranus', name: 'Уран', kind: 'gas', a: AUd(19.2), radius: Rr(4.01), color: 0x9fdde3, gravity: 0.89, air: 'gas', tilt: 97.8, day: -DAY(0.72), phase: 3.3, incl: 0.8, look: 'uranus', atmosphere: 0xb6eef2,
+    { id: 'uranus', name: 'Уран', kind: 'gas', a: AUd(19.2), radius: Rr(4.01), color: 0x9fdde3, gravity: 0.89, air: 'air', tilt: 97.8, day: -DAY(0.72), phase: 3.3, incl: 0.8, look: 'uranus', atmosphere: 0xb6eef2,
+        ground: { dust: 0xb4e6ea, rock: 0x8ccdd6, dark: 0x74b6c2, ice: 0xe4fbfc, bands: 0.25, hills: 0.4 }, slot: 7, sky: 'gas', skyCol: [0x6fb8c4, 0xbfeef2, 0x4a8a96],
         rings: { inner: 1.64, outer: 2.0, color: 0x6f7a80, alpha: 0.35 } },
-    { id: 'neptune', name: 'Нептун', kind: 'gas', a: AUd(30.05), radius: Rr(3.88), color: 0x3f63d8, gravity: 1.14, air: 'gas', tilt: 28.3, day: DAY(0.67), phase: 1.9, incl: 1.8, look: 'neptune', atmosphere: 0x6f8ff0 },
-    { id: 'pluto', name: 'Плутон', kind: 'rocky', a: AUd(39.5), radius: Rr(0.186), color: 0xd8c2a4, gravity: 0.063, air: 'none', tilt: 122.5, day: -DAY(6.39), phase: 5.6, incl: 17.2, ecc: 0.25,
+    { id: 'neptune', name: 'Нептун', kind: 'gas', a: AUd(30.05), radius: Rr(3.88), color: 0x3f63d8, gravity: 1.14, air: 'air', tilt: 28.3, day: DAY(0.67), phase: 1.9, incl: 1.8, look: 'neptune', atmosphere: 0x6f8ff0,
+        ground: { dust: 0x5a80e0, rock: 0x3e62c4, dark: 0x2a4596, ice: 0xc8d8ff, bands: 0.5, storm: 1, hills: 0.5 }, slot: 8, sky: 'gas', skyCol: [0x2e4aa8, 0x7f9ff0, 0x1c2c6a] },
+    { id: 'pluto', name: 'Плутон', kind: 'rocky', a: AUd(39.5), radius: Rr(0.186), color: 0xd8c2a4, gravity: 0.1, air: 'none', tilt: 122.5, day: -DAY(6.39), phase: 5.6, incl: 17.2, ecc: 0.25,
         look: 'pluto', ground: { dust: 0xd9c9b0, rock: 0x8f6a52, dark: 0x6a3a2a, ice: 0xf2f0ea, plains: 1.0, mountains: 0.9, hills: 0.4 }, slot: 4, sky: 'vacuum' },
 ];
 for (const p of PLANETS) {

@@ -96,7 +96,7 @@ export function planetRefusal(name, def) {
     if (def.kind === 'star') return '☀️ Солнце — не планета: к нему и не подступиться';
     if (def.id === 'earth') return name === 'TerraformPlanet' ? '🌍 Земля и так живая — её незачем терраформировать' : '🌍 Землю боги трогать не дают — это дом всех';
     if (def.id === 'venus') return '🏛️ Венера под защитой богов: на ней их храм — золотая защита не пускает это заклинание';
-    if (name === 'TerraformPlanet' && def.kind === 'gas') return `🌪️ У планеты «${def.name}» нет земли — одни облака: терраформировать нечего`;
+    if (name === 'TerraformPlanet' && def.kind === 'gas') return `🌪️ «${def.name}» — планета-гигант: своя земля из твёрдых облаков и воздух на ней уже есть — терраформировать нечего`;
     if (name === 'TerraformPlanet' && def.terraformed) return `🌱 «${def.name}» уже терраформирована`;
     if (name === 'LevitationSuperMaxima' && def.parent) return `🌙 ${def.name} идёт вокруг ${def.parent === 'earth' ? 'Земли' : 'своей планеты'} — её отдельно не сдвинуть`;
     if (name === 'EnlargePlanet' && (def.grown | 0) >= PMAGIC.MAX_GROWS) return `🪐 «${def.name}» больше не растёт: она уже увеличена ${PMAGIC.MAX_GROWS} раза`;
