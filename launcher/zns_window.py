@@ -29,6 +29,13 @@ the cut could be lost. So now:
   - the cut is kept: every half second the window's cut is checked and put back if it was lost or no
     longer is the page (the wanted cut and who made it are written on the window itself: only the
     program that cut it last — the launcher's loading screen, then the game — keeps it).
+
+Seen only as it finally is (the author: «it went through stages: first a window, then grey, then
+bigger and smaller»): Chrome already running ignores --window-position, so its window showed with the
+Windows frame where Chrome last put it, then was cut and resized. Now the launcher / server watch for
+the new window and hide it at once (cloaked and moved off the screen); it is cut, sized and placed
+while hidden, and shown («reveal», the page asks once it has its final look; by itself after 1.5 s)
+in one step. The menu window has rounded corners (the cut is a rounded rectangle); full screen not.
 """
 
 import os
@@ -37,8 +44,11 @@ import threading
 import time
 
 GAME_TITLE = "Волшебство только начинается"
-ACTIONS = ("minimize", "close", "frameless", "fullscreen", "moveby", "focus", "blur")
+ACTIONS = ("minimize", "close", "frameless", "fullscreen", "moveby", "focus", "blur", "reveal")
 PAGE_CLASS = "Chrome_RenderWidgetHostHWND"  # (Chrome's / Edge's child window over the web page)
+APP_CLASS = "Chrome_WidgetWin_1"  # (Chrome's / Edge's top-level windows)
+CORNER_CSS = 12  # px (CSS): the menu window's rounded corners
+REVEAL_AFTER = 1.5  # s: a hidden window cut by a page that never says «reveal» is shown anyway
 
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
 HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
@@ -46,6 +56,7 @@ HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
 _full = {"on": False}  # (the game is in full screen: kept on top while in front)
 _lock = threading.Lock()  # (a cut is never checked while it is being made)
 _keeper = {"thread": None}
+_reveal = {}  # hidden window -> where to show it (x, y)
 
 
 def _user32():
@@ -151,8 +162,20 @@ def fit_after_move(actual, offsets, target, area):
 
 
 def keep_needed(now, want):
-    """The window's cut now (`now`; None: no cut — lost) is not the one wanted: cut again."""
-    return want is not None and (now is None or tuple(now) != tuple(want))
+    """The window's cut now (`now`; None: no cut — lost) is not the one wanted: cut again.
+    (±1 px: the box of a rounded cut may be a pixel smaller than the rectangle it was made from)"""
+    return want is not None and (now is None or any(abs(a - b) > 1 for a, b in zip(now, want)))
+
+
+def corner_radius(full, dpr):
+    """The cut's rounded corners in real pixels: the menu window has them, full screen has none."""
+    return 0 if full else max(0, round(CORNER_CSS * (float(dpr) or 1)))
+
+
+def is_app_title(title):
+    """The title of the game's app window: the game's name, or (before the page has its title) its address."""
+    t = str(title or "")
+    return t == GAME_TITLE or "localhost" in t or "127.0.0.1" in t
 
 
 def pack_cut(region):
@@ -221,26 +244,149 @@ def _props(user32):
     user32.SetPropW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_void_p]
 
 
-def _set_cut(user32, hwnd, region, redraw):
-    """Cut the window to `region` (window coordinates) and write it on the window (for the keeper)."""
+def _set_cut(user32, hwnd, region, redraw, radius=0):
+    """Cut the window to `region` (window coordinates; rounded corners of `radius` px) and write it
+    on the window (for the keeper)."""
     import ctypes
     gdi32 = ctypes.windll.gdi32
     gdi32.CreateRectRgn.restype = ctypes.c_void_p
-    user32.SetWindowRgn(hwnd, ctypes.c_void_p(gdi32.CreateRectRgn(*region)), redraw)  # (the window owns it now)
+    gdi32.CreateRoundRectRgn.restype = ctypes.c_void_p
+    l, t, r, b = region
+    rgn = gdi32.CreateRoundRectRgn(l, t, r + 1, b + 1, 2 * radius, 2 * radius) if radius > 0 else gdi32.CreateRectRgn(l, t, r, b)
+    user32.SetWindowRgn(hwnd, ctypes.c_void_p(rgn), redraw)  # (the window owns it now)
     _props(user32)
     lt, rb = pack_cut(region)
     user32.SetPropW(hwnd, "ZNS_CUT_LT", ctypes.c_void_p(lt))
     user32.SetPropW(hwnd, "ZNS_CUT_RB", ctypes.c_void_p(rb))
+    user32.SetPropW(hwnd, "ZNS_CUT_R", ctypes.c_void_p(int(radius) + 1))
     # (who cut it last keeps it: the launcher's loading screen and then the game cut the same window)
     user32.SetPropW(hwnd, "ZNS_CUT_BY", ctypes.c_void_p(os.getpid()))
 
 
 def _wanted_cut(user32, hwnd):
-    """The cut this program made on the window (None: never cut, or cut since by the other program)."""
+    """The cut this program made on the window: (region, radius) — None: never cut, or cut since by
+    the other program."""
     _props(user32)
     if (user32.GetPropW(hwnd, "ZNS_CUT_BY") or 0) != os.getpid():
         return None
-    return unpack_cut(user32.GetPropW(hwnd, "ZNS_CUT_LT") or 0, user32.GetPropW(hwnd, "ZNS_CUT_RB") or 0)
+    region = unpack_cut(user32.GetPropW(hwnd, "ZNS_CUT_LT") or 0, user32.GetPropW(hwnd, "ZNS_CUT_RB") or 0)
+    return (region, max(0, int(user32.GetPropW(hwnd, "ZNS_CUT_R") or 1) - 1)) if region else None
+
+
+def _cloak(hwnd, on):
+    """Hidden from the screen but still drawn by Windows (DWMWA_CLOAK) — or shown again."""
+    import ctypes
+    v = ctypes.c_int(1 if on else 0)
+    try:
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 13, ctypes.byref(v), ctypes.sizeof(v))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _hidden(user32, hwnd):
+    _props(user32)
+    return bool(user32.GetPropW(hwnd, "ZNS_HIDDEN"))
+
+
+def _hide(user32, hwnd):
+    """The new window is not seen until it is cut and placed: cloaked and moved off the screen."""
+    import ctypes
+    _props(user32)
+    user32.SetPropW(hwnd, "ZNS_HIDDEN", ctypes.c_void_p(1))
+    _cloak(hwnd, True)
+    _dwm_plain(hwnd)
+    if user32.IsZoomed(hwnd) or user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, 4)  # SW_SHOWNOACTIVATE: its normal size (still cloaked)
+    user32.SetWindowPos(hwnd, None, OFFSCREEN[0], OFFSCREEN[1], 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
+
+
+def _show(user32, hwnd, pos=None):
+    """Show a hidden window (where it was cut to be). Nothing when it is not hidden."""
+    import ctypes
+    if not _hidden(user32, hwnd):
+        return False
+    if pos:
+        user32.SetWindowPos(hwnd, None, pos[0], pos[1], 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
+    user32.RemovePropW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+    user32.RemovePropW(hwnd, "ZNS_HIDDEN")
+    _cloak(hwnd, False)
+    try:
+        user32.SetForegroundWindow(hwnd)
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
+def _reveal_later(found, pos):
+    """The page says «reveal» when it has its final look; if it never does, shown anyway soon."""
+    _reveal[found] = pos
+
+    def later():
+        try:
+            import ctypes
+            with _lock:
+                if found in _reveal:
+                    _show(_user32(), ctypes.c_void_p(found), _reveal.pop(found))
+        except Exception:  # noqa: BLE001
+            pass
+
+    t = threading.Timer(REVEAL_AFTER, later)
+    t.daemon = True
+    t.start()
+
+
+def _app_windows(user32):
+    """The visible top-level Chrome / Edge windows that look like the game's app window."""
+    import ctypes
+    found = []
+    proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def cb(h, _):
+        if h and user32.IsWindowVisible(ctypes.c_void_p(h)):
+            cls = ctypes.create_unicode_buffer(64)
+            user32.GetClassNameW(ctypes.c_void_p(h), cls, 64)
+            if cls.value == APP_CLASS:
+                buf = ctypes.create_unicode_buffer(512)
+                user32.GetWindowTextW(ctypes.c_void_p(h), buf, 512)
+                if is_app_title(buf.value):
+                    found.append(h)
+        return True
+
+    user32.EnumWindows(proc(cb), 0)
+    return found
+
+
+def app_windows_now():
+    """The game-like windows open before the browser is started (the new one is the one not among them)."""
+    if sys.platform != "win32":
+        return set()
+    try:
+        return set(_app_windows(_user32()))
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def hide_new_window(before, seconds=20.0, poll=0.01):
+    """(a thread, right after starting the browser) Hide the game's new window the moment it appears:
+    it is seen only once the page has cut it to its final look («reveal»)."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            user32 = _user32()
+            for h in _app_windows(user32):
+                if h not in before:
+                    with _lock:
+                        hwnd = ctypes.c_void_p(h)
+                        if not _wanted_cut(user32, hwnd) and not user32.GetPropW(hwnd, "ZNS_CUT_LT"):
+                            _hide(user32, hwnd)  # (not cut yet: nobody has seen it)
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(poll)
+    return False
 
 
 def _cut_now(user32, hwnd):
@@ -262,15 +408,16 @@ def _check_cut():
     hwnd = ctypes.c_void_p(found)
     if user32.IsIconic(hwnd) or user32.IsZoomed(hwnd):
         return True
-    want = _wanted_cut(user32, hwnd)
-    if want is None:
+    wanted = _wanted_cut(user32, hwnd)
+    if wanted is None:
         return True  # (not cut by this program: not its to keep)
+    want, radius = wanted
     page = _page_rect(user32, hwnd)
     if page and abs((page[2] - page[0]) - (want[2] - want[0])) <= 2 and abs((page[3] - page[1]) - (want[3] - want[1])) <= 2:
         want = page_region(_rect_of(user32, hwnd), page)  # (exactly where the page is now)
     if keep_needed(_cut_now(user32, hwnd), want):
         _dwm_plain(hwnd)
-        _set_cut(user32, hwnd, want, True)
+        _set_cut(user32, hwnd, want, True, radius)
     return True
 
 
@@ -323,6 +470,10 @@ def window_action(action, data=None):
             user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
         elif action == "close":
             user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+        elif action == "reveal":
+            # the page has its final look (cut, sized, its window class set): now it is seen, in one step
+            with _lock:
+                _show(user32, hwnd, _reveal.pop(found, None))
         elif action in ("focus", "blur"):
             # full screen covers the taskbar only while the game is in front (other windows above it otherwise)
             topmost(_full["on"] and action == "focus")
@@ -339,8 +490,11 @@ def window_action(action, data=None):
             inner_h = round(float(data.get("innerHeight") or 0) * dpr)
             if inner_w <= 0 or inner_h <= 0:
                 return False
+            hidden = _hidden(user32, hwnd)  # (not seen yet: cut, sized and placed before it is shown)
             if user32.IsZoomed(hwnd):
-                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.ShowWindow(hwnd, 4 if hidden else 9)  # SW_SHOWNOACTIVATE (still hidden) / SW_RESTORE
+                if hidden:
+                    user32.SetWindowPos(hwnd, None, OFFSCREEN[0], OFFSCREEN[1], 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
                 return False  # (measured again on the page's next ask, at the window's normal size)
             _dwm_plain(hwnd)  # (first: Windows' own frame never drawn — then measured)
             win = rect()
@@ -355,7 +509,15 @@ def window_action(action, data=None):
 
             mi = MONITORINFO()
             mi.cbSize = ctypes.sizeof(MONITORINFO)
-            user32.GetMonitorInfoW(ctypes.c_void_p(user32.MonitorFromWindow(hwnd, 2)), ctypes.byref(mi))
+            if hidden or win[2] < -1000 or win[3] < -1000:
+                # (off the screen: the monitor the mouse is on, not the one nearest to «nowhere»)
+                p = wintypes.POINT()
+                user32.GetCursorPos(ctypes.byref(p))
+                user32.MonitorFromPoint.restype = ctypes.c_void_p
+                mon = user32.MonitorFromPoint(p, 2)
+            else:
+                mon = user32.MonitorFromWindow(hwnd, 2)
+            user32.GetMonitorInfoW(ctypes.c_void_p(mon), ctypes.byref(mi))
             a = mi.rcMonitor if full else mi.rcWork  # (full screen covers the taskbar; the menu stays above it)
             area = (a.left, a.top, a.right, a.bottom)
             if full:
@@ -365,17 +527,24 @@ def window_action(action, data=None):
             # the page's place: exactly from Chrome's window over the page; else measured from the frame
             offsets = page_offsets(win, _page_rect(user32, hwnd), inner_w, inner_h) or frame_offsets(win, vis, inner_w, inner_h)
             x, y, w, h, region = clip_layout(win, vis, inner_w, inner_h, target[0], target[1], area, offsets)
+            radius = corner_radius(full, dpr)
             with _lock:
-                # the cut first (not drawn yet), then the move: the frame is never seen
-                _set_cut(user32, hwnd, region, False)
-                user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST if full else HWND_NOTOPMOST), x, y, w, h, SWP_NOACTIVATE)
+                # the cut first (not drawn yet), then the size and place: the frame is never seen
+                # (a hidden window gets its size where it is — off the screen — and is shown placed)
+                _set_cut(user32, hwnd, region, False, radius)
+                at = rect()[:2] if hidden else (x, y)
+                user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST if full else HWND_NOTOPMOST), at[0], at[1], w, h, SWP_NOACTIVATE)
                 # what Windows really did (a refused size): the cut follows, the page stays inside the area
-                fx, fy, fregion = fit_after_move(rect(), offsets, (region[2] - region[0], region[3] - region[1]), area)
-                if fregion != region or (fx, fy) != (x, y):
-                    _set_cut(user32, hwnd, fregion, True)
+                rw = rect()
+                fx, fy, fregion = fit_after_move((x, y, x + rw[2] - rw[0], y + rw[3] - rw[1]), offsets, (region[2] - region[0], region[3] - region[1]), area)
+                if fregion != region:
+                    _set_cut(user32, hwnd, fregion, not hidden, radius)
+                if hidden:
+                    _reveal_later(hwnd.value, (fx, fy))  # (shown when the page has its final look)
+                elif (fx, fy) != (x, y):
                     user32.SetWindowPos(hwnd, None, fx, fy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
             _full["on"] = full
-            if full:
+            if full and not hidden:
                 user32.SetForegroundWindow(hwnd)
             _start_keeper()  # (the cut is kept from now on: put back whenever it is lost)
         return True
@@ -407,9 +576,12 @@ def rescue_offscreen(seconds=12.0, poll=0.5):
         hwnd = ctypes.c_void_p(found)
         r = wintypes.RECT()
         user32.GetWindowRect(hwnd, ctypes.byref(r))
-        if r.right > -1000 and r.bottom > -1000:
+        if r.right > -1000 and r.bottom > -1000 and not _hidden(user32, hwnd):
             return False  # (on the screen already)
-        user32.SetWindowPos(hwnd, None, 80, 60, 0, 0, SWP_NOSIZE | SWP_NOZORDER)
+        with _lock:
+            _reveal.pop(found, None)
+            if not _show(user32, hwnd, (80, 60)):
+                user32.SetWindowPos(hwnd, None, 80, 60, 0, 0, SWP_NOSIZE | SWP_NOZORDER)
         return True
     except Exception:  # noqa: BLE001
         return False

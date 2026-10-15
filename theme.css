@@ -497,7 +497,9 @@ button, input, select, textarea { font-family: inherit; }
 /* the game's own app window: the window IS the menu (no empty space, no Windows frame);
    the title bar moves the window */
 .app-window #main-menu { padding: 0; }
-.app-window #main-menu > .menu-container { --win-w: 100vw; --win-h: 100vh; border-radius: 0; border: none; box-shadow: none; }
+/* (the window's corners are rounded by its cut — zns_window.CORNER_CSS, 12 px: the menu follows them
+   with a soft edge, so the curve is smooth, not the cut's steps) */
+.app-window #main-menu > .menu-container { --win-w: 100vw; --win-h: 100vh; border-radius: 12px; border: 1px solid rgba(167, 139, 255, 0.28); box-shadow: none; }
 .app-window .menu-side, .app-window .menu-top { cursor: grab; user-select: none; touch-action: none; }
 .app-window .menu-side.dragging, .app-window .menu-top.dragging { cursor: grabbing; }
 .app-window .menu-side button, .app-window .menu-top button { cursor: pointer; }

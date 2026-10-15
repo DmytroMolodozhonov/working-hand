@@ -20,6 +20,8 @@ async function askServer(action, extra = {}) {
 
 /** The menu window's size (the app window takes exactly this size, without the Windows frame). */
 export const MENU_WINDOW = { width: 1180, height: 780 };
+/** (sessionStorage: this tab is the game's app window — index.html takes its look before the first paint) */
+const APP_KEY = 'zns-app-window';
 
 let appWindow = false;
 let appFull = false;
@@ -93,10 +95,18 @@ export async function becomeAppWindow({ bar } = {}, doc = document) {
         if (i) await new Promise((r) => setTimeout(r, 600)); // (a maximised window is first restored)
         ok = await askServer('frameless', metrics());
     }
-    if (!ok) return false;
+    if (!ok) {
+        doc.documentElement.classList.remove('app-window'); // (a browser tab after all: index.html guessed from the last time)
+        try { sessionStorage.removeItem(APP_KEY); } catch (e) { /* */ }
+        return false;
+    }
     appWindow = true;
     appFull = false;
     doc.documentElement.classList.add('app-window');
+    try { sessionStorage.setItem(APP_KEY, '1'); } catch (e) { /* */ }
+    // the window was hidden while the server cut it and gave it its size: it is shown now, with the
+    // page already in its final look (a moment for the new layout) — never a frame, a strip or a jump
+    setTimeout(() => askServer('reveal'), 60);
     for (const b of [].concat(bar || [])) if (b) dragBy(b);
     // the game's full screen covers the taskbar only while the game is in front
     window.addEventListener('focus', () => { if (appFull) askServer('focus'); });

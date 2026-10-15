@@ -75,6 +75,21 @@ class Clip(unittest.TestCase):
             self.assertTrue(all(0 < v < 2 ** 31 for v in W.pack_cut(region)))  # (a 32-bit handle, never 0)
         self.assertIsNone(W.unpack_cut(0, 5))
 
+    def test_rounded_menu_window_and_its_title(self):
+        self.assertEqual(W.corner_radius(False, 1), 12)  # the menu window: rounded
+        self.assertEqual(W.corner_radius(False, 1.5), 18)  # (real pixels at 150 %)
+        self.assertEqual(W.corner_radius(True, 1.25), 0)  # full screen: square to the monitor's edges
+        # a rounded cut's box may be a pixel smaller: not «lost»
+        self.assertFalse(W.keep_needed((9, 31, 1188, 810), (9, 31, 1189, 811)))
+        # the new window found by its title: the game's name, or its address before the page has one
+        for t in (W.GAME_TITLE, "localhost:8000/", "http://127.0.0.1:8001/"):
+            self.assertTrue(W.is_app_title(t), t)
+        for t in ("", "Новая вкладка - Google Chrome", "YouTube"):
+            self.assertFalse(W.is_app_title(t), t)
+        self.assertIn("reveal", W.ACTIONS)
+        self.assertEqual(W.app_windows_now(), set()) if sys.platform != "win32" else None
+        self.assertFalse(W.hide_new_window(set(), seconds=0)) if sys.platform != "win32" else None
+
     def test_not_on_windows_or_unknown_action_does_nothing(self):
         self.assertFalse(W.window_action("explode"))
         if sys.platform != "win32":

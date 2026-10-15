@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Волшебство только начинается</title>
+    <!-- the first paint is already the game's dark (never a white / grey flash), and in the game's own
+         window already its window look (WindowControls.js: the loading screen or the last page said so) -->
+    <meta name="color-scheme" content="dark">
+    <style>html { background: #0e0a24; }</style>
+    <script>try { if (sessionStorage.getItem('zns-app-window') === '1') document.documentElement.classList.add('app-window'); } catch (e) { /* */ }</script>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/logo/logo-32.png">
     <link rel="icon" type="image/svg+xml" href="assets/logo/logo.svg">
     <link rel="apple-touch-icon" href="assets/logo/logo-256.png">

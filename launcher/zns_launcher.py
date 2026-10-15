@@ -455,12 +455,16 @@ def open_window(url):
     for exe in browser_candidates():
         prefer_strong_gpu(exe)
         try:
-            subprocess.Popen(window_args(exe, url))
             try:
                 import zns_window
-                threading.Thread(target=zns_window.rescue_offscreen, daemon=True).start()
+                before = zns_window.app_windows_now()
             except Exception:  # noqa: BLE001
-                pass
+                zns_window, before = None, set()
+            subprocess.Popen(window_args(exe, url))
+            if zns_window:
+                # (the new window is hidden the moment it appears: seen only cut to its final look)
+                threading.Thread(target=zns_window.hide_new_window, args=(before,), daemon=True).start()
+                threading.Thread(target=zns_window.rescue_offscreen, daemon=True).start()
             log(f"Окно игры: {os.path.basename(exe)}")
             return
         except OSError as e:

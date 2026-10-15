@@ -227,9 +227,15 @@ test('look: in the game\'s own app window the menu fills the window (no empty sp
     });
     await page.goto(srv.url);
     await page.waitForFunction(() => document.documentElement.classList.contains('app-window'));
-    assert.deepEqual(asked, ['frameless']);
+    assert.equal(asked[0], 'frameless');
+    // the window (hidden by the server until now) is shown once the page has its final look
+    for (let i = 0; i < 20 && !asked.includes('reveal'); i++) await new Promise((res) => setTimeout(res, 50));
+    assert.deepEqual(asked.slice(0, 2), ['frameless', 'reveal']);
     const r = await page.$eval('#main-menu > .menu-container', (el) => { const b = el.getBoundingClientRect(); return [b.left, b.top, Math.round(b.width), Math.round(b.height)]; });
     assert.deepEqual(r, [0, 0, 1180, 780]);
+    // a reload in the same window takes the window look before its first paint (no menu box that grows)
+    await page.reload();
+    assert.equal(await page.evaluate(() => document.documentElement.classList.contains('app-window')), true);
     // dragging the title bar moves the window by the mouse's way
     const box = await page.locator('.brand-tagline').boundingBox();
     await page.mouse.move(box.x + 5, box.y + 5);

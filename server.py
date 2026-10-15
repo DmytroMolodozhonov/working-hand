@@ -734,6 +734,15 @@ def open_game_window(url):
             _prefer_strong_gpu(exe)
             # (the usual browser profile: saved worlds, the hero and the settings live there)
             try:
+                zw, before = None, set()
+                try:
+                    here = os.path.join(ROOT, "launcher")
+                    if here not in sys.path:
+                        sys.path.insert(0, here)
+                    import zns_window as zw
+                    before = zw.app_windows_now()
+                except Exception:  # noqa: BLE001
+                    zw = None
                 subprocess.Popen([
                     # (off the screen first: the page cuts the frame away and brings it to the middle — /api/window)
                     exe, f"--app={url}", "--window-size=1180,780", "--window-position=-6000,-6000",
@@ -744,14 +753,10 @@ def open_game_window(url):
                     "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
                 ])
                 print(f"  Игра открыта в отдельном окне ({os.path.basename(exe)}, мощная видеокарта)")
-                try:
-                    here = os.path.join(ROOT, "launcher")
-                    if here not in sys.path:
-                        sys.path.insert(0, here)
-                    import zns_window
-                    threading.Thread(target=zns_window.rescue_offscreen, daemon=True).start()
-                except Exception:  # noqa: BLE001
-                    pass
+                if zw:
+                    # (the new window is hidden the moment it appears: seen only cut to its final look)
+                    threading.Thread(target=zw.hide_new_window, args=(before,), daemon=True).start()
+                    threading.Thread(target=zw.rescue_offscreen, daemon=True).start()
                 return
             except OSError as e:
                 print(f"  (не удалось открыть {exe}: {e})")
