@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 import { rayToSegment, segmentToSegment, BODY } from './Duel.js';
 import { refusal } from './Hints.js';
+import { AIM, aimOffset, steadyDir, applyAimOffset } from './AimHold.js';
 
 export const LEVITATE = {
     RANGE: 30, // m (the heroes are big: 10 was only a few real steps — a thing on the ground was out of reach)
@@ -28,8 +29,8 @@ export const LEVITATE = {
     TWIST: 1.6, // the object turns this much more than the wrist (a small turn of the hand swings it)
     FOLLOW: 3.5, // how fast the float point follows the hand (1/s)
     RISE: 2.5, // 1/s: a thing taken low rises up onto the hand's line this fast (sideways it stays put)
-    GLITCH: 0.35, // rad in one frame: no real hand turns so fast — the camera lost the hand / the fingers for a moment
-    GLITCH_T: 0.4, // s: such a jump is believed only if it lasts this long
+    GLITCH: AIM.GLITCH, // (AimHold.js)
+    GLITCH_T: AIM.GLITCH_T,
     DROP_DISTANCE: 0.75, // m of hand movement within DROP_WINDOW = a jerk
     DROP_WINDOW: 0.25,
     GRACE: 0.8,
@@ -37,45 +38,8 @@ export const LEVITATE = {
     STALE: 3, // s without the caster's pose: what it held falls
 };
 
-/** A direction as yaw (around Y) and pitch (up +). */
-function yawPitch(v) {
-    return [Math.atan2(v.x, v.z), Math.asin(Math.max(-1, Math.min(1, v.y / (v.length() || 1))))];
-}
-
-/**
- * Where the thing was against the line of the hand when it was taken (yaw and pitch apart):
- * it is held there and moves as the hand turns — not snapped onto the hand's line (with a hand
- * or a wand pointing a little aside, that made it fly off for a moment).
- */
-export function aimOffset(dir, to) {
-    const [y0, p0] = yawPitch(dir), [y1, p1] = yawPitch(to);
-    const dy = y1 - y0;
-    return { dy: Math.atan2(Math.sin(dy), Math.cos(dy)), dp: p1 - p0 };
-}
-
-/**
- * The hand's direction without the camera's glitches (`st` keeps the state): a sudden jump —
- * the hand or the fingers lost for a moment — is not followed unless it lasts; a real turn
- * of the hand is smooth and goes through at once. Changes `dir` in place.
- */
-export function steadyDir(st, dir, dt) {
-    if (!st.dir) { st.dir = dir.clone(); st.held = 0; return dir; }
-    if (st.dir.angleTo(dir) > LEVITATE.GLITCH && st.held < LEVITATE.GLITCH_T) {
-        st.held += dt; // (a jump: wait and see if it lasts)
-        return dir.copy(st.dir);
-    }
-    st.held = 0;
-    st.dir.copy(dir);
-    return dir;
-}
-
-/** The hand's direction turned by such an offset (out may be dir). */
-export function applyAimOffset(dir, off, out) {
-    if (!off) return out.copy(dir);
-    const [y, p] = yawPitch(dir);
-    const yy = y + off.dy, pp = Math.max(-1.45, Math.min(1.45, p + off.dp)), c = Math.cos(pp);
-    return out.set(Math.sin(yy) * c, Math.sin(pp), Math.cos(yy) * c);
-}
+// (aiming at what is held — shared with the «Bubble» of «Water Vortex»: AimHold.js)
+export { aimOffset, steadyDir, applyAimOffset };
 
 /** Magic armour stops the plain «Левиоса», never «Левиоса Максима» (`maxima`). */
 export function levBlocked(o, maxima = false) {

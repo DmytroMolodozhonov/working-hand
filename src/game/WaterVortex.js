@@ -44,6 +44,7 @@ import { createWaterMaterial } from '../fx/WaterMaterial.js';
 import { WaterFlow, WaterSpray, arcPoints } from '../fx/WaterFlow.js';
 import { sharpJerk } from './Jerk.js';
 import { fallDir } from './Impact.js';
+import { aimOffset, applyAimOffset, steadyDir } from './AimHold.js';
 
 export const VORTEX = {
     COST: 25, // mana (see Combat.SPELL_COST)
@@ -74,8 +75,8 @@ export const VORTEX = {
     BUBBLE_FORM: 2.5, // s at least: the water swirls round the creature into a ball (never all at once)
     BUBBLE_LATE: 6, // s after the stream ran out «Bubble» still gathers its water back into a ball
     BUBBLE_LIFT: 0.6, // m: the ball lifts the one inside this far off the ground as it forms
-    BUBBLE_SPEED: 5, // m/s at most when the caster carries it by hand (it is heavy)
-    BUBBLE_GRAB: 0.3, // rad: the hand pointing this close to the ball takes hold of it
+    BUBBLE_SPEED: 8, // m/s at most when the caster carries it by hand (it is heavy)
+    BUBBLE_GRAB: 0.3, // rad: the hand pointing this close to the ball takes hold of it again
     BUBBLE_LIFE: 15, // s a liquid bubble holds
     ICE_LIFE: 90, // s at most (then it cracks)
     COLD_DPS: 1, // HP a second from the cold
@@ -101,7 +102,7 @@ const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _srcInner = new THREE.Vector3();
-const _qI = new THREE.Quaternion();
+const _bh = { o: new THREE.Vector3(), d: new THREE.Vector3() }; // (the hand carrying a bubble)
 const UP = new THREE.Vector3(0, 1, 0);
 /** A zombie kicks its legs in the water. */
 function z_kick(z) {
@@ -981,15 +982,23 @@ export class WaterVortex {
         const side = this._castSide() || g.magicHand || g.lastMagicHand || 'right';
         const ch = g.character;
         if (b.grow >= 1 && !this.state) {
-            const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
-            const d = ch.getPointingDirection ? ch.getPointingDirection(side, _a) : ch.getHandDirection(side, _a);
+            // the very hand «Левиоса» carries a body by (the duel's ray of the hand / the wand), with its
+            // filter for the camera's glitches (a lost hand for a moment does not fling the ball)
+            const o = _bh.o, d = _bh.d;
+            if (!g.duel?._handOf?.(this.me, side, o, d)) {
+                o.copy(g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side));
+                d.copy(ch.getPointingDirection ? ch.getPointingDirection(side, _a) : ch.getHandDirection(side, _a));
+            }
+            d.normalize();
+            if (b.steadySide !== side) { b.steady = {}; b.steadySide = side; }
+            steadyDir(b.steady, d, dt);
             const to = _b.subVectors(b.pos, o);
             const dist = to.length();
             // held like «Левиоса» as soon as it has formed (thrown off: point at it again to take it back)
             const pointed = dist > 0.5 && dist < 40 && to.angleTo(d) < VORTEX.BUBBLE_GRAB + Math.atan(b.r / dist) * 0.5;
             if (!b.held && (!b.wasHeld || pointed) && !b.thrown && dist < 45) {
-                // (it is taken where it is — no jump to the hand's line; it drifts onto it as the hand moves)
-                b.held = { dist: Math.max(dist, b.r + 1.5), q: new THREE.Quaternion().setFromUnitVectors(d, to.clone().normalize()), age: 0, side };
+                // (it is taken where it is — no jump to the hand's line: held at that angle to the hand, as «Левиоса» holds)
+                b.held = { dist: Math.max(dist, b.r + 1.5), off: aimOffset(d, to), age: 0, side };
                 b.wasHeld = true;
                 this._note({ ev: 'grab', id: b.id });
             }
@@ -1002,8 +1011,9 @@ export class WaterVortex {
                     b.held = null; b.rest = null;
                     this._note({ ev: 'letgo', id: b.id });
                 } else {
-                    b.held.q.slerp(_qI, Math.min(1, dt * 0.6));
-                    want = _c.copy(o).addScaledVector(_d.copy(d).applyQuaternion(b.held.q), b.held.dist);
+                    b.held.off.dp *= Math.exp(-dt * 0.6); // (it drifts onto the hand's line, slowly)
+                    b.held.off.dy *= Math.exp(-dt * 0.6);
+                    want = _c.copy(o).addScaledVector(applyAimOffset(d, b.held.off, _d), b.held.dist);
                 }
             }
         }

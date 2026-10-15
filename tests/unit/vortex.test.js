@@ -426,3 +426,35 @@ test('«Bubble» as the Russian recognizer may write it (only while the vortex w
     for (const t of ['бабл', 'Бабал', 'бобл', 'пабл', 'баббл', 'бубл', 'пузырь', 'Пузырь!', 'bubble', 'вабл']) assert.ok(bubbleLike(t), t);
     for (const t of ['стоп', 'атака', 'фрозен', 'Инферно', 'баран', 'привет']) assert.ok(!bubbleLike(t), t);
 });
+
+test('«Bubble» is carried by the hand like «Левиоса»: empty or with a creature inside, a camera glitch does not fling it, the others see it move', () => {
+    for (const tk of [null, 'z']) {
+        const { g, ch, V, sent } = world();
+        g.items.heldOf = () => null; // (the wand on the belt: the magic hand still carries it)
+        const b = V._addBubble({ id: 'me:1', by: 'me', tk, tid: tk ? 7 : null, v: 20, p: [0, 1, -8] });
+        run(V, 3);
+        assert.equal(b.grow, 1);
+        V.update(1 / 60);
+        assert.ok(b.held, `${tk || 'empty'}: taken by the hand as soon as it formed`);
+        const p0 = b.pos.clone();
+        // the camera loses the hand for one frame (a jump of the ray): the ball stays where it is
+        ch.dir.set(1, 0, 0);
+        V.update(1 / 60);
+        ch.dir.set(0, 0, -1);
+        run(V, 0.3);
+        assert.ok(b.pos.distanceTo(p0) < 0.3, `${tk || 'empty'}: a glitch does not fling it (${b.pos.distanceTo(p0).toFixed(2)} m)`);
+        // the hand turns up and aside: the ball follows smoothly
+        ch.dir.set(0.5, 0.5, -1).normalize();
+        run(V, 3);
+        assert.ok(b.pos.y > p0.y + 2 && b.pos.x > p0.x + 2, `${tk || 'empty'}: it follows the hand (${b.pos.toArray().map((v) => v.toFixed(1))})`);
+        assert.ok(sent.some((m) => m.ev === 'bpos'), 'its place is sent to the others');
+        // another computer: the ball follows those messages
+        const other = world().V;
+        other.game.localId = 'them';
+        other.onNet?.({ ...sent.find((m) => m.ev === 'bubble') || { ev: 'bubble', id: 'me:1', tk, tid: tk ? 7 : null, v: 20, p: [0, 1, -8] }, by: 'me' });
+        if (!other.bubbles.size) other._addBubble({ id: 'me:1', by: 'me', tk, tid: tk ? 7 : null, v: 20, p: [0, 1, -8] });
+        other.onNet({ ev: 'bpos', id: 'me:1', p: [b.pos.x, b.pos.y, b.pos.z], by: 'me' });
+        run(other, 1);
+        assert.ok(other.bubbles.get('me:1').pos.distanceTo(b.pos) < 0.3, 'the others see it where the caster carries it');
+    }
+});
