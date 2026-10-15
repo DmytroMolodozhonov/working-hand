@@ -66,14 +66,21 @@ const SCENES = {
         const g = h.g, t = g.world.terrain.data;
         const s = t.lairsNear(0, 0, 4000).sort((a, b) => Math.hypot(a.lair.x, a.lair.z) - Math.hypot(b.lair.x, b.lair.z))[0];
         if (!s) return { skip: 'no lair' };
-        const L = s.lair;
-        await h.go(L.mouth.x + L.dx * 4, L.F + 3, L.mouth.z + L.dz * 4, true);
+        const L = s.lair, M = L.mouth;
+        // which way is out of the mountain: the ground falls away there
+        const side = (k) => t.topLayer(Math.round(M.x + L.dx * k * 14), Math.round(M.z + L.dz * k * 14));
+        const o = side(1) < side(-1) ? 1 : -1, ox = L.dx * o, oz = L.dz * o;
+        await h.go(M.x - ox * 4, L.F + 3, M.z - oz * 4, true);
         g.dragons._lairT = 0;
         await h.until(() => g.dragons.list.some((d) => d.lair === L.id), 15000);
         const d = g.dragons.list.find((x) => x.lair === L.id);
         if (!d) return { skip: 'no dragon' };
-        await h.frames(30);
-        return { ...h.view(d.model, { d: 20, up: 6, at: 4, side: 0.6 }), light: 1.4 };
+        // awake, standing in its huge mouth and looking out at the one who came (the player, by the camera)
+        d.model.position.set(M.x + ox * 2, L.F, M.z + oz * 2);
+        d.mode = 'watch'; d.wakeT = 1e9; d.calmT = 0; d.aggro = null; d.target = null;
+        await h.go(M.x + ox * 24, L.F + 6, M.z + oz * 24, true);
+        await h.frames(150);
+        return h.view(d.model, { d: 21, up: 5, at: 5, side: 0.4 });
     },
     'ice-queen': async (h) => {
         const g = h.g, I = g.iceCastle, P = I.plan;
