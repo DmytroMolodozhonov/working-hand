@@ -138,6 +138,14 @@ function build() {
 /** Every way of saying every spell: {spell, canonical, phrase, toks, len}. */
 export const VOCAB = build();
 
+/**
+ * The ways of saying a spell that another spell goes on from: «протекшн» → «протекшн хаус» /
+ * «… максима» / «… инвизибл», «бомбардо» → «бомбардо максима», «вайнд» → «вайнд импульс», «стенд» →
+ * «стенд ап»… (found in VOCAB itself: every new spell and its «Максима» counts at once). Said alone,
+ * such a phrase is a spell only after a moment of quiet: the rest of the longer one may be on its way.
+ */
+export const GOES_ON = new Set(VOCAB.filter((w) => VOCAB.some((l) => l.spell !== w.spell && l.phrase.startsWith(w.phrase + ' '))).map((w) => w.phrase));
+
 // ------------------------------------------------------------------ the sound
 /** The rows from voice_native.py (base64 of −log-probability×10 as bytes) → log-probabilities. */
 export function unpack(b64, T) {
@@ -295,13 +303,30 @@ export function wordsOf(spell) {
     return n;
 }
 
-/** Letters heard outside a span of the sound (repeats and «nothing new» left out). */
-export function lettersOutside(P, a, b) {
-    let n = 0, prev = -1;
-    for (let t = 0; t < P.T; t++) {
+/**
+ * Letters heard outside a span of the sound (repeats and «nothing new» left out) — only those of the
+ * same stretch of speech: past a pause of `pause` 40 ms steps they are another phrase (voice_native.py
+ * ended a phrase after 0.42 s of quiet; it now waits longer for a «… Хаус», and a cough after a spell's
+ * pause is still no sentence round it).
+ */
+export const PAUSE = 11;
+export function lettersOutside(P, a, b, pause = Infinity) {
+    let n = 0, prev = -1, quiet = 0, cut = false;
+    // after the span
+    for (let t = Math.max(0, b + 1); t < P.T && !cut; t++) {
         const v = P.am[t];
-        if (t >= a && t <= b) { prev = -1; continue; }
-        if (v !== BLANK && v !== SPACE && v !== prev) n++;
+        if (v === BLANK || v === SPACE) { if (++quiet >= pause) cut = true; prev = v; continue; }
+        quiet = 0;
+        if (v !== prev) n++;
+        prev = v;
+    }
+    // before it
+    prev = -1; quiet = 0; cut = false;
+    for (let t = Math.min(P.T, a) - 1; t >= 0 && !cut; t--) {
+        const v = P.am[t];
+        if (v === BLANK || v === SPACE) { if (++quiet >= pause) cut = true; prev = v; continue; }
+        quiet = 0;
+        if (v !== prev) n++;
         prev = v;
     }
     return n;
@@ -332,7 +357,7 @@ export function hear(lp, T, o = {}) {
     // be «Бомбардо Максима», «лет…» «Let the Hellfire come», «вин…» «Вингардиум»: the next look tells)
     if (o.final === false && lettersOutside(P, -1, best.b) > 0) return { text: written, written, spell: null, sure: false, echo: false, far, best, early: true };
     // (said inside a sentence: talk — ALONE)
-    const extra = lettersOutside(P, best.a, best.b);
+    const extra = lettersOutside(P, best.a, best.b, PAUSE);
     if (!WORDY.has(best.spell) && (extra > ALONE_MAX || (extra > ALONE && best.avg - need < ALONE_FIT))) {
         return { text: written, written, spell: null, sure: false, echo: false, far, best, extra };
     }
@@ -347,5 +372,6 @@ export function hear(lp, T, o = {}) {
         }
     }
     const text = WORDY.has(best.spell) ? written : best.canonical;
+    // tail: ms heard after the spell (a look at a phrase still being said: nothing but quiet there)
     return { text, written, spell: best, sure: true, echo, far, extra, tail: (T - 1 - best.b) * 40 };
 }

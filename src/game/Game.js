@@ -1042,7 +1042,7 @@ export class Game {
         const vm = this._voiceMeta;
         if (name && vm && Number.isFinite(vm.to)) {
             const lag = performance.now() - vm.to;
-            if (lag >= 0 && lag < 6000) { const v = this.stats.voice || (this.stats.voice = { n: 0, sum: 0, max: 0, final: 0 }); v.n++; v.sum += lag; v.max = Math.max(v.max, lag); if (isFinal) v.final++; }
+            if (lag >= 0 && lag < 6000) { const v = this.stats.voice || (this.stats.voice = { n: 0, sum: 0, max: 0, final: 0 }); v.n++; v.sum += lag; v.max = Math.max(v.max, lag); if (isFinal && !vm.settled) v.final++; }
             this._voiceMeta = null;
         }
         // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom) — except Lumos: a light on the wand tip is no spell in the way
@@ -1080,6 +1080,9 @@ export class Game {
             if (isFinal) this.hud.setVoice(`📜 «${ru}» вы ещё не знаете. Найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
             return null;
         }
+        // «Protection…», «Бомбардо…» with nothing after them yet: «… Хаус», «… Максима» may still come
+        // (NativeVoice: more) — the voice tells again once it can't; only a duel answer under fire can't wait
+        if (!isFinal && this._voiceMeta?.more && !(name === 'Jolt' && this.duel.underFire?.())) return null;
         // the rule of concentration: while a spell is held no other works — first «стоп» (Concentration.js;
         // the held spell's own words, Lumos, Nox, «стоп», the shield are free; Creative too)
         if (this.focus.gate(name, isFinal, !!BUILD_SPELLS[name])) return null;

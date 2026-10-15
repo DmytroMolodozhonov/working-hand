@@ -16,13 +16,22 @@
  * one heard it very clearly), and never right at the cut edge of the look (SpellSpotter.EDGE).
  */
 
-import { unpack, hear, threshold, HEARD, WORDY } from '../audio/SpellSpotter.js';
+import { unpack, hear, threshold, HEARD, WORDY, GOES_ON } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
 
 /** A spell this clear is cast from one look at the phrase (avg cost per letter)… */
 export const SURE_AT_ONCE = -0.6;
 /** …if it is long enough: a short one («гром», «вайнд») hides in the start of a longer word still being said. */
 export const AT_ONCE_LEN = 6;
+/** …or when the speaker has clearly stopped after it (ms of quiet heard after the spell). */
+export const QUIET_AT_ONCE = 200;
+/**
+ * A spell another one goes on from («Protection» → «Protection House», «Бомбардо» → «… Максима»: GOES_ON)
+ * is cast only after this much quiet after it (ms) — or at the phrase's end: the time a «Хаус» or a
+ * «Максима» needs to begin. The longer one is cast as soon as it is heard; spells nothing goes on
+ * from never wait. (voice_native.py keeps a phrase open a little longer than this: SEG «end».)
+ */
+export const MORE_WAIT = 600;
 
 /**
  * What one look at a phrase gives the game (pure: tests).
@@ -42,11 +51,20 @@ export function lookAt(d, seg = {}) {
     } else if (h.sure) {
         const name = h.spell.canonical;
         if (d.final) {
-            say = { text: h.text, isFinal: true };
+            // (already cast as settled from this phrase: its end is no second word)
+            if (!(next.fired === name && next.settled)) say = { text: h.text, isFinal: true };
             next.fired = name;
-        } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN)) && ((d.far || 0) < 0.25 || d.ref)) {
+        } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= QUIET_AT_ONCE) && ((d.far || 0) < 0.25 || d.ref)) {
             // (while the speakers play, only a look that has their sound too may cast: it can tell an echo)
-            if (next.fired !== name) { say = { text: h.text, isFinal: false }; next.fired = name; }
+            if (GOES_ON.has(h.spell.phrase) && !(h.tail >= MORE_WAIT)) {
+                // «Protection…»: «Хаус» may yet come — the game waits (only an answer under fire can't: more)
+                if (next.fired !== name && next.more !== name) { say = { text: h.text, isFinal: false, more: true }; next.more = name; }
+            } else if (next.fired !== name) {
+                // settled: nothing can follow that would make it another spell — as good as the phrase's end
+                say = { text: h.text, isFinal: false, settled: true };
+                next.fired = name;
+                next.settled = true;
+            }
         }
         next.last = name;
     } else {
@@ -177,6 +195,6 @@ export class NativeVoice {
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
-        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure, talkOnly: !!r.say.talkOnly });
+        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled });
     }
 }

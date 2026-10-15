@@ -516,7 +516,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         // loudness and the network's echo only ever guessed that, and sometimes ate my own spells.
         if (meta?.native && meta.aec) {
             const said = matchSpell(command);
-            const name = game.castLocalSpell(command, isFinal);
+            // (settled: the voice already waited for a possible «… Максима» / «… Хаус» — as good as the phrase's end)
+            const name = game.castLocalSpell(command, isFinal || !!meta.settled);
             if (name) {
                 if (game.remotes?.size > 0) game.sync?.say?.(said);
                 voice.learnOwnVoice();
@@ -553,7 +554,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
                 if (isFinal || held) netLog(`заклинание «${command}» моё: ${gate.sure ? 'рот двигался вместе с голосом' : 'лица не видно — друг этого заклинания не говорил'}`);
             }
         }
-        const name = game.castLocalSpell(command, isFinal);
+        const name = game.castLocalSpell(command, isFinal || !!meta?.settled);
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
         // («стоп» with nothing to stop is still words to a villager: «стой» / «стоп» = stop following me)
         if (!name && isFinal && (!heard || heard === 'Stand') && (sailorFirst ? game.ships.crew.hear(command) || game.castleLife?.talk?.hear(command) : game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command))) {

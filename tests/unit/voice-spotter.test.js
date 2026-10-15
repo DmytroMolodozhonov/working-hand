@@ -4,8 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { unpack, prepare, greedy, hear, VOCAB, encode, threshold } from '../../src/audio/SpellSpotter.js';
-import { lookAt } from '../../src/input/NativeVoice.js';
+import { unpack, prepare, greedy, hear, VOCAB, encode, threshold, GOES_ON } from '../../src/audio/SpellSpotter.js';
+import { lookAt, MORE_WAIT } from '../../src/input/NativeVoice.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 
 const rows = JSON.parse(fs.readFileSync(new URL('../fixtures/voice-spells.json', import.meta.url), 'utf8'));
@@ -68,23 +68,23 @@ test('short words must fit better; while the speakers play, better still', () =>
 const one = (text, voice = 'irina') => spells.find((r) => r.text === text && r.voice === voice);
 const ev = (r, extra = {}) => ({ type: 'seg', id: 1, T: r.T, lp: r.lp, far: 0, ...extra });
 
-test('a phrase still being said casts after two looks agree (or one very clear one); its end does not cast twice', () => {
-    const r = one('бомбардо');
+test('a phrase still being said: a spell heard whole casts once — one that may go on («Бомбардо…») only tells the game to wait', () => {
+    // «Бомбардо» with a short quiet after it: «Максима» may still come — only «more» (the game waits), then its end casts
     let seg = {};
-    // (unclear first look: only remembered)
-    const first = lookAt(ev(r, { final: false }), seg);
-    seg = first.seg;
-    const said = [first.say];
-    const second = lookAt(ev(r, { final: false }), seg);
-    said.push(second.say);
-    seg = second.seg;
-    const end = lookAt(ev(r, { final: true }), seg);
-    const casts = said.filter((s) => s && !s.isFinal);
-    assert.equal(casts.length, 1, JSON.stringify(said));
-    assert.equal(matchSpell(casts[0].text), 'Bombardo');
-    // the end still says it (final): the game itself knows it was cast from the unfinished phrase
+    const said = [];
+    for (let i = 0; i < 2; i++) { const r = lookAt(ev(one('бомбардо'), { final: false }), seg); seg = r.seg; said.push(r.say); }
+    assert.equal(said.filter((s) => s && !s.more).length, 0, JSON.stringify(said));
+    assert.equal(said.filter((s) => s?.more).length, 1, JSON.stringify(said));
+    const end = lookAt(ev(one('бомбардо'), { final: true }), seg);
     assert.equal(end.say?.isFinal, true);
     assert.equal(matchSpell(end.say.text), 'Bombardo');
+    // «Инферно»: nothing goes on from it — cast from the first look, once; its end is no second word
+    seg = {};
+    const casts = [];
+    for (let i = 0; i < 2; i++) { const r = lookAt(ev(one('инферно'), { final: false }), seg); seg = r.seg; if (r.say) casts.push(r.say); }
+    assert.equal(casts.length, 1, JSON.stringify(casts));
+    assert.equal(matchSpell(casts[0].text), 'Inferno');
+    assert.equal(lookAt(ev(one('инферно'), { final: true }), seg).say, null);
 });
 
 test('a friend\'s spell from the speakers: heard in the speakers\' sound too → an echo, never cast', () => {
@@ -124,4 +124,69 @@ test('talk never casts: a spell is said on its own — a spell\'s word inside a 
         if (res.say && !res.say.talkOnly && matchSpell(res.say.text) === matchSpell(r.text)) ok++;
     }
     assert.ok(ok / spells.length >= 0.8, `${ok}/${spells.length}`);
+});
+
+// ------------------------------------------------------------------ a spell that may go on («Protection… Хаус»)
+// The phrase as it grows: looks at its first k rows (every 3 rows = 120 ms, as voice_native.py looks while it
+// is said), then — with `quiet` ms of silence after it — more looks, then its end. → the spells cast, in order.
+const rowsOf = (r) => Buffer.from(r.lp, 'base64');
+function grow(r, quiet = 0) {
+    const b = rowsOf(r), last = b.subarray((r.T - 1) * 34);
+    const pad = Math.round(quiet / 40);
+    const all = Buffer.concat([b, ...Array.from({ length: pad }, () => last)]);
+    const T = r.T + pad;
+    const casts = [];
+    let seg = {};
+    const look = (k, final) => {
+        const res = lookAt({ type: 'seg', id: 1, T: k, lp: all.subarray(0, k * 34).toString('base64'), far: 0, final }, seg);
+        seg = res.seg;
+        const s = res.say;
+        // (the game: a «more» spell waits; a settled one is as good as the end; the end of a cast one is no second word)
+        if (s && !s.more && !s.talkOnly && matchSpell(s.text) && !casts.includes(matchSpell(s.text))) casts.push(matchSpell(s.text));
+    };
+    for (let k = 8; k <= T; k += 3) look(k, false);
+    look(T, true);
+    return casts;
+}
+
+test('«Protection House» is only Protection House — never a Protection on the way; «Бомбардо Максима» only the Maxima', () => {
+    for (const voice of ['irina', 'ruslan']) {
+        assert.deepEqual(grow(one('протекшн хаус', voice)), ['ProtectionHouse'], voice);
+        assert.deepEqual(grow(one('протекшн хаус', voice), 800), ['ProtectionHouse'], voice);
+        assert.deepEqual(grow(one('бомбардо максима', voice), 800), ['BombardoMaxima'], voice);
+    }
+});
+
+test('«Protection» and then quiet: Protection — after a moment of quiet, before the phrase is over', () => {
+    for (const voice of ['irina']) {
+        const r = one('протекшн', voice);
+        const b = rowsOf(r), last = b.subarray((r.T - 1) * 34);
+        let seg = {}, cast = null;
+        for (let pad = 0; pad <= 20 && !cast; pad++) {
+            const all = Buffer.concat([b, ...Array.from({ length: pad }, () => last)]);
+            const res = lookAt({ type: 'seg', id: 1, T: r.T + pad, lp: all.toString('base64'), far: 0, final: false }, seg);
+            seg = res.seg;
+            if (res.say?.settled) cast = { name: matchSpell(res.say.text), quiet: res.heard.tail };
+            else assert.ok(!res.say || res.say.more, JSON.stringify(res.say));
+        }
+        assert.equal(cast?.name, 'Protection', voice);
+        assert.ok(cast.quiet >= MORE_WAIT && cast.quiet < MORE_WAIT + 200, `${cast.quiet} ms`);
+        // its end is no second «Protection»
+        const all = Buffer.concat([b, ...Array.from({ length: 20 }, () => last)]);
+        assert.equal(lookAt({ type: 'seg', id: 1, T: r.T + 20, lp: all.toString('base64'), far: 0, final: true }, seg).say, null);
+    }
+    // what may go on is found in the spells themselves
+    for (const p of ['протекшн', 'протекшн хаус', 'бомбардо', 'люмос', 'вайнд', 'джолт', 'алохомора', 'стенд']) assert.ok(GOES_ON.has(p), p);
+    for (const p of ['протекшн хаус максима', 'бомбардо максима', 'инферно', 'экспеллиармус', 'авада кедавра', 'стоп', 'нокс']) assert.ok(!GOES_ON.has(p), p);
+});
+
+test('a spell nothing goes on from is cast from the first look that hears it whole', () => {
+    for (const text of ['инферно', 'экспеллиармус', 'нокс']) {
+        for (const voice of ['irina', 'ruslan']) {
+            const r = one(text, voice);
+            const res = lookAt(ev(r, { final: false }), {});
+            assert.equal(matchSpell(res.say?.text), matchSpell(text), `${text} ${voice}: ${JSON.stringify(res.heard.spell?.avg)} tail ${res.heard.tail}`);
+            assert.ok(res.say.settled);
+        }
+    }
 });
