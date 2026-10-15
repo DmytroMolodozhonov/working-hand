@@ -101,6 +101,82 @@ class _LatestFrame:
             return True, self.frame
 
 
+class _V5Hands:
+    """
+    The V5 hand finder (hand_v5.py), made ready in the background: its one package (Google's
+    LiteRT, pip ai-edge-litert, ≈ 20 MB) is installed once if missing, the network is taken out of
+    the game's own hand_landmarker.task and checked (SHA-256). Until it is ready — or if it can't
+    be (state "error", `why` says why) — the camera keeps finding the hands its old way.
+    """
+
+    def __init__(self):
+        self.state = "off"  # off | installing | loading | ready | error
+        self.why = ""
+        self.gpu = ""  # what the video card does for V5 (RTMPose), or why nothing
+        self.hands = None
+        self._lock = threading.Lock()
+
+    def want(self):
+        """Asked for: start getting ready (never waits). True once it can be used."""
+        with self._lock:
+            if self.state == "off":
+                self.state = "loading"
+                threading.Thread(target=self._prepare, name="hand-v5", daemon=True).start()
+        return self.state == "ready"
+
+    def _prepare(self):
+        try:
+            try:
+                import ai_edge_litert  # noqa: F401
+            except Exception:  # noqa: BLE001
+                if os.environ.get("ZNS_NO_PIP"):
+                    raise RuntimeError("нет пакета ai-edge-litert")
+                self.state = "installing"
+                print("  [Камера] Кисти V5: устанавливаю ai-edge-litert (один раз, около 20 МБ)...")
+                import subprocess
+                r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", "-q", "ai-edge-litert"],
+                                   capture_output=True, text=True, timeout=1800)
+                if r.returncode != 0:
+                    raise RuntimeError("не удалось установить ai-edge-litert: " + ((r.stderr or r.stdout or "").strip().splitlines() or [""])[-1])
+                import importlib
+                import site
+                try:
+                    site.addsitedir(site.getusersitepackages())
+                except Exception:  # noqa: BLE001
+                    pass
+                importlib.invalidate_caches()
+            self.state = "loading"
+            from hand_v5 import HandsV5
+            self.hands = HandsV5()
+            self.state = "ready"
+            print("  [Камера] Кисти V5 готовы (MediaPipe по участкам вокруг запястий, процессор)")
+        except Exception as e:  # noqa: BLE001
+            self.why = str(e) or type(e).__name__
+            self.state = "error"
+            print(f"  [Камера] Кисти V5 не запустились (работают прежние кисти): {self.why}")
+            return
+        # A video card: RTMPose on it, in a program of its own (more exact on small hands and fists —
+        # tools/handbench). On the processor it would be too heavy next to the game: then not.
+        if os.environ.get("ZNS_V5_ENGINE", "auto") == "mp":
+            return
+        try:
+            self.gpu = "готовится"
+            import hand_v5
+            ort_dir = hand_v5.ort_gpu_dir()
+            probe = hand_v5.RTMRemote("--probe", ort_dir, probe=True)
+            del probe
+            remote = hand_v5.RTMRemote(hand_v5.rtm_path(), ort_dir)
+            self.hands.use_rtm(remote)
+            self.gpu = f"RTMPose на видеокарте ({remote.info.get('provider')}, {remote.info.get('ms')} мс)"
+            print(f"  [Камера] Кисти V5: {self.gpu}")
+        except Exception as e:  # noqa: BLE001
+            self.gpu = "без видеокарты: " + (str(e) or type(e).__name__)
+            print(f"  [Камера] Кисти V5: {self.gpu} — работает MediaPipe по участкам (процессор)")
+
+    def reason(self):
+        return {"installing": "устанавливается", "loading": "загружается"}.get(self.state, self.why or self.state)
+
+
 class NativePose:
     def __init__(self):
         self.state = "idle"  # idle | loading | running | error | unavailable
@@ -122,6 +198,8 @@ class NativePose:
         self._mp = None
         self._cv2 = None
         self.last_frame = None
+        self.hands_mode = ""  # "" — MediaPipe's own hands; "v5" — hand_v5.py (Settings → V5)
+        self.v5 = _V5Hands()
 
     # ------------------------------------------------------------ availability
     def available(self):
@@ -154,6 +232,9 @@ class NativePose:
             "fps": round(self.fps, 1),
             "cost": round(self.cost, 1),
             "size": [self.width, self.height],
+            "hands": self.hands_mode or "mp",
+            "v5": self.v5.state,
+            "v5gpu": self.v5.gpu,
         }
 
     def snapshot(self, width=480, quality=70):
@@ -168,9 +249,13 @@ class NativePose:
         return buf.tobytes() if ok else None
 
     # ------------------------------------------------------------ start / stop
-    def start(self, quality=1, camera=None):
+    def start(self, quality=1, camera=None, hands=None):
         if not self.available():
             return False
+        if hands is not None:
+            self.hands_mode = "v5" if hands == "v5" else ""  # (switched at once, the camera goes on)
+            if self.hands_mode:
+                self.v5.want()
         with self.cond:
             self.quality = int(quality) if str(quality).isdigit() else 1
             if camera is not None:
@@ -250,12 +335,19 @@ class NativePose:
 
         def run(rgb, ts):
             r = h.process(rgb)
-            return {
+            out = {
                 "poseLandmarks": _pts(r.pose_landmarks.landmark if r.pose_landmarks else None, True),
                 "faceLandmarks": _pts(r.face_landmarks.landmark if r.face_landmarks else None),
                 "leftHandLandmarks": _pts(r.left_hand_landmarks.landmark if r.left_hand_landmarks else None),
                 "rightHandLandmarks": _pts(r.right_hand_landmarks.landmark if r.right_hand_landmarks else None),
             }
+            v5 = self._v5()
+            if v5:
+                # V5: the hands from the body's wrists (the stream then carries "hands", as the Tasks way)
+                out["hands"] = v5.process(rgb, out["poseLandmarks"])
+                out.pop("leftHandLandmarks")
+                out.pop("rightHandLandmarks")
+            return out
         return run, h.close
 
     def _make_tasks(self):
@@ -277,25 +369,45 @@ class NativePose:
         n = [0]
         from concurrent.futures import ThreadPoolExecutor
         pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="pose-net")  # (body, hands, face at once)
+        hand_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hand-v5")  # (V5: both hands at once)
+        last_pose = [None]
 
         def run(rgb, ts):
             img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             n[0] += 1
+            v5 = self._v5()
             jp = pool.submit(pose.detect_for_video, img, ts)
-            jh = pool.submit(hands.detect_for_video, img, ts)
             jf = pool.submit(face.detect_for_video, img, ts)  # (every picture: a steady head turn)
-            p, h = jp.result(), jh.result()
-            out = {
-                "poseLandmarks": _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None,
-                "hands": [
-                    {
-                        "landmarks": _pts(lm),
-                        "label": h.handedness[i][0].category_name if h.handedness and h.handedness[i] else None,
-                        "score": h.handedness[i][0].score if h.handedness and h.handedness[i] else 1.0,
-                    }
-                    for i, lm in enumerate(h.hand_landmarks or [])
-                ],
-            }
+            if v5:
+                # V5: no palm search — each hand is cut out where the body has it (hand_v5.py).
+                # Both hands followed: their squares come from themselves (the body of the last
+                # picture only checks them), so they go at once, beside the body network;
+                # a hand to be found anew waits for this picture's body.
+                if v5.tracking() and last_pose[0] is not None:
+                    jh = pool.submit(v5.process, rgb, last_pose[0], None, hand_pool)
+                    p = jp.result()
+                    pl = _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None
+                    hands_out = jh.result()
+                else:
+                    p = jp.result()
+                    pl = _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None
+                    hands_out = v5.process(rgb, pl or last_pose[0], pool=hand_pool)
+                last_pose[0] = pl or last_pose[0]
+                out = {"poseLandmarks": pl, "hands": hands_out}
+            else:
+                jh = pool.submit(hands.detect_for_video, img, ts)
+                p, h = jp.result(), jh.result()
+                out = {
+                    "poseLandmarks": _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None,
+                    "hands": [
+                        {
+                            "landmarks": _pts(lm),
+                            "label": h.handedness[i][0].category_name if h.handedness and h.handedness[i] else None,
+                            "score": h.handedness[i][0].score if h.handedness and h.handedness[i] else 1.0,
+                        }
+                        for i, lm in enumerate(h.hand_landmarks or [])
+                    ],
+                }
             if jf is not None:
                 f = jf.result()
                 out["faceLandmarks"] = _pts(f.face_landmarks[0]) if f.face_landmarks else None
@@ -303,12 +415,19 @@ class NativePose:
 
         def close():
             pool.shutdown(wait=False)
+            hand_pool.shutdown(wait=False)
             for t in (pose, hands, face):
                 try:
                     t.close()
                 except Exception:  # noqa: BLE001
                     pass
         return run, close
+
+    def _v5(self):
+        """The V5 hand finder if it is asked for and ready, else None (the old hands go on)."""
+        if self.hands_mode != "v5" or not self.v5.want():
+            return None
+        return self.v5.hands
 
     # ------------------------------------------------------------ the loop
     def _run(self):
@@ -369,7 +488,13 @@ class NativePose:
                     self.fps = frames / (now - t_rate)
                     frames = 0
                     t_rate = now
-                out.update({"cost": round(cost, 1), "w": self.width, "h": self.height, "backend": self.backend})
+                v5on = self.hands_mode == "v5" and self.v5.state == "ready"
+                out.update({"cost": round(cost, 1), "w": self.width, "h": self.height, "backend": self.backend,
+                            "handsEngine": "v5" if v5on else "mp"})
+                if v5on:
+                    out["v5Engine"] = self.v5.hands.engine  # ("rtm": RTMPose on the video card; "mp": the processor)
+                if self.hands_mode == "v5" and self.v5.state != "ready":
+                    out["v5"] = self.v5.reason()  # (the game says why the V5 hands aren't there yet)
                 with self.cond:
                     self.seq += 1
                     self.latest = json.dumps(out, separators=(",", ":"))

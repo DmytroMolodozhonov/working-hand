@@ -10,3 +10,5 @@ hand_rig.json
 zns-perf.log*
 logs/
 recordings/
+.handbench/
+vendor/mediapipe/models/v5/

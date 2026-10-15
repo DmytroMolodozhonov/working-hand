@@ -485,6 +485,7 @@ export class PoseService {
         if (r.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + r.cost * 0.1 : r.cost;
         this.stats.backend = r.backend;
         this.stats.handsEngine = r.handsEngine || 'mp';
+        this.stats.v5Engine = r.v5Engine || null; // ('rtm': RTMPose on the video card, 'mp': the processor)
         // V5 asked for, but the program found the hands its old way: say so, once (honestly)
         if (this.handsWanted === 'v5' && r.handsEngine !== 'v5' && r.v5) {
             const busy = r.v5 === 'устанавливается' || r.v5 === 'загружается';

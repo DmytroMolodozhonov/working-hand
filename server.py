@@ -359,7 +359,8 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
         from pose_native import POSE
         q = parse_qs(query)
         cam = q.get("cam", [None])[0]
-        POSE.start(quality=q.get("q", ["1"])[0], camera=int(cam) if cam and cam.isdigit() else None)
+        POSE.start(quality=q.get("q", ["1"])[0], camera=int(cam) if cam and cam.isdigit() else None,
+                   hands=q.get("hands", [""])[0])  # ("v5": Settings → Версия Кистей Рук → V5, hand_v5.py)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
