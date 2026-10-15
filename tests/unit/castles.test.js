@@ -141,6 +141,7 @@ test('every village has a small graveyard: earth plots with a stone or a post at
     for (const c of castlesOf(t, 4)) {
         assert.equal(c.graveyards.length, 1, c.id);
         assert.equal(c.graves.length, 8, c.id);
+        assert.ok(c.graves.every((g) => g.cells.length === 8), "a plot 2 × 4: a man fits");
         const ids = new Set(c.graves.map((q) => q.id));
         assert.equal(ids.size, 8);
         for (const g of c.graves) {

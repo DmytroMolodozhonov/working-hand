@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { isFireDamage, MIGHTY_ON_TREES } from './LivingTrees.js';
 
 export const SKEL = {
+    K: 1.8, // its body against a metre model: a man of this world is ~3 m (Death.js bones are 3 m long)
     S: 0.25, // its size against a tree's (s): every «× s» size of LivingTrees fits a man's body
     RISE: 7, // s: the grave shakes → a hand → the earth bursts → it climbs out
     HAND: 0.18, // (form) the hand starts coming up
@@ -28,8 +29,8 @@ export const SKEL = {
     CLIMB: 0.55, // (form) it climbs out
     COLLAPSE: 1.4, // s it falls into a heap of bones
     SPEED: 2.4, RUN: 4.0,
-    REACH: 1.5, // m its arms reach
-    KEEP: 2.2, // m from its master (it is no bigger than a man)
+    REACH: 2.7, // m its arms reach
+    KEEP: 3.6, // m from its master (it is as big as a man)
     AIM: 14, // m: the grave pointed at
     BONE: 0xe6dcc0,
 };
@@ -75,6 +76,7 @@ export const graveClosed = (data, q) => !data || q.cells.some(([x, z]) => data.g
 export function skeletonModel() {
     const s = SKEL.S;
     const root = new THREE.Group();
+    root.scale.setScalar(SKEL.K);
     const fall = new THREE.Group();
     root.add(fall);
     const rig = new THREE.Group();

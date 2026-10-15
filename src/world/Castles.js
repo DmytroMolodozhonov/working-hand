@@ -1099,13 +1099,15 @@ function buildYard(p, cu, cv, face, rng, s, out, pen) {
 }
 
 /**
- * A small village graveyard on a lot (11 × 11, a fence with a gate towards the road): two rows of
- * graves — an earth plot (1 × 2) with a headstone or a wooden post at its head. Every grave goes
- * into out.graves: «Alive» said at one raises its dead (LivingTrees.js — a skeleton), and that
- * grave stays dug open (block edits, saved with the world).
+ * A village graveyard on a lot (15 × 15, a tall fence with a gate towards the road, a wide path
+ * through the middle): two rows of graves for a man of this world (~3 m: a plot 2 × 4 of earth) —
+ * each with a big headstone (a slab or a tall cross, 3 high) at its head. Every grave goes into
+ * out.graves: «Alive» said at one raises its dead (LivingTrees.js — a skeleton), and that grave
+ * stays dug open (block edits, saved with the world). Two crosses by the gate and a lantern post
+ * make it plain from afar that this is a graveyard.
  */
-export const GRAVE_COLS = [-3, -1, 1, 3];
-export const GRAVE_ROWS = [-2, 2]; // (the plot's first b; it is 2 long, the stone just behind it)
+export const GRAVE_COLS = [-6, -3, 1, 4]; // (the plot's first a; it is 2 wide, the path is a = −1…0)
+export const GRAVE_ROWS = [-5, 2]; // (the plot's first b; it is 4 long, the stone just behind it)
 function buildGraveyard(p, cu, cv, face, s, out) {
     const P = {
         box: (a0, a1, l0, l1, b0, b1, t) => {
@@ -1114,28 +1116,43 @@ function buildGraveyard(p, cu, cv, face, s, out) {
         },
         pt: (a, b, l = 0) => { const [x, z] = rotLot(a, b, face); return p.pt(cu + x, cv + z, l); },
     };
-    const R = 5;
-    // the fence (rails one high, posts two high every 2), a gate towards the road
+    const R = 7;
+    // the fence (rails 1 high, posts 3 high every 2), a gate towards the road
     P.box(-R, R, 0, 0, -R, -R, BLOCK.FENCE); P.box(-R, R, 0, 0, R, R, BLOCK.FENCE);
     P.box(-R, -R, 0, 0, -R, R, BLOCK.FENCE); P.box(R, R, 0, 0, -R, R, BLOCK.FENCE);
-    for (let k = -R; k <= R; k += 2) for (const [a, b] of [[k, -R], [k, R], [-R, k], [R, k]]) P.box(a, a, 1, 1, b, b, BLOCK.FENCE);
-    P.box(-1, 1, 0, 1, -R, -R, 0);
-    P.box(0, 0, -1, -1, -R, -R + 2, BLOCK.PATH); // (a path in from the gate)
+    for (let k = -R; k <= R; k += 2) for (const [a, b] of [[k, -R], [k, R], [-R, k], [R, k]]) P.box(a, a, 1, 2, b, b, BLOCK.FENCE);
+    P.box(-2, 1, 0, 2, -R, -R, 0);
+    P.box(-1, 0, -1, -1, -R, R - 1, BLOCK.PATH); // (a path in from the gate to the far end)
+    // the gate posts: tall crosses on both sides, seen from the road
+    for (const [a, o] of [[-3, -1], [2, 1]]) { P.box(a, a, 0, 3, -R, -R, BLOCK.CS_GREY); P.box(Math.min(a, a + o), Math.max(a, a + o), 2, 2, -R, -R, BLOCK.CS_GREY); }
     const graves = out.graves || (out.graves = []);
     let i = 0;
     for (const b0 of GRAVE_ROWS) {
         for (const a of GRAVE_COLS) {
-            P.box(a, a, -1, -1, b0, b0 + 1, BLOCK.DIRT); // the plot
+            P.box(a, a + 1, -1, -1, b0, b0 + 3, BLOCK.DIRT); // the plot, 2 × 4
             const h = hash01(cu * 7 + a, cv * 13 + b0, i++);
-            if (h < 0.3) P.box(a, a, 0, 1, b0 + 2, b0 + 2, BLOCK.FENCE); // a wooden grave post
-            else P.box(a, a, 0, 0, b0 + 2, b0 + 2, h < 0.65 ? BLOCK.CS_MOSSY : BLOCK.CS_GREY); // a headstone
-            const c = P.pt(a, b0 + 0.5), ex = P.pt(a, b0 - 1), st = P.pt(a, b0 + 2);
+            const sb = b0 + 4; // the stone row, behind the plot's head
+            if (h < 0.35) { // a tall cross
+                P.box(a, a + 1, 0, 0, sb, sb, BLOCK.CS_GREY); // the foot
+                P.box(a, a, 1, 3, sb, sb, BLOCK.CS_GREY); P.box(a - 1, a + 1, 2, 2, sb, sb, BLOCK.CS_GREY);
+            } else { // a wide headstone slab, 3 high
+                const t = h < 0.7 ? BLOCK.CS_MOSSY : BLOCK.CS_GREY;
+                P.box(a, a + 1, 0, 2, sb, sb, t);
+            }
+            const c = P.pt(a + 0.5, b0 + 1.5), ex = P.pt(a + 0.5, b0 - 1), st = P.pt(a, sb);
             const [x0, z0] = rotLot(a, b0, face), [x1, z1] = rotLot(a, b0 + 1, face);
+            const cells = [[p.wx(cu + x0, cv + z0), p.wz(cu + x0, cv + z0)], [p.wx(cu + x1, cv + z1), p.wz(cu + x1, cv + z1)]];
+            // (the rest of the plot: the second column and the length)
+            for (const da of [0, 1]) for (const db of [0, 1, 2, 3]) {
+                if (da === 0 && db < 2) continue;
+                const [xx, zz] = rotLot(a + da, b0 + db, face);
+                cells.push([p.wx(cu + xx, cv + zz), p.wz(cu + xx, cv + zz)]);
+            }
             graves.push({
                 x: c.x, y: c.y, z: c.z, // the middle of the plot, on the ground
                 exit: { x: ex.x, z: ex.z }, // where the dead climbs out to (the foot of the grave)
                 stone: { x: st.x, z: st.z },
-                cells: [[p.wx(cu + x0, cv + z0), p.wz(cu + x0, cv + z0)], [p.wx(cu + x1, cv + z1), p.wz(cu + x1, cv + z1)]],
+                cells,
                 L: p.L(-1), // the plot's layer
                 yaw: Math.atan2(-(ex.x - st.x), -(ex.z - st.z)), // (the dead faces away from its stone)
             });
