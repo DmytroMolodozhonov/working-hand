@@ -8,8 +8,10 @@
  *    smoke and fire from the nostrils, a lashing tail. He hunts the attacker: stamps, lowers
  *    his horns and rushes in a straight line (whoever he hits is knocked down and thrown),
  *    snorts short jets of fire close up (grass and trees catch fire). The herd flees.
- *  - Sheep: 29% of flocks have a leader RAM, an ordinary-looking ram. Attack the flock and in
- *    5 s he rears, rises onto his hind legs and becomes a ram-headed MINOTAUR taller than a
+ *  - Sheep: 10% of flocks have a leader RAM, an ordinary-looking ram (the author: it used to be
+ *    29% — and since every sheep is a ram and any blow at any sheep of the flock woke him, a hunt
+ *    for mutton turned into a minotaur nearly every time; it must be a rare surprise). Hurt him
+ *    or a sheep close to him (he must see it: within WAKE_R) and in 5 s he rears, rises onto his hind legs and becomes a ram-headed MINOTAUR taller than a
  *    man (40 HP): he walks upright at the attacker, butts with his curled horns (knocks down),
  *    strikes with his fists, charges from afar. Killed, he drops «Рог Минотавра».
  *
@@ -27,7 +29,8 @@ import { newUid } from './ItemTypes.js';
 
 export const GUARD = {
     BULL_CHANCE: 0.45,
-    RAM_CHANCE: 0.29,
+    RAM_CHANCE: 0.1,
+    WAKE_R: 25, // m: a sheep hurt farther from the hidden leader ram than this does not wake him (he does not see it)
     BULL: { RISE: 1.6, SCALE: 2, HP: 60, DMG: 6, RUN: 12, STAMP: 0.9, RUSH_T: 2.4, FIRE_R: 6, FIRE_CD: 4, CALM: 40, SHRINK: 3, STUN_K: 0.5, MEAT: 10 },
     RAM: { RISE: 5, HP: 40, DMG: 4, BUTT: 5, SPEED: 4.4, CHARGE: 8.5, REACH: 3.4, CALM: 45, SHRINK: 5, STUN_K: 0.7, MEAT: 6 },
     FAR: 70, // m: an attacker farther than this is "gone"
@@ -62,6 +65,8 @@ export class HerdGuards {
         const h = a.herd;
         const gd = a.guard ? a : h?.guard != null ? this.A.byId.get(h.guard) : null;
         if (!gd || gd.dead || gd.servantOf != null) return;
+        // (the hidden ram wakes only when he sees it: his own wound, or a sheep hurt close by; an awake guardian hears every blow)
+        if (gd !== a && gd.guard === 'ram' && !gd.form && Math.hypot(gd.group.position.x - a.group.position.x, gd.group.position.z - a.group.position.z) > GUARD.WAKE_R) return;
         if (by != null && this.A._playerPos(by)) gd.foe = by;
         gd.calmT = 0;
         if (gd.form === 2 || gd.form === 1) return;

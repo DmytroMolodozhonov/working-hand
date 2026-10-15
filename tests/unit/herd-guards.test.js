@@ -34,15 +34,15 @@ function herdWithGuard(A, type, n = 4) {
     return herd;
 }
 
-test('the roll: 45% of cow herds have a bull, 29% of sheep flocks a leader ram, others none', () => {
+test('the roll: 45% of cow herds have a bull, 10% of sheep flocks a leader ram, others none', () => {
     assert.equal(rollGuard('cow', 4, () => 0.44), 0);
     assert.equal(rollGuard('cow', 4, () => 0.46), -1);
-    assert.equal(rollGuard('sheep', 4, () => 0.28), 0);
-    assert.equal(rollGuard('sheep', 4, () => 0.3), -1);
+    assert.equal(rollGuard('sheep', 4, () => 0.09), 0);
+    assert.equal(rollGuard('sheep', 4, () => 0.11), -1);
     assert.equal(rollGuard('pig', 4, () => 0), -1);
     let cows = 0, sheep = 0;
     for (let i = 0; i < 4000; i++) { if (rollGuard('cow', 5) >= 0) cows++; if (rollGuard('sheep', 5) >= 0) sheep++; }
-    assert.ok(Math.abs(cows / 4000 - 0.45) < 0.03 && Math.abs(sheep / 4000 - 0.29) < 0.03, `${cows} ${sheep}`);
+    assert.ok(Math.abs(cows / 4000 - 0.45) < 0.03 && Math.abs(sheep / 4000 - 0.1) < 0.03, `${cows} ${sheep}`);
     const { A } = fakeGame();
     const herd = herdWithGuard(A, 'cow');
     const bull = herd.find((a) => a.guard === 'bull');
@@ -125,4 +125,17 @@ test('a stun holds them shorter; the bronze bull killed leaves a bronze horn and
     A.hit(bull, 999, null, 'me');
     assert.deepEqual(g.dropped, ['bronzeHorn']);
     assert.equal(bull.meat, GUARD.BULL.MEAT);
+});
+
+test('the hidden ram does not see a sheep hurt far from him: no minotaur (the author: it woke far too often)', () => {
+    const { A } = fakeGame();
+    const flock = herdWithGuard(A, 'sheep');
+    const ram = flock.find((a) => a.guard === 'ram');
+    const far = flock.find((a) => a !== ram);
+    far.group.position.set(ram.group.position.x + GUARD.WAKE_R + 5, 0, ram.group.position.z);
+    A.hit(far, 1, null, 'me');
+    assert.equal(ram.form, 0, 'still an ordinary ram');
+    far.group.position.set(ram.group.position.x + 3, 0, ram.group.position.z);
+    A.hit(far, 1, null, 'me');
+    assert.equal(ram.form, 1, 'a sheep hurt beside him: he wakes');
 });

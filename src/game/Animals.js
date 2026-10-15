@@ -266,7 +266,7 @@ export class Animals {
             placed.push(a);
         }
         herd.leader = placed[0]?.id ?? null;
-        // a hidden guardian: the bull of a cow herd (45%), the leader ram of a flock (29%)
+        // a hidden guardian: the bull of a cow herd (45%), the leader ram of a flock (10%)
         const gi = rollGuard(type, placed.length);
         if (gi >= 0) { placed[gi].guard = type === 'cow' ? 'bull' : 'ram'; herd.guard = placed[gi].id; herd.leader = placed[gi].id; }
         return placed;
