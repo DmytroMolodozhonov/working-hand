@@ -49,6 +49,16 @@ const GOODS = [
     { kind: 'apple', price: 30 }, { kind: 'arrows', price: 8, count: 10 }, { kind: 'shield', price: 25, type: 0 }, { kind: 'bow', price: 30, type: 0 },
 ];
 const _v = new THREE.Vector3();
+const GOOD_IN = 0.35, PAID_IN = 0.2; // m from the counter's front edge: a good lying there; a paid one pushed to the buyer
+
+/** Across a stall's counter: the line `inset` m behind its front edge (the buyer's side). */
+export function frontEdge(stall, inset) {
+    const c = stall.counter;
+    const along = c.x1 - c.x0 >= c.z1 - c.z0; // (the counter long in x: its front is across z)
+    const lo = along ? c.z0 : c.x0, hi = along ? c.z1 : c.x1;
+    const mid = (lo + hi) / 2, f = along ? stall.front.z : stall.front.x;
+    return f >= mid ? hi + 0.5 - inset : lo - 0.5 + inset;
+}
 
 /**
  * What is left of the whole answer after the part already said while the net wrote it
@@ -552,8 +562,9 @@ export class CastleTalk {
                     if (pick.kind === 'shield') { item.type = pick.type; item.magic = false; item.max = 0; delete item.count; }
                     if (pick.kind === 'bow') { item.type = 0; item.magic = false; item.bonus = 0; item.arrows = 5; delete item.count; }
                     const f = (k + 0.5) / 3;
-                    const x = along ? c.x0 + (c.x1 - c.x0 + 1) * f - 0.5 : (c.x0 + c.x1) / 2;
-                    const z = along ? (c.z0 + c.z1) / 2 : c.z0 + (c.z1 - c.z0 + 1) * f - 0.5;
+                    // (by the buyer's edge of the counter, not in its middle: a hand reaches it from the front)
+                    const x = along ? c.x0 + (c.x1 - c.x0 + 1) * f - 0.5 : frontEdge(stall, GOOD_IN);
+                    const z = along ? frontEdge(stall, GOOD_IN) : c.z0 + (c.z1 - c.z0 + 1) * f - 0.5;
                     const L = g.items.spawnLoose(item, new THREE.Vector3(x, c.top + 0.3, z));
                     s.goods.push(L.item.uid);
                 }
@@ -692,6 +703,15 @@ export class CastleTalk {
         if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
         v.giveT = 1.2;
         G.item.shop.paid = true;
+        // he pushes it to the very edge of the counter, before the buyer: there a hand takes it
+        const st = cs.def.stalls?.[+s];
+        if (st?.counter) {
+            const c = st.counter, along = c.x1 - c.x0 >= c.z1 - c.z0, P = G.model.position;
+            if (along) P.z = frontEdge(st, PAID_IN); else P.x = frontEdge(st, PAID_IN);
+            P.y = Math.max(P.y, c.top + 0.3);
+            G.vel?.set(0, 0, 0);
+            G.rest = false; G.sentRest = false; // (its new place goes to the others)
+        }
         g.sync?.tradePaid?.(goodUid);
         this._sayForGuestOrMe(v, by, rest > 0 ? `Беру ${price}. Остаток твой — забирай. И ${name} забирай, он твой!` : `Беру ${price}. Забирай, ${name} твой!`);
         this._tradeNote(by, `💰 Списано ${price} монет за: ${name}${rest > 0 ? ` (в мешочке осталось ${rest} — заберите его)` : ''}. Товар можно забрать`);
