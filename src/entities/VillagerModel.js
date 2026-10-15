@@ -241,6 +241,13 @@ export function strippedLook(L) {
     return S;
 }
 
+/**
+ * A wizard's rank (WizardAI.WIZ_RANKS) on his robe: the colour of its trim, stripes on the cuffs
+ * (none — a beginner, 1 — an adept, 2 — a teacher, 3 — the Master), stars on the chest, the hat's band.
+ */
+export const RANK_TRIM = { novice: 0xd8d4c8, adept: 0xc8d4ea, teacher: 0xe0b84a, master: GOLD };
+const RANK_LEVEL = { novice: 0, adept: 1, teacher: 2, master: 3 };
+
 /** Wizards: a robe to the ground, a pointed hat, a wand (a wanderer: a staff), the Master — a long beard. */
 function wizardLook(L, r, pick) {
     const role = L.role;
@@ -422,7 +429,7 @@ function headBoxes(L) {
  */
 const HAT_PIVOT_Y = 1.22;
 function hatParts(L) {
-    const c = L.hatColor, band = L.role === 'master' ? GOLD : shade(c, 0.6);
+    const c = L.hatColor, band = L.role === 'master' ? GOLD : L.rank === 'teacher' || L.rank === 'adept' ? RANK_TRIM[L.rank] : shade(c, 0.6);
     const tall = L.hat === 'wizardTall', wide = L.hat === 'wizardWide';
     const base = [], top = [];
     const brim = wide ? 2.1 : 1.7, t1 = wide ? 0.26 : 0.3;
@@ -508,12 +515,13 @@ function bodyBoxes(L) {
             b(B, 0.22, 0.22, 0.03, -0.32, -0.55, -0.42, shade(p, 1.3)); // patch
         }
     } else if (L.wizard) { // a robe: a trimmed front, a sash, a star
-        const rc = L.dressColor, tr = L.accent;
+        const rc = L.dressColor, tr = RANK_TRIM[L.rank] ?? L.accent;
         b(B, 1.26, 1.4, 0.86, 0, 0.05, 0, rc);
         b(B, 0.12, 1.42, 0.03, 0, 0.05, -0.44, tr);
         b(B, 0.56, 0.16, 0.08, 0, 0.72, -0.4, tr); // collar
         b(B, 1.3, 0.16, 0.9, 0, -0.62, 0, shade(rc, 0.7)); b(B, 0.18, 0.16, 0.04, 0, -0.62, -0.46, tr); // sash
         b(B, 0.2, 0.2, 0.03, 0.32, 0.32, -0.45, L.role === 'master' ? 0xfff2a0 : 0xe8e8ff, 0, 0, Math.PI / 4); // a star
+        for (let i = 1; i < (RANK_LEVEL[L.rank] ?? 0); i++) b(B, 0.13, 0.13, 0.03, 0.32, 0.32 - i * 0.24, -0.45, tr, 0, 0, Math.PI / 4); // (a teacher: 2 stars, the Master: 3)
         if (L.magicRobe) { for (const [x, y] of [[-0.34, 0.45], [-0.3, -0.2], [0.36, -0.3], [0.1, 0.5]]) b(B, 0.14, 0.14, 0.03, x, y, -0.45, 0xbfe8ff, 0, 0, Math.PI / 4); b(B, 0.14, 1.42, 0.035, 0, 0.05, -0.445, 0xffe08a); } // a magic robe: pale stars, a gold front
         if (L.role === 'seller' || L.role === 'wanderer') { b(B, 0.3, 0.34, 0.2, -0.42, -0.84, -0.38, 0x8b5a2b); b(B, 0.2, 0.08, 0.22, -0.42, -0.66, -0.38, tr); } // a satchel of scrolls
     } else { // merchant: vest, gold trim, coin pouch
@@ -555,7 +563,10 @@ function armBoxes(L, side) {
         b(B, 0.36, 0.4, 0.36, 0, -1.15, 0, L.skin);
     }
     if (L.role === 'merchant') b(B, 0.44, 0.08, 0.44, 0, 0.1, 0, L.accent); // vest shoulder
-    if (L.wizard && !L.robeOff) b(B, 0.54, 0.2, 0.54, 0, -0.95, 0, shade(L.dressColor, 0.85)); // a wide robe cuff
+    if (L.wizard && !L.robeOff) {
+        b(B, 0.54, 0.2, 0.54, 0, -0.95, 0, shade(L.dressColor, 0.85)); // a wide robe cuff
+        for (let i = 0; i < (RANK_LEVEL[L.rank] ?? 0); i++) b(B, 0.56, 0.05, 0.56, 0, -0.88 - i * 0.07, 0, RANK_TRIM[L.rank]); // his rank: stripes on the cuff
+    }
     return B;
 }
 

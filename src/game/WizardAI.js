@@ -30,8 +30,75 @@ export const WIZ = {
         dome: { hits: 3, t: 6, cd: 25 }, wind: { r: 4.5, cd: 6 }, blink: { cd: 20 }, heal: 0.25,
     },
 };
+// (between a student and a teacher: a senior student — «продвинутый»)
+WIZ.adept = { hp: 14, ward: 5, mana: 100, regen: 1.0, skill: 0.9, cast: 2.7, react: 0.48, reactT: 0.55, stunK: 0.85, range: [7, 15], spells: { Stupefy: 0.4, SapiraDuel: 0.4, IceDuel: 0.1, Jolt: 0.1 } };
 WIZ.seller = WIZ.teacher;
 WIZ.wanderer = { ...WIZ.teacher, mana: 50, range: [8, 18] }; // (a wanderer has seen more: a duel won against him is worth more)
+
+/**
+ * A wizard's RANK (the author's rules): how much mana he has — and with it how strong he is in a
+ * duel, how often and with what he casts. Every wizard gets his own amount: the rank's mana ±
+ * `spread` (rolled from the world: always the same, on every computer). The Master — one per tower.
+ *   novice  «начинающий» ≈ 50   (42–57)
+ *   adept   «продвинутый» ≈ 100 (85–115)
+ *   teacher «преподаватель» ≈ 200 (170–230)
+ *   master  «главный мастер», the head of the tower ≈ 500 (450–550)
+ * ±15 %: a novice never reaches an adept (57 < 85), an adept never a teacher (115 < 170), but two
+ * of one rank still differ noticeably. The Master's ±10 %: there is one of him, he stays far above all.
+ * `as`: whose fighting habits (WIZ) the rank has — the spells, the pause between casts, reactions.
+ */
+export const WIZ_RANKS = {
+    novice: { mana: 50, spread: 0.15, as: 'student' },
+    adept: { mana: 100, spread: 0.15, as: 'adept' },
+    teacher: { mana: 200, spread: 0.15, as: 'teacher' },
+    master: { mana: 500, spread: 0.10, as: 'master' },
+};
+export const WIZ_RANK_RU = {
+    novice: ['начинающий волшебник', 'начинающая волшебница'], adept: ['продвинутый волшебник', 'продвинутая волшебница'],
+    teacher: ['преподаватель', 'преподавательница'], master: ['главный мастер башни', 'главный мастер башни'],
+};
+
+/** The rank of a tower's / a wandering wizard by his job (rng 0..1; the Master is always the master). */
+export function rollRank(role, rng) {
+    if (role === 'master') return 'master';
+    if (role === 'teacher') return 'teacher';
+    const x = rng();
+    if (role === 'student') return x < 0.7 ? 'novice' : 'adept'; // (most of the tower: beginners; the older ones — adepts)
+    if (role === 'seller') return x < 0.65 ? 'adept' : 'teacher';
+    return x < 1 / 3 ? 'novice' : x < 2 / 3 ? 'adept' : 'teacher'; // a wanderer: anybody (never the Master: he lives in his tower)
+}
+
+/** His own mana for this rank (rng 0..1): the rank's ± its spread, a whole number. */
+export function rollMana(rank, rng) {
+    const R = WIZ_RANKS[rank] || WIZ_RANKS.adept;
+    return Math.round(R.mana * (1 + (rng() * 2 - 1) * R.spread));
+}
+
+/** A wizard's fighting stats: his job's (WIZ) with his rank's habits, his own mana; mana back as a player's. */
+export function wizardStats(role, rank, mana) {
+    const R = WIZ_RANKS[rank];
+    const base = WIZ[role] || WIZ.teacher;
+    if (!R) return base;
+    const H = WIZ[R.as];
+    return { ...base, hp: H.hp, ward: H.ward, skill: H.skill, cast: H.cast, react: H.react, reactT: H.reactT, stunK: H.stunK, spells: H.spells, mana: mana ?? R.mana, regen: REGEN };
+}
+
+/** Mana back a second — the same as a player's (Combat PVP.FATIGUE_REGEN). */
+export const REGEN = 1;
+
+/**
+ * «Максима» in a beam clash (as a player shouts it: 5 mana, at most once in 3 s): how readily a
+ * wizard of this rank shouts it when he may — a beginner seldom, a teacher nearly always, the Master always.
+ */
+export const NPC_MAXIMA = { student: 0.5, adept: 0.75, teacher: 0.9, master: 1 };
+export function wantsMaxima(skillRole, mana, rng = Math.random) {
+    return mana >= 5 && rng() < (NPC_MAXIMA[skillRole] ?? 0.5);
+}
+
+/** Low on mana (under a third): he casts more slowly (× this pause). */
+export function manaPace(mana, max) {
+    return max > 0 && mana < max / 3 ? 1.6 : 1;
+}
 
 /** Mana a spell costs a wizard (the same as a player's base spell). */
 export const NPC_COST = { Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
@@ -78,13 +145,29 @@ export function wizardRoster(def, idx) {
     const brave = rng();
     // a magic robe (ArmorTypes): the Master always, one wizard in five — a stronger wand, «Protection» more often
     const robe = role === 'master' || rng() < 0.2;
-    return { idx, role, female, name, home, stall, seed, brave, wizard: true, robe };
+    // the rank and his own mana: from the world's seed (another world — other ranks); a roll of its
+    // own, so the names, homes and robes of the towers stay as they were. Every computer rolls the same.
+    const rr = createRng((seed ^ strHash('rank:' + String(def.wseed ?? ''))) >>> 0);
+    const rank = rollRank(role, rr);
+    const mana = rollMana(rank, rr);
+    return { idx, role, female, name, home, stall, seed, brave, wizard: true, robe, rank, mana };
 }
 
-/** How strong a wizard is in a beam clash (the same scale as a player's). */
-export function duelStrength(role, mana, hp, luck = 0) {
+/**
+ * How strong anybody is in a beam clash — a player, a tower's wizard, a wanderer: ONE scale for all.
+ * Mana NOW (not the share of one's own maximum: 50 mana is 50 mana for everybody), with diminishing
+ * returns (the square root: 50 → 1.29, 100 → 1.83, 200 → 2.58, 500 → 4.08), plus health (its share)
+ * and a little luck. Out of mana — almost no push left.
+ */
+export const DUEL_MANA_UNIT = 30;
+export function duelPower(mana, hpK = 1, luck = 0) {
+    return Math.sqrt(Math.max(0, mana) / DUEL_MANA_UNIT) + 0.35 * Math.max(0, Math.min(1, hpK)) + luck;
+}
+
+/** A wizard's strength in a beam clash: his mana now, his health (duelPower). */
+export function duelStrength(role, mana, hp, luck = 0, maxHp = null) {
     const W = WIZ[role] || WIZ.teacher;
-    return W.skill * (Math.max(0, mana) / W.mana) + 0.35 * (Math.max(0, hp) / W.hp) + luck;
+    return duelPower(mana, Math.max(0, hp) / (maxHp || W.hp), luck);
 }
 
 /** Which duel spell to cast (a student never uses Ice, Leviosa or Avada; Avada only back at an Avada user). */

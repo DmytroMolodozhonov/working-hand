@@ -609,7 +609,7 @@ export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
         style: 'tower', styleName: 'Академия',
         walls: p.rect(-19, 19, -19, 19), inner: p.rect(-R_IN, R_IN, -R_IN, R_IN), keep: p.rect(-R_IN, R_IN, -R_IN, R_IN),
         gate: p.pt(0, -22), gateIn: p.pt(0, -12), gateYaw: p.yaw(0), door: p.pt(0, -22), doorIn: p.pt(0, -12),
-        population, knights: 0, teachers,
+        population, knights: 0, teachers, wseed: seed, // (the world's seed: the wizards' ranks — WizardAI.wizardRoster)
         throne: out.throne, throneFront: out.throneFront, posts: out.posts,
         rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: id + '_ch' + i })),
         houses, stalls: [out.stall, out.potionStall].filter(Boolean), fields: [], pens: [], market: null, wallWalk: [],
@@ -772,7 +772,7 @@ export class TowerIndex {
             const kind = type === 'wk' ? 'errant' : type === 'wc' ? 'folk' : 'wander';
             d = {
                 id: type + gx + '_' + gz, kind, gx, gz, x: (gx + 0.5) * WANDER_CELL, z: (gz + 0.5) * WANDER_CELL, F: 0,
-                population: type === 'ww' ? 3 : 40, knights: type === 'wk' ? 99 : 0, stalls: [], houses: [], chests: [], nodes: [], edges: [], pens: [], fields: [], rooms: [], posts: [],
+                wseed: this.seed, population: type === 'ww' ? 3 : 40, knights: type === 'wk' ? 99 : 0, stalls: [], houses: [], chests: [], nodes: [], edges: [], pens: [], fields: [], rooms: [], posts: [],
                 wallWalk: [], zone: 0, color: type === 'wk' ? 0x6b4a2a : 0x7a6a55, colorName: 'серые', name: kind === 'errant' ? 'Странствующие рыцари' : kind === 'folk' ? 'Путники' : 'Дороги', king: '', parts: [], _byChunk: new Map(),
             };
             this._wander.set(key, d);

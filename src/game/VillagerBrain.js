@@ -53,6 +53,27 @@ const ROLE_TOPICS = {
     advisor: 'советы королю, войско, казна, законы, соседние замки, нежить',
 };
 
+/**
+ * A wizard (a tower's or a wandering one) says who he is by his RANK (WizardAI.WIZ_RANKS):
+ * the beginner, the adept, the teacher, the Master of the tower. `{|ница}`: his / her form.
+ */
+const WIZARD_RANK_RU = {
+    novice: ['начинающий волшебник', 'начинающая волшебница'], adept: ['продвинутый волшебник', 'продвинутая волшебница'],
+    teacher: ['преподаватель', 'преподавательница'], master: ['главный мастер башни', 'главный мастер башни'],
+};
+const WIZARD_WHO = {
+    novice: ['Я {name}, начинающ{ий волшебник|ая волшебница}. Учусь недавно — маны у меня пока немного.', '{Name}. Я только начал{|а} учиться магии.'],
+    adept: ['Я {name}, продвинут{ый волшебник|ая волшебница}. Учусь не первый год — кое-что умею.', '{Name}. Старш{ий|ая} из учеников, магия мне уже послушна.'],
+    teacher: ['Я {name}, преподаватель{|ница} башни. Учу молодых волшебников.', '{Name}, преподаю здесь магию. Со мной лучше не спорить палочкой.'],
+    master: ['Я {name}, главный мастер этой башни. Сила моя велика — не советую испытывать её.', 'Перед тобой {name}, глава башни волшебников.'],
+};
+const WIZARD_WANDER_WHO = {
+    novice: ['Я {name}, странствую по дорогам. Волшебни{к|ца} я начинающ{ий|ая}, учусь в пути.'],
+    adept: ['{Name}, странствующ{ий волшебник|ая волшебница}. Магии кое-какой обучен{|а}.'],
+    teacher: ['Я {name}. Брожу по свету, а когда-то учил{|а} магии в башне — силы у меня хватает.'],
+};
+const WIZARD_TOPICS = 'магия, заклинания, палочки, мана, учёба в башне волшебников, дуэли, свитки';
+
 // ------------------------------------------------------------------ text utils
 
 /** Lowercase, ё→е, strip punctuation, collapse spaces. */
@@ -758,7 +779,11 @@ export class VillagerBrain {
     /** 'friendly' | 'neutral' | 'rude' */
     get band() { return this._mood > 0.3 ? 'friendly' : this._mood < -0.3 ? 'rude' : 'neutral'; }
 
-    get roleName() { return ROLE_RU[this.role][this.villager.female ? 1 : 0]; }
+    get roleName() {
+        const r = this.villager.wizardRank;
+        if (WIZARD_RANK_RU[r]) return WIZARD_RANK_RU[r][this.villager.female ? 1 : 0];
+        return ROLE_RU[this.role][this.villager.female ? 1 : 0];
+    }
 
     /** Facts shared from elsewhere (e.g. gossip between villagers). */
     learn(facts = {}) {
@@ -827,6 +852,8 @@ export class VillagerBrain {
     }
 
     _pool(key, band = this.band) {
+        const rank = this.villager.wizardRank;
+        if (key === 'who' && rank) { const w = (this.villager.wanderer ? WIZARD_WANDER_WHO : WIZARD_WHO)[rank] || WIZARD_WHO[rank]; if (w) return w; }
         for (const src of [P[this.role]?.[key], P.common[key]]) {
             if (!src) continue;
             if (Array.isArray(src)) { if (src.length) return src; continue; }
@@ -1587,6 +1614,17 @@ export class VillagerBrain {
                 : this.traits.smart < 0.5 ? 'простоватый, говоришь просто' : 'простой и работящий';
         const castle = w.castleName || v.castleName || DEFAULT_CASTLE;
         const kingName = w.kingName || v.kingName || DEFAULT_KING;
+        if (v.wizardRank) {
+            return [
+                `Ты — ${v.name || 'волшебник'}, ${this.roleName}${v.wanderer ? ', странствуешь по дорогам' : ' в башне волшебников'}.`,
+                `Характер: ${character}. Настроение: ${moodWord}.`,
+                `Ты говоришь только о своей жизни: ${WIZARD_TOPICS}.`,
+                this._memory.playerName ? `Собеседника зовут ${this._memory.playerName}.` : 'Собеседник — путник, ты не знаешь его имени.',
+                'Ответь на реплику собеседника по-русски, одной-двумя короткими фразами, от первого лица, без пояснений и без кавычек.',
+                `Смысл ответа должен быть таким: «${rule.reply}»`,
+                ...(rule.offer ? [`Обязательно назови цену: ${rule.offer.price} монет.`] : []),
+            ].join('\n');
+        }
         const lines = [
             `Ты — ${v.name || 'житель'}, ${this.roleName} в средневековом замке «${castle}».`,
             this.role === 'king' ? 'Ты правитель этого замка.' : `Правитель замка — ${w.kingFemale ? 'королева' : 'король'} ${kingName}.`,

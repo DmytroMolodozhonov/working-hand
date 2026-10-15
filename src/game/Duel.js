@@ -52,7 +52,7 @@ import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
 import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
-import { duelStrength } from './WizardAI.js';
+import { duelStrength, duelPower } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS } from './ArmorTypes.js';
 export { JERK, sharpJerk } from './Jerk.js';
@@ -138,6 +138,14 @@ export const DUEL = {
  */
 export function maximaPush(boostA = 0, boostB = 0) {
     return DUEL.MAXIMA_BOOST * (Math.max(0, boostA | 0) - Math.max(0, boostB | 0));
+}
+
+/**
+ * How fast the meeting point moves for a strength difference `d`: PUSH per unit while it is small,
+ * softer as it grows (a much stronger wizard still wins, but in seconds you can see — not at once).
+ */
+export function clashPush(d) {
+    return DUEL.PUSH * d / (1 + 0.5 * Math.abs(d));
 }
 
 /** Two charges meet (a duel starts): flying against each other, passing this close. */
@@ -1165,18 +1173,29 @@ export class Duel {
         return v?.wizard ? v : null;
     }
 
-    /** Strength in a duel: fatigue first, HP second, a little luck. */
+    /**
+     * Strength in a duel — ONE scale for players and wizards (WizardAI.duelPower): mana now, health, a
+     * little luck. In Creative mana never runs out: a player there is as strong as his FULL mana (not a
+     * bar that never fills up again — it used to count as 30 for ever, whatever he had grown to).
+     */
     _strength(id, luck) {
         const g = this.game;
         const w = this._npcWizard(id);
-        if (w) return duelStrength(w.role, w.mana, w.hp, luck); // (a wizard of a tower: his skill, mana, health — WizardAI)
-        let fatigue = 30, hp = PVP.MAX_HP;
-        if (id === this.me) { fatigue = g.combat.fatigue; hp = g.combat.hp; }
-        else {
+        if (w) return duelStrength(w.role, w.mana, w.hp, luck, w.maxHp); // (a wizard: his own mana now, his health — WizardAI)
+        const free = !!g.combat?.enabled;
+        let mana = 30, hp = PVP.MAX_HP, maxHp = PVP.MAX_HP;
+        if (id === this.me) {
+            const c = g.combat;
+            mana = free ? c.fatigue : Math.max(c.fatigue, c.maxFatigue || 30);
+            if (free) { hp = c.hp; maxHp = c.maxHp || PVP.MAX_HP; }
+        } else {
             const r = g.remotes.get(id);
-            if (r) { fatigue = r.fatigue ?? 30; hp = r.hp ?? PVP.MAX_HP; }
+            if (r) {
+                mana = free ? (r.fatigue ?? 30) : Math.max(r.fatigue ?? 30, r.maxMana ?? 30);
+                if (free) hp = r.hp ?? PVP.MAX_HP;
+            }
         }
-        return (fatigue / 30) * 1.0 + (hp / PVP.MAX_HP) * 0.35 + luck;
+        return duelPower(mana, hp / maxHp, luck);
     }
 
     /** Is this wizard still holding the duel (hand on the opponent)? jerk = gave up sharply. */
@@ -1241,7 +1260,7 @@ export class Duel {
         // A hand off the opponent doesn't push at all
         const sa = ca.ok ? this._strength(a.by, c.luckA) : 0;
         const sb = cb.ok ? this._strength(b.by, c.luckB) : 0;
-        c.v = (sa - sb) * DUEL.PUSH + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
+        c.v = clashPush(sa - sb) + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));
 

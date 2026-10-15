@@ -30,11 +30,11 @@
  */
 
 import * as THREE from 'three';
-import { WIZ, NPC_COST, pickSpell, react, noticeCharge } from './WizardAI.js';
+import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
-import { DUEL_SPELLS } from './Duel.js';
+import { DUEL, DUEL_SPELLS } from './Duel.js';
 import { PVP, shieldHitCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
@@ -366,12 +366,12 @@ export class WizardFight {
         // mercy: one helpless on the ground is not finished off (but kept down by a binder) — unless he is a known murderer
         const st = sq?.sit;
         if (T.mercy && st?.lying && !(wt?.role === 'binder') && !(Date.now() - (v.hurtAt || 0) < 5000)) return;
-        const spell = this._spellFor(v, planSpell(plan, wt?.role, v.role) || pickSpell(v.role), T);
+        const spell = this._spellFor(v, planSpell(plan, wt?.role, v.skillRole || v.role) || pickSpell(v.skillRole || v.role), T);
         const cost = NPC_COST[spell] ?? 10;
         if (v.mana < cost) return;
         if (this._cast(v, spell, foe, fp)) {
             v.mana -= cost;
-            v.castCd = W.cast * (CAST_PACE[plan] ?? 1) * T.pace * (0.8 + Math.random() * 0.4);
+            v.castCd = W.cast * (CAST_PACE[plan] ?? 1) * T.pace * manaPace(v.mana, v.maxMana) * (0.8 + Math.random() * 0.4); // (low on mana: slower)
             if (sq) sq.casts++;
         }
     }
@@ -382,7 +382,7 @@ export class WizardFight {
         if (T.soft && spell === 'SapiraDuel') spell = v.role !== 'student' && Math.random() < 0.4 ? 'IceDuel' : 'Stupefy'; // (calm: only stun, freeze)
         if (T.heavy && (spell === 'Stupefy' || spell === 'Jolt') && Math.random() < T.heavy) spell = 'SapiraDuel';
         if (T.avada && Math.random() < T.avada) spell = 'AvadaKedavra'; // (a mass murderer: they mean to kill)
-        if (v.role === 'student' && (spell === 'IceDuel' || spell === 'AvadaKedavra')) spell = 'Stupefy';
+        if ((v.skillRole || v.role) === 'student' && (spell === 'IceDuel' || spell === 'AvadaKedavra')) spell = 'Stupefy';
         return spell;
     }
 
@@ -448,6 +448,16 @@ export class WizardFight {
             v.aimPitch = Math.atan2(dy, dh);
         }
         v.mana = Math.max(0, v.mana - DUEL_DRAIN * dt);
+        // «Максима!» — as a player shouts it (5 mana, once in 3 s; how readily — by his rank)
+        v.maxT = (v.maxT ?? 1.5) - dt;
+        if (v.maxT <= 0) {
+            v.maxT = DUEL.MAXIMA_EVERY;
+            if (wantsMaxima(v.skillRole || v.role, v.mana) && duel.applyMaxima(c.a.id, c.b.id, v.id)) {
+                v.mana -= DUEL.MAXIMA_COST;
+                this.game.sync?.duelMaxima?.(c.a.id, c.b.id, v.id);
+                this.life._say(v, 'Максима!', 1.5);
+            }
+        }
         v.castT = Math.max(v.castT || 0, 0.3);
         v.mode = 'cast';
         return true;
@@ -459,7 +469,7 @@ export class WizardFight {
      */
     clashHold(v, share) {
         if (!v || v.dead || v.noWand || v.lev || v.stunT > 0 || v.vy) return { ok: false, jerk: true };
-        if (v.role === 'student' && share < 0.2 && v.mana < 5) return { ok: false, jerk: true };
+        if ((v.skillRole || v.role) === 'student' && share < 0.2 && v.mana < 5) return { ok: false, jerk: true };
         return { ok: true, jerk: false };
     }
 
@@ -513,7 +523,7 @@ export class WizardFight {
             if (!n.seen) continue; // (not seen yet: maybe a moment later, when it comes into view)
             seen.add(v.id);
             if (!n.shield) { this._caught(v, b); continue; } // (too late to do anything)
-            let r = react({ role: v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta, robe: !!v.robe });
+            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta, robe: !!v.robe });
             if (r && !v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; v.seated = false; } // (he cast at me: now it is a fight)
             if (r === 'counter' && !n.counter) r = 'shield'; // (no time to raise the wand and answer: only the hand shield)
             if (r === 'dome') this._dome(v);
@@ -562,7 +572,7 @@ export class WizardFight {
         if (v.mana < cost) return false;
         // not facing it yet: he turns to it first (pursueThreat), then casts
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) { v.threatAt = { ref, until: this.clock + 3 }; return false; }
-        if (this._cast(v, spell, null, fp, null, ref)) { v.mana -= cost; v.castCd = v.W.cast; v.threatAt = null; return true; }
+        if (this._cast(v, spell, null, fp, null, ref)) { v.mana -= cost; v.castCd = v.W.cast * manaPace(v.mana, v.maxMana); v.threatAt = null; return true; }
         return false;
     }
 
@@ -587,7 +597,7 @@ export class WizardFight {
         if (v.noWand || !L._isPlayer(b.by) || (v.castCd ?? 0) > 0.6) return false;
         const fp = L._playerPos(b.by);
         if (!fp || !this.clearShot(v, fp)) return false;
-        const spell = this._spellFor(v, pickSpell(v.role), wantedTactics(L.wantedLevel(b.by), v.role));
+        const spell = this._spellFor(v, pickSpell(v.skillRole || v.role), wantedTactics(L.wantedLevel(b.by), v.role));
         const cost = NPC_COST[spell] ?? 10;
         if (v.mana < cost) return false;
         if (!this._cast(v, spell, b.by, fp, b.id)) return false;

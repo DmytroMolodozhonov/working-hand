@@ -16,7 +16,7 @@
  * as `v.fx` bits and is drawn by src/fx/WizardFx.js on every computer.
  */
 
-import { WIZ, WIZ_ROLE_RU, wizardRoster } from './WizardAI.js';
+import { WIZ, WIZ_ROLE_RU, wizardRoster, wizardStats, rollMana } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
 import { WizardFx, FX } from '../fx/WizardFx.js';
 import { WizardFight } from './WizardFight.js';
@@ -70,10 +70,15 @@ export class WizardLife {
 
     /** A wizard has just come out (on every computer): stats, mana, wand. */
     init(v) {
-        const W = WIZ[v.role];
+        // his rank's habits and his own mana (WizardAI.WIZ_RANKS: rolled from the world — the same on every computer)
+        const e = v.entry, rank = e.rank || 'adept';
+        const max = e.mana ?? rollMana(rank, Math.random);
+        const W = wizardStats(v.role, rank, max);
         v.wizard = true;
+        v.rank = rank;
+        v.skillRole = { novice: 'student', adept: 'adept', teacher: 'teacher', master: 'master' }[rank] || v.role;
         v.W = W;
-        v.mana = W.mana; v.maxMana = W.mana;
+        v.mana = max; v.maxMana = max;
         v.castCd = 1 + Math.random(); v.domeCd = 0; v.windCd = 0; v.blinkCd = 0;
         v.fx = 0; v.aimPitch = 0;
         v.title = WIZ_ROLE_RU[v.role][v.entry.female ? 1 : 0];

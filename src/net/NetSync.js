@@ -478,8 +478,8 @@ export class NetSync {
     }
 
     /** I shouted «Максима» in this clash (the host counts it in the push maths; all see it). */
-    duelMaxima(a, b) {
-        this.net.send({ t: 'dmax', a, b, by: this.me }, true);
+    duelMaxima(a, b, by = this.me) { // (by: a tower's wizard — the host tells everybody)
+        this.net.send({ t: 'dmax', a, b, by }, true);
     }
 
     duelClashEnd(a, b, loser) {

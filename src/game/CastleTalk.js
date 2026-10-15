@@ -154,7 +154,7 @@ export class CastleTalk {
             const def = v.cs.def;
             const life = this.life;
             b = new VillagerBrain(
-                { id: v.id, name: v.name, role: this._trader(v) ? 'merchant' : v.role, female: v.entry.female, castleName: def.name, kingName: def.king, seed: v.entry.seed },
+                { id: v.id, name: v.name, role: this._trader(v) ? 'merchant' : v.role, female: v.entry.female, castleName: def.name, kingName: def.king, seed: v.entry.seed, wizardRank: v.wizard ? v.entry.rank : undefined, wanderer: v.role === 'wanderer' },
                 () => ({ castleName: def.name, kingName: life.state(def.id).kingDead ? (life.state(def.id).ownerName || def.king) : def.king, playerIsKing: life.state(def.id).owner === this.game.localId, kingDead: !!life.state(def.id).kingDead, timeOfDay: this.game.isNight ? 'night' : 'day', danger: v.cs.hostile.size > 0 }),
                 { memory: this.memories.get(v.id) },
             );

@@ -68,8 +68,6 @@ test('the Master is twice as strong as a teacher (health, ward, skill, mana; cas
     assert.equal(M.mana, 2 * T.mana);
     assert.ok(M.cast <= T.cast / 2);
     assert.ok(M.stunK < T.stunK);
-    const full = (r) => duelStrength(r, WIZ[r].mana, WIZ[r].hp, 0) - 0.35;
-    assert.ok(Math.abs(full('master') - 2 * full('teacher')) < 1e-9);
     for (const s of Object.keys(M.spells)) assert.ok(NPC_COST[s] > 0, s);
 });
 

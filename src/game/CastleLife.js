@@ -39,7 +39,7 @@ import { CastleTalk } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS, FX } from './WizardLife.js';
 import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
-import { WIZ, wizardRoster } from './WizardAI.js';
+import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { slowFactor, tickSlow } from './Slow.js';
@@ -278,10 +278,12 @@ export class CastleLife {
         const e = this._roster(def, idx);
         let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
         if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
+        if (e.rank) look.rank = e.rank; // (his rank: the robe's trim and cuffs — VillagerModel)
         if (this.game.armor?.wasStripped(def.id + ':' + idx)) look = strippedLook(look); // («Disarmor» took the steel / the plain robe off)
         const model = new VillagerModel(look, { castleColor: def.color });
         this.game.scene.add(model.group);
-        const S = WIZ[e.role] ? { hp: WIZ[e.role].hp, armor: WIZ[e.role].ward } : STATS[e.role]; // (a wizard's ward is its armour)
+        const WS = WIZ[e.role] ? wizardStats(e.role, e.rank, e.mana) : null;
+        const S = WS ? { hp: WS.hp, armor: WS.ward } : STATS[e.role]; // (a wizard's ward is its armour; health and ward by his rank)
         const v = {
             id: def.id + ':' + idx, cs, idx, entry: e, role: e.role, name: e.name, title: roleTitle(e),
             model, group: model.group, isVillager: true,
