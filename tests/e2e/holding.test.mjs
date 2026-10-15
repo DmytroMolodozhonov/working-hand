@@ -471,10 +471,15 @@ test('pockets and the wand\'s belt: the wand goes only to the waistband (tucked 
     await feed(page, { arms: 'hang', rightCurl: 0.9, leftCurl: 0 }, 10, 40);
     await feed(page, { arms: 'hang', pocket: 'left', rightCurl: 0.9 }, 20, 40);
     const kept = await state();
-    // tucked into the waistband, the tip down: put away (on the belt again)
+    // tucked into the waistband, the tip down, looking down at it: put away (on the belt again)
+    await look(-0.8);
+    await feed(page, { arms: 'hang', rightCurl: 0.9, leftCurl: 0 }, 10, 40);
+    await page.waitForFunction(() => window.__zns.game.inventory.belt.lookingDown(-0.5), null, { timeout: 30000 });
     await feed(page, { arms: 'hang', belt: 'right', rightRot: Math.PI, rightCurl: 0.9, leftCurl: 0 }, 30, 40);
     const away = await state();
+    await look(0);
     await feed(page, { arms: 'hang', rightCurl: 0, leftCurl: 0 }, 30, 40);
+    await page.waitForFunction(() => !window.__zns.game.inventory.headDown, null, { timeout: 30000 });
     // the right pocket, the LEFT hand across, NOT looking down: nothing
     await feed(page, { arms: 'hang', pocket: 'cross', rightCurl: 0 }, 25, 40);
     const notLookingP = await state();
