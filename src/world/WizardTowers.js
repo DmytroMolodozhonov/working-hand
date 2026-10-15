@@ -20,7 +20,7 @@
  */
 
 import { BLOCK } from './Terrain.js';
-import { CASTLE_CELL, BLEND, hash01, Plan, buildHouse, rotLot } from './Castles.js';
+import { CASTLE_CELL, BLEND, hash01, Plan, buildHouse, rotLot, inwardRy } from './Castles.js';
 import { createRng } from '../core/math.js';
 
 export const TOWER_ZONE = 58; // half-size of the levelled land
@@ -512,7 +512,7 @@ function buildGrounds(p, rng, out) {
  */
 function towerDoor(p) {
     const o = p.pt(0, 0), q = p.pt(1, 0), d = p.pt(0, -(R_IN + 1));
-    return { x: d.x, y: d.y, z: d.z, ry: Math.atan2(-(q.z - o.z), q.x - o.x), w: 5, h: 6 };
+    return { x: d.x, y: d.y, z: d.z, ry: inwardRy(Math.atan2(-(q.z - o.z), q.x - o.x), o.x - d.x, o.z - d.z), w: 5, h: 6 }; // (opens into the tower)
 }
 
 /** 4–6 wizards' houses on lots facing the ring road; their doors join the road. */

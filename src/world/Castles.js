@@ -810,6 +810,15 @@ export const RICH_HOUSES = ['manor', 'stone', 'brick', 'manor', 'towerhouse'];
  * flower boxes, a woodpile...). The game puts the real door, the glass, the
  * beds and the chests in (src/game/Houses.js) from the records in `out.houses`.
  */
+/**
+ * A door's rotation.y turned so that its leaf opens INTO the room (the author: «двери должны
+ * открываться внутрь дома» — a gust or a shove said from outside throws it open): a door opens
+ * towards its local −Z (src/game/Doors.js); (ix, iz) points from the doorway into the room.
+ */
+export function inwardRy(ry, ix, iz) {
+    return -Math.sin(ry) * ix - Math.cos(ry) * iz >= 0 ? ry : ry + Math.PI;
+}
+
 export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     const P = {
         box: (a0, a1, l0, l1, b0, b1, t) => {
@@ -857,7 +866,8 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     P.box(da - dw, da + dw, -1, -1, -d - 2, -d - 1, BLOCK.PATH); // the doorstep
     if (!T.barn) {
         const dp = P.pt(da, -d);
-        house.doorRec = { x: dp.x, y: dp.y, z: dp.z, ry: P.along(1, 0), w: 3, h: doorTop + 1 };
+        const di = P.pt(da, -d + 1);
+        house.doorRec = { x: dp.x, y: dp.y, z: dp.z, ry: inwardRy(P.along(1, 0), di.x - dp.x, di.z - dp.z), w: 3, h: doorTop + 1 };
     }
     // ---- windows (holes the game glazes): front, sides, the back of a rich house
     const win = (a0, a1, b0, b1, l0, l1) => {

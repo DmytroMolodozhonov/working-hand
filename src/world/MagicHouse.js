@@ -25,6 +25,7 @@
 
 import { BLOCK, TREE_KINDS } from './Terrain.js';
 import { createRng } from '../core/math.js';
+import { inwardRy } from './Castles.js';
 
 /** What each level takes (resources lying by the house, trees round it, mana) — «each next one twice as much». */
 export const HOUSE_LEVELS = [
@@ -192,7 +193,8 @@ export function housePlan({ seed, level, x, z, G, face = 0, woods = [], minD = 0
             box(da - 1, da + 1, -1, -1, -d - 2, -d - 1, BLOCK.PATH); // the doorstep
             const dp = pt(da, -d, l0);
             const fr = rotLot(1, 0, face); // (the leaf turned as a village door, whichever side the rooms are on)
-            out.door = { x: dp.x, y: dp.y, z: dp.z, ry: Math.atan2(-fr[1], fr[0]), w: 3, h: 5 };
+            const di = pt(da, -d + 1, l0); // (a step into the hall: the leaf opens into the house)
+            out.door = { x: dp.x, y: dp.y, z: dp.z, ry: inwardRy(Math.atan2(-fr[1], fr[0]), di.x - dp.x, di.z - dp.z), w: 3, h: 5 };
             r._door = da;
             if (level >= 2 && rng() < 0.6) for (const fa of [da - 3, da + 3]) if (fa > a0 - 1 && fa < a1 + 1) box(fa, fa, 1, 1, -d - 1, -d - 1, BLOCK.FLOWERS);
         }

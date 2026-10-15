@@ -133,7 +133,7 @@ export class Houses {
         if (h.doorRec && g.doors) {
             const id = h.id + 'd';
             // (a blown-up wall leaves no door: it has nothing to hang on — src/game/Wreck.js)
-            if (!g.doors.list.has(id) && doorHeld(g.world?.terrain?.data, h.doorRec)) g.doors._place({ id, ...h.doorRec, color: DOOR_COLOR, a: 0, gen: true, ...(def.kind === 'tower' ? { tower: true } : {}) });
+            if (!g.doors.list.has(id) && doorHeld(g.world?.terrain?.data, h.doorRec)) g.doors._place({ id, ...g.doors.hangBest(h.doorRec), color: DOOR_COLOR, a: 0, gen: true, ...(def.kind === 'tower' ? { tower: true } : {}) });
             rec.doorId = g.doors.list.has(id) ? id : null;
         }
         // the beds

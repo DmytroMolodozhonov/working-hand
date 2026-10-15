@@ -57,3 +57,21 @@ test('a charge flying at a closed leaf hits it', () => {
     assert.ok(hit && hit.door === d && Math.abs(hit.s - 0.5) < 0.05);
     assert.equal(D.segmentHit(new THREE.Vector3(5, 2, 5), new THREE.Vector3(5, 2, -5)), null, 'past it');
 });
+
+import { inwardRy } from '../../src/world/Castles.js';
+
+test('house doors open into the room; a wall or a chest behind the leaf stops it', () => {
+    for (const ry of [0, 0.5, 2, -1.3]) for (const [ix, iz] of [[1, 0], [0, -1], [-0.6, 0.8]]) {
+        const r = inwardRy(ry, ix, iz);
+        assert.ok(-Math.sin(r) * ix - Math.cos(r) * iz >= 0, 'local −Z (the opening side) points in');
+    }
+    // a door at the origin (ry 0: it opens towards −z), a wall 1.2 m inside along x
+    const D = fake();
+    D.game.world = { terrain: { data: { isSolidAt: (x, y, z) => z < -1.6 } } };
+    const d = door({ x: 0, y: 0, z: 0, ry: 0, a: 0 });
+    D._setAngle = Doors.prototype._setAngle.bind(D);
+    const lim = D.openLimit(d);
+    assert.ok(lim > 0.3 && lim < 0.8, `stops on the wall: ${lim}`);
+    D._setAngle(d, 1.5);
+    assert.ok(d.a <= lim + 1e-9);
+});
