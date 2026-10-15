@@ -176,3 +176,15 @@ test('lying on the ground (and a moment after getting up) the hand holds fast â€
     assert.equal(holdsFast(ch, 1000 + 1000), true, 'just up: still pushing up');
     assert.equal(holdsFast(ch, 1000 + 1600), false, 'standing a while: throws as usual');
 });
+
+test('the wand and the ground: a hand swung down to the ground never throws it; a wrist down at the ground is no wind-up; only a wide-open outstretched hand drops it', () => {
+    // drawn back behind the shoulder, then swung down to the ground fast, the pinch seen open
+    assert.equal(overhand(new ThrowDetector(), { strict: true, behind: true, start: V(0.8, 1.75, 0.3), vRel: V(0, -12, -4), n: 6 }), null, 'a swing down to the ground');
+    // bending to the ground: the camera sees the low wrist "behind" the shoulder â€” no wind-up
+    assert.equal(poseBehind({ rightWrist: { y: 0.8, z: 0.3 }, rightShoulder: { y: 0.42, z: 0 } }, 'right'), false);
+    assert.equal(poseBehind({ leftWrist: { y: 0.25, z: 0.22 }, leftShoulder: { y: 0.42, z: 0 } }, 'left'), true, 'a real wind-up (left)');
+    // the pinch seen half open never drops the wand; a wide-open hand kept open 0.5 s does
+    assert.equal(run(new DropGate(), { curl: 0.2, strict: true }, 3000).any, false, 'a pinch seen half open');
+    const r = run(new DropGate(), { curl: 0.05, strict: true }, 1000);
+    assert.ok(r.any && r.at >= 500 && r.at < 560, 'a wide-open outstretched hand ' + JSON.stringify(r));
+});

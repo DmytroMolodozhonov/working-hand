@@ -23,6 +23,10 @@ export const DROP = {
     LEVEL: -0.6, // the arm no more than ~37° below level (a hanging arm is not stretched out)
     STILL: 2.5, // m/s against the body
     PALM_UP: 0.6, // cos of the palm's face to up
+    // the wand (held in a pinch like a pen — the camera may see that hand half open): only a
+    // really open hand (all the fingers straight), kept open longer
+    WAND_OPEN: 0.12,
+    WAND_HOLD_MS: 500,
 };
 export const THROW = {
     UP: 0.45, // wind-up: the hand really raised, this far above the shoulder …
@@ -42,12 +46,18 @@ export const THROW = {
     // a much faster and longer swing, and the fingers seen opening
     STRICT_SPEED: 1.5,
     STRICT_TRAVEL: 1.2,
+    // (the wand: a swing down to the ground — bending to it, a hand thrust at it, a spell at it — is
+    // no throw: the hand must stay above the waist through the swing and the letting go)
+    STRICT_LOW: -1.0, // the hand this far below the shoulder (the body's space; the arm is 1.9 long): down at the hip, the ground
+    LOW_WRIST: 0.12, // (the pose: the wrist this much below the shoulder in the picture — no wind-up)
 };
 
 /** The camera's depth says the wrist is behind the shoulder (pose z: bigger = further from the camera). */
 export const poseBehind = (pose, side) => {
     const w = pose?.[side + 'Wrist'], s = pose?.[side + 'Shoulder'];
-    return !!(w && s && (w.z || 0) - (s.z || 0) > THROW.DEPTH);
+    // (a wrist down by the hip or at the ground is no wind-up: bending down to the ground, the
+    // shoulders come forward and the camera sees the low hands "behind" them)
+    return !!(w && s && (w.z || 0) - (s.z || 0) > THROW.DEPTH && (w.y ?? 0) - (s.y ?? 0) < THROW.LOW_WRIST);
 };
 
 /** s after getting up off the ground when the arms are still pushing up (no throw yet). */
@@ -77,14 +87,14 @@ export class DropGate {
      *   palmUp (cos of the palm's face to up)
      * @returns {boolean} let go now
      */
-    update({ now, curl, tracked, reach, forward, up = 0, speed = 0, palmUp = 0 }) {
+    update({ now, curl, tracked, reach, forward, up = 0, speed = 0, palmUp = 0, strict = false }) {
         if (!tracked) { this.since = 0; return false; } // a lost hand never drops
         if (curl > DROP.CLOSED) this.armed = true;
-        const opening = this.armed && curl < DROP.OPEN && reach > DROP.REACH && forward > DROP.FORWARD
+        const opening = this.armed && curl < (strict ? DROP.WAND_OPEN : DROP.OPEN) && reach > DROP.REACH && forward > DROP.FORWARD
             && up > DROP.LEVEL && speed < DROP.STILL && palmUp < DROP.PALM_UP;
         if (!opening) { this.since = 0; return false; }
         if (!this.since) this.since = now;
-        return now - this.since >= DROP.HOLD_MS;
+        return now - this.since >= (strict ? DROP.WAND_HOLD_MS : DROP.HOLD_MS);
     }
 }
 
@@ -122,11 +132,13 @@ export class ThrowDetector {
         if (!this.cock) return null;
         if (tracked && curl > THROW.HOLD) this.held = true; // (a real throw starts with the thing held)
         const need = THROW.SPEED + THROW.PER_KG * weight + (strict ? THROW.STRICT_SPEED : 0);
-        if (this.held && speed > need && (-vRel.z > 0 || vRel.y < 0) && (!strict || this.back)
+        if (this.held && speed > need && (-vRel.z > 0 || vRel.y < 0) && (!strict || (this.back && hand.y - shoulder.y > THROW.STRICT_LOW))
             && Math.hypot(hand.x - this.cock.x, hand.y - this.cock.y, hand.z - this.cock.z) > (strict ? THROW.STRICT_TRAVEL : THROW.TRAVEL)
             && (!this.peak || speed > this.peak.speed)) this.peak = { speed, vRel: [vRel.x, vRel.y, vRel.z], vWorld: [...vWorld], at: now };
         if (!this.peak) return null;
         if (now - this.peak.at > THROW.LATE_MS) { this.reset(); return null; } // the fist kept hold: a chop, not a throw
+        // (the wand let go down at the hip / the ground: the hand went down to it, no throw)
+        if (strict && hand.y - shoulder.y < THROW.STRICT_LOW) { this.reset(); return null; }
         if (tracked && curl < THROW.OPEN) { const p = this.peak; this.reset(); return p; } // (a hand lost in the blur waits ≤450 ms)
         if (tracked && curl > THROW.HOLD) this.seenHold = true; // (seen still gripping after the swing: a chop)
         // the camera lost the hand in the swing's blur: a strong swing FORWARD (not down, as a blow is)
