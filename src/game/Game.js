@@ -68,7 +68,12 @@ import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Dragons } from './Dragons.js';
-import { Carriages } from './Carriages.js';
+import { Carriages, cartModel } from './Carriages.js';
+import { ShipModel } from '../entities/ShipModel.js';
+import { buildLayout } from './ShipLayout.js';
+import { SHIP_CLASSES } from './ShipTypes.js';
+import { dragonModel } from './DragonModel.js';
+import { KIND_IDS } from './DragonKinds.js';
 import { Travelers } from './Travelers.js';
 import { DRAGON_WAND_FIRE } from './DragonKinds.js';
 import { Phoenixes, phoenixModel } from './Phoenixes.js';
@@ -2319,9 +2324,27 @@ export class Game {
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
+        // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
+        // met in flight made the frame wait for them)
+        for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
         zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), this.campfires.sampleModel());
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const v of prewarmVillagers()) zoo.add(v);
+        // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
+        // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
+        try {
+            const cls = Object.keys(SHIP_CLASSES)[0];
+            if (this.ships && cls) zoo.add(new ShipModel(buildLayout(cls), { color: 0x8a5a33, name: 'prewarm' }).group);
+            for (const k of KIND_IDS) zoo.add(dragonModel(k));
+            zoo.add(cartModel(false), cartModel(true));
+        } catch (e) { /* (a model that can't be made here: compiled on first sight, as before) */ }
+        const box = new THREE.BoxGeometry(1, 1, 1);
+        for (const m of [new THREE.MeshLambertMaterial(), new THREE.MeshPhongMaterial(), new THREE.MeshBasicMaterial(), new THREE.MeshStandardMaterial()]) {
+            const im = new THREE.InstancedMesh(box, m, 1); // (instanced, without per-instance colours: coins, cannon balls, blocks)
+            im.setMatrixAt(0, new THREE.Matrix4());
+            zoo.add(im);
+        }
+        zoo.add(new THREE.LineSegments(box, new THREE.LineBasicMaterial({ color: 0x5b4630 })));
         zoo.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, depthWrite: false })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
         this.scene.add(zoo);

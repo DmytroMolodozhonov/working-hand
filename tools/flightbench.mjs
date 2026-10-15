@@ -7,6 +7,7 @@
  *                       max: quality «Высокая» + view «Максимальная»)
  *   --seed 20261015     the world's seed (the same world every run)
  *   --out file.json     save the numbers (and print a table)
+ *   --check             fail (exit code 1) when the flight is not smooth (LIMITS below)
  *   --profile           also record a CPU profile of the max run (scratch/flight.cpuprofile)
  *   --size 640x360      the window (small: here the picture is drawn by the processor)
  *
@@ -33,6 +34,9 @@ const LEVELS = opt('levels', 'high,max').split(',');
 const SEED = parseInt(opt('seed', '20261015'), 10);
 const OUT = opt('out', null);
 const PROFILE = args.includes('--profile');
+const CHECK = args.includes('--check');
+/** --check: what a flight must keep (the game's own work in a frame; no shader made in flight). */
+const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0 };
 const [W, H] = opt('size', '640x360').split('x').map(Number);
 const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' } };
 
@@ -146,6 +150,7 @@ async function flyRoute() {
             newProgs.push(`${seg} ${(t1 - t0).toFixed(0)}мс ${progs[i].name} [${(best || ['новый вид']).slice(0, 6).join(' ')}]`);
         }
         if (window.__compiled.length > nSeen && newProgs.length > lastProgs) {
+            // (the objects using the new materials: their top group's name, so the thing can be found)
             const mats = new Set(window.__compiled.slice(nSeen));
             nSeen = window.__compiled.length;
             const who = [];
@@ -153,7 +158,10 @@ async function flyRoute() {
                 if (!o.material || who.length > 6) return;
                 for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (mats.has(m)) {
                     const path = [];
-                    for (let q = o; q && q !== g.scene && path.length < 4; q = q.parent) path.push(q.name || q.userData?.kind || q.type);
+                    let top = o;
+                    while (top.parent && top.parent !== g.scene) top = top.parent;
+                    for (let q = o; q && q !== g.scene && path.length < 3; q = q.parent) path.push(q.name || q.type);
+                    path.push('… ' + (top.name || Object.keys(top.userData || {}).slice(0, 3).join('/') || top.type) + ` (${top.children.length} частей)`);
                     who.push(`${m.type}${m.name ? '(' + m.name + ')' : ''} ← ${path.join(' < ')}`);
                 }
             });
@@ -165,10 +173,13 @@ async function flyRoute() {
             const parts = {};
             for (const k in g._parts) parts[k] = +g._parts[k].toFixed(2);
             for (const k in sub) if (sub[k] > 0.05) parts[k] = +sub[k].toFixed(2);
-            frames.push({ seg, gap: +(t0 - prev).toFixed(2), cpu: +(t1 - t0).toFixed(2), parts });
+            // «игра»: the frame's work without handing the picture to the video card (here a slow software
+            // one, whose waits land in «графика» — on a real card they don't): logic, the world, creatures
+            frames.push({ seg, gap: +(t0 - prev).toFixed(2), cpu: +(t1 - t0).toFixed(2), game: +(t1 - t0 - (g._parts['графика'] || 0)).toFixed(2), parts });
         }
         prev = t0;
     };
+    const warmAtTakeoff = { circle: !!g.circleAttack?._warmed, inspirius: !!g.inspirius?._warmed, programs: g.renderer.info.programs.length };
     g.startFlight(true);
     ch.group.position.y += 20;
     const at = ch.group.position.clone();
@@ -179,7 +190,7 @@ async function flyRoute() {
     for (const u of undo) u();
     const info = g.renderer.info;
     return {
-        frames, segs, newProgs, prewarmed: g.prewarmedPrograms, castle: { x: castle.x, z: castle.z }, peak,
+        frames, segs, newProgs, warmAtTakeoff, prewarmed: g.prewarmedPrograms, castle: { x: castle.x, z: castle.z }, peak,
         terrain: { ...g.terrain.stats, meshes: g.terrain.meshes.size, chunks: data.chunks.size, queue: g.terrain._queue.length },
         render: { calls: info.render.calls, triangles: info.render.triangles, programs: info.programs.length, geometries: info.memory.geometries, textures: info.memory.textures },
     };
@@ -232,6 +243,10 @@ async function runLevel(browser, url, level) {
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     await sleep(4000); // (the first frames: shaders of what is on screen)
+    // (Circle Attack and Inspirius compile their looks a couple of game seconds after the start, on the
+    // ground; here the frames are slow, so wait for that before taking off — in a real game it is long done)
+    await page.waitForFunction(() => { const g = window.__zns.game; return (g.circleAttack?._warmed ?? true) && (g.inspirius?._warmed ?? true); }, null, { timeout: 120000 }).catch(() => {});
+    await sleep(1500);
     let cdp = null;
     if (PROFILE && level === LEVELS[LEVELS.length - 1]) {
         cdp = await page.context().newCDPSession(page);
@@ -246,14 +261,14 @@ async function runLevel(browser, url, level) {
         fs.writeFileSync(out, JSON.stringify(profile));
         console.log('profile:', out);
     }
-    const res = { level, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, total: {}, segs: {} };
-    res.total = { frame: metrics(r.frames, 'gap'), cpu: metrics(r.frames, 'cpu'), parts: partsAvg(r.frames) };
+    const res = { level, warmAtTakeoff: r.warmAtTakeoff, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, total: {}, segs: {} };
+    res.total = { frame: metrics(r.frames, 'gap'), cpu: metrics(r.frames, 'cpu'), game: metrics(r.frames, 'game'), parts: partsAvg(r.frames) };
     for (const s of ['прямой', 'разворот', 'замок', 'горы']) {
         const f = r.frames.filter((x) => x.seg === s);
-        res.segs[s] = { frame: metrics(f, 'gap'), cpu: metrics(f, 'cpu'), parts: partsAvg(f) };
+        res.segs[s] = { frame: metrics(f, 'gap'), cpu: metrics(f, 'cpu'), game: metrics(f, 'game'), parts: partsAvg(f) };
     }
     // the slowest frames and what was heaviest in each
-    res.spikes = r.frames.slice().sort((a, b) => b.cpu - a.cpu).slice(0, 12).map((f) => `${f.cpu.toFixed(0)}мс ${f.seg}: ` + Object.entries(f.parts).filter(([k]) => !/^(игрок|магия|зомби|мультиплеер|мир|прочее|графика)/.test(k) || k === 'графика').sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', '));
+    res.spikes = r.frames.slice().sort((a, b) => b.cpu - a.cpu).slice(0, 12).map((f) => `${f.cpu.toFixed(0)}мс ${f.seg}: ` + Object.entries(f.parts).filter(([k]) => k !== 'земля:всего').sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', '));
     res.culprits = {};
     for (const f of r.frames) if (f.cpu > 33.3) {
         let best = null;
@@ -269,15 +284,15 @@ function table(results) {
     const row = (name, m) => m ? `${name.padEnd(10)} ${String(m.fps).padStart(6)} ${String(m.low1).padStart(7)} ${String(m.max).padStart(8)} ${String(m.over33).padStart(6)} ${String(m.frames).padStart(7)}` : `${name} —`;
     for (const r of results) {
         console.log(`\n=== ${r.level}  (замок ${r.castle.x},${r.castle.z}; вершина ${r.peak.x},${r.peak.z} h${r.peak.h})`);
-        for (const kind of ['frame', 'cpu']) {
-            console.log(`  ${kind === 'frame' ? 'КАДР (с рисованием процессором)' : 'ПРОЦЕССОР (работа игры за кадр)'}`);
+        for (const kind of ['frame', 'cpu', 'game']) {
+            console.log(`  ${{ frame: 'КАДР (с рисованием процессором)', cpu: 'ПРОЦЕССОР (работа игры за кадр, с подготовкой рисования)', game: 'ИГРА (логика, мир, существа — без рисования)' }[kind]}`);
             console.log(`  ${'часть'.padEnd(10)} ${'FPS'.padStart(6)} ${'1%худш'.padStart(7)} ${'макс,мс'.padStart(8)} ${'>33мс'.padStart(6)} ${'кадров'.padStart(7)}`);
             console.log('  ' + row('весь полёт', r.total[kind]));
             for (const s in r.segs) console.log('  ' + row(s, r.segs[s][kind]));
         }
         console.log('  части кадра (сред/макс мс):', JSON.stringify(r.total.parts));
         console.log('  самые долгие кадры:\n    ' + r.spikes.join('\n    '));
-        console.log(`  шейдеры: прогрето ${r.prewarmed}, в полёте новых ${r.newProgs.length}: ` + r.newProgs.slice(0, 12).join('; '));
+        console.log(`  шейдеры: прогрето ${r.prewarmed}, при взлёте ${JSON.stringify(r.warmAtTakeoff)}, в полёте новых ${r.newProgs.length}: ` + r.newProgs.slice(0, 12).join('; '));
         console.log('  кто виноват в кадрах >33мс:', JSON.stringify(r.culprits));
         console.log('  мир:', JSON.stringify(r.terrain), ' графика:', JSON.stringify(r.render));
         if (r.errors.length) console.log('  ошибки:', r.errors);
@@ -299,3 +314,18 @@ try {
 }
 table(results);
 if (OUT) { fs.writeFileSync(OUT, JSON.stringify(results, null, 1)); console.log('\nsaved:', OUT); }
+if (CHECK) {
+    const bad = [];
+    for (const r of results) {
+        const m = r.total.game;
+        if (!m) { bad.push(`${r.level}: полёт не записан`); continue; }
+        if (m.max > LIMITS.gameMaxMs) bad.push(`${r.level}: самый долгий кадр игры ${m.max} мс > ${LIMITS.gameMaxMs}`);
+        if (m.over33 > m.frames * LIMITS.gameOver33Share) bad.push(`${r.level}: кадров игры дольше 33 мс — ${m.over33} из ${m.frames}`);
+        if (m.low1 < LIMITS.gameLow1Fps) bad.push(`${r.level}: 1% худших кадров игры ${m.low1} FPS < ${LIMITS.gameLow1Fps}`);
+        const shaders = r.newProgs.filter((x) => !x.startsWith('   ')).length;
+        if (shaders > LIMITS.newShaders) bad.push(`${r.level}: в полёте собрано шейдеров: ${shaders}`);
+        if (r.errors.length) bad.push(`${r.level}: ошибки: ${r.errors.join('; ')}`);
+    }
+    console.log(bad.length ? '\nПРОВЕРКА НЕ ПРОЙДЕНА:\n  ' + bad.join('\n  ') : '\nПРОВЕРКА ПРОЙДЕНА');
+    process.exitCode = bad.length ? 1 : 0;
+}

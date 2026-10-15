@@ -100,10 +100,19 @@ export class Houses {
                 for (const pen of def.pens || []) if (Math.hypot(pen.x - p.x, pen.z - p.z) < NEAR) pens.set(pen.id, { def, pen });
             }
         }
+        // (flying into a village: its houses come to life a few at a time, nearest first, within a few
+        // milliseconds a scan — all at once was a frame of a quarter of a second; the next scan comes soon)
+        const t0 = performance.now(), me0 = pts[0];
+        const fresh = [...seen].filter(([id]) => !this.active.has(id));
+        if (fresh.length > 1) fresh.sort((a, b) => { const ha = a[1].def.houses[a[1].i].c, hb = b[1].def.houses[b[1].i].c; return Math.hypot(ha.x - me0.x, ha.z - me0.z) - Math.hypot(hb.x - me0.x, hb.z - me0.z); });
+        for (const [, s] of fresh) {
+            if (performance.now() - t0 > 4) { this._scanT = Math.min(this._scanT, 0.05); break; }
+            this._activate(s.def, s.i);
+        }
         for (const [id, s] of seen) {
             const rec = this.active.get(id);
-            if (!rec) this._activate(s.def, s.i);
-            else if (!rec.family && this.auth) rec.family = this.game.castleLife?.spawnFamily(s.def, s.i)?.length ? true : null;
+            if (!rec) continue;
+            if (!rec.family && this.auth) rec.family = this.game.castleLife?.spawnFamily(s.def, s.i)?.length ? true : null;
         }
         // inside a house: the beds are seen only near (through a door or a window); doors cast shadows only near
         const me = this.game.character.group.position;

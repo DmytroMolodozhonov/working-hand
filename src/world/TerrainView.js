@@ -239,7 +239,8 @@ export class Terrain {
         // chunk of ground at a time, so one frame never makes the ground of nine chunks and a mesh on top.
         const t0 = performance.now();
         if (this._workers) {
-            while (this._done.length && performance.now() - t0 < this.budgetMs) this._applyBuilt(this._done.shift());
+            // (at most a few a frame: each one's buffers go to the video card when it is drawn)
+            for (let n = 0; this._done.length && n < 6 && performance.now() - t0 < this.budgetMs; n++) this._applyBuilt(this._done.shift());
             this._dispatch(this._workers.length * 3);
             if (this._local.length) this._buildLocal(t0, this.budgetMs);
         } else {

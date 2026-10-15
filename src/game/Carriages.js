@@ -206,11 +206,14 @@ export function cartModel(magic) {
             box(body, 0.1, 1.3, 0.1, sx * (W / 2 - 0.1), F + CART.SIDE + 0.5, -L / 2 + 0.15, iron);
             lamps.push(box(body, 0.32, 0.4, 0.32, sx * (W / 2 - 0.1), F + CART.SIDE + 1.3, -L / 2 + 0.15, glass));
         }
-        const light = new THREE.PointLight(0x7fc0ff, 1.2, 12, 2);
-        light.position.set(0, F + CART.SIDE + 1.4, -L / 2 + 0.2);
-        body.add(light);
+        // (where their light shines from: the one light of all carriages — Carriages.light — comes here
+        // for the nearest one at night; a light of its own would change the count of lights, and every
+        // lit shader in the world would be compiled again the moment a carriage came in sight)
+        const lightAt = new THREE.Object3D();
+        lightAt.position.set(0, F + CART.SIDE + 1.4, -L / 2 + 0.2);
+        body.add(lightAt);
         g.userData.lamps = lamps;
-        g.userData.light = light;
+        g.userData.lightAt = lightAt;
     } else {
         // the people's load: sacks and a barrel behind the benches
         const sack = lam(0xc9b48a), barrel = lam(0x6b4423);
@@ -293,6 +296,12 @@ export class Carriages {
         this._netT = 0;
         this._nextId = 1;
         this.log = []; // (tests: what happened)
+        // ONE cold blue light for the nearest wizards' carriage at night: made now, before the shaders are compiled
+        if (game.scene && typeof THREE.PointLight === 'function') {
+            this.light = new THREE.PointLight(0x7fc0ff, 0, 12, 2);
+            this.light.castShadow = false;
+            game.scene.add(this.light);
+        }
     }
 
     get auth() { return this.game.authority; }
@@ -606,7 +615,10 @@ export class Carriages {
     // ---------------------------------------------------------------- frame
     update(dt) {
         const g = this.game;
+        if (this.light) this.light.intensity = 0;
         if (!this.list.size) return;
+        let lit = null, litD = Infinity;
+        const me = g.character?.group?.position;
         for (const c of [...this.list.values()]) {
             if (this.auth) {
                 // fire: it burns its HP away; water puts it out
@@ -644,7 +656,14 @@ export class Carriages {
             }
             // the carriage's lanterns: lit at night
             const ud = c.model.userData;
-            if (ud.light) ud.light.visible = !!g.isNight && !c.wreck;
+            if (ud.lightAt && g.isNight && !c.wreck && me) {
+                const d = Math.hypot(c.x - me.x, c.z - me.z);
+                if (d < litD) { litD = d; lit = ud.lightAt; }
+            }
+        }
+        if (lit && this.light) {
+            lit.getWorldPosition(this.light.position);
+            this.light.intensity = 1.2;
         }
         this._netSend(dt);
     }

@@ -188,6 +188,10 @@ export class Ships {
     _scan() {
         const idx = this.castles;
         const players = this._players();
+        // (flying up to a harbour: its ships are made and woken one by one, a few milliseconds a scan —
+        // all at once was a long frame; what is left waits for the next scan, soon)
+        const t0 = performance.now();
+        const busy = () => { if (performance.now() - t0 < 4) return false; this._scanT = Math.min(this._scanT, 0.1); return true; };
         if (idx && idx.near) {
             for (const pl of players) {
                 for (const def of idx.near(pl.x, pl.z, SCAN)) {
@@ -195,7 +199,7 @@ export class Ships {
                     if (!port || !Array.isArray(port.berths)) continue;
                     port.berths.forEach((b, k) => {
                         const id = `${def.id}:ship${k}`;
-                        if (this.list.has(id) || !SHIP_CLASSES[b.cls]) return;
+                        if (this.list.has(id) || !SHIP_CLASSES[b.cls] || busy()) return;
                         this.spawn(b.cls, b.x, b.z, b.yaw ?? 0, { id, berth: b, castleId: def.id, color: def.color, wake: false });
                     });
                     // the port's own guns (the «sea» session places them: port.cannons [{x, y, z, yaw}])
@@ -206,7 +210,7 @@ export class Ships {
         for (const s of this.list.values()) {
             let d = Infinity;
             for (const pl of players) d = Math.min(d, Math.hypot(pl.x - s.st.x, pl.z - s.st.z));
-            if (!s.awake && d < WAKE) this.wake(s);
+            if (!s.awake && d < WAKE) { if (!busy()) this.wake(s); }
             else if (s.awake && d > SLEEP) this.sleep(s);
         }
     }
