@@ -1,6 +1,6 @@
 /**
- * The Temple of the Gods — in a real browser (Creative on Earth: temple.placeTest() puts it by the start;
- * on Venus «Космос» places it with temple.place). Its floor holds the hero, its walls stop him, the four
+ * The Temple of the Gods — in a real browser, on Venus (it stands by itself when a hero comes near its place;
+ * on Earth temple.placeTest() can put it by the start in Creative). Its floor holds the hero, its walls stop him, the four
  * pedestals of the library carry the four scrolls (a taken one comes back); and its pictures, saved in
  * docs/space/temple/ (the entrance, the golden god, the gallery of the gods, the library).
  * Run: node --test tests/e2e/temple.test.mjs
@@ -23,11 +23,18 @@ test('the Temple of the Gods: solid stone, four scrolls on the pedestals — and
     await waitHudVisible(page);
     const r = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE, tm = g.temple, ch = g.character;
+        const out0 = {};
         const frame = () => new Promise((res) => { const f = g.frameCount; const k = () => (g.frameCount > f ? res() : setTimeout(k, 10)); k(); });
-        const spot = tm.placeTest();
+        // to Venus: the hero right over the temple's place (on Venus it stands by itself — Temple._venus)
+        const { templeSiteOf } = await import('/src/world/PlanetSurface.js');
+        const site = templeSiteOf(g.space.planets.get('venus'));
+        ch.group.position.set(site.x, site.y + 60, site.z + 120);
+        ch.verticalVelocity = 0;
         const t0 = performance.now();
-        while (!tm.group && performance.now() - t0 < 30000) await frame();
-        const out = { spot, built: !!tm.group, pedestals: tm.pedestals.length };
+        while (!(tm.group && !tm._pending.length) && performance.now() - t0 < 60000) { g.world.terrain.flushAround?.(site.x, site.z); await frame(); }
+        const spot = tm.spot;
+        out0.realm = g.space.realm;
+        const out = { ...out0, spot, venus: !!spot?.venus, built: !!tm.group, pedestals: tm.pedestals.length };
         // the hero in the library, by the god of Wisdom: he stands on the temple's floor
         const lib = tm.viewOf('library');
         ch.group.position.set(lib.from.x, lib.from.y + 2, lib.from.z);
@@ -38,7 +45,7 @@ test('the Temple of the Gods: solid stone, four scrolls on the pedestals — and
         out.feet = ch.groundY;
         // a wall: the point inside the library's back wall is solid, the air of the hall is not
         const { templeToWorld } = await import('/src/world/GodsTemple.js');
-        const w = templeToWorld(tm.spot, 0, 5, -60.8), air = templeToWorld(tm.spot, 0, 5, -45);
+        const w = templeToWorld(tm.spot, 0, 5, -70.8), air = templeToWorld(tm.spot, 0, 5, -45);
         out.wall = g.collision.pointBlocked(w.x, w.y, w.z);
         out.air = g.collision.pointBlocked(air.x, air.y, air.z);
         // the roof is a ceiling over the hall
@@ -55,7 +62,8 @@ test('the Temple of the Gods: solid stone, four scrolls on the pedestals — and
         return out;
     });
     console.log(JSON.stringify(r));
-    assert.ok(r.built, 'the temple is built');
+    assert.ok(r.built && r.venus, 'the temple stands on Venus');
+    assert.equal(r.realm, 'venus');
     assert.equal(r.pedestals, 4, 'four pedestals in the library');
     assert.deepEqual(r.scrolls, ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima']);
     assert.ok(Math.abs(r.feet - r.floor) < 0.6, `the hero stands on the floor (${r.feet} vs ${r.floor})`);
@@ -74,8 +82,6 @@ test('the Temple of the Gods: solid stone, four scrolls on the pedestals — and
             const v = tm.viewOf(where);
             const cam = new T.PerspectiveCamera(where === 'entrance' ? 60 : 72, 1280 / 720, 0.1, 3000);
             g.character.group.position.set(v.from.x, v.from.y, v.from.z);
-            g.dayStart = Date.now() - 24 * 60 * 1000 * 0.32;
-            g.world.setDayPhase?.(g.dayPhase());
             g.world.terrain.flushAround?.(v.from.x, v.from.z);
             const t0 = performance.now(); for (let i = 0; i < 50 && performance.now() - t0 < 25000; i++) await frame();
             cam.position.set(v.from.x, v.from.y, v.from.z); cam.lookAt(v.to.x, v.to.y, v.to.z);

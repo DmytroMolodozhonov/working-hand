@@ -33,16 +33,16 @@ test('its stone: a floor, walls that push, a roof over the head; never thrown ou
     const s = { x: 0, y: 0, z: 0, rot: 1 };
     const c = new TempleCollider(s, plan.solids);
     const floor = TEMPLE.RISE * TEMPLE.K;
-    const hall = templeToWorld(s, 0, 0, -8);
+    const hall = templeToWorld(s, 0, 0, -1);
     assert.ok(Math.abs(c.floorAt(hall.x, hall.z, floor + 1) - floor) < 1e-6, 'the floor of the hall');
     assert.ok(c.ceilingAt(hall.x, hall.z, floor + 2) > floor + 20 && c.ceilingAt(hall.x, hall.z, floor + 2) < Infinity, 'the roof');
-    assert.ok(c.pointBlocked(...Object.values(templeToWorld(s, 0, 5, -60.8))), 'the library\'s back wall');
+    assert.ok(c.pointBlocked(...Object.values(templeToWorld(s, 0, 5, -70.8))), 'the library\'s back wall');
     // walking into the back wall of the library: pushed back into the room
-    const w = templeToWorld(s, 0, 0, -59.6);
+    const w = templeToWorld(s, 0, 0, -69.6);
     const p = { x: w.x, y: 0, z: w.z };
     c.pushCylinder(p, 0.6, floor, 3.5, 1.05);
     const l = templeToLocal(s, p.x, floor, p.z);
-    assert.ok(l.z > -60 && l.z < -59, `out of the wall, into the room (${l.z})`);
+    assert.ok(l.z > -70 && l.z < -69, `out of the wall, into the room (${l.z})`);
     // sunk a little into the podium (a fall's overshoot): stays where it is
     const q = { x: hall.x, y: 0, z: hall.z };
     assert.equal(c.pushCylinder(q, 0.6, floor - 0.3, 3.5, 0.2), false);

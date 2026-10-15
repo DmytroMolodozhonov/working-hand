@@ -439,7 +439,7 @@ export class VoxelWorld {
      * A stone pedestal with a glowing rune ring; a weapon floats above it as
      * if held by magic. Returns the top surface Y.
      */
-    createPedestal(x, z, { y = 0, godGift = false } = {}) {
+    createPedestal(x, z, { y = 0, godGift = true } = {}) {
         const g = new THREE.Group();
         g.position.set(x, y, z);
         // (shapes and materials shared by every pedestal — the temple's too)

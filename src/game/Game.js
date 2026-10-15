@@ -762,6 +762,9 @@ export class Game {
 
     /** Visual + world part of an explosion (runs on every machine). */
     applyExplosion(pos, radius, authoritative, power = 1, casterId = null, keep = undefined) {
+        // (the Gods' temple — CLAUDE.md «Дары богов»: the blast stops on its golden ward — seen and heard,
+        //  nothing within its bounds breaks, nobody there flies or is hurt)
+        if (this.temple?.wards(pos, radius)) { this.temple.wardHit(pos, radius); this.sound?.playExplosion?.(pos, this.character.group.position, Math.min(1, 0.4 * power)); return; }
         // `power` times the energy: damage × power, thrown objects × √power speed
         const push = Math.sqrt(power);
         // (a house's sphere of protection: the blast doesn't eat into it from outside)

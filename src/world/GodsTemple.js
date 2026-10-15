@@ -36,8 +36,8 @@ export const TEMPLE = {
     K: 2.2, // game units per metre of the plan (the hero is ~4 units tall)
     RISE: 1.5, // m: the floor above the ground at the stairs' foot
     DEPTH: 9, // m: the podium goes this far below the floor (uneven ground hidden)
-    X0: -33, X1: 19.5, Z0: -63.5, Z1: 18, // m: the footprint (local)
-    HALL_H: 15, GAL_H: 10, LIB_H: 12,
+    X0: -33, X1: 19.5, Z0: -73.5, Z1: 18, // m: the footprint (local)
+    HALL_H: 15, GAL_H: 10, LIB_H: 20, LZ: -70, // (the library's back: its inside runs to z = LZ)
     FAR: 520, // game units: beyond this it is not drawn
 };
 
@@ -192,7 +192,8 @@ class Builder {
 
 // ─── the stone of the temple: a pale rose travertine with dark-red veins (not the castles' stone) ──
 const STONE = hex(0xc9a48c), STONE_D = hex(0x9c7a68), TRIM = hex(0x7d5a4e), FLOOR = hex(0xb39582), FLOOR_B = hex(0x8f7466);
-const MARBLE = hex(0xece6dc), GOLD = hex(0xfff4dc), SAND = hex(0xb48a62), WOOD = hex(0x5b3a24), WOOD_D = hex(0x3c2616);
+const MARBLE = hex(0xf8f6f1), GOLD = hex(0xfff4dc), SAND = hex(0xb48a62), WOOD = hex(0x5b3a24), WOOD_D = hex(0x3c2616);
+const PORPHYRY = hex(0x3d2a33), LAPIS = hex(0x1c2a5c), RED = hex(0x6e1420);
 const CRACK = hex(0x3d2a24), PARCH = hex(0xe8d6a8), WEB = hex(0xffffff), SHAFT = hex(0xffe2a8);
 const LEATHER = [0x5a1e14, 0x6b3a1c, 0x2c3a24, 0x23304a, 0x4a2b4a, 0x7a5a2a, 0x3a2418, 0x612a2a, 0x2a4a4a, 0x50442c].map(hex);
 
@@ -442,6 +443,7 @@ function column(B, x, z, h, r, stump = 0, col = STONE) {
     }
     if (!stump) {
         B.cyl('stone', T(x, h - 0.85, z), r * 0.9, r * 1.3, 0.5, col, 14);
+        B.torus('gold', T(x, h - 1.12, z), r * 0.92, 0.07, GOLD, 18, 3);
         B.abox('stone', x - r * 1.45, h - 0.6, z - r * 1.45, x + r * 1.45, h, z + r * 1.45, tint(col, 1.04), false);
     } else { // a jagged broken top
         for (let i = 0; i < 5; i++) {
@@ -575,7 +577,7 @@ export function templePlan(seed = 1) {
             }
         }
     };
-    tiles(-16, 16, -32, 2, 2); tiles(-30, -17.6, -32, 2, 2); tiles(-16, 16, -60, -33.6, 2); tiles(-18, 18, 3.6, 14, 2);
+    tiles(-16, 16, -32, 2, 2); tiles(-30, -17.6, -32, 2, 2);  tiles(-18, 18, 3.6, 14, 2);
     // ── the walls ──
     const H = HALL_H;
     // the front wall with the great doorway
@@ -590,12 +592,14 @@ export function templePlan(seed = 1) {
     wall(B, 'z', -32, 2, -17.6, -16, 0, H, [{ a0: -22, a1: -17, y1: 7 }, { a0: -12.5, a1: -8.5, y1: 7 }, { a0: -4, a1: 0, y1: 7 }], 0.8);
     wall(B, 'z', -32, 2, -31.6, -30, 0, GAL_H, [], 1);
     // the library
-    wall(B, 'z', -61.6, -33.6, 16, 17.6, 0, LIB_H, [], 0.8);
-    wall(B, 'z', -61.6, -33.6, -17.6, -16, 0, LIB_H, [], 0.8);
-    wall(B, 'x', -17.6, 17.6, -61.6, -60, 0, LIB_H, [], 0.5);
+    const LZ = TEMPLE.LZ;
+    wall(B, 'z', LZ - 1.6, -33.6, 16, 17.6, 0, LIB_H, [], 0.8);
+    wall(B, 'z', LZ - 1.6, -33.6, -17.6, -16, 0, LIB_H, [], 0.8);
+    wall(B, 'x', -17.6, 17.6, LZ - 1.6, LZ, 0, LIB_H, [], 0.5);
+    wall(B, 'x', -17.6, 17.6, -33.6, -32, H, LIB_H, [], 1.2); // (the library is higher than the hall)
     // a cornice band round the hall
-    for (const [a, b, c, d] of [[-16, 16, 1.6, 2], [-16, 16, -32, -31.6]]) B.abox('stone', a, H - 2.2, c, b, H - 1.8, d, TRIM, false);
-    for (const [c, d] of [[-16, -15.6], [15.6, 16]]) B.abox('stone', c, H - 2.2, -32, d, H - 1.8, 2, TRIM, false);
+    for (const [a, b, c, d] of [[-16, 16, 1.6, 2], [-16, 16, -32, -31.6]]) { B.abox('stone', a, H - 2.2, c, b, H - 1.8, d, TRIM, false); B.abox('gold', a, H - 2.32, c - 0.02, b, H - 2.2, d + 0.02, GOLD, false); }
+    for (const [c, d] of [[-16, -15.6], [15.6, 16]]) { B.abox('stone', c, H - 2.2, -32, d, H - 1.8, 2, TRIM, false); B.abox('gold', c - 0.02, H - 2.32, -32, d + 0.02, H - 2.2, 2, GOLD, false); }
     // breach rubble: inside and out, sand blown in through it
     rubble(B, 14, -9.5, 4.5, 60); rubble(B, 19.5, -9.5, 3, 30, 0);
     drift(B, 12, -9, 6, 4.5, 0.55, 0.3); drift(B, 6, -12, 4, 3, 0.3, 1);
@@ -614,8 +618,8 @@ export function templePlan(seed = 1) {
     const hallHoles = [[-4, 4, -20, -16], [4, 16, -16, -4], [-12, -4, -8, -4]];
     roof(-17.6, 17.6, -33.6, 3.6, H, hallHoles);
     roof(-31.6, -17.6, -33.6, 3.6, GAL_H, [[-31.6, -17.6, -16, -12]]);
-    const libHoles = [[-4, 4, -52, -48], [8, 12, -40, -36]];
-    roof(-17.6, 17.6, -61.6, -33.6, LIB_H, libHoles);
+    const libHoles = [[-4, 4, -62, -58], [8, 12, -40, -36]];
+    roof(-17.6, 17.6, LZ - 1.6, -33.6, LIB_H, libHoles);
     // rubble under the holes (the roof that fell)
     rubble(B, -8, -6, 3, 26); rubble(B, -27, -14, 2.5, 18); rubble(B, 10, -38, 2.2, 14);
     // shafts of dim light through the holes
@@ -627,7 +631,7 @@ export function templePlan(seed = 1) {
         const dv = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
         B.cyl('shaft', along(add(a, dv, 0.5), dv), w * 0.62, w * 0.5, len(dv), SHAFT, 12, false);
     };
-    shaft(0, -18, H, 3.4, 3); shaft(9, -9, H, 4, 4); shaft(-8, -6, H, 2.6, 2); shaft(-24, -14, GAL_H, 3, 2.4); shaft(0, -50, LIB_H, 3.2, 3); shaft(10, -38, LIB_H, 2.2, 2);
+    shaft(0, -18, H, 3.4, 3); shaft(9, -9, H, 4, 4); shaft(-8, -6, H, 2.6, 2); shaft(-24, -14, GAL_H, 3, 2.4); shaft(1.5, -60, LIB_H, 3.4, 3); shaft(10, -38, LIB_H, 2.4, 2);
     // ── the portico: six columns (two broken), the beam, the gable ──
     const PZ = 11;
     const xs = [-15, -9, -3, 3, 9, 15];
@@ -645,7 +649,7 @@ export function templePlan(seed = 1) {
     // cracks over the walls
     for (let i = 0; i < 6; i++) cracks(B, 'x', 3.6, 1, -14 + i * 5 + rng() * 2, 12 - rng() * 3, 6 + (rng() * 5 | 0));
     for (let i = 0; i < 6; i++) cracks(B, 'z', 16, -1, -30 + i * 5 + rng() * 2, 13 - rng() * 3, 5 + (rng() * 5 | 0));
-    for (let i = 0; i < 5; i++) cracks(B, 'x', -60, 1, -14 + i * 7, 10 - rng() * 2, 6);
+    for (let i = 0; i < 5; i++) cracks(B, 'x', LZ, 1, -14 + i * 7, 17 - rng() * 2, 7);
     // ── the Hall of the Creator: columns, the golden god ──
     for (const z of [-4, -11, -18, -25]) {
         for (const x of [-11, 11]) {
@@ -655,8 +659,12 @@ export function templePlan(seed = 1) {
     }
     // the plinth (three tiers), the god of gold upon it
     const GZ = -23;
-    B.abox('marble', -5, 0, GZ - 4.5, 5, 1, GZ + 4.5, tint(MARBLE, 0.92));
-    B.abox('marble', -4, 1, GZ - 3.5, 4, 2.2, GZ + 3.5, MARBLE);
+    B.abox('stone', -5, 0, GZ - 4.5, 5, 1, GZ + 4.5, PORPHYRY);
+    B.abox('stone', -4, 1, GZ - 3.5, 4, 2.2, GZ + 3.5, tint(PORPHYRY, 1.15));
+    for (const [a, b] of [[1, 1.08], [2.12, 2.2]]) B.abox('gold', -4.06, a, GZ - 3.56, 4.06, b, GZ + 3.56, GOLD, false); // (gold bands)
+    // a sun of gold laid in the floor round the plinth
+    for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; B.box('gold', mul(T(Math.cos(a) * 7.5, 0.06, GZ + Math.sin(a) * 7.5), Ry(-a)), i % 2 ? 1.6 : 2.8, 0.03, 0.18, GOLD); }
+    B.torus('gold', T(0, 0.06, GZ), 6.3, 0.09, GOLD, 48, 3);
     B.abox('gold', -4.1, 2.2, GZ - 3.6, 4.1, 2.45, GZ + 3.6, GOLD, false);
     for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; B.ell('gold', T(Math.cos(a) * 4.4, 1.6, GZ + Math.sin(a) * 4.4 * 0.9), 0.12, 0.12, 0.12, GOLD, 6, 4); }
     const creator = statue(B, 0, 2.45, GZ, 0, 10.5, { pose: 'creator', mat: 'gold', col: GOLD, props: [{ k: 'orb', hand: 'r' }, { k: 'halo' }] });
@@ -674,8 +682,8 @@ export function templePlan(seed = 1) {
     const statues = [{ kind: 'creator', x: 0, y: 2.45, z: GZ, H: 10.5, gold: true }];
     for (const gd of gods) {
         const x = -27.4, base = 1.4;
-        B.abox('marble', x - 1.6, 0, gd.z - 1.6, x + 1.6, base, gd.z + 1.6, tint(MARBLE, 0.88));
-        B.abox('marble', x - 1.75, base, gd.z - 1.75, x + 1.75, base + 0.18, gd.z + 1.75, tint(MARBLE, 0.95), false);
+        B.abox('stone', x - 1.6, 0, gd.z - 1.6, x + 1.6, base, gd.z + 1.6, PORPHYRY);
+        B.abox('gold', x - 1.75, base, gd.z - 1.75, x + 1.75, base + 0.18, gd.z + 1.75, GOLD, false);
         const bb = statue(B, x, base + 0.18, gd.z, Math.PI / 2, 4.4, { pose: gd.pose, mat: 'marble', col: tint(MARBLE, 0.95 + rng() * 0.05), props: gd.props, brokenArm: gd.brokenArm });
         B.solid(x - 1.6, 0, gd.z - 1.6, x + 1.6, base + 0.18, gd.z + 1.6);
         statueSolid(B, x, base + 0.18, gd.z, 4.4, bb);
@@ -683,69 +691,151 @@ export function templePlan(seed = 1) {
     }
     B.ell('marble', mul(T(-23.5, 0.18, -3), Rz(1.4)), 0.15, 0.6, 0.15, tint(MARBLE, 0.9)); // (the goddess's broken arm on the floor)
     // Atlas at the gallery's end, holding the sky; and the discus thrower in the middle
-    B.abox('marble', -26.8, 0, -31.5, -20.8, 1.0, -27.5, tint(MARBLE, 0.88));
+    B.abox('stone', -26.8, 0, -31.5, -20.8, 1.0, -27.5, PORPHYRY);
     const atlas = statue(B, -23.8, 1.0, -29.5, 0, 4.6, { pose: 'atlas', mat: 'marble', col: MARBLE, props: [{ k: 'globe' }] });
     statueSolid(B, -23.8, 1.0, -29.5, 4.6, atlas, 0.3);
     statues.push({ kind: 'atlas', x: -23.8, y: 1, z: -29.5, H: 4.6 });
-    B.abox('marble', -22.6, 0, -9.2, -19.6, 1.0, -6.2, tint(MARBLE, 0.9));
+    B.abox('stone', -22.6, 0, -9.2, -19.6, 1.0, -6.2, PORPHYRY);
     const disc = statue(B, -21.1, 1.0, -7.7, -Math.PI / 2, 4.2, { pose: 'discus', mat: 'marble', col: MARBLE, props: [{ k: 'discus', hand: 'r' }] });
     statueSolid(B, -21.1, 1.0, -7.7, 4.2, disc);
     statues.push({ kind: 'discus', x: -21.1, y: 1, z: -7.7, H: 4.2 });
     drift(B, -29, -30, 3, 2.5, 0.35); drift(B, -24, 0, 3.5, 2, 0.3); drift(B, -26, -14, 3, 2.5, 0.35);
-    // ── the Library ──
-    const WZ = -55.5;
-    B.abox('marble', -3, 0, WZ - 2.5, 3, 1.6, WZ + 2.5, tint(MARBLE, 0.9));
-    B.abox('gold', -3.1, 1.6, WZ - 2.6, 3.1, 1.75, WZ + 2.6, GOLD, false);
-    const wis = statue(B, 0, 1.75, WZ, 0, 6.6, { pose: 'wisdom', mat: 'marble', col: tint(MARBLE, 0.98), props: [{ k: 'book', hand: 'l', mat: 'wood', col: PARCH }, { k: 'owl', hand: 'r', col: tint(MARBLE, 0.92) }] });
-    statueSolid(B, 0, 1.75, WZ, 6.6, wis);
-    B.solid(-3, 0, WZ - 2.5, 3, 1.75, WZ + 2.5);
-    statues.push({ kind: 'wisdom', x: 0, y: 1.75, z: WZ, H: 6.6 });
-    // scrolls at the god's feet
-    for (let i = 0; i < 5; i++) B.cyl('wood', mul(T(-1.2 + i * 0.55, 1.85, WZ + 1.8), Rz(Math.PI / 2 + (rng() - 0.5) * 0.3)), 0.08, 0.08, 0.7, PARCH, 8);
+    // ── the Library: two storeys of books under a night-blue vault of gold stars ──
+    const WZ = LZ + 6;
+    tiles(-16, 16, LZ, -33.6, 2);
+    // the floor: a long carpet of lapis and gold down the aisle (worn, torn at the end), a gold star before the god
+    B.abox('wood', -2.2, 0.05, -60, 2.2, 0.09, -35, tint(RED, 0.9), false, 'b');
+    for (const x of [-2.05, 2.05]) B.abox('gold', x - 0.08, 0.09, -60, x + 0.08, 0.1, -35, GOLD, false, 'b');
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; B.box('gold', mul(T(Math.cos(a) * 1.8, 0.07, WZ + 5.5 + Math.sin(a) * 1.8), Ry(-a)), 3.2, 0.03, 0.22, GOLD); }
+    // the god of Wisdom on a high plinth of dark stone with gold bands; a book open in a hand, an owl on a shoulder
+    B.abox('stone', -3.4, 0, WZ - 3, 3.4, 2.2, WZ + 3, PORPHYRY);
+    for (const [a, b] of [[0.9, 1.0], [2.2, 2.38]]) B.abox('gold', -3.5, a, WZ - 3.1, 3.5, b, WZ + 3.1, GOLD, false);
+    const wis = statue(B, 0, 2.38, WZ, 0, 8.4, { pose: 'wisdom', mat: 'marble', col: MARBLE, props: [{ k: 'book', hand: 'l', mat: 'gold', col: GOLD }, { k: 'owl', hand: 'r', mat: 'gold', col: GOLD }] });
+    statueSolid(B, 0, 2.38, WZ, 8.4, wis);
+    B.solid(-3.4, 0, WZ - 3, 3.4, 2.38, WZ + 3);
+    statues.push({ kind: 'wisdom', x: 0, y: 2.38, z: WZ, H: 8.4 });
+    for (let i = 0; i < 5; i++) B.cyl('wood', mul(T(-1.2 + i * 0.55, 2.48, WZ + 2.4), Rz(Math.PI / 2 + (rng() - 0.5) * 0.3)), 0.08, 0.08, 0.7, PARCH, 8); // (scrolls at its feet)
+    // a round window of gold tracery high in the back wall, light shining through it
+    const RW = T(0, 16.4, LZ + 0.08);
+    B.torus('gold', mul(RW, Rx(Math.PI / 2)), 3.6, 0.22, GOLD, 40, 5);
+    B.torus('gold', mul(RW, Rx(Math.PI / 2)), 1.4, 0.12, GOLD, 28, 4);
+    for (let i = 0; i < 12; i++) B.box('gold', mul(RW, mul(Rz((i / 12) * Math.PI * 2), T(0, 2.5, 0))), 0.12, 2.2, 0.12, GOLD);
+    B.cyl('shaft', mul(RW, Rx(Math.PI / 2)), 3.5, 3.5, 0.05, SHAFT, 32, true);
     // the pedestals: two on each side of the god of Wisdom (placed by Temple.js — the Creative ones)
-    const pedestals = [-9.6, -5.6, 5.6, 9.6].map((x, i) => ({ x, z: WZ + 2.2, spell: TEMPLE_SCROLLS[i] }));
-    // bookcases along the walls and in stacks (the middle aisle free)
-    for (let z = -58.5; z < -36; z += 5.2) {
-        bookcase(B, mul(T(15.3, 0, z + 2.5), Ry(-Math.PI / 2)), 5, 5, 0.9, false, 0.1);
-        bookcase(B, mul(T(-15.3, 0, z + 2.5), Ry(Math.PI / 2)), 5, 5, 0.9, false, 0.12);
-        B.solid(14.8, 0, z, 16, 5, z + 5); B.solid(-16, 0, z, -14.8, 5, z + 5);
+    const pedestals = [-10, -6, 6, 10].map((x, i) => ({ x, z: WZ + 2.6, spell: TEMPLE_SCROLLS[i] }));
+    // the colonnade along both sides holding the gallery of the upper storey
+    const BY = 7; // the gallery's floor
+    for (const sx of [-1, 1]) {
+        for (let z = -36.5; z > LZ + 1; z -= 6) {
+            const x = sx * 12.2;
+            B.cyl('marble', T(x, BY / 2, z), 0.42, 0.38, BY - 0.6, MARBLE, 12);
+            B.abox('stone', x - 0.6, 0, z - 0.6, x + 0.6, 0.35, z + 0.6, PORPHYRY, false);
+            B.torus('gold', T(x, BY - 0.55, z), 0.42, 0.06, GOLD, 14, 3);
+            B.abox('marble', x - 0.65, BY - 0.5, z - 0.65, x + 0.65, BY - 0.25, z + 0.65, MARBLE, false);
+            B.solid(x - 0.42, 0, z - 0.42, x + 0.42, BY - 0.25, z + 0.42);
+        }
+        // the gallery: a floor, a gold-edged front, a balustrade
+        const g0 = sx < 0 ? -16 : 11.8, g1 = sx < 0 ? -11.8 : 16;
+        B.abox('stone', g0, BY - 0.25, LZ, g1, BY + 0.15, -33.6, tint(STONE, 0.92));
+        B.abox('gold', sx * 11.75 - 0.06, BY - 0.25, LZ, sx * 11.75 + 0.06, BY + 0.15, -33.6, GOLD, false);
+        for (let z = -34; z > LZ + 0.4; z -= 0.7) B.cyl('marble', T(sx * 12.0, BY + 0.6, z), 0.07, 0.1, 0.9, MARBLE, 6);
+        B.abox('marble', sx * 12.0 - 0.14, BY + 1.05, LZ, sx * 12.0 + 0.14, BY + 1.2, -33.6, MARBLE, false);
+        B.solid(sx * 12.0 - 0.14, BY + 0.15, LZ, sx * 12.0 + 0.14, BY + 1.2, -33.6);
+        // the walls' bookcases: under the gallery and up on it, from the floor to the vault
+        for (let z = LZ + 0.2; z < -34.5; z += 5.6) {
+            const M0 = mul(T(sx * 15.3, 0, z + 2.7), Ry(-sx * Math.PI / 2));
+            bookcase(B, M0, 5.4, 6.4, 0.9, false, 0.12);
+            bookcase(B, mul(T(sx * 15.3, BY + 0.15, z + 2.7), Ry(-sx * Math.PI / 2)), 5.4, 7.2, 0.9, false, 0.2);
+            B.solid(sx * 14.8, 0, z, sx * 16, BY - 0.25, z + 5.4);
+            B.solid(sx * 14.8, BY + 0.15, z, sx * 16, BY + 7.35, z + 5.4);
+        }
+        // a torn banner of red and gold hanging from the gallery
+        for (const z of [-45, -57]) {
+            const bx = sx * 11.62;
+            B.abox('wood', bx - 0.03, BY - 4.2, z - 0.8, bx + 0.03, BY - 0.3, z + 0.8, RED, false);
+            B.abox('gold', bx - 0.04, BY - 0.6, z - 0.8, bx + 0.04, BY - 0.45, z + 0.8, GOLD, false);
+            for (let i = 0; i < 4; i++) B.box('wood', mul(T(bx, BY - 4.2 - 0.3 - rng() * 0.4, z - 0.6 + i * 0.4), Rx((rng() - 0.5) * 0.3)), 0.06, 0.6 + rng() * 0.6, 0.36, RED);
+            B.ell('gold', T(bx - sx * 0.05, BY - 2.2, z), 0.04, 0.45, 0.45, GOLD, 12, 6); // (an owl's eye of gold: the sign of Wisdom)
+        }
+        // a library ladder leaning on the upper shelves
+        const lz = sx < 0 ? -47 : -52;
+        for (const dz of [-0.35, 0.35]) B.limb('wood', [sx * 13.2, BY + 0.15, lz + dz], [sx * 14.7, BY + 6.8, lz + dz], 0.05, 0.05, WOOD, false);
+        for (let i = 1; i < 12; i++) { const k = i / 12; B.box('wood', T(sx * (13.2 + 1.5 * k), BY + 0.15 + 6.65 * k, lz), 0.06, 0.06, 0.7, WOOD_D); }
     }
-    for (const z of [-38, -42.5, -47]) {
-        for (const [x0, x1] of [[-13.5, -7.5], [7.5, 13.5]]) {
+    // the stacks in the middle: tall double-sided bookcases crowned with gold (one toppled long ago)
+    for (const z of [-39, -45, -51]) {
+        for (const [x0, x1] of [[-10.6, -4.8], [4.8, 10.6]]) {
             const cx = (x0 + x1) / 2;
-            if (x0 < 0 && z === -42.5) { // toppled: lying on its side, its books spilled
-                bookcase(B, mul(T(cx, 0.5, z + 0.9), Rx(-1.45)), 6, 4.6, 1.1, true, 0.6);
-                fallenBooks(B, cx, z + 3.5, 2.6, 40);
-                B.solid(x0, 0, z - 0.2, x1, 1.2, z + 4.8);
+            if (x0 < 0 && z === -45) {
+                bookcase(B, mul(T(cx, 0.5, z + 0.9), Rx(-1.45)), 5.8, 5.6, 1.1, true, 0.6);
+                fallenBooks(B, cx, z + 3.8, 2.8, 46);
+                B.solid(x0, 0, z - 0.2, x1, 1.2, z + 5.8);
                 continue;
             }
-            bookcase(B, T(cx, 0, z), 6, 4.6, 1.1, true, 0.15);
-            B.solid(x0, 0, z - 0.6, x1, 4.6, z + 0.6);
+            bookcase(B, T(cx, 0, z), 5.8, 5.6, 1.1, true, 0.12);
+            B.gable('gold', T(cx, 5.6, z), 5.8, 0.7, 0.3, GOLD);
+            B.solid(x0, 0, z - 0.6, x1, 5.6, z + 0.6);
         }
     }
-    fallenBooks(B, 8, -44, 3, 22); fallenBooks(B, -14, -55, 2, 14); fallenBooks(B, 13, -52, 2, 12); fallenBooks(B, 0, -40, 2.5, 8);
-    // reading tables in the aisle, open books on them
-    for (const [x, z] of [[-4, -41], [4, -44]]) {
-        B.abox('wood', x - 1, 1.5, z - 2, x + 1, 1.62, z + 2, WOOD);
-        for (const [lx, lz] of [[-0.85, -1.85], [0.85, -1.85], [-0.85, 1.85], [0.85, 1.85]]) B.abox('wood', x + lx - 0.08, 0, z + lz - 0.08, x + lx + 0.08, 1.5, z + lz + 0.08, WOOD_D, false);
-        B.solid(x - 1, 0, z - 2, x + 1, 1.62, z + 2);
-        const M = mul(T(x, 1.66, z + (rng() - 0.5)), Ry(rng() - 0.5));
+    fallenBooks(B, 8, -47, 3, 24); fallenBooks(B, -14, LZ + 5, 2, 16); fallenBooks(B, 13, -55, 2, 14); fallenBooks(B, 1, -42, 2.5, 8);
+    // reading desks of dark wood with gold edges, high-backed chairs (some fallen), lecterns
+    const chair = (x, z, yaw, fallen) => {
+        const M = fallen ? mul(T(x, 0.45, z), mul(Ry(yaw), Rx(-1.45))) : mul(T(x, 0, z), Ry(yaw));
+        B.box('wood', mul(M, T(0, 1.0, 0)), 0.9, 0.1, 0.9, WOOD);
+        B.box('wood', mul(M, T(0, 2.0, -0.42)), 0.9, 2.0, 0.08, WOOD_D);
+        B.box('gold', mul(M, T(0, 3.0, -0.42)), 0.95, 0.08, 0.1, GOLD);
+        for (const [a, c] of [[-0.38, -0.38], [0.38, -0.38], [-0.38, 0.38], [0.38, 0.38]]) B.box('wood', mul(M, T(a, 0.5, c)), 0.09, 1.0, 0.09, WOOD_D);
+        if (!fallen) B.solid(x - 0.45, 0, z - 0.45, x + 0.45, 1.05, z + 0.45);
+    };
+    for (const [x, z] of [[-3.4, -42], [3.4, -42], [-3.4, -50], [3.4, -50]]) {
+        B.abox('wood', x - 1.0, 1.55, z - 2.4, x + 1.0, 1.7, z + 2.4, WOOD);
+        B.abox('gold', x - 1.03, 1.5, z - 2.43, x + 1.03, 1.56, z + 2.43, GOLD, false);
+        for (const [lx, lz] of [[-0.8, -2.2], [0.8, -2.2], [-0.8, 2.2], [0.8, 2.2]]) B.cyl('wood', T(x + lx, 0.78, z + lz), 0.1, 0.14, 1.55, WOOD_D, 8);
+        B.solid(x - 1, 0, z - 2.4, x + 1, 1.7, z + 2.4);
+        const M = mul(T(x, 1.75, z + (rng() - 0.5)), Ry(rng() - 0.5));
         B.box('wood', mul(M, mul(T(-0.22, 0, 0), Rz(0.1))), 0.42, 0.04, 0.6, PARCH);
         B.box('wood', mul(M, mul(T(0.22, 0, 0), Rz(-0.1))), 0.42, 0.04, 0.6, PARCH);
-        B.cyl('wood', T(x + 0.6, 1.85, z - 1.2), 0.07, 0.06, 0.4, tint(PARCH, 1.05), 8); // (a candle burnt out long ago)
+        B.cyl('gold', T(x + 0.6, 1.8, z - 1.6), 0.1, 0.12, 0.1, GOLD, 8);
+        B.cyl('wood', T(x + 0.6, 2.0, z - 1.6), 0.06, 0.05, 0.35, tint(PARCH, 1.05), 8); // (a candle burnt out long ago)
+        const side = Math.sign(x);
+        chair(x + side * 1.6, z - 1.2, -side * Math.PI / 2, false);
+        chair(x + side * 1.6, z + 1.2, -side * Math.PI / 2, (z === -50 && x > 0));
+        chair(x - side * 1.3, z, side * Math.PI / 2 + 0.4, z === -42 && x < 0);
     }
-    drift(B, 0, -50, 4, 3, 0.3); drift(B, 10, -38, 2.5, 2, 0.25); drift(B, 0, -36, 3, 2, 0.2);
-    // cobwebs: in the library's corners, between the shelves, under the beams
-    const lx0 = -16, lx1 = 16, lz0 = -60, lz1 = -33.6, LH = LIB_H;
-    cobweb(B, [lx0, LH, lz0], [1, 0, 0], [0, 0, 1], 3); cobweb(B, [lx1, LH, lz0], [-1, 0, 0], [0, 0, 1], 3);
-    cobweb(B, [lx0, LH, lz1], [1, 0, 0], [0, 0, -1], 2.5); cobweb(B, [lx1, LH, lz1], [-1, 0, 0], [0, 0, -1], 2.5);
-    cobweb(B, [lx0, 0.1, lz0], [1, 0, 0], [0, 1, 0], 1.6); cobweb(B, [lx1, 0.1, lz0], [-1, 0, 0], [0, 1, 0], 1.6);
-    for (const z of [-38, -47]) for (const x of [-13.4, 13.4]) cobweb(B, [x, 4.5, z + 0.6], [-Math.sign(x), 0, 0], [0, -1, 0], 1.2);
-    for (const x of [-15.2, 15.2]) for (const z of [-41, -51]) cobweb(B, [x, 5, z], [0, 0, 1], [0, -1, 0], 1.0);
+    // a great chandelier of gold fallen from the vault, lying broken on the floor, its chain beside it
+    {
+        const M = mul(T(7.6, 0.5, -55.6), mul(Rx(0.35), Rz(0.2)));
+        B.torus('gold', M, 2.4, 0.13, GOLD, 32, 5);
+        B.torus('gold', mul(M, T(0, 0.6, 0)), 1.4, 0.09, GOLD, 24, 4);
+        for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; if (i === 3 || i === 7) continue; B.cyl('wood', mul(M, T(Math.cos(a) * 2.4, 0.35, Math.sin(a) * 2.4)), 0.07, 0.06, 0.5, PARCH, 6); }
+        for (let i = 0; i < 6; i++) B.limb('gold', ap(M, 0, 0.6, 0), ap(M, Math.cos(i) * 2.3, 0, Math.sin(i) * 2.3), 0.05, 0.05, GOLD, false);
+        for (let i = 0; i < 9; i++) B.torus('gold', mul(T(7.6 - 3 - i * 0.32, 0.08, -55.6 + 1.6 + i * 0.12), Rz(i % 2 ? 0 : Math.PI / 2)), 0.14, 0.035, GOLD, 8, 3);
+        B.solid(5.5, 0, -57.7, 9.7, 1.2, -53.5);
+    }
+    // the vault: night-blue coffers between beams, gold stars in them
+    for (let x = -16; x < 16 - 0.01; x += 4) {
+        for (let z = LZ; z < -33.6 - 0.01; z += 4) {
+            const cx = x + 2, cz = z + 2;
+            if (libHoles.some((h) => cx > h[0] && cx < h[1] && cz > h[2] && cz < h[3])) continue;
+            B.abox('stone', x + 0.35, LIB_H - 0.35, z + 0.35, x + 3.65, LIB_H, z + 3.65, tint(LAPIS, 0.9 + rng() * 0.2), false);
+            for (let k = 0; k < 3; k++) B.box('gold', T(x + 0.8 + rng() * 2.4, LIB_H - 0.37, z + 0.8 + rng() * 2.4), 0.16, 0.02, 0.16, GOLD);
+            B.abox('stone', x, LIB_H - 0.7, z, x + 0.35, LIB_H, z + 4, TRIM, false);
+            B.abox('stone', x, LIB_H - 0.7, z, x + 4, LIB_H, z + 0.35, TRIM, false);
+        }
+    }
+    for (const sx of [-1, 1]) B.abox('gold', sx > 0 ? 15.85 : -16, LIB_H - 1.1, LZ, sx > 0 ? 16 : -15.85, LIB_H - 0.9, -33.6, GOLD, false);
+    drift(B, 1.5, -60, 4, 3, 0.3); drift(B, 10, -38, 2.5, 2, 0.25); drift(B, 0, -36, 3, 2, 0.2);
+    // cobwebs: in the library's corners, between the shelves, under the gallery
+    const lx0 = -16, lx1 = 16, lz0 = LZ, lz1 = -33.6, LH = LIB_H;
+    cobweb(B, [lx0, LH - 0.7, lz0], [1, 0, 0], [0, 0, 1], 3.5); cobweb(B, [lx1, LH - 0.7, lz0], [-1, 0, 0], [0, 0, 1], 3.5);
+    cobweb(B, [lx0, LH - 0.7, lz1], [1, 0, 0], [0, 0, -1], 3); cobweb(B, [lx1, LH - 0.7, lz1], [-1, 0, 0], [0, 0, -1], 3);
+    cobweb(B, [lx0 + 0.9, BY + 0.2, lz0], [1, 0, 0], [0, 1, 0], 1.6); cobweb(B, [lx1 - 0.9, BY + 0.2, lz0], [-1, 0, 0], [0, 1, 0], 1.6);
+    for (const x of [-12.2, 12.2]) for (const z of [-42.5, -54.5]) cobweb(B, [x, BY - 0.3, z], [0, 0, 1], [0, -1, 0], 1.6);
+    for (const z of [-39, -51]) for (const x of [-10.5, 10.5]) cobweb(B, [x, 5.5, z + 0.6], [-Math.sign(x), 0, 0], [0, -1, 0], 1.2);
     cobweb(B, [-16, H, -32], [1, 0, 0], [0, 0, 1], 2.5); cobweb(B, [16, H, 2], [-1, 0, 0], [0, 0, -1], 2.5);
     cobweb(B, [-30, GAL_H, -32], [1, 0, 0], [0, 0, 1], 2); cobweb(B, [-30, GAL_H, 2], [1, 0, 0], [0, 0, -1], 2);
     // dust: a grey film low over the library floor
-    for (let i = 0; i < 18; i++) drift(B, -14 + rng() * 28, -59 + rng() * 25, 1 + rng() * 2, 1 + rng() * 2, 0.06, rng() * 3);
+    for (let i = 0; i < 18; i++) drift(B, -11 + rng() * 22, LZ + 1 + rng() * 34, 1 + rng() * 2, 1 + rng() * 2, 0.06, rng() * 3);
     // ── the arrays ──
     const mats = {};
     for (const m of TEMPLE_MATS) {
@@ -763,11 +853,11 @@ export function templePlan(seed = 1) {
             entrance: { x: 12, y: 9, z: 44, look: [-4, 6, 0] },
             creator: { x: 6, y: 4, z: -4, look: [0, 9, GZ] },
             gallery: { x: -20, y: 3.5, z: 0.5, look: [-26, 3, -18] },
-            library: { x: 0, y: 3.6, z: -37, look: [0, 3.5, WZ] },
-            scrolls: { x: -4.2, y: 1.7, z: WZ + 5.6, look: [-8.6, 1.2, WZ + 2.2] },
+            library: { x: 0, y: 3.4, z: -35.5, look: [0, 6, WZ] },
+            scrolls: { x: -2.6, y: 2.3, z: WZ + 8.5, look: [-8, 1.6, WZ + 2.6] },
         },
         rooms: [ // the inside (for the sound: echo inside, wind outside)
-            { x0: -16, x1: 16, z0: -32, z1: 2 }, { x0: -30, x1: -17.6, z0: -32, z1: 2 }, { x0: -16, x1: 16, z0: -60, z1: -33.6 },
+            { x0: -16, x1: 16, z0: -32, z1: 2 }, { x0: -30, x1: -17.6, z0: -32, z1: 2 }, { x0: -16, x1: 16, z0: TEMPLE.LZ, z1: -33.6 },
         ],
     };
 }
@@ -807,6 +897,37 @@ export function templeFootprint(spot) {
  * the one where the ground under the footprint is the flattest. groundAt(x, z) → height.
  * → {x, y, z, rot} (y: the ground at the stairs' foot — the lowest ground under it, so it never floats).
  */
+/** The levelled ground round the temple on a planet: flat within R of its middle, blended into the land by BLEND. */
+export const TEMPLE_FLAT = { R: 195, BLEND: 90 };
+
+/**
+ * The one temple of Venus (deterministic: the same hash as Space.surfaceSpot(id, 'temple')): its place
+ * {x, z, F, rot, y} — F the top layer of the levelled ground, y = F − 0.5 its surface (the stairs' foot).
+ * rect: the planet's surface slot (Planets.slotRect); rawH(x, z) → the ground's top layer there before levelling.
+ */
+export function venusTempleSite(def, rect, rawH) {
+    let h = 2166136261;
+    for (const ch of `temple:${def.seed}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+    const u = ((h >>> 0) % 10000) / 10000, v = ((Math.imul(h, 2654435761) >>> 0) % 10000) / 10000;
+    const x = Math.round(rect.cx + (u - 0.5) * rect.w * 0.3), z = Math.round(rect.cz + (v - 0.5) * rect.h * 0.3);
+    let s = 0, n = 0;
+    for (let k = 0; k < 13; k++) {
+        const a = (k / 12) * Math.PI * 2, d = k === 12 ? 0 : TEMPLE_FLAT.R * 0.7;
+        s += rawH(Math.round(x + Math.cos(a) * d), Math.round(z + Math.sin(a) * d)); n++;
+    }
+    const F = Math.round(s / n);
+    return { x, z, F, y: F - 0.5, rot: (h >>> 7) & 3 };
+}
+
+/** The ground's top layer at (x, z) with the temple's place levelled (h: as the planet made it). */
+export function templeGround(site, x, z, h) {
+    const d = Math.hypot(x - site.x, z - site.z), R = TEMPLE_FLAT.R;
+    if (d >= R + TEMPLE_FLAT.BLEND) return h;
+    if (d <= R) return site.F;
+    const t = (d - R) / TEMPLE_FLAT.BLEND, k = t * t * (3 - 2 * t);
+    return Math.round(site.F + (h - site.F) * k);
+}
+
 export function templeSpot(seed, groundAt, { cx = 0, cz = 0, R = 600, tries = 24 } = {}) {
     const rng = createRng(((seed * 40503) ^ 0x5eed7e) >>> 0);
     let best = null;

@@ -17,6 +17,7 @@
 import { BLOCK, CHUNK, MIN_LAYER, MAX_LAYER } from './Terrain.js';
 import { createNoise2D, smoothstep } from '../core/math.js';
 import { slotRect } from './Planets.js';
+import { venusTempleSite, templeGround, TEMPLE_FLAT } from './GodsTemple.js';
 
 const SEAM = 2000; // m of blending at the seam round the planet
 
@@ -72,11 +73,16 @@ export function planetHeight(def, x, z) {
     // (seamless round the planet: over the last 2 km before the seam the ground melts into what lies
     //  just past it — the same ground one turn further)
     const t = smoothstep(W / 2 - SEAM, W / 2, u);
+    const site = templeSiteOf(def); // (Venus: the Gods' temple — its ground levelled; GodsTemple.js)
     let h = column(def, R, u, v);
     if (t > 0) {
         const top = _c.top, dark = _c.dark, ice = _c.ice;
         h = h + (column(def, R, u - W, v) - h) * t;
         if (t < 0.5) { _c.top = top; _c.dark = dark; _c.ice = ice; }
+    }
+    if (site && Math.abs(x - site.x) < TEMPLE_FLAT.R + TEMPLE_FLAT.BLEND && Math.abs(z - site.z) < TEMPLE_FLAT.R + TEMPLE_FLAT.BLEND) {
+        h = templeGround(site, x, z, h);
+        if (Math.hypot(x - site.x, z - site.z) < TEMPLE_FLAT.R) _c.dark = 0; // (no lava flow across the temple's ground)
     }
     let water = 0, top = _c.top;
     if (def.terraformed) {
@@ -90,6 +96,25 @@ export function planetHeight(def, x, z) {
     return Math.max(MIN_LAYER + 3, Math.min(MAX_LAYER - 12, Math.round(h)));
 }
 const _c = { top: 0, dark: 0, ice: 0 };
+
+/**
+ * Where the Gods' temple stands (only on Venus — the planet made with the world, not a new one): {x, z, F, y, rot}
+ * or null. Made once per planet (FLYMAX.TEMPLE_HOOK points here; Temple.js puts the temple there).
+ */
+export function templeSiteOf(def) {
+    if (!def || def.id !== 'venus' || def.look !== 'venus') return null;
+    const R = recipe(def);
+    if (R.temple === undefined) {
+        R.temple = null; // (while it is being found: the raw ground)
+        const rect = R.rect, W = rect.w;
+        R.temple = venusTempleSite(def, rect, (x, z) => {
+            let u = x - rect.cx;
+            if (u > W / 2) u -= W; else if (u < -W / 2) u += W;
+            return Math.round(column(def, R, u, z - rect.cz));
+        });
+    }
+    return R.temple;
+}
 
 /** One column's height by the planet's look (u along the longitude, v north–south, metres from the centre). */
 function column(def, R, u, v) {

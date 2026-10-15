@@ -22,6 +22,12 @@ import * as THREE from 'three';
 import { templePlan, templeToWorld, templeToLocal, solidToWorld, templeFootprint, templeSpot, TEMPLE, TEMPLE_MATS } from '../world/GodsTemple.js';
 import { sphereBoxDepth } from '../entities/Weapon.js';
 import { getEnvMap } from '../entities/WeaponModels.js';
+import { templeSiteOf } from '../world/PlanetSurface.js';
+import { FLYMAX } from './Space.js';
+
+// (the hook «Космос, часть 1» left for it: where the Gods' temple stands on Venus — {x, z, F, y, rot})
+FLYMAX.TEMPLE_HOOK = templeSiteOf;
+const NEAR = 2600, GONE = 3600; // world units: on Venus it is made this near, taken away this far
 
 const SCROLL_BACK = 90; // s: a taken scroll is back on its pedestal after this
 const CELL = 8;
@@ -34,13 +40,14 @@ function materials(renderer) {
     if (MATS) return MATS;
     const env = getEnvMap(renderer);
     MATS = {
-        stone: new THREE.MeshLambertMaterial({ vertexColors: true }),
-        marble: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.0 }),
-        gold: new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xf5c044, roughness: 0.32, metalness: 0.8, envMap: env, envMapIntensity: 1.1, emissive: 0x1a0e00, emissiveIntensity: 0.2 }),
-        wood: new THREE.MeshLambertMaterial({ vertexColors: true }),
+        stone: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x241a14 }), // (a faint glow of its own: a house of the gods, even under Venus' dim sky)
+        marble: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.0, emissive: 0x4e4a43 }),
+        gold: new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xf5c044, roughness: 0.32, metalness: 0.8, envMap: env, envMapIntensity: 1.1, emissive: 0x6a4400, emissiveIntensity: 0.6 }),
+        wood: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x140d08 }),
         sand: new THREE.MeshLambertMaterial({ vertexColors: true }),
         web: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }),
         shaft: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
+        ward: new THREE.MeshBasicMaterial({ color: 0xffcf4a, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
     };
     return MATS;
 }
@@ -167,7 +174,7 @@ export class Temple {
     /** Put the temple on the ground (see GodsTemple.js). The look comes from a worker a moment later. */
     place(spot) {
         this.remove();
-        this.spot = { x: spot.x, y: spot.y, z: spot.z, rot: ((spot.rot | 0) % 4 + 4) % 4 };
+        this.spot = { x: spot.x, y: spot.y, z: spot.z, rot: ((spot.rot | 0) % 4 + 4) % 4, venus: !!spot.venus };
         const seed = (this.game.seed ?? 1) >>> 0;
         const id = 'tmpl' + Math.round(this.spot.x) + ',' + Math.round(this.spot.z) + ':' + seed;
         this._wait = id;
@@ -277,6 +284,7 @@ export class Temple {
         if (this.pedestals.length) g.world?.removePedestals?.(this.pedestals.map((p) => p.at));
         this.pedestals = [];
         this.plan = null;
+        this.spot = null;
         g.sound?.templeAmbience?.(0, 0);
     }
 
@@ -288,7 +296,27 @@ export class Temple {
         return this.plan.rooms.some((r) => l.x > r.x0 && l.x < r.x1 && l.z > r.z0 && l.z < r.z1);
     }
 
+    /** On Venus: the temple is made when a hero comes near its place, taken away when he is far (or left). */
+    _venus(dt) {
+        this._vT = (this._vT || 0) - dt;
+        if (this._vT > 0) return;
+        this._vT = 1;
+        const g = this.game, me = g.character?.group?.position;
+        const site = me && templeSiteOf(g.space?.planets?.get?.('venus'));
+        if (!site) return;
+        const d = Math.hypot(me.x - site.x, me.z - site.z);
+        if (!this.spot && d < NEAR) this.place({ ...site, venus: true });
+        else if (this.spot?.venus && d > GONE) this.remove();
+    }
+
     update(dt) {
+        if (!this.spot || this.spot.venus) this._venus(dt);
+        if (this._wardT > 0) {
+            this._wardT -= dt * 1.6;
+            this._ward.material.opacity = 0.35 * Math.max(0, this._wardT);
+            this._ward.scale.multiplyScalar(1 + dt * 0.4);
+            if (this._wardT <= 0) this._ward.visible = false;
+        }
         if (!this.group) return;
         if (this._pending?.length) this.group.add(this._pending.shift());
         const g = this.game, me = g.character?.group?.position;
@@ -325,12 +353,40 @@ export class Temple {
         }
     }
 
+    /** Does the gods' golden ward take a blast at pos (radius r)? (its bounds, the blast's reach round them) */
+    wards(pos, r = 0) {
+        const f = this.collider?.aabb;
+        if (!f) return false;
+        return pos.x > f.minX - r && pos.x < f.maxX + r && pos.z > f.minZ - r && pos.z < f.maxZ + r && pos.y > f.minY - r && pos.y < this.spot.y + 60 + r;
+    }
+
+    /** The golden ward flares where a blast struck it: a dome of gold light fading, gold sparks. */
+    wardHit(pos, r) {
+        const g = this.game;
+        let w = this._ward;
+        if (!w) {
+            w = this._ward = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 14), materials(g.renderer).ward);
+            w.renderOrder = 3;
+            g.scene.add(w);
+        }
+        w.position.copy(pos);
+        w.scale.setScalar(Math.max(3, r * 1.2));
+        w.visible = true;
+        this._wardT = 1;
+        for (let i = 0; i < 40; i++) {
+            const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2, k = Math.max(3, r);
+            _v.set(Math.cos(a) * Math.cos(b), Math.sin(b), Math.sin(a) * Math.cos(b));
+            g.fx?.spark?.(_n.copy(pos).addScaledVector(_v, k), 0xffd86a, 0.25, _v.multiplyScalar(3), 0.9);
+        }
+    }
+
     /** One small mesh of each material: compiled at loading (Game.prewarm), never in a frame. */
     sampleModels() {
         const M = materials(this.game.renderer);
         const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(1), 3));
         const out = [];
+        out.push(new THREE.Mesh(geo, M.ward));
         for (const m of TEMPLE_MATS) {
             const mesh = new THREE.Mesh(geo, M[m]);
             mesh.castShadow = m === 'stone' || m === 'marble' || m === 'gold';
@@ -350,6 +406,7 @@ export class Temple {
 
     dispose() {
         this.remove();
+        if (this._ward) { this.game.scene?.remove(this._ward); this._ward.geometry.dispose(); this._ward = null; }
         this._worker?.terminate();
         this._worker = null;
     }
