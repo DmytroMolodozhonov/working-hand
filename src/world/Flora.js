@@ -109,7 +109,8 @@ vGlow = glow;
         if (T.floraAsync) {
             for (const r of T.takeFlora()) {
                 const w = want.find((x) => x.key === r.key);
-                if (w && this._pristine(w)) { this._build(w, r.out); want.splice(want.indexOf(w), 1); }
+                // (made from the chunk as it was changed here: only if it has not changed again since)
+                if (w && (r.rev === undefined ? this._pristine(w) : r.rev === (w.c.rev || 0))) { this._build(w, r.out); want.splice(want.indexOf(w), 1); }
             }
         }
         if (!want.length) return;
@@ -117,8 +118,8 @@ vGlow = glow;
         const t0 = performance.now();
         let n = 0;
         for (const w of want) {
-            // (untouched ground: a worker makes its blades; changed ground — dug, built on — here)
-            if (!all && T.floraAsync && this._pristine(w)) { T.askFlora(w.key, w.cx, w.cz); continue; }
+            // (a worker makes its blades: untouched ground as generated, changed ground from this computer's data)
+            if (!all && T.floraAsync) { T.askFlora(w.key, w.cx, w.cz, this._pristine(w) ? null : w.c); continue; }
             this._build(w);
             n++;
             if (!all && (n >= FLORA.BUILD_PER_FRAME || performance.now() - t0 > FLORA.BUDGET_MS)) break;

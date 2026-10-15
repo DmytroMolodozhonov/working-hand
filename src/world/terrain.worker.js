@@ -7,7 +7,7 @@
  * builds the mesh arrays and sends them back with the chunk's data. It keeps the
  * chunks it made lately (the next chunk over needs most of them again), not more.
  */
-import { TerrainData } from './Terrain.js';
+import { TerrainData, chunkKey } from './Terrain.js';
 import { buildFlora } from './FloraBuild.js';
 
 const KEEP = 240; // chunks kept (≈ 140 KB each)
@@ -29,8 +29,33 @@ self.onmessage = (e) => {
     }
     if (m.type === 'flora' && data) {
         // the tall grass and flowers of a chunk (Flora.js) — the chunk as generated
-        const out = buildFlora(data, data.chunk(m.cx, m.cz));
-        self.postMessage({ type: 'flora', id: m.id, key: m.key, out }, [out.pos.buffer, out.nor.buffer, out.col.buffer, out.sway.buffer, out.glow.buffer]);
+        const out = m.chunk ? buildFlora({ seed: data.seed, _hidden: m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null }, m.chunk) : buildFlora(data, data.chunk(m.cx, m.cz));
+        self.postMessage({ type: 'flora', id: m.id, key: m.key, out, rev: m.rev }, [out.pos.buffer, out.nor.buffer, out.col.buffer, out.sway.buffer, out.glow.buffer]);
+        return;
+    }
+    if (m.type === 'rebuild' && data) {
+        // a chunk changed on the main thread: its own data (and its changed neighbours') used for this
+        // one mesh, then the worker's own (as generated) put back
+        const keep = new Map();
+        for (const c of m.chunks) { const k = chunkKey(c.cx, c.cz); keep.set(k, data.chunks.get(k)); data.chunks.set(k, c); }
+        const hidden = data._hidden;
+        data._hidden = m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null;
+        data._last = null;
+        let arrays, sky;
+        try {
+            arrays = data.buildChunkArrays(m.cx, m.cz);
+            sky = data.chunk(m.cx, m.cz).sky;
+        } finally {
+            for (const [k, c] of keep) { if (c) data.chunks.set(k, c); else data.chunks.delete(k); }
+            data._hidden = hidden;
+            data._last = null;
+        }
+        const transfer = [];
+        for (const k of ['ground', 'raised', 'water']) {
+            const b = arrays[k];
+            for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
+        }
+        self.postMessage({ type: 'rebuilt', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, sky }, transfer);
         return;
     }
     if (m.type !== 'build' || !data) return;

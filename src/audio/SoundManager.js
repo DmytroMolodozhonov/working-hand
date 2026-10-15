@@ -518,6 +518,27 @@ export class SoundManager {
         return true;
     }
 
+    /**
+     * The sounds made the first time they are heard, made ahead instead — one a call (the game calls it
+     * every few frames once it runs): their first use froze a frame (a house's 10 s hum, its chord…).
+     * @returns true while there is more to make.
+     */
+    prewarmStep() {
+        if (!this.context || !this.loaded) return true;
+        const list = this._warmList || (this._warmList = [
+            ['house_wood', () => this._synthKnock(170, 0.3)], ['house_block', () => this._synthKnock(320, 0.12)],
+            ['house_sand', () => this._synthSizzle(0.9)], ['magic', () => this._synthChime([880, 1320, 1760], 0.9, 6)],
+            ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)],
+            ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
+            ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
+        ]);
+        while (list.length) {
+            const [key, make] = list.shift();
+            if (!this.sounds[key]) { this.sounds[key] = make(); return list.length > 0; }
+        }
+        return false;
+    }
+
     /** «Circle Attack»'s music made ahead (early in the game, not on the first cast): call every frame until true. */
     prepareCircleAttack() { return this._prepare('circleAttack', () => this._synthCircleAttackGen()); }
 

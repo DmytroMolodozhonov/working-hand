@@ -443,12 +443,22 @@ export class Hud {
         const have = (wx, wz) => d.hasChunk(Math.floor(wx / CHUNK), Math.floor(wz / CHUNK));
         const before = shift && (ti.missing?.size || touched) ? new Set([...(ti.missing || []), ...(touched || [])]) : null;
         const later = ti.missing = new Set();
-        const wasMissing = (x, z) => {
-            const wx = cx - half + x, wz = cz - half + z;
-            return before.has(ckey(wx, wz)) || before.has(ckey(wx - 1, wz)) || before.has(ckey(wx, wz - 1)); // (its shade looks at the pixels west and north)
-        };
-        // (with a shift: only the columns / rows that came into the window, and what was missing)
-        const fresh = (x, z) => !shift || x < Math.max(0, -sx) || x >= size - Math.max(0, sx) || z < Math.max(0, -sz) || z >= size - Math.max(0, sz) || (before !== null && wasMissing(x, z));
+        // (the window's columns to work out again: the strip that came in, the chunks that changed or were
+        // missing — and the pixel east and south of them: a pixel's shade looks at its west and north)
+        const S1 = size + 1;
+        const redo = ti.redo || (ti.redo = new Uint8Array(S1 * S1));
+        redo.fill(shift ? 0 : 1);
+        if (shift) {
+            const x0 = Math.max(0, -sx), x1 = size - Math.max(0, sx), z0 = Math.max(0, -sz), z1 = size - Math.max(0, sz);
+            for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) if (x < x0 || x >= x1 || z < z0 || z >= z1) redo[(z + 1) * S1 + x + 1] = 1;
+            if (before) for (const k of before) {
+                const kcx = Math.floor(k / 0x10000) - 0x8000, kcz = (k % 0x10000) - 0x8000; // (chunkKey back)
+                const ax = Math.max(-1, kcx * CHUNK - (cx - half)), bx = Math.min(size - 1, kcx * CHUNK + CHUNK - (cx - half)); // (+1: the pixel east of it)
+                const az = Math.max(-1, kcz * CHUNK - (cz - half)), bz = Math.min(size - 1, kcz * CHUNK + CHUNK - (cz - half));
+                for (let z = az; z <= bz; z++) for (let x = ax; x <= bx; x++) redo[(z + 1) * S1 + x + 1] = 1;
+            }
+        }
+        const fresh = (x, z) => redo[(z + 1) * S1 + x + 1] === 1;
         let missing = false;
         for (let z = -1; z < size; z++) for (let x = -1; x < size; x++) {
             if (!fresh(x, z)) continue;

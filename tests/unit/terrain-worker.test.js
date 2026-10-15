@@ -47,3 +47,37 @@ test('a castle planned in a worker and sent over is the same plan, and builds th
     const cx = Math.floor(castle.x / 32), cz = Math.floor(castle.z / 32);
     for (const [dx, dz] of [[0, 0], [1, 0], [0, 1]]) same(here.chunk(cx + dx, cz + dz).blocks, plain.chunk(cx + dx, cz + dz).blocks, 'castle chunk');
 });
+
+test('the worker itself: a chunk changed here (a house built, a crater) is made there the same, and so is its grass', async () => {
+    const sent = [];
+    globalThis.self = { postMessage: (m) => sent.push(m) };
+    await import('../../src/world/terrain.worker.js');
+    const { buildFlora } = await import('../../src/world/FloraBuild.js');
+    self.onmessage({ data: { type: 'init', opts: OPTS, skipSeaTop: true } });
+    const here = make();
+    // a wall of planks across a chunk border and a pit dug, here
+    const cx = 5, cz = -3, x0 = cx * 32, z0 = cz * 32;
+    for (let x = x0 + 26; x < x0 + 38; x++) for (let L = 0; L < 4; L++) here.set(x, here.topLayer(x, z0 + 10) + 1 + L, z0 + 10, 27);
+    for (let x = x0 + 3; x < x0 + 6; x++) for (let z = z0 + 3; z < z0 + 6; z++) here.set(x, here.topLayer(x, z), z, 0);
+    const chunks = [];
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const c = here.chunk(cx + dx, cz + dz);
+        if (c.modified) { const { rev, ...copy } = c; chunks.push(structuredClone(copy)); } // eslint-disable-line no-unused-vars
+    }
+    assert.ok(chunks.length >= 2, 'the changed chunks go along');
+    self.onmessage({ data: { type: 'rebuild', id: 1, key: 'k', cx, cz, chunks, hidden: null } });
+    const got = sent.pop(), want = here.buildChunkArrays(cx, cz);
+    assert.equal(got.type, 'rebuilt');
+    for (const k of ['ground', 'raised', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies']) same(got.arrays[k][f], want[k][f], `rebuilt ${k}.${f}`);
+    // and the worker's own chunks are as generated again afterwards
+    const fresh = make();
+    self.onmessage({ data: { type: 'build', id: 2, key: 'k2', cx, cz, fcx: cx, fcz: cz, R: 4 } });
+    same(sent.pop().chunk.blocks, fresh.chunk(cx, cz).blocks, 'the worker forgot the changed copy');
+    // the grass of the changed chunk
+    const { rev, ...copy } = here.chunk(cx, cz); // eslint-disable-line no-unused-vars
+    self.onmessage({ data: { type: 'flora', id: 3, key: 'k', cx, cz, chunk: structuredClone(copy), hidden: null, rev: 7 } });
+    const fl = sent.pop(), mine = buildFlora(here, here.chunk(cx, cz));
+    assert.equal(fl.rev, 7);
+    same(fl.out.pos, mine.pos, 'grass');
+    delete globalThis.self;
+});

@@ -2626,6 +2626,8 @@ export class Game {
         mark('мир');
         this._updateCamera(dt);
 
+        // (the sounds made on first use: made ahead, one every half second, after the first seconds of play)
+        if (!this._soundsWarm && this.frameCount > 240 && this.frameCount % 30 === 0) this._soundsWarm = !(this.sound?.prewarmStep?.() ?? false);
         // (the castles and towers ahead: made a little a frame before the minimap and the people want them)
         if (this.frameCount % 3 === 1) this.world.terrain?.warmSites?.(this.character.group.position.x, this.character.group.position.z, 900 + CASTLE_CELL, CASTLE_CELL);
         if (this.frameCount % 5 === 0) {
