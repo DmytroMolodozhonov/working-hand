@@ -59,7 +59,7 @@ const SCENES = {
         const s = g.spiders.spawn(new THREE.Vector3(x, y, z));
         s.model.rotation.y = 0.5;
         h.hold([s]);
-        await h.frames(10);
+        await h.frames(150); // (the trees round it load in first: the camera must see past them)
         return h.view(s.model, { d: 17, up: 5, at: 3 });
     },
     dragon: async (h) => {
