@@ -144,6 +144,26 @@ export function bombardoDamage(dist, radius, power = 1) {
     return PVP.MAX_HP * (power > 1 ? 1.5 : 1) * k * k;
 }
 
+/**
+ * «Protection» / «Protection Maxima» — what they stop and what it costs (CLAUDE.md: every creature and
+ * thing decided, «no effect» too). The cost is the HOLDER's mana: half of the stopped spell's own.
+ * Who decides: a player's own computer (it knows its shield; the others see it — and see it
+ * shatter — by serialize()); a castle wizard's — the host (WizardFight.shieldPays).
+ */
+export const PROTECTION_TARGETS = {
+    holders: 'players (every mode; mana rules only in the free world) and the castle wizards (hand shield in the free hand, the Master\'s dome); no other creature casts it',
+    duelCharges: 'Остолбеней, Авада Кедавра (−12,5), Айс, Левиоса, Сапира, Даст, Экспеллиармус, Джолт: stopped — half of their mana each',
+    spells: 'Сапира, Тандервейв, Даст, ice balls, lightning, the ice beam / Inferno / Вайнд (a held flame or beam is paid once), Fire Maxima, Water Vortex, Earthquake (the dome): stopped — half their mana',
+    blasts: 'Бомбардо (Максима), Total Destruction: a hand shield facing it −50 %, the dome −75 % — for half the spell\'s mana; out of mana the whole blast',
+    outOfMana: 'the shield shatters (its pieces fly, everybody sees it) and the spell that broke it goes on as if there were no shield',
+    arrows: 'mirrored off the disc / the dome (ShieldBounce.js) — no mana: an arrow is no spell; the shooter\'s own shield lets his arrow out',
+    thrownThings: 'a thing thrown fast bounces off it the same way (Items.js) — no mana',
+    creatures: 'a zombie\'s, a knight\'s, an animal\'s, the spider\'s, a dragon\'s blow or fire, a phoenix\'s fire: the shield facing it holds — no mana (no spell)',
+    magicBlade: 'a magic sword / axe breaks a hand shield it touches',
+    sameHand: 'another spell cast from the hand (the wand) that holds the «Protection» knocks it down; the dome is in no hand',
+    houses: 'a house\'s sphere («Protection House») is another magic: none of this applies to it (HouseWards.js)',
+};
+
 /** The name a hit's kind is paid by (SPELL_COST): a duel charge, a ball, a bolt. */
 const HIT_SPELL = {
     IceBall: 'Ice', IceDuel: 'Ice', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
@@ -470,6 +490,7 @@ export class Combat {
             // it holds while there is mana: 1 a second, until «стоп» (not bound to a hand: the wand casts on)
             this.shield = { type: 2, side: 'right', left: this.enabled ? this.fatigue / PVP.DOME_DRAIN : PVP.SHIELD_HOLD_MAX, drain: PVP.DOME_DRAIN, age: 0 };
             this.game.spiders?.onDome(); // the only way out of the spider's fangs
+            if (this.enabled) this.game.hud?.setVoice?.('🛡️ Купол держится, пока есть мана (−1 в секунду). Каждое отражённое заклинание — половина его цены. Снять — «стоп»', true);
         } else {
             if (this.shield?.type === 2) return '🛡️ Вы уже под куполом «Protection Maxima»';
             // The stretched-out hand; if none is fully stretched, the one reaching furthest.
@@ -491,6 +512,7 @@ export class Combat {
             const drain = PVP.SHIELD_DRAIN / fav;
             this.shield = { type: 1, side, left: this.enabled ? this.fatigue / drain : PVP.SHIELD_HOLD_MAX, drain, age: 0 };
             if (wand && side === wand) this.game.hud?.setVoice?.('🛡️ Щит в руке с палочкой: любое другое заклинание этой палочкой собьёт его. Держите щит другой рукой', true);
+            else if (this.enabled) this.game.hud?.setVoice?.('🛡️ Щит держится, пока есть мана (−0,5 в секунду). Каждое отражённое заклинание — половина его цены', true);
         }
         if (this.game.sound) this.game.sound.playIce?.();
         return null;
