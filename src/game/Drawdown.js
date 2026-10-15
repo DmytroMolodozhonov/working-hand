@@ -2,8 +2,10 @@
  * Drawdown.js — «Drawdown» / «Drawdown Maxima»: the ground the wand points at sinks.
  *
  * The raised hand (the wand) points at a piece of ground, the word is said: the ground there sinks
- * into a bowl — and the longer it is held, the deeper it goes (one more layer every DRAWDOWN.EVERY
- * s, deepest in the middle). It holds at least 10 s; then until «стоп» or the mana is gone. Mana:
+ * into a bowl. While it holds, the sinking FOLLOWS the wand: wherever the wand (the hand) points on
+ * the ground now, the ground is pressed down there (one more layer every DRAWDOWN.*.every s, deepest
+ * under the wand) — hold it on one place and the pit goes deeper, lead it along the ground and a
+ * trench follows it. It goes on until «стоп» or the mana is gone (the author's words). Mana:
  * 5 at once and 1 a second; «Максима»: a wider bowl, 20 at once and 2 a second.
  *
  * Everything that stands on the ground goes down WITH it — never left hanging in the air: the whole
@@ -14,34 +16,34 @@
  *
  * No scroll: like «Earthquake» (the other spell of the ground) it is known by everybody.
  *
- * Who decides: the spell goes to everybody ('spell'); every computer runs the same bowl (the same
- * steps at the same time) and moves its own boxes and models; the HOST moves the blocks (they are
- * sent and saved). The caster's computer pays the mana; «стоп» or no mana — everybody stops ('stop').
+ * Who decides: the spell goes to everybody ('spell'); the caster's computer follows its wand and tells
+ * the others where it points now ('ddat'); every computer presses there on its own clock and moves its
+ * own boxes and models; the HOST moves the blocks (they are sent and saved). The caster's computer
+ * pays the mana; «стоп» or no mana — everybody stops ('stop').
  */
 
 import * as THREE from 'three';
 import { BLOCK, MIN_LAYER } from '../world/Terrain.js';
+import { castingHand } from './WandAim.js';
 
 export const DRAWDOWN = {
     Drawdown: { r: 3.2, deep: 6, every: 1.5, drain: 1 },
     DrawdownMaxima: { r: 7, deep: 9, every: 1.3, drain: 2 },
-    MIN_T: 10, // s it holds at least (the author: «держится минимум 10 секунд»)
     REACH: 30, // m: the ground the hand points at
     MAX_T: 600, // (a guard: nothing holds forever)
 };
 
 export const isDrawdown = (name) => name === 'Drawdown' || name === 'DrawdownMaxima';
 
-/** How many layers deep the bowl is `dist` m from its middle at `level` (1, 2, … — one more each step). */
-export function bowlDepth(name, dist, level) {
+/** How hard one step presses a column `dist` m from where the wand points: 1 under it, 0 at the bowl's edge. */
+export function pressOf(name, dist) {
     const P = DRAWDOWN[name];
-    if (!P || dist > P.r || level <= 0) return 0;
-    const k = 1 - (dist / P.r) ** 2;
-    return Math.max(0, Math.min(P.deep, Math.round(Math.min(level, P.deep) * k + 0.35)));
+    if (!P || dist > P.r) return 0;
+    return 1 - (dist / P.r) ** 2;
 }
 
-/** The level after t s of holding. */
-export const levelAt = (name, t) => Math.min(DRAWDOWN[name].deep, 1 + Math.floor(t / DRAWDOWN[name].every));
+/** How many layers down a column is after this much pressing (each step adds pressOf; at most `deep`). */
+export const depthOf = (name, press) => Math.max(0, Math.min(DRAWDOWN[name].deep, Math.floor(press + 0.35)));
 
 /** Natural ground: where a column «stands» (everything above it — built, grown — goes down with it). */
 const GROUND = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.FARMLAND, BLOCK.PATH, BLOCK.GRAVEL, BLOCK.DEEPSTONE]);
@@ -97,11 +99,22 @@ export const DRAWDOWN_TARGETS = {
     ward: { does: 'none', why: 'дом под сферой защиты не проседает' },
 };
 
-const _m = new THREE.Matrix4(), _v = new THREE.Vector3();
+const _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
 export class Drawdown {
     constructor(game) {
         this.game = game;
+        this._live = new Map(); // casterId → the spell holding now (its `center` follows the wand)
+    }
+
+    /** Where my wand (my raised hand) points on the ground now, or null. */
+    _aim() {
+        const g = this.game;
+        const h = castingHand(g);
+        if (!h) return null;
+        const hit = g.terrain?.data?.raycast(h.origin, h.dir, DRAWDOWN.REACH);
+        if (!hit || h.dir.y > -0.05) return null;
+        return { side: h.side, d: h.dir, at: new THREE.Vector3(hit.x, hit.y, hit.z) };
     }
 
     /** Voice on my computer: the raised hand (the wand) points at the ground. */
@@ -111,72 +124,78 @@ export class Drawdown {
         const now = performance.now();
         if (now - (this._lastAt || -1e9) < 1500) return null;
         if (this._mine?.life > 0) return null; // (one at a time: «стоп» ends it)
-        const ch = g.character;
-        const pref = g.magicHand || g.lastMagicHand || 'right';
-        const side = g.wandSide() || (ch.isArmRaised(pref) ? pref : ['right', 'left'].find((s) => ch.isArmRaised(s)));
         const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
-        if (!side || !ch.isArmRaised(side)) return hint('⬇️ Поднимите руку (палочку), направьте её на землю — и скажите «Drawdown»');
-        const o = g.castOrigin(side), d = ch.getHandDirection(side);
-        const hit = g.terrain?.data?.raycast(o, d, DRAWDOWN.REACH);
-        if (!hit || d.y > -0.05) return hint('⬇️ Направьте руку <b>на землю</b> (не дальше 30 м) и скажите «Drawdown»');
-        const at = new THREE.Vector3(hit.x, hit.y, hit.z);
+        if (!castingHand(g)) return hint('⬇️ Поднимите руку (палочку), направьте её на землю — и скажите «Drawdown»');
+        const aim = this._aim();
+        if (!aim) return hint('⬇️ Направьте палочку <b>на землю</b> (не дальше 30 м) и скажите «Drawdown»');
         const tired = g.combat.check(name);
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay(name);
         this._lastAt = now;
-        g.spells.cast(name, at, d, side, g.localId);
-        g.sync?.spell(name, at, d, side);
-        g.hud.setVoice('⬇️ Земля проседает… держите — чем дольше, тем глубже. «Стоп» — хватит', true);
+        g.spells.cast(name, aim.at, aim.d, aim.side, g.localId);
+        g.sync?.spell(name, aim.at, aim.d, aim.side);
+        g.hud.setVoice('⬇️ Земля проседает там, куда показывает палочка: держите на месте — глубже, ведите — яма идёт за ней. «Стоп» — хватит', true);
         return name;
     }
 
-    /** (every computer) the bowl sinks round `at` while it is held. */
+    /** (every computer) the ground sinks where the caster's wand points, while it is held. */
     start(name, at, casterId) {
         const g = this.game;
         const P = DRAWDOWN[name];
-        const cx = Math.round(at.x), cz = Math.round(at.z);
-        const R = Math.ceil(P.r);
         const mine = casterId === g.localId || casterId === 'local';
-        let t = 0, level = 0, rumble = 0;
-        const sunk = new Map(); // column → layers already gone down
+        const center = at.clone();
+        let stepT = 0, rumble = 0, sentAt = null;
+        const press = new Map(), sunk = new Map(); // column → how hard it was pressed / layers it went down
         const spell = {
-            life: DRAWDOWN.MAX_T, held: true, by: casterId, kind: name,
-            minT: DRAWDOWN.MIN_T, t: 0, // (SpellManager.stopBy: «стоп» before its 10 s ends it then)
+            life: DRAWDOWN.MAX_T, held: true, by: casterId, kind: name, center,
             onUpdate: (sp, dt) => {
-                t += dt;
-                sp.t = t;
-                if (sp.stopLater && t >= DRAWDOWN.MIN_T) { sp.life = 0; return; }
                 // the caster pays while it holds (no mana: it stops — for everybody)
                 if (mine && g.spells.hooks.drain && g.spells.hooks.drain(casterId, P.drain * dt, dt) === false) {
-                    if (t >= DRAWDOWN.MIN_T) { sp.life = 0; g.hud.setVoice('⬇️ Мана кончилась — земля больше не проседает', true); g.sync?.stopSpells?.(); return; }
+                    sp.life = 0; g.hud.setVoice('⬇️ Мана кончилась — земля больше не проседает', true); g.sync?.stopSpells?.(); return;
                 }
+                // it follows the wand: where it points on the ground now (the others hear it — 'ddat')
+                if (mine) { const a = this._aim(); if (a) center.copy(a.at); }
                 // the thread of magic from the hand to the ground
-                const hp = g.handPose?.(casterId, mine ? (g.wandSide?.() || g.magicHand || 'right') : 'right');
-                if (hp && Math.random() < 0.6) {
-                    _v.lerpVectors(hp.origin, at, Math.random());
-                    g.fx.spark(_v, 0xa0784a, 0.07, _v.set(0, -0.4, 0), 0.4);
+                const hp = g.handPose?.(casterId, mine ? (castingHand(g)?.side || 'right') : 'right');
+                if (hp && Math.random() < 0.6) g.fx.spark(_v.lerpVectors(hp.origin, center, Math.random()), 0xa0784a, 0.07, _w.set(0, -0.4, 0), 0.4);
+                stepT -= dt;
+                while (stepT <= 0) {
+                    stepT += P.every;
+                    if (mine && (!sentAt || sentAt.distanceToSquared(center) > 0.04)) { g.sync?.drawdownAt?.(center); sentAt = center.clone(); }
+                    this._step(name, center, press, sunk, casterId);
                 }
-                const lv = levelAt(name, t);
-                while (level < lv) { level++; this._step(name, at, cx, cz, R, level, sunk, casterId); }
                 rumble -= dt;
-                if (rumble <= 0 && level < P.deep) { rumble = 0.25; this._dust(at, P.r, 4); }
+                if (rumble <= 0) { rumble = 0.25; this._dust(center, P.r, 4); }
             },
         };
         if (mine) this._mine = spell;
+        this._live.set(casterId, spell);
         g.spells.spells.push(spell);
     }
 
-    /** One more layer: every column whose bowl got deeper goes down. */
-    _step(name, at, cx, cz, R, level, sunk, by) {
+    /** Another computer's wand points here now ('ddat'). */
+    onNet(by, p) {
+        const sp = this._live.get(by);
+        if (sp && sp.life > 0 && p) sp.center.copy(p);
+    }
+
+    /** One step: the ground under the wand is pressed; every column pressed a layer deeper goes down. */
+    _step(name, at, press, sunk, by) {
         const g = this.game;
+        const P = DRAWDOWN[name];
         const data = g.terrain?.data;
         const get = data ? (x, L, z) => data.get(x, L, z) : null;
+        const cx = Math.round(at.x), cz = Math.round(at.z), R = Math.ceil(P.r);
         const edits = [];
         let castle = 0, moved = 0;
         for (let x = cx - R; x <= cx + R; x++) {
             for (let z = cz - R; z <= cz + R; z++) {
+                const k = pressOf(name, Math.hypot(x - at.x, z - at.z));
+                if (k <= 0) continue;
                 const key = x + ',' + z;
-                const want = bowlDepth(name, Math.hypot(x - at.x, z - at.z), level);
+                const pr = (press.get(key) || 0) + k;
+                press.set(key, pr);
+                const want = depthOf(name, pr);
                 let have = sunk.get(key) || 0;
                 while (have < want) {
                     have++;
@@ -197,17 +216,17 @@ export class Drawdown {
             }
         }
         if (!moved) return;
-        this._dust(at, DRAWDOWN[name].r, name === 'DrawdownMaxima' ? 22 : 12);
-        g.sound?.playRumble?.() || (level === 1 && g.sound?.playExplosion?.(at, at, 0.4));
+        this._dust(at, P.r, name === 'DrawdownMaxima' ? 22 : 12);
+        g.sound?.playRumble?.() || g.sound?.playExplosion?.(at, at, 0.3);
         const me = g.character?.group.position;
-        if (me && me.distanceTo(at) < DRAWDOWN[name].r + 6) g.fx.shake = Math.max(g.fx.shake || 0, name === 'DrawdownMaxima' ? 0.5 : 0.3);
+        if (me && me.distanceTo(at) < P.r + 6) g.fx.shake = Math.max(g.fx.shake || 0, name === 'DrawdownMaxima' ? 0.5 : 0.3);
         if (!g.authority) return;
         // wake the things lying about there: they fall onto the ground that went down
-        for (const L of g.items?.loose?.values() || []) if (L.model.position.distanceTo(at) < DRAWDOWN[name].r + 1.5) { L.rest = false; L.sentRest = false; }
+        for (const L of g.items?.loose?.values() || []) if (L.model.position.distanceTo(at) < P.r + 1.5) { L.rest = false; L.sentRest = false; }
         if (edits.length) g.builder?._sendEdits(edits);
         // the people near take fright; a castle sinking is damage done to it
-        g.castleLife?.alarm?.(at, 'quake', by, DRAWDOWN[name].r);
-        if (castle) g.castleLife?.damaged?.(at, by, castle, true, { r: DRAWDOWN[name].r, kind: 'quake' });
+        g.castleLife?.alarm?.(at, 'quake', by, P.r);
+        if (castle) g.castleLife?.damaged?.(at, by, castle, true, { r: P.r, kind: 'quake' });
     }
 
     /** One column went a layer down: what stands on it here (boxes, chests, beds, doors, the start's trees) too. */

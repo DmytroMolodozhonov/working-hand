@@ -85,25 +85,35 @@ test('the five new spells work in the game', async () => {
     assert.ok(a.wandGone, 'the Maxima takes the wand ' + JSON.stringify(a));
     assert.equal(a.st, 'Stitching', JSON.stringify(a));
     assert.deepEqual(a.sewn, [26, 26], 'the doorway is sewn with the wall\'s brick ' + JSON.stringify(a));
-    // ---- «Drawdown»: the ground sinks, and «стоп» waits for its 10 s
+    // ---- «Drawdown»: the pit follows where the wand points (held: deeper; led on: it goes along), «стоп» ends it
     const b = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
         const me = g.character.group.position;
-        const x = Math.round(me.x + 8), z = Math.round(me.z);
-        const top0 = g.terrain.data.topLayer(x, z);
-        g.spells.cast('Drawdown', new T.Vector3(x, top0 - 1, z), new T.Vector3(0, -1, 0), 'right', g.localId);
+        const A = { x: Math.round(me.x + 8), z: Math.round(me.z) }, B = { x: A.x + 10, z: A.z };
+        const tA = g.terrain.data.topLayer(A.x, A.z), tB = g.terrain.data.topLayer(B.x, B.z);
+        // (where the wand points: A first, then led over to B)
+        let aimAt = A;
+        const aim = g.drawdown._aim.bind(g.drawdown);
+        g.drawdown._aim = () => ({ side: 'right', d: new T.Vector3(0, -1, 0), at: new T.Vector3(aimAt.x, g.terrain.data.topLayer(aimAt.x, aimAt.z) - 1, aimAt.z) });
+        g.spells.cast('Drawdown', new T.Vector3(A.x, tA - 1, A.z), new T.Vector3(0, -1, 0), 'right', g.localId);
         // (the game's own time: a slow test browser runs it slower than the clock)
-        const t0 = performance.now();
-        while (g.terrain.data.topLayer(x, z) > top0 - 2 && performance.now() - t0 < 25000) await frames(5);
-        const top1 = g.terrain.data.topLayer(x, z);
+        let t0 = performance.now();
+        while (g.terrain.data.topLayer(A.x, A.z) > tA - 2 && performance.now() - t0 < 25000) await frames(5);
+        const a1 = g.terrain.data.topLayer(A.x, A.z);
+        aimAt = B;
+        t0 = performance.now();
+        while (g.terrain.data.topLayer(B.x, B.z) > tB - 2 && performance.now() - t0 < 25000) await frames(5);
+        const b1 = g.terrain.data.topLayer(B.x, B.z), a2 = g.terrain.data.topLayer(A.x, A.z);
         g.stopSpells();
-        await frames(10);
+        await frames(5);
         const stillHolds = g.spells.spells.some((s) => s.kind === 'Drawdown' && s.life > 0);
-        return { top0, top1, stillHolds };
+        g.drawdown._aim = aim;
+        return { tA, a1, a2, tB, b1, stillHolds };
     });
-    assert.ok(b.top1 <= b.top0 - 2, 'the ground went down ' + JSON.stringify(b));
-    assert.ok(b.stillHolds, '«стоп» before 10 s: it holds to its 10 s ' + JSON.stringify(b));
+    assert.ok(b.a1 <= b.tA - 2, 'held on A: deeper ' + JSON.stringify(b));
+    assert.ok(b.b1 <= b.tB - 2, 'led over to B: the pit follows the wand ' + JSON.stringify(b));
+    assert.ok(!b.stillHolds, '«стоп» ends it ' + JSON.stringify(b));
     // ---- the wand (hand) up: «Wind Impulse», «Invisibility»
     await pose(page, frame({ arms: 'up' }));
     await page.waitForFunction(() => window.__zns.game.character.getHandDirection('right').y > 0.6, null, { timeout: 20000 });

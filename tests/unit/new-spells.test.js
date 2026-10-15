@@ -6,7 +6,7 @@ import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { SCROLL_SPELL_COLOR } from '../../src/game/ItemTypes.js';
 import { impulsePush } from '../../src/game/WindImpulse.js';
-import { bowlDepth, sinkColumn } from '../../src/game/Drawdown.js';
+import { pressOf, depthOf, sinkColumn } from '../../src/game/Drawdown.js';
 import { blockVerdict, liquidationNeedsMaxima } from '../../src/game/Liquidation.js';
 import { findPassage } from '../../src/game/Stitching.js';
 import { cluePos } from '../../src/game/Invisibility.js';
@@ -41,9 +41,11 @@ test('«Wind Impulse»: away from the caster in every direction, 3 m (Maxima 9 m
     assert.ok(impulsePush('WindImpulse', o, new THREE.Vector3(1, 1, 0)).length() > impulsePush('WindImpulse', o, new THREE.Vector3(2.5, 1, 0)).length());
 });
 
-test('«Drawdown»: a bowl that deepens; the whole column goes down — the house on it too', () => {
-    assert.ok(bowlDepth('Drawdown', 0, 3) === 3 && bowlDepth('Drawdown', 0, 1) === 1 && bowlDepth('Drawdown', 4, 3) === 0);
-    assert.ok(bowlDepth('DrawdownMaxima', 5, 5) > 0 && bowlDepth('Drawdown', 0, 99) === 6);
+test('«Drawdown»: pressed under the wand, a bowl that deepens where it is held; the whole column goes down — the house on it too', () => {
+    // held on one place: under the wand one layer a step, the edge less, nothing beyond the bowl
+    const held = (dist, steps) => depthOf('Drawdown', steps * pressOf('Drawdown', dist));
+    assert.ok(held(0, 1) === 1 && held(0, 3) === 3 && held(0, 99) === 6 && held(2.5, 3) < held(0, 3) && held(4, 3) === 0);
+    assert.ok(pressOf('DrawdownMaxima', 5) > 0 && pressOf('Drawdown', 5) === 0);
     // a column: stone ≤ 0, dirt 1, grass 2, a wall (brick) 3–4 standing on it
     const col = { 0: BLOCK.STONE, 1: BLOCK.DIRT, 2: BLOCK.GRASS, 3: BLOCK.BRICK, 4: BLOCK.BRICK };
     const get = (x, L) => (L in col ? col[L] : L < 0 ? BLOCK.STONE : BLOCK.AIR);

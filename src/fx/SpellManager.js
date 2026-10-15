@@ -394,13 +394,7 @@ export class SpellManager {
     /** «Стоп»: the spells this caster holds (flames, ice beams, the storm in the hands) end now. */
     stopBy(casterId) {
         let n = 0;
-        for (const sp of this.spells) {
-            if (!sp.held || sp.by !== casterId || sp.life <= 0) continue;
-            // («Drawdown» holds at least 10 s: «стоп» before that ends it then)
-            if (sp.minT && (sp.t || 0) < sp.minT) sp.stopLater = true;
-            else sp.life = 0;
-            n++;
-        }
+        for (const sp of this.spells) if (sp.held && sp.by === casterId && sp.life > 0) { sp.life = 0; n++; }
         return n > 0;
     }
 

@@ -432,6 +432,11 @@ export class NetSync {
         this.net.send({ t: 'stop', by: this.me }, true);
     }
 
+    /** «Drawdown»: where my wand points on the ground now (Drawdown.js — the pit follows it). */
+    drawdownAt(p) {
+        this.net.send({ t: 'ddat', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
+    }
+
     /** «Invisibility»: I am invisible now / seen again (Invisibility.js). */
     invis(on) {
         this.net.send({ t: 'invis', by: this.me, on: on ? 1 : 0 }, true);
@@ -814,6 +819,7 @@ export class NetSync {
                 g.spells.stopBy(m.by);
                 break;
             case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
+            case 'ddat': if (m.by !== this.me && Array.isArray(m.p)) g.drawdown?.onNet(m.by, vec(m.p)); break;
             case 'say': if (m.by !== this.me && typeof m.name === 'string') g.voiceGate?.noteRemote(m.name, performance.now()); break;
             case 'draw': if (m.by !== this.me) g.wandMagic?.remoteDraw(m.by, m.c, m.p); break;
             case 'spell': {
