@@ -119,9 +119,17 @@ export class CollisionWorld {
      * `headY` or above it — the head may rise to it, never into it. Infinity: the open sky.
      */
     ceilingAt(x, z, headY) {
-        if (!this.terrain?.ceilingAbove) return Infinity;
-        const L = this.terrain.ceilingAbove(Math.round(x), Math.round(z), Math.floor(headY + 1.5));
-        return L === Infinity ? Infinity : L - 1.5;
+        let c = Infinity;
+        if (this.terrain?.ceilingAbove) {
+            const L = this.terrain.ceilingAbove(Math.round(x), Math.round(z), Math.floor(headY + 1.5));
+            if (L !== Infinity) c = L - 1.5;
+        }
+        // (a static mover with roofs — the Temple of the Gods: its ceilings too)
+        for (let i = 0; i < this.movers.length; i++) {
+            const m = this.movers[i];
+            if (m.ceilingAt && m.hasXZ(x, z)) c = Math.min(c, m.ceilingAt(x, z, headY));
+        }
+        return c;
     }
 
     /**

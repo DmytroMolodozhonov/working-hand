@@ -72,6 +72,7 @@ import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { IceCastleLife } from './IceQueen.js';
+import { Temple } from './Temple.js';
 import { Blackbeard } from './Blackbeard.js';
 import { sampleIceModels } from './IceModels.js';
 import { Dragons } from './Dragons.js';
@@ -414,6 +415,7 @@ export class Game {
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
         this.iceCastle = new IceCastleLife(this); // the one Ice Castle of the world: the Ice Queen, her snowmen and ice monsters, the Ice Rod (IceQueen.js)
+        this.temple = new Temple(this); // the abandoned Temple of the Gods (Venus — GodsTemple.js; Creative test on Earth: temple.placeTest())
         this.zombieSpawn = new ZombieSpawn(this); // zombies come out of the dark: caves, the night (ZombieSpawn.js)
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
         this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
@@ -2517,6 +2519,7 @@ export class Game {
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
         for (const m of this.iceMagic?.sampleModels?.() || []) zoo.add(m); // (the gloss of a castle of ice)
+        for (const m of this.temple?.sampleModels?.() || []) zoo.add(m); // (the Temple of the Gods: its stone, marble, gold, books, sand, cobwebs, light)
         for (const v of prewarmVillagers()) zoo.add(v);
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
@@ -2751,6 +2754,7 @@ export class Game {
         if (earth) this.spiders.update(dt);
         if (earth) this.dragons.update(dt);
         if (earth) this.iceCastle.update(dt);
+        this.temple?.update(dt); // (the Gods' temple: on Venus)
         if (earth) this.phoenixes.update(dt);
         if (earth) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
@@ -3582,6 +3586,7 @@ export class Game {
         this.spiders?.dispose();
         this.dragons?.dispose();
         this.iceCastle?.dispose();
+        this.temple?.dispose();
         this.blackbeard?.dispose();
         this.travelers?.dispose();
         this.carriages?.dispose();

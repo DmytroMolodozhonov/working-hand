@@ -439,40 +439,59 @@ export class VoxelWorld {
      * A stone pedestal with a glowing rune ring; a weapon floats above it as
      * if held by magic. Returns the top surface Y.
      */
-    createPedestal(x, z) {
+    createPedestal(x, z, { y = 0, godGift = false } = {}) {
         const g = new THREE.Group();
-        g.position.set(x, 0, z);
-        const stone = new THREE.MeshLambertMaterial({ color: 0x6d6a75 });
-        const stoneLight = new THREE.MeshLambertMaterial({ color: 0x8e8a99 });
-        const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.9 });
-        const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
-        add(new THREE.CylinderGeometry(1.35, 1.6, 0.45, 8), stone, -0.25);
-        add(new THREE.CylinderGeometry(1.05, 1.2, 0.3, 8), stoneLight, 0.12);
-        add(new THREE.CylinderGeometry(0.55, 0.7, 1.4, 8), stoneLight, 0.97);
-        add(new THREE.CylinderGeometry(0.95, 0.6, 0.3, 8), stone, 1.82);
-        const rim = add(new THREE.TorusGeometry(0.95, 0.05, 6, 24), gold, 1.97);
+        g.position.set(x, y, z);
+        // (shapes and materials shared by every pedestal — the temple's too)
+        const P = this._pedestalKit || (this._pedestalKit = {
+            stone: new THREE.MeshLambertMaterial({ color: 0x6d6a75 }),
+            stoneLight: new THREE.MeshLambertMaterial({ color: 0x8e8a99 }),
+            gold: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.9 }),
+            foot: new THREE.CylinderGeometry(1.35, 1.6, 0.45, 8), step: new THREE.CylinderGeometry(1.05, 1.2, 0.3, 8),
+            col: new THREE.CylinderGeometry(0.55, 0.7, 1.4, 8), head: new THREE.CylinderGeometry(0.95, 0.6, 0.3, 8),
+            rim: new THREE.TorusGeometry(0.95, 0.05, 6, 24), disc: new THREE.CircleGeometry(0.85, 24), ring: new THREE.TorusGeometry(0.7, 0.035, 6, 32),
+        });
+        const add = (geo, mat, yy) => { const m = new THREE.Mesh(geo, mat); m.position.y = yy; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+        add(P.foot, P.stone, -0.25);
+        add(P.step, P.stoneLight, 0.12);
+        add(P.col, P.stoneLight, 0.97);
+        add(P.head, P.stone, 1.82);
+        const rim = add(P.rim, P.gold, 1.97);
         rim.rotation.x = Math.PI / 2;
         // magic: a glowing disc and a slowly turning rune ring above the top
         const glowMat = new THREE.MeshBasicMaterial({ color: 0x9b7bff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
-        const disc = new THREE.Mesh(new THREE.CircleGeometry(0.85, 24), glowMat);
+        const disc = new THREE.Mesh(P.disc, glowMat);
         disc.rotation.x = -Math.PI / 2;
         disc.position.y = 1.99;
         g.add(disc);
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.035, 6, 32), new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+        const ring = new THREE.Mesh(P.ring, new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
         ring.position.y = 2.6;
         ring.rotation.x = Math.PI / 2;
         g.add(ring);
+        // a gift of the gods (the temple's): no spell breaks or moves it
+        if (godGift) g.userData.godGift = true;
         this.scene.add(g);
         const surfaceY = 1.97;
         // the wide stone foot is a low step one can stand on; the column and its top are as wide as they look
         // (a hand can reach what floats over it)
-        this.collision.addBox({ minX: x - 1.4, maxX: x + 1.4, minY: -0.5, maxY: -0.03, minZ: z - 1.4, maxZ: z + 1.4, kind: 'table' });
-        this.collision.addBox({ minX: x - 1.0, maxX: x + 1.0, minY: -0.5, maxY: surfaceY, minZ: z - 1.0, maxZ: z + 1.0, kind: 'table' });
+        const b1 = this.collision.addBox({ minX: x - 1.4, maxX: x + 1.4, minY: y - 0.5, maxY: y - 0.03, minZ: z - 1.4, maxZ: z + 1.4, kind: 'table', godGift });
+        const b2 = this.collision.addBox({ minX: x - 1.0, maxX: x + 1.0, minY: y - 0.5, maxY: y + surfaceY, minZ: z - 1.0, maxZ: z + 1.0, kind: 'table', godGift });
         this.pedestals = this.pedestals || [];
         // (a gift of the gods — CLAUDE.md «Дары богов»: no spell breaks or moves it; it is no block: blasts,
         //  fire, «Inspirius», «Total Destruction», quakes, «Gather» take the ground round it, never it — it stands as it was)
-        this.pedestals.push({ ring, disc, t: Math.random() * 6, x, z, group: g, godGift: true });
+        this.pedestals.push({ ring, disc, t: Math.random() * 6, x, z, y, group: g, boxes: [b1, b2], godGift: true });
         return surfaceY;
+    }
+
+    /** Take away the pedestals standing at these points (the temple leaving with its planet). */
+    removePedestals(points) {
+        for (const p of [...(this.pedestals || [])]) {
+            if (!points.some((q) => Math.abs(q.x - p.x) < 0.01 && Math.abs(q.z - p.z) < 0.01)) continue;
+            this.scene.remove(p.group);
+            p.ring.material.dispose(); p.disc.material.dispose();
+            for (const id of p.boxes) this.collision.removeBox(id);
+            this.pedestals.splice(this.pedestals.indexOf(p), 1);
+        }
     }
 
     /** Rune rings turn and breathe. */

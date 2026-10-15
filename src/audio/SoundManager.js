@@ -557,6 +557,8 @@ export class SoundManager {
             // («Create an Ice Castle», «Ice Bridge» — IceMagic.js)
             ['iceBell', () => this._synthIceBell()], ['iceFloor', () => this._synthIceFloor(2.6)],
             ['iceDone', () => this._synthChime([523, 659, 784, 1047, 1319, 1568, 2093], 3.2, 1.5)], ['iceChime', () => this._synthChime([1568, 2093, 2637, 3136], 1.4, 3)],
+            // (the Temple of the Gods — Temple.js: the wind outside, the halls' quiet echo, the scrolls' chime)
+            ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -813,6 +815,73 @@ export class SoundManager {
             this.sounds[key] = make();
         }
         this._playAt(this.sounds[key], position, volume, key === 'iceFloor' || key === 'iceDone' ? 14 : 9, kind === 'iceCrack' ? 1.6 + Math.random() * 0.6 : rate);
+    }
+
+    /**
+     * The Temple of the Gods (Temple.js): the wind outside (`wind` 0…1) and the quiet echo of its halls
+     * (`hall` 0…1) — two loops, made ahead (prewarmStep); both 0 — silent.
+     */
+    templeAmbience(wind, hall) {
+        if (!this.context) return;
+        const amb = this._templeAmb || (this._templeAmb = {});
+        for (const [key, k] of [['templeWind', wind], ['templeHall', hall]]) {
+            let a = amb[key];
+            const want = this.enabled && this.loaded ? k : 0;
+            if (want <= 0.01) { if (a?.isPlaying) a.stop(); continue; }
+            if (!this.sounds[key]) continue; // (not made yet: comes a moment later)
+            if (!a) { a = amb[key] = new THREE.Audio(this.audioListener); a.setBuffer(this.sounds[key]); a.setLoop(true); }
+            a.setVolume(want * 0.45 * this.globalVolume);
+            if (!a.isPlaying) a.play();
+        }
+    }
+
+    /** A scroll of the temple's library rings softly (a high chime) where it floats. */
+    playTempleChime(position) {
+        if (!this.enabled || !this.context || !this.loaded || !this.sounds.templeChime) return;
+        this._playAt(this.sounds.templeChime, position, 0.35, 5, 0.94 + Math.random() * 0.12);
+    }
+
+    /** The wind of Venus round the ruin: a low roar rising and falling, a thin whistle in the cracks (it loops). */
+    _synthTempleWind(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds), fade = Math.floor(sr * 0.6);
+        const raw = new Float32Array(len + fade);
+        let lp = 0, lp2 = 0, ph = 0;
+        for (let i = 0; i < raw.length; i++) {
+            const t = i / sr;
+            const gust = 0.55 + 0.3 * Math.sin(2 * Math.PI * t / seconds) + 0.15 * Math.sin(2 * Math.PI * 3 * t / seconds + 1);
+            lp += ((Math.random() * 2 - 1) - lp) * (0.02 + 0.02 * gust);
+            lp2 += (lp - lp2) * 0.08;
+            ph += (2 * Math.PI * (620 + 140 * Math.sin(2 * Math.PI * 2 * t / seconds))) / sr;
+            raw[i] = (lp2 * 3.2 + Math.sin(ph) * 0.025 * gust * gust) * gust;
+        }
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) {
+            const k = i < fade ? i / fade : 1;
+            d[i] = Math.max(-1, Math.min(1, raw[i] * k + (i < fade ? raw[len + i] * (1 - k) : 0)));
+        }
+        return buf;
+    }
+
+    /** Inside the temple: a hushed hall — a low air tone and now and then a far drop or a stone ticking, echoed. */
+    _synthTempleHall(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let lp = 0, lp2 = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            lp += ((Math.random() * 2 - 1) - lp) * 0.01;
+            lp2 += (lp - lp2) * 0.02;
+            d[i] = lp2 * 2.5 + Math.sin(2 * Math.PI * 55 * t) * 0.012 + Math.sin(2 * Math.PI * 82.5 * t) * 0.008;
+        }
+        const ticks = [[0.9, 1900], [3.7, 1250], [6.2, 2400]];
+        for (const [at, f] of ticks) {
+            for (let e = 0; e < 6; e++) { // (the echo: the same, later and softer)
+                const i0 = Math.floor((at + e * 0.31) * sr) % len, amp = 0.09 * Math.pow(0.5, e);
+                for (let k = 0; k < sr * 0.15; k++) { const tk = k / sr; d[(i0 + k) % len] += Math.sin(2 * Math.PI * f * tk) * Math.exp(-tk * 40) * amp; }
+            }
+        }
+        for (let i = 0; i < len; i++) d[i] = Math.max(-1, Math.min(1, d[i]));
+        return buf;
     }
 
     /** A crystal bell: a clear note (C6) with the glassy inharmonic partials of a struck ice rod, a long shimmer. */
