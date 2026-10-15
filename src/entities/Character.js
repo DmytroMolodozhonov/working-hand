@@ -664,7 +664,10 @@ export class VoxelCharacter {
             // Ground following + gravity (flat ground keeps the original baseY exactly)
             // the floor under the feet (not a ceiling / roof / cave rock above)
             const feetNow = this.group.position.y - PLAYER_GROUND_OFFSET + this.bodyDrop();
-            const ground = collision ? (collision.groundAt ? collision.groundAt(this.group.position.x, this.group.position.z, feetNow + 1.1) : collision.groundY(this.group.position.x, this.group.position.z)) : -0.5;
+            // (going up a step the body eases up after the feet: they reach from the floor they stand on)
+            const reach = (this.onGround && this.swimY == null ? Math.max(feetNow, Math.min(this.groundY, feetNow + 1.1)) : feetNow) + 1.1;
+            const px = this.group.position.x, pz = this.group.position.z;
+            const ground = collision ? (this.stepBoxes && collision.standAt ? collision.standAt(px, pz, reach) : collision.groundAt ? collision.groundAt(px, pz, reach) : collision.groundY(px, pz)) : -0.5;
             this.groundY = ground;
             const crouchDrop = this.knockedDown ? 1.45 * (1 - (this.liftUp || 0)) : this.bodyDrop();
             const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;

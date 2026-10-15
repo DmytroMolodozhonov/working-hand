@@ -124,6 +124,22 @@ export class CollisionWorld {
         return L === Infinity ? Infinity : L - 1.5;
     }
 
+    /**
+     * Like groundAt, but the top of a solid box under the point (a low stone foot, a chest, a bed)
+     * is a floor too when the feet reach it — what a body that steps onto boxes stands on.
+     */
+    standAt(x, z, reachY) {
+        let y = this.groundAt(x, z, reachY);
+        const boxes = this.queryBoxes(x, x, z, z);
+        for (let i = 0; i < boxes.length; i++) {
+            const b = boxes[i];
+            if (b.noSupport || b.maxY > reachY || b.maxY <= y) continue;
+            if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
+            y = b.maxY;
+        }
+        return y;
+    }
+
     /** Visible floor / terrain height for physical objects (weapons, debris). */
     surfaceY(x, z) {
         return this.terrain ? this.terrain.surfaceY(x, z) : this.floorY;
@@ -148,8 +164,10 @@ export class CollisionWorld {
      * Push a vertical cylinder (centre pos.x/pos.z, radius, feet..feet+height)
      * out of every obstacle. Mutates pos. Returns true if anything was hit.
      * stepHeight: terrain ledges up to this height can be walked onto.
+     * stepBoxes: solid boxes as low as a step can be walked onto too (the body then stands on
+     * them: standAt) — only for a body whose ground knows boxes (the player).
      */
-    resolveCylinder(pos, radius, feetY, height, stepHeight = 1.05) {
+    resolveCylinder(pos, radius, feetY, height, stepHeight = 1.05, stepBoxes = false) {
         let hit = false;
         for (let pass = 0; pass < 3; pass++) {
             let moved = false;
@@ -172,6 +190,7 @@ export class CollisionWorld {
             for (let i = 0; i < boxes.length; i++) {
                 const b = boxes[i];
                 if (b.maxY <= feetY + 0.05 || b.minY >= feetY + height) continue;
+                if (stepBoxes && !b.noSupport && b.maxY <= feetY + stepHeight) continue; // (a step up onto it)
                 if (pushOutOfRect(pos, radius, b.minX, b.maxX, b.minZ, b.maxZ)) moved = true;
             }
 

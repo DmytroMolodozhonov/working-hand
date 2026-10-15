@@ -105,6 +105,7 @@ import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
 import { Invisibility } from './Invisibility.js';
+import { LedgeClimb } from './LedgeClimb.js';
 import { castingHand, aimedUpOrSelf } from './WandAim.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -296,6 +297,7 @@ export class Game {
 
         // Player
         this.character = new VoxelCharacter(this.scene);
+        this.character.stepBoxes = true; // (my hero walks up onto a low box — a stone foot, a chest — as onto a step)
         this.character.setHandVersion(config.handVersion || 'v3');
         this.character.setHandQuality(config.handQuality || 'high');
         this.character.setFirstPerson(this.cameraMode === 'fpv' && !isTest);
@@ -317,6 +319,7 @@ export class Game {
         this.hurtFlash = new HurtFlash(this); // (wounded creatures glow red for a moment)
         this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
         this.handBlocks = new HandBlocks(this); // hands never go into blocks: a counter, a wall, a table
+        this.ledge = new LedgeClimb(this); // out of a pit / up a ledge: palms on the edge, pulled down
         this._headBase = { yaw: 0, pitch: 0 };
         this.quake = new Quake(this); // «Earthquake»: creatures thrown, the ground breaking, shaking (Quake.js)
         this.drawdown = new Drawdown(this); // «Drawdown»: the ground sinks where the wand points (Drawdown.js)
@@ -2458,6 +2461,7 @@ export class Game {
         const isTest = this.config.mode === 'test';
         this.ships?.update(dt); // ships move first and carry everyone standing on them
         this._updatePlayer(dt);
+        this.ledge.update(dt); // (palms on a ledge's edge, pulled down: the body up — before the hands are stopped at the rock)
         this.handBlocks.update(); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
         this._updateChests(dt);
         if (!isTest) this._checkVictory();
@@ -2642,7 +2646,7 @@ export class Game {
 
         if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing); // (on a rope ladder the hands hold the body)
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
 
         // Explosion knockback (decays; a body lying on the ground slides less far) — in short steps
         // against the walls: a blast throws the body at the rock, never into it (a cave, a house)
@@ -2653,7 +2657,7 @@ export class Game {
                 const was = _v1.copy(ch.group.position);
                 ch.group.position.addScaledVector(this.knockback, dt / n);
                 if (!solid) continue;
-                this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0), 3.5);
+                this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
                 if (this._bodyInRock(ch.group.position)) { ch.group.position.copy(was); this.knockback.set(0, 0, 0); break; } // (against the rock: it stops there)
             }
             // (thrown through the air — «Джолт»: only the air slows it until it lands)
@@ -2669,8 +2673,9 @@ export class Game {
 
         // Collisions: walls, tables, chests, trunks, mountains (in flight: see _updateFlight)
         if (!flight.active && !this.beds?.lying && !this.boards?.mounted) {
-            const feet = ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
-            this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, feet, 3.5);
+            // (a step up to one block high is walked onto by itself: the feet are on the floor they
+            // stand on, even while the body still eases up the last step — _feetY)
+            this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
             // never inside the rock (tossed up under an overhang, the walls' push would carry the body
             // on through the stone, block by block): back where it last stood free
             if (this._bodyInRock(ch.group.position)) {
@@ -2725,7 +2730,7 @@ export class Game {
                 } else if (this.flight.active) {
                     if (col.pointBlocked(me.x, me.y, me.z) || col.pointBlocked(me.x, me.y + 1.2, me.z)) { me.x = bx; me.z = bz; }
                 } else {
-                    col.resolveCylinder(me, PLAYER_RADIUS, me.y - PLAYER_GROUND_OFFSET + (crouch ? 1.0 : 0), 3.5);
+                    col.resolveCylinder(me, PLAYER_RADIUS, this._feetY(me), 3.5, 1.05, true);
                 }
                 this._keepInsideMap(me);
             }
@@ -3186,10 +3191,22 @@ export class Game {
     }
 
     /** Is the body's own column rock where the body is (above a step, up to the head)? */
+    /**
+     * My feet for the walls' test. Standing, they are on the floor under me even while the body
+     * still eases up onto a step it has just walked onto (Character.update): otherwise, going up
+     * stairs or a slope, the next step looks like a wall to the lagging feet and stops the walk.
+     */
+    _feetY(p) {
+        const ch = this.character;
+        const f = p.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
+        if (!ch.onGround || ch.swimY != null || this.flight?.active || this.ledge?.active) return f;
+        return Math.max(f, Math.min(ch.groundY, f + 1.05));
+    }
+
     _bodyInRock(p) {
         const T = this.terrain;
         if (!T?.solidIn) return false;
-        const feet = p.y - PLAYER_GROUND_OFFSET + (this.character.isCrouching ? 1.0 : 0);
+        const feet = this._feetY(p);
         return T.solidIn(Math.round(p.x), Math.round(p.z), Math.ceil(feet + 1.05 + 0.5 + 1e-3), Math.floor(feet + 3.5 + 1.5 - 1e-3));
     }
 
