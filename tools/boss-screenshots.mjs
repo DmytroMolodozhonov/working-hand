@@ -101,7 +101,7 @@ const SCENES = {
         await h.until(find, 20000);
         const v = find();
         if (!v) return { skip: 'no captain' };
-        h.hold([v]);
+        h.hold([...g.ships.crew.byId.values()]); // (the whole crew still: no skeleton walks in front of him)
         await h.frames(20);
         const p = v.group.position;
         return { ...h.view(v.group, { d: 6, up: 1.8, at: 1.4 }), info: `captain at ${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)}; ship ${ship.st.x.toFixed(1)},${ship.st.z.toFixed(1)}` };
