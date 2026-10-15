@@ -51,17 +51,19 @@ test('a blow older than 60 s does not count; near and fighting does', () => {
     assert.deepEqual(ids.sort(), ['me', 'p3']);
 });
 
-test('each achievement: +50 to the mana maximum and +15 % regeneration; never twice', () => {
+test('each achievement: its own mana (the king +50 … a tower +200) and +15 % regeneration; never twice', () => {
     const { g, a } = fakeGame();
     a.hit('spider', 's1', 'me');
     a.killed('spider', 's1', 'me', pos(0, 0, 0));
-    assert.equal(g.combat.maxFatigue, 30 + ACH.MANA);
+    assert.equal(g.combat.maxFatigue, 30 + 100, 'the spider: +100');
     assert.ok(Math.abs(a.regenK - 1.15) < 1e-9);
     a.gain('spider');
-    assert.equal(g.combat.maxFatigue, 80, 'the same one again gives nothing');
+    assert.equal(g.combat.maxFatigue, 130, 'the same one again gives nothing');
     a.gain('dragon');
-    assert.equal(g.combat.maxFatigue, 130);
-    assert.ok(Math.abs(a.regenK - 1.3) < 1e-9);
+    assert.equal(g.combat.maxFatigue, 280, 'a dragon: +150');
+    a.gain('king');
+    assert.equal(g.combat.maxFatigue, 330, 'the king: +50');
+    assert.ok(Math.abs(a.regenK - 1.45) < 1e-9, 'three: +45 %');
 });
 
 test('a guest never decides: a kill on a guest computer awards nothing there', () => {
@@ -115,11 +117,12 @@ test('all five → «Высший маг»: +300 more, +100 % more, the suit com
     const { g, a } = fakeGame();
     for (const k of ACH_IDS) a.gain(k);
     assert.ok(a.high);
-    assert.equal(g.combat.maxFatigue, 30 + 5 * ACH.MANA + ACH.HIGH_MANA);
+    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + ACH.HIGH_MANA);
     assert.ok(Math.abs(a.regenK - (1 + 5 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
     const suit = g.inventory.slots.find((it) => it?.archmage);
     assert.ok(suit && suit.kind === 'robe' && suit.magic, 'the suit is mine');
-    assert.deepEqual(achBonus(5, true), { mana: 550, regen: 2.75 });
+    assert.deepEqual(achBonus(ACH_IDS), { mana: 900, regen: 2.75, high: true });
+    assert.deepEqual(achBonus(['tower']), { mana: 200, regen: 1.15, high: false });
 });
 
 test('the suit: −40 % from any spell on top of a magic robe; blows as usual; seen as code 4', () => {
@@ -144,7 +147,7 @@ test('death keeps the achievements: the practice-grown mana goes, the achievemen
     a.gain('king');
     assert.equal(g.combat.maxFatigue, 30 + 20 + 50);
     g.mana.onDeath();
-    assert.equal(g.combat.maxFatigue, 30 + 50);
+    assert.equal(g.combat.maxFatigue, 30 + 50, 'the practice gone, the king\'s +50 kept');
     assert.ok(a.done.has('king'));
     // saved and loaded: the same, never twice
     const { g: g2, a: a2 } = fakeGame();

@@ -4,7 +4,9 @@
  * Five deeds (ACHIEVEMENTS): kill a castle's king, the Ice Queen, the giant spider, a dragon,
  * and destroy a wizards' tower (its Master killed AND the tower itself really pulled down —
  * TOWER.LEFT: no more than a third of its walls still standing).
- *   • Each one: +50 to the mana maximum and +15 % to how fast the mana comes back (ACH).
+ *   • Each one: + to the mana maximum by its own number (ACHIEVEMENTS `mana` — the author: the king
+ *     +50, the Ice Queen +100, the spider +100, a dragon +150, a tower +200) and +15 % to how fast
+ *     the mana comes back (ACH.REGEN).
  *   • All five: the status «Высший маг» — +300 more to the maximum, +100 % more to the speed,
  *     and the High Mage's suit (ArmorTypes.makeArchmageSuit): it comes into a slot (or at the
  *     feet) with a golden flash; put on by hand like any robe; every spell does 40 % less harm.
@@ -30,7 +32,6 @@
 import { makeArchmageSuit } from './ArmorTypes.js';
 
 export const ACH = {
-    MANA: 50, // + to the mana maximum for each achievement
     REGEN: 0.15, // + to the mana regeneration speed for each (15 %)
     HIGH_MANA: 300, // «Высший маг»: + this much more
     HIGH_REGEN: 1.0, // … and +100 % more speed
@@ -44,18 +45,22 @@ export const TOWER = {
 };
 
 export const ACHIEVEMENTS = [
-    { id: 'king', icon: '👑', title: 'Убить короля', desc: 'Убить короля (или королеву) любого замка' },
-    { id: 'iceQueen', icon: '❄️', title: 'Убить Ледяную Королеву', desc: 'Победить Снежную (Ледяную) Королеву в её ледяном замке' },
-    { id: 'spider', icon: '🕷️', title: 'Убить паучиху', desc: 'Победить гигантскую паучиху' },
-    { id: 'dragon', icon: '🐉', title: 'Убить дракона', desc: 'Победить любого дракона' },
-    { id: 'tower', icon: '🏚️', title: 'Уничтожить башню волшебников', desc: 'Убить Мастера башни и по-настоящему разрушить саму башню (снести не меньше двух третей её стен)' },
+    // mana: + to the mana maximum for it (the rewards' table: change here)
+    { id: 'king', mana: 50, icon: '👑', title: 'Убить короля', desc: 'Убить короля (или королеву) любого замка' },
+    { id: 'iceQueen', mana: 100, icon: '❄️', title: 'Убить Ледяную Королеву', desc: 'Победить Снежную (Ледяную) Королеву в её ледяном замке' },
+    { id: 'spider', mana: 100, icon: '🕷️', title: 'Убить паучиху', desc: 'Победить гигантскую паучиху' },
+    { id: 'dragon', mana: 150, icon: '🐉', title: 'Убить дракона', desc: 'Победить любого дракона' },
+    { id: 'tower', mana: 200, icon: '🏚️', title: 'Уничтожить башню волшебников', desc: 'Убить Мастера башни и по-настоящему разрушить саму башню (снести не меньше двух третей её стен)' },
 ];
 export const ACH_IDS = ACHIEVEMENTS.map((a) => a.id);
 export const ACH_BY_ID = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));
 
-/** What `n` achievements (and the status) give: {mana: + to the maximum, regen: × the speed}. */
-export function achBonus(n, high = false) {
-    return { mana: n * ACH.MANA + (high ? ACH.HIGH_MANA : 0), regen: 1 + n * ACH.REGEN + (high ? ACH.HIGH_REGEN : 0) };
+/** What these achievements (ids) give: {mana: + to the maximum, regen: × the speed, high}. */
+export function achBonus(done = []) {
+    const ids = ACH_IDS.filter((id) => [...done].includes(id));
+    const high = ids.length === ACH_IDS.length;
+    const mana = ids.reduce((s, id) => s + ACH_BY_ID[id].mana, 0) + (high ? ACH.HIGH_MANA : 0);
+    return { mana, regen: 1 + ids.length * ACH.REGEN + (high ? ACH.HIGH_REGEN : 0), high };
 }
 
 /**
@@ -121,7 +126,7 @@ export class Achievements {
     get count() { return this.done.size; }
     get high() { return ACH_IDS.every((id) => this.done.has(id)); }
     /** × the mana regeneration (Combat). */
-    get regenK() { return achBonus(this.count, this.high).regen; }
+    get regenK() { return achBonus(this.done).regen; }
 
     // ------------------------------------------------------------ the host: who took part
     _isPlayer(id) {
@@ -263,7 +268,7 @@ export class Achievements {
         const g = this.game;
         if (!quiet) {
             const a = ACH_BY_ID[kind];
-            this._banner(`${a.icon} Ачивка: ${a.title}`, `+${ACH.MANA} к максимуму маны · мана восстанавливается на ${Math.round(ACH.REGEN * 100)}% быстрее · ${this.count} из ${ACH_IDS.length}`);
+            this._banner(`${a.icon} Ачивка: ${a.title}`, `+${a.mana} к максимуму маны · мана восстанавливается на ${Math.round(ACH.REGEN * 100)}% быстрее · ${this.count} из ${ACH_IDS.length}`);
             g.sound?.playMagic?.(null, 1);
             this._sparkle(0xffd36e, 40);
             g.sync?.ach?.({ a: 'got', k: kind, n: this.count, hi: this.high ? 1 : 0 });
@@ -276,7 +281,7 @@ export class Achievements {
     /** The bonus of the achievements on the mana bar (only what is new: never twice). */
     _applyBonus() {
         const c = this.game.combat;
-        const want = achBonus(this.count, this.high).mana;
+        const want = achBonus(this.done).mana;
         const dm = want - this._bonusOn.mana;
         if (dm > 0 && c) {
             if (c.addMaxFatigue) c.addMaxFatigue(dm);
@@ -403,11 +408,11 @@ export class Achievements {
 export function achievementsHtml(done = new Set(), { world = '' } = {}) {
     const n = ACH_IDS.filter((id) => done.has(id)).length;
     const high = n === ACH_IDS.length;
-    const b = achBonus(n, high);
+    const b = achBonus(done);
     const rows = ACHIEVEMENTS.map((a) => {
         const ok = done.has(a.id);
         return `<div class="ach-row${ok ? ' done' : ''}"><span class="ach-ic">${ok ? a.icon : '🔒'}</span><div class="ach-body"><b>${a.title}</b><span>${a.desc}</span>`
-            + `<span class="ach-gift">${ok ? '✅ Получено: ' : 'Даст: '}+${ACH.MANA} к максимуму маны, восстановление +${Math.round(ACH.REGEN * 100)}%</span></div></div>`;
+            + `<span class="ach-gift">${ok ? '✅ Получено: ' : 'Даст: '}+${a.mana} к максимуму маны, восстановление +${Math.round(ACH.REGEN * 100)}%</span></div></div>`;
     }).join('');
     return `<div class="ach-head">🏆 Ачивки: <b>${n} из ${ACH_IDS.length}</b>${world ? ` <span class="ach-world">(мир «${world}»)</span>` : ''}</div>`
         + `<div class="ach-sum">Сейчас дают: +${b.mana} к максимуму маны, восстановление ×${b.regen.toFixed(2).replace(/\.?0+$/, '')}. Смерть их не отнимает.</div>`
