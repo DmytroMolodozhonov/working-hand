@@ -10,7 +10,7 @@
  * this computer's own data, as before.
  */
 import * as THREE from 'three';
-import { TerrainData, CHUNK, chunkKey } from './Terrain.js';
+import { TerrainData, CHUNK, chunkKey, mergeBuffers } from './Terrain.js';
 import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
 
 /**
@@ -32,7 +32,7 @@ export class Terrain {
         }));
         this.group = new THREE.Group();
         this.group.name = 'terrain';
-        this.meshes = new Map(); // chunk key -> {ground, raised, cx, cz}
+        this.meshes = new Map(); // chunk key -> {ground (= raised: one mesh for its land), water, cx, cz}
         this.pool = []; // unloaded mesh pairs, reused
         scene.add(this.group);
         this.viewDistance = viewDistance; // m
@@ -215,12 +215,11 @@ export class Terrain {
         else if (c.sky === undefined) c.sky = m.chunk.sky; // (made here meanwhile, by a look at it: the cave light the mesh used)
         c.rev = (c.rev || 0) + 1;
         let entry = this.pool.pop();
-        if (!entry) entry = { ground: this._makeMesh(false), raised: this._makeMesh(true), water: this._makeMesh(false, this.waterMaterial) };
+        if (!entry) entry = this._newEntry();
         entry.cx = m.cx;
         entry.cz = m.cz;
         this.meshes.set(m.key, entry);
-        this._fill(entry.ground, m.arrays.ground);
-        this._fill(entry.raised, m.arrays.raised);
+        this._fill(entry.ground, m.arrays.land);
         this._fill(entry.water, m.arrays.water);
         this.stats.built++;
         this.stats.byWorkers++;
@@ -252,8 +251,7 @@ export class Terrain {
         if (!entry || entry.cx !== m.cx || entry.cz !== m.cz) return;
         const c = this.data.chunks.get(m.key);
         if (c) { c.sky = m.sky; c.rev = (c.rev || 0) + 1; } // (the cave light the mesh used; the grass on it made again)
-        this._fill(entry.ground, m.arrays.ground);
-        this._fill(entry.raised, m.arrays.raised);
+        this._fill(entry.ground, m.arrays.land);
         this._fill(entry.water, m.arrays.water);
         this.stats.built++;
     }
@@ -409,7 +407,7 @@ export class Terrain {
 
     _load(job) {
         let entry = this.pool.pop();
-        if (!entry) entry = { ground: this._makeMesh(false), raised: this._makeMesh(true), water: this._makeMesh(false, this.waterMaterial) };
+        if (!entry) entry = this._newEntry();
         entry.cx = job.cx;
         entry.cz = job.cz;
         this.meshes.set(job.key, entry);
@@ -419,7 +417,6 @@ export class Terrain {
     _unload(key, entry) {
         this.meshes.delete(key);
         entry.ground.visible = false;
-        entry.raised.visible = false;
         entry.water.visible = false;
         this.pool.push(entry);
         this.stats.unloaded++;
@@ -430,12 +427,20 @@ export class Terrain {
         const c = this.data.chunk(entry.cx, entry.cz);
         c.rev = (c.rev || 0) + 1; // (its ground changed: the flowers and grass on it are made again — Flora.js)
         const arrays = this.data.buildChunkArrays(entry.cx, entry.cz);
-        this._fill(entry.ground, arrays.ground);
-        this._fill(entry.raised, arrays.raised);
+        this._fill(entry.ground, mergeBuffers(arrays.ground, arrays.raised));
         this._fill(entry.water, arrays.water);
         const ms = performance.now() - t0;
         this.stats.built++;
         if (ms > this.stats.maxBuildMs) this.stats.maxBuildMs = ms;
+    }
+
+    /**
+     * A chunk's meshes: its land (the ground and everything on it: one draw — `raised` is the same mesh,
+     * for whoever asks by the old name) and its water.
+     */
+    _newEntry() {
+        const land = this._makeMesh(true);
+        return { ground: land, raised: land, water: this._makeMesh(false, this.waterMaterial) };
     }
 
     _makeMesh(raised, material = this.material) {
@@ -488,7 +493,6 @@ export class Terrain {
         this.flora?.dispose();
         for (const e of [...this.meshes.values(), ...this.pool]) {
             e.ground.geometry.dispose();
-            e.raised.geometry.dispose();
             e.water.geometry.dispose();
         }
         this.meshes.clear();

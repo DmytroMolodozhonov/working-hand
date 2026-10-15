@@ -1929,6 +1929,25 @@ function finishBuffers(b) {
     };
 }
 
+/**
+ * A chunk's ground and raised faces as one mesh's arrays (one draw instead of two: the ground faces
+ * cast the sun's shadow too — flat, at the foot of everything, they change nothing on screen).
+ */
+export function mergeBuffers(a, b) {
+    if (!a.indices.length) return b;
+    if (!b.indices.length) return a;
+    const nv = a.positions.length / 3;
+    const cat = (x, y) => { const t = new x.constructor(x.length + y.length); t.set(x); t.set(y, x.length); return t; };
+    const n = nv + b.positions.length / 3;
+    const idx = n <= 65535 ? new Uint16Array(a.indices.length + b.indices.length) : new Uint32Array(a.indices.length + b.indices.length);
+    idx.set(a.indices);
+    for (let i = 0; i < b.indices.length; i++) idx[a.indices.length + i] = b.indices[i] + nv;
+    return {
+        positions: cat(a.positions, b.positions), normals: cat(a.normals, b.normals), colors: cat(a.colors, b.colors),
+        indices: idx, patterns: cat(a.patterns, b.patterns), skies: cat(a.skies, b.skies), patterned: a.patterned || b.patterned,
+    };
+}
+
 /** Convert grid-space quad to world space and append it. */
 function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1) {
     if ((buf.nv >> 2) + 1 > buf.cap) growBuffers(buf);

@@ -7,7 +7,7 @@
  * builds the mesh arrays and sends them back with the chunk's data. It keeps the
  * chunks it made lately (the next chunk over needs most of them again), not more.
  */
-import { TerrainData, chunkKey } from './Terrain.js';
+import { TerrainData, chunkKey, mergeBuffers } from './Terrain.js';
 import { buildFlora } from './FloraBuild.js';
 
 const KEEP = 240; // chunks kept (≈ 140 KB each)
@@ -51,7 +51,9 @@ self.onmessage = (e) => {
             data._last = null;
         }
         const transfer = [];
-        for (const k of ['ground', 'raised', 'water']) {
+        arrays.land = mergeBuffers(arrays.ground, arrays.raised); // (one draw for the chunk's land — TerrainView)
+        delete arrays.ground; delete arrays.raised;
+        for (const k of ['land', 'water']) {
             const b = arrays[k];
             for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
         }
@@ -65,7 +67,9 @@ self.onmessage = (e) => {
     const chunk = { ...c }; // (its typed arrays are copied by postMessage: this copy keeps its own for the neighbours)
     delete chunk.rev;
     const transfer = [];
-    for (const k of ['ground', 'raised', 'water']) {
+    arrays.land = mergeBuffers(arrays.ground, arrays.raised); // (one draw for the chunk's land — TerrainView)
+    delete arrays.ground; delete arrays.raised;
+    for (const k of ['land', 'water']) {
         const b = arrays[k];
         for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
     }

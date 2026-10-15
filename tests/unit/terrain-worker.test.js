@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TerrainData } from '../../src/world/Terrain.js';
+import { TerrainData, mergeBuffers } from '../../src/world/Terrain.js';
 
 const OPTS = { seed: 20261015, mountains: true, seas: true, test: true, deepCaves: true, lush: true };
 const make = () => { const d = new TerrainData(); d.generate(OPTS); d.skipSeaTop = true; return d; };
@@ -66,9 +66,9 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     }
     assert.ok(chunks.length >= 2, 'the changed chunks go along');
     self.onmessage({ data: { type: 'rebuild', id: 1, key: 'k', cx, cz, chunks, hidden: null } });
-    const got = sent.pop(), want = here.buildChunkArrays(cx, cz);
+    const got = sent.pop(), w = here.buildChunkArrays(cx, cz), want = { land: mergeBuffers(w.ground, w.raised), water: w.water };
     assert.equal(got.type, 'rebuilt');
-    for (const k of ['ground', 'raised', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies']) same(got.arrays[k][f], want[k][f], `rebuilt ${k}.${f}`);
+    for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies']) same(got.arrays[k][f], want[k][f], `rebuilt ${k}.${f}`);
     // and the worker's own chunks are as generated again afterwards
     const fresh = make();
     self.onmessage({ data: { type: 'build', id: 2, key: 'k2', cx, cz, fcx: cx, fcz: cz, R: 4 } });
@@ -80,4 +80,13 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     assert.equal(fl.rev, 7);
     same(fl.out.pos, mine.pos, 'grass');
     delete globalThis.self;
+});
+
+test('one mesh for a chunk\'s land: the ground and the raised faces together, nothing lost', () => {
+    const d = make();
+    const a = d.buildChunkArrays(4, 3), m = mergeBuffers(a.ground, a.raised);
+    assert.equal(m.positions.length, a.ground.positions.length + a.raised.positions.length);
+    assert.equal(m.indices.length, a.ground.indices.length + a.raised.indices.length);
+    const nv = a.ground.positions.length / 3;
+    for (let i = 0; i < a.raised.indices.length; i += 97) assert.equal(m.indices[a.ground.indices.length + i], a.raised.indices[i] + nv);
 });
