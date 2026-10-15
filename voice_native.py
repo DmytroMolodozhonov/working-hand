@@ -423,6 +423,7 @@ class WinCapture:
             except Exception as e:  # noqa: BLE001
                 print("  Голос: микрофон не открылся:", mic.get("name"), e)
         else:
+            self.pa.terminate()  # (no microphone opened: the sound system is let go too)
             raise RuntimeError("микрофон не найден")
         self.ref_name, self.ref_rate = "", 0
         try:
