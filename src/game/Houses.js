@@ -215,6 +215,13 @@ export class Houses {
     penReturn(id) { this.pens.set(id, (this.pens.get(id) || 0) + 1); this.activePens.delete(id); }
 
     // ------------------------------------------------------------------- glass
+    /** The glass of a magic house (HouseMagic.js): its panes break like these. */
+    setExtraPanes(key, list) {
+        this.panes = this.panes.filter((p) => p.extra !== key);
+        for (const w of list) if (!this.broken.has(w.id)) this.panes.push({ ...w, extra: key, house: null });
+        this._dirty = true;
+    }
+
     _rebuildGlass() {
         this._dirty = false;
         const n = Math.min(PANE_MAX, this.panes.length);
@@ -353,8 +360,8 @@ export class Houses {
         if (!this.enabled) return;
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 0.5; this._scan(); }
-        if (!this.active.size) { if (this._dirty) this._rebuildGlass(); return; }
-        this._updateDoors(dt);
+        if (!this.active.size && !this.panes.length) { if (this._dirty) this._rebuildGlass(); return; }
+        if (this.active.size) this._updateDoors(dt);
         this._checkGlass();
         if (this._dirty) this._rebuildGlass();
     }

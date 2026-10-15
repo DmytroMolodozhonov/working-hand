@@ -9,7 +9,7 @@ import { STATS } from '../../src/game/CastleLife.js';
 
 test('«на кого и на что»: every kind of castle person and every danger the people sense is in the table', () => {
     for (const role of Object.keys(STATS)) assert.ok(PEOPLE[role], `PEOPLE misses ${role}`);
-    for (const k of ['blast', 'ruin', 'quake', 'fire', 'fall', 'spider', 'zombie', 'attacker', 'fight']) assert.ok(DANGERS[k]?.ru, `DANGERS misses ${k}`);
+    for (const k of ['blast', 'ruin', 'quake', 'fire', 'fall', 'spider', 'zombie', 'attacker', 'fight', 'housemagic']) assert.ok(DANGERS[k]?.ru, `DANGERS misses ${k}`);
     assert.ok(REBUILT.restored.length && REBUILT.kept.some((t) => /игрок/.test(t)));
 });
 

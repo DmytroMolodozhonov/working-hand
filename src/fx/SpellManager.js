@@ -66,6 +66,9 @@ export function matchSpell(text) {
     // «Джолт» («…Максима»): a short word — only as a word of its own (never inside another word)
     const jolt = joltWords(s);
     if (jolt) return jolt;
+    // «Create a House» / «Improve a House» (before the beds and «Protection House»: its own words)
+    const house = houseWords(s);
+    if (house) return house;
     // Beds (first: colour words like «синий» / «red» must not turn into other spells)
     if (has('цвет', 'color', 'colour', 'колор', 'калор', 'колар', 'покрас', 'перекрас', 'раскрас', 'чейндж', 'чендж', 'change')) return 'ChangeColor';
     if (has('кроват') || (has('bed', 'бед', 'бэд') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'a bed', 'э бед', 'э бэд'))) return 'CreateBed';
@@ -183,6 +186,21 @@ export function wardWords(s) {
     if (!PROTECT_W.test(s)) return null;
     if (INVIS_W.test(s)) return 'ProtectionInvisible';
     if (HOUSE_W.test(s)) return GRANT_W.test(s) ? 'ProtectionHouseGrant' : 'ProtectionHouse';
+    return null;
+}
+
+// «Create a House» («криейт э хаус», «создай дом»), «Improve a House» («импрув э хаус», «улучши дом»):
+// a word of making / improving AND «house» / «дом» — never «Protection House», never «дом» alone in talk.
+const MAKE_W = /(creat|крейт|криейт|криэйт|креит|кріейт|созда|сотвори)/;
+const IMPROVE_W = /(improv|импрув|импруф|имрув|импрув|улучш)/;
+const HOUSE_SAID = /(хаус|хауз|хаос|house|haus|хоус)/;
+export function houseWords(s) {
+    s = String(s || '').toLowerCase();
+    if (PROTECT_W.test(s)) return null;
+    const house = HOUSE_SAID.test(s) || s.split(/[^a-zа-яё]+/).some((w) => /^(дом|дома|домик)$/.test(w));
+    if (!house) return null;
+    if (IMPROVE_W.test(s)) return 'ImproveHouse';
+    if (MAKE_W.test(s)) return 'CreateHouse';
     return null;
 }
 

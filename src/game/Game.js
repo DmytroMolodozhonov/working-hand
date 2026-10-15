@@ -98,6 +98,7 @@ import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
 import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
 import { ZombieSpawn, worldLights, litAt } from './ZombieSpawn.js';
+import { HouseMagic } from './HouseMagic.js';
 
 const SPELL_COOLDOWN = 1000;
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
@@ -105,7 +106,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima']);
+const MANA_LATER = new Set(['Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -341,6 +342,7 @@ export class Game {
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
+        this.houseMagic = new HouseMagic(this); // «Create a House», «Improve a House» (HouseMagic.js)
         // after a blast: what hangs in the air falls (src/world/Collapse.js), doors / beds / chests / glass too
         this.wreck = new Wreck(this);
         this.burnWreck = new BurnWreck(this); // a house burning down: what loses its support falls, chests burn (BurnWreck.js)
@@ -800,6 +802,7 @@ export class Game {
      * opening; what burns is gone, the rest (coins, steel, magic things…) lies in the ashes.
      */
     spillBurntChest(chest, rp) {
+        if (chest.store) { if (this.authority) this.houseMagic?.chestBurnt(chest, rp); return; } // (a magic house's chest: what was put in it)
         if (!this.authority || chest.itemType !== 'loot' || chest.ship) return;
         const testing = this.config.mode === 'creative' && /^(cvtest|creative-test)/.test(String(chest.id));
         const L0 = new Set(this.items.loose.keys()), W0 = new Set(this.weapons.weapons);
@@ -817,6 +820,8 @@ export class Game {
     openChest(chest, rewardId = null, by = null) {
         if (!chest.open()) return;
         if (this.sound) this.sound.playChestOpen(chest.getPosition());
+        // a magic house's chest: what was put into it rises out of it (HouseMagic.js)
+        if (chest.store) { if (this.authority) { this.houseMagic.chestOpened(chest); this.sync?.chestOpenedLoot?.(chest); } return; }
         const id = rewardId || `c${chest.id}`;
         if (chest.itemType === 'loot') {
             // a cave chest: wands, scrolls, shields… float up out of it
@@ -827,6 +832,7 @@ export class Game {
                 const opener = by && by !== this.localId ? this.remotes.get(by) : null;
                 LOOT_FOR.maxMana = opener ? (opener.maxMana || 0) : (this.combat?.maxFatigue || 0);
                 const pouch = this._chestPouch(chest);
+                if (!chest.ship) pouch.push(...(this.houseMagic?.scrollFor(by) || [])); // (the first «Create a House» scroll of each player is easy to find)
                 if (chest.ship) {
                     chest._openedBy = by; this.ships.lootChest(chest, rp); // (a ship's chest: often a fishing rod)
                     for (const it of pouch) this.items.spawnLoose(it, rp.clone().add(new THREE.Vector3(0, 1.1, 0)), { hover: true, rise: true }); // (within the hand's reach)
@@ -1052,6 +1058,7 @@ export class Game {
             return 'Attack';
         }
         if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
+        if (name === 'CreateHouse' || name === 'ImproveHouse') return this.houseMagic.cast(name, isFinal); // (HouseMagic.js)
         if (isWardSpell(name)) return this._castWard(name, isFinal); // «Защита дома» (HouseWards.js)
         // the spell's strength with the wand in the hand (used by damage while it acts)
         this._lastSpell = { name, pw: this.wandMagic.power(name), at: performance.now() };
@@ -2391,6 +2398,7 @@ export class Game {
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
         this.wards?.update(dt);
+        this.houseMagic?.update(dt);
         this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
         this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)
         this.scrolls.update(dt);

@@ -156,6 +156,7 @@ export class NetSync {
             cauldrons: g.cauldrons?.snapshot() || null,
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.netList() || [], // houses' spheres of protection
+            mhouses: g.houseMagic?.netList() || [], // houses made by magic (HouseMagic.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
@@ -188,6 +189,7 @@ export class NetSync {
         if (msg.houses) g.houses?.restore(msg.houses);
         if (msg.wards) g.wards?.applyNet(msg.wards);
         if (msg.beds) g.beds?.restore(msg.beds);
+        if (msg.mhouses) g.houseMagic?.applyNet(msg.mhouses);
         if (msg.castles) g.castleLife?.restore(msg.castles);
         if (msg.ships) g.ships?.restore(msg.ships);
         if (msg.guns) g.ships?.cannons.restore(msg.guns);
@@ -770,6 +772,7 @@ export class NetSync {
             case 'lumx': if (m.by !== this.me) g.wandMagic?.outBy(m.by); break;
             case 'wards': if (!this.net.isHost) g.wards?.applyNet(m.l, m.g); break;
             case 'wardop': if (this.net.isHost) g.wards?.apply(m.op, m.from); break;
+            case 'mhouse': g.houseMagic?.onNet(m, this.net.isHost); break; // («Create a House», «Improve a House»)
             case 'bice': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.hitBird(b, 99, 'ice'); } break;
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;

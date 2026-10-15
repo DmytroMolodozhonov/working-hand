@@ -32,6 +32,7 @@ export const DANGERS = {
     zombie: { r: 2, hear: 12, see: 24, near: 14, fear: 35, ru: 'зомби ночью' },
     attacker: { r: 3, hear: 18, see: 32, near: 18, fear: 40, ru: 'игрок, который бьёт и убивает людей' },
     fight: { r: 3, hear: 22, see: 26, near: 7, fear: 20, ru: 'драка рядом (рыцари бьются)' },
+    housemagic: { r: 10, hear: 40, see: 70, near: 12, fear: 25, ru: 'магия дома («Create a House», «Improve a House»): вспышки, вихрь деревьев и пыли' },
 };
 
 /** How each kind of person meets danger (VillagerFear.js does exactly this). */

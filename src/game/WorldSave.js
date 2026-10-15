@@ -232,6 +232,7 @@ export class WorldKeeper {
             cauldrons: g.cauldrons?.snapshot() || null,
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
+            magicHouses: g.houseMagic?.snapshot() || null, // houses made by magic and what is in their chests (HouseMagic.js)
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // what the builders put back (Rebuild.js)
@@ -292,6 +293,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.dragons) g.dragons?.restore(save.dragons);
     if (save.ships) g.ships?.restore(save.ships);
     if (save.guns) g.ships?.cannons.restore(save.guns);
+    if (save.magicHouses) g.houseMagic?.restore(save.magicHouses); // (after the beds, the doors and the things lying about)
     if (Number.isFinite(save.dayPhase)) g.dayStart = Date.now() - save.dayPhase * (save.dayMs || 24 * 60 * 1000);
     if (g.dayCycle) g.world.setDayPhase(g.dayPhase());
     // things lying around: exactly what was there (a sword taken into a slot is not on its pedestal any more)
