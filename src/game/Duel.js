@@ -52,6 +52,7 @@ import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
 import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
+import { duelStrength } from './WizardAI.js';
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -688,7 +689,10 @@ export class Duel {
         }
         // it hits the first body it really touches on its way (along the whole step: at a
         // low FPS a charge moves a metre and more per frame) — its target or anybody else
+        // a wall, a floor or a closed door on this step's way (looked at every 0.3 m): nothing behind it is touched
+        const wallS = this._wallOnWay(from, b.front);
         const hit = firstTouched(from, b.front, this._bodies(b.by));
+        if (hit && hit.s > wallS) { b.front.lerpVectors(from, b.front, wallS); this._end(b, 'fizzle'); return false; }
         if (hit) {
             b.front.lerpVectors(from, b.front, hit.s);
             b.prev.copy(b.front);
@@ -700,9 +704,27 @@ export class Duel {
             this._note({ ev: 'touch', id: b.id, kind: b.tk, tid: b.tid });
             return true;
         }
-        const t = g.terrain;
-        if (b.traveled > DUEL.RANGE || (t && t.data.isSolidAt(b.front.x, b.front.y, b.front.z))) { this._end(b, 'fizzle'); return false; }
+        if (wallS <= 1) b.front.lerpVectors(from, b.front, wallS);
+        if (b.traveled > DUEL.RANGE || wallS <= 1) { this._end(b, 'fizzle'); return false; }
         return true;
+    }
+
+    /**
+     * Where on the segment a→b (0…1) the first solid block or closed door is; 2 — none.
+     * (CLAUDE.md: a charge never goes through a wall, a floor or a closed door — whoever casts it.)
+     */
+    _wallOnWay(a, b) {
+        const g = this.game, t = g.terrain?.data, c = g.collision;
+        if (!t) return 2;
+        const len = a.distanceTo(b);
+        const n = Math.max(1, Math.ceil(len / 0.3));
+        for (let i = 1; i <= n; i++) {
+            const k = i / n;
+            const x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k, z = a.z + (b.z - a.z) * k;
+            if (t.isSolidAt(x, y, z)) return k;
+            if (c?.queryBoxes) for (const bx of c.queryBoxes(x, x, z, z)) if (bx.kind === 'door' && y >= bx.minY && y <= bx.maxY && x >= bx.minX && x <= bx.maxX && z >= bx.minZ && z <= bx.maxZ) return k;
+        }
+        return 2;
     }
 
     /** The charge touched a body: who decides what happens? */
@@ -997,7 +1019,7 @@ export class Duel {
             for (let j = i + 1; j < list.length; j++) {
                 let a = list[i], b = list[j];
                 if (a.by === b.by || a.state === 'clash' || b.state === 'clash') continue;
-                if (a.npc || b.npc) continue; // (a tower wizard's charge: only two players' charges meet in a clash)
+                if (a.npc && b.npc) continue; // (two wizards of a tower never fight each other; a wizard's charge and a player's — a duel)
                 if (a.id > b.id) [a, b] = [b, a]; // (the same order on every computer)
                 const m = this._meeting(a, b, _v1);
                 if (!m) continue;
@@ -1024,6 +1046,10 @@ export class Duel {
             const h = y._origin && y._origin.lengthSq() > 0 ? y._origin : y.o;
             segmentToSegment(x.front, x.front, h, y.front, c);
             if (c.dist < CLASH.MEET) return out.copy(x.front);
+        }
+        // a wizard's answer to this very charge (WizardFight._counter): their heads have passed each other
+        if (a.vs === b.id || b.vs === a.id) {
+            if (_dd.subVectors(b.front, a.front).dot(a.dir) <= 0.3) return out.copy(a.front).lerp(b.front, 0.5);
         }
         // charges aimed at each other: their ways together already span the gap
         if (a.tk === 'p' && b.tk === 'p' && a.tid === b.by && b.tid === a.by) {
@@ -1074,9 +1100,17 @@ export class Duel {
         return this.markPools[hex] || (this.markPools[hex] = new SegmentPool(this.game.scene, { capacity: 120, radius: 0.045, color: hex, transparent: true, opacity: 1, blending: THREE.AdditiveBlending }));
     }
 
+    /** A tower's wizard (or a wandering one) in a duel: the castle person, else null. */
+    _npcWizard(id) {
+        const v = this.game.castleLife?.byId?.get(id);
+        return v?.wizard ? v : null;
+    }
+
     /** Strength in a duel: fatigue first, HP second, a little luck. */
     _strength(id, luck) {
         const g = this.game;
+        const w = this._npcWizard(id);
+        if (w) return duelStrength(w.role, w.mana, w.hp, luck); // (a wizard of a tower: his skill, mana, health — WizardAI)
         let fatigue = 30, hp = PVP.MAX_HP;
         if (id === this.me) { fatigue = g.combat.fatigue; hp = g.combat.hp; }
         else {
@@ -1094,6 +1128,12 @@ export class Duel {
             const op = this._playerPos(opponentId, _co);
             const ok = op ? dir.angleTo(op.sub(hand).normalize()) < DUEL.CONTACT_ANGLE : false;
             return { ok, jerk: this._jerked(bolt.side) };
+        }
+        const w = this._npcWizard(id);
+        if (w) {
+            const c = this.clashes.find((x) => x.a === bolt || x.b === bolt);
+            const share = !c ? 0.5 : c.a === bolt ? c.p : 1 - c.p;
+            return this.game.castleLife.wizards.fight.clashHold(w, share);
         }
         const r = this.game.remotes.get(id);
         if (!r || r.dead) return { ok: false, jerk: true };
@@ -1223,6 +1263,9 @@ export class Duel {
             if (a.by === this.me || b.by === this.me) this.game.hud.setVoice('⚡ Дуэль прервана — никто не пострадал', true);
             return;
         }
+        // a wizard of a tower lost: the player's spell reaches him (the host decides the castle people)
+        const lw = this._referee() ? this._npcWizard(loser) : null;
+        if (lw && !lw.dead) this.applyToCreature(winnerBolt.spell, lw, winnerBolt.by);
         if (loser === this.me) this.applyToMe(winnerBolt.spell, winnerBolt.by, winnerBolt.side);
         else if (winnerBolt.by === this.me) {
             this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);

@@ -20,6 +20,7 @@ import { WIZ, WIZ_ROLE_RU, wizardRoster } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
 import { WizardFx, FX } from '../fx/WizardFx.js';
 import { WizardFight } from './WizardFight.js';
+import { DANGERS } from './Danger.js';
 
 export { FX };
 export const isWizSite = (def) => !!def && (def.kind === 'tower' || def.kind === 'wander');
@@ -43,6 +44,10 @@ export const WIZ_SHOUT = {
     oops: ['Ой!', 'Опять упала…', 'Ну вот…'],
 };
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const DANGER_LINES = {
+    brave: ['Что это было?! За мной!', 'Взрыв в академии! Палочки наготове!', 'Кто посмел?! Проверить!', 'Это нападение! Все наверх!'],
+    timid: ['А-а-а! Бежим!', 'Помогите!', 'Наставник!', 'Башня рушится!'],
+};
 
 function turn(a, b, k) {
     let d = b - a;
@@ -186,6 +191,43 @@ export class WizardLife {
         return true;
     }
 
+    /**
+     * (host) Something dreadful at `pos` (a blast that broke half the tower, a quake, lightning…):
+     * nobody of the tower goes on walking calmly by. The brave wizards go to see what it was (and
+     * who: the culprit seen near — the whole tower goes for him, CastleLife._catch); the timid
+     * students run from it. (Asleep: NightLife wakes them by the noise first.)
+     */
+    danger(pos, kind, by = null, r = null) {
+        const L = this.life, now = Date.now();
+        const D = DANGERS[kind] || DANGERS.blast;
+        const isPlayer = L._isPlayer(by);
+        const bp = isPlayer ? L._playerPos(by) : null;
+        for (const cs of L.castles.values()) {
+            if (!cs.awake || !isWizSite(cs.def) || !L._inLand(cs.def, pos, D.hear * 0.5)) continue;
+            if (isPlayer && by === L.state(cs.def.id).owner) continue;
+            let seen = false, said = false, comers = 0;
+            for (const v of cs.active.values()) {
+                if (v.dead || v.sleep || v.lev || v.servantOf != null || v.foe) continue;
+                const d = Math.hypot(v.x - pos.x, v.z - pos.z);
+                if (d > D.hear) continue;
+                v.practice = null;
+                if (bp && Math.hypot(bp.x - v.x, bp.z - v.z) < 40 && L._sees(v, bp)) seen = true;
+                if (L._fights(v)) {
+                    // (the Master keeps his place unless it is close; the others come — a tower has paths)
+                    if ((v.role === 'master' && d > 30) || !cs.graph.nodes.length || (v.investigate && v.investigate.t > 10) || comers >= 5) { v.yaw = Math.atan2(-(pos.x - v.x), -(pos.z - v.z)); continue; }
+                    v.investigate = { x: pos.x, y: pos.y ?? v.y, z: pos.z, by: isPlayer ? by : null, t: 45 };
+                    v.path = null; v.lookT = 0; v.seated = false; comers++;
+                    if (!said) { said = true; L._say(v, pick(DANGER_LINES.brave), 3); }
+                } else if (d < (r ?? D.r) + D.near + 8) {
+                    v.fleeAt = { x: pos.x, z: pos.z }; v.fleeFrom = null; v.fleeT = 8; v.fleeing = false; v.seated = false;
+                    if (Math.random() < 0.4) L._say(v, pick(DANGER_LINES.timid), 2.5);
+                }
+            }
+            if (seen) L._catch(cs, by, pos);
+            if (isPlayer && cs.def.kind === 'tower') cs.wizAlarmUntil = Math.max(cs.wizAlarmUntil || 0, now + 60000); // (no going to bed in the middle of it)
+        }
+    }
+
     // ------------------------------------------------------------ thinking
     /** (host) Before the usual thinking: true = handled here. (The fight comes here — see defence.) */
     think(v, dt) {
@@ -199,6 +241,8 @@ export class WizardLife {
             if (v.practice.t <= 0 || v.foe || v.fleeT > 0 || v.speed > 0.3) v.practice = null;
         }
         if (v.lostWand) return this._fetchWand(v, dt);
+        // (no fight yet, but a player's spell flies at him: a shield — or a spell back, and the beams meet in a duel)
+        if (W && !v.foe && !v.noWand && WizardFight.fights(v)) this.fight._react(v, dt);
         if (v.foe && W) return this.fight.step(v, dt);
         return false;
     }

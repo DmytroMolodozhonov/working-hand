@@ -40,7 +40,7 @@ export const PEOPLE = {
     king: { reacts: true, hides: 'уходит вглубь замка (подальше от опасности)', flees: 'за ворота, если рушится сам замок', douses: false, note: 'кричит страже; в бой — только когда ударили его' },
     advisor: { reacts: true, hides: 'с королём, вглубь замка', flees: 'за ворота', douses: false, note: '' },
     knight: { reacts: true, hides: 'не прячется', flees: 'не бежит: идёт смотреть, но в огонь и в рушащееся не лезет', douses: false, note: 'кричит людям «В дома!»' },
-    wizard: { reacts: false, hides: '—', flees: '—', douses: false, note: 'у волшебников башен своя магия и свои правила (WizardLife.js)' },
+    wizard: { reacts: true, hides: 'робкие ученики бегут прочь', flees: 'смелые не бегут: идут смотреть (и кто это сделал)', douses: false, note: 'WizardLife.danger; нашли тело своего — тревога и поиск чужаков (BodyFound.js)' },
     servant: { reacts: false, hides: '—', flees: '—', douses: false, note: 'слуга «Брейнрота» идёт за хозяином, а не прячется' },
     sailor: { reacts: false, hides: '—', flees: '—', douses: false, note: 'моряки на кораблях — у них свой бой (CrewTactics.js)' },
 };
