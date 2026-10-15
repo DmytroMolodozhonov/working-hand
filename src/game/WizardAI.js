@@ -140,3 +140,20 @@ export function react({ role, mana, shieldReady = true, domeReady = false, spell
     if (shieldReady && mana >= NPC_COST.Protection) return 'shield';
     return null;
 }
+
+/**
+ * Can a wizard answer a charge flying at him — and how? Like a real man: only one he SEES (in front
+ * or at the side of his eyes, nothing in the way — a charge from behind is never seen), and only if
+ * there is time. A wizard not ready (walking, talking, at his desk, the wand down — a surprise, even
+ * if he saw you) first has to understand and raise the wand: the shield comes late, the spell back
+ * later still. Ready (already fighting / the tower on the alert): only his reaction time.
+ *   facing  cos of the angle between where he looks and where the charge is (1 — straight ahead)
+ *   sees    a free line from his eyes to the charge
+ * → { seen, shield (time for the hand shield), counter (time for a spell back: a duel) }
+ */
+export const NOTICE = { FOV: -0.15, SURPRISE: 0.9, SEATED: 0.5, SIDE: 0.2, WAND: 0.3 };
+export function noticeCharge({ facing = 1, sees = true, ready = false, seated = false, eta = 1, reactT = 0.5 }) {
+    if (facing < NOTICE.FOV || !sees) return { seen: false, shield: false, counter: false };
+    const t = reactT + (ready ? 0 : NOTICE.SURPRISE) + (seated ? NOTICE.SEATED : 0) + (facing < 0.5 ? NOTICE.SIDE : 0);
+    return { seen: true, shield: eta > t, counter: eta > t + NOTICE.WAND };
+}

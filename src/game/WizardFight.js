@@ -26,10 +26,11 @@
  */
 
 import * as THREE from 'three';
-import { WIZ, NPC_COST, pickSpell, react } from './WizardAI.js';
+import { WIZ, NPC_COST, pickSpell, react, noticeCharge } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
+import { DUEL_SPELLS } from './Duel.js';
 import { PVP, shieldHitCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
 
@@ -485,11 +486,15 @@ export class WizardFight {
             if (!at) continue;
             const seen = b.seenBy || (b.seenBy = new Set());
             if (seen.has(v.id)) continue;
+            // does he see it, is he ready, is there time? (from behind — never; taken by surprise — late)
+            const eta = dist / (DUEL_SPELLS[b.spell]?.speed || 15);
+            const n = this._notice(v, b, dist, eta);
+            if (!n.seen) continue; // (not seen yet: maybe a moment later, when it comes into view)
             seen.add(v.id);
-            const eta = dist / 15;
-            if (eta < (v.W.reactT ?? 0.5)) continue; // (too late to do anything)
-            const r = react({ role: v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta, robe: !!v.robe });
+            if (!n.shield) { this._caught(v, b); continue; } // (too late to do anything)
+            let r = react({ role: v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta, robe: !!v.robe });
             if (r && !v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; v.seated = false; } // (he cast at me: now it is a fight)
+            if (r === 'counter' && !n.counter) r = 'shield'; // (no time to raise the wand and answer: only the hand shield)
             if (r === 'dome') this._dome(v);
             else if (r === 'counter' && this._counter(v, b)) { /* (a spell back: the beams meet — a duel) */ }
             else if (r === 'shield' || r === 'counter') {
@@ -499,6 +504,24 @@ export class WizardFight {
                 if (Math.random() < 0.25) this.life._say(v, pick(WIZ_LINES.shield), 1.5);
             }
         }
+    }
+
+    /** What this wizard can do about the charge `b` (WizardAI.noticeCharge): seen? time for a shield, a spell back? */
+    _notice(v, b, dist, eta) {
+        const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+        const facing = dist > 1e-3 ? ((b.front.x - v.x) * fx + (b.front.z - v.z) * fz) / dist : 1;
+        const c = this.game.collision;
+        const sees = !c?.lineOfSight || c.lineOfSight(v.x, v.y + 3.6, v.z, b.front.x, b.front.y, b.front.z, 0.45);
+        const now = Date.now();
+        // ready: already fighting, his tower on the alert / against this caster, or the wand just used
+        const ready = !!v.foe || v.castT > 0 || !!(v.fx & FX.SHIELD) || v.cs?.alertUntil > now || v.cs?.hostile?.get(b.by) > now || (v.readyUntil || 0) > now;
+        return noticeCharge({ facing, sees, ready, seated: !!v.seated || v.job === 'desk', eta, reactT: v.W.reactT ?? 0.5 });
+    }
+
+    /** Taken unawares: no answer — but now he knows (a moment later he is ready, if he still stands). */
+    _caught(v, b) {
+        v.readyUntil = Date.now() + 20000;
+        if (!v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; }
     }
 
     /** A spell straight back at the one who cast at him: the two charges meet (Duel.js: a clash). */

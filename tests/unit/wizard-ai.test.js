@@ -131,3 +131,14 @@ test('the people of a tower: the Master first, the scroll seller, teachers livin
     const w = wizardRoster(t.towers.wanderDef(2, 3), 1);
     assert.equal(w.role, 'wanderer');
 });
+
+test('wizard: a charge from behind is never answered; taken by surprise — late; ready — in time', async () => {
+    const { noticeCharge } = await import('../../src/game/WizardAI.js');
+    assert.equal(noticeCharge({ facing: -0.9, eta: 3, ready: true }).seen, false, 'from behind');
+    assert.equal(noticeCharge({ facing: 1, sees: false, eta: 3, ready: true }).seen, false, 'behind a wall');
+    const calm = noticeCharge({ facing: 1, eta: 0.8, ready: false, reactT: 0.45 });
+    assert.ok(calm.seen && !calm.shield && !calm.counter, 'walking calmly: no time to raise the wand');
+    const ready = noticeCharge({ facing: 1, eta: 0.6, ready: true, reactT: 0.45 });
+    assert.ok(ready.shield && !ready.counter, 'in a fight: the hand shield in time');
+    assert.ok(noticeCharge({ facing: 1, eta: 1.5, ready: true, reactT: 0.45 }).counter, 'from afar: a spell back — a duel');
+});
