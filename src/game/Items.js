@@ -25,7 +25,7 @@ import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollLoot, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
-import { PEN_POINTS, Steady } from '../entities/SimplifiedHand.js';
+import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 import { makePurseModel } from './CoinBelt.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
@@ -84,6 +84,8 @@ const GRIPPED = {
 const WAND_V3 = { axis: 'y', handle: 0.1 };
 /** V4 hands holding the wand like a pen (with a real stick seen by the camera): off — V3's wand is used. */
 const PEN_WAND = false;
+/** V5: how far the wand's own end is behind its point in the palm (SimplifiedHand WAND_LINE.at): its butt at the heel of the hand. */
+const V5_WAND_BACK = 0.35;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _f = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
@@ -258,6 +260,8 @@ export class ItemSystem {
         const g = this.game;
         // (the book: held by its edge, the fingers on its covers — BookReading)
         if (h.item.kind === 'book' && g.books?.reading?.holdClosed(side, h, dt)) return;
+        // V5: the wand across the palm, the fingers closed round it from outside, the thumb along it
+        if (h.item.kind === 'wand' && g.character.handVersion === 'v5' && this._v5Wand(side, h, dt)) return;
         const f = g.weapons.palmFrame(side, this._pf || (this._pf = {}));
         // The wand, V3 and V4 hands alike: in the fist, the arm's continuation (the author:
         // «V3's wand is very steady and good» — the pen grip of V4 was not; it is kept in
@@ -327,6 +331,47 @@ export class ItemSystem {
             const hand = g.character.getActiveHands()[side];
             if (hand && hand.setGrip) hand.setGrip(spec.curl ?? 0.62, spec.pose);
         }
+    }
+
+    /**
+     * The V5 wand (the author's own grip): it lies across the palm aslant — its end at the heel on
+     * the little finger's side, out between the thumb and the index finger (SimplifiedHand
+     * WAND_LINE); the fingers close round it from outside and the thumb lies along it, each only
+     * until it touches the wand as thick as it really is (gripWand) — never through it. Fixed in the
+     * palm's own frame: it points where the hand points and is as steady as the palm. False: no hand
+     * drawn (the old way then).
+     */
+    _v5Wand(side, h, dt) {
+        const ch = this.game.character, hand = ch.getActiveHands()[side];
+        if (!hand?.gripWand || !hand.group.visible) return false;
+        if (!h.profile) h.profile = lengthProfile(h.model);
+        if (!h.gripped || h.wandHand !== hand) {
+            h.wandFit = hand.gripWand(h.profile, V5_WAND_BACK);
+            h.wandHand = hand;
+            h.gripped = true;
+        }
+        const a = hand.wandAxis(h.wandFit.r, _a, _b), d = _b;
+        const x = _c.set(1, 0, 0).applyQuaternion(hand.palm.getWorldQuaternion(_hq));
+        x.addScaledVector(d, -x.dot(d));
+        if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
+        x.normalize();
+        _m4.makeBasis(x, d, _e.crossVectors(x, d));
+        _q.setFromRotationMatrix(_m4);
+        // steadied by its own speed (a still wand doesn't tremble, a quick turn passes at once)
+        if (!h.q) h.q = _q.clone();
+        else {
+            const st = (this._wandSteady || (this._wandSteady = {}))[side] || (this._wandSteady[side] = new Steady({ minCutoff: 1.2, beta: 5 }));
+            h.q.slerp(_q, st.alpha(h.q.angleTo(_q) / Math.max(1e-3, dt), dt));
+        }
+        h.model.quaternion.copy(h.q);
+        // its own end V5_WAND_BACK behind the point in the palm, along the (steadied) wand
+        h.model.position.copy(a).sub(_d.set(0, V5_WAND_BACK, 0).applyQuaternion(h.q));
+        const aim = ch.aim[side] || (ch.aim[side] = { dir: new THREE.Vector3(), at: 0 });
+        aim.dir.set(0, 1, 0).applyQuaternion(h.q).normalize();
+        aim.at = performance.now();
+        (aim.rel || (aim.rel = new THREE.Quaternion())).setFromUnitVectors(ch.getForearmDirection(side, _d), aim.dir);
+        if (hand) hand.stickTilt = null;
+        return true;
     }
 
     /**

@@ -137,6 +137,45 @@ export const BOOK_GRIP = {
     // where the thumb goes when it can't come round: back along the hand, across the palm, tucked behind the index
     back: { thumb: [[0.09, 0.03, 0.34, 0.1, 0.1], [-0.21, 0.27, -0.9, 0.1, 0.1], [-2.85, 0.03, -3.05, 0.1, 0.1]] },
 };
+/**
+ * The V5 wand grip, held like a pen (the author's own grip): the wand's back in the web between the
+ * thumb and the index finger, the wand going on along the index finger; the thumb lies along it, the
+ * fingers close round it from outside. Each finger closes from `open` towards `closed` only until it
+ * touches the wand as thick as it really is (fitGrip with the wand's cylinder) — never into it.
+ */
+export const WAND_GRIP = {
+    open: { index: [0, 0.1, 0.1, -0.05], middle: [0.1, 0.2, 0.1, 0], ring: [0.3, 0.4, 0.3, 0.04], pinky: [0.3, 0.4, 0.3, 0.08], thumb: [-0.69, 2.14, 0.17, 0.31, 0.58] },
+    closed: { index: [1.4, 1.5, 1.1, -0.1], middle: [1.5, 1.6, 1.1, -0.05], ring: [1.5, 1.6, 1.1, 0], pinky: [1.5, 1.6, 1.1, 0.05], thumb: [-1.82, 2.55, 1.2, 1.22, 0.55] },
+};
+/**
+ * Where the V5 wand lies in the palm's frame (right hand; a left one is its mirror; y towards the
+ * fingers, z out of the back of the hand, the palm's face at z −0.07): across the palm aslant, from
+ * the heel on the little finger's side out between the thumb and the index finger — the fingers
+ * close round it from outside, the thumb lies along it. Its axis passes `at` (x, y; z: just in front
+ * of the palm's face, as far as the wand is thick), going `dir`.
+ */
+/**
+ * How thick a long thing is along its own y (a wand): [{y0, y1, r}] in the world's units (its scale
+ * taken in) — every part's box, so a ring or a knob counts. For the grip to close on it as it is.
+ */
+export function lengthProfile(model) {
+    model.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+    const s = model.scale.x || 1;
+    const out = [];
+    const m = new THREE.Matrix4(), box = new THREE.Box3();
+    model.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        box.copy(o.geometry.boundingBox).applyMatrix4(m.multiplyMatrices(inv, o.matrixWorld));
+        const r = Math.max(Math.abs(box.min.x), Math.abs(box.max.x), Math.abs(box.min.z), Math.abs(box.max.z));
+        out.push({ y0: box.min.y * s, y1: box.max.y * s, r: r * s });
+    });
+    return out;
+}
+
+export const WAND_LINE = { at: [0, 0.2], gap: 0.008, dir: [-0.55, 0.8, 0] };
+
 /** In the palm's frame (right hand; a left one is its mirror): where a held edge lies — x of the web, the palm's face. */
 export const BOOK_POINTS = { edgeX: -0.12, edgeY: 0.05, face: -0.075 };
 
@@ -740,16 +779,25 @@ export class SimplifiedHand {
         for (let i = 0; i < seg.length; i++) seg[i].pivot.rotation.x = -J[i];
     }
 
-    /** Is any part of this finger (its bones, `margin` thick) inside one of the boxes? */
+    /** Is any part of this finger (its bones, `margin` thick) inside one of the boxes (or cylinders)? */
     _fingerIn(name, boxes, margin) {
         const seg = this.fingerMeshes[name];
         seg[0].pivot.updateMatrixWorld(true);
         const p = _va;
         for (const s of seg) {
             const len = s.mesh.position.y * 2;
+            const half = s.mesh.geometry.parameters.width / 2; // (the bone's own thickness: its sides touch first)
             for (const k of [0.3, 0.65, 1]) {
                 s.pivot.localToWorld(p.set(0, len * k, 0));
                 for (const b of boxes) {
+                    if (b.cyl) {
+                        // a cylinder (the wand): axis point a, unit direction d, radius r, along it from … to
+                        const t = _vb.copy(p).sub(b.a).dot(b.d);
+                        if (t < b.from - margin || t > b.to + margin) continue;
+                        const dist = _vc.copy(p).sub(b.a).addScaledVector(b.d, -t).length();
+                        if (dist < (b.rAt ? b.rAt(t) : b.r) + half + margin) return true;
+                        continue;
+                    }
                     const l = _vb.copy(p).applyMatrix4(b.inv), m = margin / (b.scale || 1);
                     if (l.x > b.min.x - m && l.x < b.max.x + m && l.y > b.min.y - m && l.y < b.max.y + m && l.z > b.min.z - m && l.z < b.max.z + m) return true;
                 }
@@ -791,6 +839,40 @@ export class SimplifiedHand {
             fit[name] = t;
         }
         return fit;
+    }
+
+    /**
+     * The V5 wand's axis (WAND_LINE) in the world for a wand of radius r: a (the point by the web)
+     * and d (unit, towards the tip). The palm's own frame — as steady as the palm, whatever the
+     * fingers do.
+     */
+    wandAxis(r, a, d) {
+        const L = WAND_LINE;
+        this.palm.updateWorldMatrix(true, false);
+        const z = -this.PALM_D / 2 - r - L.gap;
+        this.palm.localToWorld(a.set(L.at[0], L.at[1], z));
+        this.palm.localToWorld(d.set(L.at[0] + L.dir[0], L.at[1] + L.dir[1], z + L.dir[2])).sub(a).normalize();
+        return a;
+    }
+
+    /**
+     * Close the V5 wand grip on a wand: `profile` (lengthProfile of its model), `back` — how far its
+     * own end is behind the axis point by the palm (WAND_LINE.at). Each finger and the thumb close
+     * only until they touch it as thick as it is there. Returns {r, fit}.
+     */
+    gripWand(profile, back) {
+        // (the axis sits off the palm by the wand's thickness in the palm: its thickest part there)
+        let r = 0.02;
+        for (const p of profile) if (p.y1 - back > -0.25 && p.y0 - back < 0.35) r = Math.max(r, p.r);
+        const rAt = (t) => { let v = 0; for (const p of profile) if (t + back >= p.y0 && t + back <= p.y1) v = Math.max(v, p.r); return v; };
+        let to = -back;
+        for (const p of profile) to = Math.max(to, p.y1 - back);
+        this.setGrip(0.5, WAND_GRIP);
+        this.group.updateMatrixWorld(true);
+        const a = new THREE.Vector3(), d = new THREE.Vector3();
+        this.wandAxis(r, a, d);
+        this._wandFit = { r, fit: this.fitGrip([{ cyl: true, a, d, r, rAt, from: -back, to }], 0.004) };
+        return this._wandFit;
     }
 
     // ------------------------------------------------------------- networking
