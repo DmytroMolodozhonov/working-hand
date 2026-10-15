@@ -31,7 +31,7 @@
  * Which way it goes is where the push comes from: away from the push, whichever face it hits. «Вайнд» / «… Максима», «Overgrown» / «… Максима», a «Джолт» charge
  * (it bursts on the leaf), a blast's wave; any new pushing spell calls blow() / impulse().
  * Every door: the houses', the wizards' towers', the throne rooms' gates, «Create a Door»'s
- * (ships have doorways without doors). A LOCKED door only rattles in its frame: the lock
+ * (a ship's bulkheads too — two leaves in each doorway, moving with the ship: Ships._makeDoors). A LOCKED door only rattles in its frame: the lock
  * holds against any push (the spells shove, they don't pick locks — «Алохомора» does; a
  * «Бомбардо» at it breaks the door itself, Wreck.js). Every computer swings it the same;
  * the host tells where it came to rest.
@@ -292,6 +292,8 @@ export class Doors {
         door.a = Math.max(-DOOR_HAND.MAX_A, Math.min(DOOR_HAND.MAX_A, a)) || 0;
         door.model.userData.hinge.rotation.y = door.mirror ? -door.a : door.a;
         const g = this.game;
+        // a ship's door (Ships.js): shut, it is one of its ship's own solids (it moves with the ship) — no box in the world
+        if (door.ship) { const shut = Math.abs(door.a) < 0.35; if (shut !== door.shut) { door.shut = shut; g.ships?.applySolids?.(door.ship); } return; }
         if (door.boxId != null) { g.collision.removeBox(door.boxId); door.boxId = null; }
         if (Math.abs(door.a) < 0.35 && !door.lifted) {
             // the box of the closed door (in world space, axis-aligned around it)
@@ -600,6 +602,7 @@ export class Doors {
         for (const v of g.castleLife?.byId?.values() || []) if (!v.dead) fn(v.x, v.y + 1, v.z, 0.4, false);
         for (const z of g.zombies || []) if (!z.isDead) fn(z.group.position.x, z.group.position.y + 1, z.group.position.z, 0.4, false);
         for (const a of g.animals?.list || []) if (!a.dead) fn(a.group.position.x, a.group.position.y + 0.8, a.group.position.z, 0.7, false);
+        for (const v of g.ships?.crew?.byId?.values() || []) if (!v.dead && !v.overboard) fn(v.x, v.y + 1, v.z, 0.4, false); // (the ships' crews: a ship's door stops on them too)
     }
 
     /**
@@ -710,6 +713,7 @@ export class Doors {
         const dir = ch.getHandDirection(side, new THREE.Vector3());
         let best = null;
         for (const door of this.list.values()) {
+            if (door.ship) continue; // (a ship's door is fixed in its bulkhead)
             const to = _v.set(door.x, door.y + 1.8, door.z).sub(hand);
             const d = to.length();
             if (d > 10) continue;

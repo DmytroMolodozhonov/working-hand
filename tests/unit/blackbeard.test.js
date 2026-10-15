@@ -40,26 +40,35 @@ test('one black ship in a world: the same sea and start for the same seed, a pat
     assert.equal([...S.list.values()].filter((s) => s.cls.id === 'blackship').length, 1);
 });
 
-test('the black ship: no spell burns it, holes it, tears its sails or breaks its masts — until it is taken', () => {
+test('the black ship: no spell burns it, holes it, tears its sails or breaks its masts — but «Инспириус»; until it is taken', () => {
     const { S, B } = world();
+    S.wake(B);
     assert.ok(isCursed(B));
     S.blast({ x: B.st.x + 11, y: 2, z: 0 }, 4, 2, 'me'); // («Бомбардо Максима» at its side)
     S.hole(B, 5, 1, 0, 2, 'me');
     S.ignite(B, 0, B.layout.deck, 0, null, 'me');
     S.ignite(B, 0, 0, 0, B.sails[0].id, 'me');
     S.lightningAt({ x: 0, y: 40, z: B.layout.masts[0].z }, 'me');
-    S.inspiriusHarm({ x: B.st.x + 11, y: 2, z: 0 }, 'me');
     S.cannonHit(B, { x: 11, y: 2, z: 0 }, { x: -1, y: 0, z: 0 }, 'me');
     assert.equal(B.hp, SHIP_CLASSES.blackship.hp, 'no harm');
     assert.equal(B.holes.length, 0, 'no holes');
     assert.equal(B.fires.length, 0, 'the fire went out');
     assert.equal(B.broken.size, 0, 'the masts stand');
     assert.ok(B.sails.every((sl) => sl.burnt === 0), 'the sails whole');
+    // «Инспириус» — the one spell its curse can't hold: the hull torn open, harm (but no fire on it)
+    S.inspiriusHarm({ x: B.st.x + B.layout.B / 2 + 1, y: 2, z: 0 }, 'me');
+    assert.ok(B.holes.length > 0, 'Inspirius: holes');
+    assert.ok(B.hp < SHIP_CLASSES.blackship.hp, 'Inspirius: harm');
+    assert.equal(B.fires.length, 0, 'no fire on it even so');
+    assert.ok(isCursed(B), 'still cursed: Bombardo after it does nothing');
+    const n = B.holes.length;
+    S.hole(B, 5, 1, 0, 2, 'me');
+    assert.equal(B.holes.length, n);
     // taken: an ordinary ship
     B.owner = 'me';
     assert.ok(!isCursed(B));
     S.hole(B, 5, 1, 0, 2, 'me');
-    assert.equal(B.holes.length, 1);
+    assert.equal(B.holes.length, n + 1);
 });
 
 test('the black ship is 40 % faster than any other ship under the same wind', () => {
@@ -157,4 +166,41 @@ test('the captain\'s chests: his gold and plunder; the barrel raised to reach', 
         const vx = v * Math.cos(p), vy = v * Math.sin(p), t = D / vx;
         assert.ok(Math.abs(vy * t - 4.9 * t * t - h) < 0.5, `${D} m`);
     }
+});
+
+test('a ship\'s doors: a pair of leaves in each bulkhead\'s doorway, moving with the ship; shut — a wall, open — the way through', async () => {
+    const { Doors } = await import('../../src/game/Doors.js');
+    const { game, S, B } = world();
+    game.collision.addBox = () => 1; game.collision.removeBox = () => {};
+    game.doors = new Doors(game);
+    S.wake(B);
+    assert.equal(B.doors.length, B.layout.doors.length * 2);
+    const d = B.layout.doors.find((x) => x.id === 'cabin');
+    const at = {};
+    B.pose.toWorld(0.8, d.y + 2, d.z, at);
+    assert.ok(B.collider.pointBlocked(at.x, at.y, at.z), 'shut: a wall');
+    const leaf = B.doors.find((x) => x.local.x > 0 && x.local.z === d.z);
+    game.doors._setAngle(leaf, 1.4);
+    assert.ok(!B.collider.pointBlocked(at.x, at.y, at.z), 'open: the way through');
+    // it goes with the ship
+    B.st.x += 30; B.st.yaw += 0.4; S._place(B); S._placeDoors(B, 0);
+    B.pose.toWorld(leaf.local.x, leaf.local.y, leaf.local.z, at);
+    assert.ok(Math.hypot(leaf.x - at.x, leaf.z - at.z) < 1e-6 && Math.abs(leaf.ry - B.pose.yaw) < 1e-9);
+    S.sleep(B);
+    assert.ok(![...game.doors.list.keys()].some((k) => k.startsWith(B.id)), 'asleep: its doors put away');
+});
+
+test('Captain Black Moustache is met once in a world: killed, he never comes back (saved with his ship)', () => {
+    const { S, B } = world();
+    S.wake(B);
+    const cap = S.crew.crews.get(B.id).find((v) => v.role === 'blackbeard');
+    S.crew.hit(cap, 500, null, 'me', { pierce: true });
+    assert.ok(cap.dead && B.crewKilled.has(cap.idx));
+    const save = S.snapshot();
+    const w2 = world(); // (the world loaded again: the same ship from the save)
+    w2.S.restore(save);
+    const B2 = w2.S.list.get(BB.ID);
+    w2.S.wake(B2);
+    assert.ok(!w2.S.crew.crews.get(B2.id).some((v) => v.role === 'blackbeard'), 'no captain any more');
+    assert.ok(!w2.S.crew.captainAlive(B2));
 });

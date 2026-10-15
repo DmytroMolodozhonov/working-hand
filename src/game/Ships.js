@@ -80,8 +80,9 @@ export const INSP_SHIP = {
 
 /**
  * The black ship's curse (ShipTypes `magic`, Blackbeard.js): while it is not taken, no spell harms it —
- * fire goes out on it, «Бомбардо», «Инспириус», lightning, cannonballs leave only sparks and scratches
- * (no holes, no torn sails, no broken masts), «Левиоса Максима» does not lift it, nobody else's wind
+ * fire goes out on it, «Бомбардо», lightning, cannonballs leave only green sparks and a flash of its magic barrier
+ * (no holes, no torn sails, no broken masts) — only «Инспириус» breaks through it (the one exception, the author):
+ * holes, masts, sails, harm as on any ship; «Левиоса Максима» does not lift it, nobody else's wind
  * fills its sails. What it still feels: the sea (waves, «Wave Attack», a water vortex rock and push it),
  * the shock of a great blast (it heels), the ground under its keel. Taken (its captain and crew dead) —
  * the curse is gone: an ordinary (black) ship.
@@ -196,6 +197,7 @@ export class Ships {
         g.collision.addMover(s.collider);
         this._makePlank(s);
         this._makeChests(s);
+        this._makeDoors(s);
         this._place(s);
         s.model.setPose(s.pose);
         this.crew.wake(s);
@@ -213,6 +215,8 @@ export class Ships {
         if (s.model) { s.model.dispose(); s.model = null; }
         for (const c of s.chests) { c.dispose(); const i = g.chests.indexOf(c); if (i >= 0) g.chests.splice(i, 1); }
         s.chests = [];
+        for (const d of s.doors || []) g.doors?.remove(d.id);
+        s.doors = null;
         this.crew.sleep(s);
         for (const [k, r] of this.riders) if (r.ship === s) this.riders.delete(k);
     }
@@ -355,6 +359,67 @@ export class Ships {
         if (broadcast && this.auth) this._event(s, { k: 'plank', s: 'fallen' });
     }
 
+    // ===================================================================== doors
+    /**
+     * The doors of a ship's bulkheads (ShipLayout `doors`: the captain's cabin, the officers', the galley): a pair
+     * of leaves in each doorway, opened by the hand on the ring like any door (Doors.js), moving with the ship;
+     * shut, a leaf is a wall of the ship (applySolids). The crew opens them going through (_crewDoors).
+     */
+    _makeDoors(s) {
+        const g = this.game;
+        if (!g.doors || s.doors || !s.layout.doors?.length) return;
+        s.doors = [];
+        const color = s.cls.look ? 0x3a2a22 : 0x7a4f2a;
+        s.layout.doors.forEach((d, k) => {
+            for (const side of [-1, 1]) {
+                const id = `${s.id}:dr${k}${side < 0 ? 'L' : 'R'}`;
+                g.doors._place({ id, x: s.st.x, y: 0, z: s.st.z, ry: s.st.yaw, color, a: 0, w: d.half, h: d.h, mirror: side > 0, gate: true, gen: true, ship: s, local: { x: side * d.half / 2, y: d.y, z: d.z } });
+                const door = g.doors.list.get(id);
+                if (door) { door.ship = s; door.local = { x: side * d.half / 2, y: d.y, z: d.z, z0: d.z0, z1: d.z1, half: d.half }; s.doors.push(door); }
+            }
+        });
+        this.applySolids(s);
+        this._placeDoors(s, 0);
+    }
+
+    _placeDoors(s, dt) {
+        const P = s.pose;
+        for (const d of s.doors) {
+            P.toWorld(d.local.x, d.local.y, d.local.z, _o);
+            d.x = _o.x; d.y = _o.y; d.z = _o.z; d.ry = P.yaw;
+            d.model.position.set(_o.x, _o.y, _o.z);
+            d.model.rotation.set(P.pitch, P.yaw, P.roll, 'YXZ');
+        }
+        if (this.auth) this._crewDoors(s, dt);
+    }
+
+    /** (host) A sailor going through a doorway pushes its shut leaf open before him (the people who live there open it). */
+    _crewDoors(s) {
+        const list = this.crew.crews.get(s.id);
+        if (!list) return;
+        for (const d of s.doors) {
+            if (!d.shut) continue;
+            const L = d.local;
+            for (const v of list) {
+                if (v.dead || v.overboard || !(v.speed > 0.5) || Math.abs(v.l.y - L.y) > 1.2) continue;
+                if (Math.abs(v.l.x - L.x) > L.half / 2 + 0.6 || Math.abs(v.l.z - L.z) > 2.4) continue;
+                const fz = -Math.cos(v.lyaw || 0); // (his way along the ship: towards the door?)
+                if (fz * (L.z - v.l.z) <= 0) continue;
+                s.pose.dirToWorld(-Math.sin(v.lyaw || 0), fz, _l);
+                this.game.doors.impulse(d, _v.set(_l.x * 7, 0, _l.z * 7), 1);
+                break;
+            }
+        }
+    }
+
+    /** The ship's solids for its collider: the masts broken off cut down, the shut doors' leaves as walls. */
+    applySolids(s) {
+        const base = s._mastSolids || s.layout.solids;
+        const shut = (s.doors || []).filter((d) => d.shut !== false && Math.abs(d.a || 0) < 0.35);
+        if (!shut.length) { s.collider.solids = s._mastSolids || null; return; }
+        s.collider.solids = base.concat(shut.map((d) => ({ x0: d.local.x - d.local.half / 2, x1: d.local.x + d.local.half / 2, y0: d.local.y, y1: d.local.y + (d.h || 5), z0: d.local.z0, z1: d.local.z1, kind: 'door' })));
+    }
+
     // ===================================================================== chests
     _makeChests(s) {
         const g = this.game;
@@ -447,8 +512,10 @@ export class Ships {
                 this._fireFx(s, dt);
                 this._leakFx(s, dt, t, cam);
                 s.model.stepMasts(dt);
+                s.model.stepBarrier?.(dt);
             }
             this._placeChests(s);
+            if (s.doors) this._placeDoors(s, dt);
             if (s.plank?.fall) this._plankFallFx(s, dt);
         }
         this.helm.update(dt);
@@ -990,7 +1057,7 @@ export class Ships {
     // ================================================================= damage
     damage(s, dmg, by) {
         if (!this.auth || !s || dmg <= 0 || s.state === 'wreck') return;
-        if (isCursed(s)) { if (by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null); return; } // (the black ship: nothing harms it — but its crew saw who tried)
+        if (this._cursed(s)) { if (by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null); return; } // (the black ship: nothing harms it — but its crew saw who tried)
         s.hp = Math.max(0, s.hp - dmg);
         s.changed = true;
         if (by) {
@@ -1028,7 +1095,7 @@ export class Ships {
     /** (host) A hole in the hull at a ship-local point. */
     hole(s, lx, ly, lz, r, by = null, deck = false) {
         if (s.holes.length > 40) return null;
-        if (isCursed(s)) { this.curseSpark(s, lx, ly, lz); return null; } // (the black ship: a scratch, never a hole)
+        if (this._cursed(s)) { this.curseSpark(s, lx, ly, lz); return null; } // (the black ship: a scratch, never a hole)
         const L = s.layout;
         const side = lx >= 0 ? 1 : -1;
         const hy = deck ? ly : Math.max(keelY(L, lz) + 0.3, Math.min(L.deck - 0.4, ly));
@@ -1044,7 +1111,7 @@ export class Ships {
     /** (host) Fire on board at a ship-local point (a sail id: the sail burns). */
     ignite(s, lx, ly, lz, sail = null, by = null) {
         if (!s || s.state === 'wreck' || s.fires.length >= DMG.MAX_FIRES) return;
-        if (isCursed(s)) { // (the black ship: the flame goes out on it with a green hiss)
+        if (isCursed(s)) { // (the black ship: the flame goes out on it with a green hiss — even «Инспириус»'s)
             const sl = sail && s.sails.find((x) => x.id === sail);
             if (sl) this.curseSpark(s, sl.center.x, sl.center.y, sl.center.z, true); else this.curseSpark(s, lx, ly, lz, true);
             if (by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null);
@@ -1167,15 +1234,16 @@ export class Ships {
      * meets its wood and is turned away (every computer that runs it; the host's blasts are seen by all).
      * fire: the flame dies on it.
      */
-    curseSpark(s, lx, ly, lz, fire = false) {
+    curseSpark(s, lx, ly, lz, fire = false, k = 1) {
         const g = this.game;
+        s.model?.barrierHit?.(lx, ly, lz, fire ? 0.5 : k); // (the magic barrier round it shows where it was struck: ShipModel)
         if (!g.fx?.spark) return;
         s.pose.toWorld(lx, ly, lz, _o);
         _cv.set(_o.x, _o.y, _o.z);
         for (let i = 0; i < 22; i++) g.fx.spark(_cv, i % 3 ? 0x6dff8a : (fire ? 0xff8a2a : 0xd8ffe0), 0.16 + Math.random() * 0.18, _w.set((Math.random() - 0.5) * 6, 1 + Math.random() * 4, (Math.random() - 0.5) * 6), 0.6 + Math.random() * 0.5);
         g.fx.lightFlash?.(_cv, 0x6dff8a, 2.5, 0.25, 18);
         if (fire) g.sound?.playWhoosh?.();
-        if (this.auth && g.sync) g.sync.net.send({ t: 'shipev', id: s.id, k: 'curse', l: [r2(lx), r2(ly), r2(lz)], f: fire ? 1 : 0 });
+        if (this.auth && g.sync) g.sync.net.send({ t: 'shipev', id: s.id, k: 'curse', l: [r2(lx), r2(ly), r2(lz)], f: fire ? 1 : 0, ...(k !== 1 ? { s: k } : {}) });
     }
 
     /** Rain / a wave / a water ball put fires out (within r of a world point, or the whole ship). */
@@ -1436,8 +1504,9 @@ export class Ships {
                 st.v += (-_l.x / ll) * push;
                 s.changed = true;
             }
-            // the wood torn out where it struck (each computer its own boards and smoke) — not the black ship's
-            if (isCursed(s)) { if (d.dist < 12) this.curseSpark(s, d.x, d.y, d.z); continue; }
+            // the wood torn out where it struck (each computer its own boards and smoke) — the black ship's too:
+            // «Инспириус» is the one spell its curse can't hold (its barrier flashes as it breaks through)
+            if (isCursed(s) && d.dist < 14) this.curseSpark(s, d.x, d.y, d.z, false, 1.6);
             if (d.dist < 12 && g.fx?.shipBreak) {
                 s.pose.toWorld(d.x, d.y, d.z, _o);
                 const at = new THREE.Vector3(_o.x, _o.y, _o.z);
@@ -1472,6 +1541,14 @@ export class Ships {
      */
     inspiriusHarm(pos, casterId) {
         if (!this.auth) return;
+        this._inspirius = true; // (the black ship's curse does not hold against it: _cursed)
+        try { this._inspiriusHarm(pos, casterId); } finally { this._inspirius = false; }
+    }
+
+    /** Is the black ship's curse holding against what is being done now? («Инспириус» breaks through it.) */
+    _cursed(s) { return isCursed(s) && !this._inspirius; }
+
+    _inspiriusHarm(pos, casterId) {
         const g = this.game;
         const by = casterId === 'local' ? g.localId : casterId;
         for (const s of this.awake) {
@@ -1513,7 +1590,7 @@ export class Ships {
 
     /** (host) A sail torn to rags: it hangs useless (as a burnt one: no wind in it). */
     tearSail(s, sl) {
-        if (sl.burnt >= 1 || isCursed(s)) return;
+        if (sl.burnt >= 1 || this._cursed(s)) return;
         sl.burnt = 1;
         sl.target = 0;
         s.changed = true;
@@ -1522,7 +1599,7 @@ export class Ships {
 
     /** (host) A mast broken off: it falls over the side `side`; its sails are lost with it. */
     breakMast(s, id, side, by = null) {
-        if (s.broken.has(id) || isCursed(s)) return;
+        if (s.broken.has(id) || this._cursed(s)) return;
         this._mastDown(s, id, side);
         this.damage(s, 20, by);
         s.changed = true;
@@ -1542,12 +1619,13 @@ export class Ships {
     /** The broken masts stand no higher than their stumps (the collider: nothing invisible in the way). */
     _cutMasts(s) {
         const L = s.layout;
-        if (!s.broken.size) { s.collider.solids = null; return; }
-        s.collider.solids = L.solids.map((b) => {
+        if (!s.broken.size) { s._mastSolids = null; this.applySolids(s); return; }
+        s._mastSolids = L.solids.map((b) => {
             if (b.kind !== 'mast') return b;
             const m = L.masts.find((x) => s.broken.has(x.id) && Math.abs(x.z - (b.z0 + b.z1) / 2) < 0.01);
             return m ? { ...b, y1: Math.min(b.y1, Math.min(m.top - 4, m.deck + 2.5)) } : b;
         });
+        this.applySolids(s);
     }
 
     // =================================================================== hooks
@@ -1698,7 +1776,7 @@ export class Ships {
             case 'flooded': s.flooded = true; s.fires = []; break;
             case 'wreck': s.state = 'wreck'; break;
             case 'gun': this.cannons.applyEvent(s, m); break;
-            case 'curse': if (Array.isArray(m.l)) this.curseSpark(s, +m.l[0], +m.l[1], +m.l[2], !!m.f); break; // (a guest: only the sparks)
+            case 'curse': if (Array.isArray(m.l)) this.curseSpark(s, +m.l[0], +m.l[1], +m.l[2], !!m.f, +m.s || 1); break; // (a guest: only the sparks and the barrier)
             default: break;
         }
     }

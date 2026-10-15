@@ -77,7 +77,7 @@ import { sampleIceModels } from './IceModels.js';
 import { Dragons } from './Dragons.js';
 import { Carriages, cartModel } from './Carriages.js';
 import { CASTLE_CELL } from '../world/Castles.js';
-import { ShipModel } from '../entities/ShipModel.js';
+import { ShipModel, barrierParts } from '../entities/ShipModel.js';
 import { buildLayout } from './ShipLayout.js';
 import { SHIP_CLASSES } from './ShipTypes.js';
 import { dragonModel } from './DragonModel.js';
@@ -2524,6 +2524,7 @@ export class Game {
             const cls = Object.keys(SHIP_CLASSES)[0];
             if (this.ships && cls) zoo.add(new ShipModel(buildLayout(cls), { color: 0x8a5a33, name: 'prewarm' }).group);
             if (this.ships && cls) zoo.add(new ShipModel(buildLayout(cls), { look: 'black', name: 'prewarm' }).group); // (the black ship's deck, black flag, green fire)
+            { const B = barrierParts(); zoo.add(new THREE.Mesh(B.shell, B.shellMat), new THREE.Mesh(B.ring, B.ringMat)); } // (its magic barrier's flash)
             for (const v of sailorModels()) zoo.add(v.group); // (Captain Black Moustache, his skeletons)
             for (const k of KIND_IDS) zoo.add(dragonModel(k));
             zoo.add(cartModel(false), cartModel(true));

@@ -21,7 +21,8 @@
  *
  * Who / what × how (CLAUDE.md):
  *  - the ship (Ships.isCursed): no spell harms it while it is not taken — fire goes out on it, «Бомбардо»,
- *    «Инспириус», lightning, cannonballs: green sparks, no holes, no torn sails, no broken masts; «Левиоса
+ *    lightning, cannonballs: its magic barrier flashes, green sparks, no holes, no torn sails, no broken masts —
+ *    only «Инспириус» breaks through (the one exception: holes, masts, sails, harm); «Левиоса
  *    Максима» does not lift it; nobody else's wind fills its sails. The sea rocks it (waves, «Wave Attack»), a
  *    great blast makes it heel. It can only be taken by storm: its captain and every skeleton dead — then it is
  *    the taker's (Sailors.capture): an ordinary black ship (its green fires go out; it burns and sinks as any),

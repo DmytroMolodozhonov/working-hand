@@ -229,7 +229,7 @@ function shared() {
         iron: new THREE.MeshLambertMaterial({ color: 0x2b2b2e }),
         ball: new THREE.SphereGeometry(0.32, 10, 8),
         // the black ship (Blackbeard.js): tarred black deck, green fire in its lanterns, the black flag
-        deckBlack: new THREE.MeshLambertMaterial({ map: deckTex, color: 0x4a3c34, side: THREE.DoubleSide }),
+        deckBlack: new THREE.MeshLambertMaterial({ map: deckTex, color: 0x5e4c40, side: THREE.DoubleSide }),
         greenFire: new THREE.MeshBasicMaterial({ color: 0x6dff8a }),
         greenDim: new THREE.MeshBasicMaterial({ color: 0x2c7a3c }),
         jolly: new THREE.MeshLambertMaterial({ map: dom ? new THREE.CanvasTexture(jollyCanvas()) : null, color: 0xffffff, side: THREE.DoubleSide }),
@@ -246,7 +246,7 @@ const WOOD = 0x8a5a33, DARK = 0x4a3020, BOTTOM = 0x5a3b2a, WALE = 0x2b1d14, GOLD
  * trim, tarnished brass for the gold, black ragged sails, bone-white skulls, green fire in the lanterns.
  */
 export const SHIP_LOOKS = {
-    black: { band: 0x5c0f14, gold: 0x6e5626, bone: 0xd8cfb4, sail: 0x221f22, ragged: true, deck: 'deckBlack' },
+    black: { band: 0x6e141a, gold: 0x7d6230, bone: 0xd8cfb4, sail: 0x37323a, ragged: true, deck: 'deckBlack' },
 };
 const _tc = new THREE.Color();
 /** The black ship's planks: every colour pulled down to near-black (a hint of its own hue kept). */
@@ -256,10 +256,37 @@ function blackTint(band, gold, bone) {
         if (c === band || c === bone || c === 0xffffff || c === 0x050302 || c === 0x161008) return c;
         if (c === GOLD) return gold;
         let t = cache.get(c);
-        if (t === undefined) { _tc.set(c); _tc.lerp(_tc.clone().set(0x0d0b0b), 0.8); t = _tc.getHex(); cache.set(c, t); }
+        if (t === undefined) { _tc.set(c); _tc.lerp(_tc.clone().set(0x1a1412), 0.62); t = _tc.getHex(); cache.set(c, t); } // (dark tarred wood — the grain still shows: not a hole in the picture)
         return t;
     };
 }
+
+/** The barrier's shell (a unit sphere of green hexagons) and its ring — made once, shared. */
+let BARRIER = null;
+export function barrierParts() {
+    if (BARRIER) return BARRIER;
+    let map = null;
+    if (typeof document !== 'undefined') {
+        const cv = document.createElement('canvas');
+        cv.width = 256; cv.height = 128;
+        const x = cv.getContext('2d');
+        x.strokeStyle = 'rgba(140,255,170,0.9)'; x.lineWidth = 2;
+        const R = 10, h = R * Math.sqrt(3);
+        for (let row = -1; row < 128 / h + 1; row++) for (let col = -1; col < 256 / (R * 3) + 1; col++) {
+            const cx = col * R * 3 + (row % 2 ? R * 1.5 : 0), cy = row * h / 2;
+            x.beginPath();
+            for (let i = 0; i <= 6; i++) { const a = (i / 6) * Math.PI * 2; x.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); }
+            x.stroke();
+        }
+        map = new THREE.CanvasTexture(cv);
+        map.wrapS = map.wrapT = THREE.RepeatWrapping;
+        map.repeat.set(4, 3);
+    }
+    const mat = (m) => new THREE.MeshBasicMaterial({ map: m, color: 0x6dff8a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+    BARRIER = { shell: new THREE.SphereGeometry(1, 32, 16), shellMat: mat(map), ring: new THREE.TorusGeometry(1, 0.12, 6, 32), ringMat: mat(map) };
+    return BARRIER;
+}
+const _Z = new THREE.Vector3(0, 0, 1);
 
 /** The black flag: a white skull with a great curled moustache over its teeth, crossed sabres below. */
 function jollyCanvas() {
@@ -949,6 +976,58 @@ export class ShipModel {
         this.glow.material = this.look ? (this.cursed ? (on ? S.greenFire : S.greenDim) : on ? S.lit : S.glass) : on ? S.lit : S.glass;
     }
 
+    /**
+     * The black ship's magic barrier: struck (a blast, a ball, a flame, lightning — Ships.curseSpark), a shell of
+     * green hexagons round its hull flashes up and fades, and a ring runs out from where it was struck — so one can
+     * see the ship is held by magic. k: how hard (1 a blast; «Инспириус» breaking through — more).
+     */
+    barrierHit(lx, ly, lz, k = 1) {
+        if (!this.look || !this.cursed) return;
+        const L = this.L;
+        if (!this.barrier) {
+            const B = barrierParts();
+            const shell = new THREE.Mesh(B.shell, B.shellMat.clone());
+            const ry = (L.floors.reduce((m, f) => Math.max(m, f.y), L.deck) + L.rail + L.draft) / 2 + 2;
+            shell.scale.set(L.B / 2 + 3, ry, L.L / 2 + 4);
+            shell.position.y = ry - L.draft - 1;
+            shell.visible = false;
+            shell.renderOrder = 5;
+            this.group.add(shell);
+            const rings = [];
+            for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(B.ring, B.ringMat.clone()); r.visible = false; r.renderOrder = 6; this.group.add(r); rings.push({ mesh: r, t: 1 }); }
+            this.barrier = { shell, rings, t: 1, k: 1, next: 0 };
+        }
+        const b = this.barrier;
+        b.t = 0; b.k = Math.max(0.4, Math.min(2, k));
+        // the ring on the shell where the line from its middle through the blow comes out of it
+        const sh = b.shell, sx = sh.scale.x, sy = sh.scale.y, sz = sh.scale.z;
+        const dx = lx / sx, dy = (ly - sh.position.y) / sy, dz = lz / sz;
+        const n = Math.hypot(dx, dy, dz) || 1;
+        const r = b.rings[b.next++ % b.rings.length];
+        r.mesh.position.set((dx / n) * sx, sh.position.y + (dy / n) * sy, (dz / n) * sz);
+        _v3.set(dx / sx, dy / sy, dz / sz).normalize(); // (the shell's normal there)
+        r.mesh.quaternion.setFromUnitVectors(_Z, _v3);
+        r.t = 0; r.k = b.k;
+    }
+
+    /** The barrier fading (every frame). */
+    stepBarrier(dt) {
+        const b = this.barrier;
+        if (!b) return;
+        b.t = Math.min(1, b.t + dt / 0.9);
+        const a = (1 - b.t) * (1 - b.t);
+        b.shell.visible = a > 0.01;
+        b.shell.material.opacity = 0.55 * a * b.k;
+        for (const r of b.rings) {
+            r.t = Math.min(1, r.t + dt / 0.7);
+            r.mesh.visible = r.t < 1;
+            if (!r.mesh.visible) continue;
+            const s = 1 + r.t * 9 * (r.k || 1);
+            r.mesh.scale.set(s, s, s);
+            r.mesh.material.opacity = 0.9 * (1 - r.t);
+        }
+    }
+
     /** The black ship's curse holds (green fire in the lanterns) or is gone (it was taken). */
     setCursed(on) {
         if (!this.look || this.cursed === !!on) return;
@@ -1283,7 +1362,7 @@ export class ShipModel {
     dispose() {
         this.group.traverse((o) => {
             if (o.isMesh || o.isLineSegments) {
-                if (o.geometry !== shared().ball && o.geometry !== this._barrelGeo) o.geometry.dispose();
+                if (o.geometry !== shared().ball && o.geometry !== this._barrelGeo && o.geometry !== BARRIER?.shell && o.geometry !== BARRIER?.ring) o.geometry.dispose();
                 const m = o.material;
                 const S = shared();
                 if (m && m !== S.solid && m !== S.deck && m !== S.sail && m !== S.rope && m !== S.glass && m !== S.lit && m !== S.iron && m !== S.deckBlack && m !== S.greenFire && m !== S.greenDim && m !== S.jolly && m !== S.bundleBlack) m.dispose();

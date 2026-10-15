@@ -122,18 +122,24 @@ function makeLayout(C) {
         }
         if (x < w) solids.push({ x0: x, x1: w, y0, y1, z0, z1, kind });
     };
+    // the doors in the bulkheads' doorways (Ships.js hangs a pair of leaves in each: Doors.js opens them by hand)
+    const doors = [];
+    const doorIn = (id, z0, z1, y0, y1) => doors.push({ id, x: 0, y: y0, z: (z0 + z1) / 2, z0, z1, half: DOOR_HALF, h: y1 - y0 - 0.05 });
     const stairGap = (st) => [[-st.x - STAIR_HALF - 0.1, -st.x + STAIR_HALF + 0.1], [st.x - STAIR_HALF - 0.1, st.x + STAIR_HALF + 0.1]];
     // the captain's cabin under the quarterdeck: a bulkhead with a door; the quarterdeck's front rail with gaps at the stairs
     wallWithDoor(Q.z0, Q.z0 + 0.4, D, Q.y, 'bulkhead', [[-DOOR_HALF, DOOR_HALF], ...stairGap(qStairs)]);
+    doorIn('cabin', Q.z0, Q.z0 + 0.4, D, Q.y);
     wallWithDoor(Q.z0, Q.z0 + 0.3, Q.y, Q.y + 1.2, 'breastwork', stairGap(qStairs));
     rooms.push({ name: 'Каюта капитана', id: 'captain', x0: -hw(Q.z0, D), x1: hw(Q.z0, D), z0: Q.z0 + 0.4, z1: stern, y: D, top: Q.y });
     if (poop) {
         wallWithDoor(poop.z0, poop.z0 + 0.4, Q.y, poop.y, 'bulkhead', [[-DOOR_HALF, DOOR_HALF], ...stairGap(pStairs)]);
+        doorIn('officers', poop.z0, poop.z0 + 0.4, Q.y, poop.y);
         wallWithDoor(poop.z0, poop.z0 + 0.3, poop.y, poop.y + 1.2, 'breastwork', stairGap(pStairs));
         rooms.push({ name: 'Каюта офицеров', id: 'officers', x0: -hw(poop.z0, Q.y), x1: hw(poop.z0, Q.y), z0: poop.z0 + 0.4, z1: stern, y: Q.y, top: poop.y });
     }
     if (fore) {
         wallWithDoor(fore.z1 - 0.4, fore.z1, D, fore.y, 'bulkhead', [[-DOOR_HALF, DOOR_HALF], ...stairGap(fStairs)]);
+        doorIn('galley', fore.z1 - 0.4, fore.z1, D, fore.y);
         wallWithDoor(fore.z1 - 0.3, fore.z1, fore.y, fore.y + 1.2, 'breastwork', stairGap(fStairs));
         rooms.push({ name: 'Камбуз', id: 'galley', x0: -hw(fore.z1, D), x1: hw(fore.z1, D), z0: main.z0, z1: fore.z1 - 0.4, y: D, top: fore.y });
     }
@@ -304,7 +310,7 @@ function makeLayout(C) {
     // ------------------------------------------------------------ mooring bitts
     const bitts = [{ id: 'bow', x: 0, y: D, z: main.z0 + 3 }, { id: 'stern', x: 0, y: Q.y, z: stern - 1 }];
 
-    Object.assign(L, { floors, ramps, solids, openings, ladders, helm, masts, sails, bitts, rooms, chests, cannons, racks, capstan, hatch, gangZ, stern });
+    Object.assign(L, { doors, floors, ramps, solids, openings, ladders, helm, masts, sails, bitts, rooms, chests, cannons, racks, capstan, hatch, gangZ, stern });
     L.railTopAt = (lz) => railTop(L, lz);
     buildGraph(L, C, { main, lower, quarter, poop, fore, qStairs, pStairs, fStairs, hatch, helm, capZ, gangZ });
     return L;
