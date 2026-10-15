@@ -28,7 +28,7 @@ export const FLORA = {
 const WIND = { time: { value: 0 } };
 
 export class Flora {
-    /** @param {import('./Terrain.js').Terrain} terrain */
+    /** @param {import('./TerrainView.js').Terrain} terrain */
     constructor(terrain) {
         this.terrain = terrain;
         this.data = terrain.data;

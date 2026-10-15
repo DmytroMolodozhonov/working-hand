@@ -8,7 +8,8 @@
 
 import * as THREE from 'three';
 import { createRng } from '../core/math.js';
-import { Terrain, BLOCK } from './Terrain.js';
+import { BLOCK } from './Terrain.js';
+import { Terrain } from './TerrainView.js';
 import { collapseAfter } from './Collapse.js';
 import { ruinArea } from './Ruin.js';
 

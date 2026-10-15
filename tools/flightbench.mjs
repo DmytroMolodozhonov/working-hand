@@ -125,13 +125,42 @@ async function flyRoute() {
     let prev = null;
     const newProgs = [];
     let nProg = g.renderer.info.programs.length;
+    let nSeen = window.__compiled.length;
     g.frame = function () {
         for (const k in sub) sub[k] = 0;
         const t0 = performance.now();
         origFrame();
         const t1 = performance.now();
         const progs = g.renderer.info.programs;
-        if (progs.length > nProg) { for (let i = nProg; i < progs.length; i++) newProgs.push(`${seg} ${(t1 - t0).toFixed(0)}мс ${progs[i].name}`); nProg = progs.length; }
+        const lastProgs = newProgs.length;
+        if (progs.length > nProg) { for (let i = nProg; i < progs.length; i++) {
+            // (what is new about it: the settings that differ from the closest program already built)
+            const A = String(progs[i].cacheKey).split(',');
+            let best = null;
+            for (let j = 0; j < i; j++) {
+                if (progs[j].name !== progs[i].name) continue;
+                const B = String(progs[j].cacheKey).split(',');
+                const d = A.map((x, k) => (x !== B[k] ? `${k}:${x.slice(0, 40)}` : null)).filter(Boolean);
+                if (!best || d.length < best.length) best = d;
+            }
+            newProgs.push(`${seg} ${(t1 - t0).toFixed(0)}мс ${progs[i].name} [${(best || ['новый вид']).slice(0, 6).join(' ')}]`);
+        }
+        if (window.__compiled.length > nSeen && newProgs.length > lastProgs) {
+            const mats = new Set(window.__compiled.slice(nSeen));
+            nSeen = window.__compiled.length;
+            const who = [];
+            g.scene.traverse((o) => {
+                if (!o.material || who.length > 6) return;
+                for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (mats.has(m)) {
+                    const path = [];
+                    for (let q = o; q && q !== g.scene && path.length < 4; q = q.parent) path.push(q.name || q.userData?.kind || q.type);
+                    who.push(`${m.type}${m.name ? '(' + m.name + ')' : ''} ← ${path.join(' < ')}`);
+                }
+            });
+            if (who.length) newProgs.push(`   кто: ${who.join(' | ')}`);
+        }
+        nProg = progs.length; }
+        nSeen = window.__compiled.length;
         if (prev != null && !done && g.flight.active) {
             const parts = {};
             for (const k in g._parts) parts[k] = +g._parts[k].toFixed(2);
@@ -144,7 +173,7 @@ async function flyRoute() {
     ch.group.position.y += 20;
     const at = ch.group.position.clone();
     const t0 = performance.now();
-    while (!done && performance.now() - t0 < 200000) await new Promise((r) => setTimeout(r, 250));
+    while (!done && performance.now() - t0 < 420000) await new Promise((r) => setTimeout(r, 250));
     g._updateFlight = origFlight;
     g.frame = origFrame;
     for (const u of undo) u();
@@ -194,6 +223,10 @@ async function runLevel(browser, url, level) {
     await page.evaluate(({ P, SEED }) => {
         for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance]]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
+        // which things need a shader that was not ready (a material's first compile is noted, with
+        // the objects using it — every material, the same way, so the shaders stay the ones the game makes)
+        const seen = window.__compiled = [];
+        z.THREE.Material.prototype.onBeforeCompile = function () { seen.push(this); };
         z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance });
     }, { P, SEED });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
