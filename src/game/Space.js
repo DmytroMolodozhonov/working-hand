@@ -1086,6 +1086,23 @@ export class Space {
         ctx.fillStyle = '#ffd27a'; ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
         ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
         const label = (txt, x, y, col = '#fff') => { ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(txt, x, y); ctx.fillStyle = col; ctx.fillText(txt, x, y); };
+        // the meteor clusters still free («Create a Planet»: the author couldn't find them) — a little heap of
+        // rocks each; the nearest one ringed, with its distance
+        let nearC = null;
+        for (const c of this.planets.clusters) {
+            if (c.used) continue;
+            planetPosition(c, t, _p);
+            const d = Math.hypot(_p.x - this.P.x, _p.y - this.P.y, _p.z - this.P.z);
+            const [x, y] = toMap(_p.x, _p.z);
+            ctx.fillStyle = '#d9a066';
+            for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x + (k % 2 ? 2.2 : -2), y + (k < 2 ? -1.6 : 1.8), k ? 1.4 : 1.8, 0, Math.PI * 2); ctx.fill(); }
+            if (!nearC || d < nearC.d) nearC = { d, x, y };
+        }
+        if (nearC) {
+            ctx.strokeStyle = 'rgba(255,190,120,0.95)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(nearC.x, nearC.y, 7, 0, Math.PI * 2); ctx.stroke();
+            label(`☄️ ${dist(nearC.d)}`, nearC.x, nearC.y + 17, '#ffc98a');
+        }
         let earthAt = null;
         for (const def of this.planets.list) {
             if (def.kind === 'star' || def.parent) continue;
