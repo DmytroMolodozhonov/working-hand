@@ -25,22 +25,37 @@ import { ZOMBIE_GROUND_OFFSET } from '../entities/Zombie.js';
 export const ZSPAWN = {
     EVERY: 6, // s between the host's checks
     CAVE_NEAR: 60, // m: a cave system this near a player — he is «at a cave»
-    CAVE_CHANCE: 0.3, // a check brings a zombie in the cave's dark
-    NIGHT_CHANCE: 0.08, // a check brings one on the open ground at night
-    DARK: 0.2, // a place this dark or darker (light 0…1)
-    NIGHT_DIM: 0.85, // how much the night takes off the daylight
+    CAVE_CHANCE: 0.12, // a check brings a zombie in the cave's dark (the author: not so often)
+    NIGHT_CHANCE: 0.04, // a check brings one on the open ground at night (by day on the open ground: never)
+    DARK: 0.12, // a place this dark or darker (light 0…1): real darkness — ~10 blocks into a cave by day, or the night
+    // (a tree's crown, a house's eaves, a cliff's side give only a light daytime shade: no zombie comes out there)
+    SUN: 0.45, // by day a zombie standing in light this bright (the open sky, a tree's shade) burns
+    NIGHT_DIM: 0.92, // how much the night takes off the daylight
     MIN_D: 20, // m: never nearer a player
     MAX_D: 55, // m: and not farther (a cave: along its tunnels)
     NIGHT_D: [32, 60], // m out on the open ground
     LIGHT_R: 14, // m round a light: no zombie comes out there
-    NEAR: 80, NEAR_CAP: 5, // zombies of the dark round a player
-    CAP: 14, // and in the whole world
+    NEAR: 80, NEAR_CAP: 3, // zombies of the dark round a player
+    CAP: 10, // and in the whole world
     FORGET: 150, // m from every player: back into the dark
 };
 
 /** How lit a place is (0 dark … 1 broad day): the daylight reaching it, dimmed by the night. */
 export function lightLevel(sky, night) {
     return Math.max(0, Math.min(1, sky)) * (1 - ZSPAWN.NIGHT_DIM * Math.max(0, Math.min(1, night)));
+}
+
+/**
+ * (host) Is a zombie's body (feet at y) in the sunlight now? By day under the open sky — a tree's crown, a light
+ * shade too — yes; in a cave, under a roof, at night, in «Хардкор»'s eternal night — no. Then it smokes and burns
+ * down (Game._zombieSun): zombies are creatures of the dark; they come out of it, and the day drives them back.
+ */
+export function inSunlight(g, x, y, z) {
+    const night = g.zombieSpawn ? g.zombieSpawn.night() : 0;
+    if (night > 0.5) return false;
+    const t = g.terrain?.data;
+    if (!t?.skyAt) return false;
+    return lightLevel(t.skyAt(x, y + 1, z), night) > ZSPAWN.SUN;
 }
 
 /** Is a point lit by one of the lights ([{x, y, z, r?}])? */

@@ -749,8 +749,9 @@ export class NetSync {
         this.net.send({ t: 'wspawn', s: weapon.serialize(), hover: [weapon.hover.base.x, weapon.hover.base.y, weapon.hover.base.z] });
     }
 
-    bite(playerId) {
-        if (this.net.isHost) this.net.sendTo(playerId, { t: 'bite', dmg: 1 });
+    /** A zombie's blow landed on another player (the host saw it): that player's computer takes it (Game.zombieHitsMe). */
+    bite(playerId, dir = null) {
+        if (this.net.isHost) this.net.sendTo(playerId, { t: 'bite', dx: dir ? Math.round(dir.x * 100) / 100 : 0, dz: dir ? Math.round(dir.z * 100) / 100 : 0 });
     }
 
     victory(byId) {
@@ -1077,7 +1078,7 @@ export class NetSync {
                 if (r) { r.setDead(false); r.hp = null; g.hud.notify?.(`✨ ${r.name} возродился`); }
                 break;
             }
-            case 'bite': g.damageLocalPlayer(m.dmg || 1); break;
+            case 'bite': if (this.net.isHost) break; g.zombieHitsMe({ x: +m.dx || 0, z: +m.dz || 0 }); break;
             case 'achc': if (!this.net.isHost && typeof m.k === 'string') g.achievements?.onCredit(m.k); break; // (an achievement: the host saw me take part)
             case 'ach': if (m.by !== this.me) g.achievements?.onNet(m, m.by); break;
             case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm }); break; // (mana: my kill, the host decided)

@@ -37,7 +37,25 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _c = new THREE.Color();
 
-export const ZOMBIE_GROUND_OFFSET = 1.0; // original y=0.5 with ground at -0.5
+export const ZOMBIE_GROUND_OFFSET = 1.0; // the origin, 1 m over the ground under its feet
+/**
+ * How a zombie walks and strikes (the author: «slow, stubborn; it comes up close, turns to you and hits»).
+ * Its face (the red eyes, the arms held out) looks along its local +Z: yaw = atan2(dx, dz).
+ */
+export const ZOMBIE = {
+    SPEED: 2.1, // m/s: a slow trudge (a hero walks 2.5, runs 9.75 — walking away it falls behind)
+    STOP: 1.35, // m between its middle and the target's: it stands here, its hands on you
+    REACH: 2.0, // m: as far as its blow reaches (the arms 1.2 m out in front, the target's body)
+    FACE: 0.35, // rad: turned at least this close to the target — only then it strikes
+    TURN: 4.0, // rad/s: how fast it turns round
+    STRIDE: 1.6, // m walked in one full cycle of the legs (two steps)
+    SWING: 0.75, // s: one blow — the arms go up, come down
+    HIT_AT: 0.62, // the part of the swing when the arms come down on the target
+    EVERY: 1.3, // s between two blows
+};
+const HIP = 0.3, LEG_H = 0.6; // (the legs hang from the hips, inside the body: the feet come down to the ground)
+const SHOULDER_Y = 1.4, SHOULDER_Z = -0.1, ARM_H = 0.6;
+const wrapA = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 export const DUMMY_HEALTH = 60; // the training dummy (a plain zombie has 5): a head cut (999) still ends it
 export const CORPSE_LIFETIME = 25;
 
@@ -58,7 +76,7 @@ export class Zombie {
         this.sizeK = 1; // (the training dummy is bigger: setDummy)
         this.gOff = ZOMBIE_GROUND_OFFSET; // origin height over the feet's ground
 
-        this.baseSpeed = 3.5;
+        this.baseSpeed = ZOMBIE.SPEED;
         this.speed = this.baseSpeed;
         this.health = 5;
         this.isDead = false;
@@ -84,6 +102,9 @@ export class Zombie {
         this.group.add(this.iceCrystals);
         this.lastAttackTime = 0;
         this.isAttacking = false;
+        this.struck = false; // (host) the arms have just come down: Game sees whether they reached somebody
+        this.yaw = 0; // where it faces (its rotation.y)
+        this.burning = 0; // s left smoking in the sunlight (shown on every computer)
         this.attackAnimProgress = 0;
         this.animVariation = Math.random() * 10;
         this.lastDistSq = Infinity;
@@ -142,6 +163,61 @@ export class Zombie {
         this.rightLeg.position.set(0.3, 0, 0);
         this.group.add(this.rightLeg);
         this.bodyParts.push(this.rightLeg);
+        this._setLegs(0);
+        this._setArm(this.leftArm, -Math.PI / 2);
+        this._setArm(this.rightArm, -Math.PI / 2);
+    }
+
+    /**
+     * A leg turned at its hip (not round its middle — that slid the feet like oars, «it floats»):
+     * its top stays in the body, its foot comes down to the ground (local y −0.9 → 1 m under the origin).
+     */
+    _setLeg(leg, a) {
+        leg.rotation.x = a;
+        leg.position.y = HIP - LEG_H * Math.cos(a);
+        leg.position.z = -LEG_H * Math.sin(a);
+    }
+
+    _setLegs(swing) { this._setLeg(this.leftLeg, swing); this._setLeg(this.rightLeg, -swing); }
+
+    /** An arm turned at its shoulder (−π/2: held straight out in front). */
+    _setArm(arm, a) {
+        arm.rotation.x = a;
+        arm.position.y = SHOULDER_Y - ARM_H * Math.cos(a);
+        arm.position.z = SHOULDER_Z - ARM_H * Math.sin(a);
+    }
+
+    /** Legs and arms back to standing, slowly (k: what is left of the swing this frame). */
+    _relax(k) {
+        this._setLegs(this.leftLeg.rotation.x * k);
+        if (!this.isAttacking) {
+            this._setArm(this.leftArm, -Math.PI / 2 + (this.leftArm.rotation.x + Math.PI / 2) * k);
+            this._setArm(this.rightArm, -Math.PI / 2 + (this.rightArm.rotation.x + Math.PI / 2) * k);
+        }
+        this.body.rotation.z *= k; this.head.rotation.z *= k;
+    }
+
+    /** Turns towards a yaw, at most TURN rad/s. → how far it still is from it (rad). */
+    turnTo(yaw, dt) {
+        this.yaw = this.group.rotation.y; // (what others turned it to — a blow, «Левиоса» — counts too)
+        const d = wrapA(yaw - this.yaw), m = ZOMBIE.TURN * dt;
+        this.yaw = wrapA(this.yaw + Math.max(-m, Math.min(m, d)));
+        this.group.rotation.y = this.yaw;
+        return Math.abs(wrapA(yaw - this.yaw));
+    }
+
+    /** Can its blow reach a body at p (horizontally within REACH, not far above/below, its face turned to it)? */
+    reaches(p, extra = 0) {
+        const pos = this.group.position;
+        const feet = pos.y - this.gOff;
+        if (p.y < feet - 1.2 || p.y > feet + 3.2) return false; // (p: the target's middle/eyes/feet — a body standing by it)
+        return Math.hypot(p.x - pos.x, p.z - pos.z) < ZOMBIE.REACH * this.sizeK + extra && this.faces(p);
+    }
+
+    /** Is it turned to a point (its face to it, within FACE)? */
+    faces(p) {
+        const pos = this.group.position;
+        return Math.abs(wrapA(Math.atan2(p.x - pos.x, p.z - pos.z) - this.yaw)) < ZOMBIE.FACE;
     }
 
     setSleeping(sleeping) { this.isSleeping = sleeping; }
@@ -255,10 +331,7 @@ export class Zombie {
             } else {
                 this.head.rotation.y += dt * 15;
                 this.head.rotation.z = Math.sin(performance.now() * 0.01) * 0.3;
-                this.leftLeg.rotation.x *= decay(0.9);
-                this.rightLeg.rotation.x *= decay(0.9);
-                this.leftArm.rotation.x *= decay(0.9);
-                this.rightArm.rotation.x *= decay(0.9);
+                this._relax(decay(0.9));
                 pos.addScaledVector(this.velocity, dt);
                 this.velocity.multiplyScalar(decay(0.9));
                 this._settleY(dt, ground);
@@ -285,21 +358,31 @@ export class Zombie {
             _v.subVectors(targetPos, pos);
             _v.y = 0;
             const distance = _v.length();
+            const stop = ZOMBIE.STOP * this.sizeK;
             if (Number.isFinite(distance)) {
-                if (distance > 1.8) {
+                const toT = Math.atan2(_v.x, _v.z);
+                let walked = 0;
+                if (distance > stop && !this.isAttacking) {
                     if (distance > 0.1) _v.divideScalar(distance);
+                    const sp = this.speed * slowFactor(this);
                     // round the others on its way (zombies, people, beasts — Crowd.js; the host's game sets it)
-                    const st = this.steer ? this.steer(this, pos, _v.x, _v.z, distance - 1.8, this.speed * slowFactor(this), dt) : _v;
-                    if (st) { _v.x = st.x; _v.z = st.z; pos.addScaledVector(_v, this.speed * slowFactor(this) * dt); }
-                    this.group.lookAt(targetPos.x, pos.y, targetPos.z);
+                    const st = this.steer ? this.steer(this, pos, _v.x, _v.z, distance - stop, sp, dt) : _v;
+                    if (st) {
+                        // it faces where it goes, and turns before it walks: never sideways, never backwards
+                        const off = this.turnTo(Math.atan2(st.x, st.z), dt);
+                        const go = sp * dt * Math.max(0, Math.cos(off)) * (off < 0.6 ? 1 : 0);
+                        const step = Math.min(go, Math.max(0, distance - stop));
+                        pos.x += st.x * step; pos.z += st.z * step;
+                        walked = step;
+                    } else this.turnTo(toT, dt); // (waiting for room: it looks at its prey)
                     this.group.rotation.x = 0;
                     this.group.rotation.z = 0;
-                    this.walkCycle += dt * 10;
+                } else this.turnTo(toT, dt); // (close: it turns its face to the target)
+                if (walked > 1e-4) {
+                    // the legs step with the ground it covers (no sliding)
+                    this.walkCycle += (walked / ZOMBIE.STRIDE) * Math.PI * 2;
                     this._animateWalk();
-                } else {
-                    this.leftLeg.rotation.x *= decay(0.9);
-                    this.rightLeg.rotation.x *= decay(0.9);
-                }
+                } else this._relax(decay(0.85));
             }
         }
 
@@ -311,7 +394,8 @@ export class Zombie {
             else if (!close && this.wasHeadHiddenByCamera) { this.head.visible = !(this.limbMask & 1); this.wasHeadHiddenByCamera = false; }
         }
 
-        if (this.isAttacking) this._animateAttack(dt, targetPos);
+        if (this.isAttacking) this._animateAttack(dt);
+        if (this.burning > 0) this._smoke(dt);
     }
 
     /** Makes this zombie the training dummy: 25% bigger — model, body parts, hits and collision all follow the one scale. */
@@ -323,8 +407,8 @@ export class Zombie {
         // nothing left to cut); a blade still takes its arms, legs and head, the head ends it
         this.health = DUMMY_HEALTH;
         this.group.scale.set(1.25, 1.12 * 1.25, 1.25);
-        // the feet stay where they were relative to the ground: the origin rises with the legs' length
-        this.gOff = ZOMBIE_GROUND_OFFSET - 0.6 * 1.12 + 0.6 * 1.12 * 1.25;
+        // the feet stay on the ground: the origin rises with the legs' length (the feet: local y −0.9)
+        this.gOff = ZOMBIE_GROUND_OFFSET + 0.9 * 1.12 * 0.25;
         this.group.position.y += this.gOff - ZOMBIE_GROUND_OFFSET;
     }
 
@@ -332,9 +416,9 @@ export class Zombie {
     _sway() {
         const t = performance.now() * 0.001 + this.animVariation;
         this.head.rotation.y = Math.sin(t * 0.7) * 0.12;
-        this.leftArm.rotation.x = -Math.PI / 2 + Math.sin(t * 0.9) * 0.06;
-        this.rightArm.rotation.x = -Math.PI / 2 + Math.cos(t * 0.8) * 0.06;
-        this.leftLeg.rotation.x *= 0.9; this.rightLeg.rotation.x *= 0.9;
+        this._setArm(this.leftArm, -Math.PI / 2 + Math.sin(t * 0.9) * 0.06);
+        this._setArm(this.rightArm, -Math.PI / 2 + Math.cos(t * 0.8) * 0.06);
+        this._setLegs(this.leftLeg.rotation.x * 0.9);
     }
 
     /** Stand on the ground, or fly/fall with gravity when thrown or stepping off a ledge. */
@@ -350,33 +434,56 @@ export class Zombie {
         }
     }
 
+    /** A heavy, swaying trudge: the legs from the hips, the body rolling from foot to foot, the arms held out. */
     _animateWalk() {
-        const swing = Math.sin(this.walkCycle + this.animVariation) * 0.5;
-        this.leftLeg.rotation.x = swing;
-        this.rightLeg.rotation.x = -swing;
-        this.leftArm.rotation.x = -Math.PI / 2 + Math.sin(this.walkCycle * 0.8) * 0.2;
-        this.rightArm.rotation.x = -Math.PI / 2 + Math.cos(this.walkCycle * 0.8) * 0.2;
-        this.head.rotation.y = Math.sin(this.walkCycle * 0.5) * 0.1;
+        const c = this.walkCycle + this.animVariation;
+        this._setLegs(Math.sin(c) * 0.45);
+        this.body.rotation.z = Math.sin(c) * 0.05;
+        this.head.rotation.z = Math.sin(c) * 0.08;
+        this.head.rotation.y = Math.sin(c * 0.5) * 0.1;
+        if (!this.isAttacking) {
+            this._setArm(this.leftArm, -Math.PI / 2 + Math.sin(c * 0.8) * 0.12);
+            this._setArm(this.rightArm, -Math.PI / 2 + Math.cos(c * 0.8) * 0.12);
+        }
     }
 
-    _animateAttack(dt, targetPos) {
-        this.attackAnimProgress += dt * 5;
-        if (this.attackAnimProgress > 1.0) {
+    /** The blow: both arms go up over the head, then come down on the target (struck: the moment they land). */
+    _animateAttack(dt) {
+        const p0 = this.attackAnimProgress;
+        const p = this.attackAnimProgress = p0 + dt / ZOMBIE.SWING;
+        if (p0 < ZOMBIE.HIT_AT && p >= ZOMBIE.HIT_AT) this.struck = true;
+        let a; // the arms' angle: −π/2 straight out; less — up; more — down
+        if (p < ZOMBIE.HIT_AT) a = -Math.PI / 2 - 1.0 * Math.sin((p / ZOMBIE.HIT_AT) * Math.PI / 2);
+        else { const q = (p - ZOMBIE.HIT_AT) / (1 - ZOMBIE.HIT_AT); a = -Math.PI / 2 - 1.0 + 1.5 * Math.min(1, q * 2.5) - 0.5 * Math.max(0, q - 0.4) / 0.6; }
+        const lean = p < ZOMBIE.HIT_AT ? -0.12 * (p / ZOMBIE.HIT_AT) : 0.28 * Math.sin(Math.min(1, (p - ZOMBIE.HIT_AT) / (1 - ZOMBIE.HIT_AT)) * Math.PI);
+        this.body.rotation.x = lean;
+        this.head.rotation.x = lean * 1.4;
+        this._setArm(this.leftArm, a);
+        this._setArm(this.rightArm, a + 0.08);
+        if (p >= 1) {
             this.isAttacking = false;
             this.attackAnimProgress = 0;
+            this.body.rotation.x = 0;
+            this.head.rotation.x = 0;
         }
-        const lunge = Math.sin(this.attackAnimProgress * Math.PI);
-        const close = targetPos && this.group.position.distanceTo(targetPos) < 1.5;
-        this.group.translateZ(lunge * (close ? 0.05 : 0.15));
-        this.head.rotation.x = lunge * 0.5;
-        this.leftArm.rotation.x = -Math.PI / 2 - lunge;
-        this.rightArm.rotation.x = -Math.PI / 2 - lunge;
     }
 
     triggerAttack() {
         if (this.isAttacking) return;
         this.isAttacking = true;
         this.attackAnimProgress = 0;
+        this.struck = false;
+    }
+
+    /** Smoke and sparks off a zombie burning in the sunlight. */
+    _smoke(dt) {
+        this.burning -= dt;
+        const fx = this.ctx.fx;
+        if (!fx || Math.random() > dt * 14) return;
+        const p = this.group.position;
+        _v2.set(p.x + (Math.random() - 0.5) * 0.9, p.y + Math.random() * 2.2 * this.sizeK, p.z + (Math.random() - 0.5) * 0.9);
+        _v.set((Math.random() - 0.5) * 0.4, 1.2 + Math.random(), (Math.random() - 0.5) * 0.4);
+        fx.spark(_v2, Math.random() < 0.35 ? 0xff7a1a : 0x555555, 0.16, _v, 0.8);
     }
 
     /**
@@ -579,6 +686,7 @@ export class Zombie {
         if (!this.group.visible) flags |= 32;
         if (this.isThrall) flags |= 64;
         if (this.dummy) flags |= 128;
+        if (this.burning > 0) flags |= 256;
         return [this.id, r(p.x), r(p.y), r(p.z), r(this.group.rotation.y), flags, this.limbMask, r(this.freezeProgress), r(this.group.rotation.x)];
     }
 
@@ -593,6 +701,7 @@ export class Zombie {
         if ((flags & 32) && this.group.visible) this.group.visible = false;
         this.setThrall(!!(flags & 64));
         if ((flags & 128) && !this.dummy) this.setDummy();
+        this.burning = flags & 256 ? 0.5 : 0;
         const frozen = !!(flags & 2);
         if (frozen && !this.isFrozen) { this.freezeProgress = 1; this.freeze(); this._restoreColor(); }
         else if (!frozen && this.isFrozen) this.unfreeze();
@@ -614,18 +723,21 @@ export class Zombie {
         if (!this.netTarget) return;
         const pos = this.group.position;
         const k = Math.min(1, dt * 12);
+        const x0 = pos.x, z0 = pos.z;
         const moved = Math.hypot(this.netTarget.x - pos.x, this.netTarget.z - pos.z);
         if (moved > 8) pos.copy(this.netTarget); else pos.lerp(this.netTarget, k);
-        let dRot = this.netRotY - this.group.rotation.y;
-        while (dRot > Math.PI) dRot -= Math.PI * 2;
-        while (dRot < -Math.PI) dRot += Math.PI * 2;
+        const dRot = wrapA(this.netRotY - this.group.rotation.y);
         this.group.rotation.y += dRot * k;
+        this.yaw = this.group.rotation.y;
         this.group.rotation.x += (this.netRotX - this.group.rotation.x) * k;
+        if (this.burning > 0) this._smoke(dt);
         if (this.isDead || this.isFrozen) return;
         if (this.isStunned) { this.head.rotation.y += dt * 15; return; }
+        const step = moved > 8 ? 0 : Math.hypot(pos.x - x0, pos.z - z0);
         if (this.dummy && moved < 0.02) this._sway();
-        else if (moved > 0.02) { this.walkCycle += dt * 10; this._animateWalk(); }
-        if (this.isAttacking) this._animateAttack(dt, null);
+        else if (step > 1e-3 && !this.isAttacking) { this.walkCycle += (step / ZOMBIE.STRIDE) * Math.PI * 2; this._animateWalk(); } // (the same steps as on the host)
+        else this._relax(Math.pow(0.85, dt * 60));
+        if (this.isAttacking) { this._animateAttack(dt); this.struck = false; }
         if (camera) {
             this.head.getWorldPosition(_v2);
             const close = _v2.distanceTo(camera.position) < 0.7;

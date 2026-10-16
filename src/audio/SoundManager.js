@@ -38,6 +38,9 @@ import { SPELL_GEN, SPELL_SOUND, HELD_SOUND, SPELL_SR } from './SpellMusic.js';
 
 function finish(gen) { let r; do { r = gen.next(); } while (!r.done); return r.value; }
 
+/** m: a zombie this near is heard growling (Звук зомби.wav, from its start, from where it stands). */
+export const ZOMBIE_HEAR = 8;
+
 export class SoundManager {
     constructor(camera) {
         this.camera = camera;
@@ -288,7 +291,9 @@ export class SoundManager {
             if (z.isDead || z.dummy) continue; // (the training dummy is silent: no growls, no battle music)
             const dist = playerPos.distanceTo(z.group.position);
             if (dist < minDist) minDist = dist;
-            if (dist < 15) candidates.push({ zombie: z, dist });
+            // (the author: a zombie coming up is heard ~8 m off — it starts growling there; it keeps on to 10 m, so it doesn't flicker)
+            const playing = this.ambientPool.some((sl) => sl.activeObject === z);
+            if (dist < (playing ? ZOMBIE_HEAR + 2 : ZOMBIE_HEAR)) candidates.push({ zombie: z, dist });
         }
         this.updateMusic(dt, minDist);
         if (!this.ambientPool.length) return;

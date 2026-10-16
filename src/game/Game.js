@@ -8,11 +8,12 @@
 
 import { deepAt } from './CreatureSwim.js';
 import { crowdStep } from './CrowdSources.js';
+import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { VoiceGate } from './VoiceGate.js';
 import { VoxelWorld, MAP_CELL } from '../world/World.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../entities/Character.js';
-import { Zombie } from '../entities/Zombie.js';
+import { Zombie, ZOMBIE } from '../entities/Zombie.js';
 import { Chest } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
@@ -116,7 +117,7 @@ import { HandBlocks } from './HandBlocks.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
 import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
-import { ZombieSpawn, worldLights, litAt } from './ZombieSpawn.js';
+import { ZombieSpawn, worldLights, litAt, inSunlight } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
 import { IceMagic } from './IceMagic.js';
@@ -516,7 +517,7 @@ export class Game {
             this.character.group.position.z = Math.sin(a) * d;
         } else {
             if (this.authority) {
-                const n = config.mode === 'creative' ? (config.zombieCount || 0) : 1;
+                const n = config.mode === 'creative' ? 0 : 1; // (Творческий: its zombies come out of the dark — _spawnWaves)
                 for (let i = 0; i < n; i++) this.spawnZombieWave();
             }
             // An axe and a sword floating by magic over two pedestals (same places as the old tables)
@@ -624,7 +625,7 @@ export class Game {
      * thrown in, they don't breathe and don't float — they trudge along the bottom, slowly (CreatureSwim.js).
      */
     _zombieStep(me, p, ux, uz, d, speed, dt) {
-        const st = crowdStep(this, me, p, ux, uz, d, { r: 0.5, speed, dt });
+        const st = crowdStep(this, me, p, ux, uz, d, { r: BODY_R.zombie * (me.sizeK || 1), speed, dt });
         if (!st) return st;
         const t = this.terrain?.data;
         if (!t) return st;
@@ -669,6 +670,32 @@ export class Game {
         }
         const y = this.config.mode === 'survival' || !this.terrain ? 0.5 : this.terrain.surfaceY(x, z) + 0.5;
         return this._createZombie(new THREE.Vector3(x, y, z));
+    }
+
+    /**
+     * A zombie's blow reached me: hurt (2 of the 20 HP of «Выживание»; 1 in «Хардкор» and the maps;
+     * nothing in «Творческий») and shoved a little along the blow. (On a guest: the host's 'bite'.)
+     */
+    zombieHitsMe(dir) {
+        if (this.isDeadLocal || this.combat?.dead) return;
+        if (this.combat?.enabled) this.combat.damage(2, null, 'zombie');
+        else this.damageLocalPlayer(1);
+        if (dir && this.knockback && !this.flight?.active) { this.knockback.x += dir.x * 3; this.knockback.z += dir.z * 3; }
+    }
+
+    /** (host) By day in the sunlight a zombie smokes and burns: −1 health every 1.5 s, then ash. */
+    _zombieSun(z, dt) {
+        if (z.dummy || z.isThrall || this.config.map || z.isFrozen) { z.burning = 0; return; }
+        z._sunT = (z._sunT || 0) - dt;
+        if (z._sunT <= 0) { z._sunT = 0.5; z._inSun = inSunlight(this, z.group.position.x, z.group.position.y - z.gOff, z.group.position.z); }
+        if (!z._inSun) { z._burnT = 0; return; }
+        z.burning = 0.6;
+        z._burnT = (z._burnT || 0) + dt;
+        if (z._burnT < 1.5) return;
+        z._burnT = 0;
+        z.health -= 1;
+        z.hitFlashTimer = 0.15; z._setColor(0xff5522);
+        if (z.health <= 0) this.sandZombie(z); // (burnt down: a puff of ash)
     }
 
     removeZombie(z) {
@@ -3331,8 +3358,6 @@ export class Game {
     _updateZombies(dt) {
         const ch = this.character;
         const charPos = ch.group.position;
-        const survival = this.config.mode === 'survival' || !!this.config.map;
-
         for (let i = this.zombies.length - 1; i >= 0; i--) {
             const z = this.zombies[i];
             if (!this.authority) {
@@ -3370,40 +3395,32 @@ export class Game {
             }
 
 
-            // Zombie against zombie («Брейнрот»: the servant and the others fight)
-            if (target && target.zombie && target.distSq < 5.3) {
-                const now = Date.now();
-                if (now - (z.lastAttackTime || 0) > 900) {
-                    z.lastAttackTime = now;
-                    z.triggerAttack();
-                    const dir = _v1.subVectors(target.zombie.group.position, z.group.position).setY(0).normalize().clone();
-                    target.zombie.damageCooldown = 0;
-                    this.damageZombie(target.zombie, z.isThrall ? 2 : 1, false, dir, z.isThrall ? z.thrallOwner : null);
-                }
-                continue;
-            }
-            // a servant zombie's blow at another creature (an animal, a villager, a living tree, a wizard)
-            if (target && target.foe && target.distSq < 5.3) {
-                const now = Date.now();
-                if (now - (z.lastAttackTime || 0) > 900) {
-                    z.lastAttackTime = now;
-                    z.triggerAttack();
-                    this.servants.damage(target.foe, 2, _v1.subVectors(target.pos, z.group.position).setY(0).normalize().clone(), z.thrallOwner);
-                }
-                continue;
-            }
-            if (target && (target.zombie || target.follow || target.foe)) continue;
+            // in the sunlight by day: it smokes and burns down to ash (ZombieSpawn.inSunlight)
+            this._zombieSun(z, dt);
+            if (z.isDead) continue;
 
-            // Zombie bites (survival / maps)
-            if (survival && target && target.distSq < 4.0) {
-                const now = Date.now();
-                if (now - (z.lastAttackTime || 0) > 1000) {
-                    z.lastAttackTime = now;
-                    z.triggerAttack();
-                    if (target.id === this.localId) this.damageLocalPlayer(1);
-                    else if (this.sync) this.sync.bite(target.id);
-                }
+            // Its blow (ZOMBIE): it comes up close, turns its face to the target, raises its arms and brings
+            // them down — the blow lands when the arms come down, if the target is still there (step back — missed).
+            // Whom: a servant of «Брейнрот» — the zombie / creature its master set it on; the others — the
+            // players (and a servant zombie close by). Bites hurt in «Выживание», «Хардкор» and the maps;
+            // in «Творческий» nobody is hurt (damageLocalPlayer), but it still swings.
+            if (!target || target.follow) continue;
+            const reach = target.zombie || target.foe ? 0.3 : 0;
+            z.attackCd = Math.max(0, (z.attackCd || 0) - dt);
+            if (!z.isAttacking && z.attackCd <= 0 && z.reaches(target.pos, reach - 0.3)) { // (it starts the swing well in reach)
+                z.attackCd = ZOMBIE.EVERY;
+                z.triggerAttack();
             }
+            if (!z.struck) continue;
+            z.struck = false;
+            if (!z.reaches(target.pos, reach + 0.3)) continue; // (it stepped back in time)
+            const dir = _v1.subVectors(target.pos, z.group.position).setY(0).normalize().clone();
+            if (target.zombie) {
+                target.zombie.damageCooldown = 0;
+                this.damageZombie(target.zombie, z.isThrall ? 2 : 1, false, dir, z.isThrall ? z.thrallOwner : null);
+            } else if (target.foe) this.servants.damage(target.foe, 2, dir, z.thrallOwner);
+            else if (target.id === this.localId) this.zombieHitsMe(dir);
+            else if (this.sync) this.sync.bite(target.id, dir);
         }
 
         // Zombie–zombie separation (throttled)
@@ -3436,7 +3453,9 @@ export class Game {
             const desired = this.config.zombieCount || 0;
             let live = 0;
             for (const z of this.zombies) if (!z.isDead && !z.dummy) live++;
-            if (live < desired && Math.random() < 0.02) this.spawnZombieWave();
+            // (the slider: how many there may be — but they too come only out of the dark: a cave, the night;
+            // by day on the open ground none comes, as in «Выживание» — ZombieSpawn.trySpawn)
+            if (live < desired && Math.random() < 0.02 && !this.isDeadLocal) this.zombieSpawn?.trySpawn(this.character.group.position, undefined, undefined, true);
         } else if (this.config.mode === 'survival') {
             let live = 0;
             for (const z of this.zombies) if (!z.isDead) live++;
