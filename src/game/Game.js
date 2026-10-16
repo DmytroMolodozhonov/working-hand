@@ -144,6 +144,7 @@ const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.S
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _castSnd = new THREE.Vector3(); // (where my spell sounds from: SoundManager.spellCast)
 const _q = new THREE.Quaternion();
 
 export class Game {
@@ -1135,6 +1136,13 @@ export class Game {
         this._manaLater = false;
         const name = this._castLocalSpell(text, isFinal);
         if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
+        // its sound (SpellMusic.SPELL_SOUND: a tune for the great ones, a short effect for the others) — the others hear it too
+        if (name && this.sound?.spellHasCastSound?.(name)) {
+            const at = _castSnd.copy(this.character.group.position);
+            at.y += 1.4;
+            this.sound.spellCast(name, at);
+            this.sync?.castSound?.(name, at);
+        }
         // (how late after the word was said the spell came — the journal, zns-perf.log: «голос»)
         const vm = this._voiceMeta;
         if (name && vm && Number.isFinite(vm.to)) {

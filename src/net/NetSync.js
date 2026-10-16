@@ -408,6 +408,11 @@ export class NetSync {
         this.net.send({ t: 'say', by: this.me, name }, true);
     }
 
+    /** My spell worked: its sound (SoundManager.spellCast) at my place — the others near hear it. */
+    castSound(name, p) {
+        this.net.send({ t: 'csnd', by: this.me, n: name, p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
+    }
+
     spell(name, origin, dir, side) {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
     }
@@ -852,6 +857,7 @@ export class NetSync {
                 break;
             case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
             case 'ddat': if (m.by !== this.me && Array.isArray(m.p)) g.drawdown?.onNet(m.by, vec(m.p)); break;
+            case 'csnd': if (m.by !== this.me && typeof m.n === 'string' && Array.isArray(m.p)) g.sound?.spellCast?.(m.n, vec(m.p)); break;
             case 'say': if (m.by !== this.me && typeof m.name === 'string') g.voiceGate?.noteRemote(m.name, performance.now()); break;
             case 'draw': if (m.by !== this.me) g.wandMagic?.remoteDraw(m.by, m.c, m.p); break;
             case 'spell': {

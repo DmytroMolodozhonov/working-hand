@@ -125,7 +125,11 @@ export class Concentration {
         this._wasDown = down;
         const why = (g.isDeadLocal || c?.dead) ? 'dead' : c?.stunned ? 'stun' : c?.frozen ? 'ice' : fell ? 'fall' : null;
         if (why) this.lose(why);
-        this._mark(this.held());
+        const held = this.held();
+        this._mark(held);
+        // the quiet loop of what I hold and its end; the wind of my flight (none in space: no air) — SoundManager.focusLoop
+        const f = g.flight;
+        g.sound?.focusLoop?.(held, f?.active && !f.hovering && g.space?.realm !== 'space' ? Math.min(1, (f.speed || 0) / 14) : 0);
     }
 
     /** The concentration is lost: everything I hold stops now. True if anything did. */

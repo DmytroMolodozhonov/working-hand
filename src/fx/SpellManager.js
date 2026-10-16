@@ -355,6 +355,13 @@ export class SpellManager {
         this.soundManager = sm;
     }
 
+    /** A spell's own effect (SpellMusic: 'fxWind'…) at `pos` — heard near it; not made yet: the old sound `fallback`. */
+    _fx(key, pos, rate = 1, fallback = 'playWhoosh') {
+        const sm = this.soundManager;
+        if (!sm) return;
+        try { if (!sm.playSpellFx?.(key, pos, 1, rate) && fallback) this._sound(fallback); } catch (e) { console.warn('Sound error', e); }
+    }
+
     _sound(fn, ...args) {
         if (!this.soundManager || !this.soundManager[fn]) return;
         try { this.soundManager[fn](...args); } catch (e) { console.warn('Sound error', e); }
@@ -854,7 +861,7 @@ export class SpellManager {
      * wizard's head towards the zombie (the length of `direction` = distance).
      */
     castBrainrot(origin, direction) {
-        this._sound('playSapira');
+        this._fx('fxBrainrot', origin, 1, 'playSapira');
         const dist = Math.max(2, direction.length());
         const dir = direction.clone().normalize();
         if (!this._ringGeo) this._ringGeo = new THREE.TorusGeometry(1, 0.09, 8, 40);
@@ -902,7 +909,7 @@ export class SpellManager {
      * players, loose things. Harmless. «Вайнд Максима» is 3× stronger and reaches further.
      */
     castWind(origin, direction, casterId, power = 1) {
-        this._sound('playWhoosh');
+        this._fx('fxWind', origin, power > 1 ? 0.8 : 1);
         const range = power > 1 ? 24 : 14;
         const cone = 0.65;
         const strength = 13 * power; // m/s at the hand (loose things)
@@ -966,7 +973,7 @@ export class SpellManager {
     castImpulse(name, origin, casterId) {
         const P = IMPULSE[name];
         const max = name === 'WindImpulseMaxima';
-        this._sound('playWhoosh');
+        this._fx('fxWind', origin, max ? 0.7 : 1.2);
         // the visible wave of air: a pale shell and a ring on the ground rushing out, streaks of air
         if (!this._impGeo) { this._impGeo = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true); this._impRing = new THREE.RingGeometry(0.86, 1, 48); }
         const shellMat = new THREE.MeshBasicMaterial({ color: 0xe4f4ff, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -1043,7 +1050,7 @@ export class SpellManager {
     castOvergrown(name, origin, direction, casterId) {
         const power = name === 'OvergrownMaxima' ? 2 : 1;
         const range = overgrownRange(name);
-        this._sound('playWhoosh');
+        this._fx('fxGrow', origin, power > 1 ? 0.8 : 1);
         // a green burst at the hand and a ring-wave rolling out to the target, opening sideways
         for (let i = 0; i < 14 * power; i++) {
             const v = _a.set(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).multiplyScalar(4).addScaledVector(direction, 2);
@@ -1235,6 +1242,7 @@ export class SpellManager {
             return dir.clone().multiplyScalar(max ? 12 : 8).setY(max ? 8 : 6);
         };
         const name = max ? 'WallRiseMaxima' : 'WallRise';
+        this._fx('fxStone', center, max ? 0.85 : 1);
         if (this.auth && this.hooks.creatures) this.hooks.creatures(name, casterId, push);
         else if (this.auth) {
             for (const z of this.zombies) {

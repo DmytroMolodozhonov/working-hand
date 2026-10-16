@@ -56,6 +56,9 @@ import { kindOf } from './CreatureImpact.js';
 import { duelStrength, duelPower } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS } from './ArmorTypes.js';
+
+/** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
+const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor' };
 export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
@@ -684,7 +687,8 @@ export class Duel {
         if (g.sync) g.sync.duelCast(b);
         if (spell === 'IceDuel') { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
         if (isJolt(spell)) { g.sound?.playJolt?.(spell === 'JoltMaxima', false); this.jolt.hit(origin, dir, false); return b; }
-        if (g.sound) g.sound.playSapira?.();
+        // (each charge its own sound — SpellMusic: a red zap, a dark whoosh, a whip crack…; the others: Sapira's)
+        if (g.sound && !g.sound.playSpellFx?.(DUEL_FX[spell], origin)) g.sound.playSapira?.();
         // the spell leaves the hand with a flash
         const col = this.colors(spell, this.me).glow;
         this._burst(origin, col, 18);

@@ -146,18 +146,18 @@ export class Accio {
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 30 м — и скажите «Акцио»';
         }
         if (best.rb) {
-            if (g.sound) g.sound.playWhoosh?.();
+            if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
             if (best.catcher && g.runner.accioToHand?.(best.rb, best.catcher)) return null;
             g.runner.accio(best.rb, best.hand);
             // (a toast: the voice line is taken by «✨ ACCIO» right after)
             if (!best.catcher) g.hud?.toast?.('🪄 Обе руки заняты — бегущая книга упала у ваших ног. Освободите руку, и «Акцио» принесёт её прямо в неё', 4000);
             return null;
         }
-        if (best.body) { g.runner?.accio(best.body, best.hand); if (g.sound) g.sound.playWhoosh?.(); return null; }
+        if (best.body) { g.runner?.accio(best.body, best.hand); if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.()); return null; }
         if (best.board) {
             if (!g.boards.accioStart(best.board)) return '🪄 Эту доску уже кто-то держит';
             this.state = { board: best.board, t: 0 };
-            if (g.sound) g.sound.playWhoosh?.();
+            if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
             if (!free('left') && !free('right')) g.hud?.setVoice?.('🪄 Обе руки заняты — доска ляжет у ваших ног', true);
             return null;
         }
@@ -166,7 +166,7 @@ export class Accio {
             const f = g.crystals.accio(best.mc, best.side);
             if (!f) return '🪄 Этот кристалл уже кто-то взял';
             this.state = { mc: f, side: best.side, t: 0 };
-            if (g.sound) g.sound.playWhoosh?.();
+            if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
             return null;
         }
         if (best.bk) {
@@ -177,7 +177,7 @@ export class Accio {
             bk.fallV = null;
             this.state = { bk, side: best.side, t: 0 };
             for (let i = 0; i < 16; i++) g.fx.spark(bk.model.position, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
-            if (g.sound) g.sound.playWhoosh?.();
+            if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
             return null;
         }
         const w = best.w;
@@ -186,7 +186,7 @@ export class Accio {
         if (g.sync) g.sync._localGrab(w, 'levitate');
         this.state = { w, side: best.side, t: 0 };
         for (let i = 0; i < 16; i++) g.fx.spark(w.position, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
-        if (g.sound) g.sound.playWhoosh?.();
+        if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
         return null;
     }
 
@@ -207,7 +207,7 @@ export class Accio {
     _castItem(L, side) {
         const g = this.game;
         for (let i = 0; i < 16; i++) g.fx.spark(L.model.position, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
-        if (g.sound) g.sound.playWhoosh?.();
+        if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
         if (!g.items.auth) {
             L.asked = true;
             g.sync?.itemTake?.(L.item.uid, side);

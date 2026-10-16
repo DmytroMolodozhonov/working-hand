@@ -80,7 +80,7 @@ export class ArmorSystem {
         this._changed();
         if (!quiet) {
             g.hud?.setVoice?.(`${item.archmage ? '🌟' : slot === 'robe' ? '🧥' : '🪖'} Надето: <b>${armorName(item)}</b>${item.magic ? ' ✨' : ''}`, true);
-            g.sound?.playPickup?.();
+            if (!(performance.now() - (this._clinkAt || -1e9) < 1200)) { this._clinkAt = performance.now(); g.sound?.playSpellFx?.('fxSuitUp'); } // (the plates clinking on: once for a whole «Suit Up»)
             if (item.archmage) this._suitGlow();
         }
         return true;

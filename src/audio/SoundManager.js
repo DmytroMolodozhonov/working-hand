@@ -33,6 +33,7 @@ const FILES = [
 
 /** Runs a sound-making generator to its end (when it is needed now). */
 import { SPACE_SOUNDS } from './SpaceSounds.js';
+import { SPELL_GEN, SPELL_SOUND, HELD_SOUND, SPELL_SR } from './SpellMusic.js';
 
 function finish(gen) { let r; do { r = gen.next(); } while (!r.done); return r.value; }
 
@@ -104,6 +105,7 @@ export class SoundManager {
         for (let i = 0; i < 6; i++) this.posVoices.push(new THREE.PositionalAudio(this.audioListener));
         if (this.scene) this.setScene(this.scene);
         this.loaded = true;
+        this.prepareSpellMusic(); // (starts the worker now: ready long before the loading screen ends)
         this.playAmbientMusic();
         // (the tune of «Create a House» and the other long sounds: made on the loading screen — warmAll)
     }
@@ -122,6 +124,10 @@ export class SoundManager {
         while (!this.prepareCircleAttack()) await pause();
         onProgress?.(0.85);
         while (!this.prepareInspirius()) await pause();
+        onProgress?.(0.9);
+        // (the spells' tunes and effects: in a worker since loadSounds — SpellMusic.js; not ready yet — at most
+        // a moment more: the rest come in play, only put into buffers then, no synthesis in a frame)
+        await Promise.race([this.prepareSpellMusic(pause), new Promise((r) => setTimeout(r, 1500))]);
         onProgress?.(1);
         this._allWarm = true;
     }
@@ -241,6 +247,9 @@ export class SoundManager {
         this.music.state = 'idle';
         for (const item of this.ambientPool) if (item.sound.isPlaying) item.sound.stop();
         for (const v of this.voices) if (v.isPlaying) v.stop();
+        for (const a of Object.values(this._loops || {})) if (a.isPlaying) a.stop(); // (the held spells' loops, space's pad)
+        if (this._spellTheme?.isPlaying) this._spellTheme.stop();
+        this._heldNow = null;
     }
 
     // ------------------------------------------------------------------- SFX
@@ -585,6 +594,7 @@ export class SoundManager {
 
     /** The silence of space: the music fades away there (and comes back off it). */
     spaceQuiet(on) {
+        if (this.context && this.loaded) this._loop('space', on && this.enabled ? 'spaceAmb' : null, 0.5); // (space is not dead silent: a far quiet pad — SpellMusic.spaceAmb)
         const cur = this.music?.current;
         if (!this.context || !cur?.gain) return;
         const t = this.context.currentTime, g = cur.gain.gain;
@@ -607,6 +617,126 @@ export class SoundManager {
         a.setVolume(Math.min(1.2, k) * this.globalVolume);
         if (k > 0.01 && !a.isPlaying) { try { a.play(); } catch (e) { /* not resumed yet */ } }
         else if (k <= 0.01 && a.isPlaying) a.stop();
+    }
+
+    // ------------------------------------------------ the spells' own sounds (SpellMusic.js)
+    /**
+     * The spells' tunes, effects and loops: made in a worker (never in a frame), here only put into
+     * buffers. Without a worker: one a pause of the loading screen. @returns a promise (once, kept).
+     */
+    prepareSpellMusic(pause = null) {
+        if (!this.context) return Promise.resolve();
+        if (this._spellMusic) return this._spellMusic;
+        const keys = Object.keys(SPELL_GEN);
+        const put = (key, data) => { const b = this.context.createBuffer(1, data.length, SPELL_SR); b.copyToChannel(data, 0); this.sounds[key] = b; };
+        const t0 = performance.now();
+        const here = async () => { // (no worker: made here, one sound a pause)
+            const wait = pause || (() => new Promise((r) => setTimeout(r, 0)));
+            for (const k of keys) { if (!this.sounds[k]) put(k, SPELL_GEN[k](SPELL_SR)); await wait(); }
+        };
+        this._spellMusic = new Promise((resolve) => {
+            let w = null;
+            const done = () => { this.spellMusicMs = Math.round(performance.now() - t0); resolve(); };
+            try { w = new Worker(new URL('./spellMusic.worker.js', import.meta.url), { type: 'module' }); } catch (e) { w = null; }
+            if (!w) { here().then(done); return; }
+            const timer = setTimeout(() => { w.terminate(); here().then(done); }, 15000); // (a stuck worker: made here)
+            w.onmessage = (e) => {
+                const m = e.data || {};
+                if (m.key && m.data) put(m.key, m.data);
+                if (m.done) { clearTimeout(timer); w.terminate(); done(); }
+            };
+            w.onerror = () => { clearTimeout(timer); w.terminate(); here().then(done); };
+            w.postMessage({ sr: SPELL_SR });
+        });
+        return this._spellMusic;
+    }
+
+    /** A spell sound at a place (heard by everyone near, fainter far away) at the spells' loudness; no place — the caster's own. */
+    _spellAt(buffer, position, volume = 1, refDistance = 8, rate = 1) {
+        if (!this.enabled || !buffer) return;
+        if (!position || !this.posVoices.length) { this._spell(buffer, volume, rate); return; }
+        const v = this.posVoices[this._posIdx];
+        this._posIdx = (this._posIdx + 1) % this.posVoices.length;
+        if (v.isPlaying) v.stop();
+        v.setBuffer(buffer);
+        v.setPlaybackRate(rate);
+        v.setRefDistance(refDistance);
+        v.setVolume(volume * (this.spellVolume ?? this.globalVolume));
+        v.position.copy(position);
+        v.updateMatrixWorld(true);
+        v.play();
+    }
+
+    /** One of the spells' effects (SpellMusic FX: 'fxStupefy', 'fxWind'…) — at `position`, or the caster's own. */
+    playSpellFx(key, position = null, volume = 1, rate = 1) {
+        if (!this.context || !this.sounds[key]) return false;
+        this._spellAt(this.sounds[key], position, volume, 8, rate * (0.97 + Math.random() * 0.06));
+        return true;
+    }
+
+    /**
+     * A spell worked (`name` — matchSpell's): its sound from the card SPELL_SOUND — a tune (the great spells,
+     * its own voice: one at a time, loud far round, a little under «Create a House»'s) and / or a short effect.
+     * Played for my casts and for the others' (NetSync 'csnd') at the caster's place. @returns true if any.
+     */
+    spellCast(name, position) {
+        const e = SPELL_SOUND[name];
+        if (!e || !this.enabled || !this.context || !this.loaded) return false;
+        const rate = e.rate || 1, now = performance.now();
+        if (name === 'Stop') this._stopAt = now;
+        // (the same spell heard again at once — an unfinished phrase and then its final one: one sound)
+        const last = this._castSnd || (this._castSnd = new Map());
+        const key = name + ':' + (position ? Math.round(position.x) + ',' + Math.round(position.z) : '');
+        if (now - (last.get(key) || -1e9) < 2500) return false;
+        if (last.size > 32) last.clear();
+        last.set(key, now);
+        if (e.cast && this.sounds[e.cast]) this._spellAt(this.sounds[e.cast], position, 1, 8, rate * (0.97 + Math.random() * 0.06));
+        const buf = e.theme && this.sounds[e.theme];
+        if (buf) {
+            if (!this._spellTheme) { this._spellTheme = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._spellTheme); }
+            const v = this._spellTheme;
+            if (v.isPlaying) v.stop();
+            v.setBuffer(buf);
+            v.setPlaybackRate(rate);
+            v.setRefDistance(22);
+            v.setVolume(Math.min(1.1, 1.5 * (this.spellVolume ?? this.globalVolume)));
+            if (position) { v.position.copy(position); v.updateMatrixWorld(true); }
+            v.play();
+        }
+        return !!(buf || e.cast);
+    }
+
+    /** Does this spell's sound go from SoundManager.spellCast (and so over the network)? */
+    spellHasCastSound(name) { const e = SPELL_SOUND[name]; return !!(e && (e.cast || e.theme)); }
+
+    /**
+     * Every frame (Concentration.update): the quiet loop of the spell I hold (`held` — a HELD key, or null)
+     * and its end sound when it stops; `flight` 0…1 — the wind of my flight (0: not flying / no air).
+     */
+    focusLoop(held, flight = 0) {
+        if (!this.context || !this.loaded) return;
+        const was = this._heldNow || null;
+        if (held !== was) {
+            const prev = HELD_SOUND[was];
+            const stopped = prev?.end === 'fxStop' && performance.now() - (this._stopAt || -1e9) < 800; // («стоп» rang already)
+            if (prev?.end && !stopped && this.sounds[prev.end]) this._spell(this.sounds[prev.end], 0.8, prev.rate || 1);
+            this._heldNow = held;
+        }
+        const h = HELD_SOUND[held];
+        this._loop('held', this.enabled && h?.loop ? h.loop : null, 0.4, h?.rate || 1);
+        this._loop('flight', this.enabled && flight > 0.02 ? 'loopFlight' : null, 0.5 * Math.min(1, flight), 0.8 + 0.4 * Math.min(1, flight));
+    }
+
+    /** A named looping voice playing sound `key` (null: stopped) at loudness `k` and `rate`. */
+    _loop(slot, key, k, rate = 1) {
+        const loops = this._loops || (this._loops = {});
+        let a = loops[slot];
+        if (!key || !this.sounds[key]) { if (a?.isPlaying) a.stop(); return; }
+        if (!a) { a = loops[slot] = new THREE.Audio(this.audioListener); a.setLoop(true); }
+        if (a._key !== key) { if (a.isPlaying) a.stop(); a.setBuffer(this.sounds[key]); a._key = key; }
+        a.setVolume(k * (this.spellVolume ?? this.globalVolume));
+        if (a.playbackRate !== rate) a.setPlaybackRate(rate);
+        if (!a.isPlaying) { try { a.play(); } catch (e) { /* not resumed yet */ } }
     }
 
     /** «Circle Attack»'s music made ahead (early in the game, not on the first cast): call every frame until true. */
