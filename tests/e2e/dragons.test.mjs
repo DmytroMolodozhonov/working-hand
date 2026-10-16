@@ -57,8 +57,8 @@ test('a dragon\'s lair: the hoard, the sleeping dragon; gold taken wakes it; fir
     assert.ok(r.dragons.length >= 1 && r.dragons.every((m) => m === 'sleep'), `asleep on the hoard: ${JSON.stringify(r)}`);
     assert.ok(r.loose > 500 && r.heap, 'a heap of gold');
     assert.ok(r.eggs >= r.dragons.length && r.items > r.dragons.length, 'pouches and an egg per dragon');
-    assert.equal(r.afterFire, 1000, 'fire does nothing');
-    assert.equal(r.afterBlast, 976, 'a blast hurts');
+    assert.equal(r.afterFire, 500, 'fire does nothing'); // (DragonKinds.DRAGON_HP: 500)
+    assert.equal(r.afterBlast, 476, 'a blast hurts');
     assert.equal(r.took, 20);
     assert.notEqual(r.woke, 'sleep', 'taking the gold woke it');
     assert.ok(r.flyer && r.flyer.mode === 'air' && r.flyer.high > 20, `one flies high: ${JSON.stringify(r.flyer)}`);
