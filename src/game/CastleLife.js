@@ -22,6 +22,7 @@
  * guests show them and send their hits.
  */
 
+import { confusedMiss } from './StrongSpells.js';
 import { treeAt } from './Carriages.js';
 import { shareFoes } from './CrewTactics.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
@@ -1852,6 +1853,7 @@ export class CastleLife {
         if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4) return;
         if (Math.abs(fp.y - 1.95 - v.y) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.MELEE)) return; // («лицом к цели»: a swing from the side / behind cuts the air)
+        if (confusedMiss(v)) return; // (lost in Accentric's haze: the swing cuts the air — StrongSpells)
         const sq = v.cs?.squads?.get(v.foe);
         if (sq) sq.blows++;
         // (its sword knocked out by «Экспеллиармус»: fists)

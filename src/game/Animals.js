@@ -30,6 +30,7 @@
  * a rider moves their own horse.
  */
 
+import { confusedMiss } from './StrongSpells.js';
 import { SWIMMERS, deepAt, waterAt, swimStep, splashes } from './CreatureSwim.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
@@ -1554,6 +1555,7 @@ export class Animals {
     /** A butt / a blow at a player. o: {dmg, k — how hard it throws (m/s), down — knocked down for s} (the bull, the minotaur). */
     _butt(a, id, o = {}) {
         const g = this.game;
+        if (confusedMiss(a)) return; // (lost in Accentric's haze: it butts the air — StrongSpells)
         const dmg = o.dmg ?? SPECIES[a.type].dmg, k = o.k ?? 6;
         if (id === g.localId || id === 'local') {
             if (g.isDeadLocal || g.combat.dead) return;

@@ -369,3 +369,25 @@ test('«Protection Gods» (… Maxima): its table decides who and what; every pl
     assert.match(src('src/game/PlanetDestroy.js'), /godsHit\('PlanetLiquidation'/, '«Planet Liquidation» pays the gods\' shield');
     assert.match(src('src/game/Levitation.js'), /shield\?\.gods/, '«Левиоса» does not lift who is under it');
 });
+
+test('the strong duel spells and the new ice decide every creature and thing (StrongSpells — «не действует» is written too, with why); every place a charge lands asks StrongMagic', async () => {
+    const S = await import('../../src/game/StrongSpells.js');
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle' };
+    for (const [spell, T] of Object.entries({ Accentric: S.ACCENTRIC_TARGETS, Pilbidrio: S.PILBIDRIO_TARGETS, Die: S.DIE_TARGETS, Electrum: S.ELECTRUM_TARGETS, Ice: S.ICE_SPELL_TARGETS })) {
+        for (const k of ALL) assert.ok(T[names[k]]?.why, `«${spell}» forgets: ${k}`);
+        for (const k of ['me', 'players', 'servants', 'world', 'space']) assert.ok(T[k]?.why, `«${spell}» forgets: ${k}`);
+    }
+    assert.ok(S.DIE_TARGETS.titans?.why && S.DIE_TARGETS.godGifts?.why, '«Дай»: the titans and the gods\' gifts');
+    const d = src('src/game/Duel.js');
+    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null, part = null) {'), /strong\?\.hitCreature/);
+    assert.match(body(d, '    applyToZombie(spell, z, byId, from = null) {'), /strong\?\.hitCreature\('z'/);
+    assert.match(body(d, '    applyToMe(spell, byId, side = \'right\') {'), /strong\?\.hitMe/);
+    for (const f of ['src/game/Dragons.js', 'src/game/Spider.js', 'src/game/IceQueen.js']) assert.match(src(f), /strong\?\.boltHit\?\.\('[DsI]'/, `${f} asks StrongMagic`);
+    const sm = src('src/game/StrongMagic.js');
+    for (const k of ['zombieById', 'castleLife', 'ships\\?\\.crew', 'animals', 'livingTrees', 'spiders', 'dragons', 'iceCastle', 'phoenixes', 'owls', 'books']) assert.match(body(sm, '    _hurt(k, c, dmg, spell, by) {') + body(sm, '    _vanish(k, id) {') + sm, new RegExp(k), `StrongMagic forgets ${k}`);
+    // a dragon, a phoenix, an owl know them by name; the people fear «Дай»
+    const { ON_DRAGON } = await import('../../src/game/DragonKinds.js');
+    for (const n of ['Accentric', 'Pilbidrio', 'Electrum', 'Die', 'IceMaxima']) assert.ok(ON_DRAGON[n]?.why, n);
+    const { DANGERS } = await import('../../src/game/Danger.js');
+    assert.ok(DANGERS.die?.ru);
+});

@@ -115,7 +115,7 @@ import { Knockdown } from './Knockdown.js';
 import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
 import { StrongMagic } from './StrongMagic.js';
-import { isStrongDuel } from './StrongSpells.js';
+import { isStrongDuel, confusedMiss } from './StrongSpells.js';
 import { HurtFlash } from './HurtFlash.js';
 import { ArmorSystem } from './Armor.js';
 import { BodyStrikes } from './BodyStrikes.js';
@@ -3534,6 +3534,7 @@ export class Game {
             if (!z.struck) continue;
             z.struck = false;
             if (!z.reaches(target.pos, reach + 0.3)) continue; // (it stepped back in time)
+            if (confusedMiss(z)) continue; // (lost in Accentric's haze: the blow goes past — StrongSpells)
             const dir = _v1.subVectors(target.pos, z.group.position).setY(0).normalize().clone();
             if (target.zombie) {
                 target.zombie.damageCooldown = 0;

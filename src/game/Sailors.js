@@ -18,6 +18,7 @@
  * Multiplayer: the host runs the crews ('screw'); guests draw them and send hits.
  */
 
+import { confusedMiss } from './StrongSpells.js';
 import * as THREE from 'three';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
 import { floorAt, hullHalfWidth, stairUnder } from './ShipLayout.js';
@@ -1451,6 +1452,7 @@ export class Sailors {
 
     _strike(v, s, foeId) {
         const g = this.game;
+        if (confusedMiss(v)) return; // (lost in Accentric's haze: the blow goes wide — StrongSpells)
         if (foeId === g.localId) g.castleLife?.struck?.(v.dmg, v.x, v.z, v.title);
         else g.sync?.villagerStrike?.(foeId, v.dmg, Math.round(v.x * 10) / 10, Math.round(v.z * 10) / 10, v.title);
     }

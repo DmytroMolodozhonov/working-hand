@@ -22,6 +22,7 @@
  * what the Ice Rod's «Frozen» does to every creature and thing; what melts the palace).
  */
 
+import { confusedMiss } from './StrongSpells.js';
 import * as THREE from 'three';
 import { crowdStep } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
@@ -957,6 +958,7 @@ export class IceCastleLife {
         c.act = null; c.actTo = null;
         if (!e) return;
         if (c.type === 'queen') { this._queenCast(c, act, e); return; }
+        if (confusedMiss(c)) return; // (lost in Accentric's haze: the blow / the spell goes nowhere — StrongSpells)
         if (act === 'punch') {
             const tp = e.k === 'p' ? this._playerFeet(e.id) : this._bodyPos(e.k, e.id, new THREE.Vector3());
             if (!tp || Math.hypot(tp.x - c.model.position.x, tp.z - c.model.position.z) > ICE.MONSTER.REACH + 0.8) return;

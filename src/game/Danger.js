@@ -37,6 +37,7 @@ export const DANGERS = {
     undead: { r: 6, hear: 30, see: 60, near: 20, fear: 50, ru: '«Alive» на кладбище: могила трясётся, земля разверзается, из неё лезет скелет' },
     castlemagic: { r: 30, hear: 90, see: 120, near: 40, fear: 45, ru: 'магия замка («Create a Castle»): земля трясётся и грохочет, из неё вырастают стены и башни, летят камни' },
     ice: { r: 5, hear: 30, see: 60, near: 18, fear: 45, ru: 'ледяная магия: Ледяной Жезл («Frozen» — человек во льду, стены льда), Ледяная Королева, её снеговики и ледяные монстры, «Create an Ice Castle» и «Ice Bridge» (лёд растёт из земли)' },
+    die: { r: 18, hear: 40, see: 80, near: 30, fear: 90, ru: '«Дай»: чёрный луч богов — кого коснулся, того нет совсем (StrongMagic.terror: все обычные в ужасе бегут)' },
     housemagic: { r: 10, hear: 40, see: 70, near: 12, fear: 25, ru: 'магия дома («Create a House», «Improve a House»): вспышки, вихрь деревьев и пыли' },
 };
 
