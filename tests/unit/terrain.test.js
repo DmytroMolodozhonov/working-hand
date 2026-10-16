@@ -170,3 +170,22 @@ test('rivers and lakes: far from spawn, walkable beds, see-through water that fl
     const a = d.buildChunkArrays(spot.x >> 5, spot.z >> 5);
     assert.ok(a.water.indices.length > 0);
 });
+
+test('a column\'s top is kept right as blocks are set and taken away (no look from the sky down at every block)', () => {
+    const d = new TerrainData();
+    d.generate({ seed: 4242 });
+    const cx = 3, cz = -2, c = d.chunk(cx, cz);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+    const types = [BLOCK.AIR, BLOCK.AIR, BLOCK.WATER, BLOCK.STONE, BLOCK.PLANKS, BLOCK.DIRT];
+    for (let i = 0; i < 4000; i++) {
+        const lx = Math.floor(rnd() * 4), lz = Math.floor(rnd() * 4), x = cx * CHUNK + lx, z = cz * CHUNK + lz;
+        const top = c.top[lz * CHUNK + lx];
+        const L = Math.max(MIN_LAYER + 1, Math.min(MAX_LAYER, top + Math.floor(rnd() * 9) - 5));
+        d.set(x, L, z, types[Math.floor(rnd() * types.length)]);
+        // the top looked for from the sky down
+        let want = MIN_LAYER - 1;
+        for (let l = MAX_LAYER; l >= MIN_LAYER; l--) { const b = d.get(x, l, z); if (b !== BLOCK.AIR && b !== BLOCK.WATER) { want = l; break; } }
+        assert.equal(c.top[lz * CHUNK + lx], want, `step ${i}: (${x}, ${z}) set ${L}`);
+    }
+});

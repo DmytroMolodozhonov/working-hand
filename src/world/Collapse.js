@@ -34,6 +34,7 @@ function isGround(t) {
 }
 const movable = (t) => isSolid(t) && t !== BLOCK.ICE_SHAPE && t !== BLOCK.BEDROCK;
 
+const N6 = [0, 1, 0, 1, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0]; // (up, +x, −x, +z, −z, down)
 const key = (x, L, z) => ((x + 1048576) * 2097152 + (z + 1048576)) * 256 + (L - MIN_LAYER);
 function hash01(x, L, z) {
     let h = Math.imul(x, 73856093) ^ Math.imul(L, 19349663) ^ Math.imul(z, 83492791);
@@ -62,8 +63,8 @@ export function hangingSearch(data) {
             const sz = stack.pop(), sL = stack.pop(), sx = stack.pop();
             const st = known.get(key(sx, sL, sz));
             if (st === 1) { standing = true; break; }
-            const n6 = [[sx, sL + 1, sz], [sx + 1, sL, sz], [sx - 1, sL, sz], [sx, sL, sz + 1], [sx, sL, sz - 1], [sx, sL - 1, sz]];
-            for (const [nx, nL, nz] of n6) {
+            for (let j = 0; j < 18; j += 3) { // (the six neighbours, up first — N6: no arrays made a step)
+                const nx = sx + N6[j], nL = sL + N6[j + 1], nz = sz + N6[j + 2];
                 if (nL < floor) { standing = true; break; }
                 const k = key(nx, nL, nz);
                 if (seen.has(k)) continue;

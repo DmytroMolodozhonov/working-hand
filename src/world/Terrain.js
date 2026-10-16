@@ -1415,7 +1415,14 @@ export class TerrainData {
         if (type !== BLOCK.AIR && L > c.maxTop) c.maxTop = L;
         if (type === BLOCK.ICE) this.version++;
         const col = (iz & MASK) * CHUNK + (ix & MASK), before = c.top[col];
-        this._refreshTop(c, ix & MASK, iz & MASK);
+        // (the column's top kept as it goes — not looked for from the sky down at every block: a ruin or a
+        // house of thousands of blocks spent most of its time there)
+        if (type !== BLOCK.AIR && type !== BLOCK.WATER) { if (L > before) c.top[col] = L; }
+        else if (L === before) {
+            let l = L - 1;
+            while (l >= MIN_LAYER) { const b = c.blocks[((l - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)]; if (b !== BLOCK.AIR && b !== BLOCK.WATER) break; l--; }
+            c.top[col] = l >= MIN_LAYER ? l : MIN_LAYER - 1;
+        }
         // (a hollow: air let in under the top, or a roof put over the air)
         if (!drawn(type)) hollowAt(c, col, L);
         else if (c.top[col] > before + 1) hollowAt(c, col, c.top[col] - 1);
