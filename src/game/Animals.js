@@ -281,7 +281,8 @@ export class Animals {
         const g = this.game;
         if (a.pen && !a.dead) g.houses?.penReturn(a.pen.id); // (a pen animal far away: it comes back with the pen)
         g.scene.remove(a.model);
-        // (shapes are shared by all animals: nothing to dispose)
+        // (shapes are shared by all animals: nothing to dispose — but a running book's are its own)
+        if (a.model.userData.runbook) a.model.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
         if (a.bones) g.scene.remove(a.bones);
         this.list.splice(this.list.indexOf(a), 1);
         this.byId.delete(a.id);

@@ -90,6 +90,32 @@ function partGeometry(L) {
     const key = L.join(',');
     const hit = _geoCache.get(key);
     if (hit) return hit;
+    const g = buildPart(L);
+    g.userData.vkey = key;
+    _geoCache.set(key, g);
+    return g;
+}
+
+/**
+ * The people using a cached shape (VillagerModel takes / gives back its parts' shapes): the last one gone —
+ * a castle asleep, its people put away — the shape is given back and forgotten. Kept for ever, every look
+ * of every castle flown over stayed with the video card (a long flight: hundreds of shapes).
+ */
+const _geoUsers = new Map();
+function takeGeo(g) { if (g.userData.vkey) _geoUsers.set(g, (_geoUsers.get(g) || 0) + 1); return g; }
+function giveGeo(g) {
+    const n = (_geoUsers.get(g) || 0) - 1;
+    if (n > 0) { _geoUsers.set(g, n); return; }
+    _geoUsers.delete(g);
+    if (g.userData.vkey && _geoCache.get(g.userData.vkey) === g) _geoCache.delete(g.userData.vkey);
+    g.dispose();
+}
+
+/** A copy of a person's model (a body — Death.js) shares its shapes: taken for it, given back with it. */
+export function holdShapes(obj) { obj.traverse((o) => { if (o.isMesh && o.geometry?.userData.vkey) takeGeo(o.geometry); }); }
+export function releaseShapes(obj) { obj.traverse((o) => { if (o.isMesh && o.geometry?.userData.vkey) giveGeo(o.geometry); }); }
+
+function buildPart(L) {
     const n = L.length / STRIDE;
     const pos = new Float32Array(n * U_V * 3);
     const nor = new Float32Array(n * U_V * 3);
@@ -117,7 +143,6 @@ function partGeometry(L) {
     g.setIndex(new THREE.BufferAttribute(idx, 1));
     g.computeBoundingBox();
     g.computeBoundingSphere();
-    _geoCache.set(key, g);
     return g;
 }
 
@@ -924,6 +949,7 @@ export class VillagerModel {
         g.name = 'villager';
         this.root = new THREE.Group(); // rotates around the feet (falling down)
         this.root.position.y = -VILLAGER_FOOT_OFFSET;
+        this.root.userData.vroot = true;
         g.add(this.root);
         this.pelvis = new THREE.Group();
         this.pelvis.position.y = VILLAGER_FOOT_OFFSET;
@@ -1047,7 +1073,7 @@ export class VillagerModel {
     }
 
     _mesh(parent, boxes, shadow = true) {
-        const m = new THREE.Mesh(partGeometry(boxes), MAT);
+        const m = new THREE.Mesh(takeGeo(partGeometry(boxes)), MAT);
         m.castShadow = this._shadow && shadow;
         parent.add(m);
         this._meshes.push(m);
@@ -1064,11 +1090,12 @@ export class VillagerModel {
         if (this.tool) {
             this.handSlot.remove(this.tool);
             this._meshes.splice(this._meshes.indexOf(this.tool), 1);
+            giveGeo(this.tool.geometry);
             this.tool = null;
         }
         this.toolKind = kind;
         if (kind === 'none') return;
-        this.tool = new THREE.Mesh(partGeometry(toolBoxes(kind === 'wand' && this.look.role === 'master' ? 'wandMaster' : kind)), this._currentMat());
+        this.tool = new THREE.Mesh(takeGeo(partGeometry(toolBoxes(kind === 'wand' && this.look.role === 'master' ? 'wandMaster' : kind))), this._currentMat());
         this.tool.castShadow = this._shadow;
         if (HANGING.has(kind)) this.tool.rotation.x = -REST_WRIST; // hangs along the arm
         this.handSlot.add(this.tool);
@@ -1138,6 +1165,7 @@ export class VillagerModel {
                 lod = this._lod = new THREE.Mesh(geo, this._lodMat = this._currentMat());
                 lod.castShadow = false; // (far: no shadow — Shadows.js)
                 lod.raycast = () => {}; // (the parts are what is hit)
+                lod.userData.farOne = true; // (a copy of the person — a body, Death.js — leaves it out: its parts are shown)
                 this.group.add(lod);
             }
         }
@@ -1633,6 +1661,7 @@ export class VillagerModel {
     dispose() {
         this.group.parent?.remove(this.group);
         if (this._lod) { this._lod.geometry.dispose(); this._lod = null; }
+        if (!this._gone) { this._gone = true; for (const m of this._meshes) giveGeo(m.geometry); } // (its shapes: given back once)
     }
 }
 

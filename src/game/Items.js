@@ -687,12 +687,15 @@ export class ItemSystem {
         const ch = g.character;
         // loose things: fall, bounce, settle; hovering ones bob
         const me = ch.group.position;
+        let spent = 0;
         for (const L of this.loose.values()) {
             // (far ones — a long game leaves many about the world — not drawn, and a still one not stepped:
             // a hovering one's bobbing and sparks are for the eyes only)
             const mp = L.model.position;
             const d = Math.abs(mp.x - me.x) + Math.abs(mp.z - me.z), far = d > 140;
-            if (L.away && d < 170) this._bringBack(L); // (its look made again as one comes near)
+            // (its look made again as one comes near — a couple of milliseconds a frame: a village's spilled
+            // chests came back all at once; still out of sight there, so a frame later is never seen)
+            if (L.away && d < 170 && (spent < 2 || !far)) { const t = performance.now(); this._bringBack(L); spent += performance.now() - t; }
             else if (!L.away && d > 200 && (L.hover || L.rest)) this._putAway(L);
             L.model.visible = !far;
             if (far && (L.hover || L.rest)) continue;

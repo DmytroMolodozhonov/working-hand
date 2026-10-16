@@ -28,7 +28,7 @@
 
 import * as THREE from 'three';
 import { RESOURCE } from './Inventory.js';
-import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
+import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, holdShapes, releaseShapes } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
 import { newUid } from './ItemTypes.js';
 import { VoxelCharacter } from '../entities/Character.js';
@@ -311,8 +311,9 @@ export class DeathSystem {
         const c = group.clone(true);
         c.visible = true;
         const sprites = [];
-        c.traverse((o) => { o.layers.set(0); if (o.isSprite) sprites.push(o); });
+        c.traverse((o) => { o.layers.set(0); if (o.isSprite || o.userData.farOne) sprites.push(o); if (o.userData.vroot) o.visible = true; }); // (a far person's one shape: its parts instead)
         for (const s of sprites) s.parent?.remove(s);
+        holdShapes(c); // (a person's shapes it shares: kept while it lies there — removeBody gives them back)
         return c;
     }
 
@@ -344,7 +345,7 @@ export class DeathSystem {
 
     _toBones(b) {
         const g = this.game;
-        if (b.model) { g.scene.remove(b.model); b.model = null; }
+        if (b.model) { g.scene.remove(b.model); releaseShapes(b.model); b.model = null; }
         if (b.bones || !g.scene) return;
         const s = skeletonModel();
         s.scale.setScalar((b.len || 3) / 3);
@@ -362,7 +363,7 @@ export class DeathSystem {
         if (!b) return;
         this.bodies.delete(id);
         const g = this.game;
-        if (b.model) g.scene.remove(b.model);
+        if (b.model) { g.scene.remove(b.model); releaseShapes(b.model); }
         if (b.bones) {
             if (dust && g.fx) for (let i = 0; i < 24; i++) g.fx.spark(_v.set(b.x + (Math.random() - 0.5) * 1.5, b.y + 0.2, b.z + (Math.random() - 0.5) * 1.5), 0xd8d0bc, 0.12, _v2.set((Math.random() - 0.5) * 1.5, Math.random() * 1.5, (Math.random() - 0.5) * 1.5), 1.2);
             g.scene.remove(b.bones);
