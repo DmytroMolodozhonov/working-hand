@@ -381,6 +381,13 @@ def start_log(folder, name):
     except OSError:
         pass
     fh = open(cur, "a", encoding="utf-8", errors="replace")
+    try:
+        # (a crash of the launcher's process itself — not a Python error — is written there too: the game's
+        # window was once left with «localhost не позволяет установить соединение» and nothing in the log)
+        import faulthandler
+        faulthandler.enable(file=fh, all_threads=True)
+    except Exception:  # noqa: BLE001
+        pass
     sys.stdout = Tee(fh, sys.__stdout__)
     sys.stderr = Tee(fh, sys.__stderr__)
     return cur, prev

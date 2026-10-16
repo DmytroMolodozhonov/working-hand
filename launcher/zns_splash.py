@@ -145,10 +145,47 @@ class Splash:
             self.log(f"[заставка] не показана: {e!r}")
 
 
+class Handle:
+    """The loading picture's own process (never a thread of the launcher: tkinter in a second thread
+    could bring the whole launcher down — «Tcl_AsyncDelete … wrong thread» — and the game's window was
+    left with «localhost не позволяет установить соединение»)."""
+
+    def __init__(self, proc, log):
+        self.proc, self.log, self.started = proc, log, time.time()
+
+    def close(self, delay=0.15):
+        """(any thread) Gone in `delay` s — the game's window is shown above it first: no gap between."""
+        def later():
+            try:
+                if self.proc.poll() is None:
+                    self.proc.terminate()
+                    self.log(f"[заставка] убрана через {time.time() - self.started:.2f} с")
+            except Exception:  # noqa: BLE001
+                pass
+        t = threading.Timer(delay, later)
+        t.daemon = True
+        t.start()
+
+
 def show(seconds=25.0, logo=None, log=print):
-    """Start the loading picture (a thread of its own). Returns the Splash (`.close()`), or None."""
+    """Start the loading picture in a process of its own. Returns a Handle (`.close()`), or None."""
     if sys.platform != "win32" or os.environ.get("ZNS_NO_SPLASH"):
         return None
-    s = Splash(seconds, logo, log)
-    threading.Thread(target=s._run, daemon=True, name="zns-splash").start()
-    return s
+    import subprocess
+    exe = sys.executable or "pythonw"
+    w = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    exe = w if os.path.isfile(w) else exe  # (no black window)
+    try:
+        proc = subprocess.Popen([exe, os.path.abspath(__file__), str(seconds), logo or ""],
+                                creationflags=0x08000000, close_fds=True)  # (CREATE_NO_WINDOW)
+    except OSError as e:
+        log(f"[заставка] не запущена: {e}")
+        return None
+    log("[заставка] запущена (свой процесс)")
+    return Handle(proc, log)
+
+
+if __name__ == "__main__":
+    # (the picture's own process: tkinter in its main thread)
+    Splash(float(sys.argv[1]) if len(sys.argv) > 1 else 25.0, (sys.argv[2] if len(sys.argv) > 2 else "") or None,
+           log=lambda m: None)._run()
