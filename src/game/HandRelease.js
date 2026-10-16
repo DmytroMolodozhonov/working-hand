@@ -64,13 +64,16 @@ export const poseBehind = (pose, side) => {
 export const GOT_UP_T = 1.5;
 
 /**
- * While swimming the arms stroke (a reach up and back, a fast pull), and lying on the ground they
- * flail to get up (pushing up, a hand raised for «Up», waving): that is no throw and no letting go
- * — nothing leaves the hand then (the wand above all), nor in the moment after getting up.
+ * While swimming the arms stroke (a reach up and back, a fast pull), flying they steer, and lying on
+ * the ground they flail to get up (pushing up, a hand raised for «Up», waving): that is no throw and no
+ * letting go — nothing leaves the hand then (the wand above all), nor in the moment after getting up / landing.
  */
 export function holdsFast(ch, now = performance.now()) {
     if (!ch) return false;
     if (ch.swimming || ch.swimY != null) return true;
+    // flying («Флайн», «Flying Maxima», space) the arms steer, rise, fall and wave: nothing leaves the hand
+    // (the author: the wand flew off in flight) — nor in the moment after landing, the arms still coming down
+    if (ch.flying) { ch._downUntil = Math.max(ch._downUntil || 0, now + GOT_UP_T * 1000); return true; }
     if (ch.knockedDown) { ch._downUntil = now + GOT_UP_T * 1000; return true; }
     return now < (ch._downUntil || 0);
 }

@@ -159,7 +159,7 @@ test('ThrowDetector (the wand): raised high to cast and then pointed forward wit
     assert.equal(overhand(new ThrowDetector(), { strict: true, start: V(0.8, 2.3, -0.8), vRel: V(0, -4, -10), n: 5 }), null);
 });
 
-import { holdsFast } from '../../src/game/HandRelease.js';
+import { holdsFast, GOT_UP_T } from '../../src/game/HandRelease.js';
 test('swimming: a stroke (a reach up behind the head and a fast pull, the hand opening) would look like a throw — a swimmer\'s hand holds fast', () => {
     // the stroke really looks like a throw to the detector…
     assert.ok(overhand(new ThrowDetector(), { strict: true, behind: true, start: V(0.8, 1.75, 0.3), vRel: V(0, -3, -12), n: 5 }), 'a stroke is shaped like a wand throw');
@@ -187,4 +187,12 @@ test('the wand and the ground: a hand swung down to the ground never throws it; 
     assert.equal(run(new DropGate(), { curl: 0.2, strict: true }, 3000).any, false, 'a pinch seen half open');
     const r = run(new DropGate(), { curl: 0.05, strict: true }, 1000);
     assert.ok(r.any && r.at >= 500 && r.at < 560, 'a wide-open outstretched hand ' + JSON.stringify(r));
+});
+
+test('flying: nothing leaves the hand (the wand flew off in flight) — nor just after landing', () => {
+    const ch = { flying: true };
+    assert.equal(holdsFast(ch, 1000), true, 'in flight');
+    ch.flying = false;
+    assert.equal(holdsFast(ch, 1000 + GOT_UP_T * 500), true, 'the arms still coming down after landing');
+    assert.equal(holdsFast(ch, 1000 + GOT_UP_T * 1000 + 10), false, 'on the ground again: as always');
 });

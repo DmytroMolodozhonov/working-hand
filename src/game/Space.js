@@ -50,6 +50,7 @@ import { chunkKey, CHUNK } from '../world/Terrain.js';
 export const FLYMAX = {
     UNLOCK: 1000, // mana cells
     BREATH: 0.5, // mana a second to breathe without air
+    FLY: 1.5, // mana a second «Flying Maxima» takes while it carries the hero (the climb, space, the burning air: the author)
     SUFFOCATE: 6, // s without mana before death
     EARTH_TOP: 440, // the climb ends (and space begins) this high over the Earth (world y)
     PLANET_TOP: 300, // … over another planet's ground
@@ -299,7 +300,7 @@ export class Space {
         this._prev.clear();
         this._ovKind = this._from === 'earth' || this.planets.get(this._from)?.air === 'air' ? 'white' : 'black'; this._ovK = 1; // (the white-out clears by itself)
         const mana = g.combat?.enabled;
-        this._say(mana ? '🌌 Вы в космосе! Магия дыхания: <b>−0,5 маны в секунду</b> — без неё здесь не выжить. Кончится мана — вернитесь в воздух' : '🌌 Вы в космосе!', 'enter', 7000);
+        this._say(mana ? '🌌 Вы в космосе! Магия дыхания: <b>−0,5 маны в секунду</b> — без неё здесь не выжить, и сам полёт «Flying Maxima» — <b>−1,5 маны в секунду</b>. Кончится мана — вернитесь в воздух' : '🌌 Вы в космосе!', 'enter', 7000);
     }
 
     /** The hero in space: his flight by the body, the planets, the Sun. */
@@ -751,10 +752,13 @@ export class Space {
         const def = this.planets.get(this.realm);
         const airless = this.realm === 'space' || (def && this.realm !== 'earth' && !breathable(def));
         this.breathing = airless;
+        // «Flying Maxima» itself: −1.5 mana a second while it carries the hero (the author) — the climb, space, the burning air
+        this.maxFlying = this.state === 'ascend' || this.state === 'entry' || this.realm === 'space';
+        if (this.maxFlying && c?.enabled && !g.isDeadLocal && !c.dead) c.fatigue = Math.max(0, c.fatigue - FLYMAX.FLY * dt);
         if (!airless || g.isDeadLocal || c?.dead) { this.suffocate = 0; this._panel(); return; }
         if (c?.enabled) {
-            // (the author: the mana comes back as always, 1 a second × the bonuses — breathing takes half of
-            //  that, so one stays in plus; only mana spent on spells down to nothing leaves nothing to breathe with)
+            // (the mana comes back as always, 1 a second × the bonuses; breathing takes 0.5 and «Flying Maxima» 1.5 —
+            //  in space it runs down slowly; spent to nothing — nothing to breathe with)
             c.fatigue = Math.max(0, c.fatigue - FLYMAX.BREATH * dt);
             if (c.fatigue < 0.05) {
                 this.suffocate += dt;
@@ -1153,6 +1157,7 @@ export class Space {
         let html = '';
         if (this.offEarth && !this.game.isDeadLocal) {
             const parts = [];
+            if (this.maxFlying && this.game.combat?.enabled) parts.push('🚀 Flying Maxima: <b>−1,5 маны/с</b>');
             if (this.breathing && this.game.combat?.enabled) parts.push('🫧 Дыхание магией: <b>−0,5 маны/с</b>');
             if (this.realm === 'space' && this._bodies?.length) {
                 let best = null;
