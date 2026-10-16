@@ -13,6 +13,7 @@
  */
 
 import * as THREE from 'three';
+import { PLAYER_GROUND_OFFSET, HEAD_ROOM } from '../entities/Character.js';
 
 /** The words the recognizer writes for «Up» (a short word: often heard as «аб», «оп»…). */
 const UP_WORDS = new Set(['up', 'upp', 'ap', 'app', 'ab', 'op', 'ап', 'апп', 'аап', 'ааап', 'эп', 'апъ', 'апь', 'аб', 'оп', 'уп']);
@@ -106,6 +107,14 @@ export class UpSpell {
             && (!!ch.onGround || !!g.ships?.rigging?.climbing);
         const what = upAction({ down, swimming, armUp, standing });
         if (what !== 'rise' && what !== 'leap') { if (what && isFinal) g.hud.setVoice(what, true); return null; }
+        // a roof right over the head (a hall, a cave): nowhere to be thrown — said, not paid
+        if (what === 'leap' && !swimming && g.collision?.ceilingAt) {
+            const p = ch.group.position, feet = p.y - PLAYER_GROUND_OFFSET;
+            if (g.collision.ceilingAt(p.x, p.z, feet + 1.1) - HEAD_ROOM - feet < 0.8) {
+                if (isFinal) g.hud.setVoice('⬆️ Над головой потолок — подлететь некуда', true);
+                return null;
+            }
+        }
         const tired = g.combat.check('Up');
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay('Up');

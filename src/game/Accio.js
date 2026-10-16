@@ -19,6 +19,15 @@ export const ACCIO = {
     NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
 };
 
+/**
+ * The hand a summoned thing flies into: the leading hand (`dom`: 'right' for a right-hander) when it is free,
+ * else the other one, else none (null). The author: «правша, правая рука пустая — палочка должна лететь в правую».
+ */
+export function accioCatcher(free, dom = 'right') {
+    const off = dom === 'left' ? 'right' : 'left';
+    return free(dom) ? dom : free(off) ? off : null;
+}
+
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
@@ -51,15 +60,14 @@ export class Accio {
         const ch = g.character;
         let best = null;
         // (a dragon is no thing: «Акцио» does not act on it — DragonKinds.ON_DRAGON.Accio; its egg is a thing: it flies)
-        // the thing comes into a free hand: the pointing one, or the other (a wand in the
-        // pointing hand: the other hand catches — before, things lying about were not even looked at)
+        // the thing comes into a free hand: the leading one (Настройки → «Ведущая рука»: a right-hander's
+        // right) whichever hand points, the other only when the leading one is busy (accioCatcher)
         const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.boards?.handBusy(sd);
         // (an arm only ~20° from hanging counts too: a thing lying right by the feet is pointed at low)
         const lift = g.currentPose?.armLift;
         for (const side of ['right', 'left']) {
             if (!ch.isArmRaised(side) && !(lift && lift[side] > ACCIO.LIFT)) continue;
-            const other = side === 'right' ? 'left' : 'right';
-            const catcher = free(side) ? side : free(other) ? other : null;
+            const catcher = accioCatcher(free, g.dom);
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
             for (const w of catcher ? g.weapons.weapons : []) {

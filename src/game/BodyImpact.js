@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { IMPACT, classify, fallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush } from './Impact.js';
 import { fallStrength } from './Knockdown.js';
+import { GOT_UP_T } from './HandRelease.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 
@@ -66,6 +67,9 @@ export class BodyImpact {
             }
         }
         this._note(o, res);
+        // hit, thrown, reeling: the arms flail — nothing leaves the hand by it (the wand above all), nor in the
+        // moment after (HandRelease.holdsFast); only «Экспеллиармус» knocks it out, and says so
+        if (res !== 'none') ch._downUntil = Math.max(ch._downUntil || 0, performance.now() + GOT_UP_T * 1000);
         if (res === 'shatter') { c.die(o.by, 'shatter'); return res; }
         if (!dome) this._kickHead(o, k);
         const dir = fallDir(o.v.x, o.v.z, ch.group.rotation.y);

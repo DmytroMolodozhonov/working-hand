@@ -71,6 +71,11 @@ const FALL = { left: [0, 1.4], back: [1.45, 0], front: [-1.45, 0], right: [0, -1
 export const PLAYER_GROUND_OFFSET = 2.0;
 /** From the feet to just over the head: room a body needs under a roof. */
 export const HEAD_ROOM = 3.4;
+/** Does the body fly (under gravity) rather than stand? High over the floor, in a jump, or pushed up just now
+ * (a toss from the ground starts AT the floor: without the last, the floor would take the push back at once). */
+export function inAir(y, targetY, crouching, jumpAir, vy) {
+    return (y > targetY + 0.6 && !crouching) || !!jumpAir || vy > 0;
+}
 /** The body's height for the walls (feet to over the head), standing. */
 export const BODY_H = 3.5;
 /**
@@ -752,8 +757,8 @@ export class VoxelCharacter {
                 this.onGround = false;
                 this.airTop = null;
                 this.group.position.y += (Math.max(this.swimY, targetY) - y) * Math.min(1, 6 * dt);
-            } else if ((y > targetY + 0.6 && !this.isCrouching) || this.jumpAir) {
-                // Falling into a crater / off a ledge (or up in a jump) — the hero's gravity
+            } else if (inAir(y, targetY, this.isCrouching, this.jumpAir, this.verticalVelocity)) {
+                // Falling into a crater / off a ledge (or up in a jump, or thrown up: «Up», a vortex) — the hero's gravity
                 this.airTop = Math.max(this.airTop ?? y, y);
                 this.verticalVelocity -= G * this.gravityK * dt;
                 let ny = y + this.verticalVelocity * dt;

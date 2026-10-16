@@ -568,6 +568,25 @@ export class ItemSystem {
         return pos;
     }
 
+    /**
+     * (host) A thing lying still, looked at twice a second: the ground under it blown away (a crater) — it
+     * falls; ice / snow grown over it (the Ice Queen's rod, «Frozen», a snowdrift) — it comes up on top of it,
+     * never stays buried where no hand can reach it.
+     */
+    _restCheck(L, dt) {
+        L.chk = (L.chk || 0) + dt;
+        if (L.chk < 0.5) return;
+        L.chk = 0;
+        const col = this.game.collision, p = L.model.position;
+        if (!col) return;
+        const y0 = p.y;
+        this._outOfSolid(p);
+        const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
+        if (p.y < gy + 0.1) p.y = gy + 0.12;
+        else if (p.y > gy + 0.45) L.rest = false; // (nothing under it now: it falls — _physics)
+        if (p.y !== y0 || !L.rest) L.sentRest = false; // (its new place goes to the others)
+    }
+
     /** May my hands take this thing again (REGRAB)? Forgets it once they may. */
     _regrabOk(L, now) {
         const e = this.justLet.get(L.item.uid);
@@ -729,6 +748,7 @@ export class ItemSystem {
             if (Math.random() < dt * 3) this.game.fx.spark(m.position, 0xffe9a8, 0.06, _v.set(0, 0.6, 0), 0.7);
             return;
         }
+        if (L.rest && this.auth && !L.inCaul && !L.accio && !L.lev && !L.remote) { this._restCheck(L, dt); return; }
         if (L.rest || L.accio || L.lev) return; // («Акцио» / «Левиоса» carries it)
         if (L.remote) { m.position.lerp(L.remote, Math.min(1, dt * 8)); return; }
         // (in space — above everything, Space.js: no weight, no air — it floats on as it was let go)
