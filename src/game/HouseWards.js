@@ -1014,6 +1014,7 @@ export class HouseWards {
         else if (ck === 'v') g.castleLife?.hit?.(c, n, d, null, {});
         else if (ck === 'c') g.ships?.crew?.hit?.(c, n, d, null);
         else if (ck === 'F') g.phoenixes?.shooed?.(c); // (a phoenix: not hurt — turned away, it flies off)
+        else if (ck === 'O') g.owls?.shooed?.(c); // (an owl: the same)
         // (a living tree: only shoved — nothing but fire hurts it)
         this.log.push({ ev: 'shove', who: ck, id: w.id });
     }

@@ -69,6 +69,7 @@ export const TARGETS = {
     iceCastle: { plain: 'none', maxima: 'none', why: 'Ледяная Королева, снеговики, ледяные монстры — отпирать нечего, не действует (ледяные ворота не заперты: их держат монстры)' },
     blackship: { plain: 'none', maxima: 'none', why: 'капитан Чёрные Усы и его скелеты — отпирать нечего; сундуки чёрного корабля не заперты, кроме сундука капитана: он открывается, когда капитан убит (Ships._placeChests)' },
     phoenix: { plain: 'none', maxima: 'none', why: 'феникс — живая птица без замков, не действует' },
+    owl: { plain: 'none', maxima: 'none', why: 'сова — живая птица без замков, не действует' },
     livingTrees: { plain: 'none', maxima: 'none', why: 'ожившие деревья — не действует' },
     bookBirds: { plain: 'none', maxima: 'none', why: 'книги-птицы — не действует (книга не заперта)' },
     // ---- the world
@@ -96,6 +97,7 @@ export const LOCK_TARGETS = {
     iceCastle: { does: 'none', why: 'ледяные существа — не действует' },
     blackship: { does: 'none', why: 'капитан Чёрные Усы и скелеты — не действует' },
     phoenix: { does: 'none', why: 'феникс — не действует' },
+    owl: { does: 'none', why: 'сова — не действует' },
     livingTrees: { does: 'none', why: 'ожившие деревья — не действует' },
     bookBirds: { does: 'none', why: 'книги-птицы — не действует' },
     world: { does: 'none', why: 'земля, вода, деревья, стены, корабли, оружие и вещи — не действует. Это не магическая защита: дверь ломается взрывом, оружием, огнём как обычная' },

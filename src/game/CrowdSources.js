@@ -53,6 +53,13 @@ export function crowdOf(g) {
             const p = c.model.position;
             push({ x: p.x, y: p.y, z: p.z, r: c.r, ref: c, id: c.id, kind: c.type === 'snowman' || c.type === 'friend' ? 'snowman' : c.type === 'monster' ? 'iceMonster' : 'iceQueen' }); // (the friendly snowman of «Snowman» too)
         }
+        // owls sitting on the ground (Owls.js; a flying one is above everybody)
+        for (const o of g.owls?.list || []) {
+            if (o.dead || !o.model) continue;
+            const p = o.model.position;
+            if (p.y - (g.collision?.groundY?.(p.x, p.z) ?? p.y) > 0.5) continue;
+            push({ x: p.x, y: p.y, z: p.z, r: BODY_R.owl, ref: o, id: o.id, kind: 'owl' });
+        }
         // carts on the roads
         for (const k of g.carriages?.list?.values?.() || []) {
             if (k.gone || !Number.isFinite(k.x)) continue;

@@ -11,6 +11,7 @@
  *   - a missing or broken file no longer disables all sound.
  */
 
+import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
 import * as THREE from 'three';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
 
@@ -568,6 +569,8 @@ export class SoundManager {
             ['iceDone', () => this._synthChime([523, 659, 784, 1047, 1319, 1568, 2093], 3.2, 1.5)], ['iceChime', () => this._synthChime([1568, 2093, 2637, 3136], 1.4, 3)],
             // (the Temple of the Gods — Temple.js: the wind outside, the halls' quiet echo, the scrolls' chime)
             ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
+            // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
+            ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -1447,6 +1450,14 @@ export class SoundManager {
         if (!this.enabled || !this.loaded) return;
         if (!this.sounds.oink) this.sounds.oink = [this._synthOink(0), this._synthOink(1)];
         this._playAt(this.sounds.oink[Math.floor(Math.random() * 2)], position, volume, refDistance, rate);
+    }
+
+    /** The clever owl (Owls.js): 'hoot' | 'sad' | 'wings' | 'coo' | 'chime' — made ahead (prewarmStep). */
+    playOwl(position, kind = 'hoot') {
+        if (!this.enabled || !this.context) return;
+        const key = 'owl_' + kind;
+        if (!this.sounds[key]) { if (!OWL_SOUNDS.includes(kind)) return; this.sounds[key] = synthOwl(this.context, kind); }
+        this._playAt(this.sounds[key], position, kind === 'wings' ? 0.7 : 1, kind === 'wings' ? 6 : 12, 0.95 + Math.random() * 0.1);
     }
 
     /** The phoenix's soft healing song (a few warm, clear notes rising) at a place. */

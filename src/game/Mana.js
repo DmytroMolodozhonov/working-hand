@@ -86,6 +86,7 @@ export const MAGIC_KILL = {
     livingTree: { n: 6, name: 'Живое дерево' },
     pegasus: { n: 8, name: 'Пегас' },
     phoenix: { n: 10, name: 'Феникс' },
+    owl: { n: 6, name: 'Умная сова' },
     bronzeBull: { n: 12, name: 'Медный бык' },
     minotaur: { n: 12, name: 'Минотавр' },
     spider: { n: 20, name: 'Гигантская паучиха' },

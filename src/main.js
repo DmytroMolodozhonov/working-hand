@@ -481,7 +481,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     // Only words, never a spell: a spell's word inside a sentence («…огонь горит у ворот»). A spell is
     // said on its own (NativeVoice tells; the browser's recognizer writes whole sentences — counted here).
     const talkOnly = !!meta?.talkOnly || (!meta?.native && spellInSentence(command));
-    if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && game.castleLife?.talk?._listener?.()) earlyTalk(command);
+    if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && game.castleLife?.talk?._listener?.() && !game.owls?.claims?.(command)) earlyTalk(command);
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
         voiceTestText.style.color = '#55efc4';
@@ -499,6 +499,12 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         // (first: they cast nothing, so the checks below that a spell is really mine — loudness, lips,
         // a friend's echo — must not eat a guest's words to a villager)
         // (in a port both may be near: the nearer one — a sailor at the rail or a man on the pier — hears)
+        // a clever owl that loves me, near me: «я хочу найти паучиху» is for it — no spell, no word to a
+        // villager (only then: without such an owl the words go on as always — Owls.claims)
+        if (game.owls?.claims?.(command)) {
+            if (isFinal) game.owls.hear(command);
+            return;
+        }
         const sailorFirst = !!game.ships?.crew.heardFirst?.(game.castleLife?.talk);
         if (isFinal && !sailorFirst && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
             return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)

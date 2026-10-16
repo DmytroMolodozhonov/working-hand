@@ -155,6 +155,8 @@ export class Levitation {
         for (const b of g.books?.birds.values() || []) if (b.state !== 'fall' && !b.ward) out.push({ kind: 'bird', obj: b, pos: b.model.position }); // (the book of protection: Leviosa bounces off it)
         // a phoenix: caught, it hangs where the hand holds it, beating its wings (let go: it flies off)
         for (const f of g.phoenixes?.targets() || []) if (!f.lev) out.push({ kind: 'phoenix', obj: f, pos: f.model.position, r: 1 });
+        // a clever owl: «Левиоса» is no scroll's spell — it slips out and darts away (Owls.TARGETS)
+        for (const o of g.owls?.targets() || []) out.push({ kind: 'owl', obj: o, pos: o.model.position, r: 0.5 });
         // living bodies (not wizards: a charge flies at them — see Game)
         for (const z of g.zombies || []) if (!z.isDying && !z.isFrozen && !z.lev && (!z.isDead || (!z.removable && z.group.visible))) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 }); // (a zombie's body too)
         // the bodies of the dead (players, castle people — wizards too, knights…; Death.js): lifted like a thing
@@ -240,6 +242,7 @@ export class Levitation {
         if (best?.kind === 'wizard') best = null; // (a wizard is lifted by a duel charge: Game → aimWizard)
         if (best?.kind === 'dragon') return '🐉 Дракона «Левиоса» не поднимет — он слишком тяжёлый';
         if (best?.kind === 'iceCreature') return '❄️ Ледяная магия держит его на земле — «Левиоса» не поднимет';
+        if (best?.kind === 'owl') { this.game.owls?.hit(best.obj, 0, 'Levitation'); return '🦉 Сова выскользнула из «Левиосы» и улетела'; }
         if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар, тело), на животное, зомби, жителя или на другого волшебника — не дальше 30 м — и скажите «Вингардиум Левиоса»';
         const s = {
             kind: best.kind,

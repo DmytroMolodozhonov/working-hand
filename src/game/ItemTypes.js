@@ -24,6 +24,7 @@
  *   hammer  — Thor's hammer: catches lightning in a storm (3 strikes).
  */
 
+import { irMaterial } from '../fx/Iridescent.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
 import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
@@ -128,6 +129,8 @@ export const ITEM_INFO = {
     dragonEgg: { name: 'Яйцо дракона', icon: '🥚', weight: 4 },
     // the phoenix (Phoenixes.js): what it leaves when it is killed — for potions later (no effect yet)
     phoenixFeather: { name: 'Перо феникса', icon: '🪶', weight: 0.05, stack: 10 },
+    // the clever owl (Owls.js): what it leaves when a scroll's spell kills it — shimmering, precious (a merchant pays well)
+    owlFeather: { name: 'Перо совы', icon: '🪶', weight: 0.03, stack: 10 },
     // armour and robes (ArmorTypes.js): a piece {piece: helmet | chest | legs, magic, hp…}; put on by hand or «Suit Up»
     armor: { name: 'Доспех', icon: '🪖', weight: 4 },
     robe: { name: 'Мантия', icon: '🧥', weight: 1 },
@@ -167,6 +170,7 @@ export function itemValue(it) {
         case 'web': return 120 * (it.count || 1);
         case 'glass': return 2 * (it.count || 1);
         case 'phoenixFeather': return 250 * (it.count || 1);
+        case 'owlFeather': return 180 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
         default: return 0;
     }
@@ -487,6 +491,7 @@ export function describeItem(it) {
         case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         case 'armor': case 'robe': return describeArmor(it);
+        case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от умной волшебной совы. Переливается всеми цветами', 'Ценная вещь: торговцы дорого платят'] };
         case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Пригодится для зелий (позже)'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
@@ -807,7 +812,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -845,6 +850,7 @@ function buildItemModel(it) {
         case 'web': return webModel();
         case 'glass': return glassModel();
         case 'phoenixFeather': return phoenixFeatherModel();
+        case 'owlFeather': return owlFeatherModel();
         case 'armor': case 'robe': return armorItemModel(it);
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);
@@ -925,6 +931,40 @@ function phoenixFeatherModel() {
     const glow = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
     glow.position.y = y0 + L * 0.85;
     g.add(glow);
+    return g;
+}
+
+let _owlF = null;
+/**
+ * An owl's feather: a short quill and a soft broad vane that shimmers through the rainbow (the owl's
+ * own material — Iridescent.js); its shapes and materials shared by every such feather.
+ */
+function owlFeatherModel() {
+    if (!_owlF) {
+        const pos = [], col = [], idx = [];
+        const N = 10, L = 0.3, y0 = 0.06;
+        for (let i = 0; i <= N; i++) {
+            const t = i / N, y = y0 + t * L;
+            const w = 0.06 * Math.pow(Math.sin(Math.PI * (0.1 + 0.85 * t)), 0.6);
+            const c = 0.6 + 0.4 * t, bend = 0.025 * t * t;
+            pos.push(-w, y, bend, 0, y + 0.01, 0, w, y, bend);
+            col.push(c * 0.9, c * 0.9, c, c, c, c, c * 0.9, c * 0.9, c);
+            if (i) { const a = (i - 1) * 3, b = i * 3; idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2); }
+        }
+        const vane = new THREE.BufferGeometry();
+        vane.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        vane.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        vane.setIndex(idx);
+        vane.computeVertexNormals();
+        const quill = new THREE.CylinderGeometry(0.006, 0.011, 0.36, 6);
+        quill.translate(0, 0.18, 0);
+        vane.userData.shared = quill.userData.shared = true;
+        const qm = new THREE.MeshStandardMaterial({ color: 0xe8e2f4, roughness: 0.4 });
+        qm.userData.shared = true;
+        _owlF = { vane, quill, qm, vm: irMaterial(0xb6aee0, 0.9, { vertexColors: true, side: THREE.DoubleSide }) };
+    }
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(_owlF.quill, _owlF.qm), new THREE.Mesh(_owlF.vane, _owlF.vm));
     return g;
 }
 

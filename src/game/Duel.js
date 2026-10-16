@@ -44,6 +44,7 @@ import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
 import { dragonBody, dragonCenter } from './Dragons.js';
 import { phoenixBody, phoenixCenter } from './Phoenixes.js';
+import { owlBody, owlCenter } from './Owls.js';
 import { iceBody, iceCenter } from './IceQueen.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { IceLook, ICE } from '../fx/IceLook.js';
@@ -117,6 +118,7 @@ export const JOLT_TARGETS = {
     iceCastle: 'a snowman is thrown back; the queen and her ice monsters only sway (no damage: a spell without a scroll) — IceCastleLife.boltHit',
     blackship: 'Captain Black Moustache: thrown back as a man — unless his rapier beats the charge aside (Sailors.parryBolt); a skeleton: thrown back, no harm (no duel charge harms it — Sailors.pirateBoneDamage)',
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
+    owl: 'no effect: a simple charge — the clever owl darts away untouched (and no longer loves the caster) — Owls.boltHit',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
     carts: 'no effect on a cart on the road: far too heavy, its horses in the shafts; the charge bursts on its boards (Carriages.js — a mover); its horses and riders: as animals and castle people',
@@ -493,6 +495,8 @@ export class Duel {
         for (const dr of g.dragons?.targets() || []) dragonBody(dr, put('D', dr.id));
         // phoenixes (in the air or on the ground): their body from the tail to the breast
         for (const f of g.phoenixes?.targets() || []) phoenixBody(f, put('f', f.id));
+        // clever owls: a small body (only «Авада Кедавра», a scroll's, hurts one — Owls.boltHit)
+        for (const o of g.owls?.targets() || []) owlBody(o, put('o', o.id));
         // the Ice Castle's creatures: the queen, the snowmen, the ice monsters (IceQueen.iceBolt says what a charge does)
         for (const c of g.iceCastle?.targets() || []) iceBody(c, put('I', c.id));
         return out;
@@ -514,6 +518,7 @@ export class Duel {
         if (kind === 's') { const sp = g.spiders?.byId(id); return sp ? spiderBody(sp, e) : null; }
         if (kind === 'D') { const dr = g.dragons?.byId(id); return dr ? dragonBody(dr, e) : null; }
         if (kind === 'f') { const f = g.phoenixes?.byId(id); return f ? phoenixBody(f, e) : null; }
+        if (kind === 'o') { const o = g.owls?.byId(id); return o ? owlBody(o, e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
@@ -595,6 +600,7 @@ export class Duel {
     _creaturePoint(c, out) {
         if (c.isBird) return out.copy(c.model.position);
         if (c.isPhoenix) return phoenixCenter(c, out);
+        if (c.isOwl) return owlCenter(c, out);
         if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, 4.5 * (c.model.userData.s || 1), 0));
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
         return out.set(c.x, c.y + 2.4, c.z);
@@ -618,12 +624,13 @@ export class Duel {
         if (kind === 't') { const t = g.livingTrees?.byId.get(id); return t && !t.isDead ? t : null; }
         if (kind === 'c') { const c = g.ships?.crew.byId.get(id); return c && !c.dead ? c : null; }
         if (kind === 'f') return g.phoenixes?.byId(id) || null; // (a phoenix)
+        if (kind === 'o') return g.owls?.byId(id) || null; // (a clever owl)
         return null;
     }
 
     _targetPos(b, out) {
         const g = this.game;
-        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
         if (b.tk === 'I') { const c = g.iceCastle?.byId(b.tid); return c ? iceCenter(c, out) : null; }
@@ -877,7 +884,7 @@ export class Duel {
     _arrive(b, dt) {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
-        if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f') && this._referee()) { this._arriveAtCreature(b); return; }
+        if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') && this._referee()) { this._arriveAtCreature(b); return; }
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by); return; }
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by); return; }
@@ -964,6 +971,8 @@ export class Duel {
         if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
         // a phoenix: each charge as Phoenixes.TARGETS says («Авада» −25, «Остолбеней» drops it, «Айс» melts…)
         if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
+        // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)
+        if (c.isOwl) { g.owls?.boltHit(c, spell, byId); return; }
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither
         // («Экспеллиармус»: it has nothing in its hands to knock out — no effect)
         // («Джолт»: no damage — a rooted tree only reels from the shove: below)

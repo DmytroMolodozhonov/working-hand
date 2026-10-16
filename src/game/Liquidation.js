@@ -33,7 +33,7 @@ export const LIQ = {
 export const isLiquidation = (name) => name === 'Liquidation' || name === 'LiquidationMaxima';
 
 /** Magic things the plain splash cannot take (the «Максима» can). */
-const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather']);
+const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather', 'owlFeather']);
 export function liquidationNeedsMaxima(it) {
     if (!it) return false;
     return isMagicItem(it) || MAGIC_KINDS.has(it.kind);
@@ -71,6 +71,7 @@ export const LIQUIDATION_TARGETS = {
     iceCastle: { does: 'hurt', why: 'снеговику −урон; королеву и ледяных монстров не берёт (заклинание без свитка — IceQueen.iceDamage)' },
     blackship: { does: 'hurt', why: 'капитану −урон, как человеку; скелетов не берёт (их разрушает только то, что живое дерево, и то, что ломает кости)' },
     phoenix: { does: 'hurt', why: '−3, это нападение' },
+    owl: { does: 'none', why: 'не со свитка: сова увёртывается и улетает (Owls.TARGETS)' },
     servants: { does: 'hurt', why: 'свои слуги тоже живые: −3, если попасть' },
     looseThings: { does: 'dust', why: 'любая неживая вещь на земле (еда, оружие, щит, лук, мешочек…) рассыпается в прах; волшебная — только «Максимой»' },
     godGifts: { does: 'none', why: 'дары богов (Ледяной Жезл, пьедесталы Творческого) — не действует даже «Максима»: их защита слишком сильна' },
@@ -293,6 +294,7 @@ export class Liquidation {
         if (bk === 's') { const sp = g.spiders?.byId(id); if (sp) g.spiders.hit(sp, LIQ.DMG, 'Liquidation', by); return; }
         if (bk === 'D') { const dr = g.dragons?.byId(id); if (dr) g.dragons.hit(dr, LIQ.DMG, 'Liquidation', by); return; }
         if (bk === 'f') { const f = g.phoenixes?.byId(id); if (f) g.phoenixes.hit(f, LIQ.DMG, 'Liquidation', by); return; }
+        if (bk === 'o') { const o = g.owls?.byId(id); if (o) g.owls.hit(o, LIQ.DMG, 'Liquidation', by); return; } // (no scroll's: the owl darts away)
         if (bk === 'I') { const ic = g.iceCastle?.byId(id); if (ic) g.iceCastle.hit(ic, LIQ.DMG, ic.type === 'snowman' ? 'melee' : 'Liquidation', by); return; }
         const c = g.duel?._creature(bk, id);
         if (!c) return;

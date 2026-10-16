@@ -169,6 +169,7 @@ export const MAXIMA_TARGETS = {
     livingTrees: { why: 'живое дерево поднимается группой; падение ему не вредит — его ранит только огонь' },
     bookBirds: { why: 'не действует: книги-птицы летают сами, Максима берёт стоящих на земле (книгу ловит обычная «Левиоса»)' },
     phoenix: { why: 'не действует: феникс летит сам (его ловит обычная «Левиоса»)' },
+    owl: { why: 'не действует: сова вспархивает раньше — она летит сама; то, что падает, её не накроет (увёртывается)' },
     dragon: { why: 'не действует: дракон вырывается из любой Левиосы — он сильнее магии' },
     iceCastle: { why: 'не действует: ледяная магия королевы держит её, монстров и снеговиков на земле' },
     blackship: { why: 'чёрный корабль не поднимается (заколдован, пока его не взяли); капитан и скелеты на палубе — как моряки' },
@@ -1429,6 +1430,7 @@ export class LevitationMaxima {
         if (!ship) g.ships?.crew?.hitAt?.(c, r, dmg, by, 'crush');
         g.spiders?.hitAt?.(c, r, dmg, 'crush', by);
         g.phoenixes?.hitAt?.(c, r, dmg, 'crush', by);
+        g.owls?.hitAt?.(c, r, dmg, 'crush', by); // (an owl: quicker than a falling house — it darts away)
         g.iceCastle?.hitAt?.(c, r, dmg, 'crush', by); // (a house falling on the queen: it is no spell — it hurts)
         // (a living tree is hurt only by fire; a dragon is never under it — it flies; book-birds fly)
         // knocked down

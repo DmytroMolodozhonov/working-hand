@@ -34,6 +34,7 @@ import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
 import { phoenixDist } from './Phoenixes.js';
+import { owlDist } from './Owls.js';
 import { iceBody } from './IceQueen.js';
 import { segmentSegmentDistSq } from '../core/math.js';
 import { BowDraw, drawProgress } from './BowDraw.js';
@@ -501,6 +502,12 @@ export class Gear {
                     a.hit.add(f);
                     g.phoenixes.hit(f, a.dmg, 'arrow', a.by);
                     if (!f.dead) this._stick(a, f.model);
+                }
+                // a clever owl (Owls.js): it senses the arrow and slips aside — no harm; it flies off
+                if (g.authority) for (const o of g.owls?.targets() || []) {
+                    if (a.hit.has(o) || owlDist(o, p) > 0.2) continue;
+                    a.hit.add(o);
+                    g.owls.hit(o, a.dmg, 'arrow', a.by);
                 }
                 if (g.authority) for (const bd of g.books?.birds?.values() || []) {
                     if (bd.state === 'fall' || a.hit.has(bd) || bd.model.position.distanceTo(p) > 1.2) continue;
