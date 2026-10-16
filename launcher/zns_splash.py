@@ -88,7 +88,7 @@ class Splash:
             root.overrideredirect(True)
             root.configure(bg=BG)
             root.geometry(f"{w}x{h}+{x}+{y}")
-            root.title("Волшебство только начинается")
+            root.title("Загрузка игры")  # (never the game's title: zns_window finds the game's window by it)
             c = tk.Canvas(root, width=w, height=h, bg=BG, highlightthickness=0, bd=0)
             c.pack(fill="both", expand=True)
             # the loading screen's sky: a soft glow in the middle, the stars

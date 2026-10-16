@@ -128,7 +128,12 @@ def find_game_window(user32):
             buf = ctypes.create_unicode_buffer(512)
             user32.GetWindowTextW(ctypes.c_void_p(h), buf, 512)
             if buf.value == GAME_TITLE:
-                found.append(h)
+                # only the browser's window (the launcher's loading picture or anything else with this title
+                # is never the game: it was cut and shown instead, and the game's window stayed hidden)
+                cls = ctypes.create_unicode_buffer(64)
+                user32.GetClassNameW(ctypes.c_void_p(h), cls, 64)
+                if cls.value == APP_CLASS:
+                    found.append(h)
         return True
 
     user32.EnumWindows(proc(cb), 0)
