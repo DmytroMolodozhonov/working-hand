@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><linearGradient id="protection_gods_scroll-p" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d9c08a"/><stop offset="0.5" stop-color="#f6e6bd"/><stop offset="1" stop-color="#d2b47a"/></linearGradient></defs>
+  <!-- the parchment rolled, two golden ribbons (the shield and its dome) -->
+  <rect x="26" y="30" width="76" height="68" rx="6" fill="url(#protection_gods_scroll-p)" stroke="#8a6a2a" stroke-width="2"/>
+  <rect x="20" y="24" width="12" height="80" rx="6" fill="#c8a868" stroke="#7a5a1e" stroke-width="2"/>
+  <rect x="96" y="24" width="12" height="80" rx="6" fill="#c8a868" stroke="#7a5a1e" stroke-width="2"/>
+  <rect x="44" y="30" width="9" height="68" fill="#ffcf4a"/><rect x="75" y="30" width="9" height="68" fill="#fff1b0"/>
+  <!-- the golden shield drawn on it, shining -->
+  <circle cx="64" cy="64" r="15" fill="#ffcf4a" opacity="0.85" stroke="#b97a00" stroke-width="2"/>
+  <path d="M64 53 L73 58 L73 70 L64 75 L55 70 L55 58 Z" fill="none" stroke="#7a5000" stroke-width="1.8"/>
+  <g stroke="#ffa81f" stroke-width="2" stroke-linecap="round"><path d="M64 42 V46"/><path d="M64 82 V86"/><path d="M42 64 H46"/><path d="M82 64 H86"/></g>
+</svg>

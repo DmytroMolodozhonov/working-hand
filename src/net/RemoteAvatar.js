@@ -70,7 +70,7 @@ export class RemoteAvatar {
         const at = c.shield === 2
             ? this.position.clone().add(_d.set(0, 0.6, 0)).addScaledVector(_d.subVectors(from, this.position).normalize(), 2.4)
             : this.handPose(c.side).origin;
-        for (let i = 0; i < 20; i++) fx.spark(at, i % 2 ? 0x9fd8ff : 0xffffff, 0.15, _d.set((Math.random() - 0.5) * 8, Math.random() * 5, (Math.random() - 0.5) * 8), 0.4);
+        for (let i = 0; i < 20; i++) fx.spark(at, i % 2 ? (c.gods ? 0xffcf4a : 0x9fd8ff) : 0xffffff, 0.15, _d.set((Math.random() - 0.5) * 8, Math.random() * 5, (Math.random() - 0.5) * 8), 0.4);
     }
 
     get position() {
@@ -88,9 +88,10 @@ export class RemoteAvatar {
         this.duelContact = s.dc ? s.dc[0] : 1;
         this.duelJerk = s.dc ? s.dc[1] : 0;
         if (s.c) {
-            // [shield type, side (1 = left), seconds left, frozen seconds left, times it shattered]
-            const was = this.combat.shield, wasSide = this.combat.side;
+            // [shield type, side (1 = left), seconds left, frozen seconds left, times it shattered, the gods' shield (gold)]
+            const was = this.combat.shield, wasSide = this.combat.side, wasGods = !!this.combat.gods;
             this.combat.shield = s.c[0];
+            this.combat.gods = !!s.c[5]; // (ProtectionGods.js: their shield / dome golden)
             this.combat.side = s.c[1] ? 'left' : 'right';
             this.combat.shieldLeft = s.c[2];
             this.combat.frozen = s.c[3] > 0;
@@ -98,13 +99,14 @@ export class RemoteAvatar {
             // their shield shattered (out of mana, or knocked down by a spell from the same hand): the pieces fly
             const broke = s.c[4] | 0;
             if (this._broke != null && broke !== this._broke && was) {
-                if (was === 2) this.visuals.shatter(2, this.position.clone().add(_d.set(0, 0.6, 0)));
-                else { const hp = this.handPose(wasSide); this.visuals.shatter(1, hp.origin.clone().addScaledVector(hp.dir, 0.45), hp.dir); }
+                if (was === 2) this.visuals.shatter(2, this.position.clone().add(_d.set(0, 0.6, 0)), null, wasGods);
+                else { const hp = this.handPose(wasSide); this.visuals.shatter(1, hp.origin.clone().addScaledVector(hp.dir, 0.45), hp.dir, wasGods); }
             }
             this._broke = broke;
         } else if (this.combat.shield) {
             // (no shield sent any more: it went out — «стоп», a jerk — long before its time)
             this.combat.shield = 0;
+            this.combat.gods = false;
             this.combat.shieldLeft = 0;
             this.combat.frozen = false;
         }

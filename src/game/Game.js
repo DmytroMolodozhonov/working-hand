@@ -24,7 +24,7 @@ import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
-import { Combat, PVP, bombardoDamage } from './Combat.js';
+import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { LevitationMaxima } from './LevitationMaxima.js';
 import { Accio } from './Accio.js';
@@ -1218,7 +1218,7 @@ export class Game {
             this._voiceMeta = null;
         }
         // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom) — except Lumos: a light on the wand tip is no spell in the way
-        if (name && name !== 'Protection' && name !== 'ProtectionMaxima' && name !== 'Lumos' && name !== 'LumosMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
+        if (name && !/^Protection(Gods)?(Maxima)?$/.test(name) && name !== 'Lumos' && name !== 'LumosMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
         if (name && name !== 'Invisibility' && name !== 'Stand') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
@@ -1345,6 +1345,8 @@ export class Game {
         if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
+        // «Protection Gods» / «… Maxima»: the gods' shield, the same gesture — golden (ProtectionGods.js; works in space too)
+        if (name === 'ProtectionGods' || name === 'ProtectionGodsMaxima') return this._castProtection(name, isFinal);
         // «Максима» while my house's dome grows: it grows twice as fast (before the water's / the duel's)
         if (name === 'Maxima' && this.wards?.setting && !this._inDuel()) return this._castWard('WardGrow', isFinal);
         // «Максима» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
@@ -1573,10 +1575,11 @@ export class Game {
         const now = Date.now();
         const early = this._interimCast;
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
-        if (now - (this._lastShieldCast || 0) < 800) return null;
-        const hint = this.combat.castProtection(name === 'ProtectionMaxima');
+        if (now - (this._lastShieldCast || 0) < 800 && this._lastShieldName === name) return null; // (a longer phrase heard after — «… Gods», «… Maxima» — goes on)
+        const hint = this.combat.castProtection(/Maxima$/.test(name), name.startsWith('ProtectionGods'));
         if (hint) { this.hud.setVoice(hint, true); return null; }
         this._lastShieldCast = now;
+        this._lastShieldName = name;
         this._interimCast = isFinal ? null : { name, at: now };
         return name;
     }
@@ -2613,7 +2616,7 @@ export class Game {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
         if (name === 'FlyingMaxima') { if (!this.flight.active) this.startFlight(true); this.flight.state = 'cruise'; this.space?.cast(true); return; }
         if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
-        if (name === 'Protection' || name === 'ProtectionMaxima') { this._lastShieldCast = 0; return this._castProtection(name, true); }
+        if (/^Protection(Gods)?(Maxima)?$/.test(name)) { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
         if (name === 'Accio') { this._lastAccio = 0; return this._castAccio(true); }
         if (name === 'Fire') { this.campfires._lastCast = 0; return this.campfires.cast(true, true); }
@@ -2684,6 +2687,7 @@ export class Game {
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
         for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
+        for (const m of sampleShieldModels()) zoo.add(m); // (the shields: «Protection», and the gods' golden one — ProtectionGods.js)
         for (const m of this.iceMagic?.sampleModels?.() || []) zoo.add(m); // (the gloss of a castle of ice)
         for (const m of this.temple?.sampleModels?.() || []) zoo.add(m); // (the Temple of the Gods: its stone, marble, gold, books, sand, cobwebs, light)
         for (const m of this.boom?.sampleModels?.() || []) zoo.add(m); // («Бум»: its flying rocks, its shock ring)

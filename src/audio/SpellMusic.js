@@ -268,6 +268,22 @@ const TUNES = {
         noise(o, sr, 11.8, 1.7, 0.16, (u) => 0.03 + 0.12 * (1 - u), (u) => (1 - u) * (1 - u), r);
         return finish(o, sr, { rms: 0.085 });
     },
+    /**
+     * «Protection Gods» (… Maxima): the gods' shield — a radiant D major choir opening, a harp's golden rising
+     * arpeggios, a slow fanfare of brass over it and bells answering, a high shimmer holding at the end.
+     */
+    thGods(sr) {
+        const o = buf(sr, 7.5), r = rng(157);
+        pad(o, sr, ['D3', 'A3', 'D4', 'F#4'], 0, 3.2, 0.42, { att: 0.9, rel: 1, vib: 0.005, harm: 3 });
+        pad(o, sr, ['G3', 'B3', 'D4', 'G4'], 2.8, 4.8, 0.4, { att: 0.6, rel: 0.9, vib: 0.005, harm: 3 });
+        pad(o, sr, ['D3', 'A3', 'D4', 'F#4', 'A4', 'D5'], 4.6, 7.3, 0.5, { att: 0.4, rel: 1.6, vib: 0.005, harm: 4 });
+        const arp = ['D4', 'F#4', 'A4', 'D5', 'F#5', 'A5', 'D6'];
+        for (let k = 0; k < 21; k++) pluck(o, sr, hz(arp[k % 7]), 0.05 + k * 0.16, 0.2, 1.8, r);
+        melody([[0, 'A3', 1], [1, 'D4', 1], [2, 'F#4', 1.5], [3.5, 'E4', 0.5], [4, 'A4', 3]], 0.7, 0.4, (f, t, l) => brass(o, sr, f, t, l, 0.11));
+        melody([[0, 'D6', 1], [1, 'A5', 1], [2, 'F#6', 1], [3, 'A6', 3]], 0.6, 4.4, (f, t) => bell(o, sr, f, t, 0.15, 2.6, 0.3));
+        pad(o, sr, ['A5', 'D6'], 4.8, 7.4, 0.08, { att: 1.2, rel: 1, vib: 0.01, harm: 1 });
+        return finish(o, sr, { rms: 0.07 });
+    },
     /** «Flying Maxima»: out of the air — a Lydian arpeggio climbing, the pad opening, then airy and far (space). */
     thOrbit(sr) {
         const o = buf(sr, 11), r = rng(71);
@@ -411,6 +427,8 @@ const FX = {
     fxStop(sr) { const o = buf(sr, 0.8); bell(o, sr, hz('E5'), 0, 0.15, 0.6, 0.1); bell(o, sr, hz('A4'), 0.12, 0.15, 0.7, 0.1); return finish(o, sr, { peak: 0.45 }); },
     /** «Максима» (more push in a duel): a rising power-up and a chord. */
     fxMaxima(sr) { const o = buf(sr, 0.8), r = rng(83); noise(o, sr, 0, 0.5, 0.3, (u) => 0.05 + 0.4 * u, (u) => u, r); pad(o, sr, ['C4', 'G4', 'C5'], 0.45, 0.5, 0.5, { att: 0.02, rel: 0.3, harm: 4 }); return finish(o, sr, { peak: 0.65 }); },
+    /** The gods' shield goes out: a golden chime falling softly, a breath of air. */
+    endGods(sr) { const o = buf(sr, 1.2), r = rng(163); ['A5', 'F#5', 'D5'].forEach((n, k) => bell(o, sr, hz(n), k * 0.12, 0.14, 0.9, 0.2)); noise(o, sr, 0, 0.9, 0.08, (u) => 0.2 - 0.15 * u, swell(0.1, 0.7), r); return finish(o, sr, { peak: 0.45 }); },
     /** Lifted thing let go (Levitation's end): a soft falling sigh. */
     endLev(sr) { const o = buf(sr, 0.6); glide(o, sr, 0, 0.6, 0.25, (u) => 700 - 450 * u, swell(0.05, 0.7), 2); return finish(o, sr, { peak: 0.4 }); },
     /** The living tree is a tree again: a long wood groan and a dull thud. */
@@ -423,6 +441,8 @@ const LOOPS = {
     loopLev(sr) { const o = buf(sr, 2.3), r = rng(101); pad(o, sr, [440, 660], 0, 2.3, 0.3, { att: 0.01, rel: 0, harm: 1, vib: 0.004 }); noise(o, sr, 0, 2.3, 0.05, () => 0.3, () => 1, r); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
     /** A living tree: the wood's slow creak over a low drone. */
     loopAlive(sr) { const o = buf(sr, 3.3); pad(o, sr, [55, 82.5], 0, 3.3, 0.4, { att: 0.01, rel: 0, harm: 4 }); glide(o, sr, 0.6, 1.4, 0.15, (u) => 100 + 30 * u + 5 * Math.sin(u * 50), (u) => Math.sin(u * Math.PI), 5); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
+    /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
+    loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** A building growing: a light magic shimmer. */
     loopBuild(sr) { const o = buf(sr, 2.3); pad(o, sr, [220, 330, 880], 0, 2.3, 0.25, { att: 0.01, rel: 0, harm: 1, vib: 0.006 }); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** A beam / lightning held: an electric hum and a little crackle. */
@@ -497,6 +517,7 @@ export const SPELL_SOUND = {
     Lumos: { cast: 'fxLumos' }, LumosMaxima: { cast: 'fxLumosMax' }, Nox: { cast: 'fxNox' }, Reveal: { cast: 'fxReveal' },
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
+    ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
     Invisibility: { cast: 'fxInvis' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
     Breakthrough: { cast: 'fxStone' }, BreakthroughMaxima: { cast: 'fxStone', rate: 0.85 },
@@ -514,6 +535,7 @@ export const HELD_SOUND = {
     PlanetMove: { loop: 'loopLev', rate: 0.6, end: 'endLev' },
     Alive: { loop: 'loopAlive', end: 'endAlive' },
     Build: { loop: 'loopBuild', end: 'fxStop' },
+    GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },
     Inferno: { loop: 'loopFire', end: 'fxNox' },
     Waterball: { loop: 'loopWater', end: null },

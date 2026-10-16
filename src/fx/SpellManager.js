@@ -67,6 +67,17 @@ export function boomWords(s) {
     return w.some((x) => BOOM_WORD.test(x)) && w.every((x) => BOOM_WORD.test(x) || BOOM_FILL.has(x));
 }
 
+// «Protection Gods» («протекшн гадс / годс / гатс», «protection gods / god»), «Божественная защита», «Щит / защита богов»;
+// with «Максима» — the dome. The shield word AND the gods' word (never «год» in talk, never a plain «Protection»).
+const GODS_PROTECT_W = /(protect|протек|протэк|протект|щит|защит)/;
+const GODS_WORD = /^(gods?|gads?|godz|гад[зсц]?|год[зсц]|годсс?|гатс|гоц|гаддс|гаттс|бог|бога|богов|богам|боги|божеств\S*|божествен\S*)$/;
+export function godsShieldWords(s) {
+    s = String(s || '').toLowerCase().replace(/ё/g, 'е');
+    if (!GODS_PROTECT_W.test(s) && !/божествен/.test(s)) return null;
+    if (!s.split(/[^a-zа-я]+/).some((w) => GODS_WORD.test(w))) return null;
+    return /(максим|maxim|макс|max|купол)/.test(s) ? 'ProtectionGodsMaxima' : 'ProtectionGods';
+}
+
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
@@ -75,6 +86,10 @@ export function matchSpell(text) {
     // word AND the castle / bridge word — first, before «castle» of any other castle and the lone «Айс» (IceMagic.js)
     const iceMagic = iceMagicWords(s);
     if (iceMagic) return iceMagic;
+    // «Protection Gods» / «… Maxima» («Протекшн Гадс», «Божественная защита»): the gods' shield — the long phrase first,
+    // never a plain «Protection» while the gods' word was said (ProtectionGods.js)
+    const gods = godsShieldWords(s);
+    if (gods) return gods;
     // the gods' scrolls (PlanetMagic.js): «Create a Planet», «Enlarge Planet», «Terraform Planet» — the planet word
     // with its verb (never the house / castle «Create…»); «Wingardium Leviosa Super Maxima» — before the plain Maxima
     const pw = planetSpellWords(s);

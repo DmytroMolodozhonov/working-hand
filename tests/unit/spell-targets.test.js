@@ -358,3 +358,14 @@ test('«Бум»: the mountain torn from inside reaches every creature (MagicWav
     assert.match(body(b, '    _burst(b) {'), /ships\?\.boom/);
     assert.match(src('src/net/NetSync.js'), /case 'bum'/);
 });
+
+test('«Protection Gods» (… Maxima): its table decides who and what; every place a spell reaches the player asks it', async () => {
+    const { PROTECTION_GODS_TARGETS: T } = await import('../../src/game/ProtectionGods.js');
+    for (const k of ['holders', 'me', 'players', 'duelCharges', 'blasts', 'rays', 'beasts', 'iceQueen', 'bosses', 'things', 'creatures', 'world', 'houseSphere', 'space']) assert.ok(T[k], k);
+    const c = src('src/game/Combat.js');
+    for (const m of ['    damage(amount, byId, kind) {', '    stun(seconds, byId, kind', '    freeze(byId, time', '    slow(seconds', '    _payHit(kind) {', '    explosion(pos, radius, power, byId) {']) assert.match(body(c, m), /gods|godsKeepsOff|godsHit/, m);
+    assert.match(body(src('src/game/BodyImpact.js'), '    apply(o) {'), /_godsHold/, 'pushes and falls');
+    assert.match(src('src/game/Boom.js'), /godsHit\(BOOM\.NAME/, '«Бум» pays the gods\' shield');
+    assert.match(src('src/game/PlanetDestroy.js'), /godsHit\('PlanetLiquidation'/, '«Planet Liquidation» pays the gods\' shield');
+    assert.match(src('src/game/Levitation.js'), /shield\?\.gods/, '«Левиоса» does not lift who is under it');
+});

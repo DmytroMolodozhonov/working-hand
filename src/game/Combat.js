@@ -37,6 +37,7 @@ import * as THREE from 'three';
 import { sharpJerk } from './Jerk.js';
 import { spellPush } from './Impact.js';
 import { SLOW } from './Slow.js';
+import { PGODS, isDivine, isMagicKind, godsKeepsOff, ALL_ROUND, payDivine } from './ProtectionGods.js';
 
 export const PVP = {
     MAX_HP: 20,
@@ -57,6 +58,8 @@ export const PVP = {
 export const SPELL_COST = {
     Protection: 5,
     ProtectionMaxima: 20,
+    ProtectionGods: 100, // the gods' shield: then 3 a second while it holds (ProtectionGods.js; the author: 100 + 3)
+    ProtectionGodsMaxima: 300, // … its dome: then 5 a second (the author: 300 + 5)
     Bombardo: 15,
     BombardoMaxima: 25,
     Thunderwave: 15,
@@ -192,6 +195,7 @@ export const PROTECTION_TARGETS = {
     magicBlade: 'a magic sword / axe breaks a hand shield it touches',
     sameHand: 'another spell cast from the hand (the wand) that holds the «Protection» knocks it down; the dome is in no hand',
     houses: 'a house\'s sphere («Protection House») is another magic: none of this applies to it (HouseWards.js)',
+    gods: '«Protection Gods» (… Maxima) — the same shield, golden: every spell not of the gods held for nothing, the gods\' ones for half their price × the share of the blow (ProtectionGods.PROTECTION_GODS_TARGETS)',
 };
 
 /** The name a hit's kind is paid by (SPELL_COST): a duel charge, a ball, a bolt. */
@@ -227,7 +231,21 @@ function shared() {
     const domeMat = new THREE.MeshBasicMaterial({ color: 0x3fa9ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
     const gridMat = new THREE.LineBasicMaterial({ color: 0x8fd0ff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
     const iceMat = new THREE.MeshPhongMaterial({ color: 0xbfe9ff, emissive: 0x1d4a66, specular: 0xffffff, shininess: 120, transparent: true, opacity: 0.55, flatShading: true, depthWrite: false });
+    // the gods' shield (ProtectionGods.js): gold, brighter, a second ring and a crown of rays round it, a halo
+    const gold = (c, o, extra = {}) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false, ...extra });
+    const goldShieldMat = gold(PGODS.GOLD, 0.4), goldRingMat = gold(PGODS.GOLD_LIGHT, 0.9), goldDomeMat = gold(PGODS.GOLD, 0.2), goldHaloMat = gold(PGODS.GOLD_DEEP, 0.12);
+    const goldRayMat = gold(PGODS.GOLD_LIGHT, 0.55);
+    const goldGridMat = new THREE.LineBasicMaterial({ color: 0xffe28a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+    // (the rays: 12 thin spikes round the disc, one shape)
+    const rays = [];
+    for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2, L = i % 2 ? 0.32 : 0.5;
+        const p = new THREE.PlaneGeometry(0.05, L).translate(0, 1.12 + L / 2, 0).rotateZ(a);
+        rays.push(p);
+    }
+    const rayGeo = mergeFlat(rays);
     SHARED = {
+        goldShieldMat, goldRingMat, goldDomeMat, goldHaloMat, goldRayMat, goldGridMat, rays: rayGeo,
         disc: new THREE.CircleGeometry(1.0, 40),
         ring: new THREE.TorusGeometry(1.0, 0.04, 6, 48),
         hex: new THREE.EdgesGeometry(new THREE.CircleGeometry(0.8, 6)),
@@ -238,6 +256,26 @@ function shared() {
         shieldMat, ringMat, domeMat, gridMat, iceMat,
     };
     return SHARED;
+}
+
+/** A few plain (non-indexed after toNonIndexed) geometries of position only → one (the rays of the gods' shield). */
+function mergeFlat(list) {
+    const parts = list.map((g) => g.index ? g.toNonIndexed() : g);
+    let n = 0;
+    for (const g of parts) n += g.attributes.position.count;
+    const pos = new Float32Array(n * 3);
+    let o = 0;
+    for (const g of parts) { pos.set(g.attributes.position.array, o); o += g.attributes.position.array.length; }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    return out;
+}
+
+/** One small mesh of each of the shields' materials (Game.prewarm: compiled at loading, never in a frame). */
+export function sampleShieldModels() {
+    const S = shared();
+    return [S.shieldMat, S.ringMat, S.domeMat, S.goldShieldMat, S.goldRingMat, S.goldDomeMat, S.goldHaloMat, S.goldRayMat, S.iceMat].map((m) => new THREE.Mesh(S.disc, m))
+        .concat([new THREE.LineSegments(S.hex, S.gridMat), new THREE.LineSegments(S.hex, S.goldGridMat)]);
 }
 
 /** Shield + ice shell meshes for one player (local or remote). */
@@ -257,6 +295,24 @@ export class CombatVisuals {
         this.domeGrid = new THREE.LineSegments(S.domeGrid, S.gridMat);
         this.domeGrid.scale.setScalar(1.01);
         this.dome.add(this.domeGrid);
+        // the gods' shield and dome (ProtectionGods.js): gold, a second ring turning the other way, a crown of rays, a halo
+        this.gHand = new THREE.Group();
+        this.gHandRing = new THREE.Mesh(S.ring, S.goldRingMat);
+        this.gHandRing2 = new THREE.Mesh(S.ring, S.goldRingMat);
+        this.gHandRing2.scale.setScalar(0.72);
+        this.gHandHex = new THREE.LineSegments(S.hex, S.goldGridMat);
+        this.gRays = new THREE.Mesh(S.rays, S.goldRayMat);
+        this.gHalo = new THREE.Mesh(S.disc, S.goldHaloMat);
+        this.gHalo.scale.setScalar(1.55);
+        this.gHand.add(new THREE.Mesh(S.disc, S.goldShieldMat), this.gHandRing, this.gHandRing2, this.gHandHex, this.gRays, this.gHalo);
+        this.gDome = new THREE.Group();
+        this.gDomeGrid = new THREE.LineSegments(S.domeGrid, S.goldGridMat);
+        this.gDomeGrid.scale.setScalar(1.01);
+        this.gDomeGrid2 = new THREE.LineSegments(S.domeGrid, S.goldGridMat);
+        this.gDomeGrid2.scale.setScalar(0.97);
+        this.gDomeHalo = new THREE.Mesh(S.dome, S.goldHaloMat);
+        this.gDomeHalo.scale.setScalar(1.12);
+        this.gDome.add(new THREE.Mesh(S.dome, S.goldDomeMat), this.gDomeGrid, this.gDomeGrid2, this.gDomeHalo);
         // the ice shell: a faceted block round the body with crystal spikes sticking out of it
         this.shell = new THREE.Group();
         const block = new THREE.Mesh(S.shell, S.iceMat);
@@ -272,7 +328,7 @@ export class CombatVisuals {
             spike.scale.set(w, 0.45 + (i % 4) * 0.15, w);
             this.shell.add(spike);
         }
-        for (const o of [this.hand, this.dome, this.shell]) {
+        for (const o of [this.hand, this.dome, this.shell, this.gHand, this.gDome]) {
             o.visible = false;
             o.renderOrder = 4;
             scene.add(o);
@@ -285,12 +341,12 @@ export class CombatVisuals {
      * The shield shatters (out of mana): its pieces fly apart and fade. type 1 the hand
      * shield at `at` facing `dir`; 2 the dome round `at`.
      */
-    shatter(type, at, dir = null) {
+    shatter(type, at, dir = null, gods = false) {
         const S = shared();
         const geo = S.shard || (S.shard = new THREE.CircleGeometry(0.22, 3));
         const n = type === 2 ? 26 : 16;
         for (let i = 0; i < n; i++) {
-            const m = new THREE.Mesh(geo, S.shieldMat.clone());
+            const m = new THREE.Mesh(geo, (gods ? S.goldShieldMat : S.shieldMat).clone()); // (the gods' one: golden pieces)
             m.material.opacity = 0.75;
             const u = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize();
             if (type === 2) m.position.copy(at).addScaledVector(u, PVP.DOME_R * 0.95);
@@ -325,6 +381,9 @@ export class CombatVisuals {
     update(dt, st, body) {
         this._t += dt;
         if (this.shards.length) this._updateShards(dt);
+        if (st.gods) this.hand.visible = this.dome.visible = false;
+        else this.gHand.visible = this.gDome.visible = false;
+        if (st.gods) { this._updateGods(dt, st, body); this._shell(dt, st, body); return; }
         const showHand = st.shield === 1 && st.shieldLeft > 0;
         this.hand.visible = showHand;
         this._handAge = showHand ? (this._handAge || 0) + dt : 0;
@@ -346,6 +405,50 @@ export class CombatVisuals {
             this.dome.scale.setScalar(PVP.DOME_R * k * (1 + 0.03 * Math.sin(this._t * 6)));
             this.domeGrid.rotation.set(this._t * 0.4, this._t * 0.6, 0);
         }
+        this._shell(dt, st, body);
+    }
+
+    /** The gods' shield / dome: golden, breathing light, its rings and rays turning (ProtectionGods.js). */
+    _updateGods(dt, st, body) {
+        const t = this._t;
+        const showHand = st.shield === 1 && st.shieldLeft > 0;
+        this.gHand.visible = showHand;
+        this._handAge = showHand ? (this._handAge || 0) + dt : 0;
+        if (showHand) {
+            const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._handAge / 0.3 + 0.15));
+            this.gHand.position.copy(body.hand).addScaledVector(body.dir, 0.45);
+            this.gHand.lookAt(_v1.copy(this.gHand.position).add(body.dir));
+            this.gHand.scale.setScalar(PVP.SHIELD_SCALE * k * (1 + 0.025 * Math.sin(t * 5)));
+            this.gHandRing.rotation.z = t * 1.6;
+            this.gHandRing2.rotation.z = -t * 2.4;
+            this.gHandHex.rotation.z = -t * 0.9;
+            this.gRays.rotation.z = t * 0.5;
+            this.gRays.scale.setScalar(1 + 0.08 * Math.sin(t * 3.3));
+            this.gHalo.scale.setScalar(1.5 + 0.12 * Math.sin(t * 2.1));
+        }
+        const showDome = st.shield === 2 && st.shieldLeft > 0;
+        this.gDome.visible = showDome;
+        this._domeAge = showDome ? (this._domeAge || 0) + dt : 0;
+        if (showDome) {
+            const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._domeAge / 0.35 + 0.15));
+            this.gDome.position.copy(body.center);
+            this.gDome.scale.setScalar(PVP.DOME_R * k * (1 + 0.03 * Math.sin(t * 4)));
+            this.gDomeGrid.rotation.set(t * 0.3, t * 0.5, 0);
+            this.gDomeGrid2.rotation.set(-t * 0.45, -t * 0.2, t * 0.3);
+            this.gDomeHalo.scale.setScalar(1.1 + 0.05 * Math.sin(t * 2.3));
+        }
+        // (the gold breathes: the shared materials shine brighter and softer in turn — the same on every shield)
+        if (showHand || showDome) {
+            const S = shared(), b = 0.5 + 0.5 * Math.sin(t * 2.6);
+            S.goldShieldMat.opacity = 0.32 + 0.14 * b;
+            S.goldDomeMat.opacity = 0.15 + 0.1 * b;
+            S.goldHaloMat.opacity = 0.08 + 0.1 * (1 - b);
+            S.goldRayMat.opacity = 0.4 + 0.3 * b;
+        }
+    }
+
+    /** The ice shell of «Айс». */
+    _shell(dt, st, body) {
         this.shell.visible = !!st.frozen;
         this._iceAge = st.frozen ? (this._iceAge || 0) + dt : 0;
         if (st.frozen) {
@@ -357,7 +460,7 @@ export class CombatVisuals {
     }
 
     dispose() {
-        for (const o of [this.hand, this.dome, this.shell]) this.scene.remove(o);
+        for (const o of [this.hand, this.dome, this.shell, this.gHand, this.gDome]) this.scene.remove(o);
         for (const s of this.shards) { this.scene.remove(s.m); s.m.material.dispose(); }
         this.shards = [];
     }
@@ -417,6 +520,7 @@ export class Combat {
     }
 
     stun(seconds, byId, kind = 'stupefy') {
+        if (this.godsKeepsOff(kind)) return; // (the gods' dome: no spell knocks me down — ProtectionGods.js)
         this.stunLeft = Math.max(this.stunLeft || 0, seconds);
         this.stunBy = byId;
         this.stunKind = kind;
@@ -427,6 +531,7 @@ export class Combat {
 
     /** «Даст»: sand in the eyes and the joints — slowed for a while (every mode). */
     slow(seconds = SLOW.TIME, byId = null) {
+        if (this.godsKeepsOff('Sands')) return; // (the gods' dome: no sand gets in)
         this.slowLeft = Math.max(this.slowLeft || 0, seconds);
         this.slowBy = byId;
         if (this.game.character) this.game.character.slowScale = SLOW.SCALE;
@@ -458,7 +563,7 @@ export class Combat {
     costOf(name, extra = 0) {
         const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name, extra = 0) {
@@ -513,8 +618,10 @@ export class Combat {
      * «Protection» (arm stretched out) / «Protection Maxima» (T-pose).
      * @returns {string|null} hint when the gesture is wrong
      */
-    castProtection(maxima) {
+    castProtection(maxima, gods = false) {
         const ch = this.game.character;
+        if (gods) return this._castGods(maxima);
+        if (this.shield?.gods) return '✨ Вы уже под божественной защитой — она держит больше любого щита';
         if (maxima) {
             if (!ch.isTPose()) return '🛡️ Для «Protection Maxima» разведите руки <b>в стороны, как буква T</b>';
             if (this.shield?.type === 2) return null; // (already round me: nothing more to pay)
@@ -552,6 +659,86 @@ export class Combat {
         return null;
     }
 
+    /**
+     * «Protection Gods» (arm stretched out) / «… Maxima» (T-pose): the gods' shield (ProtectionGods.js) — the same
+     * gesture and shield as «Protection», golden; 100 / 300 mana at once, then 3 / 5 a second (Creative: free).
+     */
+    _castGods(maxima) {
+        const ch = this.game.character, name = maxima ? 'ProtectionGodsMaxima' : 'ProtectionGods';
+        let side = 'right';
+        if (maxima) {
+            if (!ch.isTPose()) return '✨ Для «Protection Gods Maxima» разведите руки <b>в стороны, как буква T</b>';
+            if (this.shield?.gods && this.shield.type === 2) return null; // (already round me)
+        } else {
+            if (this.shield?.gods && this.shield.type === 2) return '✨ Вы уже под божественным куполом';
+            if (this.shield?.gods) return null; // (already holding it)
+            // (the hand stretched out — the free one of the wand first; none stretched: the one reaching furthest)
+            const wand = this.game.wandSide?.();
+            const free = wand === 'right' ? 'left' : wand === 'left' ? 'right' : null;
+            side = free && ch.isArmExtended(free) ? free : ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
+            if (!side) {
+                const reach = (sd) => ch.getHandWorldPosition(sd, _v1).distanceTo(ch.group.position);
+                side = reach('right') >= reach('left') ? 'right' : 'left';
+            }
+        }
+        const hint = this.spend(name);
+        if (hint) return hint;
+        this.game.mana?.success(name); // (the first time: +100 cells — a gift of the gods, Mana.GOD_SPELLS)
+        const drain = maxima ? PGODS.DRAIN_MAX : PGODS.DRAIN;
+        // (an ordinary shield held now gives way to it)
+        this.shield = { type: maxima ? 2 : 1, side, left: this.enabled ? this.fatigue / drain : PVP.SHIELD_HOLD_MAX, drain, age: 0, gods: true };
+        if (maxima) this.game.spiders?.onDome(); // (the spider's fangs let go, as for any dome)
+        const at = maxima ? this.center(_v1) : ch.getHandWorldPosition(side, _v1);
+        this.game.fx?.lightFlash?.(at, PGODS.GOLD, 3, 0.4, 20);
+        for (let i = 0; i < 30; i++) this.game.fx?.spark?.(at, i % 3 ? PGODS.GOLD : 0xffffff, 0.18, _v2.set((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6), 0.8);
+        if (this.enabled) this.game.hud?.setVoice?.(maxima ? '✨ Божественный купол: ни одно заклинание, кроме божественных, не пройдёт. −5 маны в секунду. Снять — «стоп»' : '✨ Божественный щит: ни одно заклинание, кроме божественных, не пройдёт. −3 маны в секунду. Снять — «стоп» или рывком руки', true);
+        return null;
+    }
+
+    /**
+     * Does the gods' shield keep a kind of harm off me, with no direction known (Combat.damage / stun / freeze /
+     * slow)? The dome: every spell not of the gods; the hand shield: those that strike all round (ProtectionGods).
+     */
+    godsKeepsOff(kind) {
+        return godsKeepsOff(this.shield, kind);
+    }
+
+    /**
+     * The gods' shield is struck by a spell of the gods (`kind` — its name): it holds, and takes from my mana
+     * half of `price` (that spell's own: SPELL_COST, unless given — «Planet Liquidation» + the planet's mass)
+     * × `share`, the part of the blow that would have reached me (ProtectionGods.divineHitCost). Not enough
+     * mana: it breaks — the rest goes on. `from`: where it came from (the hand shield must face it; null: all round).
+     * @returns {number} the share of the blow that goes on to me (1: there was no gods' shield to stop it; 0: all held)
+     */
+    godsHit(kind, from = null, share = 1, price = null) {
+        const s = this.shield;
+        if (!s?.gods || !(s.left > 0) || this.dead) return 1;
+        if (s.type === 1 && from && this.shieldFactor(from) < 1) return 1; // (from behind the hand)
+        const k = Math.max(0, Math.min(1, share));
+        if (!isDivine(kind)) { this._godsFx(from); return 0; } // (any other spell: held for nothing)
+        if (!this.enabled) { this._godsFx(from); return 0; } // (Creative: no mana rules)
+        const r = payDivine(this.fatigue, price ?? SPELL_COST[kind] ?? 0, k);
+        this.fatigue = r.mana;
+        if (r.pass > 0) { this._shatter('💥 Божественная защита сломалась — не хватило маны удержать заклинание богов!'); return r.pass; }
+        this._godsFx(from, '✨ Божественная защита сдержала заклинание богов');
+        return 0;
+    }
+
+    /** The gods' shield held something: gold sparks where it touched, its gold light flaring. */
+    _godsFx(from, text = '✨ Божественная защита сдержала заклинание') {
+        const s = this.shield, fx = this.game.fx;
+        if (!s || !fx) return;
+        const now = performance.now();
+        if (now - (this._godsFxAt || 0) < 120) return; // (a beam held on it: not a shower every frame)
+        this._godsFxAt = now;
+        const c = this.center(_v1);
+        const at = s.type === 2 ? (from ? c.addScaledVector(_v2.subVectors(from, c).normalize(), PVP.DOME_R * 0.95) : c) : this.game.character.getHandWorldPosition(s.side, _v1);
+        for (let i = 0; i < 28; i++) fx.spark(at, i % 3 ? PGODS.GOLD : 0xffffff, 0.16, _v3.set((Math.random() - 0.5) * 8, Math.random() * 5, (Math.random() - 0.5) * 8), 0.5);
+        fx.lightFlash?.(at, PGODS.GOLD, 2.5, 0.25, 16);
+        if (now - (this._godsSayAt || 0) > 1500) { this._godsSayAt = now; this.game.hud?.setVoice?.(text, true); }
+        this.game.sound?.playFrozenHit?.();
+    }
+
     /** A held «Protection»: a sharp jerk of the shield arm puts it out (not a small move). */
     _shieldJerk(dt) {
         const s = this.shield;
@@ -586,11 +773,11 @@ export class Combat {
         if (!s) return;
         const ch = this.game.character;
         if (this.visuals) {
-            if (s.type === 2) this.visuals.shatter(2, this.center(_v1));
-            else this.visuals.shatter(1, ch.getHandWorldPosition(s.side, _v1).addScaledVector(ch.getHandDirection(s.side, _v2), 0.45), _v2);
+            if (s.type === 2) this.visuals.shatter(2, this.center(_v1), null, !!s.gods);
+            else this.visuals.shatter(1, ch.getHandWorldPosition(s.side, _v1).addScaledVector(ch.getHandDirection(s.side, _v2), 0.45), _v2, !!s.gods);
         }
         const at = s.type === 2 ? this.center(_v1) : ch.getHandWorldPosition(s.side, _v1);
-        this.game.fx?.lightFlash?.(at, 0x6fc3ff, 3, 0.3, 18);
+        this.game.fx?.lightFlash?.(at, s.gods ? PGODS.GOLD : 0x6fc3ff, 3, 0.3, 18);
         this.shield = null;
         this.brokeN = ((this.brokeN || 0) + 1) % 100;
         if (text) this.game.hud.setVoice(text, true);
@@ -602,6 +789,7 @@ export class Combat {
      * @returns {boolean} true: held (paid); false: not enough mana — the shield shattered, the spell goes on
      */
     _payHit(kind) {
+        if (this.shield?.gods) return this.godsHit(kind, null, 1) <= 0; // (the gods' shield: held — only the gods' own spells cost: ProtectionGods.js)
         if (!this.enabled || !this.shield) return true;
         let cost = shieldHitCost(kind);
         if (cost > 0 && BEAM_KINDS.has(kind)) {
@@ -639,6 +827,7 @@ export class Combat {
         if ((!this.shield || this.shield.left <= 0) && this.game.gear?.shieldFaces(from)) { this.game.gear.shieldTook(kind || 'Sapira'); return true; }
         if (!this.shield) return false;
         if (!this._payHit(kind)) return false;
+        if (this.shield?.gods) return true; // (its own gold sparks: godsHit)
         const c = this.center(_v1);
         const fx = this.game.fx;
         const at = this.shield.type === 2 ? c.addScaledVector(_v2.subVectors(from, c).normalize(), 2.4) : this.game.character.getHandWorldPosition(this.shield.side, _v1);
@@ -663,7 +852,7 @@ export class Combat {
         if (!this.enabled || this.dead) return false;
         if (this.shieldFactor(from) >= 1 && this._blocked(from, kind)) {
             // (still felt: the shield arm is pushed back, the body slides a little — never a fall)
-            if (this.game.impact && kind !== 'Bounce') this.game.impact.apply({ v: push ? push.clone() : this._pushOf(kind, from), from, by: byId, spell: kind });
+            if (this.game.impact && kind !== 'Bounce' && !this.shield?.gods) this.game.impact.apply({ v: push ? push.clone() : this._pushOf(kind, from), from, by: byId, spell: kind });
             return false;
         }
         // worn armour / a robe (Armor.js): the simplest magic bounces off a magic robe / the whole magic set
@@ -704,6 +893,7 @@ export class Combat {
     }
 
     freeze(byId, time = PVP.FREEZE_TIME) {
+        if (this.godsKeepsOff('Frozen')) return; // (the gods' dome: no ice takes me)
         this.chill = 0;
         this.frozenLeft = Math.max(this.frozenLeft, time);
         this.frozenBy = byId;
@@ -722,11 +912,13 @@ export class Combat {
         let dmg = bombardoDamage(d, radius, power);
         if (dmg <= 0) return;
         const s = this.shield;
+        const kind = power < 1 ? 'Cannon' : power > 1 ? 'BombardoMaxima' : 'Bombardo'; // (a cannonball's blast is no spell)
+        if (s?.gods && s.left > 0 && isMagicKind(kind)) { this.godsHit(kind, null); return; } // (the gods' shield: a blast all round — held, no mana)
         if (s && s.left > 0 && (s.type === 2 || this.shieldFactor(pos) >= 1) && this._payHit(power > 1 ? 'BombardoMaxima' : 'Bombardo')) {
             dmg *= s.type === 2 ? 0.25 : 0.5; // (out of mana: it shattered — the whole blast)
         }
         dmg = Math.round(dmg);
-        if (dmg > 0) this.damage(dmg, byId, 'Bombardo');
+        if (dmg > 0) this.damage(dmg, byId, kind === 'Cannon' ? 'Cannon' : 'Bombardo');
     }
 
     /** Someone hit me with a fist or a weapon. A frozen player shatters. */
@@ -736,7 +928,7 @@ export class Combat {
         const att = this.game.remotes?.get(byId)?.position;
         if (att && this.game.gear?.shieldFaces(att)) { this.game.gear.shieldTook('melee'); return false; }
         // a magic weapon breaks an ordinary «Protection» it touches
-        if (magic && this.shield && this.shield.type === 1) {
+        if (magic && this.shield && this.shield.type === 1 && !this.shield.gods) { // (the gods' one it does not: ProtectionGods.js)
             this.shield = null; // (for good: a held shield would come back from the strength left)
             this.game.hud.setVoice?.('💥 Волшебное оружие разбило ваш щит!', true);
             const p = this.center(_v1);
@@ -751,6 +943,7 @@ export class Combat {
 
     damage(amount, byId, kind) {
         if (this.dead) return;
+        if (this.godsKeepsOff(kind)) { this._godsFx(null); return; } // (the gods' shield: no spell but the gods' own gets through — ProtectionGods.js)
         // Any hit on a frozen player shatters them, whatever their HP
         if (this.frozen && kind !== 'Inferno') { this.die(byId, 'shatter'); return; }
         // worn armour takes its share; a robe / a named armour's perks soften it (Armor.js)
@@ -820,7 +1013,7 @@ export class Combat {
             this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
             this.shield.left = this.fatigue / this.shield.drain;
             this._shieldJerk(dt);
-            if (this.shield && this.fatigue <= 0) this._shatter(this.shield.type === 2 ? '🛡️ Купол рассыпался — мана кончилась' : '🛡️ Щит рассыпался — мана кончилась');
+            if (this.shield && this.fatigue <= 0) this._shatter(this.shield.gods ? '✨ Божественная защита погасла — мана кончилась' : this.shield.type === 2 ? '🛡️ Купол рассыпался — мана кончилась' : '🛡️ Щит рассыпался — мана кончилась');
         } else if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
         if (this.frozenLeft > 0) {
             this.frozenLeft = Math.max(0, this.frozenLeft - dt);
@@ -868,6 +1061,7 @@ export class Combat {
             shield: this.shield ? this.shield.type : 0,
             side: this.shield ? this.shield.side : 'right',
             shieldLeft: this.shield ? Math.min(this.shield.left, 1e6) : 0, // (Creative's endless one: a number the network can carry)
+            gods: !!this.shield?.gods, // (the gods' shield: gold — ProtectionGods.js)
             frozen: this.frozen,
         };
     }
@@ -875,7 +1069,7 @@ export class Combat {
     serialize() {
         if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Айс» is seen in every mode)
         const s = this.shield;
-        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0]; // (the last: how many times it shattered — the others see the pieces)
+        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0, s?.gods ? 1 : 0]; // (the 5th: how many times it shattered — the others see the pieces; the 6th: the gods' shield, gold)
     }
 
     // ============================================================ melee out

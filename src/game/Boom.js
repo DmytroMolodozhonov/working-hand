@@ -411,15 +411,20 @@ export class Boom {
         if (g.isDeadLocal) return;
         if (g.temple?.wards?.(me, 0)) return; // (inside the gods' temple: its golden ward)
         if (dist > R && g.wards?.shields?.(b.c, me)) return;
+        const c = g.combat, s = c?.shield;
+        // the gods' shield («Protection Gods», ProtectionGods.js): a spell of the gods — it holds, for half of «Бум»'s
+        // price × the share of the blow that reaches here (all of it in the bowl, less towards the edge); out of
+        // mana it breaks — the rest of the blow goes on
+        const full = boomDamage(0) || 1, gods = s?.gods ? c.godsHit(BOOM.NAME, null, boomDamage(dist) / full) : 1;
+        if (gods <= 0) return;
         const th = boomThrow(dist);
         if (!g.flight?.active) {
             _v.set(me.x - b.c.x, 0, me.z - b.c.z);
             if (_v.lengthSq() < 1e-6) _v.set(0, 0, 1);
-            g.impact?.apply({ v: _v.normalize().multiplyScalar(th.speed), from: b.c.clone(), by: b.by, spell: BOOM.NAME, always: { down: 6 }, toss: th.toss, jolt: 6, down: 6 });
+            g.impact?.apply({ v: _v.normalize().multiplyScalar(th.speed * gods), from: b.c.clone(), by: b.by, spell: BOOM.NAME, always: gods >= 0.5 ? { down: 6 } : null, toss: th.toss * gods, jolt: 6 * gods, down: 6 });
         }
-        let dmg = boomDamage(dist);
-        const c = g.combat, s = c?.shield;
-        if (s && s.left > 0 && dist > R) dmg *= s.type === 2 ? 0.25 : 0.5; // (inside the mountain no shield holds)
+        let dmg = boomDamage(dist) * gods;
+        if (s && s.left > 0 && dist > R && !s.gods) dmg *= s.type === 2 ? 0.25 : 0.5; // (inside the mountain no shield holds)
         dmg = Math.round(dmg);
         if (dmg <= 0 || g.config?.mode === 'creative') return;
         if (c?.enabled) c.damage(dmg, b.by === g.localId ? null : b.by, BOOM.NAME);

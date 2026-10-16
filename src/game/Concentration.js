@@ -16,6 +16,8 @@
  *   itself), «To the Sun» (the beam lives on by itself), the flight,
  *   «Invisibility» (your spells are seen under it — so you cast under it), the air bubble under water,
  *   the shield and the dome, Lumos, drawing, charges, blasts and every other spell that is cast and gone.
+ *   Held, unlike the ordinary shield: «Protection Gods» / «… Maxima» (ProtectionGods.js) — under the gods' shield
+ *   no other spell is cast (first «стоп»): nothing gets in, nothing goes out.
  *
  *   The concentration breaks (everything held stops at once — the living tree is a tree again and falls,
  *   what «Левиоса» held falls, the water falls as water, the fire goes out…) when the caster dies, is
@@ -52,6 +54,7 @@ export const HELD = {
     Lightning: { ru: 'Молния', icon: '⚡', own: ['LightningStrike', 'Hammer'] },
     SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'UnfurlMaxima', 'Furl'] },
     Beam: { ru: 'Луч', icon: '❄️', own: [] },
+    GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima'] }, // (the gods' shield: held — ProtectionGods.js)
 };
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
@@ -100,6 +103,7 @@ export class Concentration {
         const sp = g.spells?.heldBy?.(g.localId);
         if (sp) return sp.kind === 'Inferno' ? 'Inferno' : /^Drawdown/.test(sp.kind || '') ? 'Drawdown' : 'Beam';
         if (g.livingTrees?.mine?.().length) return 'Alive';
+        if (g.combat?.shield?.gods) return 'GodsShield'; // («Protection Gods» is held — unlike the ordinary shield)
         return null;
     }
 

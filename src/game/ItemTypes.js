@@ -59,9 +59,10 @@ export const SPELL_RU = {
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima',
     Boom: 'Бум', // (the fifth scroll of the library: Boom.js)
     PlanetLiquidation: 'Planet Liquidation', // (the sixth: PlanetDestroy.js)
+    ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', // (the seventh and the eighth: the gods' shield — ProtectionGods.js)
 };
 /** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
-export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a }; // («Wind Impulse»: one scroll — its «Максима» too) // («Firefighting» itself is known too: only its Maxima hose comes from a scroll) // («Алохомора» itself is known; only its Maxima comes from a scroll)
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a, ProtectionGods: 0xffcf4a, ProtectionGodsMaxima: 0xfff1b0 }; // («Wind Impulse»: one scroll — its «Максима» too) // («Firefighting» itself is known too: only its Maxima hose comes from a scroll) // («Алохомора» itself is known; only its Maxima comes from a scroll)
 /** What the temple's scrolls are for (GodsTemple.js — the library of the Temple of the Gods). */
 const TEMPLE_SCROLL_LINE = {
     CreatePlanet: 'Заклинание богов: создать в космосе новую планету',
@@ -70,11 +71,13 @@ const TEMPLE_SCROLL_LINE = {
     LevitationSuperMaxima: 'Заклинание богов: двигать целую планету в космосе',
     Boom: 'Заклинание богов: разорвать изнутри целую гору или замок (750 маны)',
     PlanetLiquidation: 'Заклинание богов: взорвать целую планету (1500 маны + масса планеты)',
+    ProtectionGods: 'Заклинание богов: золотой щит — не пропускает ни одного заклинания, кроме божественных (100 маны, потом 3 в секунду)',
+    ProtectionGodsMaxima: 'Заклинание богов: золотой купол вокруг — не пропускает ни одного заклинания, кроме божественных (300 маны, потом 5 в секунду)',
 };
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
 export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
-export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая' };
+export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая', ProtectionGods: 'сияющая золотая', ProtectionGodsMaxima: 'бледно-золотая, сияющая' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');

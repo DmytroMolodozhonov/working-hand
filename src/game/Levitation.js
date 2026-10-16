@@ -911,6 +911,8 @@ export class Levitation {
         if (levBlocked(g.combat, mx)) { g.hud.setVoice('🛡️ Магические доспехи не дали «Левиосе» вас поднять', true); return; }
         const c = g.combat.center(new THREE.Vector3());
         if (!g.duel?._handOf(by, side, _h1, _h2)) return;
+        // the gods' shield (ProtectionGods.js): the dome, or the hand shield facing the caster — no «Левиоса» lifts me (no mana)
+        if (g.combat.shield?.gods && g.combat.shieldFactor(_h1) >= 1) { g.combat.godsHit(mx ? 'LevitationMaxima' : 'Levitation', _h1); g.sync?.lift?.(by, side, 0, false, false, 'levShield'); return; }
         if (this.state) this.release(false);
         if (g.flight?.busy) g.flight.land('levitate');
         if (g.animals?.riding) g.animals.dismount();

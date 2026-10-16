@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="protection_gods-bg" cx="0.5" cy="0.45" r="0.6"><stop offset="0" stop-color="#3a2a08"/><stop offset="1" stop-color="#0d0a04"/></radialGradient>
+    <radialGradient id="protection_gods-d" cx="0.5" cy="0.45" r="0.55"><stop offset="0" stop-color="#fff6c8" stop-opacity="0.95"/><stop offset="0.55" stop-color="#ffcf4a" stop-opacity="0.75"/><stop offset="1" stop-color="#ffa81f" stop-opacity="0.25"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#protection_gods-bg)"/>
+  <!-- a crown of golden rays round the shield -->
+  <g stroke="#fff1b0" stroke-width="3" stroke-linecap="round" opacity="0.85">
+    <path d="M64 8 V20"/><path d="M64 108 V120"/><path d="M8 64 H20"/><path d="M108 64 H120"/>
+    <path d="M24 24 L32 32"/><path d="M104 24 L96 32"/><path d="M24 104 L32 96"/><path d="M104 104 L96 96"/>
+  </g>
+  <!-- the golden shield disc, two rings, the hexagon -->
+  <circle cx="64" cy="64" r="38" fill="url(#protection_gods-d)"/>
+  <circle cx="64" cy="64" r="38" fill="none" stroke="#fff1b0" stroke-width="3"/>
+  <circle cx="64" cy="64" r="27" fill="none" stroke="#fff8dc" stroke-width="2" opacity="0.8"/>
+  <path d="M64 42 L83 53 L83 75 L64 86 L45 75 L45 53 Z" fill="none" stroke="#b97a00" stroke-width="2.4"/>
+  <!-- a stretched-out hand holds it -->
+  <path d="M18 100 C30 96 40 92 48 84" fill="none" stroke="#e8c39e" stroke-width="7" stroke-linecap="round"/>
+</svg>

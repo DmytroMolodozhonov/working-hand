@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="protection_gods_max-bg" cx="0.5" cy="0.5" r="0.6"><stop offset="0" stop-color="#2e2206"/><stop offset="1" stop-color="#0b0803"/></radialGradient>
+    <radialGradient id="protection_gods_max-d" cx="0.5" cy="0.4" r="0.6"><stop offset="0" stop-color="#fff6c8" stop-opacity="0.35"/><stop offset="0.75" stop-color="#ffcf4a" stop-opacity="0.45"/><stop offset="1" stop-color="#ffa81f" stop-opacity="0.85"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#protection_gods_max-bg)"/>
+  <!-- the golden dome round the whole body, its net of gold -->
+  <circle cx="64" cy="62" r="46" fill="url(#protection_gods_max-d)"/>
+  <circle cx="64" cy="62" r="46" fill="none" stroke="#fff1b0" stroke-width="3"/>
+  <g fill="none" stroke="#ffe28a" stroke-width="1.6" opacity="0.75">
+    <ellipse cx="64" cy="62" rx="46" ry="16"/><ellipse cx="64" cy="62" rx="16" ry="46"/><ellipse cx="64" cy="62" rx="34" ry="46"/>
+  </g>
+  <!-- the hero inside, arms out in a T -->
+  <g stroke="#3a2a10" stroke-width="5" stroke-linecap="round" fill="none">
+    <path d="M64 52 V80"/><path d="M40 58 H88"/><path d="M64 80 L54 98"/><path d="M64 80 L74 98"/>
+  </g>
+  <circle cx="64" cy="44" r="7" fill="#3a2a10"/>
+  <!-- sparks of gold -->
+  <g fill="#fff8dc"><circle cx="22" cy="30" r="2.2"/><circle cx="108" cy="36" r="1.8"/><circle cx="110" cy="96" r="2"/><circle cx="18" cy="92" r="1.6"/><circle cx="64" cy="10" r="2"/></g>
+</svg>

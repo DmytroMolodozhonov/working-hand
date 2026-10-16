@@ -10,12 +10,14 @@
  *   the shield arm is pushed back. The dome: nothing moves me (blasts ×0.25). In water: half the
  *   push, never a fall. Lifted by Leviosa: the magic holds the body (only the head jolts).
  *   Frozen: a push ≥ 3 topples the statue and it shatters.
+ *   «Protection Gods» (… Maxima): no spell but the gods' own moves me at all (_godsHold).
  */
 
 import * as THREE from 'three';
 import { IMPACT, classify, fallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush } from './Impact.js';
 import { fallStrength } from './Knockdown.js';
 import { GOT_UP_T } from './HandRelease.js';
+import { isMagicKind, isDivine, ALL_ROUND } from './ProtectionGods.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 
@@ -41,6 +43,7 @@ export class BodyImpact {
         if (!c || c.dead || g.isDeadLocal || g.spiders?.held) return 'none';
         if (g.levitation?.lifted) { this._kickHead(o); return 'none'; }      // (the magic holds the body)
         if (g.circleAttack?.holdsMe?.()) return 'none'; // (my «Circle Attack»: I stand on my island — nothing pushes me off)
+        if (this._godsHold(o)) { this._note(o, 'blocked'); return 'blocked'; } // (the gods' shield: no spell moves me — ProtectionGods.js)
         const dome = !!(c.shield && c.shield.type === 2 && c.shield.left > 0);
         const facing = !o.noShield && !!o.from && !dome && c.shieldFactor(o.from) >= 1;
         const swim = ch.swimY != null, frozen = !!c.frozen;
@@ -80,6 +83,19 @@ export class BodyImpact {
         } else if (res === 'stagger') g.knock.stagger({ dir, v: v * k });
         if (facing) this._recoil(o);
         return (facing || dome) && res === 'none' ? 'blocked' : res;
+    }
+
+    /**
+     * «Protection Gods» (… Maxima): a spell not of the gods pushes, throws, staggers nobody under it (the gods' own
+     * spells pay for their blow themselves — Combat.godsHit; blows, beasts, arrows, cannonballs are no spells).
+     * The dome: from everywhere; the hand shield: what it faces, and what strikes all round (a blast, a quake).
+     */
+    _godsHold(o) {
+        const s = this.game.combat?.shield, kind = o.spell;
+        if (!s?.gods || !(s.left > 0) || !kind || o.cause === 'cannon' || !isMagicKind(kind) || isDivine(kind)) return false;
+        if (s.type === 2) return true;
+        if (!o.from || o.blast || ALL_ROUND.has(kind)) return true;
+        return !o.noShield && this.game.combat.shieldFactor(o.from) >= 1;
     }
 
     _note(o, res) {

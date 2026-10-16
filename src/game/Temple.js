@@ -1,6 +1,6 @@
 /**
  * Temple.js — the abandoned Temple of the Gods in the game: its look, its solid stone, the library's
- * pedestals with the six scrolls, its sounds. The plan itself (pure, deterministic, made in a worker)
+ * pedestals with the eight scrolls, its sounds. The plan itself (pure, deterministic, made in a worker)
  * and the API to put it on a planet are in src/world/GodsTemple.js:
  *
  *   game.temple.place({ x, y, z, rot })  — the temple on the ground at (x, z), ground height y
@@ -12,7 +12,7 @@
  * and the golden god are marked. Bodies, hands, things and spells stop at it (a static «mover» of
  * the collision world: floors for everybody, walls, ceilings — like a ship's decks).
  *
- * The scrolls: one on each of the six pedestals of the library (the planets' four, «Бум», «Planet Liquidation»). Anybody may take one (it teaches its
+ * The scrolls: one on each of the eight pedestals of the library (the planets' four, «Бум», «Planet Liquidation», «Protection Gods» and its «Maxima»). Anybody may take one (it teaches its
  * spell when burnt, like every spell scroll); a new one appears on that pedestal SCROLL_BACK s after
  * it was taken — so every player of the world can get each of them (the gods' library does not run
  * out). Every computer puts them there itself (the same ids), a taking travels like any loose thing.
@@ -270,7 +270,7 @@ export class Temple {
         // its ground is a gift of the gods too: no spell breaks a block within its bounds (Terrain.set / removeSphere)
         const data = g.world?.terrain?.data, f = this.collider.aabb;
         if (data) data.godGiftAt = (x, _L, z) => x >= f.minX - 1 && x <= f.maxX + 1 && z >= f.minZ - 1 && z <= f.maxZ + 1;
-        // the six pedestals (the Creative ones: gifts of the gods) and their scrolls
+        // the eight pedestals (the Creative ones: gifts of the gods) and their scrolls
         for (const p of plan.pedestals) {
             const w = templeToWorld(s, p.x, 0, p.z);
             const top = g.world?.createPedestal ? g.world.createPedestal(w.x, w.z, { y: w.y, godGift: true }) : 1.97;

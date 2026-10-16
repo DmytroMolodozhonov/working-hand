@@ -24,6 +24,8 @@
  * `game.mana.magicKill(kind)` (or `creditKill(game, by, …)` from the host, which tells a guest).
  */
 
+import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
+
 export const MANA = {
     BASE: 30,
     CRYSTAL: 5,
@@ -56,6 +58,7 @@ export const FIRST_SPELL = {
     IceCastle: 15, IceBridge: 3, FlyingMaxima: 10, GiveMyPower: 2,
     // the gods' scrolls (the author: «за использование любого заклинания из этой библиотеки первый раз — 100 ячеек маны»)
     CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100, Boom: 100, PlanetLiquidation: 100,
+    ProtectionGods: 100, ProtectionGodsMaxima: 100, // (the gods' shield and its dome: each its own scroll, each its own first — ProtectionGods.js)
 };
 
 /**
@@ -64,8 +67,12 @@ export const FIRST_SPELL = {
  */
 export const DISCOVER = { space: 20, planet: 50 };
 
-/** The spells of the gods' scrolls (PlanetMagic.js): +100 cells the first time, with a banner of its own. */
-export const GOD_SPELLS = new Set(['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation']); // («Бум» — the fifth scroll of the library: Boom.js; «Planet Liquidation» — the sixth: PlanetDestroy.js)
+/**
+ * The spells of the gods (the scrolls of the gods' library — GodsTemple.TEMPLE_SCROLLS, so a new scroll there is one
+ * of them by itself): +100 cells the first time, with a banner of its own; the gods' shield pays for them
+ * (ProtectionGods.js: DIVINE_SPELLS is this list).
+ */
+export const GOD_SPELLS = new Set(TEMPLE_SCROLLS); // (PlanetMagic.js' four, «Бум» — Boom.js, «Planet Liquidation» — PlanetDestroy.js, «Protection Gods (Maxima)» — ProtectionGods.js)
 
 /** Not spells (or nothing to learn): never grow the maximum. */
 export const NOT_SPELLS = new Set(['Stand', 'Stop', 'Pause', 'Nox', 'Attack', 'Reveal', 'Hammer', 'WardGrow', 'ProtectionHouseGrant']);
@@ -296,7 +303,7 @@ const TITLES = {
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle',
     WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility',
     IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',
-    CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima', PlanetLiquidation: 'Planet Liquidation',
+    CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima', ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', PlanetLiquidation: 'Planet Liquidation',
 };
 
 export function spellTitle(name) {

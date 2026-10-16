@@ -102,6 +102,20 @@ export class PlanetDestroy {
         return 'PlanetLiquidation';
     }
 
+    /**
+     * The gods' shield («Protection Gods», ProtectionGods.js) over me as the planet blows up: a spell of the gods —
+     * it holds, for half of what this «Planet Liquidation» cost (1500 + the planet's mass) — the whole blow; then
+     * the blast throws me out into space (the ground is gone). Out of mana: it breaks and the blast kills.
+     */
+    _godsHold(r) {
+        const g = this.game, c = g.combat;
+        if (!c?.shield?.gods) return false;
+        if (c.godsHit('PlanetLiquidation', null, 1, liquidationCost(r.def).total) > 0) return false;
+        try { if (this.space.realm === r.id) this.space._enterSpace(r.id); } catch (e) { console.warn('[PlanetLiquidation] out into space', e); }
+        this._say(`✨ Божественная защита выдержала взрыв «${r.name}» — вас отбросило в космос`);
+        return true;
+    }
+
     /** Am I on the planet or in its air (over it, near its ground)? */
     _inDanger(r, t) {
         const g = this.game, S = this.space;
@@ -146,7 +160,8 @@ export class PlanetDestroy {
                 r.boomed = true;
                 if (a < DOOM.T + 3) { // (seen as it happens — not a blast long over, from a save)
                     if (v) { g.sound?.playSpace?.('doomBlast', Math.min(1.4, v + 0.2)); if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 0.4 + 0.6 * v); }
-                    if (danger) S._die(`💥 Вы погибли вместе с планетой «${r.name}»: её взорвали заклинанием «Planet Liquidation»`);
+                    if (danger && this._godsHold(r)) { /* held by the gods' shield: thrown out into space alive */ }
+                    else if (danger) S._die(`💥 Вы погибли вместе с планетой «${r.name}»: её взорвали заклинанием «Planet Liquidation»`);
                     else if (v) this._say(`💥 «${r.name}» взорвана! На её орбите — обломки (скопление метеоритов): из них можно снова создать планету («Create a Planet»)`);
                 }
                 this.log.push({ ev: 'blast', id: r.id });

@@ -41,6 +41,8 @@ export const RU_SAID = {
     Inferno: /^(огонь|огня|огнем|огнём|пламя)$/,
     Protection: /^щит$/,
     ProtectionMaxima: /^щит максима$/,
+    ProtectionGods: /^(божественная защита|щит богов|защита богов)$/,
+    ProtectionGodsMaxima: /^(божественная защита максима|щит богов максима|защита богов максима)$/,
     Gather: /^(собери|соберите|собрать|соберись)$/,
     Rescue: /^(спаси|спасите|спасение)$/,
     Alive: /^(оживи|оживите|оживай|оживи[ст]ь|оживление)$/,
@@ -253,7 +255,7 @@ export function bodyNoise(h) {
 /** Spells that cost much or do much (a castle out of nothing, a curse that kills): never from a sound only just made out. */
 export const DANGEROUS = new Set(['CreateCastle', 'IceCastle', 'IceBridge', 'CreateHouse', 'ImproveHouse', 'AvadaKedavra', 'Hellfire', 'Frozen', 'Stupefy',
     'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'LightningStrike', 'Earthquake', 'EarthquakeMaxima', 'CircleAttack', 'CircleAttackMaxima',
-    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'PlanetLiquidation']);
+    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima']);
 
 /**
  * Do the letters the network wrote look like the spell? («лемус» — «люмос», «бам барда» — «бомбардо максима»,
