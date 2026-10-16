@@ -30,6 +30,9 @@ import { aired } from './GameVoices.js';
 
 const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
+/** How loud the game's voices stay while the player speaks (a spell must be heard over them). */
+export const DUCK_LEVEL = 0.18;
+
 /** A gain that brings a sentence to the same loudness as the others (RMS ≈ −20 dBFS, peaks kept under 1). */
 export function loudness(pcm) {
     let sum = 0, peak = 0;
@@ -252,6 +255,33 @@ export class Speech {
         return this._ctx;
     }
 
+    /**
+     * All the neural voices go through one gain: quieter while the player speaks (duck), so the
+     * microphone hears the player's spell and not a villager or the Ice Queen over it.
+     */
+    _duckNode(ctx) {
+        if (this._duck?.context === ctx) return this._duck;
+        try {
+            this._duck = ctx.createGain();
+            this._duck.connect(ctx.destination);
+        } catch (e) { return ctx.destination; }
+        return this._duck;
+    }
+
+    /** The player speaks now (true) / stopped (false): the game's voices go quiet / come back. */
+    duck(on) {
+        on = !!on;
+        if (on === !!this._ducked) return;
+        this._ducked = on;
+        const g = this._duck, ctx = this._ctx;
+        if (!g?.gain || !ctx) return;
+        const now = ctx.currentTime || 0;
+        try {
+            g.gain.cancelScheduledValues?.(now);
+            g.gain.setTargetAtTime(on ? DUCK_LEVEL : 1, now, on ? 0.03 : 0.3);
+        } catch (e) { g.gain.value = on ? DUCK_LEVEL : 1; }
+    }
+
     _speakNeural(text, opts) {
         const cast = castNeural(opts);
         const entry = { voiceKey: opts.voiceKey, opts, stop: null, sources: [], started: false, add: null };
@@ -274,10 +304,11 @@ export class Speech {
             const src = ctx.createBufferSource();
             src.buffer = buf;
             src.playbackRate.value = cast.pitch; // played `pitch` times faster…
+            const out = this._duckNode(ctx); // (quieter while the player speaks)
             const gain = ctx.createGain();
             gain.gain.value = opts.volume * loudness(pcm); // (every voice equally loud: a soft woman's voice too)
             src.connect(gain);
-            gain.connect(ctx.destination);
+            gain.connect(out);
             src.onended = ended;
             if (ctx.state === 'suspended') ctx.resume?.()?.catch?.(() => {});
             const now = ctx.currentTime || 0;

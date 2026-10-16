@@ -258,6 +258,7 @@ export class IceCastleLife {
         const g = this.game;
         const who = by === undefined ? g.localId : by;
         const n = iceDamage(c.type, kind, dmg);
+        if (n <= 0 && dmg > 0) this._noEffect(c, kind, who);
         if (!this.auth) { if (dmg > 0) g.sync?.ice?.({ e: 'hit', id: c.id, dmg: r2(dmg), kind, by: who }); this._flash(c, n > 0); return n; }
         this._flash(c, n > 0);
         if (c.type === 'friend') {
@@ -318,7 +319,25 @@ export class IceCastleLife {
         if (b.stun) c.stunT = Math.max(c.stunT, b.stun);
         if (b.dmg > 0) this.hit(c, b.dmg, spell === 'AvadaKedavra' ? 'AvadaKedavra' : 'duel', by);
         else this._flash(c, false);
+        if (b.dmg === 0 && !b.stun) this._noEffect(c, spell, by === undefined ? this.game.localId : by);
         if (b.dmg === 0 && !b.stun && c.type === 'queen' && (c.mockT || 0) <= 0) { c.mockT = 8; this._say(c, 'Твоя магия здесь бессильна!'); }
+    }
+
+    /**
+     * My spell reached the queen (or her monster) and did nothing: by the rules (iceDamage) the spells known
+     * without a scroll and the cold don't touch her — that is no «it didn't work». One short line says so
+     * (only to the one who cast it, at most once in a while), and the spell journal notes it.
+     */
+    _noEffect(c, kind, who) {
+        const g = this.game;
+        if (who !== g.localId || (c.type !== 'queen' && c.type !== 'monster')) return;
+        const now = performance.now();
+        if (now - (this._noEffectAt || -1e9) < 6000) return;
+        this._noEffectAt = now;
+        const whom = c.type === 'queen' ? 'Королеву' : 'ледяного монстра';
+        const why = isCold(kind) ? 'холод не действует на лёд' : 'нужны огонь или заклинания со свитков';
+        g.hud?.setVoice?.(`❄️ Не действует на ${whom}: ${why}`, true);
+        g.spellLog?.note?.(`❄️ попадание по ${c.type === 'queen' ? 'Ледяной Королеве' : 'ледяному монстру'} (${kind || '?'}) — не действует: ${why}`);
     }
 
     _casterPos(by, c) {

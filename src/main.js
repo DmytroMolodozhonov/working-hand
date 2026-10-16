@@ -19,8 +19,9 @@ import { achievementsHtml } from './game/Achievements.js';
 import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
-import { fromGame } from './audio/GameVoices.js';
-import { WORDY, wordsOf } from './audio/SpellSpotter.js';
+import { fromGame, soundingLine } from './audio/GameVoices.js';
+import { spellPhrase, PHRASE_WHY_RU } from './audio/SpellPhrase.js';
+import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
@@ -186,7 +187,7 @@ document.querySelectorAll('#tab-settings .sub-tab').forEach((btn) => {
     window.addEventListener('zns-llm-state', (e) => show(e.detail));
 })();
 // Settings → «Журнал»; and the app launcher keeps running while this window is open
-setupLogPanel();
+setupLogPanel(document, () => (game?.spellLog ? { name: 'zns-spells.log', title: 'Заклинания (эта игра)', text: game.spellLog.text() } : null));
 keepLauncherAlive();
 
 if (creativeZombieCount && zombieCountDisplay) {
@@ -447,19 +448,31 @@ function holdSpell(command, isFinal) {
 const TALK_STILL = 700; // ms
 let talkWait = null, talkEarly = null;
 const talkKey = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim();
-/** The browser's recognizer wrote a whole sentence with a spell's word in it: talk, not that spell. */
-function spellInSentence(command) {
-    const sp = matchSpell(command);
-    if (!sp || WORDY.has(sp)) return false;
-    const n = talkKey(command).split(' ').filter(Boolean).length;
-    return n > Math.max(2, wordsOf(sp)) + 1;
+// The spell journal (Settings → Журнал → «Заклинания», zns-spells.log): every phrase and what came of it.
+const spellRu = (n) => (n ? SPELL_RU[n] || n : null);
+let lastJournal = null;
+function journal(command, isFinal, meta, spell, ok, why, source = '') {
+    const log = game?.spellLog;
+    if (!log || !command) return;
+    // (a phrase still being said: only when a spell came of it, or a spell was held back — once per words)
+    if (!isFinal && !spell) return;
+    const key = `${command}|${spell}|${ok}|${why}`;
+    const now = performance.now();
+    if (lastJournal && lastJournal.key === key && now - lastJournal.at < 4000) return;
+    lastJournal = { key, at: now };
+    const m = { ...(meta || {}) };
+    if (!m.native) { const pk = voice.recentPeak?.(2500); if (Number.isFinite(pk)) { m.peak = pk; m.snr = pk - voice.noiseFloor; } }
+    const line = soundingLine(m.from ?? now - 2500, m.to ?? now);
+    if (line) m.gameLine = line;
+    log.add({ text: command, isFinal: isFinal || !!m.settled, meta: m, source, spell: spellRu(spell), ok, why });
 }
+
 function earlyTalk(command) {
     clearTimeout(talkWait);
     talkWait = setTimeout(() => {
         talkWait = null;
         const T = game?.castleLife?.talk;
-        if (!game?.active || !T || game.isMagicActive || Date.now() - game.lastMagicTime < 1500 || matchSpell(command)) return;
+        if (!game?.active || !T || game.isMagicActive || Date.now() - game.lastMagicTime < 1500 || (matchSpell(command) && spellPhrase(command).ok)) return;
         if (!$('pause-menu')?.classList.contains('hidden')) return; // (the pause menu opened meanwhile)
         if (!T._listener?.() || !T.hear(command)) return;
         talkEarly = { key: talkKey(command), at: performance.now() };
@@ -470,7 +483,7 @@ function earlyTalk(command) {
 voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (!command) return;
     // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager
-    if (game?.active && !$('pause-menu')?.classList.contains('hidden')) return;
+    if (game?.active && !$('pause-menu')?.classList.contains('hidden')) { journal(command, isFinal, meta, matchSpell(command), false, 'открыто меню паузы — голос не слушается'); return; }
     // (the words go on / are final: the early answer waits for them, or is already given)
     if (talkWait) { clearTimeout(talkWait); talkWait = null; }
     if (talkEarly && performance.now() - talkEarly.at < 5000) {
@@ -478,9 +491,13 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         if (k === talkEarly.key || talkEarly.key.startsWith(k)) { if (isFinal) talkEarly = null; return; }
         talkEarly = null; // (more words after the answer: a new question)
     }
-    // Only words, never a spell: a spell's word inside a sentence («…огонь горит у ворот»). A spell is
-    // said on its own (NativeVoice tells; the browser's recognizer writes whole sentences — counted here).
-    const talkOnly = !!meta?.talkOnly || (!meta?.native && spellInSentence(command));
+    // Only words, never a spell: a spell's word inside a sentence («…огонь горит у ворот», «спасибо»,
+    // «сегодня солнце светит»). A spell is the phrase itself, said on its own (SpellPhrase.js; the native
+    // voice already tells by the sound — NativeVoice).
+    const phrase = spellPhrase(command, { final: isFinal || !!meta?.settled });
+    const loose = !!phrase.name && !phrase.ok && !game?.planetMagic?._naming && !game?.vortex?.bubbleOpen?.();
+    const talkOnly = !!meta?.talkOnly || loose;
+    const talkWhy = loose ? PHRASE_WHY_RU[phrase.why] || 'обычная речь' : 'слово заклинания внутри обычной фразы — это разговор';
     if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && game.castleLife?.talk?._listener?.() && !game.owls?.claims?.(command)) earlyTalk(command);
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
@@ -503,28 +520,36 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         // villager (only then: without such an owl the words go on as always — Owls.claims)
         if (game.owls?.claims?.(command)) {
             if (isFinal) game.owls.hear(command);
+            journal(command, isFinal, meta, null, false, 'слова для совы рядом');
             return;
         }
         const sailorFirst = !!game.ships?.crew.heardFirst?.(game.castleLife?.talk);
         if (isFinal && !sailorFirst && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
+            journal(command, isFinal, meta, null, false, 'это разговор с жителем (рука не поднята)');
             return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)
         }
         // (the same with a ship's sailor near me)
         if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
+            journal(command, isFinal, meta, null, false, 'это разговор с моряком (рука не поднята)');
             return;
         }
         if (talkOnly) {
             if (isFinal) game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command);
+            journal(command, isFinal, meta, phrase.name, false, phrase.name ? `не заклинание: ${talkWhy}` : 'обычная речь');
             return;
         }
         // A spell's words in what the game itself said aloud just then — a merchant's «…на костре», a
         // guard's «огонь!», a wizard's «Бомбардо!» from the speakers: their voice, not mine. The game knows
         // its own lines and when they sounded (GameVoices.js) — whatever the microphone and the setup.
+        // (my mouth moved with the voice the microphone heard: mine, even over the Ice Queen's taunts)
         const spoken = matchSpell(command);
         if (spoken) {
             const now = performance.now();
-            if (fromGame(spoken, { ...meta, from: meta?.from ?? now - 2500, to: meta?.to ?? now })) {
+            const mine = game.voiceGate.lipsSync(now, voice._levels, voice.noiseFloor) === true;
+            const line = fromGame(spoken, { ...meta, from: meta?.from ?? now - 2500, to: meta?.to ?? now, mine });
+            if (line) {
                 if (isFinal) netLog(`заклинание «${command}» не моё: его слова только что сказал голос игры`);
+                journal(command, isFinal, meta, spoken, false, `отсеяно как голос игры: «${String(line).slice(0, 60)}»`, 'голос игры');
                 return;
             }
         }
@@ -536,6 +561,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             const said = matchSpell(command);
             // (settled: the voice already waited for a possible «… Максима» / «… Хаус» — as good as the phrase's end)
             const name = game.castLocalSpell(command, isFinal || !!meta.settled);
+            if (said) journal(command, isFinal, meta, said, !!name, name ? '' : castWhy(said), 'микрофон игрока');
+            else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
             if (name) {
                 if (game.remotes?.size > 0) game.sync?.say?.(said);
                 voice.learnOwnVoice();
@@ -551,6 +578,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         // Multiplayer: a friend's voice heard by this microphone must not cast here
         if (margin > 0 && game.remotes?.size > 0 && matchSpell(command) && !voice.isOwnVoice(margin)) {
             netLog(`заклинание «${command}» не моё: тише моего голоса`);
+            journal(command, isFinal, meta, matchSpell(command), false, 'отсеяно: тише моего голоса (похоже, голос друга)');
             return;
         }
         // …and it must be ME who said it: my lips moved (the camera sees the mouth), and it isn't
@@ -561,6 +589,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             const gate = game.voiceGate.check(heard, performance.now(), { levels: voice._levels, floor: voice.noiseFloor });
             if (!gate.ok) {
                 if (isFinal || held) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
+                journal(command, isFinal || held, meta, heard, false, gate.why === 'lips' ? 'отсеяно: губы не двигались (камера) — это не ваш голос' : 'отсеяно: эхо заклинания друга');
                 return;
             }
             if (game.remotes?.size > 0) {
@@ -573,6 +602,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             }
         }
         const name = game.castLocalSpell(command, isFinal || !!meta?.settled);
+        if (heard) journal(command, isFinal || held, meta, heard, !!name, name ? '' : castWhy(heard), 'микрофон игрока');
+        else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
         // («стоп» with nothing to stop is still words to a villager: «стой» / «стоп» = stop following me)
         if (!name && isFinal && (!heard || heard === 'Stand') && (sailorFirst ? game.ships.crew.hear(command) || game.castleLife?.talk?.hear(command) : game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command))) {
@@ -587,10 +618,29 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
 };
 
 // The native voice heard a spell only as the speakers' echo (a friend over Discord, the game itself)
-voice.onEcho = (words) => {
+voice.onEcho = (words, meta) => {
     if (!game?.active) return;
     netLog(`заклинание «${words}» не моё: оно звучало из колонок`);
+    journal(words, true, meta, matchSpell(words), false, 'отсеяно: это звучало из колонок (голос друга или игры)', 'колонки');
 };
+
+// A finished phrase the native voice heard that gave nothing: the journal tells how near a spell it was
+// (a spell lost in the noise shows here: «не хватило …», «шумно»)
+voice.onMiss = (written, meta) => {
+    if (!game?.active || !written) return;
+    const near = meta?.near && Number.isFinite(meta.nearFit) && meta.nearFit > -1.5
+        ? `заклинание не узнано: ближе всего «${meta.near}», не хватило ${(-meta.nearFit).toFixed(1)}${Number.isFinite(meta.snr) && meta.snr < 16 ? ' — мешал шум' : ''}`
+        : 'обычная речь — заклинания нет';
+    journal(written, true, meta, null, false, near, 'микрофон игрока');
+};
+
+/** Why a recognized spell did not work (the game says where it refused it — Game.lastCastWhy). */
+function castWhy(spell) {
+    const w = game?.lastCastWhy;
+    if (w) return w;
+    if (game && !game.knowsSpell?.(spell)) return 'это заклинание вы ещё не знаете';
+    return 'не сработало: не выполнено условие (нет цели, рука не поднята / не направлена, не здесь…)';
+}
 
 // «Распознавание голоса»: the speech network on this computer (where it is installed) or the browser's
 $('voice-engine')?.addEventListener('change', (e) => voice.setPreference(e.target.value));

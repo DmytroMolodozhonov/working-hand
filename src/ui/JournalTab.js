@@ -6,9 +6,14 @@ export function keepLauncherAlive() {
     try { return new EventSource('/api/alive'); } catch (e) { return null; }
 }
 
-export function setupLogPanel(doc = document) {
+/**
+ * @param {Document} [doc]
+ * @param {() => ({name, title, text}|null)} [live]  the spell journal of this game (shown when there is no file)
+ */
+export function setupLogPanel(doc = document, live = null) {
     const sel = doc.getElementById('log-file');
     const pre = doc.getElementById('log-text');
+    const where = doc.getElementById('log-path');
     const refresh = doc.getElementById('log-refresh');
     const copy = doc.getElementById('log-copy');
     if (!sel || !pre) return null;
@@ -18,17 +23,23 @@ export function setupLogPanel(doc = document) {
         const l = logs.find((x) => x.name === sel.value) || logs[0];
         pre.textContent = l ? (l.text || '(пока пусто)') : 'Журнал пока пуст.';
         pre.scrollTop = pre.scrollHeight;
+        // (where the file is: it can be sent as it is)
+        if (where) where.textContent = l?.path ? `Файл: ${l.path}` : l ? 'Файла нет — нажмите «Скопировать» и пришлите текст.' : '';
     };
     const load = async () => {
         pre.textContent = 'Загружаю…';
+        let failed = false;
         try {
             const r = await fetch('/api/logs', { cache: 'no-store' });
             logs = (await r.json()).logs || [];
         } catch (e) {
             logs = [];
-            pre.textContent = 'Журнал недоступен (игра открыта не через свой сервер).';
-            return;
+            failed = true;
         }
+        // the spell journal of this game, when the file isn't there (yet)
+        const mem = live?.();
+        if (mem && !logs.some((l) => l.name === mem.name && l.text)) logs = [mem, ...logs.filter((l) => l.name !== mem.name)];
+        if (failed && !logs.length) { pre.textContent = 'Журнал недоступен (игра открыта не через свой сервер).'; return; }
         const keep = sel.value;
         sel.textContent = '';
         for (const l of logs) {

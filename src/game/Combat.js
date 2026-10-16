@@ -435,12 +435,13 @@ export class Combat {
     /** Can I cast this now? null = yes, otherwise a hint for the player. */
     check(name) {
         if (this.dead) return '💀';
-        if (this.frozen) return `🧊 Вы заморожены — разморозка через ${Math.ceil(this.frozenLeft)} с`;
-        if (this.stunned) return `💫 Вы оглушены — ещё ${Math.ceil(this.stunLeft)} с`;
+        if (this.frozen) { if (this.game) this.game.lastCastWhy = 'вы заморожены'; return `🧊 Вы заморожены — разморозка через ${Math.ceil(this.frozenLeft)} с`; }
+        if (this.stunned) { if (this.game) this.game.lastCastWhy = 'вы оглушены'; return `💫 Вы оглушены — ещё ${Math.ceil(this.stunLeft)} с`; }
         if (!this.enabled) return null;
         const cost = this.costOf(name);
         if (this.fatigue < cost) {
             const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
+            if (this.game) this.game.lastCastWhy = msg.slice(3); // (the spell journal)
             this.game.hud?.toast?.(msg); // a short note that fades by itself
             // «heard you, but no mana»: the mana bar flashes red and shudders, and a short sound (once a moment)
             const t = performance.now();

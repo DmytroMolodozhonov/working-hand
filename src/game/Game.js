@@ -17,6 +17,7 @@ import { Zombie, ZOMBIE } from '../entities/Zombie.js';
 import { Chest } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
+import { SpellLog } from '../core/SpellLog.js';
 import { WeaponSystem } from './Weapons.js';
 import { FlightController, FLIGHT } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
@@ -451,6 +452,7 @@ export class Game {
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
         this.perf = config.mode === 'test' ? null : new PerfLog(this); // the performance diary (zns-perf.log)
+        this.spellLog = new SpellLog({ send: config.mode !== 'test' }); // every phrase heard and what came of it (zns-spells.log)
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
         this.quality.apply(this.world);
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
@@ -1194,6 +1196,7 @@ export class Game {
     castLocalSpell(text, isFinal = true) {
         const paid = this.combat.paidCount || 0;
         this._manaLater = false;
+        this.lastCastWhy = null; // (why it did not work — the spell journal: set where a spell is refused)
         const name = this._castWithHints(text, isFinal);
         if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
         // its sound (SpellMusic.SPELL_SOUND: a tune for the great ones, a short effect for the others) — the others hear it too
@@ -1232,6 +1235,7 @@ export class Game {
         try { name = this._castLocalSpell(text, isFinal); } finally { hud.hintFilter = null; }
         if (!held.length) return name;
         const html = held[held.length - 1];
+        if (!name && !this.lastCastWhy) this.lastCastWhy = String(html).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
         const ch = this.character;
         const now = Date.now();
         const intent = !!(this.isMagicActive || now - (this.lastMagicTime || 0) < 2500 || now - (this._armsUpAt || 0) < 2500 || ch?.isTPose?.());
@@ -1242,6 +1246,23 @@ export class Game {
         if (v.ok && hints.pass(html)) hud.setVoice(html, true);
         else if (!v.ok && isFinal) netLog(`🎙️ подсказка не показана (${v.why}): «${String(text).slice(0, 60)}» → ${String(html).replace(/<[^>]+>/g, '')}`);
         return name;
+    }
+
+    /**
+     * While I speak, the game's own voices (villagers, the Ice Queen, sailors…) go quiet: the microphone
+     * must hear my spell, not her «Твоя магия здесь бессильна!» over it. «I speak»: my voice in the
+     * microphone with the speakers' sound taken out (native), or my lips moving (the camera) — never the
+     * plain microphone level, which the speakers themselves would raise.
+     */
+    _duckVoices() {
+        const sp = this.castleLife?.talk?.speech;
+        if (!sp?.duck) return;
+        const now = performance.now();
+        if (now - (this._duckCheckAt || 0) < 100) return;
+        this._duckCheckAt = now;
+        if (this.voiceGate.lipsMoved(now, 700) === true) this._speakingAt = now;
+        const at = Math.max(this._speakingAt || -1e9, this.voice?.speakingAt || -1e9);
+        sp.duck(now - at < 900);
     }
 
     /** The hand holding a wand (null: none). While a wand is held, every spell is cast with that hand. */
@@ -1266,7 +1287,7 @@ export class Game {
         if (this.vortex?.bubbleOpen?.() && name !== 'AirBubble' && (!name || name === 'Sands' || name === 'Sapira') && bubbleLike(text)) name = 'AirBubble';
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
-        if (this.combat.dead) return null;
+        if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
             const base = SCROLL_SPELL_COLOR[name] ? name : baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
@@ -1275,7 +1296,7 @@ export class Game {
         }
         // «Protection…», «Бомбардо…» with nothing after them yet: «… Хаус», «… Максима» may still come
         // (NativeVoice: more) — the voice tells again once it can't; only a duel answer under fire can't wait
-        if (!isFinal && this._voiceMeta?.more && !(name === 'Jolt' && this.duel.underFire?.())) return null;
+        if (!isFinal && this._voiceMeta?.more && !(name === 'Jolt' && this.duel.underFire?.())) { this.lastCastWhy = 'ждём, не будет ли продолжения («… Хаус», «… Максима»)'; return null; }
         // the rule of concentration: while a spell is held no other works — first «стоп» (Concentration.js;
         // the held spell's own words, Lumos, Nox, «стоп», the shield are free; Creative too)
         if (this.focus.gate(name, isFinal, !!BUILD_SPELLS[name])) return null;
@@ -2898,6 +2919,7 @@ export class Game {
         if (earth) this.owls.update(dt);
         if (earth) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
+        this._duckVoices();
         if (earth) this.servants.update(dt);
         this.invis?.update(dt);
         if (earth) this._updateCaves(dt);

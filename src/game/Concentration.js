@@ -112,6 +112,7 @@ export class Concentration {
         if (mayCast(held, name, { hovering: !!this.game.flight?.hovering, isBuild })) return null;
         const ru = HELD[held]?.ru || held;
         const say = held === 'Duel' ? '⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)' : `🧘 Сначала «стоп» — вы держите «${ru}»`;
+        this.game.lastCastWhy = held === 'Duel' ? 'занято: идёт дуэль' : `занято: вы держите «${ru}» — сначала «стоп» (концентрация)`; // (the spell journal)
         if (isFinal && this._gate.pass(held + ':' + name)) this.game.hud?.setVoice?.(say, true);
         return held;
     }

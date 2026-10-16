@@ -27,6 +27,8 @@ export class VoiceService {
         this.native = new NativeVoice();
         this.native.onResult = (text, isFinal, meta) => this.onResult?.(text, isFinal, false, meta);
         this.native.onEcho = (words, meta) => this.onEcho?.(words, meta);
+        this.onMiss = null; // (written, meta) a finished phrase that gave nothing (native: the spell journal)
+        this.native.onMiss = (written, meta) => this.onMiss?.(written, meta);
         this.native.onLevel = (d) => this._nativeLevel(d);
         this.native.onFail = () => {
             if (this.engine !== 'native') return;
@@ -80,6 +82,8 @@ export class VoiceService {
             const db = d.db[j];
             this._levels.push([now - 70 - (n - 1 - j) * 10, db]);
             this.noiseFloor += (db - this.noiseFloor) * (db < this.noiseFloor ? 0.3 : 0.004);
+            // (the speakers' sound is taken out of the microphone: a loud cleaned level is the player's voice)
+            if (this.aec && db > this.noiseFloor + 14 && db > -50) this.speakingAt = now;
         }
         while (this._levels.length && now - this._levels[0][0] > 4000) this._levels.shift();
     }

@@ -93,6 +93,7 @@ export class NativeVoice {
         this.onLevel = null;  // ({t, db, raw, far}) the microphone's level (after the echo was taken out)
         this.onEcho = null;   // (spell words) a spell heard only from the speakers
         this.onFail = null;   // () the native voice stopped working (the browser's takes over)
+        this.onMiss = null;   // (written, meta) a finished phrase that gave the game nothing (the spell journal)
         this.segs = new Map();
         this.errors = 0;
         this.mic = ''; // the microphone chosen in the settings ('' — the system's default)
@@ -190,11 +191,19 @@ export class NativeVoice {
         const r = lookAt(d, this.segs.get(d.id));
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
-        const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, ...this._when(d, r.heard) };
+        const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, ...this._when(d, r.heard),
+            peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra };
         // (how much better than needed the spell fit: over a villager's voice only a clear one is mine — GameVoices)
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
         if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled });
+        else if (d.final && !r.seg.fired) {
+            // (nothing handed on: the closest spell and how far it was from counting — the spell journal)
+            const b = r.heard.best;
+            if (b) { meta.near = b.canonical; meta.nearFit = b.avg - threshold(b.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); }
+            meta.early = !!r.heard.early;
+            this.onMiss?.(r.heard.written || '', meta);
+        }
     }
 }

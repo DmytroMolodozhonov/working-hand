@@ -99,6 +99,12 @@ export function gameSaid(spell, from, to) {
     return null;
 }
 
+/** The text of a game's line sounding while the phrase (from…to) was heard, or null (the spell journal). */
+export function soundingLine(from, to) {
+    const l = sounding(from, to);
+    return l.length ? l.map((x) => x.text).join(' / ') : null;
+}
+
 /** How much better than needed a spell must fit (SpellSpotter: avg − threshold) while a villager speaks… */
 export const GAME_FIT = 0.7;
 /** …a short word («ап», «айс») more still. */
@@ -113,12 +119,18 @@ export const GAME_FIT_SHORT = 0.3;
  *    setup): of 1300 of the game's lines heard by the microphone 131 read as a spell — none casts now;
  *    of 400 spells said over a villager's voice 86% still cast (said at any other time: all, as before).
  * @param {string} spell  the spell (matchSpell)
- * @param {{from:number, to:number, native?:boolean, sure?:boolean, fit?:number, len?:number}} heard
+ *  - but when my mouth moved with the voice the microphone heard (the camera: VoiceGate.lipsSync), it is
+ *    mine unless the line said that very spell's words: a spell shouted over the Ice Queen's taunts casts.
+ * @param {{from:number, to:number, native?:boolean, sure?:boolean, fit?:number, len?:number, mine?:boolean}} heard
  */
-export function fromGame(spell, { from, to, native = false, sure = false, fit = NaN, len = 0 } = {}) {
+export function fromGame(spell, { from, to, native = false, sure = false, fit = NaN, len = 0, mine = false } = {}) {
     if (!spell) return null;
     const lines = sounding(from, to);
     if (!lines.length) return null;
+    if (mine) {
+        for (const l of lines) if (spellsIn(l.text).has(spell)) return l.text;
+        return null;
+    }
     for (const l of lines) if (spellsIn(l.text).has(spell) || soundsIn(spell, l.text)) return l.text;
     if (!native) return null;
     // (not the spell's own sound, only the written words — a villager's)
