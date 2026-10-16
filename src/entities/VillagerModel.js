@@ -1077,7 +1077,7 @@ export class VillagerModel {
 
     // ------------------------------------------------------------ materials
     _currentMat() { return this._flashT > 0 ? HIT_MAT : this._hl ? HL_MAT : MAT; }
-    _applyMaterial() { const m = this._currentMat(); for (const o of this._meshes) o.material = m; if (this._lod) this._lod.material = m; }
+    _applyMaterial() { const m = this._currentMat(); for (const o of this._meshes) o.material = m; if (this._lod) { this._lod.material = m; this._lodMat = m; } }
 
     // ------------------------------------------------------------ far away: one shape
     /**
@@ -1135,7 +1135,7 @@ export class VillagerModel {
             geo.setIndex(new THREE.BufferAttribute(idx, 1));
             geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.4, 0), 4.5); // (a person, whatever the pose)
             if (lod) { lod.geometry.dispose(); lod.geometry = geo; } else {
-                lod = this._lod = new THREE.Mesh(geo, this._currentMat());
+                lod = this._lod = new THREE.Mesh(geo, this._lodMat = this._currentMat());
                 lod.castShadow = false; // (far: no shadow — Shadows.js)
                 lod.raycast = () => {}; // (the parts are what is hit)
                 this.group.add(lod);
@@ -1162,7 +1162,9 @@ export class VillagerModel {
         }
         P.needsUpdate = true;
         N.needsUpdate = true;
-        lod.material = this._currentMat();
+        // (its material as the parts' — set only when that changes: a blow's red tint on it — HurtFlash — stays)
+        const mat = this._currentMat();
+        if (this._lodMat !== mat) { this._lodMat = mat; lod.material = mat; }
         lod.visible = true;
         this.root.visible = false;
     }
