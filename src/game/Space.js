@@ -1106,11 +1106,20 @@ export class Space {
             ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
             label(r.name || 'Игрок', x, y - 5);
         }
+        // me: big and bright, a pulsing halo round it (the author couldn't find himself on the map)
         const yaw = this.yaw;
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+        ctx.fillStyle = `rgba(255,225,77,${0.18 + 0.17 * pulse})`;
+        ctx.beginPath(); ctx.arc(hx, hy, 15 + 4 * pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,225,77,0.9)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(hx, hy, 15 + 4 * pulse, 0, Math.PI * 2); ctx.stroke();
         ctx.save(); ctx.translate(hx, hy); ctx.rotate(Math.atan2(-Math.sin(yaw), -Math.cos(yaw)) + Math.PI / 2);
-        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(11, 11); ctx.lineTo(0, 5); ctx.lineTo(-11, 11); ctx.closePath(); ctx.stroke(); ctx.fill();
         ctx.restore();
+        ctx.font = 'bold 13px sans-serif';
+        label('Вы', hx, hy + 30, '#ffe14d');
+        ctx.font = 'bold 10px sans-serif';
         ctx.textAlign = 'right';
         label(`${dist(this.speed)}/с`, W - 6, 13, '#ffe9a8');
         return true;
