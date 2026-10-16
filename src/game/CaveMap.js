@@ -5,7 +5,8 @@
  *  - In a cave the minimap shows the cave from above, at the hero's level (Hud.drawMinimap → cave).
  *  - What the hero saw (in ~12 m and in the line of sight — never through the rock) is opened as they
  *    go: rays from the eyes along the floor, a few a frame (CaveExplorer.step); the rest is dark.
- *  - The memory: bit masks of 8 × 8 m tiles (one bit a column), with a limit (oldest tiles dropped);
+ *  - The memory: bit masks of 8 × 8 m tiles (one bit a column), with a limit (oldest tiles dropped):
+ *    what was seen, and where the hero walked (their trail on the map: «тут я ходил, тут не ходил»);
  *    the ways in/out where they were seen. Kept with the hero (WorldSave.playerSnapshot: each player
  *    their own). It is the hero's knowledge: death takes it with the rest (Legacy.js), «Give Me My
  *    Power» gives it back.
@@ -27,44 +28,99 @@ export const CAVE_MAP = {
 const T = CAVE_MAP.TILE;
 const tileKey = (tx, tz) => (tx + 0x8000) * 0x10000 + (tz + 0x8000);
 
-/** What the hero knows of the caves: the opened columns and the ways in. */
+/** A bit of a column in a map of 8 × 8 tiles (tile key -> Uint32Array(2)); `add`: set it (true if new). */
+function bitAt(tiles, ix, iz, add) {
+    const tx = Math.floor(ix / T), tz = Math.floor(iz / T);
+    if (tx < -0x8000 || tx >= 0x8000 || tz < -0x8000 || tz >= 0x8000) return false;
+    const k = tileKey(tx, tz);
+    let m = tiles.get(k);
+    if (!m) {
+        if (!add) return false;
+        m = new Uint32Array(2);
+        tiles.set(k, m);
+        if (tiles.size > CAVE_MAP.MAX_TILES) tiles.delete(tiles.keys().next().value); // (the oldest tile)
+    }
+    const b = (iz - tz * T) * T + (ix - tx * T);
+    const bit = 1 << (b & 31);
+    if (m[b >> 5] & bit) return !add;
+    if (!add) return false;
+    m[b >> 5] |= bit;
+    // (a tile walked in again moves to the end: the oldest — the long forgotten — go first)
+    if (tiles.size > 1) { tiles.delete(k); tiles.set(k, m); }
+    return true;
+}
+
+function packTiles(tiles) {
+    const buf = new DataView(new ArrayBuffer(tiles.size * 12));
+    let o = 0;
+    for (const [k, m] of tiles) {
+        buf.setInt16(o, Math.floor(k / 0x10000) - 0x8000, true);
+        buf.setInt16(o + 2, (k % 0x10000) - 0x8000, true);
+        buf.setUint32(o + 4, m[0], true);
+        buf.setUint32(o + 8, m[1], true);
+        o += 12;
+    }
+    return toBase64(new Uint8Array(buf.buffer));
+}
+
+function unpackTiles(tiles, str) {
+    if (typeof str !== 'string' || !str) return;
+    let bytes;
+    try { bytes = fromBase64(str); } catch { return; }
+    const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const n = Math.min(CAVE_MAP.MAX_TILES, Math.floor(bytes.byteLength / 12));
+    for (let i = 0; i < n; i++) {
+        const o = i * 12, k = tileKey(v.getInt16(o, true), v.getInt16(o + 2, true));
+        let m = tiles.get(k);
+        if (!m) {
+            m = new Uint32Array(2);
+            tiles.set(k, m);
+            if (tiles.size > CAVE_MAP.MAX_TILES) tiles.delete(tiles.keys().next().value);
+        }
+        m[0] |= v.getUint32(o + 4, true);
+        m[1] |= v.getUint32(o + 8, true);
+    }
+}
+
+/** What the hero knows of the caves: the opened columns, where they walked (their trail), the ways in. */
 export class CaveMemory {
     constructor() {
-        this.tiles = new Map(); // tile key -> Uint32Array(2): bit (z % 8) * 8 + (x % 8)
+        this.tiles = new Map(); // tile key -> Uint32Array(2): bit (z % 8) * 8 + (x % 8) — seen
+        this.steps = new Map(); // … walked on (the trail on the cave map: «тут я ходил»)
         this.ways = []; // [{x, z}] ways in/out seen
-        this.fresh = []; // [x, z, x, z…] opened since the map took them (Hud)
+        this.fresh = []; // [x, z, x, z…] opened / walked since the map took them (Hud)
         this.redraw = false; // too many at once / restored / wiped: draw the cave map anew
         this.version = 0;
     }
 
     /** Has the hero seen this column? */
     has(x, z) {
-        const ix = Math.floor(x), iz = Math.floor(z);
-        const m = this.tiles.get(tileKey(Math.floor(ix / T), Math.floor(iz / T)));
-        if (!m) return false;
-        const b = (((iz % T) + T) % T) * T + (((ix % T) + T) % T);
-        return (m[b >> 5] & (1 << (b & 31))) !== 0;
+        return bitAt(this.tiles, Math.floor(x), Math.floor(z), false);
+    }
+
+    /** Has the hero walked here? */
+    walked(x, z) {
+        return bitAt(this.steps, Math.floor(x), Math.floor(z), false);
+    }
+
+    _fresh(ix, iz) {
+        if (this.fresh.length < CAVE_MAP.MAX_FRESH * 2) this.fresh.push(ix, iz); else this.redraw = true;
+        this.version++;
     }
 
     /** Open a column; true if it is new. */
     open(ix, iz) {
-        const tx = Math.floor(ix / T), tz = Math.floor(iz / T);
-        if (tx < -0x8000 || tx >= 0x8000 || tz < -0x8000 || tz >= 0x8000) return false;
-        const k = tileKey(tx, tz);
-        let m = this.tiles.get(k);
-        if (!m) {
-            m = new Uint32Array(2);
-            this.tiles.set(k, m);
-            if (this.tiles.size > CAVE_MAP.MAX_TILES) this.tiles.delete(this.tiles.keys().next().value); // (the oldest tile)
-        }
-        const b = (iz - tz * T) * T + (ix - tx * T);
-        const bit = 1 << (b & 31);
-        if (m[b >> 5] & bit) return false;
-        m[b >> 5] |= bit;
-        // (a tile walked in again moves to the end: the oldest — the long forgotten — go first)
-        if (this.tiles.size > 1) { this.tiles.delete(k); this.tiles.set(k, m); }
-        if (this.fresh.length < CAVE_MAP.MAX_FRESH * 2) this.fresh.push(ix, iz); else this.redraw = true;
-        this.version++;
+        if (!bitAt(this.tiles, ix, iz, true)) return false;
+        this._fresh(ix, iz);
+        return true;
+    }
+
+    /** The hero's feet here (x, z: the world point): the trail. */
+    walk(x, z) {
+        const ix = Math.floor(x + 0.5), iz = Math.floor(z + 0.5);
+        if (!bitAt(this.steps, ix, iz, true)) return false;
+        this.open(ix, iz);
+        this._fresh(ix, iz);
         return true;
     }
 
@@ -77,54 +133,29 @@ export class CaveMemory {
     }
 
     get empty() {
-        return !this.tiles.size && !this.ways.length;
+        return !this.tiles.size && !this.steps.size && !this.ways.length;
     }
 
     clear() {
         this.tiles.clear();
+        this.steps.clear();
         this.ways.length = 0;
         this.fresh.length = 0;
         this.redraw = true;
         this.version++;
     }
 
-    /** Compact: {t: base64 of [int16 tx, int16 tz, uint32 lo, uint32 hi]…, w: [[x, z]…]} or null. */
+    /** Compact: {t, s: base64 of [int16 tx, int16 tz, uint32 lo, uint32 hi]…, w: [[x, z]…]} or null. */
     snapshot() {
         if (this.empty) return null;
-        const buf = new DataView(new ArrayBuffer(this.tiles.size * 12));
-        let o = 0;
-        for (const [k, m] of this.tiles) {
-            buf.setInt16(o, Math.floor(k / 0x10000) - 0x8000, true);
-            buf.setInt16(o + 2, (k % 0x10000) - 0x8000, true);
-            buf.setUint32(o + 4, m[0], true);
-            buf.setUint32(o + 8, m[1], true);
-            o += 12;
-        }
-        return { t: toBase64(new Uint8Array(buf.buffer)), w: this.ways.map((w) => [w.x, w.z]) };
+        return { t: packTiles(this.tiles), s: packTiles(this.steps), w: this.ways.map((w) => [w.x, w.z]) };
     }
 
     /** Add a saved memory to this one (restore, or a legacy taken back). */
     merge(s) {
         if (!s || typeof s !== 'object') return;
-        if (typeof s.t === 'string' && s.t) {
-            let bytes;
-            try { bytes = fromBase64(s.t); } catch { bytes = null; }
-            if (bytes) {
-                const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-                const n = Math.min(CAVE_MAP.MAX_TILES, Math.floor(bytes.byteLength / 12));
-                for (let i = 0; i < n; i++) {
-                    const o = i * 12, k = tileKey(v.getInt16(o, true), v.getInt16(o + 2, true));
-                    let m = this.tiles.get(k);
-                    if (!m) {
-                        m = new Uint32Array(2);
-                        this.tiles.set(k, m);
-                        if (this.tiles.size > CAVE_MAP.MAX_TILES) this.tiles.delete(this.tiles.keys().next().value);
-                    }
-                    m[0] |= v.getUint32(o + 4, true);
-                    m[1] |= v.getUint32(o + 8, true);
-                }
-            }
-        }
+        unpackTiles(this.tiles, s.t);
+        unpackTiles(this.steps, s.s);
         if (Array.isArray(s.w)) for (const w of s.w) if (Array.isArray(w) && Number.isFinite(w[0]) && Number.isFinite(w[1])) this.addWay(w[0], w[1]);
         this.redraw = true;
         this.version++;

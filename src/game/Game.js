@@ -1082,7 +1082,10 @@ export class Game {
         else if (was && this._caveHold <= -1) this._inCave = false;
         if (this._inCave !== was && this._caveOut) this.caveMap.addWay(this._caveOut.x, this._caveOut.z); // (the way in: the last place outside)
         if (!cave) (this._caveOut || (this._caveOut = { x: 0, z: 0 })).x = p.x, this._caveOut.z = p.z;
-        if (this._inCave && this.playerHP > 0) this.caveEyes.step(this.terrain.data, p.x, p.y, p.z);
+        if (this._inCave && this.playerHP > 0) {
+            this.caveEyes.step(this.terrain.data, p.x, p.y, p.z);
+            if (!this.flight?.active) this.caveMap.walk(p.x, p.z); // (the trail on the cave map: where I walked)
+        }
     }
 
     /**

@@ -567,7 +567,7 @@ export class Hud {
 
     /**
      * The cave map's picture round (cx, cz) at the hero's level L: what they have seen of the cave —
-     * the floor light (lighter higher, darker lower), the rock dark, the rest dark as night (not seen).
+     * the floor light (lighter higher, darker lower), their trail brown, the rock dark, the rest dark as night (not seen).
      * Only what changed is worked out: newly seen columns, the strip that came in when the window moved;
      * a whole new picture (another level, a dug wall) a little a frame (≤ 1.5 ms), from the middle out.
      */
@@ -616,8 +616,10 @@ export class Hud {
             else if (k === PIT) { r = 26; g = 30; b = 40; }
             else if (d.get(wx, cave.L + k, wz) === BLOCK.WATER) { r = 58; g = 111; b = 160; }
             else {
-                const sh = Math.max(0.45, Math.min(1.25, 1 + k * 0.08)); // (higher: lighter; down a slope: darker)
+                const sh = Math.max(0.68, Math.min(1.18, 1 + k * 0.05)); // (higher: lighter; down a slope: darker)
                 r = 206 * sh; g = 194 * sh; b = 166 * sh;
+                // where I walked: footprints — a warm orange-brown trail, stippled like steps («тут я ходил»)
+                if (mem.walked(wx, wz)) { const f = (((wx + wz) & 1) ? 0.86 : 1) * Math.max(0.85, sh); r = 214 * f; g = 128 * f; b = 48 * f; }
             }
             px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255;
         };
@@ -632,11 +634,11 @@ export class Hud {
         // the columns waiting (a whole new picture, a strip): a little a frame
         if (ci.todo) {
             const t0 = performance.now();
-            let left = false;
+            let left = false, n = 0;
             for (let i = 0; i < N * N; i++) {
                 if (!redo[i]) continue;
                 pixel(i % N, Math.floor(i / N)); redo[i] = 0; dirty = true;
-                if ((i & 63) === 0 && performance.now() - t0 > 1.5) { left = true; break; }
+                if ((++n & 31) === 0 && performance.now() - t0 > 1.5) { left = true; break; }
             }
             ci.todo = left ? 1 : 0;
         }

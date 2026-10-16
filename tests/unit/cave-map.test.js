@@ -10,12 +10,14 @@ test('cave memory: saved and restored the same, with a limit', () => {
     const m = new CaveMemory();
     for (let i = -30; i < 30; i++) m.open(i * 3, -i * 5);
     m.addWay(10, 20); m.addWay(12, 21); // (the same way: once)
+    m.walk(40.2, -7.8);
     const s = m.snapshot();
     const r = new CaveMemory();
     r.restore(s);
     for (let i = -30; i < 30; i++) assert.ok(r.has(i * 3, -i * 5));
     assert.ok(!r.has(1, 1));
     assert.equal(r.ways.length, 1);
+    assert.ok(r.walked(40, -8) && r.has(40, -8) && !r.walked(41, -8), 'the trail kept');
     const big = new CaveMemory();
     for (let i = 0; i < CAVE_MAP.MAX_TILES + 50; i++) big.open(i * 8, 0);
     assert.equal(big.tiles.size, CAVE_MAP.MAX_TILES);
