@@ -1174,7 +1174,9 @@ export class TerrainData {
                 if (this.sites?.landAt(x, z)) continue;
                 const top0 = c.top[col];
                 let carved = false, hiCut = MIN_LAYER;
-                const cut = (L0, L1, open) => {
+                let extra = null;
+                const cut = (L0, L1, open, more) => {
+                    if (more) { (extra || (extra = [])).push(L0, L1); return; } // (the higher roof: after all, below)
                     const hi = Math.min(L1, open ? top0 : top0 - CAVES.ROOF);
                     for (let L = Math.max(L0, MIN_LAYER + 1); L <= hi; L++) {
                         const i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
@@ -1186,6 +1188,16 @@ export class TerrainData {
                 let keep = -Infinity;
                 if (sys.length > 1) for (const s of sys) keep = Math.max(keep, chamberFloor(s, x, z));
                 for (const s of sys) carveColumn(s, x, z, cut, keep);
+                // the higher roofs (CAVES.UP…): only where ROOF layers of rock stay over them — never into
+                // another cave's mouth above, the open air or water (whatever order the caves come in)
+                if (extra) for (let i = 0; i < extra.length; i += 2) {
+                    let hi = extra[i + 1];
+                    for (let L = extra[i]; L <= Math.min(extra[i + 1] + CAVES.ROOF, top0); L++) {
+                        const b = c.blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx];
+                        if (b === BLOCK.AIR || b === BLOCK.WATER) { hi = Math.min(hi, L - CAVES.ROOF - 1); break; }
+                    }
+                    if (hi >= extra[i]) cut(extra[i], hi, false);
+                }
                 if (carved) { (this._walls || (this._walls = [])).push(col); c.caved = true; hollowAt(c, col, hiCut); } // (its sky light: _skyLight)
                 if (carved) {
                     let top = MIN_LAYER - 1;

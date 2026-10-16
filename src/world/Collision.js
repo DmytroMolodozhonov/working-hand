@@ -174,8 +174,10 @@ export class CollisionWorld {
      * stepHeight: terrain ledges up to this height can be walked onto.
      * stepBoxes: solid boxes as low as a step can be walked onto too (the body then stands on
      * them: standAt) — only for a body whose ground knows boxes (the player).
+     * rockHeight: the height against the world's blocks (the player's head ducks a little by itself
+     * under a rock just too low — Character.bodyHeight; the body then goes lower: Game._roofNeed).
      */
-    resolveCylinder(pos, radius, feetY, height, stepHeight = 1.05, stepBoxes = false) {
+    resolveCylinder(pos, radius, feetY, height, stepHeight = 1.05, stepBoxes = false, rockHeight = height) {
         let hit = false;
         for (let pass = 0; pass < 3; pass++) {
             let moved = false;
@@ -211,7 +213,14 @@ export class CollisionWorld {
                         const top = this.terrain.topLayer(ix, iz) - 0.5;
                         if (top <= feetY + stepHeight) continue;
                         // something above the step — but is it in the way of the body (not a ceiling over the head)?
-                        if (this.terrain.solidIn && !this.terrain.solidIn(ix, iz, Math.ceil(feetY + stepHeight + 0.5 + 1e-3), Math.floor(feetY + height + 1.5 - 1e-3))) continue;
+                        // The body over this column stands on its floor (a step up): the room is measured from
+                        // there — a step under a low roof is a wall, not a place the body is shoved off sideways
+                        // once it is on it (a cave's mounds under its ragged roof: stuck and sliding).
+                        if (this.terrain.solidIn) {
+                            const reach = Math.floor(feetY + stepHeight + 0.5 + 1e-9);
+                            const stand = this.terrain.floorBelow ? Math.max(feetY, this.terrain.floorBelow(ix, iz, reach) - 0.5) : feetY;
+                            if (!this.terrain.solidIn(ix, iz, reach + 1, Math.floor(stand + rockHeight + 1.5 - 1e-3))) continue;
+                        }
                         if (pushOutOfRect(pos, radius, ix - 0.5, ix + 0.5, iz - 0.5, iz + 0.5)) moved = true;
                     }
                 }

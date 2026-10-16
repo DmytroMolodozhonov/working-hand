@@ -12,7 +12,7 @@ import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { VoiceGate } from './VoiceGate.js';
 import { VoxelWorld, MAP_CELL } from '../world/World.js';
-import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../entities/Character.js';
+import { VoxelCharacter, PLAYER_GROUND_OFFSET, BODY_H, CROUCH } from '../entities/Character.js';
 import { Zombie, ZOMBIE } from '../entities/Zombie.js';
 import { Chest } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
@@ -3011,6 +3011,7 @@ export class Game {
             ch.updateArmsLookAt(pose, dt);
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
             ch.setCrouching(flying || down ? false : pose.isCrouching);
+            ch.setStoop(flying || down || this.animals?.riding || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
             ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
         }
         // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
@@ -3039,7 +3040,7 @@ export class Game {
             ch.group.position.x = walkFromX; ch.group.position.z = walkFromZ;
             for (let i = 0; i < n; i++) {
                 ch.group.position.x += walkDX / n; ch.group.position.z += walkDZ / n;
-                this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
+                this._resolveMe(ch.group.position);
             }
         }
 
@@ -3052,7 +3053,7 @@ export class Game {
                 const was = _v1.copy(ch.group.position);
                 ch.group.position.addScaledVector(this.knockback, dt / n);
                 if (!solid) continue;
-                this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
+                this._resolveMe(ch.group.position);
                 if (this._bodyInRock(ch.group.position)) { ch.group.position.copy(was); this.knockback.set(0, 0, 0); break; } // (against the rock: it stops there)
             }
             // (thrown through the air — «Джолт»: only the air slows it until it lands)
@@ -3070,15 +3071,16 @@ export class Game {
         if (!flight.active && !this.beds?.lying && !this.boards?.mounted) {
             // (a step up to one block high is walked onto by itself: the feet are on the floor they
             // stand on, even while the body still eases up the last step — _feetY)
-            this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
+            this._resolveMe(ch.group.position);
             // a market counter: the body stays a little before it, where the hands reach its top (CastleTalk)
-            if (this.castleLife?.talk?.keepOffCounters?.(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position))) this.collision.resolveCylinder(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position), 3.5, 1.05, true);
+            if (this.castleLife?.talk?.keepOffCounters?.(ch.group.position, PLAYER_RADIUS, this._feetY(ch.group.position))) this._resolveMe(ch.group.position);
             // never inside the rock (tossed up under an overhang, the walls' push would carry the body
             // on through the stone, block by block): back where it last stood free
             if (this._bodyInRock(ch.group.position)) {
                 if (this._lastFree && this._lastFree.distanceToSquared(ch.group.position) < 400) { ch.group.position.copy(this._lastFree); this.knockback.set(0, 0, 0); if (ch.verticalVelocity > 0) ch.verticalVelocity = 0; }
             } else (this._lastFree || (this._lastFree = new THREE.Vector3())).copy(ch.group.position);
-        }
+            ch.roofNeed = this._roofNeed(ch.group.position); // (rock right over the head: the body stays low under it)
+        } else ch.roofNeed = 0;
         this._keepInsideMap(ch.group.position);
         // a house's sphere of protection: only its owner and the ones let in come through (HouseWards.js)
         if (this.wards?.list.size && !this.isDeadLocal) this.wards.keepOut(ch.group.position, ch.group.position.y - PLAYER_GROUND_OFFSET, 3.5, dt);
@@ -3127,7 +3129,7 @@ export class Game {
                 } else if (this.flight.active) {
                     if (col.pointBlocked(me.x, me.y, me.z) || col.pointBlocked(me.x, me.y + 1.2, me.z)) { me.x = bx; me.z = bz; }
                 } else {
-                    col.resolveCylinder(me, PLAYER_RADIUS, this._feetY(me), 3.5, 1.05, true);
+                    this._resolveMe(me);
                 }
                 this._keepInsideMap(me);
             }
@@ -3596,7 +3598,7 @@ export class Game {
      */
     _feetY(p) {
         const ch = this.character;
-        const f = p.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1.0 : 0);
+        const f = p.y - PLAYER_GROUND_OFFSET + CROUCH.DROP * (ch.lowK || 0);
         if (!ch.onGround || ch.swimY != null || this.flight?.active || this.ledge?.active) return f;
         return Math.max(f, Math.min(ch.groundY, f + 1.05));
     }
@@ -3643,7 +3645,40 @@ export class Game {
         const T = this.terrain;
         if (!T?.solidIn) return false;
         const feet = this._feetY(p);
-        return T.solidIn(Math.round(p.x), Math.round(p.z), Math.ceil(feet + 1.05 + 0.5 + 1e-3), Math.floor(feet + 3.5 + 1.5 - 1e-3));
+        // (over a step it stands on: from that step's top — the walls' test does the same, Collision)
+        const ix = Math.round(p.x), iz = Math.round(p.z), reach = Math.floor(feet + 1.05 + 0.5 + 1e-9);
+        const stand = T.floorBelow ? Math.max(feet, T.floorBelow(ix, iz, reach) - 0.5) : feet;
+        return T.solidIn(ix, iz, reach + 1, Math.floor(stand + (this.character.bodyHeight?.(true) ?? BODY_H) + 1.5 - 1e-3));
+    }
+
+    /** My body out of the walls (bent down: lower — Character.bodyHeight; the head ducks a little under rock). */
+    _resolveMe(p) {
+        const ch = this.character;
+        return this.collision.resolveCylinder(p, PLAYER_RADIUS, this._feetY(p), ch.bodyHeight?.() ?? BODY_H, 1.05, true, ch.bodyHeight?.(true) ?? BODY_H);
+    }
+
+    /**
+     * How much lower (0…1, × CROUCH.DROP) the rock right over the body keeps it: the columns under
+     * the body (Collision lets it in under rock a bent body fits under), each from the floor it
+     * would stand on there. Character.update keeps the body that low — it cannot stand up into it.
+     */
+    _roofNeed(p) {
+        const T = this.terrain, ch = this.character;
+        if (!T?.ceilingAbove || !T.floorBelow || !ch.onGround || ch.swimY != null) return 0;
+        const feet = this._feetY(p), reach = Math.floor(feet + 1.05 + 0.5 + 1e-9), r = PLAYER_RADIUS - 0.02;
+        let need = 0;
+        for (let iz = Math.round(p.z - r); iz <= Math.round(p.z + r); iz++) {
+            for (let ix = Math.round(p.x - r); ix <= Math.round(p.x + r); ix++) {
+                const dx = Math.max(ix - 0.5 - p.x, 0, p.x - ix - 0.5), dz = Math.max(iz - 0.5 - p.z, 0, p.z - iz - 0.5);
+                if (dx * dx + dz * dz >= r * r) continue; // (the body is not over this column)
+                if (T.topLayer && T.topLayer(ix, iz) <= reach) continue; // (open sky)
+                const L = T.ceilingAbove(ix, iz, reach + 1);
+                if (L === Infinity) continue;
+                const stand = Math.max(feet, T.floorBelow(ix, iz, reach) - 0.5);
+                need = Math.max(need, (BODY_H - (L - 1.5 - stand)) / CROUCH.DROP);
+            }
+        }
+        return Math.max(0, Math.min(1, need));
     }
 
     /**

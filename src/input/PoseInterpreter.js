@@ -9,6 +9,7 @@ import { LegReader } from './LegReader.js';
 import { StepReader } from './StepReader.js';
 import { JumpReader } from './JumpReader.js';
 import { HeadFromBody } from './HeadFromBody.js';
+import { StoopReader } from './StoopReader.js';
 
 /**
  * The head tilted back: a real head goes back ~40–45° before the camera loses the
@@ -295,6 +296,7 @@ export class PoseInterpreter {
         this.legsSeenAt = 0;
         this.legReader = new LegReader(); // (the surfboard: getting on, paddling with a leg)
         this.jumpReader = new JumpReader(); // a real jump (the hero, the horse: Game._jumpStep, Animals)
+        this.stoopReader = new StoopReader(); // bending down a little (under a low roof: Character.crouchK)
     }
 
     /**
@@ -422,6 +424,7 @@ export class PoseInterpreter {
             if (!this.wasCrouching) { if (noseY > 0.5) this.wasCrouching = true; }
             else if (noseY < 0.45) this.wasCrouching = false;
             data.isCrouching = this.wasCrouching;
+            data.stoop = this.stoopReader.read(lm);
 
             // the new walk (a setting): steps on the spot, from the legs (the body's bob only without legs to read)
             if (this.walkMode === 'legs') {

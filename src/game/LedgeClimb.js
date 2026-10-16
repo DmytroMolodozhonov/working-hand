@@ -103,7 +103,7 @@ export class LedgeClimb {
         const p = ch.group.position;
         const c = this.climb;
         if (c?.over) { this._over(dt); return; }
-        const feet = c ? c.base + c.lift : p.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1 : 0);
+        const feet = c ? c.base + c.lift : p.y - PLAYER_GROUND_OFFSET + (ch.lowK || 0);
         const max = LEDGE_MAX + (ch.swimY != null ? WATER_LIFT : 0);
         // the palms: on the edge, held there, or off it
         for (const side of ['left', 'right']) {
@@ -133,7 +133,7 @@ export class LedgeClimb {
         if (!cl) return;
         this._edge(cl);
         // (standing, one palm resting on the edge: the climb starts from where I stand now)
-        if (cl.lift <= 0.01 && !(cl.holds.left && cl.holds.right)) cl.base = p.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1 : 0);
+        if (cl.lift <= 0.01 && !(cl.holds.left && cl.holds.right)) cl.base = p.y - PLAYER_GROUND_OFFSET + (ch.lowK || 0);
         const both = cl.holds.left && cl.holds.right;
         const one = !both && (cl.holds.left || cl.holds.right);
         let err = 0;

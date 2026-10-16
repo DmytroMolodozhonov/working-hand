@@ -21,6 +21,11 @@ export const CAVES = {
     FLOOR_MIN: -12.5, // the lowest a tunnel's middle goes (bedrock at −17)
     JAG: 0.3, // how ragged the rock is (a part of the radius, by 3D noise)
     ROOF: 2, // layers of ground always left over a tunnel (but at the mouth)
+    // how high (the author: «the ceilings higher» — the tunnels ~35 % higher, the halls too):
+    UP: 0.31, // a tunnel's roof: r / √UP over its middle (was 0.8 — 1.12 r; its floor, 0.79 r under it, as it was)
+    WALL: 5, // layers a chamber is high at its wall (was 4)
+    HALL: 1.35, // its middle: this much higher than it was (c.h)
+    ROOM: 4, // layers of air always over a chamber's mounds (was 3: lower than the hero)
     REACH: 150, // m a system may reach from its cell
     MAIN_CHEST: 0.45, CHAMBER_CHEST: 0.06, // chances of a chest (4 times fewer than there were)
 };
@@ -220,28 +225,36 @@ export function carveColumn(s, x, z, out, floorKeep = -Infinity) {
     // a chamber's floor stays whole (a tunnel passing under it does not break through)
     let own = -Infinity;
     for (const c of s.chambers) if (Math.hypot(x - c.x, z - c.z) <= chamberReach(c)) own = Math.max(own, c.F + 1);
-    const clip = (keep) => (keep === -Infinity ? out : (a, b, open) => { if (b >= keep) out(Math.max(a, keep), b, open); });
+    const clip = (keep) => (keep === -Infinity ? out : (a, b, open, extra) => { if (b >= keep) out(Math.max(a, keep), b, open, extra); });
     const put = clip(Math.max(own, floorKeep)), room = clip(own); // (tunnels keep any system's floors; chambers their own)
     for (const g of s.segs) {
         const r = g.r, R = r * (1 + CAVES.JAG);
         if (x < Math.min(g.ax, g.bx) - R || x > Math.max(g.ax, g.bx) + R || z < Math.min(g.az, g.bz) - R || z > Math.max(g.az, g.bz) + R) continue;
-        const lo = Math.max(Math.floor(Math.min(g.ay, g.by) - R), g.minL ?? -Infinity), hi = Math.ceil(Math.max(g.ay, g.by) + R * 1.15);
+        const up = g.open || s.lair ? 0.8 : CAVES.UP; // (the mouth as it was: the hillside over it untouched; a dragons' lair is its own)
+        const lo = Math.max(Math.floor(Math.min(g.ay, g.by) - R), g.minL ?? -Infinity), hi = Math.ceil(Math.max(g.ay, g.by) + Math.max(R * 1.15, R / Math.sqrt(up) + 0.5));
         const dx = g.bx - g.ax, dy = g.by - g.ay, dz = g.bz - g.az, len2 = dx * dx + dy * dy + dz * dz || 1;
-        let a = null;
+        let a = null, e = null;
         for (let L = lo; L <= hi + 1; L++) {
-            let inside = false;
+            let inside = false, was = false;
             if (L <= hi) {
                 const t = Math.max(0, Math.min(1, ((x - g.ax) * dx + (L - g.ay) * dy + (z - g.az) * dz) / len2));
                 const px = g.ax + dx * t - x, py = g.ay + dy * t - L, pz = g.az + dz * t - z;
-                // (a little flatter than round: the floor walkable, the roof a little higher; ragged by
-                // noise — looked up only near the rock's face)
-                const d2 = px * px + pz * pz + (py > 0 ? py * py * 1.6 : py * py * 0.8);
+                // (an oval: the floor walkable — 0.79 r under its middle; the roof high over the head —
+                // CAVES.UP, it was 0.8; ragged by noise — looked up only near the rock's face)
+                const h2 = px * px + pz * pz;
+                const d2 = h2 + (py > 0 ? py * py * 1.6 : py * py * up), d1 = py > 0 ? d2 : h2 + py * py * 0.8;
                 const lo = r * (1 - CAVES.JAG), hi = r * (1 + CAVES.JAG);
-                if (d2 <= lo * lo) inside = true;
-                else if (d2 < hi * hi) { const rr = r * (1 + CAVES.JAG * noise3(x / 3.3, L / 3.3, z / 3.3, s.seed)); inside = d2 <= rr * rr; }
+                let rr = 0;
+                const within = (q) => q <= lo * lo || (q < hi * hi && q <= (rr || (rr = r * (1 + CAVES.JAG * noise3(x / 3.3, L / 3.3, z / 3.3, s.seed)))) ** 2);
+                inside = within(d2); was = within(d1);
             }
-            if (inside && a === null) a = L;
-            if (!inside && a !== null) { put(a, L - 1, g.open); a = null; }
+            // (what it carved before: as it was; the higher roof over it — `extra`: TerrainData carves
+            // it only where rock stays over it, never into another cave's mouth or the open air)
+            if (was && a === null) a = L;
+            if (!was && a !== null) { put(a, L - 1, g.open); a = null; }
+            const more = inside && !was;
+            if (more && e === null) e = L;
+            if (!more && e !== null) { put(e, L - 1, g.open, true); e = null; }
         }
     }
     for (const c of s.chambers) {
@@ -249,14 +262,18 @@ export function carveColumn(s, x, z, out, floorKeep = -Infinity) {
         const a = Math.atan2(z - c.z, x - c.x);
         const R = c.r * (1 + (c.w1 || 0) * Math.sin(3 * a + (c.p1 || 0)) + (c.w2 || 0) * Math.sin(7 * a + (c.p2 || 0)) + (c.w1 ? 0.08 * noise3(x / 2.5, c.F, z / 2.5, s.seed) : 0));
         if (d > R) continue;
-        // a dome, 4 high at its wall; its roof ragged (hanging rock); its floor uneven — mounds of
-        // rock, rising to the wall (the main chamber's and the floor under a chest stay flat)
-        const k = 1 - (d * d) / (R * R);
-        const top = c.F + Math.max(4, Math.round(4 + (c.h - 4) * k + 1.6 * noise3(x / 3, c.F + 7, z / 3, s.seed + 1)));
+        // a dome, WALL high at its wall; its roof ragged (hanging rock); its floor uneven — mounds of
+        // rock, rising to the wall, always with room to walk over them (the main chamber's and the
+        // floor under a chest stay flat). Its roof never comes through the ground above (ROOF).
+        const k = 1 - (d * d) / (R * R), n = 1.6 * noise3(x / 3, c.F + 7, z / 3, s.seed + 1);
+        const was = c.F + Math.max(4, Math.round(4 + (c.h - 4) * k + n)); // (its roof as it was)
+        const W = s.lair ? 4 : CAVES.WALL, h = s.lair ? c.h : c.h * CAVES.HALL;
+        const top = Math.max(was, c.F + Math.max(W, Math.round(W + (h - W) * k + n)));
         let floor = c.F + 1;
         if (c.w1 && !s.chests.some((ch) => Math.hypot(x - ch.x, z - ch.z) < 3.2)) {
-            floor += Math.max(0, Math.min(top - c.F - 3, Math.round(1.8 * noise3(x / 3.5, c.F - 5, z / 3.5, s.seed + 2) + 2 * (d / R) ** 3 - 0.4)));
+            floor += Math.max(0, Math.min(top - c.F - (s.lair ? 3 : CAVES.ROOM), Math.round(1.8 * noise3(x / 3.5, c.F - 5, z / 3.5, s.seed + 2) + 2 * (d / R) ** 3 - 0.4)));
         }
-        room(floor, top, false); // (a higher chamber's floor stays whole over it: a ledge)
+        if (floor <= was) room(floor, was, false); // (a higher chamber's floor stays whole over it: a ledge)
+        if (top > was) room(Math.max(floor, was + 1), top, false, true); // (higher — where rock stays over it)
     }
 }

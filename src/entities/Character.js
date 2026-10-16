@@ -71,6 +71,16 @@ const FALL = { left: [0, 1.4], back: [1.45, 0], front: [-1.45, 0], right: [0, -1
 export const PLAYER_GROUND_OFFSET = 2.0;
 /** From the feet to just over the head: room a body needs under a roof. */
 export const HEAD_ROOM = 3.4;
+/** The body's height for the walls (feet to over the head), standing. */
+export const BODY_H = 3.5;
+/**
+ * Bending down (a squat, or a little stoop under a low roof — StoopReader): the body goes lower,
+ * so it walks under rock it could not stand under; it cannot stand up into the rock (Game sets
+ * `roofNeed`, how much lower the rock over it keeps it). Under a roof just a little too low the
+ * head ducks by itself (DUCK), as anybody's would.
+ */
+export const CROUCH = { DROP: 1.0, DUCK: 0.3, DOWN: 2.5, UP: 1.8 };
+const ease = (v, to, down, up, dt) => (to > v ? Math.min(to, v + down * dt) : Math.max(to, v - up * dt));
 
 export class VoxelCharacter {
     constructor(scene, { remote = false } = {}) {
@@ -95,6 +105,10 @@ export class VoxelCharacter {
         this.runCycle = 0;
         this.isRunning = false;
         this.isCrouching = false;
+        this.stoop = 0; // 0…1 bent down a little (the camera: StoopReader)
+        this.roofNeed = 0; // 0…1 how much lower the rock right over the body keeps it (Game._roofNeed)
+        this.crouchK = 0; // 0…1 how bent the body is (smoothed; never stands up into rock)
+        this.lowK = 0; // 0…1 how much lower the body really is (bent + the head ducked under the rock)
         this.runIntensity = 0;
         this.baseY = 1.5;
         this.groundY = -0.5;
@@ -628,6 +642,7 @@ export class VoxelCharacter {
         this.setIdlePose();
         this.isRunning = false;
         this.isCrouching = false;
+        this.stoop = this.roofNeed = this.crouchK = this.lowK = 0;
         this.runCycle = 0;
         this.group.rotation.set(0, 0, 0);
     }
@@ -639,6 +654,19 @@ export class VoxelCharacter {
 
     setCrouching(crouching) {
         this.isCrouching = !!crouching;
+    }
+
+    /** Bent down a little (0…1) — StoopReader. */
+    setStoop(v) {
+        this.stoop = Math.max(0, Math.min(1, +v || 0));
+    }
+
+    /**
+     * The body's height for the walls now: lower when bent. `rock`: against the world's rock — the
+     * head ducks a little more by itself under a roof just too low (Game._roofNeed lowers it then).
+     */
+    bodyHeight(rock = false) {
+        return BODY_H - CROUCH.DROP * Math.min(1, this.crouchK + (rock ? CROUCH.DUCK : 0));
     }
 
     /**
@@ -663,8 +691,12 @@ export class VoxelCharacter {
         }
         this._updateHandMotion(dt);
 
-        // Crouching lowers the body by 1 m: the legs fold back (kneeling) so they stay above the ground
-        const crouchAngle = this.isCrouching ? -1.1 : 0;
+        // Crouching lowers the body by up to 1 m (smoothly; not up into the rock over it): the legs fold
+        // back (kneeling) so they stay above the ground
+        const roof = Math.min(1, this.roofNeed || 0);
+        this.crouchK = ease(this.crouchK, Math.min(1, Math.max(this.isCrouching ? 1 : 0, this.stoop || 0, roof - CROUCH.DUCK)), CROUCH.DOWN, CROUCH.UP, dt);
+        this.lowK = ease(this.lowK, Math.max(this.crouchK, roof), CROUCH.DOWN * 1.6, CROUCH.UP, dt);
+        const crouchAngle = -1.1 * this.lowK;
         // Knocked down: tips over the way it was pushed (and gets up again); reeling: leans
         const up = this.knockedDown ? 1 - (this.liftUp || 0) : 1; // (pulled up by a hand: the body follows it)
         const [px, rz] = this.knockedDown ? (FALL[this.fallDir] || FALL.left).map((a) => a * up) : [this.staggerLean || 0, this.staggerRoll || 0];
@@ -896,7 +928,7 @@ export class VoxelCharacter {
 
     /** How much lower the body is: crouching, or on the stumps with both legs cut off. */
     bodyDrop() {
-        return Math.max(this.isCrouching ? 1.0 : 0, this.legDrop || 0) + heavySink(this.gravityK); // (a heavy planet: the knees give a little)
+        return Math.max(CROUCH.DROP * this.lowK, this.legDrop || 0) + heavySink(this.gravityK); // (a heavy planet: the knees give a little)
     }
 
     /** V3 (stable), V4 and V5 (the full hand, being finished) are all the voxel SimplifiedHand. */
@@ -952,7 +984,7 @@ export class VoxelCharacter {
             la: q(this.leftArmAnchor), le: q(this.leftElbowAnchor),
             ra: q(this.rightArmAnchor), re: q(this.rightElbowAnchor),
             run: this.isRunning || this.stepping > 0 ? r2(this.isRunning ? this.runIntensity : 0.6) : -1,
-            cr: this.isCrouching ? 1 : 0,
+            cr: this.lowK > 0.01 ? r2(this.lowK) : 0, // (how much lower: a squat is 1)
             jp: this.jumpAir ? (this.verticalVelocity > 0 ? 2 : 1) : undefined, // (up in a jump: the legs tucked)
             kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
             tb: this.knockedDown && this.tumbleAng ? r3(this.tumbleAng) : undefined, // (flipping over in the air: «Джолт»)

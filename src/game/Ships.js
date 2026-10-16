@@ -747,7 +747,7 @@ export class Ships {
             pos: () => ch.group.position,
             turn: (d) => { ch.group.rotation.y += d; g.cameraBaseRotation += d; g.smoothBody += d; },
             free: () => !g.flight?.active && !g.levitation?.lifted && !g.swim?.swimming && !g.isDeadLocal && !g.combat?.dead && !g.beds?.lying && !g.animals?.riding && !this.rigging.climbing,
-            feet: () => ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.isCrouching ? 1 : 0),
+            feet: () => ch.group.position.y - PLAYER_GROUND_OFFSET + (ch.lowK || 0),
         };
     }
 

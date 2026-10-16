@@ -7,8 +7,8 @@
  *          blue light around them. The same cave always has the same crystals
  *          (from the world's seed); the ones taken are gone for everybody (synced,
  *          and kept in the world save). In Creative one lies on a pedestal too.
- *   Take:  - by hand: touch a crystal with an OPEN hand, then close the fingers on it —
- *            it breaks off into the hand;
+ *   Take:  - by hand: reach out to a crystal with an open hand and close the fingers on it —
+ *            it breaks off into the hand (a fist bumping into it takes nothing);
  *          - «Gather» pointed at the cluster: all its crystals go into the slots;
  *          - «Акцио» pointed at a crystal: it breaks off and flies to the hand (one by one).
  *   Use:   hold it in one hand, take hold of it with the other hand too (fingers
@@ -27,10 +27,14 @@ export const CRYSTAL = {
     MAX: 5,
     NEAR: 90, // m: clusters are made for caves this close
     FAR: 260, // m (x or z): a cluster this far is put away
-    TOUCH: 0.16, // m from a crystal's surface: the hand touches it
+    // (the camera guesses how far forward a hand is only roughly: a hand closing on a crystal
+    // the eye sees it at is taken — it was 0.16 m, and the fingers mostly closed on air)
+    TOUCH: 0.3, // m from a crystal's surface: the fingers close on it
     LIGHT_RANGE: 18, // m: the soft light shines at the nearest cluster this close
-    OPEN: 0.35, // finger curl below this: an open hand
-    CLOSED: 0.6, // …above this: the fingers closed on it
+    OPEN: 0.42, // finger curl below this: an open hand
+    CLOSED: 0.55, // …above this: the fingers closed on it
+    OPEN_MS: 1.5, // s: the hand was open this lately (reaching out open, then closing) — a fist bumping into it takes nothing
+    LET_GO: 0.3, // s: a hand breaking it may look open for a moment (the camera blurs a fast pull)
     BOTH: 0.45, // m between the palms: the other hand on the held crystal (two palms round a small gem)
     PULL: 0.22, // m the hands move apart (both still holding it): it breaks
     TWIST: 0.9, // rad the hands turn against each other: it breaks
@@ -140,7 +144,7 @@ export class ManaCrystals {
         this.flying = []; // crystals flying to my hand («Акцио»)
         this._t = 0;
         this._time = 0;
-        this._touch = { right: null, left: null }; // an open hand on a crystal: {id, at}
+        this._open = { right: -1e9, left: -1e9 }; // when each hand was last seen open
         this._break = null; // both hands on a held crystal: {side, d0, ang0}
         this.log = new CappedLog(); // (tests) what happened
         // ONE soft light for the nearest cluster: made now, before the shaders are compiled
@@ -159,6 +163,7 @@ export class ManaCrystals {
     update(dt) {
         if (!this.enabled) return;
         this._time += dt;
+        this._dt = dt;
         this._t -= dt;
         if (this._t <= 0) { this._t = 1; this._ensureNear(); }
         this._light();
@@ -281,31 +286,41 @@ export class ManaCrystals {
         return true;
     }
 
-    /** A touch, then closing the fingers on it: an open hand on a crystal, then a fist. */
+    /**
+     * The fingers close on a crystal: a hand that was open a moment ago (reaching out open, as for
+     * anything) closes at a crystal — it breaks off into it. A fist bumping into it takes nothing.
+     */
     _hands() {
         const g = this.game, ch = g.character;
         const now = this._time;
         for (const side of ['right', 'left']) {
             const held = g.items?.held[side];
-            if ((held && held.item.kind !== 'crystal') || g.weapons?.hands?.[side]?.held) { this._touch[side] = null; continue; }
-            const hand = ch.getGripObject ? ch.getGripObject(side).getWorldPosition(_v2) : ch.getHandWorldPosition(side, _v2); // (the palm)
+            if ((held && held.item.kind !== 'crystal') || g.weapons?.hands?.[side]?.held) continue;
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 0;
-            let near = null, nd = Infinity;
-            for (const c of this.growing()) {
-                if (c.center.distanceTo(hand) > 1.2) continue;
+            if (curl < CRYSTAL.OPEN) { this._open[side] = now; continue; }
+            if (curl < CRYSTAL.CLOSED || now - this._open[side] > CRYSTAL.OPEN_MS) continue;
+            const hand = ch.getGripObject ? ch.getGripObject(side).getWorldPosition(_v2) : ch.getHandWorldPosition(side, _v2); // (the palm)
+            const near = this.nearest(hand);
+            if (!near) continue;
+            const other = g.items?.held[side === 'right' ? 'left' : 'right'];
+            if (other?.item.kind === 'crystal' && other.model.position.distanceTo(hand) < CRYSTAL.BOTH * 0.6) continue; // (closing on the crystal in the other hand: to break it)
+            this._open[side] = -1e9; // (one closing — one crystal)
+            this.breakOff(near, side);
+        }
+    }
+
+    /** The growing crystal a hand at `hand` closes on (within TOUCH of its surface), or null. */
+    nearest(hand) {
+        let near = null, nd = CRYSTAL.TOUCH;
+        for (const cl of this.clusters.values()) {
+            if (!cl || Math.abs(cl.data.x - hand.x) > 3 || Math.abs(cl.data.z - hand.z) > 3) continue;
+            for (const c of cl.list) {
+                if (this.taken.has(c.id) || c.center.distanceTo(hand) > 1.2) continue;
                 const d = segDist(hand, c.base, c.tip) - c.r;
                 if (d < nd) { nd = d; near = c; }
             }
-            const T = this._touch[side];
-            if (near && nd < CRYSTAL.TOUCH && curl < CRYSTAL.OPEN) { this._touch[side] = { id: near.id, at: now }; continue; }
-            if (!T) continue;
-            if (now - T.at > 1.5) { this._touch[side] = null; continue; }
-            if (curl > CRYSTAL.CLOSED) {
-                this._touch[side] = null;
-                const c = this.growing().find((x) => x.id === T.id);
-                if (c && segDist(hand, c.base, c.tip) - c.r < CRYSTAL.TOUCH + 0.12) this.breakOff(c, side);
-            }
         }
+        return near;
     }
 
     /** «Gather» at a cluster: all its crystals into the slots. A message, or null if none was pointed at. */
@@ -395,16 +410,21 @@ export class ManaCrystals {
         const curlB = ch.getGripCurl ? ch.getGripCurl(B) : 0;
         const dirA = ch.getHandDirection(A, new THREE.Vector3()), dirB = ch.getHandDirection(B, new THREE.Vector3());
         const ang = dirA.angleTo(dirB);
+        const d = hA.distanceTo(hB);
         const onIt = hB.distanceTo(crystal) < CRYSTAL.BOTH && curlB > 0.45 && curlA > 0.3;
         const K = this._break;
         if (!K) {
-            if (onIt) this._break = { side: A, d0: hA.distanceTo(hB), ang0: ang, at: this._time };
+            if (onIt) this._break = { side: A, d0: d, ang0: ang, at: this._time, loose: 0 };
             return;
         }
-        if (K.side !== A || curlB < 0.3 || curlA < 0.2) { this._break = null; return; } // (a hand let go of it)
-        const pulled = hA.distanceTo(hB) - K.d0 > CRYSTAL.PULL;
+        if (K.side !== A) { this._break = null; return; }
+        // (the hands, closed on it, came closer still: the pull is counted from there)
+        if (onIt && d < K.d0) K.d0 = d;
+        const pulled = d - K.d0 > CRYSTAL.PULL;
         const twisted = Math.abs(ang - K.ang0) > CRYSTAL.TWIST;
-        if (pulled || twisted) { this._break = null; this.shatter(A, pulled ? 'pull' : 'twist'); }
+        if (pulled || twisted) { this._break = null; this.shatter(A, pulled ? 'pull' : 'twist'); return; }
+        // a hand let go of it (not just a blurred moment of a fast pull)
+        if (curlB < 0.3 || curlA < 0.2) { K.loose += this._dt || 0; if (K.loose > CRYSTAL.LET_GO) this._break = null; } else K.loose = 0;
     }
 
     /** The held crystal breaks into sparkles: +5 to the mana maximum. */
