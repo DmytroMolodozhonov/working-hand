@@ -39,7 +39,7 @@ import { radiusOf } from './WaterMagic.js';
 
 export { bookSpellName };
 
-export const BOOK_POOL = ['Gather', 'CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'CreateBoard'];
+export const BOOK_POOL = ['CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'CreateBoard'];
 const BIRDS = 4;
 const SPEED = 7;
 const COVERS = [0x8e2b2b, 0x2b4f8e, 0x2f6b3a, 0x6b3f8e, 0x8e6a2b];

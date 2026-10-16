@@ -54,6 +54,7 @@ export class Builder {
     /** May this spell be used now? (creative: all; elsewhere: learned from a book) */
     knows(spell) {
         if (this.game.config.mode === 'creative') return true;
+        if (spell === 'Gather') return true; // (the author: anyone can gather from the start — no book, no scroll)
         // (learned from a book-bird's book — or a burnt scroll, for the spells that have one)
         return !!this.game.books?.learned?.has(spell) || !!this.game.bonus?.spells?.[spell];
     }
