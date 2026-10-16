@@ -130,6 +130,7 @@ export class SoundManager {
         while (!this.prepareCircleAttack()) await pause();
         onProgress?.(0.85);
         while (!this.prepareInspirius()) await pause();
+        while (!this.prepareBoom()) await pause(); // («Бум»: the swelling groan and the blast with its long echo)
         onProgress?.(0.9);
         // (the spells' tunes and effects: in a worker since loadSounds — SpellMusic.js; not ready yet — at most
         // a moment more: the rest come in play, only put into buffers then, no synthesis in a frame)
@@ -782,6 +783,85 @@ export class SoundManager {
         const d = listenerPos ? position.distanceTo(listenerPos) : 0;
         this._spell(this.sounds.inspBlast, Math.max(0.4, 3 - d / 120), 0.95 + Math.random() * 0.05);
         if (this.sounds.explosion) this._spell(this.sounds.explosion, Math.max(0.3, 2.4 - d / 90), 0.55);
+    }
+
+    /** «Бум»'s sounds made ahead (a few ms at a time): @returns true when both are made. */
+    prepareBoom() {
+        if (!this.context) return true;
+        if (!this._prepare('boomSwell', () => this._synthBoomSwellGen(1.6))) return false;
+        return this._prepare('boomBlast', () => this._synthBoomBlastGen(11));
+    }
+
+    /** «Бум»: the mountain groans and grinds from inside, louder and lower, as it swells. */
+    playBoomSwell(position, listenerPos) {
+        if (!this.context || !this.sounds.boomSwell) return; // (made on the loading screen — never in a frame)
+        const d = listenerPos ? position.distanceTo(listenerPos) : 0;
+        this._spell(this.sounds.boomSwell, Math.max(0.35, 2.2 - d / 160), 1);
+    }
+
+    /** «Бум»: the burst — the deepest blow there is, the roar of the rock, its echo rolling back from far away. */
+    playBoomBlast(position, listenerPos) {
+        if (!this.context || !this.sounds.boomBlast) return;
+        const d = listenerPos ? position.distanceTo(listenerPos) : 0;
+        this._spell(this.sounds.boomBlast, Math.max(0.5, 3.2 - d / 200), 1);
+        if (this.sounds.explosion) this._spell(this.sounds.explosion, Math.max(0.3, 2.4 - d / 120), 0.4);
+    }
+
+    * _synthBoomSwellGen(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let lp = 0, lp2 = 0, ph = 0, ph2 = 0, snap = 0;
+        for (let i = 0; i < len; i++) {
+            if ((i & 8191) === 0 && i) yield;
+            const t = i / sr, u = t / seconds;
+            const n = Math.random() * 2 - 1;
+            lp += (n - lp) * 0.02; lp2 += (lp - lp2) * 0.03;
+            ph += (22 + 16 * u) / sr; ph2 += (47 + 30 * u * u) / sr;
+            const sub = Math.sin(2 * Math.PI * ph) * (0.3 + 0.7 * u);
+            const groan = (Math.sin(2 * Math.PI * ph2) + 0.4 * Math.sin(4 * Math.PI * ph2) + 0.2 * Math.sin(6 * Math.PI * ph2)) * 0.35 * u * (0.7 + 0.3 * Math.sin(t * 13));
+            const grind = lp2 * 18 * (0.2 + 0.8 * u);
+            if (Math.random() < 0.0009 * (0.3 + u)) snap = 1; // (the rock cracking inside)
+            const crack = snap > 0.01 ? n * snap * 0.6 : 0;
+            snap *= 0.993;
+            const env = Math.min(1, t * 6) * Math.min(1, (seconds - t) * 30);
+            d[i] = Math.max(-1, Math.min(1, (sub * 0.6 + groan + grind + crack) * env * 0.8));
+        }
+        return buf;
+    }
+
+    * _synthBoomBlastGen(seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const dry = new Float32Array(len);
+        let lp = 0, lp2 = 0, lp3 = 0, ph = 0, thump = 0, thumpF = 40, tph = 0;
+        for (let i = 0; i < len; i++) {
+            if ((i & 8191) === 0 && i) yield;
+            const t = i / sr;
+            const n = Math.random() * 2 - 1;
+            lp += (n - lp) * 0.05; lp2 += (lp - lp2) * 0.03; lp3 += (lp2 - lp3) * 0.02;
+            ph += (34 - 16 * Math.min(1, t / 2.5)) / sr;
+            const crack = n * Math.exp(-t * 30) * 0.8;
+            const blow = Math.sin(2 * Math.PI * ph) * Math.exp(-t * 0.55) * 1.1; // (the deepest: felt more than heard)
+            const roar = lp2 * 9 * Math.exp(-t * 0.9) + lp3 * 22 * Math.exp(-t * 0.35) * Math.min(1, t / 0.4);
+            // the rocks coming down all round, for seconds
+            if (t > 1.2 && t < 8 && Math.random() < 0.00025) { thump = 0.4 + Math.random() * 0.6; thumpF = 35 + Math.random() * 50; }
+            tph += thumpF / sr;
+            const fall = thump > 0.01 ? (Math.sin(2 * Math.PI * tph) * 0.8 + lp * 3) * thump * Math.exp(-t * 0.18) : 0;
+            thump *= 0.9993;
+            dry[i] = crack + blow + roar + fall;
+        }
+        // the echo from the mountains round: the blow comes back again and again, lower and later
+        for (const [at, k] of [[0.9, 0.42], [1.9, 0.3], [3.1, 0.22], [4.6, 0.15], [6.4, 0.1]]) {
+            const o = Math.floor(at * sr);
+            let e = 0;
+            for (let i = o; i < len; i++) { e += (dry[i - o] - e) * 0.08; d[i] += e * k * 2.2; }
+            yield;
+        }
+        for (let i = 0; i < len; i++) {
+            const t = i / sr, env = Math.min(1, t * 500) * Math.min(1, (seconds - t) / 2.5);
+            d[i] = Math.max(-1, Math.min(1, (dry[i] + d[i]) * env * 0.75));
+        }
+        return buf;
     }
 
     /** (made a piece at a time — `yield` between pieces — so it can be made over many frames) */

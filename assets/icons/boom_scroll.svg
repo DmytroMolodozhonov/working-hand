@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="boom_scroll-glow"><stop offset="0" stop-color="#ffd27a" stop-opacity="0.85"/><stop offset="0.6" stop-color="#ff5a1f" stop-opacity="0.3"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/></radialGradient>
+    <linearGradient id="boom_scroll-p" x1="0" x2="1"><stop offset="0" stop-color="#fff4d6"/><stop offset="0.5" stop-color="#ead09a"/><stop offset="1" stop-color="#b58c4c"/></linearGradient>
+    <linearGradient id="boom_scroll-g" x1="0" x2="1"><stop offset="0" stop-color="#fff0a0"/><stop offset="0.5" stop-color="#f0b828"/><stop offset="1" stop-color="#a8700c"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#boom_scroll-glow)"/>
+  <!-- the scroll, opened a little -->
+  <rect x="26" y="30" width="76" height="66" rx="4" fill="url(#boom_scroll-p)" stroke="#8a6230" stroke-width="2"/>
+  <rect x="18" y="24" width="12" height="78" rx="5" fill="url(#boom_scroll-g)" stroke="#7a5410" stroke-width="2"/>
+  <rect x="98" y="24" width="12" height="78" rx="5" fill="url(#boom_scroll-g)" stroke="#7a5410" stroke-width="2"/>
+  <!-- a mountain drawn on it, bursting -->
+  <path d="M36 86 L52 58 L60 66 L66 50 L80 70 L92 86 Z" fill="#7a6a58" stroke="#3e352c" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M64 54 L60 64 L66 70 L62 80" fill="none" stroke="#ff7a1f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#ff8a2a"><circle cx="54" cy="44" r="2.5"/><circle cx="74" cy="40" r="2"/><circle cx="64" cy="38" r="2.5"/></g>
+  <!-- its fiery ribbon with cracks -->
+  <rect x="20" y="58" width="88" height="9" fill="#ff5a1f" stroke="#7a2a08" stroke-width="1.5"/>
+  <path d="M34 58 L38 63 L35 67 M86 58 L82 62 L86 67" fill="none" stroke="#ffd27a" stroke-width="1.5"/>
+</svg>

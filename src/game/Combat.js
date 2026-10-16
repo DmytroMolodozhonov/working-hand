@@ -132,6 +132,7 @@ export const SPELL_COST = {
     CircleAttack: 80, // a great wave all round the wizard — as «Total Destruction» (a mana maximum of 100+; CircleAttack.js)
     CircleAttackMaxima: 160, // … much stronger (a mana maximum of 200+)
     Inspirius: 500, // the mightiest: 500 at once, only with the wand (Inspirius.js)
+    Boom: 1000, // «Бум»: a mountain torn apart from inside — the scroll of the gods' temple (Boom.js)
     WaterVortexSuperMaxima: 80, // the great water storm: 2 a second while held, «стоп» 50 (only with a mana maximum of 100+; WaterStorm.js)
     WindImpulse: 10, // a ring of air: everybody within 3 m pushed away (only from a scroll — WindImpulse.js)
     WindImpulseMaxima: 40, // … within 9 m
@@ -456,7 +457,7 @@ export class Combat {
     costOf(name) {
         const base = (SPELL_COST[name] ?? 5) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper)
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name) {

@@ -68,7 +68,7 @@ const small = (type) => type === 'snowman' || type === 'friend';
 /** The spells only a scroll (or a spell book) teaches: they act on the queen as on anyone. */
 export const SCROLL_KINDS = new Set(['Lightning', 'LightningStrike', 'Thunderwave', 'ToTheSun', 'AvadaKedavra', 'TotalDestruction', 'TotalDestructionMaxima', 'LetItRain',
     'BombardoMaxima', 'Inspirius', 'LevitationMaxima', 'WindImpulse', 'WindImpulseMaxima', 'Invisibility', 'OvergrownMaxima', 'AlohomoraMaxima', 'FirefightingMaxima',
-    'Alive', 'AliveMaxima', 'servant', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'WaterVortexSuperMaxima']);
+    'Alive', 'AliveMaxima', 'servant', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'WaterVortexSuperMaxima', 'Boom']); // («Бум» — not cold: on the queen as on anyone)
 /** Not magic at all: blows, arrows, a cauldron bursting, a house's sphere shoving. */
 const PLAIN = { melee: 1, arrow: 1, fist: 1, punch: 1, Cauldron: 1, Ward: 1, fall: 1, crush: 1, snow: 1, Liquidation: 0 };
 
@@ -816,7 +816,7 @@ export class IceCastleLife {
         if (fear) for (const z of fear.list.values()) {
             if (fear.now - z.at > 4) continue; // (only what is going on now)
             if (z.kind === 'fire' || z.kind === 'blast') put(z.x, z.z, z.y, z.kind === 'fire' ? 2 : 1);
-            else if (z.kind === 'inspirius' || z.kind === 'circle' || z.kind === 'ruin') put(z.x, z.z, z.y, 1);
+            else if (z.kind === 'inspirius' || z.kind === 'boom' || z.kind === 'circle' || z.kind === 'ruin') put(z.x, z.z, z.y, 1);
         }
         return out.k > 0 ? out : null;
     }

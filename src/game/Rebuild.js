@@ -28,6 +28,7 @@
 import * as THREE from 'three';
 import { BLOCK, MIN_LAYER, MAX_LAYER, CHUNK, isSolid } from '../world/Terrain.js';
 import { isWizSite } from './WizardLife.js';
+import { boomReach } from '../world/BoomCarve.js';
 
 export const REBUILD = {
     CALM: 120, // s of quiet in the castle's land before the builders come out (2 game hours)
@@ -88,6 +89,12 @@ export function orderOps(ops) {
     return ops.sort((p, q) => p.k - q.k || (p.k === 0 ? q.L - p.L : p.L - q.L) || p.x - q.x || p.z - q.z);
 }
 
+/** Is the cell `key` («x,L,z») in one of «Бум»'s craters (its columns, up to the sky)? */
+export function inBoomCrater(booms, key) {
+    const [x, , z] = key.split(',').map(Number);
+    return booms.some((e) => (x - e.p[0]) ** 2 + (z - e.p[2]) ** 2 <= (boomReach(e.r) + 0.5) ** 2); // (its bowl and its torn wall)
+}
+
 /**
  * Which logged rebuilt blocks still stand after the blasts that came later
  * (explosions: [{p:[x,y,z], r, ruin}]) — on load / when joining.
@@ -100,7 +107,7 @@ export function stillStanding(log, explosions) {
         for (let j = seq; j < explosions.length && !gone; j++) {
             const b = explosions[j];
             const dx = x - b.p[0], dz = z - b.p[2], dy = (L - 1) - b.p[1];
-            gone = b.ruin ? dx * dx + dz * dz <= (b.r + 1) * (b.r + 1) : dx * dx + dy * dy + dz * dz <= (b.r + 1.5) * (b.r + 1.5);
+            gone = b.ruin ? dx * dx + dz * dz <= (b.r + 1) * (b.r + 1) : b.boom ? dx * dx + dz * dz <= (boomReach(b.r) + 1) ** 2 : dx * dx + dy * dy + dz * dz <= (b.r + 1.5) * (b.r + 1.5); // («Бум»: all of its crater, up to the sky)
         }
         if (!gone) out.push(e);
     }
@@ -156,13 +163,15 @@ export class Rebuild {
         const last = new Map();
         for (const e of g.blockEdits || []) if (e[0] >= x0 && e[0] <= x1 && e[2] >= z0 && e[2] <= z1) last.set(e[0] + ',' + e[1] + ',' + e[2], e[3]);
         const owned = !!this.life.state(s.def.id).owner;
+        // («Бум»'s craters: what was there is torn apart and gone — never built again over the void (Danger.REBUILT))
+        const booms = (g.explosions || []).filter((e) => e.boom && Math.abs(e.p[0] - (x0 + x1) / 2) < boomReach(e.r) + (x1 - x0) / 2 + 2 && Math.abs(e.p[2] - (z0 + z1) / 2) < boomReach(e.r) + (z1 - z0) / 2 + 2);
         const chunks = [];
         const S = Math.log2(CHUNK);
         for (let cz = z0 >> S; cz <= z1 >> S; cz++) for (let cx = x0 >> S; cx <= x1 >> S; cx++) chunks.push([cx, cz]);
         s.scan = {
             x0, x1, z0, z1, chunks, i: 0, ops: [],
             placed: (k) => { const t = last.get(k); return t != null && t !== BLOCK.AIR && t !== BLOCK.WATER; },
-            kept: (k) => owned && last.get(k) === BLOCK.AIR,
+            kept: (k) => (owned && last.get(k) === BLOCK.AIR) || (booms.length > 0 && inBoomCrater(booms, k)),
         };
     }
 

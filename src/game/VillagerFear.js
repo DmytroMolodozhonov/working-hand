@@ -95,7 +95,7 @@ export class VillagerFear {
         let R = 0;
         for (const d of this.list.values()) {
             if (this._t - d.at > 4) continue; // (only what is going on right now)
-            if (d.kind !== 'ruin' && d.kind !== 'fire' && d.kind !== 'fall' && d.kind !== 'blast' && d.kind !== 'circle' && d.kind !== 'inspirius') continue;
+            if (d.kind !== 'ruin' && d.kind !== 'fire' && d.kind !== 'fall' && d.kind !== 'blast' && d.kind !== 'circle' && d.kind !== 'inspirius' && d.kind !== 'boom') continue;
             if (Math.hypot(p.x - d.x, p.z - d.z) < d.r + 3) R = Math.max(R, d.r + 3);
         }
         return R;
@@ -129,6 +129,8 @@ export class VillagerFear {
         for (const d of g.circleAttack?.list || []) this.add('circle', d.c || d.p, { key: 'circle:' + (d.key || (d.key = ++this._seq)), ttl: 30, r: d.f.R, by: d.by });
         for (const o of g.inspirius?.orbs || []) this.add('inspirius', o.p, { key: 'insp:' + (o.key || (o.key = ++this._seq)), ttl: 4, r: 20, by: o.by });
         for (const b of g.inspirius?.blasts || []) this.add('inspirius', b.p, { key: 'inspb:' + (b.key || (b.key = ++this._seq)), ttl: 60, r: 60, by: b.by });
+        // «Бум»: the mountain (the castle) shaking and glowing, then torn apart — the deadliest of all
+        for (const b of g.boom?.list || []) this.add('boom', b.c, { key: 'boom:' + (b.key || (b.key = ++this._seq)), ttl: 90, r: b.R, by: b.by });
         // stones falling (a roof whose walls are gone)
         for (const p of g.falling?.pieces || []) {
             const c = p.fall.cells[0];
@@ -151,7 +153,7 @@ export class VillagerFear {
 
     _sees(v, d) {
         // (a blast, a rumble, a scream are heard through walls; a fire, a spider, a fight must be seen)
-        if (d.kind === 'blast' || d.kind === 'ruin' || d.kind === 'quake' || d.kind === 'fall' || d.kind === 'circle' || d.kind === 'inspirius' || d.kind === 'uproot') return true;
+        if (d.kind === 'blast' || d.kind === 'ruin' || d.kind === 'quake' || d.kind === 'fall' || d.kind === 'circle' || d.kind === 'inspirius' || d.kind === 'boom' || d.kind === 'uproot') return true;
         const D = DANGERS[d.kind];
         const dist = Math.hypot(d.x - v.x, d.z - v.z);
         if (dist < D.hear + d.r) return true;

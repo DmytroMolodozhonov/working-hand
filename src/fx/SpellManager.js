@@ -54,6 +54,16 @@ export function planetSpellWords(s) {
     return null;
 }
 
+// «Бум» («Boom»): the word alone, or said twice — a phrase of at most three words, each «бум» or a little word
+// («ну», «давай»). Boom.js asks more: the hand (the wand) raised and aimed at a mountain or a building.
+const BOOM_WORD = /^(?:бу+м+|boo+m+|бу+мм*|бум+с?)$/;
+const BOOM_FILL = new Set(['ну', 'давай', 'а', 'эй', 'вот', 'раз']);
+export function boomWords(s) {
+    const w = String(s || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/).filter(Boolean);
+    if (!w.length || w.length > 3) return false;
+    return w.some((x) => BOOM_WORD.test(x)) && w.every((x) => BOOM_WORD.test(x) || BOOM_FILL.has(x));
+}
+
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
@@ -68,6 +78,8 @@ export function matchSpell(text) {
     if (pw) return pw;
     // «Inspirius» («Инспириус»): the mightiest — its whole word (never «инспирация» / «inspiration» in talk)
     if (has('inspir', 'инспир', 'инспайр', 'энспир', 'инспер') && !has('inspirat', 'инспирац')) return 'Inspirius';
+    // «Бум» («Boom», «Бумм»): a short word — only on its own (never «бумага», «бумеранг», «и тут бум — всё упало»)
+    if (boomWords(s)) return 'Boom';
     // «Give Me My Power» («Гив ми май пауэр», «Верни мне мою силу»): your power back from your own skeleton (Legacy.js)
     if (has('give me my power', 'give me power', 'give my power', 'гив ми май пауэр', 'гив ми май пауер', 'гив ми май пауа', 'гив ми май павер', 'гиф ми май пауэр', 'гив ми мой пауэр',
         'верни мне мою силу', 'верни мою силу', 'дай мне мою силу', 'верните мне мою силу')) return 'GiveMyPower';

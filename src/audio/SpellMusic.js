@@ -243,6 +243,17 @@ const TUNES = {
         for (const at of [2.2, 4.6]) glide(o, sr, at, 1.6, 0.06, (u) => 1400 - 900 * u, swell(0.2, 0.3), 3);
         return finish(o, sr, { rms: 0.08 });
     },
+    /** «Бум»: dread — a low drone and the deep drums of the earth, a brass falling by tritones, a last heavy hit. */
+    thBoom(sr) {
+        const o = buf(sr, 7.5), r = rng(131);
+        pad(o, sr, ['A1', 'E2', 'A2', 'Bb2'], 0, 6.2, 0.55, { att: 1.2, rel: 1.2, harm: 7, det: 0.01 });
+        melody([[0, 'A3', 2], [2, 'Eb3', 2], [4, 'D3', 1], [5, 'Ab2', 3]], 0.5, 0.6, (f, t, l) => { brass(o, sr, f, t, l, 0.18); brass(o, sr, f / 2, t, l, 0.16); });
+        let t = 0.3;
+        for (let k = 0; t < 4.6; k++) { drum(o, sr, t, 0.35 + 0.03 * k, 48, 0.9, r); t += Math.max(0.16, 0.6 - k * 0.05); }
+        drum(o, sr, 4.8, 1, 36, 2.2, r);
+        noise(o, sr, 4.8, 2.6, 0.12, (u) => 0.03 + 0.1 * (1 - u), (u) => (1 - u) * (1 - u), r);
+        return finish(o, sr, { rms: 0.085 });
+    },
     /** «Flying Maxima»: out of the air — a Lydian arpeggio climbing, the pad opening, then airy and far (space). */
     thOrbit(sr) {
         const o = buf(sr, 11), r = rng(71);
@@ -434,6 +445,7 @@ export const SPELL_SOUND = {
     IceCastle: { own: ['iceBell', 'iceFloor', 'iceDone'] }, IceBridge: { own: ['iceBell', 'iceFloor', 'iceChime'] },
     CircleAttack: { own: ['circleAttack', 'rumble'] }, CircleAttackMaxima: { own: ['circleAttack', 'rumble'] },
     Inspirius: { own: ['inspCast', 'inspZap', 'inspBlast'] },
+    Boom: { own: ['boomSwell', 'boomBlast'], theme: 'thBoom' }, // («Бум»: the swelling, the burst; its dark tune from the caster)
     Snowman: { own: ['snowman'] },
     ToTheSun: { own: ['magic'], theme: 'thSun' },
     LetItRain: { own: ['cast', 'rain'], theme: 'thRain' },

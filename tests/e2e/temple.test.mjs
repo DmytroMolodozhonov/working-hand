@@ -1,7 +1,7 @@
 /**
  * The Temple of the Gods — in a real browser, on Venus (it stands by itself when a hero comes near its place;
  * on Earth temple.placeTest() can put it by the start in Creative). Its floor holds the hero, its walls stop him, the four
- * pedestals of the library carry the four scrolls (a taken one comes back); and its pictures, saved in
+ * pedestals of the library carry the five scrolls (a taken one comes back); and its pictures, saved in
  * docs/space/temple/ (the entrance, the golden god, the gallery of the gods, the library).
  * Run: node --test tests/e2e/temple.test.mjs
  */
@@ -17,7 +17,7 @@ let srv, browser;
 test.before(async () => { srv = await startServer(PORT); browser = await launch({}); });
 test.after(async () => { await browser?.close(); srv?.stop(); });
 
-test('the Temple of the Gods: solid stone, four scrolls on the pedestals — and its pictures', { timeout: 600000 }, async () => {
+test('the Temple of the Gods: solid stone, five scrolls on the pedestals — and its pictures', { timeout: 600000 }, async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 1280, height: 720 } });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -64,8 +64,8 @@ test('the Temple of the Gods: solid stone, four scrolls on the pedestals — and
     console.log(JSON.stringify(r));
     assert.ok(r.built && r.venus, 'the temple stands on Venus');
     assert.equal(r.realm, 'venus');
-    assert.equal(r.pedestals, 4, 'four pedestals in the library');
-    assert.deepEqual(r.scrolls, ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima']);
+    assert.equal(r.pedestals, 5, 'five pedestals in the library (the planets\' four and «Бум»)');
+    assert.deepEqual(r.scrolls, ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom']);
     assert.ok(Math.abs(r.feet - r.floor) < 0.6, `the hero stands on the floor (${r.feet} vs ${r.floor})`);
     assert.ok(r.wall && !r.air, 'the walls are solid, the hall is air');
     assert.ok(r.ceiling < Infinity, 'the roof is a ceiling');

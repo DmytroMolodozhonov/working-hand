@@ -149,6 +149,7 @@ export const SPELL_PHYSICS = {
     // (the great waves throw by distance themselves — CircleAttack.circleThrow / Inspirius.inspiriusThrow: the closer, the further)
     CircleAttack: { push: 10, always: true, down: 3, toss: 8, jolt: 3 }, CircleAttackMaxima: { push: 15, always: true, down: 4, toss: 12, jolt: 4 },
     Inspirius: { push: 25, always: true, down: 5, toss: 16, jolt: 5 },
+    Boom: { push: 30, always: true, down: 6, toss: 18, jolt: 6 }, // («Бум»: Boom.boomThrow — the closer, the further)
     Lightning: { push: 8, always: true, down: 2, jolt: 2 }, LightningStrike: { push: 8, always: true, down: 2, jolt: 2 },
     Breakthrough: { push: 8, toss: 6 }, BreakthroughMaxima: { push: 12, toss: 8 },
     WallRise: { push: 8, toss: 6 }, WallRiseMaxima: { push: 12, toss: 8 },

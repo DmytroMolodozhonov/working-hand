@@ -66,6 +66,7 @@ import { TotalDestruction } from './TotalDestruction.js';
 import { LOOT_FOR } from './ItemTypes.js';
 import { CircleAttack } from './CircleAttack.js';
 import { Inspirius } from './Inspirius.js';
+import { Boom } from './Boom.js';
 import { Hellfire } from './Hellfire.js';
 import { Firefighting } from './Firefighting.js';
 import { WaterStorm } from './WaterStorm.js';
@@ -142,7 +143,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
+const MANA_LATER = new Set(['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -422,6 +423,7 @@ export class Game {
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
         this.circleAttack = new CircleAttack(this); // «Circle Attack» / «… Maxima»: a great wave all round the wizard (arms in a T)
         this.inspirius = new Inspirius(this); // «Inspirius»: the ball of electric light from the wand — the mightiest blast
+        this.boom = new Boom(this); // «Бум»: a mountain (a castle) torn apart from inside — the fifth scroll of the gods' library
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
         this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
@@ -1425,6 +1427,7 @@ export class Game {
         if (name === 'TotalDestruction' || name === 'TotalDestructionMaxima') return this.destruction.cast(isFinal, name);
         if (name === 'CircleAttack' || name === 'CircleAttackMaxima') return this.circleAttack.cast(isFinal, name);
         if (name === 'Inspirius') return this.inspirius.cast(isFinal);
+        if (name === 'Boom') return this.boom.cast(isFinal);
         if (name === 'Hellfire') return this.hellfire.cast(isFinal);
         if (name === 'WaterVortexSuperMaxima') return this.waterStorm.cast(isFinal);
         if (name === 'ToTheSun') return this._castSun(isFinal);
@@ -2680,6 +2683,7 @@ export class Game {
         for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
         for (const m of this.iceMagic?.sampleModels?.() || []) zoo.add(m); // (the gloss of a castle of ice)
         for (const m of this.temple?.sampleModels?.() || []) zoo.add(m); // (the Temple of the Gods: its stone, marble, gold, books, sand, cobwebs, light)
+        for (const m of this.boom?.sampleModels?.() || []) zoo.add(m); // («Бум»: its flying rocks, its shock ring)
         for (const v of prewarmVillagers()) zoo.add(v);
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
@@ -2762,6 +2766,7 @@ export class Game {
         try { void this.world?.terrain?.data?.iceCastle?.plan; } catch (e) { /* (only a head start) */ }
         try { if (this.circleAttack && !this.circleAttack._warmed) this.circleAttack._warm(); } catch (e) { /* (only a head start) */ }
         try { if (this.inspirius && !this.inspirius._warmed) this.inspirius._warm(); } catch (e) { /* (only a head start) */ }
+        try { this.boom?.warm(); } catch (e) { /* (only a head start) */ }
     }
 
     start() {
@@ -2981,6 +2986,7 @@ export class Game {
         this.destruction?.update(Math.min(0.05, dt));
         this.circleAttack?.update(dt);
         this.inspirius?.update(dt);
+        this.boom?.update(dt);
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
         this.world.followShadow(this.character.group.position, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
         this.seaSurface?.update(dt, this.character.group.position);
@@ -3797,6 +3803,7 @@ export class Game {
         this.servants?.dispose();
         this.circleAttack?.clear();
         this.inspirius?.clear();
+        this.boom?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

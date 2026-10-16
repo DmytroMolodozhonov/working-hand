@@ -1611,6 +1611,47 @@ export class TerrainData {
     }
 
     /**
+     * «Бум» (BoomCarve.js): one column of its crater — every block above `floorY` (a block's centre y) goes,
+     * from the column's top down; bedrock, water and the gods' ground stay. `wet` gets [x, L, z] of the cells
+     * opened at or under the sea's level (L ≤ 0) — the water may come in there. @returns how many went.
+     */
+    carveColumn(ix, iz, floorY, wet = null) {
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        if (c.empty) return 0;
+        const lx = ix & MASK, lz = iz & MASK, col = lz * CHUNK + lx;
+        const L0 = Math.max(MIN_LAYER + 1, Math.floor(floorY) + 2); // (centre y = L − 1 > floorY)
+        let n = 0;
+        for (let L = Math.min(MAX_LAYER, c.top[col]); L >= L0; L--) {
+            const idx = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+            const t = c.blocks[idx];
+            if (t === BLOCK.AIR || t === BLOCK.BEDROCK || t === BLOCK.WATER) continue;
+            if (this.godGiftAt && this.godGiftAt(ix, L - 1, iz)) continue; // (a gift of the gods: the temple's ground)
+            c.blocks[idx] = BLOCK.AIR;
+            if (L < c.minOpen) c.minOpen = L;
+            if (wet && L <= 0) wet.push(ix, L, iz);
+            n++;
+        }
+        if (n) {
+            c.modified = true;
+            this._refreshTop(c, lx, lz);
+            if (c.top[col] >= L0) hollowAt(c, col, c.top[col]); // (the gods' ground left over the air)
+            this._markDirty(ix, iz);
+        }
+        return n;
+    }
+
+    /** Water into an open cell (a flood: «Бум»'s crater under the sea's level). */
+    fillWater(ix, L, iz) {
+        if (L < MIN_LAYER || L > MAX_LAYER) return;
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        if (c.empty) return;
+        c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = BLOCK.WATER;
+        c.modified = true;
+        if (L < c.minOpen) c.minOpen = L;
+        this._markDirty(ix, iz);
+    }
+
+    /**
      * Holes dug next to / under water fill with water (up to the water level), all the way
      * through the hole (not only its cells beside the water). Returns the cells filled.
      */

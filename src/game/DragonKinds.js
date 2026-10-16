@@ -110,6 +110,7 @@ export const ON_DRAGON = {
     CircleAttack: { mult: 1, why: '«Circle Attack»: волна и лучи света ранят (это не огонь); великан только качается' },
     CircleAttackMaxima: { mult: 1, why: '«Circle Attack Maxima»: ранит, как волна' },
     Inspirius: { mult: 1, why: '«Inspirius»: сама магия, а не огонь — ранит по зоне (−100 / −50 / −25)' },
+    Boom: { mult: 1, why: '«Бум»: гору разрывает изнутри — это не огонь: в кратере −1000 (насмерть даже дракону), дальше −150 / −40 по зоне; великан только качается' },
     Cauldron: { mult: 1, why: 'взрыв котла ранит' },
     Lightning: { dmg: 40, why: 'молния бьёт сильно (−40)' },
     Thunderwave: { mult: 1, why: 'громовая волна ранит' },

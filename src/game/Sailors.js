@@ -95,7 +95,7 @@ export const SKELETON_AVADA = 'they are dead already: no life in them to take �
  * cannonballs, a crushing weight, a fall). The duel charges and the other spells: nothing.
  * kind undefined: a blow (not a spell) — it breaks bones.
  */
-const CRUSH = new Set(['crush', 'fall', 'Cauldron', 'thrown']);
+const CRUSH = new Set(['crush', 'fall', 'Cauldron', 'thrown', 'Boom']); // («Бум»: torn apart with the rock — every bone breaks)
 export const pirateBoneDamage = (kind, dmg, spell = false) => (kind == null ? (spell ? 0 : dmg) : CRUSH.has(kind) ? dmg : skeletonDamage(kind, dmg));
 const SKELETON_NAMES = ['Костлявый', 'Гремучий', 'Беззубый', 'Ржавый', 'Одноглазый', 'Хромой', 'Трухлявый', 'Шептун', 'Безносый', 'Сухарь', 'Пустоглазый', 'Утопленник'];
 const NAMES = ['Яков', 'Гаврила', 'Фома', 'Тимофей', 'Матвей', 'Савелий', 'Никита', 'Еремей', 'Захар', 'Остап', 'Мирон', 'Лука', 'Демьян', 'Аким', 'Гордей', 'Игнат', 'Кузьма', 'Прохор', 'Тарас', 'Ефим'];

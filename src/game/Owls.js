@@ -123,6 +123,7 @@ export const TARGETS = {
     Thunderwave: { does: 'hit', why: 'громовая волна (со свитка): −8' },
     TotalDestruction: { does: 'hit', why: '«Total Destruction»: взрыв со свитка — насмерть' },
     Inspirius: { does: 'hit', why: '«Inspirius»: −100 / −50 / −25 — насмерть' },
+    Boom: { does: 'hit', why: '«Бум» (свиток храма богов): гора или замок разорваны изнутри — в зоне насмерть' },
     BombardoMaxima: { does: 'hit', why: '«Бомбардо Максима» (со свитка): урон взрыва' },
     WindImpulse: { does: 'push', why: '«Wind Impulse» (со свитка): отбрасывает волной воздуха, без урона — и она улетает обиженной' },
     LevitationMaxima: { does: 'none', why: '«Левиоса Максима» поднимает тех, кто стоит; сова вспархивает раньше (как феникс)' },

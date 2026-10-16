@@ -1520,6 +1520,46 @@ export class Ships {
         if (this.auth) this.inspiriusHarm(pos, by);
     }
 
+    /**
+     * «Бум» tore a mountain (a castle) apart at `pos` (its middle; R — its crater) — every computer: the ships
+     * near are rocked and heel away, those in the crater's reach are torn apart. The host decides the harm
+     * (CLAUDE.md «на кого и на что»): a ship within R + 8 m of the middle (across) is wrecked — the hull torn
+     * open below the water line along her length, every mast broken, the sails in rags, fire on deck (she
+     * sinks as any ship); out to twice that — harm, a hole, torn sails. The black ship: its curse holds
+     * («Инспириус» is the only spell it can't hold) — its barrier flares green, its crew saw who did it.
+     */
+    boom(pos, R, by) {
+        for (const s of this.awake) {
+            s.pose.toLocal(pos.x, s.pose.y ?? pos.y, pos.z, _l);
+            const L = s.layout;
+            const d = this._hullDist(s, { x: _l.x, y: L.deck - 1, z: _l.z });
+            const reach = 2 * (R + 8);
+            if (d.dist > reach) continue;
+            const k = 1 - d.dist / reach;
+            const st = s.st;
+            const sx = _l.x >= 0 ? 1 : -1;
+            st.roll = (st.roll || 0) + sx * 0.5 * k;
+            st.heave = (st.heave || 0) + 2 * k;
+            if (isCursed(s)) { this.curseSpark(s, d.x, d.y, d.z, false, 2); if (this.auth && by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null); continue; }
+            if (!this.auth || s.state === 'wreck') continue;
+            const ll = Math.hypot(_l.x, _l.z) || 1, push = 8 * k * Math.min(1.5, 20 / L.L);
+            st.u += (_l.z / ll) * push;
+            st.v += (-_l.x / ll) * push;
+            s.changed = true;
+            const torn = d.dist <= R + 8;
+            this.damage(s, Math.round(s.cls.hp * (torn ? 3 : 0.8 * k)), by);
+            const side = _l.x >= 0 ? 1 : -1;
+            const n = torn ? 5 : 1;
+            for (let i = 0; i < n; i++) {
+                const lz = Math.max(-L.L / 2 + 1.5, Math.min(L.L / 2 - 1.5, (i - (n - 1) / 2) * (L.L / (n + 1))));
+                this.hole(s, side, -0.3 - (i % 2) * 0.6, lz, torn ? 2.8 : 1.6, by);
+            }
+            for (const m of L.masts) if (torn || k > 0.75) this.breakMast(s, m.id, -side, by);
+            for (const sl of s.sails) if (torn || k > 0.5) this.tearSail(s, sl);
+            if (torn) this.ignite(s, 0, L.deck, 0, null, by);
+        }
+    }
+
     /** The nearest point of a ship's hull to a ship-local point (ship-local) and how far it is. */
     _hullDist(s, l) {
         const L = s.layout;

@@ -20,6 +20,9 @@
  * flight through space (a planet made of a meteor cluster, landed on and terraformed standing on it —
  * PlanetMagic.js), then back into the Earth's air to a new place.
  *
+ * --boom: in the first fight a «Бум» (Boom.js) tears apart the highest hill or mountain within 200 m (its crater dug a
+ * few ms a frame, its rocks flying) — the frames while it goes on are in the samples like the rest.
+ *
  * --check: fail when something grows without end (scene objects, geometries, textures, shaders,
  * a collection over 500 that kept growing) or when the game's work in a frame grew by more than half.
  */
@@ -34,13 +37,14 @@ const SEED = parseInt(opt('seed', '20261015'), 10);
 const OUT = opt('out', null);
 const CHECK = args.includes('--check');
 const SPACE = args.includes('--space');
+const BOOM = args.includes('--boom');
 const [W, H] = opt('size', '480x270').split('x').map(Number);
 /** Draw the picture only every N-th frame: here the processor draws it (seconds a frame), so without
  *  this the game itself would go 2–3 frames a second and 15 minutes would be 3 minutes of play. */
 const RENDER_EVERY = parseInt(opt('render-every', '15'), 10);
 
 /** In the page: the autopilot (the rounds) and the sampler. */
-function install({ EVERY, RENDER_EVERY, SPACE }) {
+function install({ EVERY, RENDER_EVERY, SPACE, BOOM }) {
     const g = window.__zns.game;
     const T = window.__zns.THREE;
     const ch = g.character;
@@ -53,6 +57,8 @@ function install({ EVERY, RENDER_EVERY, SPACE }) {
         try { origFrame(); } catch (e) { S.errors++; throw e; }
         const t1 = performance.now();
         if (prev) S.frames.push([t0 - prev, t1 - t0 - (g._parts?.['графика'] || 0), S.gameTime += Math.min(0.1, (t0 - prev) / 1000)]);
+        // («Бум»: the game's own work in the frames of its 15 s — the swell, the burst, the crater dug)
+        if (prev && S.boom && S.gameTime - S.boom.t < 15) { const w = t1 - t0 - (g._parts?.['графика'] || 0); S.boom.n = (S.boom.n || 0) + 1; S.boom.max = Math.max(S.boom.max || 0, w); if (w > 33) S.boom.over33 = (S.boom.over33 || 0) + 1; }
         prev = t0;
     };
     let nr = 0;
@@ -144,6 +150,23 @@ function install({ EVERY, RENDER_EVERY, SPACE }) {
                 const zp = new T.Vector3(p.x + Math.sin(a) * 14, 0, p.z + Math.cos(a) * 14);
                 zp.y = g.collision.groundY(zp.x, zp.z);
                 try { g._createZombie(zp); } catch (e) { S.errors++; }
+            }
+            if (BOOM && !S.boom && phaseT > 3) {
+                // one «Бум» at the highest ground within 200 m (the hand pointed at it by the autopilot)
+                const p = ch.group.position, data = g.world.terrain.data;
+                let best = null;
+                for (let x = -200; x <= 200; x += 8) for (let z = -200; z <= 200; z += 8) {
+                    if (Math.hypot(x, z) < 60) continue;
+                    const h = data.topLayer(Math.round(p.x + x), Math.round(p.z + z));
+                    if (!best || h > best.h) best = { x: p.x + x, z: p.z + z, h };
+                }
+                S.boom = { at: best, t: S.gameTime, cast: null };
+                if (best) {
+                    const o = new T.Vector3(p.x, p.y + 1.5, p.z), d = new T.Vector3(best.x - o.x, best.h - 6 - o.y, best.z - o.z).normalize();
+                    g.boom.testAim = { o, d };
+                    try { S.boom.cast = g.boom.cast(true); if (S.boom.cast) S.casts++; } catch (e) { S.errors++; console.warn('boom', e); }
+                    g.boom.testAim = null;
+                }
             }
             if (castT > 1.5) {
                 castT = 0;
@@ -240,7 +263,7 @@ try {
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     await sleep(3000);
     if (SPACE) await page.evaluate(async () => { const m = await import('/src/world/Planets.js'); window.__planetPos = m.planetPosition; window.__slotRect = m.slotRect; });
-    await page.evaluate(install, { EVERY, RENDER_EVERY, SPACE });
+    await page.evaluate(install, { EVERY, RENDER_EVERY, SPACE, BOOM });
     // (minutes of PLAY: the game's own time; at most four times as long by the clock)
     const end = Date.now() + MINUTES * 4 * 60000;
     let shown = 0;
@@ -253,6 +276,7 @@ try {
             console.log(`${String(s.t).padStart(5)}с (игры ${String(s.gt).padStart(4)}с) р${s.round} ${s.phase.padEnd(5)} FPS ${String(s.fps).padStart(5)} игра ${String(s.game).padStart(6)}мс (95% ${s.game95}) | объектов ${s.objects} геом ${s.geometries} текст ${s.textures} шейд ${s.programs} вызовов ${s.calls} | память ${s.heapMB} МБ | зомби ${s.zombies} чанков ${s.chunks}/${s.meshes} закл ${s.casts} ош ${s.errors}`);
         }
     }
+    if (BOOM) console.log('«Бум»:', JSON.stringify(await page.evaluate(() => window.__soak.boom)));
     await page.close();
 } finally {
     await browser.close();

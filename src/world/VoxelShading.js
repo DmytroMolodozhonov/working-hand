@@ -29,6 +29,37 @@ export const SKY_LIGHT = { comp: { value: 1 } };
  * above its ground (g) are drawn only for the share k of the pixels (0: not at all — the land drawn
  * over it is seen instead; 1: all of it). The nearest 8, filled in every frame.
  */
+/**
+ * «Бум» (Boom.js): the ground swelling over the place about to burst and its glowing cracks — in the voxel
+ * shader itself (the same compiled program always: only these numbers change). c: (x, z, R, —); k: (lift m,
+ * glow 0…1, time s). k = 0: nothing.
+ */
+export const BOOM_SWELL = {
+    c: { value: new THREE.Vector4(0, 0, 1, 0) },
+    k: { value: new THREE.Vector3(0, 0, 0) },
+};
+const BOOM_PARS = 'uniform vec4 uBoomC;\nuniform vec3 uBoomK;';
+const BOOM_LIFT = `{
+    vec3 bw = (modelMatrix * vec4(transformed, 1.0)).xyz;
+    vec2 bq = bw.xz - uBoomC.xy;
+    float bd = dot(bq, bq) / (uBoomC.z * uBoomC.z);
+    if (uBoomK.x > 0.0 && bd < 1.0) { float f = 1.0 - bd; transformed.y += uBoomK.x * f * f * (0.85 + 0.15 * sin(bw.x * 1.7 + bw.z * 1.3 + uBoomK.z * 37.0)); }
+}`;
+const BOOM_GLOW = `
+if (uBoomK.y > 0.0) {
+    vec2 bq = vVoxPos.xz - uBoomC.xy;
+    float br = length(bq), reach = uBoomC.z * min(1.0, uBoomK.y * 1.25);
+    if (br < reach) {
+        float ang = atan(bq.y, bq.x);
+        float w = ang * 2.0675 + (vnoise(vec2(br * 0.07, ang * 2.0)) - 0.5) * 1.4; // (13 cracks from the middle, wandering)
+        float ray = 1.0 - smoothstep(0.015, 0.06, abs(fract(w) - 0.5) * (0.6 + br / uBoomC.z));
+        float net = 1.0 - smoothstep(0.02, 0.08, cobbleEdge(vVoxPos.xz * 0.16 + vec2(vVoxPos.y * 0.05), 3.0));
+        float crack = max(ray, net * 0.75) * (1.0 - smoothstep(reach * 0.8, reach, br));
+        float pulse = 0.7 + 0.3 * sin(uBoomK.z * 11.0 - br * 0.25);
+        totalEmissiveRadiance += (vec3(1.0, 0.38, 0.06) * 2.4 + vec3(1.0, 0.8, 0.45) * crack) * crack * uBoomK.y * pulse;
+    }
+}`;
+
 export const WARD_HIDE = {
     s: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
     g: { value: new Array(8).fill(0) },
@@ -72,9 +103,11 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uWardG = WARD_HIDE.g;
         shader.uniforms.uWardK = WARD_HIDE.k;
         shader.uniforms.uWardN = WARD_HIDE.n;
+        shader.uniforms.uBoomC = BOOM_SWELL.c;
+        shader.uniforms.uBoomK = BOOM_SWELL.k;
         shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;')
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
+            .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;\n' + BOOM_PARS)
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
         // a cave's dark: the sun and the sky's light (ambient, hemisphere) reach a face only as far as
         // the daylight gets in; a lamp, «Люмос», a fire light it fully
         const lightsBegin = THREE.ShaderChunk.lights_fragment_begin.replace(
@@ -85,7 +118,9 @@ export function applyVoxelDetail(material) {
             .replace('#include <clipping_planes_fragment>', WARD_HIDE_FRAG)
             .replace('#include <lights_fragment_begin>', lightsBegin)
             .replace('#include <lights_fragment_maps>', '#if defined( RE_IndirectDiffuse )\n\tirradiance *= vVoxSky * uSkyComp;\n#endif\n#include <lights_fragment_maps>')
+            .replace('#include <aomap_fragment>', '#include <aomap_fragment>\n' + BOOM_GLOW)
             .replace('#include <common>', `#include <common>
+${BOOM_PARS}
 uniform float uSkyComp;
 varying float vVoxSky;
 varying vec3 vVoxPos;

@@ -77,7 +77,7 @@ export const WARD = {
     SEE_NEAR: 3.5, // m from the sphere: an invisible house is all there
     SEE_FAR: 6.5, // m: … and not seen at all from this far
     HP: 100,
-    BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100 }, // strength taken (nothing else breaks it)
+    BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100, Boom: 100 }, // strength taken (nothing else breaks it)
     HELL_T: 7, // s of «Let the Hellfire Come» held against it: burnt through
     WARN_EVERY: 6, // s: its owner is told again that it is being broken (anywhere in the world)
     HEAL_AFTER: 60, // s left alone: its cracks heal…

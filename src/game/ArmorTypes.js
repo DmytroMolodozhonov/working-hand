@@ -327,7 +327,7 @@ export const ARCHMAGE = {
 /** Damage kinds that are spells (Combat.damage `kind`): the suit softens these. */
 export const SPELL_DAMAGE = new Set([
     'AvadaKedavra', 'Sapira', 'Sands', 'IceBall', 'Thunderwave', 'Lightning', 'Inferno', 'Fire', 'Hellfire', 'Bombardo',
-    'WaterVortex', 'WaterVortexSuperMaxima', 'Liquidation', 'Inspirius', 'CircleAttack', 'CircleAttackMaxima', 'Jolt', 'JoltMaxima',
+    'WaterVortex', 'WaterVortexSuperMaxima', 'Liquidation', 'Inspirius', 'Boom', 'CircleAttack', 'CircleAttackMaxima', 'Jolt', 'JoltMaxima',
     'cold', 'air', 'Ward', 'crush', 'thrown', 'TotalDestruction', 'TotalDestructionMaxima', 'Expelliarmus', 'Disarmor', 'Stupefy',
 ]);
 

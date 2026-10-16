@@ -341,3 +341,20 @@ test('the clever owl: every place blows, arrows, spells, water, fire and «Бр�
     assert.match(src('src/net/NetSync.js'), /case 'owl'/, 'the network');
     assert.match(src('src/main.js'), /owls\?\.claims/, 'the voice: its words are no spell and no talk');
 });
+
+test('«Бум»: the mountain torn from inside reaches every creature (MagicWave.eachBody); its table says what it does to everyone and everything', async () => {
+    const b = src('src/game/Boom.js');
+    assert.match(body(b, '    _after(b, dt) {'), /eachBody\(g, /, 'every creature');
+    assert.match(body(b, '    _after(b, dt) {'), /hitBody\(/);
+    const { BOOM_TARGETS } = await import('../../src/game/Boom.js');
+    for (const k of ['me', 'players', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'dragons', 'phoenixes', 'owls', 'livingTrees', 'bookBirds', 'iceCastle', 'ground', 'houseSphere', 'ships', 'items', 'water', 'blackship', 'godGifts', 'space']) assert.ok(BOOM_TARGETS[k], k);
+    const { ON_DRAGON } = await import('../../src/game/DragonKinds.js');
+    const { TARGETS } = await import('../../src/game/Phoenixes.js');
+    const { TARGETS: OWLS } = await import('../../src/game/Owls.js');
+    assert.ok(ON_DRAGON.Boom?.why && TARGETS.Boom?.why && OWLS.Boom?.why);
+    const { DANGERS } = await import('../../src/game/Danger.js');
+    assert.ok(DANGERS.boom?.ru);
+    assert.match(b, /castleLife\?\.alarm\(c, 'boom'/);
+    assert.match(body(b, '    _burst(b) {'), /ships\?\.boom/);
+    assert.match(src('src/net/NetSync.js'), /case 'bum'/);
+});

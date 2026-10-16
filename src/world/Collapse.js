@@ -42,22 +42,13 @@ function hash01(x, L, z) {
 }
 
 /**
- * The groups of blocks near a blast that hang in the air.
- * @returns {Array<{cells: Array<[number, number, number, number]>}>}  [x, L, z, type]
+ * A search for hanging groups that can be fed cell by cell (visit(x, L, z)), over many calls — the cells
+ * already judged are remembered. pieces: the groups found hanging so far ({cells}).
  */
-export function findHanging(data, cx, cy, cz, radius, inner = 0) {
+export function hangingSearch(data) {
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
     const known = new Map(); // key -> 1 standing, 2 hanging
     const pieces = [];
-    const R = radius + COLLAPSE.SHELL;
-    const x0 = Math.floor(cx - R), x1 = Math.ceil(cx + R), z0 = Math.floor(cz - R), z1 = Math.ceil(cz + R);
-    const Lc = cy + 1.5;
-    const L0 = Math.max(floor, Math.floor(Lc - R)), L1 = Math.ceil(Lc + R);
-    // (a band of a wave — `inner`: what is inside was looked at by the bands before; only the new
-    // band is searched — far fewer blocks a frame. A whole circle keeps its old order.)
-    const skip = inner > 0 ? Math.max(0, inner - 2 * COLLAPSE.SHELL) : 0;
-    const cols = [];
-    if (skip > 0) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) { const h = (x - cx) ** 2 + (z - cz) ** 2; if (h <= R * R && h >= skip * skip) cols.push(x, z, h); }
     const visit = (x, L, z) => {
         const t = data.get(x, L, z);
         if (!movable(t) || isGround(t)) return;
@@ -96,6 +87,25 @@ export function findHanging(data, cx, cy, cz, radius, inner = 0) {
             pieces.push({ cells });
         }
     };
+    return { visit, pieces };
+}
+
+/**
+ * The groups of blocks near a blast that hang in the air.
+ * @returns {Array<{cells: Array<[number, number, number, number]>}>}  [x, L, z, type]
+ */
+export function findHanging(data, cx, cy, cz, radius, inner = 0) {
+    const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
+    const { visit, pieces } = hangingSearch(data);
+    const R = radius + COLLAPSE.SHELL;
+    const x0 = Math.floor(cx - R), x1 = Math.ceil(cx + R), z0 = Math.floor(cz - R), z1 = Math.ceil(cz + R);
+    const Lc = cy + 1.5;
+    const L0 = Math.max(floor, Math.floor(Lc - R)), L1 = Math.ceil(Lc + R);
+    // (a band of a wave — `inner`: what is inside was looked at by the bands before; only the new
+    // band is searched — far fewer blocks a frame. A whole circle keeps its old order.)
+    const skip = inner > 0 ? Math.max(0, inner - 2 * COLLAPSE.SHELL) : 0;
+    const cols = [];
+    if (skip > 0) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) { const h = (x - cx) ** 2 + (z - cz) ** 2; if (h <= R * R && h >= skip * skip) cols.push(x, z, h); }
     if (skip > 0) {
         // (a column of a band: from the caves under it (as deep as a ruin caves them in) up to its top block — above it all is air)
         const lo = Math.max(L0, Math.floor(Lc - 32));

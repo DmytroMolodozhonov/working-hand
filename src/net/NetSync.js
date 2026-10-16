@@ -45,6 +45,7 @@ import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 import { keepIn } from '../game/HouseWards.js';
+import { runBoom } from '../world/BoomCarve.js';
 import { LUMOS } from '../game/WandMagic.js';
 import { applyCredit } from '../game/Mana.js';
 
@@ -208,7 +209,8 @@ export class NetSync {
         if (msg.bodies) g.death?.restore(msg.bodies);
         if (msg.vai && g.castleLife) g.castleLife.talk.hostSmart = true;
         for (const e of msg.explosions || []) {
-            if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave — «Circle Attack», «Inspirius»)
+            if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater)
+            else if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave — «Circle Attack», «Inspirius»)
             else g.world.explode(vec(e.p), e.r, keepIn(e.k)); // (k: houses' spheres it could not eat into)
             g.explosions.push(e);
         }
@@ -583,6 +585,11 @@ export class NetSync {
         this.net.send({ t: 'circ', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)], k: max ? 1 : 0, rays }, true);
     }
 
+    /** «Бум» of mine: {c: [x, y, z] (its middle, inside the mountain), b: the land's height} — every computer bursts it the same. */
+    boom(m) {
+        this.net.send({ t: 'bum', by: this.me, c: m.c, b: m.b }, true);
+    }
+
     /** «Inspirius» of mine: {e: 'go'|'at'|'boom', …} (the flight 'at' 10×/s). */
     inspirius(m) {
         this.net.send({ t: 'insp', by: this.me, ...m }, true);
@@ -885,6 +892,7 @@ export class NetSync {
                 break;
             }
             case 'insp': g.inspirius?.onNet(m); break;
+            case 'bum': g.boom?.onNet(m); break; // («Бум»: Boom.js)
             case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;
             case 'chest': {
                 (g._openedChests = g._openedChests || new Set()).add(m.id);

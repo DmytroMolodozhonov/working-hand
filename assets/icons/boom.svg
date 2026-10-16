@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="boom-core" cx="0.5" cy="0.6" r="0.5"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.35" stop-color="#ffb13a"/><stop offset="0.75" stop-color="#ff5a1f" stop-opacity="0.55"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/></radialGradient>
+    <linearGradient id="boom-rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8c8174"/><stop offset="1" stop-color="#4c443c"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="70" r="46" fill="url(#boom-core)"/>
+  <!-- the mountain split from inside: two halves thrown apart -->
+  <path d="M8 118 L34 66 L46 74 L56 54 L60 118 Z" fill="url(#boom-rock)" stroke="#2e2924" stroke-width="2" stroke-linejoin="round" transform="rotate(-8 34 118)"/>
+  <path d="M120 118 L94 62 L82 72 L72 52 L68 118 Z" fill="url(#boom-rock)" stroke="#2e2924" stroke-width="2" stroke-linejoin="round" transform="rotate(8 94 118)"/>
+  <!-- glowing cracks -->
+  <g fill="none" stroke="#ffcf5a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M30 104 L38 92 L34 84 L42 76"/>
+    <path d="M98 104 L90 94 L94 84 L86 74"/>
+  </g>
+  <!-- rocks flying every way -->
+  <g fill="#6b6156" stroke="#2e2924" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M58 20 L68 16 L72 24 L64 30 L56 27 Z"/>
+    <path d="M22 34 L30 30 L34 38 L26 42 Z"/>
+    <path d="M100 30 L110 28 L112 37 L103 40 Z"/>
+    <path d="M40 10 L46 8 L48 14 L42 16 Z"/>
+    <path d="M84 8 L91 7 L92 13 L86 15 Z"/>
+    <path d="M10 60 L16 57 L19 63 L13 66 Z"/>
+    <path d="M112 54 L119 52 L120 59 L114 61 Z"/>
+  </g>
+  <g stroke="#ffb13a" stroke-width="2" stroke-linecap="round" opacity="0.8">
+    <path d="M64 46 L64 36 M50 52 L42 44 M78 52 L86 44"/>
+  </g>
+</svg>
