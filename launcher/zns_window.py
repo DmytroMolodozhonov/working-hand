@@ -50,6 +50,7 @@ Every step is written in the log with its sizes and times («[окно …]» li
 """
 
 import os
+import re
 import sys
 import threading
 import time
@@ -137,6 +138,10 @@ def find_game_window(user32):
         return True
 
     user32.EnumWindows(proc(cb), 0)
+    # the new window (still hidden, being cut) first: never an old one left by a killed launcher
+    hidden = [h for h in found if _hidden(user32, ctypes.c_void_p(h))]
+    if hidden:
+        return hidden[0]
     fg = user32.GetForegroundWindow()
     return fg if fg in found else (found[0] if found else None)
 
@@ -259,10 +264,28 @@ def is_game_window(title, cls):
     return title == GAME_TITLE and cls == APP_CLASS
 
 
+_ADDRESS = re.compile(r"(https?://)?(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(/\S*)?")
+
+
+def is_address_title(title):
+    """An app window's title that is only the address (the page has no title yet, or Chrome's error page
+    «localhost» — the server was gone). Never a browser's own window («… - Google Chrome»)."""
+    return bool(_ADDRESS.fullmatch(str(title or "").strip()))
+
+
 def is_app_title(title):
     """The title of the game's app window: the game's name, or (before the page has its title) its address."""
     t = str(title or "")
-    return t == GAME_TITLE or "localhost" in t or "127.0.0.1" in t
+    return t == GAME_TITLE or is_address_title(t)
+
+
+def orphan_to_close(title, marked, keep_game):
+    """(pure) Close this app window before a new launcher opens the game? `marked`: the game's window
+    (cut / hidden by the game: its marks are on it). Its error page / address-only page — always; the
+    game's page — unless a game still runs elsewhere (`keep_game`)."""
+    if is_address_title(title):
+        return bool(marked)
+    return title == GAME_TITLE and not keep_game
 
 
 def pack_cut(region):
@@ -346,6 +369,7 @@ def _set_cut(user32, hwnd, region, redraw, radius=0):
     user32.SetPropW(hwnd, "ZNS_CUT_LT", ctypes.c_void_p(lt))
     user32.SetPropW(hwnd, "ZNS_CUT_RB", ctypes.c_void_p(rb))
     user32.SetPropW(hwnd, "ZNS_CUT_R", ctypes.c_void_p(int(radius) + 1))
+    user32.SetPropW(hwnd, "ZNS_GAME", ctypes.c_void_p(1))
     # (who cut it last keeps it: the launcher's loading screen and then the game cut the same window)
     user32.SetPropW(hwnd, "ZNS_CUT_BY", ctypes.c_void_p(os.getpid()))
 
@@ -380,6 +404,7 @@ def _hide(user32, hwnd):
     import ctypes
     _props(user32)
     user32.SetPropW(hwnd, "ZNS_HIDDEN", ctypes.c_void_p(1))
+    user32.SetPropW(hwnd, "ZNS_GAME", ctypes.c_void_p(1))  # (the game's window for good: an orphan is known by it)
     _cloak(hwnd, True)
     _dwm_plain(hwnd)
     if user32.IsZoomed(hwnd) or user32.IsIconic(hwnd):
@@ -473,6 +498,52 @@ def _app_windows(user32):
 
     user32.EnumWindows(proc(cb), 0)
     return found
+
+
+def _title(user32, h):
+    import ctypes
+    buf = ctypes.create_unicode_buffer(512)
+    user32.GetWindowTextW(ctypes.c_void_p(h), buf, 512)
+    return buf.value
+
+
+def describe_app_windows():
+    """(for the log) The game-like browser windows now: title, place, marked as the game's."""
+    if sys.platform != "win32":
+        return []
+    try:
+        import ctypes
+        user32 = _user32()
+        _props(user32)
+        return [(_title(user32, h), _rect_of(user32, ctypes.c_void_p(h)), bool(user32.GetPropW(ctypes.c_void_p(h), "ZNS_GAME")))
+                for h in _app_windows(user32)]
+    except Exception as e:  # noqa: BLE001
+        return [repr(e)]
+
+
+def close_orphans(keep_game=False):
+    """Close the game's windows left without a server (a killed launcher): error pages always, the
+    game's own pages unless a game still runs elsewhere. Returns how many were closed."""
+    if sys.platform != "win32":
+        return 0
+    import ctypes
+    n = 0
+    try:
+        user32 = _user32()
+        _props(user32)
+        for h in _app_windows(user32):
+            hwnd = ctypes.c_void_p(h)
+            title = _title(user32, h)
+            marked = bool(user32.GetPropW(hwnd, "ZNS_GAME") or user32.GetPropW(hwnd, "ZNS_CUT_LT"))
+            if orphan_to_close(title, marked, keep_game):
+                _log(f"закрываю старое окно игры без сервера: «{title}» {_rect_of(user32, hwnd)}")
+                user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                n += 1
+        if n:
+            time.sleep(0.5)  # (gone before the new window is looked for)
+    except Exception as e:  # noqa: BLE001
+        _log(f"старые окна: ошибка {e!r}")
+    return n
 
 
 def app_windows_now():

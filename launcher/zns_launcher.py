@@ -48,7 +48,7 @@ REPO = "DmytroMolodozhonov/working-hand"
 BRANCH = "main-fbxy0j"
 HERE = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
-LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html", "zns_window.py", "zns_browser.py", "zns_splash.py")
+LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html", "zns_window.py", "zns_browser.py", "zns_splash.py", "zns_ports.py")
 LOGO_FILES = (("assets/logo/logo.ico", "logo.ico"), ("assets/logo/logo-256.png", "logo.png"))
 OLD_DESKTOP_BATS = ("Зомби не спят.bat", "Волшебство только начинается.bat")  # the old icons (a black window)
 NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: helper programs never flash a black window
@@ -450,6 +450,21 @@ def window_args(exe, url):
     ]
 
 
+def close_orphans(base, port):
+    """Old game windows left by a launcher that was killed or crashed (an error page «localhost не
+    позволяет установить соединение», or the game's page with its server gone): closed before the new
+    window opens. A game still running elsewhere (another port) keeps its windows."""
+    try:
+        import zns_ports
+        import zns_window
+        alive = zns_ports.ours_elsewhere(base, 20, skip=port)
+        n = zns_window.close_orphans(keep_game=bool(alive))
+        if n or alive:
+            log(f"Старые окна игры без сервера закрыты: {n}" + (f" (игра ещё идёт на портах {alive} — её окна не трогаю)" if alive else ""))
+    except Exception as e:  # noqa: BLE001
+        log(f"  (старые окна: {e})")
+
+
 def open_window(url):
     if env("ZNS_LAUNCHER_NO_WINDOW"):
         log(f"Окно не открываю (ZNS_LAUNCHER_NO_WINDOW): {url}")
@@ -753,6 +768,27 @@ class Launcher:
         # server that runs another version): the page waits behind its own loading window
         self.live_lock = threading.Lock()
         self.live = {"state": "idle", "title": "", "detail": "", "progress": 0, "version": "", "error": ""}
+
+    def check_window(self, url, wait=25.0):
+        """The window really opened OUR game (its page connected to this launcher)? Else: logged, the
+        window that failed is closed and it is opened once more."""
+        if env("ZNS_LAUNCHER_NO_WINDOW"):
+            return
+        end = time.time() + wait
+        while time.time() < end:
+            time.sleep(0.5)
+            if self.ever_page:
+                log(f"Окно игры подключилось к запускатору через {wait - (end - time.time()):.1f} с.")
+                return
+        log(f"Окно игры не подключилось к запускатору за {wait:.0f} с ({url}) — закрываю его и открываю снова.")
+        try:
+            import zns_window
+            log(f"  окна браузера с игрой: {zns_window.describe_app_windows()}")
+            close_orphans(getattr(self, "base", self.port), self.port)
+            time.sleep(0.8)
+        except Exception as e:  # noqa: BLE001
+            log(f"  ({e})")
+        open_window(url)
 
     # ---------- pages alive
     def page_open(self):
@@ -1140,7 +1176,7 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
             self._send(200, L.status.snapshot())
             return True
         if path == "/__launcher/ping":
-            self._send(200, {"app": APP_NAME, "game": bool(L.game)})
+            self._send(200, {"app": APP_NAME, "zns": "zns-launcher", "game": bool(L.game)})
             return True
         if path == "/__launcher/handover":
             # started again (the icon) while no window is open — the game was just closed:
@@ -1255,16 +1291,20 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
         super().handle_error(request, client_address)
 
 
+def port_owner(port):
+    """Who answers on this port: None, «launcher» / «game» (ours: their marker), or «other» (another
+    program — on 127.0.0.1 OR on ::1, where the browser's «localhost» goes first) — zns_ports.py."""
+    try:
+        import zns_ports
+        return zns_ports.who(port)
+    except Exception as e:  # noqa: BLE001
+        log(f"  (порт {port}: не проверить, кто на нём: {e})")
+        return None, {}
+
+
 def game_already_running(port):
-    """Is our game (or its launcher) already answering on this port?"""
-    for p in ("/__launcher/ping", "/api/version"):
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}{p}", timeout=2) as r:
-                json.loads(r.read())
-                return True
-        except Exception:  # noqa: BLE001
-            pass
-    return False
+    """Is our game (or its launcher) already answering on this port? (only ours: never another program)"""
+    return port_owner(port)[0] in ("launcher", "game")
 
 
 def handover(port):
@@ -1282,30 +1322,37 @@ def main():
     L.log_files = [cur, prev]
     log(f"{APP_NAME}: запуск ({sys.executable}, Python {sys.version.split()[0]})")
     base = int(env("ZNS_PORT", "8000"))
+    L.base = base
     for port in range(base, base + 20):
+        owner, seen = port_owner(port)
+        if owner == "other":
+            # (another program — the author's other project, say: the game's window must never land there)
+            log(f"Порт {port} занят другой программой ({', '.join(f'{h}: {k}' for h, k in seen.items())}) — беру следующий.")
+            continue
+        if owner in ("launcher", "game"):
+            if owner == "launcher" and handover(port):
+                # (the old one is closing: take its place, and the update check runs)
+                for _ in range(40):
+                    time.sleep(0.25)
+                    try:
+                        L.httpd = Server(("127.0.0.1", port), make_handler(L))
+                        L.port = port
+                        break
+                    except OSError:
+                        pass
+                if L.httpd:
+                    log(f"Старый запускатор на порту {port} уступил место.")
+                    break
+            log(f"Игра уже запущена (порт {port}, {owner}) — открываю ещё одно окно.")
+            open_window(f"http://localhost:{port}/")
+            return
         try:
             # (only this computer: no firewall question; the browser is on this computer anyway)
             L.httpd = Server(("127.0.0.1", port), make_handler(L))
             L.port = port
             break
-        except OSError:
-            if game_already_running(port):
-                if handover(port):
-                    # (the old one is closing: take its place, and the update check runs)
-                    for _ in range(40):
-                        time.sleep(0.25)
-                        try:
-                            L.httpd = Server(("127.0.0.1", port), make_handler(L))
-                            L.port = port
-                            break
-                        except OSError:
-                            pass
-                    if L.httpd:
-                        break
-                log(f"Игра уже запущена (порт {port}) — открываю ещё одно окно.")
-                open_window(f"http://localhost:{port}/")
-                return
-            log(f"  Порт {port} занят, пробую следующий...")
+        except OSError as e:
+            log(f"  Порт {port} не занять ({e}) — пробую следующий...")
     if not L.httpd:
         log("Нет свободного порта — игра не запущена.")
         return
@@ -1316,8 +1363,12 @@ def main():
     else:
         L.status.set(need_folder=True, default_folder=default_install_dir(), title="Куда установить игру?")
         L.status.step("folder", "run", "")
+    if L.port != base:
+        log(f"Игра на порту {L.port} (а не {base}): сохранения в окне игры — свои для каждого порта.")
     threading.Thread(target=L.watchdog, daemon=True).start()
+    close_orphans(base, L.port)
     open_window(f"http://localhost:{L.port}/")
+    threading.Thread(target=L.check_window, args=(f"http://localhost:{L.port}/",), daemon=True).start()
     try:
         L.httpd.serve_forever(poll_interval=0.3)
     finally:

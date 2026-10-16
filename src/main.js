@@ -29,6 +29,7 @@ import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/WindowControls.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
+import { watchServer } from './ui/ServerLost.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
 
 const $ = (id) => document.getElementById(id);
@@ -189,6 +190,7 @@ document.querySelectorAll('#tab-settings .sub-tab').forEach((btn) => {
 // Settings → «Журнал»; and the app launcher keeps running while this window is open
 setupLogPanel(document, () => (game?.spellLog ? { name: 'zns-spells.log', title: 'Заклинания (эта игра)', text: game.spellLog.text() } : null));
 keepLauncherAlive();
+watchServer(); // (the game's program closed while the window is open: said plainly, and back by itself)
 
 if (creativeZombieCount && zombieCountDisplay) {
     creativeZombieCount.oninput = (e) => { zombieCountDisplay.textContent = e.target.value; };

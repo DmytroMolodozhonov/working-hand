@@ -249,11 +249,22 @@
         }
     }
 
+    let lostSince = 0;
     async function poll() {
         try {
             const r = await fetch('/__launcher/status', { cache: 'no-store' });
-            if (r.ok) render(await r.json());
-        } catch (e) { /* the launcher is busy for a moment */ }
+            if (r.ok) { render(await r.json()); lostSince = 0; }
+        } catch (e) {
+            // the launcher is busy for a moment — or gone (closed, crashed): said plainly after a while,
+            // and the window comes back by itself once the game is started again
+            if (!lostSince) lostSince = Date.now();
+            else if (Date.now() - lostSince > 5000) {
+                $('title').textContent = 'Игра на компьютере закрылась — запустите её ещё раз значком на рабочем столе.';
+                $('work').hidden = true;
+                lostSince = -1;
+            }
+            if (lostSince === -1) { setTimeout(() => fetch('/__launcher/ping', { cache: 'no-store' }).then((r) => r.ok && location.reload()).catch(() => setTimeout(poll, 0)), 2000); return; }
+        }
         if (!leaving) setTimeout(poll, 350);
     }
     poll();

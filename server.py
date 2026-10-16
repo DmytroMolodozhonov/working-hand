@@ -11,6 +11,7 @@ API:
   GET    /api/rig             — настройки рига рук
   POST   /api/rig             — сохранить настройки рига рук
   GET    /api/version         — дата версии игры (видна в меню)
+  GET    /api/ping            — «игра здесь» (метка zns-game; окно игры проверяет, жив ли сервер)
   GET    /api/update          — есть ли на GitHub версия новее (только при запуске через запускатор)
   GET    /api/logs            — журналы игры (настройки → «Журнал»)
   GET    /api/alive           — окно игры открыто, пока держит эту строку (запускатор)
@@ -120,7 +121,8 @@ def game_version():
         except OSError:
             pass
     date = time.strftime("%d.%m.%Y %H:%M", time.localtime(newest)) if newest else ""
-    return {"date": date, "sha": sha[:7], "full": sha if len(sha) == 40 else ""}
+    # (zns: the game's own marker — the launcher never takes another program on this port for the game)
+    return {"date": date, "sha": sha[:7], "full": sha if len(sha) == 40 else "", "zns": "zns-game"}
 
 
 _LATEST = {"sha": "", "at": 0.0}
@@ -533,6 +535,9 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._pose_pace(urlparse(self.path).query)
         if path == "/api/version":
             return self._json(200, game_version())
+        if path == "/api/ping":
+            # (cheap: the open window asks every 2 s whether the game's program is still here — ServerLost.js)
+            return self._json(200, {"zns": "zns-game"})
         if path == "/api/update":
             fresh = "fresh" in parse_qs(urlparse(self.path).query)
             return self._json(200, {"have": game_version()["sha"], "latest": latest_version(fresh)})
@@ -762,7 +767,21 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 def open_server():
     """Start on PORT; if an old game window still holds it, take the next free port."""
     last_error = None
+    try:
+        here = os.path.join(ROOT, "launcher")
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        from zns_ports import listeners
+    except Exception:  # noqa: BLE001
+        listeners = None
     for port in range(PORT, PORT + 20):
+        busy = listeners(port) if listeners else []
+        if busy:
+            # (something answers there — on ::1 too, where the browser's «localhost» goes first: the game's
+            # window would open another program; zns_ports.py)
+            print(f"  Порт {port} занят ({', '.join(busy)}) — пробую следующий...")
+            last_error = OSError(f"port {port} busy")
+            continue
         try:
             return ThreadingServer(("", port), GameRequestHandler), port
         except OSError as e:
