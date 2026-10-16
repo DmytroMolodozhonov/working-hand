@@ -127,13 +127,16 @@ test('the crater: the hill gone, a bowl under the land, the sea in it; the same 
     assert.ok(wet > 10, 'the sea in the crater: ' + wet);
 });
 
-test('the target: a hill is one (its middle inside it), flat land and the sky are not', () => {
+test('the target: any land — a hill (its middle inside it), plain land (torn right where the hand points, under the ground); the sky is not', () => {
     const t = world();
     const T = boomTarget(t, { x: 120, y: 30, z: 0 }, { x: -1, y: -0.05, z: 0 });
     assert.ok(!T.why, 'the hill');
     assert.ok(Math.abs(T.c.x) < 25 && Math.abs(T.c.z) < 5, 'its middle near the hill\'s middle: ' + JSON.stringify(T.c));
     assert.ok(T.c.y > T.base && T.c.y < 4 + 40, 'inside it, half-way up');
-    assert.equal(boomTarget(t, { x: 80, y: 10, z: 80 }, { x: 0, y: -1, z: 0 }).why, 'flat');
+    const F = boomTarget(t, { x: 80, y: 10, z: 80 }, { x: 0, y: -1, z: 0 });
+    assert.ok(!F.why && F.flat, 'plain land is a target too');
+    assert.ok(Math.abs(F.c.x - 80) < 1 && Math.abs(F.c.z - 80) < 1, 'right where the hand points');
+    assert.ok(F.c.y < 3, 'its middle under the ground: ' + F.c.y);
     assert.equal(boomTarget(t, { x: 0, y: 200, z: 0 }, { x: 0, y: 1, z: 0 }).why, 'none');
 });
 

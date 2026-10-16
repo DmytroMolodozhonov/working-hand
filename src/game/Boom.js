@@ -44,14 +44,14 @@ export const BOOM = {
     HARM_R: 130, // m: the shock wave's reach
     ZONES: [[R, 1000], [R * 1.5, 150], [130, 40]], // [up to m from the middle, harm]: inside — nothing lives
     SHOCK_T: 1.8, // s the shock wave takes to reach HARM_R
-    MIN_RELIEF: 5, // m above the land round it: a hill at least (or a building)
+    MIN_RELIEF: 5, // m above the land round it: a hill (or a building) — its middle is looked for in its mass; lower: plain land, torn where the hand points
     BUDGET: 2.5, // ms a frame for the crater
     ROCKS: 200, // the flying rocks (one instanced mesh)
 };
 
 /** Who and what it touches — and how (CLAUDE.md). «Не действует» is written too, with why. */
 export const BOOM_TARGETS = {
-    aim: 'цель — только гора, холм, скала или постройка (замок, башня волшебников, дом, деревня, ледяной дворец) до 230 м по руке; ровная земля, вода, небо — «Бум» нечего разорвать (мана не тратится)',
+    aim: 'цель — любая земля до 230 м по руке: ровное поле, берег, дно под водой (рвётся прямо там, куда показывает рука, изнутри, в нескольких метрах под землёй), холм, гора, скала или постройка (замок, башня, дом, ледяной дворец — середина ищется внутри неё); небо — нечего разорвать (мана не тратится)',
     me: 'сам волшебник — как все: стоять на горе, которую разрываешь, — смерть (вне Творческого)',
     players: 'все игроки: в кратере (до 56 м от середины) −1000 — смерть, до 84 м −150, до 130 м −40; сбивает с ног и отбрасывает (ближе — дальше); щит «Protection» — половина, купол «Protection Maxima» — четверть; каждый компьютер решает за своего игрока',
     zombies: 'в кратере — разорваны; дальше −150 / −40, отбрасывает',
@@ -112,7 +112,7 @@ const isBuilt = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE || (t >= BLOCK.ICE_
 
 /**
  * Where «Бум» bursts when the hand at `o` points along `dir` (pure: a TerrainData).
- * @returns {{c: {x, y, z}, base: number, hit: {x, y, z}, relief: number, built: number}|{why: 'none'|'flat'}}
+ * @returns {{c: {x, y, z}, base: number, hit: {x, y, z}, relief: number, built: number}|{why: 'none'}} (flat: true — plain land, torn right where the hand points)
  */
 export function boomTarget(data, o, dir, reach = BOOM.REACH) {
     const hit = data?.raycast?.(o, dir, reach);
@@ -144,7 +144,15 @@ export function boomTarget(data, o, dir, reach = BOOM.REACH) {
         }
     }
     const relief = top;
-    if (relief < BOOM.MIN_RELIEF && built < 4) return { why: 'flat' };
+    // any land is a target (the author: «не только горы — любой клочок земли»): flat ground, a field, a beach,
+    // the sea's floor — torn from inside right where the hand points (its middle a few metres under the ground);
+    // a hill, a mountain or a building — its middle is found as its mass along the hand
+    const here = data.topLayer(hx, hz) - 1 - base;
+    if (here < BOOM.MIN_RELIEF && built < 4) {
+        const gy = data.topLayer(hx, hz) - 1;
+        const flat = { x: Math.round(hit.x * 100) / 100, y: Math.round((Math.min(gy, base + 2) - 4) * 100) / 100, z: Math.round(hit.z * 100) / 100 };
+        return { c: flat, base: Math.min(base, gy), hit: { x: hit.x, y: hit.y, z: hit.z }, relief, built, flat: true };
+    }
     let cx = hx, cz = hz;
     if (sw > 0) { cx = sx / sw; cz = sz / sw; }
     const off = Math.hypot(cx - hx, cz - hz), max = R * 0.7;
@@ -202,7 +210,7 @@ export class Boom {
         const d = (this.testAim?.d || (ch.getPointingDirection ? ch.getPointingDirection(side) : ch.getHandDirection(side))).clone().normalize();
         const data = g.world?.terrain?.data;
         const T = data ? boomTarget(data, o, d) : { why: 'none' };
-        if (T.why) return say(`💥 «Бум» разрывает изнутри только <b>гору, скалу или постройку</b> — наведите на неё руку (палочку), не дальше ${BOOM.REACH} м`);
+        if (T.why) return say(`💥 «Бум» разрывает землю изнутри — наведите руку (палочку) на землю, гору или постройку, не дальше ${BOOM.REACH} м`);
         // a gift of the gods: the temple's golden ward takes it — nothing breaks (no mana spent)
         if (g.temple?.wards?.(_v.set(T.c.x, T.c.y, T.c.z), 0) || g.temple?.wards?.(_v.set(T.hit.x, T.hit.y, T.hit.z), 0)) {
             g.temple.wardHit?.(_v.set(T.hit.x, T.hit.y, T.hit.z), 12);

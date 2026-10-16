@@ -1508,6 +1508,21 @@ export class Ships {
             // the wood torn out where it struck (each computer its own boards and smoke) — the black ship's too:
             // «Инспириус» is the one spell its curse can't hold (its barrier flashes as it breaks through)
             if (isCursed(s) && d.dist < 14) this.curseSpark(s, d.x, d.y, d.z, false, 1.6);
+            // struck straight: she is blown to splinters along her whole length, both sides, the deck
+            if (d.dist < INSP_SHIP.DIRECT + 1 && g.fx?.shipBreak && s.state !== 'wreck') {
+                const n = 5;
+                for (let i = 0; i < n; i++) {
+                    const lz = -L.L / 2 + (L.L * (i + 0.5)) / n;
+                    for (const side of [-1, 1]) {
+                        s.pose.toWorld(side * hullHalfWidth(L, lz, L.deck - 1), L.deck - 0.5, lz, _o);
+                        const at = new THREE.Vector3(_o.x, _o.y, _o.z);
+                        const out = new THREE.Vector3(at.x - s.pose.x, 0, at.z - s.pose.z);
+                        if (out.lengthSq() < 1e-6) out.set(side, 0, 0);
+                        out.normalize().setY(0.6);
+                        g.fx.shipBreak(at, out, i === 2 ? 30 : 16);
+                    }
+                }
+            }
             if (d.dist < 12 && g.fx?.shipBreak) {
                 s.pose.toWorld(d.x, d.y, d.z, _o);
                 const at = new THREE.Vector3(_o.x, _o.y, _o.z);
@@ -1602,6 +1617,7 @@ export class Ships {
             const k = 1 - d.dist / INSP_SHIP.REACH;
             const direct = d.dist < INSP_SHIP.DIRECT;
             this.damage(s, Math.round(s.cls.hp * (direct ? 2 : 1.1 * k * k)), by);
+            if (direct && !this._cursed(s)) { this._inspSplit(s, l, d, by); continue; }
             // the hull torn open
             if (direct || d.dist < INSP_SHIP.HOLE) {
                 this._breach(s, l, INSP_SHIP.BREACH, d.half, by);
@@ -1627,6 +1643,27 @@ export class Ships {
             }
             if (direct || k > 0.6) this.ignite(s, Math.max(-d.half + 0.5, Math.min(d.half - 0.5, l.x)), layoutFloorAt(L, 0, d.z, l.y + 2) ?? L.deck, Math.max(-L.L / 2 + 2, Math.min(L.L / 2 - 2, d.z)), null, by);
         }
+    }
+
+    /**
+     * (host) «Inspirius» struck the ship straight: she is split — the hull torn open on both sides along her whole
+     * length and through the deck, every mast broken and falling away from the blast, the sails in rags, fire, and
+     * she goes down at once (the sinking we have, started now — not a slow flooding). Everybody sees it (shipev).
+     */
+    _inspSplit(s, l, d, by) {
+        const L = s.layout;
+        const away = l.x >= 0 ? -1 : 1;
+        for (let i = 0; i < 4; i++) {
+            const lz = -L.L / 2 + 2 + ((L.L - 4) * (i + 0.5)) / 4;
+            for (const side of [-1, 1]) this.hole(s, side, -0.4 - (i % 2) * 0.5, lz, 2.8, by);
+            this.hole(s, 0, L.deck, lz, 2.2, by, true);
+        }
+        for (const m of L.masts) this.breakMast(s, m.id, away, by);
+        for (const sl of s.sails) this.tearSail(s, sl);
+        this.ignite(s, Math.max(-d.half + 0.5, Math.min(d.half - 0.5, l.x)), L.deck, Math.max(-L.L / 2 + 2, Math.min(L.L / 2 - 2, d.z)), null, by);
+        s.flood = Math.max(s.flood || 0, 0.9);
+        s.changed = true;
+        this._startSinking(s);
     }
 
     /** (host) A sail torn to rags: it hangs useless (as a burnt one: no wind in it). */

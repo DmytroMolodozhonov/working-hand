@@ -50,7 +50,7 @@ test('the burst hurts and throws a villager (knight), a zombie and an animal (th
 
 function fakeShips() {
     const events = [];
-    const g = { authority: true, localId: 'me', hud: { setVoice() {} }, sync: { net: { send: (m) => events.push(m) } } };
+    const g = { authority: true, localId: 'me', hud: { setVoice() {} }, character: { group: { position: V(500, 0, 500) } }, sync: { net: { send: (m) => events.push(m) } } };
     const S = Object.create(Ships.prototype);
     S.game = g;
     S.awake = new Set();
@@ -61,7 +61,7 @@ function fakeShips() {
     pose.set(0, 0, 0, 0, 0, 0);
     const s = {
         id: 'ship1', cls: SHIP_CLASSES.fluyt, layout: L, pose, collider: new ShipCollider(L), st: newShipState(0, 0, 0), model: null, state: 'free',
-        hp: SHIP_CLASSES.fluyt.hp, flood: 0, holes: [], fires: [], broken: new Set(), awake: true,
+        hp: SHIP_CLASSES.fluyt.hp, flood: 0, holes: [], fires: [], broken: new Set(), awake: true, lines: [],
         sails: L.sails.map((sp) => ({ ...sp, open: 1, target: 1, fill: 0, side: 1, gust: 0, burnt: 0 })),
     };
     S.awake.add(s);
@@ -81,7 +81,7 @@ test('a ship stops the ball: its hull, its mast, an open sail', () => {
     assert.equal(S.segmentHit(V(80, 1, 0), V(70, 1, 0)), null);
 });
 
-test('a direct hit tears the hull open below the water line, breaks the mast near it, tears the sails — sent to all', () => {
+test('a direct hit splits the ship: holes on both sides below the water line, every mast broken, the sails torn, down at once — sent to all', () => {
     const { S, s, L, events } = fakeShips();
     const m = L.masts[0];
     const hp0 = s.hp;
@@ -94,8 +94,12 @@ test('a direct hit tears the hull open below the water line, breaks the mast nea
     assert.ok(cut.y1 < m.top - 3, 'nothing invisible where the mast stood');
     assert.ok(L.solids.some((b) => b.kind === 'mast' && b.y1 >= m.top - 0.01), 'the shared layout is untouched');
     assert.ok(s.sails.filter((x) => x.mast === m.id).every((x) => x.burnt >= 1), 'its sails are lost');
-    for (const k of ['hole', 'mast', 'burnt']) assert.ok(events.some((e) => e.t === 'shipev' && e.k === k), `sent: ${k}`);
+    for (const k of ['hole', 'mast']) assert.ok(events.some((e) => e.t === 'shipev' && e.k === k), `sent: ${k}`); // (the sails go with their masts)
     assert.ok(Math.abs(s.st.roll) > 0.05 || Math.abs(s.st.pitch) > 0.05 || s.st.heave > 0.5, 'the ship is rocked');
+    assert.ok(s.holes.some((h) => !h.deck && h.lx > 0) && s.holes.some((h) => !h.deck && h.lx < 0), 'split: both sides torn open');
+    assert.ok(L.masts.every((x) => s.broken.has(x.id)), 'every mast down');
+    assert.equal(s.state, 'sinking', 'she goes down at once');
+    assert.ok(events.some((e) => e.t === 'shipev' && e.k === 'sink'), 'sent: sink');
 });
 
 test('a far burst only rocks and harms the ship (no hole)', () => {
