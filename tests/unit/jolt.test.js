@@ -66,9 +66,9 @@ test('«Джолт» on a creature: it flies, flips over in the air, lies, gets 
     for (let t = 0; t < 0.6; t += 1 / 60) { ci.update(1 / 60); maxTurn = Math.max(maxTurn, Math.abs(piv.rotation.x) + Math.abs(piv.rotation.z)); }
     assert.ok(maxTurn > Math.PI, `a real flip in the air (turned ${maxTurn.toFixed(2)} rad)`);
     assert.ok(z.group.position.z > 5, 'flown back several metres');
-    for (let t = 0; t < 6; t += 1 / 60) ci.update(1 / 60);
+    for (let t = 0; t < 16 && ci.stateOf(z) !== 'up'; t += 1 / 60) ci.update(1 / 60); // (it lies 5 s + 1…5 s: the author)
     assert.equal(ci.stateOf(z), 'up', 'up again by itself');
     assert.ok(z.dazeT > 0, 'dizzy');
-    for (let t = 0; t < 12; t += 1 / 60) ci.update(1 / 60);
+    for (let t = 0; t < 20; t += 1 / 60) ci.update(1 / 60);
     assert.ok(!(z.dazeT > 0), 'the head clears');
 });

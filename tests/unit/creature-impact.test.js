@@ -62,8 +62,11 @@ test('a zombie pushed hard falls on its back, lies, and gets up by itself; every
     assert.ok(piv.rotation.x < 0, 'on its back (its back is −Z)');
     assert.ok(z.group.position.z < -1, 'slid back along the push');
     assert.ok(sent.some((e) => e[0] === 'z' && e[1] === 7 && e[2] === 'k'), 'the guests are told it fell');
-    step(ci, 1.5 + 0.6);
+    // it lies 5 s at least and 1…5 s more by chance (the author)
+    let lay = 0.6;
+    while (ci.stateOf(z) === 'down' && lay < 30) { ci.update(1 / 30); lay += 1 / 30; }
     assert.equal(ci.stateOf(z), 'rising');
+    assert.ok(lay >= CREATURE.MIN_DOWN + CREATURE.EXTRA_DOWN[0] && lay <= CREATURE.MIN_DOWN + CREATURE.EXTRA_DOWN[1] + 1.2, `lay ${lay}`);
     assert.ok(sent.some((e) => e[2] === 'r'));
     step(ci, CREATURE.RISE_T + 0.1);
     assert.equal(ci.stateOf(z), 'up');
@@ -93,7 +96,7 @@ test('a villager falls the way it was pushed, using its own feet pivot; a knight
     assert.ok(v.z > 0.5, 'slid back');
     assert.ok(v.stunT > 0);
     assert.equal(ci.apply(knight, { v: new THREE.Vector3(0, 0, 13) }), 'stagger');
-    step(ci, 3);
+    step(ci, CREATURE.MIN_DOWN + CREATURE.EXTRA_DOWN[1] + CREATURE.RISE_T + 1);
     assert.equal(v.model.root.rotation.x, 0);
     assert.ok(Math.abs(v.model.root.position.y + 1.95) < 1e-6, 'back at its feet');
 });
@@ -118,7 +121,7 @@ test('animals are heavy and four-legged: a cow shrugs off what throws a pig; the
     const piv = pig.group.userData.impPivot;
     assert.ok(Math.abs(piv.rotation.z) > 1.4 && Math.abs(piv.rotation.x) < 1e-6, 'on its side');
     assert.equal(ci.apply(pig, { v: new THREE.Vector3(0, 0, 13), always: { down: 1.5 } }), 'knockdown', '(still lying: longer)');
-    step(ci, 5);
+    step(ci, CREATURE.MIN_DOWN + CREATURE.EXTRA_DOWN[1] + CREATURE.RISE_T + 1.5);
     assert.equal(ci.stateOf(pig), 'up');
 });
 

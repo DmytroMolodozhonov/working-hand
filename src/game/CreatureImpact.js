@@ -29,7 +29,8 @@
 import * as THREE from 'three';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
 
-export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 1.5, STAGGER_MAX: 0.8, FRICTION: 4, FRICTION_DOWN: 8, G: 24, GUEST_RISE: 20, REACH: 7 };
+export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: knocked off its feet, it lies 5 s at least + 1…5 s by chance — knights don't spring up at once)
+    STAGGER_MAX: 0.8, FRICTION: 4, FRICTION_DOWN: 8, G: 24, GUEST_RISE: 20, REACH: 7 };
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
 const HALF_PI = Math.PI / 2;
@@ -264,6 +265,8 @@ export class CreatureImpact {
 
     _knock(ck, c, e, dir, down, emit = true, tumble = null) {
         const s = e.s, K = KINDS[ck];
+        // (the author: 5 s at least, and 1…5 s more by chance — the host draws it, the guests get it in 'k')
+        if (down !== Infinity) down = Math.max(down ?? CREATURE.MIN_DOWN, CREATURE.MIN_DOWN) + (emit ? CREATURE.EXTRA_DOWN[0] + Math.random() * (CREATURE.EXTRA_DOWN[1] - CREATURE.EXTRA_DOWN[0]) : 0);
         const tum = tumble ? [tumble.turns, r2(tumble.dur)] : [];
         if (s.state === 'falling' || s.state === 'down') {
             s.minDown = Math.max(s.minDown, (s.state === 'down' ? s.t : 0) + down);

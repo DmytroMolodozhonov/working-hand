@@ -7,6 +7,10 @@ import { BodyImpact } from '../../src/game/BodyImpact.js';
 import { heroBody } from '../../src/game/BodyContact.js';
 
 const IMPACT_KD = 11;
+// (the getting-up gesture tests below keep the old short lying time; the author's rule — 5 s at least
+// + 1…5 s by chance — has its own test, with the real numbers)
+const REAL = { min: KNOCK.MIN_DOWN, extra: [...KNOCK.EXTRA_DOWN] };
+KNOCK.MIN_DOWN = 1.5; KNOCK.EXTRA_DOWN = [0, 0];
 const STAND = { hasPose: true, isCrouching: false, torso: { noseRel: 0.6 } };
 const SQUAT = { hasPose: true, isCrouching: true, torso: { noseRel: 0.6 } };
 
@@ -293,4 +297,25 @@ test('lying: the head turns further than standing and alone (blended, clamped)',
     assert.ok(h.yaw > 0.5 && h.yaw < l.yaw, 'blended: no jump');
     assert.equal(lyingHead(3, -3, 1).yaw, LIE_GAIN.yawMax);
     assert.equal(lyingHead(3, -3, 1).pitch, -LIE_GAIN.pitchMax);
+});
+
+test('the author: knocked down, one lies 5 s at least and 1…5 s more by chance (no getting up sooner)', () => {
+    const keep = { min: KNOCK.MIN_DOWN, extra: KNOCK.EXTRA_DOWN };
+    KNOCK.MIN_DOWN = REAL.min; KNOCK.EXTRA_DOWN = REAL.extra;
+    try {
+        assert.equal(KNOCK.MIN_DOWN, 5);
+        for (let i = 0; i < 20; i++) {
+            const { g } = fakeGame();
+            g.knock.knock({ dir: 'back', down: 1.5 });
+            assert.ok(g.knock.minDown >= 6 - 1e-9 && g.knock.minDown <= 10 + 1e-9, `minDown ${g.knock.minDown}`);
+            run(g, 0.5, STAND); run(g, 4, STAND);
+            run(g, 0.3, SQUAT); run(g, 0.1, STAND);
+            assert.equal(g.knock.state, 'down', 'a squat at 5 s: still too early');
+        }
+        const { g } = fakeGame();
+        g.knock.knock({ dir: 'back' });
+        run(g, g.knock.minDown + 0.6, STAND);
+        run(g, 0.3, SQUAT); run(g, 0.1, STAND);
+        assert.equal(g.knock.state, 'rising', 'after it: a squat gets one up');
+    } finally { KNOCK.MIN_DOWN = keep.min; KNOCK.EXTRA_DOWN = keep.extra; }
 });

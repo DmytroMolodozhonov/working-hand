@@ -4,7 +4,7 @@
  *   stagger  a push between STAGGER_V and KNOCKDOWN_V: the body leans, the legs step back
  *            (the push itself slides it), arms flail; it is over in under a second.
  *   falling  0.45 s: the body tips over the way it was pushed (on the back, face down, a side).
- *   down     lies at least `minDown` s (1.5 by default). Then the PLAYER gets up with their own body:
+ *   down     lies at least `minDown` s (5 at least: the author). Then the PLAYER gets up with their own body:
  *            a real squat (the nose ≥ 0.17 picture lower than when upright, held ≥ 0.14 s, then
  *            straight up) — or, sitting at the desk, a deep bow and back. A frame or two of camera jitter
  *            breaks nothing; a squat done ≤ 0.5 s too early counts when the time is up, earlier ones do not.
@@ -25,7 +25,8 @@
 import { KD, fallDir, IMPACT } from './Impact.js';
 import { knockMessage, lyingMessage } from './Hints.js';
 
-export const KNOCK = { MIN_DOWN: 1.5, FALL_T: 0.45, RISE_T: 0.7, SQUAT_T: 0.14, BOW_LOW: 0.3, BOW_UP: 0.4, NO_POSE_T: 2, AUTO_RISE: 6, STAGGER_MAX: 0.8,
+export const KNOCK = { MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: a fall from a blow or a spell keeps one down 5 s at least + 1…5 s by chance — nobody jumps up at once)
+    FALL_T: 0.45, RISE_T: 0.7, SQUAT_T: 0.14, BOW_LOW: 0.3, BOW_UP: 0.4, NO_POSE_T: 2, AUTO_RISE: 6, STAGGER_MAX: 0.8,
     LIFT_T: 0.35, SINK_T: 0.5, LIFT_UP: 0.9, // (pulled up by a hand: the body's fastest rise / sinking back (s for all the way); up at this much)
     // the squat measured from the person's own upright height (any camera framing): the nose this much lower
     // (picture heights) is a squat, back within UP_DROP is straight; a frame or two of jitter (GAP_T s) breaks nothing;
@@ -111,6 +112,8 @@ export class Knockdown {
     /** Off the feet: falls `dir`, lies at least `down` s, then gets up by the player's own movement. */
     knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', cause = null, toss = 0, strength = 0.3, fly = false, tumble = 0 } = {}) {
         const g = this.game, ch = g.character;
+        // (the author: 5 s at least + 1…5 s by chance; «Up» or a friend's hand still lift one earlier)
+        if (down !== Infinity) down = Math.max(down ?? KNOCK.MIN_DOWN, KNOCK.MIN_DOWN) + KNOCK.EXTRA_DOWN[0] + Math.random() * (KNOCK.EXTRA_DOWN[1] - KNOCK.EXTRA_DOWN[0]);
         if (kind !== 'Stupefy' && !g.combat?.stunned && !g.combat?.frozen) this.daze(strength); // (not the stun's or the ice's stiff fall)
         // thrown through the air: until the feet… the back touches the ground again (it may already be lying)
         if (fly) this.flyT = KNOCK.FLY_MAX;
@@ -242,7 +245,7 @@ export class Knockdown {
                 const ready = this.t >= this.minDown;
                 if (ready && !this._told) { this._told = true; g.hud?.setVoice?.(lyingMessage(this.cause), true); }
                 if (getUpStep(this, pose, dt, this.minDown - this.t)
-                    || (this.noPoseT > KNOCK.NO_POSE_T && this.t >= KNOCK.AUTO_RISE)) {
+                    || (this.noPoseT > KNOCK.NO_POSE_T && this.t >= Math.max(KNOCK.AUTO_RISE, this.minDown))) {
                     this.state = 'rising'; this.t = 0; ch.knockedDown = false; this._told = false;
                     this.lift = 0; ch.liftUp = 0;
                 }
