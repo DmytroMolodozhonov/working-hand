@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="archmage_suit-c" x1="0" x2="1"><stop offset="0" stop-color="#2b4fb0"/><stop offset="1" stop-color="#132a6b"/></linearGradient>
+    <radialGradient id="archmage_suit-b"><stop offset="0" stop-color="#fff6c8"/><stop offset="0.4" stop-color="#ffd54a"/><stop offset="1" stop-color="#ffd54a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <path d="M34 18 Q64 8 94 18 L120 120 Q64 128 8 120 Z" fill="#0b1638" stroke="#060c22" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M44 16 L26 28 L16 88 L30 90 L38 46 Z M84 16 L102 28 L112 88 L98 90 L90 46 Z" fill="url(#archmage_suit-c)" stroke="#0a1a4a" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M16 82 L30 84 L30 90 L16 88 Z M112 82 L98 84 L98 90 L112 88 Z" fill="#e8b830"/>
+  <path d="M44 16 L84 16 L94 64 L102 118 L26 118 L34 64 Z" fill="url(#archmage_suit-c)" stroke="#0a1a4a" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M28 112 L100 112" stroke="#e8b830" stroke-width="4"/>
+  <path d="M34 107 l4 -4 4 4 4 -4 4 4 4 -4 4 4 4 -4 4 4 4 -4 4 4 4 -4 4 4 4 -4 4 4 4 -4 4 4 4 -4 4 4" fill="none" stroke="#e8b830" stroke-width="1.8"/>
+  <path d="M64 30 L64 118" stroke="#e8b830" stroke-width="3"/>
+  <path d="M46 14 L64 32 L82 14 L78 6 L64 20 L50 6 Z" fill="#1d3a8a" stroke="#e8b830" stroke-width="2.5" stroke-linejoin="round"/>
+  <rect x="32" y="62" width="64" height="9" rx="2" fill="#e8b830" stroke="#8a6410" stroke-width="2"/>
+  <path d="M64 58 L71 66.5 L64 75 L57 66.5 Z" fill="#2f7bff" stroke="#bfe0ff" stroke-width="1.8" stroke-linejoin="round"/>
+  <g fill="url(#archmage_suit-b)"><circle cx="64" cy="40" r="6"/><circle cx="64" cy="52" r="6"/><circle cx="64" cy="84" r="6"/><circle cx="64" cy="98" r="6"/></g>
+  <g fill="#ffe27a"><circle cx="64" cy="40" r="2.6"/><circle cx="64" cy="52" r="2.6"/><circle cx="64" cy="84" r="2.6"/><circle cx="64" cy="98" r="2.6"/></g>
+</svg>

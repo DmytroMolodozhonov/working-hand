@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="ward_hidden-g" cx="50%" cy="30%" r="70%"><stop offset="0" stop-color="#cfe8ff" stop-opacity="0.45"/><stop offset="1" stop-color="#3f8fe0" stop-opacity="0.15"/></radialGradient></defs>
+  <path d="M10 106 A54 56 0 0 1 118 106 Z" fill="url(#ward_hidden-g)" stroke="#8fc8ff" stroke-width="4"/>
+  <g fill="none" stroke="#e6f0ff" stroke-width="4" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round" opacity="0.6">
+    <path d="M38 104 V74 L64 52 L90 74 V104"/>
+    <path d="M30 78 L64 48 L98 78"/>
+    <path d="M56 104 V86 H72 V104"/>
+  </g>
+  <rect x="4" y="102" width="120" height="10" rx="4" fill="#4caf50"/>
+  <g fill="#cfe8ff"><path transform="translate(30 40) scale(.6)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/><path transform="translate(98 44) scale(.5)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/></g>
+</svg>

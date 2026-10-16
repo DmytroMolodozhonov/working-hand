@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="cauldron-g" cx="35%" cy="40%" r="70%"><stop offset="0" stop-color="#6b7180"/><stop offset="0.5" stop-color="#33363e"/><stop offset="1" stop-color="#16171b"/></radialGradient></defs>
+  <g fill="#26282e" stroke="#7d8391" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M30 96 L22 120 L32 120 L40 100 Z"/><path d="M98 96 L106 120 L96 120 L88 100 Z"/><path d="M59 104 L58 124 L70 124 L69 104 Z"/>
+  </g>
+  <g fill="none" stroke="#7d8391" stroke-width="5"><circle cx="15" cy="56" r="8"/><circle cx="113" cy="56" r="8"/></g>
+  <path d="M20 44 C10 72 20 108 64 110 C108 108 118 72 108 44 Z" fill="url(#cauldron-g)" stroke="#7d8391" stroke-width="3"/>
+  <path d="M30 60 C28 76 34 90 46 98" fill="none" stroke="#9aa2b2" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+  <ellipse cx="64" cy="42" rx="48" ry="12" fill="#2c2f36" stroke="#8d93a1" stroke-width="3"/>
+  <ellipse cx="64" cy="43" rx="38" ry="7" fill="#0b0c0f"/>
+</svg>

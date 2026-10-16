@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="hammer-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef2f6"/><stop offset="0.5" stop-color="#a7b3c0"/><stop offset="1" stop-color="#5f6b79"/></linearGradient>
+  </defs>
+  <g transform="rotate(32 64 64)">
+    <rect x="58" y="44" width="12" height="70" rx="3" fill="#6e4422" stroke="#3f2412" stroke-width="2.5"/>
+    <path d="M58 54 L70 60 M58 64 L70 70 M58 74 L70 80 M58 84 L70 90 M58 94 L70 100" stroke="#3f2412" stroke-width="2.5"/>
+    <rect x="55" y="112" width="18" height="9" rx="3" fill="#8794a3" stroke="#3f4852" stroke-width="2.5"/>
+    <rect x="26" y="12" width="76" height="36" rx="4" fill="url(#hammer-s)" stroke="#3f4852" stroke-width="3"/>
+    <rect x="26" y="12" width="11" height="36" rx="3" fill="#7d8a99" stroke="#3f4852" stroke-width="2.5"/>
+    <rect x="91" y="12" width="11" height="36" rx="3" fill="#7d8a99" stroke="#3f4852" stroke-width="2.5"/>
+    <path d="M42 18 L86 18" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  </g>
+  <path d="M14 30 L30 24 L26 36 L42 30" fill="none" stroke="#7fd4ff" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" opacity="0.45"/>
+  <path d="M14 30 L30 24 L26 36 L42 30" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M96 70 L110 62 L104 76 L120 70" fill="none" stroke="#7fd4ff" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" opacity="0.45"/>
+  <path d="M96 70 L110 62 L104 76 L120 70" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M78 6 L90 4 L84 14 L98 12" fill="none" stroke="#7fd4ff" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" opacity="0.45"/>
+  <path d="M78 6 L90 4 L84 14 L98 12" fill="none" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

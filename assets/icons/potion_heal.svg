@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <clipPath id="potion_heal-c"><path d="M55 22 L55 54 A38 38 0 1 0 73 54 L73 22 Z"/></clipPath>
+    <radialGradient id="potion_heal-g" cx="45%" cy="55%" r="60%"><stop offset="0" stop-color="#ff7a86"/><stop offset="0.6" stop-color="#e01b38"/><stop offset="1" stop-color="#8a0c22"/></radialGradient>
+    <radialGradient id="potion_heal-o" r="50%"><stop offset="0" stop-color="#ff3a5a" stop-opacity="0.45"/><stop offset="1" stop-color="#ff3a5a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="88" r="56" fill="url(#potion_heal-o)"/>
+  <path d="M55 22 L55 54 A38 38 0 1 0 73 54 L73 22 Z" fill="#dff4ff" fill-opacity="0.25"/>
+  <g clip-path="url(#potion_heal-c)"><rect x="20" y="64" width="90" height="70" fill="url(#potion_heal-g)"/><ellipse cx="64" cy="64" rx="34" ry="4" fill="#ff9aa6"/></g>
+  <path d="M55 22 L55 54 A38 38 0 1 0 73 54 L73 22 Z" fill="none" stroke="#bfe6ff" stroke-width="3.5" stroke-linejoin="round"/>
+  <rect x="50" y="20" width="28" height="7" rx="3" fill="#cdeeff" stroke="#8fc6ea" stroke-width="2"/>
+  <path d="M54 4 L74 4 L72 22 L56 22 Z" fill="#c08a52" stroke="#7a522a" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M64 108 C46 96 44 82 54 80 C59 79 62 82 64 86 C66 82 69 79 74 80 C84 82 82 96 64 108 Z" fill="#ffffff" stroke="#ffd0d6" stroke-width="2"/>
+  <g fill="#ffb3bd"><circle cx="50" cy="72" r="3"/><circle cx="80" cy="74" r="2"/><circle cx="62" cy="44" r="2.5"/></g>
+  <path d="M42 72 C34 80 32 94 38 104" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity="0.6"/>
+</svg>

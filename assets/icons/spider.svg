@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="spider-a" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#6a4a34"/><stop offset="1" stop-color="#1e130c"/></radialGradient>
+    <radialGradient id="spider-b" cx="45%" cy="35%" r="70%"><stop offset="0" stop-color="#5a3c28"/><stop offset="1" stop-color="#160d08"/></radialGradient>
+  </defs>
+  <g id="spider-l" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M54 62 L34 30 L10 52 M52 70 L22 50 L4 82 M52 78 L22 76 L10 110 M56 84 L34 98 L28 124" stroke="#8a6a50" stroke-width="8"/>
+    <path d="M54 62 L34 30 L10 52 M52 70 L22 50 L4 82 M52 78 L22 76 L10 110 M56 84 L34 98 L28 124" stroke="#2a1a10" stroke-width="5"/>
+  </g>
+  <use href="#spider-l" transform="translate(128 0) scale(-1 1)"/>
+  <ellipse cx="64" cy="44" rx="28" ry="26" fill="url(#spider-a)" stroke="#8a6a50" stroke-width="2.5"/>
+  <path d="M56 30 L64 38 L72 30 M58 46 L64 52 L70 46" fill="none" stroke="#a83a1e" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <ellipse cx="64" cy="80" rx="20" ry="17" fill="url(#spider-b)" stroke="#8a6a50" stroke-width="2.5"/>
+  <g fill="#ff2a2a"><circle cx="57" cy="76" r="4.5"/><circle cx="71" cy="76" r="4.5"/><circle cx="50" cy="70" r="2.5"/><circle cx="78" cy="70" r="2.5"/><circle cx="60" cy="68" r="2"/><circle cx="68" cy="68" r="2"/></g>
+  <g fill="#ffd0c0"><circle cx="55.5" cy="74.5" r="1.4"/><circle cx="69.5" cy="74.5" r="1.4"/></g>
+  <path d="M58 90 Q56 98 60 102 M70 90 Q72 98 68 102" fill="none" stroke="#e8d8c0" stroke-width="3" stroke-linecap="round"/>
+</svg>

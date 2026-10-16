@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="phoenix-o" r="50%"><stop offset="0" stop-color="#ff9a2e" stop-opacity="0.55"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/></radialGradient>
+    <linearGradient id="phoenix-w" x1="0.5" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#b8101e"/><stop offset="0.5" stop-color="#ff4a1c"/><stop offset="1" stop-color="#ffd23a"/></linearGradient>
+    <linearGradient id="phoenix-t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffcf3a"/><stop offset="0.5" stop-color="#ff5a1c"/><stop offset="1" stop-color="#b8101e" stop-opacity="0.6"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="62" r="62" fill="url(#phoenix-o)"/>
+  <g id="phoenix-wing" stroke="#8a0a16" stroke-width="2" stroke-linejoin="round">
+    <path d="M60 64 C44 44 24 30 4 10 C14 30 10 36 2 42 C16 46 18 52 8 60 C24 62 28 66 20 76 C36 76 44 80 40 88 C50 82 56 76 62 74 Z" fill="url(#phoenix-w)"/>
+  </g>
+  <use href="#phoenix-wing" transform="translate(128 0) scale(-1 1)"/>
+  <g stroke="#8a0a16" stroke-width="2" stroke-linejoin="round" fill="url(#phoenix-t)">
+    <path d="M58 84 C50 100 40 110 28 124 C46 118 54 108 62 94 Z"/>
+    <path d="M70 84 C78 100 88 110 100 124 C82 118 74 108 66 94 Z"/>
+    <path d="M60 86 C58 102 62 114 64 126 C66 114 70 102 68 86 Z"/>
+  </g>
+  <ellipse cx="64" cy="70" rx="11" ry="20" fill="#ff7a1e" stroke="#8a0a16" stroke-width="2"/>
+  <ellipse cx="64" cy="74" rx="6" ry="12" fill="#ffd23a"/>
+  <path d="M60 36 C52 26 58 18 56 10 C64 16 64 24 64 30 C66 22 72 18 74 12 C74 22 70 30 68 36 Z" fill="#ffcf3a" stroke="#c8401c" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="64" cy="44" r="10" fill="#ff5a1c" stroke="#8a0a16" stroke-width="2"/>
+  <path d="M60 48 L64 58 L68 48 Z" fill="#ffe14a" stroke="#a86a0c" stroke-width="1.5" stroke-linejoin="round"/>
+  <circle cx="60" cy="43" r="2" fill="#2a0408"/><circle cx="68" cy="43" r="2" fill="#2a0408"/>
+</svg>

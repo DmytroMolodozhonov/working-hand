@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><linearGradient id="vortex-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfeaff"/><stop offset="1" stop-color="#2f86d6"/></linearGradient></defs>
+  <ellipse cx="64" cy="110" rx="56" ry="12" fill="#1d6cc0"/>
+  <ellipse cx="64" cy="110" rx="30" ry="6" fill="none" stroke="#8fd3ff" stroke-width="3"/>
+  <path d="M18 22 Q64 2 110 22 Q90 50 78 74 Q70 92 66 108 Q60 92 52 74 Q40 50 18 22 Z" fill="url(#vortex-g)" opacity="0.55"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M18 22 Q64 40 110 22" stroke="#ffffff" stroke-width="5"/>
+    <path d="M100 34 Q64 52 30 38" stroke="#dff4ff" stroke-width="5"/>
+    <path d="M38 52 Q66 64 92 50" stroke="#ffffff" stroke-width="4.5"/>
+    <path d="M84 64 Q64 76 46 66" stroke="#dff4ff" stroke-width="4"/>
+    <path d="M52 80 Q66 88 78 80" stroke="#ffffff" stroke-width="3.5"/>
+    <path d="M74 92 Q64 98 58 92" stroke="#dff4ff" stroke-width="3"/>
+  </g>
+  <g fill="#bfe9ff"><circle cx="12" cy="40" r="3"/><circle cx="116" cy="44" r="3.5"/><circle cx="22" cy="60" r="2"/><circle cx="108" cy="66" r="2"/></g>
+</svg>

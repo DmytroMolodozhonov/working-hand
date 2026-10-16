@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="logs-g" cx="45%" cy="40%" r="60%"><stop offset="0" stop-color="#f6d39a"/><stop offset="1" stop-color="#c88a48"/></radialGradient></defs>
+  <g stroke-linecap="round">
+    <path d="M38 92 L58 76 M86 92 L106 76" stroke="#5a3519" stroke-width="44"/>
+    <path d="M38 92 L58 76 M86 92 L106 76" stroke="#7a4a26" stroke-width="36"/>
+    <path d="M62 52 L82 36" stroke="#5a3519" stroke-width="44"/>
+    <path d="M62 52 L82 36" stroke="#7a4a26" stroke-width="36"/>
+    <path d="M70 34 L84 23 M70 52 L90 37 M110 70 L120 62 M96 92 L114 78" stroke="#9a6534" stroke-width="3"/>
+  </g>
+  <g stroke="#5a3519" stroke-width="4" fill="url(#logs-g)">
+    <circle cx="38" cy="92" r="22"/><circle cx="86" cy="92" r="22"/><circle cx="62" cy="52" r="22"/>
+  </g>
+  <g fill="none" stroke="#a8703a" stroke-width="2">
+    <circle cx="38" cy="92" r="13"/><circle cx="38" cy="92" r="6"/>
+    <circle cx="86" cy="92" r="13"/><circle cx="86" cy="92" r="6"/>
+    <circle cx="62" cy="52" r="13"/><circle cx="62" cy="52" r="6"/>
+  </g>
+  <g fill="#8a5a2c"><circle cx="38" cy="92" r="2"/><circle cx="86" cy="92" r="2"/><circle cx="62" cy="52" r="2"/></g>
+</svg>

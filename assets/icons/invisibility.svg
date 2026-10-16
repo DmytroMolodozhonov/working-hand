@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="invisibility-f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eadcff" stop-opacity="0.75"/><stop offset="1" stop-color="#a77bff" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="invisibility-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3e8ff"/><stop offset="1" stop-color="#c9a8ff" stop-opacity="0.15"/></linearGradient>
+  </defs>
+  <g fill="url(#invisibility-f)" stroke="url(#invisibility-s)" stroke-width="4" stroke-dasharray="8 5" stroke-linecap="round">
+    <circle cx="64" cy="32" r="17"/>
+    <path d="M34 116 C34 80 44 56 64 56 C84 56 94 80 94 116"/>
+  </g>
+  <g fill="#e2c8ff">
+    <path transform="translate(22 30)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/><path transform="translate(106 44) scale(.8)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/>
+    <path transform="translate(104 98) scale(.65)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/><path transform="translate(22 86) scale(.7)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/>
+    <circle cx="86" cy="18" r="2.5"/><circle cx="40" cy="62" r="2"/><circle cx="92" cy="72" r="2"/>
+  </g>
+</svg>

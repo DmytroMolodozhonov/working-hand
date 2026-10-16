@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="tw-g" cx="12%" cy="64%" r="70%"><stop offset="0" stop-color="#e8f4ff"/><stop offset=".5" stop-color="#7fb6ff" stop-opacity=".45"/><stop offset="1" stop-color="#4a5aff" stop-opacity="0"/></radialGradient></defs>
+  <path d="M14 64 L118 14 A110 110 0 0 1 118 114 Z" fill="url(#tw-g)"/>
+  <g fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <polyline points="18,64 44,48 40,40 70,30 66,22 104,10" stroke="#8fc0ff" stroke-width="8" opacity=".55"/>
+    <polyline points="18,64 44,48 40,40 70,30 66,22 104,10" stroke="#fff" stroke-width="3"/>
+    <polyline points="18,64 50,66 56,58 84,64 90,56 120,62" stroke="#8fc0ff" stroke-width="8" opacity=".55"/>
+    <polyline points="18,64 50,66 56,58 84,64 90,56 120,62" stroke="#fff" stroke-width="3"/>
+    <polyline points="18,64 44,82 40,90 70,98 66,108 104,118" stroke="#8fc0ff" stroke-width="8" opacity=".55"/>
+    <polyline points="18,64 44,82 40,90 70,98 66,108 104,118" stroke="#fff" stroke-width="3"/>
+  </g>
+  <circle cx="16" cy="64" r="9" fill="#ffffff"/><circle cx="16" cy="64" r="15" fill="#bfe0ff" opacity=".4"/>
+</svg>

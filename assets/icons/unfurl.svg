@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><linearGradient id="unfurl-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6d9bc"/></linearGradient></defs>
+  <rect x="47" y="6" width="8" height="118" rx="2" fill="#7a4a24"/>
+  <path d="M14 24 C26 50 26 74 18 96 Q51 104 84 96 C76 74 76 50 88 24 Z" fill="url(#unfurl-s)" stroke="#c9b48a" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M30 40 V86 M51 40 V92 M72 40 V86" stroke="#d8c9a6" stroke-width="2"/>
+  <rect x="8" y="18" width="86" height="8" rx="3" fill="#6b3f1e"/>
+  <path d="M110 30 V96 M98 82 L110 98 L122 82" fill="none" stroke="#8fe3ff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

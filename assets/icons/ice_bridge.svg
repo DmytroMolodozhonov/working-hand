@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><linearGradient id="ib-a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#6cc0f0"/></linearGradient><linearGradient id="ib-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f8fd8"/><stop offset="1" stop-color="#174f8c"/></linearGradient></defs>
+  <path d="M0 96 Q16 90 32 96 T64 96 T96 96 T128 96 V128 H0 Z" fill="url(#ib-w)"/>
+  <path d="M0 100 H20 V80 H0 Z M108 100 H128 V80 H108 Z" fill="#7a5232"/>
+  <path d="M0 80 H20 M108 80 H128" stroke="#4caf50" stroke-width="5"/>
+  <path d="M10 80 Q64 10 118 80 L104 80 Q64 34 24 80 Z" fill="url(#ib-a)" stroke="#2f7fb8" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M24 66 l2 12 M40 46 l3 12 M64 38 v13 M88 46 l-3 12 M104 66 l-2 12" stroke="#2f7fb8" stroke-width="2"/>
+  <path d="M30 60 Q64 22 98 60" stroke="#ffffff" stroke-width="2.5" fill="none" opacity=".8"/>
+  <g stroke="#bfeaff" stroke-width="2.5" stroke-linecap="round"><path d="M40 84 v8 M56 72 v10 M72 72 v10 M88 84 v8"/></g>
+  <g fill="#fff"><path d="M64 10 l1.8 5 5 1.8 -5 1.8 -1.8 5 -1.8 -5 -5 -1.8 5 -1.8z"/><circle cx="30" cy="30" r="2"/><circle cx="100" cy="28" r="2"/></g>
+</svg>

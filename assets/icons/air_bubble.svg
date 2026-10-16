@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="air_bubble-w" cx="0.5" cy="0.3" r="0.6"><stop offset="0" stop-color="#2a7fc4"/><stop offset="1" stop-color="#0b2f5e" stop-opacity="0.6"/></radialGradient>
+    <radialGradient id="air_bubble-b" cx="0.35" cy="0.3" r="0.7"><stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/><stop offset="0.7" stop-color="#cdefff" stop-opacity="0.12"/><stop offset="1" stop-color="#cdefff" stop-opacity="0.4"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#air_bubble-w)"/>
+  <circle cx="58" cy="68" r="22" fill="#FFDBB4"/>
+  <path d="M36 64 C36 44 80 42 80 62 C72 56 46 54 36 64 Z" fill="#4a3728"/>
+  <circle cx="50" cy="70" r="2.8" fill="#15161a"/><circle cx="66" cy="70" r="2.8" fill="#15161a"/>
+  <path d="M50 80 Q58 86 66 80" fill="none" stroke="#a0522d" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="58" cy="66" r="38" fill="url(#air_bubble-b)" stroke="#dff6ff" stroke-width="3"/>
+  <path d="M32 50 A30 30 0 0 1 52 34" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  <g fill="none" stroke="#dff6ff" stroke-width="2.5"><circle cx="104" cy="42" r="6"/><circle cx="110" cy="22" r="4"/><circle cx="98" cy="10" r="2.5"/><circle cx="108" cy="64" r="3"/></g>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="wand-w" x1="0" x2="1"><stop offset="0" stop-color="#c9925a"/><stop offset="1" stop-color="#7a4a26"/></linearGradient>
+    <radialGradient id="wand-glow"><stop offset="0" stop-color="#ffffff"/><stop offset="0.35" stop-color="#fff6c8" stop-opacity="0.7"/><stop offset="1" stop-color="#ffe27a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <g transform="rotate(42 64 64)">
+    <path d="M62.2 22 L65.8 22 L68.5 84 L59.5 84 Z" fill="url(#wand-w)" stroke="#4a2b15" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M59 84 Q56 90 59 96 Q56 103 59 110 Q57 118 60 124 L68 124 Q71 118 69 110 Q72 103 69 96 Q72 90 69 84 Z" fill="url(#wand-w)" stroke="#4a2b15" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M58 90 L70 90 M58 103 L70 103 M58 116 L70 116" stroke="#4a2b15" stroke-width="2"/>
+    <circle cx="64" cy="18" r="16" fill="url(#wand-glow)"/>
+    <path d="M64 6 L66 16 L76 18 L66 20 L64 30 L62 20 L52 18 L62 16 Z" fill="#ffffff"/>
+  </g>
+</svg>

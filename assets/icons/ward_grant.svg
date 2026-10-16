@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="ward_grant-g" cx="60%" cy="30%" r="70%"><stop offset="0" stop-color="#cfe8ff" stop-opacity="0.45"/><stop offset="1" stop-color="#3f8fe0" stop-opacity="0.15"/></radialGradient></defs>
+  <path d="M22 106 A52 58 0 0 1 126 106 Z" fill="url(#ward_grant-g)" stroke="#8fc8ff" stroke-width="4"/>
+  <rect x="2" y="102" width="124" height="10" rx="4" fill="#4caf50"/>
+  <g stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M38 70 L30 86 L22 102 M38 70 L44 86 L52 100" stroke="#2c3e50" stroke-width="7"/>
+    <path d="M38 48 L38 72" stroke="#3498db" stroke-width="12"/>
+    <path d="M38 52 L28 66 M38 52 L50 62" stroke="#3498db" stroke-width="6"/>
+  </g>
+  <circle cx="40" cy="36" r="9" fill="#FFDBB4"/>
+  <path d="M60 86 H88 M80 78 L90 86 L80 94" fill="none" stroke="#3ee07a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="92" cy="44" r="15" fill="#2ecc71" stroke="#c8ffd9" stroke-width="2"/>
+  <path d="M85 44 L90 50 L100 38" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

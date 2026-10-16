@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="villagers-h" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e6ecf4"/><stop offset="1" stop-color="#7a8698"/></linearGradient>
+    <linearGradient id="villagers-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe7a0"/><stop offset="1" stop-color="#d8a84a"/></linearGradient>
+    <linearGradient id="villagers-c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2a0"/><stop offset="0.6" stop-color="#f2b81e"/><stop offset="1" stop-color="#b87a0c"/></linearGradient>
+  </defs>
+  <path d="M6 70 C6 34 20 14 38 14 C56 14 70 34 70 70 Z" fill="url(#villagers-h)" stroke="#4a5262" stroke-width="3"/>
+  <path d="M38 14 L38 70" stroke="#5a6272" stroke-width="3"/>
+  <path d="M14 46 L62 46" stroke="#1a1e26" stroke-width="6" stroke-linecap="round"/>
+  <path d="M38 14 C34 8 40 2 46 6" fill="none" stroke="#d8402a" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="92" cy="52" rx="34" ry="11" fill="url(#villagers-s)" stroke="#9a7a2a" stroke-width="3"/>
+  <path d="M72 50 C72 26 80 18 92 18 C104 18 112 26 112 50 C104 56 80 56 72 50 Z" fill="url(#villagers-s)" stroke="#9a7a2a" stroke-width="3"/>
+  <path d="M73 42 C82 48 102 48 111 42 L112 48 C102 54 82 54 72 48 Z" fill="#b8402a"/>
+  <path d="M80 26 L86 46 M92 20 L92 46 M104 26 L98 46 M66 54 L74 58 M110 58 L118 54" stroke="#c09040" stroke-width="1.5" opacity="0.8"/>
+  <path d="M24 118 L18 66 L40 88 L64 56 L88 88 L110 66 L104 118 Z" fill="url(#villagers-c)" stroke="#8a5a0a" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="22" y="104" width="84" height="16" rx="3" fill="#e8a818" stroke="#8a5a0a" stroke-width="3"/>
+  <g stroke="#7a0a1e" stroke-width="1.5"><circle cx="64" cy="112" r="5" fill="#e8284a"/><circle cx="40" cy="112" r="4" fill="#2a8aff" stroke="#0a3a7a"/><circle cx="88" cy="112" r="4" fill="#2ac86a" stroke="#0a5a2a"/></g>
+  <g fill="#fff6c0" stroke="#8a5a0a" stroke-width="1.5"><circle cx="18" cy="64" r="4"/><circle cx="64" cy="54" r="5"/><circle cx="110" cy="64" r="4"/></g>
+  <circle cx="64" cy="88" r="4" fill="#e8284a" stroke="#7a0a1e" stroke-width="1.5"/>
+</svg>

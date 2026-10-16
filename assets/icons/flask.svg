@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="flask-g" cx="40%" cy="60%" r="60%"><stop offset="0" stop-color="#eaf8ff" stop-opacity="0.35"/><stop offset="1" stop-color="#7fc4f0" stop-opacity="0.45"/></radialGradient></defs>
+  <path d="M55 22 L55 54 A38 38 0 1 0 73 54 L73 22 Z" fill="url(#flask-g)" stroke="#bfe6ff" stroke-width="3.5" stroke-linejoin="round"/>
+  <rect x="50" y="20" width="28" height="7" rx="3" fill="#cdeeff" stroke="#8fc6ea" stroke-width="2"/>
+  <path d="M54 4 L74 4 L72 22 L56 22 Z" fill="#c08a52" stroke="#7a522a" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M58 9 L70 9 M58 15 L70 15" stroke="#9a6a3a" stroke-width="2"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <path d="M42 72 C34 80 32 94 38 104" stroke-width="5" opacity="0.8"/>
+    <path d="M60 30 L60 50" stroke-width="3" opacity="0.7"/>
+    <path d="M86 108 C92 102 95 96 96 90" stroke-width="3" opacity="0.45"/>
+  </g>
+  <circle cx="46" cy="66" r="2.5" fill="#fff" opacity="0.9"/>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="planet_move-sp" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#1b2450"/><stop offset="1" stop-color="#05060f"/></radialGradient>
+    <radialGradient id="planet_move-p" cx="0.38" cy="0.35" r="0.7"><stop offset="0" stop-color="#ffcf9a"/><stop offset="0.6" stop-color="#d0703a"/><stop offset="1" stop-color="#5a2a18"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#planet_move-sp)"/><g fill="#fff" opacity="0.85"><circle cx="22" cy="30" r="1.6"/><circle cx="104" cy="24" r="1.4"/><circle cx="98" cy="104" r="1.6"/><circle cx="28" cy="100" r="1.2"/><circle cx="64" cy="12" r="1.2"/></g>
+  <ellipse cx="64" cy="58" rx="52" ry="24" fill="none" stroke="#e6dcff" stroke-width="2.5" stroke-dasharray="6 5" opacity="0.7" transform="rotate(-15 64 58)"/>
+  <path d="M28 36 Q50 22 76 24" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+  <path d="M68 16 L80 24 L68 32" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M24 106 L84 52" stroke="#c9a8ff" stroke-width="8" stroke-linecap="round" opacity="0.5"/>
+  <path d="M24 106 L84 52" stroke="#f3e8ff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="92" cy="46" r="18" fill="url(#planet_move-p)"/>
+  <circle cx="92" cy="46" r="21" fill="none" stroke="#c9a8ff" stroke-width="2" opacity="0.7"/>
+  <rect x="8" y="104" width="24" height="8" rx="3" fill="#6b3f1e" transform="rotate(-42 20 108)"/>
+</svg>

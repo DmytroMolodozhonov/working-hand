@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="frozen-g" cx="50%" cy="55%" r="55%"><stop offset="0" stop-color="#bfeaff" stop-opacity="0.5"/><stop offset="1" stop-color="#bfeaff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="frozen-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe9ff"/><stop offset="1" stop-color="#6cbcf0"/></linearGradient>
+    <linearGradient id="frozen-r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc6f4"/><stop offset="1" stop-color="#2f86cf"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="66" r="60" fill="url(#frozen-g)"/>
+  <g stroke="#e8f8ff" stroke-width="2" stroke-linejoin="round">
+    <path d="M64 24 L106 42 L64 60 L22 42 Z" fill="#effaff"/>
+    <path d="M22 42 L64 60 L64 110 L22 90 Z" fill="url(#frozen-l)"/>
+    <path d="M64 60 L106 42 L106 90 L64 110 Z" fill="url(#frozen-r)"/>
+  </g>
+  <circle cx="64" cy="70" r="16" fill="#3a9be6" opacity="0.45"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.85">
+    <path d="M32 54 L42 66 L38 76 L46 86"/><path d="M92 54 L84 66 L90 74"/><path d="M50 36 L62 40 L72 36"/>
+  </g>
+  <g stroke="#ffffff" stroke-width="2.5" stroke-linecap="round">
+    <path d="M18 18 v16 M10 26 h16 M12 20 l12 12 M24 20 l-12 12"/>
+    <path d="M112 100 v12 M106 106 h12 M108 102 l8 8 M116 102 l-8 8"/>
+    <path d="M110 14 v10 M105 19 h10"/>
+  </g>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="book_guard-c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4ca8"/><stop offset="1" stop-color="#0f2260"/></linearGradient>
+    <linearGradient id="book_guard-s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#8e9cb0"/></linearGradient>
+  </defs>
+  <path d="M64 44 Q40 8 2 14 Q10 20 4 26 Q12 30 4 36 Q12 40 6 42 Q36 30 64 52 Z M64 44 Q88 8 126 14 Q118 20 124 26 Q116 30 124 36 Q116 40 122 42 Q92 30 64 52 Z" fill="#f6ecd0" stroke="#b39a68" stroke-width="2"/>
+  <path d="M64 48 Q36 26 8 36 M64 48 Q92 26 120 36" fill="none" stroke="#c8b07c" stroke-width="1.5"/>
+  <path d="M64 50 Q38 28 6 38 L14 88 Q40 80 64 102 Z" fill="url(#book_guard-c)" stroke="#c6d0dc" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M64 50 Q90 28 122 38 L114 88 Q88 80 64 102 Z" fill="url(#book_guard-c)" stroke="#c6d0dc" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M64 50 L64 102" stroke="#08143c" stroke-width="5"/>
+  <path d="M24 50 L42 46 L44 66 Q40 78 32 82 Q24 76 22 64 Z" fill="url(#book_guard-s)" stroke="#5f6b79" stroke-width="2" transform="rotate(-8 33 64)"/>
+  <path d="M104 50 L86 46 L84 66 Q88 78 96 82 Q104 76 106 64 Z" fill="url(#book_guard-s)" stroke="#5f6b79" stroke-width="2" transform="rotate(8 95 64)"/>
+  <path d="M33 54 L33 74 M95 54 L95 74" stroke="#5f6b79" stroke-width="2"/>
+</svg>

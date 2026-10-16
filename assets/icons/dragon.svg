@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="dragon-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff5a4a"/><stop offset="1" stop-color="#8a0f1e"/></linearGradient>
+    <linearGradient id="dragon-h" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4a3a"/><stop offset="1" stop-color="#a0101e"/></linearGradient>
+    <radialGradient id="dragon-f" cx="20%" cy="50%" r="80%"><stop offset="0" stop-color="#fff6b0"/><stop offset="0.5" stop-color="#ffa01e"/><stop offset="1" stop-color="#ff3a1a"/></radialGradient>
+  </defs>
+  <g stroke="#5a0812" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M58 70 L10 8 Q16 32 4 40 Q22 44 16 60 Q32 58 30 76 Q42 72 46 88 Z" fill="url(#dragon-w)"/>
+    <path d="M70 66 L118 4 Q112 28 124 36 Q106 40 112 56 Q96 54 98 70 Z" fill="url(#dragon-w)"/>
+  </g>
+  <path d="M56 68 L16 22 M56 72 L14 48 M56 76 L30 68 M72 64 L112 18 M74 66 L112 46" stroke="#5a0812" stroke-width="2" opacity="0.7"/>
+  <path d="M44 124 C40 100 46 80 58 68 C64 60 74 54 84 56 L100 62 C108 64 110 70 104 72 L90 74 L98 80 C92 86 82 86 76 82 C68 92 66 108 70 124 Z" fill="url(#dragon-h)" stroke="#5a0812" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M70 58 L56 36 L76 54 M80 56 L76 34 L88 56" fill="#f0d9a8" stroke="#8a6a3a" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M50 92 L44 88 M54 82 L47 77 M60 72 L54 66" stroke="#ffb0a0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M84 62 L92 63 L86 67 Z" fill="#ffe14a" stroke="#5a0812" stroke-width="1.5"/>
+  <circle cx="101" cy="64" r="1.6" fill="#3a0008"/>
+  <path d="M100 76 C108 70 116 72 126 66 C120 74 126 78 122 84 C116 80 112 88 104 82 Z" fill="url(#dragon-f)"/>
+</svg>

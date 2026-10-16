@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="fire_maxima-p" cx="50%" cy="100%" r="100%"><stop offset="0" stop-color="#fff2a0"/><stop offset="0.5" stop-color="#ffb22e"/><stop offset="1" stop-color="#e2461b"/></radialGradient>
+    <radialGradient id="fire_maxima-h" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffd27a" stop-opacity="0.55"/><stop offset="1" stop-color="#ff8a2a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="68" cy="54" r="46" fill="url(#fire_maxima-h)"/>
+  <path d="M8 120 C20 118 26 104 18 100 C10 96 8 110 22 110 C36 110 40 92 32 88 C24 84 22 98 36 98 C50 98 54 80 46 76 C40 72 38 82 46 84" fill="none" stroke="#ff9a2a" stroke-width="7" stroke-linecap="round"/>
+  <path d="M8 120 C20 118 26 104 18 100 C10 96 8 110 22 110 C36 110 40 92 32 88 C24 84 22 98 36 98 C50 98 54 80 46 76" fill="none" stroke="#ffe08a" stroke-width="3" stroke-linecap="round"/>
+  <g transform="translate(68 54)" fill="url(#fire_maxima-p)" stroke="#ffcf5a" stroke-width="1">
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z"/>
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z" transform="rotate(45)"/>
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z" transform="rotate(90)"/>
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z" transform="rotate(135)"/>
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z" transform="rotate(180)"/>
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z" transform="rotate(225)"/>
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z" transform="rotate(270)"/>
+    <path d="M0 0 C-10 -12 -8 -26 0 -34 C8 -26 10 -12 0 0 Z" transform="rotate(315)"/>
+  </g>
+  <circle cx="68" cy="54" r="9" fill="#fff6c8" stroke="#ffb22e" stroke-width="2"/>
+  <circle cx="106" cy="22" r="17" fill="#ffd23a" opacity="0.22"/><path d="M106 4 L110.5 17.5 L124 22 L110.5 26.5 L106 40 L101.5 26.5 L88 22 L101.5 17.5 Z" fill="#ffd23a" stroke="#b8860b" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

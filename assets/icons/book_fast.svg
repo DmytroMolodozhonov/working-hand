@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="book_fast-c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8dcff"/><stop offset="1" stop-color="#4a9ee0"/></linearGradient>
+    <linearGradient id="book_fast-t" x1="0" x2="1"><stop offset="0" stop-color="#3fa9ff" stop-opacity="0"/><stop offset="1" stop-color="#7fd0ff" stop-opacity="0.9"/></linearGradient>
+  </defs>
+  <path d="M2 56 L44 56 M8 70 L46 70 M14 84 L48 84" stroke="url(#book_fast-t)" stroke-width="6" stroke-linecap="round"/>
+  <g transform="translate(14 0) rotate(-12 70 64) scale(0.85) translate(10 10)">
+    <path d="M64 44 Q40 8 2 14 Q10 20 4 26 Q12 30 4 36 Q12 40 6 42 Q36 30 64 52 Z M64 44 Q88 8 126 14 Q118 20 124 26 Q116 30 124 36 Q116 40 122 42 Q92 30 64 52 Z" fill="#f6ecd0" stroke="#b39a68" stroke-width="2"/>
+    <path d="M64 50 Q38 28 6 38 L14 88 Q40 80 64 102 Z" fill="url(#book_fast-c)" stroke="#e6edf5" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M64 50 Q90 28 122 38 L114 88 Q88 80 64 102 Z" fill="url(#book_fast-c)" stroke="#e6edf5" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M64 50 L64 102" stroke="#2a6aa8" stroke-width="5"/>
+    <path d="M22 50 Q38 44 54 58 L54 80 Q38 72 24 76 Z M106 50 Q90 44 74 58 L74 80 Q90 72 104 76 Z" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.8"/>
+  </g>
+</svg>

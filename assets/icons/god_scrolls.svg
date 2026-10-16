@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="god_scrolls-glow"><stop offset="0" stop-color="#fff3b0" stop-opacity="0.9"/><stop offset="0.6" stop-color="#ffcf4a" stop-opacity="0.3"/><stop offset="1" stop-color="#ffcf4a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="god_scrolls-p" x1="0" x2="1"><stop offset="0" stop-color="#fff4d6"/><stop offset="0.5" stop-color="#ead09a"/><stop offset="1" stop-color="#b58c4c"/></linearGradient>
+    <linearGradient id="god_scrolls-g" x1="0" x2="1"><stop offset="0" stop-color="#fff0a0"/><stop offset="0.5" stop-color="#f0b828"/><stop offset="1" stop-color="#a8700c"/></linearGradient>
+    <g id="god_scrolls-s">
+      <rect x="56" y="24" width="16" height="78" rx="4" fill="url(#god_scrolls-p)" stroke="#8a6230" stroke-width="2"/>
+      <rect x="53" y="18" width="22" height="9" rx="3" fill="url(#god_scrolls-g)" stroke="#7a5410" stroke-width="2"/>
+      <rect x="53" y="99" width="22" height="9" rx="3" fill="url(#god_scrolls-g)" stroke="#7a5410" stroke-width="2"/>
+      <rect x="55" y="58" width="18" height="6" fill="#f0b828" stroke="#7a5410" stroke-width="1.5"/>
+    </g>
+  </defs>
+  <circle cx="64" cy="58" r="60" fill="url(#god_scrolls-glow)"/>
+  <g stroke="#ffe27a" stroke-width="3" stroke-linecap="round" opacity="0.7">
+    <path d="M64 4 L64 12 M20 22 L26 28 M108 22 L102 28 M6 60 L14 60 M122 60 L114 60"/>
+  </g>
+  <use href="#god_scrolls-s" transform="rotate(-42 64 112)"/>
+  <use href="#god_scrolls-s" transform="rotate(-14 64 112)"/>
+  <use href="#god_scrolls-s" transform="rotate(14 64 112)"/>
+  <use href="#god_scrolls-s" transform="rotate(42 64 112)"/>
+</svg>

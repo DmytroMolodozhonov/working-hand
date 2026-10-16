@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sword-b" x1="0" x2="1"><stop offset="0" stop-color="#f4f8fc"/><stop offset="0.5" stop-color="#c9d3de"/><stop offset="1" stop-color="#8794a3"/></linearGradient>
+    <linearGradient id="sword-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe58a"/><stop offset="1" stop-color="#c58a1c"/></linearGradient>
+  </defs>
+  <g transform="rotate(45 64 64)">
+    <path d="M64 -6 L72.5 8 L72.5 88 L55.5 88 L55.5 8 Z" fill="url(#sword-b)" stroke="#5f6b79" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M64 6 L64 84" stroke="#7d8a99" stroke-width="3" stroke-linecap="round"/>
+    <rect x="40" y="86" width="48" height="9" rx="4.5" fill="url(#sword-g)" stroke="#8a5d10" stroke-width="2.5"/>
+    <circle cx="64" cy="90.5" r="4" fill="#d8433c" stroke="#8a5d10" stroke-width="1.5"/>
+    <rect x="58.5" y="95" width="11" height="25" rx="3" fill="#7a4a26" stroke="#3f2412" stroke-width="2.5"/>
+    <path d="M59 100 L69 104 M59 106 L69 110 M59 112 L69 116" stroke="#4a2b15" stroke-width="2"/>
+    <circle cx="64" cy="125" r="6.5" fill="url(#sword-g)" stroke="#8a5d10" stroke-width="2.5"/>
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="dragon_egg-g" cx="38%" cy="35%" r="75%"><stop offset="0" stop-color="#7cf0b0"/><stop offset="0.45" stop-color="#139a62"/><stop offset="0.8" stop-color="#0b5a44"/><stop offset="1" stop-color="#9a1630"/></radialGradient>
+    <pattern id="dragon_egg-p" width="14" height="12" patternUnits="userSpaceOnUse"><path d="M0 0 Q7 13 14 0 M-7 6 Q0 19 7 6 M7 6 Q14 19 21 6" fill="none" stroke="#04382a" stroke-width="1.6" opacity="0.7"/></pattern>
+    <radialGradient id="dragon_egg-c" cx="40%" cy="40%" r="60%"><stop offset="0" stop-color="#fff2a0"/><stop offset="1" stop-color="#d79a16"/></radialGradient>
+  </defs>
+  <g stroke="#9a6a0c" stroke-width="2" fill="url(#dragon_egg-c)">
+    <ellipse cx="30" cy="116" rx="18" ry="6"/><ellipse cx="98" cy="116" rx="18" ry="6"/><ellipse cx="96" cy="110" rx="16" ry="5"/>
+    <ellipse cx="64" cy="120" rx="22" ry="6"/><ellipse cx="24" cy="110" rx="12" ry="4"/>
+  </g>
+  <path d="M64 6 C98 6 108 62 104 84 C100 108 84 116 64 116 C44 116 28 108 24 84 C20 62 30 6 64 6 Z" fill="url(#dragon_egg-g)" stroke="#063d2c" stroke-width="3"/>
+  <path d="M64 6 C98 6 108 62 104 84 C100 108 84 116 64 116 C44 116 28 108 24 84 C20 62 30 6 64 6 Z" fill="url(#dragon_egg-p)"/>
+  <path d="M36 70 C36 46 44 28 54 18" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity="0.45"/>
+  <path d="M84 92 Q92 98 98 88 M78 102 Q86 108 92 100" fill="none" stroke="#ff4a5e" stroke-width="2.5" opacity="0.8"/>
+</svg>

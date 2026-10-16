@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="scroll-p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbeec8"/><stop offset="1" stop-color="#d9b77a"/></linearGradient>
+    <linearGradient id="scroll-r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7e2b0"/><stop offset="0.5" stop-color="#d7ae6a"/><stop offset="1" stop-color="#a77c3e"/></linearGradient>
+  </defs>
+  <path d="M28 30 L100 30 L100 100 Q90 94 80 100 Q70 106 60 100 Q48 94 38 100 Q32 104 28 100 Z" fill="url(#scroll-p)" stroke="#9a7238" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M38 46 L90 46 M38 56 L84 56 M38 66 L90 66 M38 76 L78 76 M38 86 L86 86" stroke="#a8814a" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <rect x="16" y="16" width="96" height="20" rx="10" fill="url(#scroll-r)" stroke="#8a6230" stroke-width="2.5"/>
+  <ellipse cx="18" cy="26" rx="5" ry="10" fill="#c99a56" stroke="#8a6230" stroke-width="2.5"/>
+  <ellipse cx="18" cy="26" rx="1.8" ry="4" fill="#8a6230"/>
+  <rect x="58" y="14" width="12" height="24" rx="2" fill="#c8283a" stroke="#7a1020" stroke-width="2"/>
+  <path d="M60 38 L54 62 L60 57 L64 64 Z M68 38 L74 60 L68 56 L64 64 Z" fill="#e0384a" stroke="#7a1020" stroke-width="2" stroke-linejoin="round"/>
+</svg>

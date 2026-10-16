@@ -3,7 +3,7 @@
 // name in its «say» at least one phrase in «…» that really casts a spell (matchSpell).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SPELLS, SPELL_CATEGORIES, MECHANICS } from '../../src/ui/Codex.js';
+import { SPELLS, SPELL_CATEGORIES, MECHANICS, ITEMS } from '../../src/ui/Codex.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 
 test('every card in the spell tabs is a spell that can be cast — mechanics go to «Механика игры»', () => {
@@ -29,5 +29,16 @@ test('every «Механика игры» section has its title, lead and points
     for (const m of MECHANICS) {
         assert.ok(m.title && typeof m.lead === 'string', `«${m.title}»: title and lead`);
         assert.ok(Array.isArray(m.points) && m.points.length, `«${m.title}»: points: [...] (not items / text)`);
+    }
+});
+
+test('every spell and every thing has its own icon (none shared) and every icon file exists', async () => {
+    const { existsSync } = await import('node:fs');
+    const seen = new Map();
+    for (const s of [...SPELLS, ...ITEMS]) {
+        assert.ok(s.icon, `«${s.name}»: no icon`);
+        assert.ok(existsSync(new URL(`../../${s.icon}`, import.meta.url)), `«${s.name}»: no file ${s.icon}`);
+        assert.ok(!seen.has(s.icon), `«${s.name}» and «${seen.get(s.icon)}» share the icon ${s.icon}`);
+        seen.set(s.icon, s.name);
     }
 });

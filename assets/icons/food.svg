@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="food-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8a24c"/><stop offset="1" stop-color="#9a5a1e"/></linearGradient>
+    <radialGradient id="food-a" cx="35%" cy="35%" r="70%"><stop offset="0" stop-color="#ff7a6a"/><stop offset="0.6" stop-color="#d8232a"/><stop offset="1" stop-color="#8a0e14"/></radialGradient>
+    <radialGradient id="food-g" cx="35%" cy="35%" r="70%"><stop offset="0" stop-color="#fff6b0"/><stop offset="0.6" stop-color="#f0c030"/><stop offset="1" stop-color="#a87a0c"/></radialGradient>
+  </defs>
+  <path d="M40 46 Q50 14 92 18 Q126 24 120 58 Q116 74 92 74 L56 74 Q34 72 40 46 Z" fill="url(#food-b)" stroke="#6a3a10" stroke-width="3" stroke-linejoin="round" transform="rotate(-10 80 46)"/>
+  <path d="M60 30 Q66 40 64 52 M78 26 Q84 36 82 50 M96 26 Q102 36 100 50" fill="none" stroke="#f8d49a" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M48 52 C34 40 8 46 10 76 C12 102 30 120 42 116 C46 114 50 114 54 116 C66 120 84 102 84 76 C86 48 62 40 48 52 Z" fill="url(#food-a)" stroke="#6a0a10" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M48 52 Q46 42 52 34" fill="none" stroke="#5a3519" stroke-width="4" stroke-linecap="round"/>
+  <path d="M52 42 Q64 30 76 38 Q66 50 52 42 Z" fill="#5fbf3a" stroke="#2f7a18" stroke-width="2"/>
+  <ellipse cx="28" cy="70" rx="5" ry="9" fill="#ffffff" opacity="0.5" transform="rotate(20 28 70)"/>
+  <path d="M104 86 C98 80 86 82 86 98 C86 112 96 120 104 118 C112 120 122 112 122 98 C122 82 110 80 104 86 Z" fill="url(#food-g)" stroke="#8a5d10" stroke-width="2.5"/>
+  <path d="M104 86 Q103 80 107 76" fill="none" stroke="#5a3519" stroke-width="3" stroke-linecap="round"/>
+</svg>

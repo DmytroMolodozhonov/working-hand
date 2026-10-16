@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="up-g" cx="0.5" cy="0.6" r="0.5"><stop offset="0" stop-color="#fff3c4" stop-opacity="0.5"/><stop offset="1" stop-color="#fff3c4" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="50" cy="66" r="50" fill="url(#up-g)"/>
+  <path d="M14 106 H98" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-dasharray="4 6" opacity="0.35"/>
+  <rect x="4" y="110" width="104" height="9" rx="4" fill="#4caf50"/>
+  <g stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M50 76 L42 110 M50 76 L60 110" stroke="#2c3e50" stroke-width="9"/>
+    <path d="M50 46 L50 78" stroke="#3498db" stroke-width="16"/>
+    <path d="M50 50 L34 30 M50 50 L66 30" stroke="#3498db" stroke-width="7"/>
+  </g>
+  <circle cx="34" cy="27" r="4.5" fill="#FFDBB4"/><circle cx="66" cy="27" r="4.5" fill="#FFDBB4"/>
+  <circle cx="50" cy="30" r="11" fill="#FFDBB4"/><path d="M39 28 Q50 14 61 28 Z" fill="#4a3728"/>
+  <path d="M100 104 V24 M86 40 L100 22 L114 40" fill="none" stroke="#6fe08a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

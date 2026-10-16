@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="planet_terraform-sp" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#1b2450"/><stop offset="1" stop-color="#05060f"/></radialGradient>
+    <radialGradient id="planet_terraform-o" cx="0.38" cy="0.35" r="0.7"><stop offset="0" stop-color="#7fd0ff"/><stop offset="0.6" stop-color="#2a76c8"/><stop offset="1" stop-color="#0f3570"/></radialGradient>
+    <radialGradient id="planet_terraform-a" cx="0.5" cy="0.5" r="0.5"><stop offset="0.7" stop-color="#9fe8ff" stop-opacity="0.7"/><stop offset="1" stop-color="#9fe8ff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#planet_terraform-sp)"/><g fill="#fff" opacity="0.85"><circle cx="22" cy="30" r="1.6"/><circle cx="104" cy="24" r="1.4"/><circle cx="98" cy="104" r="1.6"/><circle cx="28" cy="100" r="1.2"/><circle cx="64" cy="12" r="1.2"/></g>
+  <circle cx="64" cy="70" r="46" fill="url(#planet_terraform-a)"/>
+  <circle cx="64" cy="70" r="34" fill="url(#planet_terraform-o)"/>
+  <path d="M38 56 C46 46 58 48 62 56 C66 64 56 70 50 78 C44 84 34 76 34 66 Z M70 76 C78 70 92 72 96 80 C94 92 82 100 74 96 C66 92 64 82 70 76 Z M68 44 C74 38 86 42 90 50 C84 54 74 54 68 44 Z" fill="#4cbf5a"/>
+  <rect x="62" y="24" width="4" height="14" fill="#6b3f1e"/>
+  <circle cx="64" cy="22" r="9" fill="#3fae5a" stroke="#9ff0a8" stroke-width="1.5"/>
+</svg>

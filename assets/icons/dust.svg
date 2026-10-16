@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="du-g" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff0c2"/><stop offset=".45" stop-color="#f0c070" stop-opacity=".8"/><stop offset="1" stop-color="#c08a3a" stop-opacity="0"/></radialGradient></defs>
+  <path d="M10 118 L66 62" stroke="#e2b35e" stroke-width="16" stroke-linecap="round" opacity=".25"/>
+  <g fill="#e2b35e"><circle cx="18" cy="108" r="3"/><circle cx="28" cy="102" r="3.5"/><circle cx="24" cy="94" r="2.5"/><circle cx="38" cy="90" r="4"/><circle cx="34" cy="80" r="2.5"/><circle cx="48" cy="84" r="3"/><circle cx="46" cy="72" r="3.5"/><circle cx="56" cy="76" r="2.5"/></g>
+  <circle cx="80" cy="48" r="40" fill="url(#du-g)"/>
+  <g fill="none" stroke-linecap="round"><path d="M80 48 m-4 0 a4 4 0 1 1 8 0 a10 10 0 1 1 -18 -4 a16 16 0 1 1 30 10 a22 22 0 1 1 -40 -14" stroke="#c88a2a" stroke-width="5"/><path d="M80 48 m-4 0 a4 4 0 1 1 8 0 a10 10 0 1 1 -18 -4 a16 16 0 1 1 30 10 a22 22 0 1 1 -40 -14" stroke="#fff0c2" stroke-width="2" stroke-dasharray="1 6"/></g>
+  <g fill="#e8c27a"><circle cx="114" cy="22" r="3"/><circle cx="118" cy="62" r="2.5"/><circle cx="100" cy="90" r="3"/><circle cx="56" cy="14" r="2.5"/></g>
+</svg>

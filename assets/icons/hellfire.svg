@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><linearGradient id="hf-g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ffcf4a"/><stop offset=".4" stop-color="#e02a10"/><stop offset="1" stop-color="#5a0510"/></linearGradient><linearGradient id="hf-c" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#fff2a8"/><stop offset="1" stop-color="#ff6a1a"/></linearGradient></defs>
+  <path d="M4 120 C2 96 14 86 12 64 C24 74 26 84 30 80 C26 58 36 40 50 28 C50 50 60 56 64 50 C62 30 72 14 86 6 C84 30 98 40 100 58 C104 52 106 44 104 36 C120 52 126 80 124 120 Z" fill="url(#hf-g)"/>
+  <path d="M18 120 C16 104 24 96 24 84 C32 92 36 96 40 92 C38 78 46 66 56 58 C58 74 66 78 70 72 C70 60 78 50 86 44 C86 62 96 70 98 84 C104 80 106 74 106 68 C114 82 114 104 112 120 Z" fill="url(#hf-c)" opacity=".9"/>
+  <g fill="#ffb02e"><circle cx="30" cy="40" r="2.5"/><circle cx="110" cy="22" r="2.5"/><circle cx="66" cy="10" r="2"/><circle cx="18" cy="54" r="1.8"/></g>
+</svg>

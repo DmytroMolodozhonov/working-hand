@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><linearGradient id="board-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6c27a"/><stop offset="1" stop-color="#b8743a"/></linearGradient></defs>
+  <path d="M0 98 Q20 80 40 92 T80 90 T128 86 V124 H0 Z" fill="#2f7fd0"/>
+  <path d="M0 98 Q20 80 40 92 T80 90 T128 86" fill="none" stroke="#bfe6ff" stroke-width="4" stroke-linecap="round"/>
+  <g transform="rotate(-22 64 64)">
+    <path d="M8 66 C20 52 84 50 120 62 C84 76 20 78 8 66 Z" fill="url(#board-w)" stroke="#fff0d0" stroke-width="2"/>
+    <path d="M18 64 C40 60 84 60 112 62" fill="none" stroke="#7a4a20" stroke-width="3" stroke-linecap="round"/>
+    <path d="M30 72 L24 86 L38 74 Z" fill="#7a4a20"/>
+  </g>
+  <g fill="#ffffff"><circle cx="20" cy="100" r="3"/><circle cx="96" cy="98" r="3"/><circle cx="108" cy="104" r="2"/></g>
+</svg>

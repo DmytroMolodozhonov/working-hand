@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="planet_create-sp" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#1b2450"/><stop offset="1" stop-color="#05060f"/></radialGradient>
+    <radialGradient id="planet_create-p" cx="0.38" cy="0.35" r="0.7"><stop offset="0" stop-color="#c9b49a"/><stop offset="0.6" stop-color="#7e6a58"/><stop offset="1" stop-color="#3a3028"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#planet_create-sp)"/><g fill="#fff" opacity="0.85"><circle cx="22" cy="30" r="1.6"/><circle cx="104" cy="24" r="1.4"/><circle cx="98" cy="104" r="1.6"/><circle cx="28" cy="100" r="1.2"/><circle cx="64" cy="12" r="1.2"/></g>
+  <circle cx="64" cy="64" r="30" fill="#ffcf8a" opacity="0.15"/>
+  <g fill="#ff9a4a" opacity="0.4"><path d="M40.5 34.7 L31.5 45.3 L13 20.5 Z"/><path d="M99.4 46.9 L92.6 37.1 L120.6 25 Z"/><path d="M40.3 96.3 L31.7 87.7 L15 113 Z"/><path d="M100.2 82.4 L91.8 93.6 L120 106 Z"/></g>
+  <g fill="#8e7c6a" stroke="#c9b49a" stroke-width="1.5"><circle cx="36" cy="40" r="8"/><circle cx="96" cy="42" r="6.5"/><circle cx="36" cy="92" r="6.5"/><circle cx="96" cy="88" r="8"/></g>
+  <circle cx="64" cy="64" r="20" fill="url(#planet_create-p)"/>
+  <g fill="#4a3d32" opacity="0.6"><circle cx="58" cy="58" r="4"/><circle cx="72" cy="72" r="3"/><circle cx="70" cy="56" r="2"/></g>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><linearGradient id="wave-g" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#6fd0ff"/><stop offset="0.6" stop-color="#2a86d6"/><stop offset="1" stop-color="#0f4f9a"/></linearGradient></defs>
+  <path d="M4 116 C8 70 34 28 76 24 C104 22 124 42 120 64 C116 80 96 82 90 70 C86 60 96 52 104 58 C100 44 82 42 70 54 C54 70 56 98 76 116 Z" fill="url(#wave-g)"/>
+  <path d="M30 70 C40 50 56 38 74 36" fill="none" stroke="#b6e8ff" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+  <g fill="#ffffff">
+    <circle cx="76" cy="26" r="6"/><circle cx="88" cy="25" r="6"/><circle cx="100" cy="28" r="6"/><circle cx="110" cy="34" r="6"/><circle cx="117" cy="44" r="5.5"/><circle cx="120" cy="56" r="5"/><circle cx="64" cy="30" r="5"/><circle cx="54" cy="36" r="4"/>
+    <circle cx="124" cy="22" r="2.5" opacity="0.8"/><circle cx="96" cy="14" r="2" opacity="0.8"/><circle cx="114" cy="16" r="3" opacity="0.8"/>
+  </g>
+  <path d="M0 116 Q16 108 32 116 T64 116 T96 116 T128 116 V124 H0 Z" fill="#1a6bbf"/>
+</svg>

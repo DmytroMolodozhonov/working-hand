@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="brewing-g" cx="35%" cy="40%" r="70%"><stop offset="0" stop-color="#6b7180"/><stop offset="0.5" stop-color="#33363e"/><stop offset="1" stop-color="#16171b"/></radialGradient>
+    <radialGradient id="brewing-p" cx="50%" cy="50%" r="60%"><stop offset="0" stop-color="#d4ff7a"/><stop offset="1" stop-color="#3fbf3a"/></radialGradient>
+    <radialGradient id="brewing-f" cx="50%" cy="80%" r="70%"><stop offset="0" stop-color="#fff2a0"/><stop offset="0.5" stop-color="#ff9a1f"/><stop offset="1" stop-color="#e8361c"/></radialGradient>
+  </defs>
+  <g fill="none" stroke="#e8fff0" stroke-width="4" stroke-linecap="round" opacity="0.55">
+    <path d="M46 36 C40 28 52 22 46 12"/><path d="M80 34 C74 24 88 20 82 8"/>
+  </g>
+  <path d="M40 124 L88 108 M40 108 L88 124" stroke="#6b4423" stroke-width="7" stroke-linecap="round"/>
+  <path d="M42 120 C34 104 48 98 46 86 C56 94 58 80 64 72 C70 82 72 94 82 86 C80 98 94 104 86 120 Z" fill="url(#brewing-f)"/>
+  <path d="M18 50 C10 74 18 98 64 100 C110 98 118 74 110 50 Z" fill="url(#brewing-g)" stroke="#7d8391" stroke-width="3"/>
+  <ellipse cx="64" cy="48" rx="48" ry="12" fill="#2c2f36" stroke="#8d93a1" stroke-width="3"/>
+  <ellipse cx="64" cy="49" rx="40" ry="8" fill="url(#brewing-p)"/>
+  <g fill="#c8ff8a" stroke="#3aa33a" stroke-width="2">
+    <circle cx="48" cy="42" r="6"/><circle cx="72" cy="38" r="8"/><circle cx="88" cy="44" r="4"/><circle cx="60" cy="26" r="4"/><circle cx="82" cy="20" r="3"/>
+  </g>
+  <g fill="#ffffff" opacity="0.8"><circle cx="46" cy="40" r="1.8"/><circle cx="69" cy="35" r="2.4"/></g>
+</svg>

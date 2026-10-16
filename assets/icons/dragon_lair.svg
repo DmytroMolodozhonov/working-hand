@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="dragon_lair-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9a3b8"/><stop offset="1" stop-color="#55506a"/></linearGradient>
+    <radialGradient id="dragon_lair-e" cx="50%" cy="85%" r="75%"><stop offset="0" stop-color="#ffb43a"/><stop offset="0.45" stop-color="#c8401c"/><stop offset="1" stop-color="#1a0a0a"/></radialGradient>
+    <radialGradient id="dragon_lair-c" cx="45%" cy="35%" r="65%"><stop offset="0" stop-color="#fff2a0"/><stop offset="1" stop-color="#d18f12"/></radialGradient>
+  </defs>
+  <path d="M2 122 L30 50 L44 60 L64 10 L84 44 L96 36 L126 122 Z" fill="url(#dragon_lair-m)" stroke="#3a3548" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M64 10 L56 30 L64 26 L70 36 L74 28 Z M30 50 L26 62 L34 58 Z" fill="#f2f0f8"/>
+  <path d="M22 122 C22 84 38 58 64 58 C90 58 106 84 106 122 Z" fill="url(#dragon_lair-e)" stroke="#2a2436" stroke-width="3"/>
+  <path d="M40 76 L44 86 L48 74 M80 74 L84 86 L88 76" fill="#3a3548"/>
+  <path d="M30 122 C36 104 50 96 64 96 C78 96 92 104 98 122 Z" fill="url(#dragon_lair-c)" stroke="#9a6a0c" stroke-width="2"/>
+  <g fill="#ffe27a" stroke="#9a6a0c" stroke-width="1.5"><ellipse cx="48" cy="112" rx="6" ry="2.5"/><ellipse cx="66" cy="104" rx="6" ry="2.5"/><ellipse cx="82" cy="114" rx="6" ry="2.5"/><ellipse cx="60" cy="118" rx="5" ry="2"/></g>
+  <path d="M70 96 L74 88 L80 96 Z" fill="#e8284a" stroke="#7a0a1e" stroke-width="1.5"/>
+  <g fill="#ffb43a"><circle cx="52" cy="78" r="1.8"/><circle cx="74" cy="72" r="1.5"/><circle cx="66" cy="84" r="1.2"/></g>
+</svg>

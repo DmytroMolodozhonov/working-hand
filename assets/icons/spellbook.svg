@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="spellbook-l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a4f2a"/><stop offset="1" stop-color="#4f2210"/></linearGradient>
+    <radialGradient id="spellbook-glow"><stop offset="0" stop-color="#e6d0ff" stop-opacity="0.9"/><stop offset="0.5" stop-color="#a86bff" stop-opacity="0.4"/><stop offset="1" stop-color="#a86bff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect x="30" y="14" width="80" height="104" rx="5" fill="#f3e6c4" stroke="#9a7a48" stroke-width="2.5"/>
+  <path d="M104 22 L104 112 M108 22 L108 110" stroke="#c8ad78" stroke-width="1.5"/>
+  <rect x="18" y="8" width="84" height="108" rx="6" fill="url(#spellbook-l)" stroke="#2e1206" stroke-width="3"/>
+  <rect x="18" y="8" width="14" height="108" rx="5" fill="#3f1a0a"/>
+  <path d="M18 24 L32 24 M18 100 L32 100" stroke="#c99a3a" stroke-width="3"/>
+  <rect x="38" y="16" width="56" height="92" rx="3" fill="none" stroke="#c99a3a" stroke-width="2" opacity="0.7"/>
+  <circle cx="66" cy="60" r="26" fill="url(#spellbook-glow)"/>
+  <circle cx="66" cy="60" r="16" fill="none" stroke="#e6d0ff" stroke-width="2.5"/>
+  <path d="M66 44 L66 76 M58 52 L74 68 M74 52 L58 68" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="94" y="52" width="20" height="18" rx="3" fill="#d9a83a" stroke="#7a5410" stroke-width="2.5"/>
+  <circle cx="104" cy="61" r="3.5" fill="#7a5410"/>
+  <path d="M98 10 L102 10 L102 18 Z M98 114 L102 114 L102 106 Z" fill="#d9a83a"/>
+</svg>

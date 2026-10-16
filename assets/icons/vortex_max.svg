@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="vortex_max-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a8fe0"/><stop offset="1" stop-color="#062c66"/></linearGradient>
+    <radialGradient id="vortex_max-h" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#8fe0ff" stop-opacity="0.45"/><stop offset="1" stop-color="#8fe0ff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="62" cy="66" r="62" fill="url(#vortex_max-h)"/>
+  <ellipse cx="62" cy="112" rx="60" ry="13" fill="#0a3e86"/>
+  <ellipse cx="62" cy="112" rx="34" ry="7" fill="none" stroke="#bff0ff" stroke-width="3"/>
+  <path d="M4 18 Q62 -4 120 18 Q96 50 80 76 Q70 94 64 112 Q58 94 48 76 Q32 50 4 18 Z" fill="url(#vortex_max-g)" opacity="0.85"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M4 18 Q62 40 120 18" stroke="#ffffff" stroke-width="6"/>
+    <path d="M108 32 Q62 54 20 36" stroke="#bff0ff" stroke-width="5.5"/>
+    <path d="M30 52 Q64 66 96 50" stroke="#ffffff" stroke-width="5"/>
+    <path d="M88 66 Q62 80 40 68" stroke="#bff0ff" stroke-width="4.5"/>
+    <path d="M48 84 Q64 92 78 84" stroke="#ffffff" stroke-width="4"/>
+    <path d="M72 96 Q62 102 56 96" stroke="#bff0ff" stroke-width="3"/>
+  </g>
+  <g fill="#bff0ff"><circle cx="8" cy="46" r="3.5"/><circle cx="118" cy="52" r="3.5"/><circle cx="16" cy="70" r="2.5"/><circle cx="110" cy="76" r="2.5"/></g>
+  <circle cx="106" cy="22" r="17" fill="#ffd23a" opacity="0.22"/><path d="M106 4 L110.5 17.5 L124 22 L110.5 26.5 L106 40 L101.5 26.5 L88 22 L101.5 17.5 Z" fill="#ffd23a" stroke="#b8860b" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

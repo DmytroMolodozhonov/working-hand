@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="lq-g" cx="40%" cy="40%" r="60%"><stop offset="0" stop-color="#f3ecff"/><stop offset=".5" stop-color="#b6a6cf"/><stop offset="1" stop-color="#6e6488" stop-opacity=".2"/></radialGradient></defs>
+  <rect x="58" y="26" width="46" height="40" fill="#8a8a8a" stroke="#3a3a44" stroke-width="2"/>
+  <path d="M58 66 V82 q4 10 8 0 V74 q4 14 9 0 V86 q4 10 8 0 V72 q5 12 9 0 V80 q4 8 8 0 V66 Z" fill="#8a8a8a" stroke="#3a3a44" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M58 46 H104 M80 26 V46 M70 46 V66 M92 46 V66" stroke="#3a3a44" stroke-width="1.5"/>
+  <path d="M52 30 C38 34 30 44 34 54 C24 54 20 66 28 72 C20 80 30 92 42 86 C46 96 58 92 58 84" fill="url(#lq-g)" opacity=".9"/>
+  <g fill="#cbbde6"><circle cx="76" cy="104" r="6"/><circle cx="92" cy="110" r="4"/><circle cx="62" cy="112" r="3.5"/></g>
+  <path d="M8 104 L30 70" stroke="#b6a6cf" stroke-width="4" stroke-dasharray="3 6" stroke-linecap="round"/>
+  <rect x="2" y="104" width="22" height="8" rx="3" transform="rotate(-56 13 108)" fill="#6b3f1e"/>
+</svg>

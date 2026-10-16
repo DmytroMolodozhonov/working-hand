@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="rescue-g" cx="50%" cy="55%" r="55%"><stop offset="0" stop-color="#7dffb0" stop-opacity="0.35"/><stop offset="1" stop-color="#7dffb0" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rescue-h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6f6f"/><stop offset="1" stop-color="#c0262c"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#rescue-g)"/>
+  <path d="M64 114 C22 86 8 62 16 40 C24 18 52 16 64 38 C76 16 104 18 112 40 C120 62 106 86 64 114 Z" fill="url(#rescue-h)" stroke="#ffb3b3" stroke-width="2"/>
+  <ellipse cx="38" cy="40" rx="9" ry="6" fill="#fff" opacity="0.45" transform="rotate(-30 38 40)"/>
+  <path d="M56 46 H72 V60 H86 V76 H72 V90 H56 V76 H42 V60 H56 Z" fill="#fff" stroke="#f1d6d6" stroke-width="1.5" stroke-linejoin="round"/>
+  <g fill="#6ff09a"><path transform="translate(14 96) scale(.7)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/><path transform="translate(112 94) scale(.8)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/><path transform="translate(108 16) scale(.6)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"/><circle cx="20" cy="18" r="3"/><circle cx="100" cy="112" r="2.5"/></g>
+</svg>
