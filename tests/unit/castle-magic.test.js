@@ -10,7 +10,7 @@ import { BLOCK } from '../../src/world/Terrain.js';
 
 test('the words: «Create a Castle», «Создай замок» — never «замок» alone, never the house', () => {
     for (const t of ['Create a Castle', 'криейт э касл', 'крейт э кастл', 'создай замок', 'Сотвори замок', 'построй замок']) assert.equal(matchSpell(t), 'CreateCastle', t);
-    for (const t of ['замок', 'открой замок', 'lock', 'я создал замок', 'как классно иметь свой трон', 'как классно, что я создал свой замок с троном', 'строить замок']) assert.notEqual(matchSpell(t), 'CreateCastle', t);
+    for (const t of ['замок', 'открой замок', 'lock', 'создай', 'касл', 'кастл', 'create', 'create a house', 'create an ice castle', 'замок открой', 'мой замок самый красивый', 'я создал замок', 'как классно иметь свой трон', 'как классно, что я создал свой замок с троном', 'строить замок']) assert.notEqual(matchSpell(t), 'CreateCastle', t);
     assert.equal(matchSpell('Create a House'), 'CreateHouse');
 });
 
