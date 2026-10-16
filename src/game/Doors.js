@@ -677,8 +677,9 @@ export class Doors {
         const g = this.game;
         if (door.shakeT > 0) return;
         door.shakeT = 0.3;
-        g.sound?.playClang?.(0.12);
-        if (pushed) { if (Math.hypot(door.x - g.character.group.position.x, door.z - g.character.group.position.z) < 30) g.hud?.setVoice?.('🔒 Дверь заперта — её трясёт, но замок держит. Откройте «Алохоморой»', true); }
+        const near = Math.hypot(door.x - g.character.group.position.x, door.z - g.character.group.position.z) < 30;
+        if (near) g.sound?.playClang?.(0.12); // (the clang has no place of its own: a far door is not heard)
+        if (pushed) { if (near) g.hud?.setVoice?.('🔒 Дверь заперта — её трясёт, но замок держит. Откройте «Алохоморой»', true); }
         else g.locks?.lockedTried?.(door);
     }
 

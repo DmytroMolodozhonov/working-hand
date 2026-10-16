@@ -616,7 +616,7 @@ export class IceMagic {
             const at = iceLocal(S, s * 1.25, HR + 0.1);
             const id = rec.id + (s < 0 ? 'gL' : 'gR');
             const was = g.doors?.list?.get(id);
-            g.doors?._place?.({ id, x: at.x, y: F - 0.5, z: at.z, ry, color: 0xcdeffd, a: was?.a || 0, w: 2.5, h: 6, gen: true, gate: true, ice: true, mirror: s > 0 });
+            g.doors?._place?.({ id, x: at.x, y: F - 0.5, z: at.z, ry, color: 0xcdeffd, a: was?.a || 0, w: 2.5, h: 6, gen: true, banded: true, ice: true, mirror: s > 0 }); // (banded: not a castle's locked gate — open to everybody)
         }
         if (!this.look.has(rec.id) && g.scene) {
             const group = new THREE.Group();

@@ -373,7 +373,8 @@ export class Ships {
         s.layout.doors.forEach((d, k) => {
             for (const side of [-1, 1]) {
                 const id = `${s.id}:dr${k}${side < 0 ? 'L' : 'R'}`;
-                g.doors._place({ id, x: s.st.x, y: 0, z: s.st.z, ry: s.st.yaw, color, a: 0, w: d.half, h: d.h, mirror: side > 0, gate: true, gen: true, ship: s, local: { x: side * d.half / 2, y: d.y, z: d.z } });
+                // (banded: a gate's look, not a castle's lock — a `gate` is locked for everybody: the crew rattled it for ever)
+                g.doors._place({ id, x: s.st.x, y: 0, z: s.st.z, ry: s.st.yaw, color, a: 0, w: d.half, h: d.h, mirror: side > 0, banded: true, gen: true, ship: s, local: { x: side * d.half / 2, y: d.y, z: d.z } });
                 const door = g.doors.list.get(id);
                 if (door) { door.ship = s; door.local = { x: side * d.half / 2, y: d.y, z: d.z, z0: d.z0, z1: d.z1, half: d.half }; s.doors.push(door); }
             }
