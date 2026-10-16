@@ -18,16 +18,13 @@ export class SunBeam {
         const add = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
         this.group = new THREE.Group();
         this.group.visible = false;
-        // the beam (wide glow + bright core), its bottom at the hand
+        // ONE column of light from the hand: soft layers of the same straight shape, one inside the
+        // other (bright in the middle, fading to the edge), so it reads as a single beam, not two
         this.glowMat = add(0xffc94a, 0);
         this.coreMat = add(0xfff4c8, 0);
-        const beam = new THREE.CylinderGeometry(2.2, 0.9, SKY, 20, 1, true);
-        beam.translate(0, SKY / 2, 0);
-        const core = new THREE.CylinderGeometry(0.7, 0.3, SKY, 12, 1, true);
-        core.translate(0, SKY / 2, 0);
-        this.beam = new THREE.Mesh(beam, this.glowMat);
-        this.core = new THREE.Mesh(core, this.coreMat);
-        this.group.add(this.beam, this.core);
+        const column = (r) => { const g = new THREE.CylinderGeometry(r, r, SKY, 20, 1, true); g.translate(0, SKY / 2, 0); return g; };
+        this.layers = Array.from({ length: 10 }, (_, i) => ({ mesh: new THREE.Mesh(column(1.8 - i * 0.16), i < 5 ? this.glowMat : this.coreMat) }));
+        this.layers.forEach((l) => this.group.add(l.mesh));
         // the opening in the clouds: a bright widening ring and the sun's disc
         this.ringMat = add(0xffe08a, 0);
         this.ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1, 48), this.ringMat);
@@ -82,10 +79,10 @@ export class SunBeam {
         const fadeOut = t > DUR - 1.5 ? (DUR - t) / 1.5 : 1;
         // the beam shoots up in 0.6 s
         const up = Math.min(1, t / 0.6);
-        this.beam.scale.set(1 + Math.sin(t * 9) * 0.06, up, 1 + Math.sin(t * 9) * 0.06);
-        this.core.scale.set(1, up, 1);
-        this.glowMat.opacity = 0.45 * fadeOut;
-        this.coreMat.opacity = 0.9 * fadeOut;
+        const w = 1 + Math.sin(t * 9) * 0.05;
+        for (const l of this.layers) l.mesh.scale.set(w, up, w);
+        this.glowMat.opacity = 0.07 * fadeOut;
+        this.coreMat.opacity = 0.11 * fadeOut;
         // the clouds open: a ring widening to ~60 m, the sun's disc behind it
         const open = Math.max(0, Math.min(1, (t - 0.5) / 2.5));
         const R = 4 + open * 60;
