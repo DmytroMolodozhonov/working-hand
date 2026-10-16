@@ -44,6 +44,10 @@ export const TREE_RADIUS = 26;
 /** The biggest house (level 5) reaches this far from its middle (m): another house must stand twice as far. */
 export const HOUSE_REACH = 22;
 
+/** The plan's grid (cells round the middle — housePlan): reused, a stamp per plan says which are written. */
+const GR = 48, GW = 2 * GR + 1, GL0 = -10, GLN = 96, GN = GW * GW * GLN;
+let _stamp = null, _val = null, _gen = 0;
+
 const STOREY = 7; // layers of a ground storey (walls 0..6; the upper floor's slab at 7)
 const UPPER = 6; // layers of walls of the upper storey
 const BED_W = 2.5, BED_L = 5.5; // (Beds.js)
@@ -123,14 +127,28 @@ export function housePlan({ seed, level, x, z, G, face = 0, woods = [], minD = 0
         : pick(leavesOf != null ? [BLOCK.THATCH, BLOCK.THATCH, BLOCK.PLANKS_DARK, trim] : [BLOCK.PLANKS_DARK, trim]);
     const hip = rng() < 0.3;
     // ---- writing
-    // (a number for a cell — its place from the middle — not a "x,L,z" string: a big house writes ~40 000
-    // cells, and the strings made its plan take tens of milliseconds of a frame)
-    const map = new Map(); // key -> block
+    // (a cell is a place in a grid round the middle — not a "x,L,z" string, nor a Map: a big house writes
+    // ~40 000 cells, and its plan took tens of milliseconds of a frame. The first write of a cell gives its
+    // order, the last its block — as a Map would; a cell outside the grid goes in a Map, `extra`.)
+    if (!_stamp) { _stamp = new Int32Array(GN); _val = new Uint16Array(GN); }
+    if (++_gen > 2e9) { _stamp.fill(0); _gen = 1; }
+    const gen = _gen, written = [], extra = new Map(), extraKeys = [];
     const fill = [];
     const W = (a, b) => { const [rx, rz] = rotLot(mirror * a, b, face); return [x + rx, z + rz]; };
     const Lw = (l) => G + 1 + l;
     const [ra, rb] = rotLot(mirror, 0, face), [sa, sb] = rotLot(0, 1, face); // (rotLot without an array a cell)
-    const put = (a, b, l, t) => map.set(((ra * a + sa * b + 512) * 1024 + l + 512) * 1024 + rb * a + sb * b + 512, t);
+    const put = (a, b, l, t) => {
+        const rx = ra * a + sa * b, rz = rb * a + sb * b;
+        if (rx >= -GR && rx <= GR && rz >= -GR && rz <= GR && l >= GL0 && l < GL0 + GLN) {
+            const i = ((l - GL0) * GW + rz + GR) * GW + rx + GR;
+            if (_stamp[i] !== gen) { _stamp[i] = gen; written.push(i); }
+            _val[i] = t;
+        } else {
+            const k = ((rx + 512) * 1024 + l + 512) * 1024 + rz + 512;
+            if (!extra.has(k)) { written.push(-1 - extraKeys.length); extraKeys.push(k); }
+            extra.set(k, t);
+        }
+    };
     const box = (a0, a1, l0, l1, b0, b1, t) => {
         for (let a = Math.min(a0, a1); a <= Math.max(a0, a1); a++) for (let b = Math.min(b0, b1); b <= Math.max(b0, b1); b++) {
             for (let l = Math.min(l0, l1); l <= Math.max(l0, l1); l++) put(a, b, l, t);
@@ -278,9 +296,13 @@ export function housePlan({ seed, level, x, z, G, face = 0, woods = [], minD = 0
     const own = new Set();
     // (the magic builds it from the ground up: the lowest layers first, then outwards from the middle —
     // sorted as numbers: the layer, the distance from the middle, then the order written)
-    const order = new Float64Array(map.size);
-    for (const [k, t] of map) {
-        const rx = Math.floor(k / 1048576) - 512, l = (Math.floor(k / 1024) % 1024) - 512, rz = (k % 1024) - 512;
+    const order = new Float64Array(written.length);
+    for (const i of written) {
+        let rx, l, rz, t;
+        if (i >= 0) { rx = (i % GW) - GR; rz = (Math.floor(i / GW) % GW) - GR; l = Math.floor(i / (GW * GW)) + GL0; t = _val[i]; } else {
+            const k = extraKeys[-1 - i];
+            rx = Math.floor(k / 1048576) - 512; l = (Math.floor(k / 1024) % 1024) - 512; rz = (k % 1024) - 512; t = extra.get(k);
+        }
         const cx = x + rx, cL = G + 1 + l, cz = z + rz;
         order[raw.length] = ((l + 512) * 4096 + Math.abs(rx) + Math.abs(rz)) * 65536 + raw.length;
         raw.push([cx, cL, cz, t]);
