@@ -33,6 +33,10 @@ import { numId, makeWayStep, askWay } from './Crowd.js';
 import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { skeletonDamage } from './Skeletons.js';
+import { SHADOW_NEAR } from '../core/Shadows.js';
+
+/** A sailor doing these is moved every frame, however far (its blows land on the frame they come). */
+const BUSY = new Set(['attack', 'block', 'shoot', 'brace', 'cast', 'shield', 'climb', 'flail']);
 const SAILOR_TURN = 7; // rad/s — a sailor turning to his foe on deck (FaceTarget: «лицом к цели»)
 
 /** Damage of a drop from `h` m onto a deck (as Levitation.fallDamage). */
@@ -975,8 +979,18 @@ export class Sailors {
             }
             this._place(s);
             this._drawBuoys(list);
+            const me = g.character.group.position;
             for (const v of list) {
-                v.model.update(dt, { mode: v.mode === 'swim' ? 'walk' : v.mode, speed: v.speed });
+                // (far sailors: moved less often and drawn as one shape each — VillagerModel.setFar; a fighting one every frame)
+                const d = Math.hypot(v.x - me.x, v.z - me.z), busy = BUSY.has(v.mode);
+                v.animT = (v.animT || 0) + dt;
+                const far = d > SHADOW_NEAR && !busy;
+                if (!far) v.model.setFar(false);
+                if (d < 35 || busy || v.animT > (d < 60 ? 0.066 : 0.12)) {
+                    v.model.update(v.animT, { mode: v.mode === 'swim' ? 'walk' : v.mode, speed: v.speed });
+                    v.animT = 0;
+                    if (far) v.model.setFar(true);
+                }
                 if (v.sayT > 0) v.sayT -= dt;
                 if (v.bubble) v.bubble.update(dt, _w.set(v.x, v.y + 4.4, v.z), g.camera);
             }
