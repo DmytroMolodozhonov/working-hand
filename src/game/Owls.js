@@ -54,6 +54,7 @@ import { realmAt } from '../world/Planets.js';
 import { crowdStep } from './CrowdSources.js';
 import { bossOfWords, bossTo, BOSS_FINDERS } from './OwlBosses.js';
 import { irMaterial, IR } from '../fx/Iridescent.js';
+import { mergeInto } from '../core/MergeGeometry.js';
 
 export const OWL = {
     HP: 12, // (a scroll's lightning −20, «Авада» −25: one is enough; «Тандервейв» −8 two)
@@ -223,12 +224,15 @@ function heartTexture() {
  * The owl (forward +Z, its feet at the origin, ~1.2 m to its ear tufts). userData: the joints the
  * animation moves (tilt: the body; head; lids; tufts; wings {root, sh, el, sec[], pri[]}; tail; legs).
  */
+const _merged = {}; // (owlModel's merged pieces: the same for every owl)
 export function owlModel() {
     const { G, M } = shared();
     const g = new THREE.Group();
     g.name = 'owl';
     const mesh = (geo, m, parent, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; parent.add(o); return o; };
     const feather = (parent, len, w, x, y, z, rx = 0, ry = 0, rz = 0) => { const f = mesh(G.feather, M.plume, parent, x, y, z, w, 1, len); f.rotation.set(rx, ry, rz); f.castShadow = false; return f; };
+    // (pieces of one material that never move apart become one shape — the same for every owl: made once)
+    const one = [];
 
     // the body: a round barrel, a little forward-leaning (the middle 0.52 m above the feet)
     const tilt = new THREE.Group();
@@ -236,7 +240,9 @@ export function owlModel() {
     g.add(tilt);
     mesh(G.ball, M.body, tilt, 0, 0, 0, 0.29, 0.38, 0.27);
     mesh(G.ball, M.face, tilt, 0, -0.04, 0.15, 0.23, 0.3, 0.13); // (the pale breast)
-    for (let i = 0; i < 5; i++) feather(tilt, 0.26, 0.55, (i % 2 ? 1 : -1) * 0.07, 0.2 - i * 0.07, -0.18, -0.35, (i % 2 ? -1 : 1) * 0.2, 0); // (the back's mantle)
+    const mantle = [];
+    for (let i = 0; i < 5; i++) mantle.push(feather(tilt, 0.26, 0.55, (i % 2 ? 1 : -1) * 0.07, 0.2 - i * 0.07, -0.18, -0.35, (i % 2 ? -1 : 1) * 0.2, 0)); // (the back's mantle)
+    one.push(['mantle', tilt, mantle]);
 
     // the head: big and round, set straight on the body (it turns, not the neck)
     const head = new THREE.Group();
@@ -244,11 +250,12 @@ export function owlModel() {
     tilt.add(head);
     mesh(G.ball, M.body, head, 0, 0, 0, 0.25, 0.22, 0.22);
     const lids = [];
+    const face = { disc: [], eye: [], pupil: [], glint: [] };
     for (const s of [-1, 1]) {
-        mesh(G.ball, M.face, head, s * 0.095, -0.005, 0.15, 0.125, 0.135, 0.06); // (the facial disc)
-        mesh(G.small, M.eye, head, s * 0.093, 0.01, 0.195, 0.062);
-        mesh(G.small, M.pupil, head, s * 0.093, 0.01, 0.238, 0.036);
-        mesh(G.small, M.glint, head, s * 0.08, 0.028, 0.252, 0.011);
+        face.disc.push(mesh(G.ball, M.face, head, s * 0.095, -0.005, 0.15, 0.125, 0.135, 0.06)); // (the facial disc)
+        face.eye.push(mesh(G.small, M.eye, head, s * 0.093, 0.01, 0.195, 0.062));
+        face.pupil.push(mesh(G.small, M.pupil, head, s * 0.093, 0.01, 0.238, 0.036));
+        face.glint.push(mesh(G.small, M.glint, head, s * 0.08, 0.028, 0.252, 0.011));
         const lid = new THREE.Group();
         lid.position.set(s * 0.093, 0.01, 0.195);
         head.add(lid);
@@ -256,6 +263,7 @@ export function owlModel() {
         lid.rotation.x = -1.2;
         lids.push(lid);
     }
+    for (const k in face) one.push(['face:' + k, head, face[k]]);
     const beak = mesh(G.cone, M.horn, head, 0, -0.06, 0.215, 0.032, 0.085, 0.032);
     beak.rotation.x = Math.PI / 2 + 0.55;
     const tufts = [];
@@ -263,8 +271,7 @@ export function owlModel() {
         const t = new THREE.Group();
         t.position.set(s * 0.12, 0.16, 0.02);
         head.add(t);
-        feather(t, 0.17, 0.5, 0, 0, 0, 1.2, 0, -s * 0.3);
-        feather(t, 0.13, 0.4, s * 0.03, -0.01, -0.02, 1.0, 0, -s * 0.45);
+        one.push(['tuft' + s, t, [feather(t, 0.17, 0.5, 0, 0, 0, 1.2, 0, -s * 0.3), feather(t, 0.13, 0.4, s * 0.03, -0.01, -0.02, 1.0, 0, -s * 0.45)]]);
         tufts.push(t);
     }
 
@@ -286,7 +293,9 @@ export function owlModel() {
             sh.add(p);
             sec.push(p);
         }
-        for (let i = 0; i < 4; i++) feather(sh, 0.17, 0.6, 0.05 + i * 0.08, 0.02, 0.08);
+        const coverts = [];
+        for (let i = 0; i < 4; i++) coverts.push(feather(sh, 0.17, 0.6, 0.05 + i * 0.08, 0.02, 0.08));
+        one.push(['coverts', sh, coverts]); // (in the wing's own space: the same for both, the left one mirrored by its root)
         const el = new THREE.Group();
         el.position.x = 0.35;
         sh.add(el);
@@ -307,7 +316,9 @@ export function owlModel() {
     const tail = new THREE.Group();
     tail.position.set(0, -0.26, -0.2);
     tilt.add(tail);
-    for (let k = 0; k < 5; k++) feather(tail, 0.28 - Math.abs(k - 2) * 0.025, 0.7, (k - 2) * 0.035, 0, 0, 0.1, (k - 2) * 0.16, 0);
+    const fan = [];
+    for (let k = 0; k < 5; k++) fan.push(feather(tail, 0.28 - Math.abs(k - 2) * 0.025, 0.7, (k - 2) * 0.035, 0, 0, 0.1, (k - 2) * 0.16, 0));
+    one.push(['tail', tail, fan]);
 
     // the legs: short and feathered, dark talons (three forward, one back)
     const legs = [];
@@ -319,15 +330,19 @@ export function owlModel() {
         const foot = new THREE.Group();
         foot.position.y = -0.19;
         hip.add(foot);
+        const talons = [];
         for (const a of [-0.4, 0, 0.4, Math.PI]) {
             const toe = new THREE.Group();
             toe.rotation.y = a;
             foot.add(toe);
             const c = mesh(G.cone, M.horn, toe, 0, 0.01, 0.055, 0.016, 0.09, 0.016);
             c.rotation.x = Math.PI / 2 + 0.25;
+            talons.push(c);
         }
+        one.push(['talons', foot, talons]);
         legs.push({ hip, foot });
     }
+    for (const [key, parent, list] of one) mergeInto(parent, list, _merged, key);
     g.userData = { tilt, head, lids, tufts, wings, tail, legs, model: 'owl' };
     return g;
 }

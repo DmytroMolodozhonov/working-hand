@@ -2971,6 +2971,7 @@ export class Game {
         mark('мультиплеер');
 
         this.fx.update(dt);
+        mark('эффекты'); // (sparks, smoke, flashes — apart from «мир», the land and its pieces)
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
         // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)

@@ -224,7 +224,7 @@ export class Cauldrons {
         const g = this.game;
         if (this.auth) {
             this._caveT -= dt;
-            if (this._caveT <= 0) { this._caveT = 2; this._caves(); }
+            if (this._caveT <= 0) { this._caveT = 2; this._caves(); this._unloadCaves(); }
             this._shopT -= dt;
             if (this._shopT <= 0) { this._shopT = 4; this._shops(); }
         }
@@ -589,6 +589,30 @@ export class Cauldrons {
             const y = g.collision.groundAt ? g.collision.groundAt(spot.x, spot.z, spot.y + 1) : spot.y;
             const c = this.spawn({ id, x: spot.x, y, z: spot.z, yaw: roll.yaw, tilt: roll.tipped ? Math.PI / 2 : 0, tdir: roll.dir, old: true });
             this._send(c);
+            c.cave = cv.id; // (as found: put away again when everybody is far — _unloadCaves)
+        }
+    }
+
+    /**
+     * (host) A cave's cauldron nobody has touched, far behind every player, is put away (its cave is looked
+     * into again when somebody comes back — the same one, from the same seed): a long flight over the world
+     * otherwise left every cave's cauldron in the scene. One that was moved, filled or brewed in stays.
+     */
+    _unloadCaves() {
+        const g = this.game, FAR = 300;
+        const players = g._playerPositions?.() || [g.character.group.position];
+        for (const c of [...this.list.values()]) {
+            if (c.cave == null || c.touched || c.lev || c.fall) continue;
+            if (!players.every((q) => Math.abs(q.x - c.x) > FAR || Math.abs(q.z - c.z) > FAR)) continue;
+            let inIt = false;
+            for (const L of g.items?.loose.values() || []) if (L.inCaul === c.id) { inIt = true; break; }
+            if (inIt) continue;
+            if (c.boxId != null) g.collision.removeBox(c.boxId);
+            g.scene.remove(c.group);
+            disposeModel(c.group);
+            this.list.delete(c.id);
+            this._hintAt.delete(c.id);
+            this.caves.delete(c.cave);
         }
     }
 
@@ -959,6 +983,7 @@ export class Cauldrons {
     /** (host) Tell everybody this cauldron's state (with a one-off event to show). */
     _send(c, ev = null, kind = null) {
         if (!this.auth) return;
+        if (c.cave != null) c.touched = true; // (changed by somebody: kept)
         this.game.sync?.cauldron?.({ t: 'caul', d: this._rec(c), ev: ev || undefined, k: kind || undefined });
     }
 

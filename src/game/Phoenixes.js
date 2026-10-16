@@ -49,6 +49,7 @@ import { newUid } from './ItemTypes.js';
 import { registerKind } from './CreatureImpact.js';
 import { creditKill } from './Mana.js';
 import { earthly } from '../world/Planets.js';
+import { mergeInto } from '../core/MergeGeometry.js';
 
 export const PHOENIX = {
     HP: 30,
@@ -244,13 +245,19 @@ export function phoenixModel() {
     torso.scale.set(0.4, 0.42, 0.78);
     const chest = mesh(new THREE.SphereGeometry(1, 14, 10), breast, tilt, 0, -0.06, 0.36);
     chest.scale.set(0.34, 0.36, 0.42);
+    // (pieces that never move apart — the same material on the same joint — become one shape at the end:
+    // a phoenix drew 131 pieces)
+    const one = [];
+    const back = [];
     // the back's small feathers (a mantle of orange tips over the crimson)
     for (let i = 0; i < 6; i++) {
         const f = new THREE.Mesh(featherGeo(0.5, 0.11, 0xa8102a, 0xff8a2a), plume);
         f.position.set((i % 2 ? 1 : -1) * 0.12, 0.36 - i * 0.02, 0.35 - i * 0.16);
         f.rotation.set(-0.12, (i % 2 ? -1 : 1) * 0.25, 0);
         tilt.add(f);
+        back.push(f);
     }
+    one.push([tilt, back]);
 
     // neck and head
     const neck = new THREE.Group();
@@ -259,13 +266,16 @@ export function phoenixModel() {
     const neckMesh = mesh(new THREE.CylinderGeometry(0.11, 0.17, 0.5, 10), crimson, neck, 0, 0.25, 0);
     neckMesh.castShadow = true;
     // a golden ruff where the neck meets the breast
+    const ruff = [];
     for (let i = 0; i < 8; i++) {
         const f = new THREE.Mesh(featherGeo(0.28, 0.07, 0xff9a2a, 0xffd860), plume);
         const a = (i / 8) * Math.PI * 2;
         f.position.set(Math.sin(a) * 0.15, 0.12, Math.cos(a) * 0.15);
         f.rotation.set(1.9, a, 0);
         neck.add(f);
+        ruff.push(f);
     }
+    one.push([neck, ruff]);
     const head = new THREE.Group();
     head.position.y = 0.48;
     neck.add(head);
@@ -277,20 +287,26 @@ export function phoenixModel() {
     beak.rotation.x = Math.PI / 2;
     const hook = mesh(new THREE.ConeGeometry(0.035, 0.1, 8), gold, head, 0, -0.09, 0.44);
     hook.rotation.x = Math.PI * 0.85;
+    one.push([head, [beak, hook]]);
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffd23a });
+    const eyes = [], pupils = [];
     for (const s of [-1, 1]) {
-        mesh(new THREE.SphereGeometry(0.045, 8, 6), eyeMat, head, s * 0.15, 0.04, 0.12);
-        mesh(new THREE.SphereGeometry(0.024, 6, 5), dark, head, s * 0.175, 0.045, 0.14);
+        eyes.push(mesh(new THREE.SphereGeometry(0.045, 8, 6), eyeMat, head, s * 0.15, 0.04, 0.12));
+        pupils.push(mesh(new THREE.SphereGeometry(0.024, 6, 5), dark, head, s * 0.175, 0.045, 0.14));
     }
+    one.push([head, eyes], [head, pupils]);
     // the crest: a fan of plumes rising back from the crown, gold-tipped
     const crest = new THREE.Group();
     crest.position.set(0, 0.16, -0.02);
     head.add(crest);
+    const plumes = [];
     for (let i = 0; i < 5; i++) {
         const f = new THREE.Mesh(featherGeo(0.36 + (i === 2 ? 0.1 : 0) - Math.abs(i - 2) * 0.04, 0.06, 0xc81a2a, 0xffb02a, -0.05, 0xfff0a0), plume);
         f.rotation.set(0.5 + Math.abs(i - 2) * 0.1, (i - 2) * 0.2, 0); // (swept back over the nape)
         crest.add(f);
+        plumes.push(f);
     }
+    one.push([crest, plumes]);
 
     // the wings (the left one is the right one mirrored)
     const wings = [];
@@ -313,11 +329,14 @@ export function phoenixModel() {
             sec.push(p);
         }
         // coverts: short crimson feathers over the arm (fuller)
+        const coverts = [];
         for (let i = 0; i < 6; i++) {
             const f = new THREE.Mesh(featherGeo(0.32, 0.1, 0x8e0b20, 0xd8302a), plume);
             f.position.set(0.12 + i * 0.16, 0.035, 0.08);
             sh.add(f);
+            coverts.push(f);
         }
+        one.push([sh, coverts]);
         const el = new THREE.Group();
         el.position.x = 1.05;
         sh.add(el);
@@ -382,14 +401,17 @@ export function phoenixModel() {
         const foot = new THREE.Group();
         foot.position.y = -0.5;
         knee.add(foot);
+        const toes = [], claws = [];
         for (const [a, l] of [[-0.45, 0.24], [0, 0.28], [0.45, 0.24], [Math.PI, 0.16]]) {
             const toe = new THREE.Group();
             toe.rotation.y = a;
             foot.add(toe);
-            mesh(new THREE.BoxGeometry(0.05, 0.04, l), gold, toe, 0, 0, l / 2);
+            toes.push(mesh(new THREE.BoxGeometry(0.05, 0.04, l), gold, toe, 0, 0, l / 2));
             const claw = mesh(new THREE.ConeGeometry(0.025, 0.08, 5), dark, toe, 0, -0.02, l + 0.03);
             claw.rotation.x = Math.PI / 2 + 0.6;
+            claws.push(claw);
         }
+        one.push([foot, toes], [foot, claws]);
         legs.push({ hip, knee, foot });
     }
 
@@ -401,6 +423,7 @@ export function phoenixModel() {
         halo.scale.setScalar(4);
         tilt.add(halo);
     }
+    for (const [parent, list] of one) mergeInto(parent, list);
     g.userData = { tilt, neck, head, crest, wings, tail, streamers, legs, halo, glowMats, torso };
     return g;
 }
