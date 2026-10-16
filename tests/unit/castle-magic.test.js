@@ -96,3 +96,16 @@ test('the place ahead does not fit (something built there): the castle finds a p
     assert.ok(m, `it began: ${g.hud.said}`);
     assert.ok(Math.hypot(m.x, m.z) >= 16 && m.z > -30, `near the first place, ahead of the caster: ${m.x}, ${m.z}`);
 });
+
+test('said «Create a Castle» (the phrase → the spell → the castle begins); too little mana — one clear reason', () => {
+    const { g } = world();
+    g.castleMagic.testAim = { x: 0, z: 0 };
+    assert.equal(matchSpell('создай замок'), 'CreateCastle');
+    assert.equal(g.castleMagic.cast('CreateCastle', false), 'CreateCastle');
+    assert.ok(g.castleMagic.magic, 'it begins');
+    const w2 = world();
+    w2.g.castleMagic.testAim = { x: 0, z: 0 };
+    w2.g.combat.fatigue = 120;
+    assert.equal(w2.g.castleMagic.cast('CreateCastle', true), null);
+    assert.match(w2.g.hud.said, /маны: нужно 500/);
+});

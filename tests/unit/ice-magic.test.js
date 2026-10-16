@@ -198,3 +198,13 @@ test('ice made in the warm stands a game day, then melts away by two days; in th
     for (let i = 0; i < 10; i++) cold.M._warmth(ICE_SPELL.MELT_END);
     assert.equal(iceCount(cold.data, cold.plan.cells), c0, 'in the cold: never melts');
 });
+
+test('the words heard before the phrase ended: the player is still told to stamp (the castle then rises)', () => {
+    const { g } = world();
+    assert.equal(g.iceMagic.cast('IceCastle', false), 'IceCastle'); // (an unfinished phrase)
+    assert.match(g.hud.said, /топните|опустите/);
+    g.hud.said = '';
+    assert.equal(g.iceMagic.cast('IceCastle', true), null); // (the same phrase, finished: nothing new)
+    g.iceMagic.stamp();
+    assert.ok(g.iceMagic.magic, 'the stamp starts the castle');
+});

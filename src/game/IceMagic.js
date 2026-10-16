@@ -161,7 +161,9 @@ export class IceMagic {
         if (name === 'IceCastle') {
             this.pending = { at: performance.now(), stomp0: g.currentPose?.stompAt || 0 };
             this._slam.hi = 0;
-            say(this._legsSeen() ? '❄️ Теперь <b>топните ногой</b> — от неё пойдёт ледяной пол' : '❄️ Теперь <b>резко опустите обе руки вниз</b> (камера не видит ног — или отойдите, чтобы ноги были видны, и топните)');
+            // (shown at once, even heard from an unfinished phrase: the magic waits for the stamp — the final words
+            // of the same phrase change nothing, and without this line the player never knew to stamp)
+            g.hud?.setVoice?.(this._legsSeen() ? '❄️ Теперь <b>топните ногой</b> — от неё пойдёт ледяной пол' : '❄️ Теперь <b>резко опустите обе руки вниз</b> (камера не видит ног — или отойдите, чтобы ноги были видны, и топните)', true);
         } else {
             const b = this._aimGround();
             if (!b) return say('🌉 Покажите рукой на землю там, куда вести мост (до 60 м)');
