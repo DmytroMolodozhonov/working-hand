@@ -175,7 +175,11 @@ vGlow = glow;
         geo.setAttribute('color', new THREE.BufferAttribute(out.col, 3));
         geo.setAttribute('sway', new THREE.BufferAttribute(out.sway, 1));
         geo.setAttribute('glow', new THREE.BufferAttribute(out.glow, 1));
-        geo.computeBoundingSphere();
+        if (out.box) {
+            const b = out.box;
+            geo.boundingBox = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
+            geo.boundingSphere = geo.boundingBox.getBoundingSphere(new THREE.Sphere());
+        } else geo.computeBoundingSphere();
         return geo;
     }
 

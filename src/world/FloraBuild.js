@@ -95,7 +95,18 @@ export function buildFlora(data, c) {
             }
         }
     }
-    return { pos: P.slice(0, v * 3), nor: N.slice(0, v * 3), col: C.slice(0, v * 3), sway: S.slice(0, v), glow: G.slice(0, v), count, verts: v };
+    // (its box: made here — in a worker, off the frame — not by a pass over every blade when it goes in)
+    let ax = Infinity, ay = Infinity, az = Infinity, bx = -Infinity, by = -Infinity, bz = -Infinity;
+    for (let i = 0; i < v * 3; i += 3) {
+        const x = P[i], y = P[i + 1], z = P[i + 2];
+        if (x < ax) ax = x;
+        if (x > bx) bx = x;
+        if (y < ay) ay = y;
+        if (y > by) by = y;
+        if (z < az) az = z;
+        if (z > bz) bz = z;
+    }
+    return { pos: P.slice(0, v * 3), nor: N.slice(0, v * 3), col: C.slice(0, v * 3), sway: S.slice(0, v), glow: G.slice(0, v), count, verts: v, box: v ? [ax, ay, az, bx, by, bz] : null };
 }
 
 /** Patches of thicker, taller grass and of thinner (0…1, smooth over ~10 m; hashed lattice). */
