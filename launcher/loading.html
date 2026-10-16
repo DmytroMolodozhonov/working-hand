@@ -14,6 +14,7 @@
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
+    html { background: #0b0820; } /* (dark from the very first frame, never the browser's grey/white) */
     body {
         background: radial-gradient(ellipse at 50% 35%, var(--bg2), var(--bg1) 70%);
         color: var(--text); font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -140,14 +141,33 @@
     // the window: no Windows frame, the menu's size (the game's window does the same) — zns_window.py
     const win = (action, extra) => fetch('/api/window', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...(extra || {}) }) }).then((r) => r.json()).then((j) => !!j.ok).catch(() => false);
+    // (as WindowControls.framePresented: the first paint reported — Chrome does it when the frame is on
+    // the screen — and two more frames; or after 3 s anyway)
+    const presented = (max = 3000) => new Promise((resolve) => {
+        let done = false;
+        const finish = (how) => {
+            if (done) return;
+            done = true;
+            const fp = performance.getEntriesByType('paint')[0];
+            resolve({ how, t: Math.round(performance.now()), fp: fp ? Math.round(fp.startTime) : null });
+        };
+        setTimeout(() => finish('timeout'), max);
+        const frames = () => requestAnimationFrame(() => requestAnimationFrame(() => finish('paint')));
+        try {
+            if (performance.getEntriesByType('paint').length) frames();
+            else new PerformanceObserver((list, obs) => { obs.disconnect(); frames(); }).observe({ type: 'paint', buffered: true });
+        } catch (e) { frames(); }
+    });
     (async () => {
         for (let i = 0; i < 3; i++) {
             if (i) await new Promise((r) => setTimeout(r, 600));
             if (await win('frameless', { width: 1180, height: 780, innerWidth: innerWidth, innerHeight: innerHeight, dpr: devicePixelRatio || 1 })) {
                 // (the game's page in this same window takes its window look before its first paint)
                 try { sessionStorage.setItem('zns-app-window', '1'); } catch (e) { /* */ }
-                // hidden until now (cut, sized, placed): shown in its final look, in one step
-                setTimeout(() => win('reveal'), 60);
+                // hidden until now (cut, sized, placed): shown in its final look, in one step — only once
+                // a frame of it is really on the screen (before that the window would be grey;
+                // the launcher's own loading picture is seen meanwhile — zns_splash.py)
+                win('reveal', { ...(await presented()), page: 'loading' });
                 break;
             }
         }

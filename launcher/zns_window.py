@@ -36,6 +36,17 @@ Windows frame where Chrome last put it, then was cut and resized. Now the launch
 the new window and hide it at once (cloaked and moved off the screen); it is cut, sized and placed
 while hidden, and shown («reveal», the page asks once it has its final look; by itself after 1.5 s)
 in one step. The menu window has rounded corners (the cut is a rounded rectangle); full screen not.
+
+The strip at the bottom in full screen (the author: «внизу полоса, видна панель задач»): Windows does not
+let a window with a frame be bigger than the screen plus its borders (SM_CYMAXTRACK, through
+WM_WINDOWPOSCHANGING) — the window of the whole monitor PLUS Chrome's title bar above it was made
+shorter, and the page ended 20–40 px above the bottom of the screen. Full screen is now sized without
+that check (SWP_NOSENDCHANGING): the page covers the whole monitor, the taskbar's place too.
+
+The grey window at the start: shown before Chrome had drawn anything into it (its graphics process
+starts later than the page). The page now says «reveal» only after its first frame was really on the
+screen (or after a while anyway); meanwhile the launcher shows its own loading picture (zns_splash.py).
+Every step is written in the log with its sizes and times («[окно …]» lines, logs/launcher.log).
 """
 
 import os
@@ -48,15 +59,43 @@ ACTIONS = ("minimize", "close", "frameless", "fullscreen", "moveby", "focus", "b
 PAGE_CLASS = "Chrome_RenderWidgetHostHWND"  # (Chrome's / Edge's child window over the web page)
 APP_CLASS = "Chrome_WidgetWin_1"  # (Chrome's / Edge's top-level windows)
 CORNER_CSS = 12  # px (CSS): the menu window's rounded corners
-REVEAL_AFTER = 1.5  # s: a hidden window cut by a page that never says «reveal» is shown anyway
+REVEAL_AFTER = 4.0  # s: a hidden window cut by a page that never says «reveal» is shown anyway
+#   (the page waits for its first frame on the screen — at most ~3 s — and then says it)
 
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
+SWP_NOSENDCHANGING = 0x0400  # (no WM_WINDOWPOSCHANGING: Windows does not shrink a window bigger than the screen)
 HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
 
 _full = {"on": False}  # (the game is in full screen: kept on top while in front)
 _lock = threading.Lock()  # (a cut is never checked while it is being made)
 _keeper = {"thread": None}
 _reveal = {}  # hidden window -> where to show it (x, y)
+_t0 = {"t": time.time()}  # (when the browser was started: the log's times are counted from it)
+_shown_hooks = []  # () -> None: called once the game's window is seen (the launcher's loading picture goes)
+
+
+def mark_start():
+    _t0["t"] = time.time()
+
+
+def _log(msg):
+    """A line in the log (the launcher's / server's print goes to logs/…log) — never to the player."""
+    try:
+        print(f"[окно +{time.time() - _t0['t']:.2f} с] {msg}", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def on_shown(fn):
+    _shown_hooks.append(fn)
+
+
+def _shown():
+    while _shown_hooks:
+        try:
+            _shown_hooks.pop(0)()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _user32():
@@ -170,6 +209,43 @@ def keep_needed(now, want):
 def corner_radius(full, dpr):
     """The cut's rounded corners in real pixels: the menu window has them, full screen has none."""
     return 0 if full else max(0, round(CORNER_CSS * (float(dpr) or 1)))
+
+
+def target_area(full, monitor, work):
+    """Where the window must fit: full screen — the WHOLE monitor (the taskbar's place too), the menu —
+    the work area (above the taskbar)."""
+    return tuple(monitor) if full else tuple(work)
+
+
+def window_layout(full, monitor, work, win, vis, inner, page, dpr, menu=(1180, 780)):
+    """All the geometry of «frameless» / «fullscreen» (pure: tested anywhere). inner: the page's size in
+    CSS px, menu: the menu's size in CSS px, page: Chrome's window over the page (or None).
+    Returns (x, y, w, h, region, radius, area, offsets)."""
+    dpr = float(dpr or 1) or 1
+    inner_w, inner_h = round(float(inner[0]) * dpr), round(float(inner[1]) * dpr)
+    area = target_area(full, monitor, work)
+    if full:
+        target = (area[2] - area[0], area[3] - area[1])
+    else:
+        target = (round(float(menu[0]) * dpr), round(float(menu[1]) * dpr))
+    offsets = page_offsets(win, page, inner_w, inner_h) or frame_offsets(win, vis, inner_w, inner_h)
+    x, y, w, h, region = clip_layout(win, vis, inner_w, inner_h, target[0], target[1], area, offsets)
+    return x, y, w, h, region, corner_radius(full, dpr), area, offsets
+
+
+def uncovered(win_pos, region, monitor):
+    """How many px of the monitor the page leaves bare on each side (left, top, right, bottom) — in full
+    screen all must be 0 (a bottom strip: the taskbar is seen)."""
+    x, y = win_pos
+    l, t, r, b = region
+    ml, mt, mr, mb = monitor
+    return (max(0, x + l - ml), max(0, y + t - mt), max(0, mr - (x + r)), max(0, mb - (y + b)))
+
+
+def size_flags(full):
+    """SetWindowPos flags for sizing: full screen is bigger than the screen (Chrome's title bar is above
+    it, cut away) — Windows' size check is skipped, else it shrinks the window and a strip shows."""
+    return SWP_NOACTIVATE | (SWP_NOSENDCHANGING if full else 0)
 
 
 def is_app_title(title):
@@ -321,6 +397,8 @@ def _show(user32, hwnd, pos=None):
     t = threading.Timer(0.35, lambda: _repaint_later(found))
     t.daemon = True
     t.start()
+    _log(f"показано: окно {_rect_of(user32, hwnd)}, страница {_page_rect(user32, hwnd)}, обрезка {_cut_now(user32, hwnd)}")
+    _shown()
     return True
 
 
@@ -329,7 +407,7 @@ def _repaint(user32, hwnd):
     frame, as after a restore) and a full redraw — the cut keeps the extra pixel unseen."""
     try:
         wl, wt, wr, wb = _rect_of(user32, hwnd)
-        flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+        flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING  # (full screen keeps its size)
         user32.SetWindowPos(hwnd, None, 0, 0, wr - wl, wb - wt + 1, flags)
         user32.SetWindowPos(hwnd, None, 0, 0, wr - wl, wb - wt, flags)
         user32.RedrawWindow(hwnd, None, None, 0x0001 | 0x0080 | 0x0100 | 0x0400)  # INVALIDATE | ALLCHILDREN | UPDATENOW | FRAME
@@ -355,6 +433,7 @@ def _reveal_later(found, pos):
             import ctypes
             with _lock:
                 if found in _reveal:
+                    _log(f"страница не сказала «reveal» за {REVEAL_AFTER} с — показываю сам")
                     _show(_user32(), ctypes.c_void_p(found), _reveal.pop(found))
         except Exception:  # noqa: BLE001
             pass
@@ -411,10 +490,16 @@ def hide_new_window(before, seconds=20.0, poll=0.01):
                         hwnd = ctypes.c_void_p(h)
                         if not _wanted_cut(user32, hwnd) and not user32.GetPropW(hwnd, "ZNS_CUT_LT"):
                             _hide(user32, hwnd)  # (not cut yet: nobody has seen it)
+                            _log(f"новое окно браузера появилось и спрятано: {_rect_of(user32, hwnd)}")
+                        else:
+                            _log("новое окно уже обрезано страницей — не прячу")
+                            _shown()
                     return True
         except Exception:  # noqa: BLE001
             pass
         time.sleep(poll)
+    _log(f"новое окно браузера не появилось за {seconds:.0f} с")
+    _shown()
     return False
 
 
@@ -501,6 +586,8 @@ def window_action(action, data=None):
             user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
         elif action == "reveal":
             # the page has its final look (cut, sized, its window class set): now it is seen, in one step
+            _log(f"страница: «reveal» ({data.get('how', '?')}; кадр на экране через {data.get('t', '?')} мс от начала "
+                 f"страницы, первая отрисовка {data.get('fp', '?')} мс, {data.get('page', '')})")
             with _lock:
                 _show(user32, hwnd, _reveal.pop(found, None))
         elif action in ("focus", "blur"):
@@ -547,22 +634,21 @@ def window_action(action, data=None):
             else:
                 mon = user32.MonitorFromWindow(hwnd, 2)
             user32.GetMonitorInfoW(ctypes.c_void_p(mon), ctypes.byref(mi))
-            a = mi.rcMonitor if full else mi.rcWork  # (full screen covers the taskbar; the menu stays above it)
-            area = (a.left, a.top, a.right, a.bottom)
-            if full:
-                target = (area[2] - area[0], area[3] - area[1])
-            else:
-                target = (round(float(data.get("width") or 1180) * dpr), round(float(data.get("height") or 780) * dpr))
+            monitor = (mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom)
+            work = (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom)
+            page = _page_rect(user32, hwnd)
             # the page's place: exactly from Chrome's window over the page; else measured from the frame
-            offsets = page_offsets(win, _page_rect(user32, hwnd), inner_w, inner_h) or frame_offsets(win, vis, inner_w, inner_h)
-            x, y, w, h, region = clip_layout(win, vis, inner_w, inner_h, target[0], target[1], area, offsets)
-            radius = corner_radius(full, dpr)
+            x, y, w, h, region, radius, area, offsets = window_layout(
+                full, monitor, work, win, vis, (data.get("innerWidth"), data.get("innerHeight")), page, dpr,
+                (data.get("width") or 1180, data.get("height") or 780))
+            _log(f"{action}: монитор {monitor}, рабочая область {work}, масштаб {dpr}, окно {win}, видимая рамка {vis}, "
+                 f"страница {page} ({inner_w}×{inner_h}), смещения {offsets}, {'скрыто' if hidden else 'видно'}")
             with _lock:
                 # the cut first (not drawn yet), then the size and place: the frame is never seen
                 # (a hidden window gets its size where it is — off the screen — and is shown placed)
                 _set_cut(user32, hwnd, region, False, radius)
                 at = rect()[:2] if hidden else (x, y)
-                user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST if full else HWND_NOTOPMOST), at[0], at[1], w, h, SWP_NOACTIVATE)
+                user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST if full else HWND_NOTOPMOST), at[0], at[1], w, h, size_flags(full))
                 # what Windows really did (a refused size): the cut follows, the page stays inside the area
                 rw = rect()
                 fx, fy, fregion = fit_after_move((x, y, x + rw[2] - rw[0], y + rw[3] - rw[1]), offsets, (region[2] - region[0], region[3] - region[1]), area)
@@ -572,12 +658,19 @@ def window_action(action, data=None):
                     _reveal_later(hwnd.value, (fx, fy))  # (shown when the page has its final look)
                 elif (fx, fy) != (x, y):
                     user32.SetWindowPos(hwnd, None, fx, fy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
+            gap = uncovered((fx, fy), fregion, monitor)
+            _log(f"{action}: просил окно {w}×{h} в ({x}, {y}), вышло {rw[2] - rw[0]}×{rw[3] - rw[1]}; обрезка {fregion} "
+                 f"(радиус {radius}); страница на экране ({fx + fregion[0]}, {fy + fregion[1]}, {fx + fregion[2]}, {fy + fregion[3]})"
+                 + (f"; НЕ ДОКРЫТО монитора слева/сверху/справа/снизу: {gap}" if full and any(gap) else ""))
+            if not hidden:
+                _shown()
             _full["on"] = full
             if full and not hidden:
                 user32.SetForegroundWindow(hwnd)
             _start_keeper()  # (the cut is kept from now on: put back whenever it is lost)
         return True
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        _log(f"{action}: ошибка {e!r}")
         return False
 
 

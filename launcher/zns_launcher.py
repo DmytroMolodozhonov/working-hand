@@ -48,7 +48,7 @@ REPO = "DmytroMolodozhonov/working-hand"
 BRANCH = "main-fbxy0j"
 HERE = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
-LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html", "zns_window.py", "zns_browser.py")
+LAUNCHER_FILES = ("launcher.pyw", "zns_launcher.py", "loading.html", "zns_window.py", "zns_browser.py", "zns_splash.py")
 LOGO_FILES = (("assets/logo/logo.ico", "logo.ico"), ("assets/logo/logo-256.png", "logo.png"))
 OLD_DESKTOP_BATS = ("Зомби не спят.bat", "Волшебство только начинается.bat")  # the old icons (a black window)
 NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: helper programs never flash a black window
@@ -468,6 +468,17 @@ def open_window(url):
                 cmd = zns_browser.window_cmd(exe, url)
             except Exception:  # noqa: BLE001
                 cmd = window_args(exe, url)
+            if zns_window:
+                zns_window.mark_start()
+                # the browser's window is grey for its first seconds: the launcher's own loading picture
+                # is seen at once instead, until the game's window is shown (zns_splash.py)
+                try:
+                    import zns_splash
+                    sp = zns_splash.show(logo=os.path.join(HERE, "logo.png"), log=log)
+                    if sp:
+                        zns_window.on_shown(sp.close)
+                except Exception as e:  # noqa: BLE001
+                    log(f"  (заставки нет: {e})")
             subprocess.Popen(cmd)
             if zns_window:
                 # (the new window is hidden the moment it appears: seen only cut to its final look)

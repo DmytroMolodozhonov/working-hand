@@ -90,6 +90,50 @@ class Clip(unittest.TestCase):
         self.assertEqual(W.app_windows_now(), set()) if sys.platform != "win32" else None
         self.assertFalse(W.hide_new_window(set(), seconds=0)) if sys.platform != "win32" else None
 
+    def test_full_screen_is_the_whole_monitor_not_the_work_area(self):
+        # the author: «внизу полоса — видна панель задач»: full screen must cover the taskbar's place too
+        for dpr, (mw, mh), bar in ((1, (1920, 1080), 48), (1.25, (1920, 1080), 60), (1.5, (2560, 1440), 72), (1.5, (1920, 1080), 72)):
+            monitor, work = (0, 0, mw, mh), (0, 0, mw, mh - bar)
+            self.assertEqual(W.target_area(True, monitor, work), monitor)
+            self.assertEqual(W.target_area(False, monitor, work), work)
+            # the menu window (1180×780 CSS, or less when it does not fit) inside an app window with
+            # Chrome's title bar on top and 8 px invisible borders (all scaled)
+            iw, ih = min(1180, int(mw / dpr)), min(780, int((mh - bar) / dpr))
+            bw, tb = round(8 * dpr), round(31 * dpr)
+            pw, ph = round(iw * dpr), round(ih * dpr)
+            win = (300, 100, 300 + pw + 2 * bw, 100 + ph + tb + bw)
+            vis = (300 + bw, 100, 300 + pw + bw, 100 + ph + tb)
+            page = (300 + bw, 100 + tb, 300 + bw + pw, 100 + tb + ph)
+            x, y, w, h, region, radius, area, offsets = W.window_layout(True, monitor, work, win, vis, (iw, ih), page, dpr)
+            self.assertEqual(area, monitor)
+            self.assertEqual(radius, 0)  # square to the monitor's edges
+            self.assertEqual(W.uncovered((x, y), region, monitor), (0, 0, 0, 0), (dpr, mw, mh))
+            self.assertEqual((x + region[0], y + region[1], x + region[2], y + region[3]), monitor)
+            # the window is bigger than the screen (the title bar above it is cut away): sized without
+            # Windows' check, which would shrink it and leave the strip
+            self.assertGreater(h, mh)
+            self.assertTrue(W.size_flags(True) & W.SWP_NOSENDCHANGING)
+            self.assertFalse(W.size_flags(False) & W.SWP_NOSENDCHANGING)
+            # the menu: inside the work area, rounded, never under the taskbar
+            x, y, w, h, region, radius, area, _ = W.window_layout(False, monitor, work, win, vis, (iw, ih), page, dpr)
+            self.assertEqual(area, work)
+            self.assertGreater(radius, 0)
+            self.assertLessEqual(y + region[3], mh - bar)
+            self.assertGreaterEqual(y + region[1], 0)
+        # a window that Windows did shrink is seen in the log: the bare strip at the bottom is measured
+        self.assertEqual(W.uncovered((-9, -40), (9, 40, 1929, 1060), (0, 0, 1920, 1080)), (0, 0, 0, 60))
+
+    def test_the_loading_picture_is_where_the_menu_window_will_be(self):
+        import zns_splash as S
+        work = (0, 0, 1920, 1032)
+        for dpr in (1, 1.25, 1.5):
+            x, y, w, h = S.splash_rect(work, dpr)
+            # the same place and size as the cut menu window (clip_layout centres it the same way)
+            _, _, _, _, region, _, _, offsets = W.window_layout(False, (0, 0, 1920, 1080), work, (0, 0, 100, 100), (0, 0, 100, 100), (80, 60), (0, 0, 80, 60) if dpr == 1 else None, dpr)
+            self.assertEqual((w, h), (region[2] - region[0], region[3] - region[1]))
+            self.assertEqual((x, y), (work[0] + (1920 - w) // 2, (1032 - h) // 2))
+        self.assertIsNone(S.show(seconds=0)) if sys.platform != "win32" else None
+
     def test_not_on_windows_or_unknown_action_does_nothing(self):
         self.assertFalse(W.window_action("explode"))
         if sys.platform != "win32":

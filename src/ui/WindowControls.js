@@ -18,6 +18,29 @@ async function askServer(action, extra = {}) {
     } catch (e) { return false; }
 }
 
+/**
+ * Resolves once the page has really been put on the screen at its new size: its first paint is reported
+ * (Chrome reports it when the frame was presented) and two more frames came — or after `max` ms anyway.
+ * (The window shown before that was grey for seconds: the browser's graphics start later than the page.)
+ */
+export function framePresented(max = 3000) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (how) => {
+            if (done) return;
+            done = true;
+            const fp = performance.getEntriesByType?.('paint')?.[0];
+            resolve({ how, t: Math.round(performance.now()), fp: fp ? Math.round(fp.startTime) : null });
+        };
+        setTimeout(() => finish('timeout'), max);
+        const frames = () => requestAnimationFrame(() => requestAnimationFrame(() => finish('paint')));
+        try {
+            if (performance.getEntriesByType('paint').length) frames();
+            else new PerformanceObserver((list, obs) => { obs.disconnect(); frames(); }).observe({ type: 'paint', buffered: true });
+        } catch (e) { frames(); }
+    });
+}
+
 /** The menu window's size (the app window takes exactly this size, without the Windows frame). */
 export const MENU_WINDOW = { width: 1180, height: 780 };
 /** (sessionStorage: this tab is the game's app window — index.html takes its look before the first paint) */
@@ -105,8 +128,9 @@ export async function becomeAppWindow({ bar } = {}, doc = document) {
     doc.documentElement.classList.add('app-window');
     try { sessionStorage.setItem(APP_KEY, '1'); } catch (e) { /* */ }
     // the window was hidden while the server cut it and gave it its size: it is shown now, with the
-    // page already in its final look (a moment for the new layout) — never a frame, a strip or a jump
-    setTimeout(() => askServer('reveal'), 60);
+    // page already in its final look — never a frame, a strip or a jump
+    // (only once a frame of the page is really on the screen: never a grey window)
+    framePresented().then((f) => askServer('reveal', { ...f, page: 'game' }));
     for (const b of [].concat(bar || [])) if (b) dragBy(b);
     // the game's full screen covers the taskbar only while the game is in front
     window.addEventListener('focus', () => { if (appFull) askServer('focus'); });

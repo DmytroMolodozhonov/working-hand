@@ -850,6 +850,16 @@ def open_game_window(url):
                         "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
                         "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
                     ]
+                if zw:
+                    zw.mark_start()
+                    # (the browser's window is grey for its first seconds: a loading picture at once — zns_splash.py)
+                    try:
+                        import zns_splash
+                        sp = zns_splash.show(logo=os.path.join(ROOT, "assets", "logo", "logo-256.png"))
+                        if sp:
+                            zw.on_shown(sp.close)
+                    except Exception:  # noqa: BLE001
+                        pass
                 subprocess.Popen(cmd)
                 print(f"  Игра открыта в отдельном окне ({os.path.basename(exe)}, мощная видеокарта)")
                 if zw:
