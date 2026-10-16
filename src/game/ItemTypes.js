@@ -224,7 +224,7 @@ export function rollWand(r = Math.random) {
  * A chest in a village house: mostly food (bread, cheese, pies, steaks), wool,
  * arrows — and rarely something precious (a scroll, a wand, a magic weapon).
  */
-export function rollHouseLoot(r = Math.random, rich = false) {
+export function rollHouseLoot(r = Math.random, rich = false, count = 0) {
     const out = [];
     const n = randInt(r, 2, rich ? 4 : 3);
     for (let i = 0; i < n; i++) {
@@ -233,7 +233,7 @@ export function rollHouseLoot(r = Math.random, rich = false) {
         if (x < 0.10) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) }); // (a village house: a ball of wool now and then)
         else out.push(rollPlainItem(r));
     }
-    return out;
+    return count > 0 ? fitThings(out, count, r) : out;
 }
 
 /**
@@ -301,7 +301,7 @@ export function rollPirateLoot(r = Math.random, room = 'store') {
 }
 
 /** A chest in a sea castle's port: the sailors' stores — food, arrows, wool; sometimes a fishing rod, rarely something precious. */
-export function rollPortLoot(r = Math.random) {
+export function rollPortLoot(r = Math.random, count = 0) {
     const out = [];
     if (LOOT_EXTRA.fishingRod && r() < 0.35) out.push(LOOT_EXTRA.fishingRod(r));
     const n = randInt(r, 2, 3);
@@ -311,14 +311,14 @@ export function rollPortLoot(r = Math.random) {
         if (x < 0.16) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) }); // (the sailors' stores: wool for sails)
         else out.push(rollPlainItem(r));
     }
-    return out;
+    return count > 0 ? fitThings(out, count, r) : out;
 }
 
 /**
  * A ship's chest: ship's food (bread, cheese, meat, pies), something valuable, a weapon now and then —
  * and very often a fishing rod (sailors fish; the rod is the «fishing» feature's thing).
  */
-export function rollShipLoot(r = Math.random, captain = false) {
+export function rollShipLoot(r = Math.random, captain = false, count = 0) {
     const out = [];
     if (LOOT_EXTRA.fishingRod && r() < (captain ? 0.5 : 0.7)) out.push(LOOT_EXTRA.fishingRod(r));
     const n = randInt(r, 2, captain ? 4 : 3);
@@ -328,6 +328,16 @@ export function rollShipLoot(r = Math.random, captain = false) {
         else if (x < 0.10) out.push({ kind: 'cannonball', uid: newUid() }); // (ship's own: cannonballs to throw)
         else out.push(rollPlainItem(r));
     }
+    return count > 0 ? fitThings(out, count, r) : out;
+}
+
+/** How many things an ordinary chest holds, the coin pouch (if it has one) among them (author: three, not four). */
+export const CHEST_THINGS = 3;
+
+/** Make a chest's things exactly `n`: too many — random ones are left out; too few — plain things are added. */
+export function fitThings(out, n = CHEST_THINGS, r = Math.random) {
+    while (out.length > n) out.splice(Math.floor(r() * out.length) % out.length, 1);
+    while (out.length < n) out.push(rollPlainItem(r));
     return out;
 }
 
@@ -419,7 +429,12 @@ export function rollPlainItem(r = Math.random) {
  * now and then (`key`: 25%) ONE precious thing (a wand, a scroll, a magic weapon…), never more.
  * (Coins come apart, in their pouch: Game.openChest.)
  */
-export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE, royal = false } = {}) {
+export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE, royal = false, count = 0 } = {}) {
+    const out = _rollLoot(r, { cave, key, royal });
+    return count > 0 ? fitThings(out, count, r) : out;
+}
+
+function _rollLoot(r, { cave, key, royal }) {
     const out = [];
     if (r() < key) out.push(rollKeyItem(r));
     // (a royal chest in the keep: many times more fine things than plain ones — a second precious thing too)

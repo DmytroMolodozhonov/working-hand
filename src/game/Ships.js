@@ -449,9 +449,9 @@ export class Ships {
     }
 
     /** (host) A ship chest opens: food, money, weapons — and often a fishing rod. */
-    lootChest(chest, pos) {
+    lootChest(chest, pos, count = 0) {
         const g = this.game;
-        const items = s0(chest)?.cls.magic ? rollPirateLoot(Math.random, chest.local?.room) : rollShipLoot(Math.random, chest.local?.room === 'captain'); // (the black ship: the pirates' treasure — ItemTypes.rollPirateLoot)
+        const items = s0(chest)?.cls.magic ? rollPirateLoot(Math.random, chest.local?.room) : rollShipLoot(Math.random, chest.local?.room === 'captain', count); // (the black ship: the pirates' treasure — ItemTypes.rollPirateLoot)
         items.forEach((it, i) => {
             const p = pos.clone().add(_v.set((i - (items.length - 1) / 2) * 0.8, 2.2, 0));
             if (it.kind === 'weapon') {

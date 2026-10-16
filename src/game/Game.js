@@ -979,7 +979,7 @@ export class Game {
                 const pouch = this._chestPouch(chest);
                 if (!chest.ship) pouch.push(...(this.houseMagic?.scrollFor(by) || [])); // (the first «Create a House» scroll of each player is easy to find)
                 if (chest.ship) {
-                    chest._openedBy = by; this.ships.lootChest(chest, rp); // (a ship's chest: often a fishing rod)
+                    chest._openedBy = by; this.ships.lootChest(chest, rp, Math.max(1, 3 - pouch.length)); // (a ship's chest: often a fishing rod)
                     for (const it of pouch) this.items.spawnLoose(it, rp.clone().add(new THREE.Vector3(0, 1.1, 0)), { hover: true, rise: true }); // (within the hand's reach)
                 } else {
                     // (Creative: the test cave's chests and the test chest by the pedestals always hold a precious thing — to try things out)

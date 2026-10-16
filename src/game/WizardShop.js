@@ -8,7 +8,7 @@
  *    pays for it (so nobody gets rich buying here and selling at the market).
  */
 
-import { newUid, itemValue, SPELL_RU } from './ItemTypes.js';
+import { newUid, itemValue, SPELL_RU, fitThings } from './ItemTypes.js';
 import { bookSpells } from './BookBirds.js';
 import { rollChestArmor } from './ArmorTypes.js';
 
@@ -16,7 +16,7 @@ const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const randInt = (r, a, b) => a + Math.floor(r() * (b - a + 1));
 
 /** A chest in a wizards' house: 1–3 things (a rich house a little more). */
-export function rollWizardHouseLoot(r = Math.random, rich = false) {
+export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0) {
     const out = [];
     const n = randInt(r, 1, rich ? 3 : 2) + (rich && r() < 0.3 ? 1 : 0);
     for (let i = 0; i < n; i++) {
@@ -32,7 +32,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false) {
     // (the wizards keep magic armour more often than anybody — and now and then a magic robe: ArmorTypes)
     const arm = rollChestArmor(r, { wizard: true });
     if (arm) out.push(arm);
-    return out;
+    return count > 0 ? fitThings(out, count, r) : out;
 }
 
 /** The price of a scroll in a tower's shop (coins). */

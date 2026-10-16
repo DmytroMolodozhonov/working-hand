@@ -39,3 +39,18 @@ test('loot balance: ship chests have food, scrolls and bows too', () => {
     const s = shares((r => () => rollShipLoot(r, false))(rng(5)));
     assert.ok(s.scroll > 0.08 && s.bow > 0.08 && (s.food + (s.cheese || 0)) > s.scroll);
 });
+
+test('an ordinary chest holds exactly three things (a coin pouch counts as one)', async () => {
+    const { fitThings, CHEST_THINGS } = await import('../../src/game/ItemTypes.js');
+    assert.equal(CHEST_THINGS, 3);
+    const r = rng(11);
+    for (let i = 0; i < 2000; i++) {
+        for (const n of [3, 2]) {
+            assert.equal(rollLoot(r, { cave: i % 2 === 0, key: i % 3 ? 0.25 : 1, royal: i % 7 === 0, count: n }).length, n);
+            assert.equal(rollHouseLoot(r, i % 2 === 0, n).length, n);
+            assert.equal(rollPortLoot(r, n).length, n);
+            assert.equal(rollShipLoot(r, i % 2 === 0, n).length, n);
+        }
+    }
+    assert.equal(fitThings([1, 2, 3, 4, 5].map((k) => ({ kind: 'bread', k })), 3, r).length, 3);
+});
