@@ -87,6 +87,17 @@ class Clip(unittest.TestCase):
         for t in ("", "Новая вкладка - Google Chrome", "YouTube"):
             self.assertFalse(W.is_app_title(t), t)
         self.assertIn("reveal", W.ACTIONS)
+        # only the browser's window is the game's: the launcher's loading picture (or any other program)
+        # with the same title is never cut, sized or shown in its place (the game's window stayed hidden)
+        self.assertTrue(W.is_game_window(W.GAME_TITLE, W.APP_CLASS))
+        self.assertFalse(W.is_game_window(W.GAME_TITLE, "TkTopLevel"))
+        self.assertFalse(W.is_game_window(W.GAME_TITLE, "Tk"))
+        self.assertFalse(W.is_game_window("Новая вкладка - Google Chrome", W.APP_CLASS))
+        import zns_splash as S
+        self.assertNotEqual(S.TITLE, W.GAME_TITLE)
+        # a page that never asks (an error on it): its hidden window is shown by itself soon
+        self.assertLessEqual(W.RESCUE_AFTER, 10)
+        self.assertGreater(W.RESCUE_AFTER, W.REVEAL_AFTER)
         self.assertEqual(W.app_windows_now(), set()) if sys.platform != "win32" else None
         self.assertFalse(W.hide_new_window(set(), seconds=0)) if sys.platform != "win32" else None
 

@@ -132,7 +132,7 @@ def find_game_window(user32):
                 # is never the game: it was cut and shown instead, and the game's window stayed hidden)
                 cls = ctypes.create_unicode_buffer(64)
                 user32.GetClassNameW(ctypes.c_void_p(h), cls, 64)
-                if cls.value == APP_CLASS:
+                if is_game_window(buf.value, cls.value):
                     found.append(h)
         return True
 
@@ -251,6 +251,12 @@ def size_flags(full):
     """SetWindowPos flags for sizing: full screen is bigger than the screen (Chrome's title bar is above
     it, cut away) — Windows' size check is skipped, else it shrinks the window and a strip shows."""
     return SWP_NOACTIVATE | (SWP_NOSENDCHANGING if full else 0)
+
+
+def is_game_window(title, cls):
+    """The game's window: the browser's (Chrome / Edge) window with exactly the game's title — never the
+    launcher's loading picture or any other program's window with the same name."""
+    return title == GAME_TITLE and cls == APP_CLASS
 
 
 def is_app_title(title):
@@ -685,8 +691,11 @@ def window_action(action, data=None):
 OFFSCREEN = (-6000, -6000)
 
 
-def rescue_offscreen(seconds=12.0, poll=0.5):
-    """Bring the game's window back to the screen if after `seconds` it is still off it."""
+RESCUE_AFTER = 8.0  # s: a page that never asked «frameless» / «reveal» (an error on it): its window is shown anyway
+
+
+def rescue_offscreen(seconds=RESCUE_AFTER, poll=0.5):
+    """Bring the game's window back to the screen if after `seconds` it is still off it (or hidden)."""
     if sys.platform != "win32":
         return False
     import time
@@ -699,12 +708,18 @@ def rescue_offscreen(seconds=12.0, poll=0.5):
         user32 = _user32()
         found = find_game_window(user32)
         if not found:
+            # (a page that has no title yet — its address — but its window is still hidden)
+            found = next((h for h in _app_windows(user32) if _hidden(user32, ctypes.c_void_p(h))), None)
+        if not found:
+            _log(f"страховка через {seconds:.0f} с: окна игры нет")
+            _shown()
             return False
         hwnd = ctypes.c_void_p(found)
         r = wintypes.RECT()
         user32.GetWindowRect(hwnd, ctypes.byref(r))
         if r.right > -1000 and r.bottom > -1000 and not _hidden(user32, hwnd):
             return False  # (on the screen already)
+        _log(f"страховка через {seconds:.0f} с: окно игры всё ещё спрятано/за экраном {_rect_of(user32, hwnd)} — показываю")
         with _lock:
             _reveal.pop(found, None)
             if not _show(user32, hwnd, (80, 60)):
