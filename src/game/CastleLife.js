@@ -407,6 +407,19 @@ export class CastleLife {
     _sleep(cs) {
         cs.awake = false;
         for (const v of [...cs.active.values()]) this._deactivate(v);
+        // its chests are put away too, as a village house's (an opened one is remembered — _openedChests; an
+        // unlocked one — Locks): a long flight over the world left every castle's chests in the scene
+        const g = this.game;
+        cs.chests = cs.chests.filter((c) => {
+            if (c.animating) return true;
+            if (c.isOpen) (g._openedChests = g._openedChests || new Set()).add(c.id);
+            if (c.boxId != null) g.collision.removeBox(c.boxId);
+            c.dispose();
+            const k = g.chests.indexOf(c);
+            if (k >= 0) g.chests.splice(k, 1);
+            return false;
+        });
+        cs.chestsMade = false;
     }
 
     _makeChests(cs) {

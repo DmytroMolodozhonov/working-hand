@@ -152,6 +152,33 @@ export class ItemSystem {
         return L;
     }
 
+    /**
+     * A still thing far from the hero: its look (meshes, shapes) is given back and only its place is kept — an
+     * empty Object3D in its stead, out of the scene (a long game left every chest's spilled things in it, each
+     * its own shapes). It is the same thing: picked up, saved, sent, moved by a blast as before.
+     */
+    _putAway(L) {
+        const m = L.model, o = new THREE.Object3D();
+        o.position.copy(m.position);
+        o.quaternion.copy(m.quaternion);
+        o.scale.copy(m.scale);
+        o.visible = false;
+        this.game.scene.remove(m);
+        disposeModel(m);
+        L.model = o;
+        L.away = true;
+    }
+
+    _bringBack(L) {
+        const o = L.model, m = makeItemModel(L.item);
+        m.position.copy(o.position);
+        m.quaternion.copy(o.quaternion);
+        m.scale.copy(o.scale);
+        this.game.scene.add(m);
+        L.model = m;
+        L.away = false;
+    }
+
     removeLoose(uid) {
         const L = this.loose.get(uid);
         if (!L) return null;
@@ -664,7 +691,9 @@ export class ItemSystem {
             // (far ones — a long game leaves many about the world — not drawn, and a still one not stepped:
             // a hovering one's bobbing and sparks are for the eyes only)
             const mp = L.model.position;
-            const far = Math.abs(mp.x - me.x) + Math.abs(mp.z - me.z) > 140;
+            const d = Math.abs(mp.x - me.x) + Math.abs(mp.z - me.z), far = d > 140;
+            if (L.away && d < 170) this._bringBack(L); // (its look made again as one comes near)
+            else if (!L.away && d > 200 && (L.hover || L.rest)) this._putAway(L);
             L.model.visible = !far;
             if (far && (L.hover || L.rest)) continue;
             this._physics(L, dt);
