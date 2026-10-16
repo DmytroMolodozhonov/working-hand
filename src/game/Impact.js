@@ -123,7 +123,10 @@ export const SPELL_PHYSICS = {
     Brainrot: null, ToTheSun: null, GiveMyPower: null, CreatePlanet: null, EnlargePlanet: null, TerraformPlanet: null, LevitationSuperMaxima: null, PlanetLiquidation: null, /* (the gods' scrolls: only planets — nobody is pushed, PlanetMagic.js) */ LetItRain: null, Storm: null, LightningCatch: null, LightningHold: null, Rescue: null, Pause: null, Flight: null, Up: null,
     AirBubble: null, AirBubbleMaxima: null, Waterball: null, Maxima: null, WaterForming: null, Frozen: null,
     Protection: null, ProtectionMaxima: null, ProtectionGods: null, ProtectionGodsMaxima: null, /* (the gods' shield pushes nobody: ProtectionGods.js) */ ProtectionHouse: null, ProtectionInvisible: null, ProtectionHouseGrant: null, WardGrow: null, // (a house's sphere pushes only who walks into it: HouseWards.js)
-    Levitation: null, LevitationMaxima: null, /* (lifts — no push: LevitationMaxima.js) */ LevitateDuel: null, Ice: null, IceDuel: null, Hammer: null,
+    Levitation: null, LevitationMaxima: null, /* (lifts — no push: LevitationMaxima.js) */ LevitateDuel: null, Ice: null, IceDuel: null, IceMaxima: null, IceDuelMaxima: null, Hammer: null,
+    // (the strong duel spells push nobody: a haze, a beam of light that bursts or not, a lightning, the black light — StrongMagic)
+    Accentric: null, Pilbidrio: null, Electrum: null, Die: null,
+    Disarmor: null, // (its throw is «Джолт»'s own — Duel._joltCreature / applyToMe)
     Fire: { push: 0, jolt: 0.6 },
     Inferno: { push: 1.5, jolt: 0.6 },
     Ward: { push: 7, jolt: 1.5 }, // (a house's barrier shoves back the one who pushes on it: HouseWards.js)

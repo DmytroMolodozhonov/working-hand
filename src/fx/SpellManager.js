@@ -10,6 +10,7 @@
  * peers render the same spell for the eyes only.
  */
 
+import { dieWords } from '../game/StrongSpells.js';
 import { isExpelliarmus } from '../game/Expelliarmus.js';
 import { alohomoraWords, isLockWord } from '../game/Alohomora.js';
 import * as THREE from 'three';
@@ -82,6 +83,8 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Дай» («Die», «Дия»): an everyday word — only the whole phrase, one word of its own (StrongSpells.dieWords)
+    if (dieWords(s)) return 'Die';
     // «Create an Ice Castle» / «Ice Bridge» («айс касл», «айс бридж», «создай ледяной замок / мост»): the ice
     // word AND the castle / bridge word — first, before «castle» of any other castle and the lone «Айс» (IceMagic.js)
     const iceMagic = iceMagicWords(s);
@@ -194,6 +197,10 @@ export function matchSpell(text) {
         return has('макс', 'max', 'мэкс', 'мекс', 'maks', 'мах') ? 'BombardoMaxima' : 'Bombardo';
     }
     if (has('лайтнинг', 'лайтинг', 'лайтнин', 'лайтин', 'lightning', 'lightnin', 'lighting', 'страйк', 'strike', 'лайт нинг')) return 'LightningStrike';
+    // the strong duel spells (StrongSpells.js): their long words before the short tokens they hold («сент», «ром»…)
+    if (has('accentr', 'acentr', 'eccentr', 'akcentr', 'акцентр', 'аксентр', 'акцэнтр', 'эксентр', 'эксцентр', 'иксентр', 'ексцентр', 'акценрик', 'аксенрик')) return 'Accentric';
+    if (has('pilbid', 'pilbed', 'pilbyd', 'пилбид', 'пильбид', 'пилбед', 'пелбид', 'пилбит', 'пил бид', 'пилбидр', 'филбид', 'билбид')) return 'Pilbidrio';
+    if (has('electrum', 'electrom', 'elektrum', 'elektrom', 'электрум', 'электром', 'элекрум', 'элэктром', 'электрон', 'илектром') && !has('электромоб', 'электромагн', 'электромонт')) return 'Electrum';
     // Duel magic
     if (has('авада', 'кедавр', 'кидавр', 'avada', 'kedavr', 'kadavr', 'водокидавр', 'адакедавр')) return 'AvadaKedavra';
     // «Alive»: a tree comes alive (its sounds before the short Ice / Sands / Flight tokens)
@@ -223,7 +230,10 @@ export function matchSpell(text) {
     const water = has('вотер', 'ватер', 'уотер', 'water', 'вотр', 'водян', 'вода', 'воду', 'уатер', 'watter', 'woter');
     if (has('форминг', 'forming', 'формин') || (water && has('форм', 'form'))) return 'WaterForming';
     if (water && has('бол', 'бал', 'ball', 'bowl', 'bol', 'шар', 'буль', 'бул')) return 'Waterball';
-    if (has('фрозен', 'фроузен', 'фрозэн', 'фризен', 'frozen', 'frosen', 'заморо')) return 'Frozen';
+    // «Айс» and «Frozen» are one spell; «Айс Максима» = «Frozen Maxima» = «Ice Maxima» (StrongSpells.js)
+    const frozen = has('фрозен', 'фроузен', 'фрозэн', 'фризен', 'frozen', 'frosen', 'заморо');
+    if ((frozen || s.split(/[^a-zа-яё]+/).some((w) => ICE_WORD.test(w))) && has('максим', 'maxim', 'макс', 'max', 'мах')) return 'IceMaxima';
+    if (frozen) return 'Frozen';
     // «Flying Maxima» («Флайн Максима», «Флайинг Максима»): into space (Space.js) — before the lone «Максима» and «Флайн»
     if (flyingMaximaWords(s)) return 'FlyingMaxima';
     if (has('максим', 'maxim', 'макс', 'max')) return 'Maxima';

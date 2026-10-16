@@ -19,6 +19,7 @@
  * Multiplayer: the host moves it and decides; everybody sees it.
  */
 
+import { confusedMiss } from './StrongSpells.js';
 import { crowdStep } from './CrowdSources.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
@@ -210,14 +211,16 @@ export class Spiders {
     boltAt(p, spell, by = undefined) {
         for (const s of this.list) {
             if (s.dead || spiderDist(s, p) > 0.3) continue;
-            this.boltHit(s, spell, by);
+            this.boltHit(s, spell, by, p);
             return true;
         }
         return false;
     }
 
     /** A duel charge touched this spider's body. */
-    boltHit(s, spell, by = undefined) {
+    boltHit(s, spell, by = undefined, p = null) {
+        // the strong charges and the ice («Айс Максима» by the part it hit — StrongMagic; plain «Айс»: no effect)
+        if (this.game.strong?.boltHit?.('s', s, spell, by, p)) return;
         if (spell === 'Expelliarmus') return; // (no wand, no weapon in its legs: nothing to knock out — no effect)
         if (spell === 'Disarmor') return; // (its shell is its own: nothing to take off — no effect, ArmorTypes.DISARMOR_TARGETS)
         if (spell === 'Jolt' || spell === 'JoltMaxima') { this.jolt(s, spell, by); return; }
@@ -252,7 +255,7 @@ export class Spiders {
         for (let i = 0; i < 80; i++) g.fx.spark(c, i % 2 ? 0x6bff6b : 0x222222, 0.25 * SIZE, _v2.set((Math.random() - 0.5) * 12 * SIZE, Math.random() * 8 * SIZE, (Math.random() - 0.5) * 12 * SIZE), 1.4);
         g.hud.notify?.('🕷️ Гигантская паучиха побеждена!');
         // treasure: always a wand, and more
-        if (this.auth) {
+        if (this.auth && !s.annihilated) { // («Дай»: her things are gone with her — StrongMagic.annihilate)
             const p = s.model.position.clone().add(_v.set(0, 2.2 * SIZE, 0));
             // (and its web: a skein of it — an ingredient of the invisibility potion, Potions.js)
             [rollWand(), { kind: 'web', uid: newUid(), count: 1 }, ...rollLoot(Math.random, { key: 0 })].forEach((it, i) => { // (its wand is the precious thing)
@@ -374,6 +377,10 @@ export class Spiders {
         const tp = near ? this._playerPos(near.id) : null;
         const p = s.model.position;
         let moving = false;
+        // «Айс Максима» (StrongMagic): a leg / the trunk in ice — slower; its head — no tricks (nextAny); Accentric's haze — slower, half the tricks fail
+        s.iceSlowT = Math.max(0, (s.iceSlowT || 0) - dt); s.iceHeadT = Math.max(0, (s.iceHeadT || 0) - dt);
+        const slowK = (s.legK ?? 1) * (s.iceSlowT > 0 ? s.iceSlowK || 0.5 : 1) * (s.accT > 0 ? 0.6 : 1);
+        if (s.iceHeadT > 0) s.model.rotation.z = 0.1 * Math.sin(s.t * 10);
         if (s.holding) {
             // holding someone: stands still, the victim's computer takes the bites
             const hp = this._playerPos(s.holding);
@@ -389,8 +396,8 @@ export class Spiders {
         } else if (tp && near.d > STOP * SIZE) {
             const to = _v.set(tp.x - p.x, 0, tp.z - p.z).normalize();
             // (round the others on its way — trees that walk, beasts, people it isn't after; Crowd.js)
-            const a = crowdStep(g, s, p, to.x, to.z, near.d - STOP * SIZE, { r: BODY_R.spider, speed: SPEED * (s.legK ?? 1), dt, look: 5, dy: 4 });
-            if (a) { to.set(a.x, 0, a.z); p.addScaledVector(to, SPEED * (s.legK ?? 1) * dt); } // (legs cut off: slower)
+            const a = crowdStep(g, s, p, to.x, to.z, near.d - STOP * SIZE, { r: BODY_R.spider, speed: SPEED * slowK, dt, look: 5, dy: 4 });
+            if (a) { to.set(a.x, 0, a.z); p.addScaledVector(to, SPEED * slowK * dt); } // (legs cut off: slower)
             s.model.rotation.y = turnToward(s.model.rotation.y, Math.atan2(-to.x, -to.z), SPIDER_TURN * dt);
             moving = true;
         } else if (tp) s.model.rotation.y = turnToward(s.model.rotation.y, yawTo(p.x, p.z, tp.x, tp.z), SPIDER_TURN * dt); // (a big body: it turns, never spins round at once)
@@ -399,7 +406,8 @@ export class Spiders {
         s.nextPoison -= dt; s.nextWeb -= dt; s.nextGrab -= dt; s.nextAny -= dt;
         // («лицом к цели»: it grabs and spits only at one right in front of it)
         if (tp && s.nextAny <= 0 && !s.holding && facesTarget(s.model.rotation.y, p.x, p.z, tp.x, tp.z, FACE.SHOT)) {
-            if (s.nextGrab <= 0 && near.d < GRAB * SIZE) {
+            if (confusedMiss(s)) s.nextAny = 3; // (lost in the haze: the trick goes nowhere)
+            else if (s.nextGrab <= 0 && near.d < GRAB * SIZE) {
                 s.nextGrab = 30; s.nextAny = 3;
                 if (Math.random() < 0.44) {
                     s.holding = near.id;

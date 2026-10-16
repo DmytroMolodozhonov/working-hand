@@ -114,6 +114,8 @@ import { BodyImpact } from './BodyImpact.js';
 import { Knockdown } from './Knockdown.js';
 import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
+import { StrongMagic } from './StrongMagic.js';
+import { isStrongDuel } from './StrongSpells.js';
 import { HurtFlash } from './HurtFlash.js';
 import { ArmorSystem } from './Armor.js';
 import { BodyStrikes } from './BodyStrikes.js';
@@ -361,6 +363,7 @@ export class Game {
         this.knock = new Knockdown(this);
         this.up = new UpSpell(this); // «Up»: get up from the ground / leap out of the water
         this.creatureImpact = new CreatureImpact(this);
+        this.strong = new StrongMagic(this); // the strong duel spells and the new ice: what they do (StrongMagic.js)
         this.hurtFlash = new HurtFlash(this); // (wounded creatures glow red for a moment)
         this.strikes = new BodyStrikes(this); // my real hands striking bodies (players and creatures)
         this.handBlocks = new HandBlocks(this); // hands never go into blocks: a counter, a wall, a table
@@ -1287,6 +1290,10 @@ export class Game {
         // («Назови …» right after «Create a Planet»: the new planet's name — not a spell, PlanetMagic.tryName)
         if (this.planetMagic?._naming && this.planetMagic.tryName(text, isFinal)) return null;
         let name = matchSpell(text);
+        // «Айс Максима» with water in the hands: the water's «Frozen» (one spell, both words — StrongSpells.js)
+        if (name === 'IceMaxima' && (this.water?.active || this.vortex?.state)) name = 'Frozen';
+        // «Дай» only when the phrase is over: never from an unfinished one (an everyday word — StrongSpells.dieWords)
+        if (name === 'Die' && !isFinal) return null;
         // the vortex waits for «Bubble»: a word that sounds like it is it (the recognizer writes it many ways)
         if (this.vortex?.bubbleOpen?.() && name !== 'AirBubble' && (!name || name === 'Sands' || name === 'Sapira') && bubbleLike(text)) name = 'AirBubble';
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
@@ -1395,7 +1402,7 @@ export class Game {
         // armour, or lays ice where it points (IceQueen.rodFrozen)
         if (name === 'Frozen' && !this.water.active && this.iceCastle?.myRod()) return this.iceCastle.rodFrozen(isFinal);
         let ice = false;
-        if ((name === 'Ice' || name === 'Frozen') && !this.water.active) {
+        if ((name === 'Ice' || name === 'Frozen' || name === 'IceMaxima') && !this.water.active) {
             if (performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
             ice = true;
         }
@@ -1409,7 +1416,7 @@ export class Game {
         if (name === 'SuitUp') return this.armor.suitUp(isFinal);
         // «Disarmor» with the wand (the hand) held up to the sky: off ME — my plain steel and a plain robe (Armor.disarmSelf)
         if (name === 'Disarmor') { const h = castingHand(this); if (h && pointsUp(h.dir)) return this.armor.disarmSelf(isFinal); }
-        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
+        const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? (name === 'IceMaxima' ? 'IceDuelMaxima' : 'IceDuel') : isStrongDuel(name) ? name : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || this.dom) ? (this.magicHand || this.lastMagicHand || this.dom) : (this.wandSide() || [this.dom, this.off].find((s) => this.character.isArmRaised(s))));
@@ -1417,7 +1424,9 @@ export class Game {
                 if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
                 return null;
             }
-            return this._castDuel(ice ? 'Ice' : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Айс» costs)
+            // «Дай»: only at a target the raised hand (the wand) points right at — never cast into the air (StrongSpells.js)
+            if (name === 'Die' && !aim) { this.lastCastWhy = '«Дай»: рука не наведена на цель'; if (isFinal) this.hud.setVoice('🖤 «Дай» — только в цель: наведите поднятую руку (палочку) прямо на неё', true); return null; }
+            return this._castDuel(ice ? (name === 'IceMaxima' ? 'IceMaxima' : 'Ice') : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Айс» costs)
         }
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Alohomora' || name === 'AlohomoraMaxima') return this.locks.cast(name, isFinal); // (a lock the hand points at — Alohomora.js)
@@ -1612,6 +1621,7 @@ export class Game {
         if (this.flight?.busy && this.flight.state !== 'landing' && !pm) { this.flight.land('stop'); done.push('полёт'); } // («стоп» letting a planet go: the flight goes on)
         if (this.lightning) { if (this.lightning.hammer) this.gear?.hammerResult(false); this.lightning = null; this.hud.setTimer?.(null); done.push('молния'); }
         if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
+        if (this.strong?.stopElectrum('stop')) done.push('Электром');
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
@@ -2519,7 +2529,8 @@ export class Game {
     onLocalDeath(text, byId) {
         const manaMax = this.mana?.max; // (told to the others: a duel won against me is worth this much)
         // (the author: «умер — всё»: the hero starts anew in the same world; all they grew lies in the body — Legacy.js)
-        const legacy = this.config.mode !== 'creative' ? captureLegacy(this) : null;
+        // («Дай» dissolved me: no body — the old power is gone for good, nobody can take it back: StrongMagic)
+        const legacy = this.config.mode !== 'creative' && this._deathHow !== 'annihilate' ? captureLegacy(this) : null;
         this.mana?.onDeath(); // all the mana grown with practice is lost
         if (this.config.mode !== 'creative') {
             this.achievements?.onDeath(); // … the achievements with their mana cells
@@ -2542,6 +2553,7 @@ export class Game {
         const ch = this.character;
         this.bleeding?.clearCuts(ch);
         this.dismember?.resetLocal(); // (cut-off arms / legs / the head: whole again)
+        this.strong?.reset(); // (no haze, no ice, no lightning held)
         this.combat.revive();
         this.playerHP = this.maxHP;
         this.isDeadLocal = false;
@@ -2634,6 +2646,8 @@ export class Game {
         if (name === 'Sands') { this._lastDuelCast = 0; return this._castDuel('Sands', 'SandsDuel', true); }
         if (name === 'Frozen' && this.iceCastle?.myRod()) return this.iceCastle.rodFrozen(true); // (the Ice Rod's word)
         if (name === 'Ice' || name === 'Frozen') { this._lastDuelCast = 0; return this._castDuel('Ice', 'IceDuel', true); }
+        if (name === 'IceMaxima') { this._lastDuelCast = 0; return this._castDuel('IceMaxima', 'IceDuelMaxima', true); }
+        if (isStrongDuel(name)) { this._lastDuelCast = 0; return this._castDuel(name, name, true); }
         const origin = this.character.getHandWorldPosition(this.dom);
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
         this.spells.cast(name, origin, dir, this.dom, this.localId);
@@ -2948,6 +2962,7 @@ export class Game {
         this.waves.update(dt);
         this._updateBreakthrough(dt);
         this.duel.update(dt);
+        this.strong.update(dt); // (after the duel: the held «Электром» is drawn with the charges' pools)
         this.duel.updateVisuals(dt);
         this.fire.update(dt);
         this.fireLights?.update(dt); // (after every fire asked for its light this frame)

@@ -48,7 +48,7 @@ import { owlBody, owlCenter } from './Owls.js';
 import { iceBody, iceCenter } from './IceQueen.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { AvadaLook, AVADA } from '../fx/AvadaLook.js';
-import { IceLook, ICE } from '../fx/IceLook.js';
+import { IceLook } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
 import { starterWand, rollWand } from './ItemTypes.js';
 import { JoltLook } from '../fx/JoltLook.js';
@@ -58,6 +58,7 @@ import { kindOf } from './CreatureImpact.js';
 import { duelStrength, duelPower } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS } from './ArmorTypes.js';
+import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
 const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor' };
@@ -86,6 +87,17 @@ export const DUEL_SPELLS = {
     //  (as fast as the other duel charges: there must be time to answer it — or it to answer — and meet: a duel)
     Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 15.5, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
     JoltMaxima: { color: 0xc4e4ff, name: 'Джолт Максима', speed: 15.5, core: 0.026, glow: 0.11, coreColor: 0xffffff },
+    // «Айс Максима» (= «Frozen Maxima», «Ice Maxima»): a thicker, brighter frosty beam (StrongMagic.iceCreature)
+    IceDuelMaxima: { color: 0x6fc8ff, name: 'Айс Максима', speed: 17, core: 0.05, glow: 0.22, coreColor: 0xffffff },
+    // the strong duel spells (StrongSpells.js): the same flying charge — another light, another sound, another harm
+    // «Акцентрик»: a lilac charge twisting as it flies
+    Accentric: { color: 0xc05cff, name: 'Акцентрик', speed: 15, core: 0.05, glow: 0.3, coreColor: 0xffd6ff, jag: 1.4 },
+    // «Пилбидрио»: a straight beam of white-gold light
+    Pilbidrio: { color: 0xfff1b0, name: 'Пилбидрио', speed: 20, core: 0.07, glow: 0.34, coreColor: 0xffffff, jag: 0.25 },
+    // «Дай»: a black beam (its core drawn over, not added — black stays black) in a dark-violet haze
+    Die: { color: 0x3a0060, name: 'Дай', speed: 16, core: 0.085, glow: 0.32, coreColor: 0x000000, fixed: true, light: 0x5a00a0 },
+    // «Электром»: real lightning — a jagged crackling line (held on the target afterwards: StrongMagic)
+    Electrum: { color: 0x5fc8ff, name: 'Электром', speed: 26, core: 0.04, glow: 0.2, coreColor: 0xffffff, jag: 2.4 },
 };
 
 /**
@@ -699,7 +711,15 @@ export class Duel {
         b.aim = tk === 'p' ? tid : null; // (whom it was cast at: Leviosa tells why it did not lift them)
         const g = this.game;
         if (g.sync) g.sync.duelCast(b);
-        if (spell === 'IceDuel') { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
+        if (isIceCharge(spell)) { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
+        // the strong charges: their sound comes from the card (SpellMusic.SPELL_SOUND — Game.castLocalSpell); a flash here
+        if (isStrongDuel(spell)) {
+            const col = this.colors(spell, this.me).glow;
+            this._burst(origin, spell === 'Die' ? 0x6a1ab0 : col, 22);
+            if (spell === 'Die') g.strong?.terror(origin, this.me); // (cast near people: they run in terror)
+            else g.fx.lightFlash(origin, col, 2.5, 0.25, 12);
+            return b;
+        }
         if (isJolt(spell)) { g.sound?.playJolt?.(spell === 'JoltMaxima', false); this.jolt.hit(origin, dir, false); return b; }
         if (spell === 'AvadaKedavra') { this.avada.cast(origin, dir); return b; } // (a poison-green flash, a terrible sound)
         // (each charge its own sound — SpellMusic: a red zap, a dark whoosh, a whip crack…; the others: Sapira's)
@@ -778,7 +798,7 @@ export class Duel {
             if (!b) { light.intensity = 0; return; }
             light.color.setHex(DUEL_SPELLS[b.spell]?.light ?? this.colors(b.spell, b.by).glow);
             light.position.copy(b.front);
-            light.intensity = (b.spell === 'AvadaKedavra' ? 5 : 9) * (1 + 0.5 * cave); // (a softer green: a strong one bleaches the grass yellow)
+            light.intensity = (b.spell === 'AvadaKedavra' ? 5 : b.spell === 'Die' ? 3 : 9) * (1 + 0.5 * cave); // (a softer green: a strong one bleaches the grass yellow)
             light.distance = 16 + 8 * cave;
             light.decay = 2 - 0.75 * cave;
         });
@@ -894,9 +914,9 @@ export class Duel {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') && this._referee()) { this._arriveAtCreature(b); return; }
-        if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by); return; }
-        if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by); return; }
-        if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by); return; }
+        if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by, b.front); return; }
+        if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
+        if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
         if (b.waitT > 2) this._end(b, 'fizzle', false);
@@ -914,6 +934,18 @@ export class Duel {
             if (b.meWait < CLASH.WAIT && o.dir.dot(b.dir) <= -CLASH.FACING) return;
         }
         const caster = this._handOf(b.by, b.side, _v1, _v2) ? _v1.clone() : b.o;
+        // «Дай»: no «Protection», no armour holds it — but the gods' shield: the first blow breaks it (no death, no mana)
+        if (b.spell === 'Die') {
+            const s = g.combat.shield;
+            if (s?.gods && s.left > 0 && (s.type === 2 || g.combat.shieldFactor(caster) >= 1)) {
+                g.combat._shatter('💥 «Дай» разбил божественную защиту! Второй удар убьёт');
+                this._end(b, 'blocked');
+                return;
+            }
+            this._end(b, 'hit');
+            this.applyToMe(b.spell, b.by, b.side);
+            return;
+        }
         // (my «Protection» pays half of the charge's mana; out of mana it shatters and the charge goes on)
         if (g.combat.shieldFactor(caster) >= 1 && g.combat._blocked(caster, b.spell)) {
             this._end(b, 'blocked');
@@ -932,9 +964,22 @@ export class Duel {
     _arriveAtCreature(b) {
         const c = this._creature(b.tk, b.tid);
         // Captain Black Moustache: his rapier up before him — he may beat the charge aside (Sailors.parryBolt)
-        if (c?.isSailor && c.role === 'blackbeard' && this.game.ships?.crew.parryBolt(c, _v3.copy(b.front).addScaledVector(b.dir, -6))) { this._deflect(b, c); return; } // (where it comes from: along its own way)
+        if (c?.isSailor && c.role === 'blackbeard' && b.spell !== 'Die' && this.game.ships?.crew.parryBolt(c, _v3.copy(b.front).addScaledVector(b.dir, -6))) { this._deflect(b, c); return; } // (where it comes from: along its own way)
         this._end(b, 'hit');
-        if (c) this.applyToCreature(b.spell, c, b.by, b.o);
+        if (c) this.applyToCreature(b.spell, c, b.by, b.o, this._partOf(b, c));
+    }
+
+    /** Where on the body a charge hit: {ak (0…1 from the head end), low (below the body's middle), point}. */
+    _partOf(b, c, kind = b.tk) {
+        const body = this._bodyOf(kind, b.tid ?? c?.id, this._tmpBody());
+        if (!body) return { ak: b.ak ?? 0.5, low: false, point: b.front };
+        const ak = segmentToSegment(b.front, b.front, body.a, body.b).k;
+        return { ak, low: b.front.y < body.a.y + (body.b.y - body.a.y) * ak - body.r * 0.35, point: b.front.clone() };
+    }
+
+    /** Duel's kind letter of a creature object. */
+    _kindOf(c) {
+        return c.isSailor ? 'c' : c.isVillager ? 'v' : c.isAnimal ? 'a' : c.isBird ? 'b' : c.isLivingTree ? 't' : c.isPhoenix ? 'f' : c.isOwl ? 'o' : null;
     }
 
     /**
@@ -961,11 +1006,13 @@ export class Duel {
     }
 
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
-    applyToCreature(spell, c, byId, from = null) {
+    applyToCreature(spell, c, byId, from = null, part = null) {
         const g = this.game;
         const src = from || this._casterAt(byId, c);
         const p = this._creaturePoint(c, _v1);
         this._hitBurst(spell, p, 30);
+        // «Дай»: through any shield, dome or robe — dead at once (StrongMagic.annihilate)
+        if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
         if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
         // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
         if (c.isVillager && c.robe && ROBE_BLOCKS.has(spell)) {
@@ -974,6 +1021,8 @@ export class Duel {
             if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._joltCreature(c, 'Jolt', src, byId); }
             return;
         }
+        // the strong charges and the ice (StrongMagic: Accentric, Pilbidrio, Electrum, «Айс» / «Frozen» and its Maxima)
+        if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src, ak: part?.ak, low: part?.low, point: part?.point })) return;
         // a book-bird: any charge knocks it out of the air (it falls as a book)
         // («Левиоса» doesn't hurt: the bird is only jolted and flies on)
         // (the book of protection: every duel charge — «Авада» too — bounces off its aura: BookBirds)
@@ -998,10 +1047,6 @@ export class Duel {
             c.stunT = DUEL.STUN_TIME;
             // falls stiff on its back and lies while the spell holds it (then gets up by itself)
             g.creatureImpact?.spellHit(c, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
-        } else if (spell === 'IceDuel') {
-            // locked in a block of ice: it can't move while the ice holds
-            c.stunT = Math.max(c.stunT || 0, ICE.CREATURE_T);
-            this._encase(c.isAnimal ? 'a' : 'v', c.id, ICE.CREATURE_T);
         } else if (spell === 'LevitateDuel') {
             if (c.isAnimal) g.animals.push(c, _v2.set(0, 13, 0), 2.5);
             else { c.stunT = 3; c.vy = 11; }
@@ -1064,7 +1109,11 @@ export class Duel {
             g.levitation?.watchMyFall?.(byId, 0.7 + J.toss * J.toss / 40 + 1.45);
             return;
         }
+        // «Дай»: no armour, no robe, not even the High Mage's suit holds it (the gods' shield was asked on arrival)
+        if (spell === 'Die' && g.strong?.hitMe(spell, byId, side)) return;
         if (g.armor?.guard(spell)) return;
+        // the strong charges and the ice (StrongMagic.hitMe)
+        if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitMe(spell, byId, side)) return;
         if (spell === 'AvadaKedavra') {
             g.hud.flashColor?.(AVADA.HUD); // (the green flash itself: _hitBurst → AvadaLook.hit)
             // the body crumples back (off the feet; up again by a squat)
@@ -1076,11 +1125,6 @@ export class Duel {
             c.stun(DUEL.STUN_TIME, byId);
             // falls stiff on the back (the shield was checked on arrival); once the stun ends — the get-up squat
             g.impact?.apply({ v: push(4), from, by: byId, spell: 'Stupefy', always: { down: 1.5 }, noShield: true });
-        } else if (spell === 'IceDuel') {
-            // in a shell of ice (everyone sees it): 20 s in the free world (any hit shatters), 5 s in other modes
-            c.freeze(byId, c.enabled ? PVP.FREEZE_TIME : ICE.CREATIVE_T);
-            g.hud.flashColor?.('rgba(150, 220, 255, 0.6)');
-            if (!c.enabled) g.hud.setVoice('🧊 «Айс» попал в вас — вы во льду', true);
         } else if (spell === 'LevitateDuel') {
             // Lifted like a thing: my body hangs in front of the caster's hand and follows it
             // (until they let go — a fall from up there hurts — or my «Protection» breaks it)
@@ -1124,20 +1168,13 @@ export class Duel {
         const src = from || this._casterAt(byId, z);
         const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
         this._hitBurst(spell, p, 30);
+        if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature('z', z, spell, byId, { src })) return;
         if (spell === 'AvadaKedavra') {
             g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'AvadaKedavra', src, byId);
         } else if (spell === 'Stupefy') {
             z.stunTimer = DUEL.STUN_TIME;
             g.creatureImpact?.spellHit(z, 'Stupefy', src, byId, null, { down: DUEL.STUN_TIME });
-        } else if (spell === 'IceDuel') {
-            // ice crystals all over it at once, then it is frozen solid
-            if (!z.isFrozen && z.spawnIceCrystalOnBody) {
-                for (let i = 0; i < 16; i++) z.spawnIceCrystalOnBody();
-                for (const k of z.iceCrystals.children) k.scale.setScalar(1.8 + Math.random() * 1.2);
-            }
-            z.freezeProgress = 1;
-            z.freeze();
         } else if (spell === 'LevitateDuel') {
             z.vy = Math.max(z.vy || 0, 13);
         } else if (spell === 'SapiraDuel') {
@@ -1202,6 +1239,7 @@ export class Duel {
         if (!this.bolts.has(b.id)) return;
         this.bolts.delete(b.id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
+        if (res === 'hit' && b.by === this.me && b.spell === 'Electrum') this.game.strong?.startElectrum(b.side, b.tk, b.tid); // (now the lightning is held on it)
         if (res === 'blocked' || res === 'fizzle') this._hitBurst(b.spell, b.front, 15);
         // (my «Левиоса» at a wizard: why it did not lift them — a house's sphere, or it flew past)
         if (b.aim && b.by === this.me && b.spell === 'LevitateDuel' && res !== 'hit') this.game.levitation?.missed?.(b.aim, res === 'blocked' ? 'levWard' : 'levMiss');
@@ -1214,11 +1252,12 @@ export class Duel {
         if (!b) return;
         this.bolts.delete(id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
+        if (res === 'hit' && b.by === this.me && b.spell === 'Electrum') this.game.strong?.startElectrum(b.side, b.tk, b.tid);
         // (my «Левиоса»: the wizard's own computer found it on its shield)
         if (res === 'blocked' && b.aim && b.by === this.me && b.spell === 'LevitateDuel') this.game.levitation?.missed?.(b.aim, 'levShield');
         this._hitBurst(b.spell, b.front, res === 'hit' ? 30 : 15);
         // (another computer froze a creature: its ice is seen here too)
-        if (res === 'hit' && b.spell === 'IceDuel' && (b.tk === 'a' || b.tk === 'v')) this._encase(b.tk, b.tid, ICE.CREATURE_T);
+        if (res === 'hit' && isIceCharge(b.spell) && (b.tk === 'a' || b.tk === 'v' || b.tk === 'c') && !(b.tk === 'v' && this._creature('v', b.tid)?.role === 'master')) this._encase(b.tk, b.tid, STRONG.Ice.time);
         this.clashes = this.clashes.filter((c) => c.a !== b && c.b !== b);
     }
 
@@ -1355,7 +1394,8 @@ export class Duel {
             // (own vectors: _playerPos writes into _v2 — the hand's direction must survive it)
             const hand = _ch, dir = this._myRay(bolt.side, _ch, _cd);
             const op = this._playerPos(opponentId, _co);
-            const ok = op ? dir.angleTo(op.sub(hand).normalize()) < DUEL.CONTACT_ANGLE : false;
+            // («Дай» with no mana left to hold its beam: it stops pushing)
+            const ok = op && !(bolt.spell === 'Die' && this.game.combat?.enabled && this.game.combat.fatigue <= 0) ? dir.angleTo(op.sub(hand).normalize()) < DUEL.CONTACT_ANGLE : false;
             return { ok, jerk: this._jerked(bolt.side) };
         }
         const w = this._npcWizard(id);
@@ -1398,7 +1438,11 @@ export class Duel {
             this._barNow = true;
         }
         // Fatigue drains while pushing (free world)
-        if ((a.by === this.me || b.by === this.me) && g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - DUEL.CLASH_FATIGUE * dt);
+        if ((a.by === this.me || b.by === this.me) && g.combat.enabled) {
+            const mine = a.by === this.me ? a : b;
+            // («Дай» in a clash: +10 mana a second while its beam fights)
+            g.combat.fatigue = Math.max(0, g.combat.fatigue - (DUEL.CLASH_FATIGUE + (mine.spell === 'Die' ? STRONG.Die.drain : 0)) * dt);
+        }
         if (!this._referee()) return;
 
         c.luckT -= dt;
@@ -1411,8 +1455,9 @@ export class Duel {
         c.lostA = ca.ok ? 0 : c.lostA + dt;
         c.lostB = cb.ok ? 0 : c.lostB + dt;
         // A hand off the opponent doesn't push at all
-        const sa = ca.ok ? this._strength(a.by, c.luckA) : 0;
-        const sb = cb.ok ? this._strength(b.by, c.luckB) : 0;
+        // (the strong charges push harder: Accentric ×1.2, Pilbidrio ×1.4, «Дай» ×5 — StrongSpells.CLASH_POWER)
+        const sa = ca.ok ? this._strength(a.by, c.luckA) * clashPower(a.spell) : 0;
+        const sb = cb.ok ? this._strength(b.by, c.luckB) * clashPower(b.spell) : 0;
         c.v = clashPush(sa - sb) + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));
@@ -1501,6 +1546,7 @@ export class Duel {
         else if (winnerBolt.by === this.me) {
             this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);
             this._manaHit(winnerBolt.spell); // (my charge reached them)
+            if (winnerBolt.spell === 'Electrum') this.game.strong?.startElectrum(winnerBolt.side, lw ? 'v' : 'p', loser);
             this._won = { id: loser, at: performance.now() }; // (mana if it kills them: a duel won)
         }
     }
@@ -1578,7 +1624,7 @@ export class Duel {
     /** A jagged, flickering electric charge from a to b. */
     _drawBolt(spell, from, to, by, core = null) {
         if (!DUEL_SPELLS[spell]) return;
-        if (spell === 'IceDuel') { this._drawIce(from, to, by, core); return; }
+        if (isIceCharge(spell)) { this._drawIce(from, to, by, core, spell); return; }
         if (isJolt(spell)) { this._drawJolt(spell, from, to, by, core); return; }
         const pool = this._pool(spell, by);
         const col = this.colors(spell, by).glow;
@@ -1593,7 +1639,7 @@ export class Duel {
         side.normalize();
         const up = _du.crossVectors(dir, side).normalize();
         let prev = a.clone();
-        const amp = Math.min(0.35, 0.08 + len * 0.02);
+        const amp = Math.min(0.35, 0.08 + len * 0.02) * (DUEL_SPELLS[spell].jag ?? 1);
         for (let i = 1; i <= n; i++) {
             const t = i / n;
             const p = a.clone().lerp(b, t);
@@ -1612,8 +1658,8 @@ export class Duel {
     }
 
     /** «Айс»: a thin, nearly straight frosty beam (no crackling); IceLook adds the threads, the snow and the crystal. */
-    _drawIce(from, to, by, core = null) {
-        const pool = this._pool('IceDuel', by);
+    _drawIce(from, to, by, core = null, spell = 'IceDuel') {
+        const pool = this._pool(spell, by);
         const a = _da.copy(from), b = _db.copy(to);
         const len = a.distanceTo(b);
         if (len < 0.05) return;
@@ -1662,7 +1708,8 @@ export class Duel {
     /** Where a charge hits / bursts: «Айс» shatters into ice, «Джолт» rings of air, the others spark. */
     _hitBurst(spell, p, n) {
         if (isJolt(spell)) { this.jolt.hit(p, _v1.set(0, 0, 1), spell === 'JoltMaxima'); if (n >= 30) this.game.sound?.playJolt?.(spell === 'JoltMaxima', true); return; }
-        if (spell === 'IceDuel') this.ice?.shatter(p, n / 30);
+        if (isIceCharge(spell)) this.ice?.shatter(p, (n / 30) * (spell === 'IceDuelMaxima' ? 1.5 : 1));
+        else if (spell === 'Die') this._burst(p, 0x6a1ab0, n); // (a dark-violet spray: black light adds nothing)
         else if (spell === 'AvadaKedavra') this.avada.hit(p, n); // (the green flash, the ring of poison, the sound)
         else this._burst(p, DUEL_SPELLS[spell].color, n);
     }

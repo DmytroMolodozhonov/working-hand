@@ -56,8 +56,10 @@ export const FIRST_SPELL = {
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8, CreateCastle: 20,
     IceCastle: 15, IceBridge: 3, FlyingMaxima: 10, GiveMyPower: 2,
+    IceMaxima: 5, Accentric: 8, Electrum: 10, Pilbidrio: 12, // (the strong duel spells — StrongSpells.js)
     // the gods' scrolls (the author: «за использование любого заклинания из этой библиотеки первый раз — 100 ячеек маны»)
     CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100, Boom: 100, PlanetLiquidation: 100,
+    Die: 100, // («Дай»: the ninth scroll of the gods' library — StrongSpells.js)
     ProtectionGods: 100, ProtectionGodsMaxima: 100, // (the gods' shield and its dome: each its own scroll, each its own first — ProtectionGods.js)
 };
 
@@ -87,7 +89,7 @@ export function firstSpellGain(name) {
 }
 
 /** A duel charge's name → the spell it came from. */
-export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima' };
+export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', IceDuelMaxima: 'IceMaxima', Accentric: 'Accentric', Pilbidrio: 'Pilbidrio', Die: 'Die', Electrum: 'Electrum', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima' };
 
 /**
  * Magical creatures: the first kill of each kind + this much (to whoever struck the last blow).
@@ -300,6 +302,7 @@ const TITLES = {
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
+    IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle',
     WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility',
     IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',

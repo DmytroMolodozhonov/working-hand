@@ -30,7 +30,7 @@ import * as THREE from 'three';
 import { RESOURCE } from './Inventory.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, holdShapes, releaseShapes } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
-import { newUid } from './ItemTypes.js';
+import { newUid, isGodGift } from './ItemTypes.js';
 import { VoxelCharacter } from '../entities/Character.js';
 import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 
@@ -158,15 +158,22 @@ export class DeathSystem {
         const ch = g.character;
         const p = ch.group.position;
         const pos = { x: p.x, y: p.y, z: p.z };
+        // (how: «Пилбидрио» blew the body apart — only the bones are left; «Дай» dissolved it — nothing is left, every
+        //  thing gone but the gods' gifts, and no body to take the old power back from: StrongMagic)
+        const how = g._deathHow || null;
+        g._deathHow = null;
         if (g.config?.mode !== 'creative') {
             const y = this._ground(p.x, p.z, p.y + 0.5);
             const yaw = ch.group.rotation.y;
-            const drops = this.takeEverything();
+            let drops = this.takeEverything();
+            if (how === 'annihilate') drops = drops.filter((d) => isGodGift(d));
             this.scatter(drops, { x: p.x, y, z: p.z });
-            const b = { id: 'p' + (g.localId || 'me') + '_' + Date.now().toString(36), k: 'p', who: g.localId || 'local', name: g.net?.name || null, x: p.x, y, z: p.z, yaw, age: 0, look: g.config?.look || null };
-            if (legacy) b.lg = legacy; // (all the hero grew: theirs to take back — Legacy.js)
-            this.addBody(b, ch.group);
-            g.sync?.deathBody?.(this._wire(b));
+            if (how !== 'annihilate') {
+                const b = { id: 'p' + (g.localId || 'me') + '_' + Date.now().toString(36), k: 'p', who: g.localId || 'local', name: g.net?.name || null, x: p.x, y, z: p.z, yaw, age: how === 'burst' ? DEATH.BODY_S : 0, look: g.config?.look || null };
+                if (legacy) b.lg = legacy; // (all the hero grew: theirs to take back — Legacy.js)
+                this.addBody(b, how === 'burst' ? null : ch.group);
+                g.sync?.deathBody?.(this._wire(b));
+            }
         }
         for (const fn of g.onDeath) { try { fn({ byId, text, pos }); } catch (e) { console.warn('[Death] onDeath hook', e); } }
     }
@@ -239,6 +246,8 @@ export class DeathSystem {
     /** (authority) A castle person died: the armed ones drop their things; everybody's body stays. */
     villagerDied(v) {
         const g = this.game;
+        // «Дай»: nothing of them is left — no body, no things (the gods' gifts only); «Пилбидрио»: no body, the things fall (StrongMagic)
+        if (v.annihilated) return;
         const y = this._ground(v.x, v.z, v.y + 1.5);
         // (a sword knocked out by «Экспеллиармус» already lies somewhere: not a second one)
         const drops = lootOfVillager(v.role, { shield: !!v.model?.shield }).filter((d) => !(v.disarmed && d.kind === 'weapon'));
@@ -247,6 +256,7 @@ export class DeathSystem {
         drops.push(...steel);
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
+        if (v.burst) return;
         const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0 };
         this.addBody(b);
         g.sync?.deathBody?.(this._wire(b));

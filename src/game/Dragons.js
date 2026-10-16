@@ -40,6 +40,7 @@ import { creditKill } from './Mana.js';
 import { FACE, facesTarget, facingError } from './FaceTarget.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { earthly } from '../world/Planets.js';
+import { confusedMiss } from './StrongSpells.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -217,13 +218,15 @@ export class Dragons {
     boltAt(p, spell, by = undefined) {
         for (const d of this.list) {
             if (d.dead || dragonDist(d, p) > 0.4) continue;
-            this.boltHit(d, spell, by);
+            this.boltHit(d, spell, by, p);
             return true;
         }
         return false;
     }
 
-    boltHit(d, spell, by = undefined) {
+    boltHit(d, spell, by = undefined, p = null) {
+        // the strong charges and the ice («Айс Максима» by the part it hit — StrongMagic; plain «Айс»: no effect)
+        if (this.game.strong?.boltHit?.('D', d, spell, by, p)) return;
         if (spell === 'Disarmor') return; // (scales are no armour: «Disarmor» does nothing — ArmorTypes.DISARMOR_TARGETS)
         // «Джолт»: a great heavy body only sways a little — it wakes and turns on the caster (no damage)
         if (spell === 'Jolt' || spell === 'JoltMaxima') {
@@ -302,7 +305,7 @@ export class Dragons {
             g.achievements?.killed('dragon', d.id, killer, c); // (the achievement: to everyone who took part)
             // its wand: deep crimson, glowing like embers — every fire spell 60% stronger
             const p = c.clone().add(_v2.set(0, 1.5, 0));
-            g.items?.spawnLoose(dragonWand(newUid()), p, { hover: true });
+            if (!d.annihilated) g.items?.spawnLoose(dragonWand(newUid()), p, { hover: true }); // («Дай»: no wand left — StrongMagic.annihilate)
         }
         d.fly = 0;
         d.deadT = 0;
@@ -700,9 +703,13 @@ export class Dragons {
         const p = d.model.position;
         d.t += dt;
         d.stun = Math.max(0, d.stun - dt); d.blind = Math.max(0, d.blind - dt); d.slow = Math.max(0, d.slow - dt);
+        // «Айс Максима» (StrongMagic): the head in ice — it shakes it, can't strike; a leg / the trunk — slower
+        d.iceHeadT = Math.max(0, (d.iceHeadT || 0) - dt); d.iceSlowT = Math.max(0, (d.iceSlowT || 0) - dt);
+        if (d.iceHeadT > 0) d.sweep = Math.sin(d.t * 9) * 0.8;
         d.breathCd -= dt * d.react; d.blowCd -= dt * d.react;
         if (d.mouthT > 0) d.mouthT -= dt;
-        const quick = d.react * (d.slow > 0 ? 0.55 : 1);
+        // (lost in Accentric's haze: slower, reeling — and half its blows don't come off: confusedMiss)
+        const quick = d.react * (d.slow > 0 ? 0.55 : 1) * (d.iceSlowT > 0 ? d.iceSlowK || 0.5 : 1) * (d.accT > 0 ? 0.6 : 1);
         const lair = d.lair ? this.lairs.get(d.lair) : null;
         const L = lair?.L || null;
         if (d.stun > 0) { d.breath = null; this._animate(d, dt, 0); return; }
@@ -847,7 +854,9 @@ export class Dragons {
     _attack(d, tp, dist, ang, dt) {
         const s = d.size;
         const centre = _v2.copy(tp).add(_q.set(0, 0.6, 0));
+        if (d.iceHeadT > 0) return; // (its head in the ice: no bite, no fire)
         if (d.blowCd <= 0 && !d.breath && d.fly < 0.3) {
+            if ((dist < 7.5 * s || dist < 10 * s) && confusedMiss(d)) { d.blowCd = DRAGON.BLOW_REST; d.sweep = Math.random() - 0.5; return; } // (a wild snap at nothing)
             if (dist < 7.5 * s && Math.abs(ang) < FACE.BITE) { // («лицом к цели»: the jaws bite only what is right in front)
                 d.blowCd = DRAGON.BLOW_REST; d.mouthT = 0.5; d.lowerT = 0.5;
                 const push = _v.set(tp.x - d.model.position.x, 0, tp.z - d.model.position.z).normalize().multiplyScalar(6).setY(3);
@@ -867,7 +876,8 @@ export class Dragons {
         const reach = flameReach(d.flame);
         if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && dist > 4 * s && dist < reach && Math.abs(ang) < FACE.BREATH) {
             const mouth = this._mouth(d, _v3);
-            if (this.game.collision?.lineOfSight?.(mouth.x, mouth.y, mouth.z, centre.x, centre.y, centre.z, 1.5) !== false) {
+            if (confusedMiss(d)) d.breathCd = DRAGON.FLAME_REST; // (lost: the breath goes nowhere)
+            else if (this.game.collision?.lineOfSight?.(mouth.x, mouth.y, mouth.z, centre.x, centre.y, centre.z, 1.5) !== false) {
                 d.breath = { t: 0, dir: new THREE.Vector3().subVectors(centre, mouth).normalize(), aim: d.target };
                 d.breathCd = DRAGON.FLAME_REST + DRAGON.FLAME_TIME;
                 this.log.push('breath');
@@ -969,7 +979,8 @@ export class Dragons {
                 : _v3.set(tp.x + Math.cos(d.orbit) * R, tp.y + 9 * d.size, tp.z + Math.sin(d.orbit) * R);
             this._flyTo(d, goal, DRAGON.FLY * quick, dt);
             // (in flight it breathes at them as it passes: its head turned down to them)
-            if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && dist < flameReach(d.flame)) {
+            if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && d.iceHeadT <= 0 && dist < flameReach(d.flame) && confusedMiss(d)) d.breathCd = DRAGON.FLAME_REST; // (lost: no breath this pass)
+            if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && d.iceHeadT <= 0 && dist < flameReach(d.flame)) {
                 const mouth = this._mouth(d, _v);
                 const aim = _v2.copy(tp).add(_q.set(0, 0.6, 0)).sub(mouth).normalize();
                 const fwd = _q.set(-Math.sin(d.model.rotation.y), 0, -Math.cos(d.model.rotation.y));

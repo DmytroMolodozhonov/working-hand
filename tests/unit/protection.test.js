@@ -39,7 +39,7 @@ test('the hand shield is 30 % bigger; it drains 0.5 a second, the dome 1', () =>
 test('a spell stopped by the shield costs half of its own mana', () => {
     assert.equal(shieldHitCost('AvadaKedavra'), 12.5);
     assert.equal(shieldHitCost('Stupefy'), 6);
-    assert.equal(shieldHitCost('IceDuel'), 5);
+    assert.equal(shieldHitCost('IceDuel'), 2.5); // («Айс» costs 5 now — StrongSpells.js)
     assert.equal(shieldHitCost('SapiraDuel'), 10);
     assert.equal(shieldHitCost('arrow'), 0, 'an arrow is no spell');
     const { c } = fakeGame();
@@ -49,7 +49,7 @@ test('a spell stopped by the shield costs half of its own mana', () => {
     assert.equal(c.fatigue, 17.5);
     // a beam held on it is one spell: paid once
     for (let i = 0; i < 30; i++) c.chillBy(0.02, FRONT, 'enemy');
-    assert.equal(c.fatigue, 12.5);
+    assert.equal(c.fatigue, 15); // (the ice beam: half of «Айс»'s 5)
     assert.equal(c.chill, 0);
 });
 

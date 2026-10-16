@@ -67,7 +67,7 @@ export const RU_SAID = {
 };
 
 /** Spells the matcher takes only as whole words of their own («джольд», «лёд», «ап», «лок»): no piece of a word. */
-export const WHOLE_WORD = new Set(['Jolt', 'JoltMaxima', 'Ice', 'Lock', 'Up', 'Expelliarmus', 'Hellfire']);
+export const WHOLE_WORD = new Set(['Jolt', 'JoltMaxima', 'Ice', 'Lock', 'Up', 'Expelliarmus', 'Hellfire', 'Die']); // («Дай»: only the whole phrase — StrongSpells.dieWords)
 
 /** Words that hold a spell's sound but are everyday words — never a spell, even said alone. */
 export const EVERYDAY = new Set(['спасибо', 'акция', 'акции', 'акций', 'максим', 'максимум', 'максимально', 'сатурн', 'сапоги', 'сапог', 'санта',
@@ -255,7 +255,7 @@ export function bodyNoise(h) {
 /** Spells that cost much or do much (a castle out of nothing, a curse that kills): never from a sound only just made out. */
 export const DANGEROUS = new Set(['CreateCastle', 'IceCastle', 'IceBridge', 'CreateHouse', 'ImproveHouse', 'AvadaKedavra', 'Hellfire', 'Frozen', 'Stupefy',
     'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'LightningStrike', 'Earthquake', 'EarthquakeMaxima', 'CircleAttack', 'CircleAttackMaxima',
-    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima']);
+    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die', 'Pilbidrio']); // («Дай» kills anyone: never from a sound only just made out)
 
 /**
  * Do the letters the network wrote look like the spell? («лемус» — «люмос», «бам барда» — «бомбардо максима»,

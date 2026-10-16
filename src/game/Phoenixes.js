@@ -93,6 +93,10 @@ export const TARGETS = {
     cauldron: { does: 'hit', why: 'упавший котёл (только если феникс на земле)' },
     // ---- spells (rays, blasts, charges, gusts, water)
     AvadaKedavra: { does: 'hit', why: '−25 HP, как у всех существ' },
+    Accentric: { does: 'hit', why: '«Акцентрик»: −40 за 8 с и минуту летает растерянно (StrongMagic)' },
+    Pilbidrio: { does: 'hit', why: '«Пилбидрио»: −80 — почти всегда разрывает в искры' },
+    Electrum: { does: 'hit', why: '«Электром»: −25, потом −20/с' },
+    Die: { does: 'hit', why: '«Дай»: испепеляет — даже пера не остаётся' },
     Stupefy: { does: 'down', why: 'падает на землю и лежит STUN_T с, потом улетает' },
     IceDuel: { does: 'none', why: '«Айс»: лёд тает на нём сразу (огненная птица) — но это нападение' },
     LevitateDuel: { does: 'push', why: 'подбрасывает вверх, без урона; нападение' },
@@ -808,7 +812,7 @@ export class Phoenixes {
         else if (spell === 'SapiraDuel') this.hit(f, 10, spell, by);
         else if (spell === 'SandsDuel') this.hit(f, 4, spell, by);
         else if (spell === 'Stupefy') { this.hit(f, 2, spell, by); if (!f.dead) this._down(f); }
-        else if (spell === 'IceDuel') this.hit(f, 0, 'IceDuel', by);
+        else if (spell === 'IceDuel' || spell === 'IceDuelMaxima') this.hit(f, 0, 'IceDuel', by); // («Айс» / «Frozen» and its Maxima: the ice melts on it)
         else if (spell === 'LevitateDuel') { f.vel.y += 9; this._attacked(f, by, spell); }
         else if (spell === 'Jolt' || spell === 'JoltMaxima') { f.vel.add(_v.subVectors(f.model.position, this._player(by)?.pos || f.model.position).setY(0).setLength(spell === 'Jolt' ? 14 : 24)).setY(4); f.stunT = 1.2; this._attacked(f, by, spell); }
         else if (spell === 'Expelliarmus' || spell === 'Disarmor') { f.vel.add(_v.subVectors(f.model.position, this._player(by)?.pos || f.model.position).setY(0).setLength(6)); this._attacked(f, by, spell); }
@@ -852,7 +856,7 @@ export class Phoenixes {
         f.model.visible = false;
         if (this.auth) {
             // its feather: it drifts down from where the bird burnt
-            g.items?.spawnLoose?.({ kind: 'phoenixFeather', uid: newUid(), count: 1 }, p.clone(), { vel: _v.set((Math.random() - 0.5) * 2, 1.5, (Math.random() - 0.5) * 2) });
+            if (!f.annihilated) g.items?.spawnLoose?.({ kind: 'phoenixFeather', uid: newUid(), count: 1 }, p.clone(), { vel: _v.set((Math.random() - 0.5) * 2, 1.5, (Math.random() - 0.5) * 2) });
             this._send({ op: 'die', id: f.id, p: [p.x, p.y, p.z].map(r2) });
             creditKill(g, by, { kind: 'phoenix' }); // (mana: a magical creature — the killer's maximum grows, once per kind)
             if (by === g.localId) g.hud?.setVoice?.('🔥 Феникс сгорел в собственном пламени. Осталось перо феникса', true);

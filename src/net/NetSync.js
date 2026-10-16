@@ -1056,7 +1056,8 @@ export class NetSync {
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
-            case 'dmcut': case 'dmlimb': case 'dmst': case 'dmresc': g.dismember?.onNet(m); break; // (cut-off limbs: Dismember.js)
+            case 'dmcut': case 'dmlimb': case 'dmst': case 'dmresc': g.dismember?.onNet(m); break;
+            case 'sm': g.strong?.onNet(m); break; // (the strong duel spells: the held lightning, a burst, a body dissolved — StrongMagic.js) // (cut-off limbs: Dismember.js)
             case 'phit': if (m.to === this.me) {
                 const landed = g.combat.enabled ? g.combat.meleeHit(Math.min(8, Math.round(m.dmg) || 1), m.by, !!m.mg, Array.isArray(m.h) ? m.h.slice(0, 3).map(Number) : null) : true;
                 if (m.k) g.impact?.onStrike(m, landed === false); // (the blow moves my body too)

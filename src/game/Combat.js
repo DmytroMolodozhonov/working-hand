@@ -71,7 +71,8 @@ export const SPELL_COST = {
     Unfurl: 6, // a ship's sails let down (one mast)
     UnfurlMaxima: 14, // all the sails
     Furl: 3, // rolled up
-    Ice: 10,
+    Ice: 5, // «Айс» = «Frozen» (one spell): a charge — 10 s in ice, −3 HP/s (StrongSpells.js)
+    IceMaxima: 20, // «Айс Максима» = «Frozen Maxima»: −10 HP/s, at the part of the body pointed at
     Sands: 8,
     Flight: 10,
     Up: 7, // get up / leap out of the water
@@ -110,6 +111,11 @@ export const SPELL_COST = {
     ProtectionInvisible: 15, // the protected house is not seen from far
     ProtectionHouseGrant: 5, // a friend may come into the house
     AvadaKedavra: 25,
+    // the strong duel spells (StrongSpells.js)
+    Accentric: 50, // «Акцентрик»: the haze — −40 over 8 s, a minute lost
+    Pilbidrio: 100, // «Пилбидрио»: −80, the body burst at ≤ 80
+    Electrum: 50, // «Электром»: then 3 a second while the lightning is held
+    Die: 1000, // «Дай»: the gods' — +10 a second while its beam fights in a clash
     WaveAttack: 8,
     WaveAttackMaxima: 18,
     AirBubble: 4,
@@ -200,13 +206,13 @@ export const PROTECTION_TARGETS = {
 
 /** The name a hit's kind is paid by (SPELL_COST): a duel charge, a ball, a bolt. */
 const HIT_SPELL = {
-    IceBall: 'Ice', IceDuel: 'Ice', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
+    IceBall: 'Ice', IceDuel: 'Ice', IceDuelMaxima: 'IceMaxima', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
     Lightning: 'LightningStrike', Bombardo: 'Bombardo', BombardoMax: 'BombardoMaxima',
 };
 /** Not spells (a ball bounced off, a blow): a shield stops them for nothing. */
 const NOT_A_SPELL = new Set(['Bounce', 'melee', 'arrow', 'web', 'poison', 'bite', 'dragonFire', 'phoenixFire']);
 /** Kinds that keep touching the shield while held (a flame, a beam, a wind): paid once a spell. */
-const BEAM_KINDS = new Set(['Inferno', 'Ice', 'Wind', 'WindMaxima', 'Overgrown', 'OvergrownMaxima', 'Fire', 'FireMaxima', 'Hellfire', 'WaterVortex']);
+const BEAM_KINDS = new Set(['Electrum', 'Inferno', 'Ice', 'Wind', 'WindMaxima', 'Overgrown', 'OvergrownMaxima', 'Fire', 'FireMaxima', 'Hellfire', 'WaterVortex']);
 
 /**
  * What a spell stopped by a «Protection» / «Protection Maxima» costs the one holding it:
@@ -563,7 +569,7 @@ export class Combat {
     costOf(name, extra = 0) {
         const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name, extra = 0) {
@@ -956,7 +962,8 @@ export class Combat {
         if (this.dead) return;
         if (this.godsKeepsOff(kind)) { this._godsFx(null); return; } // (the gods' shield: no spell but the gods' own gets through — ProtectionGods.js)
         // Any hit on a frozen player shatters them, whatever their HP
-        if (this.frozen && kind !== 'Inferno') { this.die(byId, 'shatter'); return; }
+        // (the ice's own bite while it holds — «Айс» −3/s, «Айс Максима» −10/s — is not a blow: StrongMagic)
+        if (this.frozen && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }
         // worn armour takes its share; a robe / a named armour's perks soften it (Armor.js)
         if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
         this.hp = Math.max(0, this.hp - amount);
@@ -976,6 +983,10 @@ export class Combat {
             ? `💚 Авада Кедавра. ${name ? `Вас победил ${name}` : 'Вы погибли'}`
             : how === 'decap'
             ? `🗡️ ${name ? `${name} отрубил вам голову` : 'Вам отрубили голову'}`
+            : how === 'pilbidrio'
+            ? `✨💥 ${name ? `${name} разорвал вас «Пилбидрио»` : 'Вас разорвало «Пилбидрио»'}`
+            : how === 'die'
+            ? `🖤 «Дай». ${name ? `${name} испепелил вас` : 'Вас испепелило'} — ни тела, ни вещей, прежняя сила потеряна навсегда`
             : how === 'shatter'
             ? `🧊💥 ${name ? `${name} разбил вас` : 'Вас разбили'}, пока вы были заморожены`
             : `💀 ${name ? `Вас победил ${name}` : 'Вы погибли'}`;

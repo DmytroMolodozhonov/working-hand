@@ -44,7 +44,8 @@ export const TEMPLE = {
 /** The eight scrolls of the library's pedestals (the spells' names — taught by burning a scroll): the four of the
  * planets, «Бум» (Boom.js) on the fifth, before the god of Wisdom, and «Planet Liquidation» (PlanetDestroy.js) on
  * the sixth, further down the aisle. */
-export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima'];
+export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation', 'ProtectionGods', 'ProtectionGodsMaxima', 'Die'];
+// (the ninth: «Дай» — the gods' black beam, StrongSpells.js; on its own pedestal at the end of the aisle, before the desks)
 // (the seventh and the eighth: «Protection Gods» and its «Maxima» — the gods' shield, ProtectionGods.js; every name here is
 //  a spell of the gods — Mana.GOD_SPELLS is made of this list)
 
@@ -732,6 +733,7 @@ export function templePlan(seed = 1) {
     pedestals.push({ x: 0, z: WZ + 5.5, spell: TEMPLE_SCROLLS[4] });
     pedestals.push({ x: 0, z: WZ + 9.5, spell: TEMPLE_SCROLLS[5] }); // («Planet Liquidation»: the sixth, further down the aisle, before the reading desks)
     pedestals.push({ x: -8, z: WZ + 7.5, spell: TEMPLE_SCROLLS[6] }, { x: 8, z: WZ + 7.5, spell: TEMPLE_SCROLLS[7] }); // (the gods' shield and its dome: either side of the carpet, before the desks)
+    pedestals.push({ x: 0, z: WZ + 13.5, spell: TEMPLE_SCROLLS[8] }); // («Дай»: on the carpet between the reading desks)
     // the colonnade along both sides holding the gallery of the upper storey
     const BY = 7; // the gallery's floor
     for (const sx of [-1, 1]) {

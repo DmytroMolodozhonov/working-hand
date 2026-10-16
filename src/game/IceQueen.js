@@ -58,7 +58,7 @@ export const FIRE_K = { fire: 1.5, burn: 1.5, Fire: 1.5, Campfire: 1.5, Inferno:
  * no freezing, no ice round her, no slowing (Duel, WaterMagic, WaterVortex, WaterStorm, the rod…).
  */
 export const COLD_KINDS = new Set(['Ice', 'IceDuel', 'IceBall', 'Frozen', 'RodFrozen', 'RodIce', 'cold', 'chill', 'snow', 'ice', 'frost', 'freeze',
-    'FrozenWater', 'WaterFrozen', 'VortexIce', 'StormIce', 'IceTrap', 'IceBridge', 'IceWall', 'IceCastle']);
+    'FrozenWater', 'WaterFrozen', 'VortexIce', 'StormIce', 'IceTrap', 'IceBridge', 'IceWall', 'IceCastle', 'IceDuelMaxima', 'IceMaxima', 'iceBite']); // («Айс Максима» = «Frozen Maxima»: cold too)
 /** Is `kind` (a spell, a harm) cold? */
 export const isCold = (kind) => COLD_KINDS.has(kind);
 /** Does the cold not touch this creature (the queen, her monsters, every snowman — they are ice themselves)? */
@@ -68,7 +68,8 @@ const small = (type) => type === 'snowman' || type === 'friend';
 /** The spells only a scroll (or a spell book) teaches: they act on the queen as on anyone. */
 export const SCROLL_KINDS = new Set(['Lightning', 'LightningStrike', 'Thunderwave', 'ToTheSun', 'AvadaKedavra', 'TotalDestruction', 'TotalDestructionMaxima', 'LetItRain',
     'BombardoMaxima', 'Inspirius', 'LevitationMaxima', 'WindImpulse', 'WindImpulseMaxima', 'Invisibility', 'OvergrownMaxima', 'AlohomoraMaxima', 'FirefightingMaxima',
-    'Alive', 'AliveMaxima', 'servant', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'WaterVortexSuperMaxima', 'Boom']); // («Бум» — not cold: on the queen as on anyone)
+    'Alive', 'AliveMaxima', 'servant', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'WaterVortexSuperMaxima', 'Boom',
+    'Accentric', 'Pilbidrio', 'Electrum', 'Die']); // (the strong duel spells — StrongSpells.js: scrolls; «Дай» kills her outright) // («Бум» — not cold: on the queen as on anyone)
 /** Not magic at all: blows, arrows, a cauldron bursting, a house's sphere shoving. */
 const PLAIN = { melee: 1, arrow: 1, fist: 1, punch: 1, Cauldron: 1, Ward: 1, fall: 1, crush: 1, snow: 1, Liquidation: 0 };
 
@@ -316,8 +317,10 @@ export class IceCastleLife {
     }
 
     /** A duel charge reached an ice creature (host). */
-    boltHit(c, spell, by = undefined) {
+    boltHit(c, spell, by = undefined, p = null) {
         if (!c || c.dead) return;
+        // the strong charges (scroll spells: they act on her as on anyone — StrongMagic; «Дай» kills her, the Rod falls); the cold: below — nothing
+        if (!isCold(spell) && this.game.strong?.boltHit?.('I', c, spell, by, p)) return;
         const b = iceBolt(c.type, spell);
         if (spell === 'Jolt' || spell === 'JoltMaxima') { this.push(spell, by, (_p, x) => (x === c ? _v3.copy(c.model.position).sub(this._casterPos(by, c)).setY(0).normalize().multiplyScalar(spell === 'JoltMaxima' ? 12 : 5) : null)); return; }
         if (b.stun) c.stunT = Math.max(c.stunT, b.stun);

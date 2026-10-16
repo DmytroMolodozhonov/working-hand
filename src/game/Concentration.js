@@ -55,6 +55,7 @@ export const HELD = {
     SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'UnfurlMaxima', 'Furl'] },
     Beam: { ru: 'Луч', icon: '❄️', own: [] },
     GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima'] }, // (the gods' shield: held — ProtectionGods.js)
+    Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
 };
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
@@ -99,6 +100,7 @@ export class Concentration {
         if (g._inDuel?.()) return 'Duel';
         if (g.waves?.busy) return 'Wave';
         if (g.lightning) return 'Lightning';
+        if (g.strong?.electrum) return 'Electrum';
         if (g.ships?.blowing) return 'SailWind';
         const sp = g.spells?.heldBy?.(g.localId);
         if (sp) return sp.kind === 'Inferno' ? 'Inferno' : /^Drawdown/.test(sp.kind || '') ? 'Drawdown' : 'Beam';
@@ -152,6 +154,7 @@ export class Concentration {
         if (g.waves?.stop?.()) done.push('волна');
         if (g.lightning) { if (g.lightning.hammer) g.gear?.hammerResult?.(false); g.lightning = null; g.hud?.setTimer?.(null); done.push('молния'); }
         if (g.spells?.stopBy?.(g.localId)) done.push('огонь / луч');
+        if (g.strong?.stopElectrum?.('focus')) done.push('Электром');
         if (g.livingTrees?.stopMine?.('focus')) done.push('живое дерево');
         if (g.ships?.stopWind?.()) done.push('ветер в паруса');
         if (g.wards?.setting) { g.wards.fix?.(); done.push('защита дома'); }

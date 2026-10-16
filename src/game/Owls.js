@@ -119,6 +119,10 @@ export const TARGETS = {
     // ---- the scroll's spells: they hurt (a small bird: one or two are enough)
     scrollSpells: { does: 'hit', why: 'заклинания со свитка (IceQueen.SCROLL_KINDS): ранят и убивают; убитая падает, остаётся перо совы' },
     AvadaKedavra: { does: 'hit', why: 'со свитка: −25 — насмерть' },
+    Accentric: { does: 'hit', why: '«Акцентрик» (со свитка): −40 за 8 с — насмерть' },
+    Pilbidrio: { does: 'hit', why: '«Пилбидрио» (со свитка): −80 — разрывает' },
+    Electrum: { does: 'hit', why: '«Электром» (со свитка): насмерть' },
+    Die: { does: 'hit', why: '«Дай»: испепеляет, пера не остаётся' },
     Lightning: { does: 'hit', why: 'молния (со свитка): −20 — насмерть' },
     Thunderwave: { does: 'hit', why: 'громовая волна (со свитка): −8' },
     TotalDestruction: { does: 'hit', why: '«Total Destruction»: взрыв со свитка — насмерть' },
@@ -640,7 +644,7 @@ export class Owls {
         o.model.visible = false;
         if (this.auth) {
             // its feather drifts down where it fell
-            g.items?.spawnLoose?.({ kind: 'owlFeather', uid: newUid(), count: 1 }, p.clone(), { vel: _v.set((Math.random() - 0.5) * 1.5, 1.2, (Math.random() - 0.5) * 1.5) });
+            if (!o.annihilated) g.items?.spawnLoose?.({ kind: 'owlFeather', uid: newUid(), count: 1 }, p.clone(), { vel: _v.set((Math.random() - 0.5) * 1.5, 1.2, (Math.random() - 0.5) * 1.5) });
             this._send({ op: 'die', id: o.id, p: [p.x, p.y, p.z].map(r2) });
             creditKill(g, by, { kind: 'owl' });
             this._tell(by, '🦉 Сова упала замертво. Осталось перо совы');

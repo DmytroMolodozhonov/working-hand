@@ -284,6 +284,21 @@ const TUNES = {
         pad(o, sr, ['A5', 'D6'], 4.8, 7.4, 0.08, { att: 1.2, rel: 1, vib: 0.01, harm: 1 });
         return finish(o, sr, { rms: 0.07 });
     },
+    /**
+     * «Дай» (Die): death of the gods — a black, slow descent: a low choir in D minor and a cluster, a funeral
+     * brass falling by semitones, a single bell tolling, the drone left alone at the end.
+     */
+    thDie(sr) {
+        const o = buf(sr, 8.5), r = rng(173);
+        pad(o, sr, ['D2', 'A2', 'D3', 'F3'], 0, 3.4, 0.5, { att: 1.2, rel: 1, vib: 0.006, harm: 4, det: 0.01 });
+        pad(o, sr, ['Db2', 'Ab2', 'Db3', 'E3'], 3, 6, 0.5, { att: 0.8, rel: 1, vib: 0.007, harm: 4, det: 0.012 });
+        pad(o, sr, ['D1', 'D2', 'A2'], 5.8, 8, 0.45, { att: 0.6, rel: 0.5, harm: 6, det: 0.014 });
+        melody([[0, 'D4', 2], [2, 'C#4', 2], [4, 'C4', 1], [5, 'Bb3', 1], [6, 'A3', 4]], 0.62, 0.4, (f, t, l) => { brass(o, sr, f, t, l, 0.13); brass(o, sr, f / 2, t, l, 0.15); });
+        for (const t of [0.2, 2.6, 5, 7.3]) bell(o, sr, hz('D3'), t, 0.2, 3, 0.5);
+        drum(o, sr, 5.9, 0.8, 34, 2.2, r);
+        noise(o, sr, 5.9, 2.4, 0.08, (u) => 0.02 + 0.05 * (1 - u), (u) => (1 - u) * (1 - u), r);
+        return finish(o, sr, { rms: 0.08 });
+    },
     /** «Flying Maxima»: out of the air — a Lydian arpeggio climbing, the pad opening, then airy and far (space). */
     thOrbit(sr) {
         const o = buf(sr, 11), r = rng(71);
@@ -401,6 +416,16 @@ const FX = {
     fxExpel(sr) { const o = buf(sr, 0.45), r = rng(17); noise(o, sr, 0, 0.06, 0.9, () => 0.95, (u) => 1 - u, r); glide(o, sr, 0.02, 0.4, 0.3, (u) => 600 + 1800 * u, swell(0.05, 0.6), 3); return finish(o, sr, { peak: 0.7 }); },
     /** «Disarmor»: a zap and the steel ringing loose. */
     fxDisarmor(sr) { const o = buf(sr, 0.8), r = rng(19); glide(o, sr, 0, 0.3, 0.3, (u) => 900 - 400 * u, swell(0.05, 0.6), 4); for (const [t, f] of [[0.12, 2300], [0.24, 1900], [0.33, 2700]]) bell(o, sr, f, t, 0.18, 0.4, 0.8); noise(o, sr, 0, 0.05, 0.4, () => 0.9, (u) => 1 - u, r); return finish(o, sr, { peak: 0.65 }); },
+    /** «Акцентрик»: a woozy, wobbling glissando and a ringing that bends out of tune. */
+    fxAccentric(sr) { const o = buf(sr, 1), r = rng(181); glide(o, sr, 0, 0.9, 0.3, (u) => 700 + 400 * Math.sin(u * 18) * (1 - u), swell(0.05, 0.5), 3); bell(o, sr, 1480, 0.1, 0.15, 0.8, 0.3); noise(o, sr, 0, 0.3, 0.3, () => 0.6, (u) => 1 - u, r); return finish(o, sr, { peak: 0.65 }); },
+    /** Accentric's haze heard from inside: a far, slow, warped hum and whispers (played now and then, pitched at random). */
+    fxAccWeird(sr) { const o = buf(sr, 1.6), r = rng(183); glide(o, sr, 0, 1.6, 0.25, (u) => 180 + 60 * Math.sin(u * 7) + 30 * Math.sin(u * 23), swell(0.3, 0.4), 4); noise(o, sr, 0.2, 1.2, 0.15, (u) => 0.15 + 0.1 * Math.sin(u * 20), swell(0.2, 0.3), r); return finish(o, sr, { peak: 0.5 }); },
+    /** «Пилбидрио»: a bright rising chord of light and a hard white crack. */
+    fxPilbidrio(sr) { const o = buf(sr, 1.1), r = rng(187); pad(o, sr, ['E5', 'B5', 'E6', 'G#6'], 0, 0.5, 0.35, { att: 0.04, rel: 0.4, harm: 2 }); glide(o, sr, 0, 0.4, 0.25, (u) => 900 + 2400 * u, swell(0.05, 0.4), 2); noise(o, sr, 0.42, 0.12, 0.9, () => 0.95, (u) => 1 - u, r); drum(o, sr, 0.42, 0.5, 90, 0.5, r); return finish(o, sr, { peak: 0.72 }); },
+    /** «Электром»: lightning — a sharp crack and a buzzing crackle. */
+    fxElectrum(sr) { const o = buf(sr, 0.9), r = rng(191); noise(o, sr, 0, 0.06, 1, () => 0.98, (u) => 1 - u, r); crackle(o, sr, 0.02, 0.8, 0.6, 90, r); glide(o, sr, 0, 0.8, 0.18, () => 120, swell(0.02, 0.4), 9); return finish(o, sr, { peak: 0.72 }); },
+    /** «Дай»: a deep breath of the dark, a falling howl and a dull, final thud. */
+    fxDie(sr) { const o = buf(sr, 1.6), r = rng(193); noise(o, sr, 0, 1.2, 0.35, (u) => 0.2 * (1 - u) + 0.02, swell(0.4, 0.3), r); glide(o, sr, 0.1, 1.3, 0.3, (u) => 300 - 230 * u, swell(0.1, 0.5), 3); drum(o, sr, 1.05, 0.9, 38, 0.55, r); reverb(o, sr, 0.4, 0.85); return finish(o, sr, { peak: 0.72 }); },
     /** «Wind»: a gust — noise through a sweeping resonance. */
     fxWind(sr) { const o = buf(sr, 1), r = rng(29); noise(o, sr, 0, 1, 0.5, (u) => 0.04 + 0.3 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI) ** 0.7, r); glide(o, sr, 0, 1, 0.04, (u) => 500 + 500 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI)); return finish(o, sr, { peak: 0.6 }); },
     /** «Overgrown»: leaves rustling and wood groaning as it grows. */
@@ -443,6 +468,8 @@ const LOOPS = {
     loopAlive(sr) { const o = buf(sr, 3.3); pad(o, sr, [55, 82.5], 0, 3.3, 0.4, { att: 0.01, rel: 0, harm: 4 }); glide(o, sr, 0.6, 1.4, 0.15, (u) => 100 + 30 * u + 5 * Math.sin(u * 50), (u) => Math.sin(u * Math.PI), 5); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
     /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
     loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
+    /** «Электром» held: the hum of a live wire and its crackle. */
+    loopElectrum(sr) { const o = buf(sr, 2.3), r = rng(197); glide(o, sr, 0, 2.3, 0.3, () => 100, () => 1, 9); glide(o, sr, 0, 2.3, 0.08, () => 150, () => 1, 5); for (let k = 0; k < 30; k++) noise(o, sr, Math.abs(r()) * 2.2, 0.02, 0.6, () => 0.95, (u) => 1 - u, r); return finish(loopSeam(o, sr), sr, { peak: 0.45 }); },
     /** A building growing: a light magic shimmer. */
     loopBuild(sr) { const o = buf(sr, 2.3); pad(o, sr, [220, 330, 880], 0, 2.3, 0.25, { att: 0.01, rel: 0, harm: 1, vib: 0.006 }); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** A beam / lightning held: an electric hum and a little crackle. */
@@ -497,7 +524,9 @@ export const SPELL_SOUND = {
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
     // the duel charges and the fights (their own short sounds; Duel.js plays them for everyone)
     Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] },
-    Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] },
+    Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
+    // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
+    Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' },
     Jolt: { own: ['jolt'] }, JoltMaxima: { own: ['jolt'] }, Levitation: { own: ['cast'] }, LevitationMaxima: { own: ['cast', 'crack', 'rumble'] },
     Bombardo: { own: ['cast', 'explosion'] }, BombardoMaxima: { own: ['cast', 'explosion'] },
     Thunderwave: { own: ['thunder'] }, LightningStrike: { own: ['thunder'] }, Earthquake: { own: ['explosion'] }, EarthquakeMaxima: { own: ['explosion'] },
@@ -536,6 +565,7 @@ export const HELD_SOUND = {
     Alive: { loop: 'loopAlive', end: 'endAlive' },
     Build: { loop: 'loopBuild', end: 'fxStop' },
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
+    Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)
     Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },
     Inferno: { loop: 'loopFire', end: 'fxNox' },
     Waterball: { loop: 'loopWater', end: null },
