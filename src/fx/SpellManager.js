@@ -257,11 +257,16 @@ export function houseWords(s) {
 // AND «castle» / «замок» — never «замок» alone (a lock in talk), never «Lock».
 const CASTLE_SAID = /(castl|castel|касл|кастл|кэсл|кэстл|кесл|кестл|касел|кассл|кастел|каст?ле|кастыл)/;
 const CASTLE_RU = /^(замок|замка|замочек|дворец|дворца)$/;
-const MAKE_CASTLE = /(creat|crate|крейт|криейт|криэйт|креит|кріейт|креэйт|криет|созда|сотвори|построй|построить|возведи)/;
+// (the Russian verb only as an order — «создай», «построй»: «я создал замок», «строить замок» in talk is no spell;
+// and a short phrase — a sentence about a castle is talk: «как классно, что я создал свой замок с троном»)
+const MAKE_CASTLE = /(creat|crate|крейт|криейт|криэйт|креит|кріейт|креэйт|криет)/;
+const MAKE_CASTLE_RU = /^(создай|сотвори|построй|возведи)$/;
 export function castleWords(s) {
     s = String(s || '').toLowerCase().replace(/ё/g, 'е');
-    const castle = CASTLE_SAID.test(s) || s.split(/[^a-zа-я]+/).some((w) => CASTLE_RU.test(w));
-    return castle && MAKE_CASTLE.test(s);
+    const words = s.split(/[^a-zа-я]+/).filter(Boolean);
+    if (words.length > 5) return false;
+    const castle = CASTLE_SAID.test(s) || words.some((w) => CASTLE_RU.test(w));
+    return castle && (MAKE_CASTLE.test(s) || words.some((w) => MAKE_CASTLE_RU.test(w)));
 }
 
 // «Let the Hellfire Come» as the Russian recognizer writes it: «лет зе хеллфаер кам», «хелфайр кам»,

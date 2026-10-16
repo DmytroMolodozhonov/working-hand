@@ -10,7 +10,7 @@ import { BLOCK } from '../../src/world/Terrain.js';
 
 test('the words: «Create a Castle», «Создай замок» — never «замок» alone, never the house', () => {
     for (const t of ['Create a Castle', 'криейт э касл', 'крейт э кастл', 'создай замок', 'Сотвори замок', 'построй замок']) assert.equal(matchSpell(t), 'CreateCastle', t);
-    for (const t of ['замок', 'открой замок', 'lock']) assert.notEqual(matchSpell(t), 'CreateCastle', t);
+    for (const t of ['замок', 'открой замок', 'lock', 'я создал замок', 'как классно иметь свой трон', 'как классно, что я создал свой замок с троном', 'строить замок']) assert.notEqual(matchSpell(t), 'CreateCastle', t);
     assert.equal(matchSpell('Create a House'), 'CreateHouse');
 });
 
@@ -108,4 +108,17 @@ test('said «Create a Castle» (the phrase → the spell → the castle begins);
     w2.g.combat.fatigue = 120;
     assert.equal(w2.g.castleMagic.cast('CreateCastle', true), null);
     assert.match(w2.g.hud.said, /маны: нужно 500/);
+});
+
+test('the hands down (the camera sees the player): talk never makes a castle; the hand raised — it does', () => {
+    const { g } = world();
+    g.currentPose = { hasPose: true };
+    g.lastMagicTime = Date.now() - 10000;
+    assert.equal(g.castleMagic.cast('CreateCastle', true), null);
+    assert.equal(g.castleMagic.magic, null);
+    assert.equal(g.hud.said, '', 'no hint: it was talk');
+    g.lastMagicTime = Date.now();
+    g.castleMagic._aimPoint = () => new THREE.Vector3(0, 0, 0);
+    assert.equal(g.castleMagic.cast('CreateCastle', true), 'CreateCastle');
+    assert.ok(g.castleMagic.magic);
 });

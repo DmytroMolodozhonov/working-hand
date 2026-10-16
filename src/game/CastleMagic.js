@@ -138,6 +138,9 @@ export class CastleMagic extends HouseMagic {
         const now = Date.now();
         if (now - this._lastCast < 1500) return null;
         const say = (t) => { if (isFinal && t) g.hud.setVoice(t, true); return null; };
+        // (a castle only on purpose: the hand (the wand) raised for magic as the words are said — talk about a
+        // castle or a throne with the hands down never makes one; without a camera the words alone)
+        if (!this._intent()) { g.netLog?.(`🏰 «Create a Castle» без поднятой руки — не колдую`); return null; }
         if (this.magic) return say('🏰 Магия замка уже идёт — держите палочку');
         if (g.houseMagic?.magic) return say('🏠 Сначала дождитесь, пока достроится дом');
         if (!g.items?.heldOf?.('wand') && !this.testAim && !this.free) return say('🪄 Возьмите палочку в руку и направьте её туда, где встанет замок');
@@ -151,6 +154,13 @@ export class CastleMagic extends HouseMagic {
         this._lastCast = now;
         g._manaLater = true;
         return name;
+    }
+
+    /** Was the hand (the wand) raised for magic just now? (No camera: the words alone are enough.) */
+    _intent() {
+        const g = this.game, now = Date.now();
+        if (this.testAim || !g.currentPose?.hasPose) return true;
+        return !!(g.isMagicActive || now - (g.lastMagicTime || 0) < 3000 || now - (g._armsUpAt || 0) < 3000);
     }
 
     /** Where the castle's middle stands: ahead, where the hand (or the body) faces. */
