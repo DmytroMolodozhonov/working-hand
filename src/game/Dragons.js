@@ -3,7 +3,7 @@
  * the world. (Kinds, strength, the table «на кого и на что»: DragonKinds.js; looks: DragonModel.js;
  * the lairs themselves are carved into the mountains by the terrain: src/world/DragonLairs.js.)
  *
- *  - 1000 HP. Fire of any kind does nothing to it (DragonKinds.FIRE_KINDS); the other spells and
+ *  - 500 HP. Fire of any kind does nothing to it (DragonKinds.FIRE_KINDS); the other spells and
  *    blows — DragonKinds.ON_DRAGON, decided per spell, with the reason.
  *  - In its lair it lies on its hoard, asleep or watching. It wakes when somebody comes near (sooner
  *    with a light, running), at a blast or thunder nearby, and AT ONCE when somebody takes its gold or

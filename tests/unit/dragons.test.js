@@ -8,9 +8,9 @@ import { TerrainData } from '../../src/world/Terrain.js';
 import { LAIR } from '../../src/world/DragonLairs.js';
 import * as THREE from 'three';
 
-test('five kinds, each its own look; strength by kind and by chance; 1000 HP', () => {
+test('five kinds, each its own look; strength by kind and by chance; 500 HP', () => {
     assert.equal(KIND_IDS.length, 5);
-    assert.equal(DRAGON_HP, 1000);
+    assert.equal(DRAGON_HP, 500);
     assert.equal(new Set(KIND_IDS.map((k) => DRAGON_KINDS[k].body)).size, 5, 'each its own colour');
     let s = 1;
     const rng = () => ((s = (s * 16807) % 2147483647) / 2147483647);
