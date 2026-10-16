@@ -46,6 +46,13 @@ export const PGODS = {
 /** The gods' spells (one list for every place: the scrolls of the gods' library — Mana.GOD_SPELLS). */
 export const DIVINE_SPELLS = GOD_SPELLS;
 
+/**
+ * The gods' spells that BREAK the gods' shield (the author): the first blow takes the shield off — it does not kill and
+ * takes no mana (no «half the price»); the next one, the shield gone, does what it does. «Дай» (Die): add its name
+ * here (and its scroll to GodsTemple.TEMPLE_SCROLLS — that makes it a spell of the gods). Combat.godsHit does it.
+ */
+export const BREAKS_GODS = new Set(['Die']);
+
 /** Is this kind of hit a spell of the gods? (a kind is a spell's name, or its Mana alias) */
 export const isDivine = (kind) => !!kind && DIVINE_SPELLS.has(kind);
 

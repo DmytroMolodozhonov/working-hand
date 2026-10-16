@@ -99,6 +99,14 @@ test('a spell of the gods: held, for half its price × the share of the blow; no
     assert.equal(c.fatigue, 512.5, 'not of the gods: nothing taken');
     const pass = c.godsHit('PlanetLiquidation', null, 1, 2000);
     assert.ok(pass > 0 && c.shield === null, 'out of mana: broken, the rest goes on');
+    // («Дай»: the first blow breaks the shield — no mana, nothing gets through this time)
+    const e = fakeGame({ tPose: true }).c;
+    e.fatigue = e.maxFatigue = 1000;
+    e.castProtection(true, true);
+    const m1 = e.fatigue;
+    assert.equal(e.godsHit('Die', null, 1), 0);
+    assert.ok(e.shield === null && e.fatigue === m1, '«Дай» breaks it, takes no mana');
+    assert.equal(e.godsHit('Die', null, 1), 1, 'the next one gets through');
     assert.ok(firstSpellGain('ProtectionGods') === 100 && firstSpellGain('ProtectionGodsMaxima') === 100);
 });
 

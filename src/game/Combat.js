@@ -37,7 +37,7 @@ import * as THREE from 'three';
 import { sharpJerk } from './Jerk.js';
 import { spellPush } from './Impact.js';
 import { SLOW } from './Slow.js';
-import { PGODS, isDivine, isMagicKind, godsKeepsOff, ALL_ROUND, payDivine } from './ProtectionGods.js';
+import { PGODS, isDivine, isMagicKind, godsKeepsOff, ALL_ROUND, payDivine, BREAKS_GODS } from './ProtectionGods.js';
 
 export const PVP = {
     MAX_HP: 20,
@@ -715,6 +715,7 @@ export class Combat {
         if (!s?.gods || !(s.left > 0) || this.dead) return 1;
         if (s.type === 1 && from && this.shieldFactor(from) < 1) return 1; // (from behind the hand)
         const k = Math.max(0, Math.min(1, share));
+        if (BREAKS_GODS.has(kind)) { this.breakGods(); return 0; } // («Дай»: the first blow breaks it — no death, no mana; the next one gets through)
         if (!isDivine(kind)) { this._godsFx(from); return 0; } // (any other spell: held for nothing)
         if (!this.enabled) { this._godsFx(from); return 0; } // (Creative: no mana rules)
         const r = payDivine(this.fatigue, price ?? SPELL_COST[kind] ?? 0, k);
@@ -722,6 +723,16 @@ export class Combat {
         if (r.pass > 0) { this._shatter('💥 Божественная защита сломалась — не хватило маны удержать заклинание богов!'); return r.pass; }
         this._godsFx(from, '✨ Божественная защита сдержала заклинание богов');
         return 0;
+    }
+
+    /**
+     * The gods' shield is broken off now (a spell that breaks it — ProtectionGods.BREAKS_GODS, «Дай»): no mana taken,
+     * nothing else happens to me this time; its golden pieces fly (everybody sees them). @returns {boolean} it was up
+     */
+    breakGods(text = '💥 Божественная защита разбита! Следующий удар пройдёт') {
+        if (!this.shield?.gods) return false;
+        this._shatter(text);
+        return true;
     }
 
     /** The gods' shield held something: gold sparks where it touched, its gold light flaring. */
