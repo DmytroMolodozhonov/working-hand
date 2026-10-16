@@ -67,7 +67,7 @@ const TEMPLE_SCROLL_LINE = {
     EnlargePlanet: 'Заклинание богов: сделать планету больше',
     TerraformPlanet: 'Заклинание богов: переделать планету — воздух, вода, земля, жизнь',
     LevitationSuperMaxima: 'Заклинание богов: двигать целую планету в космосе',
-    Boom: 'Заклинание богов: разорвать изнутри целую гору или замок (1000 маны)',
+    Boom: 'Заклинание богов: разорвать изнутри целую гору или замок (750 маны)',
 };
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */

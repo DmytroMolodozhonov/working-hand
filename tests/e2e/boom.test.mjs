@@ -95,7 +95,8 @@ test('«Бум»: the mountain swells, glows, bursts from inside — a crater; l
     assert.ok(after.e, 'saved with the world (g.explosions)');
     assert.ok(after.mid < before.mid - 8 || after.mid < 2, `the mountain gone: the middle ${before.mid} → ${after.mid}`);
     assert.ok(after.peak < before.peak, `its peak gone: ${before.peak} → ${after.peak}`);
-    assert.ok(after.worst.boom < 30, `the spell's work a frame stays light: ${after.worst.boom.toFixed(1)} ms`);
+    assert.ok(after.worst.boom < 60, // (here the processor draws the picture too: a few times slower than a real computer)
+        `the spell's work a frame stays light: ${after.worst.boom.toFixed(1)} ms`);
     // talk: «бум» inside a sentence casts nothing
     const talk = await page.evaluate(() => { const g = window.__zns.game; g.boom._lastCast = 0; return g.castLocalSpell('и тут бум, всё упало', true); });
     assert.equal(talk, null, 'talk is no spell');

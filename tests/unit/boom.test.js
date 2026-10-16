@@ -35,9 +35,9 @@ test('the words: «Boom», «Бум», «Бумм» on their own cast it; «бу
     assert.equal(spellPhrase('вот это был бум вчера', { final: true }).name === 'Boom' && spellPhrase('вот это был бум вчера', { final: true }).ok, false);
 });
 
-test('only from the scroll of the gods\' temple (its fifth pedestal), 1000 mana, +100 cells the first time', () => {
-    assert.equal(SPELL_COST.Boom, 1000);
-    assert.equal(BOOM.COST, 1000);
+test('only from the scroll of the gods\' temple (its fifth pedestal), 750 mana, +100 cells the first time', () => {
+    assert.equal(SPELL_COST.Boom, 750);
+    assert.equal(BOOM.COST, 750);
     assert.ok(SCROLL_SPELL_COLOR.Boom, 'known only from a burnt scroll outside Creative');
     assert.ok(GOD_SPELLS.has('Boom'));
     assert.equal(firstSpellGain('Boom'), 100);
@@ -45,8 +45,8 @@ test('only from the scroll of the gods\' temple (its fifth pedestal), 1000 mana,
     const plan = templePlan(1);
     assert.equal(plan.pedestals.length, 5);
     assert.equal(plan.pedestals[4].spell, 'Boom');
-    assert.equal(boomBlock({ enabled: true, mana: 999 }), 'mana');
-    assert.equal(boomBlock({ enabled: true, mana: 1000 }), null);
+    assert.equal(boomBlock({ enabled: true, mana: 749 }), 'mana');
+    assert.equal(boomBlock({ enabled: true, mana: 750 }), null);
     assert.equal(boomBlock({ enabled: false, mana: 0 }), null, 'Creative: free');
 });
 

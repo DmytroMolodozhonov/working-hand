@@ -8,7 +8,7 @@
  *
  *   - Said: «Boom» / «Бум» / «Бумм» — the word on its own (SpellManager.boomWords), with the hand (the wand)
  *     raised and aimed at the target: talk with «бум» in it never casts it (and outside Creative only one
- *     who burnt its scroll knows it — the fifth pedestal of the gods' library; 1000 mana, in Creative free).
+ *     who burnt its scroll knows it — the fifth pedestal of the gods' library; 750 mana (the author changed it from 1000), in Creative free).
  *   - Aimed: a mountain, a hill, a rock or a building (castle, tower, house, the Ice Queen's palace…) up to
  *     REACH m along the hand. Its middle is found INSIDE it — the middle of its mass along the line of the
  *     hand, half-way up from the land round it (boomTarget): nothing flies from the wand.
@@ -36,7 +36,7 @@ import { eachBody, hitBody, throwBody } from './MagicWave.js';
 const R = BOOM_SHAPE.R, WALL = boomReach(R); // (the bowl; its torn wall slopes up out to WALL)
 export const BOOM = {
     NAME: 'Boom',
-    COST: 1000, // mana, at once (Combat.SPELL_COST)
+    COST: 750, // mana, at once (the author: 750) (Combat.SPELL_COST)
     REACH: 230, // m: a mountain this far along the hand
     R, // m: the crater's radius (BoomCarve)
     SWELL: 1.3, // s: it shakes, glows and swells before it bursts
