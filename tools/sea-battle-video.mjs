@@ -159,6 +159,7 @@ function setup() {
     };
     // ------------------------------------------------------------------ a camera that sees: nothing solid between
     const ray = new THREE.Raycaster();
+    let frameNo = 0;
     const _d = new THREE.Vector3();
     const solid = (h) => h.object.isMesh && h.object.visible && !(h.object.material?.transparent && h.object.material.opacity < 0.6);
     /** Nothing of the two ships (hulls, masts, sails) between the eye and what it looks at. */
@@ -176,8 +177,8 @@ function setup() {
     /** The first clear one of the candidate places (a stable choice: it keeps its place while that stays clear). */
     const choose = (memo, at, cands) => {
         if (memo.i != null && memo.i < cands.length && clear(cands[memo.i], at)) { memo.bad = 0; return cands[memo.i]; }
-        if (memo.i != null && ++memo.bad < 6) return cands[memo.i];
-        memo.bad = 0;
+        if (memo.i != null && (++memo.bad < 6 || frameNo - (memo.scan || -99) < 15)) return cands[memo.i]; // (a new look round: not every frame — the rays are not free)
+        memo.bad = 0; memo.scan = frameNo;
         for (let i = 0; i < cands.length; i++) if (clear(cands[i], at)) { memo.i = i; return cands[i]; }
         memo.i = memo.i ?? 0;
         return cands[memo.i];
@@ -352,9 +353,10 @@ function setup() {
             name: 'final', start: (t) => F.winner !== 'sunk' || t - F.endT > 8, // (she goes down: a few seconds on, when it shows) end: (t, t0) => t - t0 >= 6.5, keep: 6.5,
             on: () => { F.ph0 = g.dayPhase(); },
             cam: (k) => {
-                const m = W(T, 0, 0, 0);
+                const H = Number.isFinite(T.st.x) ? T : s;
+                const m = W(H, 0, 0, 0);
                 const e = ease(k);
-                const a = T.st.yaw + 0.9 + e * 0.5, r = lerp(30, 120, e);
+                const a = H.st.yaw + 0.9 + e * 0.5, r = lerp(30, 120, e);
                 return { p: new THREE.Vector3(m.x + Math.sin(a) * r, sea + lerp(14, 60, e), m.z + Math.cos(a) * r), at: new THREE.Vector3(m.x, sea + lerp(8, 4, e), m.z), fov: 50 };
             },
             frame: (t, t0) => { F.ph = F.ph0 + (t - t0) * 0.004; },
@@ -362,6 +364,7 @@ function setup() {
     ];
     // ------------------------------------------------------------------ the step
     let t = 0, si = 0, shot = null, rolling = [], idle = 0;
+    frameNo = 0;
     const emitted = [];
     const log = [];
     const realRender = g.renderer.render.bind(g.renderer);
@@ -389,11 +392,14 @@ function setup() {
                 if (shot) {
                     const k = Math.min(1, (t - shot.t0) / shot.def.keep);
                     const c = shot.def.cam(k, t);
-                    cam.p.copy(c.p); cam.at.copy(c.at); cam.fov = c.fov || 50; cam.ok = true;
+                    const ok = (v) => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+                    if (ok(c.p) && ok(c.at)) { cam.p.copy(c.p); cam.at.copy(c.at); cam.fov = c.fov || 50; cam.ok = true; }
+                    else if (!F.nanLog) { F.nanLog = true; log.push(`${t.toFixed(1)} s ${shot.def.name}: no camera (T ${T.st.x},${T.st.z},${T.st.yaw} s ${s.st.x},${s.st.z})`); }
                     g.renderer.render = realRender;
                 } else { cam.ok = false; g.renderer.render = () => {}; }
                 pin();
                 g.frame();
+                frameNo++;
                 t += DT / 1000;
                 if (shot) {
                     shot.def.frame?.(t, shot.t0);
