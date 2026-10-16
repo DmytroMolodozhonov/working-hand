@@ -28,7 +28,8 @@ export function formatEntry(e) {
     parts.push(e.isFinal === false ? (m.settled ? 'фраза ещё идёт, но заклинание уже сказано' : 'промежуточная') : 'конец фразы');
     parts.push(m.native ? 'нейросеть на компьютере' : 'распознавание браузера');
     if (m.native) {
-        if (m.sure) parts.push('узнано по звуку');
+        if (m.byWords) parts.push('узнано по словам (длинное заклинание целиком)');
+        else if (m.sure) parts.push('узнано по звуку');
         if (Number.isFinite(m.fit)) parts.push(`запас ${m.fit >= 0 ? '+' : ''}${num(m.fit, 1)}`);
         if (m.written && m.written !== e.text) parts.push(`буквами: «${String(m.written).slice(0, 60)}»`);
         if (Number.isFinite(m.extra) && m.extra > 0) parts.push(`букв вокруг ${m.extra}`);

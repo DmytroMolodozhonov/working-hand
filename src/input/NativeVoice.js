@@ -18,6 +18,7 @@
 
 import { unpack, hear, threshold, HEARD, WORDY, GOES_ON } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
+import { spellPhrase } from '../audio/SpellPhrase.js';
 
 /** A spell this clear is cast from one look at the phrase (avg cost per letter)… */
 export const SURE_AT_ONCE = -0.6;
@@ -51,6 +52,21 @@ export function partOf(a, b) {
  * @returns {{say: null|{text, isFinal}, echo: null|string, heard, seg}}
  *   say: what to hand on now (null: nothing yet); echo: a spell heard only as the speakers' echo
  */
+/** A written spell this long (letters) may cast by its words when the sound leans to it (WORDS_FIT). */
+export const WORDS_LEN = 8;
+export const WORDS_FIT = -0.8;
+
+/** The written words are one long spell nothing goes on from, and the sound found that spell nearly well enough. */
+function wordsSpell(h, d) {
+    const ph = spellPhrase(h.written, { final: true });
+    const way = ph.ok && ph.close === 'said' ? ph.said : null;
+    if (!way || way.l.length < WORDS_LEN || GOES_ON.has(way.phrase)) return null;
+    const b = h.best;
+    if (!b || b.spell !== ph.name) return null;
+    const fit = b.avg - threshold(b.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity);
+    return fit >= WORDS_FIT ? { canonical: way.canonical, fit } : null;
+}
+
 export function lookAt(d, seg = {}) {
     const lp = unpack(d.lp, d.T);
     const ref = d.ref ? unpack(d.ref, d.refT) : null;
@@ -94,7 +110,17 @@ export function lookAt(d, seg = {}) {
         // горит у ворот»): words to a villager, never that spell (the sound is the judge: the written words
         // found 1 of my spells in 100 it missed, and a spell in 127 of 1900 everyday sentences)
         const talkOnly = !!loose && HEARD.has(loose) && !WORDY.has(loose);
-        if (h.written && !faint && !early && (!loose || talkOnly || (d.final && (d.far || 0) < 0.25))) say = { text: h.written, isFinal: !!d.final, talkOnly };
+        // …unless the written words ARE a long spell, nothing can follow it, and the sound leans to that same
+        // spell — only a word or two round it («так теперь вайнд максима»), or not sure enough to cast it at once:
+        // «ликвидейшн максима», «раскрой свои секреты», «авада кедавра» cast now, not at the phrase's end
+        const byWords = talkOnly && !faint && !early ? wordsSpell(h, d) : null;
+        if (byWords) {
+            if (next.fired !== byWords.canonical) {
+                say = { text: byWords.canonical, isFinal: !!d.final, settled: !d.final, byWords: true };
+                next.fired = byWords.canonical;
+                next.settled = true;
+            }
+        } else if (h.written && !faint && !early && (!loose || talkOnly || (d.final && (d.far || 0) < 0.25))) say = { text: h.written, isFinal: !!d.final, talkOnly };
     }
     return { say, echo, heard: h, seg: next };
 }
@@ -211,7 +237,7 @@ export class NativeVoice {
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
-        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled });
+        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure || !!r.say.byWords, byWords: !!r.say.byWords, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled });
         else if (d.final && !r.seg.fired) {
             // (nothing handed on: the closest spell and how far it was from counting — the spell journal)
             const b = r.heard.best;

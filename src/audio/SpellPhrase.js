@@ -19,12 +19,14 @@
 
 import { matchSpell } from '../fx/SpellManager.js';
 import { VOCAB, WORDY } from './SpellSpotter.js';
+import { editsInside } from './GameVoices.js';
 
 const norm = (t) => String(t ?? '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 const letters = (t) => norm(t).replace(/[^a-zа-я]/g, '');
 
 /** Little words that may stand round a spell («ну, Бомбардо!», «давай, Инферно», «эй, Айс»). */
 export const FILLER = new Set(['ну', 'так', 'давай', 'давайка', 'а', 'э', 'эй', 'и', 'вот', 'ой', 'ох', 'ах', 'эх', 'же', 'ка', 'да', 'ещё', 'еще', 'раз',
+    'теперь', 'щас', 'сейчас', 'короче', 'ладно', 'итак', 'и так', 'нука', 'ну-ка',
     'опа', 'оп', 'хоп', 'гоп', 'окей', 'ok', 'okay', 'go', 'гоу', 'please', 'пожалуйста', 'ага', 'эм', 'мм', 'хм', 'ааа', 'эээ']);
 
 /** A phrase this long is a sentence: no spell is that many words (the longest: «Let the Hellfire Come…»). */
@@ -90,7 +92,7 @@ for (const w of VOCAB) {
     const l = letters(w.phrase);
     if (!l) continue;
     if (!SAID_BY.has(w.spell)) SAID_BY.set(w.spell, []);
-    SAID_BY.get(w.spell).push({ l, k: w.phrase.split(' ').length });
+    SAID_BY.get(w.spell).push({ l, k: w.phrase.split(' ').length, phrase: w.phrase, canonical: w.canonical });
 }
 
 /** How many letters may differ from a way of saying the spell (short ones: none — «ап», «лед»). */
@@ -100,13 +102,14 @@ const tolerance = (len) => (len <= 3 ? 0 : len <= 5 ? 1 : Math.round(len * 0.4))
  * Where in the words is one of the ways of saying `name` (near enough: misheard letters, a word split in two
  * or two run together)? → [first word, last word] or null
  */
-export function saidAt(name, words) {
+export function saidAt(name, words, info = null) {
     const said = SAID_BY.get(name);
     if (!said) return null;
     // (the most of the phrase's letters a way of saying it covers — a one-letter word at its edge doesn't
     // count: «пауза в игре» is «пауза», «ил бабл» is «эйр баббл» — then the fewest changes)
     let best = null, bestCover = 0, bestD = Infinity;
-    for (const { l, k } of said) {
+    for (const way of said) {
+        const { l, k } = way;
         const tol = tolerance(l.length);
         for (let len = 1; len <= k + 1 && len <= words.length; len++) {
             for (let i = 0; i + len <= words.length; i++) {
@@ -116,7 +119,7 @@ export function saidAt(name, words) {
                 if (d > (len === k ? tol : Math.min(tol, 1))) continue;
                 if (len > 1 && (part[0].length <= 1 || part[len - 1].length <= 1)) continue;
                 const cover = part.join('').length;
-                if (cover > bestCover || (cover === bestCover && d < bestD)) { bestCover = cover; bestD = d; best = [i, i + len - 1]; }
+                if (cover > bestCover || (cover === bestCover && d < bestD)) { bestCover = cover; bestD = d; best = [i, i + len - 1]; if (info) info.way = way; }
             }
         }
     }
@@ -152,7 +155,9 @@ export function spellPhrase(text, { final = true, match = matchSpell } = {}) {
     if (words.length > MAX_WORDS) return { ...out, ok: false, why: 'sentence', extra: words.length };
     // where the spell's own words are: one of its ways of saying it — else the fewest words in a row that
     // still name it (then they must be its Russian name, or English)
-    let span = saidAt(name, words), close = span ? 'said' : null;
+    const info = {};
+    let span = saidAt(name, words, info), close = span ? 'said' : null;
+    if (span) out.said = info.way; // (which way of saying it: {phrase, canonical})
     if (!span) {
         span = [0, words.length - 1];
         found: for (let len = 1; len <= words.length; len++) {
@@ -237,9 +242,82 @@ export function bodyNoise(h) {
     const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.text || '').length;
     const short = len <= SHORT_LEN;
     // the camera saw my mouth stay still: no word was said (a short spell, or anything while running)
-    if (h.lips === false && (short || h.running)) return 'губы не двигались — это не речь (дыхание, шаги, шорох)';
+    // (the network on this computer tells how well the spell fit: there soundTrust weighs the lips with it)
+    if (h.lips === false && (short || h.running) && !(h.native && Number.isFinite(h.fit))) return 'губы не двигались — это не речь (дыхание, шаги, шорох)';
     if (h.native && short && Number.isFinite(h.fit) && h.fit < SHORT_FIT && (h.running || (Number.isFinite(h.snr) && h.snr < 12))) {
         return `короткое заклинание узнано неуверенно ${h.running ? 'на бегу' : 'в шуме'} (запас ${h.fit.toFixed(1)}, нужно ${SHORT_FIT})`;
     }
     return null;
+}
+
+/** Spells that cost much or do much (a castle out of nothing, a curse that kills): never from a sound only just made out. */
+export const DANGEROUS = new Set(['CreateCastle', 'IceCastle', 'IceBridge', 'CreateHouse', 'ImproveHouse', 'AvadaKedavra', 'Hellfire', 'Frozen', 'Stupefy',
+    'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'LightningStrike', 'Earthquake', 'EarthquakeMaxima', 'CircleAttack', 'CircleAttackMaxima',
+    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima']);
+
+/**
+ * Do the letters the network wrote look like the spell? («лемус» — «люмос», «бам барда» — «бомбардо максима»,
+ * «фроза» — «фрозен»: yes; «да» — «даст», «страх» — «остолбеней», «настрой свой» — «криейт э касл»: no.)
+ */
+export function lettersLike(written, spellWords) {
+    const w = letters(written), p = letters(spellWords);
+    if (!w || !p) return false;
+    // (the vowels are what the network mixes up most: «лемус», «глемус» are «люмос»)
+    const fold = (x) => x.replace(/[аеёиоуыэюя]/g, 'а');
+    const like = (ww, pp) => {
+        // the spell inside the written words, with a little talk round it («можно такой стичин»; a whole
+        // sentence round a short spell is no sign: «…сюда та…» holds «даст»)
+        if (ww.length <= pp.length * 2.5 + 4 && editsInside(pp, ww) <= (pp.length <= 5 ? 1 : Math.round(pp.length * 0.4))) return true;
+        // the written words a piece of the spell (the network wrote only part of it: «максиму» of «вайнд максима»)
+        const enough = pp.length <= 5 ? Math.max(3, pp.length - 1) : Math.max(4, Math.round(pp.length * 0.4));
+        return ww.length >= enough && editsInside(ww, pp) <= Math.floor(ww.length * 0.3);
+    };
+    return like(w, p) || like(fold(w), fold(p));
+}
+
+/**
+ * A spell found by its sound (the network on this computer) — how sure must it be? The author's journal: «Даст»
+ * from «да», «Остолбеней» from «страх», «Криейт э касл» from «настрой свой», «Frozen» from «просто» — all only just
+ * above the line (запас +0…+0.9), the letters nothing like the spell; the camera's lips often unseen on the run.
+ *  - the letters like the spell: as before; not like it: a clear fit (+1);
+ *  - short ones («Даст», «Айс», «Вайнд», «Ап»): +0.3; while the speakers play or on the run more;
+ *  - the costly / deadly ones (DANGEROUS): +0.6, with letters not like it +1.5;
+ *  - the lips seen still: only a clear fit (+1.5) of letters like the spell — the camera is often wrong
+ *    (a hand, the wand at the face, running), a shout of «Ликвидейшн Максима» (+2.6) is a spell;
+ *  - «стоп» only stops: +1 is always enough.
+ * @param {{spell: string, canonical?: string, written?: string, fit: number, len?: number, far?: number,
+ *          running?: boolean, lips?: boolean|null}} h
+ * @returns {string|null} why it is not cast, or null
+ */
+export function soundTrust(h) {
+    if (!h?.spell || !Number.isFinite(h.fit)) return null;
+    const fit = h.fit;
+    const like = lettersLike(h.written ?? h.canonical ?? '', h.canonical ?? '');
+    const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.canonical || '').length;
+    const short = len <= SHORT_LEN;
+    if (h.spell === 'Stand') return fit >= 1 || (like && fit >= 0.3) ? null : `«стоп» узнан неуверенно (запас ${fit.toFixed(1)})`;
+    if (h.lips === false && !like) return 'губы не двигались, и буквы не похожи на заклинание';
+    let need = 0;
+    const why = [];
+    if (!like) { need = Math.max(need, 1); why.push('буквы не похожи'); }
+    if (short) { need = Math.max(need, 0.3); why.push('короткое'); }
+    if (short && (h.far || 0) >= 0.5) { need = Math.max(need, 1); why.push('звучали колонки'); }
+    if (short && h.running) { need = Math.max(need, 0.8); why.push('на бегу'); }
+    if (DANGEROUS.has(h.spell)) { need = Math.max(need, like ? 0.6 : 1.5); why.push('сильное заклинание'); }
+    if (h.lips === false) { need = Math.max(need, 1.5); why.push('губы не двигались'); }
+    if (fit >= need) return null;
+    return `узнано неуверенно: запас ${fit.toFixed(1)}, нужно ${need} (${why.join(', ')})`;
+}
+
+/** The written words are the game's own line sounding then («так спасибо» over «Спасибо, братцы!»). */
+export function wordsOfLine(written, line) {
+    const w = letters(written), l = letters(line);
+    if (w.length < 4 || !l) return false;
+    return editsInside(w, l) <= Math.round(w.length * 0.3);
+}
+
+/** The phrase begins with «стоп» and goes on with a spell («стоп, раскрой свои секреты»): first stop, then cast. */
+export function stopFirst(text) {
+    const w = norm(text).split(' ').filter(Boolean);
+    return w.length > 1 && /^(стоп|stop)$/.test(w[0]);
 }

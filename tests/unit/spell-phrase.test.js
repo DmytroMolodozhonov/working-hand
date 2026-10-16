@@ -78,7 +78,7 @@ test('«Бомбардо Максима» is that one spell, once: no «Джол
 test('running with no word said: breathing and steps read as «Даст» / «Джолт» never cast (the author\'s case)', async () => {
     const { bodyNoise } = await import('../../src/audio/SpellPhrase.js');
     assert.ok(bodyNoise({ spell: 'Sands', text: 'даст', native: true, fit: 0.2, len: 4, running: true, lips: null })); // (only just made out, on the run)
-    assert.ok(bodyNoise({ spell: 'Jolt', text: 'джолт', native: true, fit: 1.5, len: 5, running: true, lips: false })); // (the mouth stayed still)
+    assert.ok(bodyNoise({ spell: 'Jolt', text: 'джолт', native: false, running: true, lips: false })); // (the mouth stayed still — the browser's voice: no fit to weigh it with)
     assert.ok(bodyNoise({ spell: 'Jolt', text: 'джолт', native: true, fit: 0.3, len: 5, snr: 8, lips: null })); // (in noise)
     assert.equal(bodyNoise({ spell: 'Jolt', text: 'джолт', native: true, fit: 0.9, len: 5, running: true, lips: true }), null); // (said, clearly)
     assert.equal(bodyNoise({ spell: 'Sands', text: 'даст', native: true, fit: 0.2, len: 4, snr: 25, lips: null }), null); // (standing, quiet room)
@@ -88,4 +88,26 @@ test('running with no word said: breathing and steps read as «Даст» / «Д
 test('the journal tells how fast a spell went off after it was said', () => {
     const line = formatEntry({ text: 'ликвидейшн максима', meta: { native: true, lag: 212, fromStart: 1180 }, spell: 'Liquidation Maxima', ok: true });
     assert.match(line, /✅ сработало за 212 мс после последней буквы \(1180 мс от начала слова\)/);
+});
+
+test('the author\'s journal (16.10): a sound only just made out, its letters nothing like the spell, never casts; real ones still do', async () => {
+    const { soundTrust, wordsOfLine, stopFirst } = await import('../../src/audio/SpellPhrase.js');
+    // [spell, its words, what the network wrote, fit, lips, running, speakers] — from the journal
+    const no = [['Stupefy', 'остолбеней', 'страх', 0.1, null, false, 0.77], ['Sands', 'даст', 'да', 0.5, null, false, 0], ['Sands', 'даст', 'ат', 0.9, null, false, 0],
+        ['Wind', 'вайнд', 'вайнд', 0, null, false, 0.11], ['Hellfire', 'лет зе хеллфаер кам', 'да этоне тупая ка', 0.1, null, false, 0.44],
+        ['AvadaKedavra', 'авада кедавра', 'здк', 0.5, null, false, 0], ['CreateCastle', 'криейт э касл', 'стоочное банполо', 1, null, false, 0],
+        ['CreateCastle', 'криейт э касл', 'настрой свой', 0, false, false, 0], ['Frozen', 'фрозен', 'просто', 0.1, true, false, 0],
+        ['Gather', 'гэзер', 'а я ще у', 0.3, true, true, 0], ['Sands', 'даст', 'все я получил васего', 0.8, true, false, 0],
+        ['Sands', 'даст', 'ну да в мультиплеере играли вместе заходил сюда та ну ибы в', 0.9, null, false, 0.36]];
+    for (const [spell, canonical, written, fit, lips, running, far] of no) assert.ok(soundTrust({ spell, canonical, written, fit, lips, running, far }), `${written} → ${spell}`);
+    const yes = [['Lumos', 'люмос', 'глемус', 0.9, true], ['Lumos', 'люмос', 'лемус', 0.5, true], ['Inferno', 'инферно', 'интерно', 1.3, true],
+        ['Hellfire', 'лет зе хеллфаер кам', 'х фаркам', 1.1, true], ['BombardoMaxima', 'бомбардо максима', 'бам барда', 0.5, true],
+        ['Stand', 'стоп', 'стоп', 2, false], ['Firefighting', 'файрфайтинг', 'файфайтин', 2, false],
+        ['LiquidationMaxima', 'ликвидейшн максима', 'ликвидейшн максимум ликвидейшн максимум', 2.6, false, true], ['Accio', 'акцио', 'королева акце', 1.4, true]];
+    for (const [spell, canonical, written, fit, lips, running = false] of yes) assert.equal(soundTrust({ spell, canonical, written, fit, lips, running }), null, `${written} → ${spell}`);
+    assert.ok(wordsOfLine('так спасибо', 'Спасибо, братцы!'));
+    assert.ok(!wordsOfLine('бомбардо', 'Спасибо, братцы!'));
+    assert.ok(stopFirst('стоп раскрой свои секреты') && !stopFirst('стоп'));
+    // a word or two before a spell is no talk
+    assert.ok(spellPhrase('так теперь вайнд максима').ok);
 });

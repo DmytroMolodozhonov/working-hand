@@ -20,7 +20,7 @@ import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel }
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
-import { spellPhrase, PHRASE_WHY_RU, afterCast, bodyNoise } from './audio/SpellPhrase.js';
+import { spellPhrase, PHRASE_WHY_RU, afterCast, bodyNoise, soundTrust, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
@@ -457,6 +457,8 @@ function journal(command, isFinal, meta, spell, ok, why, source = '') {
     if (!log || !command) return;
     // (a phrase still being said: only when a spell came of it, or a spell was held back — once per words)
     if (!isFinal && !spell) return;
+    // (the network's words while the phrase is still said: the sound decides the spell — no line per look)
+    if (!isFinal && meta?.native && meta.talkOnly && !ok) return;
     const key = `${command}|${spell}|${ok}|${why}`;
     const now = performance.now();
     if (lastJournal && lastJournal.key === key && now - lastJournal.at < 4000) return;
@@ -555,6 +557,12 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
                 journal(command, isFinal, meta, spoken, false, `отсеяно как голос игры: «${String(line).slice(0, 60)}»`, 'голос игры');
                 return;
             }
+            // (the network wrote the very words a game's voice was saying then: «так спасибо» over «Спасибо, братцы!»)
+            const sounding = meta?.native && !mine ? soundingLine(meta.from ?? now - 2500, meta.to ?? now) : null;
+            if (sounding && meta.written && wordsOfLine(meta.written, sounding)) {
+                journal(command, isFinal, meta, spoken, false, `отсеяно: это слова голоса игры «${String(sounding).slice(0, 60)}»`, 'голос игры');
+                return;
+            }
         }
         // right after a spell of mine: its explosion, its echo, the end of the same phrase are no new spell
         if (spoken) {
@@ -564,8 +572,15 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             const lips = game.voiceGate.lipsMoved(performance.now());
             const running = !!game.character?.isRunning;
             if (meta) { meta.lips = lips; meta.running = running; }
-            const noise = bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips });
+            const noise = bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips })
+                // (found by its sound: how sure, weighed with how like the spell the written letters are, the lips, the run)
+                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.written, fit: meta.fit, len: meta.len, far: meta.far, running, lips }) : null);
             if (noise) { journal(command, isFinal, meta || { lips, running }, spoken, false, `отсеяно: ${noise}`); return; }
+            // «стоп, раскрой свои секреты»: first the stop (what I hold lets go), then the spell
+            if (spoken !== 'Stand' && game.focus?.held?.() && stopFirst(meta?.written || command)) {
+                const st = game.castLocalSpell('стоп', true);
+                journal('стоп', true, meta, 'Stand', !!st, st ? '' : castWhy('Stand'), 'микрофон игрока');
+            }
         }
         // The native voice with the speakers' sound taken out of the microphone (voice_native.py): a
         // friend's voice from Discord / the speakers never got here at all, and a spell heard in the
