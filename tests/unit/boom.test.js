@@ -80,7 +80,7 @@ test('who and what: every creature, the ships, the black ship, the gods\' gifts,
     assert.match(b, /eachBody\(g/, 'every creature (MagicWave.eachBody)');
     assert.match(b, /ships\?\.boom\?\.\(/, 'the ships');
     assert.match(b, /temple\?\.wards\?\./, 'the gods\' temple: the golden ward');
-    assert.match(src('src/game/Ships.js'), /boom\(pos, R, by\) \{[\s\S]*?isCursed\(s\)[\s\S]*?curseSpark/, 'the black ship: its curse holds');
+    assert.match(src('src/game/Ships.js'), /boom\(pos, R, by\) \{\s*this\._divine = true/, 'the black ship: its curse does not hold against a spell of the gods');
     assert.match(src('src/net/NetSync.js'), /case 'bum'/);
     assert.match(src('src/net/NetSync.js'), /if \(e\.boom\) runBoom/);
     assert.match(src('src/game/WorldSave.js'), /if \(e\.boom\) runBoom/);
@@ -145,4 +145,17 @@ test('the builders never build over a «Бум» crater; a rebuilt block in it c
     assert.equal(inBoomCrater(booms, '10,30,10'), true);
     assert.equal(inBoomCrater(booms, '95,5,0'), false);
     assert.deepEqual(stillStanding([[5, 40, 5, 20, 0]], booms), []);
+});
+
+test('a spell of the gods: every boss is open to it (the author: «на то они и божественные»)', async () => {
+    const { iceDamage } = await import('../../src/game/IceQueen.js');
+    for (const k of GOD_SPELLS) assert.equal(iceDamage('queen', k, 50), 50, `the Ice Queen takes ${k}`);
+    const { Ships } = await import('../../src/game/Ships.js');
+    const S = Object.create(Ships.prototype);
+    const black = { cls: { magic: true }, taken: false };
+    const cursed = S._cursed(black);
+    S._divine = true;
+    assert.equal(S._cursed(black), false, 'the black ship\'s curse does not hold against a spell of the gods');
+    S._divine = false;
+    assert.equal(S._cursed(black), cursed);
 });

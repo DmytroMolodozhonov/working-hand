@@ -31,7 +31,7 @@ import { IceFixtures, GATE } from './IceFixtures.js';
 import { BLOCK, isPalaceIce, isSolid } from '../world/Terrain.js';
 import { newUid } from './ItemTypes.js';
 import { segmentSegmentDistSq } from '../core/math.js';
-import { creditKill } from './Mana.js';
+import { creditKill, GOD_SPELLS } from './Mana.js';
 import { hitBody } from './MagicWave.js';
 import { registerKind } from './CreatureImpact.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
@@ -83,6 +83,8 @@ export function iceDamage(type, kind, dmg) {
     if (!(dmg > 0)) return 0;
     // cold: nothing (only an evil snowman's snowball breaks another evil snowman — the rod's war)
     if (COLD_KINDS.has(kind) && !(kind === 'snow' && type === 'snowman')) return 0;
+    // a spell of the gods (the scrolls of their library — «Бум», «Planet Liquidation»…): every boss is open to it
+    if (GOD_SPELLS.has(kind)) return dmg;
     const fire = FIRE_K[kind];
     if (small(type)) {
         if (fire) return dmg * fire * 2;

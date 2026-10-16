@@ -1540,10 +1540,15 @@ export class Ships {
      * near are rocked and heel away, those in the crater's reach are torn apart. The host decides the harm
      * (CLAUDE.md «на кого и на что»): a ship within R + 8 m of the middle (across) is wrecked — the hull torn
      * open below the water line along her length, every mast broken, the sails in rags, fire on deck (she
-     * sinks as any ship); out to twice that — harm, a hole, torn sails. The black ship: its curse holds
-     * («Инспириус» is the only spell it can't hold) — its barrier flares green, its crew saw who did it.
+     * sinks as any ship); out to twice that — harm, a hole, torn sails. The black ship too: a spell of the gods
+     * (the author: «на то они и божественные») — its curse can't hold: its barrier flares green as it breaks.
      */
     boom(pos, R, by) {
+        this._divine = true; // (_cursed: the black ship's curse does not hold against the gods' spells)
+        try { this._boom(pos, R, by); } finally { this._divine = false; }
+    }
+
+    _boom(pos, R, by) {
         for (const s of this.awake) {
             s.pose.toLocal(pos.x, s.pose.y ?? pos.y, pos.z, _l);
             const L = s.layout;
@@ -1555,7 +1560,7 @@ export class Ships {
             const sx = _l.x >= 0 ? 1 : -1;
             st.roll = (st.roll || 0) + sx * 0.5 * k;
             st.heave = (st.heave || 0) + 2 * k;
-            if (isCursed(s)) { this.curseSpark(s, d.x, d.y, d.z, false, 2); if (this.auth && by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null); continue; }
+            if (isCursed(s)) this.curseSpark(s, d.x, d.y, d.z, false, 2); // (its barrier flares as it breaks)
             if (!this.auth || s.state === 'wreck') continue;
             const ll = Math.hypot(_l.x, _l.z) || 1, push = 8 * k * Math.min(1.5, 20 / L.L);
             st.u += (_l.z / ll) * push;
@@ -1602,7 +1607,7 @@ export class Ships {
     }
 
     /** Is the black ship's curse holding against what is being done now? («Инспириус» breaks through it.) */
-    _cursed(s) { return isCursed(s) && !this._inspirius; }
+    _cursed(s) { return isCursed(s) && !this._inspirius && !this._divine; } // («Инспириус» and the gods' spells break through it)
 
     _inspiriusHarm(pos, casterId) {
         const g = this.game;
