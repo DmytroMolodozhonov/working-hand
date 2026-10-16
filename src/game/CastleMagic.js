@@ -147,7 +147,7 @@ export class CastleMagic extends HouseMagic {
         const me = g.character.group.position;
         const ask = { kind: 'CreateCastle', at: [r2(at.x), r2(at.y), r2(at.z)], c: [r2(me.x), r2(me.z)] };
         if (!this.auth) { g.sync?.net?.send({ t: this.netType, a: 'ask', ...ask }); say('🏰 …'); }
-        else { const res = this._hostStart(ask, g.localId); if (res !== true) return say(res); }
+        else { const res = this._hostStart(ask, g.localId); if (res === 'search') say('🏰 Перед вами место не подходит — замок ищет себе место рядом…'); else if (res !== true) return say(res); }
         this._lastCast = now;
         g._manaLater = true;
         return name;
@@ -218,24 +218,64 @@ export class CastleMagic extends HouseMagic {
     _hostStart(ask, by) {
         const g = this.game, data = this.data;
         if (this.magic) return '🏰 Магия замка уже идёт';
+        if (this._search) return '🏰 Замок уже ищет себе место…';
         if (!data) return '🏰 …';
-        const creative = this.free;
+        const remote = by !== g.localId && by !== 'local' ? g.remotes?.get?.(by) : null;
+        const no = castleProblem({ mana: remote ? Infinity : (g.combat?.enabled ? g.combat.fatigue : Infinity), free: this.free, stone: Infinity });
+        if (no) return no;
         const x = Math.round(+ask.at?.[0] || 0), z = Math.round(+ask.at?.[2] || 0);
+        if (!this.free && stoneAround(data, x, z) < CASTLE.STONE_NEED) return castleProblem({ mana: Infinity, free: false, stone: 0 });
+        const first = this._placeAt(x, z, ask, by);
+        if (first === true) return true;
+        // the place ahead does not fit (a slope, water, a house…): the magic looks for one near it by itself —
+        // a few places a frame (_searchStep), the nearest to where the wand showed first; none — the first reason
+        const cx = +ask.c?.[0] || 0, cz = +ask.c?.[1] || 0;
+        const fx = x - cx, fz = z - cz, fl = Math.hypot(fx, fz) || 1;
+        const spots = [];
+        for (const r of [16, 32, 48, 64]) for (let k = 0; k < 12; k++) {
+            const a = (k / 12) * Math.PI * 2;
+            const px = Math.round(x + Math.cos(a) * r), pz = Math.round(z + Math.sin(a) * r);
+            const ahead = ((px - cx) * fx + (pz - cz) * fz) / fl; // (in front of the caster, not behind)
+            if (ahead < 20 || Math.hypot(px - cx, pz - cz) < 36) continue; // (never on the caster's own head)
+            spots.push([px, pz, Math.hypot(px - x, pz - z)]);
+        }
+        spots.sort((p, q) => p[2] - q[2]);
+        this._search = { ask, by, spots, i: 0, why: first };
+        return 'search';
+    }
+
+    /** (host) A few of the places round the first one tried a frame (≤ 3 ms); found — the magic begins. */
+    _searchStep() {
+        const S = this._search, g = this.game;
+        const t0 = performance.now();
+        while (S.i < S.spots.length && performance.now() - t0 < 3) {
+            const [x, z] = S.spots[S.i++];
+            if (this._placeAt(x, z, S.ask, S.by) === true) { this._search = null; return; }
+        }
+        if (S.i < S.spots.length) return;
+        this._search = null;
+        const msg = String(S.why).replace(/^(\S+) Там /, '$1 Ни перед вами, ни рядом нет места: там ').replace(/^(\S+) Слишком близко/, '$1 Ни перед вами, ни рядом нет места: слишком близко');
+        if (S.by === g.localId || S.by === 'local') g.hud?.setVoice?.(msg, true);
+        else g.sync?.net?.send({ t: this.netType, a: 'no', to: S.by, msg: msg.slice(0, 200) });
+    }
+
+    /** (host) May the castle stand with its middle at (x, z)? If so, it begins there. @returns {true|string} */
+    _placeAt(x, z, ask, by) {
+        const g = this.game, data = this.data;
         for (const o of this.list.values()) if (Math.hypot(o.x - x, o.z - z) < CASTLE.REACH * 2) return '🏰 Слишком близко к другому замку, созданному магией';
         for (const o of g.houseMagic?.list?.values() || []) if (Math.hypot(o.x - x, o.z - z) < CASTLE.REACH + HOUSE_REACH) return '🏠 Слишком близко к дому, созданному магией';
         const dx = (+ask.c?.[0] || 0) - x, dz = (+ask.c?.[1] || 0) - z;
         const face = faceTowards(dx, dz);
         const id = 'mc' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
         const probe = { id: id + '?', seed: 0, x, z, G: 0, face };
-        const G = this._groundOf(castleLayout(probe).rect);
+        const prc = castleLayout(probe).rect;
+        if (dx + x >= prc.x0 - 3 && dx + x <= prc.x1 + 3 && dz + z >= prc.z0 - 3 && dz + z <= prc.z1 + 3) return '🏰 Отойдите — замок не встанет у вас на голове';
+        const G = this._groundOf(prc);
         if (G == null) return '💧 Там вода — найдите для замка сухое место';
         const rec = { id, seed: (Math.random() * 0x7fffffff) | 0, x, z, G, face, owner: this._key(by), name: this._name(by), t: 0 };
         const why = this._siteProblem(rec);
         if (why) { this._layouts.delete(id); return why; }
-        const stone = stoneAround(data, x, z);
-        const remote = by !== g.localId && by !== 'local' ? g.remotes?.get?.(by) : null;
-        const no = castleProblem({ mana: remote ? Infinity : (g.combat?.enabled ? g.combat.fatigue : Infinity), free: creative, stone });
-        if (no) { this._layouts.delete(id); return no; }
+        if (!this.free && stoneAround(data, x, z) < CASTLE.STONE_NEED) { this._layouts.delete(id); return castleProblem({ mana: Infinity, free: false, stone: 0 }); }
         const lay = this.plan(rec);
         const stones = this._bareStones(rec, lay.rect);
         // the low ground under it is raised: stone up to the foundation (it grows out of the earth)
@@ -290,6 +330,7 @@ export class CastleMagic extends HouseMagic {
             if (m.by === g.localId) this._casterHold(m, dt);
             if (this.auth && this.magic === m) this._build(m);
         }
+        if (this.auth && this._search && !this.magic) this._searchStep();
         if (this.auth) {
             this._sweepT -= dt;
             if (this._sweepT <= 0) { this._sweepT = 0.4; this._chestsTick(); }
@@ -620,7 +661,8 @@ export class CastleMagic extends HouseMagic {
             case 'ask': {
                 if (!isHost) break;
                 const res = this._hostStart({ kind: 'CreateCastle', at: m.at || [0, 0, 0], c: m.c }, m.from);
-                if (res !== true) g.sync?.net?.send({ t: this.netType, a: 'no', to: m.from, msg: String(res).slice(0, 200) });
+                if (res === 'search') g.sync?.net?.send({ t: this.netType, a: 'no', to: m.from, msg: '🏰 Перед вами место не подходит — замок ищет себе место рядом…' });
+                else if (res !== true) g.sync?.net?.send({ t: this.netType, a: 'no', to: m.from, msg: String(res).slice(0, 200) });
                 break;
             }
             case 'no': if (m.to === g.localId) g.hud?.setVoice?.(m.msg, true); break;

@@ -85,3 +85,14 @@ test('a whole castle in 30 s: −500 mana, its gate towards the caster, doors, b
     assert.equal(w2.g.chests.length, 3);
     assert.equal(w2.data.get(P.cells[(P.n - 1) * 5], P.cells[(P.n - 1) * 5 + 1], P.cells[(P.n - 1) * 5 + 2]), P.cells[(P.n - 1) * 5 + 3]);
 });
+
+test('the place ahead does not fit (something built there): the castle finds a place near by itself', () => {
+    const { g, data, G } = world();
+    for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) for (let L = G + 1; L <= G + 4; L++) data.set(x, L, z, BLOCK.CS_GREY); // (somebody's stones right where the wand showed)
+    assert.equal(g.castleMagic._hostStart({ at: [0, 0, 0], c: [0, -60] }, 'local'), 'search');
+    assert.equal(g.castleMagic.magic, null);
+    for (let i = 0; i < 200 && !g.castleMagic.magic; i++) g.castleMagic.update(0.016);
+    const m = g.castleMagic.magic;
+    assert.ok(m, `it began: ${g.hud.said}`);
+    assert.ok(Math.hypot(m.x, m.z) >= 16 && m.z > -30, `near the first place, ahead of the caster: ${m.x}, ${m.z}`);
+});
