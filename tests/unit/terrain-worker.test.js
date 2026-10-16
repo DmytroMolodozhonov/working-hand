@@ -79,6 +79,26 @@ test('the worker itself: a chunk changed here (a house built, a crater) is made 
     const fl = sent.pop(), mine = buildFlora(here, here.chunk(cx, cz));
     assert.equal(fl.rev, 7);
     same(fl.out.pos, mine.pos, 'grass');
+    // (TerrainView._share) the changed chunks sent once, then only named; changed again — sent again
+    const keyOf = (c) => (c.cx + 0x8000) * 0x10000 + (c.cz + 0x8000);
+    const fresh1 = chunks.map(({ sky, ...c }) => c); // eslint-disable-line no-unused-vars
+    const use = chunks.map(keyOf);
+    const check = (what) => {
+        const g2 = sent.pop(), w2 = here.buildChunkArrays(cx, cz);
+        const want2 = { land: mergeBuffers(w2.ground, w2.raised), water: w2.water };
+        for (const k of ['land', 'water']) for (const f of ['positions', 'colors', 'indices', 'skies']) same(g2.arrays[k][f], want2[k][f], `${what} ${k}.${f}`);
+    };
+    self.onmessage({ data: { type: 'rebuild', id: 4, key: 'k', cx, cz, fresh: fresh1, use, drop: null, hidden: null } });
+    check('sent');
+    self.onmessage({ data: { type: 'rebuild', id: 5, key: 'k', cx, cz, fresh: [], use, drop: null, hidden: null } });
+    check('kept there');
+    here.set(x0 + 10, here.topLayer(x0 + 10, z0 + 20) + 1, z0 + 20, 27);
+    const { rev: r2, sky: s2, ...again } = here.chunk(cx, cz); // eslint-disable-line no-unused-vars
+    self.onmessage({ data: { type: 'rebuild', id: 6, key: 'k', cx, cz, fresh: [structuredClone(again)], use, drop: null, hidden: null } });
+    check('changed again');
+    // a chunk next to a changed one that this computer has not got yet: it comes along
+    self.onmessage({ data: { type: 'rebuild', id: 7, key: 'k3', cx: cx + 3, cz, fresh: [], use, drop: use, hidden: null, wantChunk: true } });
+    same(sent.pop().chunk.blocks, fresh.chunk(cx + 3, cz).blocks, 'the chunk itself');
     delete globalThis.self;
 });
 

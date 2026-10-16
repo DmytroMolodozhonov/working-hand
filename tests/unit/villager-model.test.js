@@ -173,3 +173,37 @@ test('wrapText: ≤ 28 chars per line, ≤ 4 lines', () => {
     assert.deepEqual(wrapText('Привет!'), ['Привет!']);
     assert.ok(wrapText('Ааааааааааааааааааааааааааааааааааааааааа').every((l) => l.length <= 28));
 });
+
+test('far away one shape (setFar): the same points as the parts in their pose, the parts hidden; near again — the parts', () => {
+    const v = new VillagerModel(villagerLook(7, 'knight'), { tool: 'sword', shield: true });
+    v.group.position.set(40, 3, -12);
+    v.group.rotation.y = 0.7;
+    run(v, 0.4, { mode: 'walk', speed: 1.6 });
+    v.setFar(true);
+    const lod = v._lod, parts = v._meshes.filter((m) => m.visible);
+    assert.ok(lod?.visible && !v.root.visible, 'one shape drawn, the parts not');
+    assert.equal(lod.geometry.attributes.position.count, parts.reduce((n, m) => n + m.geometry.attributes.position.count, 0));
+    // every point where its part puts it (in the person's own space)
+    v.group.updateMatrixWorld(true);
+    const inv = v.group.matrixWorld.clone().invert(), p = new THREE.Vector3(), q = new THREE.Vector3();
+    let o = 0, worst = 0;
+    for (const m of parts) {
+        const P = m.geometry.attributes.position;
+        for (let i = 0; i < P.count; i += 7) {
+            p.fromBufferAttribute(P, i).applyMatrix4(m.matrixWorld).applyMatrix4(inv);
+            q.fromBufferAttribute(lod.geometry.attributes.position, o + i);
+            worst = Math.max(worst, p.distanceTo(q));
+        }
+        o += P.count;
+    }
+    assert.ok(worst < 1e-4, `off by ${worst}`);
+    // a torch at night: drawn as it is
+    v.setTorch(true);
+    v.setFar(true);
+    assert.ok(v.root.visible && !lod.visible);
+    v.setTorch(false);
+    v.setFar(true);
+    v.setFar(false);
+    assert.ok(v.root.visible && !lod.visible, 'near: the parts again');
+    v.dispose();
+});
