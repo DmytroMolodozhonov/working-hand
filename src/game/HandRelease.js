@@ -27,25 +27,35 @@ export const DROP = {
     // really open hand (all the fingers straight), kept open longer
     WAND_OPEN: 0.12,
     WAND_HOLD_MS: 500,
+    // …and only a hand SEEN letting go: the fingers seen closed on it this soon before they opened (a pinch the
+    // camera keeps seeing open — the author: the wand fell out with no action of his — is no hand opened)
+    WAND_CLOSED_MS: 1000,
 };
+// (the things — an apple, a sword, a book: the author: «when I really throw, swinging properly, they won't go» —
+// the real camera, 15–24 pictures a second and smoothed, sees a swing slower and shorter than it was, and
+// the fingers late or not at all: a hand by the head or behind the shoulder, a swing forward, they let go)
 export const THROW = {
-    UP: 0.45, // wind-up: the hand really raised, this far above the shoulder …
+    UP: 0.38, // wind-up: the hand raised by the head, this far above the shoulder …
     BACK: 0.1, // … or behind it (the body's space)
     DEPTH: 0.12, // (the camera's depth: the wrist this much further than the shoulder)
-    WINDOW_MS: 900, // the swing must start this soon after the wind-up
-    SPEED: 6, // m/s against the body …
+    WINDOW_MS: 1300, // the swing must start this soon after the wind-up
+    SPEED: 4.5, // m/s against the body …
     PER_KG: 0.3, // … a little more for heavier things (they leave the hand slower anyway)
-    TRAVEL: 0.8, // the hand travels this far from the wind-up (a real swing, not a flick)
+    TRAVEL: 0.6, // the hand travels this far from the wind-up (a real swing, not a flick)
     OPEN: 0.4, // the fingers let go
     HOLD: 0.5, // (they held the thing during the swing)
-    LATE_MS: 450, // the fingers must open this soon after the fastest moment (the camera sees them open a little late)
+    LATE_MS: 650, // the fingers must open this soon after the fastest moment (the camera sees them open a little late)
     BEHIND: 0.4, // (the camera sees the wrist behind the shoulder: the real hand is this far behind it)
-    END: 0.45, // the swing has ended: its speed fell below this share of the fastest (a hand lost in the blur)
+    END: 0.55, // the swing has ended: its speed fell below this share of the fastest (a hand lost in the blur)
     // strict (the wand — it must practically never fly off by accident): the wind-up must be the
     // hand drawn back behind the shoulder (a wand raised to cast and then pointed is no throw),
-    // a much faster and longer swing, and the fingers seen opening
-    STRICT_SPEED: 1.5,
+    // a much faster and longer swing, the fingers seen holding it in the swing and then seen opening wide
+    STRICT_BASE: 7.5, // m/s (+ PER_KG): the wand's swing
     STRICT_TRAVEL: 1.2,
+    STRICT_WINDOW_MS: 900,
+    STRICT_LATE_MS: 450,
+    STRICT_OPEN: 0.25, // (a pinch is often seen half open: only fingers seen really opening let it go)
+    STRICT_HELD_MS: 400, // (…seen closed on it this soon before)
     // (the wand: a swing down to the ground — bending to it, a hand thrust at it, a spell at it — is
     // no throw: the hand must stay above the waist through the swing and the letting go)
     STRICT_LOW: -1.0, // the hand this far below the shoulder (the body's space; the arm is 1.9 long): down at the hip, the ground
@@ -92,10 +102,12 @@ export class DropGate {
      */
     update({ now, curl, tracked, reach, forward, up = 0, speed = 0, palmUp = 0, strict = false }) {
         if (!tracked) { this.since = 0; return false; } // a lost hand never drops
-        if (curl > DROP.CLOSED) this.armed = true;
+        if (curl > DROP.CLOSED) { this.armed = true; this.closedAt = now; }
         const opening = this.armed && curl < (strict ? DROP.WAND_OPEN : DROP.OPEN) && reach > DROP.REACH && forward > DROP.FORWARD
             && up > DROP.LEVEL && speed < DROP.STILL && palmUp < DROP.PALM_UP;
         if (!opening) { this.since = 0; return false; }
+        // (the wand: the opening began right after the fingers were seen closed on it — a real letting go)
+        if (!this.since && strict && !(now - (this.closedAt ?? -1e9) < DROP.WAND_CLOSED_MS)) return false;
         if (!this.since) this.since = now;
         return now - this.since >= (strict ? DROP.WAND_HOLD_MS : DROP.HOLD_MS);
     }
@@ -104,7 +116,7 @@ export class DropGate {
 export class ThrowDetector {
     constructor() { this.reset(); }
 
-    reset() { this.cockAt = -1e9; this.cock = null; this.peak = null; this.held = false; this.back = false; this.seenHold = false; }
+    reset() { this.cockAt = -1e9; this.cock = null; this.peak = null; this.held = false; this.back = false; this.seenHold = false; this.heldAt = -1e9; }
 
     /** The swing (peak) went forward/up, not down, strong enough, and has slowed down: its end. */
     blurred(speed) {
@@ -131,24 +143,27 @@ export class ThrowDetector {
             if (behind || hand.z - shoulder.z > THROW.BACK) this.back = true;
             this.cock = { x: hand.x, y: hand.y, z: this.back ? Math.max(hand.z, shoulder.z + THROW.BEHIND) : hand.z };
         }
-        if (this.cock && !this.peak && now - this.cockAt > THROW.WINDOW_MS) this.cock = null;
+        if (this.cock && !this.peak && now - this.cockAt > (strict ? THROW.STRICT_WINDOW_MS : THROW.WINDOW_MS)) this.cock = null;
         if (!this.cock) return null;
-        if (tracked && curl > THROW.HOLD) this.held = true; // (a real throw starts with the thing held)
-        const need = THROW.SPEED + THROW.PER_KG * weight + (strict ? THROW.STRICT_SPEED : 0);
+        if (tracked && curl > THROW.HOLD) { this.held = true; this.heldAt = now; } // (a real throw starts with the thing held)
+        const need = (strict ? THROW.STRICT_BASE : THROW.SPEED) + THROW.PER_KG * weight;
         if (this.held && speed > need && (-vRel.z > 0 || vRel.y < 0) && (!strict || (this.back && hand.y - shoulder.y > THROW.STRICT_LOW))
             && Math.hypot(hand.x - this.cock.x, hand.y - this.cock.y, hand.z - this.cock.z) > (strict ? THROW.STRICT_TRAVEL : THROW.TRAVEL)
             && (!this.peak || speed > this.peak.speed)) this.peak = { speed, vRel: [vRel.x, vRel.y, vRel.z], vWorld: [...vWorld], at: now };
         if (!this.peak) return null;
-        if (now - this.peak.at > THROW.LATE_MS) { this.reset(); return null; } // the fist kept hold: a chop, not a throw
+        if (now - this.peak.at > (strict ? THROW.STRICT_LATE_MS : THROW.LATE_MS)) { this.reset(); return null; } // the fist kept hold: a chop, not a throw
         // (the wand let go down at the hip / the ground: the hand went down to it, no throw)
         if (strict && hand.y - shoulder.y < THROW.STRICT_LOW) { this.reset(); return null; }
-        if (tracked && curl < THROW.OPEN) { const p = this.peak; this.reset(); return p; } // (a hand lost in the blur waits ≤450 ms)
+        // (the wand: the fingers seen really opening, just after they were seen holding it in the swing)
+        if (tracked && (strict ? curl < THROW.STRICT_OPEN && now - this.heldAt < THROW.STRICT_HELD_MS : curl < THROW.OPEN)) { const p = this.peak; this.reset(); return p; } // (a hand lost in the blur waits ≤ LATE_MS)
         if (tracked && curl > THROW.HOLD) this.seenHold = true; // (seen still gripping after the swing: a chop)
         // the camera lost the hand in the swing's blur: a strong swing FORWARD (not down, as a blow is)
         // that has come to its end lets go — people throw this way and the fingers are rarely seen opening
         // (blurOk: never a thrust — it starts from the front, not behind the shoulder)
         // (only after a real wind-up behind the shoulder; never the wand — its pinch is often unseen)
-        if (blurOk && !strict && this.back && !tracked && !this.seenHold && this.blurred(speed)) { const p = this.peak; this.reset(); return p; }
+        // (a light thing — an apple, a stone, a pouch: a hand by the head counts as a wind-up too, an overhand throw
+        // is that; a sword, an axe swung from by the head is a blow — only from behind the shoulder)
+        if (blurOk && !strict && (this.back || weight < 1) && !tracked && !this.seenHold && this.blurred(speed)) { const p = this.peak; this.reset(); return p; }
         return null;
     }
 }

@@ -117,3 +117,48 @@ test('a hand with the wand resting on the ground / its tip in the slope: the wan
     ground = 1.2; // the wand's tip in the slope
     assert.equal(it._touching('right', h, 9000), true);
 });
+
+// ---- the author: «when I really throw, they won't go; when I don't, the wand flies off» (a real camera: 15 fps, noisy)
+import { DropGate, ThrowDetector } from '../../src/game/HandRelease.js';
+/** A swing at 15 pictures a second, with jitter: wind-up at `start`, swing at `v` for `n` frames, fingers per `curlAt(t)`, `seen(t)`. */
+function camSwing(det, { start, v, n = 3, curlAt, seen = () => true, weight = 1, strict = false, behind = false, seed = 1 }) {
+    let r = seed; const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647 - 0.5);
+    const SH = { x: 0.7, y: 1.25, z: 0 };
+    let h = { ...start }, out = null;
+    const step = (t, vRel) => {
+        const j = { x: h.x + rnd() * 0.06, y: h.y + rnd() * 0.06, z: h.z + rnd() * 0.06 };
+        const vr = { x: vRel.x + rnd() * 0.8, y: vRel.y + rnd() * 0.8, z: vRel.z + rnd() * 0.8 };
+        out = out || det.update({ now: t, hand: j, shoulder: SH, vRel: vr, vWorld: [vr.x, vr.y, vr.z], curl: curlAt(t), tracked: seen(t), weight, strict, blurOk: true, behind: behind && t < 200 });
+    };
+    let t = 0;
+    for (; t < 200; t += 66) step(t, { x: 0, y: 0, z: 0 }); // the wind-up held
+    for (let i = 0; i < n; i++, t += 66) { h = { x: h.x + v.x * 0.066, y: h.y + v.y * 0.066, z: h.z + v.z * 0.066 }; step(t, v); }
+    for (let k = 0; k < 12; k++, t += 66) step(t, { x: v.x * 0.2, y: v.y * 0.2, z: v.z * 0.2 });
+    return out;
+}
+
+test('a real overhand throw of an apple / a sword, as a 15-fps camera sees it, goes', () => {
+    // the hand by the head (not behind), a swing of ~5.5 m/s, the fingers seen opening late
+    const open = (t0) => (t) => (t >= t0 ? 0.25 : 0.9);
+    assert.ok(camSwing(new ThrowDetector(), { start: { x: 0.8, y: 1.68, z: -0.1 }, v: { x: 0, y: -2, z: -5.2 }, curlAt: open(330), weight: 0.2 }), 'an apple');
+    // the apple, the hand lost in the blur and never seen opening
+    assert.ok(camSwing(new ThrowDetector(), { start: { x: 0.8, y: 1.68, z: -0.1 }, v: { x: 0, y: -1.5, z: -6.5 }, curlAt: () => 0.9, seen: (t) => t < 260, weight: 0.2 }), 'an apple lost in the blur');
+    // a sword drawn back behind the shoulder, a swing forward, the fingers open
+    assert.ok(camSwing(new ThrowDetector(), { start: { x: 0.8, y: 1.6, z: 0.3 }, behind: true, v: { x: 0, y: -2, z: -6.5 }, curlAt: open(400), weight: 1.5 }), 'a sword');
+    // a sword chop kept in the fist is no throw
+    assert.equal(camSwing(new ThrowDetector(), { start: { x: 0.8, y: 1.6, z: 0.3 }, behind: true, v: { x: 0, y: -2, z: -6.5 }, curlAt: () => 0.9, weight: 1.5 }), null, 'a chop');
+});
+
+test('holding the wand: casting swings, a pinch seen open, waving — it stays; only a real throw or an opened outstretched hand', () => {
+    // a cast swing from by the head, the pinch seen half open all along
+    assert.equal(camSwing(new ThrowDetector(), { strict: true, start: { x: 0.8, y: 1.75, z: -0.1 }, v: { x: 0, y: -3, z: -9 }, curlAt: () => 0.35, weight: 0.15 }), null, 'a cast swing, the pinch half open');
+    // drawn back and swung hard, but the pinch never seen closed in the swing (seen open all along)
+    assert.equal(camSwing(new ThrowDetector(), { strict: true, behind: true, start: { x: 0.8, y: 1.75, z: 0.3 }, v: { x: 0, y: -2, z: -12 }, n: 5, curlAt: () => 0.2, weight: 0.15 }), null, 'never seen holding it');
+    // the real throw of the wand: drawn back, a hard long swing, held, then the fingers seen opening wide
+    assert.ok(camSwing(new ThrowDetector(), { strict: true, behind: true, start: { x: 0.8, y: 1.75, z: 0.3 }, v: { x: 0, y: -2, z: -12 }, n: 5, curlAt: (t) => (t >= 530 ? 0.1 : 0.9), weight: 0.15 }), 'a real throw');
+    // the arm out pointing the wand, the camera seeing the pinch open (never closed): it stays
+    const g = new DropGate();
+    let any = false;
+    for (let t = 0; t < 6000; t += 50) any = any || g.update({ now: t, curl: 0.05 + Math.abs(Math.sin(t)) * 0.05, tracked: true, reach: 0.95, forward: 0.9, up: 0, speed: 0.5, palmUp: 0, strict: true });
+    assert.equal(any, false);
+});

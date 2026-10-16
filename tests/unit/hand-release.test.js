@@ -68,8 +68,8 @@ test('ThrowDetector: wind-up by the head, a fast swing, the fingers let go = a t
 test('ThrowDetector: no wind-up (from the hip), a fist kept closed, a late opening — no throw', () => {
     assert.equal(overhand(new ThrowDetector(), { start: V(0.8, 0.65, -0.2) }), null, 'from the hip: a jab, not a throw');
     assert.equal(overhand(new ThrowDetector(), { curlOpen: 0.9 }), null, 'the fist kept hold: a chop');
-    assert.equal(overhand(new ThrowDetector(), { openAt: 640 }), null, 'opened long after the swing');
-    assert.equal(overhand(new ThrowDetector(), { swingAt: 1200 }), null, 'the swing long after the wind-up');
+    assert.equal(overhand(new ThrowDetector(), { openAt: 900 }), null, 'opened long after the swing');
+    assert.equal(overhand(new ThrowDetector(), { swingAt: 1600 }), null, 'the swing long after the wind-up');
     assert.equal(overhand(new ThrowDetector(), { curlWind: 0.2, curlSwing: 0.2 }), null, 'an open hand all along held nothing: no throw');
 });
 
@@ -86,8 +86,8 @@ test('ThrowDetector: running (world speed, no swing against the body) never thro
 });
 
 test('ThrowDetector: heavy things need a faster swing', () => {
-    assert.equal(overhand(new ThrowDetector(), { weight: 4, vRel: V(0, -2, -6.5), n: 5 }), null, 'a hammer at 6.8 m/s: not a throw');
-    assert.ok(overhand(new ThrowDetector(), { weight: 0.2, vRel: V(0, -2, -6.5), n: 5 }), 'an apple at 6.8 m/s is thrown');
+    assert.equal(overhand(new ThrowDetector(), { weight: 4, vRel: V(0, -1.5, -5), n: 5 }), null, 'a hammer at 5.2 m/s: not a throw');
+    assert.ok(overhand(new ThrowDetector(), { weight: 0.2, vRel: V(0, -1.5, -5), n: 5 }), 'an apple at 5.2 m/s is thrown');
     assert.ok(overhand(new ThrowDetector(), { weight: 4, vRel: V(0, -3, -8.5) }), 'at 9 m/s it is');
 });
 
@@ -185,8 +185,12 @@ test('the wand and the ground: a hand swung down to the ground never throws it; 
     assert.equal(poseBehind({ leftWrist: { y: 0.25, z: 0.22 }, leftShoulder: { y: 0.42, z: 0 } }, 'left'), true, 'a real wind-up (left)');
     // the pinch seen half open never drops the wand; a wide-open hand kept open 0.5 s does
     assert.equal(run(new DropGate(), { curl: 0.2, strict: true }, 3000).any, false, 'a pinch seen half open');
-    const r = run(new DropGate(), { curl: 0.05, strict: true }, 1000);
+    const g = new DropGate();
+    g.update({ ...out, now: 900, curl: 0.8, strict: true }); // (seen holding it…)
+    const r = run(g, { curl: 0.05, strict: true }, 1000);
     assert.ok(r.any && r.at >= 500 && r.at < 560, 'a wide-open outstretched hand ' + JSON.stringify(r));
+    // a hand the camera keeps seeing open (the pinch misread), never seen closing: the wand stays
+    assert.equal(run(new DropGate(), { curl: 0.05, strict: true }, 5000).any, false, 'never seen closed: no letting go');
 });
 
 test('flying: nothing leaves the hand (the wand flew off in flight) — nor just after landing', () => {

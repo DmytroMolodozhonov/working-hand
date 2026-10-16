@@ -1101,6 +1101,8 @@ export class ItemSystem {
                 for (const rs of ['right', 'left']) {
                     if (this.remoteHeld.get(id)?.[rs]) continue; // their hand is busy
                     const rh = r.character.getHandWorldPosition(rs, _v2);
+                    // (the wand: only into a hand that closes on it — hands near in a duel never hand it over)
+                    if (h.item.kind === 'wand' && !((r.character.getGripCurl?.(rs) ?? 0) > 0.55)) continue;
                     if (rh.distanceTo(h.model.position) < 0.45) near = { id, rs };
                 }
             }
