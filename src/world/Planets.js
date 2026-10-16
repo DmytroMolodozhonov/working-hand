@@ -145,9 +145,9 @@ export function climateAt(a) {
  */
 const TERRA = {
     green: [
-        { ground: { grass: 0x2fa58f, dust: 0x6a5a48, dark: 0x1f7a6a, rock: 0x5a6070, ice: 0xe2eef2, wood: 0x4a3050, leaf: 0xb05ad8, leaf2: 0xd77ae8, sea: 0x1f6fa0 }, skyZ: [0.33, 0.42, 0.78], skyH: [0.78, 0.66, 0.88], atmosphere: 0xb7a2ff, name: 'бирюзовый мох, лиловые деревья-зонтики' },
-        { ground: { grass: 0xc0662a, dust: 0x7a5a3a, dark: 0x8a3a20, rock: 0x6a5a5a, ice: 0xe8eef0, wood: 0x3a2a20, leaf: 0x3fd0c0, leaf2: 0x2aa8d0, sea: 0x2a8a7a }, skyZ: [0.28, 0.55, 0.6], skyH: [0.86, 0.76, 0.6], atmosphere: 0x8fe8d8, name: 'рыжая трава, голубые кроны' },
-        { ground: { grass: 0x4a8ad8, dust: 0x5a5048, dark: 0x2a5aa0, rock: 0x707080, ice: 0xeef2f8, wood: 0x5a4a3a, leaf: 0xf0c040, leaf2: 0xe08a30, sea: 0x3a9a7a }, skyZ: [0.5, 0.6, 0.33], skyH: [0.92, 0.86, 0.6], atmosphere: 0xd8e890, name: 'синяя трава, золотые кроны' },
+        { ground: { grass: 0x2fa58f, dust: 0x6a5a48, dark: 0x1f7a6a, rock: 0x5a6070, ice: 0xe2eef2, wood: 0x4a3050, leaf: 0xb05ad8, leaf2: 0xd77ae8, sea: 0x1fc8b8 }, skyZ: [0.33, 0.42, 0.78], skyH: [0.78, 0.66, 0.88], atmosphere: 0xb7a2ff, name: 'бирюзовый мох, лиловые деревья-зонтики, бирюзовые моря' },
+        { ground: { grass: 0xc0662a, dust: 0x7a5a3a, dark: 0x8a3a20, rock: 0x6a5a5a, ice: 0xe8eef0, wood: 0x3a2a20, leaf: 0x3fd0c0, leaf2: 0x2aa8d0, sea: 0x3fb85a }, skyZ: [0.28, 0.55, 0.6], skyH: [0.86, 0.76, 0.6], atmosphere: 0x8fe8d8, name: 'рыжая трава, голубые кроны, зелёные моря' },
+        { ground: { grass: 0xb0304a, dust: 0x5a4048, dark: 0x7a2038, rock: 0x707080, ice: 0xeef2f8, wood: 0x5a4a3a, leaf: 0xf0c040, leaf2: 0xe08a30, sea: 0x8a5ae0 }, skyZ: [0.5, 0.6, 0.33], skyH: [0.92, 0.86, 0.6], atmosphere: 0xd8e890, name: 'алая трава, золотые кроны, лиловые моря' },
     ],
     desert: [{ ground: { grass: 0xb08a4a, dust: 0xd88a4a, dark: 0x6a3a2a, rock: 0x8a5a3a, ice: 0xf0e0c8, wood: 0x8a4a9a, leaf: 0xff4a6a, leaf2: 0xffb03a, sea: 0x8a6a4a }, skyZ: [0.72, 0.42, 0.28], skyH: [1.0, 0.74, 0.5], atmosphere: 0xffb070, name: 'жаркая пустыня, лиловые кактусы' }],
     ice: [{ ground: { grass: 0x9ad8e8, dust: 0xb8c8d0, dark: 0x6a8aa0, rock: 0x7a8a9a, ice: 0xe8f4ff, wood: 0x8ab0d0, leaf: 0xd8f0ff, leaf2: 0xa8e0ff, sea: 0xcfe8f8 }, skyZ: [0.42, 0.58, 0.86], skyH: [0.86, 0.93, 1.0], atmosphere: 0xbfe8ff, name: 'льды, снежно-голубой мох, ледяные деревья' }],
@@ -170,6 +170,9 @@ export function orbitThrough(x, z, t) {
     return { a, phase: ((phase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), period, incl: 0, ecc: 0, node: 0 };
 }
 
+/** s: a planet let go off the plane of the orbits settles back into it this slowly (planetPosition). */
+export const LIFT_SETTLE = 40;
+
 /** Where in its orbit a body is (radians) at time t. */
 const angleAt = (def, t) => (def.phase || 0) + (2 * Math.PI * t) / (def.period || 1);
 const DEG = Math.PI / 180;
@@ -191,7 +194,11 @@ export function planetPosition(def, t, out = { x: 0, y: 0, z: 0 }, reg = null) {
     const vy = v * Math.sin(i), vv = v * Math.cos(i);
     out.x = u * cn - vv * sn;
     out.z = u * sn + vv * cn;
-    out.y = vy + (def.lift || 0); // (lift: a planet moved by «Wingardium Leviosa Super Maxima» keeps the height it was put at)
+    // (lift: a planet moved by «Wingardium Leviosa Super Maxima» is at the height it was put at; let go (liftT), it
+    //  settles back into the plane of the orbits over LIFT_SETTLE s — on every computer alike: the shared time)
+    let lift = def.lift || 0;
+    if (lift && def.liftT != null) { const k = Math.max(0, Math.min(1, (t - def.liftT) / LIFT_SETTLE)); lift *= 1 - k * k * (3 - 2 * k); }
+    out.y = vy + lift;
     if (def.parent && reg) {
         const p = reg.get(def.parent);
         if (p) { const px = out.x, py = out.y, pz = out.z; planetPosition(p, t, out, reg); out.x += px; out.y += py; out.z += pz; }
@@ -446,7 +453,8 @@ export class PlanetRegistry {
     live(id, o) {
         const p = this.byId.get(id);
         if (!p || !o || p.kind === 'star') return false;
-        for (const k of ['a', 'phase', 'period', 'incl', 'ecc', 'node', 'lift']) if (Number.isFinite(o[k])) p[k] = o[k];
+        for (const k of ['a', 'phase', 'period', 'incl', 'ecc', 'node', 'lift', 'liftT']) if (Number.isFinite(o[k])) p[k] = o[k];
+        if (o.liftT === null) delete p.liftT; // (taken again: held at its height, no settling meanwhile)
         return true;
     }
 }

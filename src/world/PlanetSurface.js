@@ -283,6 +283,7 @@ const TREE_CELL = 9;
 const TREE_CHANCE = { green: 0.5, ice: 0.2, desert: 0.1 };
 function alienTrees(def, x0, z0, blocks, top) {
     const cl = def.climate || 'green', s = (def.seed | 0) + 4242, chance = TREE_CHANCE[cl] ?? 0.3;
+    const clear = Array.isArray(def.clear) && def.clear.length ? def.clear : null;
     let hi = 0;
     const put = (x, L, z, type) => {
         const lx = x - x0, lz = z - z0;
@@ -300,6 +301,7 @@ function alienTrees(def, x0, z0, blocks, top) {
             if (hash(gx, gz, s) > chance) continue;
             const x = gx * TREE_CELL + 1 + Math.floor(hash(gx, gz, s + 1) * (TREE_CELL - 2)), z = gz * TREE_CELL + 1 + Math.floor(hash(gx, gz, s + 2) * (TREE_CELL - 2));
             if (x < x0 - M || x >= x0 + CHUNK + M || z < z0 - M || z >= z0 + CHUNK + M) continue;
+            if (clear && clear.some((c) => Math.hypot(x - c.x, z - c.z) < (c.r || 7) + M)) continue; // (nobody standing there at the terraforming gets a tree through them)
             const h = planetHeight(def, x, z), surf = planetHeight.top;
             if (planetHeight.water || (surf !== BLOCK.PLANET_GRASS && !(cl === 'desert' && surf === BLOCK.REGOLITH))) continue;
             const hs = [planetHeight(def, x + 1, z), planetHeight(def, x - 1, z), planetHeight(def, x, z + 1), planetHeight(def, x, z - 1)];

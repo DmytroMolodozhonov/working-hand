@@ -53,7 +53,7 @@
  * Each computer counts its own player's mana.
  */
 import * as THREE from 'three';
-import { planetPosition, climateAt, terraformPatch, orbitThrough, SPACE } from '../world/Planets.js';
+import { planetPosition, climateAt, terraformPatch, orbitThrough, realmAt, SPACE } from '../world/Planets.js';
 import { steadyDir } from './AimHold.js';
 
 export const PMAGIC = {
@@ -69,7 +69,20 @@ export const PMAGIC = {
     SUN_GAP: 4000, // m: never nearer the Sun's surface than this
     GAP: 300, // m between two planets' surfaces at least
     NET_DT: 0.2, // s: the move goes to the others this often
+    NAME_T: 60, // s after «Create a Planet»: «Назови …» names it
+    CLEAR_R: 7, // m round a player standing on a planet being terraformed: no tree grows there
 };
+
+/** «Назови Аврора», «назови её Новая Земля», «Name it Aurora» → the name (or null: not a naming). */
+export function planetNameWords(text) {
+    const s = String(text || '').trim().replace(/[.!?,;:«»"]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const m = /^(?:назови(?:те)?|назову|назовём|назовем|name it|call it|name her|call her)\s+(.+)$/i.exec(s);
+    if (!m) return null;
+    let n = m[1].replace(/^(?:её|ее|eё|планету|планетку|эту планету|как|it)\s+/i, '').replace(/^(?:её|ее|планету|как)\s+/i, '').trim();
+    if (!n || n.length > 30) return null;
+    n = n.split(' ').filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+    return n.slice(0, 24) || null;
+}
 
 /** The four spells (Mana: +100 cells the first time — GOD_SPELLS). */
 export const PLANET_SPELLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima'];
@@ -241,10 +254,40 @@ export class PlanetMagic {
         S.create(def);
         this._beam(side, 0xff9a4a);
         g.sound?.playSpace?.('spaceRise', 0.8);
-        this._say(`☄️ <b>Create a Planet!</b> Метеориты стягиваются в одну точку, сталкиваются, раскаляются… Рождается <b>«${def.name}»</b>`);
-        this._later(10, () => this._say(`🪐 Новая планета <b>«${def.name}»</b>: камень и пыль, воздуха нет совсем (дышите магией), тяжесть ×${def.gravity} — взлетать с неё легко. Её видно на карте космоса`));
+        this._say(`☄️ <b>Create a Planet!</b> Метеориты стягиваются в одну точку, сталкиваются, раскаляются… Рождается <b>«${def.name}»</b>. Хотите своё имя — скажите «Назови …» (например, «Назови Аврора»)`);
+        this._naming = { cluster: c.id, until: performance.now() + PMAGIC.NAME_T * 1000 };
+        this._later(10, () => { const p = this._myNew(); this._say(`🪐 Новая планета <b>«${p?.name || def.name}»</b>: камень и пыль, воздуха нет совсем (дышите магией), тяжесть ×${def.gravity} — взлетать с неё легко. Её видно на карте космоса`); });
         this._worked('CreatePlanet');
         return 'CreatePlanet';
+    }
+
+    /** The planet I made last (by its cluster: the same on the host and here). */
+    _myNew() {
+        const n = this._naming;
+        return n ? this.space.planets.list.find((p) => p.cluster === n.cluster && !p.base) || null : null;
+    }
+
+    /**
+     * After «Create a Planet» (NAME_T s): «Назови Аврора» / «Name it Aurora» gives it that name (Game._castLocalSpell
+     * asks this first). True when the words were the naming (they are not a spell then).
+     */
+    tryName(text, isFinal = true) {
+        const n = this._naming;
+        if (!n) return false;
+        if (performance.now() > n.until) { this._naming = null; return false; }
+        const name = planetNameWords(text);
+        if (!name) return false;
+        if (!isFinal) return true; // (still being said: wait for the whole name)
+        const p = this._myNew();
+        if (!p) return true;
+        let nm = name;
+        const names = new Set(this.space.planets.list.filter((q) => q.id !== p.id).map((q) => q.name));
+        for (let i = 2; names.has(nm); i++) nm = `${name} ${i}`;
+        this.space.change(p.id, { name: nm });
+        this._naming = null;
+        this._say(`🪐 Теперь эту планету зовут <b>«${nm}»</b> — так её видят все, и на карте космоса тоже`);
+        this.log.push({ ev: 'name', name: nm });
+        return true;
     }
 
     _me() {
@@ -293,6 +336,9 @@ export class PlanetMagic {
         if (!this._pay('TerraformPlanet')) return null;
         const patch = terraformPatch(def, climate);
         patch.terraAt = t;
+        // (no tree grows up through anybody standing on it now: round each player there the ground stays open)
+        const clear = this._standing(def);
+        if (clear.length) patch.clear = clear;
         S.change(def.id, patch);
         this._beam(side, 0x1fae7a);
         this.game.sound?.playSpace?.('spaceGift', 0.8);
@@ -303,6 +349,15 @@ export class PlanetMagic {
         this._later(8, () => this._say(`🌍 «${def.name}» терраформирована: дышать можно без маны, вход в её воздух — с огнём, взлёт — как с Земли`));
         this._worked('TerraformPlanet');
         return 'TerraformPlanet';
+    }
+
+    /** Where the players stand on this planet now (me and the others): [{x, z, r}] — no tree is grown there. */
+    _standing(def) {
+        const g = this.game, out = [];
+        const add = (p) => { if (p && realmAt(p.x, p.y, p.z, this.space.planets) === def.id && out.length < 16) out.push({ x: Math.round(p.x), z: Math.round(p.z), r: PMAGIC.CLEAR_R }); };
+        add(g.character?.group?.position);
+        for (const r of g.remotes?.values?.() || []) add(r.position || r.group?.position);
+        return out;
     }
 
     // ---------------------------------------------------------------- «Wingardium Leviosa Super Maxima»
@@ -317,7 +372,7 @@ export class PlanetMagic {
         const t = S.now();
         planetPosition(def, t, _p, S.planets);
         // (held from now: on a circle through where it is, its height kept — no jump)
-        S.planets.live(def.id, { ...orbitThrough(_p.x, _p.z, t), lift: _p.y });
+        S.planets.live(def.id, { ...orbitThrough(_p.x, _p.z, t), lift: _p.y, liftT: null });
         this.hold = { id: def.id, side, D: Math.max(aim.dist, def.radius + 600), steady: {}, net: 0, t: 0, worked: false };
         S.noCarry = def.id;
         if (S.view) S.view.fx.hold = { id: def.id };
@@ -336,12 +391,12 @@ export class PlanetMagic {
         if (S.noCarry === h.id) S.noCarry = null;
         if (S.view && S.view.fx.hold?.id === h.id) S.view.fx.hold = null;
         if (def) {
-            const o = { a: def.a, phase: def.phase, period: def.period, incl: 0, ecc: 0, node: 0, lift: def.lift || 0 };
+            const o = { a: def.a, phase: def.phase, period: def.period, incl: 0, ecc: 0, node: 0, lift: def.lift || 0, liftT: S.now() }; // (then it settles into the plane of the orbits: Planets.LIFT_SETTLE)
             this.game.sync?.net?.send?.({ t: 'planets', op: 'move', id: h.id, o, end: 1, relay: true });
             S.change(h.id, o);
             const cl = climateAt(def.parent ? null : def.a);
             const zone = cl === 'green' ? 'зелёная зона — тут терраформирование даст леса и моря' : cl === 'desert' ? 'жаркая зона — терраформирование даст пустыню' : cl === 'ice' ? 'холодная зона — терраформирование даст ледяной мир' : def.a < 21000 ? 'слишком близко к Солнцу для жизни' : 'слишком далеко от Солнца для жизни';
-            if (why !== 'dead') this._say(`🪐 «${def.name}» отпущена: новая орбита — ${fmt(def.a)} от Солнца (${zone})`);
+            if (why !== 'dead') this._say(`🪐 «${def.name}» отпущена: новая орбита — ${fmt(def.a)} от Солнца (${zone})${Math.abs(o.lift) > 50 ? '; она медленно опускается в плоскость орбит остальных планет' : ''}`);
             if (h.worked) this._worked('LevitationSuperMaxima');
         }
         this.log.push({ ev: 'release', id: h.id, why });
@@ -380,7 +435,7 @@ export class PlanetMagic {
         h.net += dt;
         if (h.net >= PMAGIC.NET_DT && g.sync?.net?.active) {
             h.net = 0;
-            g.sync.net.send({ t: 'planets', op: 'move', id: def.id, o: { a: def.a, phase: def.phase, period: def.period, incl: 0, ecc: 0, node: 0, lift: def.lift || 0 }, relay: true });
+            g.sync.net.send({ t: 'planets', op: 'move', id: def.id, o: { a: def.a, phase: def.phase, period: def.period, incl: 0, ecc: 0, node: 0, lift: def.lift || 0, liftT: null }, relay: true });
         }
     }
 

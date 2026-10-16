@@ -1165,6 +1165,8 @@ export class Game {
 
     _castLocalSpell(text, isFinal = true) {
         if (!this.active) return null;
+        // («Назови …» right after «Create a Planet»: the new planet's name — not a spell, PlanetMagic.tryName)
+        if (this.planetMagic?._naming && this.planetMagic.tryName(text, isFinal)) return null;
         let name = matchSpell(text);
         // the vortex waits for «Bubble»: a word that sounds like it is it (the recognizer writes it many ways)
         if (this.vortex?.bubbleOpen?.() && name !== 'AirBubble' && (!name || name === 'Sands' || name === 'Sapira') && bubbleLike(text)) name = 'AirBubble';
@@ -1467,7 +1469,8 @@ export class Game {
         if (this.combat.dropShield('🛑 Стоп — щит снят')) done.push('щит');
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
         if (this.levMax?.stop()) done.push('Левиоса Максима'); // (what it holds falls)
-        if (this.planetMagic?.stop()) done.push('Левиоса Супер Максима'); // (the planet stays on its new orbit)
+        const pm = !!this.planetMagic?.stop(); // (the planet stays on its new orbit)
+        if (pm) done.push('Левиоса Супер Максима');
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
         const hf = this.hellfire?.sayStop(); // («стоп» costs 50 mana for it)
@@ -1480,7 +1483,7 @@ export class Game {
         if (W?.drawing && W.drawing.until > performance.now()) { W.drawing.until = 0; done.push('рисование'); }
         if (W?.holo) { W._closeHolo(); done.push('тайны'); }
         if (this.accio?.stop()) done.push('Акцио');
-        if (this.flight?.busy && this.flight.state !== 'landing') { this.flight.land('stop'); done.push('полёт'); }
+        if (this.flight?.busy && this.flight.state !== 'landing' && !pm) { this.flight.land('stop'); done.push('полёт'); } // («стоп» letting a planet go: the flight goes on)
         if (this.lightning) { if (this.lightning.hammer) this.gear?.hammerResult(false); this.lightning = null; this.hud.setTimer?.(null); done.push('молния'); }
         if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
@@ -1489,7 +1492,7 @@ export class Game {
         if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
         if (!done.length) return false;
         this.sync?.stopSpells?.();
-        if ((hf === true || ws === true) && done.length === 1) return true; // (its own words: the fire left / the water fallen)
+        if ((hf === true || ws === true || pm) && done.length === 1) return true; // (its own words: the fire left / the water fallen / the planet's new orbit)
         this.hud.setVoice(`🛑 Стоп: ${done.join(', ')}`, true);
         return true;
     }

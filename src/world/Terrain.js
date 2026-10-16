@@ -1867,6 +1867,9 @@ export class TerrainData {
         const origin = [x0, lowest, z0];
         const blocks = c.blocks;
         const skipSea = !!(this.skipSeaTop && c.sea);
+        // (a terraformed planet's seas and lakes: its own colour — PlanetMagic.js; the Earth's water elsewhere)
+        const pdef = c.planet ? this.planets?.get(c.planet) : null;
+        const WATER_COL = pdef?.terraformed && pdef.ground?.sea != null ? pdef.ground.sea : BASE_COLORS[BLOCK.WATER];
         const below = lowest > MIN_LAYER ? BLOCK.STONE : BLOCK.AIR; // (all rock under `lowest`)
         const hid = this._hidden?.get(chunkKey(cx, cz)) || null; // (a falling piece not landed yet: not drawn there)
         // (a cave's dark: a face is as lit as the air in front of it — _skyLight; null: all lit)
@@ -1947,9 +1950,9 @@ export class TerrainData {
                             }
                         } else if (a === WATER && (bRaw === AIR || bRaw === ICE_SHAPE)) {
                             // (the sea's top is drawn by the moving wave surface instead)
-                            if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) { key = BASE_COLORS[BLOCK.WATER] + 1; kind = 2; }
+                            if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) { key = WATER_COL + 1; kind = 2; }
                         } else if (b === WATER && (aRaw === AIR || aRaw === ICE_SHAPE)) {
-                            key = -(BASE_COLORS[BLOCK.WATER] + 1); kind = 2;
+                            key = -(WATER_COL + 1); kind = 2;
                         }
                         mask[n] = key;
                         maskKind[n] = kind;

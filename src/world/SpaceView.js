@@ -428,10 +428,11 @@ export class SpaceView {
     }
 
     _orbitLine(b, def) {
-        if (b.orbitA === def.a && b.orbitL === (def.lift || 0) && b.orbitI === (def.incl || 0) && b.orbit) return;
+        const lift = def.liftT != null ? 0 : def.lift || 0; // (a planet settling back: its orbit's line where it goes)
+        if (b.orbitA === def.a && b.orbitL === lift && b.orbitI === (def.incl || 0) && b.orbit) return;
         if (b.orbit) { this.root.remove(b.orbit); b.orbit.geometry.dispose(); }
         const N = 256, pos = new Float32Array(N * 3);
-        const d = { ...def, phase: 0, period: 1 };
+        const d = { ...def, phase: 0, period: 1, lift };
         for (let i = 0; i < N; i++) {
             planetPosition({ ...d, phase: (i / N) * Math.PI * 2, node: def.node ?? def.phase ?? 0, period: 1e12 }, 0, _p);
             pos.set([_p.x, _p.y, _p.z], i * 3);
@@ -442,7 +443,7 @@ export class SpaceView {
         this._earthOrbitMat = this._earthOrbitMat || new THREE.LineBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.45, depthWrite: false });
         b.orbit = new THREE.LineLoop(g, def.look === 'earth' ? this._earthOrbitMat : this._orbitMat);
         b.orbit.frustumCulled = false;
-        b.orbitA = def.a; b.orbitL = def.lift || 0; b.orbitI = def.incl || 0;
+        b.orbitA = def.a; b.orbitL = lift; b.orbitI = def.incl || 0;
         this.root.add(b.orbit);
     }
 

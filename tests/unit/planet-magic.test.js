@@ -5,8 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
-import { PlanetMagic, PMAGIC, planetRefusal, PLANET_TARGETS } from '../../src/game/PlanetMagic.js';
-import { PlanetRegistry, planetPosition, climateAt, terraformPatch, orbitThrough, SPACE, slotRect } from '../../src/world/Planets.js';
+import { PlanetMagic, PMAGIC, planetRefusal, PLANET_TARGETS, planetNameWords } from '../../src/game/PlanetMagic.js';
+import { PlanetRegistry, planetPosition, climateAt, terraformPatch, orbitThrough, SPACE, slotRect, LIFT_SETTLE } from '../../src/world/Planets.js';
 import { planetHeight, generatePlanetChunk } from '../../src/world/PlanetSurface.js';
 import { BLOCK, CHUNK, MIN_LAYER } from '../../src/world/Terrain.js';
 import { Combat, SPELL_COST } from '../../src/game/Combat.js';
@@ -234,4 +234,46 @@ test('+100 cells: Creative gives none; death takes them into the body, «Give Me
     // a death without taking it back: it can be earned again
     g.mana.onDeath(); wipeHero(g);
     assert.equal(g.mana.success('TerraformPlanet'), 100);
+});
+
+test('the new planet named by voice: «Назови Аврора» right after making it — and nothing else is a name', () => {
+    assert.equal(planetNameWords('Назови Аврора'), 'Аврора');
+    assert.equal(planetNameWords('назови её новая земля!'), 'Новая Земля');
+    assert.equal(planetNameWords('Name it aurora'), 'Aurora');
+    assert.equal(planetNameWords('бомбардо'), null);
+    assert.equal(planetNameWords('назови'), null);
+    const g = heroInSpace(), S = g.space, reg = S.planets;
+    const c = reg.clusters[2], cp = planetPosition(c, S.T);
+    g.at(cp.x + 3000, cp.y, cp.z); g.lookAt(cp);
+    assert.equal(g.pm.cast('CreatePlanet', true), 'CreatePlanet');
+    assert.equal(g.pm.tryName('назови Аврора', false), true, 'still being said: not a spell meanwhile');
+    assert.equal(g.pm.tryName('назови Аврора', true), true);
+    assert.ok(reg.list.some((p) => p.name === 'Аврора' && p.cluster === c.id));
+    assert.equal(g.pm.tryName('назови Борей', true), false, 'named once: the next words are words again');
+});
+
+test('terraforming with a player on the planet: no tree through them; let go, a dragged planet settles into the orbits\' plane', () => {
+    const r = new PlanetRegistry(9), mars = r.get('mars'), rect = slotRect(mars);
+    const x = rect.cx + 300, z = rect.cz + 1500;
+    r.update('mars', { ...terraformPatch(mars, 'green'), clear: [{ x, z, r: 7 }] });
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+    const ch = generatePlanetChunk(cx, cz, mars, MIN_LAYER + 2);
+    const H = ch.blocks.length / (CHUNK * CHUNK);
+    for (let dz = -7; dz <= 7; dz++) for (let dx = -7; dx <= 7; dx++) {
+        const lx = x + dx - cx * CHUNK, lz = z + dz - cz * CHUNK;
+        if (lx < 0 || lz < 0 || lx >= CHUNK || lz >= CHUNK || Math.hypot(dx, dz) > 7) continue;
+        for (let L = 0; L < H; L++) {
+            const b = ch.blocks[(L * CHUNK + lz) * CHUNK + lx];
+            assert.ok(b !== BLOCK.PLANET_WOOD && b !== BLOCK.PLANET_LEAF, 'no tree where the player stood');
+        }
+    }
+    // the drag's height: held — kept; let go — back into the plane over LIFT_SETTLE s
+    const o = orbitThrough(40000, 0, 100);
+    const held = { ...o, lift: 900 };
+    assert.equal(planetPosition(held, 100).y, 900);
+    const let_ = { ...o, lift: 900, liftT: 100 };
+    assert.equal(planetPosition(let_, 100).y, 900);
+    const mid = planetPosition(let_, 100 + LIFT_SETTLE / 2).y;
+    assert.ok(mid > 0 && mid < 900);
+    assert.equal(planetPosition(let_, 100 + LIFT_SETTLE + 1).y, 0);
 });

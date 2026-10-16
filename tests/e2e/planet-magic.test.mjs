@@ -91,6 +91,9 @@ test('planet spells: create, enlarge, terraform, move', async () => {
     await shot('03-red-hot-ball.png');
     const pid = await page.evaluate(() => window.__zns.game.space.planets.list.find((p) => !p.base)?.id);
     assert.ok(pid, 'a new planet');
+    // its name by voice
+    await say('Назови Аврора');
+    assert.equal(await page.evaluate((pid) => window.__zns.game.space.planets.get(pid).name, pid), 'Аврора');
     await page.evaluate(async (pid) => { const S = window.__zns.game.space; for (let i = 0; i < 150 && S._tex.get(pid) !== 'done'; i++) await new Promise((r) => setTimeout(r, 100)); }, pid);
     await wait(5000);
     await near({ id: pid, k: 3.0, side: 0.6, up: 0.3 });
