@@ -24,3 +24,10 @@ test('the spell tabs: each card in a tab that exists, no empty tabs, the sphere 
     assert.ok(MECHANICS.some((m) => /Море/.test(m.title)), 'the sea is a mechanic');
     assert.ok(!SPELLS.some((s) => s.name === 'Море'));
 });
+
+test('every «Механика игры» section has its title, lead and points (one broken section left the whole tab empty)', () => {
+    for (const m of MECHANICS) {
+        assert.ok(m.title && typeof m.lead === 'string', `«${m.title}»: title and lead`);
+        assert.ok(Array.isArray(m.points) && m.points.length, `«${m.title}»: points: [...] (not items / text)`);
+    }
+});
