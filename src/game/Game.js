@@ -953,7 +953,7 @@ export class Game {
      * (host) A chest that was never opened burnt down (BurnWreck.js): its things are rolled as on
      * opening; what burns is gone, the rest (coins, steel, magic things…) lies in the ashes.
      */
-    spillBurntChest(chest, rp) {
+    spillBurntChest(chest, rp, burn = true) { // (burn false: «Liquidation Максима» crumbled it — nothing burns, all falls out)
         if (chest.store) { if (this.authority) (chest.store.castle ? this.castleMagic : this.houseMagic)?.chestBurnt(chest, rp); return; } // (a magic house's chest: what was put in it)
         if (!this.authority || chest.itemType !== 'loot' || chest.ship) return;
         const testing = this.config.mode === 'creative' && /^(cvtest|creative-test)/.test(String(chest.id));
@@ -961,7 +961,7 @@ export class Game {
         this.items.lootChest(rp, Math.random, chest.house || null, chest.room === 'port' ? 'port' : null, { chest, extra: this._chestPouch(chest), key: testing ? 1 : undefined });
         for (const [uid, L] of [...this.items.loose]) {
             if (L0.has(uid)) continue;
-            if (burnsInFire(L.item)) { this.items.removeLoose(uid); this.sync?.itemGone?.(uid, null, null); continue; }
+            if (burn && burnsInFire(L.item)) { this.items.removeLoose(uid); this.sync?.itemGone?.(uid, null, null); continue; }
             L.hover = null; L.rise = null; // (it falls into the ashes)
             L.model.position.y = rp.y + 0.2;
             L.vel.set((Math.random() - 0.5) * 1.2, 0.5, (Math.random() - 0.5) * 1.2);
@@ -2907,6 +2907,7 @@ export class Game {
         if (earth) this.campfires.update(dt);
         if (earth) this.lanterns?.update(dt);
         if (earth) this.cauldrons?.update(dt);
+        if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         if (earth) this.crystals?.update(dt);
         if (earth) this.beds.update(dt);

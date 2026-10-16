@@ -9,18 +9,22 @@
  *   - a MAGIC thing (a wand, a scroll, a spell book, a magic sword / bow / shield, a potion, a mana
  *     crystal, a dragon's egg, a phoenix's feather, the wizards' arcane stone…) only by «Максима»;
  *     the plain splash breaks on it and the caster is told;
+ *   - a big thing of a house or a cave (a cauldron, a chest, a bed, a door) only by «Максима» (the
+ *     plain splash is too small for it); a campfire, a surfboard — by either; a chest's things fall out;
  *   - anything alive (a player, a zombie, a villager, an animal, a tree…) loses 3 HP — and that is
  *     all; «Protection» (a shield turned to it, the dome) stops it.
  *
  * Who decides: the spell goes to everybody ('spell'); every computer flies the same splash. The host
  * takes away the thing it struck (and tells the others: 'igone' / 'wgone') and hurts the creatures;
  * every computer hurts only its own player; a block of the world is taken by the caster's computer
- * (Builder._sendEdits, like every block a player takes).
+ * (Builder._sendEdits, like every block a player takes). A cauldron, a chest, a bed, a door, a board:
+ * the host takes it away and tells the others ('liq'); it is remembered (`gone`, saved with the world)
+ * so a house, a cave, a beach coming near again never makes it anew.
  */
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
-import { isMagicItem, isGodGift } from './ItemTypes.js';
+import { isMagicItem, isGodGift, ITEM_SCALE } from './ItemTypes.js';
 
 export const LIQ = {
     SPEED: 26, // m/s
@@ -28,7 +32,10 @@ export const LIQ = {
     DMG: 3, // HP to anything alive
     THING_R: 0.45, // a thing this near the splash's path is struck
     WEAPON_R: 0.6,
+    NEAR_HIT: 0.9, // m: a thing lying this near where the splash hits the ground / a wall is what was aimed at
+    GONE_MAX: 4000,
 };
+const THING_DUST = { cauldron: 0x5a5856, chest: 0x8a6a3a, bed: 0xc8b8a0, door: 0x7a4f2a, board: 0xb08a5a, campfire: 0x4a3a2a, crystal: 0x5cb8ff };
 
 export const isLiquidation = (name) => name === 'Liquidation' || name === 'LiquidationMaxima';
 
@@ -78,11 +85,37 @@ export const LIQUIDATION_TARGETS = {
     heldThings: { does: 'none', why: 'вещь в руке не трогает — всплеск попадает в руку (живое: −3 HP тому, кто держит)' },
     blocks: { does: 'dust', why: 'блок стены, доска, камень, кирпич рассыпается (один блок); волшебный камень башен — только «Максимой»; у замка — это порча: стража заметит' },
     trees: { does: 'none', why: 'дерево живое: всплеск разбивается о ствол, ничего не рассыпается' },
-    furniture: { does: 'none', why: 'сундуки, двери, кровати, котлы, костры — всплеск разбивается о них (это часть дома, ломают «Бомбардо»)' },
+    furniture: { does: 'dust', why: 'котёл, сундук, кровать, дверь — только «Максимой» (обычный всплеск для них мал); костёр, доска для волн — любым; из сундука его вещи выпадают; уничтоженное не появляется снова (запомнено, сохраняется); сундук корабля и повозки, ворота тронного зала и Ледяного замка, вещь в руках — нет (см. THINGS)' },
     ships: { does: 'none', why: 'корпус и паруса корабля — большие постройки: всплеск разбивается' },
     water: { does: 'none', why: 'вода не рассыпается: всплеск уходит в неё' },
     ground: { does: 'dust', why: 'трава (живой дёрн) и коренная порода — всплеск разбивается; голая земля, песок, камень — неживой блок, рассыпается, как любой блок' },
 };
+
+/**
+ * Things that are not items, reached by their solid box (or their place): `need` 'dust' (either
+ * splash) | 'maxima' (only «Максима»), and what does not crumble at all — with why.
+ */
+export const THINGS = {
+    cauldron: { need: 'maxima', why: 'большой чугунный котёл: рассыпает только «Максима»' },
+    chest: { need: 'maxima', why: 'сундук: только «Максима»; его вещи выпадают на землю (у боссов награда так не пропадает)' },
+    bed: { need: 'maxima', why: 'кровать: только «Максима»' },
+    door: { need: 'maxima', why: 'дверь: только «Максима»' },
+    board: { need: 'dust', why: 'доска для волн — просто доска' },
+    campfire: { need: 'dust', why: 'костёр: дрова рассыпаются, огонь гаснет' },
+    crystal: { need: 'maxima', why: 'кристалл маны — волшебный' },
+};
+/** What the splash does to such a thing: 'dust' | 'maxima' | {none: why}. `o`: the thing itself (its own exceptions). */
+export function thingVerdict(k, max, o = null) {
+    const r = THINGS[k];
+    if (!r) return { none: '' };
+    if (o?.godGift) return { none: '✨ Это дар богов — никакое заклинание его не уничтожит' };
+    if (k === 'chest' && (o?.ship || String(o?.id).startsWith('cart:'))) return { none: o?.ship ? '⛵ Сундук корабля — часть его палубы' : '🛞 Сундук — часть повозки' };
+    if (k === 'chest' && o?.room === 'iceQueen' && o?.locked) return { none: '❄️ Сундуки Королевы скованы её чарами, пока она жива' };
+    if (k === 'door' && (o?.gate || o?.ship || o?.ice)) return { none: o?.gate ? '🚪 Ворота тронного зала держат и взрывы — всплеску их не взять' : o?.ice ? '❄️ Ворота Ледяного замка — всплеску их не взять' : '⛵ Дверь корабля — часть его корпуса' };
+    if (o?.inHand) return { none: '' };
+    if (r.need === 'maxima' && !max) return 'maxima';
+    return 'dust';
+}
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 
@@ -110,6 +143,41 @@ export class Liquidation {
     constructor(game) {
         this.game = game;
         this._geo = null;
+        this.gone = new Set(); // 'cauldron:id' | 'chest:id' | 'bed:id' | 'door:id' | 'board:id' — crumbled, never made again
+        this._sweepT = 0;
+    }
+
+    isGone(k, id) { return this.gone.has(k + ':' + id); }
+
+    _gone(k, id) {
+        this.gone.add(k + ':' + id);
+        if (this.gone.size > LIQ.GONE_MAX) this.gone.delete(this.gone.values().next().value); // (a list with its limit)
+    }
+
+    snapshot() { return [...this.gone]; }
+
+    restore(list) { for (const k of list || []) if (typeof k === 'string' && k.length < 200) this.gone.add(k); }
+
+    /** (guests) The host saw it crumble. */
+    onNet(m) {
+        if (typeof m.k !== 'string' || !THINGS[m.k] || (typeof m.id !== 'string' && typeof m.id !== 'number')) return;
+        const p = this._destroy(m.k, m.id);
+        if (p) this._dust(p, THING_DUST[m.k] || 0x9c8f80);
+        this._gone(m.k, m.id);
+    }
+
+    /**
+     * Now and then: a house that came near again, a cave looked into anew, makes its door / beds /
+     * chests / cauldron from the world's plan — what crumbled is taken away again at once (quietly).
+     */
+    update(dt) {
+        if (!this.gone.size || (this._sweepT -= dt) > 0) return;
+        this._sweepT = 1;
+        const g = this.game;
+        for (const c of [...(g.chests || [])]) if (this.gone.has('chest:' + c.id)) this._chestGone(c, false);
+        for (const id of [...(g.beds?.list.keys() || [])]) if (this.gone.has('bed:' + id) && g.beds.lying !== id) g.beds.removeBed(id);
+        for (const id of [...(g.doors?.list.keys() || [])]) if (this.gone.has('door:' + id)) g.doors.remove(id);
+        for (const id of [...(g.cauldrons?.list.keys() || [])]) if (this.gone.has('cauldron:' + id)) g.cauldrons.destroy(id);
     }
 
     /** Voice on my computer: the raised hand (the wand) points where the splash goes. */
@@ -191,12 +259,24 @@ export class Liquidation {
         for (const [uid, L] of g.items?.loose || []) {
             const p = L.model.position;
             const t = segT(a, b, p);
-            if (_b.lerpVectors(a, b, t).distanceTo(p) < LIQ.THING_R) take(t, { kind: 'item', uid });
+            if (_b.lerpVectors(a, b, t).distanceTo(p) < Math.max(LIQ.THING_R, 0.3 * (ITEM_SCALE[L.item?.kind] || 1))) take(t, { kind: 'item', uid });
         }
         for (const wp of g.weapons?.weapons || []) {
             if (wp.holder || wp.remoteTarget) continue;
             const t = segT(a, b, wp.position);
             if (_b.lerpVectors(a, b, t).distanceTo(wp.position) < LIQ.WEAPON_R) take(t, { kind: 'weapon', w: wp });
+        }
+        // a campfire (no box: you walk round it), a mana crystal growing in a cave
+        for (const f of g.campfires?.list.values() || []) {
+            if (Math.abs(f.x - a.x) > 40 || Math.abs(f.z - a.z) > 40) continue;
+            _a.set(f.x, f.y + 0.35, f.z);
+            const t = segT(a, b, _a);
+            if (_b.lerpVectors(a, b, t).distanceTo(_a) < 0.75) take(t, { kind: 'thing', th: { k: 'campfire', id: f.id, o: f, p: _a.clone() } });
+        }
+        for (const c of g.crystals?.growing?.() || []) {
+            if (!c.base || !c.tip || c.center.distanceTo(a) > LIQ.RANGE + 2) continue;
+            if (segSegDist(a, b, c.base, c.tip) > (c.r || 0.15) + 0.15) continue;
+            take(segT(a, b, c.center), { kind: 'thing', th: { k: 'crystal', id: c.id, o: c, p: c.center.clone() } });
         }
         // a block of the world
         const data = g.terrain?.data;
@@ -211,9 +291,18 @@ export class Liquidation {
         const n = Math.max(1, Math.ceil(len / 0.3));
         for (let k = 1; k <= n; k++) {
             _c.lerpVectors(a, b, k / n);
+            const box = g.collision?.boxAt?.(_c.x, _c.y, _c.z);
+            if (box) { take(k / n, { kind: 'box', box }); break; }
             if (g.collision?.pointBlocked?.(_c.x, _c.y, _c.z)) { take(k / n, { kind: 'solid' }); break; }
         }
         if (best) best.at = new THREE.Vector3().lerpVectors(a, b, best.t);
+        // (aimed at a thing lying on the ground or by a wall: the splash hit the ground right by it — it was the thing)
+        if (best && (best.kind === 'block' || best.kind === 'solid')) {
+            let near = null, nd = LIQ.NEAR_HIT;
+            for (const [uid, L] of g.items?.loose || []) { const q = L.model.position.distanceTo(best.at); if (q < nd) { nd = q; near = { kind: 'item', uid }; } }
+            for (const wp of g.weapons?.weapons || []) { if (wp.holder || wp.remoteTarget) continue; const q = wp.position.distanceTo(best.at); if (q < nd) { nd = q; near = { kind: 'weapon', w: wp }; } }
+            if (near) best = { t: best.t, at: best.at, ...near };
+        }
         return best;
     }
 
@@ -247,9 +336,26 @@ export class Liquidation {
             if (mine) g.mana?.success(name);
             return;
         }
+        if (h.kind === 'box') { const th = this._thingOf(h.box); if (th) h = { ...h, kind: 'thing', th }; else if (h.box.godGift) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; } }
+        if (h.kind === 'thing') {
+            const th = h.th, v = thingVerdict(th.k, max, th.o);
+            if (v === 'maxima') { this._burst(h.at, max, 12); say(th.k === 'crystal' ? '✨ Кристалл маны волшебный — его возьмёт только «Liquidation Максима»' : '🫧 Эта вещь слишком большая — её рассыплет только «Liquidation Максима»'); return; }
+            if (v !== 'dust') { this._burst(h.at, max, 12); if (v.none) say(v.none); return; }
+            this._dust(th.p, THING_DUST[th.k] || 0x9c8f80);
+            if (auth) {
+                if (th.k === 'campfire') g.campfires._out(th.o); // (put out for everybody: Campfires sends it)
+                else if (th.k === 'crystal') g.crystals.take([th.id]); // (gone for everybody, saved: ManaCrystals)
+                else if (this._destroy(th.k, th.id, true)) { this._gone(th.k, th.id); g.sync?.liquidated?.(th.k, th.id); }
+            }
+            // (somebody's cauldron, chest, bed, door in a castle / a village: a crime there — whoever sees it calls the guard)
+            if (mine && th.k !== 'board' && th.k !== 'campfire' && th.k !== 'crystal') g.castleLife?.damaged?.({ x: th.p.x, y: th.p.y, z: th.p.z }, g.localId, 1, false);
+            if (mine) g.mana?.success(name);
+            return;
+        }
         if (h.kind === 'block') {
             const v = blockVerdict(h.type, max);
             const at = _a.set(h.x, h.L - 1, h.z);
+            if (g.terrain?.data?.godGiftAt?.(h.x, h.L, h.z)) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; }
             if (v === 'maxima') { this._burst(h.at, max, 12); say('✨ Это волшебный камень — его рассыпет только «Liquidation Максима»'); return; }
             if (v !== 'dust') { this._burst(h.at, max, 12); if (v === 'alive') say('🌳 Это живое — «Liquidation» рассыпает только неживое'); return; }
             if (mine && g.wards?.forbids?.(origin, at)) { this._burst(h.at, max, 12); say('🛡️ Этот дом под защитой'); return; }
@@ -259,6 +365,82 @@ export class Liquidation {
             return;
         }
         this._burst(h.at, max, 12); // (a ward, a tree, a chest, a door…: it breaks on it)
+    }
+
+    /** The thing a solid box belongs to: {k, id, o, p} | null (a pedestal, a counter, a cart… — null). */
+    _thingOf(box) {
+        const g = this.game, bid = box.id;
+        for (const c of g.cauldrons?.list.values() || []) if (c.boxId === bid) return { k: 'cauldron', id: c.id, o: c, p: c.pos.clone() };
+        for (const c of g.chests || []) if (c.boxId === bid) return { k: 'chest', id: c.id, o: c, p: c.getPosition().clone() };
+        for (const b of g.beds?.list.values() || []) if (b.boxId === bid) return { k: 'bed', id: b.id, o: b, p: new THREE.Vector3(b.x, b.y + 0.4, b.z) };
+        for (const d of g.doors?.list.values() || []) if (d.boxId === bid) return { k: 'door', id: d.id, o: g.doors.carried?.door === d ? { ...d, inHand: true } : d, p: new THREE.Vector3(d.x, d.y + 1.8, d.z) };
+        for (const [id, m] of g.boards?.models || []) {
+            if (m.boxId !== bid) continue;
+            const st = g.boards.reg?.map.get(id)?.st;
+            return { k: 'board', id, o: { inHand: st === 'held' || st === 'ridden' }, p: m.model.position.clone() };
+        }
+        return null;
+    }
+
+    /** It is gone (every computer: the host, then 'liq' to the others). Its place (for the dust), or null if it is not here. */
+    _destroy(k, id, spill = false) {
+        const g = this.game;
+        if (k === 'cauldron') {
+            const c = g.cauldrons?.list.get(id);
+            if (!c) return null;
+            const p = c.pos.clone();
+            g.cauldrons.destroy(id);
+            return p;
+        }
+        if (k === 'chest') {
+            const c = (g.chests || []).find((x) => String(x.id) === String(id));
+            if (!c) return null;
+            const p = c.getPosition().clone();
+            this._chestGone(c, spill);
+            return p;
+        }
+        if (k === 'bed') {
+            const b = g.beds?.list.get(id);
+            if (!b) return null;
+            if (g.beds.lying === id) g.beds.standUp(); // (I lay in it: on my feet)
+            g.beds.removeBed(id);
+            return new THREE.Vector3(b.x, b.y + 0.4, b.z);
+        }
+        if (k === 'door') {
+            const d = g.doors?.list.get(id);
+            if (!d) return null;
+            if (g.wreck) g.wreck._breakDoor(d); else g.doors.remove(id);
+            return new THREE.Vector3(d.x, d.y + 1.8, d.z);
+        }
+        if (k === 'board') {
+            const m = g.boards?.models.get(id);
+            const p = m ? m.model.position.clone() : null;
+            if (g.boards?.reg.map.get(id)?.beach) g.boards.reg.beachTaken.add(id); // (the beach rack makes no new one)
+            g.boards?.remove(id);
+            return p;
+        }
+        return null;
+    }
+
+    /** A chest crumbles: gone; (spill, the host) what was in it falls out — nothing of a boss's reward is lost. */
+    _chestGone(c, spill) {
+        const g = this.game;
+        c.mesh.updateMatrixWorld(true);
+        const p = c.getPosition().clone();
+        const rp = c.getRewardPosition(new THREE.Vector3());
+        const wasOpen = c.isOpen || g._openedChests?.has(c.id);
+        c.burnt = true; // (nothing else treats it as standing)
+        if (c.boxId != null) { g.collision.removeBox(c.boxId); c.boxId = null; }
+        c.dispose();
+        const i = g.chests.indexOf(c);
+        if (i >= 0) g.chests.splice(i, 1);
+        (g._openedChests = g._openedChests || new Set()).add(c.id); // (nothing comes out of it any more)
+        if (!spill || !g.authority) return;
+        if (!wasOpen) { g.spillBurntChest?.(c, rp, false); return; }
+        // opened: its things floating over it fall
+        const over = (m) => Math.abs(m.x - p.x) < 2.2 && Math.abs(m.z - p.z) < 2.2 && m.y > p.y - 0.3 && m.y < p.y + 3.2;
+        for (const L of g.items?.loose.values() || []) if (L.hover && over(L.model.position)) { L.hover = null; L.rise = null; L.rest = false; L.sentRest = false; }
+        for (const w of g.weapons?.weapons || []) if (w.hover && !w.holder && over(w.hover.base || w.position)) { w.hover = null; w.wake?.(); }
     }
 
     /** (the caster's computer) the block is gone — for everybody, like a block a player takes. */

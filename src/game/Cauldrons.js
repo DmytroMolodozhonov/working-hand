@@ -580,7 +580,7 @@ export class Cauldrons {
             if (this.caves.has(cv.id)) continue;
             this.caves.add(cv.id);
             const id = 'cave:' + cv.id;
-            if (this.list.has(id)) continue;
+            if (this.list.has(id) || g.liquidation?.isGone('cauldron', id)) continue; // (crumbled by «Liquidation Максима»: never again)
             const rng = createRng(hashString('cauldron:' + cv.id + ':' + (t.seed ?? 0)));
             const roll = rollCaveCauldron(rng, !!cv.test); // (the creative test cave: always one, to try)
             if (!roll) continue;
@@ -1015,6 +1015,7 @@ export class Cauldrons {
         if (s.sold && typeof s.sold === 'object') Object.assign(this.sold, s.sold);
         for (const d of list) {
             if (!d || typeof d.id !== 'string' || ![d.x, d.y, d.z].every(Number.isFinite)) continue;
+            if (this.game.liquidation?.isGone('cauldron', d.id)) continue;
             this.spawn({ ...d, q: undefined, c: undefined, lev: 0 });
         }
     }
@@ -1032,6 +1033,28 @@ export class Cauldrons {
         }
         out.push(makeItemModel({ kind: 'potion', color: 0xff00ff }), makeItemModel({ kind: 'flask' }));
         return out;
+    }
+
+    /**
+     * The cauldron is gone (crumbled into dust by «Liquidation Максима» — every computer). A master's
+     * one: his goods are gone (he puts out another later, as when it is sold). What lay in it falls.
+     */
+    destroy(id) {
+        const c = this.list.get(id);
+        if (!c) return false;
+        if (c.shop && this.auth) {
+            const key = c.shop.stall;
+            this.sold[key] = (this.sold[key] || 0) + 1;
+            this.restockAt[key] = performance.now() + 120000;
+        }
+        for (const L of this.game.items?.loose.values() || []) if (L.inCaul === id) { L.inCaul = null; L.rest = false; L.sentRest = false; }
+        if (c.boxId != null) this.game.collision.removeBox(c.boxId);
+        if (c.tripod) { this.game.scene.remove(c.tripod); disposeModel(c.tripod); }
+        this.game.scene.remove(c.group);
+        disposeModel(c.group);
+        this.list.delete(id);
+        this._hintAt.delete(id);
+        return true;
     }
 
     dispose() {

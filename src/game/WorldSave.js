@@ -238,6 +238,7 @@ export class WorldKeeper {
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
+            liquidated: g.liquidation?.snapshot() || [], // cauldrons, chests, beds, doors, boards crumbled by «Liquidation» (they never come back)
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
             magicCastles: g.castleMagic?.snapshot() || null, // castles made by magic and what is in their chests (CastleMagic.js)
@@ -288,6 +289,7 @@ export function restoreWorld(game, save, THREE) {
     }
     if (save.rebuild) g.castleLife?.rebuild.restore(save.rebuild); // (after the blasts: what the builders put back since)
     if (save.ice && save.ice.length) g.applyIce(save.ice);
+    if (save.liquidated) g.liquidation?.restore(save.liquidated); // (before the things themselves: what crumbled is not made again)
     for (const id of save.chests || []) { (g._openedChests = g._openedChests || new Set()).add(id); const c = g.chests?.find((x) => x.id === id); if (c) c.setOpenInstant(); }
     for (const e of save.items || []) g.items?.spawnLoose(e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (save.animals) g.animals?.restore(save.animals);

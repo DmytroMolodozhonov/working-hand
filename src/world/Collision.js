@@ -238,6 +238,12 @@ export class CollisionWorld {
         return hit;
     }
 
+    /** The added box a world point is in (a cauldron, a chest, a bed, a door…), or null. */
+    boxAt(x, y, z) {
+        for (const b of this.queryBoxes(x, x, z, z)) if (y >= b.minY && y <= b.maxY) return b;
+        return null;
+    }
+
     /** Is a world point inside any solid obstacle? (projectiles, line of sight) */
     pointBlocked(x, y, z) {
         if (this.walls && y < this.walls.height) {

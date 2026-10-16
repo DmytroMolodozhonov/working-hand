@@ -158,6 +158,7 @@ export class NetSync {
             boards: g.boards?.snapshot() || null,
             campfires: g.campfires?.snapshot() || [],
             cauldrons: g.cauldrons?.snapshot() || null,
+            liquidated: g.liquidation?.snapshot() || [], // (crumbled by «Liquidation»: not made again)
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.netList() || [], // houses' spheres of protection
             mhouses: g.houseMagic?.netList() || [], // houses made by magic (HouseMagic.js)
@@ -188,6 +189,7 @@ export class NetSync {
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
         if (msg.rain > 0) g.storm?.startRain(msg.rain);
+        if (msg.liquidated) g.liquidation?.restore(msg.liquidated);
         if (msg.doors) g.doors?.restore(msg.doors);
         if (msg.locks) g.locks?.restore(msg.locks);
         if (msg.boards) g.boards?.restore(msg.boards);
@@ -664,6 +666,8 @@ export class NetSync {
     campfire(msg) { this.net.send(msg); }
 
     cauldron(msg) { this.net.send(msg); }
+    /** (host) «Liquidation» crumbled a thing that is not an item: a cauldron, a chest, a bed, a door, a board (Liquidation.js). */
+    liquidated(k, id) { this.net.send({ t: 'liq', k, id }, true); }
     /** Beds (Beds.js): {a: set | create | color | msg | lie | sleep, …}; `to`: only that player (host). */
     bed(m, to = null) { if (to) this.net.sendTo(to, { t: 'bed', ...m }); else this.net.send({ t: 'bed', ...m }, true); }
     doorAngle(id, a) { this.net.send({ t: 'dang', id, a: Math.round(a * 100) / 100 }, true); }
@@ -905,6 +909,7 @@ export class NetSync {
             case 'lock': case 'dlk': g.locks?.applyNet(m); break; // («Алохомора» — Alohomora.js)
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
             case 'cart': if (!this.net.isHost) g.carriages?.onNet(m); break; // (carts on the roads: Carriages.js)
+            case 'liq': if (!g.authority) g.liquidation?.onNet(m); break; // («Liquidation»: what the host saw crumble)
             case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
             case 'bed': g.beds?.onNet(m); break;
