@@ -23,9 +23,16 @@
 <body>
     <!-- HUD (In-Game) -->
     <div id="hud" class="hidden">
-        <div id="hp-container">
-            <div id="hp-bar-fill"></div>
-            <span id="hp-text">HP: 20/20</span>
+        <div id="hp-col">
+            <div id="hp-container">
+                <div id="hp-bar-fill"></div>
+                <span id="hp-text">HP: 20/20</span>
+            </div>
+            <!-- the armour worn as extra health: what its pieces can still take (Armor.js → Hud.setArmor) -->
+            <div id="armor-hp" class="hidden">
+                <div id="armor-hp-fill"></div>
+                <span id="armor-hp-text"><span class="ah-ico">🛡</span> +<b id="armor-hp-num">0</b></span>
+            </div>
         </div>
         <div id="stats-container">
             <p id="coin-counter" title="Монеты">🪙 <span id="coin-count">0</span></p>

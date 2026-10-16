@@ -398,11 +398,12 @@ button, input, select, textarea { font-family: inherit; }
 /* ------------------------------------------------------------ HUD */
 #hud { font-family: var(--ui-font); }
 #hp-container {
-    width: 260px; height: 22px; border: 1px solid var(--ui-border-strong); border-radius: 999px;
+    width: 360px; height: 36px; border: 1px solid var(--ui-border-strong); border-radius: 999px;
     background: rgba(8, 5, 24, 0.78); box-shadow: 0 0 12px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.7);
 }
 #hp-bar-fill { background: linear-gradient(90deg, #c0264a, #ff6b8a); box-shadow: 0 0 10px rgba(255, 93, 122, 0.8); }
-#hp-text { font-size: 12px; font-weight: 800; letter-spacing: 0.3px; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+/* big figures «❤ 18 / 20»: read from 2–3 m away, outlined on any sky */
+#hp-text { font: 900 26px/1 system-ui, 'Segoe UI', Arial, sans-serif; white-space: nowrap; letter-spacing: 0.3px; -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.9); paint-order: stroke fill; text-shadow: 0 1px 3px #000, 0 0 4px #000; }
 #stats-container { font-weight: 800; text-shadow: 0 1px 3px #000, 0 0 2px #000; }
 #mp-hud, .hud-notify-item {
     background: var(--ui-panel); border: 1px solid var(--ui-border); border-radius: 12px;

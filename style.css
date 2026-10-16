@@ -149,6 +149,8 @@ body {
     z-index: 100;
 }
 
+#hp-col { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+#hp-col.hidden { display: none; }
 #hp-container {
     background: rgba(0, 0, 0, 0.5);
     border: 2px solid #fff;
@@ -1610,6 +1612,50 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #voice-debug.hint.on { opacity: 1; transition: opacity 0.15s; }
 @media (max-height: 560px) { #voice-debug.hint { font-size: 20px !important; top: 92px !important; } }
 
+/* the armour's extra health under the HP bar (Hud.setArmor): silver, «🛡 +N» */
+#armor-hp {
+    position: relative;
+    width: 300px;
+    height: 28px;
+    border: 2px solid #cfd8e3;
+    border-radius: 999px;
+    background: rgba(8, 10, 20, 0.78);
+    box-shadow: 0 0 8px rgba(200, 220, 255, 0.45), inset 0 0 6px rgba(0, 0, 0, 0.7);
+    overflow: hidden;
+}
+#armor-hp.hidden { display: none; }
+#armor-hp .ah-ico { -webkit-text-stroke: 0; font-size: 18px; }
+#armor-hp b { font-weight: 900; }
+#armor-hp-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(180deg, #f4f8ff 0%, #b9c4d2 45%, #7d8a9b 100%);
+    box-shadow: 0 0 8px rgba(220, 235, 255, 0.8);
+    transition: width 0.3s;
+}
+#armor-hp-text {
+    position: absolute;
+    inset: 0;
+    text-align: center;
+    font: 900 21px/28px system-ui, 'Segoe UI', Arial, sans-serif;
+    color: #fff;
+    -webkit-text-stroke: 1.2px rgba(0, 0, 0, 0.9);
+    paint-order: stroke fill;
+    text-shadow: 0 0 3px #000, 0 1px 2px #000;
+}
+#armor-hp.hit { animation: armor-hit 0.6s ease-out; }
+#armor-hp.hit #armor-hp-fill { background: linear-gradient(180deg, #ffd0d0, #ff5252); }
+#armor-hp.grow { animation: armor-grow 0.6s ease-out; }
+@keyframes armor-hit {
+    0% { border-color: #ff4040; box-shadow: 0 0 18px rgba(255, 50, 50, 1); transform: translateX(-5px); }
+    30% { transform: translateX(4px); }
+    60% { transform: translateX(-2px); }
+    100% { transform: none; }
+}
+@keyframes armor-grow {
+    0% { border-color: #fff; box-shadow: 0 0 22px rgba(235, 245, 255, 1); transform: scale(1.06); }
+    100% { transform: none; }
+}
 /* armour worn (Armor.js): cells on the right, one above the other — only while something is worn */
 #armor-cells {
     position: fixed;

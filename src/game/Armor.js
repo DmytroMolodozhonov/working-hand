@@ -482,6 +482,10 @@ export class ArmorSystem {
     // ------------------------------------------------------------ the cells (right side)
     _renderCells() {
         if (typeof document === 'undefined') return;
+        // (the extra health of the armour under the HP bar: the points all the pieces worn can still take)
+        let cur = 0, max = 0;
+        for (const s of SLOTS) { const it = this.worn[s]; if (it?.kind === 'armor') { const m = pieceMax(it); max += m; cur += Math.min(m, it.hp ?? m); } }
+        this.game.hud?.setArmor?.(cur, max);
         let el = document.getElementById('armor-cells');
         if (!this.anyWorn()) { if (el) el.style.display = 'none'; return; }
         if (!el) {

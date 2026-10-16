@@ -98,7 +98,10 @@ export class Hud {
             hud: document.getElementById('hud'),
             hpText: document.getElementById('hp-text'),
             hpFill: document.getElementById('hp-bar-fill'),
-            hpContainer: document.getElementById('hp-container'),
+            hpContainer: document.getElementById('hp-col') || document.getElementById('hp-container'),
+            armorHp: document.getElementById('armor-hp'),
+            armorHpFill: document.getElementById('armor-hp-fill'),
+            armorHpNum: document.getElementById('armor-hp-num'),
             kills: document.getElementById('kill-count'),
             punches: document.getElementById('punch-count'),
             fps: document.getElementById('fps-counter'),
@@ -132,7 +135,7 @@ export class Hud {
     }
 
     update(hp, maxHp, kills, punches) {
-        this.el.hpText.textContent = `HP: ${hp}/${maxHp}`;
+        this.el.hpText.textContent = `❤ ${Math.ceil(hp)}/${maxHp}`;
         this.el.hpFill.style.width = `${Math.max(0, (hp / maxHp) * 100)}%`;
         this.el.kills.textContent = kills;
         this.el.punches.textContent = punches;
@@ -176,6 +179,32 @@ export class Hud {
             el.manaMax.textContent = String(Math.floor(max));
             el.manaNum.classList.toggle('low', value < max * 0.3);
         }
+    }
+
+    /**
+     * The armour worn as extra health under the HP bar: «🛡 +N» — what all the pieces can still take
+     * (Armor.js). It flashes when it changes: silver when it grows (a piece put on, mended), red when hit.
+     * @param {number} cur  points left in all the pieces worn (0 with nothing worn: hidden)
+     * @param {number} max  their full points
+     */
+    setArmor(cur, max) {
+        const el = this.el;
+        if (!el.armorHp) return;
+        cur = Math.max(0, Math.round(cur)); max = Math.max(0, Math.round(max));
+        el.armorHp.classList.toggle('hidden', !(max > 0));
+        if (!(max > 0)) { this._armorCur = null; return; }
+        el.armorHpFill.style.width = `${Math.min(100, (cur / max) * 100)}%`;
+        el.armorHpNum.textContent = String(cur);
+        const was = this._armorCur;
+        this._armorCur = cur;
+        if (was == null || was === cur) return;
+        const cls = cur < was ? 'hit' : 'grow';
+        const e = el.armorHp;
+        e.classList.remove('hit', 'grow');
+        void e.offsetWidth; // (restart the animation)
+        e.classList.add(cls);
+        clearTimeout(e._flashT);
+        e._flashT = setTimeout(() => e.classList.remove(cls), 700);
     }
 
     /**
