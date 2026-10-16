@@ -368,21 +368,25 @@ export class WandMagic {
         }
         const dir = _v2.clone();
         let target = null, at = null;
-        // a thing lying / hovering where the wand points
-        let best = 0.25;
+        // a thing lying / hovering where the wand points (the cone wider for a near thing — it is a big
+        // target, and the camera's hand trembles: the author pointed at the things by him and got nothing)
+        // — scored by the angle beyond what its distance allows
+        let best = 0;
+        const cone = (d) => 0.3 + Math.atan2(0.7, Math.max(0.5, d));
+        const score = (ang, d) => cone(d) - ang;
         for (const L of g.items.loose.values()) {
             const to = _v.subVectors(L.model.position, tip);
             const d = to.length();
             if (d > 10) continue;
-            const ang = dir.angleTo(to.normalize());
-            if (ang < best) { best = ang; target = L.item; at = L.model.position.clone(); }
+            const sc = score(dir.angleTo(to.normalize()), d);
+            if (sc > best) { best = sc; target = L.item; at = L.model.position.clone(); }
         }
         for (const w of g.weapons.weapons) {
             const to = _v.subVectors(w.position, tip);
             const d = to.length();
             if (d > 10) continue;
-            const ang = dir.angleTo(to.normalize());
-            if (ang < best) { best = ang; target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); }
+            const sc = score(dir.angleTo(to.normalize()), d);
+            if (sc > best) { best = sc; target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); }
         }
         // a running book (a creature and a book at once): its secret
         // (small and running: where the wand OR the arm points, a wide cone, up to 30 m — and it
@@ -396,15 +400,15 @@ export class WandMagic {
             if (d > 30) continue;
             to.normalize();
             const ang = Math.min(dir.angleTo(to), arm ? arm.angleTo(to) : Infinity);
-            if (ang < 0.45 + Math.atan2(1.5, d) && ang < rbBest) { rbBest = ang; best = 0; info = g.runner.secret(); target = { kind: 'book', runbook: true }; at = pos.clone(); }
+            if (ang < 0.45 + Math.atan2(1.5, d) && ang < rbBest) { rbBest = ang; best = Infinity; info = g.runner.secret(); target = { kind: 'book', runbook: true }; at = pos.clone(); }
         }
         // a book-bird's book lying on the ground or on a pedestal
         for (const bk of g.books?.books?.values() || []) {
             const to = _v.subVectors(bk.model.position, tip);
             const d = to.length();
             if (d > 10) continue;
-            const ang = dir.angleTo(to.normalize());
-            if (ang < best) { best = ang; info = null; target = { kind: 'book', id: bk.id, spells: bk.spells, ...(bk.spells?.includes('Flight') ? { swift: true } : {}) }; at = bk.model.position.clone(); }
+            const sc = score(dir.angleTo(to.normalize()), d);
+            if (sc > best) { best = sc; info = null; target = { kind: 'book', id: bk.id, spells: bk.spells, ...(bk.spells?.includes('Flight') ? { swift: true } : {}) }; at = bk.model.position.clone(); }
         }
         // the thing in the other hand (or in this bare hand), else the wand itself
         if (!target) {
@@ -414,7 +418,7 @@ export class WandMagic {
                 if (w) { target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); break; }
             }
             // (a running book about but the wand not on it: say so — not the wand's own secrets)
-            const rb = g.runner?.accioTargets?.() || [];
+            const rb = (g.runner?.accioTargets?.() || []).filter((r) => dir.angleTo(_v.subVectors(r.pos, tip).normalize()) < 0.9);
             if (!target && rb.length) {
                 const near = Math.min(...rb.map((r) => r.pos.distanceTo(tip)));
                 g.hud.setVoice(near > 30 ? `🔮 Бегущая книга слишком далеко (${Math.round(near)} м) — подойдите ближе` : '🔮 Бегущая книга не там, куда показывает палочка (рука) — наведите прямо на неё и скажите ещё раз', true);
