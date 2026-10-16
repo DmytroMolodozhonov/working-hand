@@ -463,6 +463,8 @@ function journal(command, isFinal, meta, spell, ok, why, source = '') {
     lastJournal = { key, at: now };
     const m = { ...(meta || {}) };
     if (!m.native) { const pk = voice.recentPeak?.(2500); if (Number.isFinite(pk)) { m.peak = pk; m.snr = pk - voice.noiseFloor; } }
+    // (how fast: from the start of the spell's words and from their last letter to the cast)
+    if (ok && Number.isFinite(m.to)) { m.lag = now - m.to; if (Number.isFinite(m.from)) m.fromStart = now - (m.from + 200); }
     const line = soundingLine(m.from ?? now - 2500, m.to ?? now);
     if (line) m.gameLine = line;
     log.add({ text: command, isFinal: isFinal || !!m.settled, meta: m, source, spell: spellRu(spell), ok, why });

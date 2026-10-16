@@ -210,9 +210,10 @@ export function afterCast(last, spell, meta, now) {
     if (!last || !spell || !(now - last.at < 4000)) return null;
     const fit = meta?.fit;
     if (meta?.seg != null && meta.seg === last.seg) {
-        // (the same spell or a piece of it again: no; its longer form — «Джолт» → «Джолт Максима» — the game makes the first one grow)
+        // (the same spell or a piece of it again: no; its longer form after a long pause — no second blast; only
+        // «Джолт» → «Джолт Максима»: the game makes the charge already flying grow)
         if (spell === last.spell || last.spell.startsWith(spell)) return `эта же фраза уже дала «${last.spell}»`;
-        if (spell.startsWith(last.spell)) return null;
+        if (spell.startsWith(last.spell)) return last.spell === 'Jolt' ? null : `уже сработало «${last.spell}» — продолжение сказано слишком поздно`;
         if (!(fit >= AFTER_CAST_FIT)) return `эта же фраза уже дала «${last.spell}», а это узнано неуверенно (звук взрыва / эхо?)`;
         return null;
     }

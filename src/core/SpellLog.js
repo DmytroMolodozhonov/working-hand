@@ -45,8 +45,9 @@ export function formatEntry(e) {
     if (m.running) parts.push('на бегу');
     if (m.gameLine) parts.push(`в это время голос игры: «${String(m.gameLine).slice(0, 50)}»`);
     const src = e.source ? ` [${e.source}]` : '';
+    const fast = e.ok && Number.isFinite(m.lag) ? ` за ${Math.round(m.lag)} мс после последней буквы${Number.isFinite(m.fromStart) ? ` (${Math.round(m.fromStart)} мс от начала слова)` : ''}` : '';
     const spell = e.spell ? ` → ${e.spell}` : ' → заклинания нет';
-    const out = e.ok ? ' → ✅ сработало' : e.why ? ` → ❌ ${e.why}` : '';
+    const out = e.ok ? ` → ✅ сработало${fast}` : e.why ? ` → ❌ ${e.why}` : '';
     const note = e.note ? ` (${e.note})` : '';
     return `${clock(e.at || new Date())} 🎙️ «${String(e.text ?? '').slice(0, 120)}» (${parts.join(', ')})${src}${spell}${out}${note}`;
 }

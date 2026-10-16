@@ -23,15 +23,17 @@ import { matchSpell } from '../fx/SpellManager.js';
 export const SURE_AT_ONCE = -0.6;
 /** …if it is long enough: a short one («гром», «вайнд») hides in the start of a longer word still being said. */
 export const AT_ONCE_LEN = 6;
-/** …or when the speaker has clearly stopped after it (ms of quiet heard after the spell). */
+/** …or when the speaker has clearly stopped after it (ms of quiet heard after the spell): a short one… */
 export const QUIET_AT_ONCE = 280;
+/** …a long one sooner (it hides in no longer word: «Ликвидейшн Максима», «Экспеллиармус» — in a fight every ms counts). */
+export const QUIET_AT_ONCE_LONG = 160;
 /**
  * A spell another one goes on from («Protection» → «Protection House», «Бомбардо» → «… Максима»: GOES_ON)
  * is cast only after this much quiet after it (ms) — or at the phrase's end: the time a «Хаус» or a
  * «Максима» needs to begin. The longer one is cast as soon as it is heard; spells nothing goes on
  * from never wait. (voice_native.py keeps a phrase open a little longer than this: SEG «end».)
  */
-export const MORE_WAIT = 700;
+export const MORE_WAIT = 400; // (was 700: the author felt the wait in a fight; the «Хаус» / «Максима» of one breath comes sooner)
 
 /** Another spell in a phrase that already cast one must fit this much better than needed (the explosion's noise, a tail). */
 export const AFTER_FIT = 0.6;
@@ -66,7 +68,7 @@ export function lookAt(d, seg = {}) {
             const again = next.fired && (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT));
             if (!again) say = { text: h.text, isFinal: true };
             if (!next.fired || !again) next.fired = name;
-        } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= QUIET_AT_ONCE) && ((d.far || 0) < 0.25 || d.ref)) {
+        } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= (h.spell.len >= AT_ONCE_LEN ? QUIET_AT_ONCE_LONG : QUIET_AT_ONCE)) && ((d.far || 0) < 0.25 || d.ref)) {
             // (while the speakers play, only a look that has their sound too may cast: it can tell an echo)
             if (GOES_ON.has(h.spell.phrase) && !(h.tail >= MORE_WAIT)) {
                 // «Protection…»: «Хаус» may yet come — the game waits (only an answer under fire can't: more)

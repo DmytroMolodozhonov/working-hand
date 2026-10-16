@@ -84,3 +84,8 @@ test('running with no word said: breathing and steps read as «Даст» / «Д
     assert.equal(bodyNoise({ spell: 'Sands', text: 'даст', native: true, fit: 0.2, len: 4, snr: 25, lips: null }), null); // (standing, quiet room)
     assert.equal(bodyNoise({ spell: 'BombardoMaxima', text: 'бомбардо максима', native: true, fit: 0.1, len: 15, running: true, lips: null }), null);
 });
+
+test('the journal tells how fast a spell went off after it was said', () => {
+    const line = formatEntry({ text: 'ликвидейшн максима', meta: { native: true, lag: 212, fromStart: 1180 }, spell: 'Liquidation Maxima', ok: true });
+    assert.match(line, /✅ сработало за 212 мс после последней буквы \(1180 мс от начала слова\)/);
+});
