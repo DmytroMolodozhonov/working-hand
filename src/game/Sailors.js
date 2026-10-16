@@ -59,6 +59,11 @@ export const SAILOR_STATS = {
 const TITLES = { captain: 'Капитан', boatswain: 'Боцман', sailor: 'Матрос', blackbeard: 'Капитан', skeleton: 'Скелет' };
 /** The black ship's people (Blackbeard.js): always the players' foes; they never sleep, never chat, nobody saves them from the sea. */
 export const isPirate = (v) => v?.role === 'blackbeard' || v?.role === 'skeleton';
+// Captain Black Moustache and his skeletons hold fast on a deck (the author: «ни он, ни его скелеты не могли быть столкнуты
+// с корабля … стали в стойку и держатся»): a push — «Вайнд», «Вайнд Максима», «Винд Импульс», «Джолт», a blast, «Overgrown»,
+// a hand — never throws them off their feet or over the side; it slides them SLIDE m along the deck at most (GIVE: of the
+// push's speed), they stand braced T s (the captain — his rapier's guard). Their damage stays the spell's own.
+export const BRACE = { T: 0.8, SLIDE: 0.5, GIVE: 0.1 };
 /** Who stands at the wheel when idle and gives the orders in a fight. */
 const isCaptain = (v) => v?.role === 'captain' || v?.role === 'blackbeard';
 /** Captain Black Moustache's parry of duel charges (parryBolt). */
@@ -106,7 +111,7 @@ const SHOUT = {
 };
 const WALK = 2.2, RUN = 5.2;
 const HOSTILE_MS = 180000;
-const MODE_CODE = ['idle', 'walk', 'run', 'attack', 'dead', 'work', 'swim', 'block', 'cheer', 'sleepMat', 'situp']; // (asleep below at night: NightLife.js)
+const MODE_CODE = ['idle', 'walk', 'run', 'attack', 'dead', 'work', 'swim', 'block', 'cheer', 'sleepMat', 'situp', 'brace']; // (asleep below at night: NightLife.js)
 const GUARD = 2.6; // m/s: stepping in and out with the blade up
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const _v = new THREE.Vector3();
@@ -561,6 +566,35 @@ export class Sailors {
         this._solids(v, L);
     }
 
+    /** (host) A pirate pushed (CreatureImpact → KINDS.c.brace): braced, he gives at most BRACE.SLIDE along the deck. */
+    brace(v, dx, dz) {
+        if (!this.auth || v.dead || v.overboard) return;
+        const s = v.ship, L = s.layout;
+        if (!(v.braceT > 0)) v.braceSlid = 0;
+        v.braceT = BRACE.T;
+        v.vy = 0; v.stunT = 0;
+        s.pose.dirToLocal(dx, dz, _o);
+        const m = Math.hypot(_o.x, _o.z);
+        if (m < 1e-4) return;
+        v.lyaw = Math.atan2(_o.x, _o.z); // (facing into the push: he leans against it)
+        const k = Math.min(BRACE.SLIDE - (v.braceSlid || 0), m * BRACE.GIVE) / m;
+        if (!(k > 0)) return;
+        const nz = v.l.z + _o.z * k, half = hullHalfWidth(L, nz, Math.max(0.2, v.l.y)) - 0.9;
+        const nx = Math.max(-half, Math.min(half, v.l.x + _o.x * k));
+        const f = floorAt(L, nx, nz, v.l.y + 1.1);
+        if (f === null || Math.abs(f - v.l.y) > 0.4) return; // (no stepping off an edge or up a step: he stands his ground)
+        v.braceSlid = (v.braceSlid || 0) + Math.hypot(nx - v.l.x, nz - v.l.z);
+        v.l.x = nx; v.l.z = nz;
+        this._solids(v, L);
+    }
+
+    /** (host) Standing braced a moment (brace): feet wide, crouched — the captain with his rapier up. */
+    _braced(v, dt) {
+        v.braceT -= dt;
+        v.mode = isBlackbeard(v) ? 'block' : 'brace'; v.speed = 0; v.busy = false;
+        if (v.fs) v.fs.st = 'close';
+    }
+
     /** (host) Up in the air (tossed, lifted, fallen off a deck): gravity, down to the floor below. */
     _fall(v, s, dt) {
         const L = s.layout;
@@ -617,6 +651,7 @@ export class Sailors {
             const p = pushAt(_w.set(v.x, v.y + 1.6, v.z));
             if (!p) continue;
             const s = v.ship;
+            if (v.pirate) { this.brace(v, p.x, p.z); this.provoke(s, by, null); continue; } // (they hold fast: BRACE)
             const push = Math.hypot(p.x, p.z);
             s.pose.dirToLocal(p.x, p.z, _o);
             const ol = Math.hypot(_o.x, _o.z) || 1;
@@ -972,6 +1007,7 @@ export class Sailors {
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; } // (held up in the air by «Левиоса Максима»: it carries him)
         if (v.overboard) { if (!(v.pirate && this.game.blackbeard?.overboard(v, s, dt))) this._swim(v, s, dt); return; } // (a skeleton sinks: Blackbeard.js)
         if (s.flooded) { this._overboard(v, Math.random() < 0.5 ? -1 : 1); return; }
+        if (v.braceT > 0) { this._braced(v, dt); return; } // (a pirate braced against a push: BRACE)
         if (v.pirate && this.game.blackbeard?.thinkHome(v, s, dt)) return; // (the black ship's own business: going over to board, the guns)
         // knocked down, reeling, thrown up into the air: the body, not the mind
         if (v.stunT > 0 || v.vy) {
@@ -1802,6 +1838,9 @@ registerKind('c', {
     pivot: (c) => ({ obj: c.model.root, base: c.model.root.userData.impBase ?? (c.model.root.userData.impBase = c.model.root.position.y), lie: 0.5 }),
     head: (c) => c.model.head, arms: (c) => [c.model.leftArm, c.model.rightArm], legs: (c) => [c.model.leftLeg, c.model.rightLeg],
     move(g, c, dx, dz) { g.ships?.crew.shove(c, dx, dz); },
+    // the black ship's own (captain and skeletons) on a deck: «держатся на палубе» — no fall, no flight over the side (BRACE)
+    braces: (g, c) => !!c.pirate && !c.overboard && !c.dead && !!c.ship,
+    brace(g, c, dx, dz) { g.ships?.crew.brace(c, dx, dz); },
     toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
     hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },
     frozen: () => false,

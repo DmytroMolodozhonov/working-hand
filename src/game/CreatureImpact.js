@@ -205,6 +205,14 @@ export class CreatureImpact {
         const src = o.from || (o.by != null ? this.game.wards?.casterAt?.(o.by) : null);
         if (src && this.game.wards?.shields(src, K.centre(c, _v))) return 'none';
         const B = bodyOf(K.body(c));
+        // (it holds fast where it stands — Captain Black Moustache and his skeletons on a deck, Sailors.BRACE: «держатся
+        // на палубе»): braced, it gives a little along the deck, never falls, never flies; the damage is the spell's own
+        if (K.braces?.(this.game, c, o)) {
+            this._note(ck, c, o, 'brace');
+            K.struck?.(this.game, c, o);
+            K.brace(this.game, c, o.v.x / B.mass, o.v.z / B.mass);
+            return 'stagger';
+        }
         const v = Math.hypot(o.v.x, o.v.z);
         let res = classify(v, { mass: B.mass, quad: B.quad, frozen: K.frozen(c) });
         if (o.always && res !== 'shatter') res = 'knockdown';

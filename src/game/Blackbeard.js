@@ -52,6 +52,7 @@ import { newUid } from './ItemTypes.js';
 export const BB = {
     ID: 'blackship', NAME: 'Чёрный Призрак',
     OPEN: 160, // m from the shore at least: its patrol round its sea
+    START_FAR: 2000, // m: its patrol never comes nearer the start than this (pirateSea)
     KEEP_OFF: 90, // m: it never comes nearer the shore than this (no ports)
     SEE: 380, // m: it notices a ship, a swimmer, one on the shore by the sea
     LOSE: 600, // m: it gives the chase up (Ships keeps it awake that far: SLEEP_FAR)
@@ -69,21 +70,42 @@ export const BB = {
     GUARDS: 3, // skeletons that stay to guard its own deck
     PISTOL: { R: 38, RELOAD: 7, DMG: 3, HIT: 0.4 },
     SINK: 2.4, BOTTOM_WALK: 1.4, BOTTOM_MAX: 110, // a skeleton in the sea: down, then along the bottom home
+    CLIMB: 1.8, CLIMB_U: 3.5, // m/s up a rope ladder; it takes the ladder while the ship makes less way than this
 };
 
+/** Its patrol on this sea: a circle round the middle, every point of it far from any shore (and the islands); ok — it is. */
+function patrolOn(seas, sea) {
+    let R = Math.max(80, Math.min(sea.r0 * 0.55, sea.r0 - BB.OPEN - 40));
+    const ok = (r) => { for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; if (seas.signedDist(sea.x + Math.cos(a) * r, sea.z + Math.sin(a) * r) < BB.OPEN) return false; } return true; };
+    while (R > 60 && !ok(R)) R -= 20;
+    return { R, ok: ok(R) };
+}
+
 /**
- * The black ship's sea and where it starts (pure, the same on every computer for a world): the sea nearest
- * to the spawn (its own deep middle), the patrol circle, a start on it. null — a world without seas.
+ * The black ship's sea and where it starts (pure, the same on every computer for a world). Not the sea nearest the
+ * start (the author: «можно найти, но не так же быстро, что прямо сразу») — that one has the start's port and the
+ * first ships the hero takes out — but the next one out whose patrol is all open sea and never nearer the start
+ * than BB.START_FAR: the hero meets it when he sails off into the open sea himself. (Only one sea about: that one.)
+ * null — a world without seas.
  * @param {import('../world/Sea.js').SeaIndex} seas
  */
 export function pirateSea(seas, spawn = { x: 0, z: 0 }) {
     if (!seas) return null;
-    const sea = seas.nearest(spawn.x, spawn.z, 6);
-    if (!sea) return null;
-    // the patrol: a circle round the middle, every point of it far from any shore (and the islands)
-    let R = Math.max(80, Math.min(sea.r0 * 0.55, sea.r0 - BB.OPEN - 40));
-    const ok = (r) => { for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; if (seas.signedDist(sea.x + Math.cos(a) * r, sea.z + Math.sin(a) * r) < BB.OPEN) return false; } return true; };
-    while (R > 60 && !ok(R)) R -= 20;
+    const N = 3, cx = Math.floor(spawn.x / SEA.CELL), cz = Math.floor(spawn.z / SEA.CELL), all = []; // (7×7 cells: ~14 km round)
+    for (let gz = cz - N; gz <= cz + N; gz++) for (let gx = cx - N; gx <= cx + N; gx++) {
+        const sea = seas.cellOf(gx, gz);
+        if (sea) all.push({ sea, d: Math.hypot(sea.x - spawn.x, sea.z - spawn.z) - sea.r0 }); // (by its shore: as SeaIndex.nearest)
+    }
+    if (seas.test) all.push({ sea: seas.test, d: Math.hypot(seas.test.x - spawn.x, seas.test.z - spawn.z) - seas.test.r0 });
+    if (!all.length) return null;
+    all.sort((a, b) => a.d - b.d || (a.sea.id < b.sea.id ? -1 : 1));
+    let best = null;
+    for (let k = all.length > 1 ? 1 : 0; k < all.length && !best; k++) {
+        const e = all[k], P = patrolOn(seas, e.sea);
+        if (P.ok && e.d + e.sea.r0 - P.R >= BB.START_FAR) best = { sea: e.sea, R: P.R };
+    }
+    if (!best) { const e = all[all.length > 1 ? 1 : 0]; best = { sea: e.sea, R: patrolOn(seas, e.sea).R }; }
+    const { sea, R } = best;
     let h = 0;
     for (const ch of String(sea.id)) h = (h * 31 + ch.charCodeAt(0)) | 0;
     const a0 = (Math.abs(h) % 360) * Math.PI / 180;
@@ -600,6 +622,7 @@ export class Blackbeard {
             return true;
         }
         if (v.parryShow > 0) { v.parryShow -= dt; v.mode = 'block'; v.speed = 0; return true; }
+        if (v.braceT > 0) { C._braced(v, dt); return true; } // (braced against a push on her deck: Sailors.BRACE)
         const L = this.lash;
         if (!L || L.T !== T) { C._overboard(v, Math.random() < 0.5 ? -1 : 1); return true; } // (the lines are off: into the sea — home along the bottom)
         // a foe aboard her: the nearest
@@ -684,23 +707,26 @@ export class Blackbeard {
             if (g.fx?.spark) for (let i = 0; i < 22; i++) g.fx.spark(_v.set(o.x, WATER_LEVEL_Y + 0.2, o.z), i % 3 ? 0xe8f6ff : 0x9fd3ea, 0.16, _w.set((Math.random() - 0.5) * 5, 3 + Math.random() * 5, (Math.random() - 0.5) * 5), 0.9);
             g.sound?.playSplash?.();
         }
-        if (v.dead) { o.y = Math.max(this._bed(o.x, o.z), o.y - BB.SINK * dt); return true; }
+        if (v.dead) { o.climb = null; o.y = Math.max(this._bed(o.x, o.z), o.y - BB.SINK * dt); return true; }
+        if (o.climb) return this._climb(v, o, dt); // (up a rope ladder)
         // down like a stone
         const bed = this._bed(o.x, o.z);
         if (o.y > bed + 0.05) { o.y = Math.max(bed, o.y - BB.SINK * dt); v.mode = 'idle'; v.speed = 0; return true; }
         o.y = bed;
-        // along the bottom to his ship's ladder
-        const home = v.crew || s;
-        const lad = home.layout.ladders.reduce((a, b) => { home.pose.toWorld(a.x, 0, a.z, _o); const da = Math.hypot(_o.x - o.x, _o.z - o.z); home.pose.toWorld(b.x, 0, b.z, _l); return Math.hypot(_l.x - o.x, _l.z - o.z) < da ? b : a; });
-        home.pose.toWorld(lad.x * 1.05, 0, lad.z, _o);
-        const dx = _o.x - o.x, dz = _o.z - o.z, d = Math.hypot(dx, dz);
-        if (d > BB.BOTTOM_MAX || o.t > 150) { this.crew._die(v, home.lastBy); return true; } // (lost on the bottom: it falls apart)
-        if (d < 2.5 && Math.abs(home.st.u) < 2.5) {
-            // up the ladder, aboard
-            const gw = home.layout.nodes.find((n) => n.tag === 'gangway:' + (lad.side > 0 ? '+1' : '-1')) || home.layout.nodes.find((n) => n.tag && n.tag.startsWith('gangway')) || home.layout.nodes[0];
-            v.ship = home;
-            v.l.x = gw.x; v.l.y = gw.y; v.l.z = gw.z; v.node = gw.id; v.vy = 0;
-            v.overboard = null; v.leapYaw = null; v.mode = 'idle'; v.path = null;
+        // along the bottom to the nearest rope ladder: his own ship's — or, while the black ship is lashed to its
+        // prey and he is one of the boarders, hers (thrown off her deck, he comes up her side again: the author)
+        const home = v.crew || s, L = this.lash;
+        const ships = L?.planks && L.T && v.board === L.T.id && !L.T.flooded ? [home, L.T] : [home];
+        let ship = home, lad = null, d = Infinity, dx = 0, dz = 0;
+        for (const sh of ships) for (const ld of sh.layout.ladders) {
+            sh.pose.toWorld(ld.x * 1.05, 0, ld.z, _l);
+            const k = Math.hypot(_l.x - o.x, _l.z - o.z);
+            if (k < d) { d = k; ship = sh; lad = ld; dx = _l.x - o.x; dz = _l.z - o.z; }
+        }
+        if (!lad || d > BB.BOTTOM_MAX || o.t > 150) { this.crew._die(v, home.lastBy); return true; } // (lost on the bottom: it falls apart)
+        if (d < 2.5 && Math.abs(ship.st.u) < BB.CLIMB_U) {
+            // takes the ladder: up it, rung by rung (_climb), aboard at its gangway
+            o.climb = { ship, lad, y: Math.max(lad.bottom - 2, ship.pose.toLocal(o.x, o.y, o.z, _l).y) };
             return true;
         }
         const step = Math.min(d, BB.BOTTOM_WALK * dt);
@@ -709,6 +735,24 @@ export class Blackbeard {
         if (nb < o.y + 1.2) { o.x = nx; o.z = nz; o.y = Math.max(nb, o.y - BB.SINK * dt); } // (a step up the bottom, not a cliff)
         v.leapYaw = Math.atan2(-dx, -dz);
         v.mode = 'walk'; v.speed = BB.BOTTOM_WALK;
+        return true;
+    }
+
+    /** (host) A skeleton up a rope ladder from the water (o.climb): hands and feet on the rungs, the ship's side under him. */
+    _climb(v, o, dt) {
+        const C = o.climb, sh = C.ship, lad = C.lad;
+        if (sh.flooded || Math.abs(sh.st.u) > BB.CLIMB_U + 1.5) { o.climb = null; return true; } // (torn off by the ship's way: back down)
+        C.y = Math.min(lad.top, C.y + BB.CLIMB * dt);
+        sh.pose.toWorld(lad.x * 1.05, C.y, lad.z, _o);
+        o.x = _o.x; o.y = _o.y; o.z = _o.z;
+        v.leapYaw = sh.st.yaw + (lad.side > 0 ? -Math.PI / 2 : Math.PI / 2) + Math.PI; // (facing the hull)
+        v.mode = 'walk'; v.speed = BB.CLIMB;
+        if (C.y < lad.top) return true;
+        // over the rail: on her deck at the gangway
+        const gw = sh.layout.nodes.find((n) => n.tag === 'gangway:' + (lad.side > 0 ? '+1' : '-1')) || sh.layout.nodes.find((n) => n.tag && n.tag.startsWith('gangway')) || sh.layout.nodes[0];
+        v.ship = sh;
+        v.l.x = gw.x; v.l.y = gw.y; v.l.z = gw.z; v.node = gw.id; v.vy = 0;
+        v.overboard = null; v.leapYaw = null; v.mode = 'idle'; v.path = null;
         return true;
     }
 

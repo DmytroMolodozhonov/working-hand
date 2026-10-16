@@ -14,6 +14,7 @@
 import { HELM_LOCK } from './ShipTypes.js';
 
 export const RUDDER_MAX = 0.61; // ±35°
+export const TURN_K = 1.6, TURN_SLOW = 0.5, TURN_FOLLOW = 1.6; // how hard the rudder bites / how quickly the yaw answers it
 
 /** Thrust of the sails per unit mass in the body frame. */
 export function sailForce(cls, openFrac, along, across) {
@@ -176,8 +177,12 @@ export function stepShip(st, cls, env, dt) {
         // wheel > 0 (clockwise) → the bow goes to starboard → yaw decreases. The rudder turns the ship
         // towards a rate u·δ/turnR (the same turning circle at any speed, like a real hull), the yaw
         // follows it with inertia — quicker the faster she goes; amidships the yaw dies out: she holds her course
-        const want = -st.u * (delta / RUDDER_MAX) / cls.turnR;
-        const follow = cls.yawD1 * (1 + Math.abs(st.u) / 4);
+        // (the author: «чуть более поворотливым»): the rudder bites TURN_K times harder than the bare turning
+        // circle, and more still at steerage way (a slow ship answered hardly at all) — still ∝ u, so a ship at
+        // rest never spins on the spot, and amidships the yaw still dies out
+        const slow = 1 + TURN_SLOW * Math.max(0, 1 - Math.abs(st.u) / 5);
+        const want = -st.u * (delta / RUDDER_MAX) / cls.turnR * TURN_K * slow;
+        const follow = cls.yawD1 * TURN_FOLLOW * (1 + Math.abs(st.u) / 4);
         st.r += ((want - st.r) * follow + F.N + M.r) * h;
         if (st.forced) {
             if (st.forced.u != null) st.u = st.forced.u;
