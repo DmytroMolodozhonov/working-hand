@@ -6,7 +6,7 @@
  *  - On death (not in Creative) everything the hero grew is taken off them: the burnt scrolls
  *    (health, strength, flight, the spells they taught), the books' spells, the mana grown with
  *    practice and crystals (and the firsts already counted), the achievements («Высший маг» with
- *    them). The things — the suit of the High Mage too — drop at the body (Death.takeEverything).
+ *    them), the cave map (what they had seen of the caves — CaveMap.js). The things — the suit of the High Mage too — drop at the body (Death.takeEverything).
  *    The hero comes back as new, in the same world. The gods' scrolls' +100 mana cells (the first «Create a
  *    Planet», «Enlarge Planet», «Terraform Planet», «Wingardium Leviosa Super Maxima» — PlanetMagic.js) are
  *    a part of the mana's growth and its list of firsts: they go into the body with it and come back with it
@@ -54,8 +54,9 @@ export function captureLegacy(g) {
         // (the growth holds the gods' +100 cells too; `spells` — the firsts already counted, theirs among them)
         mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
+        caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length;
+    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves;
     return empty ? null : rec;
 }
 
@@ -79,6 +80,7 @@ export function wipeHero(g) {
     g.bonus = { hp: 0, fatigue: 0 };
     if (B.spells?.GiveMyPower) g.bonus.spells = { GiveMyPower: true }; // (kept: the one way to take the rest back)
     g.books?.learned?.clear();
+    g.caveMap?.clear(); // (the caves are forgotten: the cave map starts empty)
 }
 
 /** The hero takes their legacy back: all of it added to what they have now. */
@@ -96,6 +98,7 @@ export function absorbLegacy(g, rec) {
     if (rec.flight) B.flight = true;
     if (rec.spells?.length) B.spells = { ...(B.spells || {}), ...Object.fromEntries(rec.spells.map((k) => [k, true])) };
     for (const k of rec.learned || []) g.books?.learned?.add(k);
+    if (rec.caves) g.caveMap?.merge(rec.caves);
     const M = g.mana;
     if (M && rec.mana) {
         for (const k of rec.mana.spells || []) M.spellsUsed.add(String(k));

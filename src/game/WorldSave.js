@@ -115,6 +115,7 @@ export function playerSnapshot(game) {
         ship: game.ships?.playerSnap() || null, // standing on a ship: [ship id, place on its deck]
         bed: game.beds?.home || null, // the bed they come back to life at
         space: game.space?.snapshot() || null, // in space: where (the planets' surfaces need nothing: the place says it — Space.js)
+        caves: game.caveMap?.snapshot() || null, // the cave map: what the hero has seen of the caves (CaveMap.js)
     };
 }
 
@@ -150,6 +151,7 @@ export function applyPlayerSnapshot(game, s) {
     if (s.bed) game.beds?.setHome(s.bed);
     if (s.ship) game.ships?.applyPlayerSnap(s.ship); // (back on the ship's deck, wherever it sailed)
     if (s.space) game.space?.restore(s.space); // (still in space)
+    if (s.caves) game.caveMap?.restore(s.caves);
 }
 
 /**

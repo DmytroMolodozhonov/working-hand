@@ -73,6 +73,7 @@ import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { captureLegacy, wipeHero } from './Legacy.js';
+import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
 import { Blackbeard } from './Blackbeard.js';
@@ -399,6 +400,8 @@ export class Game {
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
         this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
+        this.caveMap = new CaveMemory(); // what the hero has seen of the caves (the cave map — CaveMap.js)
+        this.caveEyes = new CaveExplorer(this.caveMap);
         this.lanterns = new LanternLights(this); // the houses' lamps shine: lights at the nearest lanterns (made before prewarm too)
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
@@ -1013,7 +1016,9 @@ export class Game {
         if (this._caveT <= 0) {
             this._caveT = 1;
             this._caveChests = this._caveChests || new Set();
+            this._caveSys = false; // (a cave system round the hero: the cave map may be wanted — _updateCaveMap)
             for (const cv of t.cavesNear(p.x, p.z, 90).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90) : [])) {
+                if (cv.x0 != null ? p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
                 this._caveChests.add(cv.id);
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
@@ -1061,6 +1066,23 @@ export class Game {
         this._indoorK = (this._indoorK || 0) + ((built ? 1 : 0) - (this._indoorK || 0)) * Math.min(1, dt * 1.5);
         this.world.setCave?.(this._caveK);
         this.world.setIndoor?.(this._indoorK);
+        this._updateCaveMap(dt, p, !built && !!this._caveSys && (covered || sky < 0.9));
+    }
+
+    /**
+     * The cave map (CaveMap.js): in a cave the minimap shows what the hero has seen of it; the eyes
+     * open the cave round them a few rays a frame; where they went in / came out is remembered.
+     */
+    _updateCaveMap(dt, p, cave) {
+        if (!this.caveMap || this.space?.offEarth) { this._inCave = false; return; }
+        // (in after a moment, out after a second: never flickering at the mouth)
+        this._caveHold = cave ? Math.min(0.3, (this._caveHold || 0) + dt) : Math.max(-1, Math.min(0, this._caveHold || 0) - dt);
+        const was = !!this._inCave;
+        if (!was && this._caveHold >= 0.3 && !this.flight?.active) this._inCave = true;
+        else if (was && this._caveHold <= -1) this._inCave = false;
+        if (this._inCave !== was && this._caveOut) this.caveMap.addWay(this._caveOut.x, this._caveOut.z); // (the way in: the last place outside)
+        if (!cave) (this._caveOut || (this._caveOut = { x: 0, z: 0 })).x = p.x, this._caveOut.z = p.z;
+        if (this._inCave && this.playerHP > 0) this.caveEyes.step(this.terrain.data, p.x, p.y, p.z);
     }
 
     /**
@@ -2948,7 +2970,9 @@ export class Game {
             let castles = castleIdx && !this.space?.offEarth ? castleIdx.nearestForMap(cp) : [];
             if (this.iceCastle?.mapMark && !this.space?.offEarth) castles = castles.concat([this.iceCastle.mapMark]); // (the Ice Castle: only once seen)
             if (this.space?.offEarth) castles = this.space.mapMarks(); // (on another planet: its own marks — the Gods' temple on Venus)
-            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles);
+            // (in a cave: the cave as far as the hero has seen it — CaveMap.js)
+            const cave = this._inCave ? { mem: this.caveMap, L: Math.floor(cp.y + 1.51), data: this.terrain.data, chests: this.chests.filter((c) => c.cave != null), crystals: this.crystals?.clusters } : null;
+            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles, cave);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
         }
 

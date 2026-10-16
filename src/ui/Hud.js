@@ -4,6 +4,7 @@
  */
 
 const MINIMAP_WINDOW = 128; // m of terrain drawn around the player
+const CAVE_WINDOW = 96; // m of a cave drawn around the player (the cave map: 4 px a metre)
 const MINIMAP_W = 240, MINIMAP_H = 160; // the map's own units (drawn bigger by the size setting)
 const HEARD_WORDS = 4;       // the «heard words» line keeps only the newest few words
 const HINT_MS = 5000;        // a hint (the message line) fades after this long…
@@ -16,6 +17,7 @@ export function lastWords(text, n = HEARD_WORDS) {
     return words.slice(-n).join(' ');
 }
 import { BLOCK, BASE_COLORS, CHUNK, chunkKey, isPlanetBlock } from '../world/Terrain.js';
+import { CAVE_MAP, columnLook, WALL, PIT } from '../game/CaveMap.js';
 
 /**
  * The minimap's size, % of 240 × 160 (settings → «Размер мини-карты»): the same picture,
@@ -534,7 +536,85 @@ export class Hud {
         ti.version = d.version;
     }
 
-    drawMinimap(charPos, rotY, world, zombies, others = [], server = null, castles = []) {
+    /**
+     * The cave map's picture round (cx, cz) at the hero's level L: what they have seen of the cave —
+     * the floor light (lighter higher, darker lower), the rock dark, the rest dark as night (not seen).
+     * Only what changed is worked out: newly seen columns, the strip that came in when the window moved;
+     * a whole new picture (another level, a dug wall) a little a frame (≤ 1.5 ms), from the middle out.
+     */
+    _renderCaveWindow(cave, cx, cz) {
+        const N = CAVE_WINDOW, half = N / 2, mem = cave.mem, d = cave.data;
+        let ci = this.caveImage;
+        if (!ci) {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = N;
+            const ctx = canvas.getContext('2d');
+            ci = this.caveImage = { canvas, ctx, img: ctx.createImageData(N, N), redo: new Uint8Array(N * N), todo: 0, tmp: null };
+        }
+        const px = ci.img.data, redo = ci.redo;
+        const FOG = [10, 10, 15];
+        const fog = (i) => { px[i] = FOG[0]; px[i + 1] = FOG[1]; px[i + 2] = FOG[2]; px[i + 3] = 255; };
+        let dirty = false;
+        const levelMoved = ci.L == null || Math.abs(cave.L - ci.L) >= 2;
+        if (ci.cx == null || levelMoved || mem.redraw || ci.ver !== d.version || Math.abs(cx - ci.cx) >= N || Math.abs(cz - ci.cz) >= N) {
+            // (all anew: the seen columns are worked out a little a frame; the rest is dark at once)
+            for (let i = 0; i < N * N; i++) { fog(i * 4); redo[i] = mem.has(cx - half + (i % N), cz - half + Math.floor(i / N)) ? 1 : 0; }
+            ci.todo = 1;
+            ci.L = cave.L; ci.ver = d.version; mem.redraw = false; mem.fresh.length = 0;
+            dirty = true;
+        } else if (cx !== ci.cx || cz !== ci.cz) {
+            // (moved on: what is shown is moved over, only the strip that came in is worked out)
+            const sx = cx - ci.cx, sz = cz - ci.cz;
+            const tmp = ci.tmp || (ci.tmp = new Uint8ClampedArray(px.length));
+            const tr = ci.tmpR || (ci.tmpR = new Uint8Array(N * N));
+            tmp.set(px); tr.set(redo);
+            for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+                const ox = x + sx, oz = z + sz, i = z * N + x;
+                if (ox >= 0 && ox < N && oz >= 0 && oz < N) {
+                    const j = oz * N + ox;
+                    px[i * 4] = tmp[j * 4]; px[i * 4 + 1] = tmp[j * 4 + 1]; px[i * 4 + 2] = tmp[j * 4 + 2]; px[i * 4 + 3] = 255;
+                    redo[i] = tr[j];
+                } else { fog(i * 4); redo[i] = mem.has(cx - half + x, cz - half + z) ? 1 : 0; if (redo[i]) ci.todo = 1; }
+            }
+            dirty = true;
+        }
+        ci.cx = cx; ci.cz = cz;
+        const pixel = (x, z) => {
+            const wx = cx - half + x, wz = cz - half + z, i = (z * N + x) * 4;
+            const k = columnLook(d, wx, wz, cave.L);
+            let r, g, b;
+            if (k === WALL) { r = 74; g = 68; b = 60; }
+            else if (k === PIT) { r = 26; g = 30; b = 40; }
+            else if (d.get(wx, cave.L + k, wz) === BLOCK.WATER) { r = 58; g = 111; b = 160; }
+            else {
+                const sh = Math.max(0.45, Math.min(1.25, 1 + k * 0.08)); // (higher: lighter; down a slope: darker)
+                r = 206 * sh; g = 194 * sh; b = 166 * sh;
+            }
+            px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255;
+        };
+        // newly seen columns (just those)
+        const f = mem.fresh;
+        for (let j = 0; j < f.length; j += 2) {
+            const x = f[j] - (cx - half), z = f[j + 1] - (cz - half);
+            if (x < 0 || x >= N || z < 0 || z >= N) continue;
+            pixel(x, z); redo[z * N + x] = 0; dirty = true;
+        }
+        f.length = 0;
+        // the columns waiting (a whole new picture, a strip): a little a frame
+        if (ci.todo) {
+            const t0 = performance.now();
+            let left = false;
+            for (let i = 0; i < N * N; i++) {
+                if (!redo[i]) continue;
+                pixel(i % N, Math.floor(i / N)); redo[i] = 0; dirty = true;
+                if ((i & 63) === 0 && performance.now() - t0 > 1.5) { left = true; break; }
+            }
+            ci.todo = left ? 1 : 0;
+        }
+        if (dirty) ci.ctx.putImageData(ci.img, 0, 0);
+    }
+
+    drawMinimap(charPos, rotY, world, zombies, others = [], server = null, castles = [], cave = null) {
         const ctx = this.mmCtx;
         if (!ctx) return;
         const cvs = this.el.minimap;
@@ -543,13 +623,14 @@ export class Hud {
         ctx.setTransform(zoom, 0, 0, zoom, 0, 0);
         const W = MINIMAP_W, Hh = MINIMAP_H;
         const hw = W / 2, hh = Hh / 2;
-        const scale = 2.0;
+        const scale = cave ? CAVE_MAP.SCALE : 2.0;
         ctx.clearRect(0, 0, W, Hh);
-        ctx.fillStyle = '#4CAF50';
+        ctx.fillStyle = cave ? '#0a0a0f' : '#4CAF50';
         ctx.fillRect(0, 0, W, Hh);
         ctx.save();
         ctx.translate(hw, hh);
 
+        if (cave) return this._drawCaveMap(ctx, cave, charPos, rotY, zombies, others, scale, hw, hh);
         if (this.terrain) {
             // Redrawn only after changes to the world or when the player moved to another 16 m cell
             const cx = Math.round(charPos.x / 16) * 16, cz = Math.round(charPos.z / 16) * 16;
@@ -734,5 +815,112 @@ export class Hud {
             ctx.textAlign = 'center';
             ctx.fillText(text, hw, 17);
         }
+    }
+
+    /**
+     * The minimap in a cave (CaveMap.js): the cave from above at the hero's level, only what they have
+     * seen; the ways out, the chests and crystals seen, zombies seen, the other players, me.
+     * (ctx: translated to the middle, saved — restored here)
+     */
+    _drawCaveMap(ctx, cave, charPos, rotY, zombies, others, scale, hw, hh) {
+        const mem = cave.mem;
+        const cx = Math.round(charPos.x / 8) * 8, cz = Math.round(charPos.z / 8) * 8;
+        this._renderCaveWindow(cave, cx, cz);
+        const ci = this.caveImage, half = CAVE_WINDOW / 2;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(ci.canvas, (ci.cx - half - charPos.x - 0.5) * scale, (ci.cz - half - charPos.z - 0.5) * scale, CAVE_WINDOW * scale, CAVE_WINDOW * scale);
+        const inside = (x, y, m = 0) => Math.abs(x) < hw - m && Math.abs(y) < hh - m;
+        const at = (x, z) => [(x - charPos.x) * scale, (z - charPos.z) * scale];
+        const label = (text, x, y) => { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(text, x, y); ctx.fillText(text, x, y); };
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.lineJoin = 'round';
+        // the crystals seen: a blue diamond
+        if (cave.crystals) for (const cl of cave.crystals.values()) {
+            if (!cl || !mem.has(cl.data.x, cl.data.z)) continue;
+            const [x, y] = at(cl.data.x, cl.data.z);
+            if (!inside(x, y, 4)) continue;
+            ctx.fillStyle = '#5fd3ff'; ctx.strokeStyle = '#06324a'; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x + 4, y); ctx.lineTo(x, y + 6); ctx.lineTo(x - 4, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        // the chests seen: a little chest (grey when opened)
+        for (const c of cave.chests) {
+            const p = c.mesh.position;
+            if (!mem.has(p.x, p.z)) continue;
+            const [x, y] = at(p.x, p.z);
+            if (!inside(x, y, 5)) continue;
+            ctx.fillStyle = c.isOpen ? '#7d7466' : '#c88a2e'; ctx.strokeStyle = '#2b1a05'; ctx.lineWidth = 1.2;
+            ctx.fillRect(x - 5, y - 3.5, 10, 7); ctx.strokeRect(x - 5, y - 3.5, 10, 7);
+            ctx.fillStyle = '#ffd76a'; ctx.fillRect(x - 1, y - 1.5, 2, 3);
+        }
+        // zombies seen (their place opened)
+        ctx.fillStyle = '#e74c3c'; ctx.strokeStyle = '#4a0000'; ctx.lineWidth = 1;
+        for (const z of zombies) {
+            if (z.isDead) continue;
+            const q = z.group.position;
+            if (!mem.has(q.x, q.z)) continue;
+            const [x, y] = at(q.x, q.z);
+            if (inside(x, y)) { ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+        }
+        // the ways out: a green door with «Выход»; the nearest one, beyond the map, by a pointer on its edge
+        let near = null, nd = Infinity;
+        for (const w of mem.ways) {
+            const [x, y] = at(w.x, w.z);
+            if (inside(x, y, 8)) {
+                ctx.fillStyle = '#7ee08a'; ctx.strokeStyle = '#0c3b14'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#0c3b14'; ctx.fillRect(x - 2, y - 3, 4, 6);
+                label('Выход', x, Math.max(-hh + 12, y - 9));
+                nd = -1;
+            } else if (nd >= 0) {
+                const dd = Math.hypot(x, y);
+                if (dd < nd) { nd = dd; near = [x, y]; }
+            }
+        }
+        if (near && nd >= 0) {
+            const a = Math.atan2(near[1], near[0]);
+            const k = Math.min((hw - 9) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - 9) / Math.max(1e-6, Math.abs(Math.sin(a))));
+            ctx.save(); ctx.translate(Math.cos(a) * k, Math.sin(a) * k); ctx.rotate(a);
+            ctx.fillStyle = '#7ee08a'; ctx.strokeStyle = '#0c3b14'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.restore();
+            const tx = Math.max(-hw + 34, Math.min(hw - 34, Math.cos(a) * (k - 18))), ty = Math.max(-hh + 10, Math.min(hh - 4, Math.sin(a) * (k - 16) + 3));
+            label(`Выход ${Math.round(nd / scale)} м`, tx, ty);
+        }
+        // other players: a dot in their colour with the name (an arrow on the edge when far)
+        for (const o of others) {
+            const [x, y] = at(o.x, o.z);
+            const col = o.color != null ? '#' + o.color.toString(16).padStart(6, '0') : '#3498db';
+            const name = (o.name || '').slice(0, 8);
+            if (inside(x, y, 6)) {
+                ctx.fillStyle = col; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                if (name) label(name, x, y - 7);
+            } else {
+                const a = Math.atan2(y, x);
+                const k = Math.min((hw - 9) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - 9) / Math.max(1e-6, Math.abs(Math.sin(a))));
+                ctx.save(); ctx.translate(Math.cos(a) * k, Math.sin(a) * k); ctx.rotate(a);
+                ctx.fillStyle = col; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+            }
+        }
+        // me: a white arrow
+        ctx.rotate(-rotY);
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2.5); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+        // «Пещера» at the top: the map shows the cave
+        ctx.font = 'bold 11px sans-serif';
+        const text = '⛏ Пещера';
+        const w = ctx.measureText(text).width + 14;
+        ctx.fillStyle = 'rgba(15, 15, 25, 0.75)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(4, 4, w, 18, 9); else ctx.rect(4, 4, w, 18); // (top left: the way-out pointer may be at the top)
+        ctx.fill();
+        ctx.fillStyle = '#e8dcc0';
+        ctx.textAlign = 'center';
+        ctx.fillText(text, 4 + w / 2, 17);
+        this.minimapCastles = [];
     }
 }
