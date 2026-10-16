@@ -37,6 +37,8 @@ export const FLIGHT = {
     LAND_PITCH: -0.12, // path must point at the ground at least this much
     MIN_ALTITUDE: 1.6, // skimming the ground never goes lower than this
     CEILING: 110,
+    COST: 2.5, // mana a second flying (free world) — more than comes back (1 a second): no endless flight (the author)
+    HOVER_COST: 1.8, // mana a second hovering («Паузин»)
 };
 
 export class FlightController {
