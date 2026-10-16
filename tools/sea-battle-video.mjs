@@ -350,7 +350,8 @@ function setup() {
         { name: 'decisive', start: (t) => near() || !!outcome() || t > 400, end: (t, t0) => (F.endT && t - F.endT > (F.winner === 'sunk' ? 2.6 : 1.0)) || t - t0 > 45, keep: 3.6, frame: (t) => { if (!F.endT && outcome()) { F.endT = t; F.winner = outcome(); } }, cam: (k, t) => (T.state === 'sinking' || T.state === 'wreck' ? sinking() : deck(k, t)) },
         {
             // the end: slowly up and away, the evening coming
-            name: 'final', start: (t) => F.winner !== 'sunk' || t - F.endT > 8, // (she goes down: a few seconds on, when it shows) end: (t, t0) => t - t0 >= 6.5, keep: 6.5,
+            // (she goes down: the final shot a few seconds on, when it shows)
+            name: 'final', start: (t) => F.winner !== 'sunk' || t - F.endT > 8, end: (t, t0) => t - t0 >= 6.5, keep: 6.5,
             on: () => { F.ph0 = g.dayPhase(); },
             cam: (k) => {
                 const H = Number.isFinite(T.st.x) ? T : s;
