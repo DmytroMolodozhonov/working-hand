@@ -255,7 +255,7 @@ export class Inventory {
     /** Choose a cell: -1 is the free hand, 0… the slots. */
     select(i, side = null) {
         if (i === this.selected && (this.inHand || i < 0)) return;
-        this._putBackHand();
+        this._putBackHand(side);
         const n = this.slots.length + 1;
         this.selected = ((((i + 1) % n) + n) % n) - 1;
         this._takeIntoHand(side);
@@ -302,13 +302,19 @@ export class Inventory {
         }
     }
 
-    /** Switching slots: a weapon taken out of the chosen slot goes back into it. */
-    _putBackHand() {
+    /**
+     * Switching slots: a weapon taken out of the chosen slot goes back into it. `by`: the hand taking the next
+     * thing (the pocket): only what THAT hand holds goes back — the other hand's wand never leaves it so (the
+     * author: the wand went into a slot by itself while the other hand reached into the pocket); the wand goes
+     * away by a hand only to the waistband (WandBelt), by the keys / a click on the slots still.
+     */
+    _putBackHand(by = null) {
         const h = this.inHand;
         this.inHand = null;
         if (!h) return;
         const slot = this.selected >= 0 && !this.slots[this.selected] ? this.selected : null;
         const D = h.side || this.game.dom || 'right';
+        if (by && (by !== D || (h.kind === 'item' && h.item?.kind === 'wand'))) return;
         if (h.kind === 'weapon' && this.game.weapons.hands[D].held === h.weapon) this._storeWeapon(h.weapon, slot);
         if (h.kind === 'item' && this.game.items?.held[D]?.item === h.item) { const it = this.game.items.releaseHand(D); if (slot != null) this.slots[slot] = it; else this.storeItem(it); }
     }

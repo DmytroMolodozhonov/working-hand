@@ -63,3 +63,40 @@ test('a thing lying still: buried by new ice it comes up on top; the ground blow
     it._restCheck(L, 0.6);
     assert.equal(L.rest, false);
 });
+
+test('the wand stays in the hand: an arm stretched out a little to the left (at the camera) is not at the belt', async () => {
+    const { beltPose } = await import('../../src/input/PoseInterpreter.js');
+    const { frame } = await import('../e2e/poses.mjs');
+    // the real tuck still counts
+    assert.equal(beltPose(frame({ arms: 'hang', belt: 'right' }).poseLandmarks, 'right').at, true);
+    // the right arm straight out at the camera, a little to the left and down: the camera sees the upper
+    // arm short, the wrist over the belly, the elbow put a little off the line (bent, as the camera guesses it)
+    const lm = frame({ arms: 'forward' }).poseLandmarks;
+    lm[14] = { x: 0.41, y: 0.52, z: -0.3, visibility: 0.9 };
+    lm[16] = { x: 0.52, y: 0.66, z: -0.6, visibility: 0.9 };
+    const b = beltPose(lm, 'right');
+    assert.equal(b.at, false);
+    assert.equal(b.near, false);
+});
+
+test('the other hand taking a thing out of the pocket never puts the wand of the leading hand into a slot', async () => {
+    const { Inventory } = await import('../../src/game/Inventory.js');
+    const wand = { kind: 'wand', uid: 'w1' }, bread = { kind: 'bread', uid: 'b1' };
+    const held = { right: { item: wand }, left: null };
+    const released = [];
+    const inv = Object.create(Inventory.prototype);
+    inv.game = {
+        dom: 'right',
+        items: { held, releaseHand: (s) => { released.push(s); const it = held[s]?.item; held[s] = null; return it; }, takeIntoHand: (it, s) => { held[s] = { item: it }; return true; } },
+        weapons: { hands: { left: {}, right: {} } },
+    };
+    inv.slots = [bread, null, null, null, null];
+    inv.selected = 1;
+    inv.inHand = { kind: 'item', item: wand, side: 'right' }; // (the wand was chosen from the slots)
+    inv._render = () => {};
+    inv.storeItem = () => true;
+    inv.select(0, 'left'); // the left hand into the pocket: the bread
+    assert.deepEqual(released, []);
+    assert.equal(held.right.item, wand);
+    assert.equal(held.left.item, bread);
+});

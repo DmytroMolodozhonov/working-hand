@@ -70,6 +70,8 @@ export function pocketPose(lm, hand, side, aspect = 4 / 3, hipSide = side) {
  * just lowered is straight — never this; a hand reaching across to the other side
  * (the wand's belt) is not at its own hip.
  */
+/** The upper arm (shoulder → elbow) seen at least this long (torso heights) for a hand at the belt: hanging by the body ~0.5. */
+export const BELT_UPPER = 0.38;
 /**
  * The REAL hand at the wand's place on the waistband (WandBelt.js), from the camera's
  * skeleton: the wrist at the waist (between the waist and the hip line), in front of the
@@ -91,8 +93,12 @@ export function beltPose(lm, side, aspect = 4 / 3) {
     const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
     const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
     const bend = nu > 1e-4 && nf > 1e-4 ? Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) : 0;
-    const at = dy > -0.45 && dy < 0.1 && u > -0.15 && u < 0.21 && bend > 0.55; // (u ~0.25: the left hip, its trouser pocket)
-    const near = dy > -0.6 && dy < 0.25 && u > -0.3 && u < 0.6 && bend > 0.35;
+    // (the upper arm seen at its length, hanging down by the body: an arm stretched out AT the camera is seen
+    // short, its wrist over the belly and its elbow anywhere — the author: the arm straight, a little to the
+    // left, and the wand went to the belt)
+    const upper = nu / T >= BELT_UPPER;
+    const at = dy > -0.45 && dy < 0.1 && u > -0.15 && u < 0.21 && bend > 0.55 && upper; // (u ~0.25: the left hip, its trouser pocket)
+    const near = dy > -0.6 && dy < 0.25 && u > -0.3 && u < 0.6 && bend > 0.35 && upper;
     return { at, near, dy, u, bend };
 }
 
