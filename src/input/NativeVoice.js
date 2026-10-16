@@ -33,6 +33,15 @@ export const QUIET_AT_ONCE = 280;
  */
 export const MORE_WAIT = 700;
 
+/** Another spell in a phrase that already cast one must fit this much better than needed (the explosion's noise, a tail). */
+export const AFTER_FIT = 0.6;
+
+/** Is one spell's words a piece of the other's («бомбардо» of «бомбардо максима»)? */
+export function partOf(a, b) {
+    const x = ` ${String(a || '')} `, y = ` ${String(b || '')} `;
+    return x.includes(y) || y.includes(x);
+}
+
 /**
  * What one look at a phrase gives the game (pure: tests).
  * @param {object} d  the event from voice_native.py ({id, final, T, lp, ref?, refT?, far, cut?})
@@ -51,9 +60,12 @@ export function lookAt(d, seg = {}) {
     } else if (h.sure) {
         const name = h.spell.canonical;
         if (d.final) {
-            // (already cast as settled from this phrase: its end is no second word)
-            if (!(next.fired === name && next.settled)) say = { text: h.text, isFinal: true };
-            next.fired = name;
+            // (already cast as settled from this phrase: its end is no second word — nor a piece of it heard
+            // again: «Бомбардо Максима» cast, its end read as «Бомбардо», is no second «Бомбардо»; another
+            // spell after it in the same phrase — the explosion, the echo — only when heard clearly: AFTER_FIT)
+            const again = next.fired && (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT));
+            if (!again) say = { text: h.text, isFinal: true };
+            if (!next.fired || !again) next.fired = name;
         } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= QUIET_AT_ONCE) && ((d.far || 0) < 0.25 || d.ref)) {
             // (while the speakers play, only a look that has their sound too may cast: it can tell an echo)
             if (GOES_ON.has(h.spell.phrase) && !(h.tail >= MORE_WAIT)) {
@@ -192,7 +204,7 @@ export class NativeVoice {
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
         const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, ...this._when(d, r.heard),
-            peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra };
+            peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra, seg: d.id };
         // (how much better than needed the spell fit: over a villager's voice only a clear one is mine — GameVoices)
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }

@@ -192,3 +192,30 @@ export const PHRASE_WHY_RU = {
     everyday: 'обычное слово, а не заклинание',
     unfinished: 'фраза ещё не закончена — ждём конца',
 };
+
+/** ms after a spell of mine went off in which another one from the voice must be heard clearly (AFTER_CAST_FIT). */
+export const AFTER_CAST_MS = 1500;
+export const AFTER_CAST_FIT = 0.6;
+
+/**
+ * Right after a spell went off, the microphone hears its explosion, its echo, the end of my own phrase:
+ * the author's «Бомбардо Максима» was followed by a «Джолт» and a second «Бомбардо» he never said. A spell
+ * from the same phrase that already cast one, or one only just made out within AFTER_CAST_MS, is not cast.
+ * @param {{spell: string, at: number, seg?: any}|null} last  the last spell that went off (from the voice)
+ * @param {string} spell  the spell heard now
+ * @param {object|null} meta  the voice's details (native: seg, fit)
+ * @returns {string|null} why it is not cast, or null
+ */
+export function afterCast(last, spell, meta, now) {
+    if (!last || !spell || !(now - last.at < 4000)) return null;
+    const fit = meta?.fit;
+    if (meta?.seg != null && meta.seg === last.seg) {
+        // (the same spell or a piece of it again: no; its longer form — «Джолт» → «Джолт Максима» — the game makes the first one grow)
+        if (spell === last.spell || last.spell.startsWith(spell)) return `эта же фраза уже дала «${last.spell}»`;
+        if (spell.startsWith(last.spell)) return null;
+        if (!(fit >= AFTER_CAST_FIT)) return `эта же фраза уже дала «${last.spell}», а это узнано неуверенно (звук взрыва / эхо?)`;
+        return null;
+    }
+    if (meta?.native && now - last.at < AFTER_CAST_MS && !(fit >= AFTER_CAST_FIT)) return `сразу после «${last.spell}» и узнано неуверенно — похоже на звук заклинания или эхо`;
+    return null;
+}

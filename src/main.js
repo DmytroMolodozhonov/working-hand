@@ -20,7 +20,7 @@ import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel }
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
-import { spellPhrase, PHRASE_WHY_RU } from './audio/SpellPhrase.js';
+import { spellPhrase, PHRASE_WHY_RU, afterCast } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
@@ -451,6 +451,7 @@ const talkKey = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replac
 // The spell journal (Settings → Журнал → «Заклинания», zns-spells.log): every phrase and what came of it.
 const spellRu = (n) => (n ? SPELL_RU[n] || n : null);
 let lastJournal = null;
+let lastCast = null; // the last spell the voice cast {spell, at, seg} (SpellPhrase.afterCast)
 function journal(command, isFinal, meta, spell, ok, why, source = '') {
     const log = game?.spellLog;
     if (!log || !command) return;
@@ -553,6 +554,11 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
                 return;
             }
         }
+        // right after a spell of mine: its explosion, its echo, the end of the same phrase are no new spell
+        if (spoken) {
+            const no = afterCast(lastCast, spoken, meta, performance.now());
+            if (no) { journal(command, isFinal, meta, spoken, false, `отсеяно: ${no}`); return; }
+        }
         // The native voice with the speakers' sound taken out of the microphone (voice_native.py): a
         // friend's voice from Discord / the speakers never got here at all, and a spell heard in the
         // speakers' sound too was already let go (voice.onEcho). Nothing more to check — the lips, the
@@ -561,6 +567,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             const said = matchSpell(command);
             // (settled: the voice already waited for a possible «… Максима» / «… Хаус» — as good as the phrase's end)
             const name = game.castLocalSpell(command, isFinal || !!meta.settled);
+            if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg };
             if (said) journal(command, isFinal, meta, said, !!name, name ? '' : castWhy(said), 'микрофон игрока');
             else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
             if (name) {
@@ -602,6 +609,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             }
         }
         const name = game.castLocalSpell(command, isFinal || !!meta?.settled);
+        if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg };
         if (heard) journal(command, isFinal || held, meta, heard, !!name, name ? '' : castWhy(heard), 'микрофон игрока');
         else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)

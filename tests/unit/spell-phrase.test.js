@@ -55,3 +55,22 @@ test('my mouth moving with the voice: a spell over the Ice Queen\'s taunt is min
     assert.ok(fromGame('Ice', { from: 4200, to: 4600, mine: true })); // (her line says that very spell)
     clearAired();
 });
+
+test('«Бомбардо Максима» is that one spell, once: no «Джолт», no second «Бомбардо» after it (the author\'s case)', async () => {
+    const { matchSpell } = await import('../../src/fx/SpellManager.js');
+    const { afterCast } = await import('../../src/audio/SpellPhrase.js');
+    const { partOf } = await import('../../src/input/NativeVoice.js');
+    for (const t of ['бомбарда максима', 'бомбардо максима', 'бомбарда макс има']) {
+        assert.equal(matchSpell(t), 'BombardoMaxima', t);
+        assert.ok(spellPhrase(t).ok, t);
+    }
+    assert.ok(partOf('бомбардо максима', 'бомбардо'));
+    const last = { spell: 'BombardoMaxima', at: 1000, seg: 7 };
+    assert.ok(afterCast(last, 'Bombardo', { native: true, seg: 7, fit: 1.5 }, 1500)); // (the end of the same phrase)
+    assert.ok(afterCast(last, 'BombardoMaxima', { native: true, seg: 7, fit: 1.5 }, 1500));
+    assert.ok(afterCast(last, 'Jolt', { native: true, seg: 7, fit: 0.2 }, 1600)); // (the explosion read as a word)
+    assert.ok(afterCast(last, 'Jolt', { native: true, seg: 8, fit: 0.2 }, 1800)); // (its echo, the next «phrase»)
+    assert.equal(afterCast(last, 'Jolt', { native: true, seg: 8, fit: 1.2 }, 1800), null); // (said clearly: mine)
+    assert.equal(afterCast(last, 'Bombardo', { native: true, seg: 9, fit: 0.2 }, 3000), null); // (later: a new spell)
+    assert.equal(afterCast({ spell: 'Jolt', at: 1000, seg: 3 }, 'JoltMaxima', { native: true, seg: 3, fit: 0.1 }, 1300), null); // (it grows)
+});
