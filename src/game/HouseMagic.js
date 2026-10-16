@@ -133,6 +133,14 @@ export class HouseMagic {
             for (const rec of this.list.values()) { const rc = this._rectOf(rec); if (x >= rc.x0 && x <= rc.x1 && z >= rc.z0 && z <= rc.z1) return true; }
             return false;
         };
+        // (the same as shapes, for a whole piece of land at once — TerrainView._sendRebuild)
+        const prevS = data._litPair === prev ? data.litShapes : null;
+        data.litShapes = (x0, z0, x1, z1, out) => {
+            prevS?.(x0, z0, x1, z1, out);
+            for (const rec of this.list.values()) { const rc = this._rectOf(rec); if (rc.x1 >= x0 && rc.x0 <= x1 && rc.z1 >= z0 && rc.z0 <= z1) out.push(rc); }
+            return out;
+        };
+        data._litPair = prev && !prevS ? null : data.litLand;
     }
 
     /** Its ground plan's rectangle (kept: asked for every column of a chunk made again — the plan's own key was too slow). */

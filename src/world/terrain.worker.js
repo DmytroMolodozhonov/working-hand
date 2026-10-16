@@ -10,6 +10,35 @@
 import { TerrainData, chunkKey, mergeBuffers } from './Terrain.js';
 import { buildFlora } from './FloraBuild.js';
 
+/** A mesh's box, made here (TerrainView._fill: no pass over its points in the frame). */
+function bounds(b) {
+    const p = b.positions;
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i < p.length; i += 3) {
+        const x = p[i], y = p[i + 1], z = p[i + 2];
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+        if (z < z0) z0 = z;
+        if (z > z1) z1 = z;
+    }
+    b.bounds = [x0, y0, z0, x1, y1, z1];
+}
+
+/** A mesh's box, made here (TerrainView._fill: no pass over its points in the frame). */
+function bounds(b) {
+    const p = b.positions;
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i < p.length; i += 3) {
+        const x = p[i], y = p[i + 1], z = p[i + 2];
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    b.bounds = [x0, y0, z0, x1, y1, z1];
+}
+
 const KEEP = 240; // chunks kept (≈ 140 KB each)
 let data = null;
 /** The main thread's changed chunks (TerrainView._share): sent once each time they change, kept here. */
@@ -74,6 +103,7 @@ self.onmessage = (e) => {
         delete arrays.ground; delete arrays.raised;
         for (const k of ['land', 'water']) {
             const b = arrays[k];
+            bounds(b);
             for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
         }
         self.postMessage({ type: 'rebuilt', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, sky, chunk }, transfer);
@@ -90,6 +120,7 @@ self.onmessage = (e) => {
     delete arrays.ground; delete arrays.raised;
     for (const k of ['land', 'water']) {
         const b = arrays[k];
+        bounds(b);
         for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
     }
     self.postMessage({ type: 'built', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, chunk, ms: performance.now() - t0 }, transfer);

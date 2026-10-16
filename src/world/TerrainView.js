@@ -17,6 +17,19 @@ import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
 const REBUILD_MS = 1.5;
 /** Changed chunks each worker keeps (its copy of this computer's): ~150 KB each. */
 const SHARE_KEEP = 40;
+const _shapes = []; // (reused: the lit rooms' shapes of one chunk)
+
+/** [minX, minY, minZ, maxX, maxY, maxZ] of xyz points (one pass). */
+export function boundsOf(p) {
+    let a = Infinity, b = Infinity, c = Infinity, d = -Infinity, e = -Infinity, f = -Infinity;
+    for (let i = 0; i < p.length; i += 3) {
+        const x = p[i], y = p[i + 1], z = p[i + 2];
+        if (x < a) a = x; if (x > d) d = x;
+        if (y < b) b = y; if (y > e) e = y;
+        if (z < c) c = z; if (z > f) f = z;
+    }
+    return [a, b, c, d, e, f];
+}
 
 /**
  * Terrain = data + THREE meshes for the chunks around the player.
@@ -173,6 +186,9 @@ export class Terrain {
         w.postMessage({ type: 'flora', id, key, cx, cz, chunk, hidden, rev, ...share });
     }
 
+    /** Grass made but not put in this frame: first next time. */
+    putBackFlora(list) { this._floraDone = list.concat(this._floraDone); }
+
     /** The grass the workers made since the last look: [{key, out}]. */
     takeFlora() {
         const out = this._floraDone;
@@ -322,7 +338,21 @@ export class Terrain {
         if (d.litLand) {
             const P = 15, RW = CHUNK + 2 * P, x0 = entry.cx * CHUNK - P, z0 = entry.cz * CHUNK - P;
             let a = null;
-            for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) if (d.litLand(x0 + rx, z0 + rz)) (a || (a = new Uint8Array(RW * RW)))[rz * RW + rx] = 1;
+            if (d.litShapes && d._litPair === d.litLand) {
+                // (the rooms' rectangles and circles that reach here, filled in — not a question per column)
+                const shapes = d.litShapes(x0, z0, x0 + RW - 1, z0 + RW - 1, _shapes);
+                for (const s of shapes) {
+                    const r = s.r;
+                    const ax = r != null ? s.cx - r : s.x0, bx = r != null ? s.cx + r : s.x1, az = r != null ? s.cz - r : s.z0, bz = r != null ? s.cz + r : s.z1;
+                    for (let z = Math.max(z0, Math.ceil(az)); z <= Math.min(z0 + RW - 1, Math.floor(bz)); z++) {
+                        for (let x = Math.max(x0, Math.ceil(ax)); x <= Math.min(x0 + RW - 1, Math.floor(bx)); x++) {
+                            if (r != null && Math.hypot(x - s.cx, z - s.cz) > r) continue;
+                            (a || (a = new Uint8Array(RW * RW)))[(z - z0) * RW + x - x0] = 1;
+                        }
+                    }
+                }
+                _shapes.length = 0;
+            } else for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) if (d.litLand(x0 + rx, z0 + rz)) (a || (a = new Uint8Array(RW * RW)))[rz * RW + rx] = 1;
             if (a) lit = { x0, z0, RW, a };
         }
         let w = this._workers[0];
@@ -602,8 +632,11 @@ export class Terrain {
         geo.setAttribute('voxPat', new THREE.BufferAttribute(buf.patterns, 1));
         geo.setAttribute('voxSky', new THREE.BufferAttribute(buf.skies, 1)); // (daylight reaching it: a cave's dark)
         geo.setIndex(new THREE.BufferAttribute(buf.indices, 1));
-        geo.computeBoundingSphere();
-        geo.computeBoundingBox();
+        // (its box — worked out in the worker, or here in one pass — and a sphere round the box: three
+        // passes over a chunk's ~100 000 points took a frame several milliseconds a chunk)
+        const b = buf.bounds || boundsOf(buf.positions);
+        geo.boundingBox = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
+        geo.boundingSphere = geo.boundingBox.getBoundingSphere(new THREE.Sphere());
         mesh.geometry = geo;
         mesh.visible = true;
     }

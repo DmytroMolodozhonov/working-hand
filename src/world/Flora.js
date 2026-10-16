@@ -107,11 +107,16 @@ vGlow = glow;
         // made by a terrain worker (a chunk as it was generated — the same blades as here): in now
         const T = this.terrain;
         if (T.floraAsync) {
-            for (const r of T.takeFlora()) {
+            // (a few milliseconds a frame: in flight a whole row of chunks' grass came back at once)
+            const done = T.takeFlora(), tb = performance.now();
+            let k = 0;
+            for (; k < done.length && (k === 0 || performance.now() - tb < FLORA.BUDGET_MS); k++) {
+                const r = done[k];
                 const w = want.find((x) => x.key === r.key);
                 // (made from the chunk as it was changed here: only if it has not changed again since)
                 if (w && (r.rev === undefined ? this._pristine(w) : r.rev === (w.c.rev || 0))) { this._build(w, r.out); want.splice(want.indexOf(w), 1); }
             }
+            if (k < done.length) T.putBackFlora(done.slice(k));
         }
         if (!want.length) return;
         want.sort((a, b) => a.d - b.d);

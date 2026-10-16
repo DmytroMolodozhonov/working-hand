@@ -654,6 +654,14 @@ export class IceMagic {
             for (const r of this.list.values()) if (r.k === 'castle' && Math.abs(x - r.x) <= R && Math.abs(z - r.z) <= R && Math.hypot(x - r.x, z - r.z) <= R) return true;
             return false;
         };
+        // (the same as shapes, for a whole piece of land at once — TerrainView._sendRebuild)
+        const prevS = data._litPair === prev ? data.litShapes : null;
+        data.litShapes = (x0, z0, x1, z1, out) => {
+            prevS?.(x0, z0, x1, z1, out);
+            for (const r of this.list.values()) if (r.k === 'castle' && r.x + R >= x0 && r.x - R <= x1 && r.z + R >= z0 && r.z - R <= z1) out.push({ cx: r.x, cz: r.z, r: R });
+            return out;
+        };
+        data._litPair = prev && !prevS ? null : data.litLand;
     }
 
     _unfurnish(rec) {

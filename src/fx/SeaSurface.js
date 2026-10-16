@@ -199,10 +199,11 @@ varying vec3 vSeaWorld;`)
         if (!this.active) { this.mesh.visible = false; return; }
         const o = this.uniforms.uOrigin.value;
         if (!this._job && (!this.ready || Math.hypot(focus.x - o.x, focus.z - o.y) > 128)) this._startJob(focus.x, focus.z);
-        // the first time synchronously in big slices (the sea comes into view far away, fog hides it)
-        // (a jump far away — a teleport, a respawn: the old texture does not reach here, build it now, never a gap)
-        if (this._job && this.ready && Math.hypot(focus.x - o.x, focus.z - o.y) > TEX * TEXEL / 2 - 200) this._runJob(TEX * TEX);
-        if (this._job) this._runJob(this.ready ? SLICE : SLICE * 4, this.ready ? 2 : 6);
+        // the first time in big slices (the sea comes into view far away, fog hides it)
+        // (far from where the texture was made — a jump, or the sea out of sight a long flight: the old one
+        // does not fit here; the sea waits the few frames its new one takes — made all at once it froze a frame ~25 ms)
+        if (this._job && this.ready && Math.hypot(focus.x - o.x, focus.z - o.y) > TEX * TEXEL / 2 - 200) this.ready = false;
+        if (this._job) this._runJob(this.ready ? SLICE : SLICE * 4, this.ready ? 2 : 4);
         this.mesh.visible = this.ready;
         const cam = g.camera ? g.camera.getWorldPosition(_v) : focus;
         this.mesh.position.set(Math.round(cam.x / 2) * 2, WATER_LEVEL_Y, Math.round(cam.z / 2) * 2);
