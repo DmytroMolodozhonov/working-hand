@@ -116,9 +116,17 @@ export class CastleMagic extends HouseMagic {
         const was = data.litLand;
         data.litLand = (x, z) => {
             if (was?.(x, z)) return true;
-            for (const rec of this.list.values()) { const rc = this.plan(rec).rect; if (x >= rc.x0 && x <= rc.x1 && z >= rc.z0 && z <= rc.z1) return true; }
+            for (const rec of this.list.values()) { const rc = this._rectOf(rec); if (x >= rc.x0 && x <= rc.x1 && z >= rc.z0 && z <= rc.z1) return true; }
             return false;
         };
+    }
+
+    /** Its ground plan's rectangle (kept: asked for every column of a chunk made again — the plan's own key was too slow). */
+    _rectOf(rec) {
+        const m = this._rects || (this._rects = new WeakMap());
+        let e = m.get(rec);
+        if (!e || e.level !== rec.level) m.set(rec, e = { level: rec.level, rc: this.plan(rec).rect });
+        return e.rc;
     }
 
     houseNear(p, r = 0) {

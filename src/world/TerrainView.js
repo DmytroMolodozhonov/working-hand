@@ -13,6 +13,11 @@ import * as THREE from 'three';
 import { TerrainData, CHUNK, chunkKey, mergeBuffers } from './Terrain.js';
 import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
 
+/** ms a frame for sending changed chunks to the workers (and as much again for putting their meshes in). */
+const REBUILD_MS = 1.5;
+/** Changed chunks each worker keeps (its copy of this computer's): ~150 KB each. */
+const SHARE_KEEP = 40;
+
 /**
  * Terrain = data + THREE meshes for the chunks around the player.
  * update(focus) streams chunks in and out; explosions rebuild only the
@@ -163,8 +168,9 @@ export class Terrain {
         this._floraAsked.set(key, id);
         // (a chunk changed here: its own data goes along, and its rev — an answer for an older one is not used)
         let chunk = null, hidden = null, rev;
-        if (changed) { const { rev: r, ...copy } = changed; chunk = copy; rev = r || 0; const h = this.data._hidden?.get(key); hidden = h ? [...h] : null; }
-        w.postMessage({ type: 'flora', id, key, cx, cz, chunk, hidden, rev });
+        let share = null;
+        if (changed) { share = this._share(w, [changed]); rev = changed.rev || 0; const h = this.data._hidden?.get(key); hidden = h ? [...h] : null; }
+        w.postMessage({ type: 'flora', id, key, cx, cz, chunk, hidden, rev, ...share });
     }
 
     /** The grass the workers made since the last look: [{key, out}]. */
@@ -206,6 +212,7 @@ export class Terrain {
         this._floraAsked.clear();
         this._floraDone.length = 0;
         this._siteAsked.clear();
+        for (const key of this._rebuilding.keys()) this.data.dirtyChunks.add(key); // (made here instead)
         this._rebuilding.clear();
         this._rebuilt.length = 0;
         this._center = null; // (plan again: what was being made is wanted again)
@@ -302,11 +309,11 @@ export class Terrain {
      * A changed chunk's mesh made again in a worker: the chunks round it that were changed here go
      * along (the rest the worker makes itself, the same as here), with the falling pieces' hidden cells.
      */
-    _sendRebuild(key, entry) {
+    _sendRebuild(key, entry, wantChunk = false) {
         const d = this.data, chunks = [];
         for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
             const c = d.chunks.get(chunkKey(entry.cx + dx, entry.cz + dz));
-            if (c && c.modified) { const { rev, ...copy } = c; chunks.push(copy); } // eslint-disable-line no-unused-vars
+            if (c && c.modified) chunks.push(c);
         }
         const hid = d._hidden?.get(key);
         // the lit land round it (rooms made by magic — HouseMagic, CastleMagic, IceMagic: data.litLand lives
@@ -323,13 +330,38 @@ export class Terrain {
         w.load++;
         const id = ++this._jobId;
         this._rebuilding.set(key, id);
-        w.postMessage({ type: 'rebuild', id, key, cx: entry.cx, cz: entry.cz, chunks, hidden: hid ? [...hid] : null, lit });
+        w.postMessage({ type: 'rebuild', id, key, cx: entry.cx, cz: entry.cz, ...this._share(w, chunks), hidden: hid ? [...hid] : null, lit, wantChunk });
+    }
+
+    /**
+     * The changed chunks a worker is to use for one job. Each is sent only when it changed since that worker
+     * last got it (the worker keeps the last SHARE_KEEP of them): a house rising changes the same two or three
+     * chunks every frame, and copying all nine round each changed one (blocks and light, ~0.3 MB) for every
+     * rebuild took the frame tens of milliseconds. Its light (`sky`) is never sent: the worker works it out.
+     */
+    _share(w, list) {
+        const sent = w.sent || (w.sent = new Map()); // key -> {c, ver}: what that worker holds (oldest first)
+        const fresh = [], use = [];
+        for (const c of list) {
+            const key = chunkKey(c.cx, c.cz);
+            use.push(key);
+            const s = sent.get(key);
+            sent.delete(key);
+            if (s && s.c === c && s.ver === c.ver) { sent.set(key, s); continue; }
+            const { rev, sky, ...copy } = c; // eslint-disable-line no-unused-vars
+            fresh.push(copy);
+            sent.set(key, { c, ver: c.ver });
+        }
+        let drop = null;
+        while (sent.size > SHARE_KEEP) { const k = sent.keys().next().value; sent.delete(k); (drop || (drop = [])).push(k); }
+        return { fresh, use, drop };
     }
 
     _applyRebuilt(m) {
         const entry = this.meshes.get(m.key);
         if (!entry || entry.cx !== m.cx || entry.cz !== m.cz) return;
-        const c = this.data.chunks.get(m.key);
+        let c = this.data.chunks.get(m.key);
+        if (!c && m.chunk) { c = m.chunk; this.data.chunks.set(m.key, c); } // (a chunk next to a changed one, not here yet: as the worker made it)
         if (c) { c.sky = m.sky; c.rev = (c.rev || 0) + 1; } // (the cave light the mesh used; the grass on it made again)
         this._fill(entry.ground, m.arrays.land);
         this._fill(entry.water, m.arrays.water);
@@ -341,6 +373,19 @@ export class Terrain {
         while (this._local.length) {
             const job = this._local[this._local.length - 1];
             if (this.meshes.has(job.key) || !this._inRange(job.cx, job.cz)) { this._local.pop(); continue; }
+            if (this._workers && !this._rebuilding.has(job.key)) {
+                // (made in a worker too, from this computer's changed chunks round it: a whole chunk's mesh made
+                // here took a flight over a crater or a magic house 20–40 ms a frame)
+                this._local.pop();
+                let entry = this.pool.pop();
+                if (!entry) entry = this._newEntry();
+                entry.cx = job.cx;
+                entry.cz = job.cz;
+                this.meshes.set(job.key, entry);
+                this._sendRebuild(job.key, entry, !this.data.chunks.has(job.key));
+                if (performance.now() - t0 > budget) break;
+                continue;
+            }
             const miss = this._missingGround(job.cx, job.cz);
             if (miss) this.data.chunk(miss[0], miss[1]);
             else { this._local.pop(); this._load(job); }
@@ -409,11 +454,14 @@ export class Terrain {
         // made there from this computer's own data of the changed chunks (sent along), one job a chunk at
         // a time — a chunk changed again meanwhile is sent again when its last one is back.
         let n = 0;
+        const tr = performance.now();
         for (const key of this.data.dirtyChunks) {
             const entry = this.meshes.get(key);
             if (!entry) { this.data.dirtyChunks.delete(key); continue; }
             if (this._workers) {
                 if (this._rebuilding.has(key)) continue; // (stays dirty: sent again when the answer is back)
+                if (n && performance.now() - tr > REBUILD_MS) break; // (the rest next frame: a house's magic never takes the frame)
+                n++;
                 this.data.dirtyChunks.delete(key);
                 this._sendRebuild(key, entry);
                 continue;
@@ -422,7 +470,7 @@ export class Terrain {
             this._build(entry);
             if (++n >= this.maxRebuildsPerFrame) break;
         }
-        while (this._rebuilt.length) this._applyRebuilt(this._rebuilt.shift());
+        for (let k = 0; this._rebuilt.length && (k < 2 || performance.now() - tr < 2 * REBUILD_MS); k++) this._applyRebuilt(this._rebuilt.shift());
 
         // 2) New chunks, nearest first. With workers: they make them, here they only go in (a few
         // milliseconds a frame at most). Without: made here within the time budget — a chunk's mesh

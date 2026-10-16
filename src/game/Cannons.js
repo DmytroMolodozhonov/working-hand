@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { newUid } from './ItemTypes.js';
+import { mergeParts } from '../core/MergeGeometry.js';
 
 const FUSE = 1.6; // s
 const BALL_SPEED = 70; // m/s
@@ -30,50 +31,58 @@ const _o = { x: 0, y: 0, z: 0 };
 const _l = { x: 0, y: 0, z: 0 };
 
 let BALL_GEO = null;
-const ballGeo = () => BALL_GEO || (BALL_GEO = new THREE.SphereGeometry(0.32, 10, 8));
+const ballGeo = () => BALL_GEO || (BALL_GEO = new THREE.SphereGeometry(0.32, 10, 8), BALL_GEO.userData.shared = true, BALL_GEO);
 const IRON = () => new THREE.MeshLambertMaterial({ color: 0x2b2b2e });
 
-/** A gun on a port's wall (world-placed), with its own model and shot rack. */
+/** The shapes and materials every port gun shares (made once; a gun's model is only meshes of them). */
+let GUN = null;
+function gunParts() {
+    if (GUN) return GUN;
+    const U = new THREE.BoxGeometry(1, 1, 1), wheel = new THREE.CylinderGeometry(0.32, 0.32, 0.2, 8);
+    // the carriage, its four wheels and the rack's box: one shape of wood
+    const wood = [{ geo: U, pos: [0, 0.38, 0], scale: [1.4, 0.75, 2.4] }, { geo: U, pos: [2.0, 0.35, 0.6], scale: [1.0, 0.7, 1.2] }];
+    for (const sx of [-0.75, 0.75]) for (const sz of [-0.9, 0.9]) wood.push({ geo: wheel, pos: [sx, 0.3, sz], rot: [0, 0, Math.PI / 2] });
+    GUN = {
+        wood: mergeParts(wood),
+        barrel: mergeParts([{ geo: new THREE.CylinderGeometry(0.36, 0.55, 3.0, 12), rot: [-Math.PI / 2, 0, 0] }]), // (along −z: forward)
+        fuse: new THREE.SphereGeometry(0.1, 6, 4),
+        woodMat: new THREE.MeshLambertMaterial({ color: 0x5a3a20 }),
+        ironMat: IRON(),
+        fuseOff: new THREE.MeshBasicMaterial({ color: 0x222222 }),
+        fuseOn: new THREE.MeshBasicMaterial({ color: 0xffa020 }),
+    };
+    U.dispose(); wheel.dispose();
+    for (const k of ['wood', 'barrel', 'fuse']) GUN[k].userData.shared = true;
+    return GUN;
+}
+
+/**
+ * A gun on a port's wall (world-placed), with its shot rack. (Its pieces of wood are one shape, the rack's
+ * balls one instanced draw — a port's guns drew 15 pieces each, every one with its own shape and material,
+ * and were never given back when they went out of sight.)
+ */
 function portGunModel() {
+    const P = gunParts();
     const g = new THREE.Group();
-    const wood = new THREE.MeshLambertMaterial({ color: 0x5a3a20 });
-    const iron = IRON();
-    const car = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.75, 2.4), wood);
-    car.position.y = 0.38;
-    g.add(car);
-    for (const sx of [-0.75, 0.75]) for (const sz of [-0.9, 0.9]) {
-        const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.2, 8), wood);
-        w.rotation.z = Math.PI / 2;
-        w.position.set(sx, 0.3, sz);
-        g.add(w);
-    }
+    g.add(new THREE.Mesh(P.wood, P.woodMat));
     const barrel = new THREE.Group();
-    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.55, 3.0, 12), iron);
-    b.rotation.x = -Math.PI / 2; // along −z (forward)
-    barrel.add(b);
-    const fuse = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 4), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+    barrel.add(new THREE.Mesh(P.barrel, P.ironMat));
+    const fuse = new THREE.Mesh(P.fuse, P.fuseOff);
     fuse.position.set(0, 0.5, 1.1);
     barrel.add(fuse);
-    const ball = new THREE.Mesh(ballGeo(), iron);
+    const ball = new THREE.Mesh(ballGeo(), P.ironMat);
     ball.position.set(0, 0, -1.25);
     ball.visible = false;
     barrel.add(ball);
     barrel.position.y = 1.35;
     g.add(barrel);
-    const rack = new THREE.Group();
-    const rb = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.7, 1.2), wood);
-    rb.position.y = 0.35;
-    rack.add(rb);
-    const balls = [];
-    for (let k = 0; k < 6; k++) {
-        const m = new THREE.Mesh(ballGeo(), iron);
-        m.position.set((k % 2) * 0.4 - 0.2, 0.95, Math.floor(k / 2) * 0.4 - 0.4);
-        rack.add(m);
-        balls.push(m);
-    }
-    rack.position.set(2.0, 0, 0.6);
-    g.add(rack);
-    return { group: g, barrel, fuse, ball, balls };
+    // the rack's six balls (the first `count` of them lie there)
+    const balls = new THREE.InstancedMesh(ballGeo(), P.ironMat, 6);
+    const m4 = new THREE.Matrix4();
+    for (let k = 0; k < 6; k++) balls.setMatrixAt(k, m4.makeTranslation(2.0 + (k % 2) * 0.4 - 0.2, 0.95, 0.6 + Math.floor(k / 2) * 0.4 - 0.4));
+    balls.frustumCulled = false; // (six small balls: the shape alone would be culled at the gun's middle)
+    g.add(balls);
+    return { group: g, barrel, fuse, ball, balls, setBalls: (n) => { balls.count = Math.max(0, Math.min(6, n)); } };
 }
 
 export class Cannons {
@@ -189,7 +198,7 @@ export class Cannons {
         }
         for (const R of this._racks()) {
             if (R.ship) R.ship.model?.setRack(R.id, R.n);
-            else if (R.gun.model) R.gun.model.balls.forEach((b, i) => { b.visible = i < R.n; });
+            else if (R.gun.model) R.gun.model.setBalls(R.n);
         }
         this._hands(dt);
         this._fly(dt);
@@ -201,7 +210,7 @@ export class Cannons {
         const m = G.spec.model;
         if (!m) return;
         m.barrel.position.z = st.recoil * 1.6;
-        m.fuse.material.color.setHex(st.fuse > 0 ? 0xffa020 : 0x222222);
+        m.fuse.material = st.fuse > 0 ? GUN.fuseOn : GUN.fuseOff;
         m.ball.visible = st.loaded;
     }
 

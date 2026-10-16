@@ -47,6 +47,7 @@ const DEFAULT_SPEED = { walk: 1.6, run: 5, flee: 5.5 };
 
 // ================================================================ materials
 const MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+const _lodInv = new THREE.Matrix4(), _lodM = new THREE.Matrix4();
 MAT.name = 'villager';
 const HIT_MAT = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0xff6060, emissive: 0x8a1010 });
 // the night: a blanket over a sleeper, a straw mat under one on the floor, a watchman's torch (shared)
@@ -1076,7 +1077,95 @@ export class VillagerModel {
 
     // ------------------------------------------------------------ materials
     _currentMat() { return this._flashT > 0 ? HIT_MAT : this._hl ? HL_MAT : MAT; }
-    _applyMaterial() { const m = this._currentMat(); for (const o of this._meshes) o.material = m; }
+    _applyMaterial() { const m = this._currentMat(); for (const o of this._meshes) o.material = m; if (this._lod) this._lod.material = m; }
+
+    // ------------------------------------------------------------ far away: one shape
+    /**
+     * Far from the player (CastleLife): the whole person is drawn as ONE shape, made again from the pose
+     * each time the model is moved (far people move every 0.07–0.12 s anyway) — a village's sixty people
+     * were ~500 draws (8–12 a person), the most of a frame's drawing near a castle. Not while something
+     * of its own is on it (a torch, a blanket, a skeleton's eyes, a cut limb): then drawn as it is.
+     */
+    setFar(on) {
+        if (on && (this.torch || this.blanket || this.mat || this.look.skeleton || this.limbs)) on = false;
+        if (!on) {
+            if (this._far) { this._far = false; this.root.visible = true; if (this._lod) this._lod.visible = false; }
+            return;
+        }
+        this._far = true;
+        this._refreshLod();
+    }
+
+    /** The far shape made again from the parts as they are posed now. */
+    _refreshLod() {
+        const ms = this._meshes;
+        // the parts drawn now (hidden ones — a shield gone with the arm — are left out)
+        const list = this._lodList || (this._lodList = []);
+        list.length = 0;
+        let nv = 0, ni = 0;
+        for (const m of ms) {
+            let o = m, shown = true;
+            while (o && o !== this.root) { if (!o.visible) { shown = false; break; } o = o.parent; }
+            if (!shown || o !== this.root) continue;
+            list.push(m);
+            nv += m.geometry.attributes.position.count;
+            ni += m.geometry.index.count;
+        }
+        let lod = this._lod;
+        const was = this._lodGeos || (this._lodGeos = []);
+        let same = !!lod && was.length === list.length;
+        for (let i = 0; same && i < list.length; i++) same = was[i] === list[i].geometry;
+        if (!same) {
+            was.length = 0;
+            for (const m of list) was.push(m.geometry);
+            const geo = new THREE.BufferGeometry();
+            const pos = new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage);
+            const nor = new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage);
+            const col = new Float32Array(nv * 3), idx = new Uint16Array(ni);
+            let vo = 0, io = 0;
+            for (const m of list) {
+                const G = m.geometry, n = G.attributes.position.count, I = G.index.array;
+                col.set(G.attributes.color.array, vo * 3);
+                for (let i = 0; i < I.length; i++) idx[io++] = I[i] + vo;
+                vo += n;
+            }
+            geo.setAttribute('position', pos);
+            geo.setAttribute('normal', nor);
+            geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+            geo.setIndex(new THREE.BufferAttribute(idx, 1));
+            geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.4, 0), 4.5); // (a person, whatever the pose)
+            if (lod) { lod.geometry.dispose(); lod.geometry = geo; } else {
+                lod = this._lod = new THREE.Mesh(geo, this._currentMat());
+                lod.castShadow = false; // (far: no shadow — Shadows.js)
+                lod.raycast = () => {}; // (the parts are what is hit)
+                this.group.add(lod);
+            }
+        }
+        // the parts' places relative to the person (the group), each vertex put there
+        this.group.updateMatrixWorld(true);
+        _lodInv.copy(this.group.matrixWorld).invert();
+        const P = lod.geometry.attributes.position, N = lod.geometry.attributes.normal, pa = P.array, na = N.array;
+        let vo = 0;
+        for (const m of list) {
+            const e = _lodM.multiplyMatrices(_lodInv, m.matrixWorld).elements;
+            const G = m.geometry, sp = G.attributes.position.array, sn = G.attributes.normal.array, n = G.attributes.position.count;
+            for (let i = 0; i < n; i++) {
+                const k = i * 3, o = (vo + i) * 3, x = sp[k], y = sp[k + 1], z = sp[k + 2], a = sn[k], b = sn[k + 1], c = sn[k + 2];
+                pa[o] = e[0] * x + e[4] * y + e[8] * z + e[12];
+                pa[o + 1] = e[1] * x + e[5] * y + e[9] * z + e[13];
+                pa[o + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
+                na[o] = e[0] * a + e[4] * b + e[8] * c;
+                na[o + 1] = e[1] * a + e[5] * b + e[9] * c;
+                na[o + 2] = e[2] * a + e[6] * b + e[10] * c;
+            }
+            vo += n;
+        }
+        P.needsUpdate = true;
+        N.needsUpdate = true;
+        lod.material = this._currentMat();
+        lod.visible = true;
+        this.root.visible = false;
+    }
 
     /** Short red tint (~0.15 s) — shared material, nothing is cloned. */
     flashHit(seconds = 0.15) { this._flashT = seconds; this._applyMaterial(); }
@@ -1541,6 +1630,7 @@ export class VillagerModel {
     /** Removes the model from its parent. Shared geometry / materials stay alive. */
     dispose() {
         this.group.parent?.remove(this.group);
+        if (this._lod) { this._lod.geometry.dispose(); this._lod = null; }
     }
 }
 

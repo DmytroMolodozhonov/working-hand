@@ -16,6 +16,7 @@
  */
 
 import * as THREE from 'three';
+import { mergeParts } from '../core/MergeGeometry.js';
 
 const SCALE = 3; // (a treasure chest; a household one in a villager's house is smaller — opts.scale)
 /** The chest's size in metres per unit of scale: across (its local X), deep (Z), high with the lid shut. */
@@ -49,6 +50,10 @@ function shared() {
         corner: new THREE.BoxGeometry(0.11, 0.6, 0.11),
         hollow: new THREE.BoxGeometry(1.08, 0.02, 0.68),
     };
+    // (the lock and the four gold corners of the box: one shape, one draw — a village has dozens of chests)
+    SHARED.goldBody = mergeParts([{ geo: SHARED.lock, pos: [0, 0.35, 0.43] },
+        ...[[-0.55, -0.35], [-0.55, 0.35], [0.55, -0.35], [0.55, 0.35]].map(([x, z]) => ({ geo: SHARED.corner, pos: [x, 0.3, z] }))]);
+    for (const g of Object.values(SHARED)) if (g.isBufferGeometry) g.userData.shared = true; // (Game.prewarm's samples leave them)
     return SHARED;
 }
 
@@ -115,17 +120,7 @@ export class Chest {
         this.lidGroup.add(lidLock);
         this.mesh.add(this.lidGroup);
 
-        const lock = new THREE.Mesh(s.lock, s.gold);
-        lock.position.set(0, 0.35, 0.43);
-        this.mesh.add(lock);
-
-        for (const x of [-0.55, 0.55]) {
-            for (const z of [-0.35, 0.35]) {
-                const corner = new THREE.Mesh(s.corner, s.gold);
-                corner.position.set(x, 0.3, z);
-                this.mesh.add(corner);
-            }
-        }
+        this.mesh.add(new THREE.Mesh(s.goldBody, s.gold)); // (the lock and the corners)
     }
 
     /**

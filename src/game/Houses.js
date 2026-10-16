@@ -112,7 +112,9 @@ export class Houses {
         for (const [id, s] of seen) {
             const rec = this.active.get(id);
             if (!rec) continue;
-            if (!rec.family && this.auth) rec.family = this.game.castleLife?.spawnFamily(s.def, s.i)?.length ? true : null;
+            if (rec.family || !this.auth) continue;
+            if (performance.now() - t0 > 4) { this._scanT = Math.min(this._scanT, 0.05); break; } // (their people too: a few a scan)
+            rec.family = this.game.castleLife?.spawnFamily(s.def, s.i)?.length ? true : null;
         }
         // inside a house: the beds are seen only near (through a door or a window); doors cast shadows only near
         const me = this.game.character.group.position;

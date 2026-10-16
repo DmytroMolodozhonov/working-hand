@@ -123,11 +123,14 @@ export function housePlan({ seed, level, x, z, G, face = 0, woods = [], minD = 0
         : pick(leavesOf != null ? [BLOCK.THATCH, BLOCK.THATCH, BLOCK.PLANKS_DARK, trim] : [BLOCK.PLANKS_DARK, trim]);
     const hip = rng() < 0.3;
     // ---- writing
-    const map = new Map(); // "x,L,z" -> block
+    // (a number for a cell — its place from the middle — not a "x,L,z" string: a big house writes ~40 000
+    // cells, and the strings made its plan take tens of milliseconds of a frame)
+    const map = new Map(); // key -> block
     const fill = [];
     const W = (a, b) => { const [rx, rz] = rotLot(mirror * a, b, face); return [x + rx, z + rz]; };
     const Lw = (l) => G + 1 + l;
-    const put = (a, b, l, t) => { const [wx, wz] = W(a, b); map.set(wx + ',' + Lw(l) + ',' + wz, t); };
+    const [ra, rb] = rotLot(mirror, 0, face), [sa, sb] = rotLot(0, 1, face); // (rotLot without an array a cell)
+    const put = (a, b, l, t) => map.set(((ra * a + sa * b + 512) * 1024 + l + 512) * 1024 + rb * a + sb * b + 512, t);
     const box = (a0, a1, l0, l1, b0, b1, t) => {
         for (let a = Math.min(a0, a1); a <= Math.max(a0, a1); a++) for (let b = Math.min(b0, b1); b <= Math.max(b0, b1); b++) {
             for (let l = Math.min(l0, l1); l <= Math.max(l0, l1); l++) put(a, b, l, t);
@@ -271,15 +274,21 @@ export function housePlan({ seed, level, x, z, G, face = 0, woods = [], minD = 0
     }
     for (const a of chimneys) box(a, a, 0, T + d + 4, d + 1, d + 1, BLOCK.COBBLE); // (after the roof: it goes through the eaves)
     // ---- the result
-    const cells = [];
+    const raw = [];
     const own = new Set();
+    // (the magic builds it from the ground up: the lowest layers first, then outwards from the middle —
+    // sorted as numbers: the layer, the distance from the middle, then the order written)
+    const order = new Float64Array(map.size);
     for (const [k, t] of map) {
-        const [cx, cL, cz] = k.split(',').map(Number);
-        cells.push([cx, cL, cz, t]);
-        if (t !== BLOCK.AIR) own.add(k);
+        const rx = Math.floor(k / 1048576) - 512, l = (Math.floor(k / 1024) % 1024) - 512, rz = (k % 1024) - 512;
+        const cx = x + rx, cL = G + 1 + l, cz = z + rz;
+        order[raw.length] = ((l + 512) * 4096 + Math.abs(rx) + Math.abs(rz)) * 65536 + raw.length;
+        raw.push([cx, cL, cz, t]);
+        if (t !== BLOCK.AIR) own.add(cx + ',' + cL + ',' + cz);
     }
-    // (the magic builds it from the ground up: the lowest layers first, then outwards from the middle)
-    cells.sort((p, q) => p[1] - q[1] || (Math.abs(p[0] - x) + Math.abs(p[2] - z)) - (Math.abs(q[0] - x) + Math.abs(q[2] - z)));
+    order.sort();
+    const cells = new Array(raw.length);
+    for (let i = 0; i < order.length; i++) cells[i] = raw[order[i] % 65536];
     const c0 = pt(-w - 1, -d - 1 - bal), c1 = pt(w + 1, d + 1);
     out.rect = { x0: Math.min(c0.x, c1.x), x1: Math.max(c0.x, c1.x), z0: Math.min(c0.z, c1.z), z1: Math.max(c0.z, c1.z) };
     out.floorY = Lw(0) - 1.5;

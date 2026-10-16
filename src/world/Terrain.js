@@ -1450,7 +1450,9 @@ export class TerrainData {
 
     _markDirty(ix, iz) {
         const cx = ix >> SHIFT, cz = iz >> SHIFT;
-        this.dirtyChunks.add(chunkKey(cx, cz));
+        const key = chunkKey(cx, cz), c = this.chunks.get(key);
+        if (c) c.ver = (c.ver || 0) + 1; // (its blocks changed: the workers get it again — TerrainView._share)
+        this.dirtyChunks.add(key);
         // Faces on chunk borders depend on the neighbour chunk too.
         const lx = ix & MASK, lz = iz & MASK;
         if (lx === 0) this.dirtyChunks.add(chunkKey(cx - 1, cz));

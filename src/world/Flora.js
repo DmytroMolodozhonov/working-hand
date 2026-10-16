@@ -119,7 +119,7 @@ vGlow = glow;
         let n = 0;
         for (const w of want) {
             // (a worker makes its blades: untouched ground as generated, changed ground from this computer's data)
-            if (!all && T.floraAsync) { T.askFlora(w.key, w.cx, w.cz, this._pristine(w) ? null : w.c); continue; }
+            if (!all && T.floraAsync) { T.askFlora(w.key, w.cx, w.cz, this._pristine(w) ? null : w.c); if (performance.now() - t0 > FLORA.BUDGET_MS) break; continue; }
             this._build(w);
             n++;
             if (!all && (n >= FLORA.BUILD_PER_FRAME || performance.now() - t0 > FLORA.BUDGET_MS)) break;

@@ -893,6 +893,7 @@ async function startGameInner(config, welcome) {
 
         updateProgress(90, 'Компиляция шейдеров...');
         await new Promise((r) => requestAnimationFrame(r));
+        game.revealed = false;
         game.start();
         if (poseService._noticed) setTimeout(() => game.hud?.notify?.('✋ ' + poseService._noticed, 9000), 1500); // (said before the game was on)
         if (net.isHost && game.sync) net.broadcast(game.sync.welcomeMessage());
@@ -900,6 +901,7 @@ async function startGameInner(config, welcome) {
         updateProgress(100, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...');
 
         const reveal = () => {
+            game.revealed = true; // (the frames before it are behind the loading screen: PerfLog says so of their hitches)
             loadingScreen.classList.add('hidden');
             loadingScreen.style.display = 'none';
             hud.show(true);
@@ -910,7 +912,7 @@ async function startGameInner(config, welcome) {
             // (and a few frames drawn behind this screen first: what the first frames compile and send
             // to the graphics card — new models, the sea's waves — happens here, not in the first seconds of play)
             // (automated tests draw in software, a frame a second: they don't wait)
-            const warm = game.frameCount - frame0 >= 20 || performance.now() - started > 4000 || window.__ZNS_FIXED_QUALITY__;
+            const warm = game.frameCount - frame0 >= 30 || performance.now() - started > 4000 || window.__ZNS_FIXED_QUALITY__;
             if (!warm) return;
             if (game.firstPoseReceived || !cameraOk || performance.now() - started > 10000 || window.__ZNS_NO_CAMERA__) {
                 clearInterval(waitPose);

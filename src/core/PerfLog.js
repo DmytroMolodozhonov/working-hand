@@ -103,8 +103,10 @@ export class PerfLog {
             .join(', ');
         const ps = g.poseService;
         const st = ps?.stats || {};
-        const ai = ps ? `ИИ ${st.mode === 'native' ? `отдельная программа (${st.backend || '…'})` : st.mode === 'holistic' ? (st.thread === 'process' ? 'Holistic, отдельный процесс' : 'Holistic, ПОТОК ИГРЫ') : st.mode || '—'} ${st.results != null ? `${((st.results - (this._aiPrev || 0)) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.thread === 'process' && st.latency ? ` (задержка ${st.latency} мс)` : ''}${st.handHelper ? ', помощник рук' : ''}${st.handsEngine === 'v5' ? (st.v5Engine === 'rtm' ? ', кисти V5 (видеокарта)' : ', кисти V5') : ''}${st.delegate ? ', ' + st.delegate : ''}${st.thread === 'main' && st.nativeWhy ? ` (программа-нейросеть: ${st.nativeWhy})` : ''}` : 'ИИ —';
-        this._aiPrev = st.results || 0;
+        const ai = ps ? `ИИ ${st.mode === 'native' ? `отдельная программа (${st.backend || '…'})` : st.mode === 'holistic' ? (st.thread === 'process' ? 'Holistic, отдельный процесс' : 'Holistic, ПОТОК ИГРЫ') : st.mode || '—'} ${st.results != null && this._aiPrev != null && st.results >= this._aiPrev ? `${((st.results - this._aiPrev) / Math.max(secs, 0.001)).toFixed(0)}/с` : ''} ${Math.round(st.avgCost || 0)} мс${st.thread === 'process' && st.latency ? ` (задержка ${st.latency} мс)` : ''}${st.handHelper ? ', помощник рук' : ''}${st.handsEngine === 'v5' ? (st.v5Engine === 'rtm' ? ', кисти V5 (видеокарта)' : ', кисти V5') : ''}${st.delegate ? ', ' + st.delegate : ''}${st.thread === 'main' && st.nativeWhy ? ` (программа-нейросеть: ${st.nativeWhy})` : ''}` : 'ИИ —';
+        // counted from the previous line only: the camera outlives a game (a new game in the same page
+        // found thousands of its results «in 5 s») and its counter restarts with a new network
+        this._aiPrev = st.results ?? null;
         // the voice: which hears (the program on this computer / the browser's Google), the program's time per
         // look at a phrase, and how late after the word the spells came (average / worst)
         const vs = g.voice, nv = vs?.native, vc = nv?.cost, vl = g.stats?.voice;

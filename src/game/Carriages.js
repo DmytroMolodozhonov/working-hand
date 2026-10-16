@@ -43,6 +43,7 @@ import { BLOCK } from '../world/Terrain.js';
 import { crowdNear } from './CrowdSources.js';
 import { avoidStep } from './Avoid.js';
 import { CappedLog } from '../core/CappedLog.js';
+import { mergeParts } from '../core/MergeGeometry.js';
 
 export const CART = {
     LEN: 6.6, WID: 3.6, FLOOR: 1.75, SIDE: 0.85, WHEEL_R: 1.2,
@@ -126,73 +127,83 @@ const lam = (hex, o = {}) => {
     if (!_mats.has(k)) _mats.set(k, new THREE.MeshLambertMaterial({ color: hex, ...o }));
     return _mats.get(k);
 };
-const box = (parent, w, h, d, x, y, z, mat) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
-    m.castShadow = true; m.receiveShadow = true;
+const UNIT = new THREE.BoxGeometry(1, 1, 1);
+/** A box piece for mergeParts (a unit box scaled, turned). */
+const bx = (w, h, d, x, y, z, rot = [0, 0, 0]) => ({ geo: UNIT, pos: [x, y, z], rot, scale: [w, h, d] });
+/** The merged shapes of a cart and of a wheel (the same for every cart of a kind: made once, shared). */
+const _shapes = new Map();
+function cartShapes(magic) {
+    let S = _shapes.get(magic);
+    if (S) return S;
+    const L = CART.LEN, W = CART.WID, F = CART.FLOOR, R = CART.WHEEL_R;
+    const wood = [], dark = [], iron = [], star = [], glass = [], sack = [];
+    // the floor, the sides, the front and the tailboard
+    dark.push(bx(W, 0.2, L, 0, F - 0.1, 0));
+    wood.push(bx(0.14, CART.SIDE, L, -W / 2 + 0.07, F + CART.SIDE / 2, 0), bx(0.14, CART.SIDE, L, W / 2 - 0.07, F + CART.SIDE / 2, 0),
+        bx(W, CART.SIDE + 0.3, 0.14, 0, F + (CART.SIDE + 0.3) / 2, -L / 2 + 0.07), bx(W, CART.SIDE, 0.14, 0, F + CART.SIDE / 2, L / 2 - 0.07));
+    // the rims of the sides (gold on the carriage)
+    iron.push(bx(0.2, 0.08, L, -W / 2 + 0.07, F + CART.SIDE, 0), bx(0.2, 0.08, L, W / 2 - 0.07, F + CART.SIDE, 0));
+    // the beams under it and the axles
+    dark.push(bx(0.25, 0.25, L - 0.4, -W / 2 + 0.6, F - 0.32, 0), bx(0.25, 0.25, L - 0.4, W / 2 - 0.6, F - 0.32, 0));
+    for (const z of [-L / 2 + 1.25, L / 2 - 1.25]) iron.push(bx(W + 0.5, 0.2, 0.2, 0, R, z));
+    // the benches: the driver's in front, the sides
+    wood.push(bx(W - 0.4, 0.14, 0.7, 0, F + CART.BENCH + 0.08, -L / 2 + 0.75), bx(0.6, 0.14, 2.6, -1.25, F + CART.BENCH - 0.07, -0.15), bx(0.6, 0.14, 2.6, 1.25, F + CART.BENCH - 0.07, -0.15));
+    // the shafts to the horse(s) and the yoke bar
+    const shaftX = magic ? [-2.25, 2.25] : [-0.95, 0.95];
+    for (const x of shaftX) dark.push(bx(0.13, 0.13, 6.4, x, F - 0.05, -L / 2 - 3.0, [-0.05, 0, 0]));
+    if (magic) dark.push(bx(0.16, 0.16, 6.4, 0, F - 0.05, -L / 2 - 3.0));
+    iron.push(bx(shaftX[1] - shaftX[0] + 0.3, 0.12, 0.12, 0, F + 0.15, -L / 2 - 5.6));
+    if (magic) {
+        for (let i = 0; i < 9; i++) {
+            const a = -Math.PI / 2 + (i % 5 + 0.5) / 5 * Math.PI;
+            star.push(bx(0.16, 0.16, 0.16, Math.sin(a) * (W / 2 + 0.02), F + CART.SIDE + Math.cos(a) * (W / 2 + 0.02), L / 2 - 2.5 + (i > 4 ? 1.6 : 0.6), [a, 0.6, 0.78]));
+        }
+        for (const sx of [-1, 1]) {
+            iron.push(bx(0.1, 1.3, 0.1, sx * (W / 2 - 0.1), F + CART.SIDE + 0.5, -L / 2 + 0.15));
+            glass.push(bx(0.32, 0.4, 0.32, sx * (W / 2 - 0.1), F + CART.SIDE + 1.3, -L / 2 + 0.15));
+        }
+    } else {
+        for (const [x, z] of [[-1.0, 1.0], [-0.95, 1.75], [1.0, 1.55]]) sack.push(bx(0.9, 0.7, 0.75, x, F + 0.35, z, [0, x * 0.3, 0]));
+    }
+    // a wheel (turns about its local x): its iron (the rim, the hub) and its wood (the felloe, the spokes)
+    const wIron = [{ geo: new THREE.TorusGeometry(R - 0.07, 0.09, 6, 22), rot: [0, Math.PI / 2, 0] }, { geo: new THREE.CylinderGeometry(0.2, 0.2, 0.36, 10), rot: [0, 0, Math.PI / 2] }];
+    const wWood = [{ geo: new THREE.TorusGeometry(R - 0.18, 0.08, 5, 22), rot: [0, Math.PI / 2, 0] }];
+    for (let i = 0; i < 8; i++) wWood.push(bx(0.07, R * 2 - 0.4, 0.09, 0, 0, 0, [(i / 8) * Math.PI, 0, 0]));
+    const m = (list) => (list.length ? mergeParts(list) : null);
+    S = { wood: m(wood), dark: m(dark), iron: m(iron), star: m(star), glass: m(glass), sack: m(sack), wheelIron: m(wIron), wheelWood: m(wWood) };
+    for (const p of [...wIron, ...wWood]) if (p.geo !== UNIT) p.geo.dispose();
+    for (const k in S) if (S[k]) S[k].userData.shared = true; // (Game.prewarm's samples leave them)
+    _shapes.set(magic, S);
+    return S;
+}
+const part = (parent, geo, mat, shadow = true) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = shadow; m.receiveShadow = true;
+    m.userData.shared = true; // (never disposed with the cart: every cart has it)
     parent.add(m);
     return m;
 };
 
-/** A wheel: a rim, a hub and spokes (turns about its local x). */
-function wheel(mat, iron, r) {
-    const g = new THREE.Group();
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(r - 0.07, 0.09, 6, 22), iron);
-    rim.rotation.y = Math.PI / 2;
-    g.add(rim);
-    const felloe = new THREE.Mesh(new THREE.TorusGeometry(r - 0.18, 0.08, 5, 22), mat);
-    felloe.rotation.y = Math.PI / 2;
-    g.add(felloe);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.36, 10), iron);
-    hub.rotation.z = Math.PI / 2;
-    g.add(hub);
-    for (let i = 0; i < 8; i++) {
-        const sp = box(g, 0.07, r * 2 - 0.4, 0.09, 0, 0, 0, mat);
-        sp.rotation.x = (i / 8) * Math.PI;
-    }
-    return g;
-}
-
-/** The cart's shape: magic — the wizards' carriage; else the people's cart. Origin on the ground under the middle. */
+/**
+ * The cart's shape: magic — the wizards' carriage; else the people's cart. Origin on the ground under the middle.
+ * (Its pieces of one material are one shape, the same for every cart: a carriage drew ~85 pieces, each its own.)
+ */
 export function cartModel(magic) {
     const g = new THREE.Group();
     g.name = magic ? 'wizardCarriage' : 'cart';
     g.rotation.order = 'YXZ';
     const L = CART.LEN, W = CART.WID, F = CART.FLOOR;
     const wood = lam(magic ? 0x3b2350 : 0x7a5530), dark = lam(magic ? 0x241433 : 0x5a3d22), iron = lam(magic ? 0xc9a23a : 0x3d3a36);
+    const S = cartShapes(magic);
     const body = new THREE.Group();
     g.add(body);
     g.userData.body = body;
-    // the floor, the sides, the front and the tailboard
-    box(body, W, 0.2, L, 0, F - 0.1, 0, dark);
-    box(body, 0.14, CART.SIDE, L, -W / 2 + 0.07, F + CART.SIDE / 2, 0, wood);
-    box(body, 0.14, CART.SIDE, L, W / 2 - 0.07, F + CART.SIDE / 2, 0, wood);
-    box(body, W, CART.SIDE + 0.3, 0.14, 0, F + (CART.SIDE + 0.3) / 2, -L / 2 + 0.07, wood);
-    box(body, W, CART.SIDE, 0.14, 0, F + CART.SIDE / 2, L / 2 - 0.07, wood);
-    // the rims of the sides (gold on the carriage)
-    box(body, 0.2, 0.08, L, -W / 2 + 0.07, F + CART.SIDE, 0, iron);
-    box(body, 0.2, 0.08, L, W / 2 - 0.07, F + CART.SIDE, 0, iron);
-    // the beams under it and the axles
-    box(body, 0.25, 0.25, L - 0.4, -W / 2 + 0.6, F - 0.32, 0, dark);
-    box(body, 0.25, 0.25, L - 0.4, W / 2 - 0.6, F - 0.32, 0, dark);
-    const axZ = [-L / 2 + 1.25, L / 2 - 1.25];
-    for (const z of axZ) box(body, W + 0.5, 0.2, 0.2, 0, CART.WHEEL_R, z, iron);
-    // the benches: the driver's in front, the sides
-    box(body, W - 0.4, 0.14, 0.7, 0, F + CART.BENCH + 0.08, -L / 2 + 0.75, wood);
-    box(body, 0.6, 0.14, 2.6, -1.25, F + CART.BENCH - 0.07, -0.15, wood);
-    box(body, 0.6, 0.14, 2.6, 1.25, F + CART.BENCH - 0.07, -0.15, wood);
-    // the shafts to the horse(s) and the yoke bar
-    const shaftX = magic ? [-2.25, 2.25] : [-0.95, 0.95];
-    for (const x of shaftX) {
-        const s = box(body, 0.13, 0.13, 6.4, x, F - 0.05, -L / 2 - 3.0, dark);
-        s.rotation.x = -0.05;
-    }
-    if (magic) box(body, 0.16, 0.16, 6.4, 0, F - 0.05, -L / 2 - 3.0, dark);
-    box(body, shaftX[1] - shaftX[0] + 0.3, 0.12, 0.12, 0, F + 0.15, -L / 2 - 5.6, iron);
+    part(body, S.wood, wood); part(body, S.dark, dark); part(body, S.iron, iron);
     // the wheels
     const wheels = [];
-    for (const z of axZ) for (const sx of [-1, 1]) {
-        const w = wheel(dark, iron, CART.WHEEL_R);
+    for (const z of [-L / 2 + 1.25, L / 2 - 1.25]) for (const sx of [-1, 1]) {
+        const w = new THREE.Group();
+        part(w, S.wheelIron, iron); part(w, S.wheelWood, dark);
         w.position.set(sx * (W / 2 + 0.22), CART.WHEEL_R, z);
         body.add(w);
         wheels.push(w);
@@ -200,42 +211,35 @@ export function cartModel(magic) {
     g.userData.wheels = wheels;
     if (magic) {
         // the hood over the chest: canvas over three hoops, with stars
-        const hood = new THREE.Mesh(new THREE.CylinderGeometry(W / 2, W / 2, 2.7, 16, 1, true, -Math.PI / 2, Math.PI), lam(0x2b2f6e, { side: THREE.DoubleSide }));
+        if (!_hood) { _hood = new THREE.CylinderGeometry(W / 2, W / 2, 2.7, 16, 1, true, -Math.PI / 2, Math.PI); _hood.userData.shared = true; }
+        const hood = new THREE.Mesh(_hood, lam(0x2b2f6e, { side: THREE.DoubleSide }));
+        hood.userData.shared = true;
         hood.rotation.x = -Math.PI / 2; // (the arch up over the chest; the stars sit on its canvas)
         hood.position.set(0, F + CART.SIDE, L / 2 - 1.45);
         hood.castShadow = true;
         body.add(hood);
-        const star = lam(0xf2d66b, { emissive: 0x6a5410 });
-        for (let i = 0; i < 9; i++) {
-            const a = -Math.PI / 2 + (i % 5 + 0.5) / 5 * Math.PI;
-            const s = box(body, 0.16, 0.16, 0.16, Math.sin(a) * (W / 2 + 0.02), F + CART.SIDE + Math.cos(a) * (W / 2 + 0.02), L / 2 - 2.5 + (i > 4 ? 1.6 : 0.6), star);
-            s.rotation.set(a, 0.6, 0.78);
-        }
+        part(body, S.star, lam(0xf2d66b, { emissive: 0x6a5410 }));
         // the lanterns at the front corners: a cold blue light
-        const glass = lam(0x9fd2ff, { emissive: 0x4fa8ff });
-        const lamps = [];
-        for (const sx of [-1, 1]) {
-            box(body, 0.1, 1.3, 0.1, sx * (W / 2 - 0.1), F + CART.SIDE + 0.5, -L / 2 + 0.15, iron);
-            lamps.push(box(body, 0.32, 0.4, 0.32, sx * (W / 2 - 0.1), F + CART.SIDE + 1.3, -L / 2 + 0.15, glass));
-        }
+        g.userData.lamps = [part(body, S.glass, lam(0x9fd2ff, { emissive: 0x4fa8ff }))];
         // (where their light shines from: the one light of all carriages — Carriages.light — comes here
         // for the nearest one at night; a light of its own would change the count of lights, and every
         // lit shader in the world would be compiled again the moment a carriage came in sight)
         const lightAt = new THREE.Object3D();
         lightAt.position.set(0, F + CART.SIDE + 1.4, -L / 2 + 0.2);
         body.add(lightAt);
-        g.userData.lamps = lamps;
         g.userData.lightAt = lightAt;
     } else {
         // the people's load: sacks and a barrel behind the benches
-        const sack = lam(0xc9b48a), barrel = lam(0x6b4423);
-        for (const [x, z] of [[-1.0, 1.0], [-0.95, 1.75], [1.0, 1.55]]) { const s = box(body, 0.9, 0.7, 0.75, x, F + 0.35, z, sack); s.rotation.y = x * 0.3; }
-        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.0, 12), barrel);
+        part(body, S.sack, lam(0xc9b48a));
+        if (!_barrel) { _barrel = new THREE.CylinderGeometry(0.42, 0.42, 1.0, 12); _barrel.userData.shared = true; }
+        const b = new THREE.Mesh(_barrel, lam(0x6b4423));
+        b.userData.shared = true;
         b.position.set(1.0, F + 0.5, 0.75);
         body.add(b);
     }
     return g;
 }
+let _hood = null, _barrel = null;
 
 // ------------------------------------------------------------------ the mover (collision)
 /** The cart's box for the CollisionWorld (an oriented box: pushes bodies out, they stand on its floor). */
@@ -629,7 +633,7 @@ export class Carriages {
         const g = this.game;
         g.collision?.removeMover?.(c.collider);
         g.scene.remove(c.model);
-        c.model.traverse?.((o) => { if (o.geometry) o.geometry.dispose(); });
+        c.model.traverse?.((o) => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); // (the shapes every cart shares stay)
         if (c.chest) {
             if (c.chest.boxId != null) g.collision?.removeBox?.(c.chest.boxId);
             c.chest.dispose();

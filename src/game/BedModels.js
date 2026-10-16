@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { bedColorHex } from './BedRules.js';
+import { mergeParts } from '../core/MergeGeometry.js';
 
 export const BED = { W: 2.5, L: 5.5, top: 1.0, head: 2.1 };
 
@@ -24,7 +25,7 @@ function mat(color) {
 const _geos = new Map();
 function boxGeo(w, h, d) {
     const k = `${w}|${h}|${d}`;
-    if (!_geos.has(k)) _geos.set(k, new THREE.BoxGeometry(w, h, d));
+    if (!_geos.has(k)) { const b = new THREE.BoxGeometry(w, h, d); b.userData.shared = true; _geos.set(k, b); }
     return _geos.get(k);
 }
 function box(w, h, d, m, x, y, z, shadow = true) {
@@ -36,6 +37,24 @@ function box(w, h, d, m, x, y, z, shadow = true) {
     return b;
 }
 
+/** A bed's merged shapes (made once): its dark wood, its light wood, its blanket (the top and both sides). */
+let _bedGeos = null;
+function bedShapes() {
+    const { W, L, top, head } = BED;
+    const p = (w, h, d, x, y, z) => ({ geo: UNIT, pos: [x, y, z], scale: [w, h, d] });
+    const dark = [];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) dark.push(p(0.26, 0.5, 0.26, sx * (W / 2 - 0.14), 0.25, sz * (L / 2 - 0.14)));
+    for (const sx of [-1, 1]) dark.push(p(0.14, 0.2, L - 0.04, sx * (W / 2 - 0.08), 0.78, 0));
+    dark.push(p(W + 0.3, 0.22, 0.3, 0, head + 0.06, -L / 2 + 0.11), p(W * 0.6, 0.7, 0.06, 0, head - 0.65, -L / 2 + 0.25), p(W + 0.24, 0.16, 0.26, 0, 1.3, L / 2 - 0.1));
+    const wood = [p(W, 0.3, L - 0.02, 0, 0.55, 0), p(W + 0.1, head, 0.22, 0, head / 2, -L / 2 + 0.11), p(W + 0.1, 1.25, 0.2, 0, 0.625, L / 2 - 0.1)];
+    const bz = L / 2 - 0.22 - L * 0.31;
+    const blanket = [p(W - 0.06, 0.12, L * 0.62, 0, top + 0.04, bz), p(0.06, 0.62, L * 0.62, -W / 2, top - 0.25, bz), p(0.06, 0.62, L * 0.62, W / 2, top - 0.25, bz)];
+    const S = { dark: mergeParts(dark), wood: mergeParts(wood), blanket: mergeParts(blanket) };
+    for (const k in S) S[k].userData.shared = true; // (Game.prewarm's samples leave them)
+    return S;
+}
+const UNIT = new THREE.BoxGeometry(1, 1, 1);
+
 /** The blanket material of a colour (shared). */
 export function blanketMaterial(color) { return mat(bedColorHex(color)); }
 
@@ -46,26 +65,28 @@ export function bedModel(color = 'white') {
     const wood = mat(0x8b5a2b), dark = mat(0x5a3a1e), sheet = mat(0xe2dac8), pillow = mat(0xffffff);
     const blanket = blanketMaterial(color);
     const stripe = mat(new THREE.Color(bedColorHex(color)).multiplyScalar(0.72).getHex());
-    // legs and the frame (each part a little inside the next: faces flush with each other flickered)
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.26, 0.5, 0.26, dark, sx * (W / 2 - 0.14), 0.25, sz * (L / 2 - 0.14)));
-    g.add(box(W, 0.3, L - 0.02, wood, 0, 0.55, 0));
-    for (const sx of [-1, 1]) g.add(box(0.14, 0.2, L - 0.04, dark, sx * (W / 2 - 0.08), 0.78, 0, false));
-    // headboard (with a carved top) and footboard
-    g.add(box(W + 0.1, head, 0.22, wood, 0, head / 2, -L / 2 + 0.11));
-    g.add(box(W + 0.3, 0.22, 0.3, dark, 0, head + 0.06, -L / 2 + 0.11));
-    g.add(box(W * 0.6, 0.7, 0.06, dark, 0, head - 0.65, -L / 2 + 0.25, false));
-    g.add(box(W + 0.1, 1.25, 0.2, wood, 0, 0.625, L / 2 - 0.1));
-    g.add(box(W + 0.24, 0.16, 0.26, dark, 0, 1.3, L / 2 - 0.1));
+    // (the pieces of one material are one shape, the same for every bed — one draw each: a castle's beds
+    // drew 19 pieces apiece; legs, rails, caps — the dark wood; the frame, the head and foot boards — the light)
+    const geo = _bedGeos || (_bedGeos = bedShapes());
+    const part = (gm, m, shadow = true) => {
+        const b = new THREE.Mesh(gm, m);
+        b.castShadow = shadow;
+        b.receiveShadow = true;
+        b.userData.sharedGeo = true;
+        g.add(b);
+        return b;
+    };
+    part(geo.dark, dark);
+    part(geo.wood, wood);
     // mattress, pillow, blanket (turned down at the top)
     g.add(box(W - 0.16, 0.3, L - 0.44, sheet, 0, 0.85, 0));
     g.add(box(W * 0.7, 0.26, 0.85, pillow, 0, top + 0.12, -L / 2 + 0.75));
-    const b1 = box(W - 0.06, 0.12, L * 0.62, blanket, 0, top + 0.04, L / 2 - 0.22 - L * 0.31);
+    const bz = L / 2 - 0.22 - L * 0.31;
+    const b1 = part(geo.blanket, blanket);
     const b2 = box(W - 0.04, 0.14, 0.32, mat(0xfbf8f0), 0, top + 0.07, L / 2 - 0.22 - L * 0.62 + 0.14);
-    const b3 = box(0.06, 0.62, L * 0.62, blanket, -(W / 2 - 0.0), top - 0.25, b1.position.z, false);
-    const b4 = box(0.06, 0.62, L * 0.62, blanket, W / 2 - 0.0, top - 0.25, b1.position.z, false);
-    const s1 = box(W - 0.02, 0.13, 0.18, stripe, 0, top + 0.045, b1.position.z + L * 0.18);
-    g.add(b1, b2, b3, b4, s1);
-    g.userData.blanket = [b1, b3, b4];
+    const s1 = box(W - 0.02, 0.13, 0.18, stripe, 0, top + 0.045, bz + L * 0.18);
+    g.add(b2, s1);
+    g.userData.blanket = [b1];
     g.userData.stripe = s1;
     return g;
 }

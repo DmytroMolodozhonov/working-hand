@@ -41,6 +41,7 @@
 
 import * as THREE from 'three';
 import { isWood, TREE_KINDS } from '../world/Terrain.js';
+import { mergeParts } from '../core/MergeGeometry.js';
 
 const WOOD_NEEDED = 12;
 const W = 1.6, H = 3.6, T = 0.18; // a full-size door
@@ -75,6 +76,10 @@ function doorMats(color) {
  * a ring for a handle, no frame of its own (the stone doorway is its frame).
  * Both kinds swing both ways: a positive angle towards their local −Z, a negative one towards +Z.
  */
+/** (the unit box every door's pieces are made of, scaled; the knob's shapes — shared, never disposed) */
+const _box = new THREE.BoxGeometry(1, 1, 1);
+const _knobGeo = {};
+
 export function doorModel(color, { mirror = false, gate = false, ice = false, metal = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
     const g = new THREE.Group();
     let { wood, dark, gold } = doorMats(color);
@@ -89,14 +94,18 @@ export function doorModel(color, { mirror = false, gate = false, ice = false, me
         gold = _mats.frost || (_mats.frost = new THREE.MeshBasicMaterial({ color: 0xe8fbff }));
     }
     const m = mirror ? -1 : 1;
+    // (the pieces of one material are one shape — one draw: a village's twenty doors drew ~200 pieces)
+    const box = (w, h, d, x, y, z, rz = 0) => ({ geo: _box, pos: [x, y, z], rot: [0, 0, rz], scale: [w, h, d] });
+    const mesh = (parts, mat, parent, shadow = false) => {
+        const o = new THREE.Mesh(mergeParts(parts), mat);
+        o.castShadow = shadow;
+        parent.add(o);
+        return o;
+    };
     // frame (its inner faces a hair inside the opening: a house door is scaled to fill its doorway
     // exactly, and faces flush with the stone of the doorway flickered through it)
-    if (!gate) for (const [w, h, x, y] of [[0.17, H + 0.17, -W / 2 - 0.075, H / 2 + 0.005], [0.17, H + 0.17, W / 2 + 0.075, H / 2 + 0.005], [W + 0.32, 0.17, 0, H + 0.075]]) {
-        const fm = new THREE.Mesh(new THREE.BoxGeometry(w, h, T + 0.08), dark);
-        fm.position.set(x, y, 0);
-        fm.castShadow = true;
-        g.add(fm);
-    }
+    if (!gate) mesh([[0.17, H + 0.17, -W / 2 - 0.075, H / 2 + 0.005], [0.17, H + 0.17, W / 2 + 0.075, H / 2 + 0.005], [W + 0.32, 0.17, 0, H + 0.075]]
+        .map(([w, h, x, y]) => box(w, h, T + 0.08, x, y, 0)), dark, g, true);
     // the leaf turns around its hinge (the left edge; a mirrored one: the right)
     const hinge = new THREE.Group();
     hinge.position.set(-m * W / 2, 0, 0);
@@ -105,45 +114,34 @@ export function doorModel(color, { mirror = false, gate = false, ice = false, me
     leaf.position.set(m * W / 2, H / 2, 0);
     leaf.castShadow = true;
     hinge.add(leaf);
+    const iron = () => _mats.iron || (_mats.iron = new THREE.MeshStandardMaterial({ color: 0x3a3a40, metalness: 0.7, roughness: 0.5 }));
     if (ice) {
         // a snowflake of frost on both faces, and a frost rim
+        const frost = [];
         for (const z of [-T / 2 - 0.02, T / 2 + 0.02]) {
-            for (let k = 0; k < 3; k++) {
-                const arm = new THREE.Mesh(new THREE.BoxGeometry(W * 0.7, 0.06, 0.03), gold);
-                arm.position.set(m * W / 2, H * 0.55, z);
-                arm.rotation.z = (k / 3) * Math.PI + Math.PI / 2;
-                hinge.add(arm);
-            }
-            const rim = new THREE.Mesh(new THREE.BoxGeometry(W * 0.94, 0.07, 0.03), gold);
-            rim.position.set(m * W / 2, H * 0.97, z);
-            hinge.add(rim);
+            for (let k = 0; k < 3; k++) frost.push(box(W * 0.7, 0.06, 0.03, m * W / 2, H * 0.55, z, (k / 3) * Math.PI + Math.PI / 2));
+            frost.push(box(W * 0.94, 0.07, 0.03, m * W / 2, H * 0.97, z));
         }
+        mesh(frost, gold, hinge);
     } else if (gate || metal) {
         // iron bands across both faces
-        const iron = _mats.iron || (_mats.iron = new THREE.MeshStandardMaterial({ color: 0x3a3a40, metalness: 0.7, roughness: 0.5 }));
-        for (const y of [H * 0.15, H * 0.5, H * 0.85]) {
-            for (const z of [-T / 2 - 0.02, T / 2 + 0.02]) {
-                const band = new THREE.Mesh(new THREE.BoxGeometry(W * 0.96, 0.12, 0.04), iron);
-                band.position.set(m * W / 2, y, z);
-                hinge.add(band);
-            }
-        }
+        const bands = [];
+        for (const y of [H * 0.15, H * 0.5, H * 0.85]) for (const z of [-T / 2 - 0.02, T / 2 + 0.02]) bands.push(box(W * 0.96, 0.12, 0.04, m * W / 2, y, z));
+        mesh(bands, iron(), hinge);
     } else {
-        for (const [y, h] of [[H * 0.72, H * 0.38], [H * 0.27, H * 0.38]]) {
-            const panel = new THREE.Mesh(new THREE.BoxGeometry(W * 0.7, h, 0.04), dark);
-            panel.position.set(m * W / 2, y, -T / 2 - 0.01);
-            hinge.add(panel);
-            const p2 = panel.clone();
-            p2.position.z = T / 2 + 0.01;
-            hinge.add(p2);
-        }
+        const panels = [];
+        for (const [y, h] of [[H * 0.72, H * 0.38], [H * 0.27, H * 0.38]]) for (const z of [-T / 2 - 0.01, T / 2 + 0.01]) panels.push(box(W * 0.7, h, 0.04, m * W / 2, y, z));
+        mesh(panels, dark, hinge);
     }
-    // the handles (both faces): a golden knob, on a gate — an iron ring
-    const knob = gate ? new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), ice ? gold : _mats.iron || (_mats.iron = new THREE.MeshStandardMaterial({ color: 0x3a3a40, metalness: 0.7, roughness: 0.5 }))) : new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), gold);
-    knob.position.set(m * (W - 0.22), H * 0.48, -T / 2 - 0.08);
+    // the handles (both faces): a golden knob, on a gate — an iron ring (the two: one shape; knob, knob2 — where they are)
+    const kx = m * (W - 0.22), ky = H * 0.48, kz = T / 2 + 0.08;
+    const kgeo = gate ? (_knobGeo.ring || (_knobGeo.ring = new THREE.TorusGeometry(0.11, 0.025, 6, 14))) : (_knobGeo.ball || (_knobGeo.ball = new THREE.SphereGeometry(0.09, 10, 8)));
+    mesh([{ geo: kgeo, pos: [kx, ky, -kz] }, { geo: kgeo, pos: [kx, ky, kz] }], gate ? (ice ? gold : iron()) : gold, hinge);
+    const knob = new THREE.Object3D();
+    knob.position.set(kx, ky, -kz);
     hinge.add(knob);
-    const knob2 = knob.clone();
-    knob2.position.z = T / 2 + 0.08;
+    const knob2 = new THREE.Object3D();
+    knob2.position.set(kx, ky, kz);
     hinge.add(knob2);
     g.userData = { hinge, knob, knob2, mirror };
     return g;

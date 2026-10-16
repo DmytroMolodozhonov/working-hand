@@ -57,6 +57,7 @@ const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
 const SEE = 32; // m: villagers see violence this far (with a free line of sight)
 const VIEW = 80; // m: farther villagers are not drawn
+const FAR_ONE = SHADOW_NEAR; // m: farther ones (no shadow there either) are drawn as one shape each (one draw instead of 8–12)
 const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
@@ -2588,11 +2589,14 @@ export class CastleLife {
                 setNearShadow(v.group, d < SHADOW_NEAR);
                 // (far people move their arms and legs less often — nobody sees the difference)
                 v.animT = (v.animT || 0) + dt;
+                const far = d > FAR_ONE && !v.foe; // (far: drawn as one shape — VillagerModel.setFar)
+                if (!far) v.model.setFar(false);
                 if (d < 35 || v.foe || v.animT > (d < 60 ? 0.066 : 0.12)) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     v.model.update(v.animT, { mode: v.mode, speed: v.speed });
                     v.animT = 0;
+                    if (far) v.model.setFar(true);
                     // (a builder's hammer heard: the repairs — Rebuild.js)
                     if (v.model.workStrikeNow && v.role === 'builder' && v.model.toolKind === 'hammer' && d < 40) g.sound?.playHammer?.(_v.set(v.x, v.y + 2.2, v.z), 0.8);
                 }

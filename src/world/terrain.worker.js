@@ -12,6 +12,13 @@ import { buildFlora } from './FloraBuild.js';
 
 const KEEP = 240; // chunks kept (≈ 140 KB each)
 let data = null;
+/** The main thread's changed chunks (TerrainView._share): sent once each time they change, kept here. */
+const shared = new Map();
+const takeShared = (m) => {
+    for (const k of m.drop || []) shared.delete(k);
+    for (const c of m.fresh || []) shared.set(chunkKey(c.cx, c.cz), c);
+    return (m.use || []).map((k) => shared.get(k)).filter(Boolean);
+};
 
 self.onmessage = (e) => {
     const m = e.data;
@@ -34,6 +41,7 @@ self.onmessage = (e) => {
     }
     if (m.type === 'flora' && data) {
         // the tall grass and flowers of a chunk (Flora.js) — the chunk as generated
+        if (m.use) m.chunk = takeShared(m)[0] || null;
         const out = m.chunk ? buildFlora({ seed: data.seed, _hidden: m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null }, m.chunk) : buildFlora(data, data.chunk(m.cx, m.cz));
         self.postMessage({ type: 'flora', id: m.id, key: m.key, out, rev: m.rev }, [out.pos.buffer, out.nor.buffer, out.col.buffer, out.sway.buffer, out.glow.buffer]);
         return;
@@ -42,16 +50,19 @@ self.onmessage = (e) => {
         // a chunk changed on the main thread: its own data (and its changed neighbours') used for this
         // one mesh, then the worker's own (as generated) put back
         const keep = new Map();
-        for (const c of m.chunks) { const k = chunkKey(c.cx, c.cz); keep.set(k, data.chunks.get(k)); data.chunks.set(k, c); }
+        for (const c of m.use ? takeShared(m) : m.chunks) { const k = chunkKey(c.cx, c.cz); keep.set(k, data.chunks.get(k)); data.chunks.set(k, c); }
         const hidden = data._hidden;
         data._hidden = m.hidden ? new Map([[m.key, new Set(m.hidden)]]) : null;
         data._last = null;
         const litWas = data.litLand, L = m.lit; // (the lit land of the main thread: rooms made by magic)
         data.litLand = L ? (x, z) => { const rx = x - L.x0, rz = z - L.z0; return rx >= 0 && rz >= 0 && rx < L.RW && rz < L.RW && L.a[rz * L.RW + rx] === 1; } : litWas;
-        let arrays, sky;
+        let arrays, sky, chunk = null;
         try {
             arrays = data.buildChunkArrays(m.cx, m.cz);
-            sky = data.chunk(m.cx, m.cz).sky;
+            const c = data.chunk(m.cx, m.cz);
+            sky = c.sky;
+            // (the main thread has no data of this chunk yet: it goes along, as made here)
+            if (m.wantChunk && !c.modified) { chunk = { ...c }; delete chunk.rev; }
         } finally {
             for (const [k, c] of keep) { if (c) data.chunks.set(k, c); else data.chunks.delete(k); }
             data._hidden = hidden;
@@ -65,7 +76,7 @@ self.onmessage = (e) => {
             const b = arrays[k];
             for (const a of [b.positions, b.normals, b.colors, b.indices, b.patterns, b.skies]) transfer.push(a.buffer);
         }
-        self.postMessage({ type: 'rebuilt', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, sky }, transfer);
+        self.postMessage({ type: 'rebuilt', id: m.id, key: m.key, cx: m.cx, cz: m.cz, arrays, sky, chunk }, transfer);
         return;
     }
     if (m.type !== 'build' || !data) return;

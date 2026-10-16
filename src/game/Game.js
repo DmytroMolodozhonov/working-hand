@@ -2757,6 +2757,9 @@ export class Game {
                 }
             }
         } catch (e) { console.warn('[Game] ships warm-up', e); }
+        // (the Ice Castle's place and plan in this computer's world: a search over the land, made on first look —
+        // the first frames of play froze on it)
+        try { void this.world?.terrain?.data?.iceCastle?.plan; } catch (e) { /* (only a head start) */ }
         try { if (this.circleAttack && !this.circleAttack._warmed) this.circleAttack._warm(); } catch (e) { /* (only a head start) */ }
         try { if (this.inspirius && !this.inspirius._warmed) this.inspirius._warm(); } catch (e) { /* (only a head start) */ }
     }
@@ -2771,6 +2774,7 @@ export class Game {
             this.inventory.purse.tieMagic({ kind: 'coins', magic: true, uid: 'cmp-start', count: 100 });
         }
         this.prewarm();
+        this.lastTime = performance.now(); // (the shaders compiled behind the loading screen are not the first frame's time)
         // The microphone listens all game long: shield (arm forward), water
         // (hand towards a river) and flight (arms up) don't raise a hand to
         // the face. Each spell checks its own gesture.
@@ -2818,6 +2822,7 @@ export class Game {
             const ai = ps && (ps.holistic || ps.runner) && ps.lastSendEnd > this._frameEnd - 5 && ps.lastSendEnd - ps.lastSendStart > 30; // (only when it shares the game's thread)
             reason = ai ? 'нейросеть камеры' : 'браузер (память/вкладка)';
         }
+        if (this.revealed === false) reason += ' (за экраном загрузки)'; // (main.js: not seen by the player)
         this.stats.spike = { ms: gapMs, reason, at: now };
         const log = this.stats.spikes || (this.stats.spikes = []);
         log.push({ ms: Math.round(gapMs), reason, t: Math.round(now) });

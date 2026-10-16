@@ -125,7 +125,8 @@ export class SoundManager {
         const pause = () => new Promise((r) => setTimeout(r, 0));
         let n = 0;
         while (this.prewarmStep()) { onProgress?.(Math.min(0.6, ++n / 20)); await pause(); }
-        this.prepareHouseTheme(); this.prepareCastleTheme(); onProgress?.(0.7); await pause(); // (the castle's long tune: in a worker)
+        this.prepareHouseTheme(); this.prepareCastleTheme(); onProgress?.(0.7);
+        for (let L = 2; L <= 5; L++) this.prepareHouseTheme(10, L); // («Improve a House»: in workers, ready long before) await pause(); // (the castle's long tune: in a worker)
         while (!this.prepareCircleAttack()) await pause();
         onProgress?.(0.85);
         while (!this.prepareInspirius()) await pause();
@@ -566,7 +567,7 @@ export class SoundManager {
             ['house_sand', () => this._synthSizzle(0.9)], ['magic', () => this._synthChime([880, 1320, 1760], 0.9, 6)],
             ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)],
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
-            ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)],
+            ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)], ['houseBreak', () => this._synthHouseBreak()],
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
             ['snowStep', () => this._synthSnowStep()], ['land', () => this._synthKnock(55, 0.22)], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
@@ -1128,8 +1129,31 @@ export class SoundManager {
         return this.sounds[key];
     }
 
-    /** Make the tune ahead (no hitch when a house is made). */
-    prepareHouseTheme(seconds = 10, level = 1) { if (this.context) this._houseTheme(seconds, level); }
+    /** Make the tune ahead (no hitch when a house is made): level 1 here, the others in a worker. */
+    prepareHouseTheme(seconds = 10, level = 1) {
+        if (!this.context) return;
+        if (level === 1) this._houseTheme(seconds, level);
+        else this._themeWorker('houseTheme' + Math.round(seconds * 10) + '_' + level, seconds, level);
+    }
+
+    /** A long tune made in a worker (theme.worker.js), never in a frame: in this.sounds[key] when ready. */
+    _themeWorker(key, seconds, level) {
+        const busy = this._themeBusy || (this._themeBusy = new Set());
+        if (!this.context || this.sounds[key] || busy.has(key)) return;
+        busy.add(key);
+        const sr = 24000;
+        try {
+            const w = new Worker(new URL('./theme.worker.js', import.meta.url), { type: 'module' });
+            w.onmessage = (e) => {
+                const data = e.data?.data;
+                if (data) { const buf = this.context.createBuffer(1, data.length, sr); buf.copyToChannel(data, 0); this.sounds[key] = buf; }
+                busy.delete(key);
+                w.terminate();
+            };
+            w.onerror = () => { busy.delete(key); w.terminate(); };
+            w.postMessage({ sr, seconds, level });
+        } catch (e) { busy.delete(key); } // (no worker: the level-1 tune plays)
+    }
 
     /**
      * The main tune of the house magic from the place of the house: grows with it for `seconds`, its last
@@ -1137,7 +1161,10 @@ export class SoundManager {
      */
     playHouseTheme(position, seconds = 10, level = 1) {
         if (!this.enabled || !this.context || !this.loaded) return;
-        const buf = this._houseTheme(seconds, Math.max(1, Math.min(5, level | 0)));
+        // (levels 2–5: made ahead in a worker — not ready yet, the first level's tune; its synthesis in a frame froze it)
+        const L = Math.max(1, Math.min(5, level | 0)), key = 'houseTheme' + Math.round(seconds * 10) + '_' + L;
+        let buf = this.sounds[key];
+        if (!buf) { if (L > 1) this.prepareHouseTheme(seconds, L); buf = this._houseTheme(seconds, 1); }
         if (!this._theme) { this._theme = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._theme); }
         const v = this._theme;
         this._themeRun = (this._themeRun || 0) + 1;
@@ -1154,22 +1181,7 @@ export class SoundManager {
     }
 
     /** «Create a Castle»'s tune (the house's theme over 30 s, its grandest form): made ahead in a worker. */
-    prepareCastleTheme(seconds = 30) {
-        const key = 'castleTheme' + seconds;
-        if (!this.context || this.sounds[key] || this._castleWorking) return;
-        this._castleWorking = true;
-        const sr = 24000;
-        try {
-            const w = new Worker(new URL('./theme.worker.js', import.meta.url), { type: 'module' });
-            w.onmessage = (e) => {
-                const data = e.data?.data;
-                if (data) { const buf = this.context.createBuffer(1, data.length, sr); buf.copyToChannel(data, 0); this.sounds[key] = buf; }
-                w.terminate();
-            };
-            w.onerror = () => w.terminate();
-            w.postMessage({ sr, seconds, level: 5 });
-        } catch (e) { /* (no worker: the castle plays the house's grand tune) */ }
-    }
+    prepareCastleTheme(seconds = 30) { this._themeWorker('castleTheme' + seconds, seconds, 5); }
 
     /** The castle's tune from its place: the long one when ready (else the house's grandest, shorter). */
     playCastleTheme(position, seconds = 30) {
@@ -1197,12 +1209,14 @@ export class SoundManager {
         v.gain.gain.cancelScheduledValues(now);
         v.gain.gain.setTargetAtTime(0, now, 0.12);
         setTimeout(() => { if (this._themeRun === run && v.isPlaying) v.stop(); }, 700);
-        if (!this.sounds.houseBreak) {
-            const sr = 24000, data = houseThemeBreak(sr);
-            this.sounds.houseBreak = this.context.createBuffer(1, data.length, sr);
-            this.sounds.houseBreak.copyToChannel(data, 0);
-        }
+        if (!this.sounds.houseBreak) this.sounds.houseBreak = this._synthHouseBreak();
         this._playAt(this.sounds.houseBreak, position || v.position, 1.2, 14);
+    }
+
+    _synthHouseBreak() {
+        const sr = 24000, data = houseThemeBreak(sr), buf = this.context.createBuffer(1, data.length, sr);
+        buf.copyToChannel(data, 0);
+        return buf;
     }
 
     /** «Stitching»: the stone iris shuts — a deep thud of stone meeting stone under a soft, low chime. */
