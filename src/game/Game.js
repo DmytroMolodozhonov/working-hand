@@ -54,6 +54,7 @@ import { Doors, doorModel } from './Doors.js';
 import { Alohomora } from './Alohomora.js';
 import { Campfires } from './Campfires.js';
 import { LanternLights } from './LanternLights.js';
+import { FireLights } from './FireLights.js';
 import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
@@ -398,7 +399,8 @@ export class Game {
         this.doors = new Doors(this); // «Create a Door», opening by the handle
         this.locks = new Alohomora(this); // «Алохомора»: locked chests, house doors, the gates of throne rooms
         this.boards = new SurfBoards(this); // surfboards: «Create a Board», carried by hand, ridden on waves
-        this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (its one light is made before prewarm)
+        this.fireLights = new FireLights(this); // firelight: a few warm lights at the nearest fires (made before prewarm; FireLights.js)
+        this.campfires = new Campfires(this); // «Fire»: campfires, firewood, cooking (their light: fireLights)
         this.crystals = new ManaCrystals(this); // mana crystals deep in caves (their one light too)
         this.caveMap = new CaveMemory(); // what the hero has seen of the caves (the cave map — CaveMap.js)
         this.caveEyes = new CaveExplorer(this.caveMap);
@@ -2908,6 +2910,7 @@ export class Game {
         this.duel.update(dt);
         this.duel.updateVisuals(dt);
         this.fire.update(dt);
+        this.fireLights?.update(dt); // (after every fire asked for its light this frame)
         if (earth) this.burnWreck?.update(dt);
         this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal) }); // (the dead don't take things)
         this.water.update(dt);

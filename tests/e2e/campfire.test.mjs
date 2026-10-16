@@ -47,7 +47,7 @@ test('«Fire»: a campfire on the ground, glows at night, wood makes it burn lon
         return {
             n: g.campfires.list.size, left: f.left, dist: Math.hypot(f.x - me.x, f.z - me.z),
             onGround: Math.abs(f.y - g.collision.groundAt(f.x, f.z, f.y + 1)) < 0.05,
-            inScene: !!f.model.parent, night: g.world.nightAmount, light: g.campfires.light.intensity,
+            inScene: !!f.model.parent, night: g.world.nightAmount, light: Math.max(...g.fireLights.lights.map((l) => l.intensity)),
             lights: (() => { let n = 0; g.scene.traverse((o) => { if (o.isLight) n++; }); return n; })(),
             programs: g.renderer.info.programs.length, voice: g.hud.voiceText(),
         };
@@ -134,7 +134,7 @@ test('«Fire»: a campfire on the ground, glows at night, wood makes it burn lon
     assert.equal(embers.flames, false, 'no flames, only embers');
     await page.evaluate(() => { [...window.__zns.game.campfires.list.values()][0].left = -14.9; });
     await frames(page, 20);
-    const gone = await page.evaluate(() => ({ n: window.__zns.game.campfires.list.size, snap: window.__zns.game.keeper.snapshot().campfires.length, light: window.__zns.game.campfires.light.intensity }));
+    const gone = await page.evaluate(() => ({ n: window.__zns.game.campfires.list.size, snap: window.__zns.game.keeper.snapshot().campfires.length, light: window.__zns.game.fireLights.lights.every((l) => l.userData.want === 0) ? 0 : 1 }));
     assert.deepEqual(gone, { n: 0, snap: 0, light: 0 });
 
     // restoring a saved world brings the fire back

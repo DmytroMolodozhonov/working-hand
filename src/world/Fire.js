@@ -186,6 +186,7 @@ export class FireSystem {
             b.t += dt;
             const k = Math.min(1, b.t / 1.5); // flames grow
             if (t.alive) {
+                this.game.fireLights?.want(t.x, 7, t.z, 1.5 * k); // (the burning crown lights what is round it)
                 for (let n = 0; n < 3; n++) {
                     const y = 5 + Math.random() * 6 * k, rr = 3 * k;
                     fx.glow.spawn(t.x + (Math.random() - 0.5) * rr * 2, y, t.z + (Math.random() - 0.5) * rr * 2, (Math.random() - 0.5), 2 + Math.random() * 3, (Math.random() - 0.5),
@@ -219,6 +220,7 @@ export class FireSystem {
         if (!terrain) return;
         for (const [key, b] of this.burningBlocks) {
             b.t += dt;
+            this.game.fireLights?.want(b.x, b.L - 1, b.z, 0.8);
             if (Math.random() < 0.5) {
                 fx.glow.spawn(b.x + (Math.random() - 0.5), b.L - 1 + (Math.random() - 0.3), b.z + (Math.random() - 0.5), 0, 1.5 + Math.random() * 2, 0,
                     [0xffe08a, 0xffa020, 0xff5a00][(Math.random() * 3) | 0], 0.35 + Math.random() * 0.4, 0.4, { shrink: 1.5 });

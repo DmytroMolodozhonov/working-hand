@@ -21,7 +21,7 @@
  */
 
 import * as THREE from 'three';
-import { isWood } from '../world/Terrain.js';
+import { isWood, BLOCK } from '../world/Terrain.js';
 import { FX_RENDER_ORDER } from '../fx/Particles.js';
 
 /** Seconds in a spell's flame that roast meat / fish (a campfire takes CAMPFIRE.COOK_TIME). */
@@ -40,6 +40,7 @@ export const CAMPFIRE = {
     FEED_R: 1.5, // m: the hand with wood at the fire
     FEED_TIME: 0.6, // s to hold the wood there
     HURT_R: 0.9, // m: standing in the fire
+    WALL_DROP: 2.5, // m: pointing at a wall, the fire lights on the floor at its foot this far below the spot
 };
 
 // ------------------------------------------------------------------ pure logic
@@ -77,6 +78,7 @@ export function burnText(left) {
 // --------------------------------------------------------------------- looks
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 let SH = null; // shared geometries / materials
 
 function glowTexture() {
@@ -204,10 +206,7 @@ export class Campfires {
         this._heldCook = { right: 0, left: 0 };
         this._roast = new Map(); // (a spell's fire: what roasts in it, and for how long)
         this._looseT = 0;
-        // ONE light for the nearest fire at night: made now, before the shaders are compiled
-        this.light = new THREE.PointLight(0xff9a40, 0, 24, 2);
-        this.light.castShadow = false;
-        game.scene?.add(this.light);
+        // (their light: the shared fire lights, FireLights.js — no light of their own)
     }
 
     get auth() { return this.game.authority; }
@@ -234,9 +233,10 @@ export class Campfires {
         if (tired) { g.hud.setVoice(tired, true); return null; }
         const spot = this.aim(side);
         // a ship's gun (its fuse is lit — no campfire needed) or a ship's deck (it burns): Ships.js
-        const onShip = g.ships?.fireSpell(side, spot, isFinal);
+        const onShip = g.ships?.fireSpell(side, spot?.wall ? null : spot, isFinal);
         if (onShip !== undefined) { if (onShip) this._lastCast = now; return onShip; }
         if (!spot) return say('🔥 Покажите рукой на землю (не дальше 25 м)');
+        if (spot.wall) return say('🔥 Огонь горит только на земле — покажите вниз, на пол или землю');
         if (spot.water) return say('🔥 На воде костёр не загорится — покажите на сушу');
         for (const f of this.list.values()) {
             if (Math.hypot(f.x - spot.x, f.z - spot.z) < 2.2 && Math.abs(f.y - spot.y) < 2) return say('🔥 Здесь уже есть костёр — подбросьте в него дров');
@@ -259,17 +259,41 @@ export class Campfires {
         return 'Fire';
     }
 
-    /** Where the hand points at the ground: {x, y, z, water} or null. */
+    /**
+     * Where the hand points at the ground: {x, y, z, water}, {wall: true} (a wall or a ceiling
+     * high above any floor: a fire can't burn there) or null (the sky, too far).
+     * A fire stands only on the TOP of something solid (the ground, a floor, a rock, a deck); the
+     * hand pointing at a wall or a ceiling: it lights at the foot of that wall, on the floor under
+     * the spot — if that floor is near (WALL_DROP), otherwise nowhere.
+     */
     aim(side) {
         const g = this.game;
         const ch = g.character;
         const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
         const dir = ch.getHandDirection(side, new THREE.Vector3()).normalize();
+        const tv = g.terrain;
+        const solid = (x, y, z) => {
+            const b = tv?.blockAt?.(Math.round(x), Math.floor(y + 1.5), Math.round(z));
+            return b != null && b !== BLOCK.AIR && b !== BLOCK.WATER && b !== BLOCK.ICE_SHAPE;
+        };
+        const prev = _v3.copy(hand);
         let hit = null;
         for (let k = 0.5; k <= CAMPFIRE.RANGE; k += 0.25) {
             const p = _v.copy(hand).addScaledVector(dir, k);
-            const gy = g.collision.groundAt(p.x, p.z, p.y);
+            if (solid(p.x, p.y, p.z)) {
+                const L = Math.floor(p.y + 1.5);
+                // came down onto its top (the block above is open): a floor
+                if (prev.y >= L - 0.5 - 0.02 && !solid(p.x, L - 0.5 + 0.3, p.z)) { hit = { x: p.x, y: L - 0.5, z: p.z }; break; }
+                // a wall (its side) or a ceiling (from below): the floor at its foot, just in front of it
+                const fx = prev.x - dir.x * 0.3, fz = prev.z - dir.z * 0.3;
+                const gy = g.collision.groundAt(fx, fz, prev.y);
+                if (prev.y - gy > CAMPFIRE.WALL_DROP || solid(fx, gy + 0.3, fz)) return { wall: true };
+                hit = { x: fx, y: gy, z: fz };
+                break;
+            }
+            const gy = g.collision.groundAt(p.x, p.z, p.y); // (a ship's deck, the temple's floor too)
             if (p.y <= gy + 0.05) { hit = { x: p.x, y: gy, z: p.z }; break; }
+            prev.copy(p);
         }
         if (!hit) {
             // pointing far ahead (not at the sky): the fire lights a few steps in front
@@ -346,11 +370,12 @@ export class Campfires {
     // ------------------------------------------------------------- frame
     update(dt) {
         const g = this.game;
-        if (!this.list.size) { this.light.intensity = 0; return; }
-        const night = g.dayCycle ? (g.world?.nightAmount || 0) : (g.isNight ? 1 : 0);
+        if (!this.list.size) return;
+        // (dark: the night, a cave, under a roof — the glow and the warm pool on the ground show)
+        const night = g.fireLights?.darkness() ?? (g.dayCycle ? (g.world?.nightAmount || 0) : (g.isNight ? 1 : 0));
         const S = shared();
-        S.halo.opacity = 0.12 + 0.55 * night;
-        S.pool.opacity = 0.06 + 0.42 * night;
+        S.halo.opacity = 0.14 + 0.56 * night;
+        S.pool.opacity = 0.1 + 0.5 * night;
         const t = performance.now() / 1000;
         const cam = g.camera?.position;
         for (const f of [...this.list.values()]) {
@@ -361,7 +386,7 @@ export class Campfires {
             }
             this._animate(f, dt, t, cam);
         }
-        this._light(night, t);
+        this._light();
         this._feed(dt);
         this._cookHeld(dt);
         this._hurt(dt);
@@ -415,20 +440,15 @@ export class Campfires {
         }
     }
 
-    /** The one light: over the nearest burning fire, at night. */
-    _light(night, t) {
-        const g = this.game;
-        const me = g.character.group.position;
-        let best = null, bd = 45;
+    /** Each burning fire asks for a real light (the nearest few get one: FireLights.js). */
+    _light() {
+        const L = this.game.fireLights;
+        if (!L) return;
         for (const f of this.list.values()) {
-            if (f.left <= -CAMPFIRE.EMBERS * 0.5) continue;
-            const d = Math.hypot(f.x - me.x, f.z - me.z);
-            if (d < bd) { bd = d; best = f; }
+            if (f.left <= -CAMPFIRE.EMBERS * 0.8) continue;
+            const k = f.left > 0 ? flameSize(f.left) : 0.3 * Math.max(0, 1 + f.left / CAMPFIRE.EMBERS);
+            L.want(f.x, f.y + 1.3, f.z, k);
         }
-        if (!best || night < 0.05) { this.light.intensity = 0; return; }
-        const k = best.left > 0 ? flameSize(best.left) : 0.25 * Math.max(0, 1 + best.left / CAMPFIRE.EMBERS);
-        this.light.position.set(best.x, best.y + 1.6, best.z);
-        this.light.intensity = 2.4 * night * k * (0.9 + 0.08 * Math.sin(t * 13) + 0.05 * Math.sin(t * 31));
     }
 
     // ----------------------------------------------------- wood and cooking
@@ -635,7 +655,6 @@ export class Campfires {
 
     dispose() {
         for (const f of [...this.list.values()]) this._remove(f);
-        this.light.parent?.remove(this.light);
     }
 }
 
