@@ -20,7 +20,7 @@ import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel }
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
-import { spellPhrase, PHRASE_WHY_RU, afterCast } from './audio/SpellPhrase.js';
+import { spellPhrase, PHRASE_WHY_RU, afterCast, bodyNoise } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
@@ -558,6 +558,12 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         if (spoken) {
             const no = afterCast(lastCast, spoken, meta, performance.now());
             if (no) { journal(command, isFinal, meta, spoken, false, `отсеяно: ${no}`); return; }
+            // breathing, steps, a rustle while running read as «Даст», «Джолт»: the mouth and the fit tell
+            const lips = game.voiceGate.lipsMoved(performance.now());
+            const running = !!game.character?.isRunning;
+            if (meta) { meta.lips = lips; meta.running = running; }
+            const noise = bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips });
+            if (noise) { journal(command, isFinal, meta || { lips, running }, spoken, false, `отсеяно: ${noise}`); return; }
         }
         // The native voice with the speakers' sound taken out of the microphone (voice_native.py): a
         // friend's voice from Discord / the speakers never got here at all, and a spell heard in the

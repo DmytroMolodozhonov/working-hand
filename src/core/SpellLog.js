@@ -37,7 +37,12 @@ export function formatEntry(e) {
     if (Number.isFinite(m.snr)) parts.push(`над шумом ${num(m.snr)} дБ${m.snr < 10 ? ' (шумно!)' : m.snr < 16 ? ' (шумновато)' : ''}`);
     else if (Number.isFinite(m.floor)) parts.push(`шум ${num(m.floor)} дБ`);
     if (m.far > 0) parts.push(`колонки звучали ${Math.round(m.far * 100)}% времени`);
-    if (m.aec) parts.push('эхо колонок убрано');
+    if (m.native) parts.push(m.aec ? 'звук колонок убирается из микрофона' : 'звук колонок НЕ убирается (лучше наушники)');
+    if (m.src === 'aec') parts.push('читался очищенный звук');
+    // whose voice: the camera saw the mouth move with it (or not), running in front of the camera
+    if (m.lips === true) parts.push('губы двигались — ваш голос');
+    else if (m.lips === false) parts.push('губы НЕ двигались');
+    if (m.running) parts.push('на бегу');
     if (m.gameLine) parts.push(`в это время голос игры: «${String(m.gameLine).slice(0, 50)}»`);
     const src = e.source ? ` [${e.source}]` : '';
     const spell = e.spell ? ` → ${e.spell}` : ' → заклинания нет';

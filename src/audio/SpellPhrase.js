@@ -219,3 +219,26 @@ export function afterCast(last, spell, meta, now) {
     if (meta?.native && now - last.at < AFTER_CAST_MS && !(fit >= AFTER_CAST_FIT)) return `сразу после «${last.spell}» и узнано неуверенно — похоже на звук заклинания или эхо`;
     return null;
 }
+
+/** A short spell («Даст», «Джолт», «Айс», «Ап») must fit this much better than needed while running or in noise. */
+export const SHORT_LEN = 5;
+export const SHORT_FIT = 0.5;
+
+/**
+ * Breathing, steps, a rustle, the microphone's click — running in front of the camera with no word said —
+ * read as a short spell: the author's «просто бегаю — выстреливает «Даст», «Джолт» несколько раз».
+ * @param {{spell: string, text?: string, native?: boolean, fit?: number, len?: number, snr?: number,
+ *          running?: boolean, lips?: boolean|null}} h  lips: the camera saw the mouth move (null: not seen)
+ * @returns {string|null} why it is not a spell, or null
+ */
+export function bodyNoise(h) {
+    if (!h?.spell) return null;
+    const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.text || '').length;
+    const short = len <= SHORT_LEN;
+    // the camera saw my mouth stay still: no word was said (a short spell, or anything while running)
+    if (h.lips === false && (short || h.running)) return 'губы не двигались — это не речь (дыхание, шаги, шорох)';
+    if (h.native && short && Number.isFinite(h.fit) && h.fit < SHORT_FIT && (h.running || (Number.isFinite(h.snr) && h.snr < 12))) {
+        return `короткое заклинание узнано неуверенно ${h.running ? 'на бегу' : 'в шуме'} (запас ${h.fit.toFixed(1)}, нужно ${SHORT_FIT})`;
+    }
+    return null;
+}

@@ -204,7 +204,7 @@ export class NativeVoice {
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
         const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, ...this._when(d, r.heard),
-            peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra, seg: d.id };
+            peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra, seg: d.id, src: d.src };
         // (how much better than needed the spell fit: over a villager's voice only a clear one is mine — GameVoices)
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }

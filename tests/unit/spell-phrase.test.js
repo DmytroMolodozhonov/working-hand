@@ -74,3 +74,13 @@ test('«Бомбардо Максима» is that one spell, once: no «Джол
     assert.equal(afterCast(last, 'Bombardo', { native: true, seg: 9, fit: 0.2 }, 3000), null); // (later: a new spell)
     assert.equal(afterCast({ spell: 'Jolt', at: 1000, seg: 3 }, 'JoltMaxima', { native: true, seg: 3, fit: 0.1 }, 1300), null); // (it grows)
 });
+
+test('running with no word said: breathing and steps read as «Даст» / «Джолт» never cast (the author\'s case)', async () => {
+    const { bodyNoise } = await import('../../src/audio/SpellPhrase.js');
+    assert.ok(bodyNoise({ spell: 'Sands', text: 'даст', native: true, fit: 0.2, len: 4, running: true, lips: null })); // (only just made out, on the run)
+    assert.ok(bodyNoise({ spell: 'Jolt', text: 'джолт', native: true, fit: 1.5, len: 5, running: true, lips: false })); // (the mouth stayed still)
+    assert.ok(bodyNoise({ spell: 'Jolt', text: 'джолт', native: true, fit: 0.3, len: 5, snr: 8, lips: null })); // (in noise)
+    assert.equal(bodyNoise({ spell: 'Jolt', text: 'джолт', native: true, fit: 0.9, len: 5, running: true, lips: true }), null); // (said, clearly)
+    assert.equal(bodyNoise({ spell: 'Sands', text: 'даст', native: true, fit: 0.2, len: 4, snr: 25, lips: null }), null); // (standing, quiet room)
+    assert.equal(bodyNoise({ spell: 'BombardoMaxima', text: 'бомбардо максима', native: true, fit: 0.1, len: 15, running: true, lips: null }), null);
+});
