@@ -233,6 +233,7 @@ export class Space {
             const def = this.planets.get(this.realm);
             this._say(`🪐 ${def?.name || 'Планета'}: ${planetLine(def)}`, 'land' + this.realm, 7000);
             g.sound?.playSpace?.('spaceBeep', 0.8);
+            this._found(this.realm);
         }
         if (this.realm === 'earth' && was !== 'earth' && was !== 'space') this._say('🌍 Вы снова дома, на Земле', 'home', 4000);
         if (this.realm === 'space' && this.state === 'off') {
@@ -240,6 +241,13 @@ export class Space {
             this.state = 'space';
             if (!g.flight.active) g.flight.float();
         }
+        if (this.realm === 'space') g.mana?.discover?.('space');
+    }
+
+    /** A planet entered (into its air, down to it) the first time this life: +50 cells, an achievement (Mana.discover). */
+    _found(id) {
+        if (!id || id === 'earth' || id === 'space' || id === 'sun') return;
+        this.game.mana?.discover?.('planet:' + id, this.planets.get(id)?.name);
     }
 
     /**
@@ -301,6 +309,7 @@ export class Space {
         this._prev.clear();
         this._ovKind = this._from === 'earth' || this.planets.get(this._from)?.air === 'air' ? 'white' : 'black'; this._ovK = 1; // (the white-out clears by itself)
         const mana = g.combat?.enabled;
+        g.mana?.discover?.('space'); // (the first time out: the achievement, +20 cells)
         this._say(mana ? '🌌 Вы в космосе! Магия дыхания: <b>−0,5 маны в секунду</b> — без неё здесь не выжить, и сам полёт — <b>Flying Maxima −1,5</b> и «Флайн» <b>−2,5 маны в секунду</b> (зависнуть — −1,8). Кончится мана — вернитесь в воздух' : '🌌 Вы в космосе!', 'enter', 7000);
     }
 
@@ -525,6 +534,7 @@ export class Space {
         this._v = 120;
         this._descTop = p.y;
         this.realm = realmAt(p.x, p.y, p.z, this.planets);
+        if (d.id !== 'earth') this._found(d.id); // (through its air, over its ground: the planet is found)
         g.character.gravityK = 1;
         this._ovKind = this._entryAir ? 'white' : 'black'; this._ovK = 1; // (out of the burning air: it clears)
         // (the castles and ships left far behind fall asleep at once: nobody of theirs asks for land long gone)

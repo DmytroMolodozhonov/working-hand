@@ -52,7 +52,8 @@ export function captureLegacy(g) {
         spells: Object.keys(B.spells || {}).filter((k) => B.spells[k]),
         learned: g.books ? [...g.books.learned] : [],
         // (the growth holds the gods' +100 cells too; `spells` — the firsts already counted, theirs among them)
-        mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [] } : null,
+        // (and `found`: space and the planets already counted — their +20 / +50 cells are in the growth)
+        mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length || mana.found?.length) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [], found: mana.found || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
@@ -103,6 +104,7 @@ export function absorbLegacy(g, rec) {
     if (M && rec.mana) {
         for (const k of rec.mana.spells || []) M.spellsUsed.add(String(k));
         for (const k of rec.mana.kills || []) M.killsMade.add(String(k));
+        for (const k of rec.mana.found || []) M.found?.add(String(k));
         M.grow(Math.max(0, Math.min(20000, Number(rec.mana.growth) || 0)), 'legacy'); // (with the gods' +100s: up to 400 of it)
     }
     const A = g.achievements;

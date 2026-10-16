@@ -58,6 +58,12 @@ export const FIRST_SPELL = {
     CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100,
 };
 
+/**
+ * Space's achievements (the author): the first time out in space +20 cells, each planet first entered (into its
+ * air and down to it — the Moon and the planets made by «Create a Planet» too) +50. Once per life, as the firsts.
+ */
+export const DISCOVER = { space: 20, planet: 50 };
+
 /** The spells of the gods' scrolls (PlanetMagic.js): +100 cells the first time, with a banner of its own. */
 export const GOD_SPELLS = new Set(['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima']);
 
@@ -138,6 +144,7 @@ export class Mana {
         this.spellsUsed = new Set(); // spells whose first success was already counted (this life)
         this.killsMade = new Set(); // magical creature kinds already counted (this life)
         this.duelsWon = new Map(); // opponent id → 'win' | 'kill' already counted (this life)
+        this.found = new Set(); // 'space', 'planet:<id>' — space's achievements already counted (this life)
         this.log = []; // (tests) the last few gains
     }
 
@@ -168,6 +175,25 @@ export class Mana {
             return n;
         }
         this._say(`🔷 Первое «${spellTitle(key)}»! Мана +${n} к максимуму`);
+        return n;
+    }
+
+    /**
+     * Space reached ('space') or a planet entered ('planet:<id>', its `name`) the first time: its cells and an
+     * achievement banner (Space.js). Creative: mana does not count — nothing.
+     * @returns {number} how much the maximum grew
+     */
+    discover(key, name = '') {
+        const n = key === 'space' ? DISCOVER.space : DISCOVER.planet;
+        if (this.found.has(key) || !this.combat?.enabled) return 0;
+        this.found.add(key);
+        this.grow(n, 'discover', key);
+        const g = this.game;
+        const title = key === 'space' ? '🏆 Ачивка: Вы в космосе!' : `🏆 Ачивка: открыта планета «${name || 'Планета'}»`;
+        const sub = `+${n} ячеек маны. Теперь ячеек маны: ${Math.round(this.max)}`;
+        if (g.achievements?._banner) g.achievements._banner(title, sub, true);
+        else this._say(`${title} ${sub}`);
+        g.sound?.playSpace?.('spaceGift', 0.7);
         return n;
     }
 
@@ -232,18 +258,20 @@ export class Mana {
         this.spellsUsed.clear();
         this.killsMade.clear();
         this.duelsWon.clear();
+        this.found.clear();
     }
 
     /** Kept with the player (world save, multiplayer). */
     snapshot() {
-        return { growth: this.growth, spells: [...this.spellsUsed], kills: [...this.killsMade] };
+        return { growth: this.growth, spells: [...this.spellsUsed], kills: [...this.killsMade], found: [...this.found] };
     }
 
     restore(s) {
         if (!s) return;
         for (const k of [...(Array.isArray(s.spells) ? s.spells : []), ...(Array.isArray(s.strong) ? s.strong : [])]) this.spellsUsed.add(String(k)); // («strong»: an older save)
         if (Array.isArray(s.kills)) for (const k of s.kills) if (MAGIC_KILL[k]) this.killsMade.add(k);
-        const g = Math.max(0, Math.min(10000, Number(s.growth) || 0));
+        if (Array.isArray(s.found)) for (const k of s.found) this.found.add(String(k));
+        const g =Math.max(0, Math.min(10000, Number(s.growth) || 0));
         if (g > this.growth) this.grow(g - this.growth, 'restore');
     }
 

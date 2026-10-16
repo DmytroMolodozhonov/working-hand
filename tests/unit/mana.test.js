@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Combat } from '../../src/game/Combat.js';
-import { Mana, MANA, FIRST_SPELL, NOT_SPELLS, SAME_SPELL, MAGIC_KILL, firstSpellGain, duelGain, animalMagicKind, creditKill, GOD_SPELLS } from '../../src/game/Mana.js';
+import { Mana, MANA, FIRST_SPELL, NOT_SPELLS, SAME_SPELL, MAGIC_KILL, firstSpellGain, duelGain, animalMagicKind, creditKill, GOD_SPELLS, DISCOVER } from '../../src/game/Mana.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { readFileSync } from 'node:fs';
 import { playerSnapshot, applyPlayerSnapshot } from '../../src/game/WorldSave.js';
@@ -141,7 +141,7 @@ test('mana: the maximum, the spells and creatures already counted are saved with
     g.mana.success('Levitation');
     g.mana.magicKill('pegasus');
     const snap = JSON.parse(JSON.stringify(playerSnapshot(g)));
-    assert.deepEqual(snap.mana, { growth: 19, spells: ['AvadaKedavra', 'Levitation'], kills: ['pegasus'] });
+    assert.deepEqual(snap.mana, { growth: 19, spells: ['AvadaKedavra', 'Levitation'], kills: ['pegasus'], found: [] });
     const { g: g2 } = fakeGame();
     applyPlayerSnapshot(g2, snap);
     assert.equal(g2.mana.max, 49);
@@ -201,4 +201,26 @@ test('mana: the giant spider gives +20 to whoever killed it — the first one on
     sp.hit(s3, 10, 'Bombardo');
     assert.ok(s3.dead);
     assert.equal(g.mana.max, 50, 'the second spider: nothing');
+});
+
+test('mana: space +20 the first time, each new planet +50 (once per life); death takes them, the save keeps them', () => {
+    const { g } = fakeGame();
+    assert.equal(DISCOVER.space, 20);
+    assert.equal(DISCOVER.planet, 50);
+    assert.equal(g.mana.discover('space'), 20);
+    assert.equal(g.mana.discover('space'), 0, 'space again: nothing');
+    assert.equal(g.mana.discover('planet:mars', 'Марс'), 50);
+    assert.equal(g.mana.discover('planet:moon', 'Луна'), 50, 'each planet its own');
+    assert.equal(g.mana.discover('planet:mars', 'Марс'), 0);
+    assert.equal(g.mana.max, MANA.BASE + 120);
+    const snap = g.mana.snapshot();
+    const { g: g2 } = fakeGame();
+    g2.mana.restore(snap);
+    assert.equal(g2.mana.discover('planet:mars'), 0, 'restored: Mars is already found');
+    assert.equal(g2.mana.max, MANA.BASE + 120);
+    g.mana.onDeath();
+    assert.equal(g.mana.max, MANA.BASE);
+    assert.equal(g.mana.discover('space'), 20, 'after death: earned again');
+    const { g: c } = fakeGame('creative');
+    assert.equal(c.mana.discover('space'), 0, 'Creative: mana does not count');
 });
