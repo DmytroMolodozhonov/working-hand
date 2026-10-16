@@ -171,7 +171,7 @@ export class PageSheet {
         this.beta = dir > 0 ? bR : bL;
         this.omega = 0;
         this.finger = null; // the finger's angle the sheet rests on (null: let go)
-        this.gap = 0; // at the catch the finger may be a little above the page: closed slowly
+        this.gap = 0; // at the catch the finger may be a little above the page: it lifts it from there
         this.landed = null;
         this._lastF = null;
     }
@@ -179,8 +179,10 @@ export class PageSheet {
     /** The finger is under the sheet's edge at angle fBeta (or null: it let go). */
     touch(fBeta, dt) {
         if (fBeta == null) { this.finger = null; this._lastF = null; return; }
-        if (this.finger == null) this.gap = this.dir > 0 ? Math.max(0, fBeta - this.beta) : Math.max(0, this.beta - fBeta);
-        else this.gap = Math.max(0, this.gap - dt * 1.2);
+        // (the gap closes only when the finger itself comes down onto the page: a page never
+        // rises by itself to a finger hovering over it)
+        const g = this.dir > 0 ? Math.max(0, fBeta - this.beta) : Math.max(0, this.beta - fBeta);
+        this.gap = this.finger == null ? g : Math.min(this.gap, g);
         // how fast the finger moves round the spine (for a flick)
         if (this._lastF != null && dt > 0) this.fingerOmega = (fBeta - this._lastF) / dt;
         this._lastF = fBeta;

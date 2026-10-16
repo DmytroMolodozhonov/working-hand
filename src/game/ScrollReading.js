@@ -2,12 +2,14 @@
  * ScrollReading.js — opening a scroll with the hands and reading it.
  *
  * A scroll in one fist; the other (empty) hand comes open to an end of it and
- * closes its fingers on the other roller; pulling the hands apart unrolls the
- * parchment between them (the further apart, the more of it is seen). Its
+ * closes its fingers on the other roller (a fist arriving, or a pointing hand —
+ * the index out — takes nothing); pulling the hands apart unrolls the
+ * parchment between them: exactly as much as the hands are apart. Its
  * pages look at the reader, the camera comes over the shoulder (as for the
  * book). Hands back together — it rolls up between them; the second hand opens
- * (or an arm drops) — it lets the roller go and the scroll is rolled up in the
- * first fist again.
+ * (or an arm drops, or the hands go further apart than the parchment is long —
+ * the roller slips out of the fingers) — the roller is let go and the parchment
+ * rolls itself back up onto the roller in the first fist.
  *
  * Anybody can read any scroll. Learning is only by burning it (Inferno):
  * whoever burns it gets it (Items.burnHeldScroll).
@@ -15,6 +17,7 @@
 
 import * as THREE from 'three';
 import { describeItem, ITEM_SCALE } from './ItemTypes.js';
+import { Steady } from '../entities/SimplifiedHand.js';
 
 const MAX_W = 2.2; // m of parchment, fully unrolled
 const PARCH_H = 0.95;
@@ -23,11 +26,14 @@ const GRAB_CURL = 0.5; // …by closing its fingers this much…
 const GRAB_T = 0.2; // …for this long (s)
 const OPEN_CURL = 0.3; // fingers opened this much: the roller is let go…
 const LET_T = 0.3; // …after this long (s)
+const SLIP = 0.6; // m further apart than the parchment is long: the roller slips out of the fingers
+const ROLL_V = 7; // m/s: a let-go parchment rolls itself back up this fast
 const SCROLL_END = 0.21; // the ends of the scroll model (local x)
 const _v8 = new THREE.Vector3(), _v9 = new THREE.Vector3();
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3(), _v7 = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
+const _qs = new THREE.Quaternion();
 
 /** The text of a scroll, in ink on parchment. */
 function drawParchment(item) {
@@ -71,6 +77,14 @@ export class ScrollReading {
         this.r = null; // {side, other, item, model, open, touchT, closeT, group, tex, mat}
         this.readingSide = null;
         this.readCam = null;
+        this.input = null; // (tests) side → {G, curl, up}: instead of the tracked hands
+    }
+
+    /** How closed a hand is round a roller (the index too: a pointing hand holds nothing). */
+    _curl(side) {
+        if (this.input) return this.input(side).curl;
+        const ch = this.game.character;
+        return ch.getHoldCurl ? ch.getHoldCurl(side) : ch.getGripCurl ? ch.getGripCurl(side) : 0;
     }
 
     update(dt) {
@@ -85,11 +99,11 @@ export class ScrollReading {
         const other = s.side === 'right' ? 'left' : 'right';
         const free = !items.held[other] && !g.weapons.hands[other].held;
         const ho = this._grip(other);
-        const curl = g.character.getGripCurl ? g.character.getGripCurl(other) : 0;
+        const curl = this._curl(other);
         if (!this.r) {
             // the free hand takes the other roller: it comes to an end of the scroll OPEN and
             // closes its fingers on it (an open hand passing by, or a fist arriving at it, takes nothing)
-            if (!free || !g.currentPose) { this._touchT = 0; this._armed = false; return; }
+            if (!free || !g.currentPose && !this.input) { this._touchT = 0; this._armed = false; return; }
             const d = this._endDist(s.model, ho);
             if (d > END_NEAR * 2) this._armed = false;
             else if (curl < OPEN_CURL) this._armed = true;
@@ -101,22 +115,50 @@ export class ScrollReading {
             this._begin(s, other);
             return;
         }
-        if (!free) { this._close(); return; }
         const R = this.r;
-        // the fingers on the roller opened: that hand let it go — it rolls up in the first fist
+        // the rollers are in the fists: where the closed fingers are (eased by speed: no tremble)
+        const hs = this._steady(R, 'hs', this._grip(s.side), dt);
+        if (R.rolling) { this._rollBack(R, hs, dt); return; }
+        if (!free) { this._letGo(R); this._rollBack(R, hs, dt); return; }
+        const hoG = this._steady(R, 'ho', ho, dt);
+        // the fingers on the roller opened: that hand let it go
         R.letT = curl < OPEN_CURL ? (R.letT || 0) + dt : 0;
-        if (R.letT > LET_T) { this._close(); return; }
-        // the rollers are in the fists: where the closed fingers are
-        const hs = this._grip(s.side);
-        const hoG = ho;
+        // pulled further apart than the parchment is long: the roller slips out of the fingers
         const dist = hs.distanceTo(hoG);
+        R.slipT = dist > MAX_W + SLIP ? (R.slipT || 0) + dt : 0;
         // an arm dropped to the side: it rolls up again (hands brought together only roll it up
         // between them — the other hand still holds its roller, so it does not jump closed and open)
         R.closeT = !this._up(hs) || !this._up(hoG) ? R.closeT + dt : 0;
-        if (R.closeT > 0.4) { this._close(); return; }
+        if (R.letT > LET_T || R.slipT > 0.15 || R.closeT > 0.4) { this._letGo(R); this._rollBack(R, hs, dt); return; }
         const want = Math.max(0, Math.min(1, (dist - 0.35) / 1.4));
         R.open += (want - R.open) * Math.min(1, dt * 8);
         this._place(R, hs, hoG, dt);
+    }
+
+    /** A hand eased steadily (a still hand's tremble smoothed, a real move followed at once). */
+    _steady(R, key, p, dt) {
+        const st = R.steady || (R.steady = {});
+        if (!R[key]) { st[key] = new Steady({ minCutoff: 2, beta: 10 }); R[key] = p.clone(); return R[key]; }
+        return R[key].lerp(p, st[key].alpha(dt > 0 ? R[key].distanceTo(p) / dt : 0, dt));
+    }
+
+    /** The second hand let the roller go: its fingers open, the parchment rolls back by itself. */
+    _letGo(R) {
+        if (R.rolling) return;
+        R.rolling = true;
+        this.readCam = null;
+        const g = this.game;
+        const hand = g.character.getActiveHands?.()[R.other];
+        if (hand?.setGrip && !g.items.held[R.other] && !g.weapons.hands[R.other].held) hand.setGrip(null);
+    }
+
+    /** Rolling back up onto the roller in the first fist (that roller stays in the fist). */
+    _rollBack(R, hs, dt) {
+        R.w = Math.max(0.12, (R.w || 0.12) - ROLL_V * dt);
+        const across = _v6.set(1, 0, 0).applyQuaternion(R.group.quaternion);
+        R.group.position.copy(hs).addScaledVector(across, R.sSign * R.w / 2);
+        this._unroll(R, R.w);
+        if (R.w <= 0.12) this._close();
     }
 
     _begin(s, other) {
@@ -138,7 +180,7 @@ export class ScrollReading {
         group.add(parch, rollA, rollB);
         g.scene.add(group);
         s.model.visible = false; // (it is the open one now)
-        this.r = { side: s.side, other, item: s.item, model: s.model, open: 0, closeT: 0, group, parch, rollA, rollB, tex, mat, c: null };
+        this.r = { side: s.side, other, item: s.item, model: s.model, open: 0, closeT: 0, w: 0.12, sSign: 1, group, parch, rollA, rollB, tex, mat, c: null };
         this.readingSide = s.side;
         const hand = g.character.getActiveHands?.()[other];
         if (hand?.setGrip) hand.setGrip(0.5);
@@ -156,7 +198,9 @@ export class ScrollReading {
         // across: from fist to fist (as the reader sees it left → right); the face: to the reader
         const across = _v6.subVectors(ho, hs);
         const camRight = _v7.set(1, 0, 0).applyQuaternion(g.camera.quaternion);
-        if (across.dot(camRight) < 0) across.negate();
+        // (which end is in the first fist: −w/2 when the parchment runs from it to the other hand)
+        R.sSign = 1;
+        if (across.dot(camRight) < 0) { across.negate(); R.sSign = -1; }
         if (across.lengthSq() < 1e-4) across.copy(camRight);
         across.normalize();
         const n = _v5.subVectors(eye, R.c);
@@ -170,16 +214,8 @@ export class ScrollReading {
         R.group.quaternion.copy(_q);
         // unrolled as far as the hands are apart (at most MAX_W); the text shows as it unrolls
         const w = Math.max(0.12, Math.min(MAX_W, hs.distanceTo(ho)));
-        const seen = Math.max(0.05, Math.min(1, w / MAX_W));
-        R.parch.scale.x = w;
-        R.tex.repeat.x = seen;
-        R.tex.offset.x = (1 - seen) / 2;
-        R.rollA.position.x = -w / 2;
-        R.rollB.position.x = w / 2;
-        // the rollers grow thinner as the parchment comes off them
-        const thick = 1 - seen * 0.4;
-        R.rollA.scale.set(thick, 1, thick);
-        R.rollB.scale.set(thick, 1, thick);
+        R.w = w;
+        this._unroll(R, w);
         // the camera: over the shoulder, the whole parchment in view
         if (g.cameraMode !== 'fpv' && k > 0.15) {
             const cam = g.camera;
@@ -193,6 +229,20 @@ export class ScrollReading {
         }
     }
 
+    /** The parchment w long between the rollers; the text shows as it unrolls. */
+    _unroll(R, w) {
+        const seen = Math.max(0.05, Math.min(1, w / MAX_W));
+        R.parch.scale.x = w;
+        R.tex.repeat.x = seen;
+        R.tex.offset.x = (1 - seen) / 2;
+        R.rollA.position.x = -w / 2;
+        R.rollB.position.x = w / 2;
+        // the rollers grow thinner as the parchment comes off them
+        const thick = 1 - seen * 0.4;
+        R.rollA.scale.set(thick, 1, thick);
+        R.rollB.scale.set(thick, 1, thick);
+    }
+
     /** How far a point is from the nearer end of a rolled scroll. */
     _endDist(model, p) {
         model.updateMatrixWorld(true);
@@ -203,6 +253,7 @@ export class ScrollReading {
 
     /** Where a hand's closed fingers are (a roller in the fist). */
     _grip(side) {
+        if (this.input) return this.input(side).G;
         const pf = this._pf || (this._pf = { left: {}, right: {} });
         return this.game.weapons.palmFrame(side, pf[side]).G;
     }

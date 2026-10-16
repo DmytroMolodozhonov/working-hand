@@ -6,10 +6,12 @@
  *     fingers, the covers between the palm and the thumb (the fore-edge towards the other
  *     hand — so the hand holds the fore-edge or the spine). The fingers close on the
  *     covers only until they touch them (SimplifiedHand.fitGrip).
- *   - The other (empty) hand closes on the covers' edge: now each hand holds one half by
+ *   - The other (empty) hand comes OPEN to the covers' edge and closes on it (a fist arriving,
+ *     or a pointing hand — the index out — takes nothing): now each hand holds one half by
  *     its outer edge (low on it), and the book is exactly as open as the hands are apart
  *     (a hinge: φ = 2·asin((d/2 − t) / w)); it tilts as the hands' fingers do. Pulled wider
- *     than the book, it lies flat between them: only an opened hand lets go.
+ *     than the book, it lies flat between them; spread the arms wide — the cover slips out
+ *     of the second hand's fingers.
  *   - Open a hand: it lets go; the book stays open in the other hand, its half held rigidly
  *     (it turns with that hand); the free hand turns the pages: the index fingertip slides
  *     under the edge of a page and lifts it; the page rests on the finger and follows it;
@@ -18,7 +20,8 @@
  *     opened stretched arm. Closing the hand on it holds it where it lies.
  *   - Take the free half again: both hands; bring them together: it closes, and
  *     letting one go leaves it closed in the other hand. Lower the holding arm: it closes.
- *   - Fingers never go through it: the free hand is pushed back out of the pages.
+ *   - Fingers never go through it: the free hand is pushed back out of the pages. The free
+ *     hand is never tied to the book: it touches, lifts a page, takes a cover — or goes away.
  * The pose comes from the hands only — the same in both camera modes.
  * Reading a spread for a moment teaches its spell.
  */
@@ -28,12 +31,12 @@ import { BUILD_SPELLS } from './Builder.js';
 import { WARD_SPELLS, WARD_NAMES, isWardSpell } from './HouseWards.js';
 import { BOOK, setBookAngle, pageHinge, makePageSheet, setPageSheet, disposePageSheet } from './BookModel.js';
 import { frameFromHands, frameFromOneHand, viewRight, pageLimits, PageSheet, sheetLag, edgeInBook, halfQuat, bookFromHinge, frameOnPalm } from './BookPhysics.js';
-import { BOOK_POINTS } from '../entities/SimplifiedHand.js';
+import { BOOK_POINTS, Steady } from '../entities/SimplifiedHand.js';
 import { ITEM_SCALE } from './ItemTypes.js';
 
 export const HOLD = {
     REACH: 0.32, // m from the edge of the covers (the fore-edge): a hand closing there takes it
-    GRAB_CURL: 0.5, // fingers this closed: holding
+    GRAB_CURL: 0.5, // fingers this closed (the index too — Character.getHoldCurl): holding
     OPEN_CURL: 0.3, // … this open: let go
     GRAB_T: 0.2, // s closed in reach
     LET_GO_T: 0.3, // s open
@@ -45,9 +48,12 @@ export const HOLD = {
     LEARN_T: 1.0, // s reading a spread
     GRIP_Y: -0.21, // m: the hands hold the edges below the middle (the book's own y)
     PUSH_MAX: 0.15, // m: the most a hand is held back out of the pages in a frame
+    SLIP: 1.0, // m: hands this much further apart than the open book reaches (arms spread wide) — the cover slips out of the second hand…
+    SLIP_T: 0.3, // …after this long (s) (a little wider it just lies flat between them: nothing lets go by accident)
 };
 // a fingertip catches a page by its edge: the outer part of the page, close to it
-const CATCH = { R0: 0.55, R1: 1.12, ABOVE: 0.16, BELOW: 0.13, LOST_IN: 0.1, LOST_OUT: 1.18 };
+// (a fingertip hovering over the page, or anywhere on it, catches nothing: only at the very edge, on it)
+const CATCH = { R0: 0.72, R1: 1.1, ABOVE: 0.07, BELOW: 0.1, T: 0.1, LOST_IN: 0.1, LOST_OUT: 1.18 };
 
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qI = new THREE.Quaternion();
@@ -139,6 +145,7 @@ export class BookReading {
         this.readCam = null;
         this.input = null; // (tests) side → {G, curl, tip, up}: instead of the tracked hands
         this._grab = { left: 0, right: 0 };
+        this._armed = { left: false, right: false }; // came open: a hand that closes now takes it
         this._let = { left: 0, right: 0 };
         this._pf = { left: {}, right: {} };
         this._tipV = { left: new THREE.Vector3(), right: new THREE.Vector3() };
@@ -179,7 +186,33 @@ export class BookReading {
         const hand = ch.getActiveHands()[side];
         const drawn = !!(hand?.palm && hand.group.visible && ch.getGripObject(side) === hand.palm);
         const G = this._palmPoint(f, BOOK_POINTS.edgeX, BOOK_POINTS.edgeY, BOOK_POINTS.face - this._halfThick() / 2, f.E || (f.E = new THREE.Vector3()));
-        return { G, f, curl: ch.getGripCurl(side), tip: this._tip(hand, side), up: ch.isArmRaised(side), ext: ch.isArmExtended?.(side), hand: drawn ? hand : null };
+        return { G, f, curl: ch.getGripCurl(side), grip: ch.getHoldCurl?.(side), tip: this._tip(hand, side), up: ch.isArmRaised(side), ext: ch.isArmExtended?.(side), hand: drawn ? hand : null };
+    }
+
+    /** How closed a hand is round a cover: the index too (a pointing hand holds nothing). */
+    _closed(h) {
+        return h.grip ?? h.curl;
+    }
+
+    /**
+     * Does this hand take a cover now? Only one that came OPEN and closes at the edge, for a
+     * moment (a fist arriving, a pointing finger, a hand passing by — nothing).
+     */
+    _takes(side, h, near, dt) {
+        const c = this._closed(h);
+        if (c < HOLD.OPEN_CURL) this._armed[side] = true;
+        else if (!near && c > HOLD.GRAB_CURL) this._armed[side] = false;
+        const yes = this._dwell(this._grab, side, near && c > HOLD.GRAB_CURL && this._armed[side], dt) >= HOLD.GRAB_T;
+        if (yes) { this._grab[side] = 0; this._armed[side] = false; }
+        return yes;
+    }
+
+    /** A hand eased steadily (a still hand's tremble smoothed, a real move followed at once). */
+    _steady(s, key, p, dt) {
+        const st = s.steady || (s.steady = {});
+        if (!s[key] || !st[key]) { st[key] = new Steady({ minCutoff: 2, beta: 10 }); s[key] = p.clone(); return s[key]; }
+        const a = st[key].alpha(dt > 0 ? s[key].distanceTo(p) / dt : 0, dt);
+        return s[key].lerp(p, a);
     }
 
     /** A point given in the palm's own frame (a right hand's; a left one is its mirror). */
@@ -317,15 +350,14 @@ export class BookReading {
     /** Closed in one fist: the other hand may take it by the covers' edge (the fore-edge). */
     _fist(hb, dt) {
         const B = other(hb.side);
-        if (!this._free(B) || !this.game.currentPose && !this.input) { this._grab[B] = 0; return; }
+        if (!this._free(B) || !this.game.currentPose && !this.input) { this._grab[B] = 0; this._armed[B] = false; return; }
         const h = this._hand(B);
         const m = hb.model;
         m.updateMatrixWorld(true);
         const { W, H } = BOOK;
         const a = m.localToWorld(_v3.set(0, -H / 2, W)), b = m.localToWorld(_v4.set(0, H / 2, W));
         const near = distToSegment(h.G, a, b) < HOLD.REACH;
-        if (this._dwell(this._grab, B, near && h.curl > HOLD.GRAB_CURL, dt) < HOLD.GRAB_T) return;
-        this._grab[B] = 0;
+        if (!this._takes(B, h, near, dt)) return;
         // both hands now: each holds a half by its outer edge — the one on the reader's left
         // the left half; the book turns from how the fist held it into how both hands hold it
         const eye = this._eye(_v1);
@@ -340,7 +372,7 @@ export class BookReading {
             hold: { left: aLeft ? hb.side : B, right: aLeft ? B : hb.side },
             phi: 0, pos: m.position.clone(), quat: m.quaternion.clone(), gy,
             from: { pos: m.position.clone(), quat: m.quaternion.clone(), t: 0 },
-            pL: null, pR: null, spread: 0, sheet: null, readT: 0, lowT: 0, support: false,
+            pL: null, pR: null, spread: 0, sheet: null, readT: 0, lowT: 0, support: false, slipT: 0,
         };
         this._setGrip(B, 0.55, 'book');
         this._initPages(this.s);
@@ -364,9 +396,9 @@ export class BookReading {
      */
     _two(s, dt) {
         const hl = this._hand(s.hold.left), hr = this._hand(s.hold.right);
-        const k = Math.min(1, dt / 0.06); // (a little steadier than the camera)
-        s.pL = s.pL ? s.pL.lerp(hl.G, k) : hl.G.clone();
-        s.pR = s.pR ? s.pR.lerp(hr.G, k) : hr.G.clone();
+        // (eased by speed: a still hand's tremble is gone, a real move is followed at once)
+        this._steady(s, 'pL', hl.G, dt);
+        this._steady(s, 'pR', hr.G, dt);
         const eye = this._eye(_v1);
         // upright to the eyes, turned on by however the hands have turned since they took it
         // (bend the wrists — it tilts with them)
@@ -384,13 +416,21 @@ export class BookReading {
         const boxes = this._openBoxes(s.model);
         this._fitHand(s.hold.left, boxes);
         this._fitHand(s.hold.right, boxes);
-        // only a hand that opens lets go of its half (pulled wider, the book just lies flat between them)
+        // a hand that opens (or points its index) lets go of its half
         for (const half of ['left', 'right']) {
             const side = s.hold[half], h = half === 'left' ? hl : hr;
-            if (this._dwell(this._let, side, h.curl < HOLD.OPEN_CURL, dt) < HOLD.LET_GO_T) continue;
+            if (this._dwell(this._let, side, this._closed(h) < HOLD.OPEN_CURL, dt) < HOLD.LET_GO_T) continue;
             this._let[side] = 0;
             this._letGo(s, half);
             return;
+        }
+        // the hands further apart than the open book reaches: the cover slips out of the second
+        // hand's fingers (a book doesn't stretch, nor follow a hand that has gone away)
+        const far = hl.G.distanceTo(hr.G) > 2 * (this.w + this.t) + HOLD.SLIP;
+        s.slipT = far ? s.slipT + dt : 0;
+        if (s.slipT >= HOLD.SLIP_T) {
+            s.slipT = 0;
+            this._letGo(s, s.hold.left === s.owner ? 'right' : 'left');
         }
     }
 
@@ -409,6 +449,7 @@ export class BookReading {
         s.lowT = 0;
         s.support = false;
         this._grab[gone] = 0;
+        this._armed[gone] = false;
         this._let[keeps] = 0;
         this._rig(s, this._hand(keeps));
     }
@@ -478,13 +519,16 @@ export class BookReading {
         if (!this._free(Fr)) return;
         const fh = this._hand(Fr);
         const freeHalf = other(s.half);
-        const edge = edgeInBook(freeHalf, s.phi, this.w, s.gy, this.t, _v2).applyQuaternion(s.quat).add(s.pos);
-        const near = fh.G.distanceTo(edge) < HOLD.REACH + 0.1;
-        if (!s.support && this._dwell(this._grab, Fr, near && fh.curl > HOLD.GRAB_CURL && s.sheet?.finger == null, dt) >= HOLD.GRAB_T) {
-            this._grab[Fr] = 0;
+        // (its outer edge, top to bottom: the hand closes on it there — and only there)
+        const hs = BOOK.H * (ITEM_SCALE.book || 1.6) / 2;
+        const ea = edgeInBook(freeHalf, s.phi, this.w, -hs, this.t, _v2).applyQuaternion(s.quat).add(s.pos);
+        const eb = edgeInBook(freeHalf, s.phi, this.w, hs, this.t, _v6).applyQuaternion(s.quat).add(s.pos);
+        const near = !s.support && s.sheet?.finger == null && distToSegment(fh.G, ea, eb) < HOLD.REACH;
+        if (this._takes(Fr, fh, near, dt)) {
             s.mode = 'two';
+            s.slipT = 0;
             s.hold = { [s.half]: H, [freeHalf]: Fr };
-            s.pL = s.pR = null;
+            s.pL = s.pR = null; s.steady = null;
             s.hy0 = s.hyPrev = null;
             s.from = { pos: s.model.position.clone(), quat: s.model.quaternion.clone(), t: 0 };
             this._setGrip(Fr, 0.55, 'book');
@@ -572,7 +616,7 @@ export class BookReading {
             if (out < CATCH.R0 * W || out > CATCH.R1 * W || Math.abs(p.y) > H / 2 + 0.02) continue;
             if (above > CATCH.ABOVE * (1.6 / sc) || above < -CATCH.BELOW * (1.6 / sc)) continue;
             s.catchT = (s.catchT || 0) + dt;
-            if (s.catchT < 0.05) return;
+            if (s.catchT < CATCH.T) return;
             s.catchT = 0;
             this._startSheet(s, dir);
             s.sheet.touch(this._fingerInBook(s, tip, dir > 0 ? 0 : 1).beta, dt);

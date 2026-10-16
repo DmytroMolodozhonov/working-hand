@@ -976,6 +976,19 @@ export class VoxelCharacter {
         return (f.index + f.middle + f.ring) / 3;
     }
 
+    /**
+     * How closed a hand is round something it takes by an edge (a book's cover, a scroll's
+     * roller): the index finger counts as much as the others — a pointing hand (the index
+     * out to turn a page, the others in) holds nothing.
+     */
+    getHoldCurl(side) {
+        if (this.handLost(side)) return 0;
+        const hand = this.getActiveHands()[side];
+        if (!hand) return 0;
+        const f = (hand.targetState || hand.currentState).fingers;
+        return Math.min(f.index, (f.middle + f.ring) / 2);
+    }
+
     // ------------------------------------------------------------- networking
     /** Compact pose snapshot for multiplayer. */
     serializePose() {

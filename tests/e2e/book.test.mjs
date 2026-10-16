@@ -41,6 +41,7 @@ test('book: taken by the cover, opened by the hands, tilted by the wrists, a pag
         const C = ch.group.position.clone().addScaledVector(fwd, 1.4).setY(ch.group.position.y + 1.0);
         const H = { left: { G: m.position.clone(), curl: 0, tip: null, up: true }, right: { G: m.position.clone(), curl: 0.9, tip: null, up: true } };
         R.input = (s) => H[s];
+        await frames(3); // (the left hand is seen open first: a fist arriving takes nothing)
         // 1) the left hand comes to the covers' edge (the fore-edge) and closes on it: both hands hold it
         m.updateMatrixWorld(true);
         H.left.G.copy(m.localToWorld(new T.Vector3(0, -0.1, 0.42))); H.left.curl = 0.9;
@@ -180,7 +181,8 @@ test('book: with the camera hands — held by its edge, fingers on the covers ne
     // the wrists bent (the fingers towards the camera): still no finger in it
     await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.02, 0], leftTilt: 0.6, rightTilt: 0.6 }), 20, 40);
     const tilted = await page.evaluate(MEASURE);
-    // much wider than the book: it lies flat between the hands, nothing lets go
+    // much wider than the book: it lies flat between the hands, nothing lets go (only arms spread
+    // wide let the cover slip out — book-hands.test.js)
     await feed(page, pose({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [0.08, 0] }), 20, 40);
     const wide = await page.evaluate(MEASURE);
     // the right hand opens: it lets go, the book stays open in the left one (rigidly)
@@ -242,8 +244,10 @@ test('book: in one hand, the hand opens palm up — the book lies on the palm; o
         await frames(3);
         const m = g.items.held.right.model;
         m.updateMatrixWorld(true);
-        const H = { left: { G: m.localToWorld(new T.Vector3(0, -0.1, 0.42)), curl: 0.9, tip: null, up: true }, right: { G: m.position.clone(), curl: 0.9, tip: null, up: true } };
+        const H = { left: { G: m.localToWorld(new T.Vector3(0, -0.1, 0.42)), curl: 0, tip: null, up: true }, right: { G: m.position.clone(), curl: 0.9, tip: null, up: true } };
         R.input = (s) => H[s];
+        await frames(3); // (it comes open to the edge, then closes on it)
+        H.left.curl = 0.9;
         await frames(12);
         const C = H.right.G.clone();
         H.left.G.copy(C).add(new T.Vector3(-1.2, 0, 0));
