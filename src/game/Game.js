@@ -17,7 +17,7 @@ import { Chest } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
 import { WeaponSystem } from './Weapons.js';
-import { FlightController, FLIGHT } from './Flight.js';
+import { FlightController } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
@@ -3154,10 +3154,10 @@ export class Game {
             return;
         }
 
-        // Flying costs mana (free world): 1 a second, hovering 0.5 (the author); at 0 the hero falls
+        // Flying costs strength (free world): more than it comes back; at 0 the hero falls
         const c = this.combat;
         if (c.enabled) {
-            c.fatigue = Math.max(0, c.fatigue - (flight.hovering ? FLIGHT.HOVER_COST : FLIGHT.COST) * dt);
+            c.fatigue = Math.max(0, c.fatigue - (flight.hovering ? 1.8 : 2.5) * dt);
             if (c.fatigue <= 0) {
                 flight.land('tired');
                 this.hud.toast?.('😮‍💨 Нет сил лететь — вы падаете!', 2200);
