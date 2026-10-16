@@ -159,3 +159,11 @@ test('a spell of the gods: every boss is open to it (the author: «на то о�
     S._divine = false;
     assert.equal(S._cursed(black), cursed);
 });
+
+test('every boss is open to the spells of the gods: the dragon (no scales hold), the spider (no «it doesn\'t care»)', async () => {
+    const { dragonDamage, isGodSpell } = await import('../../src/game/DragonKinds.js');
+    for (const k of GOD_SPELLS) { assert.ok(isGodSpell(k), k); assert.equal(dragonDamage(k, 40).dmg, 40, `the dragon takes ${k}`); }
+    assert.equal(dragonDamage('Inferno', 40).dmg, 0, 'fire still nothing to it');
+    const src = fs.readFileSync(new URL('../../src/game/Spider.js', import.meta.url), 'utf8');
+    assert.match(src, /!isGodSpell\(kind\) && \(kind === 'Ice'/);
+});

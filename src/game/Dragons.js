@@ -165,7 +165,7 @@ export class Dragons {
         const g = this.game;
         const who = by === undefined || by === 'local' ? this.me : by;
         const { dmg: n, rule } = dragonDamage(kind, dmg);
-        if (isFire(kind)) {
+        if (isFire(kind) && n <= 0) {
             // (fire: nothing — a few sparks off its scales, and the one who burnt it is told once)
             if (who === this.me && !this._fireSaid) { this._fireSaid = true; g.hud?.setVoice?.('🐉 Огонь дракону не страшен — жгите хоть адским пламенем', true); }
             this.log.push('fire:' + kind);

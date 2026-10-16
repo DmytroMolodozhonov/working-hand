@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { rollWand, rollLoot, newUid } from './ItemTypes.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
+import { isGodSpell } from './DragonKinds.js';
 
 const HP = 200;
 /** How big it is against the first (smaller) spider: everything below scales with it. */
@@ -171,7 +172,7 @@ export class Spiders {
     // -------------------------------------------------------------- damage
     hit(s, dmg, kind = null, by = undefined) {
         if (!s || s.dead) return;
-        if (kind === 'Ice' || kind === 'Frozen' || kind === 'Wind') return; // it doesn't care
+        if (!isGodSpell(kind) && (kind === 'Ice' || kind === 'Frozen' || kind === 'Wind')) return; // it doesn't care (a spell of the gods — it does)
         if (kind === 'AvadaKedavra') dmg = 25;
         if (!this.auth) { this.game.sync?.bossHit?.(s.id, dmg, kind); return; }
         s.lastBy = by === undefined ? this.game.localId : by; // (who struck: the killer gets the mana)

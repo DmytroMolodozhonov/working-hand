@@ -9,6 +9,12 @@
  * как ни жги, даже адским огнём, ему всё равно.»
  */
 
+import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
+
+/** The spells of the gods (the scrolls of their library): every boss is open to them — «на то они и божественные». */
+export const GODS = new Set(TEMPLE_SCROLLS);
+export const isGodSpell = (kind) => !!kind && GODS.has(kind);
+
 /** Every dragon: its health. */
 export const DRAGON_HP = 500; // (the author: 1000 was too much)
 
@@ -151,6 +157,7 @@ export const ON_DRAGON = {
  * @returns {{dmg:number, rule:object|null}}
  */
 export function dragonDamage(kind, dmg) {
+    if (isGodSpell(kind)) return { dmg: Math.max(0, dmg || 0), rule: ON_DRAGON[kind] || null }; // (a spell of the gods: no scales, no fire-proofness hold)
     if (isFire(kind)) return { dmg: 0, rule: ON_DRAGON.fire };
     const r = ON_DRAGON[kind];
     if (!r) return { dmg: Math.max(0, dmg || 0), rule: null };
