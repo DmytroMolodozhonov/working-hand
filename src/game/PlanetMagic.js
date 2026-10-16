@@ -55,6 +55,7 @@
 import * as THREE from 'three';
 import { planetPosition, climateAt, terraformPatch, orbitThrough, realmAt, SPACE } from '../world/Planets.js';
 import { steadyDir } from './AimHold.js';
+import { VIEW_FX } from '../world/SpaceView.js';
 
 export const PMAGIC = {
     COST: { CreatePlanet: 500, EnlargePlanet: 100, TerraformPlanet: 1000, LevitationSuperMaxima: 100 },
@@ -256,7 +257,7 @@ export class PlanetMagic {
         g.sound?.playSpace?.('spaceRise', 0.8);
         this._say(`☄️ <b>Create a Planet!</b> Метеориты стягиваются в одну точку, сталкиваются, раскаляются… Рождается <b>«${def.name}»</b>. Хотите своё имя — скажите «Назови …» (например, «Назови Аврора»)`);
         this._naming = { cluster: c.id, until: performance.now() + PMAGIC.NAME_T * 1000 };
-        this._later(10, () => { const p = this._myNew(); this._say(`🪐 Новая планета <b>«${p?.name || def.name}»</b>: камень и пыль, воздуха нет совсем (дышите магией), тяжесть ×${def.gravity} — взлетать с неё легко. Её видно на карте космоса`); });
+        this._later(VIEW_FX.BIRTH, () => { const p = this._myNew(); this._say(`🪐 Новая планета <b>«${p?.name || def.name}»</b>: камень и пыль, воздуха нет совсем (дышите магией), тяжесть ×${def.gravity} — взлетать с неё легко. Её видно на карте космоса`); });
         this._worked('CreatePlanet');
         return 'CreatePlanet';
     }
@@ -345,8 +346,8 @@ export class PlanetMagic {
         const what = climate === 'green' ? 'зелёная зона: воздух, моря и озёра, своя трава и деревья'
             : climate === 'desert' ? 'близко к Солнцу — вышла жаркая пустыня: воздух есть, воды нет'
                 : 'далеко от Солнца — вышел ледяной мир: воздух есть, вся вода — лёд';
-        this._say(`🌱 <b>Terraform Planet!</b> «${def.name}» меняется: ${what} (${patch.terraLook}). Животных там нет`);
-        this._later(8, () => this._say(`🌍 «${def.name}» терраформирована: дышать можно без маны, вход в её воздух — с огнём, взлёт — как с Земли`));
+        this._say(`🌱 <b>Terraform Planet!</b> «${def.name}» меняется: ${what} (${patch.terraLook}). Животных там нет. Смотрите — чудо займёт секунд двадцать`);
+        this._later(VIEW_FX.TERRA, () => this._say(`🌍 «${def.name}» терраформирована: дышать можно без маны, вход в её воздух — с огнём, взлёт — как с Земли`));
         this._worked('TerraformPlanet');
         return 'TerraformPlanet';
     }

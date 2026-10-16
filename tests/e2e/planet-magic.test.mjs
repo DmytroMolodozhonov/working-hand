@@ -75,6 +75,10 @@ test('planet spells: create, enlarge, terraform, move', async () => {
         window.__aim = look;
         return { R };
     }, spec);
+    // (the pictures of the long animations: the shared clock held at each moment — this browser draws only a few
+    //  frames a second, a picture taken «at 5 s» came seconds late)
+    const clockAt = (s) => page.evaluate((s) => { const S = window.__zns.game.space; if (S.__t0 == null) { S.__t0 = S.now(); } S.now = () => S.__t0 + s; }, s);
+    const clockGo = () => page.evaluate(() => { const S = window.__zns.game.space; delete S.now; S.__t0 = null; });
     const hold = () => page.evaluate(() => { const S = window.__zns.game.space; S.vel.x = S.vel.y = S.vel.z = 0; S.speed = 0; });
 
     // 1. «Create a Planet» at the first meteor cluster of the asteroid belt
@@ -85,17 +89,20 @@ test('planet spells: create, enlarge, terraform, move', async () => {
     await shot('01-meteor-cluster.png');
     const made = await say('Create a Planet');
     assert.equal(made.name, 'CreatePlanet', JSON.stringify(made));
-    await wait(1800); await hold();
-    await shot('02-meteors-drawn-in.png');
-    await wait(2600); await hold();
-    await shot('03-red-hot-ball.png');
+    // (the making: ~30 s — the rocks falling in one by one, crashing with flashes and sparks, a red-hot ball cooling)
+    const until = async (s) => { await clockAt(s); await hold(); await frames(4); };
+    await until(4); await shot('02-meteors-drawn-in.png');
+    await until(8); await shot('02b-meteors-crashing.png');
+    await until(12); await shot('02c-ball-growing.png');
+    await until(16); await shot('03-red-hot-ball.png');
+    await until(23); await shot('03b-ball-cooling.png');
+    await clockGo();
     const pid = await page.evaluate(() => window.__zns.game.space.planets.list.find((p) => !p.base)?.id);
     assert.ok(pid, 'a new planet');
     // its name by voice
     await say('Назови Аврора');
     assert.equal(await page.evaluate((pid) => window.__zns.game.space.planets.get(pid).name, pid), 'Аврора');
     await page.evaluate(async (pid) => { const S = window.__zns.game.space; for (let i = 0; i < 150 && S._tex.get(pid) !== 'done'; i++) await new Promise((r) => setTimeout(r, 100)); }, pid);
-    await wait(5000);
     await near({ id: pid, k: 3.0, side: 0.6, up: 0.3 });
     await frames(20);
     await shot('04-new-planet.png');
@@ -162,7 +169,8 @@ test('planet spells: create, enlarge, terraform, move', async () => {
             const e = S.localSun(def, x, z).y;
             if (!best || e > best.e) best = { x: Math.round(x), z, e };
         }
-        const x = best.x + Math.round(r.w * 0.06), z = best.z;
+        let x = best.x + Math.round(r.w * 0.06), z = best.z;
+        if (x > r.cx + r.w / 2 - 600) x -= Math.round(r.w * 0.12); // (never past the edge of its surface)
         S.state = 'off';
         g.character.group.visible = true;
         g.flight.land('debug');
@@ -181,6 +189,17 @@ test('planet spells: create, enlarge, terraform, move', async () => {
     await shot('10-mars-before.png');
     const tf = await say('Terraform Planet');
     assert.equal(tf.name, 'TerraformPlanet', JSON.stringify(tf));
+    // (its 20 s on the planet: the ground's own light, waves of light, the air flaring up, the land changing)
+    const at1 = async (s, n = 6) => { await clockAt(s); await frames(n); };
+    await page.evaluate(() => { window.__look = [0.7, -0.15, -0.7]; });
+    await at1(1.5); await shot('10b-terraform-glow.png');
+    await at1(5); await shot('10c-waves-of-light.png');
+    await page.evaluate(() => { window.__look = [0.6, 0.25, -0.75]; });
+    await at1(9.2, 3); await shot('10d-air-flares-up.png');
+    await at1(11.5); await shot('10d2-new-sky.png');
+    await page.evaluate(() => { window.__look = [0.7, -0.05, -0.7]; });
+    await at1(14, 14); await shot('10e-land-changing.png');
+    await clockGo();
     // (its land made again a few chunks a frame: wait for it)
     for (let i = 0; i < 60; i++) {
         const busy = await page.evaluate(() => { const T = window.__zns.game.world.terrain; return (T._remake?.length || 0) + (T._remade?.length || 0) + (T._remakeFlight?.size || 0); });
@@ -207,10 +226,19 @@ test('planet spells: create, enlarge, terraform, move', async () => {
     await near({ id: 'mars', k: 3.4, side: 0.7, up: 0.3 });
     await frames(30);
     await shot('13-mars-from-space-terraformed.png');
-    await near({ id: pid, k: 3.2, side: 0.6, up: 0.3 });
+    // (from space, half of it in the night: it lights up by itself, the waves run, its air and clouds come, its new land spreads)
+    await near({ id: pid, k: 3.2, side: 2.2, up: 0.25 });
     const ice = await say('Terraform Planet');
     assert.equal(ice.name, 'TerraformPlanet', JSON.stringify(ice));
     assert.equal(await page.evaluate((pid) => window.__zns.game.space.planets.get(pid).climate, pid), 'ice');
+    await page.evaluate(async (pid) => { const S = window.__zns.game.space; for (let i = 0; i < 150 && S._tex.get(pid) !== 'done'; i++) await new Promise((r) => setTimeout(r, 100)); }, pid); // (its new map)
+    const at2 = async (s) => { await clockAt(s); await hold(); await frames(4); };
+    await at2(3); await shot('15a-terraform-from-space-glow.png');
+    await at2(7); await shot('15b-terraform-from-space-waves.png');
+    await at2(12); await shot('15c-terraform-from-space-air.png');
+    await at2(15); await shot('15d-terraform-from-space-new-land.png');
+    await at2(21); await shot('15e-terraform-from-space-done.png');
+    await clockGo();
     at = await land(pid);
     for (let i = 0; i < 40; i++) { if (!(await page.evaluate(() => window.__zns.game.world.terrain._remake?.length))) break; await wait(250); }
     await frames(90);

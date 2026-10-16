@@ -34,6 +34,7 @@ void main() {
 
 const PLANET_FS = /* glsl */ `
 uniform sampler2D map; uniform vec3 uSun; uniform vec3 uAtmo; uniform float uAtmoK; uniform float uAmb; uniform float uSpec; uniform float uHeat;
+uniform sampler2D map0; uniform float uTerra; uniform vec3 uTerraCol;
 varying vec3 vObj; varying vec3 vN; varying vec3 vW;
 void main() {
     vec3 d = normalize(vObj);
@@ -42,7 +43,27 @@ void main() {
     // (no seam where the longitude wraps: the second u, wrapped the other way, where its change is smaller)
     vec2 uv2 = vec2(fract(uv.x + 0.5) - 0.5, uv.y);
     vec2 dx = dFdx(uv), dy = dFdy(uv), dx2 = dFdx(uv2), dy2 = dFdy(uv2);
-    vec3 tex = (abs(dx.x) + abs(dy.x) > abs(dx2.x) + abs(dy2.x) + 1e-6) ? textureGrad(map, uv2, dx2, dy2).rgb : textureGrad(map, uv, dx, dy).rgb;
+    bool wrap = abs(dx.x) + abs(dy.x) > abs(dx2.x) + abs(dy2.x) + 1e-6;
+    vec3 tex = wrap ? textureGrad(map, uv2, dx2, dy2).rgb : textureGrad(map, uv, dx, dy).rgb;
+    // «Terraform Planet» (PlanetMagic): uTerra 0..1 over its 20 s — the new land (map) spreads over the old (map0)
+    // from the north pole down, after the waves of light
+    float south = 0.5 - 0.5 * d.y;
+    float reveal = 1.0, tw = 0.0, tg = 0.0;
+    if (uTerra > 0.0 && uTerra < 1.0) {
+        vec3 tex0 = wrap ? textureGrad(map0, uv2, dx2, dy2).rgb : textureGrad(map0, uv, dx, dy).rgb;
+        reveal = clamp((uTerra - 0.5) / 0.32 * 1.35 - south * 0.35, 0.0, 1.0);
+        tex = mix(tex0, tex, smoothstep(0.0, 1.0, reveal));
+        // its own light (seen on the night side too), strongest while the waves run
+        tg = smoothstep(0.0, 0.08, uTerra) * (1.0 - smoothstep(0.8, 1.0, uTerra));
+        // waves of light running over it from pole to pole, three at a time
+        for (int i = 0; i < 3; i++) {
+            float ph = fract(uTerra * 4.0 + float(i) / 3.0) * 1.3 - 0.15;
+            tw += exp(-pow((south - ph) * 16.0, 2.0));
+        }
+        tw *= smoothstep(0.06, 0.15, uTerra) * (1.0 - smoothstep(0.55, 0.7, uTerra));
+        // the edge of the new land: a bright line where it is spreading
+        tw += (1.0 - smoothstep(0.0, 0.08, abs(reveal - 0.5))) * smoothstep(0.48, 0.55, uTerra) * (1.0 - smoothstep(0.8, 0.86, uTerra)) * 0.8;
+    }
     vec3 n = normalize(vN);
     vec3 L = normalize(uSun - vW);
     vec3 V = normalize(-vW);
@@ -58,6 +79,8 @@ void main() {
     // red-hot (a planet just made of meteors — PlanetMagic): it glows by itself, cracks brighter, then cools
     float cr = smoothstep(0.35, 0.75, tex.r + 0.25 * sin(d.x * 40.0 + d.y * 31.0) * sin(d.z * 37.0));
     col = mix(col, mix(vec3(0.75, 0.16, 0.03), vec3(1.0, 0.72, 0.3), cr), clamp(uHeat, 0.0, 1.0));
+    // the terraforming's own light: a glow over all of it, the waves, the new land's edge
+    col += uTerraCol * (tg * (0.18 + 0.35 * tex) + tw * 0.9);
     gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -187,8 +210,21 @@ function glowTexture(white = false) {
 }
 
 /** The planet spells' times in the view (s): the meteors melt into a ball, it cools; a planet grows; its air comes. */
-export const VIEW_FX = { FORM: 5, BIRTH: 10, GROW: 3, TERRA: 8 };
+export const VIEW_FX = { FORM: 15, BIRTH: 30, GROW: 3, TERRA: 20 }; // (the author: the making ~3× slower, the terraforming ~20 s)
 const smooth = (k) => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
+/** «Create a Planet»: the rocks start falling in over SPREAD s, each falls FALL s; its sparks live SPARK_T s. */
+const FORM_FX = { SPREAD: 9, FALL: 5, SPARK_T: 2.2 };
+/** The new ball's size (share of its radius) `a` s after «Create a Planet»: the rocks' mass in it so far. */
+const coreK = (a) => Math.max(0.04, Math.pow(Math.max(0, Math.min(1, (a - FORM_FX.FALL * 0.85) / (FORM_FX.SPREAD + 0.6))), 0.55));
+/** The terraforming's light: its new air's colour, made bright and rich (a pale icy air still glows cyan). */
+const magicColor = (hex) => { const c = new THREE.Color(hex), h = {}; c.getHSL(h); return c.setHSL(h.h, Math.max(0.85, h.s), 0.6); };
+/** Is a planet being terraformed now (its 20 s)? */
+const terraforming = (def, t) => !!def?.terraAt && t >= def.terraAt && t - def.terraAt < VIEW_FX.TERRA;
+/** A terraformed planet with clouds of its own (the desert has none). */
+const wantsClouds = (def) => !!def?.terraformed && def.climate !== 'desert' && def.kind !== 'gas';
+const SPARKS = 240;
+const hash01 = (a, b) => { let h = Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const _m4 = new THREE.Matrix4(), _q4 = new THREE.Quaternion(), _e4 = new THREE.Euler(), _s4 = new THREE.Vector3(), _v2 = new THREE.Vector3();
 const _hot = new THREE.Color(0xff6a20);
 
 function colorTex(hex) {
@@ -294,6 +330,7 @@ export class SpaceView {
             const o = new THREE.Object3D();
             let s = c.count * 977 + c.a;
             const rnd = () => ((s = (s * 48271) % 2147483647) / 2147483647);
+            const base = new Float32Array(c.count * 9); // (each rock: place, turn, size — «Create a Planet» moves them)
             for (let i = 0; i < c.count; i++) {
                 const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, rr = c.r * Math.cbrt(rnd());
                 const q = Math.sqrt(1 - u * u);
@@ -303,7 +340,9 @@ export class SpaceView {
                 o.scale.set(sz, sz * (0.6 + rnd() * 0.5), sz * (0.7 + rnd() * 0.5));
                 o.updateMatrix();
                 m.setMatrixAt(i, o.matrix);
+                base.set([o.position.x, o.position.y, o.position.z, o.rotation.x, o.rotation.y, o.rotation.z, o.scale.x, o.scale.y, o.scale.z], i * 9);
             }
+            m.userData.base9 = base;
             m.frustumCulled = false;
             this.root.add(m);
             this.clusterMeshes.set(c.id, m);
@@ -324,7 +363,7 @@ export class SpaceView {
     _makeGlows() {
         const tex = glowTexture(true);
         this.glows = [];
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 6; i++) {
             const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, color: 0xffffff }));
             s.visible = false;
             s.renderOrder = 2;
@@ -332,6 +371,75 @@ export class SpaceView {
             this.glows.push(s);
         }
         this.fx = { hold: null }; // (PlanetMagic: the planet held now, by anybody: {id})
+        // the sparks of the meteors crashing together («Create a Planet»): one small cloud of points, used by
+        // the heap being made into a planet (each spark's path from the shared time: the same everywhere)
+        const N = SPARKS, g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+        g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+        this.sparks = new THREE.Points(g, new THREE.PointsMaterial({ size: 16, vertexColors: true, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, sizeAttenuation: true }));
+        this.sparks.frustumCulled = false;
+        this.sparks.visible = false;
+        this.root.add(this.sparks);
+    }
+
+    /**
+     * «Create a Planet» (PlanetMagic.js), `a` s after it was said: each rock of the heap falls in to its centre in
+     * its own time along a spiral, tumbling; where it strikes the growing ball — a flash and sparks; then it is
+     * gone into it. Returns the next free glow.
+     */
+    _forming(c, m, a, gi) {
+        const B = m.userData.base9, n = c.count;
+        if (!B) return gi;
+        const mat = _m4, q = _q4, e = _e4, sc = _s4, pos = _v2;
+        const flashes = [];
+        // the ball the rocks strike (the new planet: its radius now)
+        let R = m.userData.planetR;
+        if (!R) { const p = this.planets.list.find((d) => d.cluster === c.id && !d.base); R = m.userData.planetR = p?.radius || 250; }
+        const core = R * coreK(a);
+        const hitAt = m.userData.hitAt || (m.userData.hitAt = new Float32Array(n).fill(-1));
+        for (let i = 0; i < n; i++) {
+            const j = i * 9, h = hash01(i, c.count);
+            const delay = h * FORM_FX.SPREAD, k = smooth((a - delay) / FORM_FX.FALL);
+            const ang = k * k * (2.2 + h * 2); // (the spiral in)
+            const len = Math.hypot(B[j], B[j + 1], B[j + 2]) || 1, size = B[j + 6];
+            // falling in — but no deeper than the ball's face: it strikes there
+            const r = Math.max(1 - k, Math.min(1, (core + size * 0.3) / len));
+            if (hitAt[i] > a) hitAt[i] = -1; // (the clock went back: from the start)
+            if (hitAt[i] < 0 && k > 0.05 && 1 - k <= (core + size * 0.3) / len) hitAt[i] = a;
+            const ca = Math.cos(ang), sa = Math.sin(ang);
+            const x = B[j] * r, y = B[j + 1] * r, z = B[j + 2] * r;
+            pos.set(x * ca - z * sa, y, x * sa + z * ca);
+            e.set(B[j + 3] + a * (0.3 + h), B[j + 4] + a * 0.4 * h, B[j + 5]);
+            const swallow = hitAt[i] >= 0 ? 1 - smooth((a - hitAt[i]) / 0.7) : 1; // (melting into the ball)
+            sc.set(B[j + 6] * swallow + 1e-3, B[j + 7] * swallow + 1e-3, B[j + 8] * swallow + 1e-3);
+            mat.compose(pos, q.setFromEuler(e), sc);
+            m.setMatrixAt(i, mat);
+            // the strike: a flash and sparks where it hit
+            const hit = hitAt[i] >= 0 ? a - hitAt[i] : -1;
+            if (hit >= 0 && hit < FORM_FX.SPARK_T) flashes.push(i, hit, pos.x, pos.y, pos.z);
+        }
+        m.instanceMatrix.needsUpdate = true;
+        // the flashes of the newest strikes, the sparks of all the recent ones
+        for (let f = flashes.length - 5; f >= 0 && gi < this.glows.length; f -= 5) {
+            const age = flashes[f + 1];
+            if (age > 0.6) continue;
+            this._glow(gi++, m.position.x + flashes[f + 2], m.position.y + flashes[f + 3], m.position.z + flashes[f + 4], c.r * (0.25 + 0.4 * hash01(flashes[f], 7)), 0xfff0c0, 1.4 * (1 - age / 0.6));
+        }
+        const P = this.sparks.geometry.attributes.position, C = this.sparks.geometry.attributes.color;
+        let s = 0;
+        for (let f = 0; f < flashes.length && s < SPARKS; f += 5) {
+            const i = flashes[f], age = flashes[f + 1], fade = 1 - age / FORM_FX.SPARK_T;
+            for (let k = 0; k < 4 && s < SPARKS; k++, s++) {
+                const h1 = hash01(i * 4 + k, 11), h2 = hash01(i * 4 + k, 23), h3 = hash01(i * 4 + k, 37);
+                const th = h1 * Math.PI * 2, u = h2 * 2 - 1, w = Math.sqrt(1 - u * u), v = (40 + 90 * h3) * age;
+                P.setXYZ(s, m.position.x + flashes[f + 2] + Math.cos(th) * w * v, m.position.y + flashes[f + 3] + u * v, m.position.z + flashes[f + 4] + Math.sin(th) * w * v);
+                C.setXYZ(s, 1.0 * fade, (0.55 + 0.35 * h3) * fade * fade, 0.15 * fade * fade);
+            }
+        }
+        for (; s < SPARKS; s++) C.setXYZ(s, 0, 0, 0);
+        P.needsUpdate = true; C.needsUpdate = true;
+        this.sparks.visible = true;
+        return gi;
     }
 
     _glow(i, x, y, z, size, color, k) {
@@ -353,13 +461,37 @@ export class SpaceView {
         if (def.born && t - def.born < VIEW_FX.BIRTH) {
             const a = t - def.born;
             this._heat = 1 - smooth((a - VIEW_FX.FORM) / (VIEW_FX.BIRTH - VIEW_FX.FORM));
-            return def.radius * Math.max(0.04, smooth((a - 1.2) / (VIEW_FX.FORM - 1.2)));
+            return def.radius * coreK(a); // (it grows as the rocks strike it: _forming)
         }
         if (def.grownAt && def.radiusFrom && t - def.grownAt < VIEW_FX.GROW && t >= def.grownAt) {
             const k = smooth((t - def.grownAt) / VIEW_FX.GROW);
             return def.radiusFrom + (def.radius - def.radiusFrom) * k;
         }
         return def.radius;
+    }
+
+    /**
+     * «Terraform Planet» seen from space (VIEW_FX.TERRA s, the shared time — every computer the same): it lights
+     * up from inside (on the night side too), waves of light run over it, its air comes (the rim), then its
+     * clouds, and the new land spreads from the north pole down (PLANET_FS: uTerra, map0 → map).
+     */
+    _terraStep(b, def, t) {
+        const p = terraforming(def, t) ? (t - def.terraAt) / VIEW_FX.TERRA : 0;
+        if (p > 0) {
+            b.u.uTerra.value = Math.max(1e-4, p);
+            const air = smooth((p - 0.3) / 0.3);
+            b.u.uAtmoK.value = 0.55 * air;
+            if (b.au) b.au.uK.value = 0.6 * air;
+            if (b.cu) b.cu.uK.value = b.cloudK * smooth((p - 0.5) / 0.3);
+            b.terraDone = false;
+        } else if (!b.terraDone) {
+            b.terraDone = true;
+            b.u.uTerra.value = 0;
+            if (b.u.map0.value !== b.u.map.value) { b.u.map0.value?.dispose?.(); b.u.map0.value = b.u.map.value; }
+            if (b.atmoCol != null) b.u.uAtmoK.value = 0.55;
+            if (b.au) b.au.uK.value = def.look === 'earth' ? 1.0 : 0.6;
+            if (b.cu) b.cu.uK.value = b.cloudK;
+        }
     }
 
     _rockMat(color) {
@@ -377,7 +509,7 @@ export class SpaceView {
             seen.add(def.id);
             let b = this.bodies.get(def.id);
             // (its air came or went — «Terraform Planet»: the body made again with it, its map kept)
-            if (b && (b.atmoCol ?? null) !== (def.atmosphere ?? def.clouds ?? null)) {
+            if (b && ((b.atmoCol ?? null) !== (def.atmosphere ?? def.clouds ?? null) || !!b.clouds !== (def.look === 'earth' || wantsClouds(def)))) {
                 const map = b.u.map.value;
                 this.root.remove(b.group, b.orbit);
                 b.orbit?.geometry.dispose();
@@ -385,6 +517,7 @@ export class SpaceView {
                 b = this._makeBody(def);
                 b.u.map.value.dispose?.();
                 b.u.map.value = map;
+                b.u.map0.value = map; // (its old look: the new one spreads over it — «Terraform Planet»)
                 this.bodies.set(def.id, b);
             }
             if (!b) { b = this._makeBody(def); this.bodies.set(def.id, b); }
@@ -404,7 +537,9 @@ export class SpaceView {
         const u = {
             map: { value: colorTex(def.color) }, uSun: { value: new THREE.Vector3() }, uAtmo: { value: new THREE.Color(def.atmosphere ?? def.clouds ?? 0x000000) },
             uAtmoK: { value: def.atmosphere || def.clouds ? 0.55 : 0 }, uAmb: { value: def.look === 'earth' ? 0.035 : 0.02 }, uSpec: { value: def.look === 'earth' ? 1 : 0 }, uHeat: { value: 0 },
+            map0: { value: null }, uTerra: { value: 0 }, uTerraCol: { value: magicColor(def.atmosphere ?? 0x9fe0ff) },
         };
+        u.map0.value = u.map.value;
         const mesh = new THREE.Mesh(this.geoLo, new THREE.ShaderMaterial({ uniforms: u, vertexShader: PLANET_VS, fragmentShader: PLANET_FS }));
         tilt.add(mesh);
         const b = { def, group, tilt, mesh, u, atmo: null, clouds: null, rings: null, atmoCol: def.atmosphere ?? def.clouds ?? null };
@@ -416,8 +551,10 @@ export class SpaceView {
             b.au = au;
             tilt.add(b.atmo);
         }
-        if (def.look === 'earth') {
-            b.cu = { uSun: u.uSun, uTime: { value: 0 }, uK: { value: 0.9 } };
+        if (def.look === 'earth' || wantsClouds(def)) {
+            // (the Earth's clouds; a terraformed planet's own — PlanetMagic.js; the same shader)
+            b.cloudK = def.look === 'earth' ? 0.9 : 0.6;
+            b.cu = { uSun: u.uSun, uTime: { value: 0 }, uK: { value: b.cloudK } };
             b.clouds = new THREE.Mesh(this.geoLo, new THREE.ShaderMaterial({ uniforms: b.cu, vertexShader: PLANET_VS, fragmentShader: CLOUD_FS, transparent: true, depthWrite: false }));
             b.clouds.scale.setScalar(1.012);
             tilt.add(b.clouds);
@@ -465,7 +602,8 @@ export class SpaceView {
         t.needsUpdate = true;
         const old = b.u.map.value;
         b.u.map.value = t;
-        old?.dispose?.();
+        if (old !== b.u.map0.value) old?.dispose?.(); // (its old look still shown under the terraforming: kept until it ends)
+        else if (!terraforming(b.def, this.time)) { b.u.map0.value = t; old?.dispose?.(); }
     }
 
     /**
@@ -494,7 +632,7 @@ export class SpaceView {
         this.sunGlow.scale.setScalar(Math.max(SPACE.SUN_R * 7, ds * 0.06));
         const sunRel = _v.set(sx, sy, sz);
         const pxK = (o.height || 720) / (2 * Math.tan((C.fov * Math.PI) / 360));
-        let gi = 0;
+        let gi = 0, sparked = false;
         for (const b of this.bodies.values()) {
             const def = b.def;
             planetPosition(def, t, _p, this.planets);
@@ -503,11 +641,12 @@ export class SpaceView {
             const rNow = this.radiusNow(def, t), heat = this._heat;
             if (b.group.scale.x !== rNow) b.group.scale.setScalar(rNow);
             b.u.uHeat.value = heat;
+            this._terraStep(b, def, t);
             if (gi < this.glows.length) {
                 const gp = b.group.position;
                 if (heat > 0.01) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 4.5, 0xff8a3a, heat * 1.3);
                 else if (rNow !== def.radius) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 3.2, 0xfff0d0, 0.6);
-                else if (def.terraAt && t - def.terraAt >= 0 && t - def.terraAt < VIEW_FX.TERRA) { const k = Math.sin(Math.PI * (t - def.terraAt) / VIEW_FX.TERRA); this._glow(gi++, gp.x, gp.y, gp.z, def.radius * 3.4, def.atmosphere ?? 0x9fe0ff, 0.9 * k); }
+                else if (terraforming(def, t)) { const p = (t - def.terraAt) / VIEW_FX.TERRA, k = smooth(p / 0.08) * (1 - smooth((p - 0.75) / 0.25)) * (0.8 + 0.2 * Math.sin(t * 6)); this._glow(gi++, gp.x, gp.y, gp.z, def.radius * (3 + p), def.atmosphere ?? 0x9fe0ff, k); }
                 else if (this.fx.hold?.id === def.id) this._glow(gi++, gp.x, gp.y, gp.z, def.radius * 3, 0xf2e6ff, 0.75 + 0.15 * Math.sin(t * 5));
             }
             b.mesh.rotation.y = spinAt(def, t);
@@ -552,13 +691,15 @@ export class SpaceView {
                 const a = c.usedAt ? t - c.usedAt : 1e9;
                 if (a > VIEW_FX.FORM + 0.5 || a < 0) { m.visible = false; continue; }
                 const k = smooth(a / VIEW_FX.FORM);
-                m.scale.setScalar(Math.max(0.02, 1 - k));
-                m.rotation.y = t * 0.01 + k * k * 9;
+                m.rotation.y = t * 0.01 + k * k * 3;
                 const u = m.material.uniforms.uCol.value, base = m.userData.base || (m.userData.base = u.getHex());
-                u.setHex(base).lerp(_hot, Math.min(1, k * 1.4));
-                if (gi < this.glows.length) this._glow(gi++, m.position.x, m.position.y, m.position.z, c.r * (1.6 - k), 0xff7a2a, 0.3 + k);
+                u.setHex(base).lerp(_hot, smooth((a - 2) / 9)); // (red-hot from the crashes)
+                if (gi < this.glows.length) this._glow(gi++, m.position.x, m.position.y, m.position.z, c.r * (1.5 - k * 0.8), 0xff7a2a, 0.15 + 0.9 * k);
+                gi = this._forming(c, m, a, gi);
+                sparked = true;
             }
         }
+        if (!sparked) this.sparks.visible = false;
         for (; gi < this.glows.length; gi++) this.glows[gi].visible = false;
         // (close to a planet the orbits' lines would cross the whole view: they fade away)
         const ok = o.orbitK ?? 1;
@@ -580,8 +721,10 @@ export class SpaceView {
         // (the far / near spheres both in use once, so both are uploaded too)
         for (const b of this.bodies.values()) { b.group.visible = true; b.group.position.set(0, 0, -b.def.radius * 3); }
         for (const s of this.glows) { s.visible = true; s.position.set(0, 0, -500); }
+        this.sparks.visible = true;
         try { renderer.compile(this.scene, C); } catch (e) { /* (no GL in tests) */ }
         for (const s of this.glows) s.visible = false;
+        this.sparks.visible = false;
     }
 
     dispose() {

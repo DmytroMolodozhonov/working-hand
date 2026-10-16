@@ -43,7 +43,7 @@
  */
 import * as THREE from 'three';
 import { SPACE, PLANETS, planetPosition, spinAt, realmAt, surfaceToDir, dirToSurface, earthToDir, dirToEarth, slotRect, PlanetRegistry } from '../world/Planets.js';
-import { SpaceView } from '../world/SpaceView.js';
+import { SpaceView, VIEW_FX } from '../world/SpaceView.js';
 import { clamp, smoothstep } from '../core/math.js';
 import { chunkKey, CHUNK } from '../world/Terrain.js';
 import { FLIGHT } from './Flight.js';
@@ -72,6 +72,8 @@ const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quate
 const _pc = { x: 0, y: 0, z: 0 }; // (a meteor cluster's place: _clusterAlt)
 const _p = { x: 0, y: 0, z: 0 }, _p2 = { x: 0, y: 0, z: 0 }, _d = { x: 0, y: 0, z: 0 }, _s = { x: 0, z: 0 };
 const A = { x: SPACE.ANCHOR_X, y: SPACE.ORIGIN_Y, z: SPACE.ANCHOR_Z };
+/** «Terraform Planet» seen on the planet (shares of VIEW_FX.TERRA): the waves of light, its air, its land remade. */
+export const TERRA_STAGE = { WAVES: 0.12, AIR: 0.45, LAND: 0.5 };
 const EPOCH = 1.79e9; // (the shared clock: seconds since then — the same on every computer)
 
 /**
@@ -607,6 +609,7 @@ export class Space {
     afterWorld(dt) {
         const g = this.game;
         if (!this.enabled) return;
+        this._groundStep(); // (a terraformed planet's land remade when its time came)
         this._breath(dt);
         this._heatFx(dt);
         this._overlayStep(dt);
@@ -687,7 +690,9 @@ export class Space {
         this._localFrame = { n: n.clone(), east: east.clone(), north: north.clone() };
         const elev = local.y;
         const day = smoothstep(-0.06, 0.12, elev);
-        const vac = def.sky === 'vacuum';
+        const tk = this._terraFx(dt, def); // («Terraform Planet» going on here: its stages)
+        const vac = def.sky === 'vacuum' || (tk >= 0 && tk < TERRA_STAGE.AIR); // (no air yet: the black sky of before)
+        const airK = tk < 0 ? 1 : smoothstep(TERRA_STAGE.AIR, TERRA_STAGE.AIR + 0.2, tk); // (the new sky coming)
         if (sky) {
             sky.mesh.visible = !vac;
             sky.setSunDirection(local);
@@ -703,7 +708,8 @@ export class Space {
                 u.uZenith.value.setRGB(z[0], z[1], z[2]).lerp(_c1.setRGB(0.01, 0.01, 0.03), 1 - day);
                 u.uHorizon.value.setRGB(h[0], h[1], h[2]).lerp(_c1.setRGB(0.03, 0.03, 0.06), 1 - day);
                 u.uGround.value.setRGB(h[0] * 0.5, h[1] * 0.5, h[2] * 0.5).lerp(_c1.setRGB(0.02, 0.02, 0.03), 1 - day);
-                u.uNight.value = 1 - day; u.uClouds.value = def.climate === 'desert' ? 0 : 1; u.uOvercast.value = 0;
+                u.uNight.value = 1 - day; u.uClouds.value = def.climate === 'desert' ? 0 : tk < 0 ? 1 : smoothstep(TERRA_STAGE.AIR + 0.1, TERRA_STAGE.AIR + 0.3, tk); u.uOvercast.value = 0;
+                if (airK < 1) { u.uZenith.value.multiplyScalar(airK); u.uHorizon.value.lerp(_c1.set(def.atmosphere ?? 0x9fe0ff), 1 - airK).multiplyScalar(0.3 + 0.7 * airK); u.uGround.value.multiplyScalar(airK); }
             } else if (def.sky === 'gas' && def.skyCol) {
                 // a giant: a sky of its own colour (Jupiter's tan, Saturn's pale gold, Uranus' cyan, Neptune's blue)
                 const [zc, hc, gc] = def.skyCol, dk = 0.12 + 0.88 * day;
@@ -739,6 +745,13 @@ export class Space {
             w.ambientLight.intensity = venus ? 0.32 * (0.4 + 0.6 * day) + 0.05 : vac ? 0.07 + 0.05 * day : alien ? 0.2 + 0.25 * day : def.kind === 'gas' ? 0.24 + 0.12 * day : 0.16 + 0.1 * day;
             w.ambientLight.color.set(venus ? 0xffc77a : def.sky === 'mars' ? 0xffc9a4 : alien ? (def.atmosphere ?? 0xc8d4ff) : 0xc8d4ff);
             w.hemiLight.intensity = venus ? 0.25 * (0.3 + 0.7 * day) : vac ? 0.03 : 0.12 * day;
+            if (tk >= 0 && tk < TERRA_STAGE.AIR + 0.1) {
+                // (the planet's own light from inside, pulsing with the waves — the night side too)
+                const pulse = 0.5 + 0.5 * Math.sin(this.now() * 5);
+                w.ambientLight.color.set(def.atmosphere ?? 0x9fe0ff);
+                w.ambientLight.intensity = Math.max(w.ambientLight.intensity, 0.35 + 0.45 * pulse);
+                w.hemiLight.intensity = Math.max(w.hemiLight.intensity, 0.2 + 0.25 * pulse);
+            }
         }
         this._weather(dt, def);
     }
@@ -869,7 +882,7 @@ export class Space {
         const def = this.planets.get(this.realm);
         // (climbing out of the Earth's air its own sky darkens and shows its stars: _darkSky — space itself
         //  is drawn from the white-out on)
-        const vac = this.realm === 'space' || (def && this.realm !== 'earth' && def.sky === 'vacuum');
+        const vac = this.realm === 'space' || (def && this.realm !== 'earth' && (def.sky === 'vacuum' || (this.terraP(def) >= 0 && this.terraP(def) < TERRA_STAGE.AIR)));
         const high = false;
         if (!vac) return false;
         const R = g.renderer, cam = g.camera, t = this.now();
@@ -988,13 +1001,69 @@ export class Space {
             else if (!sig.has(p.id) && sig.size && !p.base) changed.push(p.id);
             sig.set(p.id, k);
         }
-        if (changed.length || !this._sentGround) { this.game.world?.terrain?.planetsChanged?.(json, this._sentGround ? changed : null); this._sentGround = true; }
+        // (a planet being terraformed: its land is remade only when its air has come — half way through the 20 s,
+        //  then chunk by chunk round the hero, the nearest first: the land changes before one's eyes)
+        const later = this._sentGround ? changed.filter((id) => { const k = this.terraP(this.planets.get(id)); return k >= 0 && k < TERRA_STAGE.LAND; }) : [];
+        const now = changed.filter((id) => !later.includes(id));
+        if (now.length || !this._sentGround) { this.game.world?.terrain?.planetsChanged?.(json, this._sentGround ? now : null); this._sentGround = true; }
+        for (const id of later) (this._groundLater || (this._groundLater = new Map())).set(id, this.planets.get(id).terraAt + TERRA_STAGE.LAND * VIEW_FX.TERRA);
         if (this._worker) {
             this._worker.postMessage({ type: 'planets', s: json });
             for (const id of changed) this._tex.delete(id); // (a changed planet's map made again)
             if (this._prepared && changed.length) this._askTextures();
         }
         if (this.game.authority && this.game.sync?.net?.active) this.game.sync.net.send({ t: 'planets', s: json });
+    }
+
+    /** How far a planet's terraforming is (0..1 over its VIEW_FX.TERRA s), or -1 when it is not going on. */
+    terraP(def) {
+        if (!def?.terraAt) return -1;
+        const k = (this.now() - def.terraAt) / VIEW_FX.TERRA;
+        return k >= 0 && k < 1 ? k : -1;
+    }
+
+    /** The land of a terraformed planet, remade when its time came (_planetsChanged). Every frame (afterWorld). */
+    _groundStep() {
+        const L = this._groundLater;
+        if (!L?.size) return;
+        const t = this.now();
+        for (const [id, at] of L) if (t >= at) { L.delete(id); this.game.world?.terrain?.planetsChanged?.(this.planets.toJSON(), [id]); }
+    }
+
+    /**
+     * Standing on a planet while it is terraformed (PlanetMagic.js; the same on every computer — its terraAt):
+     * first the ground lights up and waves of light run over it (the black sky of before), then the air flares
+     * up — a white flash, the sky and its clouds come — then water and its own green: the land is remade round
+     * the hero, the nearest first (_groundStep). Returns how far it is (or -1).
+     */
+    _terraFx(dt, def) {
+        const k = this.terraP(def);
+        if (k < 0) { this._terraSeen = null; return -1; }
+        const g = this.game, p = g.character.group.position, col = def.atmosphere ?? 0x9fe0ff, leaf = def.ground?.leaf ?? 0x9a5ad0, sea = def.ground?.sea ?? 0x4aa0e0;
+        const seen = this._terraSeen?.at === def.terraAt ? this._terraSeen : (this._terraSeen = { at: def.terraAt, st: -1 });
+        const stage = k < TERRA_STAGE.WAVES ? 0 : k < TERRA_STAGE.AIR ? 1 : k < TERRA_STAGE.LAND + 0.08 ? 2 : k < 0.96 ? 3 : 4;
+        if (stage !== seen.st) {
+            seen.st = stage;
+            const say = ['✨ Планета светится изнутри…', '🌊 По земле бегут волны света', '🌬️ Вспыхнула атмосфера — над вами её небо и облака', '💧 Растекается вода, прорастает своя зелень — земля меняется на глазах', `🌍 «${def.name}» ожила`][stage];
+            this._say(say, 'terra' + stage, 1000);
+            if (stage === 2) { this._overlay('white', 0.95); g.sound?.playSpace?.('spaceGift', 1); g.fx.shake = Math.max(g.fx.shake || 0, 0.5); }
+        }
+        // the ground's own light, the waves of light round the hero (expanding rings), then the sprouting
+        if (k < TERRA_STAGE.AIR) {
+            const ring = ((k * 4) % 1) * 70 + 3, n = k < TERRA_STAGE.WAVES ? 12 : 22;
+            for (let i = 0; i < n; i++) {
+                const a = Math.random() * Math.PI * 2, r = k < TERRA_STAGE.WAVES ? 2 + Math.random() * 30 : ring + Math.random() * 2;
+                const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = this._ground(x, z) + 1.2;
+                g.fx.spark(_v1.set(x, y, z), col, 0.18, _v2.set(0, 2 + Math.random() * 3, 0), 1.1);
+            }
+            if (this._waveK !== Math.floor(k * 4)) { this._waveK = Math.floor(k * 4); g.fx.lightFlash?.(p, col, 2, 0.6, 60); }
+        } else if (k < 0.95) {
+            for (let i = 0; i < 6; i++) {
+                const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 40, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+                g.fx.spark(_v1.set(x, this._ground(x, z) + 1.1, z), i % 3 ? leaf : sea, 0.14, _v2.set(0, 1 + Math.random() * 2, 0), 1.4);
+            }
+        }
+        return k;
     }
 
     // ─────────────────────────────────────────────────────────────── the planet spells' hooks
