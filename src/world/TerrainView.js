@@ -24,9 +24,12 @@ export function boundsOf(p) {
     let a = Infinity, b = Infinity, c = Infinity, d = -Infinity, e = -Infinity, f = -Infinity;
     for (let i = 0; i < p.length; i += 3) {
         const x = p[i], y = p[i + 1], z = p[i + 2];
-        if (x < a) a = x; if (x > d) d = x;
-        if (y < b) b = y; if (y > e) e = y;
-        if (z < c) c = z; if (z > f) f = z;
+        if (x < a) a = x;
+        if (x > d) d = x;
+        if (y < b) b = y;
+        if (y > e) e = y;
+        if (z < c) c = z;
+        if (z > f) f = z;
     }
     return [a, b, c, d, e, f];
 }

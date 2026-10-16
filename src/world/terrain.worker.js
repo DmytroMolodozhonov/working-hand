@@ -26,19 +26,6 @@ function bounds(b) {
     b.bounds = [x0, y0, z0, x1, y1, z1];
 }
 
-/** A mesh's box, made here (TerrainView._fill: no pass over its points in the frame). */
-function bounds(b) {
-    const p = b.positions;
-    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
-    for (let i = 0; i < p.length; i += 3) {
-        const x = p[i], y = p[i + 1], z = p[i + 2];
-        if (x < x0) x0 = x; if (x > x1) x1 = x;
-        if (y < y0) y0 = y; if (y > y1) y1 = y;
-        if (z < z0) z0 = z; if (z > z1) z1 = z;
-    }
-    b.bounds = [x0, y0, z0, x1, y1, z1];
-}
-
 const KEEP = 240; // chunks kept (≈ 140 KB each)
 let data = null;
 /** The main thread's changed chunks (TerrainView._share): sent once each time they change, kept here. */
