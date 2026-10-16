@@ -230,13 +230,8 @@ export function rollHouseLoot(r = Math.random, rich = false) {
     for (let i = 0; i < n; i++) {
         const x = r();
         if (x < (rich ? 0.07 : 0.03)) { out.push(rollKeyItem(r)); continue; }
-        if (x < 0.30) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
-        else if (x < 0.48) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
-        else if (x < 0.62) out.push({ kind: 'pie', uid: newUid(), count: 1 });
-        else if (x < 0.74) out.push({ kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
-        else if (x < 0.84) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) });
-        else if (x < 0.92) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 3, 8) });
-        else out.push({ kind: 'apple', uid: newUid(), count: 1 });
+        if (x < 0.10) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) }); // (a village house: a ball of wool now and then)
+        else out.push(rollPlainItem(r));
     }
     return out;
 }
@@ -313,12 +308,8 @@ export function rollPortLoot(r = Math.random) {
     for (let i = 0; i < n; i++) {
         const x = r();
         if (x < 0.08) { out.push(rollKeyItem(r)); continue; }
-        if (x < 0.32) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
-        else if (x < 0.46) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
-        else if (x < 0.60) out.push({ kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
-        else if (x < 0.74) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 4, 12) });
-        else if (x < 0.86) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) });
-        else out.push({ kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) });
+        if (x < 0.16) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) }); // (the sailors' stores: wool for sails)
+        else out.push(rollPlainItem(r));
     }
     return out;
 }
@@ -333,15 +324,9 @@ export function rollShipLoot(r = Math.random, captain = false) {
     const n = randInt(r, 2, captain ? 4 : 3);
     for (let i = 0; i < n; i++) {
         const x = r();
-        if (x < 0.2) out.push({ kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) });
-        else if (x < 0.32) out.push({ kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) });
-        else if (x < 0.44) out.push({ kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) });
-        else if (x < 0.5) out.push({ kind: 'pie', uid: newUid(), count: 1 });
-        else if (x < 0.62) out.push({ kind: 'weapon', type: r() < 0.6 ? 'sword' : 'axe', magic: r() < (captain ? 0.5 : 0.2), bonus: randInt(r, 1, 60), uid: newUid() });
-        else if (x < 0.7) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 12) });
-        else if (x < 0.78) out.push({ kind: 'apple', uid: newUid(), count: 1 });
-        else if (x < (captain ? 0.92 : 0.86)) out.push(rollKeyItem(r)); // a wand, a scroll, a shield…
-        else out.push({ kind: 'cannonball', uid: newUid() });
+        if (x < (captain ? 0.92 : 0.86) && x >= 0.80) out.push(rollKeyItem(r)); // a wand, a scroll, a shield…
+        else if (x < 0.10) out.push({ kind: 'cannonball', uid: newUid() }); // (ship's own: cannonballs to throw)
+        else out.push(rollPlainItem(r));
     }
     return out;
 }
@@ -356,40 +341,48 @@ export const KEY_CHANCE = 0.25;
  */
 export const LOOT_FOR = { maxMana: 0 };
 
+/** A scroll of a chest (health, strength, a spell…). `mild`: the mightiest spells are rerolled most of the time (a plain chest's scroll). */
+export function rollScroll(r = Math.random, mild = false) {
+    const it = _rollScroll(r);
+    return mild && MIGHTY.has(it.spell) && r() < 0.65 ? _rollScroll(r) : it;
+}
+const MIGHTY = new Set(['AvadaKedavra', 'TotalDestruction', 'Hellfire', 'Inspirius', 'LevitationMaxima', 'GiveMyPower']);
+function _rollScroll(r) {
+    // «Inspirius»: only for a great wizard (the chance asked only then: nothing else changes for the rest)
+    if ((LOOT_FOR.maxMana || 0) >= 500 && r() < 0.06) return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Inspirius' };
+    const y = r();
+    // (no scroll of flight any more: «Флайн» is learned only from the swift book-bird's book)
+    // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
+    //  «Авада Кедавра» too — its scroll is the rarest)
+    return y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
+        : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
+        : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
+        : y < 0.45 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
+        : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Alive' }
+        : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
+        : y < 0.535 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'TotalDestruction' }
+        : y < 0.58 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateBoard' }
+        : y < 0.60 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LetItRain' }
+        : y < 0.66 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AlohomoraMaxima' } // (the throne room's gates)
+        : y < 0.70 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'BombardoMaxima' }
+        : y < 0.73 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'OvergrownMaxima' }
+        : y < 0.745 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Hellfire' } // (rare: the strongest fire)
+        : y < 0.775 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'FirefightingMaxima' } // (the hose that drowns even the Hellfire)
+        : y < 0.79 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LevitationMaxima' } // (houses, trees, ships in the air)
+        : y < 0.80 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
+        : y < 0.82 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateHouse' } // (the first one is far easier: HouseMagic.scrollFor)
+        : y < 0.86 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ImproveHouse' }
+        : y < 0.875 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'WindImpulse' } // (and its «Максима»)
+        : y < 0.89 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Invisibility' }
+        : y < 0.915 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'GiveMyPower' } // (your power back from your own skeleton — Legacy.js)
+        : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+}
+
 /** The precious thing of a chest: a wand, a scroll, a magic weapon, shield or bow, a backpack, Thor's hammer. */
 export function rollKeyItem(r = Math.random) {
     const x = r();
     if (x < 0.26) return rollWand(r);
-    if (x < 0.52) {
-        // «Inspirius»: only for a great wizard (the chance asked only then: nothing else changes for the rest)
-        if ((LOOT_FOR.maxMana || 0) >= 500 && r() < 0.06) return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Inspirius' };
-        const y = r();
-        // (no scroll of flight any more: «Флайн» is learned only from the swift book-bird's book)
-        // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
-        //  «Авада Кедавра» too — its scroll is the rarest)
-        return y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
-            : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
-            : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
-            : y < 0.45 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
-            : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Alive' }
-            : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
-            : y < 0.535 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'TotalDestruction' }
-            : y < 0.58 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateBoard' }
-            : y < 0.60 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LetItRain' }
-            : y < 0.66 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AlohomoraMaxima' } // (the throne room's gates)
-            : y < 0.70 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'BombardoMaxima' }
-            : y < 0.73 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'OvergrownMaxima' }
-            : y < 0.745 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Hellfire' } // (rare: the strongest fire)
-            : y < 0.775 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'FirefightingMaxima' } // (the hose that drowns even the Hellfire)
-            : y < 0.79 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LevitationMaxima' } // (houses, trees, ships in the air)
-            : y < 0.80 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
-            : y < 0.82 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateHouse' } // (the first one is far easier: HouseMagic.scrollFor)
-            : y < 0.86 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ImproveHouse' }
-            : y < 0.875 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'WindImpulse' } // (and its «Максима»)
-            : y < 0.89 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Invisibility' }
-            : y < 0.915 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'GiveMyPower' } // (your power back from your own skeleton — Legacy.js)
-            : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
-    }
+    if (x < 0.52) return rollScroll(r);
     if (x < 0.66) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: true, bonus: randInt(r, 1, 60), uid: newUid() };
     if (x < 0.76) { const t = randInt(r, 0, 2); return { kind: 'shield', uid: newUid(), type: t, magic: true, max: randInt(r, 20, 50) }; }
     if (x < 0.86) return { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) };
@@ -398,17 +391,27 @@ export function rollKeyItem(r = Math.random) {
     return { kind: 'hammer', uid: newUid(), charges: 0 };
 }
 
-/** The plain things of a chest: food, a plain bow, arrows, a plain shield or blade, now and then a golden apple. */
+/**
+ * The ordinary things of an ordinary chest (author: scrolls, bows, weapons, shields and food come up equally often;
+ * food only ~10 % more often than a scroll; cheese is one kind of food among the four, no more common than the rest).
+ * Per thing: food 27 % (bread, cheese, steak, pie 6.5 % each — so the scroll and bow that ride in with the precious thing even out — a golden
+ * apple 1 %), scroll 18 %, bow-and-arrows 19 %, weapon 18 %, shield 18 %. Mostly plain; a magic one now and then. Wands, backpacks, Thor's hammer, the magic
+ * pouch stay rare: only `rollKeyItem` (the chest's 25 % precious thing) gives them.
+ */
 export function rollPlainItem(r = Math.random) {
-    const x = r();
-    if (x < 0.22) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
-    if (x < 0.36) return { kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) };
-    if (x < 0.48) return { kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) };
-    if (x < 0.58) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: false, bonus: 0, arrows: randInt(r, 5, 12) };
-    if (x < 0.74) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
-    if (x < 0.83) return { kind: 'shield', uid: newUid(), type: randInt(r, 0, 1), magic: false, max: 0 };
-    if (x < 0.92) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: false, bonus: 0, uid: newUid() };
-    return { kind: 'apple', uid: newUid(), count: 1 };
+    const x = r() * 100;
+    const mg = () => r() < 0.12;
+    if (x < 6.5) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
+    if (x < 13) return { kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) };
+    if (x < 19.5) return { kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) };
+    if (x < 25.5) return { kind: 'pie', uid: newUid(), count: 1 };
+    if (x < 27) return { kind: 'apple', uid: newUid(), count: 1 };
+    if (x < 45) return rollScroll(r, true);
+    if (x < 54.5) { const m = mg(); return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; }
+    if (x < 64) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
+    if (x < 82) { const m = mg(); return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: m, bonus: m ? randInt(r, 1, 60) : 0, uid: newUid() }; }
+    const m = mg();
+    return { kind: 'shield', uid: newUid(), type: randInt(r, 0, m ? 2 : 1), magic: m, max: m ? randInt(r, 20, 50) : 0 };
 }
 
 /**

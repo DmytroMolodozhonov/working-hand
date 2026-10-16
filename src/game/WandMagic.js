@@ -33,6 +33,7 @@ const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
 export const LUMOS = {
+    LOSS_GRACE: 1.5, // s: the wand must stay gone this long before Lumos goes out (a tracking blink is not «put away»)
     THROW_SPEED: 10, // m/s at the start (it is seen flying: not a jump onto the wall)
     DRAG: 0.6, // per second: it slows down by itself and stops in the air (~15 m on open ground, in ~5 s)
     STOP: 0.5, // m/s: slower than this — it hangs where it is
@@ -103,6 +104,13 @@ export function makeGlow(size) {
     s.scale.setScalar(size);
     s.renderOrder = 5;
     return s;
+}
+
+/** Lumos and a wand out of the hand: how long it has been gone (s) and whether the light must go out now. */
+export function lumosGone(t, hasWand, dt) {
+    if (hasWand) return { t: 0, out: false };
+    t += dt;
+    return t > LUMOS.LOSS_GRACE ? { t: 0, out: true } : { t, out: false };
 }
 
 /** How big the tip's glow is for a Lumos level (1 Люмос … 5 Максима again and again). */
@@ -516,10 +524,15 @@ export class WandMagic {
     update(dt) {
         const g = this.game;
         const hasWand = !!this.wand || this._bare();
-        if (this.light && !hasWand) this._nox(false);
+        // Lumos burns until «стоп»/«Нокс» (author). Only a wand really put away or dropped puts it out — and not at once:
+        // a camera that loses the hand for a blink (tracking flicker) must not, so the wand must stay gone for LUMOS.LOSS_GRACE.
+        // (No mana is spent on it, so running out of mana never puts it out.)
+        const gone = lumosGone(this._noWand || 0, hasWand, dt);
+        this._noWand = gone.t;
+        if (this.light && gone.out) this._nox(false);
         this._flick = (this._flick || 0) + dt;
         // Lumos at the tip (a little strength over time); a flick throws it
-        if (this.light) {
+        if (this.light && hasWand) { // (a wand lost for a blink: the glow just stays where it was)
             const tip = this.tip(new THREE.Vector3(), _v2);
             this.light.glow.position.copy(tip);
             this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
