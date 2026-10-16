@@ -250,7 +250,7 @@ function setup() {
     };
     const SHOTS = [
         {
-            name: 'intro', start: (t) => t > 0.3, end: (t, t0) => t - t0 >= 3.0, keep: 3.0,
+            name: 'intro', start: (t) => t > 0.3, end: (t, t0) => t - t0 >= 5.0, keep: 5.0,
             cam: (k) => {
                 // off the galleon's side, low over the water and rising: she near, the black ship coming over the sea
                 const dx = s.st.x - T.st.x, dz = s.st.z - T.st.z, l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l;
@@ -263,7 +263,7 @@ function setup() {
         },
         {
             // the black ship's broadside: from beside its guns, along its hull
-            name: 'broadside', start: () => s.layout.cannons.some((c) => K.gunOf(s, c.id)?.st.fuse > 0), end: (t, t0) => t - t0 >= 2.8, keep: 2.2, wait: 90,
+            name: 'broadside', start: () => s.layout.cannons.some((c) => K.gunOf(s, c.id)?.st.fuse > 0), end: (t, t0) => t - t0 >= 3.6, keep: 3.4, wait: 90,
             on: () => { F.side = Math.sign(s.pose.toLocal(T.st.x, s.pose.y, T.st.z, _l).x) || 1; },
             cam: (k) => {
                 // close by its gunports, a little ahead of them: the muzzles flash towards the camera's side
@@ -276,7 +276,7 @@ function setup() {
         },
         {
             // the balls arrive: by the galleon, her side to them
-            name: 'hits', start: () => true, end: (t, t0) => t - t0 >= 3.0 || (F.hitT && t - F.hitT > 1.0 && t - t0 > 1.4), keep: 1.4,
+            name: 'hits', start: () => true, end: (t, t0) => t - t0 >= 3.4 || (F.hitT && t - F.hitT > 1.6 && t - t0 > 2.4), keep: 2.4,
             cam: (k) => {
                 const sd = Math.sign(T.pose.toLocal(s.st.x, T.pose.y, s.st.z, _l).x) || 1, L = T.layout;
                 const p = W(T, sd * (L.B / 2 + 16), lerp(8, 9, k), -L.L / 2 + 2);
@@ -286,7 +286,7 @@ function setup() {
         },
         {
             // her answer: from behind her guns, towards the black ship — its barrier flashes
-            name: 'answer', start: () => bears() || (F.waitA = (F.waitA || 0) + 1) > 30 * 14, end: (t, t0) => t - t0 >= 4.4, keep: 2.6, wait: 40,
+            name: 'answer', start: () => bears() || (F.waitA = (F.waitA || 0) + 1) > 30 * 14, end: (t, t0) => t - t0 >= 4.6, keep: 4.2, wait: 40,
             on: () => { F.answered = answer(); F.aSide = Math.sign(T.pose.toLocal(s.st.x, T.pose.y, s.st.z, _l).x) || 1; },
             cam: (k) => {
                 const sd = F.aSide, L = T.layout;
@@ -299,7 +299,7 @@ function setup() {
         },
         {
             // the second broadside, low over the water between them: both ships in it
-            name: 'broadside2', start: () => s.layout.cannons.some((c) => K.gunOf(s, c.id)?.st.fuse > 0), end: (t, t0) => t - t0 >= 3.6, keep: 2.4, wait: 60, optional: true,
+            name: 'broadside2', start: () => s.layout.cannons.some((c) => K.gunOf(s, c.id)?.st.fuse > 0), end: (t, t0) => t - t0 >= 4.2, keep: 3.4, wait: 60, optional: true,
             cam: (k) => {
                 const m = mid(), dx = T.st.x - s.st.x, dz = T.st.z - s.st.z, l = Math.hypot(dx, dz) || 1;
                 const nx = -dz / l, nz = dx / l, r = Math.max(50, l * 0.65);
@@ -308,7 +308,7 @@ function setup() {
         },
         {
             // the grapnels: from high, the two hulls hauled together
-            name: 'grapple', start: () => !!B.lash, end: (t, t0) => B.lash?.planks || t - t0 > 12, keep: 1.9, wait: 120,
+            name: 'grapple', start: () => !!B.lash, end: (t, t0) => B.lash?.planks || t - t0 > 12, keep: 3.2, wait: 120,
             on: () => { beam = false; },
             cam: (k) => {
                 const m = mid();
@@ -317,7 +317,7 @@ function setup() {
         },
         {
             // the boarders leap across: low on her deck, looking up at the black ship's rail
-            name: 'leap', start: () => B.lash?.planks, end: (t, t0) => (F.leapT && t - F.leapT > 1.8) || t - t0 > 20, keep: 2.2, wait: 30,
+            name: 'leap', start: () => B.lash?.planks, end: (t, t0) => (F.leapT && t - F.leapT > 2.4) || t - t0 > 20, keep: 3.6, wait: 30,
             frame: (t) => { if (!F.leapT && alive(s).some((v) => v.overboard?.leap)) F.leapT = t; },
             cam: () => {
                 const gw = B._gangways(F.lash, {}), sT = gw.sT;
@@ -326,10 +326,10 @@ function setup() {
                 return { p: choose(F.leapMemo || (F.leapMemo = {}), at, ringOn(T, gw.b.x, gw.b.z, a0, [10, 13, 7], [1.5, 3.2])), at, fov: 58 };
             },
         },
-        { name: 'melee', start: () => true, end: (t, t0) => t - t0 >= 2.2 || !!outcome(), keep: 2.2, cam: fight(1) },
+        { name: 'melee', start: () => true, end: (t, t0) => t - t0 >= 3.6 || !!outcome(), keep: 3.6, cam: fight(1) },
         {
             // Captain Black Moustache comes over: in front of him, low
-            name: 'captain', start: () => { const c = captain(); return !!c && !c.dead && (c.ship === T || !!c.overboard?.leap); }, end: (t, t0) => t - t0 >= 2.6 || !!outcome(), keep: 2.0, wait: 40, optional: true,
+            name: 'captain', start: () => { const c = captain(); return !!c && !c.dead && (c.ship === T || !!c.overboard?.leap); }, end: (t, t0) => t - t0 >= 3.4 || !!outcome(), keep: 3.2, wait: 40, optional: true,
             cam: () => {
                 const c = captain();
                 const p = c.group.position;
@@ -346,10 +346,10 @@ function setup() {
             },
         },
         // the decisive moments: the fight rolls until it is decided, the last seconds are kept
-        { name: 'decisive', start: (t) => near() || !!outcome() || t > 400, end: (t, t0) => (F.endT && t - F.endT > (F.winner === 'sunk' ? 2.6 : 1.0)) || t - t0 > 45, keep: 2.4, frame: (t) => { if (!F.endT && outcome()) { F.endT = t; F.winner = outcome(); } }, cam: (k, t) => (T.state === 'sinking' || T.state === 'wreck' ? sinking() : deck(k, t)) },
+        { name: 'decisive', start: (t) => near() || !!outcome() || t > 400, end: (t, t0) => (F.endT && t - F.endT > (F.winner === 'sunk' ? 2.6 : 1.0)) || t - t0 > 45, keep: 3.6, frame: (t) => { if (!F.endT && outcome()) { F.endT = t; F.winner = outcome(); } }, cam: (k, t) => (T.state === 'sinking' || T.state === 'wreck' ? sinking() : deck(k, t)) },
         {
             // the end: slowly up and away, the evening coming
-            name: 'final', start: (t) => F.winner !== 'sunk' || t - F.endT > 8, // (she goes down: a few seconds on, when it shows) end: (t, t0) => t - t0 >= 4.0, keep: 4.0,
+            name: 'final', start: (t) => F.winner !== 'sunk' || t - F.endT > 8, // (she goes down: a few seconds on, when it shows) end: (t, t0) => t - t0 >= 6.5, keep: 6.5,
             on: () => { F.ph0 = g.dayPhase(); },
             cam: (k) => {
                 const m = W(T, 0, 0, 0);
@@ -451,7 +451,7 @@ const mp4 = path.join(out, 'sea-battle.mp4');
 const dur = n / FPS;
 execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-framerate', String(FPS), '-i', path.join(tmp, 'f%05d.jpg'),
     '-vf', `fade=t=in:st=0:d=0.6,fade=t=out:st=${(dur - 1.0).toFixed(2)}:d=1.0,format=yuv420p`,
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '23', '-maxrate', '2800k', '-bufsize', '5600k', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-r', String(FPS), mp4]);
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-maxrate', '4500k', '-bufsize', '9000k', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-r', String(FPS), mp4]);
 console.log(mp4, (fs.statSync(mp4).size / 1e6).toFixed(2), 'MB', dur.toFixed(1), 's');
 // the stills: one from each act
 for (const [name, at] of [['approach', 0.12], ['cannons', 0.3], ['boarding', 0.58], ['finale', 0.93]]) {
