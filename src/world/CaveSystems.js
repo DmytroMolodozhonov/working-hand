@@ -14,6 +14,10 @@
 
 export const CAVES = {
     CHANCE: 0.5, // per cave cell (90 m): a system starts there (was 0.28: «caves are really rare» — the author; the old ones stay, new ones join them)
+    // more caves, their mouths in the side of a hill or a mountain («caves in the hills too, half as many
+    // again» — the author): the cells past CHANCE, this many more of them, where a hillside rises (hillMouth)
+    HILL_CHANCE: 0.5,
+    APRON: 4.2, // m round a mouth: bare stone and scree, not grass (seen from afar)
     MIN_SPAWN: 150, // m: no mouth nearer the spawn (the creative test cave aside)
     KEEP_SPAWN: 80, // m: a natural cave never reaches the spawn's ground
     STEP: 3, // m per tunnel segment
@@ -213,6 +217,29 @@ export function caveMouth(rng, gx, gz, cell, H, blocked) {
         return { x, ground: h - 0.6, z, yaw: rng() * TAU, pitch: -0.5, open: 3 }; // a sloping hole down
     }
     return null;
+}
+
+/**
+ * The mouth of a hill cave: in the side of a hill or a mountain that rises steeply (a dark opening
+ * in the slope, walked into level — a short cutting, then the tunnel goes on under the rock).
+ * The steepest of a few spots in the cell; null: no such hillside there.
+ */
+export function hillMouth(rng, gx, gz, cell, H, blocked) {
+    let best = null;
+    for (let t = 0; t < 30; t++) {
+        const x = gx * cell + 10 + rng() * (cell - 20), z = gz * cell + 10 + rng() * (cell - 20);
+        if (Math.hypot(x, z) < CAVES.MIN_SPAWN || blocked(x, z)) continue;
+        const ix = Math.round(x), iz = Math.round(z);
+        const h = H(ix, iz);
+        const sx = H(ix + 4, iz) - H(ix - 4, iz), sz = H(ix, iz + 4) - H(ix, iz - 4), sl = Math.hypot(sx, sz);
+        if (sl < 2) continue;
+        const ux = sx / sl, uz = sz / sl;
+        // (the hill goes on rising into it: rock enough over the tunnel a few steps in)
+        const rise = Math.min(H(Math.round(x + ux * 8), Math.round(z + uz * 8)), H(Math.round(x + ux * 14), Math.round(z + uz * 14))) - h;
+        if (rise < 5 || blocked(x + ux * 14, z + uz * 14)) continue;
+        if (!best || sl > best.sl) best = { x, z, ground: h, yaw: Math.atan2(uz, ux), sl };
+    }
+    return best && { x: best.x, ground: best.ground, z: best.z, yaw: best.yaw, pitch: -0.05, open: 2 };
 }
 
 /**

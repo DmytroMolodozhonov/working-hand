@@ -25,7 +25,7 @@ import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
-import { CAVES, growCaveSystem, caveMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
+import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
 import { IceCastleSite, ICE_BLOCK } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
@@ -1067,10 +1067,18 @@ export class TerrainData {
         if (this.test && gx === Math.floor(T.X / CAVE_CELL) && gz === Math.floor(T.Z / CAVE_CELL)) {
             const m = testCaveMouth();
             s = growCaveSystem({ id: 'cvtest', test: true, rng: createRng((this.seed * 31 + 777) >>> 0), start: { x: m.x, ground: top(m.x, m.z), z: m.z, yaw: Math.PI, pitch: -0.04, open: 2 }, H: top, blocked: wet });
-        } else if (hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101) < CAVES.CHANCE) {
-            const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0xca7e) >>> 0);
-            const m = caveMouth(rng, gx, gz, CAVE_CELL, top, blocked);
-            if (m) s = growCaveSystem({ id: 'cv' + gx + '_' + gz, rng, start: m, H: top, blocked });
+        } else {
+            const h = hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101);
+            if (h < CAVES.CHANCE) {
+                const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0xca7e) >>> 0);
+                const m = caveMouth(rng, gx, gz, CAVE_CELL, top, blocked);
+                if (m) s = growCaveSystem({ id: 'cv' + gx + '_' + gz, rng, start: m, H: top, blocked });
+            } else if (h < CAVES.CHANCE + CAVES.HILL_CHANCE) {
+                // (more caves: their mouths in a hillside — the ones before stay as they were)
+                const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0x4177) >>> 0);
+                const m = hillMouth(rng, gx, gz, CAVE_CELL, top, blocked);
+                if (m) s = growCaveSystem({ id: 'cvh' + gx + '_' + gz, rng, start: m, H: top, blocked });
+            }
         }
         this._caves.set(key, s);
         return s;
@@ -1206,6 +1214,15 @@ export class TerrainData {
                         if (b !== BLOCK.AIR && b !== BLOCK.WATER) { top = L; break; }
                     }
                     c.top[col] = top;
+                }
+                // round a mouth: bare stone and scree instead of grass — the way in is seen from afar
+                for (const s of sys) {
+                    const m = s.start;
+                    if (!m || s.lair || Math.hypot(x - m.x, z - m.z) > CAVES.APRON) continue;
+                    const L = c.top[col], i = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
+                    if (Math.abs(L - m.ground) > 4 || (c.blocks[i] !== BLOCK.GRASS && c.blocks[i] !== BLOCK.DIRT && c.blocks[i] !== BLOCK.SNOW)) continue;
+                    c.blocks[i] = noise3(x / 2, L, z / 2, this.seed + 33) > 0.1 ? BLOCK.GRAVEL : BLOCK.STONE;
+                    break;
                 }
             }
         }
