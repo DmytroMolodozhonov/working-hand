@@ -260,6 +260,10 @@ export function carveColumn(s, x, z, out, floorKeep = -Infinity) {
         const up = g.open || s.lair ? 0.8 : CAVES.UP; // (the mouth as it was: the hillside over it untouched; a dragons' lair is its own)
         const lo = Math.max(Math.floor(Math.min(g.ay, g.by) - R), g.minL ?? -Infinity), hi = Math.ceil(Math.max(g.ay, g.by) + Math.max(R * 1.15, R / Math.sqrt(up) + 0.5));
         const dx = g.bx - g.ax, dy = g.by - g.ay, dz = g.bz - g.az, len2 = dx * dx + dy * dy + dz * dz || 1;
+        const lo2 = (r * (1 - CAVES.JAG)) ** 2, hi2 = (r * (1 + CAVES.JAG)) ** 2;
+        // (from above: the column farther from the tunnel's line than its widest — none of it is in)
+        const hx = dx * dx + dz * dz, th = hx ? Math.max(0, Math.min(1, ((x - g.ax) * dx + (z - g.az) * dz) / hx)) : 0;
+        if ((g.ax + dx * th - x) ** 2 + (g.az + dz * th - z) ** 2 >= hi2) continue;
         let a = null, e = null;
         for (let L = lo; L <= hi + 1; L++) {
             let inside = false, was = false;
@@ -270,10 +274,9 @@ export function carveColumn(s, x, z, out, floorKeep = -Infinity) {
                 // CAVES.UP, it was 0.8; ragged by noise — looked up only near the rock's face)
                 const h2 = px * px + pz * pz;
                 const d2 = h2 + (py > 0 ? py * py * 1.6 : py * py * up), d1 = py > 0 ? d2 : h2 + py * py * 0.8;
-                const lo = r * (1 - CAVES.JAG), hi = r * (1 + CAVES.JAG);
-                let rr = 0;
-                const within = (q) => q <= lo * lo || (q < hi * hi && q <= (rr || (rr = r * (1 + CAVES.JAG * noise3(x / 3.3, L / 3.3, z / 3.3, s.seed)))) ** 2);
-                inside = within(d2); was = within(d1);
+                inside = d2 <= lo2 || (d2 < hi2 && d2 <= (r * (1 + CAVES.JAG * noise3(x / 3.3, L / 3.3, z / 3.3, s.seed))) ** 2);
+                // (its old roof's ragged rock and over it: `extra`; under its middle — d1 = d2 — as it was)
+                was = inside && (py > 0 || d1 <= lo2);
             }
             // (what it carved before: as it was; the higher roof over it — `extra`: TerrainData carves
             // it only where rock stays over it, never into another cave's mouth or the open air)
