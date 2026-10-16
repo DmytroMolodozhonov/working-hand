@@ -36,6 +36,7 @@ import { BookReading, bookSpellName } from './BookReading.js';
 import { SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
 import { WARD_SPELLS } from './HouseWards.js';
 import { radiusOf } from './WaterMagic.js';
+import { earthly } from '../world/Planets.js';
 
 export { bookSpellName };
 
@@ -638,7 +639,7 @@ export class BookBirds {
             const me = g.character.group.position;
             for (const b of [...this.birds.values()]) if (b.state !== 'fall' && b.model.position.distanceTo(me) > 130) this._removeBird(b);
             this._spawnT -= dt;
-            if (this._spawnT <= 0 && this.birds.size < BIRDS) { this._spawnT = 6; this._spawnBird(); }
+            if (this._spawnT <= 0 && this.birds.size < BIRDS) { this._spawnT = 6; if (earthly(me)) this._spawnBird(); } // (none off the Earth: Planets.earthly)
         }
         for (const b of [...this.birds.values()]) {
             if (this.auth || b.state === 'fall') this._updateBird(b, dt);

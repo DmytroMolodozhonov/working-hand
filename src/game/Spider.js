@@ -24,6 +24,7 @@ import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { rollWand, rollLoot, newUid } from './ItemTypes.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
+import { earthly } from '../world/Planets.js';
 
 const HP = 200;
 /** How big it is against the first (smaller) spider: everything below scales with it. */
@@ -423,7 +424,7 @@ export class Spiders {
         const night = g.isNight;
         // one spider a night (the host decides)
         if (this.auth) {
-            if (night && !this._nightDone && !this.list.length) {
+            if (night && !this._nightDone && !this.list.length && earthly(g.character.group.position)) { // (never on another planet)
                 const me = g.character.group.position;
                 const a = Math.random() * Math.PI * 2;
                 const p = new THREE.Vector3(me.x + Math.cos(a) * 40, 0, me.z + Math.sin(a) * 40);

@@ -27,6 +27,7 @@
 
 import * as THREE from 'three';
 import { BLOCK } from '../world/Terrain.js';
+import { earthly } from '../world/Planets.js';
 
 export const RUNNER = {
     BONUS: 0.3, // +30% run speed
@@ -208,6 +209,7 @@ export class RunningBook {
         const g = this.game, A = g.animals;
         if (!A) return null;
         const me = g.character.group.position;
+        if (!pos && !earthly(me)) return null; // (none off the Earth: Planets.earthly)
         let p = pos;
         for (let i = 0; i < 12 && !p; i++) {
             const a = Math.random() * Math.PI * 2;

@@ -69,6 +69,7 @@ export function flyingMaximaWords(s) {
 }
 
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _pc = { x: 0, y: 0, z: 0 }; // (a meteor cluster's place: _clusterAlt)
 const _p = { x: 0, y: 0, z: 0 }, _p2 = { x: 0, y: 0, z: 0 }, _d = { x: 0, y: 0, z: 0 }, _s = { x: 0, z: 0 };
 const A = { x: SPACE.ANCHOR_X, y: SPACE.ORIGIN_Y, z: SPACE.ANCHOR_Z };
 const EPOCH = 1.79e9; // (the shared clock: seconds since then — the same on every computer)
@@ -420,8 +421,24 @@ export class Space {
 
     /** The speed allowed here: slow near a planet's ground, very fast far out. */
     _speedCap(near = this._nearest(this.now())) {
-        const d = near ? near.alt : 1e6;
+        const d = Math.min(near ? near.alt : 1e6, this._clusterAlt());
         return clamp(d * 0.75 + 80, 80, FLYMAX.MAX_SPEED);
+    }
+
+    /**
+     * How far the nearest free meteor cluster's edge is (m): near one the flight slows down as near a planet —
+     * the author flew through them too fast to stop and point the hand («Create a Planet», PlanetMagic.js).
+     */
+    _clusterAlt() {
+        let best = 1e9;
+        const t = this.now();
+        for (const c of this.planets.clusters) {
+            if (c.used) continue;
+            planetPosition(c, t, _pc);
+            const d = Math.hypot(this.P.x - _pc.x, this.P.y - _pc.y, this.P.z - _pc.z) - c.r;
+            if (d < best) best = d;
+        }
+        return Math.max(0, best);
     }
 
     /** Every body's place now and the nearest one's ground (alt: metres above it). */

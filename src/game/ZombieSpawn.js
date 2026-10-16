@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { ZOMBIE_GROUND_OFFSET } from '../entities/Zombie.js';
+import { earthly } from '../world/Planets.js';
 
 export const ZSPAWN = {
     EVERY: 6, // s between the host's checks
@@ -104,7 +105,7 @@ export class ZombieSpawn {
         const g = this.game, out = [];
         if (!g.isDeadLocal && g.character) out.push(g.character.group.position);
         for (const r of g.remotes?.values?.() || []) if (!r.dead && r.position) out.push(r.position);
-        return out;
+        return out.filter(earthly); // (no zombies off the Earth: Planets.earthly)
     }
 
     update(dt) {

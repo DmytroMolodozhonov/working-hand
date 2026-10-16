@@ -30,6 +30,7 @@ import { CART, wayFree } from './Carriages.js';
 import { outOfSight } from './Animals.js';
 import { WANDER_GRID } from '../world/WizardTowers.js';
 import { CappedLog } from '../core/CappedLog.js';
+import { earthly } from '../world/Planets.js';
 
 export const ROAD = {
     EVERY: 20, // s between tries
@@ -115,6 +116,7 @@ export class Travelers {
         const players = L._players();
         if (!players.length) return false;
         const pl = o.player || players[Math.floor(Math.random() * players.length)];
+        if (!earthly(pl.p)) return false; // (no travellers off the Earth)
         if (idx.landAt?.(Math.round(pl.p.x), Math.round(pl.p.z))) return false; // (in a castle, a village, a tower: not there)
         kind = kind || pickKind(g.isNight);
         const cart = kind === 'folkCart' || kind === 'wizCart';

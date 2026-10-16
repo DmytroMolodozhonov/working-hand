@@ -44,6 +44,7 @@ import { ROOM, LOOSE, POSE, measureBody, rigHead, solidGap, pairRoom, pickIdle, 
 import { slowFactor, tickSlow } from './Slow.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
+import { earthly } from '../world/Planets.js';
 
 export { animalModel };
 
@@ -1584,11 +1585,11 @@ export class Animals {
             if (this._spawnT <= 0) {
                 this._spawnT = HERDS.EVERY * (0.67 + Math.random() * 0.67);
                 const near = this.list.filter((a) => !a.dead && a.group.position.distanceTo(me) < HERDS.NEAR).length;
-                if (near < HERDS.MAX_NEAR) this._spawnHerd();
+                if (near < HERDS.MAX_NEAR && earthly(me)) this._spawnHerd(); // (no herds off the Earth: Planets.earthly)
             }
             // now and then pigs migrate (a rare sight: a flock flying over)
             this._migT = (this._migT ?? rr(...FLY.MIG_EVERY)) - dt;
-            if (this._migT <= 0) { this._migT = rr(...FLY.MIG_EVERY); this.migrate(); }
+            if (this._migT <= 0) { this._migT = rr(...FLY.MIG_EVERY); if (earthly(me)) this.migrate(); }
             const look = this._look(this._lookV || (this._lookV = new THREE.Vector3()));
             for (const a of [...this.list]) {
                 // (gone only far away and out of sight: never vanishing in front of the player)

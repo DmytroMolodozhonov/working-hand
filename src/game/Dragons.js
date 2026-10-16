@@ -39,6 +39,7 @@ import { skeletonModel } from './Death.js';
 import { creditKill } from './Mana.js';
 import { FACE, facesTarget, facingError } from './FaceTarget.js';
 import { CappedLog } from '../core/CappedLog.js';
+import { earthly } from '../world/Planets.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -660,7 +661,7 @@ export class Dragons {
         if (this.list.some((d) => !d.lair && !d.dead)) return;
         if (Math.random() > WANDER.CHANCE && !this._forceWander) return;
         this._forceWander = false;
-        const ps = this._players();
+        const ps = this._players().filter((P) => earthly(P.p)); // (no dragons fly by off the Earth: Planets.earthly)
         if (!ps.length) return;
         const q = ps[Math.floor(Math.random() * ps.length)].p;
         const a = Math.random() * TAU, side = (Math.random() - 0.5) * 300;

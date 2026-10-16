@@ -48,6 +48,7 @@ import * as THREE from 'three';
 import { newUid } from './ItemTypes.js';
 import { registerKind } from './CreatureImpact.js';
 import { creditKill } from './Mana.js';
+import { earthly } from '../world/Planets.js';
 
 export const PHOENIX = {
     HP: 30,
@@ -586,7 +587,7 @@ export class Phoenixes {
         const me = this._player(g.localId);
         if (me) out.push({ id: g.localId, ...me });
         for (const [id] of g.remotes || []) { const p = this._player(id); if (p) out.push({ id, ...p }); }
-        return out;
+        return out.filter((P) => earthly(P.pos)); // (phoenixes only round players on the Earth: Planets.earthly)
     }
 
     _ground(x, z) { const y = this.game.collision?.groundY?.(x, z); return Number.isFinite(y) ? y : 0; }

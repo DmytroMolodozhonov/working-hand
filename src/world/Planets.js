@@ -249,6 +249,13 @@ export function realmAt(x, y, z, reg = null) {
     return def ? def.id : 'earth';
 }
 
+/**
+ * Is a position on the Earth (not in space, not on another planet)? The Earth's creatures — book-birds, herds,
+ * flying pigs, phoenixes, dragons, the spider, zombies, running books, travellers — appear only round players for
+ * whom this is true (the author: the planets are clean — ground and trees, no creatures).
+ */
+export const earthly = (p) => !!p && p.y < SPACE.FLOOR_Y && p.x < SPACE.ZONE_X - 64;
+
 /** Is a column (or a chunk's corner) in the far zone of the planets? (castles, caves… are never there) */
 export const offEarth = (x) => x >= SPACE.ZONE_X - 64;
 
