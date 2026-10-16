@@ -34,7 +34,7 @@
  * Magic: no simple spell (any spell known without a scroll — IceQueen.SCROLL_KINDS) touches it at
  *   all: it darts away fast. A scroll's spell (lightning, «Авада Кедавра», «Total Destruction»,
  *   «Inspirius», «Бомбардо Максима»…) hurts it (HP small); killed, it falls and leaves an owl feather
- *   (ItemTypes 'owlFeather' — shimmering, a precious thing to sell). Blows, arrows, a falling thing:
+ *   (ItemTypes 'owlFeather' — shimmering; just a thing for now: the author will decide its use). Blows, arrows, a falling thing:
  *   it is quicker — it dodges and flies off. Whoever attacked it (anything aimed at it) it no longer
  *   loves, and it never comes to him again (`o.hated`). The villagers and the animals leave it alone.
  *   TARGETS below says it all («не действует» is a decision too).

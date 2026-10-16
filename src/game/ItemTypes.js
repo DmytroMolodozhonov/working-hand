@@ -129,7 +129,7 @@ export const ITEM_INFO = {
     dragonEgg: { name: 'Яйцо дракона', icon: '🥚', weight: 4 },
     // the phoenix (Phoenixes.js): what it leaves when it is killed — for potions later (no effect yet)
     phoenixFeather: { name: 'Перо феникса', icon: '🪶', weight: 0.05, stack: 10 },
-    // the clever owl (Owls.js): what it leaves when a scroll's spell kills it — shimmering, precious (a merchant pays well)
+    // the clever owl (Owls.js): what it leaves when a scroll's spell kills it — just a thing for now (the author: for potions later)
     owlFeather: { name: 'Перо совы', icon: '🪶', weight: 0.03, stack: 10 },
     // armour and robes (ArmorTypes.js): a piece {piece: helmet | chest | legs, magic, hp…}; put on by hand or «Suit Up»
     armor: { name: 'Доспех', icon: '🪖', weight: 4 },
@@ -170,7 +170,6 @@ export function itemValue(it) {
         case 'web': return 120 * (it.count || 1);
         case 'glass': return 2 * (it.count || 1);
         case 'phoenixFeather': return 250 * (it.count || 1);
-        case 'owlFeather': return 180 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
         default: return 0;
     }
@@ -491,7 +490,7 @@ export function describeItem(it) {
         case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         case 'armor': case 'robe': return describeArmor(it);
-        case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от умной волшебной совы. Переливается всеми цветами', 'Ценная вещь: торговцы дорого платят'] };
+        case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Перо умной волшебной совы. Переливается всеми цветами'] };
         case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Пригодится для зелий (позже)'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
     }
