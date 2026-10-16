@@ -8,6 +8,7 @@ test-results
 hand_rig.json
 .claude/
 zns-perf.log*
+zns-spells.log*
 logs/
 recordings/
 .handbench/
