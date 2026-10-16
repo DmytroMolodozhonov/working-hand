@@ -190,6 +190,7 @@ export class Alohomora {
         if (!d) return false;
         if (this.spelled.has(d.id)) return true; // («Lock»: for everybody, the castle's owner too)
         if (d.gate) {
+            if (d.ice && this.game.iceCastle?.state?.queenDead) return false; // (the Ice Castle's gates: her magic gone, no lock holds them)
             const st = this.gates.get(d.castle) || {};
             if (st.unlocked || st.broken) return false;
             const owner = this.game.castleLife?.state?.(d.castle)?.owner;

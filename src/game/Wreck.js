@@ -6,7 +6,8 @@
  * them instead of the wall. Now, after every blast (on every computer, from the same
  * blocks, so it agrees everywhere and needs nothing saved):
  *  - a door with nothing left to hang on (no lintel above it, no post at its side)
- *    breaks and falls apart (a door a player made is broken by a blast right at it);
+ *    breaks and falls apart (a door a player made is broken by a blast right at it) — the gates
+ *    of a throne room too (CLAUDE.md: «Ничто не висит в воздухе»);
  *  - a bed or a chest with no floor under it falls to the floor below;
  *  - window glass whose wall above is gone breaks.
  * The same rules decide a house's door, beds and chests when the house comes near again.
@@ -50,12 +51,15 @@ export class Wreck {
     afterBlast(pos, radius, power = 0) {
         const g = this.game, t = this.data;
         if (power > 0) g.locks?.blast(pos, radius, power);
+        if (power > 0) g.iceCastle?.fixtures?.blast(pos, radius, power); // (the Ice Castle's gates and chandelier: IceFixtures.js)
         if (!t) return;
         const R = radius + 24; // (a fallen roof may leave things hanging a little further)
         const near = (x, z) => Math.abs(x - pos.x) < R && Math.abs(z - pos.z) < R;
         // doors
         for (const d of [...(g.doors?.list.values() || [])]) {
-            if (!near(d.x, d.z) || d.lifted || g.doors.carried?.door === d || d.gate || d.ship) continue; // (a ship's door: its ship's own wood) // (the gates: Alohomora.blast)
+            if (!near(d.x, d.z) || d.lifted || g.doors.carried?.door === d || d.ship || d.ice) continue; // (a ship's door: its ship's own wood; the Ice Castle's gates: IceFixtures.js)
+            // the gates of a throne room: blasts wear them (Alohomora.blast); their archway gone — they fall
+            if (d.gate) { if (d.castle && !doorHeld(t, d) && !g.locks?.gates?.get(d.castle)?.broken) g.locks?._break?.(d.castle); continue; }
             const hit = Math.hypot(d.x - pos.x, d.y + 1.8 - pos.y, d.z - pos.z) < radius + 0.8;
             if (d.gen ? !doorHeld(t, d) : hit) this._breakDoor(d);
         }

@@ -33,6 +33,7 @@ const UNIT = {
     cone: new THREE.ConeGeometry(0.5, 1, 6),
     oct: new THREE.OctahedronGeometry(0.5, 0),
     cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8),
+    ring: new THREE.TorusGeometry(0.5, 0.11, 5, 10), // (a chain's link)
 };
 const _cache = new Map();
 
@@ -247,6 +248,7 @@ export function puddleModel() {
 
 // ================================================================== the ice monsters
 const ICEB = 0xa8ddf7, ICEB2 = 0x86c8ee, ICEB3 = 0xcdeffd, CRACK = 0xe9fbff;
+const CHAIN = 0x9fc3d6; // (frosted chain links: the chandelier hangs by them)
 /**
  * An ice monster (unit height ~4.65, the creature is scaled ×2): hunched, all of ice — a great
  * leaning chest, a hump of jagged spikes, a small head low in front with glowing eyes, long arms
@@ -281,7 +283,13 @@ export function iceMonsterModel() {
 }
 
 // ================================================================== things
-/** The ice chandelier hanging in the throne hall: rings of icicles round glowing crystals. */
+/**
+ * The ice chandelier hanging in the throne hall: rings of icicles round glowing crystals, four short
+ * chains from its top ring up to one iron-hard ice hub (local y = CHANDELIER_HUB) — the long chain from
+ * the hub to the hook in the vault is its own model (iceChainModel), as long as the hall is high.
+ */
+export const CHANDELIER_HUB = 2.6;
+export const CHANDELIER_LOW = 3.6; // m: its lowest point (the big crystal) under its origin
 export function chandelierModel() {
     const L = [], G = [];
     for (const [r, y, n] of [[3.2, 0, 18], [2.2, -1.1, 12], [1.2, -2.0, 8]]) {
@@ -293,10 +301,36 @@ export function chandelierModel() {
         for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; L.push(['box', r * 0.27, 0.12, 0.12, Math.cos(a) * r, y + 0.25, Math.sin(a) * r, ICEB, 0, -a + Math.PI / 2, 0]); }
     }
     G.push(['oct', 0.9, 1.6, 0.9, 0, -2.8, 0, ROD_GLOW]);
-    for (let i = 0; i < 4; i++) L.push(['box', 0.08, 6, 0.08, Math.cos(i * 1.57) * 1.5, 3, Math.sin(i * 1.57) * 1.5, ICEB3, Math.sin(i * 1.57) * 0.24, 0, -Math.cos(i * 1.57) * 0.24]);
+    // four chains from the top ring up to the hub, and the hub (a ring the long chain is hooked into)
+    const C = [];
+    for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 + Math.PI / 4;
+        const x0 = Math.cos(a) * 3.1, z0 = Math.sin(a) * 3.1, y0 = 0.3;
+        _n.set(-x0, CHANDELIER_HUB - y0, -z0);
+        const len = _n.length();
+        _q.setFromUnitVectors(_p.set(0, 1, 0), _n.normalize());
+        _e.setFromQuaternion(_q);
+        const n = Math.round(len / 0.3);
+        for (let k = 0; k < n; k++) {
+            const t = (k + 0.5) / n;
+            C.push(['ring', 0.2, 0.34, 0.2, x0 * (1 - t), y0 + (CHANDELIER_HUB - y0) * t, z0 * (1 - t), CHAIN, _e.x, _e.y + (k % 2) * Math.PI / 2, _e.z]);
+        }
+    }
+    C.push(['ring', 0.6, 0.6, 0.6, 0, CHANDELIER_HUB, 0, CHAIN, Math.PI / 2, 0, 0], ['box', 0.5, 0.3, 0.5, 0, CHANDELIER_HUB - 0.2, 0, CHAIN]);
     const g = new THREE.Group();
-    g.add(mesh(L, MAT.ice, false), mesh(G, MAT.glow, false));
+    g.add(mesh(L, MAT.ice, false), mesh(G, MAT.glow, false), mesh(C, MAT.solid, false));
     return g;
+}
+
+/**
+ * The chandelier's chain: from its hook in the vault (the origin: a frosted plate with a hook, on the
+ * block's underside) down `len` m to the hub. Cached by its number of links (one chandelier per world).
+ */
+export function iceChainModel(len) {
+    const n = Math.max(2, Math.round(len / 0.3));
+    const C = [['box', 1.1, 0.18, 1.1, 0, -0.09, 0, CHAIN], ['cone', 0.35, 0.35, 0.35, 0, -0.32, 0, CHAIN, Math.PI, 0, 0]];
+    for (let k = 0; k < n; k++) C.push(['ring', 0.2, 0.34, 0.2, 0, -0.45 - (k + 0.5) * (len - 0.45) / n, 0, CHAIN, 0, (k % 2) * Math.PI / 2, 0]);
+    return mesh(C, MAT.solid, false);
 }
 
 /** A thrown snowflake (a snowman's, the queen's shards): a white snowball with a six-armed flake round it. */
@@ -316,5 +350,5 @@ export function iceSpikeModel() { const m = new THREE.Mesh(merged([['cone', 1, 1
 export function sampleIceModels() {
     const hurt = snowmanModel();
     hurt.traverse((o) => { if (o.isMesh && o.material === MAT.solid) o.material = MAT.hit; }); // (the red flash of a hurt one)
-    return [iceQueenModel(), snowmanModel(), hurt, friendSnowmanModel(), puddleModel(), iceMonsterModel(), chandelierModel(), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel()];
+    return [iceQueenModel(), snowmanModel(), hurt, friendSnowmanModel(), puddleModel(), iceMonsterModel(), chandelierModel(), iceChainModel(4), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel()];
 }

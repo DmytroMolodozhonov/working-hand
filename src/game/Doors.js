@@ -714,6 +714,7 @@ export class Doors {
         let best = null;
         for (const door of this.list.values()) {
             if (door.ship) continue; // (a ship's door is fixed in its bulkhead)
+            if (door.ice) continue; // (the Ice Castle's gates are grown into their archway of ice: «Левиоса» does not take them — IceFixtures.js)
             const to = _v.set(door.x, door.y + 1.8, door.z).sub(hand);
             const d = to.length();
             if (d > 10) continue;

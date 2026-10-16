@@ -25,8 +25,9 @@
 import * as THREE from 'three';
 import { crowdStep } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
-import { iceQueenModel, snowmanModel, friendSnowmanModel, puddleModel, iceMonsterModel, chandelierModel, snowflakeShotModel, shardModel, iceSpikeModel, ICE_MATERIALS, ROD_TIP, FRIEND_H } from './IceModels.js';
+import { iceQueenModel, snowmanModel, friendSnowmanModel, puddleModel, iceMonsterModel, snowflakeShotModel, shardModel, iceSpikeModel, ICE_MATERIALS, ROD_TIP, FRIEND_H } from './IceModels.js';
 import { iceYaw, iceLocal } from '../world/IceCastle.js';
+import { IceFixtures, GATE } from './IceFixtures.js';
 import { BLOCK, isPalaceIce, isSolid } from '../world/Terrain.js';
 import { newUid } from './ItemTypes.js';
 import { segmentSegmentDistSq } from '../core/math.js';
@@ -198,7 +199,8 @@ export class IceCastleLife {
         this.rodCmd = null; // (the rod's holder) {k, id} the snowmen attack
         this._hud = null;
         this._gates = null;
-        this.chandelier = null;
+        this.fixtures = new IceFixtures(this); // the gates' strength, the chandelier on its chain
+        IceFixtures.initState(this.state);
         this.mapMark = null;
         void this.plan; // (worked out now, while loading — never in a frame of play)
     }
@@ -400,6 +402,7 @@ export class IceCastleLife {
             this.state.queenDead = true;
             this.state.queenHp = 0;
             g.hud?.notify?.('❄️ Ледяная Королева побеждена! Её Ледяной Жезл упал на пол');
+            this.fixtures.queenFell(); // (her magic leaves the gates: plain ice now)
             if (this.auth) {
                 creditKill(g, killer, { kind: 'iceQueen' });
                 g.achievements?.killed('iceQueen', c.id, killer, p); // (the achievement: to all who fought her)
@@ -430,10 +433,11 @@ export class IceCastleLife {
             // the minimap: the castle once seen (near enough to see its spires)
             if (!this.state.seen && dMe < 260) { this.state.seen = true; g.hud?.notify?.('❄️ Вдали сверкает Ледяной замок'); }
             this.mapMark = this.state.seen ? { x: P.x, z: P.z, name: 'Ледяной замок', icon: '❄' } : null;
-            // the gates and the chandelier: whoever is near (each computer its own; the doors sync themselves)
-            const near = dMe < ICE.ACTIVE + 60;
+            // the gates and the chandelier: whoever is near (each computer its own; the doors sync themselves) —
+            // the host too while the castle is awake for anybody (it decides their strength: IceFixtures.js)
+            const near = dMe < ICE.ACTIVE + 60 || (this.auth && this.active);
             if (near && !this._gates) this._makeGates();
-        if (this._chests) for (const c of this._chests) c.locked = !this.state.queenDead; // (open to all once she is gone)
+            if (this._chests) for (const c of this._chests) c.locked = !this.state.queenDead; // (open to all once she is gone)
             if (!near && this._gates && dMe > ICE.SLEEP + 60) this._dropGates();
             if (this.auth) {
                 let dNear = dMe;
@@ -465,6 +469,7 @@ export class IceCastleLife {
         }
         this._updatePuddles(dt);
         if (!P) { this._netSend(dt); return; }
+        this.fixtures.update(dt);
         this._updateShots(dt);
         this._updateFx(dt);
         this._updateRod(dt);
@@ -1304,16 +1309,10 @@ export class IceCastleLife {
     // ================================================================ the gates and the chandelier
     _makeGates() {
         const g = this.game, P = this.plan;
-        this._gates = ['iceGateL', 'iceGateR'];
+        // the gates (strong, not invulnerable) and the chandelier on its chain: IceFixtures.js
+        this.fixtures.make();
+        this._gates = this.fixtures.leaves;
         const ry = iceYaw(P);
-        const gv = Math.round((P.gate.x - P.x) * [0, 1, 0, -1][P.rot] + (P.gate.z - P.z) * [1, 0, -1, 0][P.rot]);
-        for (const s of [-1, 1]) {
-            const at = iceLocal(P, s * 1.25, gv + 0.1);
-            g.doors?._place?.({ id: s < 0 ? 'iceGateL' : 'iceGateR', x: at.x, y: P.gate.y, z: at.z, ry, color: 0xcdeffd, a: 0, w: 2.5, h: 6, gen: true, gate: true, ice: true, mirror: s > 0 });
-        }
-        const ch = this.chandelier = chandelierModel();
-        ch.position.set(P.chandelier.x, P.chandelier.y, P.chandelier.z);
-        g.scene.add(ch);
         // her chests by the throne: locked while she lives (Game.openChest → Items.lootChest 'iceQueen')
         this._chests = (P.chests || []).map((c, i) => {
             const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y, c.z), 'loot', ry, 'iceChest' + i);
@@ -1329,9 +1328,8 @@ export class IceCastleLife {
 
     _dropGates() {
         const g = this.game;
-        for (const id of this._gates || []) g.doors?.remove?.(id);
+        this.fixtures.drop();
         this._gates = null;
-        if (this.chandelier) { g.scene.remove(this.chandelier); this.chandelier = null; }
         for (const c of this._chests || []) {
             if (c.isOpen) (g._openedChests = g._openedChests || new Set()).add(c.id);
             if (c.boxId != null) g.collision?.removeBox(c.boxId);
@@ -1366,6 +1364,7 @@ export class IceCastleLife {
         const mine = by === g.localId || ((by == null || !g.remotes?.has(by)) && this.auth);
         if (!mine) return 0;
         const R = Math.min(9, radius ?? 1.2 + power * 0.9);
+        this.fixtures.fire(p, R, power); // (fire is ice's weakness: the gates melt, the chandelier's chain)
         const edits = [];
         const x0 = Math.round(p.x - R), x1 = Math.round(p.x + R), z0 = Math.round(p.z - R), z1 = Math.round(p.z + R);
         const L0 = Math.floor(p.y + 1.5 - R), L1 = Math.ceil(p.y + 1.5 + R);
@@ -1394,6 +1393,13 @@ export class IceCastleLife {
     meltRay(o, d, len, power = 1, by = null) {
         const t = this.game.world?.terrain?.data;
         if (!t) return 0;
+        // (the gates' leaves are not blocks: a flame at them melts them — IceFixtures.js)
+        const g = this.game, G = this.plan?.gate;
+        if (G && this.fixtures.leaves && (by === g.localId || ((by == null || !g.remotes?.has(by)) && this.auth))) {
+            const k = Math.max(0, Math.min(len, (G.x - o.x) * d.x + (G.y + 3 - o.y) * d.y + (G.z - o.z) * d.z));
+            _v3.set(o.x + d.x * k, o.y + d.y * k, o.z + d.z * k);
+            if (Math.hypot(_v3.x - G.x, _v3.y - G.y - 3, _v3.z - G.z) < 3.2) this.fixtures.fire(_v3, 1, power);
+        }
         const h = t.raycast(o, d, len);
         if (!h) return 0;
         const b = t.get(Math.round(h.x + d.x * 0.3), Math.floor(h.y + d.y * 0.3 + 1.5), Math.round(h.z + d.z * 0.3));
@@ -1585,7 +1591,7 @@ export class IceCastleLife {
         // (no castle here and nobody to send: one empty list, then quiet)
         if (!this.plan && !this.list.length) { if (this._sentEmpty) return; this._sentEmpty = true; } else this._sentEmpty = false;
         const l = this.list.filter((c) => !c.dead || c.deadT > 0).map((c) => [c.id, TYPES.indexOf(c.type), r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, c.dead ? 1 : 0, (c.moving ? 1 : 0) | (c.act ? 2 : 0) | (c.melting ? 4 : 0), c.act || 0, c.slot || 0, c.type === 'friend' ? r2(Math.min(c.buildT, ICE.FRIEND.BUILD)) : 0]);
-        g.sync.ice?.({ e: 's', l, st: { qd: this.state.queenDead ? 1 : 0 } });
+        g.sync.ice?.({ e: 's', l, st: { qd: this.state.queenDead ? 1 : 0, ...this.fixtures.netState() } });
     }
 
     onNet(m, from) {
@@ -1601,6 +1607,7 @@ export class IceCastleLife {
             case 'rodF': if (this.auth && typeof m.k === 'string') this.applyRodFreeze(m.k, m.id, m.by ?? from); break;
             case 'enc': if (!this.auth && typeof m.k === 'string') g.duel?._encase?.(m.k, m.id, Math.min(20, +m.T || 10)); break;
             case 'cmd': if (this.auth && typeof m.k === 'string') this.rodCmd = { k: m.k, id: m.id }; break;
+            case 'fix': if (this.auth && Array.isArray(m.p) && m.p.every(Number.isFinite)) this.fixtures.applyFire(vec(m.p), m.r, m.pw); break; // (a guest's fire at the gates / the chandelier)
             case 'mk': if (this.auth && Array.isArray(m.p) && m.p.every(Number.isFinite)) this.makeFriend(vec(m.p), +m.ry || 0); break; // (a guest's «Snowman»)
             default: break;
         }
@@ -1629,7 +1636,7 @@ export class IceCastleLife {
             if (dead && !c.dead) this._die(c, null);
         }
         for (const c of [...this.list]) if (!seen.has(c.id) && !c.dead) this._remove(c);
-        if (m.st) this.state.queenDead = !!m.st.qd;
+        if (m.st) { this.state.queenDead = !!m.st.qd; this.fixtures.applyNet(m.st); }
     }
 
     // ================================================================ save
@@ -1639,7 +1646,7 @@ export class IceCastleLife {
         for (const c of this.list) if (c.type === 'monster' && !c.dead) mons[c.slot] = Math.round(c.hp);
         // the friendly snowmen stay in the world till they melt: [x, y, z, yaw, hp, homeX, homeZ]
         const friends = this.list.filter((c) => c.type === 'friend' && !c.dead).map((c) => [r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, r2(c.home.x), r2(c.home.z)]);
-        return { queenDead: !!this.state.queenDead, queenHp: Math.round(q ? q.hp : this.state.queenHp), monsters: mons, monsterDeadAt: this.state.monsterDeadAt.slice(), seen: !!this.state.seen, friends };
+        return { queenDead: !!this.state.queenDead, queenHp: Math.round(q ? q.hp : this.state.queenHp), monsters: mons, monsterDeadAt: this.state.monsterDeadAt.slice(), seen: !!this.state.seen, friends, gateHp: Math.round(this.state.gateHp ?? 0), gateBroken: !!this.state.gateBroken, chandFallen: !!this.state.chandFallen };
     }
 
     restore(s) {
@@ -1650,6 +1657,11 @@ export class IceCastleLife {
         if (Array.isArray(s.monsters)) this.state.monsters = [0, 1].map((i) => (s.monsters[i] == null ? ICE.MONSTER.HP : n(s.monsters[i], ICE.MONSTER.HP)));
         if (Array.isArray(s.monsterDeadAt)) this.state.monsterDeadAt = [0, 1].map((i) => +s.monsterDeadAt[i] || 0);
         this.state.seen = !!s.seen;
+        // the gates' strength, broken or not; the chandelier fallen (IceFixtures.js)
+        this.state.gateHp = s.gateHp != null ? n(s.gateHp, GATE.HP) : GATE.HP;
+        this.state.gateBroken = !!s.gateBroken;
+        this.state.chandFallen = !!s.chandFallen;
+        if (this.state.queenDead) this.state.gateHp = Math.min(this.state.gateHp, GATE.WEAK_HP);
         if (Array.isArray(s.friends)) this._friendsToLoad = s.friends.filter((f) => Array.isArray(f) && f.length >= 5 && f.slice(0, 5).every(Number.isFinite)).slice(0, ICE.FRIEND.MAX);
     }
 
