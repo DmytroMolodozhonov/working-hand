@@ -71,7 +71,9 @@ export class FlightController {
      * the take-off (no arms to hold up) and never a landing.
      */
     float() {
+        const neutral = this.neutral, samples = this.samples; // (the body's calm pose stays: leaning still steers)
         this.reset();
+        this.neutral = neutral; this.samples = samples;
         this.state = 'cruise';
         this.t = 2;
         this.hovering = true;

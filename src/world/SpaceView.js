@@ -307,6 +307,12 @@ export class SpaceView {
             m.frustumCulled = false;
             this.root.add(m);
             this.clusterMeshes.set(c.id, m);
+            // a soft light over the heap, seen from far (the author: on the map they were, in space not to be
+            // found): the same size on the screen however far, fading out close by where the rocks are seen
+            const beacon = new THREE.Sprite(this._beaconMat || (this._beaconMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xbfe0ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })));
+            beacon.userData.cluster = c.id;
+            this.root.add(beacon);
+            m.userData.beacon = beacon;
         }
     }
 
@@ -528,9 +534,18 @@ export class SpaceView {
         for (const m of this._rockMats) m.uniforms.uSun.value.copy(sunRel);
         for (const c of this.planets.clusters) {
             const m = this.clusterMeshes.get(c.id);
+            const bc = m?.userData.beacon;
+            if (bc) bc.visible = !!m.visible && !c.used;
             if (!m || !m.visible) continue;
             planetPosition(c, t, _p);
             m.position.set(_p.x - cam.x, _p.y - cam.y, _p.z - cam.z);
+            if (bc && bc.visible) {
+                const d = m.position.length();
+                bc.position.copy(m.position);
+                bc.scale.setScalar(Math.max(c.r * 2.5, d * 0.035)); // (a few dozen pixels on the screen from anywhere)
+                bc.material.opacity = 0.9; // (shared)
+                bc.visible = d > c.r * 4; // (close by: the rocks themselves)
+            }
             m.rotation.y = t * 0.01;
             if (c.used) {
                 // «Create a Planet»: the rocks drawn in to one point, crashing, red-hot — then gone (the planet is there)

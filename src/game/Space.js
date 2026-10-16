@@ -222,6 +222,7 @@ export class Space {
         const def = this.planets.get(this.realm);
         g.character.gravityK = def && this.realm !== 'earth' && this.realm !== 'space' ? def.gravity : 1;
         if (was !== this.realm) this._realmChanged(was);
+        g.character.setBodyHidden?.(this.realm === 'space'); // (looking down in space: space, not one's own back)
         if (!this._soundsReady && this._prepared && g.sound?.prepareSpace) this._soundsReady = g.sound.prepareSpace();
     }
 
@@ -329,8 +330,11 @@ export class Space {
         }
         for (const b of this._bodies) { const q = this._prev.get(b.def.id) || {}; q.x = b.pos.x; q.y = b.pos.y; q.z = b.pos.z; this._prev.set(b.def.id, q); }
 
-        // steering: the same as «Флайн» (lean sideways to turn; forward / back, or the look, to dive / climb)
-        const steer = fl.steering(pose ? pose.torso : null, g.smoothHead.pitch);
+        // steering by the body as in «Флайн»: lean sideways to turn, forward / back to dive / climb. The look
+        // does NOT steer here (the author: looking down turned the whole flight down — hard to look anywhere):
+        // the head looks freely round the way one flies; the flight drifts a little after a steady look (below)
+        if (!fl.neutral && pose?.torso) fl._calibrate(pose.torso); // (floated without a take-off: the calm pose now)
+        const steer = fl.steering(pose ? pose.torso : null, 0);
         const yawRate = steer.turn * 1.5;
         if (yawRate) {
             if (g.settings.drifting) g.cameraBaseRotation += yawRate * dt; else g.smoothBody += yawRate * dt;
@@ -355,6 +359,15 @@ export class Space {
             const l = Math.hypot(hx, hy, hz) || 1; hx /= l; hy /= l; hz /= l;
             if (!fl.hovering) this.speed = Math.max(this.speed, 300 + this._exitT * 500);
         } else this._exitDir = null;
+        // where one looks pulls the course a little: half-way toward the look when it is near ahead, nothing
+        // when looking aside, down or back (so one can look round without the flight turning — and without
+        // the view turning on its own: the body's course is not changed, only the way one drifts)
+        if (!this._exitDir && g.camera) {
+            g.camera.getWorldDirection(_v1);
+            const dot = _v1.x * hx + _v1.y * hy + _v1.z * hz;
+            const k = 0.5 * smoothstep(Math.cos(1.3), Math.cos(0.6), dot);
+            if (k > 0) { hx += (_v1.x - hx) * k; hy += (_v1.y - hy) * k; hz += (_v1.z - hz) * k; const l = Math.hypot(hx, hy, hz) || 1; hx /= l; hy /= l; hz /= l; }
+        }
         const ki = 1 - Math.exp(-2.2 * dt); // (a little drift: space has no air to turn against)
         this.vel.x += (hx * this.speed - this.vel.x) * ki;
         this.vel.y += (hy * this.speed - this.vel.y) * ki;
@@ -372,6 +385,8 @@ export class Space {
         ch.setFlightTilt(fl.tilt);
         const view = clamp(this.pitch, -1.3, 1.1);
         ch.head.rotation.x = g.smoothHead.pitch + fl.tilt + view;
+        // (and the head turns sideways as it is turned: looking round, even behind, while the course holds)
+        ch.head.rotation.y = g._headBase?.yaw ?? 0;
         ch.flightView = view;
         // speed lines (the dust of space rushing past)
         if (this.speed > 60 && g.cameraMode === 'fpv' && !fl.hovering) {
@@ -1238,7 +1253,69 @@ export class Space {
                 i++;
             }
         }
+        // the meteor clusters: their names and distances over them, and — when the nearest is off the screen
+        // (behind, above, below) — an arrow at the edge pointing the way (the map is flat: this shows up / down)
+        let arrow = null;
+        if (show) {
+            const cam = this.view.camera, w = innerWidth, h = innerHeight;
+            const list = this._clusterList || (this._clusterList = []);
+            list.length = 0;
+            for (const c of this.planets.clusters) {
+                if (c.used) continue;
+                const q = planetPosition(c, t, c._pos || (c._pos = { x: 0, y: 0, z: 0 }));
+                c._dist = Math.hypot(q.x - _p2.x, q.y - _p2.y, q.z - _p2.z) - c.r;
+                list.push(c);
+            }
+            list.sort((a, b) => a._dist - b._dist);
+            for (let n = 0; n < list.length && n < 3; n++) {
+                const c = list[n];
+                _v1.set(c._pos.x - _p2.x, c._pos.y - _p2.y, c._pos.z - _p2.z);
+                _v6.copy(_v1);
+                _v1.project(cam);
+                const on = _v1.z < 1 && Math.abs(_v1.x) < 1 && Math.abs(_v1.y) < 1;
+                if (!on) { if (n === 0) arrow = { c, dir: _v6.clone() }; continue; }
+                let el = d.pool[i];
+                if (!el) { el = d.pool[i] = document.createElement('div'); el.className = 'space-label'; d.labels.appendChild(el); }
+                const txt = `☄️ Скопление метеоритов · ${dist(Math.max(0, c._dist))}`;
+                if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
+                el.style.left = `${((_v1.x + 1) / 2) * w}px`;
+                el.style.top = `${((1 - _v1.y) / 2) * h}px`;
+                el.style.display = 'block';
+                i++;
+            }
+        }
         for (; i < d.pool.length; i++) if (d.pool[i].style.display !== 'none') d.pool[i].style.display = 'none';
+        this._arrow(d, arrow);
+    }
+
+    /** An arrow at the edge of the screen towards the nearest meteor cluster (when it is not in sight). */
+    _arrow(d, a) {
+        if (!d.arrow) {
+            const el = document.createElement('div');
+            el.className = 'space-arrow';
+            el.innerHTML = '<div class="tip">➤</div><div class="txt"></div>';
+            d.root.appendChild(el);
+            const st = document.createElement('style');
+            st.textContent = '#space-hud .space-arrow{position:absolute;transform:translate(-50%,-50%);color:#bfe0ff;font:600 12px system-ui,sans-serif;text-shadow:0 0 3px #000,0 0 6px #000;text-align:center;display:none;white-space:nowrap}#space-hud .space-arrow .tip{font-size:26px;line-height:26px}';
+            d.root.appendChild(st);
+            d.arrow = el;
+        }
+        const el = d.arrow;
+        if (!a) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+        // which way on the screen: the direction in the camera's own frame (right, up), behind → turned round
+        const q = _q.copy(this.view.camera.quaternion).invert();
+        const v = a.dir.applyQuaternion(q);
+        let x = v.x, y = v.y;
+        if (Math.hypot(x, y) < 1e-3) { x = 0; y = -1; } // (straight behind: «turn round», at the bottom)
+        const ang = Math.atan2(-y, x), w = innerWidth, h = innerHeight, mx = 130, my = 60; // (room for its words inside the screen)
+        const k = Math.min((w / 2 - mx) / Math.max(1e-6, Math.abs(Math.cos(ang))), (h / 2 - my) / Math.max(1e-6, Math.abs(Math.sin(ang))));
+        el.style.left = `${w / 2 + Math.cos(ang) * k}px`;
+        el.style.top = `${h / 2 + Math.sin(ang) * k}px`;
+        el.firstChild.style.transform = `rotate(${ang}rad)`;
+        const where = v.z > 0 ? 'позади, ' : '';
+        const txt = `☄️ Скопление: ${where}${dist(Math.max(0, a.c._dist))}`;
+        if (el._t !== txt) { el.lastChild.textContent = txt; el._t = txt; }
+        el.style.display = 'block';
     }
 
     _say(text, key, ms = 4000) {

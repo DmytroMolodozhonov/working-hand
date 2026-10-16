@@ -895,6 +895,27 @@ export class VoxelCharacter {
         }
         this._headShadow.layers.set(0);
         this._headShadow.visible = !!isFPV;
+        if (this._bodyHidden) this._applyBodyLayer();
+    }
+
+    /**
+     * In space (Space.js, first person): one's own torso and legs (and what is worn on them) unseen by one's
+     * own camera — the body lies flat under the eyes there (Superman), and looking down one must see space
+     * and the planets, not one's own back. The arms stay (they cast the spells); the shadow and the other
+     * players still see the whole body.
+     */
+    setBodyHidden(on) {
+        on = !!on;
+        if (this._bodyHidden === on) return;
+        this._bodyHidden = on;
+        this._applyBodyLayer();
+    }
+
+    _applyBodyLayer() {
+        const layer = this._bodyHidden && this._fpv ? 1 : 0;
+        const set = (o) => o && o.traverse((c) => c.layers.set(layer));
+        set(this.body); set(this.leftLegPivot); set(this.rightLegPivot);
+        for (const p of [...(this._lookParts || []), ...(this._armorParts || [])]) if (p.parent === this.torso || p.parent === this.body || p.parent === this.leftLegPivot || p.parent === this.rightLegPivot) set(p);
     }
 
     /** Dress the hero (face, hair, clothes — see Appearance.js). */
