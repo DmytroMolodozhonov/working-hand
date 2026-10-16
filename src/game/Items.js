@@ -44,6 +44,8 @@ export function regrabFree(entry, d, now) {
 const SHOP_GRIP = 0.5; // fingers this closed (tracked curl) to take a good from a market counter
 /** The fingers close on a thing this near (from the grip point in the fingers to its surface / handle). */
 const PICK_REACH = 0.35;
+/** ms after the hand / the held thing last touched something solid: nothing leaves the hand yet. */
+export const TOUCH_MS = 1500;
 /** Long things are taken by their handle (wand, hammer, bow): the rest by their body. */
 const BY_HANDLE = new Set(['wand', 'hammer', 'bow', 'iceRod']);
 const _v = new THREE.Vector3();
@@ -587,6 +589,24 @@ export class ItemSystem {
         if (p.y !== y0 || !L.rest) L.sentRest = false; // (its new place goes to the others)
     }
 
+    /**
+     * The hand (HandBlocks held it back) or the thing in it (both its ends) is against something solid now, or
+     * was within TOUCH_MS: a hand pressed on the ground / a wall is no hand letting go — the thing stays in it.
+     */
+    _touching(side, h, now) {
+        const g = this.game, hb = g.handBlocks, t = this._touchAt || (this._touchAt = { left: -1e9, right: -1e9 });
+        let touch = (hb?.pushed?.[side] || 0) > 0.005;
+        const S = h.shape;
+        if (!touch && S && hb?.solid && h.model) {
+            for (const y of [S.y0, S.y1]) {
+                const p = h.model.localToWorld(_a.set(S.c.x, y, S.c.z));
+                if (hb.solid(p.x, p.y, p.z)) { touch = true; break; }
+            }
+        }
+        if (touch) t[side] = now;
+        return now - t[side] < TOUCH_MS;
+    }
+
     /** May my hands take this thing again (REGRAB)? Forgets it once they may. */
     _regrabOk(L, now) {
         const e = this.justLet.get(L.item.uid);
@@ -714,9 +734,12 @@ export class ItemSystem {
             const h = this.held[side];
             if (!h) continue;
             const kind = h.item.kind;
+            // (nor the wand while the hand or the wand rests against the ground, a wall — the author: the ground at the
+            // hands' height, the wand touched it and fell — and a moment after: _touching; coins are still laid on a
+            // counter by opening the hand on it)
             // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
             // (nor a wand while a spell is going — swinging it to cast never throws it)
-            if (holdsFast(ch) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            if (holdsFast(ch) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
             const arm = ch.armState(side, this._arm[side]);

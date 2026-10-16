@@ -100,3 +100,20 @@ test('the other hand taking a thing out of the pocket never puts the wand of the
     assert.equal(held.right.item, wand);
     assert.equal(held.left.item, bread);
 });
+
+test('a hand with the wand resting on the ground / its tip in the slope: the wand stays in the hand', async () => {
+    const { TOUCH_MS } = await import('../../src/game/Items.js');
+    let ground = -10, pushed = 0;
+    const it = Object.create(Items.prototype);
+    it.game = { handBlocks: { pushed: { left: 0, get right() { return pushed; } }, solid: (x, y) => y < ground } };
+    const model = new THREE.Object3D(); model.position.set(0, 1, 0); model.updateMatrixWorld(true);
+    const h = { model, shape: { c: new THREE.Vector3(), y0: -0.05, y1: 0.35 } };
+    assert.equal(it._touching('right', h, 1000), false, 'in the air: free');
+    pushed = 0.1; // the hand held back by the ground
+    assert.equal(it._touching('right', h, 2000), true);
+    pushed = 0;
+    assert.equal(it._touching('right', h, 2000 + TOUCH_MS - 1), true, 'a moment after, still');
+    assert.equal(it._touching('right', h, 2000 + TOUCH_MS + 1), false);
+    ground = 1.2; // the wand's tip in the slope
+    assert.equal(it._touching('right', h, 9000), true);
+});
