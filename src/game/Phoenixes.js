@@ -779,7 +779,7 @@ export class Phoenixes {
         const g = this.game;
         if (!f || f.dead) return;
         if (!this.auth) { this._send({ op: 'hit', id: f.id, dmg: 0, kind: spell }); return; }
-        if (spell === 'AvadaKedavra') { g.fx?.lightFlash?.(phoenixCenter(f, _v3), 0x2dff5a, 4, 0.5, 25); this.hit(f, 25, spell, by); }
+        if (spell === 'AvadaKedavra') { g.fx?.lightFlash?.(phoenixCenter(f, _v3), 0x2bff00, 6, 0.55, 28); this.hit(f, 25, spell, by); }
         else if (spell === 'SapiraDuel') this.hit(f, 10, spell, by);
         else if (spell === 'SandsDuel') this.hit(f, 4, spell, by);
         else if (spell === 'Stupefy') { this.hit(f, 2, spell, by); if (!f.dead) this._down(f); }

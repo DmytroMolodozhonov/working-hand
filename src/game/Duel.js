@@ -47,6 +47,7 @@ import { phoenixBody, phoenixCenter } from './Phoenixes.js';
 import { owlBody, owlCenter } from './Owls.js';
 import { iceBody, iceCenter } from './IceQueen.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
+import { AvadaLook, AVADA } from '../fx/AvadaLook.js';
 import { IceLook, ICE } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
 import { starterWand, rollWand } from './ItemTypes.js';
@@ -64,7 +65,9 @@ export { JERK, sharpJerk } from './Jerk.js';
 
 export const DUEL_SPELLS = {
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
-    AvadaKedavra: { color: 0x2dff5a, name: 'Авада Кедавра' },
+    // a poison-green charge: an acid core (never white), a murky swamp-green glow, smoke and sparks (AvadaLook.js);
+    // the same green for every wizard (`fixed`: only a slight shade apart, so two of them in a clash still differ)
+    AvadaKedavra: { color: AVADA.MURK, name: 'Авада Кедавра', coreColor: AVADA.CORE, core: 0.07, glow: 0.3, light: AVADA.LIGHT, fixed: true },
     // «Айс»: a thin frosty beam (no crackling) with a spinning ice crystal at its head (IceLook.js)
     IceDuel: { color: 0x8fdcff, name: 'Айс', speed: 17, core: 0.035, glow: 0.15, coreColor: 0xf2fbff },
     // («Левиоса» on a wizard is aimed as loosely as at a thing — Levitation.aimWizard: the charge
@@ -343,6 +346,7 @@ export class Duel {
         this.log = []; // last duel events (for testing / debugging)
         this.ice = new IceLook(game); // how «Айс» looks
         this.jolt = new JoltLook(game); // how «Джолт» looks
+        this.avada = new AvadaLook(game); // how «Авада Кедавра» looks
     }
 
     /** 0..3: this wizard's colour signature (same on every computer). */
@@ -358,9 +362,9 @@ export class Duel {
     colors(spell, by) {
         const slot = typeof by === 'number' ? by : this._slot(by);
         const s = DUEL_SPELLS[spell];
-        const shift = [0, 0.085, -0.085, 0.17][slot];
+        const shift = [0, 0.085, -0.085, 0.17][slot] * (s.fixed ? 0.15 : 1);
         const glow = new THREE.Color(s.color).offsetHSL(shift, 0, slot ? 0.04 : 0).getHex();
-        const core = slot === 0 ? (s.coreColor || 0xffffff) : [0xffffff, 0xfff08a, 0x9ff3ff, 0xffb3ec][slot];
+        const core = slot === 0 || s.fixed ? (s.coreColor || 0xffffff) : [0xffffff, 0xfff08a, 0x9ff3ff, 0xffb3ec][slot];
         return { glow, core };
     }
 
@@ -374,6 +378,9 @@ export class Duel {
                 core: new SegmentPool(this.game.scene, { capacity: 200, radius: s.core || 0.055, color: c.core, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }),
                 glow: new SegmentPool(this.game.scene, { capacity: 200, radius: s.glow || 0.24, color: c.glow, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
             };
+            // («Авада»: its acid core drawn over, not added — added to a bright day it washes out pale yellow-white;
+            //  and its true poison green, not toned down — the same variant for every slot: one shader, built at the start)
+            if (s.fixed) { const m = this.pools[key].core.mat; m.blending = THREE.NormalBlending; m.toneMapped = false; }
         }
         return this.pools[key];
     }
@@ -694,6 +701,7 @@ export class Duel {
         if (g.sync) g.sync.duelCast(b);
         if (spell === 'IceDuel') { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
         if (isJolt(spell)) { g.sound?.playJolt?.(spell === 'JoltMaxima', false); this.jolt.hit(origin, dir, false); return b; }
+        if (spell === 'AvadaKedavra') { this.avada.cast(origin, dir); return b; } // (a poison-green flash, a terrible sound)
         // (each charge its own sound — SpellMusic: a red zap, a dark whoosh, a whip crack…; the others: Sapira's)
         if (g.sound && !g.sound.playSpellFx?.(DUEL_FX[spell], origin)) g.sound.playSapira?.();
         // the spell leaves the hand with a flash
@@ -708,7 +716,8 @@ export class Duel {
         const had = this.bolts.get(m.id);
         if (had) { if (m.s === 'JoltMaxima' && had.spell === 'Jolt') had.spell = m.s; return; } // (it became «Джолт Максима»: upgradeJolt)
         if (m.up) return; // (an upgrade of a charge already gone here: nothing new flies)
-        this._addBolt({ id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
+        const b = this._addBolt({ id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
+        if (b.spell === 'AvadaKedavra') this.avada.cast(b.o, b.dir); // (seen and heard here as at the caster's)
     }
 
     /** A duel charge of someone else is flying at me (an answer can't wait for the end of the phrase). */
@@ -767,9 +776,9 @@ export class Duel {
         this.boltLights.forEach((light, i) => {
             const b = fly[i];
             if (!b) { light.intensity = 0; return; }
-            light.color.setHex(this.colors(b.spell, b.by).glow);
+            light.color.setHex(DUEL_SPELLS[b.spell]?.light ?? this.colors(b.spell, b.by).glow);
             light.position.copy(b.front);
-            light.intensity = 9 * (1 + 0.5 * cave);
+            light.intensity = (b.spell === 'AvadaKedavra' ? 5 : 9) * (1 + 0.5 * cave); // (a softer green: a strong one bleaches the grass yellow)
             light.distance = 16 + 8 * cave;
             light.decay = 2 - 0.75 * cave;
         });
@@ -980,10 +989,9 @@ export class Duel {
         if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
         // a skeleton of the black ship: dead already — «Авада Кедавра» finds no life in it (Sailors.SKELETON_AVADA),
         // and like a living tree no duel charge harms it (only fire, the mighty spells, what breaks bones — Sailors.pirateBoneDamage)
-        if (c.isSailor && c.role === 'skeleton') { this._burst(p, spell === 'AvadaKedavra' ? 0x2dff5a : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
+        if (c.isSailor && c.role === 'skeleton') { this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
-            g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
             hit(25, { pierce: true }); // (not a killing curse: −25 HP at once, no armour stops it)
             if (!c.dead) g.creatureImpact?.spellHit(c, 'AvadaKedavra', src, byId); // (thrown on its back)
         } else if (spell === 'Stupefy') {
@@ -1058,8 +1066,7 @@ export class Duel {
         }
         if (g.armor?.guard(spell)) return;
         if (spell === 'AvadaKedavra') {
-            g.fx.lightFlash(p, 0x2dff5a, 6, 0.6, 30);
-            g.hud.flashColor?.('rgba(40, 255, 90, 0.75)');
+            g.hud.flashColor?.(AVADA.HUD); // (the green flash itself: _hitBurst → AvadaLook.hit)
             // the body crumples back (off the feet; up again by a squat)
             g.knock?.knock({ dir: 'back', down: 1.5, by: byId, kind: 'avada', strength: 0.5 });
             // (not a killing curse: −25 HP at once)
@@ -1118,7 +1125,6 @@ export class Duel {
         const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
         this._hitBurst(spell, p, 30);
         if (spell === 'AvadaKedavra') {
-            g.fx.lightFlash(p, 0x2dff5a, 4, 0.5, 25);
             g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'AvadaKedavra', src, byId);
         } else if (spell === 'Stupefy') {
@@ -1599,6 +1605,7 @@ export class Duel {
             pool.glow.add(prev, p, this._segLife || 0.05);
             prev = p;
         }
+        if (spell === 'AvadaKedavra' && !core) { this.avada.trail(b, dir, pool, this._dt || 1 / 60); return; } // (its own smoke and sparks)
         // bright head, and a glow at the hand it comes from
         if (Math.random() < 0.8) this.game.fx.spark(b, col, 0.22, _v1.set((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2), 0.25);
         if (Math.random() < 0.5) this.game.fx.spark(a, col, 0.12, _v1.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5), 0.2);
@@ -1656,6 +1663,7 @@ export class Duel {
     _hitBurst(spell, p, n) {
         if (isJolt(spell)) { this.jolt.hit(p, _v1.set(0, 0, 1), spell === 'JoltMaxima'); if (n >= 30) this.game.sound?.playJolt?.(spell === 'JoltMaxima', true); return; }
         if (spell === 'IceDuel') this.ice?.shatter(p, n / 30);
+        else if (spell === 'AvadaKedavra') this.avada.hit(p, n); // (the green flash, the ring of poison, the sound)
         else this._burst(p, DUEL_SPELLS[spell].color, n);
     }
 

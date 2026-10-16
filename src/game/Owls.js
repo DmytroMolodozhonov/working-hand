@@ -571,7 +571,7 @@ export class Owls {
     /** A duel charge touched it: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away. */
     boltHit(o, spell, by) {
         if (!o || o.dead) return;
-        if (spell === 'AvadaKedavra') this.game.fx?.lightFlash?.(owlCenter(o, _v3), 0x2dff5a, 3, 0.4, 20);
+        if (spell === 'AvadaKedavra') this.game.fx?.lightFlash?.(owlCenter(o, _v3), 0x2bff00, 5, 0.5, 24);
         this.hit(o, spell === 'AvadaKedavra' ? 25 : 0, spell, by);
     }
 

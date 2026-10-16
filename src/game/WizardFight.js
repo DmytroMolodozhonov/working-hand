@@ -498,9 +498,10 @@ export class WizardFight {
         v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));
         v.castT = 0.55;
         v.model.castNow = true;
-        duel._burst?.(_o, duel.colors(spell, v.id).glow, 12);
         const me = g.character.group.position;
-        if (Math.hypot(me.x - v.x, me.z - v.z) < 40) { if (spell === 'IceDuel') g.sound?.playIce?.(); else if (spell === 'Jolt' || spell === 'JoltMaxima') g.sound?.playJolt?.(spell === 'JoltMaxima', false); else g.sound?.playSapira?.(); }
+        if (spell === 'AvadaKedavra' && duel.avada) duel.avada.cast(_o, _d, Math.hypot(me.x - v.x, me.z - v.z) < 60); // (the same poison-green flash and terrible sound as a player's)
+        else duel._burst?.(_o, duel.colors(spell, v.id).glow, 12);
+        if (spell !== 'AvadaKedavra' && Math.hypot(me.x - v.x, me.z - v.z) < 40) { if (spell === 'IceDuel') g.sound?.playIce?.(); else if (spell === 'Jolt' || spell === 'JoltMaxima') g.sound?.playJolt?.(spell === 'JoltMaxima', false); else g.sound?.playSapira?.(); }
         return true;
     }
 

@@ -123,6 +123,38 @@ function glide(o, sr, t0, len, amp, f, env, harm = 1) {
         o[i0 + i] += v * amp * env(u);
     }
 }
+/** A green electric crackle: `rate` random snaps a second, each a tiny burst of bright noise. */
+function crackle(o, sr, t0, len, amp, rate, rand) {
+    const i0 = Math.floor(t0 * sr), n = Math.min(o.length - i0, Math.floor(len * sr)), w = Math.floor(sr * 0.004);
+    const count = Math.round(rate * len);
+    for (let c = 0; c < count; c++) {
+        const at = Math.floor(((rand() + 1) / 2) * (n - w)), a = amp * (0.4 + 0.6 * Math.abs(rand())) * (1 - at / n);
+        for (let i = 0; i < w; i++) o[i0 + at + i] += rand() * a * (1 - i / w);
+    }
+}
+/** A dark hall: a few feedback echoes (Schroeder combs + an all-pass) mixed in as `mix`, each echo `fb` as loud. */
+function reverb(o, sr, mix, fb) {
+    const dry = Float32Array.from(o), out = new Float32Array(o.length);
+    for (const ms of [29.7, 37.1, 41.1, 43.7]) {
+        const d = Math.floor((ms / 1000) * sr), line = new Float32Array(d);
+        let p = 0, lp = 0;
+        for (let i = 0; i < o.length; i++) {
+            const y = line[p];
+            lp += (y - lp) * 0.35; // (the highs die first: a dark echo)
+            line[p] = dry[i] + lp * fb;
+            p = (p + 1) % d;
+            out[i] += y * 0.25;
+        }
+    }
+    const d = Math.floor(0.005 * sr), line = new Float32Array(d);
+    let p = 0;
+    for (let i = 0; i < o.length; i++) {
+        const y = line[p], x = out[i];
+        line[p] = x + y * 0.5;
+        p = (p + 1) % d;
+        o[i] = dry[i] * (1 - mix * 0.5) + (y - x * 0.5) * mix * 2;
+    }
+}
 const swell = (a, b) => (u) => Math.min(1, u / a) * Math.min(1, (1 - u) / b);
 
 /** The finished sound: the ends faded, loud as `rms` (a tune) or as `peak` (an effect), never clipping. */
@@ -294,8 +326,36 @@ const FX = {
     fxBubble(sr) { const o = buf(sr, 0.8), r = rng(7); for (let k = 0; k < 9; k++) { const f = 300 + 400 * Math.abs(r()), t = k * 0.07 + 0.03 * r() + 0.03; glide(o, sr, Math.max(0, t), 0.09, 0.3, (u) => f * (1 + 1.6 * u), (u) => Math.sin(u * Math.PI)); } return finish(o, sr, { peak: 0.6 }); },
     /** «Остолбеней»: a sharp red zap — a bright buzz falling and a crack. */
     fxStupefy(sr) { const o = buf(sr, 0.5), r = rng(9); glide(o, sr, 0, 0.45, 0.35, (u) => 1500 - 1100 * u, swell(0.02, 0.6), 6); noise(o, sr, 0, 0.12, 0.5, () => 0.8, swell(0.05, 0.8), r); return finish(o, sr, { peak: 0.7 }); },
-    /** «Авада Кедавра»: a dark rushing whoosh, a deep falling tone and a thin eerie note. */
-    fxAvada(sr) { const o = buf(sr, 1), r = rng(13); noise(o, sr, 0, 1, 0.35, (u) => 0.03 + 0.15 * Math.sin(u * Math.PI), swell(0.2, 0.5), r); glide(o, sr, 0, 1, 0.3, (u) => 160 - 100 * u, swell(0.1, 0.5), 3); glide(o, sr, 0.05, 0.9, 0.07, () => 1661, swell(0.3, 0.5)); return finish(o, sr, { peak: 0.7 }); },
+    /**
+     * «Авада Кедавра» (the author: «звук — явно страшным»): a low swelling rumble and a deep indrawn breath, then the
+     * charge tears off with a hissing rush and a green electric crackle, a dissonant shriek of a choir over it, and a
+     * long dark echo dying away.
+     */
+    fxAvada(sr) {
+        const o = buf(sr, 2), r = rng(13);
+        glide(o, sr, 0, 0.55, 0.42, (u) => 34 + 40 * u * u, (u) => Math.min(1, 0.25 + u * u * 2.2) * Math.min(1, (1 - u) / 0.15), 5); // (the rumble rising)
+        noise(o, sr, 0, 0.45, 0.22, (u) => 0.01 + 0.06 * u, (u) => u * Math.min(1, (1 - u) / 0.1), r); // (the breath drawn in)
+        noise(o, sr, 0.32, 0.75, 0.5, (u) => 0.5 - 0.4 * u, (u) => Math.min(1, u / 0.06) * (1 - u) ** 1.6, r); // (the hissing rush)
+        crackle(o, sr, 0.34, 0.7, 0.55, 70, r); // (the green electric crackle)
+        for (const [f0, a] of [[1244, 0.07], [1318, 0.07], [1865, 0.05], [2637, 0.03]]) // (a shriek: minor seconds and a tritone, falling)
+            glide(o, sr, 0.36, 1.0, a, (u) => f0 * (1 - 0.18 * u) * (1 + 0.012 * sn(u * 23)), swell(0.08, 0.7), 2);
+        pad(o, sr, ['C#4', 'D4', 'G4'], 0.4, 1.1, 0.2, { att: 0.12, rel: 0.6, vib: 0.012, det: 0.011, harm: 3 }); // (the choir)
+        glide(o, sr, 0.35, 1.3, 0.3, (u) => 62 - 30 * u, swell(0.05, 0.6), 4); // (a deep falling undertone)
+        reverb(o, sr, 0.45, 0.86);
+        return finish(o, sr, { peak: 0.72 });
+    },
+    /** «Авада Кедавра» hits: a dull thud — the «clap of death» — a short shriek falling away and a dark ringing echo. */
+    fxAvadaHit(sr) {
+        const o = buf(sr, 2), r = rng(14);
+        noise(o, sr, 0, 0.05, 0.8, () => 0.9, (u) => 1 - u, r); // (the clap)
+        drum(o, sr, 0, 0.95, 46, 1.1, r); // (the thud)
+        glide(o, sr, 0, 0.9, 0.4, (u) => 95 - 65 * u, (u) => (1 - u) ** 2, 3);
+        crackle(o, sr, 0.01, 0.35, 0.35, 45, r);
+        for (const [f0, a] of [[932, 0.08], [988, 0.08], [1397, 0.05]]) glide(o, sr, 0.04, 0.9, a, (u) => f0 * (1 - 0.35 * u) * (1 + 0.015 * sn(u * 19)), swell(0.05, 0.75), 2);
+        pad(o, sr, [55, 58.3], 0.05, 1.0, 0.25, { att: 0.05, rel: 0.8, harm: 2 }); // (a low beating drone left behind)
+        reverb(o, sr, 0.5, 0.88);
+        return finish(o, sr, { peak: 0.75 });
+    },
     /** «Экспеллиармус»: a whip crack and a quick rising zing. */
     fxExpel(sr) { const o = buf(sr, 0.45), r = rng(17); noise(o, sr, 0, 0.06, 0.9, () => 0.95, (u) => 1 - u, r); glide(o, sr, 0.02, 0.4, 0.3, (u) => 600 + 1800 * u, swell(0.05, 0.6), 3); return finish(o, sr, { peak: 0.7 }); },
     /** «Disarmor»: a zap and the steel ringing loose. */
@@ -389,7 +449,7 @@ export const SPELL_SOUND = {
     Hellfire: { own: ['inferno', 'rumble'], theme: 'thHell' },
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
     // the duel charges and the fights (their own short sounds; Duel.js plays them for everyone)
-    Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] },
+    Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] },
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] },
     Jolt: { own: ['jolt'] }, JoltMaxima: { own: ['jolt'] }, Levitation: { own: ['cast'] }, LevitationMaxima: { own: ['cast', 'crack', 'rumble'] },
     Bombardo: { own: ['cast', 'explosion'] }, BombardoMaxima: { own: ['cast', 'explosion'] },
