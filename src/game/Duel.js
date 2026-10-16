@@ -875,6 +875,16 @@ export class Duel {
         // a wall or a floor on this step's way (looked at every 0.3 m): nothing behind it is touched
         const wallS = this._wallOnWay(from, b.front);
         const hit = firstTouched(from, b.front, this._bodies(b.by));
+        // the strong charges burst on a ship's hull, a mast, a sail (StrongSpells: «не действует» on ships); the black ship's barrier flares
+        if (isStrongDuel(b.spell) && g.ships?.segmentHit) {
+            const sh = g.ships.segmentHit(from, b.front);
+            if (sh && (!hit || sh.s < hit.s) && sh.s < wallS) {
+                b.front.lerpVectors(from, b.front, sh.s);
+                if (sh.ship?.cls?.magic && !sh.ship.owner && sh.ship.pose?.toLocal) { const l = new THREE.Vector3(); sh.ship.pose.toLocal(b.front.x, b.front.y, b.front.z, l); g.ships.curseSpark?.(sh.ship, l.x, l.y, l.z); } // (Ships.isCursed)
+                this._end(b, 'fizzle');
+                return false;
+            }
+        }
         if (hit && hit.s > wallS) { b.front.lerpVectors(from, b.front, wallS); this._end(b, 'fizzle'); return false; }
         if (hit) {
             b.front.lerpVectors(from, b.front, hit.s);

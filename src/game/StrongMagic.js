@@ -424,7 +424,7 @@ export class StrongMagic {
         if (k === 's') { const s = g.spiders?.list?.find?.((x) => x.id === id); if (s?.model) s.model.visible = false; return; }
         if (k === 'D') { const d = g.dragons?.list?.find?.((x) => x.id === id); if (d?.model) { d.model.visible = false; if (d.shadow) d.shadow.visible = false; d.burst = true; } return; }
         if (k === 'I') { const c = g.iceCastle?.list?.find?.((x) => x.id === id); if (c?.model) c.model.visible = false; return; }
-        if (k === 'p' && id !== this.me) { const r = g.remotes?.get(id); if (r?.character?.group) r.character.group.visible = false; }
+        // (a player: their own computer ends their life — their avatar is the network's, it comes back when they do)
     }
 
     // ============================================================ «Электром»
