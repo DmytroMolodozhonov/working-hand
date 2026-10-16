@@ -129,6 +129,8 @@ import { Stitching } from './Stitching.js';
 import { Invisibility } from './Invisibility.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { Concentration } from './Concentration.js';
+import { CastHints } from './CastHints.js';
+import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 
 const SPELL_COOLDOWN = 1000;
@@ -1165,7 +1167,7 @@ export class Game {
     castLocalSpell(text, isFinal = true) {
         const paid = this.combat.paidCount || 0;
         this._manaLater = false;
-        const name = this._castLocalSpell(text, isFinal);
+        const name = this._castWithHints(text, isFinal);
         if (name) this._castAt = performance.now(); // (the wand never leaves the hand while a spell is going: spellBusy)
         // its sound (SpellMusic.SPELL_SOUND: a tune for the great ones, a short effect for the others) — the others hear it too
         if (name && this.sound?.spellHasCastSound?.(name)) {
@@ -1186,6 +1188,32 @@ export class Game {
         if (name && name !== 'Invisibility' && name !== 'Stand') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
+        return name;
+    }
+
+    /**
+     * The spell's advice («поднимите руку…», «скажите «…»») reaches the screen only when the player was
+     * really casting (CastHints): talk where a spell's word slipped in gives none — that goes to the journal.
+     * The advice is held back while the phrase is worked out; a spell that went off shows its own lines.
+     */
+    _castWithHints(text, isFinal) {
+        const hud = this.hud;
+        if (!hud || hud.hintFilter) return this._castLocalSpell(text, isFinal);
+        const held = [];
+        hud.hintFilter = (html) => { held.push(html); return false; };
+        let name = null;
+        try { name = this._castLocalSpell(text, isFinal); } finally { hud.hintFilter = null; }
+        if (!held.length) return name;
+        const html = held[held.length - 1];
+        const ch = this.character;
+        const now = Date.now();
+        const intent = !!(this.isMagicActive || now - (this.lastMagicTime || 0) < 2500 || now - (this._armsUpAt || 0) < 2500 || ch?.isTPose?.());
+        const talking = !intent && !!this.castleLife?.talk?._listener?.();
+        const hints = this._castHints || (this._castHints = new CastHints());
+        if (name) { hud.setVoice(html, true); return name; } // (the spell went off: its own line about it)
+        const v = hints.phrase({ text, name: matchSpell(text), isFinal, intent, talking });
+        if (v.ok && hints.pass(html)) hud.setVoice(html, true);
+        else if (!v.ok && isFinal) netLog(`🎙️ подсказка не показана (${v.why}): «${String(text).slice(0, 60)}» → ${String(html).replace(/<[^>]+>/g, '')}`);
         return name;
     }
 

@@ -413,8 +413,9 @@ button, input, select, textarea { font-family: inherit; }
 .hud-notify-item { border-left: 3px solid var(--ui-gold); font-weight: 700; }
 #minimap-container { border: 2px solid var(--ui-border-strong); border-radius: 16px; box-shadow: 0 0 0 4px rgba(8, 5, 24, 0.5), 0 6px 20px rgba(0, 0, 0, 0.55); }
 #webcam-preview { border: 2px solid var(--ui-border); border-radius: 16px; }
-#fatigue-container { height: 18px; border: 1px solid var(--ui-border-strong); border-radius: 999px; background: rgba(8, 5, 24, 0.82); }
-#fatigue-text { font-size: 12px; line-height: 18px; font-weight: 800; }
+#fatigue-container { height: 34px; border: 1px solid var(--ui-border-strong); border-radius: 999px; background: rgba(8, 5, 24, 0.82); }
+#fatigue-container.short { border: 2px solid #ff3b3b; }
+#fatigue-text { display: none; } /* (the figures are big over the bar: #mana-num) */
 #pvp-status { background: var(--ui-panel); border: 1px solid var(--ui-violet); border-radius: 14px; backdrop-filter: blur(8px); font-weight: 700; }
 #boss-bar .boss-name { color: var(--ui-pink); font-family: var(--ui-font-title); font-size: 1.1rem; }
 #boss-bar .boss-track { border: 1px solid var(--ui-border-strong); border-radius: 999px; background: rgba(8, 5, 24, 0.8); }

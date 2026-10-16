@@ -1162,10 +1162,10 @@ body {
 #fatigue-container {
     position: fixed;
     left: 50%;
-    bottom: 76px;
+    bottom: 104px; /* (over the bigger slots) */
     transform: translateX(-50%);
-    width: min(420px, 70vw);
-    height: 20px;
+    width: min(690px, 70vw);
+    height: 34px;
     background: linear-gradient(180deg, rgba(20, 16, 40, 0.85), rgba(8, 6, 20, 0.9));
     border: 2px solid #d4af37;
     border-radius: 12px;
@@ -1212,13 +1212,57 @@ body {
     background: repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / var(--mana-marks, 6) - 1px), rgba(0, 0, 0, 0.45) calc(100% / var(--mana-marks, 6) - 1px), rgba(0, 0, 0, 0.45) calc(100% / var(--mana-marks, 6)));
     pointer-events: none;
 }
+/* «heard you, but no mana»: a red flash and a short shudder (Hud.manaShort) */
+#fatigue-container.short {
+    animation: mana-shake 0.45s ease-in-out;
+    border-color: #ff3b3b;
+    background: rgba(150, 10, 10, 0.88) !important;
+    box-shadow: 0 0 22px rgba(255, 40, 40, 0.95), inset 0 0 6px rgba(0, 0, 0, 0.8);
+}
+#fatigue-container.short #fatigue-fill {
+    background: linear-gradient(90deg, #ff2d2d, #ff6b4a);
+    box-shadow: 0 0 14px rgba(255, 40, 40, 1);
+}
+@keyframes mana-shake {
+    0%, 100% { transform: translateX(-50%); }
+    15% { transform: translateX(calc(-50% - 9px)); }
+    35% { transform: translateX(calc(-50% + 8px)); }
+    55% { transform: translateX(calc(-50% - 6px)); }
+    75% { transform: translateX(calc(-50% + 4px)); }
+}
+/* the mana in big figures over the bar («347 / 1000»): bold, outlined — readable on sky, snow, space */
+#mana-num {
+    position: fixed;
+    left: 50%;
+    bottom: 146px;
+    transform: translateX(-50%);
+    z-index: 1200;
+    pointer-events: none;
+    white-space: nowrap;
+    font: 900 44px/1 system-ui, 'Segoe UI', Arial, sans-serif;
+    color: #fff;
+    letter-spacing: 0.5px;
+    -webkit-text-stroke: 2px rgba(0, 0, 0, 0.9);
+    paint-order: stroke fill;
+    text-shadow: 0 0 4px #000, 0 2px 3px #000, 0 0 12px rgba(40, 90, 255, 0.85);
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+#mana-num.hidden { display: none; }
+#mana-num .mn-ico { font-size: 34px; -webkit-text-stroke: 0; }
+#mana-num #mana-cur { color: #8fe3ff; }
+#mana-num .mn-sep { color: #c9d4ff; font-weight: 700; }
+#mana-num.low #mana-cur { color: #ffb36b; }
+#mana-num.short { animation: mana-shake 0.45s ease-in-out; }
+#mana-num.short #mana-cur, #mana-num.short .mn-sep, #mana-num.short #mana-max { color: #ff4040; text-shadow: 0 0 4px #000, 0 0 16px rgba(255, 30, 30, 1); }
 #fatigue-text {
     position: absolute;
     inset: 0;
     z-index: 1;
     text-align: center;
     font-size: 12px;
-    line-height: 20px;
+    line-height: 34px;
     color: #fff;
     font-weight: bold;
     letter-spacing: 0.5px;
@@ -1354,28 +1398,29 @@ body {
     bottom: 10px;
     transform: translateX(-50%);
     display: none;
-    gap: 6px;
+    gap: 9px;
     z-index: 1200;
     pointer-events: none;
 }
+/* (the slots are big: read from 2–3 m away, like the mana figures) */
 .hotbar-slot {
     position: relative;
-    width: 54px;
-    height: 54px;
+    width: 81px;
+    height: 81px;
     background: rgba(12, 12, 22, 0.72);
     border: 2px solid rgba(255, 255, 255, 0.55);
-    border-radius: 8px;
+    border-radius: 12px;
     box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
 }
-.hotbar-slot.sel { border-color: #ffe066; box-shadow: 0 0 10px rgba(255, 224, 102, 0.8), inset 0 0 6px rgba(0, 0, 0, 0.8); transform: translateY(-3px); }
+.hotbar-slot.sel { border-color: #ffe066; box-shadow: 0 0 10px rgba(255, 224, 102, 0.8), inset 0 0 6px rgba(0, 0, 0, 0.8); transform: translateY(-4px); }
 .hotbar-slot .hb-icon {
-    position: absolute; inset: 9px; border-radius: 4px;
-    display: flex; align-items: center; justify-content: center; font-size: 26px;
+    position: absolute; inset: 13px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-size: 39px;
 }
-.hotbar-slot .hb-count { position: absolute; right: 4px; bottom: 1px; color: #fff; font-weight: bold; font-size: 13px; text-shadow: 0 0 3px #000, 0 1px 1px #000; }
-.hotbar-slot.hand { width: 44px; height: 44px; margin-top: 10px; border-style: dashed; background: rgba(40, 30, 10, 0.6); }
-.hotbar-slot.hand .hb-icon { inset: 5px; font-size: 22px; }
-.hotbar-slot .hb-key { position: absolute; left: 4px; top: 1px; color: rgba(255, 255, 255, 0.55); font-size: 10px; }
+.hotbar-slot .hb-count { position: absolute; right: 6px; bottom: 2px; color: #fff; font-weight: bold; font-size: 19px; text-shadow: 0 0 3px #000, 0 1px 1px #000; }
+.hotbar-slot.hand { width: 66px; height: 66px; margin-top: 15px; border-style: dashed; background: rgba(40, 30, 10, 0.6); }
+.hotbar-slot.hand .hb-icon { inset: 8px; font-size: 33px; }
+.hotbar-slot .hb-key { position: absolute; left: 6px; top: 2px; color: rgba(255, 255, 255, 0.55); font-size: 15px; }
 
 /* ---------------- Menu (single player / multiplayer / codex / settings) ---------------- */
 #main-menu .menu-container { max-width: 980px; }
@@ -1431,7 +1476,7 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .world-confirm { grid-column: 1 / -1; color: #ff7675; font-weight: bold; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .world-confirm.hidden, .world-row .hidden { display: none; }
 .world-row.confirming { background: rgba(255, 118, 117, 0.08); border-radius: 6px; }
-#air-bar { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); display: none; gap: 3px; z-index: 1200; pointer-events: none; align-items: center; }
+#air-bar { position: fixed; left: 50%; bottom: 198px; transform: translateX(-50%); display: none; gap: 3px; z-index: 1200; pointer-events: none; align-items: center; }
 #air-bar i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.08); }
 #air-bar i.on { background: radial-gradient(circle at 35% 35%, #ffffff, #8fdcff 55%, #2f8fd0); }
 #air-bar .air-txt { color: #bff3ff; font-size: 12px; margin-right: 6px; text-shadow: 0 0 3px #000; }

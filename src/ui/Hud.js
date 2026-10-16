@@ -107,6 +107,9 @@ export class Hud {
             fatigue: document.getElementById('fatigue-container'),
             fatigueFill: document.getElementById('fatigue-fill'),
             fatigueText: document.getElementById('fatigue-text'),
+            manaNum: document.getElementById('mana-num'),
+            manaCur: document.getElementById('mana-cur'),
+            manaMax: document.getElementById('mana-max'),
             status: document.getElementById('pvp-status'),
             frozen: document.getElementById('frozen-overlay'),
         };
@@ -165,10 +168,32 @@ export class Hud {
         el.fatigueFill.classList.toggle('low', value < max * 0.3);
         el.fatigue.style.setProperty?.('--mana-marks', String(Math.max(1, max / 5))); // (a mark every 5 mana, whatever the maximum)
         el.fatigueText.textContent = `🔷 Мана: ${Math.floor(value)}/${Math.floor(max)}`;
+        if (el.manaNum) {
+            el.manaNum.classList.remove('hidden');
+            el.manaCur.textContent = String(Math.max(0, Math.floor(value)));
+            el.manaMax.textContent = String(Math.floor(max));
+            el.manaNum.classList.toggle('low', value < max * 0.3);
+        }
+    }
+
+    /**
+     * «Мы вас поняли, но маны недостаточно»: the bar and its figures flash red and shudder (Combat.check).
+     * A CSS animation, restarted by taking the class off and on.
+     */
+    manaShort() {
+        for (const e of [this.el.fatigue, this.el.manaNum]) {
+            if (!e) continue;
+            e.classList.remove('short');
+            void e.offsetWidth; // (restart the animation)
+            e.classList.add('short');
+            clearTimeout(e._shortT);
+            e._shortT = setTimeout(() => e.classList.remove('short'), 900);
+        }
     }
 
     hidePvp() {
         this.el.fatigue?.classList.add('hidden');
+        this.el.manaNum?.classList.add('hidden');
         this.setStatus('');
         this.setFrozenOverlay(0);
     }
@@ -294,6 +319,7 @@ export class Hud {
         const now = performance.now();
         if (show) {
             const hint = !!html && !html.includes('ЖДУ КОМАНДУ');
+            if (hint && this.hintFilter && !this.hintFilter(html)) return; // (a spell's advice waits: was it really cast? — Game._castWithHints)
             if (html === this._lastVoice) {
                 // the same line again: an indicator just stays; a hint only after a while (no flicker)
                 if (!hint || now - this._voiceAt < HINT_AGAIN_MS) { if (!hint || v.classList.contains('on')) this._showVoice(v, hint); return; }

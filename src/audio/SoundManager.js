@@ -104,6 +104,7 @@ export class SoundManager {
         this.music.battle = results.battle || null;
         this.sounds.explosion = this._synthExplosion();
         this.sounds.cast = this._synthWhoosh();
+        this.sounds.noMana = this._synthNoMana(); // (made now, never at the first «не хватает маны»)
 
         for (let i = 0; i < 10; i++) this.voices.push(new THREE.Audio(this.audioListener));
         for (let i = 0; i < 6; i++) this.posVoices.push(new THREE.PositionalAudio(this.audioListener));
@@ -1399,6 +1400,28 @@ export class SoundManager {
     }
 
     /** A short dry crack of stone. */
+    /** «Heard you, but no mana»: a soft spark that fizzles out — two falling tones and a little hiss (0.35 s). */
+    _synthNoMana() {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, len = Math.floor(sr * 0.35);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        let seed = 5, lp = 0, ph = 0;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const f = t < 0.12 ? 520 : 330; // (down a step: «нет»)
+            ph += 2 * Math.PI * f * (1 - t * 0.6) / sr;
+            const env = Math.min(1, t * 400) * Math.exp(-((t < 0.12 ? t : t - 0.12)) * 14) * (t < 0.12 ? 1 : 0.85);
+            lp += (rnd() - lp) * 0.25;
+            d[i] = Math.max(-1, Math.min(1, (Math.sin(ph) * 0.45 + Math.sin(ph * 2.01) * 0.12 + lp * 0.18 * Math.exp(-t * 9)) * env));
+        }
+        return buf;
+    }
+
+    /** The «не хватает маны» sound. */
+    playNoMana() { if (this.sounds.noMana) this._play(this.sounds.noMana, 0.55); }
+
     _synthCrack() {
         const ctx = this.context;
         const sr = ctx.sampleRate, len = Math.floor(sr * 0.35);

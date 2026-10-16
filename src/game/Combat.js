@@ -442,6 +442,9 @@ export class Combat {
         if (this.fatigue < cost) {
             const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
             this.game.hud?.toast?.(msg); // a short note that fades by itself
+            // «heard you, but no mana»: the mana bar flashes red and shudders, and a short sound (once a moment)
+            const t = performance.now();
+            if (t - (this._noManaAt || -1e9) > 700) { this._noManaAt = t; this.game.hud?.manaShort?.(); this.game.sound?.playNoMana?.(); }
             return msg;
         }
         return null;
