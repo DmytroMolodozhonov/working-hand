@@ -129,7 +129,7 @@ import { Stitching } from './Stitching.js';
 import { Invisibility } from './Invisibility.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { Concentration } from './Concentration.js';
-import { castingHand, aimedUpOrSelf } from './WandAim.js';
+import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 
 const SPELL_COOLDOWN = 1000;
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
@@ -1324,6 +1324,8 @@ export class Game {
         if (name === 'Firefighting' && !isFinal) return null;
         // «Suit Up»: the best armour of the slots and of what lies near — on at once (Armor.js)
         if (name === 'SuitUp') return this.armor.suitUp(isFinal);
+        // «Disarmor» with the wand (the hand) held up to the sky: off ME — my plain steel and a plain robe (Armor.disarmSelf)
+        if (name === 'Disarmor') { const h = castingHand(this); if (h && pointsUp(h.dir)) return this.armor.disarmSelf(isFinal); }
         const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? 'IceDuel' : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
             const aim = this.duel.pickSide(false);

@@ -248,8 +248,8 @@ export function handAtMouth(lm, hand, side, aspect = 4 / 3) {
 /**
  * A hand put on the body, as the picture shows it (armour put on by hand — Armor.js): on the head
  * (the wrist at the face or above it, over the head), on the chest (between the shoulders, on the
- * upper half of the body), at the knee (reached down well below the hips — a hand hanging at the
- * side is not). → {head, chest, knee} | null (the body not seen).
+ * upper half of the body), on the thigh in front / at the knee (`knee`: the greaves — a hand hanging
+ * at the side is not). → {head, chest, knee} | null (the body not seen).
  */
 export function bodyTouch(lm, side, aspect = 4 / 3) {
     const w = side === 'left' ? 15 : 16;
@@ -258,14 +258,18 @@ export function bodyTouch(lm, side, aspect = 4 / 3) {
     const W = Math.abs(ls.x - rs.x) * aspect;
     if (W < 0.03) return null;
     const sy = (ls.y + rs.y) / 2, mx = (ls.x + rs.x) / 2;
-    const T = lh && rh && (lh.visibility ?? 1) > 0.3 && (rh.visibility ?? 1) > 0.3 ? Math.max(0.5 * W, (lh.y + rh.y) / 2 - sy) : 1.3 * W; // (the torso's length)
+    const hipsSeen = !!(lh && rh && (lh.visibility ?? 1) > 0.3 && (rh.visibility ?? 1) > 0.3);
+    const T = hipsSeen ? Math.max(0.5 * W, (lh.y + rh.y) / 2 - sy) : 1.3 * W; // (the torso's length)
     const hy = sy + T;
     const hx = (wr.x - nose.x) * aspect / W, hdy = (wr.y - nose.y) / W;
     const cx = (wr.x - mx) * aspect / W, cdy = (wr.y - sy) / T;
     return {
         head: Math.abs(hx) < 0.75 && hdy > -1.1 && hdy < 0.4, // (from the chin up)
         chest: Math.abs(cx) < 0.5 && cdy > 0.08 && cdy < 0.65,
-        knee: wr.y > hy + 0.45 * T,
+        // the greaves: the hand on the thigh, in front (drawn in from the hip line — a hand hanging at
+        // the side is out there and never counts), from the belt down; or bent down to the knee. Hips
+        // not seen (a camera to the waist): the hand low in front, at the belt, is enough.
+        knee: wr.y > hy + 0.45 * T && Math.abs(cx) < 1.0 || Math.abs(cx) < 0.42 && cdy > (hipsSeen ? 0.8 : 0.72),
     };
 }
 

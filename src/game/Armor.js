@@ -11,6 +11,7 @@
  *    piece beaten to 0 falls apart; magic ones mend themselves. The whole magic set / a magic
  *    robe turn the simplest magic away (guard), arrows bounce off magic steel (arrowBounces) —
  *    the knights who see their arrows bounce stop shooting a while (bouncesArrows).
+ *  - «Disarmor» with the wand up to the sky: the same off myself (disarmSelf), dropped by me.
  *  - «Disarmor» (a duel charge): plain steel and a plain robe fly off in all directions as real
  *    things — off me (my own computer decides), off another player (theirs), off a knight or the
  *    king (the host: they fight on without it), off a wizard's plain robe. Magic steel and a magic
@@ -297,8 +298,33 @@ export class ArmorSystem {
     }
 
     // ------------------------------------------------------------ «Disarmor»
-    /** «Disarmor» hit me: my plain steel (and a plain robe) flies off in all directions. */
-    disarmorMe(byId) {
+    /**
+     * «Disarmor» said with the wand (the hand) raised to the sky: off myself — the same as the charge
+     * takes (plain steel, a plain robe; magic ones and the High Mage's suit stay), its mana, no jolt.
+     * The pieces drop around me as things (the others see them: itemThrow / spawnLoose, 'worn').
+     */
+    disarmSelf(isFinal = true) {
+        const g = this.game, c = g.combat;
+        const now = Date.now();
+        if (now - (g._lastDuelCast || 0) < 900) return null; // (the same word heard again)
+        const off = SLOTS.filter((s) => this.worn[s] && !this.worn[s].magic);
+        if (!off.length) {
+            if (isFinal) g.hud?.setVoice?.(this.anyWorn() ? '✨ «Disarmor»: волшебное с себя не снять' : '🪖 «Disarmor»: на вас нечего снимать', true);
+            return null;
+        }
+        const tired = c?.check?.('Disarmor');
+        if (tired) { if (isFinal) g.hud?.setVoice?.(tired, true); return null; }
+        c?.pay?.('Disarmor');
+        g._lastDuelCast = now;
+        g.sound?.playSpellFx?.('fxDisarmor');
+        const p = g.character.group.position;
+        for (let i = 0; i < 20; i++) g.fx?.spark(_v.set(p.x, p.y + 1.2, p.z), 0x8fa3b8, 0.08, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.5);
+        this.disarmorMe(g.localId, { self: true, gentle: true });
+        return 'Disarmor';
+    }
+
+    /** «Disarmor» hit me: my plain steel (and a plain robe) flies off in all directions (`gentle`: off myself — it drops by me). */
+    disarmorMe(byId, { self = false, gentle = false } = {}) {
         const g = this.game;
         const off = SLOTS.filter((s) => this.worn[s] && !this.worn[s].magic);
         if (!off.length) {
@@ -311,12 +337,12 @@ export class ArmorSystem {
             this.worn[s] = null;
             const from = (s === 'helmet' ? ch.head : s === 'legs' ? ch.leftLegPivot : ch.torso).getWorldPosition(new THREE.Vector3());
             if (s === 'legs') from.y -= 0.8;
-            const f = pickFlight(g, from);
+            const f = gentle ? { vel: new THREE.Vector3((Math.random() - 0.5) * 3, 1.5, (Math.random() - 0.5) * 3), spin: new THREE.Vector3(Math.random(), Math.random(), Math.random()) } : pickFlight(g, from);
             if (g.items?.auth || !g.sync) g.items?.spawnLoose(it, from, { vel: f.vel, spin: f.spin });
             else g.sync.itemThrow?.(it, from, f.vel, null, f.spin);
         }
         this._changed();
-        g.hud?.setVoice?.(`🪖💨 «Disarmor»! С вас слетело: ${off.map((s) => armorName({ kind: s === 'robe' ? 'robe' : 'armor', piece: s })).join(', ').toLowerCase()} — подберите`, true);
+        g.hud?.setVoice?.(`🪖💨 «Disarmor»! ${self ? 'Вы сняли с себя' : 'С вас слетело'}: ${off.map((s) => armorName({ kind: s === 'robe' ? 'robe' : 'armor', piece: s })).join(', ').toLowerCase()} — подберите`, true);
         return off.length;
     }
 

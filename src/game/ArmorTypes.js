@@ -273,7 +273,10 @@ export function wearSpot(kind, piece, hand, touch = null) {
     if (touch && !touch[spot]) return false;
     if (spot === 'head') return y > 1.3 && y < 3.5 && Math.hypot(x, z) < 1.45; // at the head (its middle at y 2.1), on it or over it
     if (spot === 'chest') return Math.abs(x) < 0.9 && y > 0.2 && y < 1.75 && z < 0.2 && z > -1.6; // on the chest (its front at z −0.4)
-    return Math.abs(x) < 1.0 && y > -1.9 && y < -0.75 && z > -1.6 && z < 0.8; // at the knee / the shin (bent down to it)
+    // on the thigh / at the knee: below the belt (the hero's arm hangs to y −0.65 — it can't reach lower,
+    // so the camera's picture tells the thigh from a hand at the side); unseen — the hand forward of the thigh
+    if (!(Math.abs(x) < 1.0 && y > -1.9 && y < 0.15 && z > -1.6 && z < 0.8)) return false;
+    return touch ? true : z < -0.35 && Math.abs(x) < 0.75;
 }
 
 // ================================================================ «Раздеть» («Disarmor»)
@@ -282,7 +285,7 @@ export function wearSpot(kind, piece, hand, touch = null) {
  * The steel flies off in all directions as real things (they can be picked up, put on).
  */
 export const DISARMOR_TARGETS = {
-    me: { does: 'strip+jolt', why: 'меня отбрасывает, как «Джолт» (кувырок, падение); мои обычные доспехи (и обычная мантия) слетают и разлетаются вокруг; волшебные остаются; решает мой компьютер' },
+    me: { does: 'strip+jolt', why: 'меня отбрасывает, как «Джолт» (кувырок, падение); мои обычные доспехи (и обычная мантия) слетают и разлетаются вокруг; волшебные остаются; решает мой компьютер. Палочка (рука) вверх к небу + «Disarmor» — снимаю с себя сам (без толчка, та же мана): обычное падает рядом, волшебное и костюм Высшего мага остаются' },
     players: { does: 'strip+jolt', why: 'другой игрок (отбрасывает, как «Джолт»): заряд видят все, снимает с себя его компьютер; волшебные доспехи и мантия не снимаются' },
     zombies: { does: 'jolt', why: 'на зомби нет доспехов — его только отбрасывает, как «Джолт»' },
     castlePeople: { does: 'strip+jolt', why: 'всех отбрасывает, как «Джолт»; рыцари и король: латы разлетаются (шлем, нагрудник, поножи — вещи на земле), броня 0, дерутся дальше без неё; волшебники: обычная мантия слетает, волшебная — нет; остальным снимать нечего (толчок)' },
