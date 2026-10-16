@@ -92,16 +92,16 @@ export const PLANET_SPELLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet'
  * Who / what × how (CLAUDE.md). Each spell: what it works on, and «не действует» with why.
  */
 export const PLANET_TARGETS = {
-    cluster: { CreatePlanet: 'a new planet of its rocks (the cluster is gone)', other: 'не действует: это не планета' },
-    rocky: { EnlargePlanet: '+30 % radius and gravity (max 3 times)', TerraformPlanet: 'air, its own life — by its distance from the Sun', LevitationSuperMaxima: 'moved to a new orbit' },
-    created: { EnlargePlanet: 'yes', TerraformPlanet: 'yes', LevitationSuperMaxima: 'yes' },
-    moon: { EnlargePlanet: 'yes', TerraformPlanet: 'yes (the Earth\'s distance: the green zone)', LevitationSuperMaxima: 'не действует: Луна идёт вокруг Земли — её орбита держится за Землю' },
-    gas: { EnlargePlanet: 'yes (no ground to break)', TerraformPlanet: 'не действует: у газового гиганта нет земли', LevitationSuperMaxima: 'yes' },
-    earth: { all: 'не действует: Земля — дом всех, боги не дают её менять' },
-    venus: { all: 'не действует: Венера под защитой богов (их храм — дар богов)' },
-    sun: { all: 'не действует: Солнце не планета, к нему не подступиться' },
-    creatures: { all: 'не действует: заклинания богов ищут только планеты и метеориты в космосе (players, villagers, animals, zombies, dragons, the Ice Queen, sailors… are never targets)' },
-    things: { all: 'не действует: вещи, книги, сундуки, корабли, дома, блоки мира — не цели (only celestial bodies)' },
+    cluster: { CreatePlanet: 'a new planet of its rocks (the cluster is gone)', other: 'не действует: это не планета' }, // («Planet Liquidation» leaves a new one — PlanetDestroy.js)
+    rocky: { EnlargePlanet: '+30 % radius and gravity (max 3 times)', TerraformPlanet: 'air, its own life — by its distance from the Sun', LevitationSuperMaxima: 'moved to a new orbit', PlanetLiquidation: 'blown up (1500 + its mass): gone, its rocks a meteor cluster on its orbit, its ground gone' },
+    created: { EnlargePlanet: 'yes', TerraformPlanet: 'yes', LevitationSuperMaxima: 'yes', PlanetLiquidation: 'yes (its maker\'s or anybody\'s)' },
+    moon: { EnlargePlanet: 'yes', TerraformPlanet: 'yes (the Earth\'s distance: the green zone)', LevitationSuperMaxima: 'не действует: Луна идёт вокруг Земли — её орбита держится за Землю', PlanetLiquidation: 'yes (its rocks go round the Sun where it was)' },
+    gas: { EnlargePlanet: 'yes (no ground to break)', TerraformPlanet: 'не действует: у газового гиганта нет земли', LevitationSuperMaxima: 'yes', PlanetLiquidation: 'yes (the dearest: thousands of mana — its mass)' },
+    earth: { all: 'не действует: Земля — дом всех, боги не дают её менять', PlanetLiquidation: 'не действует: защищена силой богов (золотой щит вспыхивает)' },
+    venus: { all: 'не действует: Венера под защитой богов (их храм — дар богов)', PlanetLiquidation: 'не действует: защищена силой богов (золотой щит вспыхивает)' },
+    sun: { all: 'не действует: Солнце не планета, к нему не подступиться', PlanetLiquidation: 'не действует: звезда, а не планета — её не берёт никакая магия' },
+    creatures: { all: 'не действует: заклинания богов ищут только планеты и метеориты в космосе (players, villagers, animals, zombies, dragons, the Ice Queen, sailors… are never targets)', PlanetLiquidation: 'never aimed at; a player on the planet or in its air at the blast dies (warned while it cracks; each computer its own) — no creatures live on other planets' },
+    things: { all: 'не действует: вещи, книги, сундуки, корабли, дома, блоки мира — не цели (only celestial bodies)', PlanetLiquidation: 'what lies or is built on the planet is gone with its ground (its slot never given again)' },
 };
 
 /** Why `name` does not work on `def` (or null). */

@@ -17,6 +17,9 @@
  *       .update(id, patch)                     radius ×1.3 («Увеличить планету»), {terraformed: true, …}
  *                                              («Терраформировать»), {orbit: {…}} («Wingardium Leviosa Super Maxima»)
  *       .live(id, orbit)                       a planet's orbit while it is dragged (quiet: no rebuild; PlanetMagic)
+ *       .remove(id, debris, at) / .gone        a planet blown up («Planet Liquidation», PlanetDestroy.js): gone, its
+ *                                              slot never given again; `debris` — a new meteor cluster on its orbit
+ *                                              (belt 'debris', saved whole)
  *       .onChange(fn)                          called after any add / update / apply (the view rebuilds it)
  *   climateAt(a) / ZONES / terraformPatch(def, climate)   «Terraform Planet»: what comes of a planet this far out
  *   orbitThrough(x, z, t)                      a circular orbit through a point (a planet moved there)
@@ -357,6 +360,7 @@ export class PlanetRegistry {
         this._bySlot = new Map();
         for (const p of this.list) if (p.slot != null) this._bySlot.set(p.slot, p);
         this.clusters = makeClusters(this.seed);
+        this.gone = []; // («Planet Liquidation»: the planets blown up — {id, slot, name, at}; their slots are never given again)
     }
 
     get(id) { return this.byId.get(id) || null; }
@@ -374,7 +378,7 @@ export class PlanetRegistry {
         const id = def.id || `p${this.seed % 1000}_${n + 1}`;
         if (this.byId.has(id)) return id;
         let slot = -1;
-        if ((def.kind || 'rocky') === 'rocky') { slot = 5; while (this._bySlot.has(slot)) slot++; if (slot >= SPACE.SLOT_COLS * SPACE.SLOT_ROWS) slot = -1; }
+        if ((def.kind || 'rocky') === 'rocky') { slot = 5; while (this._bySlot.has(slot) || this.gone.some((g) => g.slot === slot)) slot++; if (slot >= SPACE.SLOT_COLS * SPACE.SLOT_ROWS) slot = -1; }
         const a = def.a || SPACE.AU * 2;
         if (def.cluster) { const c = this.cluster(def.cluster); if (c) { c.used = true; c.usedAt = def.born ?? c.usedAt ?? null; } } // («Create a Planet»: its meteors are gone into it)
         const p = {
@@ -399,6 +403,23 @@ export class PlanetRegistry {
             else p[k] = patch[k];
         }
         if (patch.a && !patch.period) p.period = Tk(Math.pow(p.a / SPACE.AU, 1 / 0.7));
+        this._changed();
+        return true;
+    }
+
+    /**
+     * A planet blown up («Planet Liquidation», PlanetDestroy.js): gone from the list; its surface slot is gone with
+     * it (never given to another planet — what was built there went with it); `debris` — the meteor cluster of its
+     * rocks left on its orbit (one can make a planet of it again: «Create a Planet»).
+     */
+    remove(id, debris = null, at = null) {
+        const p = this.byId.get(id);
+        if (!p || p.kind === 'star') return false;
+        this.list.splice(this.list.indexOf(p), 1);
+        this.byId.delete(id);
+        if (p.slot != null && p.slot >= 0) this._bySlot.delete(p.slot);
+        this.gone.push({ id, slot: p.slot ?? -1, name: p.name, at });
+        if (debris && !this.cluster(debris.id)) this.clusters.push(debris);
         this._changed();
         return true;
     }
@@ -434,6 +455,9 @@ export class PlanetRegistry {
         for (const c of this.clusters) if (c.used && c.usedAt) clusterAt[c.id] = c.usedAt;
         const out = { v: 1, changed, created, clusters };
         if (Object.keys(clusterAt).length) out.clusterAt = clusterAt; // (when each was made into a planet: its end is seen everywhere)
+        if (this.gone.length) out.gone = this.gone; // («Planet Liquidation»: the planets blown up …
+        const debris = this.clusters.filter((c) => c.belt === 'debris');
+        if (debris.length) out.debris = debris.map(({ id, belt, a, period, phase, incl, node, ecc, lift, liftT, r, count, bornAt, from, color }) => ({ id, belt, a, period, phase, incl, node, ecc, lift, liftT, r, count, bornAt, from, color })); // … and their rocks
         return out;
     }
 
@@ -442,8 +466,17 @@ export class PlanetRegistry {
         if (!s || typeof s !== 'object') return;
         this.reset();
         for (const [id, d] of Object.entries(s.changed || {})) { const p = this.byId.get(id); if (p && d && typeof d === 'object') Object.assign(p, d); }
+        // («Planet Liquidation»: the planets blown up are not there — base or created; their slots stay taken)
+        for (const g of Array.isArray(s.gone) ? s.gone.slice(0, 200) : []) {
+            if (!g || typeof g.id !== 'string') continue;
+            const p = this.byId.get(g.id);
+            if (p && p.kind !== 'star' && p.id !== 'earth' && p.id !== 'venus') { this.list.splice(this.list.indexOf(p), 1); this.byId.delete(p.id); if (p.slot != null && p.slot >= 0) this._bySlot.delete(p.slot); }
+            this.gone.push({ id: g.id, slot: Number.isFinite(g.slot) ? g.slot : -1, name: String(g.name || ''), at: Number.isFinite(g.at) ? g.at : null });
+        }
+        const goneIds = new Set(this.gone.map((g) => g.id));
+        for (const c of Array.isArray(s.debris) ? s.debris.slice(0, 200) : []) if (c && typeof c.id === 'string' && Number.isFinite(c.a) && !this.cluster(c.id)) this.clusters.push({ ...c, belt: 'debris', used: false });
         for (const c of Array.isArray(s.created) ? s.created.slice(0, 120) : []) {
-            if (!c || typeof c.id !== 'string' || this.byId.has(c.id)) continue;
+            if (!c || typeof c.id !== 'string' || this.byId.has(c.id) || goneIds.has(c.id)) continue;
             const p = { ...c, base: false };
             this.list.push(p); this.byId.set(p.id, p);
             if (p.slot != null && p.slot >= 0) this._bySlot.set(p.slot, p);

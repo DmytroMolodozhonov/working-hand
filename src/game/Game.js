@@ -127,6 +127,7 @@ import { CastleMagic } from './CastleMagic.js';
 import { IceMagic } from './IceMagic.js';
 import { Space } from './Space.js';
 import { PlanetMagic, PLANET_SPELLS } from './PlanetMagic.js';
+import { PlanetDestroy } from './PlanetDestroy.js';
 import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
@@ -143,7 +144,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
+const MANA_LATER = new Set(['CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -423,6 +424,7 @@ export class Game {
         this.destruction = new TotalDestruction(this); // «Total Destruction»: the area falls into ruins
         this.circleAttack = new CircleAttack(this); // «Circle Attack» / «… Maxima»: a great wave all round the wizard (arms in a T)
         this.inspirius = new Inspirius(this); // «Inspirius»: the ball of electric light from the wand — the mightiest blast
+        this.planetDestroy = new PlanetDestroy(this); // «Planet Liquidation»: a planet blown up — the sixth scroll of the gods' library
         this.boom = new Boom(this); // «Бум»: a mountain (a castle) torn apart from inside — the fifth scroll of the gods' library
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
         this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
@@ -1337,6 +1339,7 @@ export class Game {
         }
         // the gods' scrolls: the planets (PlanetMagic.js) — in space or on a planet
         if (PLANET_SPELLS.includes(name)) return this.planetMagic.cast(name, isFinal);
+        if (name === 'PlanetLiquidation') return this.planetDestroy.cast(isFinal); // (instant: the magic let go does the rest — PlanetDestroy.js)
         // off the Earth some spells have nothing to work with: no air for fire, no water, no ground in space (Space.js)
         const offEarth = this.space?.spellBlocked(name);
         if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
@@ -2952,6 +2955,7 @@ export class Game {
         this.hellfire?.update(dt);
         this.waterStorm?.update(dt);
         this.planetMagic?.update(dt); // (a planet held by «Wingardium Leviosa Super Maxima» follows the hand)
+        this.planetDestroy?.update(dt); // («Planet Liquidation»: the warnings, the blast, the host taking the planet away)
         this.strikes.update(dt); // fists, slaps, pushes, shoves: real contact only
         mark('магия и оружие');
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
@@ -3804,6 +3808,7 @@ export class Game {
         this.circleAttack?.clear();
         this.inspirius?.clear();
         this.boom?.dispose();
+        this.planetDestroy?.dispose();
         if (this.keeper) { this.keeper.save(); this.keeper.dispose(); }
         if (this.sync) this.sync.dispose();
         this.sync = null;

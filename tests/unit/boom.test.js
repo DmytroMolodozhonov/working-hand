@@ -43,7 +43,7 @@ test('only from the scroll of the gods\' temple (its fifth pedestal), 750 mana, 
     assert.equal(firstSpellGain('Boom'), 100);
     assert.equal(TEMPLE_SCROLLS[4], 'Boom');
     const plan = templePlan(1);
-    assert.equal(plan.pedestals.length, 5);
+    assert.equal(plan.pedestals.length, 6); // (the sixth: «Planet Liquidation»)
     assert.equal(plan.pedestals[4].spell, 'Boom');
     assert.equal(boomBlock({ enabled: true, mana: 749 }), 'mana');
     assert.equal(boomBlock({ enabled: true, mana: 750 }), null);

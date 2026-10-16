@@ -41,9 +41,10 @@ export const TEMPLE = {
     FAR: 520, // game units: beyond this it is not drawn
 };
 
-/** The five scrolls of the library's pedestals (the spells' names — taught by burning a scroll): the four of the
- * planets, and «Бум» (Boom.js) on the fifth, before the god of Wisdom. */
-export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom'];
+/** The six scrolls of the library's pedestals (the spells' names — taught by burning a scroll): the four of the
+ * planets, «Бум» (Boom.js) on the fifth, before the god of Wisdom, and «Planet Liquidation» (PlanetDestroy.js) on
+ * the sixth, further down the aisle. */
+export const TEMPLE_SCROLLS = ['CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'Boom', 'PlanetLiquidation'];
 
 /** Materials of the mesh arrays (Temple.js makes one THREE material for each). */
 export const TEMPLE_MATS = ['stone', 'marble', 'gold', 'wood', 'sand', 'web', 'shaft'];
@@ -727,6 +728,7 @@ export function templePlan(seed = 1) {
     // (placed by Temple.js — the Creative ones)
     const pedestals = [-10, -6, 6, 10].map((x, i) => ({ x, z: WZ + 2.6, spell: TEMPLE_SCROLLS[i] }));
     pedestals.push({ x: 0, z: WZ + 5.5, spell: TEMPLE_SCROLLS[4] });
+    pedestals.push({ x: 0, z: WZ + 9.5, spell: TEMPLE_SCROLLS[5] }); // («Planet Liquidation»: the sixth, further down the aisle, before the reading desks)
     // the colonnade along both sides holding the gallery of the upper storey
     const BY = 7; // the gallery's floor
     for (const sx of [-1, 1]) {

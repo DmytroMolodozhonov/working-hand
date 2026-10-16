@@ -11,6 +11,8 @@
  */
 import * as THREE from 'three';
 import { planetPosition, spinAt, SPACE, BELTS } from './Planets.js';
+import { DoomView } from './DoomView.js';
+import { DOOM } from './PlanetDoom.js';
 
 const GLSL_NOISE = /* glsl */ `
 float h31(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -34,8 +36,9 @@ void main() {
 
 const PLANET_FS = /* glsl */ `
 uniform sampler2D map; uniform vec3 uSun; uniform vec3 uAtmo; uniform float uAtmoK; uniform float uAmb; uniform float uSpec; uniform float uHeat;
-uniform sampler2D map0; uniform float uTerra; uniform vec3 uTerraCol;
+uniform sampler2D map0; uniform float uTerra; uniform vec3 uTerraCol; uniform float uDoom;
 varying vec3 vObj; varying vec3 vN; varying vec3 vW;
+${GLSL_NOISE}
 void main() {
     vec3 d = normalize(vObj);
     float lon = atan(d.x, d.z), lat = asin(clamp(d.y, -1.0, 1.0));
@@ -81,6 +84,17 @@ void main() {
     col = mix(col, mix(vec3(0.75, 0.16, 0.03), vec3(1.0, 0.72, 0.3), cr), clamp(uHeat, 0.0, 1.0));
     // the terraforming's own light: a glow over all of it, the waves, the new land's edge
     col += uTerraCol * (tg * (0.18 + 0.35 * tex) + tw * 0.9);
+    // «Planet Liquidation» (PlanetDestroy / DoomView): uDoom 0..1 — cracks open over it, its red-hot core shines
+    // through them (on the night side too), the crust darkens, at the end all of it glows
+    if (uDoom > 0.0) {
+        float n1 = fbm3(d * 4.0 + 3.1), n2 = fbm3(d * 11.0 - 1.7);
+        float big = 1.0 - smoothstep(0.0, 0.012 + 0.05 * uDoom, abs(n1 - 0.5));
+        float fine = (1.0 - smoothstep(0.0, 0.01 + 0.035 * uDoom, abs(n2 - 0.5))) * smoothstep(0.25, 0.6, uDoom);
+        float crack = max(big * smoothstep(0.0, 0.2, uDoom), fine);
+        vec3 lava = mix(vec3(1.0, 0.22, 0.02), vec3(1.0, 0.85, 0.45), uDoom * uDoom);
+        col *= 1.0 - 0.55 * uDoom;
+        col += lava * crack * (1.6 + 2.4 * uDoom) + lava * pow(uDoom, 4.0) * 0.9;
+    }
     gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -252,6 +266,7 @@ export class SpaceView {
         this._makeSun();
         this._makeBelts();
         this._makeGlows();
+        this.doom = new DoomView(this, this.glowTex); // («Planet Liquidation»: the beam, the cracks, the blast, the gods' shield)
         this._sync();
         planets.onChange(() => this._sync());
     }
@@ -325,34 +340,38 @@ export class SpaceView {
         this.kuiperPeriod = SPACE.YEAR * Math.pow(40, 1.5);
         // the meteor clusters (скопления метеоритов): a dense heap of rocks each
         this.clusterMeshes = new Map();
-        for (const c of this.planets.clusters) {
-            const m = new THREE.InstancedMesh(this.rockGeo, this._rockMat(c.belt === 'kuiper' ? 0xb8c2cc : 0x9a8a78), c.count);
-            const o = new THREE.Object3D();
-            let s = c.count * 977 + c.a;
-            const rnd = () => ((s = (s * 48271) % 2147483647) / 2147483647);
-            const base = new Float32Array(c.count * 9); // (each rock: place, turn, size — «Create a Planet» moves them)
-            for (let i = 0; i < c.count; i++) {
-                const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, rr = c.r * Math.cbrt(rnd());
-                const q = Math.sqrt(1 - u * u);
-                o.position.set(Math.cos(th) * q * rr, u * rr * 0.6, Math.sin(th) * q * rr);
-                o.rotation.set(rnd() * 6, rnd() * 6, rnd() * 6);
-                const sz = 8 + 34 * Math.pow(rnd(), 2.5);
-                o.scale.set(sz, sz * (0.6 + rnd() * 0.5), sz * (0.7 + rnd() * 0.5));
-                o.updateMatrix();
-                m.setMatrixAt(i, o.matrix);
-                base.set([o.position.x, o.position.y, o.position.z, o.rotation.x, o.rotation.y, o.rotation.z, o.scale.x, o.scale.y, o.scale.z], i * 9);
-            }
-            m.userData.base9 = base;
-            m.frustumCulled = false;
-            this.root.add(m);
-            this.clusterMeshes.set(c.id, m);
-            // a soft light over the heap, seen from far (the author: on the map they were, in space not to be
-            // found): the same size on the screen however far, fading out close by where the rocks are seen
-            const beacon = new THREE.Sprite(this._beaconMat || (this._beaconMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xbfe0ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })));
-            beacon.userData.cluster = c.id;
-            this.root.add(beacon);
-            m.userData.beacon = beacon;
+        for (const c of this.planets.clusters) this._addCluster(c);
+    }
+
+    /** A meteor cluster's heap of rocks (also a new one: the rocks of a blown-up planet — «Planet Liquidation»). */
+    _addCluster(c) {
+        const col = c.belt === 'kuiper' ? 0xb8c2cc : c.belt === 'debris' ? new THREE.Color(c.color ?? 0x8a7a6a).lerp(new THREE.Color(0x6a6058), 0.45).getHex() : 0x9a8a78; // (a blown-up planet's rocks: its own colour, darker)
+        const m = new THREE.InstancedMesh(this.rockGeo, this._rockMat(col), c.count);
+        const o = new THREE.Object3D();
+        let s = c.count * 977 + Math.round(c.a);
+        const rnd = () => ((s = (s * 48271) % 2147483647) / 2147483647);
+        const base = new Float32Array(c.count * 9); // (each rock: place, turn, size — «Create a Planet» moves them)
+        for (let i = 0; i < c.count; i++) {
+            const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, rr = c.r * Math.cbrt(rnd());
+            const q = Math.sqrt(1 - u * u);
+            o.position.set(Math.cos(th) * q * rr, u * rr * 0.6, Math.sin(th) * q * rr);
+            o.rotation.set(rnd() * 6, rnd() * 6, rnd() * 6);
+            const sz = 8 + 34 * Math.pow(rnd(), 2.5);
+            o.scale.set(sz, sz * (0.6 + rnd() * 0.5), sz * (0.7 + rnd() * 0.5));
+            o.updateMatrix();
+            m.setMatrixAt(i, o.matrix);
+            base.set([o.position.x, o.position.y, o.position.z, o.rotation.x, o.rotation.y, o.rotation.z, o.scale.x, o.scale.y, o.scale.z], i * 9);
         }
+        m.userData.base9 = base;
+        m.frustumCulled = false;
+        this.root.add(m);
+        this.clusterMeshes.set(c.id, m);
+        // a soft light over the heap, seen from far (the author: on the map they were, in space not to be
+        // found): the same size on the screen however far, fading out close by where the rocks are seen
+        const beacon = new THREE.Sprite(this._beaconMat || (this._beaconMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xbfe0ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })));
+        beacon.userData.cluster = c.id;
+        this.root.add(beacon);
+        m.userData.beacon = beacon;
     }
 
     /**
@@ -361,7 +380,7 @@ export class SpaceView {
      * the rest; each frame they go where an effect is (or hide).
      */
     _makeGlows() {
-        const tex = glowTexture(true);
+        const tex = this.glowTex = glowTexture(true);
         this.glows = [];
         for (let i = 0; i < 6; i++) {
             const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, color: 0xffffff }));
@@ -527,8 +546,24 @@ export class SpaceView {
             b.tilt.rotation.z = (def.kind === 'gas' ? def.tilt || 0 : 0) * Math.PI / 180; // (rocky bodies: their surface frame stays upright — Planets.js)
             this._orbitLine(b, def);
         }
-        for (const [id, b] of this.bodies) if (!seen.has(id)) { this.root.remove(b.group, b.orbit); this.bodies.delete(id); }
-        for (const [id, m] of this.clusterMeshes) { const c = this.planets.cluster(id); m.visible = !c?.used || !!c.usedAt; }
+        for (const [id, b] of this.bodies) {
+            if (seen.has(id)) continue;
+            // (gone — «Planet Liquidation»: its own things freed; the shared spheres stay)
+            this.root.remove(b.group, b.orbit);
+            b.orbit?.geometry.dispose();
+            b.rings?.geometry.dispose();
+            b.group.traverse((o) => o.material?.dispose?.());
+            if (b.u.map0.value !== b.u.map.value) b.u.map0.value?.dispose?.();
+            b.u.map.value?.dispose?.();
+            this.bodies.delete(id);
+        }
+        // the clusters: new ones (a blown-up planet's rocks) made, ones no longer there taken away
+        for (const c of this.planets.clusters) if (!this.clusterMeshes.has(c.id)) this._addCluster(c);
+        for (const [id, m] of this.clusterMeshes) {
+            const c = this.planets.cluster(id);
+            if (!c) { this.root.remove(m, m.userData.beacon); this._rockMats = this._rockMats.filter((r) => r !== m.material); m.material.dispose(); m.dispose?.(); this.clusterMeshes.delete(id); continue; }
+            m.visible = !c.used || !!c.usedAt;
+        }
     }
 
     _makeBody(def) {
@@ -537,7 +572,7 @@ export class SpaceView {
         const u = {
             map: { value: colorTex(def.color) }, uSun: { value: new THREE.Vector3() }, uAtmo: { value: new THREE.Color(def.atmosphere ?? def.clouds ?? 0x000000) },
             uAtmoK: { value: def.atmosphere || def.clouds ? 0.55 : 0 }, uAmb: { value: def.look === 'earth' ? 0.035 : 0.02 }, uSpec: { value: def.look === 'earth' ? 1 : 0 }, uHeat: { value: 0 },
-            map0: { value: null }, uTerra: { value: 0 }, uTerraCol: { value: magicColor(def.atmosphere ?? 0x9fe0ff) },
+            map0: { value: null }, uTerra: { value: 0 }, uTerraCol: { value: magicColor(def.atmosphere ?? 0x9fe0ff) }, uDoom: { value: 0 },
         };
         u.map0.value = u.map.value;
         const mesh = new THREE.Mesh(this.geoLo, new THREE.ShaderMaterial({ uniforms: u, vertexShader: PLANET_VS, fragmentShader: PLANET_FS }));
@@ -637,21 +672,22 @@ export class SpaceView {
             const def = b.def;
             planetPosition(def, t, _p, this.planets);
             b.group.position.set(_p.x - cam.x, _p.y - cam.y, _p.z - cam.z);
-            // (the planet spells: a body being born, growing, given air, held — PlanetMagic.js)
-            const rNow = this.radiusNow(def, t), heat = this._heat;
+            // (the planet spells: a body being born, growing, given air, held — PlanetMagic.js; dying — DoomView)
+            const dk = this.doom.body(b, def, t);
+            const r0 = this.radiusNow(def, t), heat = this._heat, rNow = r0 * dk;
             if (b.group.scale.x !== rNow) b.group.scale.setScalar(rNow);
             b.u.uHeat.value = heat;
             this._terraStep(b, def, t);
             if (gi < this.glows.length) {
                 const gp = b.group.position;
                 if (heat > 0.01) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 4.5, 0xff8a3a, heat * 1.3);
-                else if (rNow !== def.radius) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 3.2, 0xfff0d0, 0.6);
+                else if (r0 !== def.radius) this._glow(gi++, gp.x, gp.y, gp.z, rNow * 3.2, 0xfff0d0, 0.6);
                 else if (terraforming(def, t)) { const p = (t - def.terraAt) / VIEW_FX.TERRA, k = smooth(p / 0.08) * (1 - smooth((p - 0.75) / 0.25)) * (0.8 + 0.2 * Math.sin(t * 6)); this._glow(gi++, gp.x, gp.y, gp.z, def.radius * (3 + p), def.atmosphere ?? 0x9fe0ff, k); }
                 else if (this.fx.hold?.id === def.id) this._glow(gi++, gp.x, gp.y, gp.z, def.radius * 3, 0xf2e6ff, 0.75 + 0.15 * Math.sin(t * 5));
             }
             b.mesh.rotation.y = spinAt(def, t);
             const d = b.group.position.length();
-            b.group.visible = def.id !== o.hide;
+            b.group.visible = def.id !== o.hide && !(def.doomAt && t - def.doomAt >= DOOM.T && def.id !== 'earth' && def.id !== 'venus');
             // near: the fine sphere
             const px = (def.radius / Math.max(1, d)) * pxK;
             const geo = px > 140 ? this.geoHi : this.geoLo;
@@ -686,6 +722,7 @@ export class SpaceView {
                 bc.visible = d > c.r * 4; // (close by: the rocks themselves)
             }
             m.rotation.y = t * 0.01;
+            if (c.bornAt != null && !c.used && t - c.bornAt < DOOM.AFTER + 1) this.doom.scatter(c, m, Math.max(0, t - c.bornAt)); // (a blown-up planet's rocks flying out)
             if (c.used) {
                 // «Create a Planet»: the rocks drawn in to one point, crashing, red-hot — then gone (the planet is there)
                 const a = c.usedAt ? t - c.usedAt : 1e9;
@@ -701,6 +738,7 @@ export class SpaceView {
         }
         if (!sparked) this.sparks.visible = false;
         for (; gi < this.glows.length; gi++) this.glows[gi].visible = false;
+        this.doom.update(t, cam, sunRel); // («Planet Liquidation»: the beam, the blast, the gods' shield)
         // (close to a planet the orbits' lines would cross the whole view: they fade away)
         const ok = o.orbitK ?? 1;
         this._orbitMat.opacity = 0.22 * ok; this._earthOrbitMat.opacity = 0.45 * ok;
@@ -722,13 +760,15 @@ export class SpaceView {
         for (const b of this.bodies.values()) { b.group.visible = true; b.group.position.set(0, 0, -b.def.radius * 3); }
         for (const s of this.glows) { s.visible = true; s.position.set(0, 0, -500); }
         this.sparks.visible = true;
+        this.doom.compileShow(true);
         try { renderer.compile(this.scene, C); } catch (e) { /* (no GL in tests) */ }
         for (const s of this.glows) s.visible = false;
         this.sparks.visible = false;
+        this.doom.compileShow(false);
     }
 
     dispose() {
-        this.geoHi.dispose(); this.geoLo.dispose(); this.rockGeo.dispose();
+        this.geoHi.dispose(); this.geoLo.dispose(); this.rockGeo.dispose(); this.doom.dispose();
         this.scene.traverse((o) => { o.material?.dispose?.(); if (o.geometry && o.geometry !== this.geoHi && o.geometry !== this.geoLo && o.geometry !== this.rockGeo) o.geometry.dispose(); });
     }
 }

@@ -11,6 +11,7 @@
  */
 import * as THREE from 'three';
 import { TerrainData, CHUNK, chunkKey, mergeBuffers } from './Terrain.js';
+import { slotAt } from './Planets.js';
 import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
 
 /** ms a frame for sending changed chunks to the workers (and as much again for putting their meshes in). */
@@ -95,6 +96,18 @@ export class Terrain {
         this._remake = list;
         this._remakeFlight = new Map();
         this._remade = [];
+    }
+
+    /**
+     * «Planet Liquidation» (PlanetDestroy.js): planets gone — their ground with them (what was built there too: it
+     * blew up with the planet); their slots of the far zone are empty space now. Only their own chunks are touched.
+     */
+    planetGone(json, ids, slots) {
+        if (this._workers) for (const w of this._workers) w.postMessage({ type: 'planets', s: json });
+        this.data._last = null;
+        const set = new Set(ids), sl = new Set(slots);
+        for (const [k, c] of this.data.chunks) if (c.planet && set.has(c.planet)) this.data.chunks.delete(k);
+        for (const [key, e] of [...this.meshes]) { const s = slotAt(e.cx * CHUNK + CHUNK / 2, e.cz * CHUNK + CHUNK / 2); if (s >= 0 && sl.has(s)) this._unload(key, e); }
     }
 
     /** «Terraform Planet»: the shown ground of the planet made again, a little a frame (planetsChanged). */

@@ -254,6 +254,20 @@ const TUNES = {
         noise(o, sr, 4.8, 2.6, 0.12, (u) => 0.03 + 0.1 * (1 - u), (u) => (1 - u) * (1 - u), r);
         return finish(o, sr, { rms: 0.085 });
     },
+    /** «Planet Liquidation»: doom — a dark choir in C minor, a brass motif falling by tritones, timpani quickening to the blast, the blast. */
+    thDoom(sr) {
+        const o = buf(sr, 13.5), r = rng(149);
+        pad(o, sr, ['C2', 'G2', 'C3', 'Eb3'], 0, 4.2, 0.45, { att: 1.4, vib: 0.006, harm: 4, det: 0.008 });
+        pad(o, sr, ['Db2', 'Ab2', 'Db3', 'F3'], 4, 7.4, 0.48, { att: 0.6, vib: 0.006, harm: 4, det: 0.008 });
+        pad(o, sr, ['C2', 'Gb2', 'C3', 'Eb3', 'Gb3'], 7.2, 11.6, 0.55, { att: 0.5, rel: 0.3, vib: 0.008, harm: 5, det: 0.01 });
+        melody([[0, 'C4', 2], [2, 'Gb3', 2], [4, 'Eb4', 1], [5, 'D4', 1], [6, 'Ab3', 3], [10, 'G3', 1], [11, 'Gb3', 1], [12, 'C3', 4]], 0.62, 0.8, (f, t, l) => { brass(o, sr, f, t, l, 0.17); brass(o, sr, f / 2, t, l, 0.14); });
+        let t = 2.2;
+        for (let k = 0; t < 11.6; k++) { drum(o, sr, t, 0.22 + 0.03 * Math.min(k, 18), 52, 0.8, r); t += Math.max(0.12, 0.85 - k * 0.04); }
+        glide(o, sr, 9.2, 2.6, 0.07, (u) => 300 + 1500 * u * u, swell(0.8, 0.05), 3); // (the scream before the blast)
+        drum(o, sr, 11.8, 1, 32, 2.2, r); drum(o, sr, 11.85, 0.8, 60, 1.2, r);
+        noise(o, sr, 11.8, 1.7, 0.16, (u) => 0.03 + 0.12 * (1 - u), (u) => (1 - u) * (1 - u), r);
+        return finish(o, sr, { rms: 0.085 });
+    },
     /** «Flying Maxima»: out of the air — a Lydian arpeggio climbing, the pad opening, then airy and far (space). */
     thOrbit(sr) {
         const o = buf(sr, 11), r = rng(71);
@@ -458,6 +472,7 @@ export const SPELL_SOUND = {
     CreatePlanet: { own: ['spaceRise', 'spaceGift'], theme: 'thPlanet' },
     EnlargePlanet: { own: ['spaceRise', 'spaceGift'], theme: 'thTerraform', rate: 0.9 }, TerraformPlanet: { own: ['spaceRise', 'spaceGift'], theme: 'thTerraform' },
     LevitationSuperMaxima: { own: ['spaceRise'], cast: 'fxMaxima' },
+    PlanetLiquidation: { own: ['doomBeam', 'doomRumble', 'doomBlast'], theme: 'thDoom' }, // (the beam, the cracking, the blast — SpaceSounds, everybody who sees it; the tune from the caster)
     Hellfire: { own: ['inferno', 'rumble'], theme: 'thHell' },
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
     // the duel charges and the fights (their own short sounds; Duel.js plays them for everyone)

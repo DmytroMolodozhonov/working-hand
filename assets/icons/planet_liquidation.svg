@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="planet_liquidation-sp" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#2a1030"/><stop offset="1" stop-color="#05040c"/></radialGradient>
+    <radialGradient id="planet_liquidation-p" cx="0.4" cy="0.38" r="0.7"><stop offset="0" stop-color="#b07a5a"/><stop offset="0.6" stop-color="#5a3428"/><stop offset="1" stop-color="#22120e"/></radialGradient>
+    <radialGradient id="planet_liquidation-f" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fffbe8"/><stop offset="0.35" stop-color="#ffb04a" stop-opacity="0.9"/><stop offset="1" stop-color="#ff3d1a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#planet_liquidation-sp)"/><g fill="#fff" opacity="0.8"><circle cx="20" cy="26" r="1.4"/><circle cx="108" cy="30" r="1.2"/><circle cx="102" cy="108" r="1.5"/><circle cx="24" cy="104" r="1.2"/></g>
+  <!-- the beam of magic from the corner -->
+  <path d="M8 120 L62 70 L70 76 L14 124 Z" fill="#ff3d8b" opacity="0.55"/>
+  <path d="M10 121 L64 72 L66 74 L12 123 Z" fill="#fff0f6"/>
+  <!-- the shock ring -->
+  <ellipse cx="70" cy="62" rx="52" ry="14" fill="none" stroke="#ffd2a0" stroke-width="3" opacity="0.8" transform="rotate(-18 70 62)"/>
+  <!-- the planet bursting: red-hot cracks, its pieces flying -->
+  <circle cx="70" cy="60" r="24" fill="url(#planet_liquidation-p)"/>
+  <path d="M58 46 L66 58 L60 66 L70 74 M66 58 L80 54 L86 64 M70 74 L78 82" fill="none" stroke="#ffcf5a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="70" cy="60" r="30" fill="url(#planet_liquidation-f)" opacity="0.75"/>
+  <g fill="#7a4a34" stroke="#ff8a3a" stroke-width="1.2">
+    <path d="M100 30 l8 -3 l3 7 l-7 3 z"/><path d="M104 74 l7 2 l-2 7 l-7 -2 z"/><path d="M42 26 l6 -2 l2 6 l-6 2 z"/><path d="M86 98 l6 1 l-1 6 l-6 -1 z"/>
+  </g>
+</svg>

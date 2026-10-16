@@ -132,6 +132,7 @@ export const SPELL_COST = {
     CircleAttack: 80, // a great wave all round the wizard — as «Total Destruction» (a mana maximum of 100+; CircleAttack.js)
     CircleAttackMaxima: 160, // … much stronger (a mana maximum of 200+)
     Inspirius: 500, // the mightiest: 500 at once, only with the wand (Inspirius.js)
+    PlanetLiquidation: 1500, // «Planet Liquidation»: a planet blown up — 1500 + the planet's mass (PlanetDoom.massCost: check / pay `extra`)
     Boom: 750, // «Бум»: a mountain torn apart from inside — the scroll of the gods' temple (Boom.js)
     WaterVortexSuperMaxima: 80, // the great water storm: 2 a second while held, «стоп» 50 (only with a mana maximum of 100+; WaterStorm.js)
     WindImpulse: 10, // a ring of air: everybody within 3 m pushed away (only from a scroll — WindImpulse.js)
@@ -434,12 +435,12 @@ export class Combat {
 
     // ================================================================ fatigue
     /** Can I cast this now? null = yes, otherwise a hint for the player. */
-    check(name) {
+    check(name, extra = 0) {
         if (this.dead) return '💀';
         if (this.frozen) { if (this.game) this.game.lastCastWhy = 'вы заморожены'; return `🧊 Вы заморожены — разморозка через ${Math.ceil(this.frozenLeft)} с`; }
         if (this.stunned) { if (this.game) this.game.lastCastWhy = 'вы оглушены'; return `💫 Вы оглушены — ещё ${Math.ceil(this.stunLeft)} с`; }
         if (!this.enabled) return null;
-        const cost = this.costOf(name);
+        const cost = this.costOf(name, extra);
         if (this.fatigue < cost) {
             const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
             if (this.game) this.game.lastCastWhy = msg.slice(3); // (the spell journal)
@@ -454,15 +455,15 @@ export class Combat {
 
     /** Pay the fatigue of a spell that was cast. */
     /** Fatigue a spell costs (a wand in the hand saves 15%). */
-    costOf(name) {
-        const base = (SPELL_COST[name] ?? 5) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper)
+    costOf(name, extra = 0) {
+        const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
-    pay(name) {
+    pay(name, extra = 0) {
         this.paidCount = (this.paidCount || 0) + 1; // (mana: a spell that was paid for may count as a success)
-        if (this.enabled) this.fatigue = Math.max(0, this.fatigue - this.costOf(name));
+        if (this.enabled) this.fatigue = Math.max(0, this.fatigue - this.costOf(name, extra));
     }
 
     /**

@@ -41,7 +41,7 @@ const RAY_SPELLS = new Set(['Sapira', 'Thunderwave', 'Wind', 'WindMaxima', 'Over
 /** «Вайнд» on creatures and players: this many times its push on loose things. */
 export const WIND_BODY_K = 2;
 
-/** The four spells of the gods' scrolls by their words (Russian and English as the recognizer writes them), or null. */
+/** The planet spells of the gods' scrolls by their words (Russian and English as the recognizer writes them), or null. */
 export function planetSpellWords(s) {
     const has = (...w) => w.some((x) => s.includes(x));
     if (has('terraform', 'teraform', 'терраформ', 'тераформ', 'тэрраформ', 'тэраформ', 'терафор', 'террафор', 'терроформ', 'тероформ')) return 'TerraformPlanet';
@@ -49,6 +49,9 @@ export function planetSpellWords(s) {
     if (lev && has('супер', 'super', 'сюпер', 'суппер', 'супр')) return 'LevitationSuperMaxima';
     const planet = has('planet', 'плэнет', 'планет', 'плэнит', 'планит', 'плейнет', 'пленет', 'плэнэт', 'plannet');
     if (!planet) return null;
+    // «Planet Liquidation» («Плэнет ликвидэйшн», «Уничтожь планету»): the planet word with «ликвид…» / «уничтож…» —
+    // here, before «Liquidation» alone (the long phrase wins: never a plain «Ликвидейшн» while «планет» was said)
+    if (has('liquid', 'ликвид', 'ликвед', 'уничтож', 'destroy', 'дестрой', 'взорви')) return 'PlanetLiquidation';
     if (has('enlarg', 'inlarg', 'энларж', 'инларж', 'энлардж', 'инлардж', 'энлаж', 'инлаж', 'enlage', 'увелич', 'больше')) return 'EnlargePlanet';
     if (has('creat', 'crate', 'крейт', 'криейт', 'криэйт', 'креит', 'криет', 'созда', 'сотвор', 'make', 'мейк')) return 'CreatePlanet';
     return null;

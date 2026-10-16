@@ -253,7 +253,7 @@ export function bodyNoise(h) {
 /** Spells that cost much or do much (a castle out of nothing, a curse that kills): never from a sound only just made out. */
 export const DANGEROUS = new Set(['CreateCastle', 'IceCastle', 'IceBridge', 'CreateHouse', 'ImproveHouse', 'AvadaKedavra', 'Hellfire', 'Frozen', 'Stupefy',
     'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'LightningStrike', 'Earthquake', 'EarthquakeMaxima', 'CircleAttack', 'CircleAttackMaxima',
-    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima']);
+    'WaterVortexSuperMaxima', 'LetItRain', 'ToTheSun', 'CreatePlanet', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'PlanetLiquidation']);
 
 /**
  * Do the letters the network wrote look like the spell? («лемус» — «люмос», «бам барда» — «бомбардо максима»,

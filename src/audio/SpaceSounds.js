@@ -9,6 +9,9 @@
  *   spaceHeat   the Sun's heat: a low seething hiss (loops, 3 s)
  *   spaceGift   «Поздравляем, вы приблизились к силе богов»: a bright rising choir chord (3.5 s)
  *   spaceBeep   a soft chime (a planet reached, the map)
+ *   doomBeam    «Planet Liquidation»: the great beam — a roaring rising hum, a crackling edge, a scream of magic (3.5 s)
+ *   doomRumble  … the planet cracking: a deep groaning rumble, growing, grinding, louder and higher (9.5 s)
+ *   doomBlast   … the blast: a crack, the deepest boom, the roar rolling away and the rocks rattling (9 s)
  */
 
 const STEP = 4096; // samples between yields
@@ -111,4 +114,58 @@ export function* beepGen(ctx) {
     return buf;
 }
 
-export const SPACE_SOUNDS = { spaceRise: riseGen, spaceEntry: entryGen, spaceWind: windGen, spaceHeat: heatGen, spaceGift: giftGen, spaceBeep: beepGen };
+export function* doomBeamGen(ctx) {
+    const sr = ctx.sampleRate, T = 3.5, len = Math.floor(sr * T);
+    const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+    let lp = 0, hp = 0, ph1 = 0, ph2 = 0, ph3 = 0;
+    for (let i = 0; i < len; i++) {
+        const t = i / sr, k = t / T;
+        const n = Math.random() * 2 - 1;
+        lp += (n - lp) * 0.08; hp = n - lp; // (the roar and its crackling edge)
+        ph1 += (2 * Math.PI * (55 + 40 * k)) / sr; ph2 += (2 * Math.PI * (220 + 520 * k * k)) / sr; ph3 += (2 * Math.PI * (331 + 790 * k * k)) / sr;
+        const env = Math.min(1, t * 6) * (t < T - 0.6 ? 1 : Math.max(0, (T - t) / 0.6));
+        const crack = Math.random() < 0.004 ? 1 : 0; // (sparks)
+        d[i] = (Math.sin(ph1) * 0.45 + Math.sin(ph1 * 2.01) * 0.2 + (Math.sin(ph2) + 0.6 * Math.sin(ph3)) * 0.16 * (0.4 + k) + lp * 1.4 + hp * 0.08 + crack * (Math.random() - 0.5) * 0.8) * env * 0.42;
+        if (i % STEP === 0) yield;
+    }
+    return buf;
+}
+
+export function* doomRumbleGen(ctx) {
+    const sr = ctx.sampleRate, T = 9.5, len = Math.floor(sr * T);
+    const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+    let lp = 0, lp2 = 0, ph = 0, g = 0;
+    for (let i = 0; i < len; i++) {
+        const t = i / sr, k = t / T;
+        const n = Math.random() * 2 - 1;
+        lp += (n - lp) * (0.01 + 0.05 * k); lp2 += (lp - lp2) * (0.02 + 0.06 * k);
+        ph += (2 * Math.PI * (28 + 34 * k * k)) / sr;
+        if (Math.random() < 0.0006 + 0.004 * k) g = 1; // (grinding, cracking — more and more)
+        g *= 0.9993;
+        const env = Math.min(1, t * 0.8) * (0.35 + 0.65 * k * k) * (t < T - 0.15 ? 1 : Math.max(0, (T - t) / 0.15));
+        d[i] = (lp2 * 4.5 + Math.sin(ph) * 0.4 + Math.sin(ph * 1.5) * 0.15 * k + g * n * 0.35) * env * 0.5;
+        if (i % STEP === 0) yield;
+    }
+    return buf;
+}
+
+export function* doomBlastGen(ctx) {
+    const sr = ctx.sampleRate, T = 9, len = Math.floor(sr * T);
+    const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+    let lp = 0, lp2 = 0, ph = 0, r = 0;
+    for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        const n = Math.random() * 2 - 1;
+        const cut = 0.004 + 0.3 * Math.exp(-t * 3); // (bright crack first, then only the deepest)
+        lp += (n - lp) * cut; lp2 += (lp - lp2) * (cut * 0.8 + 0.004);
+        ph += (2 * Math.PI * (24 + 70 * Math.exp(-t * 1.5))) / sr;
+        if (t > 0.6 && Math.random() < 0.0012 * Math.exp(-t * 0.3)) r = 0.6 + Math.random() * 0.4; // (the rocks rattling past)
+        r *= 0.998;
+        const env = Math.min(1, t * 200) * Math.exp(-t * 0.42);
+        d[i] = (lp2 * 6 * env + Math.sin(ph) * 0.7 * Math.exp(-t * 0.6) + (t < 0.08 ? n * (1 - t / 0.08) : 0) + r * n * 0.25 * Math.exp(-t * 0.25)) * 0.48 * Math.min(1, (T - t) * 2);
+        if (i % STEP === 0) yield;
+    }
+    return buf;
+}
+
+export const SPACE_SOUNDS = { spaceRise: riseGen, spaceEntry: entryGen, spaceWind: windGen, spaceHeat: heatGen, spaceGift: giftGen, spaceBeep: beepGen, doomBeam: doomBeamGen, doomRumble: doomRumbleGen, doomBlast: doomBlastGen };

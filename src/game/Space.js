@@ -82,6 +82,8 @@ const EPOCH = 1.79e9; // (the shared clock: seconds since then — the same on e
  * giants have storm clouds: lightning and rain have something to come from).
  */
 export function spaceSpellBlock(name, where, air, def = null) {
+    // («Planet Liquidation» — only from space: from the ground one cannot aim at a whole planet — PlanetDestroy.js)
+    if (name === 'PlanetLiquidation' && where !== 'space') return where === 'earth' ? '🌌 «Planet Liquidation» — только в космосе: взлетите «Flying Maxima» и наведите руку на планету' : '🌌 «Planet Liquidation» — только из космоса: стоя на планете, её не взорвать (взлетите «Flying Maxima» и наведите руку на неё)';
     if (where === 'earth') return null;
     if (def?.terraformed && def.climate === 'green' && /^(LightningStrike|LetItRain|Thunderwave|Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|Firefighting|FirefightingMaxima|AirBubble|AirBubbleMaxima|WaveAttack|WaveAttackMaxima|Frozen|Drawdown|DrawdownMaxima)$/.test(name)) return null;
     const vacuum = where === 'space' || air === 'none';
@@ -996,6 +998,10 @@ export class Space {
         // (only the planets whose ground changed — made, terraformed — have their land and map made again;
         //  a bigger planet or a new orbit changes neither: nothing is remade for it)
         const sig = this._groundSig || (this._groundSig = new Map()), changed = [];
+        // (a planet blown up — «Planet Liquidation», PlanetDestroy.js: its ground goes with it)
+        const gone = [];
+        for (const id of sig.keys()) if (!this.planets.get(id)) { gone.push(id); sig.delete(id); this._tex.delete(id); this._prev.delete(id); }
+        if (gone.length) this.game.world?.terrain?.planetGone?.(json, gone, this.planets.gone.filter((g) => gone.includes(g.id)).map((g) => g.slot));
         for (const p of this.planets.list) {
             if (p.kind === 'star') continue;
             const k = `${p.seed}|${p.look}|${p.terraformed ? p.climate || 1 : 0}|${p.slot}`;
@@ -1197,7 +1203,7 @@ export class Space {
             planetPosition(c, t, _p);
             const d = Math.hypot(_p.x - this.P.x, _p.y - this.P.y, _p.z - this.P.z);
             const [x, y] = toMap(_p.x, _p.z);
-            ctx.fillStyle = '#d9a066';
+            ctx.fillStyle = c.belt === 'debris' ? '#ff8f6a' : '#d9a066'; // (the rocks of a blown-up planet: redder)
             for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x + (k % 2 ? 2.2 : -2), y + (k < 2 ? -1.6 : 1.8), k ? 1.4 : 1.8, 0, Math.PI * 2); ctx.fill(); }
             if (!nearC || d < nearC.d) nearC = { d, x, y };
         }
@@ -1312,6 +1318,8 @@ export class Space {
                 if (def?.storms) parts.push('🌪️ Буря');
             }
             html = parts.join(' · ');
+            const doom = this.realm === 'space' ? this.game.planetDestroy?.panelLine?.() : ''; // («Planet Liquidation»: its price on the planet aimed at)
+            if (doom) html += `<br>${doom}`;
         }
         if (d._html !== html) { d.panel.innerHTML = html; d.panel.style.display = html ? 'block' : 'none'; d._html = html; }
     }
@@ -1364,7 +1372,7 @@ export class Space {
                 if (!on) { if (n === 0) arrow = { c, dir: _v6.clone() }; continue; }
                 let el = d.pool[i];
                 if (!el) { el = d.pool[i] = document.createElement('div'); el.className = 'space-label'; d.labels.appendChild(el); }
-                const txt = `☄️ Скопление метеоритов · ${dist(Math.max(0, c._dist))}`;
+                const txt = `☄️ ${c.from ? `Обломки «${c.from}»` : 'Скопление метеоритов'} · ${dist(Math.max(0, c._dist))}`; // (from: a blown-up planet's rocks)
                 if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
                 el.style.left = `${((_v1.x + 1) / 2) * w}px`;
                 el.style.top = `${((1 - _v1.y) / 2) * h}px`;
