@@ -317,7 +317,10 @@ if (CHECK) {
     const lastMinute = (f) => avg(B, f), first = (f) => avg(A, f);
     if (lastMinute((s) => s.game) > first((s) => s.game) * 1.5 + 2) bad.push(`работа игры за кадр выросла: ${sum((s) => s.game)} мс`);
     for (const [name, f, slack] of [['объектов сцены', (s) => s.objects, 400], ['геометрий', (s) => s.geometries, 150], ['текстур', (s) => s.textures, 40], ['шейдеров', (s) => s.programs, 5]]) if (lastMinute(f) > first(f) + slack) bad.push(`${name}: ${sum(f)}`);
-    for (const x of grow) if (x.mono && x.last > 500) bad.push(`коллекция ${x.k} всё время растёт: ${x.a} → ${x.last}`);
+    // (the world's own memory — what was changed, blown up, put back by the builders — grows with what happens in
+    // it and is saved with it; each is capped where it is kept: Rebuild REBUILD.LOG, Builder 30000, PerfLog 400)
+    const MEMORY = new Set(['castleLife.rebuild.log', 'blockEdits', 'explosions', 'perf.lines']);
+    for (const x of grow) if (x.mono && x.last > 500 && !MEMORY.has(x.k)) bad.push(`коллекция ${x.k} всё время растёт: ${x.a} → ${x.last}`);
     console.log(bad.length ? '\nПРОВЕРКА НЕ ПРОЙДЕНА:\n  ' + bad.join('\n  ') : '\nПРОВЕРКА ПРОЙДЕНА');
     process.exitCode = bad.length ? 1 : 0;
 }
