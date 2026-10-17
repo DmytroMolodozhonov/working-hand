@@ -238,7 +238,8 @@ export class ArmorSystem {
             _inv.copy(ch.group.matrixWorld).invert();
             const hand = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
             // (held there: the time adds up; a frame's jitter out of the place only takes a little off, it does not start over)
-            if (wearSpot(h.item.kind, h.item.piece, hand, g.currentPose?.bodyTouch?.[side] ?? null)) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 1.5 * dt);
+            // (the camera shakes a hand held over the body: a moment out of the place takes off only a third as much)
+            if (wearSpot(h.item.kind, h.item.piece, hand, g.currentPose?.bodyTouch?.[side] ?? null)) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 0.35 * dt);
             if (this._wearT[side] < ARMOR.WEAR_T) continue;
             this._wearT[side] = 0;
             const inv = g.inventory;

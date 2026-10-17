@@ -96,8 +96,10 @@ for (const side of ['left', 'right']) for (const piece of Object.keys(SPOTS)) {
     });
 }
 
-test('an arm stretched out to the camera before the chest is not on the chest', () => {
+test('an arm stretched out to the camera before the chest is not on the chest; a hand pressed on it is', () => {
     const lm = pose({ x: 0.47, y: 0.45 });
-    lm[11].z = lm[12].z = 0; lm[16].z = -0.4;
+    lm[11].z = lm[12].z = 0; lm[16].z = -0.6;
     assert.ok(!bodyTouch(lm, 'right', 1).chest);
+    lm[16].z = -0.2; // (pressed on the chest: the camera's depth still puts it a shoulder width in front)
+    assert.ok(bodyTouch(lm, 'right', 1).chest);
 });

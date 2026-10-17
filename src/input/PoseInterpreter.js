@@ -276,7 +276,9 @@ export function bodyTouch(lm, side, aspect = 4 / 3, hand = null) {
     const px = palm ? (palm.x - mx) * aspect / W : cx, pdy = palm ? (palm.y - sy) / T : cdy;
     // (the arm stretched out to the camera: the wrist far in front of the shoulders — holding it out, not on me)
     const sz = ((ls.z || 0) + (rs.z || 0)) / 2;
-    const out = wr.z != null && (wr.z || sz) ? (wr.z - sz) * aspect / W < -1.1 : false;
+    // (the camera's depth is rough and exaggerated: a hand pressed on the chest reads ~1 shoulder width in front
+    // of the shoulders — the author: the breastplate never went on; only an arm really stretched out is out)
+    const out = wr.z != null && (wr.z || sz) ? (wr.z - sz) * aspect / W < -2.4 : false;
     return {
         head: Math.abs(hx) < 0.75 && hdy > -1.1 && hdy < 0.4, // (from the chin up)
         // (the palm on the chest, the belly's top; the wrist alone — a little lower and wider: the forearm comes in from the side)
