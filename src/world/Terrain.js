@@ -1369,7 +1369,10 @@ export class TerrainData {
             }
         } else if (kind === 3) {
             // Cherry: a low crooked trunk, a wide round pink crown
-            for (let L = h + 1; L <= h + 5; L++) put(tx + (L > h + 3 ? 1 : 0), L, tz, wood, false);
+            // (the bend is a step up and over, face to face — not corner to corner, which left a gap — and the
+            // trunk goes on into the crown; only blocks under the crown's top are added: old worlds' heights stay)
+            for (let L = h + 1; L <= h + 6; L++) put(tx + (L > h + 3 ? 1 : 0), L, tz, wood, false);
+            put(tx + 1, h + 3, tz, wood, false);
             for (let L = h + 5; L <= h + 9; L++) {
                 const r = L === h + 5 || L === h + 9 ? 2 : 3;
                 for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dz * dz <= r * r + 1) put(tx + 1 + dx, L, tz + dz, leaves, true);
