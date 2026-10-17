@@ -20,7 +20,7 @@ export const START_SPELLS = new Set([
     // duel («Айс» = «Frozen»: one spell; «Максима» in a clash of charges)
     'Sands', 'Sapira', 'Stupefy', 'Expelliarmus', 'Disarmor', 'Ice', 'Frozen', 'Jolt', 'Maxima',
     // fight and guard
-    'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'FireMaxima',
+    'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection',
     // water: only «Firefighting»
     'Firefighting',
     // building: the campfire, a bed and its colour, a passage sewn up, gathering

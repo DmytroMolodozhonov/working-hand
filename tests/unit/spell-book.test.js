@@ -41,7 +41,7 @@ test('the author\'s list: what a beginner knows outside Creative — and the Max
     for (const n of ['BombardoMaxima', 'EarthquakeMaxima', 'LiquidationMaxima', 'ProtectionMaxima', 'IceMaxima', 'JoltMaxima', 'CircleAttack', 'CircleAttackMaxima',
         'Drawdown', 'DrawdownMaxima', 'Overgrown', 'OvergrownMaxima', 'Brainrot', 'Waterball', 'WaterForming', 'AirBubble', 'AirBubbleMaxima', 'WaveAttack', 'WaveAttackMaxima',
         'WaterVortex', 'WaterVortexSuperMaxima', 'FirefightingMaxima', 'LetItRain', 'Snowman', 'Unfurl', 'Furl', 'LevitationMaxima', 'CreateFloor', 'CreateWall', 'CreateDoor',
-        'CreateBoard', 'CreateHouse', 'CreateCastle', 'IceCastle', 'IceBridge', 'Breakthrough'])
+        'CreateBoard', 'CreateHouse', 'CreateCastle', 'IceCastle', 'IceBridge', 'Breakthrough', 'FireMaxima'])
         assert.ok(!knows(n, me), `${n}: only from a scroll / a book`);
     // a burnt scroll teaches its spell (and the Maxima it carries); the default «knew it» of an old save is gone
     assert.ok(knows('DrawdownMaxima', survival({ Drawdown: true })) && knows('Furl', survival({ Unfurl: true })));
