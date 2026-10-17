@@ -224,6 +224,7 @@ export function shieldHitCost(kind) {
     return (cost ?? 10) / 2; // (an unnamed spell: as an ordinary one, 10)
 }
 
+const SHIELD_LEVEL = 0.15; // m: one hand this much higher than the other — the shield goes up at it (Combat._shieldSide)
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -624,6 +625,23 @@ export class Combat {
      * «Protection» (arm stretched out) / «Protection Maxima» (T-pose).
      * @returns {string|null} hint when the gesture is wrong
      */
+    /**
+     * The hand «Protection» goes up at (the author: «протекшн запускается там, где рука выше»): the HIGHER hand —
+     * the wand held higher than the other hand: at the wand; the other hand higher: there. Both at one height
+     * (within SHIELD_LEVEL): as before — the wand's free hand stretched out, else a stretched one, else the one reaching furthest.
+     */
+    _shieldSide() {
+        const ch = this.game.character;
+        const ry = ch.getHandWorldPosition('right', _v1).y, ly = ch.getHandWorldPosition('left', _v1).y;
+        if (Math.abs(ry - ly) > SHIELD_LEVEL) return ry > ly ? 'right' : 'left';
+        const wand = this.game.wandSide?.();
+        const free = wand === 'right' ? 'left' : wand === 'left' ? 'right' : null;
+        const side = free && ch.isArmExtended(free) ? free : ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
+        if (side) return side;
+        const reach = (sd) => ch.getHandWorldPosition(sd, _v1).distanceTo(ch.group.position);
+        return reach('right') >= reach('left') ? 'right' : 'left';
+    }
+
     castProtection(maxima, gods = false) {
         const ch = this.game.character;
         if (gods) return this._castGods(maxima);
@@ -640,15 +658,8 @@ export class Combat {
             if (this.enabled) this.game.hud?.setVoice?.('🛡️ Купол держится, пока есть мана (−1 в секунду). Каждое отражённое заклинание — половина его цены. Снять — «стоп»', true);
         } else {
             if (this.shield?.type === 2) return '🛡️ Вы уже под куполом «Protection Maxima»';
-            // The stretched-out hand; if none is fully stretched, the one reaching furthest.
-            // A wand in one hand: the other hand stretched out takes the shield (the wand stays free to cast)
             const wand = this.game.wandSide?.();
-            const free = wand === 'right' ? 'left' : wand === 'left' ? 'right' : null;
-            let side = free && ch.isArmExtended(free) ? free : ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
-            if (!side) {
-                const reach = (sd) => ch.getHandWorldPosition(sd, _v1).distanceTo(ch.group.position);
-                side = reach('right') >= reach('left') ? 'right' : 'left';
-            }
+            const side = this._shieldSide();
             if (this.shield?.type === 1) return null; // (already holding one: nothing more to pay)
             const hint = this.spend('Protection');
             if (hint) return hint;
@@ -678,14 +689,7 @@ export class Combat {
         } else {
             if (this.shield?.gods && this.shield.type === 2) return '✨ Вы уже под божественным куполом';
             if (this.shield?.gods) return null; // (already holding it)
-            // (the hand stretched out — the free one of the wand first; none stretched: the one reaching furthest)
-            const wand = this.game.wandSide?.();
-            const free = wand === 'right' ? 'left' : wand === 'left' ? 'right' : null;
-            side = free && ch.isArmExtended(free) ? free : ch.isArmExtended('right') ? 'right' : ch.isArmExtended('left') ? 'left' : null;
-            if (!side) {
-                const reach = (sd) => ch.getHandWorldPosition(sd, _v1).distanceTo(ch.group.position);
-                side = reach('right') >= reach('left') ? 'right' : 'left';
-            }
+            side = this._shieldSide(); // (as «Protection»: the higher hand)
         }
         const hint = this.spend(name);
         if (hint) return hint;
