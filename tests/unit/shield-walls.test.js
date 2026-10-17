@@ -48,3 +48,18 @@ test('the hand shield and the other players\' shields are walls too (as the netw
     g.combat.shield = null; g.frameCount++;
     assert.equal(wardsOf(g).length, 1);
 });
+
+test('a hand shield (not the dome): its place is read into a real vector — no «out.set is not a function» crash', async () => {
+    const THREE = await import('three');
+    const pos = new THREE.Vector3(0, 1.95, 0);
+    const g = {
+        frameCount: 1,
+        character: { group: { position: pos }, getHandWorldPosition: (side, out = new THREE.Vector3()) => out.set(0.4, 1.6, -0.5) },
+        combat: { shield: { type: 1, left: 3, side: 'right' } },
+        remotes: new Map([['p2', { position: new THREE.Vector3(5, 1.95, 0), combat: { shield: 1, shieldLeft: 2, side: 'left' }, character: { getHandWorldPosition: (side, out = new THREE.Vector3()) => out.set(5.4, 1.6, -0.5) } }]]),
+    };
+    const w = wardsOf(g);
+    assert.equal(w.length, 2);
+    assert.ok(Math.abs(w[0].x - 0.4) < 1e-9 && w[0].dome === false);
+    assert.ok(Math.abs(w[1].x - 5.4) < 1e-9);
+});

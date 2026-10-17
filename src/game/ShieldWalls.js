@@ -29,7 +29,9 @@ export const WARD = {
  */
 export function wardsOf(g, out) {
     const key = g.frameCount ?? -1;
-    const cache = g._wards || (g._wards = { key: -2, list: [], hand: { x: 0, y: 0, z: 0 } });
+    const cache = g._wards || (g._wards = { key: -2, list: [], hand: null });
+    // (the hand's place is written by Character.getHandWorldPosition — a real vector, made once from one the game has)
+    const handVec = (like) => cache.hand || (cache.hand = like?.clone ? like.clone() : { x: 0, y: 0, z: 0 });
     if (cache.key === key && key >= 0) return cache.list;
     cache.key = key;
     const L = out || cache.list;
@@ -45,7 +47,7 @@ export function wardsOf(g, out) {
     if (me && s && s.left > 0 && !g.isDeadLocal) {
         if (s.type === 2) put(me.x, me.y - 1.95, me.z, WARD.DOME_R, 'me', true);
         else {
-            const h = g.character.getHandWorldPosition?.(s.side, cache.hand);
+            const h = g.character.getHandWorldPosition?.(s.side, handVec(me));
             if (h) put(h.x, me.y - 1.95, h.z, WARD.HAND_R, 'me', false);
         }
     }
@@ -54,7 +56,7 @@ export function wardsOf(g, out) {
         if (r.dead || !r.position || !c?.shield || !(c.shieldLeft > 0)) continue;
         const p = r.position;
         if (c.shield === 2) { put(p.x, p.y - 1.95, p.z, WARD.DOME_R, String(id), true); continue; }
-        const h = r.character?.getHandWorldPosition?.(c.side || 'right', cache.hand);
+        const h = r.character?.getHandWorldPosition?.(c.side || 'right', handVec(p));
         if (h) put(h.x, p.y - 1.95, h.z, WARD.HAND_R, String(id), false);
     }
     return L;
