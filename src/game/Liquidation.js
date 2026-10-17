@@ -14,6 +14,10 @@
  *   - anything alive (a player, a zombie, a villager, an animal, a tree…) loses 3 HP — and that is
  *     all; «Protection» (a shield turned to it, the dome) stops it.
  *
+ * Aim: as the duel charges (Duel.AIM) — it flies where the hand points, with a light correction: the
+ * nearest fitting thing (or body) in a narrow cone round the hand's line is its target, and it turns
+ * towards it a little (at most AIM.BEND off the line), never round after it.
+ *
  * Who decides: the spell goes to everybody ('spell'); every computer flies the same splash. The host
  * takes away the thing it struck (and tells the others: 'igone' / 'wgone') and hurts the creatures;
  * every computer hurts only its own player; a block of the world is taken by the caster's computer
@@ -25,6 +29,7 @@
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { isMagicItem, isGodGift, ITEM_SCALE } from './ItemTypes.js';
+import { pickBody, bendToward, AIM } from './Duel.js';
 
 export const LIQ = {
     SPEED: 26, // m/s
@@ -213,11 +218,15 @@ export class Liquidation {
         g.sound?.playWhoosh?.();
         const prev = new THREE.Vector3();
         let went = 0, t = 0;
+        // (the light correction: the thing the hand points at, as the duel charges find theirs)
+        const d0 = d.clone(), want = new THREE.Vector3();
+        const aim = this._aimAt(origin, d, casterId, max);
         g.spells.spells.push({
             life: LIQ.RANGE / LIQ.SPEED + 0.2,
             onUpdate: (spell, dt) => {
                 t += dt;
                 prev.copy(pos);
+                if (aim) { const q = aim.at(); if (q && want.subVectors(q, pos).dot(d) > 0.2) bendToward(d, d0, want.normalize(), AIM.TURN * dt); }
                 const step = Math.min(LIQ.SPEED * dt, LIQ.RANGE - went);
                 pos.addScaledVector(d, step);
                 went += step;
@@ -232,6 +241,36 @@ export class Liquidation {
             },
             onEnd: () => { g.scene.remove(look); look.material.dispose(); },
         });
+    }
+
+    /**
+     * What the hand points at: the nearest (along the line) fitting thing or body within AIM.CONE
+     * (plus its own size) of the hand's line — {at(): its middle now} | null. What the splash could
+     * never take (a ship's chest, the throne room's gates…) does not draw it.
+     */
+    _aimAt(o, d, casterId, max) {
+        const g = this.game, list = [];
+        const add = (p, r, at) => list.push({ a: p, b: p, r, at });
+        for (const e of g.duel?._bodies(casterId) || []) {
+            if (e.kind === 'p' && e.id === casterId) continue;
+            const bk = e.kind, id = e.id;
+            list.push({ a: e.a.clone(), b: e.b.clone(), r: e.r, at: () => { for (const f of g.duel._bodies(casterId)) if (f.kind === bk && f.id === id) return _c.lerpVectors(f.a, f.b, 0.5); return null; } });
+        }
+        const far = (p) => Math.abs(p.x - o.x) > LIQ.RANGE + 2 || Math.abs(p.z - o.z) > LIQ.RANGE + 2;
+        for (const [uid, L] of g.items?.loose || []) {
+            const p = L.model.position;
+            if (!far(p)) add(p.clone(), Math.max(LIQ.THING_R, 0.3 * (ITEM_SCALE[L.item?.kind] || 1)), () => g.items.loose.get(uid)?.model.position || null);
+        }
+        for (const w of g.weapons?.weapons || []) if (!w.holder && !w.remoteTarget && !far(w.position)) add(w.position.clone(), LIQ.WEAPON_R, () => (w.holder ? null : w.position));
+        const thing = (k, id, o2, p, r) => { if (!far(p) && !thingVerdict(k, true, o2).none) add(p, r, () => p); };
+        for (const c of g.cauldrons?.list.values() || []) if (c.boxId != null) thing('cauldron', c.id, c, c.pos.clone(), 0.7);
+        for (const c of g.chests || []) thing('chest', c.id, c, c.getPosition().clone().setY(c.getPosition().y + 0.4), 0.7);
+        for (const b of g.beds?.list.values() || []) thing('bed', b.id, b, new THREE.Vector3(b.x, b.y + 0.4, b.z), 0.8);
+        for (const dr of g.doors?.list.values() || []) thing('door', dr.id, dr, new THREE.Vector3(dr.x, dr.y + 1.8, dr.z), 0.8);
+        for (const f of g.campfires?.list.values() || []) thing('campfire', f.id, f, new THREE.Vector3(f.x, f.y + 0.35, f.z), 0.6);
+        for (const [id, m] of g.boards?.models || []) { const st = g.boards.reg?.map.get(id)?.st; if (st !== 'held' && st !== 'ridden') thing('board', id, null, m.model.position.clone(), 0.6); }
+        for (const c of g.crystals?.growing?.() || []) if (c.center) thing('crystal', c.id, c, c.center.clone(), 0.3);
+        return pickBody(o, d, list, LIQ.RANGE)?.body || null;
     }
 
     _look(max) {

@@ -76,3 +76,24 @@ test('a guest: the host\'s word takes the bed and the door away', () => {
     L.update(2);
     assert.ok(!g.doors.list.has('h1d'));
 });
+
+test('a light correction, as the duel charges: a thing a little beside the hand\'s line is struck, one far beside it is not', () => {
+    const run = (side) => {
+        const { g, caul } = world();
+        g.cauldrons.destroy(caul.id); // (nothing else on the way)
+        const model = { position: new THREE.Vector3(10, 0.7, side) };
+        g.items.loose.set('u1', { item: { kind: 'cheese', uid: 'u1' }, model });
+        g.items.removeLoose = (uid) => g.items.loose.delete(uid);
+        g.sync.itemGone = () => {};
+        const spells = [];
+        g.spells = { spells };
+        g.scene = { add() {}, remove() {} };
+        const L = new Liquidation(g);
+        L.fly('Liquidation', new THREE.Vector3(0, 0.7, 0), new THREE.Vector3(1, 0, 0), 'me');
+        const s = spells[0];
+        for (let i = 0; i < 120 && s.life > 0; i++) s.onUpdate(s, 1 / 60);
+        return !g.items.loose.has('u1');
+    };
+    assert.equal(run(0.9), true, '~5° beside the line: found');
+    assert.equal(run(4), false, '~22° beside it: a miss');
+});
