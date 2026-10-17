@@ -19,6 +19,7 @@
 import { unpack, hear, threshold, HEARD, WORDY, GOES_ON } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { spellPhrase } from '../audio/SpellPhrase.js';
+import { soundingLine } from '../audio/GameVoices.js';
 
 /** A spell this clear is cast from one look at the phrase (avg cost per letter)… */
 export const SURE_AT_ONCE = -0.6;
@@ -67,6 +68,10 @@ function wordsSpell(h, d) {
     return fit >= WORDS_FIT ? { canonical: way.canonical, fit } : null;
 }
 
+/** How much better than needed a spell must fit to cast while the game's voices play, before the phrase's end. */
+export const GAME_CLEAR = 0.6;
+const gameClear = (h, d) => !!d.game && h.spell.len >= 4 && h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) >= GAME_CLEAR;
+
 export function lookAt(d, seg = {}) {
     const lp = unpack(d.lp, d.T);
     const ref = d.ref ? unpack(d.ref, d.refT) : null;
@@ -84,8 +89,10 @@ export function lookAt(d, seg = {}) {
             const again = next.fired && (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT));
             if (!again) say = { text: h.text, isFinal: true };
             if (!next.fired || !again) next.fired = name;
-        } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= (h.spell.len >= AT_ONCE_LEN ? QUIET_AT_ONCE_LONG : QUIET_AT_ONCE)) && ((d.far || 0) < 0.25 || d.ref)) {
-            // (while the speakers play, only a look that has their sound too may cast: it can tell an echo)
+        } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= (h.spell.len >= AT_ONCE_LEN ? QUIET_AT_ONCE_LONG : QUIET_AT_ONCE)) && ((d.far || 0) < 0.25 || d.ref || gameClear(h, d))) {
+            // (while the speakers play, only a look that has their sound too may cast: it can tell an echo —
+            // or, when what plays is the game's own voices (it knows their words: GameVoices) and the spell is
+            // clear: at the wizards' tower the spell waited for the phrase's end, 2–3 s, behind their talk)
             if (GOES_ON.has(h.spell.phrase) && !(h.tail >= MORE_WAIT)) {
                 // «Protection…»: «Хаус» may yet come — the game waits (only an answer under fire can't: more)
                 if (next.fired !== name && next.more !== name) { say = { text: h.text, isFinal: false, more: true }; next.more = name; }
@@ -228,6 +235,8 @@ export class NativeVoice {
         this._clock(d.t1);
         // (the network's time per look at a phrase: the journal shows it — zns-perf.log «голос»)
         if (Number.isFinite(d.cost)) { const c = this.cost || (this.cost = { n: 0, sum: 0, max: 0 }); c.n++; c.sum += d.cost; c.max = Math.max(c.max, d.cost); }
+        // (the speakers played the game's own voices then — villagers, wizards: not a friend's)
+        if ((d.far || 0) >= 0.25 && !d.final) { const w = this._when(d, {}); d.game = Number.isFinite(w.from) && !!soundingLine(w.from - 600, w.to); }
         const r = lookAt(d, this.segs.get(d.id));
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);

@@ -1256,7 +1256,7 @@ export class Game {
     }
 
     /**
-     * While I speak, the game's own voices (villagers, the Ice Queen, sailors…) go quiet: the microphone
+     * While I speak (or raise the hand to cast), the game's own voices (villagers, the Ice Queen, sailors…) go quiet: the microphone
      * must hear my spell, not her «Твоя магия здесь бессильна!» over it. «I speak»: my voice in the
      * microphone with the speakers' sound taken out (native), or my lips moving (the camera) — never the
      * plain microphone level, which the speakers themselves would raise.
@@ -1268,6 +1268,9 @@ export class Game {
         if (now - (this._duckCheckAt || 0) < 100) return;
         this._duckCheckAt = now;
         if (this.voiceGate.lipsMoved(now, 700) === true) this._speakingAt = now;
+        // (and while the hand is raised for magic: a spell is about to be said — at the wizards' tower the
+        // villagers' and the wizards' voices filled the quiet after my word, and the spell came 2–3 s late)
+        if (this.isMagicActive) this._speakingAt = now;
         const at = Math.max(this._speakingAt || -1e9, this.voice?.speakingAt || -1e9);
         sp.duck(now - at < 900);
     }

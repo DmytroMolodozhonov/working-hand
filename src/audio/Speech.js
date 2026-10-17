@@ -165,7 +165,7 @@ export class Speech {
     _prepNext() {
         if (this._prepBusy || !this._prep.length) return;
         // (a line being said goes first: try again a little later)
-        if (this._current) { if (!this._prepT) this._prepT = setTimeout(() => { this._prepT = null; this._prepNext(); }, 400); return; }
+        if (this._current || this._ducked) { if (!this._prepT) this._prepT = setTimeout(() => { this._prepT = null; this._prepNext(); }, 400); return; }
         const { text, opts } = this._prep.shift();
         const cast = castNeural(opts);
         const k = this._ckey(cast, text);
@@ -201,6 +201,13 @@ export class Speech {
         if (volume < 0.03) return false; // too far away (or the sound is off)
         const key = opts.voiceKey ?? 'default';
         const o = { ...opts, volume, voiceKey: key, female: isFemale(opts) };
+        // (the player speaks / casts: a new line waits — its sound would cover the spell, and its making takes the
+        // processor the voice's network needs; it is said as soon as the player is done — duck(false))
+        if (this._ducked && !this._current && !opts.append) {
+            if (this._pending?.opts.onEnd) this._safeCall(this._pending.opts.onEnd, false);
+            this._pending = { text: clean, opts: o };
+            return true;
+        }
         if (this._current) {
             if (this._current.voiceKey === key) {
                 // the next piece of the same answer (opts.append): made at once and played right after,
@@ -273,6 +280,8 @@ export class Speech {
         on = !!on;
         if (on === !!this._ducked) return;
         this._ducked = on;
+        // (the lines held meanwhile: the newest is said now)
+        if (!on && !this._current && this._pending) { const p = this._pending; this._pending = null; this._speak(p.text, p.opts); }
         const g = this._duck, ctx = this._ctx;
         if (!g?.gain || !ctx) return;
         const now = ctx.currentTime || 0;

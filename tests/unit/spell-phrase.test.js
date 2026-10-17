@@ -121,3 +121,19 @@ test('«Дай» said alone is found by its sound and casts with a clear fit; «
     assert.equal(soundTrust({ spell: 'Die', canonical: 'дай', written: 'дай', fit: 0.4 }), null);
     assert.ok(soundTrust({ spell: 'Die', canonical: 'дай', written: 'да', fit: 1.0 })); // («да» is no «дай»)
 });
+
+test('the game\'s own voices playing (the wizards\' tower): a clear spell casts before the phrase\'s end, not 2–3 s later', async () => {
+    const fs = await import('node:fs');
+    const { unpack, V, BLANK } = await import('../../src/audio/SpellSpotter.js');
+    const { lookAt } = await import('../../src/input/NativeVoice.js');
+    const { matchSpell } = await import('../../src/fx/SpellManager.js');
+    const rows = JSON.parse(fs.readFileSync(new URL('../fixtures/voice-spells.json', import.meta.url), 'utf8'));
+    const r = rows.find((x) => x.kind === 'spell' && x.text === 'инферно');
+    const lp0 = unpack(r.lp, r.T), T = r.T + 15, lp = new Float32Array(T * V);
+    lp.set(lp0);
+    for (let t = r.T; t < T; t++) for (let v = 0; v < V; v++) lp[t * V + v] = v === BLANK ? 0 : -25; // (the voices ducked: quiet)
+    const b64 = Buffer.from(Array.from(lp, (x) => Math.round(-x * 10))).toString('base64');
+    const cast = (game) => { const o = lookAt({ id: 1, final: false, T, lp: b64, far: 0.6, game }, { last: 'инферно' }); return o.say && !o.say.more ? matchSpell(o.say.text) : null; };
+    assert.equal(cast(true), 'Inferno');
+    assert.equal(cast(false), null); // (a friend's voice — not the game's: the phrase's end decides, with the speakers' copy)
+});
