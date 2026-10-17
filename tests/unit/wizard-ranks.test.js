@@ -89,13 +89,16 @@ test('a wizard\'s duel strength: his mana now on the player\'s scale; out of man
     assert.ok(duelPower(500) > duelPower(200) && duelPower(200) > duelPower(100) && duelPower(100) > duelPower(50));
 });
 
-test('Creative never makes the player weaker than Survival with the same mana', async () => {
+test('a duel counts the mana LEFT and the health now — «Выживание» and «Хардкор» alike; Creative: the opponent\'s mana', async () => {
     const { Duel } = await import('../../src/game/Duel.js');
-    const strength = (enabled, fatigue, maxFatigue) => Duel.prototype._strength.call({
-        me: 'me', _npcWizard: () => null,
-        game: { combat: { enabled, fatigue, maxFatigue, hp: 20, maxHp: 20 }, remotes: new Map() },
-    }, 'me', 0);
-    // (Creative: the bar never moves — it used to count as 30 for ever, whatever the player had grown to)
-    assert.ok(strength(false, 30, 120) >= strength(true, 120, 120) - 1e-9);
-    assert.ok(strength(false, 50, 50) >= strength(true, 50, 50) - 1e-9);
+    const { duelPower } = await import('../../src/game/WizardAI.js');
+    const wiz = { wizard: true, mana: 200, hp: 16, maxHp: 16, role: 'teacher' };
+    const strength = (mode, fatigue, maxFatigue, hp = 20) => Duel.prototype._strength.call({
+        me: 'me', _npcWizard: (id) => (id === 5 ? wiz : null), _playerMana: Duel.prototype._playerMana,
+        game: { config: { mode }, combat: { enabled: mode === 'freeworld', fatigue, maxFatigue, hp, maxHp: 20 }, playerHP: hp, maxHP: 20, remotes: new Map() },
+    }, 'me', 0, 5);
+    assert.equal(strength('freeworld', 40, 120), duelPower(40, 1));
+    assert.equal(strength('survival', 40, 120), strength('freeworld', 40, 120), 'Хардкор = Выживание');
+    assert.equal(strength('survival', 40, 120, 10), strength('freeworld', 40, 120, 10));
+    assert.equal(strength('creative', 30, 30), duelPower(200, 1), 'Creative: as much mana as the wizard');
 });

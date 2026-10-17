@@ -51,6 +51,7 @@ import { AvadaLook, AVADA } from '../fx/AvadaLook.js';
 import { IceLook } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
 import { starterWand, rollWand } from './ItemTypes.js';
+import { wandPower } from './WandMagic.js';
 import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
 import { SPELL_PHYSICS } from './Impact.js';
@@ -321,7 +322,10 @@ const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vect
 
 /** The wand a castle wizard holds: a student's plain wooden one, the others' a real (random) one. */
 // (a wizard in a magic robe has a fine wand: strong, +35–50 % power)
-const wizardWandOf = (v) => (v.robe ? (({ power, ...w }) => ({ ...w, power: Math.max(power || 0, 35 + Math.floor(Math.random() * 16)) }))(rollWand()) : v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand());
+const rollWizardWand = (v) => (v.robe ? (({ power, ...w }) => ({ ...w, power: Math.max(power || 0, 35 + Math.floor(Math.random() * 16)) }))(rollWand()) : v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand());
+
+/** His own wand (rolled once, then always the same: in his hand in a duel, and the one «Экспеллиармус» knocks out). */
+const wizardWandOf = (v) => v.wand || (v.wand = rollWizardWand(v));
 
 let nextId = 1;
 
@@ -1376,7 +1380,7 @@ export class Duel {
     /**
      * Strength in a duel — ONE scale for players and wizards (WizardAI.duelPower): mana now, health, a
      * little luck. In Creative mana never runs out: a player there is as strong in mana as his opponent
-     * (the author's rule); in «Хардкор» and the maps — his full store (its cells).
+     * (the author's rule); in «Выживание» and «Хардкор» alike — the mana left now (not the cells).
      */
     _strength(id, luck, opId = null) {
         const g = this.game;
@@ -1390,22 +1394,33 @@ export class Duel {
             const mana = ow ? ow.mana : Math.max(this._playerMana(id), this._playerMana(opId));
             return duelPower(mana, 1, luck);
         }
+        // «Выживание» and «Хардкор» (the maps too) — the same (the author): the mana LEFT now and the health now
         let mana = 30, hp = PVP.MAX_HP, maxHp = PVP.MAX_HP;
         if (id === this.me) {
             const c = g.combat;
-            mana = free ? c.fatigue : Math.max(c.fatigue, c.maxFatigue || 30);
-            if (free) { hp = c.hp; maxHp = c.maxHp || PVP.MAX_HP; }
+            mana = c.fatigue ?? 30;
+            if (free) { hp = c.hp; maxHp = c.maxHp || PVP.MAX_HP; } else { hp = g.playerHP ?? PVP.MAX_HP; maxHp = g.maxHP || PVP.MAX_HP; }
         } else {
             const r = g.remotes.get(id);
-            if (r) {
-                mana = free ? (r.fatigue ?? 30) : Math.max(r.fatigue ?? 30, r.maxMana ?? 30);
-                if (free) hp = r.hp ?? PVP.MAX_HP;
-            }
+            if (r) { mana = r.fatigue ?? 30; hp = r.hp ?? PVP.MAX_HP; }
         }
         return duelPower(mana, hp / maxHp, luck);
     }
 
-    /** A player's mana as a duel counts it outside the free world: his whole store (its cells). */
+    /**
+     * How much stronger this one's duel spell is with the wand in his hand — the same as for every spell
+     * (WandMagic.wandPower): ×1.15, a duel wand +25 %, its favourite spell +40 %, its own power +1…50 %.
+     * A bare hand ×1; a wizard: his own wand (none — knocked out — ×1); another player: his, by the network.
+     */
+    _wandK(id, spell) {
+        const name = DUEL_SPELL_NAME[spell] || spell;
+        if (id === this.me) return wandPower(this.game.items?.wand || null, name);
+        const w = this._npcWizard(id);
+        if (w) return w.noWand ? 1 : wandPower(wizardWandOf(w), name);
+        return wandPower(this.game.remotes.get(id)?.wand || null, name);
+    }
+
+    /** A player's whole store of mana (its cells): Creative's duel against another player. */
     _playerMana(id) {
         const g = this.game;
         if (id === this.me) return Math.max(g.combat?.fatigue ?? 0, g.combat?.maxFatigue || 30);
@@ -1481,8 +1496,9 @@ export class Duel {
         c.lostB = cb.ok ? 0 : c.lostB + dt;
         // A hand off the opponent doesn't push at all
         // (the strong charges push harder: Accentric ×1.2, Pilbidrio ×1.4, «Дай» ×5 — StrongSpells.CLASH_POWER)
-        const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) : 0;
-        const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) : 0;
+        // (the wand counts as everywhere: +15 % and its own bonuses — WandMagic.wandPower)
+        const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) * this._wandK(a.by, a.spell) : 0;
+        const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) * this._wandK(b.by, b.spell) : 0;
         c.v = clashPush(sa - sb) + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));

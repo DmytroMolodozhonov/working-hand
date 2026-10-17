@@ -55,3 +55,18 @@ test('Творческий: in a duel a player is as strong in mana as his oppon
     me.game.config.mode = 'survival';
     assert.equal(Duel.prototype._strength.call(me, 'me', 0, 5), duelPower(30, 1, 0), 'Хардкор: his own store');
 });
+
+test('the wand counts in a duel as everywhere: ×1.15 and its own bonuses; a wizard keeps his own wand', async () => {
+    const { Duel } = await import('../../src/game/Duel.js');
+    const ctx = (wand, wiz) => ({ me: 'me', game: { items: { wand }, remotes: new Map() }, _npcWizard: (id) => (id === 5 ? wiz : null) });
+    const k = (wand, id = 'me', wiz = null) => Duel.prototype._wandK.call(ctx(wand, wiz), id, 'SapiraDuel');
+    assert.equal(k(null), 1, 'a bare hand');
+    assert.ok(Math.abs(k({ plain: true, power: 0 }) - 1.15) < 1e-9);
+    assert.ok(Math.abs(k({ power: 8 }) - 1.15 * 1.08) < 1e-9, 'a good one: about +24 %');
+    assert.ok(Math.abs(k({ dir: 'duel', fav: 'Sapira', power: 50 }) - 1.15 * 1.25 * 1.4 * 1.5) < 1e-9);
+    const wiz = { wizard: true, role: 'teacher', robe: false };
+    const a = k(null, 5, wiz), b = k(null, 5, wiz);
+    assert.ok(a >= 1.15 && a === b, 'his own wand, always the same');
+    wiz.noWand = true;
+    assert.equal(k(null, 5, wiz), 1);
+});
