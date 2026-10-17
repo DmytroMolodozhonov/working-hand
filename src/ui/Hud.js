@@ -17,6 +17,7 @@ export function lastWords(text, n = HEARD_WORDS) {
     return words.slice(-n).join(' ');
 }
 import { BLOCK, BASE_COLORS, CHUNK, chunkKey, isPlanetBlock } from '../world/Terrain.js';
+import { hintPolicy } from './HintPolicy.js';
 import { CAVE_MAP, columnLook, WALL, PIT } from '../game/CaveMap.js';
 
 /**
@@ -301,6 +302,7 @@ export class Hud {
      * small, see-through and never in the way of the game.
      */
     toast(text, ms = 1600) {
+        if (!hintPolicy.allow(text)) return; // (a «how to» hint: the setting «Подсказки»)
         let el = this._toastEl;
         if (!el) {
             el = this._toastEl = document.createElement('div');
@@ -370,6 +372,7 @@ export class Hud {
         if (show) {
             const hint = !!html && !html.includes('ЖДУ КОМАНДУ');
             if (hint && this.hintFilter && !this.hintFilter(html)) return; // (a spell's advice waits: was it really cast? — Game._castWithHints)
+            if (hint && !hintPolicy.allow(html)) return; // (the setting «Подсказки»: a «how to» hint once / always / never — HintPolicy.js)
             if (html === this._lastVoice) {
                 // the same line again: an indicator just stays; a hint only after a while (no flicker)
                 if (!hint || now - this._voiceAt < HINT_AGAIN_MS) { if (!hint || v.classList.contains('on')) this._showVoice(v, hint); return; }

@@ -3529,6 +3529,13 @@ export class Game {
         return m === 'creative' || m === 'test' || !!this.bonus?.spells?.[key];
     }
 
+    /** Can the hero say this spell now (the pause menu's spell book outside Creative)? The same checks the cast makes. */
+    canSaySpell(name) {
+        if (!name) return false;
+        if (name === 'Flight' || name === 'FlyingMaxima') return this.knowsFlight();
+        return this.knowsSpell(name);
+    }
+
     startFlight(force = false) {
         if (this.flight.active) return false;
         if (this.knock?.down) return false; // (get up first)

@@ -504,9 +504,15 @@ function renderCats(catsId, gridId, cats, list, current, pick) {
 let currentCat = 'fight';
 let currentItemCat = 'weapon';
 
-export function renderSpellsTab(catsId = 'spell-cats', gridId = 'spells-grid') {
-    // (the same spell book in the menu and in the game's pause menu — Creative)
-    renderCats(catsId, gridId, SPELL_CATEGORIES, SPELLS, currentCat, (id) => { currentCat = id; renderSpellsTab(catsId, gridId); });
+/**
+ * The spell book: in the menu and in the game's pause menu. `can(spell)` — only the spells the hero can say
+ * now (outside Creative: the game's own «knows it» check), the empty sections left out.
+ */
+export function renderSpellsTab(catsId = 'spell-cats', gridId = 'spells-grid', can = null) {
+    const list = can ? SPELLS.filter((s) => can(s)) : SPELLS;
+    const cats = can ? SPELL_CATEGORIES.filter((c) => list.some((s) => s.cat === c.id)) : SPELL_CATEGORIES;
+    if (cats.length && !cats.some((c) => c.id === currentCat)) currentCat = cats[0].id;
+    renderCats(catsId, gridId, cats, list, currentCat, (id) => { currentCat = id; renderSpellsTab(catsId, gridId, can); });
 }
 
 export function renderItemsTab(extra = []) {

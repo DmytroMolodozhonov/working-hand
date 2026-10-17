@@ -24,6 +24,7 @@ import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
+import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/WindowControls.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from './ui/GameNames.js';
@@ -1055,7 +1056,7 @@ const pauseAudio = setupPauseAudio($('pause-audio'));
 // «🖥 Графика» in the pause menu: the same graphics settings, applied at once
 const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
 // «Правша / Левша» in the pause menu (every mode): the same control as in «Настройки», applied at once
-const pauseHands = setupPauseAudio($('pause-hands'), ['handedness', 'walk-mode']);
+const pauseHands = setupPauseAudio($('pause-hands'), ['handedness', 'walk-mode', 'hints-mode']);
 const applyHandedness = () => {
     const left = $('handedness')?.value === 'left';
     poseService.interpreter.leftHanded = left; // (the body's places mirrored: PoseInterpreter.bodyPlaces)
@@ -1066,6 +1067,8 @@ applyHandedness();
 // «Ходьба и бег»: the usual walk (the body's bob) or the new one (steps read from the legs)
 const applyWalkMode = () => { poseService.interpreter.walkMode = $('walk-mode')?.value === 'legs' ? 'legs' : 'old'; };
 $('walk-mode')?.addEventListener('change', applyWalkMode);
+// «Подсказки»: a «how to» hint once (remembered in this browser), always, or never (HintPolicy.js)
+$('hints-mode')?.addEventListener('change', (e) => hintPolicy.setMode(e.target.value));
 applyWalkMode();
 // the graphics settings change the running game at once (no restart of the world)
 $('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.world.viewDistance = viewDistanceScale(e.target.value); });
@@ -1144,7 +1147,7 @@ function showPauseTab(id) {
     if (id === 'pause-audio') pauseAudio.sync();
     if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-creative') pauseCreative.sync();
-    if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid');
+    if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid', game?.config?.mode === 'creative' ? null : (s) => game?.canSaySpell?.(matchSpell(s.name)));
     // (the achievements are only the bosses: who is beaten in THIS world is ticked there — the author: no separate tab)
     if (id === 'pause-bosses') renderBossesTab('pause-bosses-list', game?.achievements?.done || null);
 }
@@ -1157,9 +1160,9 @@ function togglePauseMenu(show) {
         pauseAudio.sync();
         pauseGraphics.sync();
         pauseHands.sync();
-        // «✨ Заклинания» — only in Creative (not on a map)
-        const creative = game?.config?.mode === 'creative' && !game?.config?.map;
-        document.querySelector('[data-pause-tab="pause-spells"]').hidden = !creative;
+        // «✨ Заклинания»: in Creative all of them (not on a map); in the other modes the ones the hero can say now
+        const creativeMap = game?.config?.mode === 'creative' && !!game?.config?.map;
+        document.querySelector('[data-pause-tab="pause-spells"]').hidden = creativeMap;
         document.querySelector('[data-pause-tab="pause-creative"]').hidden = game?.config?.mode !== 'creative';
         showPauseTab('pause-main');
     }
@@ -1422,7 +1425,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'creative-zombie-count', 'minimap-size', 'v5-gpu'];
+        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'v5-gpu'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
