@@ -230,6 +230,8 @@ export function afterCast(last, spell, meta, now) {
 
 /** A short spell («Даст», «Джолт», «Айс», «Ап») must fit this much better than needed while running or in noise. */
 export const SHORT_LEN = 5;
+/** A spell this short (letters) must have its own letters in what was heard (soundTrust). */
+export const SHORT_WORD = 6;
 export const SHORT_FIT = 0.5;
 
 /**
@@ -266,16 +268,16 @@ export function lettersLike(written, spellWords) {
     if (!w || !p) return false;
     // (the vowels are what the network mixes up most: «лемус», «глемус» are «люмос»)
     const fold = (x) => x.replace(/[аеёиоуыэюя]/g, 'а');
-    const like = (ww, pp) => {
+    const like = (ww, pp, exact = false) => {
         // the spell inside the written words, with a little talk round it («можно такой стичин»; a whole
         // sentence round a short spell is no sign: «…сюда та…» holds «даст»)
-        // (a short spell: all its letters must be there — «да» is no «дай», «даст»)
-        if (ww.length <= pp.length * 2.5 + 4 && (pp.length > 5 || ww.length >= pp.length) && editsInside(pp, ww) <= (pp.length <= 5 ? 1 : Math.round(pp.length * 0.4))) return true;
+        if (ww.length <= pp.length * 2.5 + 4 && (pp.length > 5 || ww.length >= pp.length) && editsInside(pp, ww) <= (pp.length <= 3 ? 0 : pp.length <= 5 || exact ? 1 : Math.round(pp.length * 0.4))) return true;
         // the written words a piece of the spell (the network wrote only part of it: «максиму» of «вайнд максима»)
         const enough = pp.length <= 5 ? Math.max(3, pp.length - 1) : Math.max(4, Math.round(pp.length * 0.4));
-        return ww.length >= enough && editsInside(ww, pp) <= Math.floor(ww.length * 0.3);
+        return ww.length >= enough && editsInside(ww, pp) <= (exact ? 0 : Math.floor(ww.length * 0.3));
     };
-    return like(w, p) || like(fold(w), fold(p));
+    // (vowels folded: exact for a short spell — «проза» is no «фрозен», «лемус» is «люмос»)
+    return like(w, p) || like(fold(w), fold(p), p.length <= SHORT_WORD);
 }
 
 /**
@@ -300,6 +302,15 @@ export function soundTrust(h) {
     const short = len <= SHORT_LEN;
     if (h.spell === 'Stand') return fit >= 1 || (like && fit >= 0.3) ? null : `«стоп» узнан неуверенно (запас ${fit.toFixed(1)})`;
     if (h.lips === false && !like) return 'губы не двигались, и буквы не похожи на заклинание';
+    // a short one-word spell («Sands», «Даст», «Айс», «Frozen»…) is a word said on its own — its letters must be
+    // there: a lone «с» of talk to oneself, «просто», «заморозил» are no spell however the sound fits (the author:
+    // «сам с собой разговаривал — прозвучала буква с, и сработал песок»); nor one word in a sentence the network wrote
+    if (len <= SHORT_WORD) {
+        const tiny = letters(h.canonical || '').length <= 2 && h.lips === true && fit >= 1.2; // («ап» heard as «а», the mouth seen moving)
+        if (!like && !tiny) return 'короткое заклинание: буквы не похожи — это обычная речь';
+        const said = norm(h.written ?? '').split(' ').filter(Boolean).length, own = norm(h.canonical || '').split(' ').filter(Boolean).length;
+        if (said > own + 2) return 'короткое заклинание внутри фразы — это разговор';
+    }
     let need = 0;
     const why = [];
     if (!like) { need = Math.max(need, 1); why.push('буквы не похожи'); }

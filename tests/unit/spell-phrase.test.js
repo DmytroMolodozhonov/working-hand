@@ -180,3 +180,17 @@ test('«Бомбардо» waits for a «… Максима» only when the hero
     }
     assert.ok(checked > 0);
 });
+
+test('talking to oneself: a lone «с», «айс» or «фроз…» inside words is no Sands / Ice / Frozen; said on their own they still are', async () => {
+    const { soundTrust } = await import('../../src/audio/SpellPhrase.js');
+    // [spell, its words, what the network wrote, fit] — the sound only just like the spell, the letters talk
+    const talk = [['Sands', 'санд', 'с', 1.4], ['Sands', 'санд', 'сам с собой', 1.2], ['Sands', 'даст', 'я вот сам с собой разговариваю', 2],
+        ['Ice', 'айс', 'а', 1.5], ['Ice', 'айс', 'найс получилось', 1.3], ['Ice', 'лед', 'лето', 1.2],
+        ['Frozen', 'фрозен', 'проза', 0.7], ['Frozen', 'фрозен', 'он заморозил реку', 2], ['Frozen', 'фрозен', 'просто', 1.6]];
+    for (const [spell, canonical, written, fit] of talk) assert.ok(soundTrust({ spell, canonical, written, fit, lips: null }), `«${written}» → ${spell}`);
+    const said = [['Sands', 'санд', 'санд', 0.8], ['Sands', 'даст', 'даст', 0.6], ['Sands', 'санд', 'сэндс', 0.9], ['Ice', 'айс', 'айс', 0.6], ['Ice', 'лед', 'лёд', 0.7],
+        ['Frozen', 'фрозен', 'фрозен', 0.8], ['Frozen', 'фрозен', 'фроза', 1.3], ['Frozen', 'фрозен', 'фроузен', 0.9]];
+    for (const [spell, canonical, written, fit] of said) assert.equal(soundTrust({ spell, canonical, written, fit, lips: null }), null, `«${written}» → ${spell}`);
+    // the written words (the browser's voice): words inside talk never cast
+    for (const t of ['я сам с собой разговариваю', 'найс получилось', 'он заморозил реку', 'сэндвич съел']) assert.equal(spellPhrase(t).ok, false, t);
+});
