@@ -17,6 +17,7 @@ export const CAVES = {
     // more caves, their mouths in the side of a hill or a mountain («caves in the hills too, half as many
     // again» — the author): the cells past CHANCE, this many more of them, where a hillside rises (hillMouth)
     HILL_CHANCE: 0.5,
+    MORE_CHANCE: 1, // a cell left without a cave tries again this often (+30 % caves — the author)
     APRON: 4.2, // m round a mouth: bare stone and scree, not grass (seen from afar)
     MIN_SPAWN: 150, // m: no mouth nearer the spawn (the creative test cave aside)
     KEEP_SPAWN: 80, // m: a natural cave never reaches the spawn's ground

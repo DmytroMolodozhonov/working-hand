@@ -1081,6 +1081,13 @@ export class TerrainData {
                 const m = hillMouth(rng, gx, gz, CAVE_CELL, top, blocked);
                 if (m) s = growCaveSystem({ id: 'cvh' + gx + '_' + gz, rng, start: m, H: top, blocked });
             }
+            // («caves 30 % more often» — the author): a cell left without one tries again — a hillside
+            // first, else any mouth (the caves before stay as they were)
+            if (!s && hash01(gx * 11 + 5, gz * 3 + 9, this.seed + 505) < CAVES.MORE_CHANCE) {
+                const rng = createRng(((this.seed * 7919) ^ Math.imul(gx, 104729) ^ Math.imul(gz, 1299709) ^ 0x6a5e) >>> 0);
+                const m = hillMouth(rng, gx, gz, CAVE_CELL, top, blocked) || caveMouth(rng, gx, gz, CAVE_CELL, top, blocked);
+                if (m) s = growCaveSystem({ id: 'cvm' + gx + '_' + gz, rng, start: m, H: top, blocked });
+            }
         }
         this._caves.set(key, s);
         return s;
