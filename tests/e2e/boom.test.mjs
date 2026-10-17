@@ -101,4 +101,84 @@ test('«Бум»: the mountain swells, glows, bursts from inside — a crater; l
     const talk = await page.evaluate(() => { const g = window.__zns.game; g.boom._lastCast = 0; return g.castLocalSpell('и тут бум, всё упало', true); });
     assert.equal(talk, null, 'talk is no spell');
     assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});
+
+test('«Бум» by the sea: the sea pours into the crater over seconds (a front of water), and it is the sea\'s own water', { timeout: 900000 }, async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 1280, height: 720 } });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const dir = path.join(ROOT, 'docs', 'spells', 'boom');
+    const at = await page.evaluate(async () => {
+        const g = window.__zns.game, T = window.__zns.THREE, data = g.world.terrain.data, S = data.seas;
+        const frame = () => new Promise((res) => { const f = g.frameCount; const k = () => (g.frameCount > f ? res() : setTimeout(k, 10)); k(); });
+        // a place on the land 22 m from the shore, by the nearest sea
+        let p = null;
+        for (let r = 60; r < 2000 && !p; r += 8) for (let a = 0; a < 6.3 && !p; a += 8 / r) {
+            const q = { x: Math.cos(a) * r, z: Math.sin(a) * r }, s = S.signedDist(q.x, q.z);
+            if (s < -18 && s > -26) p = q;
+        }
+        g.world.terrain.flushAround?.(p.x, p.z);
+        g.character.group.position.set(p.x + 40, data.topLayer(Math.round(p.x + 40), Math.round(p.z)) + 30, p.z + 40);
+        for (let i = 0; i < 60; i++) await frame();
+        g.boom.testAim = { o: new T.Vector3(p.x, data.topLayer(Math.round(p.x), Math.round(p.z)) + 20, p.z), d: new T.Vector3(0, -1, 0) };
+        // (the land round it, before: which cells at the sea's level are solid)
+        const land = [];
+        for (let x = -40; x <= 40; x += 2) for (let z = -40; z <= 40; z += 2) { const ix = Math.round(p.x + x), iz = Math.round(p.z + z); const t = data.get(ix, 0, iz); if (t !== 0 && t !== 8) land.push([ix, iz]); }
+        window.__land = land;
+        // (a picture of the crater from close by, the fog pushed back)
+        window.__seaShot = () => {
+            const cam = new T.PerspectiveCamera(62, 1280 / 720, 0.1, 3000);
+            cam.position.set(p.x + 45, 38, p.z + 60); cam.lookAt(p.x, -2, p.z);
+            const fog = g.scene.fog, far = fog?.far, near = fog?.near; if (fog && far != null) { fog.near = 400; fog.far = 1400; }
+            g.character.group.visible = false;
+            g.scene.updateMatrixWorld(true);
+            g.renderer.render(g.scene, cam);
+            g.character.group.visible = true;
+            if (fog && far != null) { fog.near = near; fog.far = far; }
+            return g.renderer.domElement.toDataURL('image/png');
+        };
+        const name = g.castLocalSpell('Бум', true);
+        return { name, p: { x: p.x, z: p.z }, land: land.length };
+    });
+    assert.equal(at.name, 'Boom');
+    // the flood: how much water came in, frame by frame
+    const fill = await page.evaluate(async () => {
+        const g = window.__zns.game;
+        const frame = () => new Promise((res) => { const f = g.frameCount; const k = () => (g.frameCount > f ? res() : setTimeout(k, 10)); k(); });
+        const seen = [];
+        for (let i = 0; i < 3000; i++) {
+            await frame();
+            const b = g.boom.list[0];
+            if (!b) break;
+            const j = b.job;
+            if (!j) continue; // (still swelling)
+            if (j.phase === 'flood' || j.done) seen.push(j.filled);
+            if (j.phase === 'flood' && j.filled > 25000 && b.t > 4 && !window.__midShot) window.__midShot = window.__seaShot(); // (the sea pouring in)
+            if (j.done) break;
+        }
+        return { steps: seen.length, first: seen[0], last: seen.at(-1), mid: seen[Math.floor(seen.length / 2)] };
+    });
+    const shot = async (name) => {
+        const url = await page.evaluate(() => window.__seaShot());
+        fs.writeFileSync(path.join(dir, name), Buffer.from(url.split(',')[1], 'base64'));
+    };
+    const sea = await page.evaluate(async (p) => {
+        const g = window.__zns.game, data = g.world.terrain.data;
+        const frame = () => new Promise((res) => { const f = g.frameCount; const k = () => (g.frameCount > f ? res() : setTimeout(k, 10)); k(); });
+        for (let i = 0; i < 4000 && g.boom.list.length; i++) await frame(); // (the dust settled)
+        for (let i = 0; i < 60; i++) await frame();
+        let water = 0, seaCols = 0;
+        for (const [ix, iz] of window.__land) if (data.get(ix, 0, iz) === 8) { water++; if (data.isSeaColumn(ix, iz)) seaCols++; } // (where the land was)
+        return { water, seaCols };
+    }, at.p);
+    const mid = await page.evaluate(() => window.__midShot);
+    if (mid) fs.writeFileSync(path.join(dir, '5-sea-pouring-in.png'), Buffer.from(mid.split(',')[1], 'base64'));
+    await shot('6-sea-crater.png');
+    console.log(JSON.stringify({ at, fill, sea }));
+    assert.ok(fill.steps > 20 && fill.mid < fill.last, `the sea came in over many frames: ${JSON.stringify(fill)}`);
+    assert.ok(sea.water > 20, 'water in the crater: ' + sea.water);
+    assert.ok(sea.seaCols >= sea.water * 0.9, `it is the sea's own water: ${sea.seaCols} of ${sea.water}`);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
 });

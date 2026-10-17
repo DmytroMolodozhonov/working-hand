@@ -60,7 +60,7 @@ export function planetSpellWords(s) {
 
 // «Бум» («Boom»): the word alone, or said twice — a phrase of at most three words, each «бум» or a little word
 // («ну», «давай»). Boom.js asks more: the hand (the wand) raised and aimed at a mountain or a building.
-const BOOM_WORD = /^(?:бу+м+|boo+m+|бу+мм*|бум+с?)$/;
+const BOOM_WORD = /^(?:бу+м+|boo+m+|bou?m+|bu+m+|бум+с?)$/; // (the recognizer writes it «бум», «бумм», «буум», «boom», «bum»)
 const BOOM_FILL = new Set(['ну', 'давай', 'а', 'эй', 'вот', 'раз']);
 export function boomWords(s) {
     const w = String(s || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/).filter(Boolean);

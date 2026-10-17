@@ -87,6 +87,8 @@ const isTree = (t) => isLeaves(t) || t === BLOCK.WOOD || t === BLOCK.BIRCH || t 
 export const isFlammable = (t) => isWood(t) || isLeaves(t) || t === BLOCK.THATCH || t === BLOCK.HAY || t === BLOCK.WHEAT || t === BLOCK.BOOKS || t === BLOCK.FENCE || t === BLOCK.VEG;
 // ICE_SHAPE: solid space inside frozen water shapes (drawn by WaterMagic, not as cubes)
 
+/** The sea's water where its side shows (a crater of «Бум» it poured into): the waving sea surface's shallow colour. */
+export const SEA_WATER = 0x2b8f9e;
 /** Water is not solid: you can see, walk and shoot through it. */
 export const isSolid = (type) => type !== BLOCK.AIR && type !== BLOCK.WATER;
 /** Blocks drawn as cubes (frozen water shapes are drawn as their own smooth shapes). */
@@ -1631,9 +1633,9 @@ export class TerrainData {
         for (let L = Math.min(MAX_LAYER, c.top[col]); L >= L0; L--) {
             const idx = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
             const t = c.blocks[idx];
-            if (t === BLOCK.AIR || t === BLOCK.BEDROCK || t === BLOCK.WATER) continue;
+            if (t === BLOCK.AIR || t === BLOCK.BEDROCK || (t === BLOCK.WATER && L <= 0)) continue; // (the sea's water stays: it pours in)
             if (this.godGiftAt && this.godGiftAt(ix, L - 1, iz)) continue; // (a gift of the gods: the temple's ground)
-            c.blocks[idx] = BLOCK.AIR;
+            c.blocks[idx] = BLOCK.AIR; // (a river's or a lake's water over the sea's level goes with the ground under it — none left hanging)
             if (L < c.minOpen) c.minOpen = L;
             if (wet && L <= 0) wet.push(ix, L, iz);
             n++;
@@ -1647,12 +1649,14 @@ export class TerrainData {
         return n;
     }
 
-    /** Water into an open cell (a flood: «Бум»'s crater under the sea's level). */
-    fillWater(ix, L, iz) {
+    /** Water into an open cell (a flood: «Бум»'s crater under the sea's level); `sea`: the sea's own water (its column
+     * marked as sea: the waving sea surface is drawn there, not a lake's flat top — skipSeaTop). */
+    fillWater(ix, L, iz, sea = false) {
         if (L < MIN_LAYER || L > MAX_LAYER) return;
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         if (c.empty) return;
         c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = BLOCK.WATER;
+        if (sea && L <= 0) (c.sea || (c.sea = new Uint8Array(CHUNK * CHUNK)))[(iz & MASK) * CHUNK + (ix & MASK)] = 1;
         c.modified = true;
         if (L < c.minOpen) c.minOpen = L;
         this._markDirty(ix, iz);
@@ -1949,6 +1953,7 @@ export class TerrainData {
         // (a terraformed planet's seas and lakes: its own colour — PlanetMagic.js; the Earth's water elsewhere)
         const pdef = c.planet ? this.planets?.get(c.planet) : null;
         const WATER_COL = pdef?.terraformed && pdef.ground?.sea != null ? pdef.ground.sea : BASE_COLORS[BLOCK.WATER];
+        const SEA_WATER_COL = pdef ? WATER_COL : SEA_WATER; // (the sea's water seen from the side: the sea surface's colour)
         const below = lowest > MIN_LAYER ? BLOCK.STONE : BLOCK.AIR; // (all rock under `lowest`)
         const hid = this._hidden?.get(chunkKey(cx, cz)) || null; // (a falling piece not landed yet: not drawn there)
         // (a cave's dark: a face is as lit as the air in front of it — _skyLight; null: all lit)
@@ -2029,9 +2034,10 @@ export class TerrainData {
                             }
                         } else if (a === WATER && (bRaw === AIR || bRaw === ICE_SHAPE)) {
                             // (the sea's top is drawn by the moving wave surface instead)
-                            if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) { key = WATER_COL + 1; kind = 2; }
+                            if (!(skipSea && d === 1 && ay + lowest === 0 && c.sea[az * CHUNK + ax])) { key = (c.sea && c.sea[az * CHUNK + ax] ? SEA_WATER_COL : WATER_COL) + 1; kind = 2; }
                         } else if (b === WATER && (aRaw === AIR || aRaw === ICE_SHAPE)) {
-                            key = -(WATER_COL + 1); kind = 2;
+                            const sx = ax + qx, sz = az + qz; // (the sea's water — a crater of «Бум» it poured into — in the sea's colour, not a lake's)
+                            key = -((c.sea && sx >= 0 && sz >= 0 && sx < CHUNK && sz < CHUNK && c.sea[sz * CHUNK + sx] ? SEA_WATER_COL : WATER_COL) + 1); kind = 2;
                         }
                         mask[n] = key;
                         maskKind[n] = kind;

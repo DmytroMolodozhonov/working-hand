@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { waveGlsl, seaDepth, waveAmp, WAVES } from '../world/Sea.js';
 import { SPACE } from '../world/Planets.js';
+import { boomReach } from '../world/BoomCarve.js';
 
 const TEX = 256; // texels per side
 const TEXEL = 5; // m per texel → 1280 m covered
@@ -154,7 +155,23 @@ varying vec3 vSeaWorld;`)
     /** Start rebuilding the shore texture around (x, z). */
     _startJob(x, z) {
         const ox = Math.round(x / TEXEL) * TEXEL, oz = Math.round(z / TEXEL) * TEXEL;
-        this._job = { ox, oz, i: 0 };
+        // «Бум»'s craters by the sea: the sea came into them — its waving surface is drawn there too (BoomCarve
+        // marks those columns as sea; the crater's walls above the water hide it where there is none)
+        const half = TEX * TEXEL / 2, patches = [];
+        for (const e of this.game.explosions || []) {
+            if (!e.boom) continue;
+            const r = boomReach(e.r);
+            if (Math.abs(e.p[0] - ox) > half + r || Math.abs(e.p[2] - oz) > half + r) continue;
+            if (this.sea.s(e.p[0], e.p[2]) > -(r + 10)) patches.push(e.p[0], e.p[2], r);
+        }
+        this._job = { ox, oz, i: 0, patches };
+    }
+
+    /** Make the shore texture again where it is (the sea reached somewhere new: a crater of «Бум»), a little a frame. */
+    refresh() {
+        if (!this.sea || this._job) return;
+        const o = this.uniforms.uOrigin.value;
+        this._startJob(o.x, o.y);
     }
 
     /** Work on the shore texture: `count` texels at most, and no longer than `ms` (a fast flight: no spike). */
@@ -168,7 +185,9 @@ varying vec3 vSeaWorld;`)
             if ((j.i & 31) === 31 && ms < Infinity && performance.now() - t0 > ms) break;
             const tx = j.i % TEX, tz = (j.i / TEX) | 0;
             const x = j.ox - half + (tx + 0.5) * TEXEL, z = j.oz - half + (tz + 0.5) * TEXEL;
-            const s = sea.s(x, z);
+            let s = sea.s(x, z);
+            const P = j.patches;
+            if (s < 6 && P?.length) for (let k = 0; k < P.length; k += 3) if (Math.hypot(x - P[k], z - P[k + 1]) < P[k + 2]) { s = 6; break; } // (a crater the sea filled: shallow sea)
             const o = j.i * 4;
             this._next[o] = Math.max(0, Math.min(255, Math.round(s + 32)));
             this._next[o + 1] = Math.min(255, seaDepth(s) * 15);

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { matchSpell, boomWords } from '../../src/fx/SpellManager.js';
 import { spellPhrase } from '../../src/audio/SpellPhrase.js';
 import { BOOM, BOOM_TARGETS, boomDamage, boomThrow, boomFront, boomBlock, boomTarget } from '../../src/game/Boom.js';
-import { boomJob, boomStep, runBoom, boomFloor, BOOM_SHAPE } from '../../src/world/BoomCarve.js';
+import { boomJob, boomStep, runBoom, boomFloor, BOOM_SHAPE, craterLook, craterFloor } from '../../src/world/BoomCarve.js';
 import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { GOD_SPELLS, firstSpellGain } from '../../src/game/Mana.js';
@@ -104,7 +104,7 @@ test('the crater: the hill gone, a bowl under the land, the sea in it; the same 
     const a = world(), b = world(), c = world();
     const ja = boomJob(a, e);
     let frames = 0;
-    while (!boomStep(ja, 0.05)) frames++; // (tiny budgets: many frames)
+    while (!boomStep(ja, 0.05, 150)) frames++; // (tiny budgets and the sea pouring in slowly: many frames)
     assert.ok(frames > 3, 'done a piece at a time');
     const jb = boomJob(b, e);
     boomStep(jb, Infinity);
@@ -143,7 +143,7 @@ test('the target: any land — a hill (its middle inside it), plain land (torn r
 test('the builders never build over a «Бум» crater; a rebuilt block in it counts as gone', () => {
     const booms = [{ boom: 1, p: [0, 10, 0], b: 3, r: 56 }];
     assert.equal(inBoomCrater(booms, '10,30,10'), true);
-    assert.equal(inBoomCrater(booms, '95,5,0'), false);
+    assert.equal(inBoomCrater(booms, '120,5,0'), false);
     assert.deepEqual(stillStanding([[5, 40, 5, 20, 0]], booms), []);
 });
 
@@ -166,4 +166,31 @@ test('every boss is open to the spells of the gods: the dragon (no scales hold),
     assert.equal(dragonDamage('Inferno', 40).dmg, 0, 'fire still nothing to it');
     const src = fs.readFileSync(new URL('../../src/game/Spider.js', import.meta.url), 'utf8');
     assert.match(src, /!isGodSpell\(kind\) && \(kind === 'Ice'/);
+});
+
+test('the crater is not a drawn bowl: a ragged rim, an uneven floor, rubble on it — the same from the same place', () => {
+    const look = craterLook(120, -40);
+    assert.deepEqual(look, craterLook(120, -40), 'the same everywhere');
+    const ring = [];
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 16) ring.push(craterFloor(look, Math.cos(a) * 30, Math.sin(a) * 30, 30, 0).y);
+    assert.ok(Math.max(...ring) - Math.min(...ring) > 4, 'its floor uneven round the middle: ' + (Math.max(...ring) - Math.min(...ring)).toFixed(1));
+    const e = [];
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 16) e.push(craterFloor(look, Math.cos(a) * 50, Math.sin(a) * 50, 50, 0).e);
+    assert.ok(Math.max(...e) - Math.min(...e) > 0.15, 'its rim ragged: not a circle');
+    const t = world();
+    runBoom(t, { p: [0, 20, 0], b: 3, r: BOOM_SHAPE.R });
+    let gravel = 0;
+    for (let x = -60; x <= 60; x += 2) for (let z = -60; z <= 60; z += 2) if (t.get(x, t.topLayer(x, z), z) === BLOCK.GRAVEL) gravel++;
+    assert.ok(gravel > 10, 'scree and rubble on its floor: ' + gravel);
+});
+
+test('by the sea the crater\'s water is the sea\'s own (its columns marked: the waving sea surface is drawn there)', () => {
+    const t = world();
+    t.fillWater(5, 0, 5, true);
+    assert.equal(t.get(5, 0, 5), BLOCK.WATER);
+    assert.equal(t.isSeaColumn(5, 5), true);
+    t.fillWater(6, -1, 6, true);
+    assert.equal(t.isSeaColumn(6, 6), true, 'pouring in deep: the sea\'s colour from the start');
+    t.fillWater(7, -1, 7);
+    assert.equal(t.isSeaColumn(7, 7), false, 'a lake\'s water stays a lake');
 });
