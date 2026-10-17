@@ -269,7 +269,8 @@ export function lettersLike(written, spellWords) {
     const like = (ww, pp) => {
         // the spell inside the written words, with a little talk round it («можно такой стичин»; a whole
         // sentence round a short spell is no sign: «…сюда та…» holds «даст»)
-        if (ww.length <= pp.length * 2.5 + 4 && editsInside(pp, ww) <= (pp.length <= 5 ? 1 : Math.round(pp.length * 0.4))) return true;
+        // (a short spell: all its letters must be there — «да» is no «дай», «даст»)
+        if (ww.length <= pp.length * 2.5 + 4 && (pp.length > 5 || ww.length >= pp.length) && editsInside(pp, ww) <= (pp.length <= 5 ? 1 : Math.round(pp.length * 0.4))) return true;
         // the written words a piece of the spell (the network wrote only part of it: «максиму» of «вайнд максима»)
         const enough = pp.length <= 5 ? Math.max(3, pp.length - 1) : Math.max(4, Math.round(pp.length * 0.4));
         return ww.length >= enough && editsInside(ww, pp) <= Math.floor(ww.length * 0.3);
@@ -305,7 +306,8 @@ export function soundTrust(h) {
     if (short) { need = Math.max(need, 0.3); why.push('короткое'); }
     if (short && (h.far || 0) >= 0.5) { need = Math.max(need, 1); why.push('звучали колонки'); }
     if (short && h.running) { need = Math.max(need, 0.8); why.push('на бегу'); }
-    if (DANGEROUS.has(h.spell)) { need = Math.max(need, like ? 0.6 : 1.5); why.push('сильное заклинание'); }
+    // («Дай» asks the raised hand aimed right at the target besides: its letters said clearly are enough)
+    if (DANGEROUS.has(h.spell)) { need = Math.max(need, like ? (h.spell === 'Die' ? 0.3 : 0.6) : 1.5); why.push('сильное заклинание'); }
     if (h.lips === false) { need = Math.max(need, 1.5); why.push('губы не двигались'); }
     if (fit >= need) return null;
     return `узнано неуверенно: запас ${fit.toFixed(1)}, нужно ${need} (${why.join(', ')})`;

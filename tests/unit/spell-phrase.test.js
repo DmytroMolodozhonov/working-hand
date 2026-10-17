@@ -111,3 +111,13 @@ test('the author\'s journal (16.10): a sound only just made out, its letters not
     // a word or two before a spell is no talk
     assert.ok(spellPhrase('так теперь вайнд максима').ok);
 });
+
+test('«Дай» said alone is found by its sound and casts with a clear fit; «дай мне», «да» never', async () => {
+    const { HEARD } = await import('../../src/audio/SpellSpotter.js');
+    const { soundTrust } = await import('../../src/audio/SpellPhrase.js');
+    assert.ok(HEARD.has('Die'));
+    assert.ok(spellPhrase('дай').ok && spellPhrase('бум').ok);
+    for (const t of ['дай мне', 'дайте', 'дай посмотреть']) assert.equal(spellPhrase(t).ok, false, t);
+    assert.equal(soundTrust({ spell: 'Die', canonical: 'дай', written: 'дай', fit: 0.4 }), null);
+    assert.ok(soundTrust({ spell: 'Die', canonical: 'дай', written: 'да', fit: 1.0 })); // («да» is no «дай»)
+});
