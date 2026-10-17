@@ -49,7 +49,7 @@ test('Творческий: in a duel a player is as strong in mana as his oppon
     const { duelPower } = await import('../../src/game/WizardAI.js');
     const wiz = { wizard: true, mana: 480, hp: 32, maxHp: 32, role: 'master' };
     const me = { me: 'me', game: { config: { mode: 'creative' }, combat: { enabled: false, fatigue: 30, maxFatigue: 30 }, remotes: new Map(), castleLife: { byId: new Map([[5, wiz]]) } } };
-    me._npcWizard = Duel.prototype._npcWizard; me._playerMana = Duel.prototype._playerMana;
+    me._npcWizard = Duel.prototype._npcWizard; me._playerMana = Duel.prototype._playerMana; me._mastery = Duel.prototype._mastery;
     const s = Duel.prototype._strength.call(me, 'me', 0, 5);
     assert.equal(s, duelPower(480, 1, 0));
     me.game.config.mode = 'survival';
@@ -69,4 +69,26 @@ test('the wand counts in a duel as everywhere: ×1.15 and its own bonuses; a wiz
     assert.ok(a >= 1.15 && a === b, 'his own wand, always the same');
     wiz.noWand = true;
     assert.equal(k(null, 5, wiz), 1);
+});
+
+test('«дуэльное мастерство»: +5 a new opponent, +3 a known one, +10 to the death; counted as mana in a duel; death takes it into the body', async () => {
+    const { Mana } = await import('../../src/game/Mana.js');
+    const { captureLegacy, absorbLegacy } = await import('../../src/game/Legacy.js');
+    const { Duel } = await import('../../src/game/Duel.js');
+    const { duelPower } = await import('../../src/game/WizardAI.js');
+    const g = { combat: { enabled: true, fatigue: 100, maxFatigue: 100, hp: 20, maxHp: 20 }, hud: {}, remotes: new Map(), config: { mode: 'freeworld' } };
+    const M = g.mana = new Mana(g);
+    M.duelWonAlive(7); M.duelWonAlive(7); M.duelWon(50, 8);
+    assert.equal(M.mastery, 5 + 3 + 10);
+    const s = Duel.prototype._strength.call({ me: 'me', game: g, _npcWizard: () => null, _mastery: Duel.prototype._mastery }, 'me', 0);
+    assert.equal(s, duelPower(100 + 18, 1));
+    const rec = captureLegacy(g);
+    M.onDeath();
+    assert.equal(M.mastery, 0);
+    absorbLegacy(g, rec);
+    assert.equal(M.mastery, 18);
+    M.duelWonAlive(7);
+    assert.equal(M.mastery, 21, 'the one he beat before: still known');
+    const M2 = new Mana(g); M2.restore(M.snapshot());
+    assert.equal(M2.mastery, 21);
 });

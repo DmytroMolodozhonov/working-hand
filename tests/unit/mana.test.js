@@ -141,7 +141,7 @@ test('mana: the maximum, the spells and creatures already counted are saved with
     g.mana.success('Levitation');
     g.mana.magicKill('pegasus');
     const snap = JSON.parse(JSON.stringify(playerSnapshot(g)));
-    assert.deepEqual(snap.mana, { growth: 19, spells: ['AvadaKedavra', 'Levitation'], kills: ['pegasus'], found: [] });
+    assert.deepEqual(snap.mana, { growth: 19, spells: ['AvadaKedavra', 'Levitation'], kills: ['pegasus'], found: [], mastery: 0, beaten: [] });
     const { g: g2 } = fakeGame();
     applyPlayerSnapshot(g2, snap);
     assert.equal(g2.mana.max, 49);

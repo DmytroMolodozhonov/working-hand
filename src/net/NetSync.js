@@ -274,6 +274,7 @@ export class NetSync {
                 bw: g.gear?.netBow(), // (an arrow on my bow's string, and how far it is drawn)
                 dw: g.items?.wand?.dragon ? 1 : undefined, // (the dragon's wand in my hand: my fire spells are 60% stronger)
                 wd: netWand(g.items?.wand), // (my wand: it counts in a duel as everywhere — Duel._wandK)
+                dms: g.mana?.mastery || undefined, // (my «дуэльное мастерство»: it counts in a duel — Duel._mastery)
                 sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
             }, true);
         }

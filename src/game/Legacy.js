@@ -27,7 +27,7 @@
  * owner's computer, then 'dblg' tells everybody the body is empty now.
  */
 
-import { MANA } from './Mana.js';
+import { MANA, DUEL_MASTERY } from './Mana.js';
 
 export const LEGACY = {
     GLOW_R: 40, // m: golden sparks over the owner's body when they are this near
@@ -53,7 +53,8 @@ export function captureLegacy(g) {
         learned: g.books ? [...g.books.learned] : [],
         // (the growth holds the gods' +100 cells too; `spells` — the firsts already counted, theirs among them)
         // (and `found`: space and the planets already counted — their +20 / +50 cells are in the growth)
-        mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length || mana.found?.length) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [], found: mana.found || [] } : null,
+        // (and «дуэльное мастерство»: the duels won, and whom — Mana.masteryWon)
+        mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length || mana.found?.length || mana.mastery > 0) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [], found: mana.found || [], mastery: mana.mastery || 0, beaten: mana.beaten || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
@@ -106,6 +107,8 @@ export function absorbLegacy(g, rec) {
         for (const k of rec.mana.kills || []) M.killsMade.add(String(k));
         for (const k of rec.mana.found || []) M.found?.add(String(k));
         M.grow(Math.max(0, Math.min(20000, Number(rec.mana.growth) || 0)), 'legacy'); // (with the gods' +100s: up to 400 of it)
+        M.mastery += Math.max(0, Math.min(1e6, Math.floor(Number(rec.mana.mastery) || 0)));
+        for (const k of rec.mana.beaten || []) if (M.beaten && M.beaten.size < DUEL_MASTERY.MAX_BEATEN) M.beaten.add(String(k));
     }
     const A = g.achievements;
     let got = 0;

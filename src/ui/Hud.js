@@ -322,6 +322,7 @@ export class Hud {
      */
     setDuelBar(d) {
         let el = this._duelEl;
+        this._setMastery(d ? d.mastery : null);
         if (!d) { if (el) el.style.display = 'none'; return; }
         if (!el) {
             el = this._duelEl = document.createElement('div');
@@ -336,6 +337,24 @@ export class Hud {
         me.style.width = `${Math.round(Math.max(0, Math.min(1, d.share)) * 100)}%`;
         me.style.background = hex(d.me);
         them.style.background = hex(d.them);
+    }
+
+    /**
+     * «Дуэльное мастерство» (Mana.masteryWon): a golden bar over the mana with how much of it I have —
+     * only while a duel goes on (setDuelBar). null hides it.
+     */
+    _setMastery(n) {
+        let el = this._masteryEl;
+        if (n == null) { if (el && el.style.display !== 'none') el.style.display = 'none'; return; }
+        if (!el) {
+            el = this._masteryEl = document.createElement('div');
+            el.id = 'hud-mastery';
+            el.style.cssText = 'position:fixed;left:50%;bottom:200px;transform:translateX(-50%);z-index:1200;pointer-events:none;width:min(420px,60vw);height:26px;border-radius:10px;border:2px solid #d4af37;background:linear-gradient(90deg,#5a3d06,#c8961e,#5a3d06);box-shadow:0 0 10px rgba(255,200,80,.5);display:flex;align-items:center;justify-content:center;font:800 17px/1 system-ui,\'Segoe UI\',Arial,sans-serif;color:#fff;text-shadow:0 1px 3px #000';
+            document.body.appendChild(el);
+        }
+        if (el.style.display !== 'flex') el.style.display = 'flex';
+        const v = Math.max(0, Math.floor(n));
+        if (this._masteryN !== v) { this._masteryN = v; el.textContent = `⚔️ Дуэльное мастерство: ${v}`; }
     }
 
     /**

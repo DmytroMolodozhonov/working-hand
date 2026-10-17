@@ -1392,7 +1392,7 @@ export class Duel {
         if (g.config?.mode === 'creative' && opId != null) {
             const ow = this._npcWizard(opId);
             const mana = ow ? ow.mana : Math.max(this._playerMana(id), this._playerMana(opId));
-            return duelPower(mana, 1, luck);
+            return duelPower(mana + this._mastery(id), 1, luck);
         }
         // «Выживание» and «Хардкор» (the maps too) — the same (the author): the mana LEFT now and the health now
         let mana = 30, hp = PVP.MAX_HP, maxHp = PVP.MAX_HP;
@@ -1404,6 +1404,7 @@ export class Duel {
             const r = g.remotes.get(id);
             if (r) { mana = r.fatigue ?? 30; hp = r.hp ?? PVP.MAX_HP; }
         }
+        mana += this._mastery(id); // («дуэльное мастерство»: never spent — counted as if it were mana, Mana.masteryWon)
         return duelPower(mana, hp / maxHp, luck);
     }
 
@@ -1418,6 +1419,12 @@ export class Duel {
         const w = this._npcWizard(id);
         if (w) return w.noWand ? 1 : wandPower(wizardWandOf(w), name);
         return wandPower(this.game.remotes.get(id)?.wand || null, name);
+    }
+
+    /** A player's «дуэльное мастерство» (mine — Mana.mastery; another's — by the network). */
+    _mastery(id) {
+        if (id === this.me) return this.game.mana?.mastery || 0;
+        return this.game.remotes?.get(id)?.mastery || 0;
     }
 
     /** A player's whole store of mana (its cells): Creative's duel against another player. */
@@ -1474,7 +1481,7 @@ export class Duel {
         }
         if (a.by === this.me || b.by === this.me) {
             const mineA = a.by === this.me;
-            g.hud.setDuelBar?.({ me: c.marks[mineA ? 0 : 1], them: c.marks[mineA ? 1 : 0], share: mineA ? c.p : 1 - c.p });
+            g.hud.setDuelBar?.({ me: c.marks[mineA ? 0 : 1], them: c.marks[mineA ? 1 : 0], share: mineA ? c.p : 1 - c.p, mastery: g.mana?.mastery ?? 0 });
             this._barNow = true;
         }
         // Fatigue drains while pushing (free world)

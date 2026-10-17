@@ -37,6 +37,14 @@ export const MANA = {
  * The first real success of each spell: + this much to the maximum (once). Every name
  * matchSpell / Combat.SPELL_COST knows is here (tests/unit/mana.test.js checks it).
  */
+/**
+ * «Дуэльное мастерство» (the author): how good one is at duels — a measure of its own, not the mana.
+ * A duel won (the opponent alive): a new opponent +5, one beaten before +3; won to the death +10.
+ * It is never spent: in a duel it is added to the mana (Duel._strength — as if it were mana).
+ * Death takes it (into the body: Legacy.js), as all the hero grew.
+ */
+export const DUEL_MASTERY = { NEW: 5, KNOWN: 3, KILL: 10, MAX_BEATEN: 400 };
+
 export const FIRST_SPELL = {
     // simple: +1
     Lumos: 1, Draw: 1, Accio: 1, Gather: 1, Levitation: 1, Up: 1, Fire: 1, Wind: 1,
@@ -154,6 +162,8 @@ export class Mana {
         this.killsMade = new Set(); // magical creature kinds already counted (this life)
         this.duelsWon = new Map(); // opponent id → 'win' | 'kill' already counted (this life)
         this.found = new Set(); // 'space', 'planet:<id>' — space's achievements already counted (this life)
+        this.mastery = 0; // «дуэльное мастерство»: duels won (DUEL_MASTERY); never spent, adds to the mana in a duel (lost on death)
+        this.beaten = new Set(); // opponents already beaten in a duel (this life): a known one gives less
         this.log = []; // (tests) the last few gains
     }
 
@@ -208,6 +218,7 @@ export class Mana {
 
     /** A real duel won: the opponent `id` (his mana maximum `oppMax`) beaten in the clash and killed. */
     duelWon(oppMax = MANA.BASE, id = null) {
+        this.masteryWon(id, true);
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (this one already counted)
         if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = duelGain(oppMax);
@@ -218,11 +229,34 @@ export class Mana {
 
     /** The clash won but the opponent `id` lives (lifted, stunned…): +1…+3 at random, once per opponent. */
     duelWonAlive(id = null, rng = Math.random) {
+        this.masteryWon(id, false);
         if (id != null && this.duelsWon.has(String(id))) return 0;
         if (id != null) this.duelsWon.set(String(id), 'win');
         const n = 1 + Math.min(2, Math.floor(rng() * 3));
         this.grow(n, 'duelAlive');
         this._say(`🔷 Победа в дуэли: +${n} к максимуму маны`);
+        return n;
+    }
+
+    /**
+     * A duel won against `id` (`kill`: to the death): «дуэльное мастерство» grows — every duel won,
+     * a new opponent more than a known one (DUEL_MASTERY). Shown after every one, in every mode.
+     * @returns {number} how much it grew
+     */
+    masteryWon(id = null, kill = false) {
+        const key = id != null ? String(id) : null;
+        const known = key != null && this.beaten.has(key);
+        const n = kill ? DUEL_MASTERY.KILL : known ? DUEL_MASTERY.KNOWN : DUEL_MASTERY.NEW;
+        if (key != null && !known) {
+            if (this.beaten.size >= DUEL_MASTERY.MAX_BEATEN) this.beaten.delete(this.beaten.values().next().value);
+            this.beaten.add(key);
+        }
+        this.mastery += n;
+        this.log.push({ why: 'mastery', name: key, n });
+        if (this.log.length > 20) this.log.shift();
+        const hud = this.game.hud, text = `⚔️ ${kill ? 'Соперник повержен' : 'Победа в дуэли'}: +${n} дуэльного мастерства (всего ${this.mastery})`;
+        if (hud?.toast) hud.toast(text, 3000);
+        else hud?.setVoice?.(text, true);
         return n;
     }
 
@@ -268,11 +302,13 @@ export class Mana {
         this.killsMade.clear();
         this.duelsWon.clear();
         this.found.clear();
+        this.mastery = 0;
+        this.beaten.clear();
     }
 
     /** Kept with the player (world save, multiplayer). */
     snapshot() {
-        return { growth: this.growth, spells: [...this.spellsUsed], kills: [...this.killsMade], found: [...this.found] };
+        return { growth: this.growth, spells: [...this.spellsUsed], kills: [...this.killsMade], found: [...this.found], mastery: this.mastery, beaten: [...this.beaten] };
     }
 
     restore(s) {
@@ -280,6 +316,8 @@ export class Mana {
         for (const k of [...(Array.isArray(s.spells) ? s.spells : []), ...(Array.isArray(s.strong) ? s.strong : [])]) this.spellsUsed.add(String(k)); // («strong»: an older save)
         if (Array.isArray(s.kills)) for (const k of s.kills) if (MAGIC_KILL[k]) this.killsMade.add(k);
         if (Array.isArray(s.found)) for (const k of s.found) this.found.add(String(k));
+        this.mastery = Math.max(this.mastery, Math.max(0, Math.min(1e6, Math.floor(Number(s.mastery) || 0))));
+        if (Array.isArray(s.beaten)) for (const k of s.beaten.slice(-DUEL_MASTERY.MAX_BEATEN)) this.beaten.add(String(k));
         const g =Math.max(0, Math.min(10000, Number(s.growth) || 0));
         if (g > this.growth) this.grow(g - this.growth, 'restore');
     }

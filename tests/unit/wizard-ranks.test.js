@@ -94,7 +94,7 @@ test('a duel counts the mana LEFT and the health now — «Выживание» 
     const { duelPower } = await import('../../src/game/WizardAI.js');
     const wiz = { wizard: true, mana: 200, hp: 16, maxHp: 16, role: 'teacher' };
     const strength = (mode, fatigue, maxFatigue, hp = 20) => Duel.prototype._strength.call({
-        me: 'me', _npcWizard: (id) => (id === 5 ? wiz : null), _playerMana: Duel.prototype._playerMana,
+        me: 'me', _npcWizard: (id) => (id === 5 ? wiz : null), _playerMana: Duel.prototype._playerMana, _mastery: Duel.prototype._mastery,
         game: { config: { mode }, combat: { enabled: mode === 'freeworld', fatigue, maxFatigue, hp, maxHp: 20 }, playerHP: hp, maxHP: 20, remotes: new Map() },
     }, 'me', 0, 5);
     assert.equal(strength('freeworld', 40, 120), duelPower(40, 1));
