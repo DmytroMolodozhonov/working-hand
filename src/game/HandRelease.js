@@ -167,3 +167,48 @@ export class ThrowDetector {
         return null;
     }
 }
+
+/**
+ * Throwing the Lumos light (WandMagic): the same rules as a real throw of a thing — a wind-up (the hand by
+ * the head or behind the shoulder), a fast swing FORWARD, and the light leaves at the swing's end (when the
+ * hand slows down), the way and as hard as the hand went. No wind-up — never; a swing down, sideways (a wave
+ * while talking) or back — never. (No fingers: the light is not held, it leaves the wand.)
+ * The author: «it is thrown unrealistically, not when I really throw».
+ */
+export const LUMOS_THROW = {
+    SPEED: 5, // m/s against the body at the fastest moment
+    TRAVEL: 0.6, // the hand from the wind-up
+    WINDOW_MS: 1000, // the swing begins this soon after the wind-up
+    FWD: 0.55, // the swing's forward part (of its speed): mostly forward (an overhand throw goes down a little)
+    END: 0.5, // its end: the speed fell below this share of the fastest …
+    MAX_MS: 400, // … or this long after the fastest moment (the camera smooths the end of a swing)
+};
+
+export class LumosThrow {
+    constructor() { this.reset(); }
+
+    reset() { this.cock = null; this.cockAt = -1e9; this.peak = null; }
+
+    /**
+     * @param {object} s  now (ms); hand, shoulder, vRel — the body's space (x right, y up, z back); behind (the camera
+     *   sees the wrist behind the shoulder)
+     * @returns {null|{speed:number, dir:{x,y,z}}} the throw at the swing's end: the hand's direction (the body's space)
+     */
+    update({ now, hand, shoulder, vRel, behind = false }) {
+        const speed = Math.hypot(vRel.x, vRel.y, vRel.z);
+        if (!this.peak && (hand.y - shoulder.y > THROW.UP || hand.z - shoulder.z > THROW.BACK || behind)) {
+            this.cockAt = now;
+            this.cock = { x: hand.x, y: hand.y, z: hand.z + (behind || hand.z - shoulder.z > THROW.BACK ? THROW.BEHIND : 0) };
+        }
+        if (this.cock && !this.peak && now - this.cockAt > LUMOS_THROW.WINDOW_MS) this.cock = null;
+        if (!this.cock) return null;
+        const fwd = -vRel.z;
+        if (speed > LUMOS_THROW.SPEED && fwd > LUMOS_THROW.FWD * speed && (!this.peak || speed > this.peak.speed)
+            && Math.hypot(hand.x - this.cock.x, hand.y - this.cock.y, hand.z - this.cock.z) > LUMOS_THROW.TRAVEL) {
+            this.peak = { speed, dir: { x: vRel.x / speed, y: vRel.y / speed, z: vRel.z / speed }, at: now };
+        }
+        if (!this.peak) return null;
+        if (speed < this.peak.speed * LUMOS_THROW.END || now - this.peak.at > LUMOS_THROW.MAX_MS) { const p = this.peak; this.reset(); return p; }
+        return null;
+    }
+}

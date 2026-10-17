@@ -1,48 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { lumosFlick, LUMOS } from '../../src/game/WandMagic.js';
+import { LUMOS } from '../../src/game/WandMagic.js';
+import { LumosThrow } from '../../src/game/HandRelease.js';
 
 /**
- * Lumos is thrown only by a real flick of the wand — never by walking (the arms swing), nor by one
- * jumpy camera frame: the light stays at the tip until «Нокс» / «стоп».
+ * The Lumos light is thrown like a thing (the author: «not when I really throw»): a wind-up by the head or behind
+ * the shoulder, a fast swing forward — it leaves at the swing's end, the way the hand went. A 15-fps noisy camera.
  */
-const trailOf = (fn, ms = 400, step = 16) => {
-    const trail = [];
-    for (let t = 0; t <= ms; t += step) trail.push({ t, p: fn(t / 1000) });
-    return { trail, now: ms };
-};
-const FWD = new THREE.Vector3(0, 0.2, 1).normalize(); // (the wand points ahead, a little up)
+const SH = { x: 0.7, y: 1.25, z: 0 };
+function swing(det, { start, v, n = 3, hold = 200, after = 10, seed = 3, behind = false }) {
+    let r = seed; const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647 - 0.5);
+    let h = { ...start }, t = 0, out = null, at = -1, swingEnd = 0;
+    const step = (vRel) => {
+        const res = det.update({ now: t, hand: { x: h.x + rnd() * 0.05, y: h.y + rnd() * 0.05, z: h.z + rnd() * 0.05 }, shoulder: SH,
+            vRel: { x: vRel.x + rnd() * 0.6, y: vRel.y + rnd() * 0.6, z: vRel.z + rnd() * 0.6 }, behind: behind && t < hold });
+        if (res && !out) { out = res; at = t; }
+    };
+    for (; t < hold; t += 66) step({ x: 0, y: 0, z: 0 });
+    for (let i = 0; i < n; i++, t += 66) { h = { x: h.x + v.x * 0.066, y: h.y + v.y * 0.066, z: h.z + v.z * 0.066 }; step(v); }
+    swingEnd = t;
+    for (let k = 0; k < after; k++, t += 66) step({ x: v.x * 0.15, y: v.y * 0.15, z: v.z * 0.15 });
+    return { out, at, swingEnd };
+}
 
-test('Lumos throw: a wind-up, then a quick steady throw where the wand points — the light flies', () => {
-    // drawn back 0.35 m (0.15–0.45 s), then the tip goes 1 m ahead in the last 0.16 s
-    const { trail, now } = trailOf((s) => new THREE.Vector3(0, 1.4, s < 0.15 ? 0.4 : s < 0.45 ? 0.4 - (s - 0.15) * 1.17 : s < 0.64 ? 0.05 : 0.05 + (s - 0.64) * 6.25), 800);
-    const d = lumosFlick(trail, now, FWD);
-    assert.ok(d && d.z > 0.9, 'thrown ahead');
-    // the same fast move with no wind-up (a jerk of the hand): the light stays on the wand
-    const jerk = trailOf((s) => new THREE.Vector3(0, 1.4, 0.05 + Math.max(0, s - 0.64) * 6.25), 800);
-    assert.equal(lumosFlick(jerk.trail, jerk.now, FWD), null, 'a jerk with no wind-up');
+test('Lumos throw: the hand by the head (or behind the shoulder), a fast swing forward — it flies that way at the swing\'s end', () => {
+    const r = swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1.5, z: -6.5 } });
+    assert.ok(r.out, 'thrown');
+    assert.ok(r.out.dir.z < -0.8, 'forward ' + JSON.stringify(r.out.dir));
+    assert.ok(r.at >= r.swingEnd - 66 && r.at <= r.swingEnd + 132, `at the swing's end (${r.at} vs ${r.swingEnd})`);
+    // to the right: it goes to the right
+    const side = swing(new LumosThrow(), { start: { x: 0.6, y: 1.7, z: 0 }, v: { x: 3.5, y: -1, z: -5.5 } });
+    assert.ok(side.out && side.out.dir.x > 0.4, 'to the right ' + JSON.stringify(side.out?.dir));
+    // from behind the shoulder
+    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.4, z: 0.3 }, behind: true, v: { x: 0, y: -0.5, z: -6.5 } }).out, 'from behind the shoulder');
+    // a harder swing: a faster light
+    const hard = swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1.5, z: -11 } });
+    assert.ok(hard.out.speed > r.out.speed, 'harder');
 });
 
-test('Lumos flick: never by walking (the arm swings), a jumpy frame, a slow move or a flick down', () => {
-    // walking: the arm swings ±0.35 m about twice a second
-    for (let ph = 0; ph < 6.3; ph += 0.7) {
-        const { trail, now } = trailOf((s) => new THREE.Vector3(0.05 * Math.sin(ph + s * 12), 1.1, 0.3 + 0.35 * Math.sin(ph + s * 12)));
-        assert.equal(lumosFlick(trail, now, FWD), null, `walking swing (phase ${ph})`);
-    }
-    // one jumpy camera frame: the tip jumps 0.9 m for a moment
-    const jump = trailOf((s) => new THREE.Vector3(0, 1.4, Math.abs(s - 0.392) < 0.01 ? 1.2 : 0.3));
-    assert.equal(lumosFlick(jump.trail, jump.now, FWD), null, 'a jumpy frame');
-    // a slow, calm move of the arm
-    const slow = trailOf((s) => new THREE.Vector3(0, 1.4, 0.3 + s * 1.2));
-    assert.equal(lumosFlick(slow.trail, slow.now, FWD), null, 'a calm move');
-    // fast, but straight down at the feet
-    const down = trailOf((s) => new THREE.Vector3(0, 1.4 - Math.max(0, s - 0.25) * 6, 0.3));
-    assert.equal(lumosFlick(down.trail, down.now, FWD), null, 'down at the feet');
-    // fast, but backwards (away from where the wand points)
-    const back = trailOf((s) => new THREE.Vector3(0, 1.4, 0.3 - Math.max(0, s - 0.25) * 6));
-    assert.equal(lumosFlick(back.trail, back.now, FWD), null, 'against the wand');
-    assert.ok(LUMOS.STILL >= 1000, 'a moment standing still first');
+test('Lumos throw: never without a wind-up, never a wave while talking, a swing down or back, a slow move, the arm just held', () => {
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.2, z: -0.6 }, v: { x: 0, y: 0, z: -7 } }).out, null, 'a jab from the chest: no wind-up');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 7, y: 0, z: -1 } }).out, null, 'a wave aside');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -7, z: -1.5 } }).out, null, 'a swing down');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: -0.5 }, v: { x: 0, y: 0, z: 6 } }).out, null, 'back');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1, z: -3 }, n: 6 }).out, null, 'slow');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: 0, z: 0 }, hold: 3000 }).out, null, 'held up');
+    // talking: the hands move about at the chest, quick little moves every way
+    const d = new LumosThrow();
+    let any = null;
+    for (let t = 0; t < 5000; t += 50) any = any || d.update({ now: t, hand: { x: 0.6 + 0.1 * Math.sin(t / 90), y: 1.0 + 0.1 * Math.cos(t / 70), z: -0.5 }, shoulder: SH, vRel: { x: 3 * Math.cos(t / 90), y: -2 * Math.sin(t / 70), z: 1.5 * Math.sin(t / 50) } });
+    assert.equal(any, null, 'talking');
+    assert.ok(LUMOS.STILL >= 1000, 'walking / running: a moment standing still first');
 });
 
 test('«Lightning Writing»: another player\'s drawing comes as points — joined into lines, broken where they broke it', async () => {
