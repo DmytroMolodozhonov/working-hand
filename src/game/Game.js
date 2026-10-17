@@ -141,6 +141,8 @@ import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 
 const SPELL_COOLDOWN = 1000;
+/** The duel's one-word spells: cast the moment they are heard — no wait for a «… Максима» (NativeVoice.DUEL_FAST). */
+const DUEL_FAST = new Set(['Jolt', 'Sapira', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Disarmor', 'Ice', 'Sands']);
 /** s: «Левиоса» heard again this soon after it lifted something (or sent a charge) is the same phrase */
 const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
@@ -1273,6 +1275,12 @@ export class Game {
         if (this.isMagicActive) this._speakingAt = now;
         const at = Math.max(this._speakingAt || -1e9, this.voice?.speakingAt || -1e9);
         sp.duck(now - at < 900);
+        if (sp._ducked) this._duckedAt = now;
+    }
+
+    /** Were the game's voices quiet (ducked) at page time t? Then a spell heard then is mine, not theirs. */
+    voicesDucked(t) {
+        return Number.isFinite(this._duckedAt) && this._duckedAt >= t - 300;
     }
 
     /** The hand holding a wand (null: none). While a wand is held, every spell is cast with that hand. */
@@ -1310,7 +1318,7 @@ export class Game {
         }
         // «Protection…», «Бомбардо…» with nothing after them yet: «… Хаус», «… Максима» may still come
         // (NativeVoice: more) — the voice tells again once it can't; only a duel answer under fire can't wait
-        if (!isFinal && this._voiceMeta?.more && !(name === 'Jolt' && this.duel.underFire?.())) { this.lastCastWhy = 'ждём, не будет ли продолжения («… Хаус», «… Максима»)'; return null; }
+        if (!isFinal && this._voiceMeta?.more && !DUEL_FAST.has(name)) { this.lastCastWhy = 'ждём, не будет ли продолжения («… Хаус», «… Максима»)'; return null; }
         // the rule of concentration: while a spell is held no other works — first «стоп» (Concentration.js;
         // the held spell's own words, Lumos, Nox, «стоп», the shield are free; Creative too)
         if (this.focus.gate(name, isFinal, !!BUILD_SPELLS[name])) return null;
@@ -1409,9 +1417,8 @@ export class Game {
             if (performance.now() - (this.water.frozenAt || -1e9) < 4000) return null;
             ice = true;
         }
-        // («Джолт» alone, still being spoken: wait — it may yet be «Джолт Максима»; but with a duel charge
-        //  flying at me the answer can't wait: it flies now, and «…Максима» then makes it the Maxima)
-        if (name === 'Jolt' && !isFinal && !this.duel.underFire?.()) return null;
+        // («Джолт» flies at once — a duel is won by milliseconds (the author); a «…Максима» after it makes the
+        //  charge already flying the Maxima: _joltUpgrade)
         if (name === 'JoltMaxima' && this._joltUpgrade()) return name;
         // («Firefighting» alone, still being spoken: it may yet be «Firefighting Maxima»)
         if (name === 'Firefighting' && !isFinal) return null;
@@ -2955,6 +2962,8 @@ export class Game {
         if (earth) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._duckVoices();
+        // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
+        if (this.voice?.native) this.voice.native.duelHot = !!(this._inDuel?.() || this.duel?.underFire?.());
         if (earth) this.servants.update(dt);
         this.invis?.update(dt);
         if (earth) this._updateCaves(dt);

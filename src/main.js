@@ -552,7 +552,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         const spoken = matchSpell(command);
         if (spoken) {
             const now = performance.now();
-            const mine = game.voiceGate.lipsSync(now, voice._levels, voice.noiseFloor) === true;
+            // (or the game's voices were made quiet then — the hand raised to cast: what was heard is mine)
+            const mine = game.voiceGate.lipsSync(now, voice._levels, voice.noiseFloor) === true || !!game.voicesDucked?.(meta?.from ?? now - 1500);
             const line = fromGame(spoken, { ...meta, from: meta?.from ?? now - 2500, to: meta?.to ?? now, mine });
             if (line) {
                 if (isFinal) netLog(`заклинание «${command}» не моё: его слова только что сказал голос игры`);

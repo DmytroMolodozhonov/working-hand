@@ -137,3 +137,22 @@ test('the game\'s own voices playing (the wizards\' tower): a clear spell casts 
     assert.equal(cast(true), 'Inferno');
     assert.equal(cast(false), null); // (a friend's voice — not the game's: the phrase's end decides, with the speakers' copy)
 });
+
+test('a duel\'s one-word spells don\'t wait for a «… Максима»; «Дай мне хлеба» from a villager is no «Дай»', async () => {
+    const { lookAt } = await import('../../src/input/NativeVoice.js');
+    const { spellsIn } = await import('../../src/audio/GameVoices.js');
+    const fs = await import('node:fs');
+    const { unpack, V, BLANK } = await import('../../src/audio/SpellSpotter.js');
+    const rows = JSON.parse(fs.readFileSync(new URL('../fixtures/voice-spells.json', import.meta.url), 'utf8'));
+    let fast = 0, n = 0;
+    for (const r of rows.filter((x) => x.kind === 'spell' && x.text === 'джолт')) {
+        const lp0 = unpack(r.lp, r.T), T = r.T + 6, lp = new Float32Array(T * V); // (just 240 ms of quiet after it)
+        lp.set(lp0);
+        for (let t = r.T; t < T; t++) for (let v = 0; v < V; v++) lp[t * V + v] = v === BLANK ? 0 : -25;
+        const o = lookAt({ id: 1, final: false, T, lp: Buffer.from(Array.from(lp, (x) => Math.round(-x * 10))).toString('base64'), far: 0 }, { last: 'джолт' });
+        n++; if (o.say?.settled) fast++;
+        assert.ok(!o.say?.more, 'never «wait for Максима»');
+    }
+    assert.ok(n && fast >= 1, `${fast}/${n}`); // (a recording heard less clearly waits for the phrase's end — never for a «Максима»)
+    assert.ok(!spellsIn('Дай мне хлеба!').has('Die') && spellsIn('Дай!').has('Die'));
+});

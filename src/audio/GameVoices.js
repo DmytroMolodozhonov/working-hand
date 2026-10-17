@@ -37,6 +37,8 @@ export function spellsIn(text) {
     for (let i = 0; i < w.length; i++) {
         for (let n = 1; n <= 4 && i + n <= w.length; n++) {
             const s = matchSpell(w.slice(i, i + n).join(' '));
+            // («Дай» is an everyday word: a villager's «Дай мне хлеба» is no «Дай» — only the line that is just it)
+            if (s === 'Die' && w.length > n) continue;
             if (s) out.add(s);
         }
     }
