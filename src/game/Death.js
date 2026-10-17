@@ -30,7 +30,7 @@ import * as THREE from 'three';
 import { RESOURCE } from './Inventory.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, holdShapes, releaseShapes } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
-import { newUid, isGodGift } from './ItemTypes.js';
+import { newUid, isGodGift, ITEM_INFO } from './ItemTypes.js';
 import { VoxelCharacter } from '../entities/Character.js';
 import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 
@@ -42,7 +42,8 @@ export const DEATH = {
     SPREAD: 1.3, // m around the body the things fall
     GATHER_R: 3.5, // m around the pointed place «Gather» takes everything
     GATHER_RANGE: 14, // m how far «Gather» reaches
-    GATHER_CONE: 0.3, // rad
+    GATHER_CONE: 0.45, // rad (as «Акцио»)
+    GATHER_NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
     KNIGHT_COINS: [4, 15],
     KING_COINS: [40, 80],
 };
@@ -573,26 +574,50 @@ export class DeathSystem {
      * «Gather» pointed at things lying about (at a body): everything within a
      * few metres of the pointed place goes into the slots. Returns a hint or null.
      */
-    gatherAt(o, d) {
+    gatherAt(o, d, into = null) {
         const g = this.game;
+        // (`o` may be a list of rays [{o, d}]: every pointing hand — the wand's and the other one; `into`: the free
+        // hand the pointed-at thing goes into — Accio's rule, accioCatcher; none (both busy) — into a slot)
+        const rays = Array.isArray(o) ? o : [{ o, d }];
         let best = null;
-        const consider = (p) => {
-            const to = _v.subVectors(p, o);
-            const dist = to.length();
-            if (dist > DEATH.GATHER_RANGE || dist < 0.2) return;
-            const ang = d.angleTo(to.normalize());
-            if (ang > DEATH.GATHER_CONE) return;
-            const s = ang * 5 + dist * 0.05;
-            if (!best || s < best.s) best = { s, p: p.clone() };
+        const consider = (p, what) => {
+            for (const r of rays) {
+                const to = _v.subVectors(p, r.o);
+                const dist = to.length();
+                if (dist > DEATH.GATHER_RANGE || dist < 0.2) continue;
+                const ang = r.d.angleTo(to.normalize());
+                // (as «Акцио»: a thing close by is pointed at low, off the line a little more)
+                if (ang > DEATH.GATHER_CONE + Math.atan2(DEATH.GATHER_NEAR, dist)) continue;
+                const s = ang * 5 + dist * 0.05;
+                if (!best || s < best.s) best = { s, p: p.clone(), what };
+            }
         };
-        for (const L of g.items?.loose.values() || []) if (!L.hover && !L.accio && !L.item.shop) consider(L.model.position); // (not the market's goods)
-        for (const w of g.weapons?.weapons || []) if (this._freeWeapon(w)) consider(w.position);
-        for (const b of this.bodies.values()) consider(_v2.set(b.x, b.y + 0.4, b.z).clone());
+        for (const L of g.items?.loose.values() || []) if (!L.hover && !L.accio && !L.asked && !L.item.shop) consider(L.model.position, L); // (not the market's goods)
+        for (const w of g.weapons?.weapons || []) if (this._freeWeapon(w)) consider(w.position, w);
+        for (const b of this.bodies.values()) consider(_v2.set(b.x, b.y + 0.4, b.z), null);
         if (!best) return null;
         const c = best.p;
-        let n = 0, full = false;
+        let n = 0, full = false, hand = null;
+        // the thing pointed at: into the free hand (never the hand with the wand / a sword in it)
+        const one = best.what;
+        if (one && into) {
+            if (g.weapons?.weapons?.includes(one)) {
+                const item = { kind: 'weapon', type: one.type, id: one.id, magic: !!one.magic, bonus: one.bonus || 0 };
+                if (g.inventory.store(item)) {
+                    g.sync?.weaponGone?.(one);
+                    g.weapons.remove(one);
+                    g.inventory._fromSlot(g.inventory.slots.indexOf(item), into);
+                    g.inventory._render?.();
+                    n++; hand = item;
+                } else full = true;
+            } else {
+                if (g.items.auth) g.items.pickUp(one.item.uid, g.localId, into);
+                else { one.asked = true; g.sync?.itemTake?.(one.item.uid, into); setTimeout(() => { one.asked = false; }, 1500); }
+                n++; hand = one.item;
+            }
+        }
         for (const w of [...(g.weapons?.weapons || [])]) {
-            if (!this._freeWeapon(w) || w.position.distanceTo(c) > DEATH.GATHER_R) continue;
+            if (full || !this._freeWeapon(w) || w.position.distanceTo(c) > DEATH.GATHER_R) continue;
             const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0 };
             if (!g.inventory.store(item)) { full = true; break; }
             g.sync?.weaponGone?.(w);
@@ -600,14 +625,15 @@ export class DeathSystem {
             n++;
         }
         for (const L of [...(g.items?.loose.values() || [])]) {
-            if (full || L.hover || L.accio || L.asked || L.item.shop || L.model.position.distanceTo(c) > DEATH.GATHER_R) continue;
+            if (full || L.item === hand || L.hover || L.accio || L.asked || L.item.shop || L.model.position.distanceTo(c) > DEATH.GATHER_R) continue;
             if (g.items.auth) g.items.pickUp(L.item.uid, g.localId, 'slot');
             else { L.asked = true; g.sync?.itemTake?.(L.item.uid, 'slot'); setTimeout(() => { L.asked = false; }, 1500); }
             n++;
         }
         if (!n) return full ? '🎒 Все ячейки заняты' : null;
         for (let i = 0; i < 20; i++) g.fx?.spark(c, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.6);
-        return `✨ Gather: ${n} ${n === 1 ? 'вещь' : n < 5 ? 'вещи' : 'вещей'} в ячейках`;
+        if (hand && n === 1) return `✨ Gather: ${hand.kind === 'weapon' ? 'Оружие' : ITEM_INFO[hand.kind]?.name || 'Вещь'} в руке`;
+        return `✨ Gather: ${n} ${n === 1 ? 'вещь' : n < 5 ? 'вещи' : 'вещей'}${hand ? ' (одна — в руке)' : ' в ячейках'}`;
     }
 
     _freeWeapon(w) {

@@ -29,7 +29,7 @@ import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
 import { Levitation } from './Levitation.js';
 import { LevitationMaxima } from './LevitationMaxima.js';
-import { Accio } from './Accio.js';
+import { Accio, accioCatcher } from './Accio.js';
 import { Storm, aimedAtSky } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
@@ -2264,8 +2264,13 @@ export class Game {
         // «Gather» at a carcass (meat) or a golden tree (apples)
         if (name === 'Gather') {
             const side = (this.wandSide() || [this.dom, this.off].find((sd) => this.character.isArmRaised(sd))) || this.dom;
-            // things lying about (at a body): all of them into the slots (Death.js)
-            const loot = this.death?.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
+            // a thing lying about (armour, a weapon, food, a scroll…) pointed at by the wand or a raised hand wins
+            // over the blocks under / behind it: it goes into the free hand — never the one with the wand or a sword
+            // (Accio's rule: accioCatcher), both busy — into a slot; the rest around it (a body's) into the slots (Death.js)
+            const rays = [...new Set([side, this.dom, this.off])].filter((sd) => sd === side || this.character.isArmRaised(sd))
+                .map((sd) => ({ o: this.castOrigin(sd), d: this.character.getHandDirection(sd) }));
+            const free = (sd) => !this.weapons.hands[sd].held && !this.items?.held[sd] && !this.boards?.handBusy?.(sd);
+            const loot = this.death?.gatherAt(rays, null, accioCatcher(free, this.dom));
             if (loot && loot.startsWith('✨')) { this.hud.setVoice(loot, true); this._lastBuild = now; if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost); return 'Gather'; }
             // a cluster of mana crystals: all of it into the slots
             const cr = this.crystals?.gatherAt(this.castOrigin(side), this.character.getHandDirection(side), side);

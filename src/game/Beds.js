@@ -46,7 +46,7 @@ import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
 import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS, bedStandSpot, homeBed } from './BedRules.js';
 import { floorUnder } from './Wreck.js';
-import { ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
+import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 
 const DAY_MS = 24 * 60 * 1000; // (Game.DAY_CYCLE_MS)
 const LIE_AFTER = 1.5; // s of crouching at a bed
@@ -325,57 +325,77 @@ export class Beds {
         return true;
     }
 
-    /** Throwing wood out of the hand: a real throw (wind-up, swing, the fingers open — like any thing). */
+    /**
+     * The chosen resource in the hand (Inventory.resSide) leaves it like any thing (HandRelease.js): a real
+     * throw (wind-up, swing, the fingers open), or the outstretched hand opened — then it falls and the
+     * hand is empty (the rest of the stack stays in its slot). Wood: a bundle of logs; any other block
+     * (earth, stone, sand…): a heap (`blocks`), picked up again into the stacks (Items._gotItem).
+     */
     _updateWoodThrow(dt = 1 / 60) {
         const g = this.game;
         const inv = g.inventory;
         const ch = g.character;
-        const s = inv?.inHand?.kind === 'res' ? inv.inHand.stack : null;
+        const side = inv?.resSide?.();
+        const s = side ? inv.inHand.stack : null;
         const now = performance.now();
         const thrower = this._thrower || (this._thrower = new ThrowDetector());
-        if (!s || !(isWood(s.block) || s.block === BLOCK.SAND) || s.count <= 0 || !inv.slots.includes(s) || !g.currentPose || g.combat.dead || this.lying || !ch.armState || holdsFast(ch)) { thrower.reset(); return; }
+        const gate = this._dropGate || (this._dropGate = new DropGate());
+        // (a stack that came into the hand from the pocket: kept until the fingers have closed once)
+        if (s !== this._resHeld || side !== this._resSide) { this._resHeld = s; this._resSide = side; gate.reset(false); thrower.reset(); }
+        if (!s || !g.currentPose || g.combat.dead || this.lying || !ch.armState || holdsFast(ch)) { thrower.reset(); gate.since = 0; return; }
         if (now - this._throwAt < 600) return;
-        const arm = ch.armState('right', this._arm || (this._arm = {}));
-        const thr = thrower.update({ now: this._clock = (this._clock || 0) + dt * 1000, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl: ch.getGripCurl('right'), tracked: ch.isHandTracked('right'), behind: poseBehind(g.currentPose, 'right'), weight: 1.2 });
-        if (!thr) return;
-        // a strike down onto the right pocket (putting the wood away) is not a throw
-        ch.group.updateMatrixWorld(true);
-        const local = ch.getHandWorldPosition('right', _v).applyMatrix4(_m.copy(ch.group.matrixWorld).invert());
-        const pocket = local.x > 0.3 && local.y < 0.55 && Math.abs(local.z) < 0.85 && thr.vRel[1] < -0.6 * thr.speed;
-        if (!pocket) this.throwWood(g.items?._throwVelocity ? g.items._throwVelocity('right', thr, new THREE.Vector3(), 1.2) : new THREE.Vector3().fromArray(thr.vWorld));
+        const arm = ch.armState(side, this._arm || (this._arm = {}));
+        const clock = this._clock = (this._clock || 0) + dt * 1000;
+        const curl = ch.getGripCurl(side), tracked = ch.isHandTracked(side);
+        const thr = thrower.update({ now: clock, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight: 1.2 });
+        if (thr) {
+            // a strike down onto the pocket (putting it away) is not a throw
+            ch.group.updateMatrixWorld(true);
+            const local = ch.getHandWorldPosition(side, _v).applyMatrix4(_m.copy(ch.group.matrixWorld).invert());
+            const pocket = Math.abs(local.x) > 0.3 && local.y < 0.55 && Math.abs(local.z) < 0.85 && thr.vRel[1] < -0.6 * thr.speed;
+            if (!pocket) this.throwWood(g.items?._throwVelocity ? g.items._throwVelocity(side, thr, new THREE.Vector3(), 1.2) : new THREE.Vector3().fromArray(thr.vWorld), side);
+            return;
+        }
+        if (gate.update({ now: clock, curl, tracked, ...arm })) {
+            this.throwWood(_v.copy(ch.handVelocity?.[side] || _v.set(0, 0, 0)).clampLength(0, 2), side);
+            if (inv.inHand?.stack === s) { inv.inHand = null; inv.selected = -1; inv._render(); } // (the hand opened: it is empty now)
+        }
     }
 
-    /** A bundle of logs leaves the right hand (up to 4 wood from the chosen stack). */
-    throwWood(vel = null) {
+    /** A handful of the chosen stack leaves the hand: wood — a bundle of logs (up to 4); anything else — a heap (up to 10). */
+    throwWood(vel = null, side = null) {
         const g = this.game;
+        side = side || g.inventory?.resSide?.() || g.dom || 'right';
         const s = g.inventory?.inHand?.kind === 'res' ? g.inventory.inHand.stack : null;
-        if (!s || !(isWood(s.block) || s.block === BLOCK.SAND) || s.count <= 0) return null;
-        // sand: a heap of up to 10 flies out of the hand (for the glass of «Create a House» — HouseMagic.js)
-        if (s.block === BLOCK.SAND) return this._throwSand(s, vel);
+        if (!s || s.count <= 0) return null;
+        // not wood (sand for the glass of «Create a House» — HouseMagic.js, earth, stone…): a heap
+        if (!isWood(s.block)) return this._throwHeap(s, vel, side);
         const n = Math.min(LOGS_PER_THROW, s.count);
         if (!g.inventory.take(s, n)) return null;
         this._throwAt = performance.now();
         const item = { kind: 'logs', uid: newUid(), count: n, block: s.block, color: RESOURCE[s.block]?.color ?? 0x8b5a2b };
-        const pos = g.character.getGripObject('right').getWorldPosition(new THREE.Vector3());
-        const v = (vel ? vel.clone() : g.character.getHandDirection('right', new THREE.Vector3()).multiplyScalar(5)).clampLength(0, 14);
+        const pos = g.character.getGripObject(side).getWorldPosition(new THREE.Vector3());
+        const v = (vel ? vel.clone() : g.character.getHandDirection(side, new THREE.Vector3()).multiplyScalar(5)).clampLength(0, 14);
         if (this.auth) { const L = g.items.spawnLoose(item, pos, { vel: v }); L.thrower = g.localId; }
         else g.sync?.itemThrow?.(item, pos, v);
         g.hud.setVoice(`🪵 Брёвна брошены (${n})${s.count > 0 ? `, осталось ${s.count}` : ''}`, true);
         return item;
     }
 
-    /** A heap of sand (up to SAND_PER_THROW of the chosen stack) leaves the right hand. */
-    _throwSand(s, vel) {
+    /** A heap (up to SAND_PER_THROW of the chosen stack: sand, earth, stone…) leaves the hand. */
+    _throwHeap(s, vel, side) {
         const g = this.game;
         const n = Math.min(SAND_PER_THROW, s.count);
         if (!g.inventory.take(s, n)) return null;
         this._throwAt = performance.now();
-        const item = { kind: 'blocks', uid: newUid(), count: n, block: BLOCK.SAND, color: RESOURCE[BLOCK.SAND].color };
-        const pos = g.character.getGripObject('right').getWorldPosition(new THREE.Vector3());
-        const v = (vel ? vel.clone() : g.character.getHandDirection('right', new THREE.Vector3()).multiplyScalar(5)).clampLength(0, 14);
+        const block = s.block;
+        const item = { kind: 'blocks', uid: newUid(), count: n, block, color: RESOURCE[block]?.color ?? 0x999999 };
+        const pos = g.character.getGripObject(side).getWorldPosition(new THREE.Vector3());
+        const v = (vel ? vel.clone() : g.character.getHandDirection(side, new THREE.Vector3()).multiplyScalar(5)).clampLength(0, 14);
         if (this.auth) { const L = g.items.spawnLoose(item, pos, { vel: v }); L.thrower = g.localId; }
         else g.sync?.itemThrow?.(item, pos, v);
-        g.hud.setVoice(`🏖️ Песок брошен (${n})${s.count > 0 ? `, осталось ${s.count}` : ''}`, true);
+        const name = block === BLOCK.SAND ? '🏖️ Песок' : `🧱 ${RESOURCE[block]?.name || 'Блоки'}`;
+        g.hud.setVoice(`${name}: ${n} из руки${s.count > 0 ? `, осталось ${s.count}` : ''}`, true);
         return item;
     }
 

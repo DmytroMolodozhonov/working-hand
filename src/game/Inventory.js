@@ -32,6 +32,7 @@ import { WandBelt } from './WandBelt.js';
 import { CoinBelt } from './CoinBelt.js';
 import { armorIcon } from './Armor.js';
 import { armorName } from './ArmorTypes.js';
+import { accioCatcher } from './Accio.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -293,7 +294,7 @@ export class Inventory {
             this.inHand = { kind: 'weapon', weapon: w, side: D };
             return;
         }
-        if (s.kind === 'res') { this.inHand = { kind: 'res', stack: s }; return; }
+        if (s.kind === 'res') { this.inHand = { kind: 'res', stack: s, side }; return; } // (seen in a free hand: resSide)
         // any other thing (wand, scroll, shield, food…)
         if (g.items && !g.items.held[D] && !g.weapons.hands[D].held) {
             g.items.takeIntoHand(s, D);
@@ -602,11 +603,23 @@ export class Inventory {
         return holder;
     }
 
-    /** A small glowing block of the chosen resource floats in the right hand. */
+    /**
+     * The hand the chosen resource is in: the hand that took it from the pocket, else a free one — never a
+     * hand that holds something (the wand, a sword…): the leading one if free, else the other (Accio's
+     * rule: accioCatcher). null: both hands busy (the stack stays chosen for building, in no hand).
+     */
+    resSide() {
+        const h = this.inHand, g = this.game;
+        if (!h || h.kind !== 'res' || !(h.stack?.count > 0) || !this.slots.includes(h.stack)) return null;
+        const free = (sd) => !g.items?.held?.[sd] && !g.weapons?.hands?.[sd]?.held && !g.boards?.handBusy?.(sd);
+        return h.side && free(h.side) ? h.side : accioCatcher(free, g.dom || 'right');
+    }
+
+    /** A small glowing block of the chosen resource floats in the hand that holds it (resSide). */
     _updateHandBlock() {
         const s = this.inHand && this.inHand.kind === 'res' ? this.inHand.stack : null;
-        const show = s && s.count > 0 && this.slots.includes(s);
-        if (!show) { if (this._handBlock) this._handBlock.visible = false; return; }
+        const side = this.resSide();
+        if (!side) { if (this._handBlock) this._handBlock.visible = false; return; }
         if (!this._handBlock) {
             this._handBlock = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x222222 }));
             this.game.scene.add(this._handBlock);
@@ -614,7 +627,7 @@ export class Inventory {
         const b = this._handBlock;
         b.visible = true;
         b.material.color.setHex(RESOURCE[s.block]?.color ?? 0xffffff);
-        const p = this.game.character.getGripObject(this.game.dom || 'right').getWorldPosition(_v);
+        const p = this.game.character.getGripObject(side).getWorldPosition(_v);
         const t = performance.now() / 1000;
         b.position.set(p.x, p.y + 0.3 + Math.sin(t * 3) * 0.04, p.z);
         b.rotation.set(t * 0.7, t, 0);
