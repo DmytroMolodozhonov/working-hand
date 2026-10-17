@@ -30,7 +30,7 @@
  */
 
 import * as THREE from 'three';
-import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima } from './WizardAI.js';
+import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
@@ -260,6 +260,8 @@ export class WizardFight {
         // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
         const shot = this._castReady(v, d) && this.clearShot(v, fp);
         if (shot && spot && !spot.run && !(v.unstickT > 0)) spot = null;
+        // just cast: he stands in his pose a moment (and while his charge flies), only then moves on
+        if (this.holding(v, dt, d)) { spot = null; v.unstickT = 0; }
         let moving = false;
         if (v.unstickT > 0 && v.path) {
             // (stuck: round by the tower's paths for a while)
@@ -277,6 +279,38 @@ export class WizardFight {
         v.mode = v.castT > 0 ? 'cast' : (v.fx & FX.SHIELD) ? 'shield' : moving ? (v.speed > WALK * 1.4 ? 'run' : 'walk') : 'idle';
         if (v.mode === 'shield') v.aimPitch = 0;
         L._ground(v);
+        return true;
+    }
+
+    /** (after `_cast`) He stands where he cast: the pose held a while (WizardAI.castHold). */
+    _startHold(v) {
+        v.holdT = castHold();
+        v.heldT = 0;
+    }
+
+    /**
+     * (host) Still standing in his cast's pose? (WizardAI.holdsCast: the pose's time, his charge still
+     * flying — its beam comes from his wand; a danger right at him or a flight from it — no.)
+     */
+    holding(v, dt, foeDist = Infinity) {
+        if (v.holdT == null) return false;
+        v.holdT -= dt; v.heldT = (v.heldT || 0) + dt;
+        let flying = false;
+        const bolts = this.game.duel?.bolts;
+        if (bolts) for (const b of bolts.values()) if (b.by === v.id && b.state === 'flying') { flying = true; break; }
+        if (holdsCast({ left: v.holdT, held: v.heldT, flying, fleeing: v.fleeT > 0, foeDist })) return true;
+        v.holdT = null;
+        return false;
+    }
+
+    /** (host) No foe (he answered a creature, a tree…): he stands in his cast's pose, facing where he cast. */
+    holdStill(v, dt) {
+        if (v.holdT == null || v.foe) return false;
+        if (!this.holding(v, dt)) return false;
+        v.speed = 0; v.path = null;
+        if (v.holdAt) this._turnTo(v, v.holdAt, dt);
+        v.mode = v.castT > 0 ? 'cast' : 'idle';
+        this.life._ground(v);
         return true;
     }
 
@@ -498,6 +532,8 @@ export class WizardFight {
         v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));
         v.castT = 0.55;
         v.model.castNow = true;
+        this._startHold(v);
+        v.holdAt = { x: fp.x, z: fp.z };
         const me = g.character.group.position;
         if (spell === 'AvadaKedavra' && duel.avada) duel.avada.cast(_o, _d, Math.hypot(me.x - v.x, me.z - v.z) < 60); // (the same poison-green flash and terrible sound as a player's)
         else duel._burst?.(_o, duel.colors(spell, v.id).glow, 12);

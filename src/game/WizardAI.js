@@ -95,6 +95,23 @@ export function wantsMaxima(skillRole, mana, rng = Math.random) {
     return mana >= 5 && rng() < (NPC_MAXIMA[skillRole] ?? 0.5);
 }
 
+/**
+ * After a spell a wizard STANDS where he cast it (the author: «пускает и бежит — нереалистично»):
+ * he holds the pose CAST_HOLD s (a random 1.5–2.5), and longer while his own charge still flies
+ * (its beam is drawn from his wand: running, he would make it snake) — at most CAST_HOLD_MAX s.
+ * Only then he moves: dodges, changes his place, looks for cover. A danger right at him breaks it.
+ */
+export const CAST_HOLD = { MIN: 1.5, MAX: 2.5, MAX_T: 4, NEAR: 2 };
+export function castHold(rng = Math.random) {
+    return CAST_HOLD.MIN + rng() * (CAST_HOLD.MAX - CAST_HOLD.MIN);
+}
+/** Is he still holding still after his cast? `held` s since the cast, `left` s of the pose left, `flying` his charge still in the air. */
+export function holdsCast({ left = 0, held = 0, flying = false, fleeing = false, foeDist = Infinity }) {
+    if (fleeing || foeDist < CAST_HOLD.NEAR) return false;
+    if (held >= CAST_HOLD.MAX_T) return false;
+    return left > 0 || flying;
+}
+
 /** Low on mana (under a third): he casts more slowly (× this pause). */
 export function manaPace(mana, max) {
     return max > 0 && mana < max / 3 ? 1.6 : 1;
