@@ -176,3 +176,36 @@ test('«Stitching» closes like a camera\'s iris: the edge first from every side
     for (const s of o.stones) assert.ok(s.from.distanceTo(o.mid) > s.to.distanceTo(o.mid), 'flies in from outside');
     assert.ok(o.T >= 1.6 && o.T <= 5);
 });
+
+test('«Stitching»: a hole in a floor (the wand pointing down at it) is sewn with the floor\'s planks; a pit with no way through is not', () => {
+    // a plank floor at layer 5 (x, z within ±6) with a 2×2 hole; a cellar of air below it (layers 1…4), the ground ≤ 0
+    const hole = (x, z) => x >= 0 && x <= 1 && z >= 0 && z <= 1;
+    const get = (x, L, z) => {
+        if (L <= 0) return BLOCK.STONE;
+        if (L === 5 && Math.abs(x) <= 6 && Math.abs(z) <= 6 && !hole(x, z)) return BLOCK.WOOD_PLANKS ?? BLOCK.WOOD;
+        return BLOCK.AIR;
+    };
+    const o = new THREE.Vector3(0.5, 8, 0.5), d = new THREE.Vector3(0, -1, 0);
+    const f = findPassage(get, o, d);
+    assert.equal(f.plane, 'y');
+    assert.equal(f.cells.length, 4);
+    assert.ok(f.cells.every((c) => c.L === 5 && hole(c.x, c.z)));
+    // looking down from the side at a slant, and up at a hole in a ceiling
+    const f2 = findPassage(get, new THREE.Vector3(3, 8, 3), new THREE.Vector3(-2.5, -7.5, -2.5).normalize());
+    assert.equal(f2.plane, 'y');
+    const up = findPassage(get, new THREE.Vector3(0.5, 1.2, 0.5), new THREE.Vector3(0, 1, 0));
+    assert.equal(up.plane, 'y');
+    assert.equal(up.cells.length, 4);
+});
+
+test('«Stitching»: a pit in the ground (a crater with solid bottom) is filled up to its rim; a closed little room is not', async () => {
+    const pit = (x, z) => Math.abs(x) <= 1 && Math.abs(z) <= 1;
+    const get = (x, L, z) => (L <= 0 || (L <= 3 && !pit(x, z)) ? BLOCK.DIRT : BLOCK.AIR); // ground to layer 3, a 3×3 pit 3 deep
+    const f = findPassage(get, new THREE.Vector3(0, 9, 0), new THREE.Vector3(0, -1, 0));
+    assert.equal(f.plane, 'y');
+    assert.equal(f.cells.length, 27);
+    assert.equal(f.block, BLOCK.DIRT);
+    const room = (x, L, z) => (L <= 0 || L >= 4 || Math.abs(x) >= 2 || Math.abs(z) >= 2 ? BLOCK.STONE : BLOCK.AIR);
+    const { pitFill, crossSection } = await import('../../src/game/Stitching.js');
+    assert.equal(pitFill(room, crossSection(room, { x: 0, L: 1, z: 0 }, 'y').cells), null);
+});

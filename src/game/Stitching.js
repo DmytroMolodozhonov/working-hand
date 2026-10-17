@@ -105,6 +105,38 @@ export function materialOf(walls) {
     return AS_WALL[best] ?? best;
 }
 
+/**
+ * A pit in a floor or the ground (a crater, a hole blown in the earth): the cross-section is closed all
+ * round and open above, but solid beneath — no way through. It is sewn up to its rim: the layers above
+ * are added while they are closed too (the crater widens upward); the rim must open out within PIT_DEPTH
+ * layers (a closed little room is no pit). → the cells of all the layers, or null.
+ */
+const PIT_DEPTH = 6;
+export function pitFill(get, cells, max = STITCH.MAX_CELLS) {
+    // down to the bottom: a crater narrows as it goes down (some cells have air beneath, some rock)
+    for (let i = 0; ; i++) {
+        const below = cells.filter((c) => open(get(c.x, c.L - 1, c.z)));
+        if (!below.length) break; // (the bottom: rock under every cell)
+        if (i >= PIT_DEPTH) return null;
+        const s = crossSection(get, { x: below[0].x, L: below[0].L - 1, z: below[0].z }, 'y', max);
+        if (!s.cells || s.cells.length > cells.length) return null; // (a hole through, into a room or the open: not a pit)
+        cells = s.cells;
+    }
+    const all = new Map(cells.map((c) => [`${c.x},${c.L},${c.z}`, c]));
+    let layer = cells;
+    for (let i = 1; i <= PIT_DEPTH; i++) {
+        const up = layer.map((c) => ({ x: c.x, L: c.L + 1, z: c.z }));
+        if (!up.every((c) => open(get(c.x, c.L, c.z)))) return null; // (a roof over it: a room)
+        const s = crossSection(get, up[0], 'y', max);
+        if (!s.cells) return [...all.values()]; // (the rim: it opens out)
+        const have = new Set(s.cells.map((c) => `${c.x},${c.L},${c.z}`));
+        if (!up.every((c) => have.has(`${c.x},${c.L},${c.z}`))) return null;
+        for (const c of s.cells) all.set(`${c.x},${c.L},${c.z}`, c);
+        layer = s.cells;
+    }
+    return null;
+}
+
 const _dir = new THREE.Vector3(), _ax = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _p = new THREE.Vector3();
 
 /**
@@ -142,9 +174,12 @@ export function findPassage(get, o, d, { reach = STITCH.REACH, near = STITCH.NEA
                     else why.open++;
                     continue;
                 }
-                if (!throughBothSides(get, s.cells, plane)) { why.niche++; continue; }
+                let cells = s.cells;
+                const pit = plane === 'y' && open(get(cells[0].x, cells[0].L + 1, cells[0].z)) ? pitFill(get, cells, max) : null;
+                if (pit) cells = pit; // (the score below is by the layer found: s.cells)
+                else if (!throughBothSides(get, cells, plane)) { why.niche++; continue; }
                 const score = s.cells.length * (1 + 0.02 * Math.hypot(yaw, pitch)) + t * 0.01;
-                if (!best || score < best.score) best = { ...s, plane, score };
+                if (!best || score < best.score) best = { ...s, cells, plane, score };
             }
         }
     });
