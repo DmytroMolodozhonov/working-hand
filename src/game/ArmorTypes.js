@@ -177,7 +177,7 @@ export function describeArmor(it) {
     if (it.magic) lines.push('Весь волшебный комплект: «Левиоса», «Остолбеней», «Айс», «Джолт» не действуют, «Инферно» — вдвое слабее, стрелы отскакивают');
     if (it.set) lines.push(`Весь «${it.set.name}» вместе: ${it.set.perks.map((p) => PERK[p]?.ru).join('; ')}`);
     for (const p of it.perks || []) lines.push(`Сам по себе: ${PERK[p]?.ru}`);
-    lines.push(it.piece === 'helmet' ? 'Наденьте: поднесите к голове' : it.piece === 'chest' ? 'Наденьте: приложите к груди' : 'Наденьте: приложите к колену');
+    lines.push(it.piece === 'helmet' ? 'Наденьте: поднесите к голове' : it.piece === 'chest' ? 'Наденьте: приложите к груди' : 'Наденьте: приложите к бедру спереди');
     return { title, color: it.magic ? 0x9fd8ff : 0xb8c2cc, lines };
 }
 
@@ -271,8 +271,9 @@ export function wearSpot(kind, piece, hand, touch = null) {
     const spot = kind === 'robe' || piece === 'chest' ? 'chest' : piece === 'helmet' ? 'head' : piece === 'legs' ? 'knee' : null;
     if (!spot) return false;
     if (touch && !touch[spot]) return false;
-    if (spot === 'head') return y > 1.3 && y < 3.5 && Math.hypot(x, z) < 1.45; // at the head (its middle at y 2.1), on it or over it
-    if (spot === 'chest') return Math.abs(x) < 0.9 && y > 0.2 && y < 1.75 && z < 0.2 && z > -1.6; // on the chest (its front at z −0.4)
+    // (the camera saw the hand there: the arm's guessed depth only rules out a hand far out — loose)
+    if (spot === 'head') return y > 1.2 && y < 3.6 && Math.hypot(x, z) < (touch ? 1.8 : 1.45); // at the head (its middle at y 2.1), on it or over it
+    if (spot === 'chest') return Math.abs(x) < (touch ? 1.1 : 0.9) && y > (touch ? -0.1 : 0.2) && y < 1.9 && z < 0.4 && z > (touch ? -2.0 : -1.6); // on the chest (its front at z −0.4)
     // on the thigh / at the knee: below the belt (the hero's arm hangs to y −0.65 — it can't reach lower,
     // so the camera's picture tells the thigh from a hand at the side); unseen — the hand forward of the thigh
     if (!(Math.abs(x) < 1.0 && y > -1.9 && y < 0.15 && z > -1.6 && z < 0.8)) return false;

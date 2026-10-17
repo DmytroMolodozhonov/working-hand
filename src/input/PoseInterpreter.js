@@ -256,9 +256,11 @@ export function handAtMouth(lm, hand, side, aspect = 4 / 3) {
  * A hand put on the body, as the picture shows it (armour put on by hand — Armor.js): on the head
  * (the wrist at the face or above it, over the head), on the chest (between the shoulders, on the
  * upper half of the body), on the thigh in front / at the knee (`knee`: the greaves — a hand hanging
- * at the side is not). → {head, chest, knee} | null (the body not seen).
+ * at the side is not). → {head, chest, knee} | null (the body not seen). Either hand, the same places.
+ * `hand` — that hand's own points (seen: the palm's middle is where it touches, the wrist lies lower
+ * when a palm is put flat on the chest). An arm stretched out to the camera is not on the body (depth).
  */
-export function bodyTouch(lm, side, aspect = 4 / 3) {
+export function bodyTouch(lm, side, aspect = 4 / 3, hand = null) {
     const w = side === 'left' ? 15 : 16;
     const ls = lm?.[11], rs = lm?.[12], nose = lm?.[0], wr = lm?.[w], lh = lm?.[23], rh = lm?.[24];
     if (!ls || !rs || !nose || !wr || (wr.visibility ?? 1) < 0.4) return null;
@@ -268,15 +270,21 @@ export function bodyTouch(lm, side, aspect = 4 / 3) {
     const hipsSeen = !!(lh && rh && (lh.visibility ?? 1) > 0.3 && (rh.visibility ?? 1) > 0.3);
     const T = hipsSeen ? Math.max(0.5 * W, (lh.y + rh.y) / 2 - sy) : 1.3 * W; // (the torso's length)
     const hy = sy + T;
+    const palm = hand && hand.length >= 21 ? { x: (hand[0].x + hand[5].x + hand[9].x + hand[17].x) / 4, y: (hand[0].y + hand[5].y + hand[9].y + hand[17].y) / 4 } : null;
     const hx = (wr.x - nose.x) * aspect / W, hdy = (wr.y - nose.y) / W;
     const cx = (wr.x - mx) * aspect / W, cdy = (wr.y - sy) / T;
+    const px = palm ? (palm.x - mx) * aspect / W : cx, pdy = palm ? (palm.y - sy) / T : cdy;
+    // (the arm stretched out to the camera: the wrist far in front of the shoulders — holding it out, not on me)
+    const sz = ((ls.z || 0) + (rs.z || 0)) / 2;
+    const out = wr.z != null && (wr.z || sz) ? (wr.z - sz) * aspect / W < -1.1 : false;
     return {
         head: Math.abs(hx) < 0.75 && hdy > -1.1 && hdy < 0.4, // (from the chin up)
-        chest: Math.abs(cx) < 0.5 && cdy > 0.08 && cdy < 0.65,
+        // (the palm on the chest, the belly's top; the wrist alone — a little lower and wider: the forearm comes in from the side)
+        chest: !out && (palm ? Math.abs(px) < 0.65 && pdy > 0.02 && pdy < 0.72 : Math.abs(cx) < 0.7 && cdy > 0.02 && cdy < 0.78),
         // the greaves: the hand on the thigh, in front (drawn in from the hip line — a hand hanging at
         // the side is out there and never counts), from the belt down; or bent down to the knee. Hips
         // not seen (a camera to the waist): the hand low in front, at the belt, is enough.
-        knee: wr.y > hy + 0.45 * T && Math.abs(cx) < 1.0 || Math.abs(cx) < 0.42 && cdy > (hipsSeen ? 0.8 : 0.72),
+        knee: wr.y > hy + 0.45 * T && Math.abs(cx) < 1.0 || Math.abs(cx) < 0.42 && cdy > (hipsSeen ? 0.8 : 0.72) || !!palm && Math.abs(px) < 0.45 && pdy > (hipsSeen ? 0.85 : 0.78),
     };
 }
 
@@ -396,7 +404,7 @@ export class PoseInterpreter {
             // the body's own places (the wand's belt, the pouches, the pockets) — mirrored for a left-hander
             Object.assign(data, bodyPlaces(lm, results.leftHandLandmarks, results.rightHandLandmarks, data.aspect, this.leftHanded));
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
-            data.bodyTouch = { left: bodyTouch(lm, 'left', data.aspect), right: bodyTouch(lm, 'right', data.aspect) }; // (armour put on by hand: Armor.js)
+            data.bodyTouch = { left: bodyTouch(lm, 'left', data.aspect, results.leftHandLandmarks), right: bodyTouch(lm, 'right', data.aspect, results.rightHandLandmarks) }; // (armour put on by hand: Armor.js)
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));

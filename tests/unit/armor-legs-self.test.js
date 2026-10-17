@@ -13,6 +13,7 @@ function pose(wrist, { hips = true } = {}) {
     lm[11] = { x: 0.6, y: 0.35, visibility: 1 }; lm[12] = { x: 0.4, y: 0.35, visibility: 1 };
     lm[23] = { x: 0.56, y: 0.65, visibility: hips ? 1 : 0.05 }; lm[24] = { x: 0.44, y: 0.65, visibility: hips ? 1 : 0.05 };
     lm[16] = { ...wrist, visibility: 1 }; // (the right wrist)
+    lm[15] = { x: 1 - wrist.x, y: wrist.y, visibility: 1 }; // (the left one: the same place, mirrored)
     return lm;
 }
 
@@ -61,4 +62,42 @@ test('«Disarmor» with the wand up: my plain steel and plain robe drop by me; m
     assert.equal(b.disarmSelf(true), null);
     assert.equal(b.worn.robe, suit);
     assert.equal(g2.combat.paid, undefined, 'nothing taken off — no mana');
+});
+
+// every piece by either hand: the one «Accio» brought into the left hand, the one picked up from the ground into the right
+// (both are items.held[side] — the same path), held at its place → on; held at the side / out in front → not
+const SPOTS = {
+    helmet: { wrist: { x: 0.45, y: 0.12 }, body: { x: 0.3, y: 2.0, z: -1.0 } },
+    chest: { wrist: { x: 0.47, y: 0.55 }, body: { x: 0.2, y: 0.6, z: -1.5 } }, // (the palm flat on the chest: the wrist low, the depth guessed far)
+    legs: { wrist: { x: 0.44, y: 0.72 }, body: { x: 0.3, y: -0.45, z: -0.3 } },
+    robe: { wrist: { x: 0.46, y: 0.5 }, body: { x: 0.1, y: 0.8, z: -0.8 } },
+};
+function wearGame(side, piece, at) {
+    const it = piece === 'robe' ? makeRobe(false) : makePiece(piece);
+    const lm = pose(at.wrist);
+    const touch = { [side]: bodyTouch(lm, side, 1) };
+    const held = { left: null, right: null }; held[side] = { item: it };
+    const g = game();
+    Object.assign(g.character, { getHandWorldPosition: (s, out) => out.set(at.body.x * (s === 'left' ? -1 : 1), at.body.y, at.body.z) });
+    g.currentPose = { bodyTouch: touch };
+    g.items = { held, releaseHand: (s) => { const x = held[s].item; held[s] = null; return x; } };
+    return { g, it };
+}
+for (const side of ['left', 'right']) for (const piece of Object.keys(SPOTS)) {
+    test(`${piece} in the ${side} hand: held at its place goes on; at the side it does not`, () => {
+        const { g, it } = wearGame(side, piece, SPOTS[piece]);
+        const a = new ArmorSystem(g);
+        for (let i = 0; i < 12; i++) a._handWear(0.05);
+        assert.equal(a.worn[piece === 'robe' ? 'robe' : piece], it);
+        const hang = wearGame(side, piece, { wrist: { x: 0.38, y: 0.68 }, body: { x: 0.7, y: -0.65, z: 0 } });
+        const b = new ArmorSystem(hang.g);
+        for (let i = 0; i < 30; i++) b._handWear(0.05);
+        assert.equal(b.worn[piece === 'robe' ? 'robe' : piece], null);
+    });
+}
+
+test('an arm stretched out to the camera before the chest is not on the chest', () => {
+    const lm = pose({ x: 0.47, y: 0.45 });
+    lm[11].z = lm[12].z = 0; lm[16].z = -0.4;
+    assert.ok(!bodyTouch(lm, 'right', 1).chest);
 });

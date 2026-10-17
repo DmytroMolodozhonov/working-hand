@@ -57,6 +57,7 @@ export class ArmorSystem {
         this.remote = new Map(); // playerId -> worn code (what the others wear)
         this.stripped = new Set(); // villager ids «Disarmor» stripped (their look stays so)
         this._wearT = { right: 0, left: 0 };
+        this._told = new Set(); // (piece kinds whose «how to put it on» was said)
         this._statsOn = { maxHp: 0, maxMana: 0 };
         this._healT = 0;
         this._suitUntil = 0;
@@ -228,10 +229,16 @@ export class ArmorSystem {
             const h = items.held[side];
             const slot = slotOf(h?.item);
             if (!slot || (h.item.shop && !h.item.shop.paid)) { this._wearT[side] = 0; continue; }
+            // (taken in a hand — from the ground, by «Accio», from a slot: where it goes on, once a piece kind)
+            if (!this._told.has(slot) && !this.worn[slot]) {
+                this._told.add(slot);
+                g.hud?.setVoice?.({ helmet: '🪖 Чтобы надеть шлем — поднесите его к голове и подержите', chest: '🪖 Чтобы надеть нагрудник — приложите его к груди и подержите', legs: '🪖 Чтобы надеть поножи — приложите их к бедру спереди и подержите', robe: '🧥 Чтобы надеть мантию — приложите её к груди и подержите' }[slot], true);
+            }
             ch.group.updateMatrixWorld(true);
             _inv.copy(ch.group.matrixWorld).invert();
             const hand = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
-            if (wearSpot(h.item.kind, h.item.piece, hand, g.currentPose?.bodyTouch?.[side] ?? null)) this._wearT[side] += dt; else this._wearT[side] = 0;
+            // (held there: the time adds up; a frame's jitter out of the place only takes a little off, it does not start over)
+            if (wearSpot(h.item.kind, h.item.piece, hand, g.currentPose?.bodyTouch?.[side] ?? null)) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 1.5 * dt);
             if (this._wearT[side] < ARMOR.WEAR_T) continue;
             this._wearT[side] = 0;
             const inv = g.inventory;
