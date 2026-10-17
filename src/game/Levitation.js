@@ -621,7 +621,10 @@ export class Levitation {
         if (!L.body && !L.lower && this._struggle(ck, c, L, dt)) return;
         this._moveBody(ck, c, _h3.copy(L.vel).multiplyScalar(dt));
         // walls and trees stop it as they would stop the thing
-        if (ck !== 'v') g.collision.resolveCylinder(c.group.position, ck === 'z' ? 0.45 : 0.6, c.group.position.y - up + 0.1, 2.5, 1.05);
+        // (from its feet: the centre less `up` — an animal's group stands lower than its centre, and from
+        // there the ground itself was a "wall" that shoved it aside a metre a frame)
+        this._centre(ck, c, _h3);
+        if (ck !== 'v') g.collision.resolveCylinder(c.group.position, ck === 'z' ? 0.45 : 0.6, _h3.y - up + 0.1, 2.5, 1.05);
         this._centre(ck, c, _h3);
         L.top = Math.max(L.top, _h3.y - up);
         // kicking in the air (a dead body hangs limp)
