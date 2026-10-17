@@ -32,3 +32,26 @@ test('WizardFight: a wizard who just cast stands still for the pose, then may mo
     bolts.clear();
     assert.ok(!f.holding(v, 1 / 60));
 });
+
+test('in a fight a wizard keeps a duel\'s distance: not close — further from a foe behind his shield', async () => {
+    const { WIZ, duelBand, duelDist } = await import('../../src/game/WizardAI.js');
+    for (const k of ['student', 'adept', 'teacher', 'master']) {
+        const R = WIZ[k].range;
+        const [lo, hi] = duelBand(R);
+        assert.ok(lo >= (R[0] + R[1]) / 2 - 1 && hi <= R[1], k);
+        assert.equal(duelDist(2, R), lo, 'too near: he backs off');
+        assert.ok(duelBand(R, true)[0] > lo, 'a shield: further');
+    }
+});
+
+test('Творческий: in a duel a player is as strong in mana as his opponent (a wizard: the wizard\'s mana now)', async () => {
+    const { Duel } = await import('../../src/game/Duel.js');
+    const { duelPower } = await import('../../src/game/WizardAI.js');
+    const wiz = { wizard: true, mana: 480, hp: 32, maxHp: 32, role: 'master' };
+    const me = { me: 'me', game: { config: { mode: 'creative' }, combat: { enabled: false, fatigue: 30, maxFatigue: 30 }, remotes: new Map(), castleLife: { byId: new Map([[5, wiz]]) } } };
+    me._npcWizard = Duel.prototype._npcWizard; me._playerMana = Duel.prototype._playerMana;
+    const s = Duel.prototype._strength.call(me, 'me', 0, 5);
+    assert.equal(s, duelPower(480, 1, 0));
+    me.game.config.mode = 'survival';
+    assert.equal(Duel.prototype._strength.call(me, 'me', 0, 5), duelPower(30, 1, 0), 'Хардкор: his own store');
+});

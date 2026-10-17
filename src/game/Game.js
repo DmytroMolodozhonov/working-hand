@@ -8,6 +8,7 @@
 
 import { deepAt } from './CreatureSwim.js';
 import { crowdStep } from './CrowdSources.js';
+import { wardsOf, pushOut } from './ShieldWalls.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { VoiceGate } from './VoiceGate.js';
@@ -3514,6 +3515,13 @@ export class Game {
             if (z.isDead || z.isSleeping) continue;
 
             this.collision.resolveCylinder(z.group.position, ZOMBIE_RADIUS * z.sizeK, z.group.position.y - z.gOff, 3.5 * z.sizeK, 1.05);
+            // (a player's shield / dome: it presses against it, never in — ShieldWalls.js)
+            const zw = wardsOf(this);
+            if (zw.length) {
+                const zp = z.group.position, o = this._wardZ || (this._wardZ = { x: 0, y: 0, z: 0 });
+                o.x = zp.x; o.y = zp.y - z.gOff; o.z = zp.z;
+                if (pushOut(o, ZOMBIE_RADIUS * z.sizeK, zw, 1)) { zp.x = o.x; zp.z = o.z; }
+            }
 
             // Player–zombie separation (local player)
             const dx = charPos.x - z.group.position.x, dz = charPos.z - z.group.position.z;
@@ -3755,6 +3763,13 @@ export class Game {
     /** My body out of the walls (bent down: lower — Character.bodyHeight; the head ducks a little under rock). */
     _resolveMe(p) {
         const ch = this.character;
+        // (another player's «Protection» — his shield, his dome: solid, I don't walk through it — ShieldWalls.js)
+        const w = wardsOf(this);
+        if (w.length) {
+            const o = this._wardP || (this._wardP = { x: 0, y: 0, z: 0 });
+            o.x = p.x; o.y = this._feetY(p); o.z = p.z;
+            if (pushOut(o, PLAYER_RADIUS, w, 1, 'me')) { p.x = o.x; p.z = o.z; }
+        }
         return this.collision.resolveCylinder(p, PLAYER_RADIUS, this._feetY(p), ch.bodyHeight?.() ?? BODY_H, 1.05, true, ch.bodyHeight?.(true) ?? BODY_H);
     }
 

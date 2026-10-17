@@ -112,6 +112,23 @@ export function holdsCast({ left = 0, held = 0, flying = false, fleeing = false,
     return left > 0 || flying;
 }
 
+/**
+ * How far a wizard keeps from his foe in a fight (the author: «им выгоднее, чтобы я был не то чтобы
+ * далеко, но не близко» — room for a real duel): within his range, from its middle to near its far
+ * end — never pressing close. The foe behind a «Protection» — further still (no use walking at a
+ * shield). → [lo, hi] m. (Only in a fight: talking, he comes as near as people do.)
+ */
+export const DUEL_BAND = { LO: 0.45, LO_SHIELD: 0.7, HI: 0.9 };
+export function duelBand(range, shield = false) {
+    const [r0, r1] = range;
+    return [r0 + (r1 - r0) * (shield ? DUEL_BAND.LO_SHIELD : DUEL_BAND.LO), r1 * DUEL_BAND.HI];
+}
+/** Where in the band to stand, being `d` m away now: where he is, if that is in it; else its edge (too near — he backs off). */
+export function duelDist(d, range, shield = false) {
+    const [lo, hi] = duelBand(range, shield);
+    return Math.min(Math.max(d, lo), hi);
+}
+
 /** Low on mana (under a third): he casts more slowly (× this pause). */
 export function manaPace(mana, max) {
     return max > 0 && mana < max / 3 ? 1.6 : 1;

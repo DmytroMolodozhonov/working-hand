@@ -26,6 +26,7 @@ import { confusedMiss } from './StrongSpells.js';
 import { treeAt } from './Carriages.js';
 import { shareFoes } from './CrewTactics.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
+import { wardsOf, pushOut } from './ShieldWalls.js';
 import { makeWayStep } from './Crowd.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -53,6 +54,8 @@ import { knowsCulprit, sightRange, spellFamily } from './Blame.js';
 import { BodyFound } from './BodyFound.js';
 import { FACE, facesTarget } from './FaceTarget.js';
 import { CSWIM, SWIMMERS, deepAt, waterAt, swimStep, splashes } from './CreatureSwim.js';
+
+const _wardP = { x: 0, y: 0, z: 0 }; // (ShieldWalls.pushOut: a person's feet, reused)
 
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
@@ -577,9 +580,9 @@ export class CastleLife {
         if (speed > 0) {
             const a = crowdStep(this.game, v, v, ux, uz, last ? d : d + 3, { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y) });
             if (!a) { v.speed = 0; return false; }
-            // (off the path only where one can walk; else the path's own way)
+            // (off the path only where one can walk; else the path's own way — but never into a player's shield)
             if (a.x !== ux || a.z !== uz) {
-                if (this._walkable(v.x + a.x * (s + BODY_R), v.z + a.z * (s + BODY_R), v.y)) { ux = a.x; uz = a.z; }
+                if (this._walkable(v.x + a.x * (s + BODY_R), v.z + a.z * (s + BODY_R), v.y)) { ux = a.x; uz = a.z; } else if (a.ward) { v.speed = 0; return false; }
             }
         }
         // a door shut by «Lock» on the way: knock, wait a little — then go some other way (never through it)
@@ -1825,6 +1828,12 @@ export class CastleLife {
             if (mw) {
                 const l = Math.hypot(mw.x, mw.z) || 1;
                 if (this._walkable(p.x + mw.x + mw.x / l * BODY_R, p.z + mw.z + mw.z / l * BODY_R, p.y)) { p.x += mw.x; p.z += mw.z; }
+            }
+            // (in a player's shield / dome — it went up over him: out of it, where one can stand — ShieldWalls.js)
+            const wards = wardsOf(this.game);
+            if (wards.length) {
+                const o = _wardP; o.x = p.x; o.y = p.y; o.z = p.z;
+                if (pushOut(o, this._bodyR(p), wards, k) && this._walkable(o.x, o.z, p.y)) { p.x = o.x; p.z = o.z; }
             }
             // (only the ones round it, from the crowd's grid — never all with all; each pair once)
             for (const b of crowdNear(this.game, p.x, p.y, p.z, 2, p, 2.5, near)) {

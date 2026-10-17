@@ -4,6 +4,7 @@
  */
 
 import { Crowd, steer, BODY_R, numId } from './Crowd.js';
+import { wardsOf, clipStep } from './ShieldWalls.js';
 
 /** The game's crowd (made once; filled from all the systems each frame it's asked). */
 export function crowdOf(g) {
@@ -60,6 +61,8 @@ export function crowdOf(g) {
             if (p.y - (g.collision?.groundY?.(p.x, p.z) ?? p.y) > 0.5) continue;
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.owl, ref: o, id: o.id, kind: 'owl' });
         }
+        // the players' «Protection» (the hand shield, the dome — the gods' too): solid, a wall for all (ShieldWalls.js)
+        for (const w of wardsOf(g)) push({ x: w.x, y: w.y, z: w.z, r: w.r, ref: w, id: 'ward:' + w.owner, kind: 'ward', still: true, vx: 0, vz: 0 });
         // carts on the roads
         for (const k of g.carriages?.list?.values?.() || []) {
             if (k.gone || !Number.isFinite(k.x)) continue;
@@ -93,5 +96,13 @@ export function crowdStep(g, me, p, ux, uz, d, opts = {}) {
     let others = crowdNear(g, p.x, p.y ?? 0, p.z, range, me, opts.dy ?? 2.5, _near);
     if (opts.skip) others = others.filter((b) => !opts.skip(b));
     const st = me._avoid || (me._avoid = {});
-    return steer(st, p, { x: ux, z: uz }, { ...opts, others, r, maxF: d, id: numId(opts.id ?? me.id) ?? 0 });
+    const a = steer(st, p, { x: ux, z: uz }, { ...opts, others, r, maxF: d, id: numId(opts.id ?? me.id) ?? 0 });
+    // (a player's shield / dome: never through it — along it, or it stands at it: ShieldWalls.js)
+    if (!a) return a;
+    const w = wardsOf(g);
+    if (!w.length) return a;
+    const c = clipStep(p, a.x, a.z, r, d, w);
+    if (!c) return null;
+    if (c.x !== a.x || c.z !== a.z) return { ...a, x: c.x, z: c.z, ward: true };
+    return a;
 }

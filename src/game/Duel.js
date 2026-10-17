@@ -1375,14 +1375,21 @@ export class Duel {
 
     /**
      * Strength in a duel — ONE scale for players and wizards (WizardAI.duelPower): mana now, health, a
-     * little luck. In Creative mana never runs out: a player there is as strong as his FULL mana (not a
-     * bar that never fills up again — it used to count as 30 for ever, whatever he had grown to).
+     * little luck. In Creative mana never runs out: a player there is as strong in mana as his opponent
+     * (the author's rule); in «Хардкор» and the maps — his full store (its cells).
      */
-    _strength(id, luck) {
+    _strength(id, luck, opId = null) {
         const g = this.game;
         const w = this._npcWizard(id);
         if (w) return duelStrength(w.role, w.mana, w.hp, luck, w.maxHp); // (a wizard: his own mana now, his health — WizardAI)
         const free = !!g.combat?.enabled;
+        // Творческий (the author): mana there is endless — in a duel a player is exactly as strong in mana
+        // as his opponent (a wizard: the wizard's mana now; another player: both the same — the larger)
+        if (g.config?.mode === 'creative' && opId != null) {
+            const ow = this._npcWizard(opId);
+            const mana = ow ? ow.mana : Math.max(this._playerMana(id), this._playerMana(opId));
+            return duelPower(mana, 1, luck);
+        }
         let mana = 30, hp = PVP.MAX_HP, maxHp = PVP.MAX_HP;
         if (id === this.me) {
             const c = g.combat;
@@ -1396,6 +1403,14 @@ export class Duel {
             }
         }
         return duelPower(mana, hp / maxHp, luck);
+    }
+
+    /** A player's mana as a duel counts it outside the free world: his whole store (its cells). */
+    _playerMana(id) {
+        const g = this.game;
+        if (id === this.me) return Math.max(g.combat?.fatigue ?? 0, g.combat?.maxFatigue || 30);
+        const r = g.remotes.get(id);
+        return r ? Math.max(r.fatigue ?? 30, r.maxMana ?? 30) : 30;
     }
 
     /** Is this wizard still holding the duel (hand on the opponent)? jerk = gave up sharply. */
@@ -1466,8 +1481,8 @@ export class Duel {
         c.lostB = cb.ok ? 0 : c.lostB + dt;
         // A hand off the opponent doesn't push at all
         // (the strong charges push harder: Accentric ×1.2, Pilbidrio ×1.4, «Дай» ×5 — StrongSpells.CLASH_POWER)
-        const sa = ca.ok ? this._strength(a.by, c.luckA) * clashPower(a.spell) : 0;
-        const sb = cb.ok ? this._strength(b.by, c.luckB) * clashPower(b.spell) : 0;
+        const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) : 0;
+        const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) : 0;
         c.v = clashPush(sa - sb) + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));

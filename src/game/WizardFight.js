@@ -30,7 +30,7 @@
  */
 
 import * as THREE from 'three';
-import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast } from './WizardAI.js';
+import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
@@ -319,6 +319,10 @@ export class WizardFight {
         const L = this.life, wt = v.wt, W = v.W;
         const [r0, r1] = W.range;
         const plan = sq?.plan || 'duel';
+        // a duel's distance: not far, not close — further from a foe behind his shield (WizardAI.duelBand)
+        const shield = this._foeShield(v.foe);
+        const [lo, hi] = duelBand(W.range, shield);
+        const keep = duelDist(d, W.range, shield);
         const mine = Math.atan2(v.z - fp.z, v.x - fp.x);
         const strafe = Math.sin(this.clock * 0.5 + v.idx * 1.7) * 0.22 + (v.spotTurn || 0); // (a moving target is harder to hit; stuck: another side)
         const spread = (k, of) => sq.base + (of > 1 ? (k / of) * Math.PI * 2 : 0);
@@ -329,7 +333,7 @@ export class WizardFight {
             const p = this._goodSpot(v, fp, a, R);
             return (box.spot = { x: p.x, z: p.z, a, R, fx: fp.x, fz: fp.z, run: Math.hypot(p.x - v.x, p.z - v.z) > 6 });
         };
-        if (!wt) return ground(mine, Math.min(Math.max(d, r0), r1 * 0.85));
+        if (!wt) return ground(mine, keep);
         switch (wt.role) {
             case 'retreat': {
                 const gr = v.cs.graph;
@@ -351,24 +355,31 @@ export class WizardFight {
                 const a = Math.atan2(fp.z - m.z, fp.x - m.x) + (wt.k - (wt.of - 1) / 2) * 0.8;
                 return { x: m.x + Math.cos(a) * 2.6, z: m.z + Math.sin(a) * 2.6, run: true };
             }
-            case 'shield': return ground(sq.base + (wt.k - (wt.of - 1) / 2) * 0.45, Math.max(4, r0 * 0.6));
+            case 'shield': return ground(sq.base + (wt.k - (wt.of - 1) / 2) * 0.45, Math.max(4, lo * 0.7));
             case 'snipe': {
                 const id = sq.upNodes[wt.k % Math.max(1, sq.upNodes.length)];
                 const n = id != null ? v.cs.graph.nodes[id] : null;
                 if (n) return { x: n.x, z: n.z, run: true };
-                return ground(mine + strafe, Math.min(Math.max(d, r0), r1 * 0.85));
+                return ground(mine + strafe, keep);
             }
-            case 'binder': return ground(mine + strafe, r0);
+            case 'binder': return ground(mine + strafe, lo);
             default: break;
         }
         switch (plan) {
-            case 'crossfire': case 'volley': return ground(spread(wt.k, wt.of) + strafe * 0.5, Math.min(Math.max(d, r0 + 1), r1 * 0.8));
-            case 'screen': return ground(sq.base + (wt.k - (wt.of - 1) / 2) * 0.5, Math.max(4, r0 * 0.6) + 4.5);
-            case 'kite': return ground(mine, r1 * 0.9);
-            case 'punish': return ground(mine, r0);
-            case 'ground': return ground(spread(wt.k, wt.of), r0 + 2);
-            default: return ground(mine + strafe, Math.min(Math.max(d, r0), r1 * 0.85));
+            case 'crossfire': case 'volley': return ground(spread(wt.k, wt.of) + strafe * 0.5, keep);
+            case 'screen': return ground(sq.base + (wt.k - (wt.of - 1) / 2) * 0.5, Math.max(lo, Math.max(4, lo * 0.7) + 4.5));
+            case 'kite': return ground(mine, hi);
+            case 'punish': return ground(mine, lo);
+            case 'ground': return ground(spread(wt.k, wt.of), lo);
+            default: return ground(mine + strafe, keep);
         }
+    }
+
+    /** Does this foe hold a «Protection» now (his hand shield or dome)? */
+    _foeShield(id) {
+        const g = this.game;
+        if (id === g.localId) return !!g.combat?.shield;
+        return (g.remotes?.get(id)?.combat?.shield || 0) > 0;
     }
 
     /** Could he cast at the foe now (the pause over, his role casts, in range)? (The line of sight: clearShot.) */
