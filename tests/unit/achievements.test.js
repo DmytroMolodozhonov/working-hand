@@ -172,3 +172,17 @@ test('Captain Black Moustache (a stub until his ship is in): everyone who fought
     assert.ok(a.high);
     assert.deepEqual(credits, [['p2', 'blackbeard']]);
 });
+
+test('Creative and the test ground: no achievements at all (the author: it is only for trying things)', () => {
+    for (const mode of ['creative', 'test']) {
+        const { g } = fakeGame();
+        g.config = { ...(g.config || {}), mode };
+        assert.equal(g.achievements.gain('king'), false, mode);
+        assert.equal(g.achievements.count, 0);
+        g.achievements.restore({ done: ['king', 'dragon'] });
+        assert.equal(g.achievements.count, 0, `${mode}: an old save brings none either`);
+    }
+    const { g } = fakeGame();
+    g.config = { ...(g.config || {}), mode: 'freeworld' };
+    assert.equal(g.achievements.gain('king', { quiet: true }), true, 'the free world: it counts');
+});

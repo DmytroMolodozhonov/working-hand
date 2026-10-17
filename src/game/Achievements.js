@@ -130,6 +130,9 @@ export class Achievements {
         this.log = []; // (tests)
     }
 
+    /** Creative (and the test ground): no achievements at all — it is all for trying things (the author). */
+    get off() { const m = this.game.config?.mode; return m === 'creative' || m === 'test'; }
+
     get count() { return this.done.size; }
     get high() { return ACH_IDS.every((id) => this.done.has(id)); }
     /** × the mana regeneration (Combat). */
@@ -268,7 +271,7 @@ export class Achievements {
      * @returns {boolean} new
      */
     gain(kind, { quiet = false } = {}) {
-        if (!ACH_BY_ID[kind] || this.done.has(kind)) return false;
+        if (!ACH_BY_ID[kind] || this.done.has(kind) || this.off) return false;
         const wasHigh = this.high;
         this.done.add(kind);
         this._applyBonus();
@@ -406,7 +409,7 @@ export class Achievements {
     snapshot() { return { done: [...this.done], suit: this.suitGiven }; }
 
     restore(s) {
-        if (!s) return;
+        if (!s || this.off) return;
         const wasHigh = this.high;
         for (const k of Array.isArray(s.done) ? s.done : []) if (ACH_BY_ID[k]) this.done.add(k);
         if (s.suit) this.suitGiven = true;
