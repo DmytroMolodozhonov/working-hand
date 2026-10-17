@@ -26,6 +26,9 @@ import { earthly } from '../world/Planets.js';
 export const ZSPAWN = {
     EVERY: 6, // s between the host's checks
     CAVE_NEAR: 60, // m: a cave system this near a player — he is «at a cave»
+    GAP: [80, 140], // s: after one zombie came out, the next one no sooner (the author: one at a time, not often —
+    // a night is 6 minutes: a few meetings a night, not a crowd)
+    APART: 18, // m: a new one never comes out by another zombie (one here, the next elsewhere)
     CAVE_CHANCE: 0.12, // a check brings a zombie in the cave's dark (the author: not so often)
     NIGHT_CHANCE: 0.04, // a check brings one on the open ground at night (by day on the open ground: never)
     DARK: 0.12, // a place this dark or darker (light 0…1): real darkness — ~10 blocks into a cave by day, or the night
@@ -118,15 +121,16 @@ export class ZombieSpawn {
             if (!z.fromDark || z.isDead || z.isThrall) continue;
             if (!ps.some((p) => Math.hypot(p.x - z.group.position.x, p.z - z.group.position.z) < ZSPAWN.FORGET)) g.removeZombie(z);
         }
+        this._gap = (this._gap || 0) - dt;
         this._t -= dt;
-        if (this._t > 0) return;
+        if (this._t > 0 || this._gap > 0) return;
         this._t = ZSPAWN.EVERY;
         const dark = g.zombies.filter((z) => z.fromDark && !z.isDead);
         if (dark.length >= ZSPAWN.CAP) return;
         const P = ps[Math.floor(Math.random() * ps.length)];
         if (dark.filter((z) => Math.hypot(P.x - z.group.position.x, P.z - z.group.position.z) < ZSPAWN.NEAR).length >= ZSPAWN.NEAR_CAP) return;
         const lights = worldLights(g);
-        this.trySpawn(P, ps, lights);
+        if (this.trySpawn(P, ps, lights)) this._gap = rnd(...ZSPAWN.GAP); // (one — the next one much later)
     }
 
     /** (host) One check round a player: a cave first, else the open night. → the zombie or null. */
@@ -138,8 +142,10 @@ export class ZombieSpawn {
             const first = caves.find((s) => !this._seenCaves.has(s.id));
             for (const s of caves) this._seenCaves.add(s.id);
             if (force || first || Math.random() < ZSPAWN.CAVE_CHANCE) {
-                const at = this.caveSpot(first || caves[Math.floor(Math.random() * caves.length)], P, ps, lights);
-                if (at) return this._make(at, 'cave');
+                // (the new system first; if it has no dark room in reach — another one round the player)
+                const order = caves.slice().sort(() => Math.random() - 0.5);
+                if (first) order.unshift(first);
+                for (const c of order.slice(0, 3)) { const at = this.caveSpot(c, P, ps, lights); if (at) return this._make(at, 'cave'); }
             }
         }
         if (this.night() > 0.6 && (force || Math.random() < ZSPAWN.NIGHT_CHANCE)) {
@@ -161,6 +167,7 @@ export class ZombieSpawn {
     /** Is this a place a zombie may come out at: far enough from every player, unlit? */
     _clear(x, y, z, ps, lights) {
         for (const p of ps) if (Math.hypot(p.x - x, p.y - y, p.z - z) < ZSPAWN.MIN_D) return false;
+        for (const o of this.game.zombies || []) if (!o.isDead && Math.hypot(o.group.position.x - x, o.group.position.z - z) < ZSPAWN.APART) return false; // (never in a group)
         return !litAt(lights, x, y, z);
     }
 

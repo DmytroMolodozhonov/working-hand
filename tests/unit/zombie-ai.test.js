@@ -148,3 +148,42 @@ test('no zombie comes out in a light daytime shade (a few blocks under a roof, a
     assert.ok(lightLevel(0.08, 0) <= ZSPAWN.DARK, 'deep in a cave: dark');
     assert.ok(lightLevel(0.7, 1) <= ZSPAWN.DARK, 'a shade at night: dark');
 });
+
+test('a night zombie out on the open ground (45 m off) shambles up, notices the player and hits him within a minute', () => {
+    const g = fakeGame();
+    const z = g._createZombie(new THREE.Vector3(30, GROUND + 1, 34));
+    let t = 0;
+    while (!g.hits.length && t < 60) { g.frameCount++; g._updateZombies(dt); t += dt; }
+    assert.ok(g.hits.length, `hit after ${t.toFixed(0)} s (at ${Math.hypot(z.group.position.x, z.group.position.z).toFixed(1)} m)`);
+    assert.ok(z.hunting);
+});
+
+test('nobody near: it wanders slowly (not standing like a post), does not hunt; a blow wakes it', () => {
+    const g = fakeGame();
+    g.character.group.position.set(300, GROUND + 2, 0);
+    const z = g._createZombie(new THREE.Vector3(0, GROUND + 1, 0));
+    let path = 0, prev = z.group.position.clone();
+    for (let i = 0; i < 30 / dt; i++) { g.frameCount++; g._updateZombies(dt); path += z.group.position.distanceTo(prev); prev.copy(z.group.position); }
+    assert.ok(path > 3, `it roams (${path.toFixed(1)} m in 30 s)`);
+    assert.ok(Math.hypot(z.group.position.x, z.group.position.z) < 15, 'round where it came out');
+    assert.ok(!z.hunting);
+    g.character.group.position.set(z.group.position.x + 20, GROUND + 2, z.group.position.z);
+    z.hunting = true; // (what damageZombie sets)
+    g.run(3);
+    assert.ok(Math.hypot(g.character.group.position.x - z.group.position.x, g.character.group.position.z - z.group.position.z) < 16, 'after the player now');
+});
+
+test('a wall in its way: it goes round, it does not push into it', () => {
+    const g = fakeGame();
+    g.character.group.position.set(0, GROUND + 2, 9);
+    g.collision.pointBlocked = (x, y, z) => Math.abs(x) < 3 && z > 3.5 && z < 4.5 && y < GROUND + 4; // (a wall 6 m wide)
+    const z = g._createZombie(new THREE.Vector3(0.3, GROUND + 1, 0));
+    let inWall = 0;
+    for (let i = 0; i < 25 / dt && !g.hits.length; i++) {
+        g.frameCount++; g._updateZombies(dt);
+        const p = z.group.position;
+        if (Math.abs(p.x) < 3 && p.z > 3.4 && p.z < 4.6) inWall++;
+    }
+    assert.equal(inWall, 0, 'never in the wall');
+    assert.ok(g.hits.length, `round it and at the player (at ${z.group.position.x.toFixed(1)}, ${z.group.position.z.toFixed(1)})`);
+});

@@ -42,7 +42,7 @@ test('light: the open sky by day is lit, the night and a cave are dark; a light 
 test('in a cave, by day: zombies do come — in the dark, not under the nose', () => {
     const g = fakeGame(inCave);
     const made = [];
-    for (let i = 0; i < 20; i++) { const z = g.zombieSpawn.trySpawn(inCave, [inCave], [], true); if (z) made.push(z); }
+    for (let i = 0; i < 20; i++) { const z = g.zombieSpawn.trySpawn(inCave, [inCave], [], true); if (z) { made.push(z); g.zombies.length = 0; } } // (one at a time: each check alone)
     assert.ok(made.length >= 10, `they come (${made.length}/20)`);
     for (const z of made) {
         const p = z.group.position;
@@ -68,7 +68,7 @@ test('on a meadow: none by day, now and then at night (far off)', () => {
     for (let i = 0; i < 10; i++) assert.equal(day.zombieSpawn.trySpawn(meadow, [meadow], [], true), null, 'not by day');
     const night = fakeGame(meadow, { night: 1 });
     let n = 0;
-    for (let i = 0; i < 10; i++) { const z = night.zombieSpawn.trySpawn(meadow, [meadow], [], true); if (z) { n++; assert.ok(Math.hypot(z.group.position.x - meadow.x, z.group.position.z - meadow.z) >= ZSPAWN.NIGHT_D[0] - 1); } }
+    for (let i = 0; i < 10; i++) { const z = night.zombieSpawn.trySpawn(meadow, [meadow], [], true); if (z) { n++; night.zombies.length = 0; assert.ok(Math.hypot(z.group.position.x - meadow.x, z.group.position.z - meadow.z) >= ZSPAWN.NIGHT_D[0] - 1); } }
     assert.ok(n >= 5, `at night (${n}/10)`);
 });
 
@@ -99,4 +99,17 @@ test('phoenixes: rare, and they never pile up as a player walks on', () => {
     P.pos.set(0, 0, 0);
     for (let s = 0; s < 3600; s += 5) ph._spawnTick(5);
     assert.equal(ph.list.length, 1);
+});
+
+test('the open ground: no new zombie by day at all; at night one at a time, much later each, never side by side', () => {
+    const day = fakeGame(meadow);
+    for (let s = 0; s < 600; s++) day.zombieSpawn.update(1); // (10 minutes of day)
+    assert.equal(day.zombies.length, 0, 'by day: none');
+    const night = fakeGame(meadow, { night: 1 });
+    const at = [];
+    for (let s = 0; s < 360; s++) { const n = night.zombies.length; night.zombieSpawn.update(1); if (night.zombies.length > n) at.push(s); } // (a 6-minute night)
+    assert.ok(at.length >= 1 && at.length <= 5, `a few a night (${at.length})`);
+    for (let i = 1; i < at.length; i++) assert.ok(at[i] - at[i - 1] >= ZSPAWN.GAP[0] - 1, 'one at a time, the next much later');
+    const zs = night.zombies;
+    for (let i = 0; i < zs.length; i++) for (let j = i + 1; j < zs.length; j++) assert.ok(zs[i].group.position.distanceTo(zs[j].group.position) >= ZSPAWN.APART - 1, 'not in a group');
 });

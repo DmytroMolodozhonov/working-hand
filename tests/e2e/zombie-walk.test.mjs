@@ -42,12 +42,12 @@ test('a zombie walks face first to the player and swings at him', async () => {
         tick();
         return z.id;
     });
-    await page.waitForFunction((zid) => { const z = window.__zns.game.zombieById.get(zid), p = window.__zns.game.character.group.position; return Math.hypot(z.group.position.x - p.x, z.group.position.z - p.z) < 5; }, id, { timeout: 20000 });
+    await page.waitForFunction((zid) => { const z = window.__zns.game.zombieById.get(zid), p = window.__zns.game.character.group.position; return Math.hypot(z.group.position.x - p.x, z.group.position.z - p.z) < 5; }, id, { timeout: 90000 });
     await shot(page, 'walk.png');
-    await page.waitForFunction((zid) => { const z = window.__zns.game.zombieById.get(zid); return z.isAttacking && z.attackAnimProgress > 0.45; }, id, { timeout: 15000 });
+    await page.waitForFunction((zid) => { const z = window.__zns.game.zombieById.get(zid); return z.isAttacking && z.attackAnimProgress > 0.45; }, id, { timeout: 90000 });
     await shot(page, 'swing.png');
     const r = await page.evaluate(() => {
-        const f = window.__zt.face.slice(40); // (after it turned round)
+        const f = window.__zt.face.slice(Math.floor(window.__zt.face.length / 3)); // (after it turned round)
         return { facing: f.length ? f.reduce((a, b) => a + b, 0) / f.length : 0, worst: Math.min(...f), walk: window.__zt.walk };
     });
     assert.ok(r.facing > 0.9 && r.worst > 0.5, `walks face first (${r.facing.toFixed(2)}, worst ${r.worst.toFixed(2)})`);

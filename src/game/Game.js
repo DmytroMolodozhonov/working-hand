@@ -124,7 +124,7 @@ import { HandBlocks } from './HandBlocks.js';
 import { SPELL_PHYSICS, blastPush } from './Impact.js';
 import { ManaCrystals } from './ManaCrystals.js';
 import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
-import { ZombieSpawn, worldLights, litAt, inSunlight } from './ZombieSpawn.js';
+import { ZombieSpawn, worldLights, litAt, inSunlight, ZSPAWN, lightLevel } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
 import { IceMagic } from './IceMagic.js';
@@ -153,6 +153,8 @@ const MANA_LATER = new Set(['CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet'
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
+/** What a zombie notices: hears a player this near (m), sees him this far with nothing between, follows him this far. */
+export const ZSENSE = { HEAR: 10, SEE: 34, LOSE: 48, ROAM: 7, SCENT: 90 }; // (SCENT: it drifts towards the living this near)
 const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.STONE]: 0x8a8a8a, [BLOCK.SNOW]: 0xf2f6f8 };
 
 const _v1 = new THREE.Vector3();
@@ -644,7 +646,9 @@ export class Game {
      * thrown in, they don't breathe and don't float — they trudge along the bottom, slowly (CreatureSwim.js).
      */
     _zombieStep(me, p, ux, uz, d, speed, dt) {
-        const st = crowdStep(this, me, p, ux, uz, d, { r: BODY_R.zombie * (me.sizeK || 1), speed, dt });
+        let st = crowdStep(this, me, p, ux, uz, d, { r: BODY_R.zombie * (me.sizeK || 1), speed, dt });
+        if (!st) return st;
+        st = this._zombieRound(me, p, st, dt);
         if (!st) return st;
         const t = this.terrain?.data;
         if (!t) return st;
@@ -652,6 +656,38 @@ export class Game {
         if (deepAt(t, p.x, p.z, feet)) { const o = this._zStep || (this._zStep = { x: 0, z: 0 }); o.x = st.x * 0.45; o.z = st.z * 0.45; return o; }
         if (deepAt(t, p.x + st.x * 0.9, p.z + st.z * 0.9, feet)) return null; // (the bank: it stops at the water)
         return st;
+    }
+
+    /**
+     * A wall, a rock, a pedestal, a chest in its way (not a body — the crowd sees those): it feels ahead and goes
+     * round, keeping to the side it chose for a while (no dithering at a corner). A step of one block it climbs.
+     */
+    _zombieRound(z, p, st, dt) {
+        const c = this.collision;
+        if (!c?.pointBlocked) return st;
+        const feet = p.y - z.gOff;
+        const R = 0.5 * (z.sizeK || 1); // (its shoulders: the middle and both sides of the body feel ahead)
+        const shut = (dx, dz) => {
+            for (const k of [0.7, 1.3]) for (const w of [0, R, -R]) {
+                const x = p.x + dx * k - dz * w, y = p.z + dz * k + dx * w;
+                if (c.pointBlocked(x, feet + 1.3, y) || c.pointBlocked(x, feet + 2.3, y)) return true;
+            }
+            return false;
+        };
+        z._sideT = Math.max(0, (z._sideT || 0) - dt);
+        if (!shut(st.x, st.z) && !(z._sideT > 0)) return st;
+        const o = z._round || (z._round = { x: 0, z: 0 });
+        const side = z._side || (Math.random() < 0.5 ? 1 : -1);
+        for (const sg of [side, -side]) for (const a of [0.5, 0.9, 1.3, 1.7, 2.2]) { // (its side first, all the way round it)
+            const ca = Math.cos(a * sg), sa = Math.sin(a * sg), dx = st.x * ca - st.z * sa, dz = st.x * sa + st.z * ca;
+            if (shut(dx, dz)) continue;
+            if (!(z._sideT > 0) || sg !== z._side) { z._side = sg; z._sideT = 1.2; }
+            o.x = dx; o.z = dz;
+            return o;
+        }
+        if (!shut(st.x, st.z)) { z._sideT = 0; return st; }
+        z._side = -side; // (shut all round on this side: next time the other way)
+        return null;
     }
 
     _createZombie(pos, id = null) {
@@ -727,6 +763,7 @@ export class Game {
     /** Authoritative damage. `by` = player id that dealt it (for kill counting). */
     damageZombie(z, amount, isWeapon, dir, by, hit = null) {
         if (z.isDead) return null;
+        z.hunting = true; // (a blow: it turns on whoever is near — _zombieSenses)
         // my spells with a wand in the hand hit harder
         if (!isWeapon && by == null && this._lastSpell && performance.now() - this._lastSpell.at < 6000) amount *= this._lastSpell.pw;
         const res = z.takeDamage(amount, isWeapon, dir, Math.random, hit);
@@ -1048,14 +1085,13 @@ export class Game {
                     chest.cave = cv.id; // (put away again when the player is far — _unloadCaves)
                     this.chests.push(chest);
                     if (this._openedChests?.has(id)) chest.setOpenInstant();
-                    if (this.authority && this.config.mode === 'freeworld' && !cv.lair) {
-                        const n = 2 + ((cv.r + k) % 3);
-                        for (let i = 0; i < n; i++) {
-                            const a = (i / n) * Math.PI * 2;
-                            const z = this._createZombie(new THREE.Vector3(sp.x + Math.cos(a) * 3, sp.y - 0.5, sp.z + Math.sin(a) * 3));
-                            z.setSleeping?.(true);
-                            z.caveGuard = cv.id; // (asleep by its chest: put away with it)
-                        }
+                    // (one zombie by a chest every other chamber — only in the real dark of the cave, never a group, never
+                    // a lit chamber by day; it wanders by its chest, not asleep standing — _zombieTarget)
+                    if (this.authority && this.config.mode === 'freeworld' && !cv.lair && (cv.r + k) % 2 === 0 && t.skyAt &&
+                        lightLevel(t.skyAt(sp.x, sp.y, sp.z), this.zombieSpawn?.night() ?? 0) <= ZSPAWN.DARK &&
+                        !this.zombies.some((o) => !o.isDead && Math.hypot(o.group.position.x - sp.x, o.group.position.z - sp.z) < ZSPAWN.APART)) {
+                        const z = this._createZombie(new THREE.Vector3(sp.x + 2.5, sp.y - 0.5, sp.z));
+                        z.caveGuard = cv.id; // (by its chest: put away with it)
                     }
                 });
             }
@@ -1125,7 +1161,7 @@ export class Game {
         }
         if (!gone.size) return;
         for (const id of gone) this._caveChests.delete(id);
-        if (this.authority) for (const z of [...this.zombies]) if (z.caveGuard != null && gone.has(z.caveGuard) && z.isSleeping && !z.isDead) this.removeZombie(z);
+        if (this.authority) for (const z of [...this.zombies]) if (z.caveGuard != null && gone.has(z.caveGuard) && !z.hunting && !z.isDead) this.removeZombie(z);
     }
 
     // ============================================================== players
@@ -2279,7 +2315,7 @@ export class Game {
             if (owner && zp.distanceToSquared(owner) > 16) return { pos: owner, follow: true, distSq: zp.distanceToSquared(owner) };
             return null;
         }
-        const player = this.nearestPlayer(zp);
+        const player = this._zombieSenses(z, this.nearestPlayer(zp));
         let best = null, bd = 10 * 10;
         for (const o of this.zombies) {
             if (!o.isThrall || o.isDead || o.isDying) continue;
@@ -2287,7 +2323,57 @@ export class Game {
             if (d < bd) { bd = d; best = o; }
         }
         if (best && (!player || bd < player.distSq)) return { pos: best.group.position, zombie: best, distSq: bd };
-        return player;
+        return player || this._zombieWander(z);
+    }
+
+    /**
+     * What a zombie notices (ZSENSE): it hears a player within HEAR m, sees one within SEE m if nothing is in between
+     * (a wall, a hill — Collision.lineOfSight); once after him, it keeps on up to LOSE m. A blow wakes it at once
+     * (damageZombie). Not noticed — null (it wanders). In «Хардкор» and on the maps they always know where you are.
+     */
+    _zombieSenses(z, player) {
+        if (!player) { z.hunting = false; return null; }
+        if (this.config.mode === 'survival' || this.config.map) { z.hunting = true; return player; }
+        const d = Math.sqrt(player.distSq);
+        if (z.hunting) { if (d < ZSENSE.LOSE) return player; z.hunting = false; }
+        if (d < ZSENSE.HEAR) { z.hunting = true; return player; }
+        if (d < ZSENSE.SEE) {
+            z._seeT = (z._seeT || 0) - (this._zdt || 1 / 60);
+            if (z._seeT <= 0) { // (it looks again every 0.3 s: a ray isn't cast every frame)
+                z._seeT = 0.3;
+                const p = z.group.position, q = player.pos;
+                z._saw = !this.collision?.lineOfSight || this.collision.lineOfSight(p.x, p.y + 1.1, p.z, q.x, q.y - 0.3, q.z, 0.8);
+            }
+            if (z._saw) { z.hunting = true; return player; }
+        }
+        return null;
+    }
+
+    /** Nobody noticed: it shambles about slowly round where it came out (a new spot every few seconds). */
+    _zombieWander(z) {
+        const p = z.group.position;
+        if (!z.home) z.home = { x: p.x, z: p.z };
+        const w = z.wander || (z.wander = { pos: new THREE.Vector3(), t: 0, wander: true, distSq: 0 });
+        const dt = this._zdt || 1 / 60;
+        w.t -= dt;
+        if (w.t <= 0 || Math.hypot(w.pos.x - p.x, w.pos.z - p.z) < ZOMBIE.STOP + 0.2) {
+            // (it scents the living: with a player within SCENT it shambles on his way — the next spot ahead of it,
+            // turned a little either side; nobody about — round where it came out)
+            const pl = this.nearestPlayer(p);
+            if (pl && pl.distSq < ZSENSE.SCENT ** 2) {
+                const a = Math.atan2(pl.pos.x - p.x, pl.pos.z - p.z) + (Math.random() - 0.5) * 1.6, r = 4 + Math.random() * 5;
+                w.pos.set(p.x + Math.sin(a) * r, p.y, p.z + Math.cos(a) * r);
+                z.home.x = w.pos.x; z.home.z = w.pos.z;
+            } else {
+                const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * ZSENSE.ROAM;
+                w.pos.set(z.home.x + Math.cos(a) * r, p.y, z.home.z + Math.sin(a) * r);
+            }
+            w.t = 4 + Math.random() * 6; // (s; a pause before it sets off)
+            w.rest = 1 + Math.random() * 3;
+        }
+        if (w.rest > 0) { w.rest -= dt; return null; } // (stands a moment, swaying — then goes on)
+        w.distSq = p.distanceToSquared(w.pos);
+        return w;
     }
 
     /** Another wizard's «Вайнд» reached me: blown away (no harm; a shield stops it). */
@@ -3489,6 +3575,7 @@ export class Game {
     }
 
     _updateZombies(dt) {
+        this._zdt = dt;
         const ch = this.character;
         const charPos = ch.group.position;
         for (let i = this.zombies.length - 1; i >= 0; i--) {
@@ -3544,7 +3631,8 @@ export class Game {
             // Whom: a servant of «Брейнрот» — the zombie / creature its master set it on; the others — the
             // players (and a servant zombie close by). Bites hurt in «Выживание», «Хардкор» and the maps;
             // in «Творческий» nobody is hurt (damageLocalPlayer), but it still swings.
-            if (!target || target.follow) continue;
+            z.pace = target?.wander ? 0.45 : 1; // (wandering: a slow shamble)
+            if (!target || target.follow || target.wander) continue;
             const reach = target.zombie || target.foe ? 0.3 : 0;
             z.attackCd = Math.max(0, (z.attackCd || 0) - dt);
             if (!z.isAttacking && z.attackCd <= 0 && z.reaches(target.pos, reach - 0.3)) { // (it starts the swing well in reach)
@@ -3596,7 +3684,8 @@ export class Game {
             for (const z of this.zombies) if (!z.isDead && !z.dummy) live++;
             // (the slider: how many there may be — but they too come only out of the dark: a cave, the night;
             // by day on the open ground none comes, as in «Выживание» — ZombieSpawn.trySpawn)
-            if (live < desired && Math.random() < 0.02 && !this.isDeadLocal) this.zombieSpawn?.trySpawn(this.character.group.position, undefined, undefined, true);
+            const zs = this.zombieSpawn;
+            if (zs && live < desired && !(zs._gap > 0) && Math.random() < 0.02 && !this.isDeadLocal && zs.trySpawn(this.character.group.position, undefined, undefined, true)) zs._gap = ZSPAWN.GAP[0] + Math.random() * (ZSPAWN.GAP[1] - ZSPAWN.GAP[0]); // (one at a time, as in «Выживание»)
         } else if (this.config.mode === 'survival') {
             let live = 0;
             for (const z of this.zombies) if (!z.isDead) live++;

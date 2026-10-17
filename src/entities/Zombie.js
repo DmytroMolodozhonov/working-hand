@@ -364,7 +364,7 @@ export class Zombie {
                 let walked = 0;
                 if (distance > stop && !this.isAttacking) {
                     if (distance > 0.1) _v.divideScalar(distance);
-                    const sp = this.speed * slowFactor(this);
+                    const sp = this.speed * slowFactor(this) * (this.pace ?? 1); // (pace: slower when only wandering)
                     // round the others on its way (zombies, people, beasts — Crowd.js; the host's game sets it)
                     const st = this.steer ? this.steer(this, pos, _v.x, _v.z, distance - stop, sp, dt) : _v;
                     if (st) {
